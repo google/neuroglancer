@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
+import { VolumeChunk } from "#src/sliceview/volume/chunk.js";
 import type {
   VolumeChunkSource,
   ChunkFormat,
 } from "#src/sliceview/volume/frontend.js";
-import { VolumeChunk } from "#src/sliceview/volume/chunk.js";
 import type { TypedArray } from "#src/util/array.js";
 import type { DataType } from "#src/util/data_type.js";
 import type { Disposable } from "#src/util/disposable.js";

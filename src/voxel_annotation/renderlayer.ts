@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2024 Google Inc.
+ * Copyright 2025 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -21,16 +21,6 @@ import { SliceViewVolumeRenderLayer } from "#src/sliceview/volume/renderlayer.js
 import { constantWatchableValue } from "#src/trackable_value.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 
-/**
- * This is a specialized rendering layer that knows how to take data from a `MultiscaleVolumeChunkSource`
- * and render it as a 2D slice in the Neuroglancer viewer.
- *
- * Its main responsibilities include:
- * - Data Request: It requests the necessary 3D data chunks from the `MultiscaleVolumeChunkSource` that intersect with the current 2D slice being viewed.
- * - WebGL Management: It manages the WebGL resources (like textures and buffers) required to efficiently upload and display this 3D data as a 2D image.
- * - Shader Logic: It provides the core shader program (via its `defineShader` method) that interprets the raw 3D volume data (e.g., a voxel value) and converts it into a visual representation (e.g., a color).
- * - Interaction: It handles interactions like picking, allowing you to identify the specific 3D voxel or segment under the mouse cursor on the 2D slice.
- */
 type EmptyParams = Record<string, never>;
 
 export class VoxelAnnotationRenderLayer extends SliceViewVolumeRenderLayer<EmptyParams> {
@@ -48,7 +38,9 @@ export class VoxelAnnotationRenderLayer extends SliceViewVolumeRenderLayer<Empty
   setForcedSourceIndexLock(index: number | undefined): void {
     if (index !== undefined) {
       if (!Number.isInteger(index) || index < 0) {
-        throw new Error("setForcedSourceIndexLock: index must be a non-negative integer");
+        throw new Error(
+          "setForcedSourceIndexLock: index must be a non-negative integer",
+        );
       }
     }
     this.forcedSourceIndexLock = index;

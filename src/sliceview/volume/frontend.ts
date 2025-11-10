@@ -16,7 +16,10 @@
 
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
-import type { DataType, SliceViewChunkSpecification } from "#src/sliceview/base.js";
+import type {
+  DataType,
+  SliceViewChunkSpecification,
+} from "#src/sliceview/base.js";
 import { SLICEVIEW_REQUEST_CHUNK_RPC_ID } from "#src/sliceview/base.js";
 import { ChunkFormat as CompressedChunkFormat } from "#src/sliceview/compressed_segmentation/chunk_format.js";
 import { decodeChannel as decodeChannelUint32 } from "#src/sliceview/compressed_segmentation/decode_uint32.js";
@@ -24,21 +27,24 @@ import { decodeChannel as decodeChannelUint64 } from "#src/sliceview/compressed_
 import { encodeChannel as encodeChannelUint32 } from "#src/sliceview/compressed_segmentation/encode_uint32.js";
 import { encodeChannel as encodeChannelUint64 } from "#src/sliceview/compressed_segmentation/encode_uint64.js";
 import type { SliceViewChunk } from "#src/sliceview/frontend.js";
-import { MultiscaleSliceViewChunkSource, SliceViewChunkSource } from "#src/sliceview/frontend.js";
 import {
-  ChunkFormat as UncompressedChunkFormat,
+  MultiscaleSliceViewChunkSource,
+  SliceViewChunkSource,
+} from "#src/sliceview/frontend.js";
+import type {
   UncompressedChunkFormatHandler,
   UncompressedVolumeChunk,
 } from "#src/sliceview/uncompressed_chunk_format.js";
+import { ChunkFormat as UncompressedChunkFormat } from "#src/sliceview/uncompressed_chunk_format.js";
 import type {
   VolumeChunkSource as VolumeChunkSourceInterface,
   VolumeChunkSpecification,
   VolumeSourceOptions,
-  VolumeType
+  VolumeType,
 } from "#src/sliceview/volume/base.js";
 import { VolumeChunk } from "#src/sliceview/volume/chunk.js";
 import { getChunkFormatHandler } from "#src/sliceview/volume/registry.js";
-import type { TypedArray} from "#src/util/array.js";
+import type { TypedArray } from "#src/util/array.js";
 import { TypedArrayBuilder } from "#src/util/array.js";
 import {
   DATA_TYPE_ARRAY_CONSTRUCTOR,
@@ -167,7 +173,6 @@ export interface ChunkFormatHandler extends Disposable {
   getChunk(source: SliceViewChunkSource, x: any): SliceViewChunk;
 }
 
-
 export class VolumeChunkSource
   extends SliceViewChunkSource<VolumeChunkSpecification, VolumeChunk>
   implements VolumeChunkSourceInterface
@@ -230,14 +235,19 @@ export class VolumeChunkSource
         chunkGridPosition: chunkGridPosition,
       });
     } catch (e) {
-      console.error(`Failed to fetch chunk for position ${chunkPosition.join()}:`, e);
+      console.error(
+        `Failed to fetch chunk for position ${chunkPosition.join()}:`,
+        e,
+      );
       return null;
     }
 
     return this.getValueAt(chunkPosition, channelAccess);
   }
 
-  applyLocalEdits(edits: Map<string, {indices: number[], value: bigint}>): void {
+  applyLocalEdits(
+    edits: Map<string, { indices: number[]; value: bigint }>,
+  ): void {
     const chunksToUpdate = new Set<VolumeChunk>();
     const fetches: Promise<void>[] = [];
 
@@ -255,8 +265,8 @@ export class VolumeChunkSource
           if (cpuArray === null) {
             // If the chunk currently has the shared fill value texture, we must
             // detach it so that a new texture is created for the edited data.
-            const handler =
-              uncompressedChunk.source.chunkFormatHandler as UncompressedChunkFormatHandler;
+            const handler = uncompressedChunk.source
+              .chunkFormatHandler as UncompressedChunkFormatHandler;
             if (uncompressedChunk.texture === handler.fillValueChunk.texture) {
               uncompressedChunk.texture = null;
               uncompressedChunk.textureLayout = null;
@@ -270,8 +280,7 @@ export class VolumeChunkSource
             cpuArray = new (Ctor as any)(numElements);
             uncompressedChunk.data = cpuArray;
           }
-          if (cpuArray === null)
-            throw new Error("Unexpected null chunk data");
+          if (cpuArray === null) throw new Error("Unexpected null chunk data");
           const { dataType } = chunkFormat;
           for (const index of edit.indices) {
             if (dataType === DataTypeUtil.UINT32) {
@@ -287,23 +296,54 @@ export class VolumeChunkSource
           // TODO: rework this
           const compressedData = (targetChunk as any).data as Uint32Array;
           const { chunkDataSize } = targetChunk;
-          const numElements = chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2];
+          const numElements =
+            chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2];
           const { dataType, subchunkSize } = chunkFormat;
           const baseOffset = compressedData[0];
-          const outputBuilder = new TypedArrayBuilder(Uint32Array, compressedData.length);
+          const outputBuilder = new TypedArrayBuilder(
+            Uint32Array,
+            compressedData.length,
+          );
           outputBuilder.resize(1);
           outputBuilder.data[0] = 1;
 
           if (dataType === DataTypeUtil.UINT32) {
             const uncompressedData = new Uint32Array(numElements);
-            decodeChannelUint32(uncompressedData, compressedData, baseOffset, chunkDataSize, subchunkSize);
-            for (const index of edit.indices) { uncompressedData[index] = Number(edit.value); }
-            encodeChannelUint32(outputBuilder, subchunkSize, uncompressedData, chunkDataSize);
-          } else { // Assumes UINT64
+            decodeChannelUint32(
+              uncompressedData,
+              compressedData,
+              baseOffset,
+              chunkDataSize,
+              subchunkSize,
+            );
+            for (const index of edit.indices) {
+              uncompressedData[index] = Number(edit.value);
+            }
+            encodeChannelUint32(
+              outputBuilder,
+              subchunkSize,
+              uncompressedData,
+              chunkDataSize,
+            );
+          } else {
+            // Assumes UINT64
             const uncompressedData = new BigUint64Array(numElements);
-            decodeChannelUint64(uncompressedData, compressedData, baseOffset, chunkDataSize, subchunkSize);
-            for (const index of edit.indices) { uncompressedData[index] = edit.value; }
-            encodeChannelUint64(outputBuilder, subchunkSize, uncompressedData, chunkDataSize);
+            decodeChannelUint64(
+              uncompressedData,
+              compressedData,
+              baseOffset,
+              chunkDataSize,
+              subchunkSize,
+            );
+            for (const index of edit.indices) {
+              uncompressedData[index] = edit.value;
+            }
+            encodeChannelUint64(
+              outputBuilder,
+              subchunkSize,
+              uncompressedData,
+              chunkDataSize,
+            );
           }
 
           (targetChunk as any).data = outputBuilder.view;
@@ -314,10 +354,17 @@ export class VolumeChunkSource
       if ((chunk as any).data) {
         processEdit(chunk);
       } else {
-        const fetchPromise = this.fetchChunk(chunk.chunkGridPosition, (fetchedChunk) => {
-          processEdit(fetchedChunk as VolumeChunk);
-        }, {}).catch(err => {
-          console.error(`Failed to fetch chunk ${key} for local edit preview:`, err);
+        const fetchPromise = this.fetchChunk(
+          chunk.chunkGridPosition,
+          (fetchedChunk) => {
+            processEdit(fetchedChunk as VolumeChunk);
+          },
+          {},
+        ).catch((err) => {
+          console.error(
+            `Failed to fetch chunk ${key} for local edit preview:`,
+            err,
+          );
         });
         fetches.push(fetchPromise);
       }
@@ -354,7 +401,9 @@ export class VolumeChunkSource
       const chunkSize = chunkDataSize[chunkDim];
       const chunkIndex = Math.floor(voxel / chunkSize);
       chunkGridPosition[chunkDim] = chunkIndex;
-      positionWithinChunk[chunkDim] = Math.floor(voxel - chunkSize * chunkIndex);
+      positionWithinChunk[chunkDim] = Math.floor(
+        voxel - chunkSize * chunkIndex,
+      );
     }
     return { chunkGridPosition, positionWithinChunk };
   }

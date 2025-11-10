@@ -122,7 +122,7 @@ export class LocalDataSourceProvider implements DataSourceProvider {
             value: "equivalences",
             description:
               "Segmentation equivalence graph stored in the JSON state",
-          }
+          },
         ],
         (x) => x.value,
         (x) => x.description,

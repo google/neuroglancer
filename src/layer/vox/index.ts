@@ -32,18 +32,12 @@ import {
   getChunkPositionFromCombinedGlobalLocalPositions,
   getChunkTransformParameters,
 } from "#src/render_coordinate_transform.js";
-import {
-  trackableRenderScaleTarget,
-} from "#src/render_scale_statistics.js";
+import { trackableRenderScaleTarget } from "#src/render_scale_statistics.js";
 import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
 import { DataType } from "#src/sliceview/base.js";
 import { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
-import {
-  constantWatchableValue,
-} from "#src/trackable_value.js";
-import {
-  registerVoxelAnnotationTools,
-} from "#src/ui/voxel_annotations.js";
+import { constantWatchableValue } from "#src/trackable_value.js";
+import { registerVoxelAnnotationTools } from "#src/ui/voxel_annotations.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import * as matrix from "#src/util/matrix.js";
 import { NullarySignal } from "#src/util/signal.js";
@@ -59,7 +53,7 @@ export class VoxUserLayer extends UserLayer {
   static type = "vox";
   static typeAbbreviation = "vox";
   voxEditController?: VoxelEditController;
-  voxLabelsManager : LabelsManager;
+  voxLabelsManager: LabelsManager;
   labelsChanged = new NullarySignal();
 
   // Draw tool state
@@ -86,7 +80,9 @@ export class VoxUserLayer extends UserLayer {
 
   beginRenderLodLock(lockedIndex: number): void {
     if (!Number.isInteger(lockedIndex) || lockedIndex < 0) {
-      throw new Error("beginRenderLodLock: lockedIndex must be a non-negative integer");
+      throw new Error(
+        "beginRenderLodLock: lockedIndex must be a non-negative integer",
+      );
     }
     const rl = this.voxRenderLayerInstance;
     if (!rl) {
@@ -155,7 +151,10 @@ export class VoxUserLayer extends UserLayer {
       const multiscaleSource = renderLayer.multiscaleSource;
       const options: SliceViewSourceOptions = {
         displayRank: multiscaleSource.rank,
-        multiscaleToViewTransform: matrix.createIdentity(Float32Array, multiscaleSource.rank * multiscaleSource.rank),
+        multiscaleToViewTransform: matrix.createIdentity(
+          Float32Array,
+          multiscaleSource.rank * multiscaleSource.rank,
+        ),
         modelChannelDimensionIndices: [],
       };
       const sources = multiscaleSource.getSources(options);
@@ -178,8 +177,13 @@ export class VoxUserLayer extends UserLayer {
     const chunkTransform = this.cachedChunkTransform;
     if (chunkTransform === undefined) return undefined;
 
-    if (this.cachedVoxelPosition.length !== chunkTransform.modelTransform.unpaddedRank) {
-      this.cachedVoxelPosition = new Float32Array(chunkTransform.modelTransform.unpaddedRank);
+    if (
+      this.cachedVoxelPosition.length !==
+      chunkTransform.modelTransform.unpaddedRank
+    ) {
+      this.cachedVoxelPosition = new Float32Array(
+        chunkTransform.modelTransform.unpaddedRank,
+      );
     }
 
     const ok = getChunkPositionFromCombinedGlobalLocalPositions(
@@ -222,8 +226,7 @@ export class VoxUserLayer extends UserLayer {
 
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>): void {
     for (const loadedSubsource of subsources) {
-      const { volume } =
-        loadedSubsource.subsourceEntry.subsource;
+      const { volume } = loadedSubsource.subsourceEntry.subsource;
       if (volume instanceof MultiscaleVolumeChunkSource) {
         if (volume === undefined) {
           loadedSubsource.deactivate("No volume source");
@@ -231,10 +234,16 @@ export class VoxUserLayer extends UserLayer {
         }
         switch (volume.dataType) {
           case DataType.UINT32:
-            this.voxLabelsManager = new LabelsManager(DataType.UINT32, this.labelsChanged.dispatch);
+            this.voxLabelsManager = new LabelsManager(
+              DataType.UINT32,
+              this.labelsChanged.dispatch,
+            );
             break;
           case DataType.UINT64:
-            this.voxLabelsManager = new LabelsManager(DataType.UINT64, this.labelsChanged.dispatch);
+            this.voxLabelsManager = new LabelsManager(
+              DataType.UINT64,
+              this.labelsChanged.dispatch,
+            );
             break;
           default:
             loadedSubsource.deactivate(
@@ -243,26 +252,22 @@ export class VoxUserLayer extends UserLayer {
             continue;
         }
         this.voxEditController = new VoxelEditController(this, volume);
-        loadedSubsource.activate(
-            () => {
-              const renderLayer = new VoxelAnnotationRenderLayer(volume, {
-                transform: loadedSubsource.getRenderLayerTransform(),
-                renderScaleTarget: this.sliceViewRenderScaleTarget,
-                localPosition: this.localPosition,
-                shaderParameters: constantWatchableValue({})
-              });
+        loadedSubsource.activate(() => {
+          const renderLayer = new VoxelAnnotationRenderLayer(volume, {
+            transform: loadedSubsource.getRenderLayerTransform(),
+            renderScaleTarget: this.sliceViewRenderScaleTarget,
+            localPosition: this.localPosition,
+            shaderParameters: constantWatchableValue({}),
+          });
 
-              this.voxRenderLayerInstance = renderLayer;
-              loadedSubsource.addRenderLayer(renderLayer);
-            }
-        );
+          this.voxRenderLayerInstance = renderLayer;
+          loadedSubsource.addRenderLayer(renderLayer);
+        });
         continue;
       }
 
       // Reject anything else.
-      loadedSubsource.deactivate(
-        "Not compatible with vox layer",
-      );
+      loadedSubsource.deactivate("Not compatible with vox layer");
     }
   }
 }

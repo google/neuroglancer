@@ -1,16 +1,29 @@
 /**
  * @license
- * Copyright 2025.
+ * Copyright 2025 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 import type { VoxUserLayer } from "#src/layer/vox/index.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
-import type { VolumeChunkSource , MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
+import type {
+  VolumeChunkSource,
+  MultiscaleVolumeChunkSource,
+} from "#src/sliceview/volume/frontend.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { vec3 } from "#src/util/geom.js";
-import type {
-  VoxelLayerResolution} from "#src/voxel_annotation/base.js";
+import type { VoxelLayerResolution } from "#src/voxel_annotation/base.js";
 import {
   VOX_EDIT_BACKEND_RPC_ID,
   VOX_EDIT_COMMIT_VOXELS_RPC_ID,
@@ -20,7 +33,7 @@ import {
   VOX_EDIT_REDO_RPC_ID,
   VOX_EDIT_HISTORY_UPDATE_RPC_ID,
   makeVoxChunkKey,
-  parseVoxChunkKey
+  parseVoxChunkKey,
 } from "#src/voxel_annotation/base.js";
 import {
   registerRPC,
@@ -33,18 +46,27 @@ export class VoxelEditController extends SharedObject {
   public undoCount = new WatchableValue<number>(0);
   public redoCount = new WatchableValue<number>(0);
 
-  constructor(private layer: VoxUserLayer, private multiscale: MultiscaleVolumeChunkSource) {
+  constructor(
+    private layer: VoxUserLayer,
+    private multiscale: MultiscaleVolumeChunkSource,
+  ) {
     super();
     const rpc = (this.multiscale as any)?.chunkManager?.rpc;
     if (!rpc) {
-      throw new Error("VoxelEditController: Missing RPC from multiscale chunk manager.");
+      throw new Error(
+        "VoxelEditController: Missing RPC from multiscale chunk manager.",
+      );
     }
 
     // Get all sources for all scales and orientations
-    const sourcesByScale = this.multiscale.getSources(this.getIdentitySliceViewSourceOptions());
+    const sourcesByScale = this.multiscale.getSources(
+      this.getIdentitySliceViewSourceOptions(),
+    );
     const sources = sourcesByScale[0];
     if (!sources) {
-      throw new Error("VoxelEditController: Could not retrieve sources from multiscale object.");
+      throw new Error(
+        "VoxelEditController: Could not retrieve sources from multiscale object.",
+      );
     }
 
     const resolutions: VoxelLayerResolution[] = [];
@@ -53,13 +75,15 @@ export class VoxelEditController extends SharedObject {
       const source = sources[i]!.chunkSource;
       const rpcId = source.rpcId;
       if (rpcId == null) {
-        throw new Error(`VoxelEditController: Source at LOD index ${i} has null rpcId during initialization.`);
+        throw new Error(
+          `VoxelEditController: Source at LOD index ${i} has null rpcId during initialization.`,
+        );
       }
       resolutions.push({
         lodIndex: i,
         transform: Array.from(sources[i]!.chunkToMultiscaleTransform),
         chunkSize: Array.from(source.spec.chunkDataSize),
-        sourceRpc: rpcId
+        sourceRpc: rpcId,
       });
     }
 
@@ -80,9 +104,8 @@ export class VoxelEditController extends SharedObject {
     numChannels: 1,
     channelSpaceShape: new Uint32Array([]),
     chunkChannelDimensionIndices: [],
-    chunkChannelCoordinates: new Uint32Array([0])
+    chunkChannelCoordinates: new Uint32Array([0]),
   };
-
 
   private getIdentitySliceViewSourceOptions() {
     const rank = (this.multiscale as any).rank as number | undefined;
@@ -107,15 +130,21 @@ export class VoxelEditController extends SharedObject {
   }
 
   getSourceForLOD(lodIndex: number): VolumeChunkSource {
-    const sourcesByScale = this.multiscale.getSources(this.getIdentitySliceViewSourceOptions());
+    const sourcesByScale = this.multiscale.getSources(
+      this.getIdentitySliceViewSourceOptions(),
+    );
     // Assuming a single orientation, which is correct for this use case.
     const sources = sourcesByScale[0];
     if (!sources || sources.length <= lodIndex) {
-      throw new Error(`VoxelEditController: LOD index ${lodIndex} is out of bounds.`);
+      throw new Error(
+        `VoxelEditController: LOD index ${lodIndex} is out of bounds.`,
+      );
     }
     const source = sources[lodIndex]?.chunkSource;
     if (!source) {
-      throw new Error(`VoxelEditController: No chunk source found for LOD index ${lodIndex}.`);
+      throw new Error(
+        `VoxelEditController: No chunk source found for LOD index ${lodIndex}.`,
+      );
     }
     return source;
   }
@@ -169,27 +198,32 @@ export class VoxelEditController extends SharedObject {
       }
     } else {
       if (basis === undefined) {
-        throw new Error("paintBrushWithShape: 'basis' must be defined for disk alignment.");
+        throw new Error(
+          "paintBrushWithShape: 'basis' must be defined for disk alignment.",
+        );
       }
-        const { u, v } = basis;
-        for (let j = -r; j <= r; ++j) {
-          for (let i = -r; i <= r; ++i) {
-            if (i * i + j * j <= rr) {
-              const point = vec3.fromValues(cx, cy, cz);
-              vec3.scaleAndAdd(point, point, u as vec3, i);
-              vec3.scaleAndAdd(point, point, v as vec3, j);
-              voxelsToPaint.push(point as Float32Array);
-            }
+      const { u, v } = basis;
+      for (let j = -r; j <= r; ++j) {
+        for (let i = -r; i <= r; ++i) {
+          if (i * i + j * j <= rr) {
+            const point = vec3.fromValues(cx, cy, cz);
+            vec3.scaleAndAdd(point, point, u as vec3, i);
+            vec3.scaleAndAdd(point, point, v as vec3, j);
+            voxelsToPaint.push(point as Float32Array);
           }
-
+        }
       }
     }
 
     if (!voxelsToPaint || voxelsToPaint.length === 0) return;
-    const editsByVoxKey = new Map<string, { indices: number[], value: bigint }>();
+    const editsByVoxKey = new Map<
+      string,
+      { indices: number[]; value: bigint }
+    >();
 
     for (const voxelCoord of voxelsToPaint) {
-      const { chunkGridPosition, positionWithinChunk } = source.computeChunkIndices(voxelCoord);
+      const { chunkGridPosition, positionWithinChunk } =
+        source.computeChunkIndices(voxelCoord);
       const chunkKey = chunkGridPosition.join();
       const voxKey = makeVoxChunkKey(chunkKey, sourceIndex);
 
@@ -200,12 +234,15 @@ export class VoxelEditController extends SharedObject {
       }
 
       const { chunkDataSize } = source.spec;
-      const index = (positionWithinChunk[2] * chunkDataSize[1] + positionWithinChunk[1]) * chunkDataSize[0] + positionWithinChunk[0];
+      const index =
+        (positionWithinChunk[2] * chunkDataSize[1] + positionWithinChunk[1]) *
+          chunkDataSize[0] +
+        positionWithinChunk[0];
       entry.indices.push(index);
     }
 
     // Apply edits locally on the specific source for immediate feedback.
-    const localEdits = new Map<string, {indices: number[], value: bigint}>();
+    const localEdits = new Map<string, { indices: number[]; value: bigint }>();
     for (const [voxKey, edit] of editsByVoxKey.entries()) {
       const parsed = parseVoxChunkKey(voxKey);
       if (!parsed) continue;
@@ -213,19 +250,38 @@ export class VoxelEditController extends SharedObject {
     }
     source.applyLocalEdits(localEdits);
 
-    const backendEdits = [] as { key: string; indices: number[]; value: bigint }[];
+    const backendEdits = [] as {
+      key: string;
+      indices: number[];
+      value: bigint;
+    }[];
     for (const [voxKey, edit] of editsByVoxKey.entries()) {
-      backendEdits.push({ key: voxKey, indices: edit.indices, value: edit.value });
+      backendEdits.push({
+        key: voxKey,
+        indices: edit.indices,
+        value: edit.value,
+      });
     }
 
     this.commitEdits(backendEdits);
   }
 
   /** Commit helper for UI tools. */
-  commitEdits(edits: { key: string; indices: number[] | Uint32Array; value?: bigint; values?: ArrayLike<number>; size?: number[] }[]): void {
-    if (!this.rpc) throw new Error("VoxelEditController.commitEdits: RPC not initialized.");
+  commitEdits(
+    edits: {
+      key: string;
+      indices: number[] | Uint32Array;
+      value?: bigint;
+      values?: ArrayLike<number>;
+      size?: number[];
+    }[],
+  ): void {
+    if (!this.rpc)
+      throw new Error("VoxelEditController.commitEdits: RPC not initialized.");
     if (!Array.isArray(edits)) {
-      throw new Error("VoxelEditController.commitEdits: edits must be an array.");
+      throw new Error(
+        "VoxelEditController.commitEdits: edits must be an array.",
+      );
     }
     this.rpc.invoke(VOX_EDIT_COMMIT_VOXELS_RPC_ID, {
       rpcId: this.rpcId,
@@ -243,16 +299,31 @@ export class VoxelEditController extends SharedObject {
     fillValue: bigint,
     maxVoxels: number,
     planeNormal: vec3, // MUST be a normalized vector
-  ): Promise<{ edits: { key: string; indices: number[]; value: bigint }[]; filledCount: number; originalValue: bigint }> {
-      const sourceIndex = 0;
-      const source = this.getSourceForLOD(sourceIndex);
-      const startVoxelLod = vec3.round(vec3.create(), startPositionCanonical as vec3);
+  ): Promise<{
+    edits: { key: string; indices: number[]; value: bigint }[];
+    filledCount: number;
+    originalValue: bigint;
+  }> {
+    const sourceIndex = 0;
+    const source = this.getSourceForLOD(sourceIndex);
+    const startVoxelLod = vec3.round(
+      vec3.create(),
+      startPositionCanonical as vec3,
+    );
 
-      const originalValueResult = await source.getEnsuredValueAt(startVoxelLod as Float32Array, this.singleChannelAccess);
-      if (originalValueResult === null) {
-      throw new Error("Flood fill seed is in an unloaded or out-of-bounds chunk.");
+    const originalValueResult = await source.getEnsuredValueAt(
+      startVoxelLod as Float32Array,
+      this.singleChannelAccess,
+    );
+    if (originalValueResult === null) {
+      throw new Error(
+        "Flood fill seed is in an unloaded or out-of-bounds chunk.",
+      );
     }
-    const originalValue = typeof originalValueResult !== "bigint" ? BigInt(originalValueResult as number) : originalValueResult;
+    const originalValue =
+      typeof originalValueResult !== "bigint"
+        ? BigInt(originalValueResult as number)
+        : originalValueResult;
 
     if (originalValue === fillValue) {
       return { edits: [], filledCount: 0, originalValue };
@@ -260,8 +331,10 @@ export class VoxelEditController extends SharedObject {
 
     const U = vec3.create();
     const V = vec3.create();
-    const tempVec = Math.abs(vec3.dot(planeNormal, vec3.fromValues(1, 0, 0))) < 0.9 ?
-      vec3.fromValues(1, 0, 0) : vec3.fromValues(0, 1, 0);
+    const tempVec =
+      Math.abs(vec3.dot(planeNormal, vec3.fromValues(1, 0, 0))) < 0.9
+        ? vec3.fromValues(1, 0, 0)
+        : vec3.fromValues(0, 1, 0);
     vec3.cross(U, tempVec, planeNormal);
     vec3.normalize(U, U);
     vec3.cross(V, planeNormal, U);
@@ -272,7 +345,6 @@ export class VoxelEditController extends SharedObject {
     let filledCount = 0;
     const voxelsToFill: Float32Array[] = [];
 
-
     const map2dTo3d = (u: number, v: number): vec3 => {
       const point = vec3.clone(startVoxelLod);
       vec3.scaleAndAdd(point, point, U, u);
@@ -281,9 +353,13 @@ export class VoxelEditController extends SharedObject {
     };
 
     const isFillable = async (p: vec3): Promise<boolean> => {
-      const value = await source.getEnsuredValueAt(p as Float32Array, this.singleChannelAccess);
+      const value = await source.getEnsuredValueAt(
+        p as Float32Array,
+        this.singleChannelAccess,
+      );
       if (value === null) return false;
-      const bigValue = (typeof value !== "bigint") ? BigInt(value as number) : value;
+      const bigValue =
+        typeof value !== "bigint" ? BigInt(value as number) : value;
       if (originalValue === 0n) return bigValue === 0n;
       return bigValue === originalValue;
     };
@@ -298,7 +374,13 @@ export class VoxelEditController extends SharedObject {
       return Math.min(thickness, this.morphologicalConfig.maxSize);
     };
 
-    const hasThickEnoughChannel = async (u: number, v: number, nu: number, nv: number, requiredThickness: number): Promise<boolean> => {
+    const hasThickEnoughChannel = async (
+      u: number,
+      v: number,
+      nu: number,
+      nv: number,
+      requiredThickness: number,
+    ): Promise<boolean> => {
       if (requiredThickness <= 1) return true;
 
       const halfThickness = Math.floor(requiredThickness / 2);
@@ -315,7 +397,7 @@ export class VoxelEditController extends SharedObject {
         const testV = nv + perpV * offset;
         const pointToTest = map2dTo3d(testU, testV);
 
-        if (!await isFillable(pointToTest)) {
+        if (!(await isFillable(pointToTest))) {
           return false;
         }
       }
@@ -323,7 +405,11 @@ export class VoxelEditController extends SharedObject {
       return true;
     };
 
-    const fillBorderRegion = async (startU: number, startV: number, requiredThickness: number) => {
+    const fillBorderRegion = async (
+      startU: number,
+      startV: number,
+      requiredThickness: number,
+    ) => {
       const subQueue: [number, number][] = [];
       // The bounding box for the local fill is defined in the (u, v) coordinate system
       const halfSize = Math.floor(requiredThickness / 2) + 1;
@@ -341,11 +427,20 @@ export class VoxelEditController extends SharedObject {
         filledCount++;
         voxelsToFill.push(currentPoint as Float32Array);
 
-        const neighbors2d: [number, number][] = [[u + 1, v], [u - 1, v], [u, v + 1], [u, v - 1]];
+        const neighbors2d: [number, number][] = [
+          [u + 1, v],
+          [u - 1, v],
+          [u, v + 1],
+          [u, v - 1],
+        ];
         for (const [nu, nv] of neighbors2d) {
           // Constrain this local search to a small bounding box
-          if (nu < startU - halfSize || nu > startU + halfSize ||
-            nv < startV - halfSize || nv > startV + halfSize) {
+          if (
+            nu < startU - halfSize ||
+            nu > startU + halfSize ||
+            nv < startV - halfSize ||
+            nv > startV + halfSize
+          ) {
             continue;
           }
 
@@ -366,7 +461,9 @@ export class VoxelEditController extends SharedObject {
 
     while (queue.length > 0) {
       if (filledCount >= maxVoxels) {
-        throw new Error(`Flood fill region exceeds the limit of ${maxVoxels} voxels.`);
+        throw new Error(
+          `Flood fill region exceeds the limit of ${maxVoxels} voxels.`,
+        );
       }
       const [u, v] = queue.shift()!;
 
@@ -375,7 +472,12 @@ export class VoxelEditController extends SharedObject {
       voxelsToFill.push(currentPoint as Float32Array);
 
       const requiredThickness = getCurrentThickness();
-      const neighbors2d: [number, number][] = [[u + 1, v], [u - 1, v], [u, v + 1], [u, v - 1]];
+      const neighbors2d: [number, number][] = [
+        [u + 1, v],
+        [u - 1, v],
+        [u, v + 1],
+        [u, v - 1],
+      ];
 
       for (const [nu, nv] of neighbors2d) {
         const k = `${nu},${nv}`;
@@ -393,9 +495,13 @@ export class VoxelEditController extends SharedObject {
       }
     }
 
-    const editsByVoxKey = new Map<string, { indices: number[], value: bigint }>();
+    const editsByVoxKey = new Map<
+      string,
+      { indices: number[]; value: bigint }
+    >();
     for (const voxelCoord of voxelsToFill) {
-      const { chunkGridPosition, positionWithinChunk } = source.computeChunkIndices(voxelCoord);
+      const { chunkGridPosition, positionWithinChunk } =
+        source.computeChunkIndices(voxelCoord);
       const chunkKey = chunkGridPosition.join();
       const voxKey = makeVoxChunkKey(chunkKey, sourceIndex);
       let entry = editsByVoxKey.get(voxKey);
@@ -404,19 +510,27 @@ export class VoxelEditController extends SharedObject {
         editsByVoxKey.set(voxKey, entry);
       }
       const { chunkDataSize } = source.spec;
-      const index = (positionWithinChunk[2] * chunkDataSize[1] + positionWithinChunk[1]) * chunkDataSize[0] + positionWithinChunk[0];
+      const index =
+        (positionWithinChunk[2] * chunkDataSize[1] + positionWithinChunk[1]) *
+          chunkDataSize[0] +
+        positionWithinChunk[0];
       entry.indices.push(index);
     }
-    const localEdits = new Map<string, {indices: number[], value: bigint}>();
+    const localEdits = new Map<string, { indices: number[]; value: bigint }>();
     for (const [voxKey, edit] of editsByVoxKey.entries()) {
       const parsed = parseVoxChunkKey(voxKey);
       if (!parsed) continue;
       localEdits.set(parsed.chunkKey, edit);
     }
     source.applyLocalEdits(localEdits);
-    const backendEdits: { key: string; indices: number[]; value: bigint }[] = [];
+    const backendEdits: { key: string; indices: number[]; value: bigint }[] =
+      [];
     for (const [voxKey, edit] of editsByVoxKey.entries()) {
-      backendEdits.push({ key: voxKey, indices: edit.indices, value: edit.value });
+      backendEdits.push({
+        key: voxKey,
+        indices: edit.indices,
+        value: edit.value,
+      });
     }
     this.commitEdits(backendEdits);
 
@@ -426,7 +540,9 @@ export class VoxelEditController extends SharedObject {
   callChunkReload(voxChunkKeys: string[]) {
     if (!Array.isArray(voxChunkKeys) || voxChunkKeys.length === 0) return;
     // This assumes the multiscale source has a single orientation.
-    const sourcesByScale = (this.multiscale as any).getSources(this.getIdentitySliceViewSourceOptions());
+    const sourcesByScale = (this.multiscale as any).getSources(
+      this.getIdentitySliceViewSourceOptions(),
+    );
     const sources = sourcesByScale && sourcesByScale[0];
     if (!sources) return;
 
@@ -435,7 +551,9 @@ export class VoxelEditController extends SharedObject {
     for (const voxKey of voxChunkKeys) {
       const parsed = parseVoxChunkKey(voxKey);
       if (!parsed) continue;
-      const source = sources[parsed.lodIndex]?.chunkSource as VolumeChunkSource | undefined;
+      const source = sources[parsed.lodIndex]?.chunkSource as
+        | VolumeChunkSource
+        | undefined;
       if (!source) continue;
       let arr = chunksToInvalidateBySource.get(source);
       if (!arr) {
@@ -462,21 +580,27 @@ export class VoxelEditController extends SharedObject {
   }
 
   public undo(): void {
-    if (!this.rpc) throw new Error("VoxelEditController.undo: RPC not initialized.");
+    if (!this.rpc)
+      throw new Error("VoxelEditController.undo: RPC not initialized.");
     console.log("VoxelEditController.undo");
-    this.rpc.promiseInvoke<void>(VOX_EDIT_UNDO_RPC_ID, { rpcId: this.rpcId }).catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      StatusMessage.showTemporaryMessage(`Undo failed: ${message}`, 3000);
-    });
+    this.rpc
+      .promiseInvoke<void>(VOX_EDIT_UNDO_RPC_ID, { rpcId: this.rpcId })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        StatusMessage.showTemporaryMessage(`Undo failed: ${message}`, 3000);
+      });
   }
 
   public redo(): void {
-    if (!this.rpc) throw new Error("VoxelEditController.redo: RPC not initialized.");
+    if (!this.rpc)
+      throw new Error("VoxelEditController.redo: RPC not initialized.");
     console.log("VoxelEditController.redo");
-    this.rpc.promiseInvoke<void>(VOX_EDIT_REDO_RPC_ID, { rpcId: this.rpcId }).catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      StatusMessage.showTemporaryMessage(`Redo failed: ${message}`, 3000);
-    });
+    this.rpc
+      .promiseInvoke<void>(VOX_EDIT_REDO_RPC_ID, { rpcId: this.rpcId })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        StatusMessage.showTemporaryMessage(`Redo failed: ${message}`, 3000);
+      });
   }
 }
 
@@ -489,14 +613,15 @@ registerRPC(VOX_RELOAD_CHUNKS_RPC_ID, function (x: any) {
 registerRPC(VOX_EDIT_FAILURE_RPC_ID, function (x: any) {
   const obj = this.get(x.rpcId) as VoxelEditController;
   const keys: string[] = Array.isArray(x.voxChunkKeys) ? x.voxChunkKeys : [];
-  const message: string = typeof x.message === 'string' ? x.message : 'Voxel edit failed.';
+  const message: string =
+    typeof x.message === "string" ? x.message : "Voxel edit failed.";
   obj.handleCommitFailure(keys, message);
 });
 
 registerRPC(VOX_EDIT_HISTORY_UPDATE_RPC_ID, function (x: any) {
   const obj = this.get(x.rpcId) as VoxelEditController;
-  const undoCount = typeof x.undoCount === 'number' ? x.undoCount : 0;
-  const redoCount = typeof x.redoCount === 'number' ? x.redoCount : 0;
+  const undoCount = typeof x.undoCount === "number" ? x.undoCount : 0;
+  const redoCount = typeof x.redoCount === "number" ? x.redoCount : 0;
   obj.undoCount.value = undoCount;
   obj.redoCount.value = redoCount;
 });

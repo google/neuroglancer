@@ -1,3 +1,19 @@
+/**
+ * @license
+ * Copyright 2025 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 import type { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { mat4, vec3 } from "#src/util/geom.js";
 import * as matrix from "#src/util/matrix.js";
@@ -19,12 +35,21 @@ import {
   makeChunkKey,
 } from "#src/voxel_annotation/base.js";
 import type { RPC } from "#src/worker_rpc.js";
-import { registerPromiseRPC , SharedObject , registerRPC, registerSharedObject, initializeSharedObjectCounterpart } from "#src/worker_rpc.js";
+import {
+  registerPromiseRPC,
+  SharedObject,
+  registerRPC,
+  registerSharedObject,
+  initializeSharedObjectCounterpart,
+} from "#src/worker_rpc.js";
 
 @registerSharedObject(VOX_EDIT_BACKEND_RPC_ID)
 export class VoxelEditController extends SharedObject {
   private sources = new Map<number, VolumeChunkSource>();
-  private resolutions = new Map<number, VoxelLayerResolution & { invTransform: mat4 }>();
+  private resolutions = new Map<
+    number,
+    VoxelLayerResolution & { invTransform: mat4 }
+  >();
 
   private pendingEdits: {
     key: string;
@@ -52,10 +77,7 @@ export class VoxelEditController extends SharedObject {
     const passedResolutions = options?.resolutions as
       | VoxelLayerResolution[]
       | undefined;
-    if (
-      passedResolutions === undefined ||
-      !Array.isArray(passedResolutions)
-    ) {
+    if (passedResolutions === undefined || !Array.isArray(passedResolutions)) {
       throw new Error(
         "VoxelEditBackend: missing required 'resolutions' array during initialization",
       );
@@ -64,8 +86,17 @@ export class VoxelEditController extends SharedObject {
     for (const res of passedResolutions) {
       const rank = res.chunkSize.length;
       const invTransform = new Float32Array((rank + 1) ** 2);
-      matrix.inverse(invTransform, rank + 1, new Float32Array(res.transform), rank + 1, rank + 1);
-      this.resolutions.set(res.lodIndex, { ...res, invTransform: invTransform as mat4 });
+      matrix.inverse(
+        invTransform,
+        rank + 1,
+        new Float32Array(res.transform),
+        rank + 1,
+        rank + 1,
+      );
+      this.resolutions.set(res.lodIndex, {
+        ...res,
+        invTransform: invTransform as mat4,
+      });
       const resolved = rpc.get(res.sourceRpc) as VolumeChunkSource | undefined;
       if (!resolved) {
         throw new Error(
@@ -199,7 +230,9 @@ export class VoxelEditController extends SharedObject {
   ) {
     for (const e of edits) {
       if (!e || !e.key || !e.indices) {
-        throw new Error("VoxelEditController.commitVoxels: invalid edit payload");
+        throw new Error(
+          "VoxelEditController.commitVoxels: invalid edit payload",
+        );
       }
       this.pendingEdits.push(e);
     }
@@ -250,7 +283,9 @@ export class VoxelEditController extends SharedObject {
     }
   }
 
-  private async performDownsampleCascadeForKey(sourceKey: string): Promise<void> {
+  private async performDownsampleCascadeForKey(
+    sourceKey: string,
+  ): Promise<void> {
     let currentKey: string | null = sourceKey;
     while (currentKey !== null) {
       currentKey = await this.downsampleStep(currentKey);
@@ -270,20 +305,27 @@ export class VoxelEditController extends SharedObject {
     }
     const childSource = this.sources.get(childInfo.lodIndex);
     if (!childSource) {
-      console.error(`[Downsample] No source found for child LOD: ${childInfo.lodIndex}`);
+      console.error(
+        `[Downsample] No source found for child LOD: ${childInfo.lodIndex}`,
+      );
       return null;
     }
 
-    const childChunk = childSource.getChunk(new Float32Array([childInfo.x, childInfo.y, childInfo.z])) as any;
+    const childChunk = childSource.getChunk(
+      new Float32Array([childInfo.x, childInfo.y, childInfo.z]),
+    ) as any;
     if (!childChunk.data) {
       try {
         await childSource.download(childChunk, new AbortController().signal);
       } catch (e) {
-        console.warn(`[Downsample] Failed to download source chunk ${childKey}:`, e);
+        console.warn(
+          `[Downsample] Failed to download source chunk ${childKey}:`,
+          e,
+        );
         return null;
       }
     }
-    const childChunkData = childChunk.data as (Uint32Array | BigUint64Array);
+    const childChunkData = childChunk.data as Uint32Array | BigUint64Array;
     const childRes = this.resolutions.get(childInfo.lodIndex)!;
 
     // 2. Determine the parent chunk that corresponds to this child chunk.
@@ -295,17 +337,29 @@ export class VoxelEditController extends SharedObject {
     const { parentKey, parentSource, parentRes } = parentInfo;
 
     // 3. Calculate the update for the parent chunk based on the child chunk's data.
-    const update = this._calculateParentUpdate(childChunkData, childRes, parentRes, childInfo);
+    const update = this._calculateParentUpdate(
+      childChunkData,
+      childRes,
+      parentRes,
+      childInfo,
+    );
     if (update.indices.length === 0) {
       return parentKey;
     }
 
     // 4. Commit the update to the parent chunk and notify the frontend.
     try {
-      await parentSource.applyEdits(parentInfo.chunkKey, update.indices, update.values);
+      await parentSource.applyEdits(
+        parentInfo.chunkKey,
+        update.indices,
+        update.values,
+      );
       this.callChunkReload([parentKey]);
     } catch (e) {
-      console.error(`[Downsample] Failed to apply edits to parent chunk ${parentKey}:`, e);
+      console.error(
+        `[Downsample] Failed to apply edits to parent chunk ${parentKey}:`,
+        e,
+      );
       this.rpc?.invoke(VOX_EDIT_FAILURE_RPC_ID, {
         rpcId: this.rpcId,
         voxChunkKeys: [parentKey],
@@ -320,7 +374,10 @@ export class VoxelEditController extends SharedObject {
   /**
    * Helper to find and describe the parent chunk.
    */
-  private _getParentChunkInfo(childKey: string, childRes: VoxelLayerResolution) {
+  private _getParentChunkInfo(
+    childKey: string,
+    childRes: VoxelLayerResolution,
+  ) {
     const childInfo = parseVoxChunkKey(childKey)!;
     const parentLodIndex = childInfo.lodIndex + 1;
     const parentRes = this.resolutions.get(parentLodIndex);
@@ -337,22 +394,39 @@ export class VoxelEditController extends SharedObject {
       childInfo.z * childRes.chunkSize[2],
     ]);
     const childPhysOrigin = new Float32Array(rank);
-    matrix.transformPoint(childPhysOrigin, new Float32Array(childRes.transform), rank + 1, childVoxelOrigin, rank);
+    matrix.transformPoint(
+      childPhysOrigin,
+      new Float32Array(childRes.transform),
+      rank + 1,
+      childVoxelOrigin,
+      rank,
+    );
 
     // Transform that world coordinate into the parent's voxel space
     const parentVoxelCoordOfChildOrigin = new Float32Array(rank);
-    matrix.transformPoint(parentVoxelCoordOfChildOrigin, parentRes.invTransform, rank + 1, childPhysOrigin, rank);
+    matrix.transformPoint(
+      parentVoxelCoordOfChildOrigin,
+      parentRes.invTransform,
+      rank + 1,
+      childPhysOrigin,
+      rank,
+    );
 
     // Determine the parent chunk's grid position
-    const parentX = Math.floor(parentVoxelCoordOfChildOrigin[0] / parentRes.chunkSize[0]);
-    const parentY = Math.floor(parentVoxelCoordOfChildOrigin[1] / parentRes.chunkSize[1]);
-    const parentZ = Math.floor(parentVoxelCoordOfChildOrigin[2] / parentRes.chunkSize[2]);
+    const parentX = Math.floor(
+      parentVoxelCoordOfChildOrigin[0] / parentRes.chunkSize[0],
+    );
+    const parentY = Math.floor(
+      parentVoxelCoordOfChildOrigin[1] / parentRes.chunkSize[1],
+    );
+    const parentZ = Math.floor(
+      parentVoxelCoordOfChildOrigin[2] / parentRes.chunkSize[2],
+    );
 
     const parentChunkKey = makeChunkKey(parentX, parentY, parentZ);
     const parentKey = makeVoxChunkKey(parentChunkKey, parentLodIndex);
     return { parentKey, chunkKey: parentChunkKey, parentRes, parentSource };
   }
-
 
   /**
    * Calculates the downsampled voxel values for a region of a parent chunk.
@@ -362,7 +436,7 @@ export class VoxelEditController extends SharedObject {
     childChunkData: Uint32Array | BigUint64Array,
     childRes: VoxelLayerResolution & { invTransform: mat4 },
     parentRes: VoxelLayerResolution & { invTransform: mat4 },
-    childInfo: { x: number, y: number, z: number }
+    childInfo: { x: number; y: number; z: number },
   ) {
     const indices: number[] = [];
     const values: bigint[] = [];
@@ -374,7 +448,7 @@ export class VoxelEditController extends SharedObject {
     const parentVoxelToChildVoxelTransform = mat4.multiply(
       mat4.create(),
       childRes.invTransform,
-      new Float32Array(parentRes.transform) as mat4
+      new Float32Array(parentRes.transform) as mat4,
     );
 
     // Calculate the child chunk's origin and extent in absolute child-voxel-space
@@ -391,15 +465,39 @@ export class VoxelEditController extends SharedObject {
 
     // Transform child chunk bounds to physical space
     const childPhysOrigin = new Float32Array(rank);
-    matrix.transformPoint(childPhysOrigin, new Float32Array(childRes.transform), rank + 1, childChunkOrigin, rank);
+    matrix.transformPoint(
+      childPhysOrigin,
+      new Float32Array(childRes.transform),
+      rank + 1,
+      childChunkOrigin,
+      rank,
+    );
     const childPhysMax = new Float32Array(rank);
-    matrix.transformPoint(childPhysMax, new Float32Array(childRes.transform), rank + 1, childChunkMax, rank);
+    matrix.transformPoint(
+      childPhysMax,
+      new Float32Array(childRes.transform),
+      rank + 1,
+      childChunkMax,
+      rank,
+    );
 
     // Transform to parent-voxel-space to find the affected region
     const parentVoxelMin = new Float32Array(rank);
-    matrix.transformPoint(parentVoxelMin, parentRes.invTransform, rank + 1, childPhysOrigin, rank);
+    matrix.transformPoint(
+      parentVoxelMin,
+      parentRes.invTransform,
+      rank + 1,
+      childPhysOrigin,
+      rank,
+    );
     const parentVoxelMax = new Float32Array(rank);
-    matrix.transformPoint(parentVoxelMax, parentRes.invTransform, rank + 1, childPhysMax, rank);
+    matrix.transformPoint(
+      parentVoxelMax,
+      parentRes.invTransform,
+      rank + 1,
+      childPhysMax,
+      rank,
+    );
 
     // Determine which parent chunk this corresponds to (should match _getParentChunkInfo)
     const parentChunkGridX = Math.floor(parentVoxelMin[0] / parentChunkSize[0]);
@@ -417,8 +515,14 @@ export class VoxelEditController extends SharedObject {
     const parentLocalMin = new Float32Array(rank);
     const parentLocalMax = new Float32Array(rank);
     for (let i = 0; i < rank; ++i) {
-      parentLocalMin[i] = Math.max(0, Math.floor(parentVoxelMin[i] - parentChunkOriginInParentVoxels[i]));
-      parentLocalMax[i] = Math.min(parentChunkSize[i], Math.ceil(parentVoxelMax[i] - parentChunkOriginInParentVoxels[i]));
+      parentLocalMin[i] = Math.max(
+        0,
+        Math.floor(parentVoxelMin[i] - parentChunkOriginInParentVoxels[i]),
+      );
+      parentLocalMax[i] = Math.min(
+        parentChunkSize[i],
+        Math.ceil(parentVoxelMax[i] - parentChunkOriginInParentVoxels[i]),
+      );
     }
 
     const [startX, startY, startZ] = parentLocalMin;
@@ -451,7 +555,11 @@ export class VoxelEditController extends SharedObject {
 
           // Transform corners to absolute child-voxel-space
           for (let i = 0; i < 8; ++i) {
-            vec3.transformMat4(transformedCorners[i], corners[i], parentVoxelToChildVoxelTransform);
+            vec3.transformMat4(
+              transformedCorners[i],
+              corners[i],
+              parentVoxelToChildVoxelTransform,
+            );
           }
 
           // Find bounding box in absolute child-voxel-space
@@ -529,7 +637,7 @@ export class VoxelEditController extends SharedObject {
     sourceStack: EditAction[],
     targetStack: EditAction[],
     useOldValues: boolean,
-    actionDescription: 'undo' | 'redo'
+    actionDescription: "undo" | "redo",
   ): Promise<void> {
     await this.flushPending();
 
@@ -550,11 +658,18 @@ export class VoxelEditController extends SharedObject {
 
       const valuesToApply = useOldValues ? change.oldValues : change.newValues;
       try {
-        await source.applyEdits(parsedKey.chunkKey, change.indices, valuesToApply);
+        await source.applyEdits(
+          parsedKey.chunkKey,
+          change.indices,
+          valuesToApply,
+        );
         chunksToReload.add(voxKey);
       } catch (e) {
         success = false;
-        console.error(`performUndoRedo: failed to apply edits for ${voxKey}`, e);
+        console.error(
+          `performUndoRedo: failed to apply edits for ${voxKey}`,
+          e,
+        );
         this.rpc?.invoke(VOX_EDIT_FAILURE_RPC_ID, {
           rpcId: this.rpcId,
           voxChunkKeys: [voxKey],
@@ -584,11 +699,11 @@ export class VoxelEditController extends SharedObject {
   }
 
   public async undo(): Promise<void> {
-    await this.performUndoRedo(this.undoStack, this.redoStack, true, 'undo');
+    await this.performUndoRedo(this.undoStack, this.redoStack, true, "undo");
   }
 
   public async redo(): Promise<void> {
-    await this.performUndoRedo(this.redoStack, this.undoStack, false, 'redo');
+    await this.performUndoRedo(this.redoStack, this.undoStack, false, "redo");
   }
 }
 

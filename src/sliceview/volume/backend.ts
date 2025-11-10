@@ -16,12 +16,15 @@
 
 import type { Chunk } from "#src/chunk_manager/backend.js";
 import { ChunkState } from "#src/chunk_manager/base.js";
-import { SliceViewChunk, SliceViewChunkSourceBackend } from "#src/sliceview/backend.js";
+import {
+  SliceViewChunk,
+  SliceViewChunkSourceBackend,
+} from "#src/sliceview/backend.js";
 import type { SliceViewChunkSpecification } from "#src/sliceview/base.js";
 import { DataType } from "#src/sliceview/base.js";
 import type {
   VolumeChunkSource as VolumeChunkSourceInterface,
-  VolumeChunkSpecification
+  VolumeChunkSpecification,
 } from "#src/sliceview/volume/base.js";
 import type { TypedArray } from "#src/util/array.js";
 import { DATA_TYPE_ARRAY_CONSTRUCTOR } from "#src/util/data_type.js";
@@ -159,15 +162,24 @@ export class VolumeChunkSource
   // Override in data source backends to actually persist the chunk.
   // Default throws to ensure write capability is explicitly implemented.
   async writeChunk(_chunk: VolumeChunk): Promise<void> {
-    throw new Error("VolumeChunkSource.writeChunk not implemented for this datasource");
+    throw new Error(
+      "VolumeChunkSource.writeChunk not implemented for this datasource",
+    );
   }
 
-  async applyEdits(chunkKey: string, indices: ArrayLike<number>, values: ArrayLike<number | bigint>): Promise<VoxelChange> {
+  async applyEdits(
+    chunkKey: string,
+    indices: ArrayLike<number>,
+    values: ArrayLike<number | bigint>,
+  ): Promise<VoxelChange> {
     if (indices.length !== values.length) {
       throw new Error("applyEdits: indices and values length mismatch");
     }
-    const chunkGridPosition = new Float32Array(chunkKey.split(',').map(Number));
-    if (chunkGridPosition.length !== this.spec.rank || chunkGridPosition.some((v) => !Number.isFinite(v))) {
+    const chunkGridPosition = new Float32Array(chunkKey.split(",").map(Number));
+    if (
+      chunkGridPosition.length !== this.spec.rank ||
+      chunkGridPosition.some((v) => !Number.isFinite(v))
+    ) {
       throw new Error(`applyEdits: invalid chunk key ${chunkKey}`);
     }
     const chunk = this.getChunk(chunkGridPosition) as VolumeChunk;
@@ -193,7 +205,9 @@ export class VolumeChunkSource
         this.computeChunkBounds(chunk);
       }
       if (!chunk.chunkDataSize) {
-        throw new Error(`applyEdits: Cannot create new chunk ${chunkKey} because its size is unknown.`);
+        throw new Error(
+          `applyEdits: Cannot create new chunk ${chunkKey} because its size is unknown.`,
+        );
       }
       const numElements = chunk.chunkDataSize.reduce((a, b) => a * b, 1);
       const Ctor = DATA_TYPE_ARRAY_CONSTRUCTOR[this.spec.dataType];
@@ -206,14 +220,19 @@ export class VolumeChunkSource
     const indicesCopy = new Uint32Array(indices);
     const newValuesArray = new ArrayCtor(values.length);
     for (let i = 0; i < values.length; ++i) {
-      newValuesArray[i] = this.spec.dataType === DataType.UINT32 ? Number(values[i]!) : values[i]!;
+      newValuesArray[i] =
+        this.spec.dataType === DataType.UINT32
+          ? Number(values[i]!)
+          : values[i]!;
     }
     const oldValuesArray = new ArrayCtor(indices.length);
 
     for (let i = 0; i < indices.length; ++i) {
       const idx = indices[i]!;
       if (idx < 0 || idx >= data.length) {
-        throw new Error(`applyEdits: index ${idx} out of bounds for chunk ${chunkKey}`);
+        throw new Error(
+          `applyEdits: index ${idx} out of bounds for chunk ${chunkKey}`,
+        );
       }
       oldValuesArray[i] = data[idx];
       data[idx] = newValuesArray[i];
@@ -234,10 +253,15 @@ export class VolumeChunkSource
         if (e instanceof HttpError && e.status < 500 && e.status !== 429) {
           break;
         }
-        await new Promise(resolve => setTimeout(resolve, 250 * Math.pow(2, i)));
+        await new Promise((resolve) =>
+          setTimeout(resolve, 250 * Math.pow(2, i)),
+        );
       }
     }
-    throw new Error(`Failed to write chunk ${chunkKey} after ${maxRetries} attempts.`, { cause: lastError });
+    throw new Error(
+      `Failed to write chunk ${chunkKey} after ${maxRetries} attempts.`,
+      { cause: lastError },
+    );
   }
 }
 VolumeChunkSource.prototype.chunkConstructor = VolumeChunk;

@@ -96,7 +96,10 @@ export interface WritableKvStore {
   delete?: (key: string) => Promise<void>;
 }
 
-export interface KvStore extends ReadableKvStore, ListableKvStore, WritableKvStore {
+export interface KvStore
+  extends ReadableKvStore,
+    ListableKvStore,
+    WritableKvStore {
   // Indicates that the only valid key is the empty string.
   singleKey?: boolean;
 }

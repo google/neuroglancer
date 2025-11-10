@@ -697,7 +697,11 @@ export function* filterVisibleSources(
   // First: allow a render layer to force a specific multiscale index for safety-critical flows.
   const forcedIndex = renderLayer.getForcedSourceIndexOverride?.();
   if (forcedIndex !== undefined) {
-    if (!Number.isInteger(forcedIndex) || forcedIndex < 0 || forcedIndex >= sources.length) {
+    if (
+      !Number.isInteger(forcedIndex) ||
+      forcedIndex < 0 ||
+      forcedIndex >= sources.length
+    ) {
       throw new Error(
         `filterVisibleSources: forced source index ${forcedIndex} is out of range [0, ${sources.length - 1}]`,
       );

@@ -16,19 +16,34 @@
 
 import type { OAuth2Credentials } from "#src/credentials_provider/oauth2.js";
 import { fetchOkWithOAuth2CredentialsAdapter } from "#src/credentials_provider/oauth2.js";
-import type { BaseKvStoreProvider, BaseKvStoreCompleteUrlOptions, CompletionResult } from "#src/kvstore/context.js";
+import type {
+  BaseKvStoreProvider,
+  BaseKvStoreCompleteUrlOptions,
+  CompletionResult,
+} from "#src/kvstore/context.js";
 import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
 import { frontendOnlyKvStoreProviderRegistry } from "#src/kvstore/frontend.js";
 import { SsaS3KvStore } from "#src/kvstore/ssa_s3/ssa_s3_kvstore.js";
-import { ensureSsaHttpsUrl, getWorkerOriginAndDatasetPrefix, getDisplayBase } from "#src/kvstore/ssa_s3/url_utils.js";
-import { verifyObject, verifyObjectProperty, verifyString, verifyStringArray } from "#src/util/json.js";
+import {
+  ensureSsaHttpsUrl,
+  getWorkerOriginAndDatasetPrefix,
+  getDisplayBase,
+} from "#src/kvstore/ssa_s3/url_utils.js";
+import {
+  verifyObject,
+  verifyObjectProperty,
+  verifyString,
+  verifyStringArray,
+} from "#src/util/json.js";
 
 interface SsaAuthenticateResponseLite {
   permissions: { read: string[]; write: string[] };
   endpoints: { signRequests: string; listFiles: string };
 }
 
-function parseAuthenticateResponseLite(json: unknown): SsaAuthenticateResponseLite {
+function parseAuthenticateResponseLite(
+  json: unknown,
+): SsaAuthenticateResponseLite {
   const obj = verifyObject(json);
   const endpointsObj = verifyObjectProperty(obj, "endpoints", verifyObject);
   const permissionsObj = verifyObjectProperty(obj, "permissions", verifyObject);
@@ -38,7 +53,11 @@ function parseAuthenticateResponseLite(json: unknown): SsaAuthenticateResponseLi
       write: verifyObjectProperty(permissionsObj, "write", verifyStringArray),
     },
     endpoints: {
-      signRequests: verifyObjectProperty(endpointsObj, "signRequests", verifyString),
+      signRequests: verifyObjectProperty(
+        endpointsObj,
+        "signRequests",
+        verifyString,
+      ),
       listFiles: verifyObjectProperty(endpointsObj, "listFiles", verifyString),
     },
   };
@@ -62,21 +81,26 @@ async function completeSsaUrl(
 ): Promise<CompletionResult> {
   const { url } = options;
   const parsed = ensureSsaHttpsUrl(url.url);
-  const { workerOrigin, datasetBasePrefix } = getWorkerOriginAndDatasetPrefix(parsed);
+  const { workerOrigin, datasetBasePrefix } =
+    getWorkerOriginAndDatasetPrefix(parsed);
 
-  const credentialsProvider = sharedContext.credentialsManager.getCredentialsProvider<OAuth2Credentials>(
-    "ssa",
-    workerOrigin,
-  );
-  const fetchOkToWorker = fetchOkWithOAuth2CredentialsAdapter(credentialsProvider);
+  const credentialsProvider =
+    sharedContext.credentialsManager.getCredentialsProvider<OAuth2Credentials>(
+      "ssa",
+      workerOrigin,
+    );
+  const fetchOkToWorker =
+    fetchOkWithOAuth2CredentialsAdapter(credentialsProvider);
 
   const authenticateResponse = parseAuthenticateResponseLite(
-    await (await fetchOkToWorker(`${workerOrigin}/authenticate`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "{}",
-      signal: options.signal,
-    })).json(),
+    await (
+      await fetchOkToWorker(`${workerOrigin}/authenticate`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+        signal: options.signal,
+      })
+    ).json(),
   );
 
   // Determine context for completion.
@@ -84,7 +108,9 @@ async function completeSsaUrl(
 
   // Root-level completion: suggest directories from read permissions.
   if (dir === "") {
-    const candidates = authenticateResponse.permissions.read.map((p) => (p.endsWith("/") ? p : p + "/"));
+    const candidates = authenticateResponse.permissions.read.map((p) =>
+      p.endsWith("/") ? p : p + "/",
+    );
     const matches = candidates
       .filter((p) => p.startsWith(base))
       .map((p) => ({ value: p }));
@@ -94,14 +120,23 @@ async function completeSsaUrl(
 
   // Within a directory: use list-files for current dir prefix.
   const listResponse = verifyObject(
-    await (await fetchOkToWorker(`${workerOrigin}${authenticateResponse.endpoints.listFiles}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ prefix: dir }),
-      signal: options.signal,
-    })).json(),
+    await (
+      await fetchOkToWorker(
+        `${workerOrigin}${authenticateResponse.endpoints.listFiles}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ prefix: dir }),
+          signal: options.signal,
+        },
+      )
+    ).json(),
   );
-  const objects = verifyObjectProperty(listResponse, "objects", (x) => x as unknown as any[]);
+  const objects = verifyObjectProperty(
+    listResponse,
+    "objects",
+    (x) => x as unknown as any[],
+  );
   const childDirs = new Set<string>();
   const childFiles = new Set<string>();
   for (const entry of objects) {
@@ -128,14 +163,17 @@ async function completeSsaUrl(
   return { offset, completions: matches };
 }
 
-function ssaFrontendProvider(sharedContext: SharedKvStoreContext): BaseKvStoreProvider {
+function ssaFrontendProvider(
+  sharedContext: SharedKvStoreContext,
+): BaseKvStoreProvider {
   return {
     scheme: "ssa+https",
     description: "Stateless S3 Authenticator (SSA) over HTTPS",
     getKvStore(parsedUrl) {
       // parsedUrl.url is full string like ssa+https://host/path
       const parsed = ensureSsaHttpsUrl(parsedUrl.url);
-      const { workerOrigin, datasetBasePrefix } = getWorkerOriginAndDatasetPrefix(parsed);
+      const { workerOrigin, datasetBasePrefix } =
+        getWorkerOriginAndDatasetPrefix(parsed);
       const displayBase = getDisplayBase(parsedUrl.url);
       return {
         store: new SsaS3KvStore(sharedContext, workerOrigin, "", displayBase),
@@ -148,4 +186,6 @@ function ssaFrontendProvider(sharedContext: SharedKvStoreContext): BaseKvStorePr
   };
 }
 
-frontendOnlyKvStoreProviderRegistry.registerBaseKvStoreProvider(ssaFrontendProvider);
+frontendOnlyKvStoreProviderRegistry.registerBaseKvStoreProvider(
+  ssaFrontendProvider,
+);

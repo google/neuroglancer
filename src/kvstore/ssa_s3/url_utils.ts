@@ -18,18 +18,28 @@ export const SSA_SCHEME_PREFIX = "ssa+";
 
 export function ensureSsaHttpsUrl(url: string): URL {
   if (!url.startsWith("ssa+https://")) {
-    throw new Error(`Invalid URL ${JSON.stringify(url)}: expected ssa+https scheme`);
+    throw new Error(
+      `Invalid URL ${JSON.stringify(url)}: expected ssa+https scheme`,
+    );
   }
   const httpUrl = url.substring(SSA_SCHEME_PREFIX.length);
   const parsed = new URL(httpUrl);
   if (parsed.hash) throw new Error("Fragment not supported in ssa+https URLs");
-  if (parsed.username || parsed.password) throw new Error("Basic auth credentials are not supported in ssa+https URLs");
+  if (parsed.username || parsed.password)
+    throw new Error(
+      "Basic auth credentials are not supported in ssa+https URLs",
+    );
   return parsed;
 }
 
-export function getWorkerOriginAndDatasetPrefix(parsed: URL): { workerOrigin: string; datasetBasePrefix: string } {
+export function getWorkerOriginAndDatasetPrefix(parsed: URL): {
+  workerOrigin: string;
+  datasetBasePrefix: string;
+} {
   const workerOrigin = parsed.origin;
-  const datasetBasePrefix = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
+  const datasetBasePrefix = decodeURIComponent(
+    parsed.pathname.replace(/^\//, ""),
+  );
   return { workerOrigin, datasetBasePrefix };
 }
 

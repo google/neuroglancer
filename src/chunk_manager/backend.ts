@@ -15,12 +15,12 @@
  */
 
 import { throttle } from "lodash-es";
-import {
-  CHUNK_SOURCE_INVALIDATE_CHUNKS_RPC_ID,
+import type {
   ChunkSourceParametersConstructor,
   LayerChunkProgressInfo,
 } from "#src/chunk_manager/base.js";
 import {
+  CHUNK_SOURCE_INVALIDATE_CHUNKS_RPC_ID,
   CHUNK_LAYER_STATISTICS_RPC_ID,
   CHUNK_MANAGER_RPC_ID,
   CHUNK_QUEUE_MANAGER_RPC_ID,
@@ -1111,10 +1111,10 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     }
   }
 
-  invalidateCachedChunks(source: ChunkSource, keys: string[]){
+  invalidateCachedChunks(source: ChunkSource, keys: string[]) {
     for (const key of keys) {
       const chunk = source.chunks.get(key);
-      if(!chunk) continue;
+      if (!chunk) continue;
       switch (chunk.state) {
         case ChunkState.DOWNLOADING:
           cancelChunkDownload(chunk);
@@ -1129,7 +1129,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
   }
 
   invalidateSourceCache(source: ChunkSource) {
-    this.invalidateCachedChunks(source, [...source.chunks.keys()])
+    this.invalidateCachedChunks(source, [...source.chunks.keys()]);
     this.rpc!.invoke("Chunk.update", { source: source.rpcId });
     this.scheduleUpdate();
   }

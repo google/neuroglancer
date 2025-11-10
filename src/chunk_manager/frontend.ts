@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import {
-  CHUNK_SOURCE_INVALIDATE_CHUNKS_RPC_ID,
+import type {
   ChunkSourceParametersConstructor,
   LayerChunkProgressInfo,
 } from "#src/chunk_manager/base.js";
 import {
+  CHUNK_SOURCE_INVALIDATE_CHUNKS_RPC_ID,
   CHUNK_LAYER_STATISTICS_RPC_ID,
   CHUNK_MANAGER_RPC_ID,
   CHUNK_QUEUE_MANAGER_RPC_ID,
@@ -477,7 +477,10 @@ export class ChunkSource extends SharedObject {
     }
 
     if (validKeys.length > 0) {
-      this.rpc!.invoke(CHUNK_SOURCE_INVALIDATE_CHUNKS_RPC_ID, { id: this.rpcId, keys: validKeys });
+      this.rpc!.invoke(CHUNK_SOURCE_INVALIDATE_CHUNKS_RPC_ID, {
+        id: this.rpcId,
+        keys: validKeys,
+      });
     }
 
     if (changed) {

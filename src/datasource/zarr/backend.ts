@@ -28,13 +28,13 @@ import {
 import "#src/datasource/zarr/codec/gzip/decode.js";
 import "#src/datasource/zarr/codec/sharding_indexed/decode.js";
 import "#src/datasource/zarr/codec/transpose/decode.js";
+import { encodeArray } from "#src/datasource/zarr/codec/encode.js";
 import { ChunkKeyEncoding } from "#src/datasource/zarr/metadata/index.js";
 import { WithSharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
 import { postProcessRawData } from "#src/sliceview/backend_chunk_decoders/postprocess.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
-import { encodeArray } from "#src/datasource/zarr/codec/encode.js";
 
 @registerSharedObject()
 export class ZarrVolumeChunkSource extends WithParameters(
@@ -102,14 +102,20 @@ export class ZarrVolumeChunkSource extends WithParameters(
   async writeChunk(chunk: VolumeChunk): Promise<void> {
     const { kvStore, getChunkKey, decodeCodecs } = this.chunkKvStore as any;
     if (!kvStore.write) {
-      throw new Error("ZarrVolumeChunkSource.writeChunk: underlying kvStore is not writable");
+      throw new Error(
+        "ZarrVolumeChunkSource.writeChunk: underlying kvStore is not writable",
+      );
     }
     if (!chunk.data) {
       throw new Error("ZarrVolumeChunkSource.writeChunk: missing chunk.data");
     }
     // Encode using the same codecs chain that was used to decode, but in reverse; our minimal
     // encodeArray currently only supports raw 'bytes'.
-    const encoded = await encodeArray(decodeCodecs, chunk.data as ArrayBufferView<ArrayBufferLike>, new AbortController().signal);
+    const encoded = await encodeArray(
+      decodeCodecs,
+      chunk.data as ArrayBufferView<ArrayBufferLike>,
+      new AbortController().signal,
+    );
 
     // Compute base key same as in download.
     const { parameters } = this;

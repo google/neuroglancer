@@ -34,7 +34,7 @@ import {
   listS3CompatibleUrl,
 } from "#src/kvstore/s3/list.js";
 import { joinBaseUrlAndPath } from "#src/kvstore/url.js";
-import type { FetchOk} from "#src/util/http_request.js";
+import type { FetchOk } from "#src/util/http_request.js";
 import { HttpError, fetchOk } from "#src/util/http_request.js";
 import { ProgressSpan } from "#src/util/progress_listener.js";
 
@@ -88,19 +88,15 @@ export class S3KvStoreBase<
     );
   }
 
-
   async write(key: string, value: ArrayBuffer): Promise<void> {
     const url = joinBaseUrlAndPath(this.baseUrl, key);
     try {
       await this.fetchOkImpl(url, {
-        method: 'PUT',
+        method: "PUT",
         body: value,
       });
     } catch (e) {
-      throw new Error(
-        `Failed to write to ${url}.`,
-        { cause: e }
-      );
+      throw new Error(`Failed to write to ${url}.`, { cause: e });
     }
   }
 
@@ -108,16 +104,13 @@ export class S3KvStoreBase<
     const url = joinBaseUrlAndPath(this.baseUrl, key);
     try {
       await this.fetchOkImpl(url, {
-        method: 'DELETE',
+        method: "DELETE",
       });
     } catch (e) {
       if (e instanceof HttpError && e.status === 404) {
         return;
       }
-      throw new Error(
-        `Failed to delete ${url}.`,
-        { cause: e }
-      );
+      throw new Error(`Failed to delete ${url}.`, { cause: e });
     }
   }
 

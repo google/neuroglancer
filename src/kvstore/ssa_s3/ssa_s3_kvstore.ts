@@ -35,7 +35,10 @@ import {
   verifyString,
   verifyStringArray,
 } from "#src/util/json.js";
-import { MultiConsumerProgressListener, ProgressSpan } from "#src/util/progress_listener.js";
+import {
+  MultiConsumerProgressListener,
+  ProgressSpan,
+} from "#src/util/progress_listener.js";
 
 function joinPath(base: string, suffix: string) {
   if (base === "") return suffix;
@@ -63,7 +66,11 @@ function parseAuthenticateResponse(json: unknown): SsaAuthenticateResponse {
   return {
     bucket,
     endpoints: {
-      signRequests: verifyObjectProperty(endpointsObj, "signRequests", verifyString),
+      signRequests: verifyObjectProperty(
+        endpointsObj,
+        "signRequests",
+        verifyString,
+      ),
       listFiles: verifyObjectProperty(endpointsObj, "listFiles", verifyString),
     },
     permissions: {
@@ -80,29 +87,41 @@ interface SsaSignRequestBody {
   }>;
 }
 
-interface SsaSignRequestsResponseItem { key: string; url: string }
+interface SsaSignRequestsResponseItem {
+  key: string;
+  url: string;
+}
 interface SsaSignRequestsResponse {
   signedRequests: SsaSignRequestsResponseItem[];
 }
 
 function parseSignRequestsResponse(json: unknown): SsaSignRequestsResponse {
   const obj = verifyObject(json);
-  const signedRequestsArrayUnknown = verifyObjectProperty(obj, "signedRequests", (v) => {
-    if (!Array.isArray(v)) {
-      throw new Error("signedRequests must be an array");
-    }
-    return v as unknown[];
-  });
-  const signedRequests: SsaSignRequestsResponseItem[] = signedRequestsArrayUnknown.map((entry) => {
-    const entryObj = verifyObject(entry);
-    const key = verifyObjectProperty(entryObj, "key", verifyString);
-    const url = verifyObjectProperty(entryObj, "url", verifyString);
-    return { key, url };
-  });
+  const signedRequestsArrayUnknown = verifyObjectProperty(
+    obj,
+    "signedRequests",
+    (v) => {
+      if (!Array.isArray(v)) {
+        throw new Error("signedRequests must be an array");
+      }
+      return v as unknown[];
+    },
+  );
+  const signedRequests: SsaSignRequestsResponseItem[] =
+    signedRequestsArrayUnknown.map((entry) => {
+      const entryObj = verifyObject(entry);
+      const key = verifyObjectProperty(entryObj, "key", verifyString);
+      const url = verifyObjectProperty(entryObj, "url", verifyString);
+      return { key, url };
+    });
   return { signedRequests };
 }
 
-interface SsaListFilesObject { key: string; size: number; lastModified: string }
+interface SsaListFilesObject {
+  key: string;
+  size: number;
+  lastModified: string;
+}
 interface SsaListFilesResponse {
   prefix: string;
   objects: SsaListFilesObject[];
@@ -111,7 +130,11 @@ interface SsaListFilesResponse {
 function parseListFilesResponse(json: unknown): SsaListFilesResponse {
   const obj = verifyObject(json);
   const prefix = verifyObjectProperty(obj, "prefix", verifyString);
-  const objectsArray = verifyObjectProperty(obj, "objects", (x) => x as unknown as any[]);
+  const objectsArray = verifyObjectProperty(
+    obj,
+    "objects",
+    (x) => x as unknown as any[],
+  );
   const objects: SsaListFilesObject[] = objectsArray.map((entry) => {
     const e = verifyObject(entry);
     const key = verifyObjectProperty(e, "key", verifyString);
@@ -143,10 +166,11 @@ export class SsaS3KvStore implements KvStore {
     this.workerOrigin = workerOrigin;
     this.datasetBasePrefix = datasetBasePrefix;
     this.displayBaseUrl = displayBaseUrl;
-    this.credentialsProvider = sharedKvStoreContext.credentialsManager.getCredentialsProvider<OAuth2Credentials>(
-      "ssa",
-      workerOrigin,
-    ) as unknown as SsaCredentialsProvider;
+    this.credentialsProvider =
+      sharedKvStoreContext.credentialsManager.getCredentialsProvider<OAuth2Credentials>(
+        "ssa",
+        workerOrigin,
+      ) as unknown as SsaCredentialsProvider;
     this.fetchOkToWorker = fetchOkWithOAuth2CredentialsAdapter(
       this.credentialsProvider,
     );
@@ -164,7 +188,9 @@ export class SsaS3KvStore implements KvStore {
     return true;
   }
 
-  private async ensureAuthenticated(signal?: AbortSignal): Promise<SsaAuthenticateResponse> {
+  private async ensureAuthenticated(
+    signal?: AbortSignal,
+  ): Promise<SsaAuthenticateResponse> {
     if (this.authenticatePromise === undefined) {
       this.authenticatePromise = this.performAuthenticate(signal).catch((e) => {
         // Clear cached promise on failure to allow retry.
@@ -175,17 +201,22 @@ export class SsaS3KvStore implements KvStore {
     return this.authenticatePromise;
   }
 
-  private async performAuthenticate(signal?: AbortSignal): Promise<SsaAuthenticateResponse> {
+  private async performAuthenticate(
+    signal?: AbortSignal,
+  ): Promise<SsaAuthenticateResponse> {
     using _span = new ProgressSpan(new MultiConsumerProgressListener(), {
       message: `Connecting to SSA worker at ${this.workerOrigin}`,
     });
     try {
-      const response = await this.fetchOkToWorker(`${this.workerOrigin}/authenticate`, {
-        method: "POST",
-        signal,
-        headers: { "content-type": "application/json" },
-        body: "{}",
-      });
+      const response = await this.fetchOkToWorker(
+        `${this.workerOrigin}/authenticate`,
+        {
+          method: "POST",
+          signal,
+          headers: { "content-type": "application/json" },
+          body: "{}",
+        },
+      );
       const result = parseAuthenticateResponse(await response.json());
       return result;
     } catch (e) {
@@ -205,7 +236,7 @@ export class SsaS3KvStore implements KvStore {
 
   private async signSingleUrl(
     fullKey: string,
-    type: 'GET' | 'PUT' | 'HEAD' | 'DELETE',
+    type: "GET" | "PUT" | "HEAD" | "DELETE",
     signal?: AbortSignal,
   ): Promise<string> {
     const { endpoints } = await this.ensureAuthenticated(signal);
@@ -221,7 +252,9 @@ export class SsaS3KvStore implements KvStore {
           } satisfies SsaSignRequestBody),
         },
       );
-      const { signedRequests } = parseSignRequestsResponse(await response.json());
+      const { signedRequests } = parseSignRequestsResponse(
+        await response.json(),
+      );
       if (signedRequests.length !== 1) {
         throw new Error(
           `SSA /sign-requests returned ${signedRequests.length} entries, expected 1 for key ${JSON.stringify(fullKey)}`,
@@ -291,17 +324,26 @@ export class SsaS3KvStore implements KvStore {
     }
   }
 
-  async stat(key: string, options: StatOptions): Promise<StatResponse | undefined> {
+  async stat(
+    key: string,
+    options: StatOptions,
+  ): Promise<StatResponse | undefined> {
     const fullKey = joinPath(this.datasetBasePrefix, key);
     const url = await this.signSingleUrl(fullKey, "HEAD", options.signal);
     try {
-      const response = await fetchOk(url, { method: "HEAD", signal: options.signal, progressListener: options.progressListener });
+      const response = await fetchOk(url, {
+        method: "HEAD",
+        signal: options.signal,
+        progressListener: options.progressListener,
+      });
       const contentLength = response.headers.get("content-length");
       let totalSize: number | undefined;
       if (contentLength !== null) {
         const n = Number(contentLength);
         if (!Number.isFinite(n) || n < 0) {
-          throw new Error(`Invalid content-length returned by S3 for ${JSON.stringify(fullKey)}: ${JSON.stringify(contentLength)}`);
+          throw new Error(
+            `Invalid content-length returned by S3 for ${JSON.stringify(fullKey)}: ${JSON.stringify(contentLength)}`,
+          );
         }
         totalSize = n;
       }
@@ -320,7 +362,10 @@ export class SsaS3KvStore implements KvStore {
     }
   }
 
-  async read(key: string, options: DriverReadOptions): Promise<ReadResponse | undefined> {
+  async read(
+    key: string,
+    options: DriverReadOptions,
+  ): Promise<ReadResponse | undefined> {
     const fullKey = joinPath(this.datasetBasePrefix, key);
     const url = await this.signSingleUrl(fullKey, "GET", options.signal);
 
@@ -331,7 +376,10 @@ export class SsaS3KvStore implements KvStore {
       if ("suffixLength" in byteRange) {
         // For suffix reads we must know total size; issue HEAD first then compute exact range.
         const statResponse = await this.stat(key, { signal: options.signal });
-        if (statResponse === undefined || statResponse.totalSize === undefined) {
+        if (
+          statResponse === undefined ||
+          statResponse.totalSize === undefined
+        ) {
           throw new Error(
             `Failed to determine total size of ${this.getUrl(key)} in order to fetch suffix bytes`,
           );
@@ -357,7 +405,11 @@ export class SsaS3KvStore implements KvStore {
         signal: options.signal,
         progressListener: options.progressListener,
         headers: rangeHeader ? { range: rangeHeader } : undefined,
-        cache: rangeHeader ? (navigator.userAgent.indexOf("Chrome") !== -1 ? "no-store" : "default") : undefined,
+        cache: rangeHeader
+          ? navigator.userAgent.indexOf("Chrome") !== -1
+            ? "no-store"
+            : "default"
+          : undefined,
       });
 
       // Interpret response similar to http/read.ts logic.
@@ -381,7 +433,9 @@ export class SsaS3KvStore implements KvStore {
           // Some servers omit content-range; use requested range info where possible.
           if ("suffixLength" in byteRange) {
             // Already computed via HEAD.
-            const statResponse = await this.stat(key, { signal: options.signal });
+            const statResponse = await this.stat(key, {
+              signal: options.signal,
+            });
             totalSize = statResponse?.totalSize;
             if (totalSize === undefined) {
               throw new Error("Missing total size for suffix read");
@@ -394,7 +448,12 @@ export class SsaS3KvStore implements KvStore {
               offset = byteRange.offset;
               length = 0;
               // Return empty body for zero-length reads.
-              return { response: new Response(new Uint8Array(0)), offset, length, totalSize };
+              return {
+                response: new Response(new Uint8Array(0)),
+                offset,
+                length,
+                totalSize,
+              };
             } else {
               offset = byteRange.offset;
               length = byteRange.length;
@@ -406,7 +465,9 @@ export class SsaS3KvStore implements KvStore {
         if (cl !== null) {
           const n = Number(cl);
           if (!Number.isFinite(n) || n < 0) {
-            throw new Error(`Invalid content-length header for ${this.getUrl(key)}: ${JSON.stringify(cl)}`);
+            throw new Error(
+              `Invalid content-length header for ${this.getUrl(key)}: ${JSON.stringify(cl)}`,
+            );
           }
           length = n;
           totalSize = n;
@@ -437,7 +498,10 @@ export class SsaS3KvStore implements KvStore {
     }
   }
 
-  async list(prefix: string, options: { signal?: AbortSignal } = {}): Promise<ListResponse> {
+  async list(
+    prefix: string,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<ListResponse> {
     const fullPrefix = joinPath(this.datasetBasePrefix, prefix);
     const { endpoints } = await this.ensureAuthenticated(options.signal);
     try {

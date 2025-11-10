@@ -22,21 +22,30 @@ import type {
 } from "#src/kvstore/register.js";
 import type { UrlWithParsedScheme } from "#src/kvstore/url.js";
 
-function parseOpfsUrlSuffix(suffix: string | undefined): { basePath: string; path: string } {
+function parseOpfsUrlSuffix(suffix: string | undefined): {
+  basePath: string;
+  path: string;
+} {
   // Accept opfs://<path>, opfs:/<path>, or opfs:<path>
   const s = suffix ?? "";
   const m = s.match(/^\/?\/?(.*)$/);
   if (m === null) {
-    throw new Error(`Invalid opfs URL suffix ${JSON.stringify(s)}; expected opfs://<path>`);
+    throw new Error(
+      `Invalid opfs URL suffix ${JSON.stringify(s)}; expected opfs://<path>`,
+    );
   }
   const decoded = decodeURIComponent(m[1] ?? "");
   // Choose to have basePath be empty and return full path as initial kv path.
   return { basePath: "", path: decoded };
 }
 
-export function registerProviders<SharedKvStoreContext extends SharedKvStoreContextBase>(
+export function registerProviders<
+  SharedKvStoreContext extends SharedKvStoreContextBase,
+>(
   registry: KvStoreProviderRegistry<SharedKvStoreContext>,
-  OpfsKvStoreClass: { new (sharedKvStoreContext: SharedKvStoreContext, basePath: string): KvStore },
+  OpfsKvStoreClass: {
+    new (sharedKvStoreContext: SharedKvStoreContext, basePath: string): KvStore;
+  },
 ) {
   const provider: (context: SharedKvStoreContext) => BaseKvStoreProvider = (
     sharedKvStoreContext: SharedKvStoreContext,
@@ -45,7 +54,10 @@ export function registerProviders<SharedKvStoreContext extends SharedKvStoreCont
     description: "Origin Private File System (browser)",
     getKvStore(url: UrlWithParsedScheme) {
       const { basePath, path } = parseOpfsUrlSuffix(url.suffix);
-      return { store: new OpfsKvStoreClass(sharedKvStoreContext, basePath), path };
+      return {
+        store: new OpfsKvStoreClass(sharedKvStoreContext, basePath),
+        path,
+      };
     },
   });
   registry.registerBaseKvStoreProvider(provider);

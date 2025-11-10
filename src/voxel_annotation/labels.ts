@@ -1,3 +1,19 @@
+/**
+ * @license
+ * Copyright 2025 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 import { SegmentColorHash } from "#src/segment_color.js";
 import { DataType } from "#src/util/data_type.js";
 
@@ -11,15 +27,18 @@ export class LabelsManager {
   private nextLocalId: bigint = 1n;
   private idMask: bigint;
 
-  constructor(public dataType: DataType, private onLabelsChanged?: () => void) {
-    switch (dataType){
+  constructor(
+    public dataType: DataType,
+    private onLabelsChanged?: () => void,
+  ) {
+    switch (dataType) {
       case DataType.UINT32:
         this.sessionPrefix = BigInt(Date.now() << 20);
-        this.idMask = 0xFFFFFFFFn;
+        this.idMask = 0xffffffffn;
         break;
       case DataType.UINT64:
         this.sessionPrefix = BigInt(getRandomUint32()) << 32n;
-        this.idMask = 0xFFFFFFFFFFFFFFFFn;
+        this.idMask = 0xffffffffffffffffn;
         break;
       default:
         throw new Error(`LabelsManager: Unsupported data type: ${dataType}`);
@@ -28,7 +47,7 @@ export class LabelsManager {
   }
 
   private generateNewGuid(): bigint {
-    const newId = this.sessionPrefix | this.nextLocalId  & this.idMask;
+    const newId = this.sessionPrefix | (this.nextLocalId & this.idMask);
     this.nextLocalId++;
     return newId;
   }

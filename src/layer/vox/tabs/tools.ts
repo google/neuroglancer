@@ -1,6 +1,19 @@
 /**
- * Vox Tool tab UI split from index.ts
+ * @license
+ * Copyright 2025 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
+
 import type { VoxUserLayer } from "#src/layer/vox/index.js";
 import {
   VoxelBrushLegacyTool,
@@ -24,7 +37,6 @@ function formatUnsignedId(id: bigint, dataType: DataType): string {
   // Fallback for other types, though this case is unlikely for labels.
   return id.toString();
 }
-
 
 export class VoxToolTab extends Tab {
   private labelsContainer!: HTMLDivElement;
@@ -51,7 +63,10 @@ export class VoxToolTab extends Tab {
       sw.style.background = this.layer.voxLabelsManager.colorForValue(lab);
       // id text (monospace)
       const txt = document.createElement("div");
-      txt.textContent = formatUnsignedId(lab, this.layer.voxLabelsManager.dataType);
+      txt.textContent = formatUnsignedId(
+        lab,
+        this.layer.voxLabelsManager.dataType,
+      );
       txt.style.fontFamily = "monospace";
       txt.style.whiteSpace = "nowrap";
       txt.style.overflow = "hidden";
@@ -113,15 +128,16 @@ export class VoxToolTab extends Tab {
 
     const floodButton = document.createElement("button");
     floodButton.textContent = "Flood fill";
-    floodButton.title = "Click a voxel to flood fill the connected region on the current Z plane";
+    floodButton.title =
+      "Click a voxel to flood fill the connected region on the current Z plane";
     floodButton.addEventListener("click", () => {
       this.layer.tool.value = new VoxelFloodFillLegacyTool(this.layer);
     });
 
-
     const adoptBtn = document.createElement("button");
     adoptBtn.textContent = "Pick";
-    adoptBtn.title = "Activate tool: click a non-zero voxel to add its ID as a label";
+    adoptBtn.title =
+      "Activate tool: click a non-zero voxel to add its ID as a label";
     adoptBtn.addEventListener("click", () => {
       this.layer.tool.value = new AdoptVoxelLabelTool(this.layer);
     });
@@ -168,14 +184,18 @@ export class VoxToolTab extends Tab {
     if (ctrl) {
       undoButton.disabled = ctrl.undoCount.value === 0;
       redoButton.disabled = ctrl.redoCount.value === 0;
-      this.registerDisposer(ctrl.undoCount.changed.add(() => {
-        undoButton.disabled = ctrl.undoCount.value === 0;
-      }));
-      this.registerDisposer(ctrl.redoCount.changed.add(() => {
-        redoButton.disabled = ctrl.redoCount.value === 0;
-      }));
+      this.registerDisposer(
+        ctrl.undoCount.changed.add(() => {
+          undoButton.disabled = ctrl.undoCount.value === 0;
+        }),
+      );
+      this.registerDisposer(
+        ctrl.redoCount.changed.add(() => {
+          redoButton.disabled = ctrl.redoCount.value === 0;
+        }),
+      );
     } else {
-      console.error("TODO")
+      console.error("TODO");
     }
 
     historyButtons.appendChild(undoButton);
@@ -363,7 +383,6 @@ export class VoxToolTab extends Tab {
       this.layer.voxLabelsManager.createNewLabel();
     });
     buttonsRow.appendChild(createBtn);
-
 
     this.labelsContainer = document.createElement("div");
     this.labelsContainer.className = "neuroglancer-vox-labels";

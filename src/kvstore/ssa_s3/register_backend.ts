@@ -18,15 +18,22 @@ import type { BaseKvStoreProvider } from "#src/kvstore/context.js";
 import type { SharedKvStoreContextBase } from "#src/kvstore/register.js";
 import { frontendBackendIsomorphicKvStoreProviderRegistry } from "#src/kvstore/register.js";
 import { SsaS3KvStore } from "#src/kvstore/ssa_s3/ssa_s3_kvstore.js";
-import { ensureSsaHttpsUrl, getWorkerOriginAndDatasetPrefix, getDisplayBase } from "#src/kvstore/ssa_s3/url_utils.js";
+import {
+  ensureSsaHttpsUrl,
+  getWorkerOriginAndDatasetPrefix,
+  getDisplayBase,
+} from "#src/kvstore/ssa_s3/url_utils.js";
 
-function ssaIsomorphicProvider(context: SharedKvStoreContextBase): BaseKvStoreProvider {
+function ssaIsomorphicProvider(
+  context: SharedKvStoreContextBase,
+): BaseKvStoreProvider {
   return {
     scheme: "ssa+https",
     description: "Stateless S3 Authenticator (SSA) over HTTPS",
     getKvStore(parsedUrl) {
       const parsed = ensureSsaHttpsUrl(parsedUrl.url);
-      const { workerOrigin, datasetBasePrefix } = getWorkerOriginAndDatasetPrefix(parsed);
+      const { workerOrigin, datasetBasePrefix } =
+        getWorkerOriginAndDatasetPrefix(parsed);
       const displayBase = getDisplayBase(parsedUrl.url);
       return {
         store: new SsaS3KvStore(context, workerOrigin, "", displayBase),

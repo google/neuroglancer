@@ -19,10 +19,9 @@ import { ChunkState } from "#src/chunk_manager/base.js";
 import type {
   ChunkManager,
   ChunkRequesterState,
+  Chunk,
 } from "#src/chunk_manager/frontend.js";
-import { Chunk, ChunkSource } from "#src/chunk_manager/frontend.js";
-export { SliceViewChunk } from "#src/sliceview/chunk_base.js";
-import type { SliceViewChunk as SliceViewChunk } from "#src/sliceview/chunk_base.js";
+import { ChunkSource } from "#src/chunk_manager/frontend.js";
 import { applyRenderViewportToProjectionMatrix } from "#src/display_context.js";
 import type { LayerManager } from "#src/layer/index.js";
 import type {
@@ -62,6 +61,7 @@ import {
   SliceViewBase,
   SliceViewProjectionParameters,
 } from "#src/sliceview/base.js";
+import type { SliceViewChunk } from "#src/sliceview/chunk_base.js";
 import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
 import type { SliceViewerState } from "#src/sliceview/panel.js";
 import { SliceViewRenderLayer } from "#src/sliceview/renderlayer.js";
@@ -90,6 +90,8 @@ import type { ShaderModule, ShaderBuilder } from "#src/webgl/shader.js";
 import { getSquareCornersBuffer } from "#src/webgl/square_corners_buffer.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { registerSharedObjectOwner } from "#src/worker_rpc.js";
+
+export { SliceViewChunk } from "#src/sliceview/chunk_base.js";
 
 export type GenericChunkKey = string;
 

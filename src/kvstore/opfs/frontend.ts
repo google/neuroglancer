@@ -16,19 +16,32 @@
 
 import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
 import { ProxyKvStore } from "#src/kvstore/proxy.js";
-import { encodePathForUrl, kvstoreEnsureDirectoryPipelineUrl } from "#src/kvstore/url.js";
+import {
+  encodePathForUrl,
+  kvstoreEnsureDirectoryPipelineUrl,
+} from "#src/kvstore/url.js";
 
 export class OpfsKvStore extends ProxyKvStore {
-  constructor(public override sharedKvStoreContext: SharedKvStoreContext, private readonly basePath: string) {
+  constructor(
+    public override sharedKvStoreContext: SharedKvStoreContext,
+    private readonly basePath: string,
+  ) {
     super(sharedKvStoreContext);
   }
 
   getUrl(key: string): string {
-    const base = this.basePath === "" ? "opfs://" : `opfs://${encodePathForUrl(this.basePath)}/`;
+    const base =
+      this.basePath === ""
+        ? "opfs://"
+        : `opfs://${encodePathForUrl(this.basePath)}/`;
     const ensured = kvstoreEnsureDirectoryPipelineUrl(base);
     return ensured + (key === "" ? "" : encodePathForUrl(key));
   }
 
-  get supportsOffsetReads(): boolean { return false; }
-  get supportsSuffixReads(): boolean { return false; }
+  get supportsOffsetReads(): boolean {
+    return false;
+  }
+  get supportsSuffixReads(): boolean {
+    return false;
+  }
 }
