@@ -39,7 +39,12 @@ import { TrackableValue, WatchableValue } from "#src/trackable_value.js";
 import type { UserLayerWithAnnotations } from "#src/ui/annotations.js";
 import { randomUint64 } from "#src/util/bigint.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { parseUint64, verifyFiniteFloat, verifyInt } from "#src/util/json.js";
+import {
+  parseUint64,
+  verifyFiniteFloat,
+  verifyInt,
+  verifyOptionalObjectProperty,
+} from "#src/util/json.js";
 import { TrackableEnum } from "#src/util/trackable_enum.js";
 import { VoxelPreviewMultiscaleSource } from "#src/voxel_annotation/PreviewMultiscaleChunkSource.js";
 import type { VoxelEditControllerHost } from "#src/voxel_annotation/edit_controller.js";
@@ -49,6 +54,12 @@ export enum BrushShape {
   DISK = 0,
   SPHERE = 1,
 }
+
+const BRUSH_SIZE_JSON_KEY = "brushSize";
+const ERASE_MODE_JSON_KEY = "eraseMode";
+const BRUSH_SHAPE_JSON_KEY = "brushShape";
+const FLOOD_FILL_MAX_VOXELS_JSON_KEY = "floodFillMaxVoxels";
+const PAINT_VALUE_JSON_KEY = "paintValue";
 
 export class VoxelEditingContext
   extends RefCounted
@@ -194,6 +205,25 @@ export function UserLayerWithVoxelEditingMixin<
         order: 20,
         getter: () => new VoxToolTab(this),
       });
+    }
+
+    toJSON() {
+      const json = super.toJSON();
+      json[BRUSH_SIZE_JSON_KEY] = this.voxBrushRadius.toJSON();
+      json[ERASE_MODE_JSON_KEY] = this.voxEraseMode.toJSON();
+      json[BRUSH_SHAPE_JSON_KEY] = this.voxBrushShape.toJSON();
+      json[FLOOD_FILL_MAX_VOXELS_JSON_KEY] = this.voxFloodMaxVoxels.toJSON();
+      json[PAINT_VALUE_JSON_KEY] = this.paintValue.toJSON();
+      return json;
+    }
+
+    restoreState(specification: any) {
+      super.restoreState(specification);
+      verifyOptionalObjectProperty(specification, BRUSH_SIZE_JSON_KEY, v => this.voxBrushRadius.restoreState(v));
+      verifyOptionalObjectProperty(specification, ERASE_MODE_JSON_KEY, v => this.voxEraseMode.restoreState(v));
+      verifyOptionalObjectProperty(specification, BRUSH_SHAPE_JSON_KEY, v => this.voxBrushShape.restoreState(v));
+      verifyOptionalObjectProperty(specification, FLOOD_FILL_MAX_VOXELS_JSON_KEY, v => this.voxFloodMaxVoxels.restoreState(v));
+      verifyOptionalObjectProperty(specification, PAINT_VALUE_JSON_KEY, v => this.paintValue.restoreState(v));
     }
 
     getVoxelPaintValue(erase: boolean): bigint {
