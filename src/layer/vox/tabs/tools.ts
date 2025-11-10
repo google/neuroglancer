@@ -2,7 +2,7 @@
  * Vox Tool tab UI split from index.ts
  */
 import type { VoxUserLayer } from "#src/layer/vox/index.js";
-import { VoxelBrushLegacyTool, VoxelPixelLegacyTool } from "#src/ui/voxel_annotations.js";
+import { VoxelBrushLegacyTool } from "#src/ui/voxel_annotations.js";
 import { Tab } from "#src/widget/tab_view.js";
 
 
@@ -81,13 +81,6 @@ export class VoxToolTab extends Tab {
     toolsWrap.style.display = "flex";
     toolsWrap.style.gap = "8px";
 
-    const pixelButton = document.createElement("button");
-    pixelButton.textContent = "Pixel";
-    pixelButton.title = "ctrl+click to paint a pixel";
-    pixelButton.addEventListener("click", () => {
-      this.layer.tool.value = new VoxelPixelLegacyTool(this.layer);
-    });
-
     const brushButton = document.createElement("button");
     brushButton.textContent = "Brush";
     brushButton.title = "ctrl+click to paint a small sphere";
@@ -95,7 +88,6 @@ export class VoxToolTab extends Tab {
       this.layer.tool.value = new VoxelBrushLegacyTool(this.layer);
     });
 
-    toolsWrap.appendChild(pixelButton);
     toolsWrap.appendChild(brushButton);
     toolsRow.appendChild(toolsLabel);
     toolsRow.appendChild(toolsWrap);

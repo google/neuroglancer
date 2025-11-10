@@ -76,17 +76,6 @@ export class VoxMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource 
       upperVoxelBound,
       baseVoxelOffset,
     });
-    const baseSource: VoxChunkSource = this.chunkManager.getChunkSource(
-      VoxChunkSource as any,
-      {
-        spec: baseSpec,
-        vox: {
-          serverUrl: map.serverUrl,
-          token: map.token,
-        },
-      },
-    );
-
     // Helper to make a homogeneous scaling transform matrix with scale factor f.
     const makeScale = (f: number) => {
       const m = new Float32Array((rank + 1) * (rank + 1));
@@ -98,12 +87,25 @@ export class VoxMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource 
     const factors = map.steps && map.steps.length > 0 ? [...map.steps] : [1];
 
     const levels: SliceViewSingleResolutionSource<VoxChunkSource>[] = factors.map(
-      (f) => ({
-        chunkSource: baseSource,
-        chunkToMultiscaleTransform: makeScale(f),
-        lowerClipBound: baseSpec.lowerVoxelBound,
-        upperClipBound: baseSpec.upperVoxelBound,
-      }),
+      (f) => {
+        const src: VoxChunkSource = this.chunkManager.getChunkSource(
+          VoxChunkSource,
+          {
+            spec: baseSpec,
+            vox: {
+              serverUrl: map.serverUrl,
+              token: map.token,
+            },
+            lodFactor: f,
+          },
+        );
+        return {
+          chunkSource: src,
+          chunkToMultiscaleTransform: makeScale(f),
+          lowerClipBound: baseSpec.lowerVoxelBound,
+          upperClipBound: baseSpec.upperVoxelBound,
+        };
+      },
     );
 
     return [levels];

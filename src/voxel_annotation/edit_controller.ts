@@ -6,130 +6,117 @@
 import type { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import type { VoxChunkSource } from "#src/voxel_annotation/frontend.js";
 
-/** Tiny controller to forward voxel edits from tools to the VoxChunkSource. */
 export class VoxelEditController {
   constructor(private multiscale: MultiscaleVolumeChunkSource) {}
+  private static readonly qualityFactor = 5.0;
 
-  private getSource(): VoxChunkSource | undefined {
-    try {
-      const sources2D = this.multiscale.getSources({} as any);
-      const single = sources2D?.[0]?.[0];
-      return single?.chunkSource as VoxChunkSource | undefined;
-    } catch {
-      return undefined;
+  // Required: compute desired voxel size (power-of-two) from brush radius.
+  getOptimalVoxelSize(brushRadius: number, minLOD = 1, maxLOD = 128) {
+    if (!Number.isFinite(brushRadius) || brushRadius <= 0) {
+      return minLOD;
     }
+    const targetSize = brushRadius / VoxelEditController.qualityFactor;
+    const exponent = Math.round(Math.log2(targetSize));
+    let voxelSize = Math.pow(2, exponent);
+    voxelSize = Math.max(minLOD, Math.min(voxelSize, maxLOD));
+    return voxelSize;
   }
 
-  paintVoxelsBatch(voxels: Float32Array[], value: number) {
-    if (!voxels || voxels.length === 0) return;
-    try {
-      const source = this.getSource();
-      source?.paintVoxelsBatch(voxels, value);
-    } catch {
-      // no-op
-    }
-  }
-
-  /** Paint a brush with selectable shape: 'disk' (2D oriented to slice plane) or 'sphere' (3D). Default: 'disk'. */
+  // Paint a disk (slice-aligned via basis) or sphere in WORLD/ canonical units; we transform to LOD grid before sending.
   paintBrushWithShape(
-    center: Float32Array,
-    radius: number,
+    centerCanonical: Float32Array,
+    radiusCanonical: number,
     value: number,
     shape: "disk" | "sphere" = "disk",
     basis?: { u: Float32Array; v: Float32Array },
   ) {
-    if (!Number.isFinite(radius) || radius <= 0) return;
-    const r = Math.floor(radius);
-    const cx = Math.floor(center[0] ?? 0);
-    const cy = Math.floor(center[1] ?? 0);
-    const cz = Math.floor(center[2] ?? 0);
+    if (!Number.isFinite(radiusCanonical) || radiusCanonical <= 0) {
+      throw new Error("paintBrushWithShape: 'radius' must be > 0.");
+    }
+    if (!centerCanonical || centerCanonical.length < 3) {
+      throw new Error("paintBrushWithShape: 'center' must be a Float32Array[3].");
+    }
+
+    const voxelSize = this.getOptimalVoxelSize(radiusCanonical);
+    const sourceIndex = Math.round(Math.log2(voxelSize));
+    const src2D = this.multiscale.getSources({} as any);
+    if (!src2D || !src2D[0] || src2D[0].length <= sourceIndex) {
+      throw new Error("VoxelEditController: No multiscale levels available.");
+    }
+    const source = src2D[0][sourceIndex]?.chunkSource as VoxChunkSource;
+    if (!source) throw new Error("paintVoxelsBatch: Selected level has no chunk source.");
+
+    // Convert center and radius to the level’s voxel grid.
+    const cx = Math.floor((centerCanonical[0] ?? 0) / voxelSize);
+    const cy = Math.floor((centerCanonical[1] ?? 0) / voxelSize);
+    const cz = Math.floor((centerCanonical[2] ?? 0) / voxelSize);
+    const r = Math.floor(radiusCanonical / voxelSize);
+    if (r <= 0) {
+      throw new Error("paintBrushWithShape: radius too small for selected LOD.");
+    }
     const rr = r * r;
-    const source = this.getSource();
-    if (!source) return;
-    const voxels: Float32Array[] = [];
+
+    const voxelsLOD: Float32Array[] = [];
+
     if (shape === "sphere") {
       for (let dz = -r; dz <= r; ++dz) {
         for (let dy = -r; dy <= r; ++dy) {
           for (let dx = -r; dx <= r; ++dx) {
             if (dx * dx + dy * dy + dz * dz <= rr) {
-              voxels.push(new Float32Array([cx + dx, cy + dy, cz + dz]));
+              voxelsLOD.push(new Float32Array([cx + dx, cy + dy, cz + dz]));
             }
           }
         }
       }
     } else {
-      // Oriented disk in the provided slice plane; if basis not provided, fall back to XY at fixed Z = cz.
-      const u = basis?.u;
-      const v = basis?.v;
-      if (
-        u &&
-        v &&
-        Number.isFinite(u[0]) &&
-        Number.isFinite(u[1]) &&
-        Number.isFinite(u[2]) &&
-        Number.isFinite(v[0]) &&
-        Number.isFinite(v[1]) &&
-        Number.isFinite(v[2])
-      ) {
-        // Normalize u and v for safety.
-        const ul = Math.hypot(u[0], u[1], u[2]) || 1;
-        const vl = Math.hypot(v[0], v[1], v[2]) || 1;
-        const un = [u[0] / ul, u[1] / ul, u[2] / ul];
-        const vn = [v[0] / vl, v[1] / vl, v[2] / vl];
-        const seen = new Set<string>();
-        for (let dy = -r; dy <= r; ++dy) {
-          for (let dx = -r; dx <= r; ++dx) {
-            if (dx * dx + dy * dy <= rr) {
-              const px = cx + dx * un[0] + dy * vn[0];
-              const py = cy + dx * un[1] + dy * vn[1];
-              const pz = cz + dx * un[2] + dy * vn[2];
-              const ix = Math.round(px);
-              const iy = Math.round(py);
-              const iz = Math.round(pz);
-              const key = ix + "," + iy + "," + iz;
-              if (!seen.has(key)) {
-                seen.add(key);
-                voxels.push(new Float32Array([ix, iy, iz]));
-              }
-            }
-          }
-        }
-      } else {
-        console.warn(
-          "No basis provided for disk brush, falling back to XY plane at fixed Z = cz.",
-        );
-        // Fallback: Disk in XY plane at fixed Z = cz
-        for (let dy = -r; dy <= r; ++dy) {
-          for (let dx = -r; dx <= r; ++dx) {
-            if (dx * dx + dy * dy <= rr) {
-              voxels.push(new Float32Array([cx + dx, cy + dy, cz]));
+      // Disk: require a valid basis, no fallback.
+      if (!basis || !basis.u || !basis.v) {
+        throw new Error("paintBrushWithShape[disk]: 'basis' (u,v) is required.");
+      }
+      const u = basis.u, v = basis.v;
+      if (![u[0], u[1], u[2], v[0], v[1], v[2]].every(Number.isFinite)) {
+        throw new Error("paintBrushWithShape[disk]: Invalid basis vectors.");
+      }
+      // Normalize basis in canonical space, then convert step directions to LOD units by dividing by voxelSize
+      const ul = Math.hypot(u[0], u[1], u[2]) || 1;
+      const vl = Math.hypot(v[0], v[1], v[2]) || 1;
+      const un = [u[0] / ul / voxelSize, u[1] / ul / voxelSize, u[2] / ul / voxelSize];
+      const vn = [v[0] / vl / voxelSize, v[1] / vl / voxelSize, v[2] / vl / voxelSize];
+      const seen = new Set<string>();
+      for (let dy = -r; dy <= r; ++dy) {
+        for (let dx = -r; dx <= r; ++dx) {
+          if (dx * dx + dy * dy <= rr) {
+            const px = cx + dx * un[0] + dy * vn[0];
+            const py = cy + dx * un[1] + dy * vn[1];
+            const pz = cz + dx * un[2] + dy * vn[2];
+            const ix = Math.round(px);
+            const iy = Math.round(py);
+            const iz = Math.round(pz);
+            const key = `${ix},${iy},${iz}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              voxelsLOD.push(new Float32Array([ix, iy, iz]));
             }
           }
         }
       }
     }
-    source.paintVoxelsBatch(voxels, value);
-  }
 
-  /** Backward-compat spherical brush API. */
-  paintBrush(center: Float32Array, radius: number, value: number) {
-    this.paintBrushWithShape(center, radius, value, "sphere");
+    source.paintVoxelsBatch(voxelsLOD, value);
   }
 
   async getLabelIds(): Promise<number[]> {
-    try {
-      const source = this.getSource();
-      if (!source) return [];
-      return await source.getLabelIds();
-    } catch {
-      return [];
-    }
+    const src2D = this.multiscale.getSources({} as any);
+    if (!src2D || !src2D[0] || src2D[0].length === 0) return [];
+    const src = src2D[0][0].chunkSource as VoxChunkSource | undefined;
+    if (!src) return [];
+    return await src.getLabelIds();
   }
 
-
   async addLabel(value: number): Promise<number[]> {
-    const source = this.getSource();
-    if (!source) throw new Error("Voxel source not ready");
-    return await source.addLabel(value >>> 0);
+    const src2D = this.multiscale.getSources({} as any);
+    const src = src2D?.[0]?.[0]?.chunkSource as VoxChunkSource | undefined;
+    if (!src) throw new Error("Voxel source not ready");
+    return await src.addLabel(value >>> 0);
   }
 }

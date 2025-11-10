@@ -1,5 +1,9 @@
 # TODO List
 
+- LOD -> where am I:
+  - choosing the lod level depanding on the brush size, live rendering is working but data saving need to be updated.
+
+- cleanup label handling code (more specifically in the ui code: layer/vox/index.ts, would be nice to have a handler similar to the one for maps)
 - Add redundancy to avoid corrupt/unsaved chunks on the remote
 - Test token authentication
 - Try to import pre-computed segmentation (in zarr format) into the remote server
@@ -9,7 +13,7 @@
 - the uncaching of chunks the VoxSource is working great, but since it has no way of knowing which chunks are in view, it will delete them, causing flickering of the drawings.
 - look into the massive ram usage when a lot of voxel annotations are drawn
 - Add Uint64 support for annotation id
-- LOD
+- Replace the current map settings to use the built-ins of neuroglancer (viewable under the datasource url), handle multimap with link choices, look into how to keep the init/creation logic.
 
 # Saving/importing/exporting
 

@@ -17,8 +17,8 @@ import {
   VOX_LABELS_GET_RPC_ID,
   VOX_LABELS_ADD_RPC_ID,
 } from "#src/voxel_annotation/base.js";
-import { registerSharedObjectOwner } from "#src/worker_rpc.js";
 import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
+import { registerSharedObjectOwner } from "#src/worker_rpc.js";
 
 /**
  * Frontend owner for VoxChunkSource, extended with a local optimistic edit overlay.
@@ -28,6 +28,7 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
   declare OPTIONS: {
     spec: VolumeChunkSpecification;
     vox?: { serverUrl?: string; token?: string };
+    lodFactor?: number;
   };
   private voxOptions?: { serverUrl?: string; token?: string };
   private tempVoxChunkGridPosition = new Float32Array(3);
@@ -36,6 +37,7 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
   private scheduleProcessPendingUploads = animationFrameDebounce(() =>
     this.processPendingUploads(),
   );
+  private lodFactor: number;
 
   /** Initialize map in the worker/backend for this source. */
   initializeMap(map: VoxMapConfig) {
@@ -51,10 +53,11 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
 
   constructor(
     chunkManager: ChunkManager,
-    options: { spec: VolumeChunkSpecification; vox?: { serverUrl?: string; token?: string } },
+    options: { spec: VolumeChunkSpecification; vox?: { serverUrl?: string; token?: string }; lodFactor?: number },
   ) {
     super(chunkManager, options);
     this.voxOptions = options.vox;
+    this.lodFactor = options.lodFactor ?? 1;
   }
 
   override initializeCounterpart(rpc: any, options: any) {
@@ -68,6 +71,7 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
   static override encodeOptions(options: {
     spec: VolumeChunkSpecification;
     vox?: { serverUrl?: string; token?: string };
+    lodFactor?: number;
   }) {
     const base = (BaseVolumeChunkSource as any).encodeOptions(options);
     if (options?.vox) {
@@ -75,6 +79,9 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
         serverUrl: options.vox.serverUrl,
         token: options.vox.token,
       };
+    }
+    if (options?.lodFactor) {
+      (base as any).lodFactor = options.lodFactor;
     }
     return base;
   }
@@ -122,6 +129,7 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     if (!voxels || voxels.length === 0) return;
     const editsByKey = new Map<string, number[]>();
     const chunksToUpdate = new Set<string>();
+    console.log("painting a lod level: ", this.lodFactor)
 
     for (const v of voxels) {
       if (!v) continue;
@@ -168,24 +176,27 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     return (local[2] * size[1] + local[1]) * size[0] + local[0];
   }
 
-  /** Compute indices for both canonical (spec-sized) and actual loaded chunk. */
   private computeIndices(voxel: Float32Array) {
     const rank = this.spec.rank;
     const { baseVoxelOffset, chunkDataSize } = this.spec as any;
     const keyParts = this.tempVoxChunkGridPosition;
     const local = this.tempLocalPosition;
+
     for (let i = 0; i < rank; ++i) {
-      const v = voxel[i] - baseVoxelOffset[i];
+      const v = (voxel[i] as number) - baseVoxelOffset[i];
       const size = chunkDataSize[i];
       const c = Math.floor(v / size);
       keyParts[i] = c;
       local[i] = Math.floor(v - c * size);
     }
+
     const key = `${keyParts[0]},${keyParts[1]},${keyParts[2]}`;
+
     const canonicalIndex = this.localIndexFromLocalPosition(
       local,
       this.spec.chunkDataSize as Uint32Array,
     );
+
     const chunk = this.chunks.get(key) as VolumeChunk | undefined;
     let chunkLocalIndex = -1;
     const cds = (chunk?.chunkDataSize as Uint32Array) ?? null;
@@ -194,7 +205,6 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
         chunkLocalIndex = this.localIndexFromLocalPosition(local, cds);
       }
     } else {
-      // If the chunk is not loaded yet, the spec size is a reasonable fallback for immediate updates (no-op if no CPU array).
       chunkLocalIndex = this.localIndexFromLocalPosition(
         local,
         this.spec.chunkDataSize as Uint32Array,

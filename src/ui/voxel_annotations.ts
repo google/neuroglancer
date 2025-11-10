@@ -18,7 +18,6 @@ import type { MouseSelectionState } from "#src/layer/index.js";
 import type { VoxUserLayer } from "#src/layer/vox/index.js";
 import { LegacyTool, registerLegacyTool } from "#src/ui/tool.js";
 
-export const PIXEL_TOOL_ID = "voxPixel";
 export const BRUSH_TOOL_ID = "voxBrush";
 
 abstract class BaseVoxelLegacyTool extends LegacyTool<VoxUserLayer> {
@@ -126,22 +125,6 @@ abstract class BaseVoxelLegacyTool extends LegacyTool<VoxUserLayer> {
   }
 }
 
-export class VoxelPixelLegacyTool extends BaseVoxelLegacyTool {
-  description = "pixel";
-
-  toJSON() {
-    return PIXEL_TOOL_ID;
-  }
-
-  protected paintPoint(point: Float32Array, value: number) {
-    (this.layer as any).voxEditController?.paintVoxelsBatch([point], value);
-  }
-
-  protected paintPoints(points: Float32Array[], value: number) {
-    (this.layer as any).voxEditController?.paintVoxelsBatch(points, value);
-  }
-}
-
 export class VoxelBrushLegacyTool extends BaseVoxelLegacyTool {
   description = "brush";
 
@@ -188,10 +171,6 @@ export class VoxelBrushLegacyTool extends BaseVoxelLegacyTool {
 }
 
 export function registerVoxelAnnotationTools() {
-  registerLegacyTool(
-    PIXEL_TOOL_ID,
-    (layer) => new VoxelPixelLegacyTool(layer as unknown as VoxUserLayer),
-  );
   registerLegacyTool(
     BRUSH_TOOL_ID,
     (layer) => new VoxelBrushLegacyTool(layer as unknown as VoxUserLayer),
