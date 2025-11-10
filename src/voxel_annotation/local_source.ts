@@ -118,22 +118,22 @@ export class LocalVoxSource extends VoxSource {
       if (pInfo.lod === maxLOD) break;
     }
 
-    // Find the nearest ancestor that has a dirty entry and is CLEAN (0)
+    // Find the nearest clean ancestor after a dirty one
     let cleanAncestorIndex = -1;
-    for (let i = ancestors.length - 1; i >= 0; i--) {
+    let hasDirt = false;
+    for (let i = 0; i < ancestors.length; i++) {
       const k = ancestors[i];
       const v = await this.getDirtyTreeValue(k);
-      if (v === 0) {
+      if (v === 0 && hasDirt) {
         cleanAncestorIndex = i;
         break;
+      }
+      if (v === 1){
+        hasDirt = true;
       }
     }
     if (cleanAncestorIndex === -1) {
       // No clean ancestor registered in tree -> nothing to upscale from.
-      return;
-    }
-    if (cleanAncestorIndex === 0) {
-      // Target itself is already clean according to the tree -> nothing to do.
       return;
     }
 
@@ -144,7 +144,7 @@ export class LocalVoxSource extends VoxSource {
 
       // A clean ancestor must exist physically. Enforce invariant strictly.
       const parentChunk = await this.readChunkFromDbWithoutSideEffects(parentKey);
-      if (!parentChunk) throw new Error(`Missing parent chunk for clean node during upscaling: ${parentKey}`);
+      if (!parentChunk) throw new Error(`Missing parent chunk for clean node during upscaling: ${parentKey} ${ancestors}`);
 
       const childDirtyVal = await this.getDirtyTreeValue(childKey);
       const needsRegeneration = childDirtyVal === 1 || childDirtyVal === undefined;
@@ -152,6 +152,7 @@ export class LocalVoxSource extends VoxSource {
         await this.upscaleFromParentIntoChild(parentChunk, parentKey, childKey);
         await this.setDirtyTreeFlag(childKey, false);
         await this.markChildrenDirtyInTree(childKey);
+        console.log(`Upscaled ${childKey} from ${parentKey}`);
       }
     }
   }
@@ -477,11 +478,8 @@ export class LocalVoxSource extends VoxSource {
     const sourceChunk = await this.getSavedChunk(sourceKey);
     if (!sourceChunk) return null; // Cannot downsample if source doesn't exist.
 
-    const targetLOD = sourceKeyInfo.lod * 2;
-    const targetX = Math.floor(sourceKeyInfo.x / 2);
-    const targetY = Math.floor(sourceKeyInfo.y / 2);
-    const targetZ = Math.floor(sourceKeyInfo.z / 2);
-    const targetKey = makeVoxChunkKey(`${targetX},${targetY},${targetZ}`, targetLOD);
+    const targetKey = this.parentKeyOf(sourceKey);
+    if (!targetKey) return null;
 
     const targetChunk = await this.ensureChunk(targetKey);
 
@@ -514,7 +512,6 @@ export class LocalVoxSource extends VoxSource {
     this.saved.set(targetKey, targetChunk);
     this.markDirty(targetKey);
     await this.setDirtyTreeFlag(targetKey, false);
-    await this.markChildrenDirtyInTree(targetKey);
     return targetKey;
   }
 

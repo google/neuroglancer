@@ -1,5 +1,7 @@
 # TODO List
 
+- FOR TOMORROW: fix dirty tree upscaling and integrate it into the zarr export feature.
+
 - LOD -> where am I:
   - choosing the lod level depanding on the brush size, live rendering is working local data saving is working.
   - there are some performance issues at very high brush sizes (>1000)

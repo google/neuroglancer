@@ -36,7 +36,7 @@ export abstract class VoxSource {
   protected mapCfg: VoxMapConfig; // Keep the entire configuration in one place
 
   // In-memory cache of loaded chunks
-  protected maxSavedChunks = 0; // cap to prevent unbounded growth
+  protected maxSavedChunks = 256; // cap to prevent unbounded growth
   protected saved = new Map<string, SavedChunk>();
 
   // Dirty tracking and debounced save
