@@ -1,10 +1,7 @@
 # TODO List
 
 
-- LOD -> where am I:
-  - choosing the lod level depanding on the brush size, live rendering is working local data saving is working.
-  - there are some performance issues at very high brush sizes (>1000)
-  - fix the redownload trigger from the backend to the front -> making VoxLayer a true singleton
+- LOD -> 
   -  "feat: dirty tree upscaling is kinda working, at lea
     st enough to conclude that this upscaling method wont work
     due to unsolvable conficts and lost unavoidable lost of qua
@@ -12,26 +9,21 @@
     will be to enqueue every upscale and downscale and throttl
     e the user when the queue is too full, with some kind of in
     dicator in the ui. We also may need to restrict the max bru
-    sh size to avoid too long waiting time."
+    sh size to avoid too long waiting time." -> no upscaling for now (e.g. drawn voxel size/lod level is always 1), only downscaling.
 
 - cleanup label handling code (more specifically in the ui code: layer/vox/index.ts, would be nice to have a handler similar to the one for maps)
-- Add redundancy to avoid corrupt/unsaved chunks on the remote
-- Test token authentication
-- Try to import pre-computed segmentation (in zarr format) into the remote server
 - continue to study the segmentation compression, using it should greatly reduce the ram and indexDB usage, but it no easy integration of the hot chunk reloading in the frontend for drawing tool responsiveness has been found.
-- add flood fill tool (with a max expansion safeguard), this tool should be 2d (e.g. act on a plane, the plane normal to the z axis is sufficient for a v1)
 - Fix the orientation of the disk in the brush tool
-- the uncaching of chunks the VoxSource is working great, but since it has no way of knowing which chunks are in view, it will delete them, causing flickering of the drawings.
+- Add support for flood fill on different planes
 - look into the massive ram usage when a lot of voxel annotations are drawn
 - Add Uint64 support for annotation id
-- Replace the current map settings to use the built-ins of neuroglancer (viewable under the datasource url), handle multimap with link choices, look into how to keep the init/creation logic.
-- adapt the brush size to the zoom level linearly
-
-
-
-
-
-
+-? Replace the current map settings to use the built-ins of neuroglancer (viewable under the datasource url), handle multimap with link choices, look into how to keep the init/creation logic.
+-? adapt the brush size to the zoom level linearly
+- Flood fill do not work at the bounds of the layer
+- need to fix this cache invalidation pipeline, it is not responsive enough
+- THERE MAY BE A CASE WHERE CHUNK GETS CORRUPTED/DELETED -> observed when drawing zoomed out with a big brush, previous drawing got erased but only their high resolution mipmap, the low resolution mipmap is still there.
+- save all the lod level in the zarr export
+- add a zarr import feature or even better design a dual source system, where you have the zarr source with most of the data and the indexedDB where the updates are stored, this would be an augmented version of the current localsource which would first look into the indexedDB and if not present, fetch the zarr source.
 
 # Saving/importing/exporting
 

@@ -472,6 +472,14 @@ export class LocalVoxSourceWriter extends VoxSourceWriter {
     }
   }
 
+  private chunksToReload = new Set<string>();
+  private DELAY_BEFORE_CHUNK_RELOAD = 100;
+
+  // Downscale job queue to serialize downsampling cascades
+  private downscaleQueue: string[] = [];
+  private downscaleQueuedKeys = new Set<string>();
+  private isProcessingDownscaleQueue = false;
+
   /**
    * Public entry point to start the downsampling cascade for a modified chunk.
    * @param sourceKey The key of the chunk that was edited.
@@ -479,23 +487,52 @@ export class LocalVoxSourceWriter extends VoxSourceWriter {
   public async propagateDownsample(sourceKey: string): Promise<void> {
     const keyInfo = parseVoxChunkKey(sourceKey);
     if (!keyInfo || !this.mapCfg) return;
+    if (!this.downscaleQueuedKeys.has(sourceKey)) {
+      this.downscaleQueuedKeys.add(sourceKey);
+      this.downscaleQueue.push(sourceKey);
+    }
+    // Trigger processor but do not await full drain here to avoid blocking callers
+    void this._processDownscaleQueue();
+  }
 
+  private async _processDownscaleQueue(): Promise<void> {
+    if (this.isProcessingDownscaleQueue) return;
+    this.isProcessingDownscaleQueue = true;
+    try {
+      while (this.downscaleQueue.length > 0) {
+        const nextKey = this.downscaleQueue.shift();
+        if (nextKey === undefined) {
+          throw new Error("Downscale queue returned undefined key");
+        }
+        this.downscaleQueuedKeys.delete(nextKey);
+        try {
+          await this._performDownsampleCascade(nextKey);
+        } catch (err) {
+          console.error("Downscale job failed for key", nextKey, err);
+        }
+      }
+    } finally {
+      this.isProcessingDownscaleQueue = false;
+    }
+  }
+
+  private async _performDownsampleCascade(sourceKey: string): Promise<void> {
+    if (!this.mapCfg) return;
     // Assuming cubic chunks
     const chunkSize = this.mapCfg.chunkDataSize[0];
     const maxPasses = calculateDownsamplePasses(chunkSize);
     const maxLOD = this.mapCfg.steps[this.mapCfg.steps.length - 1];
 
-    let currentKey = sourceKey;
+    let currentKey: string | null = sourceKey;
     for (let i = 0; i < maxPasses; i++) {
-      const currentKeyInfo = parseVoxChunkKey(currentKey)!;
+      if (!currentKey) break;
+      const currentKeyInfo = parseVoxChunkKey(currentKey);
+      if (!currentKeyInfo) break;
       if (currentKeyInfo.lod >= maxLOD) {
-        console.log(`Reached max LOD ${maxLOD}, stopping downsample.`);
         break;
       }
-
       const targetKey = await this._downsampleStep(currentKey);
       if (!targetKey) {
-        console.log("Downsample step failed or was unnecessary, stopping cascade.");
         break;
       }
       currentKey = targetKey;
@@ -546,6 +583,7 @@ export class LocalVoxSourceWriter extends VoxSourceWriter {
 
     this.saved.set(targetKey, targetChunk);
     this.markDirty(targetKey);
+    this.chunksToReload.add(targetKey);
     // Upscaling halted
     //await this.setDirtyTreeFlag(targetKey, false);
     return targetKey;
@@ -602,7 +640,11 @@ export class LocalVoxSourceWriter extends VoxSourceWriter {
     }
     await txDone(tx);
     this.saveTimer = undefined;
-    this.callChunkReload(keys);
+    const toReload = Array.from(this.chunksToReload);
+    this.chunksToReload.clear();
+    setTimeout(() => {
+      this.callChunkReload(toReload);
+    }, this.DELAY_BEFORE_CHUNK_RELOAD);
   }
 
   private async getDb(): Promise<IDBDatabase> {
