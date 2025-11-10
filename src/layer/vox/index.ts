@@ -43,13 +43,13 @@ import {
   RenderScaleHistogram,
   trackableRenderScaleTarget,
 } from "#src/render_scale_statistics.js";
-import { SegmentColorHash } from "#src/segment_color.js";
 import {
   registerVoxelAnnotationTools,
 } from "#src/ui/voxel_annotations.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { mat4 } from "#src/util/geom.js";
 import { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
+import { LabelsManager } from "#src/voxel_annotation/labels.js";
 import { VoxMapRegistry } from "#src/voxel_annotation/map.js";
 import { RemoteVoxSource } from "#src/voxel_annotation/remote_source.js";
 import { VoxelAnnotationRenderLayer } from "#src/voxel_annotation/renderlayer.js";
@@ -58,21 +58,14 @@ import { VoxMultiscaleVolumeChunkSource } from "#src/voxel_annotation/volume_chu
 export class VoxUserLayer extends UserLayer {
   // While drawing, we keep a reference to the vox render layer to control temporary LOD locks.
   private voxRenderLayerInstance?: VoxelAnnotationRenderLayer;
-  onLabelsChanged?: () => void;
-  voxMapRegistry = new VoxMapRegistry();
-  // Label state for painting: only store ids; colors are hashed from id on the fly
-  voxLabels: { id: number }[] = [];
-  voxSelectedLabelId: number | undefined = undefined;
-  voxLabelsError: string | undefined = undefined;
-  // Indicates whether an initial labels load attempt has completed.
-  private voxLabelsInitialized: boolean = false;
-  segmentColorHash = SegmentColorHash.getDefault();
   // Match Image/Segmentation layers: provide a per-layer cross-section render scale target/histogram.
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
   static type = "vox";
   static typeAbbreviation = "vox";
   voxEditController?: VoxelEditController;
+  voxLabelsManager = new LabelsManager();
+  voxMapRegistry = new VoxMapRegistry();
 
   // Draw tool state
   voxBrushRadius: number = 3;
@@ -90,6 +83,43 @@ export class VoxUserLayer extends UserLayer {
     } catch {
       /* ignore */
     }
+  }
+
+  // Labels manager integration proxies
+  get onLabelsChanged(): (() => void) | undefined {
+    return this.voxLabelsManager.onLabelsChanged;
+  }
+  set onLabelsChanged(cb: (() => void) | undefined) {
+    this.voxLabelsManager.onLabelsChanged = cb;
+  }
+
+  get voxLabels(): { id: number }[] {
+    return this.voxLabelsManager.labels;
+  }
+  get voxSelectedLabelId(): number | undefined {
+    return this.voxLabelsManager.selectedLabelId;
+  }
+  get voxLabelsError(): string | undefined {
+    return this.voxLabelsManager.labelsError;
+  }
+
+  colorForValue(v: number): string {
+    return this.voxLabelsManager.colorForValue(v);
+  }
+  createVoxLabel(): void {
+    this.voxLabelsManager.createVoxLabel(this.voxEditController);
+  }
+  selectVoxLabel(id: number): void {
+    this.voxLabelsManager.selectVoxLabel(id);
+  }
+  getCurrentLabelValue(): number {
+    return this.voxLabelsManager.getCurrentLabelValue(!!this.voxEraseMode);
+  }
+
+  private async loadLabels(): Promise<void> {
+    const ctrl = this.voxEditController;
+    if (!ctrl) return;
+    await this.voxLabelsManager.initialize(ctrl);
   }
 
   // Remote server configuration when using vox+http(s):// data sources
@@ -124,120 +154,6 @@ export class VoxUserLayer extends UserLayer {
     if (!rl) return;
     rl.setForcedSourceIndexLock(undefined);
     console.log("endRenderLodLock");
-  }
-
-  getActiveRenderedLodIndex(): number | undefined {
-    const rl = this.voxRenderLayerInstance;
-    if (!rl) return undefined;
-    return rl.getForcedSourceIndexOverride?.();
-  }
-
-  // --- Label helpers ---
-  private genId(): number {
-    // Generate a unique uint32 per layer session. Try crypto.getRandomValues; fallback to Math.random.
-    let id = 0;
-    const used = new Set(this.voxLabels.map((l) => l.id));
-    for (let attempts = 0; attempts < 10_000; attempts++) {
-      if (typeof crypto !== "undefined" && (crypto as any).getRandomValues) {
-        const a = new Uint32Array(1);
-        (crypto as any).getRandomValues(a);
-        id = a[0] >>> 0;
-      } else {
-        id = Math.floor(Math.random() * 0xffffffff) >>> 0;
-      }
-      if (id !== 0 && !used.has(id)) return id;
-    }
-    // As an ultimate fallback, probe sequentially from a time-based seed.
-    const base = (Date.now() ^ ((Math.random() * 0xffffffff) >>> 0)) >>> 0;
-    id = base || 1;
-    while (used.has(id)) id = (id + 1) >>> 0;
-    return id >>> 0;
-  }
-  colorForValue(v: number): string {
-    // Use segmentation-like color from SegmentColorHash seeded on numeric value
-    return this.segmentColorHash.computeCssColor(BigInt(v >>> 0));
-  }
-
-  // --- Labels persistence (via VoxSource) ---
-  private async loadLabels() {
-    try {
-      const arr = await this.voxEditController?.getLabelIds();
-      if (arr && Array.isArray(arr)) {
-        if (arr.length > 0) {
-          this.voxLabels = arr.map((id) => ({ id: id >>> 0 }));
-          const sel = this.voxSelectedLabelId;
-          if (!sel || !this.voxLabels.some((l) => l.id === sel)) {
-            this.voxSelectedLabelId = this.voxLabels[0].id;
-          }
-        } else {
-          this.voxLabels = [];
-          this.voxSelectedLabelId = undefined;
-        }
-      } else {
-        throw new Error("Invalid labels response");
-      }
-    } catch (e: any) {
-      const msg = `Failed to load labels: ${e?.message || e}`;
-      console.error(msg);
-      this.voxLabelsError = msg;
-    } finally {
-      // Mark labels as initialized; UI/painting should not trigger default creation before this point.
-      this.voxLabelsInitialized = true;
-      try {
-        this.onLabelsChanged?.();
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-
-  async createVoxLabel() {
-    const id = this.genId(); // unique uint32
-    if (!this.voxEditController) {
-      const msg = "Labels backend not ready; please try again after source initializes.";
-      console.error(msg);
-      this.voxLabelsError = msg;
-      return;
-    }
-    try {
-      const updated = await this.voxEditController.addLabel(id);
-      this.voxLabels = updated.map((x) => ({ id: x >>> 0 }));
-      // Prefer to select the last label from the updated list (likely the one just added).
-      const last = this.voxLabels[this.voxLabels.length - 1]?.id;
-      this.voxSelectedLabelId = last ?? id;
-      this.voxLabelsError = undefined;
-      try {
-        this.onLabelsChanged?.();
-      } catch {
-        /* ignore */
-      }
-    } catch (e: any) {
-      const msg = `Failed to create label: ${e?.message || e}`;
-      console.error(msg);
-      this.voxLabelsError = msg;
-      try {
-        this.onLabelsChanged?.();
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-  selectVoxLabel(id: number) {
-    const found = this.voxLabels.find((l) => l.id === id);
-    if (found) this.voxSelectedLabelId = id;
-  }
-  getCurrentLabelValue(): number {
-    if (this.voxEraseMode) return 0;
-    // Avoid triggering default creation during initialization.
-    if (!this.voxLabelsInitialized) return 0;
-    // Ensure we have a valid selection if labels exist.
-    if (!this.voxSelectedLabelId && this.voxLabels.length > 0) {
-      this.voxSelectedLabelId = this.voxLabels[0].id;
-    }
-    const cur =
-      this.voxLabels.find((l) => l.id === this.voxSelectedLabelId) ||
-      this.voxLabels[0];
-    return cur ? cur.id >>> 0 : 0;
   }
 
   constructor(managedLayer: Borrowed<ManagedUserLayer>) {

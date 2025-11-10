@@ -1,5 +1,7 @@
 # TODO List
 
+- FOR TOMORROW: fix plane orientation in the brush and flood tools + ask about the R2 storage on cloudflare, it is behind a "put your credit card" wall.
+
 - LOD -> 
   -  "feat: dirty tree upscaling is kinda working, at lea
     st enough to conclude that this upscaling method wont work
@@ -23,7 +25,6 @@
 - rework the ui (tabs)
 - add persistance to vox layer
 - add shortcuts for tools (switching tools, toogle erase mode, select label from the pointed one in the slice view and adjusting brush size) and label creation
-- add feedback for the user when the flood fill fails
 
 # Saving/importing/exporting
 
