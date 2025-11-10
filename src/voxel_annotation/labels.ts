@@ -9,14 +9,17 @@ export class LabelsManager {
 
   private sessionPrefix: bigint;
   private nextLocalId: bigint = 1n;
+  private idMask: bigint;
 
   constructor(public dataType: DataType, private onLabelsChanged?: () => void) {
     switch (dataType){
       case DataType.UINT32:
         this.sessionPrefix = BigInt(Date.now() << 20);
+        this.idMask = 0xFFFFFFFFn;
         break;
       case DataType.UINT64:
         this.sessionPrefix = BigInt(getRandomUint32()) << 32n;
+        this.idMask = 0xFFFFFFFFFFFFFFFFn;
         break;
       default:
         throw new Error(`LabelsManager: Unsupported data type: ${dataType}`);
@@ -25,7 +28,7 @@ export class LabelsManager {
   }
 
   private generateNewGuid(): bigint {
-    const newId = this.sessionPrefix | this.nextLocalId;
+    const newId = this.sessionPrefix | this.nextLocalId  & this.idMask;
     this.nextLocalId++;
     return newId;
   }
