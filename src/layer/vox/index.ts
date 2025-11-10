@@ -20,8 +20,7 @@ import { LocalDataSource, localVoxelAnnotationsUrl } from "#src/datasource/local
 import type { ManagedUserLayer } from "#src/layer/index.js";
 import { registerLayerType, registerLayerTypeDetector, UserLayer } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
-import { makeToolButton } from "#src/ui/tool.js";
-import { PIXEL_TOOL_ID, VoxelPixelLegacyTool, registerVoxelAnnotationTools } from "#src/ui/voxel_annotations.js";
+import { VoxelPixelLegacyTool, registerVoxelAnnotationTools } from "#src/ui/voxel_annotations.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { Tab } from "#src/widget/tab_view.js";
 
@@ -42,8 +41,8 @@ class VoxToolTab extends Tab {
     const toolbox = document.createElement("div");
     toolbox.className = "neuroglancer-vox-toolbox";
     const legacyButton = document.createElement("button");
-    legacyButton.textContent = "Pixel (annotate)";
-    legacyButton.title = "Select legacy pixel tool for ctrl+click annotate";
+    legacyButton.textContent = "Pixel";
+    legacyButton.title = "ctrl+click to paint a pixel";
     legacyButton.addEventListener("click", () => {
       this.layer.tool.value = new VoxelPixelLegacyTool(this.layer);
     });
