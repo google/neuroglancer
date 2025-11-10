@@ -417,7 +417,7 @@ export class VoxelEditController extends SharedObject {
     ) => {
       const subQueue: [number, number][] = [];
       // The bounding box for the local fill is defined in the (u, v) coordinate system
-      const halfSize = Math.floor(requiredThickness / 2) + 1;
+      const halfSize = requiredThickness * 2; // multiply by 2 to avoid small artefacts
       const startKey = `${startU},${startV}`;
       if (visited.has(startKey)) return;
 
@@ -439,13 +439,10 @@ export class VoxelEditController extends SharedObject {
           [u, v - 1],
         ];
         for (const [nu, nv] of neighbors2d) {
-          // Constrain this local search to a small bounding box
-          if (
-            nu < startU - halfSize ||
-            nu > startU + halfSize ||
-            nv < startV - halfSize ||
-            nv > startV + halfSize
-          ) {
+          const du = nu - startU;
+          const dv = nv - startV;
+          const distanceSquared = du * du + dv * dv;
+          if (distanceSquared > halfSize * halfSize) {
             continue;
           }
 

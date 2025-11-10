@@ -8,7 +8,6 @@
 ### later
 
 - add preview for the undo/redo
-- the flood fill sometimes leaves artifacts in sharp areas (maybe increase fillBorderRegion() radius)
 
 ### questionable
 
