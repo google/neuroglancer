@@ -1,0 +1,34 @@
+/**
+ * @license
+ * Copyright 2025
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
+import { ProxyKvStore } from "#src/kvstore/proxy.js";
+import { encodePathForUrl, kvstoreEnsureDirectoryPipelineUrl } from "#src/kvstore/url.js";
+
+export class OpfsKvStore extends ProxyKvStore {
+  constructor(public override sharedKvStoreContext: SharedKvStoreContext, private readonly basePath: string) {
+    super(sharedKvStoreContext);
+  }
+
+  getUrl(key: string): string {
+    const base = this.basePath === "" ? "opfs://" : `opfs://${encodePathForUrl(this.basePath)}/`;
+    const ensured = kvstoreEnsureDirectoryPipelineUrl(base);
+    return ensured + (key === "" ? "" : encodePathForUrl(key));
+  }
+
+  get supportsOffsetReads(): boolean { return false; }
+  get supportsSuffixReads(): boolean { return false; }
+}
