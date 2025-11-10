@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import type {
+import {
+  CHUNK_SOURCE_INVALIDATE_CHUNKS_RPC_ID,
   ChunkSourceParametersConstructor,
   LayerChunkProgressInfo,
 } from "#src/chunk_manager/base.js";
@@ -464,14 +465,21 @@ export class ChunkSource extends SharedObject {
   }
 
   invalidateChunks(keys: string[]): void {
+    const validKeys: string[] = [];
     let changed = false;
     for (const key of keys) {
       const chunk = this.chunks.get(key);
       if (chunk) {
+        validKeys.push(key);
         this.deleteChunk(key);
         changed = true;
       }
     }
+
+    if (validKeys.length > 0) {
+      this.rpc!.invoke(CHUNK_SOURCE_INVALIDATE_CHUNKS_RPC_ID, { id: this.rpcId, keys: validKeys });
+    }
+
     if (changed) {
       this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
     }

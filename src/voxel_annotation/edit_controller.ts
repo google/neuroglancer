@@ -163,9 +163,9 @@ export class VoxelEditController extends SharedObject {
     const source = this.getSourceForLOD(sourceIndex);
 
     // Convert center and radius to the level’s voxel grid.
-    const cx = Math.floor((centerCanonical[0] ?? 0) / voxelSize);
-    const cy = Math.floor((centerCanonical[1] ?? 0) / voxelSize);
-    const cz = Math.floor((centerCanonical[2] ?? 0) / voxelSize);
+    const cx = Math.round((centerCanonical[0] ?? 0) / voxelSize);
+    const cy = Math.round((centerCanonical[1] ?? 0) / voxelSize);
+    const cz = Math.round((centerCanonical[2] ?? 0) / voxelSize);
     const r = Math.round(radiusCanonical / voxelSize);
     if (r <= 0) {
       throw new Error(
@@ -284,9 +284,9 @@ export class VoxelEditController extends SharedObject {
 
     // Convert canonical/world to level grid coordinates.
     const startVoxelLod = new Float32Array([
-      Math.floor((startPositionCanonical[0] ?? NaN) / voxelSize),
-      Math.floor((startPositionCanonical[1] ?? NaN) / voxelSize),
-      Math.floor((startPositionCanonical[2] ?? NaN) / voxelSize),
+      Math.round((startPositionCanonical[0] ?? NaN) / voxelSize),
+      Math.round((startPositionCanonical[1] ?? NaN) / voxelSize),
+      Math.round((startPositionCanonical[2] ?? NaN) / voxelSize),
     ]);
 
     if (!startVoxelLod || startVoxelLod.length < 3) {
