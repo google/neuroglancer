@@ -3,11 +3,11 @@
  */
 import type { VoxUserLayer } from "#src/layer/vox/index.js";
 import { DataType } from "#src/util/data_type.js";
+import { scaleByExp10, unitFromJson } from "#src/util/si_units.js";
 import { exportVoxToZarr, type ExportStatus } from "#src/voxel_annotation/export_to_zarr.js";
 import { LocalVoxSourceWriter } from "#src/voxel_annotation/local_source.js";
 import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
 import { computeSteps, constructVoxMapConfig } from "#src/voxel_annotation/map.js";
-import { scaleByExp10, unitFromJson } from "#src/util/si_units.js";
 import { Tab } from "#src/widget/tab_view.js";
 
 export class VoxSettingsTab extends Tab {

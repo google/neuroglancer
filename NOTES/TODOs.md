@@ -1,7 +1,5 @@
 # TODO List
 
-- FOR MONDAY: see [multi-source-plan.md](multi-source-plan.md)
-
 - LOD -> 
   -  "feat: dirty tree upscaling is kinda working, at lea
     st enough to conclude that this upscaling method wont work
@@ -21,7 +19,7 @@
 -? adapt the brush size to the zoom level linearly
 - Flood fill do not work at the bounds of the layer
 - need to fix this cache invalidation pipeline, it is not responsive enough
-- add a zarr import feature or even better design a dual source system, where you have the zarr source with most of the data and the indexedDB where the updates are stored, this would be an augmented version of the current localsource which would first look into the indexedDB and if not present, fetch the zarr source.
+- ~~add a zarr import feature or even better design a dual source system, where you have the zarr source with most of the data and the indexedDB where the updates are stored, this would be an augmented version of the current localsource which would first look into the indexedDB and if not present, fetch the zarr source.~~ -> this is really hard, I should ask JMS for help, I will implement a simplified import system myself for now.
 - rework the ui (tabs)
 - add persistance to vox layer
 - add shortcuts for tools (switching tools, toogle erase mode, select label from the pointed one in the slice view and adjusting brush size) and label creation

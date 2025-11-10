@@ -10,6 +10,7 @@ import type {
 import {
   constructVoxMapConfig
 , computeSteps } from "#src/voxel_annotation/map.js";
+import { fetchZarrChunkIfAvailable } from "#src/voxel_annotation/import_from_zarr.js";
 
 /**
  * Calculates the number of meaningful downsample passes for the worst case
@@ -44,6 +45,11 @@ export class LocalVoxSource extends VoxSource {
         size: new Uint32Array(this.mapCfg!.chunkDataSize as any),
       };
       return sc;
+    }
+    // Fallback to remote Zarr import if available
+    const remote = await fetchZarrChunkIfAvailable(this.mapCfg, key);
+    if (remote) {
+      return remote;
     }
     return undefined;
   }
@@ -410,6 +416,16 @@ export class LocalVoxSourceWriter extends VoxSourceWriter {
         this.enforceCap();
         return sc;
       }
+      // Try remote Zarr import on miss
+      const remote = await fetchZarrChunkIfAvailable(this.mapCfg, key);
+      if (remote) {
+        this.saved.set(key, remote);
+        this.enforceCap();
+        const tx = db.transaction("chunks", "readwrite");
+        await idbPut(tx.objectStore("chunks"), remote.data.buffer, composite);
+        await txDone(tx);
+        return remote;
+      }
       return undefined;
     }
 
@@ -440,6 +456,17 @@ export class LocalVoxSourceWriter extends VoxSourceWriter {
       sc = { data: arr, size: new Uint32Array(this.mapCfg!.chunkDataSize as any) };
       this.saved.set(key, sc);
       this.enforceCap();
+      return sc;
+    }
+    // Try fetching from remote Zarr before allocating an empty chunk
+    const remote = await fetchZarrChunkIfAvailable(this.mapCfg, key);
+    if (remote) {
+      sc = remote;
+      this.saved.set(key, sc);
+      this.enforceCap();
+      const tx = db.transaction("chunks", "readwrite");
+      await idbPut(tx.objectStore("chunks"), sc.data.buffer, composite);
+      await txDone(tx);
       return sc;
     }
     const fallbackSize = new Uint32Array(this.mapCfg!.chunkDataSize as any);
