@@ -28,6 +28,8 @@ export class VoxelPixelLegacyTool extends LegacyTool<VoxUserLayer> {
     return PIXEL_TOOL_ID;
   }
   trigger(mouseState: MouseSelectionState) {
+    // Defensive runtime check: this tool is intended for VoxUserLayer only.
+    if ((this.layer as any)?.constructor?.type !== 'vox') return;
     try {
       const layer = this.layer;
       const display = layer.manager.root.display;
@@ -141,5 +143,5 @@ export class VoxelPixelLegacyTool extends LegacyTool<VoxUserLayer> {
 }
 
 export function registerVoxelAnnotationTools() {
-  registerLegacyTool(PIXEL_TOOL_ID, (layer) => new VoxelPixelLegacyTool(layer));
+  registerLegacyTool(PIXEL_TOOL_ID, (layer) => new VoxelPixelLegacyTool(layer as unknown as VoxUserLayer));
 }

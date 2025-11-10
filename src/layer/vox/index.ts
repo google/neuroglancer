@@ -15,13 +15,18 @@
  */
 
 import type { CoordinateTransformSpecification } from "#src/coordinate_transform.js";
+import { makeCoordinateSpace, makeIdentityTransform, WatchableCoordinateSpaceTransform } from "#src/coordinate_transform.js";
 import type { DataSourceSpecification } from "#src/datasource/index.js";
 import { LocalDataSource, localVoxelAnnotationsUrl } from "#src/datasource/local.js";
 import type { ManagedUserLayer } from "#src/layer/index.js";
 import { registerLayerType, registerLayerTypeDetector, UserLayer } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
+import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
+import { RenderScaleHistogram, trackableRenderScaleTarget } from "#src/render_scale_statistics.js";
 import { VoxelPixelLegacyTool, registerVoxelAnnotationTools } from "#src/ui/voxel_annotations.js";
 import type { Borrowed } from "#src/util/disposable.js";
+import { DummyMultiscaleVolumeChunkSource } from "#src/voxel_annotation/dummy_volume_chunk_source.js";
+import { VoxelAnnotationRenderLayer } from "#src/voxel_annotation/renderlayer.js";
 import { Tab } from "#src/widget/tab_view.js";
 
 class VoxHelloTab extends Tab {
@@ -53,6 +58,9 @@ class VoxToolTab extends Tab {
 
 
 export class VoxUserLayer extends UserLayer {
+  // Match Image/Segmentation layers: provide a per-layer cross-section render scale target/histogram.
+  sliceViewRenderScaleHistogram = new RenderScaleHistogram();
+  sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
   static type = "vox";
   static typeAbbreviation = "vox";
 
@@ -103,7 +111,43 @@ export class VoxUserLayer extends UserLayer {
       const { subsource } = subsourceEntry;
       if (subsource.local === LocalDataSource.voxelAnnotations) {
         // Accept this data source; no render layers yet.
-        loadedSubsource.activate(() => {});
+        loadedSubsource.activate(() => {
+          console.log('Activating voxel annotation data subsource.');
+          const dummySource = new DummyMultiscaleVolumeChunkSource(
+            this.manager.chunkManager,
+          );
+          this.addRenderLayer(
+            new VoxelAnnotationRenderLayer(
+              dummySource,
+              {
+                // Provide a synthetic 3D identity transform to match our 3D dummy volume.
+                // The default transform from local://voxel-annotations has rank 0, which results in
+                // no sources becoming visible. We bind an identity 3D model transform to the viewer/global
+                // and layer/local spaces so SliceView can select sources correctly.
+                transform: getWatchableRenderLayerTransform(
+                  this.manager.root.coordinateSpace,
+                  this.localPosition.coordinateSpace,
+                  new WatchableCoordinateSpaceTransform(
+                    makeIdentityTransform(
+                      // Construct a generic 3D model space. Names/units are placeholders but sufficient.
+                      makeCoordinateSpace({
+                        rank: 3,
+                        names: ["x", "y", "z"],
+                        units: ["", "", ""],
+                        scales: new Float64Array([1, 1, 1]),
+                      }),
+                    ),
+                  ),
+                  undefined,
+                  undefined,
+                ),
+                renderScaleTarget: this.sliceViewRenderScaleTarget,
+                renderScaleHistogram: undefined,
+                localPosition: this.localPosition,
+              } as any,
+            ),
+          );
+        });
         continue;
       }
       loadedSubsource.deactivate(

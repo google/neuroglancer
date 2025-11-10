@@ -28,3 +28,4 @@ tsconfig.tsbuildinfo
 /.vite
 /.idea
 /.local
+/.env
