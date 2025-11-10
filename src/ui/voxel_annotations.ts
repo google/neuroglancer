@@ -252,7 +252,10 @@ export class VoxelBrushLegacyTool extends BaseVoxelLegacyTool {
   }
 }
 
-export class VoxelFloodFillLegacyTool extends LegacyTool<VoxUserLayer> {
+export class VoxelFloodFillLegacyTool extends BaseVoxelLegacyTool {
+  protected paintPoints(_points: Float32Array[], _value: bigint): void {
+    throw new Error("Method not implemented.");
+  }
   description = "flood fill";
 
   toJSON() {
@@ -270,12 +273,10 @@ export class VoxelFloodFillLegacyTool extends LegacyTool<VoxUserLayer> {
         return;
       }
 
-      const pos = layer.getVoxelPositionFromMouse?.(mouseState) as
-        | Float32Array
-        | undefined;
+      const seed = this.getPoint(mouseState);
       const planeNormal = mouseState.planeNormal;
 
-      if (!pos || pos.length < 3 || !planeNormal) {
+      if (!seed || !planeNormal) {
         throw new Error(
           "Flood fill: failed to get voxel position or plane normal.",
         );
@@ -293,19 +294,13 @@ export class VoxelFloodFillLegacyTool extends LegacyTool<VoxUserLayer> {
       const ctrl = layer.voxEditController;
       if (!ctrl) throw new Error("Flood fill: drawing backend not ready yet");
 
-      const seed = new Float32Array([
-        Math.floor(pos[0]!),
-        Math.floor(pos[1]!),
-        Math.floor(pos[2]!),
-      ]);
-
       console.info("[VoxFloodFill] starting flood fill", {
         seed: Array.from(seed),
         value: value,
         max: Math.floor(max),
       });
       ctrl
-        .floodFillPlane2D(seed, value, Math.floor(max), planeNormal)
+        .floodFillPlane2D(new Float32Array(seed), value, Math.floor(max), planeNormal)
         .then(({ edits, filledCount }) => {
           console.info("[VoxFloodFill] BFS completed", {
             filledCount,
