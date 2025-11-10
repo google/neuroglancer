@@ -36,6 +36,7 @@ import { makeEmptyDataSourceSpecification } from "#src/datasource/index.js";
 import type { UserLayer } from "#src/layer/index.js";
 import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
 import type { RenderLayer } from "#src/renderlayer.js";
+import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { arraysEqual } from "#src/util/array.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
@@ -63,6 +64,7 @@ export function parseDataSubsourceSpecificationFromJson(
   verifyObject(json);
   return {
     enabled: verifyOptionalObjectProperty(json, "enabled", verifyBoolean),
+    writable: verifyOptionalObjectProperty(json, "writable", verifyBoolean),
   };
 }
 
@@ -146,6 +148,7 @@ export class LoadedDataSubsource {
   subsourceToModelSubspaceTransform: Float32Array;
   modelSubspaceDimensionIndices: number[];
   enabled: boolean;
+  writable: TrackableBoolean;
   activated: RefCounted | undefined = undefined;
   guardValues: any[] = [];
   messages = new MessageList();
@@ -178,6 +181,8 @@ export class LoadedDataSubsource {
       ),
     } = subsourceEntry;
     this.enabled = enabled;
+    this.writable = new TrackableBoolean(subsourceSpec?.writable ?? false, false);
+    this.writable.changed.add(loadedDataSource.layer.dataSourcesChanged.dispatch);
     this.subsourceToModelSubspaceTransform = subsourceToModelSubspaceTransform;
     this.modelSubspaceDimensionIndices = modelSubspaceDimensionIndices;
     this.isActiveChanged.add(

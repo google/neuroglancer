@@ -309,6 +309,14 @@ void main() {
           }, this.volumeRenderingMode),
         );
         this.shaderError.changed.dispatch();
+        context.registerDisposer(registerNested((context, isWritable) => {
+          if (isWritable) {
+            this.initializeVoxelEditingForSubsource(loadedSubsource);
+            context.registerDisposer(() => {
+              this.deinitializeVoxelEditingForSubsource(loadedSubsource);
+            });
+          }
+        }, loadedSubsource.writable));
       });
     }
     this.dataType.value = dataType;

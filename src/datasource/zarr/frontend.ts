@@ -556,7 +556,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
               id: "default",
               default: true,
               url: undefined,
-              subsource: { volume },
+              subsource: { volume, isPotentiallyWritable: true },
             },
             {
               id: "bounds",

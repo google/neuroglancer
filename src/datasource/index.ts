@@ -132,6 +132,7 @@ export interface DataSubsource {
   singleMesh?: SingleMeshSource;
   segmentPropertyMap?: SegmentPropertyMap;
   segmentationGraph?: SegmentationGraphSource;
+  isPotentiallyWritable?: boolean;
 }
 
 export interface CompleteUrlOptionsBase extends Partial<ProgressOptions> {
@@ -216,6 +217,7 @@ export interface DataSourceWithRedirectInfo extends DataSource {
 
 export interface DataSubsourceSpecification {
   enabled?: boolean;
+  writable?: boolean;
 }
 
 export interface DataSourceSpecification {

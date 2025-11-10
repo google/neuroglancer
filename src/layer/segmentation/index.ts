@@ -89,7 +89,8 @@ import { SegmentationRenderLayer } from "#src/sliceview/volume/segmentation_rend
 import { StatusMessage } from "#src/status.js";
 import { trackableAlphaValue } from "#src/trackable_alpha.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
-import type {
+import {
+  registerNested,
   TrackableValueInterface,
   WatchableValueInterface,
 } from "#src/trackable_value.js";
@@ -792,7 +793,7 @@ export class SegmentationUserLayer extends Base {
         }
         hasVolume = true;
         loadedSubsource.activate(
-          () =>
+          (context) => {
             loadedSubsource.addRenderLayer(
               new SegmentationRenderLayer(volume, {
                 ...this.displayState,
@@ -801,7 +802,16 @@ export class SegmentationUserLayer extends Base {
                 renderScaleHistogram: this.sliceViewRenderScaleHistogram,
                 localPosition: this.localPosition,
               }),
-            ),
+            )
+            context.registerDisposer(registerNested((context, isWritable) => {
+              if (isWritable) {
+                this.initializeVoxelEditingForSubsource(loadedSubsource);
+                context.registerDisposer(() => {
+                  this.deinitializeVoxelEditingForSubsource(loadedSubsource);
+                });
+              }
+            }, loadedSubsource.writable));
+          },
           this.displayState.segmentationGroupState.value,
         );
       } else if (mesh !== undefined) {
