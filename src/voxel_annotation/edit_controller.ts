@@ -37,7 +37,6 @@ import {
   makeVoxChunkKey,
   parseVoxChunkKey,
 } from "#src/voxel_annotation/base.js";
-import type { LabelsManager } from "#src/voxel_annotation/labels.js";
 import type { RPC } from "#src/worker_rpc.js";
 import {
   registerRPC,
@@ -48,9 +47,7 @@ import {
 export interface VoxelEditControllerHost {
   primarySource: MultiscaleVolumeChunkSource;
   previewSource: VoxelPreviewMultiscaleSource;
-  labelsManager: LabelsManager;
   rpc: RPC;
-  setDrawErrorMessage(message: string | undefined): void;
 }
 
 @registerSharedObjectOwner(VOX_EDIT_BACKEND_RPC_ID)
@@ -616,7 +613,7 @@ export class VoxelEditController extends SharedObject {
     try {
       this.callChunkReload(voxChunkKeys);
     } finally {
-      this.host.setDrawErrorMessage(message);
+      StatusMessage.showTemporaryMessage(message);
     }
   }
 

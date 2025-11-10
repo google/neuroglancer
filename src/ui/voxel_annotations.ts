@@ -15,10 +15,7 @@
  */
 
 import type { MouseSelectionState } from "#src/layer/index.js";
-import type {
-  UserLayerWithVoxelEditing,
-  VoxelEditingContext,
-} from "#src/layer/vox/index.js";
+import type { UserLayerWithVoxelEditing, VoxelEditingContext } from "#src/layer/vox/index.js";
 import { BrushShape } from "#src/layer/vox/index.js";
 import type { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import { StatusMessage } from "#src/status.js";
@@ -231,9 +228,7 @@ export class VoxelBrushTool extends BaseVoxelTool {
       ) {
         const points = this.linePoints(last, cur);
         if (points.length > 0) {
-          if (!this.layer.voxLabelsManager)
-            throw new Error("Drawing backend not ready yet");
-          const value = this.layer.voxLabelsManager.getCurrentLabelValue(
+          const value = this.layer.getVoxelPaintValue(
             this.layer.voxEraseMode.value,
           );
           this.paintPoints(points, value);
@@ -256,9 +251,7 @@ export class VoxelBrushTool extends BaseVoxelTool {
       );
     }
 
-    if (!this.layer.voxLabelsManager)
-      throw new Error("Drawing backend not ready yet");
-    const value = this.layer.voxLabelsManager.getCurrentLabelValue(
+    const value = this.layer.getVoxelPaintValue(
       this.layer.voxEraseMode.value,
     );
 
@@ -370,15 +363,11 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
     const seed = this.getPoint(this.mouseState);
     const planeNormal = this.mouseState.planeNormal;
     if (!seed || !planeNormal) return;
-    const layer = this.layer;
     try {
-      layer.setDrawErrorMessage(undefined);
-      if (!layer.voxLabelsManager)
-        throw new Error("Drawing backend not ready yet");
-      const value = layer.voxLabelsManager.getCurrentLabelValue(
-        layer.voxEraseMode.value,
+      const value = this.layer.getVoxelPaintValue(
+        this.layer.voxEraseMode.value,
       );
-      const max = Number(layer.voxFloodMaxVoxels.value);
+      const max = Number(this.layer.voxFloodMaxVoxels.value);
       if (!Number.isFinite(max) || max <= 0) {
         throw new Error("Invalid max fill voxels setting");
       }
@@ -390,10 +379,10 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
           planeNormal,
         )
         .catch((e: any) =>
-          layer.setDrawErrorMessage?.(String(e?.message ?? e)),
+          StatusMessage.showTemporaryMessage(String(e?.message ?? e)),
         );
     } catch (e: any) {
-      layer.setDrawErrorMessage?.(String(e?.message ?? e));
+      StatusMessage.showTemporaryMessage(String(e?.message ?? e));
     }
   }
 
@@ -424,7 +413,7 @@ const pickerSVG = `<svg width="24px" height="24px" stroke-width="1.5" viewBox="0
 
 const pickerCursor = `url('data:image/svg+xml;utf8,${encodeURIComponent(pickerSVG)}') 4 19, crosshair`;
 
-export class AdoptVoxelLabelTool extends LayerTool<UserLayerWithVoxelEditing> {
+export class AdoptVoxelValueTool extends LayerTool<UserLayerWithVoxelEditing> {
   constructor(layer: UserLayerWithVoxelEditing) {
     super(layer, /*toggle=*/ false);
   }
@@ -461,7 +450,7 @@ export class AdoptVoxelLabelTool extends LayerTool<UserLayerWithVoxelEditing> {
       .next().value;
     if (!voxelEditingContext) {
       StatusMessage.showTemporaryMessage(
-        "Cannot pick label: layer is not ready.",
+        "Cannot pick value: layer is not ready.",
         3000,
       );
       return;
@@ -471,7 +460,7 @@ export class AdoptVoxelLabelTool extends LayerTool<UserLayerWithVoxelEditing> {
 
     if (!pos || pos.length < 3) {
       StatusMessage.showTemporaryMessage(
-        "Cannot pick label: position is not valid.",
+        "Cannot pick value: position is not valid.",
         3000,
       );
       return;
@@ -498,30 +487,20 @@ export class AdoptVoxelLabelTool extends LayerTool<UserLayerWithVoxelEditing> {
     StatusMessage.forPromise(
       source
         .getEnsuredValueAt(pos, channelAccess)
-        .then((value: bigint | number | null) => {
-          if (value === null) {
+        .then((data: bigint | number | null) => {
+          if (data === null) {
             throw new Error(
               "Voxel data not available at the selected position.",
             );
           }
-          const label = BigInt(value);
-          if (label === 0n) {
-            StatusMessage.showTemporaryMessage(
-              "Cannot adopt background label (0).",
-              3000,
-            );
-            return;
-          }
-          if (!this.layer.voxLabelsManager) {
-            throw new Error("Drawing backend not ready yet");
-          }
-          this.layer.voxLabelsManager.addLabel(label);
-          StatusMessage.showTemporaryMessage(`Adopted label: ${label}`, 3000);
+          const value = BigInt(data);
+          this.layer.setVoxelPaintValue(value);
+          StatusMessage.showTemporaryMessage(`Adopted value: ${value}`, 3000);
         }),
       {
-        initialMessage: "Picking voxel label...",
+        initialMessage: "Picking voxel value...",
         delay: true,
-        errorPrefix: "Error picking label: ",
+        errorPrefix: "Error picking value: ",
       },
     );
   }
@@ -541,6 +520,6 @@ export function registerVoxelTools(LayerCtor: any) {
   registerTool(
     LayerCtor,
     ADOPT_VOXEL_LABEL_TOOL_ID,
-    (layer: UserLayerWithVoxelEditing) => new AdoptVoxelLabelTool(layer),
+    (layer: UserLayerWithVoxelEditing) => new AdoptVoxelValueTool(layer),
   );
 }

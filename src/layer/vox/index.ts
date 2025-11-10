@@ -37,14 +37,13 @@ import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { TrackableValue, WatchableValue } from "#src/trackable_value.js";
 import type { UserLayerWithAnnotations } from "#src/ui/annotations.js";
+import { randomUint64 } from "#src/util/bigint.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { verifyFiniteFloat, verifyInt } from "#src/util/json.js";
-import { NullarySignal } from "#src/util/signal.js";
+import { parseUint64, verifyFiniteFloat, verifyInt } from "#src/util/json.js";
 import { TrackableEnum } from "#src/util/trackable_enum.js";
 import { VoxelPreviewMultiscaleSource } from "#src/voxel_annotation/PreviewMultiscaleChunkSource.js";
 import type { VoxelEditControllerHost } from "#src/voxel_annotation/edit_controller.js";
 import { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
-import { LabelsManager } from "#src/voxel_annotation/labels.js";
 
 export enum BrushShape {
   DISK = 0,
@@ -73,15 +72,8 @@ export class VoxelEditingContext
     //this.registerDisposer(optimisticRenderLayer);
   }
 
-  // VoxelEditControllerHost implementation
-  get labelsManager(): LabelsManager {
-    return this.hostLayer.voxLabelsManager!;
-  }
   get rpc() {
     return this.hostLayer.manager.chunkManager.rpc!;
-  }
-  setDrawErrorMessage(message: string | undefined): void {
-    this.hostLayer.setDrawErrorMessage(message);
   }
 
   disposed() {
@@ -141,16 +133,13 @@ export class VoxelEditingContext
 }
 
 export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
-  voxLabelsManager?: LabelsManager;
-  labelsChanged: NullarySignal;
   isEditable: WatchableValue<boolean>;
-  onDrawMessageChanged?: () => void;
-  voxDrawErrorMessage: string | undefined;
 
   voxBrushRadius: TrackableValue<number>;
   voxEraseMode: TrackableBoolean;
   voxBrushShape: TrackableEnum<BrushShape>;
   voxFloodMaxVoxels: TrackableValue<number>;
+  paintValue: TrackableValue<bigint>;
 
   editingContexts: Map<LoadedDataSubsource, VoxelEditingContext>;
 
@@ -158,6 +147,8 @@ export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
     source: MultiscaleVolumeChunkSource,
     transform: WatchableValueInterface<RenderLayerTransformOrError>,
   ): ImageRenderLayer | SegmentationRenderLayer;
+  abstract getVoxelPaintValue(erase: boolean): bigint;
+  abstract setVoxelPaintValue(value: bigint): void;
 
   initializeVoxelEditingForSubsource(
     loadedSubsource: LoadedDataSubsource,
@@ -168,7 +159,6 @@ export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
   ): void;
 
   getIdentitySliceViewSourceOptions(): SliceViewSourceOptions;
-  setDrawErrorMessage(message: string | undefined): void;
   handleVoxAction(action: string, context: LayerActionContext): void;
 }
 
@@ -177,22 +167,14 @@ export function UserLayerWithVoxelEditingMixin<
 >(Base: TBase) {
   abstract class C extends Base implements UserLayerWithVoxelEditing {
     editingContexts = new Map<LoadedDataSubsource, VoxelEditingContext>();
-    voxLabelsManager?: LabelsManager;
-    labelsChanged = new NullarySignal();
     isEditable = new WatchableValue<boolean>(false);
+    paintValue = new TrackableValue<bigint>(1n, (x) => parseUint64(x));
 
     // Brush properties
     voxBrushRadius = new TrackableValue<number>(3, verifyInt);
     voxEraseMode = new TrackableBoolean(false);
     voxBrushShape = new TrackableEnum(BrushShape, BrushShape.DISK);
     voxFloodMaxVoxels = new TrackableValue<number>(10000, verifyFiniteFloat);
-
-    voxDrawErrorMessage: string | undefined = undefined;
-    onDrawMessageChanged?: () => void;
-    setDrawErrorMessage(message: string | undefined): void {
-      this.voxDrawErrorMessage = message;
-      this.onDrawMessageChanged?.();
-    }
 
     constructor(...args: any[]) {
       super(...args);
@@ -206,12 +188,22 @@ export function UserLayerWithVoxelEditingMixin<
       this.voxEraseMode.changed.add(this.specificationChanged.dispatch);
       this.voxBrushShape.changed.add(this.specificationChanged.dispatch);
       this.voxFloodMaxVoxels.changed.add(this.specificationChanged.dispatch);
+      this.paintValue.changed.add(this.specificationChanged.dispatch);
       this.tabs.add("Draw", {
         label: "Draw",
         order: 20,
         getter: () => new VoxToolTab(this),
       });
     }
+
+    getVoxelPaintValue(erase: boolean): bigint {
+      if (erase) return 0n;
+      return this.paintValue.value;
+    }
+    setVoxelPaintValue(value: bigint) {
+      this.paintValue.value = value;
+    }
+
 
     abstract _createVoxelRenderLayer(
       source: MultiscaleVolumeChunkSource,
@@ -226,16 +218,6 @@ export function UserLayerWithVoxelEditingMixin<
 
       const primarySource = loadedSubsource.subsourceEntry.subsource
         .volume as MultiscaleVolumeChunkSource;
-      const baseSpec = primarySource.getSources(
-        this.getIdentitySliceViewSourceOptions(),
-      )[0][0]!.chunkSource.spec;
-
-      if (this.voxLabelsManager === undefined) {
-        this.voxLabelsManager = new LabelsManager(
-          baseSpec.dataType,
-          this.labelsChanged.dispatch,
-        );
-      }
 
       const previewSource = new VoxelPreviewMultiscaleSource(
         this.manager.chunkManager,
@@ -289,8 +271,7 @@ export function UserLayerWithVoxelEditingMixin<
       };
     }
 
-    handleVoxAction(action: string, context: LayerActionContext): void {
-      super.handleAction(action, context);
+    handleVoxAction(action: string, _context: LayerActionContext): void {
       const firstContext = this.editingContexts.values().next().value;
       if (!firstContext) return;
       const controller = firstContext.controller;
@@ -301,8 +282,8 @@ export function UserLayerWithVoxelEditingMixin<
         case "redo":
           controller.redo();
           break;
-        case "new-label":
-          this.voxLabelsManager?.createNewLabel();
+        case "randomize-paint-value":
+          this.paintValue.value = randomUint64();
           break;
       }
     }

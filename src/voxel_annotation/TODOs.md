@@ -3,13 +3,13 @@
 ### priority
 
 - url completion for the ssa+https source
-- add json state for every tools and settings of voxel painting
-- replace the current label system with a new system linked to the segment in the segmantation layer and with a color picker for the image layer
+- add json state for all tools and settings of voxel painting
+- replace the current label system with a new system linked to the segment in the segmentation layer and with a color picker for the image layer -> FOR TOMORROW
 - fix the case of multiple datasources in the same layer
-- should we support compressed chunks? if yes, we should find a better way to handle them.
 
 ### later
 
+- add preview for the undo/redo
 - optimize flood fill tool (it is too slow on area containing uncached chunks, due to the getEnsuredValueAt() calls)
 - the flood fill sometimes leaves artifacts in sharp areas (maybe increase fillBorderRegion() radius)
 - write a testsuite for the downsampler and ensure its proper working on exotic lod levels
