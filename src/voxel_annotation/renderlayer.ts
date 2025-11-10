@@ -60,7 +60,7 @@ export class VoxelAnnotationRenderLayer extends SliceViewVolumeRenderLayer<Empty
   defineShader(builder: ShaderBuilder) {
     builder.setFragmentMain(`
   float t = float(getDataValue().value);
-  vec4 color = t > 10.0 ? vec4(1.0, 1.0, 0.0, 1.0) : vec4(clamp(t, 0.0, 1.0), 0.0, 0.0, t > 0.0 ? 0.3 : 0.0);
+  vec4 color = t > 10.0 ? vec4(1.0, 1.0, 0.0, 0.5) : vec4(clamp(t, 0.0, 1.0), 0.0, 0.0, t > 0.0 ? 0.3 : 0.0);
   emit(color);
   `);
 

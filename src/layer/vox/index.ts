@@ -206,6 +206,32 @@ class VoxToolTab extends Tab {
     erWrap.appendChild(erChk);
     toolbox.appendChild(erWrap);
 
+    // Brush shape selector
+    const shapeWrap = document.createElement("div");
+    shapeWrap.style.display = "inline-flex";
+    shapeWrap.style.alignItems = "center";
+    shapeWrap.style.gap = "4px";
+    const shapeLabel = document.createElement("label");
+    shapeLabel.textContent = "Brush shape";
+    const shapeSel = document.createElement("select");
+    const optDisk = document.createElement("option");
+    optDisk.value = "disk";
+    optDisk.textContent = "disk";
+    const optSphere = document.createElement("option");
+    optSphere.value = "sphere";
+    optSphere.textContent = "sphere";
+    shapeSel.appendChild(optDisk);
+    shapeSel.appendChild(optSphere);
+    shapeSel.value = (this.layer.voxBrushShape === 'sphere') ? 'sphere' : 'disk';
+    shapeSel.addEventListener("change", () => {
+      const v = shapeSel.value === 'sphere' ? 'sphere' : 'disk';
+      this.layer.voxBrushShape = v;
+      shapeSel.value = v;
+    });
+    shapeWrap.appendChild(shapeLabel);
+    shapeWrap.appendChild(shapeSel);
+    toolbox.appendChild(shapeWrap);
+
     element.appendChild(toolbox);
   }
 }
@@ -230,6 +256,7 @@ export class VoxUserLayer extends UserLayer {
   // Draw tool state
   voxBrushRadius: number = 3;
   voxEraseMode: boolean = false;
+  voxBrushShape: 'disk' | 'sphere' = 'disk';
   private voxLoadedSubsource?: LoadedDataSubsource;
 
   constructor(managedLayer: Borrowed<ManagedUserLayer>) {
