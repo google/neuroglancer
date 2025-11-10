@@ -253,10 +253,6 @@ export class VolumeChunkSource
         }
       }
 
-      const ArrayCtor = DATA_TYPE_ARRAY_CONSTRUCTOR[dataType] as any;
-      const oldValuesArray = new ArrayCtor(indices.length);
-      const newValuesArray = new ArrayCtor(values.length);
-
       for (let i = 0; i < indices.length; ++i) {
         const idx = indices[i]!;
         oldValuesArray[i] = uncompressedData[idx];
