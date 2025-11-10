@@ -110,7 +110,7 @@ export class VoxMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource 
 
     // Large diagonal scale to make effective voxel size huge, ensuring guard scale is used when
     // zoomed out. Homogeneous (rank+1)x(rank+1) matrix.
-    const scale = 1 << 2;
+    const scale = 10;
     const guardXform = new Float32Array((rank + 1) * (rank + 1));
     for (let i = 0; i < rank; ++i) {
       guardXform[i * (rank + 1) + i] = scale;

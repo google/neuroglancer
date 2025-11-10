@@ -120,7 +120,8 @@ class VoxSettingsTab extends Tab {
     });
 
     const apply = document.createElement("button");
-    apply.textContent = "Apply";
+    apply.textContent = "Regen source";
+    apply.title = "Regenerate the source volume with the new settings, warning old local source will be deleted";
     apply.addEventListener("click", () => {
       const u = unitSel.value || currentUnit;
       const f = factor(u);
@@ -475,6 +476,17 @@ export class VoxUserLayer extends UserLayer {
         );
         // Expose a controller so tools can paint voxels via the source.
         this.voxEditController = new VoxelEditController(dummySource);
+
+        // Initialize worker-side map persistence for this source (best-effort, fire-and-forget).
+        const sources2D = dummySource.getSources({} as any);
+        const base = sources2D[0][0];
+        const source = (base.chunkSource as any);
+        void source.initializeMap({
+          dataType: dummySource.dataType,
+          chunkDataSize: Array.from(((dummySource as any)['cfgChunkDataSize']) ?? [64, 64, 64]),
+          upperVoxelBound: Array.from(this.voxUpperBound),
+          unit: this.voxScaleUnit,
+        }).catch(() => { /* ignore init failures */ });
 
         // Build transform with current scale and units.
         const identity3D = this.createIdentity3D();

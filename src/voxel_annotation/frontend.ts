@@ -10,7 +10,7 @@ import type { VolumeChunk } from '#src/sliceview/volume/frontend.js';
 import { VolumeChunkSource as BaseVolumeChunkSource } from '#src/sliceview/volume/frontend.js';
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import type { TypedArray } from '#src/util/array.js';
-import { VOX_CHUNK_SOURCE_RPC_ID, VOX_COMMIT_VOXELS_RPC_ID } from '#src/voxel_annotation/base.js';
+import { VOX_CHUNK_SOURCE_RPC_ID, VOX_COMMIT_VOXELS_RPC_ID, VOX_MAP_INIT_RPC_ID } from '#src/voxel_annotation/base.js';
 import { registerSharedObjectOwner } from "#src/worker_rpc.js";
 
 
@@ -26,36 +26,18 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     () => this.processPendingUploads()
   );
 
+  /** Initialize map in the worker/backend for this source. */
+  async initializeMap(opts: { mapId?: string; dataType?: number; chunkDataSize?: number[]; upperVoxelBound?: number[]; unit?: string; scaleKey?: string }) {
+    try {
+      return await this.rpc!.invoke(VOX_MAP_INIT_RPC_ID, { id: this.rpcId, ...opts });
+    } catch {
+      // initialization is best-effort; continue even if it fails
+      return undefined;
+    }
+  }
+
   constructor(chunkManager: ChunkManager, options: { spec: VolumeChunkSpecification }) {
     super(chunkManager, options);
-  }
-
-  /** Newly added chunks use whatever data backend provides; no overlay merge needed. */
-  override addChunk(key: string, chunk: VolumeChunk) {
-    super.addChunk(key, chunk);
-  }
-
-  /** Public paint API called by the tool/controller. */
-  paintVoxel(voxel: Float32Array, value: number) {
-    const { key, canonicalIndex, chunkLocalIndex } = this.computeIndices(voxel);
-    // Immediate draw if chunk is present in CPU memory
-    if (chunkLocalIndex >= 0) {
-      const chunk = this.chunks.get(key) as VolumeChunk | undefined;
-      const baseArray = chunk && this.getCpuArrayForChunk(chunk);
-      if (baseArray) {
-        (baseArray as any)[chunkLocalIndex] = value as any;
-        this.scheduleUpdate(key);
-      }
-    }
-    // Persist to backend
-    try {
-      this.rpc!.invoke(VOX_COMMIT_VOXELS_RPC_ID, {
-        id: this.rpcId,
-        edits: [{ key, indices: [canonicalIndex], value, size: Array.from(this.spec.chunkDataSize) }],
-      });
-    } catch {
-      // swallow rpc errors; rendering is already updated optimistically
-    }
   }
 
   private scheduleUpdate(key: string) {

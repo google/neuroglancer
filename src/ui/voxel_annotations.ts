@@ -132,7 +132,7 @@ export class VoxelPixelLegacyTool extends BaseVoxelLegacyTool {
   }
 
   protected paintPoint(point: Float32Array, value: number) {
-    (this.layer as any).voxEditController?.paintVoxel(point, value);
+    (this.layer as any).voxEditController?.paintVoxelsBatch([point], value);
   }
 
   protected paintPoints(points: Float32Array[], value: number) {

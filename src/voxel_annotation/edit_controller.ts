@@ -20,15 +20,6 @@ export class VoxelEditController {
     }
   }
 
-  paintVoxel(voxel: Float32Array, value: number) {
-    try {
-      const source = this.getSource();
-      source?.paintVoxel(voxel, value);
-    } catch {
-      // no-op
-    }
-  }
-
   paintVoxelsBatch(voxels: Float32Array[], value: number) {
     if (!voxels || voxels.length === 0) return;
     try {
