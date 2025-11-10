@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import type { VoxUserLayer } from "#src/layer/vox/index.js";
 import { BrushShape } from "#src/layer/vox/index.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import type {
   VolumeChunkSource,
   MultiscaleVolumeChunkSource,
+  InMemoryVolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
@@ -36,11 +36,22 @@ import {
   makeVoxChunkKey,
   parseVoxChunkKey,
 } from "#src/voxel_annotation/base.js";
+import type { LabelsManager } from "#src/voxel_annotation/labels.js";
+import type {
+  RPC} from "#src/worker_rpc.js";
 import {
   registerRPC,
   registerSharedObjectOwner,
   SharedObject,
 } from "#src/worker_rpc.js";
+
+export interface VoxelEditControllerHost {
+  primarySource: MultiscaleVolumeChunkSource;
+  previewSource?: InMemoryVolumeChunkSource;
+  labelsManager: LabelsManager;
+  rpc: RPC;
+  setDrawErrorMessage(message: string | undefined): void;
+}
 
 @registerSharedObjectOwner(VOX_EDIT_BACKEND_RPC_ID)
 export class VoxelEditController extends SharedObject {
@@ -48,11 +59,10 @@ export class VoxelEditController extends SharedObject {
   public redoCount = new WatchableValue<number>(0);
 
   constructor(
-    private layer: VoxUserLayer,
-    private multiscale: MultiscaleVolumeChunkSource,
+    private host: VoxelEditControllerHost
   ) {
     super();
-    const rpc = (this.multiscale as any)?.chunkManager?.rpc;
+    const rpc = this.host.rpc;
     if (!rpc) {
       throw new Error(
         "VoxelEditController: Missing RPC from multiscale chunk manager.",
@@ -60,7 +70,7 @@ export class VoxelEditController extends SharedObject {
     }
 
     // Get all sources for all scales and orientations
-    const sourcesByScale = this.multiscale.getSources(
+    const sourcesByScale = this.host.primarySource.getSources(
       this.getIdentitySliceViewSourceOptions(),
     );
     const sources = sourcesByScale[0];
@@ -109,7 +119,7 @@ export class VoxelEditController extends SharedObject {
   };
 
   private getIdentitySliceViewSourceOptions() {
-    const rank = (this.multiscale as any).rank as number | undefined;
+    const rank = this.host.primarySource.rank as number | undefined;
     if (!Number.isInteger(rank) || (rank as number) <= 0) {
       throw new Error("VoxelEditController: Invalid multiscale rank.");
     }
@@ -131,7 +141,7 @@ export class VoxelEditController extends SharedObject {
   }
 
   getSourceForLOD(lodIndex: number): VolumeChunkSource {
-    const sourcesByScale = this.multiscale.getSources(
+    const sourcesByScale = this.host.primarySource.getSources(
       this.getIdentitySliceViewSourceOptions(),
     );
     // Assuming a single orientation, which is correct for this use case.
@@ -171,7 +181,12 @@ export class VoxelEditController extends SharedObject {
     // For V1 we use the minimum LOD (index 0)
     const voxelSize = 1;
     const sourceIndex = 0;
-    const source = this.getSourceForLOD(sourceIndex);
+    const source = this.host.previewSource;
+    if (!source) {
+      throw new Error(
+        "paintBrushWithShape: Missing preview source",
+      );
+    }
 
     // Convert center and radius to the level’s voxel grid.
     const cx = Math.round((centerCanonical[0] ?? 0) / voxelSize);
@@ -496,13 +511,19 @@ export class VoxelEditController extends SharedObject {
       }
     }
 
+    const previewSource = this.host.previewSource;
+    if (!previewSource) {
+      throw new Error(
+        "paintBrushWithShape: Missing preview source",
+      );
+    }
     const editsByVoxKey = new Map<
       string,
       { indices: number[]; value: bigint }
     >();
     for (const voxelCoord of voxelsToFill) {
       const { chunkGridPosition, positionWithinChunk } =
-        source.computeChunkIndices(voxelCoord);
+        previewSource.computeChunkIndices(voxelCoord);
       const chunkKey = chunkGridPosition.join();
       const voxKey = makeVoxChunkKey(chunkKey, sourceIndex);
       let entry = editsByVoxKey.get(voxKey);
@@ -510,7 +531,7 @@ export class VoxelEditController extends SharedObject {
         entry = { indices: [], value: fillValue };
         editsByVoxKey.set(voxKey, entry);
       }
-      const { chunkDataSize } = source.spec;
+      const { chunkDataSize } = previewSource.spec;
       const index =
         (positionWithinChunk[2] * chunkDataSize[1] + positionWithinChunk[1]) *
           chunkDataSize[0] +
@@ -523,7 +544,7 @@ export class VoxelEditController extends SharedObject {
       if (!parsed) continue;
       localEdits.set(parsed.chunkKey, edit);
     }
-    source.applyLocalEdits(localEdits);
+    previewSource.applyLocalEdits(localEdits);
     const backendEdits: { key: string; indices: number[]; value: bigint }[] =
       [];
     for (const [voxKey, edit] of editsByVoxKey.entries()) {
@@ -541,7 +562,7 @@ export class VoxelEditController extends SharedObject {
   callChunkReload(voxChunkKeys: string[]) {
     if (!Array.isArray(voxChunkKeys) || voxChunkKeys.length === 0) return;
     // This assumes the multiscale source has a single orientation.
-    const sourcesByScale = (this.multiscale as any).getSources(
+    const sourcesByScale = this.host.primarySource.getSources(
       this.getIdentitySliceViewSourceOptions(),
     );
     const sources = sourcesByScale && sourcesByScale[0];
@@ -576,7 +597,7 @@ export class VoxelEditController extends SharedObject {
     try {
       this.callChunkReload(voxChunkKeys);
     } finally {
-      this.layer.setDrawErrorMessage(message);
+      this.host.setDrawErrorMessage(message);
     }
   }
 

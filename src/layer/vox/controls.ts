@@ -1,13 +1,12 @@
 import { LayerActionContext } from "#src/layer/index.js";
-import type { VoxUserLayer} from "#src/layer/vox/index.js";
+import type { UserLayerWithVoxelEditing } from "#src/layer/vox/index.js";
 import type { LayerControlDefinition } from "#src/widget/layer_control.js";
-import { registerLayerControl } from "#src/widget/layer_control.js";
 import { buttonLayerControl } from "#src/widget/layer_control_button.js";
 import { checkboxLayerControl } from "#src/widget/layer_control_checkbox.js";
 import { enumLayerControl } from "#src/widget/layer_control_enum.js";
 import { rangeLayerControl } from "#src/widget/layer_control_range.js";
 
-export const VOXEL_LAYER_CONTROLS: LayerControlDefinition<VoxUserLayer>[] = [
+export const VOXEL_LAYER_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEditing>[] = [
   {
     label: "Brush size",
     toolJson: { type: "vox-brush-size" },
@@ -24,7 +23,7 @@ export const VOXEL_LAYER_CONTROLS: LayerControlDefinition<VoxUserLayer>[] = [
   {
     label: "Brush shape", 
     toolJson: { type: "vox-brush-shape" },
-    ...enumLayerControl((layer: VoxUserLayer) => layer.voxBrushShape),
+    ...enumLayerControl((layer: UserLayerWithVoxelEditing) => layer.voxBrushShape),
   },
   {
     label: "Max fill voxels",
@@ -59,9 +58,3 @@ export const VOXEL_LAYER_CONTROLS: LayerControlDefinition<VoxUserLayer>[] = [
     }),
   },
 ];
-
-export function registerLayerControls(layerType: typeof VoxUserLayer) {
-  for (const control of VOXEL_LAYER_CONTROLS) {
-    registerLayerControl(layerType, control);
-  }
-}

@@ -34,6 +34,7 @@ import {
   UserLayer,
 } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
+import { UserLayerWithVoxelEditingMixin } from "#src/layer/vox/index.js";
 import { Overlay } from "#src/overlay.js";
 import { getChannelSpace } from "#src/render_coordinate_transform.js";
 import {
@@ -119,7 +120,9 @@ export interface ImageLayerSelectionState extends UserLayerSelectionState {
   value: any;
 }
 
-const Base = UserLayerWithAnnotationsMixin(UserLayer);
+const Base = UserLayerWithVoxelEditingMixin(
+  UserLayerWithAnnotationsMixin(UserLayer),
+);
 const [
   volumeRenderingDepthSamplesOriginLogScale,
   volumeRenderingDepthSamplesMaxLogScale,
@@ -186,6 +189,18 @@ export class ImageUserLayer extends Base {
       baseDisposer();
       channelDisposer();
     };
+  }
+
+  _createVoxelRenderLayer(
+    source: MultiscaleVolumeChunkSource,
+  ): ImageRenderLayer {
+    return new ImageRenderLayer(source, {
+      ...this.displayState,
+      transform: this.transform,
+      renderScaleTarget: this.sliceViewRenderScaleTarget,
+      renderScaleHistogram: this.sliceViewRenderScaleHistogram,
+      localPosition: this.localPosition,
+    });
   }
 
   addCoordinateSpace(

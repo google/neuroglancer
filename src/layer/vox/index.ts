@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025.
+ * Copyright 2025 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,190 +14,108 @@
  * limitations under the License.
  */
 
-import "#src/layer/vox/style.css";
-
-import type { CoordinateTransformSpecification } from "#src/coordinate_transform.js";
-import type { DataSourceSpecification } from "#src/datasource/index.js";
-import {
-  LayerActionContext,
-  type ManagedUserLayer,
-  type MouseSelectionState,
-  registerLayerType,
-  registerLayerTypeDetector,
-  UserLayer,
-} from "#src/layer/index.js";
+import type { LayerActionContext, MouseSelectionState, UserLayer } from "#src/layer/index.js"
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
-import { registerLayerControls } from "#src/layer/vox/controls.js";
 import { VoxToolTab } from "#src/layer/vox/tabs/tools.js";
 import type { ChunkTransformParameters } from "#src/render_coordinate_transform.js";
 import {
   getChunkPositionFromCombinedGlobalLocalPositions,
   getChunkTransformParameters,
 } from "#src/render_coordinate_transform.js";
-import { trackableRenderScaleTarget } from "#src/render_scale_statistics.js";
 import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
-import { DataType } from "#src/sliceview/base.js";
-import { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
+import type {
+  MultiscaleVolumeChunkSource} from "#src/sliceview/volume/frontend.js";
+import {
+  InMemoryVolumeChunkSource
+} from "#src/sliceview/volume/frontend.js";
+import type { ImageRenderLayer } from "#src/sliceview/volume/image_renderlayer.js";
+import type { SegmentationRenderLayer } from "#src/sliceview/volume/segmentation_renderlayer.js";
+import { BLEND_MODES } from "#src/trackable_blend.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
-import { constantWatchableValue, TrackableValue } from "#src/trackable_value.js";
-import { registerVoxelTools } from "#src/ui/voxel_annotations.js";
-import type { Borrowed } from "#src/util/disposable.js";
+import {
+  makeDerivedWatchableValue,
+  TrackableValue,
+  WatchableValue,
+} from "#src/trackable_value.js";
+import type {
+  UserLayerWithAnnotations,
+} from "#src/ui/annotations.js";
+import { RefCounted } from "#src/util/disposable.js";
 import { verifyFiniteFloat, verifyInt } from "#src/util/json.js";
-import * as matrix from "#src/util/matrix.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { TrackableEnum } from "#src/util/trackable_enum.js";
+import type { VoxelEditControllerHost } from "#src/voxel_annotation/edit_controller.js";
 import { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
 import { LabelsManager } from "#src/voxel_annotation/labels.js";
-import { VoxelAnnotationRenderLayer } from "#src/voxel_annotation/renderlayer.js";
 
 export enum BrushShape {
   DISK = 0,
   SPHERE = 1,
 }
 
-export class VoxUserLayer extends UserLayer {
-  // While drawing, we keep a reference to the vox render layer to control temporary LOD locks.
-  voxRenderLayerInstance?: VoxelAnnotationRenderLayer;
-  // Match Image/Segmentation layers: provide a per-layer cross-section render scale target/histogram.
-  sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
-  static type = "vox";
-  static typeAbbreviation = "vox";
-  voxEditController?: VoxelEditController;
-  voxLabelsManager: LabelsManager;
-  labelsChanged = new NullarySignal();
+export class VoxelEditingContext
+  extends RefCounted
+  implements VoxelEditControllerHost
+{
+  controller: VoxelEditController;
 
-  // Draw tool state (trackables for widget integration)
-  voxBrushRadius = new TrackableValue<number>(3, verifyInt);
-  voxEraseMode = new TrackableBoolean(false);
-  voxBrushShape = new TrackableEnum(BrushShape, BrushShape.DISK);
-  voxFloodMaxVoxels = new TrackableValue<number>(10000, verifyFiniteFloat);
-
-  // Cached transform and voxel buffer to avoid recomputation/allocation on every mouse move
   private cachedChunkTransform: ChunkTransformParameters | undefined;
   private cachedTransformGeneration: number = -1;
   private cachedVoxelPosition: Float32Array = new Float32Array(3);
 
-  // Draw tab error messaging
-  voxDrawErrorMessage: string | undefined = undefined;
-  onDrawMessageChanged?: () => void;
+
+  constructor(
+    public hostLayer: UserLayerWithVoxelEditing,
+    public primarySource: MultiscaleVolumeChunkSource,
+    public previewSource: InMemoryVolumeChunkSource,
+    public optimisticRenderLayer: ImageRenderLayer | SegmentationRenderLayer,
+  ) {
+    super();
+    this.controller = new VoxelEditController(this);
+    this.registerDisposer(optimisticRenderLayer);
+    this.registerDisposer(previewSource);
+  }
+
+  // VoxelEditControllerHost implementation
+  get labelsManager(): LabelsManager {
+    return this.hostLayer.voxLabelsManager!;
+  }
+  get rpc() {
+    return this.hostLayer.manager.chunkManager.rpc!;
+  }
   setDrawErrorMessage(message: string | undefined): void {
-    this.voxDrawErrorMessage = message;
-    try {
-      this.onDrawMessageChanged?.();
-    } catch {
-      /* ignore */
-    }
+    this.hostLayer.setDrawErrorMessage(message);
   }
 
-  handleAction(action: string, _context: LayerActionContext): void {
-    if(!this.voxEditController || !this.voxLabelsManager)
-      return;
-    switch (action) {
-      case "undo":
-        this.voxEditController.undo();
-        break;
-      case "redo":
-        this.voxEditController.redo();
-        break;
-      case "new-label":
-        this.voxLabelsManager.createNewLabel();
-        break;
-    }
-  }
-
-  beginRenderLodLock(lockedIndex: number): void {
-    if (!Number.isInteger(lockedIndex) || lockedIndex < 0) {
-      throw new Error(
-        "beginRenderLodLock: lockedIndex must be a non-negative integer",
-      );
-    }
-    const rl = this.voxRenderLayerInstance;
-    if (!rl) {
-      throw new Error("beginRenderLodLock: render layer is not ready");
-    }
-    // Validate against available levels in current pyramid.
-    const { multiscaleSource } = rl;
-    const rank = multiscaleSource.rank;
-    const options: SliceViewSourceOptions = {
-      displayRank: rank,
-      multiscaleToViewTransform: new Float32Array(rank * rank),
-      modelChannelDimensionIndices: [],
-    };
-    // Create an identity transform matrix.
-    for (let i = 0; i < rank; ++i) {
-      options.multiscaleToViewTransform[i * rank + i] = 1;
-    }
-    const sources2D = multiscaleSource.getSources(options);
-    const levels = sources2D?.[0]?.length ?? 0;
-    if (levels <= 0) {
-      throw new Error("beginRenderLodLock: multiscale source has no levels");
-    }
-    if (lockedIndex >= levels) {
-      throw new Error(
-        `beginRenderLodLock: requested LOD ${lockedIndex} exceeds available levels (${levels})`,
-      );
-    }
-    rl.setForcedSourceIndexLock(lockedIndex);
-    console.log("beginRenderLodLock: lockedIndex", lockedIndex);
-  }
-
-  endRenderLodLock(): void {
-    const rl = this.voxRenderLayerInstance;
-    if (!rl) return;
-    rl.setForcedSourceIndexLock(undefined);
-    console.log("endRenderLodLock");
-  }
-
-  constructor(managedLayer: Borrowed<ManagedUserLayer>) {
-    super(managedLayer);
-    this.tabs.add("vox_tools", {
-      label: "Draw",
-      order: 1,
-      getter: () => new VoxToolTab(this),
-    });
-    this.tabs.default = "vox_tools";
+  disposed() {
+    this.controller.dispose();
+    super.disposed();
   }
 
   getVoxelPositionFromMouse(
     mouseState: MouseSelectionState,
   ): Float32Array | undefined {
-    const renderLayer = this.voxRenderLayerInstance;
-    if (renderLayer === undefined) {
-      return undefined;
-    }
-
+    const renderLayer = this.optimisticRenderLayer;
     const renderLayerTransform = renderLayer.transform.value;
     if (renderLayerTransform.error !== undefined) {
       return undefined;
     }
 
-    // Caching logic for chunk transform parameters
     const transformGeneration = renderLayer.transform.changed.count;
     if (this.cachedTransformGeneration !== transformGeneration) {
       this.cachedChunkTransform = undefined;
-      const multiscaleSource = renderLayer.multiscaleSource;
-      const options: SliceViewSourceOptions = {
-        displayRank: multiscaleSource.rank,
-        multiscaleToViewTransform: matrix.createIdentity(
-          Float32Array,
-          multiscaleSource.rank * multiscaleSource.rank,
-        ),
-        modelChannelDimensionIndices: [],
-      };
-      const sources = multiscaleSource.getSources(options);
-      if (sources.length > 0 && sources[0].length > 0) {
-        const baseSource = sources[0][0];
-        try {
-          this.cachedChunkTransform = getChunkTransformParameters(
-            renderLayerTransform,
-            baseSource.chunkToMultiscaleTransform,
-          );
-          this.cachedTransformGeneration = transformGeneration;
-        } catch (e) {
-          this.cachedTransformGeneration = -1;
-          console.error("Error computing chunk transform parameters:", e);
-          return undefined;
-        }
+      try {
+        this.cachedChunkTransform = getChunkTransformParameters(
+          renderLayerTransform,
+          this.primarySource.getSources(
+            this.hostLayer.getIdentitySliceViewSourceOptions(),
+          )[0][0]!.chunkToMultiscaleTransform,
+        );
+        this.cachedTransformGeneration = transformGeneration;
+      } catch (e) {
+        this.cachedTransformGeneration = -1;
+        console.error("Error computing chunk transform parameters:", e);
+        return undefined;
       }
     }
 
@@ -216,7 +134,7 @@ export class VoxUserLayer extends UserLayer {
     const ok = getChunkPositionFromCombinedGlobalLocalPositions(
       this.cachedVoxelPosition,
       mouseState.unsnappedPosition,
-      this.localPosition.value,
+      this.hostLayer.localPosition.value,
       chunkTransform.layerRank,
       chunkTransform.combinedGlobalLocalToChunkTransform,
     );
@@ -225,87 +143,196 @@ export class VoxUserLayer extends UserLayer {
     return this.cachedVoxelPosition;
   }
 
-  getLegacyDataSourceSpecifications(
-    sourceSpec: string | undefined,
-    layerSpec: any,
-    legacyTransform: CoordinateTransformSpecification | undefined,
-    explicitSpecs: DataSourceSpecification[],
-  ): DataSourceSpecification[] {
-    if (Object.prototype.hasOwnProperty.call(layerSpec, "source")) {
-      // Respect explicit source definitions.
-      return super.getLegacyDataSourceSpecifications(
-        sourceSpec,
-        layerSpec,
-        legacyTransform,
-        explicitSpecs,
-      );
-    }
-    // Default to the special local voxel annotations data source.
-    return [
-      {
-        url: "TODO",
-        transform: legacyTransform,
-        enableDefaultSubsources: true,
-        subsources: new Map(),
-      },
-    ];
-  }
 
-  activateDataSubsources(subsources: Iterable<LoadedDataSubsource>): void {
-    for (const loadedSubsource of subsources) {
-      const { volume } = loadedSubsource.subsourceEntry.subsource;
-      if (volume instanceof MultiscaleVolumeChunkSource) {
-        if (volume === undefined) {
-          loadedSubsource.deactivate("No volume source");
-          continue;
-        }
-        switch (volume.dataType) {
-          case DataType.UINT32:
-            this.voxLabelsManager = new LabelsManager(
-              DataType.UINT32,
-              this.labelsChanged.dispatch,
-            );
-            break;
-          case DataType.UINT64:
-            this.voxLabelsManager = new LabelsManager(
-              DataType.UINT64,
-              this.labelsChanged.dispatch,
-            );
-            break;
-          default:
-            loadedSubsource.deactivate(
-              "Data type not compatible with segmentation layer",
-            );
-            continue;
-        }
-        this.voxEditController = new VoxelEditController(this, volume);
-        loadedSubsource.activate(() => {
-          const renderLayer = new VoxelAnnotationRenderLayer(volume, {
-            transform: loadedSubsource.getRenderLayerTransform(),
-            renderScaleTarget: this.sliceViewRenderScaleTarget,
-            localPosition: this.localPosition,
-            shaderParameters: constantWatchableValue({}),
-          });
-
-          this.voxRenderLayerInstance = renderLayer;
-          loadedSubsource.addRenderLayer(renderLayer);
-        });
-        continue;
-      }
-
-      // Reject anything else.
-      loadedSubsource.deactivate("Not compatible with vox layer");
-    }
+  get voxRenderLayerInstance():
+    | ImageRenderLayer
+    | SegmentationRenderLayer
+    | undefined {
+    // TODO
+    return undefined;
   }
 }
 
-registerVoxelTools(VoxUserLayer);
-registerLayerControls(VoxUserLayer);
-registerLayerType(VoxUserLayer);
-registerLayerTypeDetector((subsource) => {
-  // Accept non-local datasources at low priority to avoid interfering with other layers.
-  if (subsource.local === undefined) {
-    return { layerConstructor: VoxUserLayer, priority: 0 };
+export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
+  voxLabelsManager?: LabelsManager;
+  labelsChanged: NullarySignal;
+  isEditable: WatchableValue<boolean>;
+  onDrawMessageChanged?: () => void;
+  voxDrawErrorMessage: string | undefined;
+
+  voxBrushRadius: TrackableValue<number>;
+  voxEraseMode: TrackableBoolean;
+  voxBrushShape: TrackableEnum<BrushShape>;
+  voxFloodMaxVoxels: TrackableValue<number>;
+
+  editingContexts: Map<LoadedDataSubsource, VoxelEditingContext>;
+
+  abstract _createVoxelRenderLayer(
+    source: MultiscaleVolumeChunkSource,
+  ): ImageRenderLayer | SegmentationRenderLayer;
+
+  initializeVoxelEditingForSubsource(loadedSubsource: LoadedDataSubsource): void;
+  deinitializeVoxelEditingForSubsource(
+    loadedSubsource: LoadedDataSubsource,
+  ): void;
+
+  getIdentitySliceViewSourceOptions(): SliceViewSourceOptions;
+  setDrawErrorMessage(message: string | undefined): void;
+}
+
+export function UserLayerWithVoxelEditingMixin<
+  TBase extends { new (...args: any[]): UserLayerWithAnnotations },
+>(Base: TBase) {
+  abstract class C extends Base implements UserLayerWithVoxelEditing {
+    editingContexts = new Map<LoadedDataSubsource, VoxelEditingContext>();
+    voxLabelsManager?: LabelsManager;
+    labelsChanged = new NullarySignal();
+    isEditable = new WatchableValue<boolean>(false);
+
+    // Brush properties
+    voxBrushRadius = new TrackableValue<number>(3, verifyInt);
+    voxEraseMode = new TrackableBoolean(false);
+    voxBrushShape = new TrackableEnum(BrushShape, BrushShape.DISK);
+    voxFloodMaxVoxels = new TrackableValue<number>(10000, verifyFiniteFloat);
+
+
+    voxDrawErrorMessage: string | undefined = undefined;
+    onDrawMessageChanged?: () => void;
+    setDrawErrorMessage(message: string | undefined): void {
+      this.voxDrawErrorMessage = message;
+      this.onDrawMessageChanged?.();
+    }
+
+    constructor(...args: any[]) {
+      super(...args);
+      this.registerDisposer(() => {
+        for (const context of this.editingContexts.values()) {
+          context.dispose();
+        }
+        this.editingContexts.clear();
+      });
+      this.voxBrushRadius.changed.add(this.specificationChanged.dispatch);
+      this.voxEraseMode.changed.add(this.specificationChanged.dispatch);
+      this.voxBrushShape.changed.add(this.specificationChanged.dispatch);
+      this.voxFloodMaxVoxels.changed.add(this.specificationChanged.dispatch);
+      this.tabs.add("Draw", {
+        label: "Draw",
+        order: 10,
+        getter: () => new VoxToolTab(this),
+      });
+    }
+
+    abstract _createVoxelRenderLayer(
+      source: MultiscaleVolumeChunkSource,
+    ): ImageRenderLayer | SegmentationRenderLayer;
+
+
+    initializeVoxelEditingForSubsource(loadedSubsource: LoadedDataSubsource) {
+      if (this.editingContexts.has(loadedSubsource)) return;
+
+      const primarySource = loadedSubsource.subsourceEntry.subsource
+        .volume as MultiscaleVolumeChunkSource;
+      const baseSpec = primarySource.getSources(
+        this.getIdentitySliceViewSourceOptions(),
+      )[0][0]!.chunkSource.spec;
+
+      if (this.voxLabelsManager === undefined) {
+        this.voxLabelsManager = new LabelsManager(
+          baseSpec.dataType,
+          this.labelsChanged.dispatch,
+        );
+      }
+
+      const previewSource = new InMemoryVolumeChunkSource(
+        this.manager.chunkManager,
+        baseSpec,
+      );
+
+      const optimisticRenderLayer = this._createVoxelRenderLayer(
+        previewSource as any,
+      );
+
+      const originalFragmentMain = optimisticRenderLayer.fragmentMain;
+      optimisticRenderLayer.fragmentMain = makeDerivedWatchableValue(
+        (originalShader) => `
+void main() {
+  if (toRaw(getDataValue()) == 0) {
+    emitTransparent();
+    return;
   }
-  return undefined;
-});
+  ${originalShader}
+}
+`,
+        [originalFragmentMain],
+      );
+      optimisticRenderLayer.blendMode.value = BLEND_MODES.ADDITIVE;
+
+      const context = new VoxelEditingContext(
+        this,
+        primarySource,
+        previewSource,
+        optimisticRenderLayer,
+      );
+      this.editingContexts.set(loadedSubsource, context);
+      this.addRenderLayer(optimisticRenderLayer);
+
+      if (!this.isEditable.value) {
+        this.isEditable.value = true;
+        this.tabs.add("voxel-editing", {
+          label: "Draw",
+          getter: () => new VoxToolTab(this as any),
+          order: 50,
+        });
+        this.tabs.changed.dispatch();
+      }
+    }
+
+    deinitializeVoxelEditingForSubsource(loadedSubsource: LoadedDataSubsource) {
+      const context = this.editingContexts.get(loadedSubsource);
+      if (context) {
+        this.removeRenderLayer(context.optimisticRenderLayer);
+        context.dispose();
+        this.editingContexts.delete(loadedSubsource);
+      }
+      if (this.editingContexts.size === 0 && this.isEditable.value) {
+        this.isEditable.value = false;
+      }
+    }
+
+    getIdentitySliceViewSourceOptions(): SliceViewSourceOptions {
+      const rank = this.localCoordinateSpace.value.rank;
+      const displayRank = rank;
+      const multiscaleToViewTransform = new Float32Array(displayRank * rank);
+      for (let chunkDim = 0; chunkDim < rank; ++chunkDim) {
+        for (let displayDim = 0; displayDim < displayRank; ++displayDim) {
+          multiscaleToViewTransform[displayRank * chunkDim + displayDim] =
+            chunkDim === displayDim ? 1 : 0;
+        }
+      }
+      return {
+        displayRank,
+        multiscaleToViewTransform,
+        modelChannelDimensionIndices: [],
+      };
+    }
+
+    handleAction(action: string, context: LayerActionContext): void {
+      super.handleAction(action, context);
+      const firstContext = this.editingContexts.values().next().value;
+      if (!firstContext) return;
+      const controller = firstContext.controller;
+      switch (action) {
+        case "undo":
+          controller.undo();
+          break;
+        case "redo":
+          controller.redo();
+          break;
+        case "new-label":
+          this.voxLabelsManager?.createNewLabel();
+          break;
+      }
+    }
+  }
+  return C;
+}

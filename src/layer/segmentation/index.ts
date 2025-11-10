@@ -35,6 +35,7 @@ import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import { layerDataSourceSpecificationFromJson } from "#src/layer/layer_data_source.js";
 import * as json_keys from "#src/layer/segmentation/json_keys.js";
 import { registerLayerControls } from "#src/layer/segmentation/layer_controls.js";
+import { UserLayerWithVoxelEditingMixin } from "#src/layer/vox/index.js";
 import {
   MeshLayer,
   MeshSource,
@@ -579,7 +580,9 @@ interface SegmentationActionContext extends LayerActionContext {
   segmentationToggleSegmentState?: boolean | undefined;
 }
 
-const Base = UserLayerWithAnnotationsMixin(UserLayer);
+const Base = UserLayerWithVoxelEditingMixin(
+  UserLayerWithAnnotationsMixin(UserLayer),
+);
 export class SegmentationUserLayer extends Base {
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
@@ -605,6 +608,18 @@ export class SegmentationUserLayer extends Base {
       pin,
     );
   };
+
+  _createVoxelRenderLayer(
+    source: MultiscaleVolumeChunkSource,
+  ): SegmentationRenderLayer {
+    return new SegmentationRenderLayer(source, {
+      ...this.displayState,
+      transform: this.transform,
+      renderScaleTarget: this.sliceViewRenderScaleTarget,
+      renderScaleHistogram: this.sliceViewRenderScaleHistogram,
+      localPosition: this.localPosition,
+    });
+  }
 
   filterBySegmentLabel = (id: bigint) => {
     const augmented = augmentSegmentId(this.displayState, id);

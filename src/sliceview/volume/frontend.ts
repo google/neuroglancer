@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { ChunkState } from "#src/chunk_manager/base.js";
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import type {
@@ -32,10 +33,11 @@ import {
   SliceViewChunkSource,
 } from "#src/sliceview/frontend.js";
 import type {
-  UncompressedChunkFormatHandler,
+  UncompressedChunkFormatHandler} from "#src/sliceview/uncompressed_chunk_format.js";
+import {
   UncompressedVolumeChunk,
+  ChunkFormat as UncompressedChunkFormat
 } from "#src/sliceview/uncompressed_chunk_format.js";
-import { ChunkFormat as UncompressedChunkFormat } from "#src/sliceview/uncompressed_chunk_format.js";
 import type {
   VolumeChunkSource as VolumeChunkSourceInterface,
   VolumeChunkSpecification,
@@ -463,7 +465,35 @@ export class VolumeChunkSource
   }
 }
 
-// VolumeChunk moved to src/sliceview/volume/chunk.ts
+export class InMemoryVolumeChunkSource extends VolumeChunkSource {
+  constructor(chunkManager: ChunkManager, spec: VolumeChunkSpecification) {
+    super(chunkManager, { spec });
+  }
+
+  initializeCounterpart() {}
+
+  getChunk(chunkGridPosition: Float32Array): UncompressedVolumeChunk {
+    const key = chunkGridPosition.join();
+    let chunk = this.chunks.get(key) as UncompressedVolumeChunk | undefined;
+    if (chunk === undefined) {
+      const { spec } = this;
+      const chunkDataSize = spec.chunkDataSize;
+      const numElements = chunkDataSize.reduce((a, b) => a * b, 1);
+      const Ctor = DATA_TYPE_ARRAY_CONSTRUCTOR[spec.dataType];
+      const data = new (Ctor as any)(numElements) as TypedArray;
+
+      chunk = new UncompressedVolumeChunk(this, {
+        chunkGridPosition: chunkGridPosition.slice(),
+        data: data,
+        chunkDataSize: chunkDataSize,
+      });
+
+      this.addChunk(key, chunk);
+      chunk.state = ChunkState.GPU_MEMORY;
+    }
+    return chunk;
+  }
+}
 
 export abstract class MultiscaleVolumeChunkSource extends MultiscaleSliceViewChunkSource<
   VolumeChunkSource,

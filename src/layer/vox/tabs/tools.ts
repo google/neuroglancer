@@ -15,7 +15,7 @@
  */
 
 import { VOXEL_LAYER_CONTROLS } from "#src/layer/vox/controls.js";
-import type { VoxUserLayer } from "#src/layer/vox/index.js";
+import type { UserLayerWithVoxelEditing } from "#src/layer/vox/index.js";
 import { observeWatchable } from "#src/trackable_value.js";
 import { makeToolButton } from "#src/ui/tool.js";
 import {
@@ -45,7 +45,7 @@ function formatUnsignedId(id: bigint, dataType: DataType): string {
 }
 
 export class VoxToolTab extends Tab {
-  constructor(public layer: VoxUserLayer) {
+  constructor(public layer: UserLayerWithVoxelEditing) {
     super();
     const { element } = this;
     element.classList.add("neuroglancer-vox-tools-tab");
@@ -106,7 +106,7 @@ export class VoxToolTab extends Tab {
               {
                 changed: this.layer.layersChanged,
                 get value() {
-                  return layer.voxEditController;
+                  return layer.editingContexts.values().next().value.controller;
                 },
               },
               (controller: VoxelEditController | undefined, _parent, context) => {

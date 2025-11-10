@@ -15,7 +15,10 @@
  */
 
 import type { MouseSelectionState } from "#src/layer/index.js";
-import type { VoxUserLayer } from "#src/layer/vox/index.js";
+import type {
+  UserLayerWithVoxelEditing,
+  VoxelEditingContext,
+} from "#src/layer/vox/index.js";
 import { BrushShape } from "#src/layer/vox/index.js";
 import type { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import { StatusMessage } from "#src/status.js";
@@ -33,11 +36,13 @@ const VOX_TOOL_INPUT_MAP = EventActionMap.fromObject({
   ["at:control+mousedown0"]: "paint-voxels",
 });
 
-abstract class BaseVoxelTool extends LayerTool<VoxUserLayer> {
+abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
   protected latestMouseState: MouseSelectionState | null = null;
 
   protected getPoint(mouseState: MouseSelectionState): Int32Array | undefined {
-    const vox = this.layer.getVoxelPositionFromMouse?.(mouseState) as
+    // TODO: maybe getVoxelPositionFromMouse() would best fit in the userLayer
+    const editController = this.layer.editingContexts.values().next().value.controller;
+    const vox = editController.getVoxelPositionFromMouse(mouseState) as
       | Float32Array
       | undefined;
     if (!mouseState?.active || !vox) return undefined;
@@ -175,7 +180,7 @@ export class VoxelBrushTool extends BaseVoxelTool {
     this.stopDrawing();
   }
 
-  constructor(layer: VoxUserLayer) {
+  constructor(layer: UserLayerWithVoxelEditing) {
     super(layer, /*toggle=*/ true);
   }
 
@@ -206,6 +211,8 @@ export class VoxelBrushTool extends BaseVoxelTool {
       ) {
         const points = this.linePoints(last, cur);
         if (points.length > 0) {
+          if (!this.layer.voxLabelsManager)
+            throw new Error("Drawing backend not ready yet");
           const value = this.layer.voxLabelsManager.getCurrentLabelValue(
             this.layer.voxEraseMode.value,
           );
@@ -229,9 +236,8 @@ export class VoxelBrushTool extends BaseVoxelTool {
       );
     }
 
-    // Lock render LOD to base level during edits
-    this.layer.beginRenderLodLock(0);
-
+    if (!this.layer.voxLabelsManager)
+      throw new Error("Drawing backend not ready yet");
     const value = this.layer.voxLabelsManager.getCurrentLabelValue(
       this.layer.voxEraseMode.value,
     );
@@ -262,11 +268,6 @@ export class VoxelBrushTool extends BaseVoxelTool {
       this.mouseDisposer();
       this.mouseDisposer = undefined;
     }
-    try {
-      this.layer.endRenderLodLock();
-    } catch {
-      /* ignore */
-    }
   }
 
   private paintPoints(points: Float32Array[], value: bigint) {
@@ -275,7 +276,6 @@ export class VoxelBrushTool extends BaseVoxelTool {
       Math.floor(this.layer.voxBrushRadius.value ?? 3),
     );
     const shapeEnum = this.layer.voxBrushShape.value;
-    const ctrl = this.layer.voxEditController;
     let basis = undefined as undefined | { u: Float32Array; v: Float32Array };
     if (shapeEnum === BrushShape.DISK && this.currentMouseState?.planeNormal) {
       const n = this.currentMouseState.planeNormal;
@@ -290,8 +290,10 @@ export class VoxelBrushTool extends BaseVoxelTool {
       vec3.normalize(v, v);
       basis = { u, v };
     }
-    for (const p of points)
-      ctrl?.paintBrushWithShape(p, radius, value, shapeEnum, basis);
+
+    for (const [_, ed] of this.layer.editingContexts)
+      for (const p of points)
+        ed.controller?.paintBrushWithShape(p, radius, value, shapeEnum, basis);
   }
 }
 
@@ -332,6 +334,7 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
     const layer = this.layer;
     try {
       layer.setDrawErrorMessage(undefined);
+      if (!layer.voxLabelsManager) throw new Error("Drawing backend not ready yet");
       const value = layer.voxLabelsManager.getCurrentLabelValue(
         layer.voxEraseMode.value,
       );
@@ -339,9 +342,8 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
       if (!Number.isFinite(max) || max <= 0) {
         throw new Error("Invalid max fill voxels setting");
       }
-      const ctrl = layer.voxEditController;
-      if (!ctrl) throw new Error("Drawing backend not ready yet");
-      ctrl
+      for (const [_, ed] of this.layer.editingContexts)
+      ed.controller
         .floodFillPlane2D(
           new Float32Array(seed),
           value,
@@ -360,7 +362,7 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
     return;
   }
 
-  constructor(layer: VoxUserLayer) {
+  constructor(layer: UserLayerWithVoxelEditing) {
     super(layer, /*toggle=*/ true);
   }
 
@@ -373,8 +375,8 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
   }
 }
 
-export class AdoptVoxelLabelTool extends LayerTool<VoxUserLayer> {
-  constructor(layer: VoxUserLayer) {
+export class AdoptVoxelLabelTool extends LayerTool<UserLayerWithVoxelEditing> {
+  constructor(layer: UserLayerWithVoxelEditing) {
     super(layer, /*toggle=*/ false);
   }
 
@@ -388,8 +390,17 @@ export class AdoptVoxelLabelTool extends LayerTool<VoxUserLayer> {
 
   activate(_activation: ToolActivation<this>): void {
     if (!this.mouseState?.active) return;
-    const layer = this.layer as VoxUserLayer;
-    const pos = layer.getVoxelPositionFromMouse?.(this.mouseState);
+
+    const voxelEditingContext = this.layer.editingContexts.values().next().value as VoxelEditingContext;
+    if (!voxelEditingContext) {
+      StatusMessage.showTemporaryMessage(
+        "Cannot pick label: layer is not ready.",
+        3000,
+      );
+      return;
+    }
+
+    const pos = voxelEditingContext.getVoxelPositionFromMouse(this.mouseState);
 
     if (!pos || pos.length < 3) {
       StatusMessage.showTemporaryMessage(
@@ -399,20 +410,12 @@ export class AdoptVoxelLabelTool extends LayerTool<VoxUserLayer> {
       return;
     }
 
-    const editController = layer.voxEditController;
-    if (!editController) {
-      StatusMessage.showTemporaryMessage(
-        "Cannot pick label: layer is not ready.",
-        3000,
-      );
-      return;
-    }
-
-    const renderLayer = layer.voxRenderLayerInstance;
+    const renderLayer = voxelEditingContext.voxRenderLayerInstance;
     if (!renderLayer) {
       StatusMessage.showTemporaryMessage("Render layer not available.", 3000);
       return;
     }
+
 
     const visibleSources = renderLayer.visibleSourcesList;
     if (visibleSources.length === 0) {
@@ -424,7 +427,7 @@ export class AdoptVoxelLabelTool extends LayerTool<VoxUserLayer> {
     }
 
     const source = visibleSources[0].source;
-    const channelAccess = editController.singleChannelAccess;
+    const channelAccess = voxelEditingContext.controller.singleChannelAccess;
 
     StatusMessage.forPromise(
       source
@@ -443,7 +446,10 @@ export class AdoptVoxelLabelTool extends LayerTool<VoxUserLayer> {
             );
             return;
           }
-          layer.voxLabelsManager.addLabel(label);
+          if (!this.layer.voxLabelsManager) {
+            throw new Error("Drawing backend not ready yet");
+          }
+          this.layer.voxLabelsManager.addLabel(label);
           StatusMessage.showTemporaryMessage(`Adopted label: ${label}`, 3000);
         }),
       {
@@ -456,7 +462,7 @@ export class AdoptVoxelLabelTool extends LayerTool<VoxUserLayer> {
 }
 
 export function registerVoxelTools(LayerCtor: any) {
-  registerTool(LayerCtor, BRUSH_TOOL_ID, (layer: VoxUserLayer) => new VoxelBrushTool(layer));
-  registerTool(LayerCtor, FLOODFILL_TOOL_ID, (layer: VoxUserLayer) => new VoxelFloodFillTool(layer));
-  registerTool(LayerCtor, ADOPT_VOXEL_LABEL_TOOL_ID, (layer: VoxUserLayer) => new AdoptVoxelLabelTool(layer));
+  registerTool(LayerCtor, BRUSH_TOOL_ID, (layer: UserLayerWithVoxelEditing) => new VoxelBrushTool(layer));
+  registerTool(LayerCtor, FLOODFILL_TOOL_ID, (layer: UserLayerWithVoxelEditing) => new VoxelFloodFillTool(layer));
+  registerTool(LayerCtor, ADOPT_VOXEL_LABEL_TOOL_ID, (layer: UserLayerWithVoxelEditing) => new AdoptVoxelLabelTool(layer));
 }
