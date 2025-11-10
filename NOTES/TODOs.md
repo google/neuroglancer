@@ -1,6 +1,6 @@
 # TODO List
 
-- FOR TOMORROW: start to prepare the problematic/email to JMS + go through the todo list
+- FOR TOMORROW: start to prepare the problematic/email to JMS + look at neuroglancer console and fix the drawing preview: issue with chunk coord and think on how to handle compressed chunks -> maybe a second chunk source as an overlay? 
 
 - LOD -> 
   -  "feat: dirty tree upscaling is kinda working, at lea

@@ -249,11 +249,9 @@ export class VolumeChunkSource
       const cpuArray = (chunk as any).data as TypedArray;
       for (const index of edit.indices) {
         cpuArray[index] = edit.value;
-        console.log(cpuArray[index], key, edit, edit.value, index);
       }
       chunksToUpdate.add(chunk);
     }
-    console.log("applyLocalEdits", edits, chunksToUpdate);
     this.invalidateGpuData(chunksToUpdate);
   }
 

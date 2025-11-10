@@ -16,7 +16,6 @@
 
 import "#src/layer/vox/style.css";
 
-import { vec3 } from "gl-matrix";
 import type { CoordinateTransformSpecification } from "#src/coordinate_transform.js";
 import type { DataSourceSpecification } from "#src/datasource/index.js";
 import {
@@ -33,6 +32,11 @@ import {
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import { VoxToolTab } from "#src/layer/vox/tabs/tools.js";
 import {
+  getChunkPositionFromCombinedGlobalLocalPositions,
+  getChunkTransformParameters,
+  getWatchableRenderLayerTransform,
+} from "#src/render_coordinate_transform.js";
+import {
   trackableRenderScaleTarget,
 } from "#src/render_scale_statistics.js";
 import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
@@ -45,7 +49,7 @@ import {
   registerVoxelAnnotationTools,
 } from "#src/ui/voxel_annotations.js";
 import type { Borrowed } from "#src/util/disposable.js";
-import { mat4 } from "#src/util/geom.js";
+import * as matrix from "#src/util/matrix.js";
 import { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
 import { LabelsManager } from "#src/voxel_annotation/labels.js";
 import { VoxelAnnotationRenderLayer } from "#src/voxel_annotation/renderlayer.js";
@@ -59,7 +63,6 @@ export class VoxUserLayer extends UserLayer {
   static typeAbbreviation = "vox";
   voxEditController?: VoxelEditController;
   voxLabelsManager = new LabelsManager();
-  private modelToVoxTransform: mat4 | null;
 
   // Draw tool state
   voxBrushRadius: number = 3;
@@ -129,24 +132,72 @@ export class VoxUserLayer extends UserLayer {
     this.tabs.default = "vox_tools";
   }
 
-  private getModelToVoxTransform(): mat4 | null {
-    return this.modelToVoxTransform;
-  }
-
   getVoxelPositionFromMouse(
     mouseState: MouseSelectionState,
   ): Float32Array | undefined {
+    const loadedDataSource = this.dataSources[0]?.loadState;
+    if (loadedDataSource === undefined || loadedDataSource.error !== undefined) {
+      return undefined;
+    }
+
+    const volumeSubsource = loadedDataSource.subsources.find(
+      s => s.enabled && s.subsourceEntry.subsource.volume instanceof MultiscaleVolumeChunkSource
+    );
+
+    if (volumeSubsource === undefined) return undefined;
+
+    const volume = volumeSubsource.subsourceEntry.subsource.volume as MultiscaleVolumeChunkSource;
+
+    // This watchable will be disposed immediately after use.
+    const renderLayerTransformWatchable = getWatchableRenderLayerTransform(
+      this.manager.root.coordinateSpace,
+      this.localPosition.coordinateSpace,
+      loadedDataSource.transform,
+      volumeSubsource,
+    );
+    const renderLayerTransform = renderLayerTransformWatchable.value;
+    renderLayerTransformWatchable.dispose(); // Clean up immediately.
+
+    if (renderLayerTransform.error !== undefined) {
+      // If the render layer transform itself has an error, we can't proceed.
+      return undefined;
+    }
+
+    // Get the base resolution source to establish the coordinate transform.
+    const options: SliceViewSourceOptions = {
+      displayRank: volume.rank,
+      multiscaleToViewTransform: matrix.createIdentity(Float32Array, volume.rank * volume.rank),
+      modelChannelDimensionIndices: [],
+    };
+    const sources = volume.getSources(options);
+    if (sources.length === 0 || sources[0].length === 0) return undefined;
+    const baseSource = sources[0][0];
+
     try {
-      if (!mouseState?.active || !mouseState?.position) return undefined;
-      const inv = this.getModelToVoxTransform();
-      if (!inv) return undefined;
-      const p = mouseState.position;
-      return vec3.transformMat4(
-        vec3.create(),
-        vec3.fromValues(p[0], p[1], p[2]),
-        inv,
+      // Get the complete chunk transform parameters using the valid RenderLayerTransform.
+      const chunkTransform = getChunkTransformParameters(
+        renderLayerTransform,
+        baseSource.chunkToMultiscaleTransform,
       );
-    } catch {
+
+      const chunkPosition = new Float32Array(chunkTransform.modelTransform.unpaddedRank);
+
+      // Use the standard utility to transform from global/local viewer coordinates to chunk coordinates.
+      if (!getChunkPositionFromCombinedGlobalLocalPositions(
+        chunkPosition,
+        mouseState.unsnappedPosition, // Use unsnapped for higher precision
+        this.localPosition.value,
+        chunkTransform.layerRank,
+        chunkTransform.combinedGlobalLocalToChunkTransform,
+      )) {
+        return undefined;
+      }
+
+      // The result is the floating-point position in the base-resolution voxel space.
+      return chunkPosition;
+    } catch (e) {
+      // getChunkTransformParameters can throw if mappings are invalid.
+      console.error("Error getting chunk transform parameters:", e);
       return undefined;
     }
   }
@@ -195,44 +246,23 @@ export class VoxUserLayer extends UserLayer {
         }
         this.voxEditController = new VoxelEditController(volume);
         loadedSubsource.activate(
-          () => {
-            const renderLayerTransform = loadedSubsource.getRenderLayerTransform();
-
-            const renderLayer = new VoxelAnnotationRenderLayer(volume, {
+            () => {
+              const renderLayer = new VoxelAnnotationRenderLayer(volume, {
                 transform: loadedSubsource.getRenderLayerTransform(),
                 renderScaleTarget: this.sliceViewRenderScaleTarget,
                 localPosition: this.localPosition,
                 shaderParameters: constantWatchableValue({})
               });
 
-            this.voxRenderLayerInstance = renderLayer;
-            loadedSubsource.addRenderLayer(renderLayer);
+              this.voxRenderLayerInstance = renderLayer;
+              loadedSubsource.addRenderLayer(renderLayer);
 
-            // 3. Calculate and store the inverse transform needed for mouse picking.
-            const updateTransform = () => {
-              const transformOrError = renderLayerTransform.value;
-              if (transformOrError.error !== undefined) {
-                this.modelToVoxTransform = null;
-              } else {
-                this.modelToVoxTransform = mat4.invert(
-                  mat4.create(),
-                  transformOrError.modelToRenderLayerTransform as mat4,
-                );
+              try {
+                this.voxLabelsManager.initialize(this.voxEditController!);
+              } catch (e) {
+                console.warn("VoxUserLayer: labels initialization failed", e);
               }
-            };
-
-            updateTransform();
-            loadedSubsource.activated!.registerDisposer(
-              renderLayerTransform.changed.add(updateTransform)
-            );
-
-            // Initialize labels manager (temporarily hardcoded to label 42).
-            try {
-              this.voxLabelsManager.initialize(this.voxEditController!);
-            } catch (e) {
-              console.warn("VoxUserLayer: labels initialization failed", e);
             }
-          }
         );
         continue;
       }
