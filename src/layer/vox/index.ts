@@ -116,20 +116,19 @@ export class VoxUserLayer extends UserLayer {
           const dummySource = new DummyMultiscaleVolumeChunkSource(
             this.manager.chunkManager,
           );
-          this.addRenderLayer(
+          loadedSubsource.addRenderLayer(
             new VoxelAnnotationRenderLayer(
               dummySource,
               {
-                // Provide a synthetic 3D identity transform to match our 3D dummy volume.
-                // The default transform from local://voxel-annotations has rank 0, which results in
-                // no sources becoming visible. We bind an identity 3D model transform to the viewer/global
-                // and layer/local spaces so SliceView can select sources correctly.
-                transform: getWatchableRenderLayerTransform(
-                  this.manager.root.coordinateSpace,
-                  this.localPosition.coordinateSpace,
-                  new WatchableCoordinateSpaceTransform(
+                // IMPORTANT: Use an explicit 3D identity model transform, then convert it to a
+                // WatchableRenderLayerTransform. In this project, relying on the subsource-provided
+                // transform for local://voxel-annotations can yield a rank-0/ambiguous mapping and
+                // hide the chunk sources, meaning the checkerboard shader is never invoked. The
+                // identity 3D model space ensures proper detection and visibility of our dummy
+                // volume chunks while still integrating with global/local spaces.
+                transform: ((): any => {
+                  const identity3D = new WatchableCoordinateSpaceTransform(
                     makeIdentityTransform(
-                      // Construct a generic 3D model space. Names/units are placeholders but sufficient.
                       makeCoordinateSpace({
                         rank: 3,
                         names: ["x", "y", "z"],
@@ -137,10 +136,14 @@ export class VoxUserLayer extends UserLayer {
                         scales: new Float64Array([1, 1, 1]),
                       }),
                     ),
-                  ),
-                  undefined,
-                  undefined,
-                ),
+                  );
+                  return getWatchableRenderLayerTransform(
+                    this.manager.root.coordinateSpace,
+                    this.localPosition.coordinateSpace,
+                    identity3D,
+                    undefined,
+                  );
+                })(),
                 renderScaleTarget: this.sliceViewRenderScaleTarget,
                 renderScaleHistogram: undefined,
                 localPosition: this.localPosition,

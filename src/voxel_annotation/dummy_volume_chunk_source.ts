@@ -50,8 +50,8 @@ export class DummyMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSourc
   getSources(_options: VolumeSourceOptions) {
     // Provide a single-scale, single-orientation dummy source.
     const rank = this.rank;
-    const chunkDataSize = new Uint32Array([64, 64, 64]);
-    const upperVoxelBound = new Float32Array([1000, 1000, 1000]);
+    const chunkDataSize = new Uint32Array([32, 32, 32]);
+    const upperVoxelBound = new Float32Array([1024, 1024, 1024]);
 
     const spec = makeVolumeChunkSpecification({
       rank,

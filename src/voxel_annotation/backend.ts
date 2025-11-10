@@ -3,10 +3,11 @@
  * Copyright 2025.
  */
 
+import type { VolumeChunk } from '#src/sliceview/volume/backend.js';
+import { VolumeChunkSource as BaseVolumeChunkSource } from '#src/sliceview/volume/backend.js';
+import { DataType } from '#src/util/data_type.js';
 import type { RPC } from '#src/worker_rpc.js';
 import { registerSharedObject } from '#src/worker_rpc.js';
-import { VolumeChunkSource as BaseVolumeChunkSource } from '#src/sliceview/volume/backend.js';
-import type { VolumeChunk } from '#src/sliceview/volume/backend.js';
 
 // RPC id for the vox dummy chunk source
 export const VOX_DUMMY_CHUNK_SOURCE_RPC_ID = 'vox/VoxDummyChunkSource';
@@ -61,21 +62,25 @@ export class VoxDummyChunkSource extends BaseVolumeChunkSource {
   }
 
   private allocateTypedArray(dataType: number, size: number, fill: number) {
-    // UINT32 is expected by vox dummy; keep simple mapping
     switch (dataType) {
-      case 2: // DataType.UINT8
+      case DataType.UINT8:
         return new Uint8Array(size).fill(fill & 0xff);
-      case 3: // DataType.INT8
-        return new Int8Array(size).fill(fill & 0xff);
-      case 4: // DataType.UINT16
+      case DataType.INT8:
+        return new Int8Array(size).fill((fill << 24) >> 24);
+      case DataType.UINT16:
         return new Uint16Array(size).fill(fill & 0xffff);
-      case 5: // DataType.INT16
-        return new Int16Array(size).fill(fill & 0xffff);
-      case 6: // DataType.UINT32
+      case DataType.INT16:
+        return new Int16Array(size).fill((fill << 16) >> 16);
+      case DataType.UINT32:
         return new Uint32Array(size).fill(fill >>> 0);
-      case 7: // DataType.INT32
+      case DataType.INT32:
         return new Int32Array(size).fill(fill | 0);
-      case 1: // DataType.FLOAT32
+      case DataType.UINT64: {
+        // Represent as 64-bit unsigned. Use BigUint64Array; frontend will reinterpret as Uint32Array.
+        const big = BigInt(fill >>> 0);
+        return new BigUint64Array(size).fill(big);
+      }
+      case DataType.FLOAT32:
         return new Float32Array(size).fill(fill);
       default:
         return new Uint32Array(size).fill(fill >>> 0);

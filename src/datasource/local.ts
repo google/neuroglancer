@@ -107,31 +107,36 @@ export class LocalDataSourceProvider implements DataSourceProvider {
         };
       }
       case localVoxelAnnotationsUrl: {
+        // Voxels data source: by default, provide a fixed 3D identity model transform.
+        // Rationale: Many voxel-based layers (like our demo vox layer) expect a concrete 3D
+        // model space. Mirroring the global space rank/names can lead to ambiguous or rank-0
+        // cases depending on viewer state. Keeping a stable 3D identity model transform here
+        // reduces surprises while still allowing an explicit transform override via options.
         const { transform } = options;
         let modelTransform: CoordinateSpaceTransform;
         if (transform === undefined) {
-          const baseSpace = options.globalCoordinateSpace.value;
-          const { rank, names, scales, units } = baseSpace;
           const inputSpace = makeCoordinateSpace({
-            rank,
-            scales,
-            units,
-            names: names.map((_, i) => `${i}`),
+            rank: 3,
+            scales: new Float64Array([1, 1, 1]),
+            units: ["", "", ""],
+            names: ["x", "y", "z"],
           });
           const outputSpace = makeCoordinateSpace({
-            rank,
-            scales,
-            units,
-            names,
+            rank: 3,
+            scales: new Float64Array([1, 1, 1]),
+            units: ["", "", ""],
+            names: ["x", "y", "z"],
           });
           modelTransform = {
-            rank,
-            sourceRank: rank,
+            rank: 3,
+            sourceRank: 3,
             inputSpace,
             outputSpace,
-            transform: createIdentity(Float64Array, rank + 1),
+            transform: createIdentity(Float64Array, 4),
           };
         } else {
+          // If an explicit transform is provided, just pass through an identity over empty space,
+          // consistent with other local sources.
           modelTransform = makeIdentityTransform(emptyValidCoordinateSpace);
         }
         return {

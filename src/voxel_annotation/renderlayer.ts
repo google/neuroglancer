@@ -33,6 +33,16 @@ import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 type EmptyParams = Record<string, never>;
 
 export class VoxelAnnotationRenderLayer extends SliceViewVolumeRenderLayer<EmptyParams> {
+  // Defensive draw override to avoid crashes if layerInfo is not initialized yet.
+  override draw(renderContext: any) {
+    const { sliceView } = renderContext;
+    const layerInfo = sliceView.visibleLayers.get(this);
+    if (layerInfo === undefined) {
+      // Visible layers not ready yet; skip drawing this frame.
+      return;
+    }
+    super.draw(renderContext);
+  }
   constructor(
     multiscaleSource: MultiscaleVolumeChunkSource,
     options: RenderLayerOptions<EmptyParams>,
@@ -47,19 +57,20 @@ export class VoxelAnnotationRenderLayer extends SliceViewVolumeRenderLayer<Empty
   }
 
   defineShader(builder: ShaderBuilder) {
-    // The checkerboard shader logic. Assumes required varyings/uniforms are set up by base class.
+    // Highly-visible checkerboard, fully opaque, large tiles so it's hard to miss.
     builder.setFragmentMain(`
 void main() {
   // vChunkPosition is in voxel coords [0..uChunkDataSize]; normalize XY.
   vec2 tex = vChunkPosition.xy / uChunkDataSize.xy;
-  float u = tex.x;
-  float v = tex.y;
-  float checker = mod(floor(u * 16.0) + floor(v * 16.0), 2.0);
-  vec4 color = checker > 0.5 ? vec4(1.0, 0.0, 1.0, 0.5) : vec4(0.5, 0.0, 0.5, 0.5);
+  float tiles = 8.0; // fewer tiles for larger squares
+  float u = tex.x * tiles;
+  float v = tex.y * tiles;
+  float checker = mod(floor(u) + floor(v), 2.0);
+  vec4 color = checker > 0.5 ? vec4(1.0, 1.0, 0.0, 1.0) : vec4(0.0, 0.0, 0.0, 1.0);
   emit(color);
 }
   `);
-    console.log('VoxelAnnotationRenderLayer fragment shader:');
+    console.log('VoxelAnnotationRenderLayer fragment shader installed.');
   }
 
   initializeShader(
