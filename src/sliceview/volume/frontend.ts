@@ -342,7 +342,6 @@ export class InMemoryVolumeChunkSource extends VolumeChunkSource {
       }
     };
     // adding a small delay to avoid flickering since the base source will take some time to download the new data
-    // TODO: it would be better to reload the preview once the base source is good, with big brushes this delay is not sufficient
     setTimeout(update, 100);
   }
 

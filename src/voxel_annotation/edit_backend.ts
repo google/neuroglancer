@@ -195,7 +195,6 @@ export class VoxelEditController extends SharedObject {
         if (firstErrorMessage === undefined) firstErrorMessage = msg;
       }
     }
-    this.callChunkReload(editsByVoxKey.keys().toArray());
 
     if (newAction.changes.size > 0) {
       this.undoStack.push(newAction);
@@ -273,7 +272,13 @@ export class VoxelEditController extends SharedObject {
       while (this.downsampleQueue.length > 0) {
         const key = this.downsampleQueue.shift() as string;
         this.downsampleQueueSet.delete(key);
-        await this.performDownsampleCascadeForKey(key);
+        const allModifiedKeys = new Array<string>();
+        let currentKey: string | null = key;
+        while (currentKey !== null) {
+          allModifiedKeys.push(currentKey);
+          currentKey = await this.downsampleStep(currentKey);
+        }
+        this.callChunkReload(allModifiedKeys);
       }
     } finally {
       this.isProcessingDownsampleQueue = false;
@@ -284,15 +289,6 @@ export class VoxelEditController extends SharedObject {
         this.isProcessingDownsampleQueue = true;
         Promise.resolve().then(() => this.processDownsampleQueue());
       }
-    }
-  }
-
-  private async performDownsampleCascadeForKey(
-    sourceKey: string,
-  ): Promise<void> {
-    let currentKey: string | null = sourceKey;
-    while (currentKey !== null) {
-      currentKey = await this.downsampleStep(currentKey);
     }
   }
 
