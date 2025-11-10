@@ -80,6 +80,18 @@ export class VoxUserLayer extends UserLayer {
   voxBrushShape: "disk" | "sphere" = "disk";
   private voxLoadedSubsource?: LoadedDataSubsource;
 
+  // Draw tab error messaging
+  voxDrawErrorMessage: string | undefined = undefined;
+  onDrawMessageChanged?: () => void;
+  setDrawErrorMessage(message: string | undefined): void {
+    this.voxDrawErrorMessage = message;
+    try {
+      this.onDrawMessageChanged?.();
+    } catch {
+      /* ignore */
+    }
+  }
+
   // Remote server configuration when using vox+http(s):// data sources
   voxServerUrl?: string;
   voxServerToken?: string;

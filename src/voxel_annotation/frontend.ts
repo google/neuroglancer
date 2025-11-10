@@ -402,7 +402,10 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
         const cpu = chunk ? this.getCpuArrayForChunk(chunk) : null;
 
         if (!cpu || chunkLocalIndex < 0) {
-          throw new Error("VoxChunkSource.floodFillPlane2D: encountered adjacency to unloaded chunk; aborting to avoid partial fill.");
+          // Stop propagation at map bounds/unloaded chunks without invalidating the fill.
+          // Simply do not enqueue this neighbor.
+          visited.add(k);
+          continue;
         }
 
         if (isOriginalAt(nx, ny)) {

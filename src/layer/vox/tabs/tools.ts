@@ -12,6 +12,7 @@ export class VoxToolTab extends Tab {
   }
   private labelsContainer!: HTMLDivElement;
   private labelsError!: HTMLDivElement;
+  private drawErrorContainer!: HTMLDivElement;
   private renderLabels() {
     const cont = this.labelsContainer;
     cont.innerHTML = "";
@@ -304,8 +305,32 @@ export class VoxToolTab extends Tab {
 
     toolbox.appendChild(labelsSection);
 
+    // Draw error message area at the very end of the Draw tab
+    this.drawErrorContainer = document.createElement("div");
+    this.drawErrorContainer.className = "neuroglancer-vox-draw-error";
+    this.drawErrorContainer.style.color = "#b00020";
+    this.drawErrorContainer.style.fontSize = "12px";
+    this.drawErrorContainer.style.whiteSpace = "pre-wrap";
+    this.drawErrorContainer.style.marginTop = "8px";
+    this.drawErrorContainer.style.display = "none";
+    toolbox.appendChild(this.drawErrorContainer);
+
+    const updateDrawError = () => {
+      const msg = this.layer.voxDrawErrorMessage;
+      if (msg && msg.length > 0) {
+        this.drawErrorContainer.textContent = msg;
+        this.drawErrorContainer.style.display = "block";
+      } else {
+        this.drawErrorContainer.textContent = "";
+        this.drawErrorContainer.style.display = "none";
+      }
+    };
+
     this.layer.onLabelsChanged = () => this.requestRenderLabels();
+    this.layer.onDrawMessageChanged = () => updateDrawError();
+
     this.renderLabels();
+    updateDrawError();
 
     element.appendChild(toolbox);
   }
