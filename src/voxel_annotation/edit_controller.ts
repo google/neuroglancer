@@ -9,9 +9,11 @@ import type { VoxChunkSource } from "#src/voxel_annotation/frontend.js";
 export class VoxelEditController {
   constructor(private multiscale: MultiscaleVolumeChunkSource) {}
   private static readonly qualityFactor = 16.0;
+  private static readonly restrictToMinLOD = true;
 
   // Required: compute desired voxel size (power-of-two) from brush radius.
   getOptimalVoxelSize(brushRadius: number, minLOD = 1, maxLOD = 128) {
+    if (VoxelEditController.restrictToMinLOD) {return minLOD;}
     if (!Number.isFinite(brushRadius) || brushRadius <= 0) {
       return minLOD;
     }
@@ -24,6 +26,7 @@ export class VoxelEditController {
 
   /** Compute the edit LOD index (scale index) from a brush radius in canonical units. */
   getEditLodIndexForBrush(brushRadiusCanonical: number): number {
+    if (VoxelEditController.restrictToMinLOD) {return 0;}
     if (!Number.isFinite(brushRadiusCanonical) || brushRadiusCanonical <= 0) {
       throw new Error("getEditLodIndexForBrush: brushRadiusCanonical must be > 0");
     }

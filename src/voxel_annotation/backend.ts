@@ -76,7 +76,7 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     size?: number[];
   }[] = [];
   private commitDebounceTimer: number | undefined;
-  private readonly commitDebounceDelayMs: number = 75;
+  private readonly commitDebounceDelayMs: number = 200;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
@@ -122,9 +122,6 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
   }
 
   reloadChunksByKey(keys: string[]) {
-    console.log("sending RPC call")
-
-
     this.rpc?.invoke(VOX_RELOAD_CHUNKS_RPC_ID, {
       id: this.rpcId,
       keys,
@@ -139,6 +136,7 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     this.pendingCommitEdits = [];
     this.commitDebounceTimer = undefined;
     if (pending.length === 0) return;
+    console.log("####################################################################################\n flushPendingCommitEdits: applying edits", pending)
     await src.applyEdits(pending);
   }
 
@@ -161,11 +159,12 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
       }
       this.pendingCommitEdits.push(e);
     }
-    if (this.commitDebounceTimer === undefined) {
-      this.commitDebounceTimer = setTimeout(() => {
-        void this.flushPendingCommitEdits();
-      }, this.commitDebounceDelayMs) as unknown as number;
+    if (this.commitDebounceTimer !== undefined) {
+      clearTimeout(this.commitDebounceTimer);
     }
+    this.commitDebounceTimer = setTimeout(() => {
+      void this.flushPendingCommitEdits();
+    }, this.commitDebounceDelayMs) as unknown as number;
   }
 
   async getLabelIds(): Promise<number[]> {

@@ -1,12 +1,18 @@
 # TODO List
 
-- FOR TOMORROW: fix dirty tree upscaling and integrate it into the zarr export feature.
 
 - LOD -> where am I:
   - choosing the lod level depanding on the brush size, live rendering is working local data saving is working.
   - there are some performance issues at very high brush sizes (>1000)
   - fix the redownload trigger from the backend to the front -> making VoxLayer a true singleton
-  - implement upscaling and dirty chunks marks
+  -  "feat: dirty tree upscaling is kinda working, at lea
+    st enough to conclude that this upscaling method wont work
+    due to unsolvable conficts and lost unavoidable lost of qua
+    lity due to upscaling of downscaled strokes. A new approach
+    will be to enqueue every upscale and downscale and throttl
+    e the user when the queue is too full, with some kind of in
+    dicator in the ui. We also may need to restrict the max bru
+    sh size to avoid too long waiting time."
 
 - cleanup label handling code (more specifically in the ui code: layer/vox/index.ts, would be nice to have a handler similar to the one for maps)
 - Add redundancy to avoid corrupt/unsaved chunks on the remote

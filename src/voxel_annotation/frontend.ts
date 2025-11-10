@@ -263,6 +263,5 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
 
 registerRPC(VOX_RELOAD_CHUNKS_RPC_ID, function (x: any) {
   const obj = this.get(x.id) as VoxChunkSource;
-  console.log("received RPC call")
   obj.invalidateChunksByKey(x.keys);
 });

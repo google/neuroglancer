@@ -21,42 +21,45 @@ function calculateDownsamplePasses(chunkSize: number) {
 
 /** IndexedDB-backed local source. */
 export class LocalVoxSource extends VoxSource {
-  private static readonly DIRTY_STORE = "dirty";
 
-  private async readChunkFromDbWithoutSideEffects(key: string): Promise<SavedChunk | undefined> {
-    const existing = this.saved.get(key);
-    if (existing) return existing;
-    const db = await this.getDb();
-    const composite = this.compositeKey(key);
-    const buf = await idbGet<ArrayBuffer>(db, "chunks", composite);
-    if (!buf) return undefined;
-    const arr = new Uint32Array(buf);
-    const sc: SavedChunk = {
-      data: arr,
-      size: new Uint32Array(this.mapCfg!.chunkDataSize as any),
-    };
-    this.saved.set(key, sc);
-    this.enforceCap();
-    return sc;
-  }
+  // Upscaling halted
+  /*
+    private static readonly DIRTY_STORE = "dirty";
 
-  private async setDirtyTreeFlag(key: string, isDirty: boolean): Promise<void> {
-    const db = await this.getDb();
-    const tx = db.transaction(LocalVoxSource.DIRTY_STORE, "readwrite");
-    const store = tx.objectStore(LocalVoxSource.DIRTY_STORE);
-    const composite = this.compositeKey(key);
-    await idbPut(store, isDirty ? 1 : 0, composite);
-    await txDone(tx);
-  }
-  
-  private async getDirtyTreeValue(key: string): Promise<0 | 1 | undefined> {
-    const db = await this.getDb();
-    const composite = this.compositeKey(key);
-    const v = await idbGet<number | undefined>(db, LocalVoxSource.DIRTY_STORE, composite);
-    if (v === undefined) return undefined;
-    if (v !== 0 && v !== 1) throw new Error(`Invalid dirty-tree value for ${key}: ${String(v)}`);
-    return v as 0 | 1;
-  }
+    private async readChunkFromDbWithoutSideEffects(key: string): Promise<SavedChunk | undefined> {
+      const existing = this.saved.get(key);
+      if (existing) return existing;
+      const db = await this.getDb();
+      const composite = this.compositeKey(key);
+      const buf = await idbGet<ArrayBuffer>(db, "chunks", composite);
+      if (!buf) return undefined;
+      const arr = new Uint32Array(buf);
+      const sc: SavedChunk = {
+        data: arr,
+        size: new Uint32Array(this.mapCfg!.chunkDataSize as any),
+      };
+      this.saved.set(key, sc);
+      this.enforceCap();
+      return sc;
+    }
+
+    private async setDirtyTreeFlag(key: string, isDirty: boolean): Promise<void> {
+      const db = await this.getDb();
+      const tx = db.transaction(LocalVoxSource.DIRTY_STORE, "readwrite");
+      const store = tx.objectStore(LocalVoxSource.DIRTY_STORE);
+      const composite = this.compositeKey(key);
+      await idbPut(store, isDirty ? 1 : 0, composite);
+      await txDone(tx);
+    }
+
+    private async getDirtyTreeValue(key: string): Promise<0 | 1 | undefined> {
+      const db = await this.getDb();
+      const composite = this.compositeKey(key);
+      const v = await idbGet<number | undefined>(db, LocalVoxSource.DIRTY_STORE, composite);
+      if (v === undefined) return undefined;
+      if (v !== 0 && v !== 1) throw new Error(`Invalid dirty-tree value for ${key}: ${String(v)}`);
+      return v as 0 | 1;
+    }*/
 
   private parentKeyOf(childKey: string): string | null {
     const info = parseVoxChunkKey(childKey);
@@ -70,133 +73,137 @@ export class LocalVoxSource extends VoxSource {
     return makeVoxChunkKey(`${px},${py},${pz}`, parentLod);
   }
 
-  private childKeysOf(parentKey: string): string[] {
-    const info = parseVoxChunkKey(parentKey);
-    if (!info) throw new Error(`Invalid voxel chunk key: ${parentKey}`);
-    const childLod = info.lod / 2;
-    if (childLod < 1) return [];
-    const baseX = info.x * 2;
-    const baseY = info.y * 2;
-    const baseZ = info.z * 2;
-    const out: string[] = [];
-    for (let dz = 0; dz < 2; dz++) {
-      for (let dy = 0; dy < 2; dy++) {
-        for (let dx = 0; dx < 2; dx++) {
-          out.push(makeVoxChunkKey(`${baseX + dx},${baseY + dy},${baseZ + dz}`, childLod));
+  // Upscaling halted
+  /*
+    private childKeysOf(parentKey: string): string[] {
+      const info = parseVoxChunkKey(parentKey);
+      if (!info) throw new Error(`Invalid voxel chunk key: ${parentKey}`);
+      const childLod = info.lod / 2;
+      if (childLod < 1) return [];
+      const baseX = info.x * 2;
+      const baseY = info.y * 2;
+      const baseZ = info.z * 2;
+      const out: string[] = [];
+      for (let dz = 0; dz < 2; dz++) {
+        for (let dy = 0; dy < 2; dy++) {
+          for (let dx = 0; dx < 2; dx++) {
+            out.push(makeVoxChunkKey(`${baseX + dx},${baseY + dy},${baseZ + dz}`, childLod));
+          }
+        }
+      }
+      return out;
+    }
+
+    private async markChildrenDirtyInTree(parentKey: string): Promise<void> {
+      const children = this.childKeysOf(parentKey);
+      if (children.length === 0) return;
+      const db = await this.getDb();
+      const tx = db.transaction(LocalVoxSource.DIRTY_STORE, "readwrite");
+      const store = tx.objectStore(LocalVoxSource.DIRTY_STORE);
+      for (const ck of children) {
+        await idbPut(store, 1, this.compositeKey(ck));
+      }
+      await txDone(tx);
+    }
+
+    private async ensureUpscaledPathTo(targetKey: string): Promise<void> {
+      // Find nearest CLEAN ancestor using the dirty-tree only, then descend regenerating dirty/missing nodes.
+      const parsedTarget = parseVoxChunkKey(targetKey);
+      if (!parsedTarget) throw new Error(`ensureUpscaledPathTo: invalid target key: ${targetKey}`);
+      const maxLOD = this.mapCfg!.steps[this.mapCfg!.steps.length - 1];
+
+      // Build ancestor chain from target up to the root (inclusive)
+      const ancestors: string[] = [targetKey];
+      while (true) {
+        const last = ancestors[ancestors.length - 1];
+        const p = this.parentKeyOf(last);
+        if (!p) break;
+        ancestors.push(p);
+        const pInfo = parseVoxChunkKey(p)!;
+        if (pInfo.lod === maxLOD) break;
+      }
+
+      // Find the nearest clean ancestor after a dirty one
+      let cleanAncestorIndex = -1;
+      let hasDirt = false;
+      for (let i = 0; i < ancestors.length; i++) {
+        const k = ancestors[i];
+        const v = await this.getDirtyTreeValue(k);
+        if (v === 0 && hasDirt) {
+          cleanAncestorIndex = i;
+          break;
+        }
+        if (v === 1){
+          hasDirt = true;
+        }
+      }
+      if (cleanAncestorIndex === -1) {
+        // No clean ancestor registered in tree -> nothing to upscale from.
+        return;
+      }
+
+      // Descend from that ancestor down to the target
+      for (let i = cleanAncestorIndex - 1; i >= 0; i--) {
+        const childKey = ancestors[i];
+        const parentKey = ancestors[i + 1];
+
+        // A clean ancestor must exist physically. Enforce invariant strictly.
+        const parentChunk = await this.readChunkFromDbWithoutSideEffects(parentKey);
+        if (!parentChunk) throw new Error(`Missing parent chunk for clean node during upscaling: ${parentKey} ${ancestors}`);
+
+        const childDirtyVal = await this.getDirtyTreeValue(childKey);
+        const needsRegeneration = childDirtyVal === 1 || childDirtyVal === undefined;
+        if (needsRegeneration) {
+          await this.upscaleFromParentIntoChild(parentChunk, parentKey, childKey);
+          await this.setDirtyTreeFlag(childKey, false);
+          await this.markChildrenDirtyInTree(childKey);
+          console.log(`Upscaled ${childKey} from ${parentKey}`);
         }
       }
     }
-    return out;
-  }
 
-  private async markChildrenDirtyInTree(parentKey: string): Promise<void> {
-    const children = this.childKeysOf(parentKey);
-    if (children.length === 0) return;
-    const db = await this.getDb();
-    const tx = db.transaction(LocalVoxSource.DIRTY_STORE, "readwrite");
-    const store = tx.objectStore(LocalVoxSource.DIRTY_STORE);
-    for (const ck of children) {
-      await idbPut(store, 1, this.compositeKey(ck));
-    }
-    await txDone(tx);
-  }
+    private async upscaleFromParentIntoChild(parentChunk: SavedChunk, parentKey: string, childKey: string): Promise<void> {
+      const pInfo = parseVoxChunkKey(parentKey);
+      const cInfo = parseVoxChunkKey(childKey);
+      if (!pInfo || !cInfo) throw new Error("Invalid parent/child keys for upscaling");
+      if (cInfo.lod !== pInfo.lod / 2) throw new Error("Upscale expects child lod to be half of parent lod");
 
-  private async ensureUpscaledPathTo(targetKey: string): Promise<void> {
-    // Find nearest CLEAN ancestor using the dirty-tree only, then descend regenerating dirty/missing nodes.
-    const parsedTarget = parseVoxChunkKey(targetKey);
-    if (!parsedTarget) throw new Error(`ensureUpscaledPathTo: invalid target key: ${targetKey}`);
-    const maxLOD = this.mapCfg!.steps[this.mapCfg!.steps.length - 1];
-
-    // Build ancestor chain from target up to the root (inclusive)
-    const ancestors: string[] = [targetKey];
-    while (true) {
-      const last = ancestors[ancestors.length - 1];
-      const p = this.parentKeyOf(last);
-      if (!p) break;
-      ancestors.push(p);
-      const pInfo = parseVoxChunkKey(p)!;
-      if (pInfo.lod === maxLOD) break;
-    }
-
-    // Find the nearest clean ancestor after a dirty one
-    let cleanAncestorIndex = -1;
-    let hasDirt = false;
-    for (let i = 0; i < ancestors.length; i++) {
-      const k = ancestors[i];
-      const v = await this.getDirtyTreeValue(k);
-      if (v === 0 && hasDirt) {
-        cleanAncestorIndex = i;
-        break;
+      const childSize = new Uint32Array(this.mapCfg!.chunkDataSize as any);
+      const total = (childSize[0] | 0) * (childSize[1] | 0) * (childSize[2] | 0);
+      let child = this.saved.get(childKey);
+      if (!child) {
+        child = { data: new Uint32Array(total), size: childSize };
+        this.saved.set(childKey, child);
+        this.enforceCap();
       }
-      if (v === 1){
-        hasDirt = true;
+
+      const [cw, ch, cd] = child.size;
+      const [pw, ph] = parentChunk.size;
+      const subW = pw / 2;
+      const subH = ph / 2;
+      const subD = parentChunk.size[2] / 2;
+      const offX = (cInfo.x % 2) * subW;
+      const offY = (cInfo.y % 2) * subH;
+      const offZ = (cInfo.z % 2) * subD;
+
+      for (let z = 0; z < cd; z++) {
+        const pz = Math.floor(z / 2) + offZ;
+        for (let y = 0; y < ch; y++) {
+          const py = Math.floor(y / 2) + offY;
+          for (let x = 0; x < cw; x++) {
+            const px = Math.floor(x / 2) + offX;
+            const pIndex = (pz | 0) * pw * ph + (py | 0) * pw + (px | 0);
+            const cIndex = z * cw * ch + y * cw + x;
+            (child.data as Uint32Array)[cIndex] = (parentChunk.data as Uint32Array)[pIndex];
+          }
+        }
       }
-    }
-    if (cleanAncestorIndex === -1) {
-      // No clean ancestor registered in tree -> nothing to upscale from.
-      return;
-    }
 
-    // Descend from that ancestor down to the target
-    for (let i = cleanAncestorIndex - 1; i >= 0; i--) {
-      const childKey = ancestors[i];
-      const parentKey = ancestors[i + 1];
-
-      // A clean ancestor must exist physically. Enforce invariant strictly.
-      const parentChunk = await this.readChunkFromDbWithoutSideEffects(parentKey);
-      if (!parentChunk) throw new Error(`Missing parent chunk for clean node during upscaling: ${parentKey} ${ancestors}`);
-
-      const childDirtyVal = await this.getDirtyTreeValue(childKey);
-      const needsRegeneration = childDirtyVal === 1 || childDirtyVal === undefined;
-      if (needsRegeneration) {
-        await this.upscaleFromParentIntoChild(parentChunk, parentKey, childKey);
-        await this.setDirtyTreeFlag(childKey, false);
-        await this.markChildrenDirtyInTree(childKey);
-        console.log(`Upscaled ${childKey} from ${parentKey}`);
-      }
-    }
-  }
-
-  private async upscaleFromParentIntoChild(parentChunk: SavedChunk, parentKey: string, childKey: string): Promise<void> {
-    const pInfo = parseVoxChunkKey(parentKey);
-    const cInfo = parseVoxChunkKey(childKey);
-    if (!pInfo || !cInfo) throw new Error("Invalid parent/child keys for upscaling");
-    if (cInfo.lod !== pInfo.lod / 2) throw new Error("Upscale expects child lod to be half of parent lod");
-
-    const childSize = new Uint32Array(this.mapCfg!.chunkDataSize as any);
-    const total = (childSize[0] | 0) * (childSize[1] | 0) * (childSize[2] | 0);
-    let child = this.saved.get(childKey);
-    if (!child) {
-      child = { data: new Uint32Array(total), size: childSize };
       this.saved.set(childKey, child);
-      this.enforceCap();
+      this.markDirty(childKey);
     }
+    */
 
-    const [cw, ch, cd] = child.size;
-    const [pw, ph] = parentChunk.size;
-    const subW = pw / 2;
-    const subH = ph / 2;
-    const subD = parentChunk.size[2] / 2;
-    const offX = (cInfo.x % 2) * subW;
-    const offY = (cInfo.y % 2) * subH;
-    const offZ = (cInfo.z % 2) * subD;
-
-    for (let z = 0; z < cd; z++) {
-      const pz = Math.floor(z / 2) + offZ;
-      for (let y = 0; y < ch; y++) {
-        const py = Math.floor(y / 2) + offY;
-        for (let x = 0; x < cw; x++) {
-          const px = Math.floor(x / 2) + offX;
-          const pIndex = (pz | 0) * pw * ph + (py | 0) * pw + (px | 0);
-          const cIndex = z * cw * ch + y * cw + x;
-          (child.data as Uint32Array)[cIndex] = (parentChunk.data as Uint32Array)[pIndex];
-        }
-      }
-    }
-
-    this.saved.set(childKey, child);
-    this.markDirty(childKey);
-  }
   override async listMaps(): Promise<VoxMapConfig[]> {
     try {
       const db = await this.getDb();
@@ -342,13 +349,14 @@ export class LocalVoxSource extends VoxSource {
 
   async getSavedChunk(key: string): Promise<SavedChunk | undefined> {
       // Before returning, ensure any pending upscales are realized for this key.
-      if (this.mapCfg) {
-        try {
-          await this.ensureUpscaledPathTo(key);
-        } catch (e) {
-          console.error("ensureUpscaledPathTo failed", e);
-        }
+    // Upscaling halted
+    /*if (this.mapCfg) {
+      try {
+        await this.ensureUpscaledPathTo(key);
+      } catch (e) {
+        console.error("ensureUpscaledPathTo failed", e);
       }
+    }*/
       const existing = this.saved.get(key);
       if (existing) {
         this.touch(key);
@@ -380,13 +388,15 @@ export class LocalVoxSource extends VoxSource {
       return sc;
     }
     // Attempt to satisfy this chunk by performing any pending upscales along its path.
+    // Upscaling halted
+    /*
     if (this.mapCfg) {
       try {
         await this.ensureUpscaledPathTo(key);
       } catch (e) {
         console.error("ensureUpscaledPathTo failed in ensureChunk", e);
       }
-    }
+    }*/
     const db = await this.getDb();
     const composite = this.compositeKey(key);
     const buf = await idbGet<ArrayBuffer>(db, "chunks", composite);
@@ -426,8 +436,9 @@ export class LocalVoxSource extends VoxSource {
       );
       this.applyEditsIntoChunk(sc, e.indices, e.value, e.values);
       this.markDirty(e.key);
-      await this.setDirtyTreeFlag(e.key, false);
-      await this.markChildrenDirtyInTree(e.key);
+      // Upscaling halted
+      //await this.setDirtyTreeFlag(e.key, false);
+      //await this.markChildrenDirtyInTree(e.key);
       touchedKeys.add(e.key);
     }
     for (const key of touchedKeys) {
@@ -461,7 +472,6 @@ export class LocalVoxSource extends VoxSource {
         console.log("Downsample step failed or was unnecessary, stopping cascade.");
         break;
       }
-      console.log(`Downsampled ${currentKey} to ${targetKey}`);
       this.callChunkReload(targetKey);
       currentKey = targetKey;
     }
@@ -511,7 +521,8 @@ export class LocalVoxSource extends VoxSource {
 
     this.saved.set(targetKey, targetChunk);
     this.markDirty(targetKey);
-    await this.setDirtyTreeFlag(targetKey, false);
+    // Upscaling halted
+    //await this.setDirtyTreeFlag(targetKey, false);
     return targetKey;
   }
 
@@ -590,6 +601,8 @@ export function openVoxDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains("labels")) db.createObjectStore("labels");
 
       // Ensure dirty store exists
+      // Upscaling halted
+    /*
       let dirtyStore: IDBObjectStore;
       if (!db.objectStoreNames.contains("dirty")) {
         dirtyStore = db.createObjectStore("dirty");
@@ -609,7 +622,7 @@ export function openVoxDb(): Promise<IDBDatabase> {
             cursor.continue();
           }
         };
-      }
+      }*/
     };
     req.onsuccess = () => resolve(req.result);
   });

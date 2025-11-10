@@ -108,7 +108,7 @@ export class VoxToolTab extends Tab {
     const sizeSlider = document.createElement("input");
     sizeSlider.type = "range";
     sizeSlider.min = "1";
-    sizeSlider.max = "4242";
+    sizeSlider.max = "64";
     sizeSlider.step = "1";
     sizeSlider.value = String(this.layer.voxBrushRadius ?? 3);
 
@@ -120,7 +120,7 @@ export class VoxToolTab extends Tab {
     sizeNumber.value = String(this.layer.voxBrushRadius ?? 3);
 
     const syncSize = (v: number) => {
-      const clamped = Math.max(1, Math.min(8192, Math.floor(v)));
+      const clamped = Math.max(1, Math.min(128, Math.floor(v)));
       this.layer.voxBrushRadius = clamped;
       sizeSlider.value = String(clamped);
       sizeNumber.value = String(clamped);
