@@ -20,4 +20,21 @@
 import { setupDefaultViewer } from "#src/ui/default_viewer_setup.js";
 import "#src/util/google_tag_manager.js";
 
+(function maybeHandleOidcCallback() {
+  try {
+    // Only handle when running in a popup opened by our app and when code/state are present.
+    if (window.opener === null) return;
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    const state = params.get("state");
+    if (code === null || state === null) return;
+    // Post message back to opener; opener will validate origin and state.
+    window.opener.postMessage({ type: "oidc_code", code, state }, "*");
+    // Close this popup window.
+    window.close();
+  } catch {
+    // Swallow errors; fall through to normal app startup.
+  }
+})();
+
 setupDefaultViewer();

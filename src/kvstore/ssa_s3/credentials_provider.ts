@@ -34,32 +34,19 @@ import {
 import { ProgressSpan } from "#src/util/progress_listener.js";
 
 interface SsaConfiguration {
+  // OIDC issuer for the SSA deployment.
   issuer: string;
-  authorizationUrl: string;
-  // Optional field to allow the SSA deployment to specify a dedicated popup endpoint.
-  popupAuthorizationUrl?: string;
 }
 
-interface SsaPopupAuthResult {
-  access_token: string;
-  token_type: string;
-  email?: string;
+interface OidcConfiguration {
+  authorization_endpoint: string;
+  token_endpoint: string;
 }
 
 function parseSsaConfiguration(json: unknown): SsaConfiguration {
   const obj = verifyObject(json);
   const issuer = verifyObjectProperty(obj, "issuer", verifyString);
-  const authorizationUrl = verifyObjectProperty(
-    obj,
-    "authorization_url",
-    verifyString,
-  );
-  const popupAuthorizationUrl = verifyOptionalObjectProperty(
-    obj,
-    "popup_authorization_url",
-    verifyString,
-  );
-  return { issuer, authorizationUrl, popupAuthorizationUrl };
+  return { issuer };
 }
 
 async function discoverSsaConfiguration(workerOrigin: string): Promise<SsaConfiguration> {
@@ -68,11 +55,29 @@ async function discoverSsaConfiguration(workerOrigin: string): Promise<SsaConfig
   return config;
 }
 
-async function waitForPopupAuthMessage(
+async function discoverOpenIdConfiguration(issuer: string): Promise<OidcConfiguration> {
+  const response = await fetchOk(`${issuer}/.well-known/openid-configuration`);
+  const json = verifyObject(await response.json());
+  const authorization_endpoint = verifyObjectProperty(
+    json,
+    "authorization_endpoint",
+    verifyString,
+  );
+  const token_endpoint = verifyObjectProperty(json, "token_endpoint", verifyString);
+  return { authorization_endpoint, token_endpoint };
+}
+
+interface OidcCodeMessage {
+  type: "oidc_code";
+  code: string;
+  state: string;
+}
+
+async function waitForOidcCodeMessage(
   expectedOrigin: string,
   source: Window,
   signal: AbortSignal,
-): Promise<SsaPopupAuthResult> {
+): Promise<OidcCodeMessage> {
   return new Promise((resolve, reject) => {
     window.addEventListener(
       "message",
@@ -81,14 +86,15 @@ async function waitForPopupAuthMessage(
         if (event.origin !== expectedOrigin) return;
         try {
           const data = verifyObject(event.data);
-          const access_token = verifyObjectProperty(data, "access_token", verifyString);
-          const token_type = verifyObjectProperty(data, "token_type", verifyString);
-          const email = verifyOptionalObjectProperty(data, "email", verifyString);
-          resolve({ access_token, token_type, email });
+          const type = verifyObjectProperty(data, "type", verifyString);
+          if (type !== "oidc_code") return;
+          const code = verifyObjectProperty(data, "code", verifyString);
+          const state = verifyObjectProperty(data, "state", verifyString);
+          resolve({ type: "oidc_code", code, state });
         } catch (e) {
           reject(
             new Error(
-              `Received unexpected SSA authentication response: ${(e as Error).message}`,
+              `Received unexpected OIDC authorization response: ${(e as Error).message}`,
             ),
           );
         }
@@ -113,6 +119,33 @@ function openPopupCentered(url: string, width: number, height: number) {
   return popup;
 }
 
+function base64UrlEncode(bytes: Uint8Array): string {
+  const s = btoa(String.fromCharCode(...bytes));
+  return s.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function sha256Bytes(input: Uint8Array): Promise<Uint8Array> {
+  const digest = await crypto.subtle.digest("SHA-256", input);
+  return new Uint8Array(digest);
+}
+
+function generateRandomAscii(length: number): string {
+  const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+  const random = new Uint8Array(length);
+  crypto.getRandomValues(random);
+  let s = "";
+  for (let i = 0; i < length; ++i) {
+    s += charset[random[i] % charset.length];
+  }
+  return s;
+}
+
+async function createPkcePair(): Promise<{ verifier: string; challenge: string }> {
+  const verifier = generateRandomAscii(64);
+  const challenge = base64UrlEncode(await sha256Bytes(new TextEncoder().encode(verifier)));
+  return { verifier, challenge };
+}
+
 export class SsaCredentialsProvider extends CredentialsProvider<OAuth2Credentials> {
   constructor(public readonly workerOrigin: string) {
     super();
@@ -123,7 +156,7 @@ export class SsaCredentialsProvider extends CredentialsProvider<OAuth2Credential
         throw new Error("workerOrigin must be an origin like https://host");
       }
     } catch (e) {
-      throw new Error(`Invalid worker origin ${JSON.stringify(workerOrigin)}`, {
+      throw new Error(`Invalid worker origin ${JSON.stringify(workerOrigin)}` , {
         cause: e,
       });
     }
@@ -134,31 +167,63 @@ export class SsaCredentialsProvider extends CredentialsProvider<OAuth2Credential
       message: `Requesting SSA login via ${this.workerOrigin}`,
     });
 
-    const config = await discoverSsaConfiguration(this.workerOrigin);
-    const popupUrl = config.popupAuthorizationUrl ?? config.authorizationUrl;
+    const { issuer } = await discoverSsaConfiguration(this.workerOrigin);
+    const { authorization_endpoint, token_endpoint } = await discoverOpenIdConfiguration(issuer);
+
+    // Application configuration. For SPA public clients, no client secret is used.
+    const clientId = "neuroglancer";
+    const redirectUri = `${location.origin}/`;
+    const scope = "openid profile email";
+    const state = generateRandomAscii(32);
+    const { verifier: codeVerifier, challenge: codeChallenge } = await createPkcePair();
+
+    const authParams = new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      scope,
+      state,
+      code_challenge: codeChallenge,
+      code_challenge_method: "S256",
+    });
+    const popupUrl = `${authorization_endpoint}?${authParams.toString()}`;
 
     return await getCredentialsWithStatus<OAuth2Credentials>(
       {
         description: `SSA at ${this.workerOrigin}`,
         requestDescription: "login",
         get: async (signal, _immediate) => {
-          // For SSA, we do not support a silent/iframe flow; immediate just attempts a direct
-          // load of the authorization page and the worker may choose to complete without user
-          // interaction if a session is present.
           const abortController = new AbortController();
           signal = AbortSignal.any([abortController.signal, signal]);
           try {
             const popup = openPopupCentered(popupUrl, 450, 700);
             monitorAuthPopupWindow(popup, abortController);
-            const result = await raceWithAbort(
-              waitForPopupAuthMessage(this.workerOrigin, popup, abortController.signal),
+            const appOrigin = new URL(redirectUri).origin;
+            const { code, state: returnedState } = await raceWithAbort(
+              waitForOidcCodeMessage(appOrigin, popup, abortController.signal),
               signal,
             );
-            return {
-              tokenType: result.token_type,
-              accessToken: result.access_token,
-              email: result.email,
-            };
+            if (returnedState !== state) {
+              throw new Error("OIDC state mismatch detected");
+            }
+            // Exchange authorization code for tokens.
+            const tokenResp = await fetchOk(token_endpoint, {
+              method: "POST",
+              headers: { "content-type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({
+                grant_type: "authorization_code",
+                code,
+                redirect_uri: redirectUri,
+                client_id: clientId,
+                code_verifier: codeVerifier,
+              }),
+              signal,
+            });
+            const tokenJson = verifyObject(await tokenResp.json());
+            const access_token = verifyObjectProperty(tokenJson, "access_token", verifyString);
+            const token_type = verifyObjectProperty(tokenJson, "token_type", verifyString);
+            const email = verifyOptionalObjectProperty(tokenJson, "email", verifyString);
+            return { tokenType: token_type, accessToken: access_token, email };
           } finally {
             abortController.abort();
           }
