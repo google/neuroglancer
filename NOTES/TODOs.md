@@ -14,15 +14,16 @@
 - continue to study the segmentation compression, using it should greatly reduce the ram and indexDB usage, but it no easy integration of the hot chunk reloading in the frontend for drawing tool responsiveness has been found.
 - Fix the orientation of the disk in the brush tool
 - Add support for flood fill on different planes
-- look into the massive ram usage when a lot of voxel annotations are drawn
 - Add Uint64 support for annotation id
 -? Replace the current map settings to use the built-ins of neuroglancer (viewable under the datasource url), handle multimap with link choices, look into how to keep the init/creation logic.
 -? adapt the brush size to the zoom level linearly
 - Flood fill do not work at the bounds of the layer
 - need to fix this cache invalidation pipeline, it is not responsive enough
-- THERE MAY BE A CASE WHERE CHUNK GETS CORRUPTED/DELETED -> observed when drawing zoomed out with a big brush, previous drawing got erased but only their high resolution mipmap, the low resolution mipmap is still there.
-- save all the lod level in the zarr export
 - add a zarr import feature or even better design a dual source system, where you have the zarr source with most of the data and the indexedDB where the updates are stored, this would be an augmented version of the current localsource which would first look into the indexedDB and if not present, fetch the zarr source.
+- rework the ui (tabs)
+- add persistance to vox layer
+- add shortcuts for tools (switching tools, toogle erase mode and adjusting brush size) and label creation
+- add feedback for the user when the flood fill fails
 
 # Saving/importing/exporting
 

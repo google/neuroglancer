@@ -68,7 +68,8 @@
 }
 
 /* Status text can occupy a full line to improve readability */
-.neuroglancer-vox-row .neuroglancer-vox-status {
+.neuroglancer-vox-status {
+  display: block;
   flex: 1 1 100%;
   min-width: 100%;
   padding-top: 4px;

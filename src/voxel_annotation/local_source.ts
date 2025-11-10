@@ -1,12 +1,15 @@
 import { makeVoxChunkKey, parseVoxChunkKey } from "#src/voxel_annotation/base.js";
-import { SavedChunk, VoxSourceWriter } from "#src/voxel_annotation/index.js";
-import {
+import type { SavedChunk} from "#src/voxel_annotation/index.js";
+import { VoxSourceWriter ,
   compositeChunkDbKey,
   compositeLabelsDbKey,
   VoxSource,
 } from "#src/voxel_annotation/index.js";
-import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
-import { computeSteps } from "#src/voxel_annotation/map.js";
+import type {
+  VoxMapConfig} from "#src/voxel_annotation/map.js";
+import {
+  constructVoxMapConfig
+, computeSteps } from "#src/voxel_annotation/map.js";
 
 /**
  * Calculates the number of meaningful downsample passes for the worst case
@@ -285,17 +288,21 @@ export class LocalVoxSourceWriter extends VoxSourceWriter {
             (upper[2] | 0) - (lower[2] | 0),
           ];
           const steps = computeSteps(bounds, cds);
-          maps.push({
+          const map = constructVoxMapConfig({
             id,
             name: r?.name ?? id,
             baseVoxelOffset: new Float32Array(lower),
             upperVoxelBound: new Float32Array(upper),
             chunkDataSize: new Uint32Array(cds),
-            dataType: r.dataType,
-            scaleMeters: r.scaleMeters,
-            unit: r.unit,
-            steps,
+            dataType: Number(r.dataType),
+            scaleMeters: Array.from(r.scaleMeters ?? [1,1,1]),
+            unit: String(r.unit),
+            steps: Array.isArray(r?.steps) ? r.steps : steps,
+            serverUrl: r?.serverUrl,
+            token: r?.token,
+            importUrl: r?.importUrl,
           });
+          maps.push(map);
         } catch {
           // skip malformed
         }

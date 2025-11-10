@@ -4,6 +4,7 @@ import { VoxSourceWriter } from "#src/voxel_annotation/index.js";
 import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
 import { computeSteps } from "#src/voxel_annotation/map.js";
 
+// OBSOLETE DO NOT USE THIS CLASS
 export class RemoteVoxSource extends VoxSourceWriter {
   async listMaps(): Promise<VoxMapConfig[]> {
     try {
