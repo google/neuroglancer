@@ -15,7 +15,7 @@ import {
   VOX_COMMIT_VOXELS_RPC_ID,
   VOX_MAP_INIT_RPC_ID,
   VOX_LABELS_GET_RPC_ID,
-  VOX_LABELS_SET_RPC_ID,
+  VOX_LABELS_ADD_RPC_ID,
 } from "#src/voxel_annotation/base.js";
 import { registerSharedObjectOwner } from "#src/worker_rpc.js";
 
@@ -99,12 +99,13 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     }
   }
 
-  setLabelIds(ids: number[]) {
-    try {
-      this.rpc!.invoke(VOX_LABELS_SET_RPC_ID, { id: this.rpcId, ids });
-    } catch {
-      // ignore
-    }
+
+  async addLabel(value: number): Promise<number[]> {
+    // Do not swallow errors; caller should display them to the user and avoid UI updates on failure.
+    return await this.rpc!.promiseInvoke<number[]>(VOX_LABELS_ADD_RPC_ID, {
+      rpcId: this.rpcId,
+      value,
+    });
   }
 
   private scheduleUpdate(key: string) {

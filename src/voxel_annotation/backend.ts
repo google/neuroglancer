@@ -11,7 +11,7 @@ import {
   VOX_COMMIT_VOXELS_RPC_ID,
   VOX_MAP_INIT_RPC_ID,
   VOX_LABELS_GET_RPC_ID,
-  VOX_LABELS_SET_RPC_ID,
+  VOX_LABELS_ADD_RPC_ID,
 } from "#src/voxel_annotation/base.js";
 import type { VoxMapInitOptions } from "#src/voxel_annotation/index.js";
 import { LocalVoxSource, RemoteVoxSource, toScaleKey } from "#src/voxel_annotation/index.js";
@@ -187,7 +187,9 @@ registerPromiseRPC<number[]>(
   },
 );
 
-registerRPC(VOX_LABELS_SET_RPC_ID, function (x: any) {
-  const obj = this.get(x.id) as VoxChunkSource;
-  obj.source.setLabelIds(Array.isArray(x?.ids) ? x.ids : []);
+
+registerPromiseRPC<number[]>(VOX_LABELS_ADD_RPC_ID, async function (x: any) {
+  const obj = this.get(x.rpcId) as VoxChunkSource;
+  const ids = await obj.source.addLabel(x?.value >>> 0);
+  return { value: ids };
 });

@@ -126,12 +126,10 @@ export class VoxelEditController {
     }
   }
 
-  setLabelIds(ids: number[]) {
-    try {
-      const source = this.getSource();
-      source?.setLabelIds(ids);
-    } catch {
-      // ignore
-    }
+
+  async addLabel(value: number): Promise<number[]> {
+    const source = this.getSource();
+    if (!source) throw new Error("Voxel source not ready");
+    return await source.addLabel(value >>> 0);
   }
 }

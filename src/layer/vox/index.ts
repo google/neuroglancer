@@ -180,6 +180,7 @@ class VoxToolTab extends Tab {
     this.renderLabels();
   }
   private labelsContainer!: HTMLDivElement;
+  private labelsError!: HTMLDivElement;
   private renderLabels() {
     const cont = this.labelsContainer;
     cont.innerHTML = "";
@@ -222,6 +223,15 @@ class VoxToolTab extends Tab {
         this.renderLabels();
       });
       cont.appendChild(row);
+    }
+    // Update error message area
+    const err = this.layer.voxLabelsError;
+    if (err && err.length > 0) {
+      this.labelsError.textContent = err;
+      this.labelsError.style.display = "block";
+    } else {
+      this.labelsError.textContent = "";
+      this.labelsError.style.display = "none";
     }
   }
   constructor(public layer: VoxUserLayer) {
@@ -398,9 +408,17 @@ class VoxToolTab extends Tab {
     this.labelsContainer.style.maxHeight = "180px";
     this.labelsContainer.style.overflowY = "auto";
 
+    this.labelsError = document.createElement("div");
+    this.labelsError.className = "neuroglancer-vox-labels-error";
+    this.labelsError.style.color = "#b00020"; // Material red 700-ish
+    this.labelsError.style.fontSize = "12px";
+    this.labelsError.style.whiteSpace = "pre-wrap";
+    this.labelsError.style.display = "none";
+
     labelsSection.appendChild(labelsTitle);
     labelsSection.appendChild(buttonsRow);
     labelsSection.appendChild(this.labelsContainer);
+    labelsSection.appendChild(this.labelsError);
 
     toolbox.appendChild(labelsSection);
 
@@ -417,6 +435,9 @@ export class VoxUserLayer extends UserLayer {
   // Label state for painting: only store ids; colors are hashed from id on the fly
   voxLabels: { id: number }[] = [];
   voxSelectedLabelId: number | undefined = undefined;
+  voxLabelsError: string | undefined = undefined;
+  // Indicates whether an initial labels load attempt has completed.
+  private voxLabelsInitialized: boolean = false;
   segmentColorHash = SegmentColorHash.getDefault();
   // Match Image/Segmentation layers: provide a per-layer cross-section render scale target/histogram.
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
@@ -472,40 +493,31 @@ export class VoxUserLayer extends UserLayer {
   }
 
   // --- Labels persistence (via VoxSource) ---
-  private async saveLabels() {
-    try {
-      const ids = this.voxLabels.map((l) => l.id >>> 0);
-      await this.voxEditController?.setLabelIds(ids);
-    } catch {
-      // ignore persistence failures
-    }
-  }
   private async loadLabels() {
     try {
       const arr = await this.voxEditController?.getLabelIds();
-      const existing = new Set(this.voxLabels.map((l) => l.id >>> 0));
-      if (arr && Array.isArray(arr) && arr.length > 0) {
-        // Merge previously created labels (before init) with stored ones.
-        const mergedIds = new Set<number>(arr.map((id) => id >>> 0));
-        for (const id of existing) mergedIds.add(id);
-        this.voxLabels = Array.from(mergedIds).map((id) => ({ id }));
-        // Ensure selected label is valid
-        const sel = this.voxSelectedLabelId;
-        if (!sel || !this.voxLabels.some((l) => l.id === sel)) {
-          this.voxSelectedLabelId = this.voxLabels[0].id;
+      if (arr && Array.isArray(arr)) {
+        if (arr.length > 0) {
+          this.voxLabels = arr.map((id) => ({ id: id >>> 0 }));
+          const sel = this.voxSelectedLabelId;
+          if (!sel || !this.voxLabels.some((l) => l.id === sel)) {
+            this.voxSelectedLabelId = this.voxLabels[0].id;
+          }
+        } else {
+          this.voxLabels = [];
+          this.voxSelectedLabelId = undefined;
         }
-        // Write back merged set to keep in sync.
-        await this.saveLabels();
       } else {
-        // Nothing stored: if any labels were created pre-init, persist them; otherwise, create one.
-        if (this.voxLabels.length === 0) this.ensureDefaultLabel();
-        await this.saveLabels();
+        throw new Error("Invalid labels response");
       }
-    } catch {
-      // Fallback to default if load fails
-      if (this.voxLabels.length === 0) this.ensureDefaultLabel();
+    } catch (e: any) {
+      const msg = `Failed to load labels: ${e?.message || e}`;
+      console.error(msg);
+      this.voxLabelsError = msg;
+      // Do NOT create a default label on error.
     } finally {
-      // Ensure UI reflects the loaded/merged labels.
+      // Mark labels as initialized; UI/painting should not trigger default creation before this point.
+      this.voxLabelsInitialized = true;
       try {
         this.onLabelsChanged?.();
       } catch {
@@ -514,27 +526,35 @@ export class VoxUserLayer extends UserLayer {
     }
   }
 
-  ensureDefaultLabel() {
-    if (this.voxLabels.length > 0) return;
-    this.createVoxLabel();
-  }
   async createVoxLabel() {
     const id = this.genId(); // unique uint32
-    this.voxLabels.push({ id });
-    this.voxSelectedLabelId = id;
-    // Persist immediately once the source/controller is available.
-    if (this.voxEditController) {
+    if (!this.voxEditController) {
+      const msg = "Labels backend not ready; please try again after source initializes.";
+      console.error(msg);
+      this.voxLabelsError = msg;
+      return;
+    }
+    try {
+      const updated = await this.voxEditController.addLabel(id);
+      this.voxLabels = updated.map((x) => ({ id: x >>> 0 }));
+      // Prefer to select the last label from the updated list (likely the one just added).
+      const last = this.voxLabels[this.voxLabels.length - 1]?.id;
+      this.voxSelectedLabelId = last ?? id;
+      this.voxLabelsError = undefined;
       try {
-        await this.saveLabels();
+        this.onLabelsChanged?.();
       } catch {
         /* ignore */
       }
-    }
-    // Notify UI to re-render labels list whenever a label is created.
-    try {
-      this.onLabelsChanged?.();
-    } catch {
-      /* ignore */
+    } catch (e: any) {
+      const msg = `Failed to create label: ${e?.message || e}`;
+      console.error(msg);
+      this.voxLabelsError = msg;
+      try {
+        this.onLabelsChanged?.();
+      } catch {
+        /* ignore */
+      }
     }
   }
   selectVoxLabel(id: number) {
@@ -543,7 +563,12 @@ export class VoxUserLayer extends UserLayer {
   }
   getCurrentLabelValue(): number {
     if (this.voxEraseMode) return 0;
-    if (!this.voxSelectedLabelId) this.ensureDefaultLabel();
+    // Avoid triggering default creation during initialization.
+    if (!this.voxLabelsInitialized) return 0;
+    // Ensure we have a valid selection if labels exist.
+    if (!this.voxSelectedLabelId && this.voxLabels.length > 0) {
+      this.voxSelectedLabelId = this.voxLabels[0].id;
+    }
     const cur =
       this.voxLabels.find((l) => l.id === this.voxSelectedLabelId) ||
       this.voxLabels[0];

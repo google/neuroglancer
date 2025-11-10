@@ -1,10 +1,15 @@
 # TODO List
 
+- Add redundancy to avoid corrupt/unsaved chunks on the remote
+- Test token authentication
+- Try to import pre-computed segmentation (in zarr format) into the remote server
 - continue to study the segmentation compression, using it should greatly reduce the ram and indexDB usage, but it no easy integration of the hot chunk reloading in the frontend for drawing tool responsiveness has been found.
 - add flood fill tool (with a max expansion safeguard), this tool should be 2d (e.g. act on a plane, the plane normal to the z axis is sufficient for a v1)
 - Fix the orientation of the disk in the brush tool
 - the uncaching of chunks the VoxSource is working great, but since it has no way of knowing which chunks are in view, it will delete them, causing flickering of the drawings.
+- look into the massive ram usage when a lot of voxel annotations are drawn
 - Add Uint64 support for annotation id
+- LOD
 
 # Saving/importing/exporting
 

@@ -67,8 +67,9 @@ export abstract class VoxSource {
   async getLabelIds(): Promise<number[]> {
     return [];
   }
-  async setLabelIds(_ids: number[]): Promise<void> {
-    /* no-op */
+  async addLabel(_value: number): Promise<number[]> {
+    // Default: pretend success with no labels
+    return [];
   }
 
   init(_opts: VoxMapInitOptions): Promise<{ mapId: string; scaleKey: string }> {
@@ -183,18 +184,18 @@ export class LocalVoxSource extends VoxSource {
     }
   }
 
-  override async setLabelIds(ids: number[]): Promise<void> {
-    try {
-      const db = await this.getDb();
-      const tx = db.transaction("labels", "readwrite");
-      const store = tx.objectStore("labels");
-      const key = compositeLabelsDbKey(this.mapId, this.scaleKey);
-      const payload = ids.map((v) => v >>> 0);
-      await idbPut(store, payload, key);
-      await txDone(tx);
-    } catch {
-      // ignore
-    }
+
+  override async addLabel(value: number): Promise<number[]> {
+    const v = value >>> 0;
+    const db = await this.getDb();
+    const key = compositeLabelsDbKey(this.mapId, this.scaleKey);
+    const arr = (await idbGet<number[]>(db, "labels", key)) || [];
+    // Ensure uniqueness
+    if (!arr.some((x) => (x >>> 0) === v)) arr.push(v);
+    const tx = db.transaction("labels", "readwrite");
+    await idbPut(tx.objectStore("labels"), arr.map((x) => x >>> 0), key);
+    await txDone(tx);
+    return arr.map((x) => x >>> 0);
   }
 
   private touch(key: string) {
@@ -510,12 +511,41 @@ export class RemoteVoxSource extends VoxSource {
     if (!res.ok) throw new Error(`PUT ${url} -> ${res.status}`);
   }
 
-  // Keep labels local (in-memory) unless remote endpoints are added later
+  private async httpGetJson(url: string): Promise<any> {
+    const res = await fetch(url, { method: "GET", credentials: "omit" });
+    if (!res.ok) throw new Error(`GET ${url} -> ${res.status}`);
+    return await res.json();
+  }
+
+  private async httpPutJson(url: string, body: any): Promise<any> {
+    const res = await fetch(url, {
+      method: "PUT",
+      body: typeof body === "string" ? body : JSON.stringify(body),
+      headers: { "Content-Type": "application/json" },
+      credentials: "omit",
+    });
+    if (!res.ok) throw new Error(`PUT ${url} -> ${res.status}`);
+    return await res.json();
+  }
+
+  // --- Labels via remote server endpoints ---
   override async getLabelIds(): Promise<number[]> {
+    const qs = this.qs({ mapId: this.mapId });
+    const json = await this.httpGetJson(`${this.baseUrl}/labels${qs}`);
+    const arr = Array.isArray(json?.labels) ? json.labels : [];
+    this.labelsCache = arr.map((v: any) => (v as number) >>> 0);
     return Array.from(this.labelsCache);
   }
-  override async setLabelIds(ids: number[]): Promise<void> {
-    this.labelsCache = ids.map((v) => v >>> 0);
+
+
+  override async addLabel(value: number): Promise<number[]> {
+    const v = value >>> 0;
+    // If dtype is UINT64 we still send a 32-bit value; server must accept as valid subset. -> TODO: no
+    const qs = this.qs({ mapId: this.mapId });
+    const json = await this.httpPutJson(`${this.baseUrl}/labels${qs}`, { value: v });
+    const arr = Array.isArray(json?.labels) ? json.labels : [];
+    this.labelsCache = arr.map((x: any) => (x as number) >>> 0);
+    return Array.from(this.labelsCache);
   }
 
   // LRU-style cap similar to LocalVoxSource
