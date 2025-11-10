@@ -15,6 +15,7 @@
  */
 
 import type { Chunk } from "#src/chunk_manager/backend.js";
+import { ChunkState } from "#src/chunk_manager/base.js";
 import {
   SliceViewChunk,
   SliceViewChunkSourceBackend,
@@ -27,6 +28,8 @@ import type {
   VolumeChunkSource as VolumeChunkSourceInterface,
   VolumeChunkSpecification,
 } from "#src/sliceview/volume/base.js";
+import type { TypedArray } from "#src/util/array.js";
+import { DATA_TYPE_ARRAY_CONSTRUCTOR } from "#src/util/data_type.js";
 import type { vec3 } from "#src/util/geom.js";
 import * as vector from "#src/util/vector.js";
 import type { RPC } from "#src/worker_rpc.js";
@@ -154,6 +157,53 @@ export class VolumeChunkSource
 
   computeChunkBounds(chunk: VolumeChunk) {
     return computeChunkBounds(this, chunk);
+  }
+
+  // Override in data source backends to actually persist the chunk.
+  // Default throws to ensure write capability is explicitly implemented.
+  async writeChunk(_chunk: VolumeChunk): Promise<void> {
+    throw new Error("VolumeChunkSource.writeChunk not implemented for this datasource");
+  }
+
+  async applyEdits(chunkKey: string, indices: ArrayLike<number>, values: ArrayLike<number>): Promise<void> {
+    if (indices.length !== values.length) {
+      throw new Error("applyEdits: indices and values length mismatch");
+    }
+    const chunkGridPosition = new Float32Array(chunkKey.split(',').map(Number));
+    if (chunkGridPosition.length !== this.spec.rank || chunkGridPosition.some((v) => !Number.isFinite(v))) {
+      throw new Error(`applyEdits: invalid chunk key ${chunkKey}`);
+    }
+    const chunk = this.getChunk(chunkGridPosition) as unknown as VolumeChunk;
+
+    // Ensure chunk data is available in system memory
+    if (chunk.state > ChunkState.SYSTEM_MEMORY_WORKER) {
+      const ac = new AbortController();
+      await this.download(chunk, ac.signal);
+    }
+    if (!chunk.data) {
+      // If chunk.data is null, the chunk does not exist at the source or was evicted.
+      // Create a new, zero-filled chunk to apply the edits to.
+      if (!chunk.chunkDataSize) {
+        this.computeChunkBounds(chunk); // Ensure chunkDataSize is computed
+      }
+      if (!chunk.chunkDataSize) {
+        throw new Error(`applyEdits: Cannot create new chunk ${chunkKey} because its size is unknown.`);
+      }
+      const numElements = chunk.chunkDataSize.reduce((a, b) => a * b, 1);
+      const Ctor = DATA_TYPE_ARRAY_CONSTRUCTOR[this.spec.dataType];
+      chunk.data = new (Ctor as any)(numElements);
+      // The new TypedArray is already zero-filled.
+    }
+    const data = (chunk.data as unknown) as TypedArray;
+    for (let i = 0; i < indices.length; ++i) {
+      const idx = indices[i]!;
+      const val = values[i]!;
+      if (idx < 0 || idx >= data.length) {
+        throw new Error(`applyEdits: index ${idx} out of bounds for chunk ${chunkKey}`);
+      }
+      (data as any)[idx] = val; // TypedArray index assignment
+    }
+    await this.writeChunk(chunk);
   }
 }
 VolumeChunkSource.prototype.chunkConstructor = VolumeChunk;

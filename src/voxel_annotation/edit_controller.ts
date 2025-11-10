@@ -11,6 +11,8 @@ import {
   VOX_EDIT_LABELS_ADD_RPC_ID,
   VOX_EDIT_LABELS_GET_RPC_ID,
   VOX_RELOAD_CHUNKS_RPC_ID,
+  makeVoxChunkKey,
+  parseVoxChunkKey,
 } from "#src/voxel_annotation/base.js";
 import {
   registerRPC,
@@ -26,7 +28,26 @@ export class VoxelEditController extends SharedObject {
     if (!rpc) {
       throw new Error("VoxelEditController: Missing RPC from multiscale chunk manager.");
     }
-    this.initializeCounterpart(rpc, {});
+
+    // Get all sources for all scales and orientations
+    const sourcesByScale = this.multiscale.getSources(this.getIdentitySliceViewSourceOptions());
+    const sources = sourcesByScale[0];
+    if (!sources) {
+      throw new Error("VoxelEditController: Could not retrieve sources from multiscale object.");
+    }
+
+    const sourceMap: { [key: number]: number } = {};
+    for (let i = 0; i < sources.length; ++i) {
+      const source = sources[i]!.chunkSource;
+      const lodFactor = 1 << i; // LOD factor is 2^i
+      const rpcId = source.rpcId;
+      if (rpcId == null) {
+        throw new Error(`VoxelEditController: Source at LOD index ${i} has null rpcId during initialization.`);
+      }
+      sourceMap[lodFactor] = rpcId;
+    }
+
+    this.initializeCounterpart(rpc, { sources: sourceMap });
   }
   private static readonly qualityFactor = 16.0;
   private static readonly restrictToMinLOD = true;
@@ -174,16 +195,18 @@ export class VoxelEditController extends SharedObject {
     }
 
     if (!voxelsToPaint || voxelsToPaint.length === 0) return;
-    const editsByChunk = new Map<string, { indices: number[], value: number }>();
+    const editsByVoxKey = new Map<string, { indices: number[], value: number }>();
 
+    const lodFactor = 1 << sourceIndex;
     for (const voxelCoord of voxelsToPaint) {
       const { chunkGridPosition, positionWithinChunk } = source.computeChunkIndices(voxelCoord);
-      const key = chunkGridPosition.join();
+      const chunkKey = chunkGridPosition.join();
+      const voxKey = makeVoxChunkKey(chunkKey, lodFactor);
 
-      let entry = editsByChunk.get(key);
+      let entry = editsByVoxKey.get(voxKey);
       if (!entry) {
         entry = { indices: [], value };
-        editsByChunk.set(key, entry);
+        editsByVoxKey.set(voxKey, entry);
       }
 
       const { chunkDataSize } = source.spec;
@@ -191,18 +214,21 @@ export class VoxelEditController extends SharedObject {
       entry.indices.push(index);
     }
 
-    source.applyLocalEdits(editsByChunk);
+    // Apply edits locally on the specific source for immediate feedback.
+    const localEdits = new Map<string, {indices: number[], value: number}>();
+    for (const [voxKey, edit] of editsByVoxKey.entries()) {
+      const parsed = parseVoxChunkKey(voxKey);
+      if (!parsed) continue;
+      localEdits.set(parsed.chunkKey, edit);
+    }
+    source.applyLocalEdits(localEdits);
 
-    const backendEdits = [];
-    for (const [key, edit] of editsByChunk.entries()) {
-      backendEdits.push({ key, indices: edit.indices, value: edit.value });
+    const backendEdits = [] as { key: string; indices: number[]; value: number }[];
+    for (const [voxKey, edit] of editsByVoxKey.entries()) {
+      backendEdits.push({ key: voxKey, indices: edit.indices, value: edit.value });
     }
 
-    if (!this.rpc) throw new Error("VoxelEditController.paintBrushWithShape: RPC not initialized.");
-    this.rpc.invoke(VOX_EDIT_COMMIT_VOXELS_RPC_ID, {
-      rpcId: this.rpcId,
-      edits: backendEdits,
-    });
+    this.commitEdits(backendEdits);
   }
 
   async getLabelIds(): Promise<number[]> {
@@ -412,35 +438,71 @@ export class VoxelEditController extends SharedObject {
       }
     }
 
-    const editsByChunk = new Map<string, { indices: number[], value: number }>();
+    const editsByVoxKey = new Map<string, { indices: number[], value: number }>();
+    const lodFactor = 1 << sourceIndex;
     for (const voxelCoord of voxelsToFill) {
       const { chunkGridPosition, positionWithinChunk } = source.computeChunkIndices(voxelCoord);
-      const key = chunkGridPosition.join();
+      const chunkKey = chunkGridPosition.join();
+      const voxKey = makeVoxChunkKey(chunkKey, lodFactor);
 
-      let entry = editsByChunk.get(key);
+      let entry = editsByVoxKey.get(voxKey);
       if (!entry) {
         entry = { indices: [], value: fillValue };
-        editsByChunk.set(key, entry);
+        editsByVoxKey.set(voxKey, entry);
       }
       const { chunkDataSize } = source.spec;
       const index = (positionWithinChunk[2] * chunkDataSize[1] + positionWithinChunk[1]) * chunkDataSize[0] + positionWithinChunk[0];
       entry.indices.push(index);
     }
 
-    // Apply edits locally for preview.
-    source.applyLocalEdits(editsByChunk);
-
-    // Prepare edits for the backend.
-    const backendEdits: { key: string; indices: number[]; value: number }[] = [];
-    for (const [key, edit] of editsByChunk.entries()) {
-      backendEdits.push({ key, indices: edit.indices, value: edit.value });
+    // Apply edits locally for preview on this source.
+    const localEdits = new Map<string, {indices: number[], value: number}>();
+    for (const [voxKey, edit] of editsByVoxKey.entries()) {
+      const parsed = parseVoxChunkKey(voxKey);
+      if (!parsed) continue;
+      localEdits.set(parsed.chunkKey, edit);
     }
+    source.applyLocalEdits(localEdits);
+
+    // Prepare edits for the backend keyed by voxKey.
+    const backendEdits: { key: string; indices: number[]; value: number }[] = [];
+    for (const [voxKey, edit] of editsByVoxKey.entries()) {
+      backendEdits.push({ key: voxKey, indices: edit.indices, value: edit.value });
+    }
+
+    this.commitEdits(backendEdits);
 
     return { edits: backendEdits, filledCount, originalValue: originalValue >>> 0 };
   }
 
-  callChunkReload(_voxChunkKeys: string[]) {
-    /// TODO
+  callChunkReload(voxChunkKeys: string[]) {
+    if (!Array.isArray(voxChunkKeys) || voxChunkKeys.length === 0) return;
+    // This assumes the multiscale source has a single orientation.
+    const sourcesByScale = (this.multiscale as any).getSources(this.getIdentitySliceViewSourceOptions());
+    const sources = sourcesByScale && sourcesByScale[0];
+    if (!sources) return;
+
+    const chunksToInvalidateBySource = new Map<VolumeChunkSource, string[]>();
+
+    for (const voxKey of voxChunkKeys) {
+      const parsed = parseVoxChunkKey(voxKey);
+      if (!parsed) continue;
+      const lodIndex = Math.log2(parsed.lod);
+      const source = sources[lodIndex]?.chunkSource as VolumeChunkSource | undefined;
+      if (!source) continue;
+      let arr = chunksToInvalidateBySource.get(source);
+      if (!arr) {
+        arr = [];
+        chunksToInvalidateBySource.set(source, arr);
+      }
+      arr.push(parsed.chunkKey);
+    }
+
+    for (const [source, keys] of chunksToInvalidateBySource.entries()) {
+      if (keys.length > 0) {
+        source.invalidateChunks(keys);
+      }
+    }
   }
 }
 

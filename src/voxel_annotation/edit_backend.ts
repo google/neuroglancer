@@ -20,7 +20,7 @@ import { SharedObject , registerPromiseRPC, registerRPC, registerSharedObject, i
 
 @registerSharedObject(VOX_EDIT_BACKEND_RPC_ID)
 export class VoxelEditController extends SharedObject {
-  private source?: VolumeChunkSource;
+  private sources = new Map<number, VolumeChunkSource>();
 
   // Short debounce to coalesce rapid edits coming from tools.
   private pendingEdits: {
@@ -43,16 +43,83 @@ export class VoxelEditController extends SharedObject {
     // Initialize as a counterpart in the worker so RPC references are valid.
     // This registers the object under the provided rpc/id and sets up ref counting.
     initializeSharedObjectCounterpart(this, rpc, options);
+
+    const passedSources = options?.sources;
+    if (passedSources === undefined || typeof passedSources !== 'object') {
+      throw new Error("VoxelEditBackend: missing required 'sources' map during initialization");
+    }
+
+    for (const lodFactorStr in passedSources) {
+      const lodFactor = Number(lodFactorStr);
+      const sourceId = passedSources[lodFactorStr];
+      const resolved = rpc.get(sourceId) as VolumeChunkSource | undefined;
+      if (!resolved) {
+        throw new Error(`VoxelEditBackend: failed to resolve VolumeChunkSource for LOD factor ${lodFactor}`);
+      }
+      this.sources.set(lodFactor, resolved);
+    }
   }
 
   private async flushPending(): Promise<void> {
-    const src = this.source;
-    if (!src) throw new Error("VoxEditBackend.flushPending: source not initialized");
     const edits = this.pendingEdits;
     this.pendingEdits = [];
     this.commitDebounceTimer = undefined;
     if (edits.length === 0) return;
-    // await src.applyEdits(edits); TODO: add writting capability to VolumeChunkSource
+
+    // 1. Group edits by vox chunk key (includes LOD).
+    const editsByVoxKey = new Map<string, { indices: number[]; values: number[] }>();
+    for (const edit of edits) {
+      if (!editsByVoxKey.has(edit.key)) {
+        editsByVoxKey.set(edit.key, { indices: [], values: [] });
+      }
+      const entry = editsByVoxKey.get(edit.key)!;
+      if (edit.values) {
+        const vals = Array.from(edit.values);
+        if (vals.length !== edit.indices.length) {
+          throw new Error("flushPending: values length mismatch with indices");
+        }
+        for (let i = 0; i < edit.indices.length; ++i) {
+          entry.indices.push(Number(edit.indices[i]!));
+          entry.values.push(Number(vals[i]!));
+        }
+      } else if (edit.value !== undefined) {
+        const inds = edit.indices as ArrayLike<number>;
+        for (let i = 0; i < inds.length; ++i) {
+          const index = inds[i]!;
+          entry.indices.push(Number(index));
+          entry.values.push(Number(edit.value));
+        }
+      } else {
+        throw new Error("flushPending: edit missing value(s)");
+      }
+    }
+
+    // 2. For each modified vox chunk, apply edits via the correct source and record vox keys to reload.
+    const touchedVoxChunkKeys: string[] = [];
+    for (const [voxKey, chunkEdits] of editsByVoxKey.entries()) {
+      try {
+        const parsedKey = parseVoxChunkKey(voxKey);
+        if (!parsedKey) {
+          console.error(`flushPending: Failed to parse vox chunk key: ${voxKey}`);
+          continue;
+        }
+        const source = this.sources.get(parsedKey.lod);
+        if (!source) {
+          console.error(`flushPending: No source found for LOD factor ${parsedKey.lod}`);
+          continue;
+        }
+        await (source as any).applyEdits(parsedKey.chunkKey, chunkEdits.indices, chunkEdits.values);
+        touchedVoxChunkKeys.push(voxKey);
+      } catch (e) {
+        console.error(`Failed to write chunk ${voxKey}:`, e);
+      }
+    }
+
+    // 3. Invalidate frontend caches for the modified chunks.
+    if (touchedVoxChunkKeys.length > 0) {
+      this.callChunkReload(touchedVoxChunkKeys);
+    }
+
     // After base edits, enqueue downsampling for affected chunks (do not await here).
     const touched = new Set<string>();
     for (const e of edits) touched.add(e.key);
@@ -70,7 +137,6 @@ export class VoxelEditController extends SharedObject {
       size?: number[];
     }[],
   ) {
-    if (!this.source) return;//throw new Error("VoxEditBackend.commitVoxels: source not initialized");
     for (const e of edits) {
       if (!e || !e.key || !e.indices) {
         throw new Error("VoxEditBackend.commitVoxels: invalid edit payload");
@@ -82,15 +148,13 @@ export class VoxelEditController extends SharedObject {
   }
 
   async getLabelIds(): Promise<number[]> {
-    const src = this.source;
-    if (!src) throw new Error("VoxEditBackend.getLabelIds: source not initialized");
-    return [] // await src.getLabelIds();
+    // Label operations not yet implemented for multiscale edit backend.
+    return [];
   }
 
   async addLabel(_value: number): Promise<number[]> {
-    const src = this.source;
-    if (!src) throw new Error("VoxEditBackend.addLabel: source not initialized");
-    return [] // await src.addLabel(value >>> 0);
+    // Label operations not yet implemented for multiscale edit backend.
+    return [];
   }
 
   callChunkReload(voxChunkKeys: string[]){
@@ -116,8 +180,6 @@ export class VoxelEditController extends SharedObject {
   }
 
   private async performDownsampleCascadeForKey(sourceKey: string): Promise<void> {
-    const src = this.source;
-    if (!src) return;
     const chunkSize = 64;
     const maxPasses = this.calculateDownsamplePasses(chunkSize);
     const maxLOD = 256;
@@ -182,10 +244,11 @@ export class VoxelEditController extends SharedObject {
   }
 
   private async downsampleStep(sourceKey: string): Promise<string | null> {
-    const src = this.source;
-    if (!src) return null;
     const info = parseVoxChunkKey(sourceKey);
     if (info === null) return null;
+
+    const src = this.sources.get(info.lod);
+    if (!src) return null;
 
     const sourceChunk = src.getChunk(
       new Float32Array([info.x, info.y, info.z]),
@@ -196,15 +259,15 @@ export class VoxelEditController extends SharedObject {
     if (targetKey === null) return null;
 
     // Prepare indices and values to write into the target chunk
-    const chunkW = sourceChunk.size[0] / 2; // target subregion width
-    const chunkH = sourceChunk.size[1] / 2;
-    const chunkD = sourceChunk.size[2] / 2;
+    const chunkW = sourceChunk.chunkDataSize[0] / 2; // target subregion width
+    const chunkH = sourceChunk.chunkDataSize[1] / 2;
+    const chunkD = sourceChunk.chunkDataSize[2] / 2;
     const offsetX = (info.x % 2) * chunkW;
     const offsetY = (info.y % 2) * chunkH;
     const offsetZ = (info.z % 2) * chunkD;
 
-    const targetSizeX = 1// cfg.chunkDataSize[0];
-    const targetSizeY =1 // cfg.chunkDataSize[1];
+    const targetSizeX = 1; // TODO: compute from parent spec if needed
+    const targetSizeY = 1;
 
     const indices: number[] = [];
     const values: number[] = [];
@@ -215,9 +278,9 @@ export class VoxelEditController extends SharedObject {
           const sx = x * 2;
           const sy = y * 2;
           const sz = z * 2;
-          const base = sz * (sourceChunk.size[0] * sourceChunk.size[1]) + sy * sourceChunk.size[0] + sx;
-          const row = sourceChunk.size[0];
-          const plane = sourceChunk.size[0] * sourceChunk.size[1];
+          const base = sz * (sourceChunk.chunkDataSize[0] * sourceChunk.chunkDataSize[1]) + sy * sourceChunk.chunkDataSize[0] + sx;
+          const row = sourceChunk.chunkDataSize[0];
+          const plane = sourceChunk.chunkDataSize[0] * sourceChunk.chunkDataSize[1];
           // Gather 8 voxels from source
           const v000 = Number((sourceChunk.data as any)[base]);
           const v100 = Number((sourceChunk.data as any)[base + 1]);
@@ -240,9 +303,17 @@ export class VoxelEditController extends SharedObject {
     }
 
     if (indices.length > 0) {
-      //await src.applyEdits([
-      //  { key: targetKey, indices, values },
-      //]);
+      const targetInfo = parseVoxChunkKey(targetKey);
+      if (targetInfo) {
+        const targetSrc = this.sources.get(targetInfo.lod);
+        if (targetSrc) {
+          await (targetSrc as any).applyEdits(targetInfo.chunkKey, indices, values);
+          // Notify frontend to reload the target parent chunk at its LOD.
+          this.callChunkReload([targetKey]);
+        } else {
+          console.error(`Downsampling failed: could not find target source for LOD ${targetInfo.lod}`);
+        }
+      }
     }
 
     return targetKey;

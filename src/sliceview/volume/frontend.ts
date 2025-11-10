@@ -25,7 +25,6 @@ import { encodeChannel as encodeChannelUint32 } from "#src/sliceview/compressed_
 import { encodeChannel as encodeChannelUint64 } from "#src/sliceview/compressed_segmentation/encode_uint64.js";
 import type { SliceViewChunk } from "#src/sliceview/frontend.js";
 import { MultiscaleSliceViewChunkSource, SliceViewChunkSource } from "#src/sliceview/frontend.js";
-import { getChunkFormatHandler } from "#src/sliceview/volume/registry.js";
 import { ChunkFormat as UncompressedChunkFormat } from "#src/sliceview/uncompressed_chunk_format.js";
 import type {
   VolumeChunkSource as VolumeChunkSourceInterface,
@@ -34,6 +33,7 @@ import type {
   VolumeType
 } from "#src/sliceview/volume/base.js";
 import { VolumeChunk } from "#src/sliceview/volume/chunk.js";
+import { getChunkFormatHandler } from "#src/sliceview/volume/registry.js";
 import type { TypedArray} from "#src/util/array.js";
 import { TypedArrayBuilder } from "#src/util/array.js";
 import { DataType as DataTypeUtil } from "#src/util/data_type.js";

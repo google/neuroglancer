@@ -34,6 +34,7 @@ import { postProcessRawData } from "#src/sliceview/backend_chunk_decoders/postpr
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
+import { encodeArray } from "#src/datasource/zarr/codec/encode.js";
 
 @registerSharedObject()
 export class ZarrVolumeChunkSource extends WithParameters(
@@ -96,5 +97,61 @@ export class ZarrVolumeChunkSource extends WithParameters(
       );
       await postProcessRawData(chunk, signal, decoded);
     }
+  }
+
+  async writeChunk(chunk: VolumeChunk): Promise<void> {
+    const { kvStore, getChunkKey, decodeCodecs } = this.chunkKvStore as any;
+    if (!kvStore.write) {
+      throw new Error("ZarrVolumeChunkSource.writeChunk: underlying kvStore is not writable");
+    }
+    if (!chunk.data) {
+      throw new Error("ZarrVolumeChunkSource.writeChunk: missing chunk.data");
+    }
+    // Encode using the same codecs chain that was used to decode, but in reverse; our minimal
+    // encodeArray currently only supports raw 'bytes'.
+    const encoded = await encodeArray(decodeCodecs, chunk.data as ArrayBufferView<ArrayBufferLike>, new AbortController().signal);
+
+    // Compute base key same as in download.
+    const { parameters } = this;
+    const { chunkGridPosition } = chunk;
+    const { metadata } = parameters;
+    let baseKey = "";
+    const rank = this.spec.rank;
+    const { physicalToLogicalDimension } = metadata.codecs.layoutInfo[0];
+    let sep: string;
+    if (metadata.chunkKeyEncoding === ChunkKeyEncoding.DEFAULT) {
+      baseKey += "c";
+      sep = metadata.dimensionSeparator;
+    } else {
+      sep = "";
+      if (rank === 0) {
+        baseKey += "0";
+      }
+    }
+    const keyCoords = new Array<number>(rank);
+    const { readChunkShape } = metadata.codecs.layoutInfo[0];
+    const { chunkShape } = metadata;
+    for (
+      let fOrderPhysicalDim = 0;
+      fOrderPhysicalDim < rank;
+      ++fOrderPhysicalDim
+    ) {
+      const decodedDim =
+        physicalToLogicalDimension[rank - 1 - fOrderPhysicalDim];
+      keyCoords[decodedDim] = Math.floor(
+        (chunkGridPosition[fOrderPhysicalDim] * readChunkShape[decodedDim]) /
+          chunkShape[decodedDim],
+      );
+    }
+    for (let i = 0; i < rank; ++i) {
+      baseKey += `${sep}${keyCoords[i]}`;
+      sep = metadata.dimensionSeparator;
+    }
+
+    const key = getChunkKey(chunkGridPosition, baseKey) as string | unknown;
+    // Ensure we provide an ArrayBuffer-backed payload. If encoded is backed by SharedArrayBuffer,
+    // copy it into a new ArrayBuffer.
+    const arrayBuffer = new Uint8Array(encoded).buffer;
+    await kvStore.write!(key as any, arrayBuffer);
   }
 }
