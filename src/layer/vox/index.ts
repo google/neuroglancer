@@ -133,7 +133,7 @@ export class VoxUserLayer extends UserLayer {
                         rank: 3,
                         names: ["x", "y", "z"],
                         units: ["", "", ""],
-                        scales: new Float64Array([1, 1, 1]),
+                        scales: new Float64Array([0.000001, 0.000001, 0.000001]),
                       }),
                     ),
                   );
