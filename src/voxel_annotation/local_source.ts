@@ -226,6 +226,7 @@ export class LocalVoxSource extends VoxSource {
       size?: number[];
     }[],
   ) {
+    const touchedKeys = new Set<string>();
     for (const e of edits) {
       const sc = await this.ensureChunk(
         e.key,
@@ -233,7 +234,10 @@ export class LocalVoxSource extends VoxSource {
       );
       this.applyEditsIntoChunk(sc, e.indices, e.value, e.values);
       this.markDirty(e.key);
-      this.propagateDownsample(e.key);
+      touchedKeys.add(e.key);
+    }
+    for (const key of touchedKeys) {
+      this.propagateDownsample(key);
     }
   }
 

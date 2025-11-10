@@ -132,10 +132,12 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
   }
 
   invalidateChunksByKey(keys: string[]) {
+    console.log("invalidateChunksByKey", keys);
     for (const key of keys) {
       const chunk = this.chunks.get(key) as VolumeChunk | undefined;
       const cpuArray = chunk ? this.getCpuArrayForChunk(chunk) : null;
       if (chunk && cpuArray) {
+        console.log("chunk:", key, " has been reloaded");
         this.invalidateChunkUpload(chunk);
       }
     }
@@ -261,5 +263,6 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
 
 registerRPC(VOX_RELOAD_CHUNKS_RPC_ID, function (x: any) {
   const obj = this.get(x.id) as VoxChunkSource;
+  console.log("received RPC call")
   obj.invalidateChunksByKey(x.keys);
 });

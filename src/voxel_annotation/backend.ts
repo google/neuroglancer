@@ -34,24 +34,20 @@ function makeServerKey(serverUrl?: string, token?: string): string {
   return `remote:${serverUrl}|${token ?? ""}`;
 }
 
-function toScaleKeySafe(map: VoxMapConfig): string {
-  const cds = Array.from(map.chunkDataSize);
-  const lower = Array.from(map.baseVoxelOffset);
-  const upper = Array.from(map.upperVoxelBound);
-  return `${cds.join(',')}:${lower.join(',')}-${upper.join(',')}`;
-}
-
 function makeRegistryKey(serverUrl: string | undefined, token: string | undefined, map: VoxMapConfig): string {
   const sk = makeServerKey(serverUrl, token);
-  const scaleKey = toScaleKeySafe(map);
-  return `${sk}|${map.id}|${scaleKey}`;
+  return `${sk}|${map.id}`;
 }
 
 async function getOrCreateRegisteredVoxSource(serverUrl: string | undefined, token: string | undefined, map: VoxMapConfig, vcsInstance: VoxChunkSource): Promise<VoxSource> {
+  console.log("getOrCreateRegisteredVoxSource", vcsInstance.lodFactor)
   const key = makeRegistryKey(serverUrl, token, map);
+  console.log(voxSourceRegistry)
+  console.log("getOrCreateRegisteredVoxSource: key", key)
   const existing = voxSourceRegistry.get(key);
   if (existing)
   {
+    console.log("getOrCreateRegisteredVoxSource: using existing source")
     existing.addVoxChunkSource(vcsInstance);
     return existing;
   }
@@ -70,6 +66,17 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
   public lodFactor: number;
   private mapReadyPromise: Promise<void>;
   private resolveMapReady!: () => void;
+
+  // Debounced commit batching to minimize backend churn for rapid strokes.
+  private pendingCommitEdits: {
+    key: string;
+    indices: number[] | Uint32Array;
+    value?: number;
+    values?: ArrayLike<number>;
+    size?: number[];
+  }[] = [];
+  private commitDebounceTimer: number | undefined;
+  private readonly commitDebounceDelayMs: number = 75;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
@@ -115,13 +122,27 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
   }
 
   reloadChunksByKey(keys: string[]) {
+    console.log("sending RPC call")
+
+
     this.rpc?.invoke(VOX_RELOAD_CHUNKS_RPC_ID, {
       id: this.rpcId,
       keys,
     });
   }
 
-  /** Commit voxel edits from the frontend. */
+  private async flushPendingCommitEdits(): Promise<void> {
+    await this.mapReadyPromise;
+    const src = this.source;
+    if (!src) throw new Error("flushPendingCommitEdits: source is not initialized for this map");
+    const pending = this.pendingCommitEdits;
+    this.pendingCommitEdits = [];
+    this.commitDebounceTimer = undefined;
+    if (pending.length === 0) return;
+    await src.applyEdits(pending);
+  }
+
+  /** Commit voxel edits from the frontend (debounced to batch rapid updates). */
   async commitVoxels(
     edits: {
       key: string;
@@ -132,9 +153,19 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     }[],
   ) {
     await this.mapReadyPromise;
-    const src = this.source;
-    if (!src) throw new Error("commitVoxels: source is not initialized for this map");
-    await src.applyEdits(edits);
+    if (!this.source) throw new Error("commitVoxels: source is not initialized for this map");
+    // Enqueue edits and schedule a short debounce to coalesce frames
+    for (const e of edits) {
+      if (!e || !e.key || !e.indices) {
+        throw new Error("commitVoxels: invalid edit payload");
+      }
+      this.pendingCommitEdits.push(e);
+    }
+    if (this.commitDebounceTimer === undefined) {
+      this.commitDebounceTimer = setTimeout(() => {
+        void this.flushPendingCommitEdits();
+      }, this.commitDebounceDelayMs) as unknown as number;
+    }
   }
 
   async getLabelIds(): Promise<number[]> {

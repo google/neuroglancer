@@ -71,13 +71,17 @@ export abstract class VoxSource {
   }
 
   callChunkReload(voxChunkKey: string) {
+    console.log("VoxSource: callChunkReload: ", voxChunkKey);
       const parsed_vck = parseVoxChunkKey(voxChunkKey);
+      console.log("parsed_vck: ", parsed_vck);
       if (!parsed_vck) {
         console.error("VoxSource: callChunkReload: invalid chunk key", voxChunkKey);
         return;
       }
       const vcs = this.voxChunkSources.get(parsed_vck.lod);
+      console.log("vcs: ", this.voxChunkSources);
       if (vcs) {
+        console.log("invoking reloadChunksByKey for ", voxChunkKey);
         vcs.reloadChunksByKey([parsed_vck.chunkKey]);
       }
   }
