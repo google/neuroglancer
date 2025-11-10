@@ -34,7 +34,6 @@ import { VoxToolTab } from "#src/layer/vox/tabs/tools.js";
 import {
   getChunkPositionFromCombinedGlobalLocalPositions,
   getChunkTransformParameters,
-  getWatchableRenderLayerTransform,
 } from "#src/render_coordinate_transform.js";
 import {
   trackableRenderScaleTarget,
@@ -135,46 +134,28 @@ export class VoxUserLayer extends UserLayer {
   getVoxelPositionFromMouse(
     mouseState: MouseSelectionState,
   ): Float32Array | undefined {
-    const loadedDataSource = this.dataSources[0]?.loadState;
-    if (loadedDataSource === undefined || loadedDataSource.error !== undefined) {
+    const renderLayer = this.voxRenderLayerInstance;
+    if (renderLayer === undefined) {
       return undefined;
     }
 
-    const volumeSubsource = loadedDataSource.subsources.find(
-      s => s.enabled && s.subsourceEntry.subsource.volume instanceof MultiscaleVolumeChunkSource
-    );
-
-    if (volumeSubsource === undefined) return undefined;
-
-    const volume = volumeSubsource.subsourceEntry.subsource.volume as MultiscaleVolumeChunkSource;
-
-    // This watchable will be disposed immediately after use.
-    const renderLayerTransformWatchable = getWatchableRenderLayerTransform(
-      this.manager.root.coordinateSpace,
-      this.localPosition.coordinateSpace,
-      loadedDataSource.transform,
-      volumeSubsource,
-    );
-    const renderLayerTransform = renderLayerTransformWatchable.value;
-    renderLayerTransformWatchable.dispose(); // Clean up immediately.
-
+    const renderLayerTransform = renderLayer.transform.value;
     if (renderLayerTransform.error !== undefined) {
-      // If the render layer transform itself has an error, we can't proceed.
+      console.error("Render layer transform error:", renderLayerTransform.error);
       return undefined;
     }
 
-    // Get the base resolution source to establish the coordinate transform.
+    const multiscaleSource = renderLayer.multiscaleSource;
     const options: SliceViewSourceOptions = {
-      displayRank: volume.rank,
-      multiscaleToViewTransform: matrix.createIdentity(Float32Array, volume.rank * volume.rank),
+      displayRank: multiscaleSource.rank,
+      multiscaleToViewTransform: matrix.createIdentity(Float32Array, multiscaleSource.rank * multiscaleSource.rank),
       modelChannelDimensionIndices: [],
     };
-    const sources = volume.getSources(options);
+    const sources = multiscaleSource.getSources(options);
     if (sources.length === 0 || sources[0].length === 0) return undefined;
     const baseSource = sources[0][0];
 
     try {
-      // Get the complete chunk transform parameters using the valid RenderLayerTransform.
       const chunkTransform = getChunkTransformParameters(
         renderLayerTransform,
         baseSource.chunkToMultiscaleTransform,
@@ -182,7 +163,6 @@ export class VoxUserLayer extends UserLayer {
 
       const chunkPosition = new Float32Array(chunkTransform.modelTransform.unpaddedRank);
 
-      // Use the standard utility to transform from global/local viewer coordinates to chunk coordinates.
       if (!getChunkPositionFromCombinedGlobalLocalPositions(
         chunkPosition,
         mouseState.unsnappedPosition, // Use unsnapped for higher precision
@@ -193,11 +173,9 @@ export class VoxUserLayer extends UserLayer {
         return undefined;
       }
 
-      // The result is the floating-point position in the base-resolution voxel space.
       return chunkPosition;
     } catch (e) {
-      // getChunkTransformParameters can throw if mappings are invalid.
-      console.error("Error getting chunk transform parameters:", e);
+      console.error("Error computing voxel position:", e);
       return undefined;
     }
   }
