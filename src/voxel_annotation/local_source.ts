@@ -440,7 +440,6 @@ export class LocalVoxSourceWriter extends VoxSourceWriter {
     sc = { data: arr, size: new Uint32Array(sz) };
     this.saved.set(key, sc);
     this.enforceCap();
-    this.markDirty(key);
     return sc;
   }
 
@@ -455,6 +454,11 @@ export class LocalVoxSourceWriter extends VoxSourceWriter {
   ) {
     const touchedKeys = new Set<string>();
     for (const e of edits) {
+      const count = (e.indices as any)?.length | 0;
+      if (count <= 0) {
+        // No actual edits for this key. Do not allocate, do not mark dirty.
+        continue;
+      }
       const sc = await this.ensureChunk(
         e.key,
         e.size ? new Uint32Array(e.size) : (this.mapCfg!.chunkDataSize as any),
@@ -636,6 +640,9 @@ export class LocalVoxSourceWriter extends VoxSourceWriter {
     for (const key of keys) {
       const sc = this.saved.get(key);
       if (!sc) continue;
+      if (this._isAllZero(sc.data))
+        continue;
+
       await idbPut(store, sc.data.buffer, compositeChunkDbKey(this.mapId, key));
     }
     await txDone(tx);
@@ -651,6 +658,13 @@ export class LocalVoxSourceWriter extends VoxSourceWriter {
     if (this.dbPromise) return this.dbPromise;
     this.dbPromise = openVoxDb();
     return this.dbPromise;
+  }
+
+  private _isAllZero(arr: Uint32Array | BigUint64Array): boolean {
+    for (let i = 0; i < arr.length; i++) {
+      if ((arr as any)[i] !== 0 && (arr as any)[i] !== 0n) return false;
+    }
+    return true;
   }
 }
 

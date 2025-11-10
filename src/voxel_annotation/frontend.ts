@@ -186,16 +186,11 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
 
     const chunk = this.chunks.get(key) as VolumeChunk | undefined;
     let chunkLocalIndex = -1;
-    const cds = (chunk?.chunkDataSize as Uint32Array) ?? null;
-    if (cds) {
+    if (chunk) {
+      const cds = chunk.chunkDataSize as Uint32Array;
       if (local[0] < cds[0] && local[1] < cds[1] && local[2] < cds[2]) {
         chunkLocalIndex = this.localIndexFromLocalPosition(local, cds);
       }
-    } else {
-      chunkLocalIndex = this.localIndexFromLocalPosition(
-        local,
-        this.spec.chunkDataSize as Uint32Array,
-      );
     }
     return { key, canonicalIndex, chunkLocalIndex };
   }
@@ -205,12 +200,19 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     return data ?? null;
   }
 
+
+  private morphologicalConfig = {
+    // At what `filledCount` thresholds the neighborhood size increases.
+    growthThresholds: [
+      { count: 1000, size: 3 },  // Requires 3px thick channels
+      { count: 10000, size: 5 },  // Requires 5px thick channels
+      { count: 100000, size: 7 }, // Requires 7px thick channels
+    ],
+    maxSize: 9,
+  };
+
   /**
-   * 2D flood fill on a z-constant plane using 4-connectivity. Operates only on loaded chunks.
-   * Throws if the seed chunk is not loaded, if the fill would exceed maxVoxels, or if it crosses
-   * into any unloaded chunk. Returns a backend edits payload and some stats. It enqueues all
-   * voxel updates during BFS and only applies them to the CPU arrays after the BFS completes
-   * successfully, then schedules GPU uploads for live feedback.
+   * 2D flood fill with thickness constraint to prevent leaking through narrow passages
    */
   floodFillPlane2D(
     startVoxelLod: Float32Array,
@@ -229,17 +231,18 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
       Math.floor(startVoxelLod[1] ?? NaN),
       Math.floor(startVoxelLod[2] ?? NaN),
     ]);
+
     if (!Number.isFinite(seed[0]) || !Number.isFinite(seed[1]) || !Number.isFinite(seed[2])) {
       throw new Error("VoxChunkSource.floodFillPlane2D: startVoxelLod contains invalid coordinates.");
     }
 
-    // Determine the target value at the seed from loaded CPU data.
     const seedIdx = this.computeIndices(seed);
     const seedChunk = this.chunks.get(seedIdx.key) as VolumeChunk | undefined;
     const seedCpu = seedChunk ? this.getCpuArrayForChunk(seedChunk) : null;
     if (!seedCpu || seedIdx.chunkLocalIndex < 0) {
       throw new Error("VoxChunkSource.floodFillPlane2D: seed lies in an unloaded chunk or out of bounds.");
     }
+
     const originalValue = Number((seedCpu as any)[seedIdx.chunkLocalIndex] ?? NaN);
     if (!Number.isFinite(originalValue)) {
       throw new Error("VoxChunkSource.floodFillPlane2D: unable to read seed value.");
@@ -251,45 +254,31 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     const zPlane = seed[2] | 0;
     const visited = new Set<string>();
     const queue: [number, number][] = [];
-    const pushIfNew = (x: number, y: number) => {
-      const k = `${x},${y}`;
-      if (visited.has(k)) return false;
-      visited.add(k);
-      queue.push([x, y]);
-      return true;
-    };
-
-    pushIfNew(seed[0] | 0, seed[1] | 0);
-
-    // Collect edits without touching CPU arrays until BFS succeeds.
-    const indicesByInnerKey = new Map<string, number[]>(); // canonical indices for backend edits
-    const localIndicesByInnerKey = new Map<string, number[]>(); // chunk-local indices for CPU painting
+    const indicesByInnerKey = new Map<string, number[]>();
+    const localIndicesByInnerKey = new Map<string, number[]>();
     let filledCount = 0;
 
-    // BFS 4-connected on (x,y) at fixed zPlane
-    while (queue.length > 0) {
-      const [x, y] = queue.shift()!;
-      // Check cap early
+    const isOriginalAt = (px: number, py: number): boolean => {
+      const voxel = new Float32Array([px, py, zPlane]);
+      const { key, chunkLocalIndex } = this.computeIndices(voxel);
+      const chunk = this.chunks.get(key) as VolumeChunk | undefined;
+      const cpu = chunk ? this.getCpuArrayForChunk(chunk) : null;
+      if (!cpu || chunkLocalIndex < 0) {
+        // For thickness checking, treat unloaded as non-original (conservative approach)
+        return false;
+      }
+      const v = Number((cpu as any)[chunkLocalIndex]);
+      return (v >>> 0) === (originalValue >>> 0);
+    };
+
+    const scheduleFill = (x: number, y: number) => {
       if (filledCount >= maxVoxels) {
         throw new Error(`VoxChunkSource.floodFillPlane2D: region exceeds maxVoxels (${maxVoxels}).`);
       }
 
       const voxel = new Float32Array([x, y, zPlane]);
       const { key, canonicalIndex, chunkLocalIndex } = this.computeIndices(voxel);
-      const chunk = this.chunks.get(key) as VolumeChunk | undefined;
-      const cpu = chunk ? this.getCpuArrayForChunk(chunk) : null;
-      if (!cpu || chunkLocalIndex < 0) {
-        throw new Error(
-          `VoxChunkSource.floodFillPlane2D: encountered unloaded chunk at (${x},${y},${zPlane}) key=${key}.`,
-        );
-      }
 
-      const currentValue = Number((cpu as any)[chunkLocalIndex]);
-      if ((currentValue >>> 0) !== (originalValue >>> 0)) {
-        continue; // boundary
-      }
-
-      // Enqueue to apply after BFS completes.
       let arr = indicesByInnerKey.get(key);
       if (!arr) indicesByInnerKey.set(key, (arr = []));
       arr.push(canonicalIndex);
@@ -297,23 +286,145 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
       let locals = localIndicesByInnerKey.get(key);
       if (!locals) localIndicesByInnerKey.set(key, (locals = []));
       locals.push(chunkLocalIndex);
-
       filledCount++;
+    };
 
-      // 4-neighbors
-      pushIfNew(x + 1, y);
-      pushIfNew(x - 1, y);
-      pushIfNew(x, y + 1);
-      pushIfNew(x, y - 1);
+    const getCurrentThickness = (): number => {
+      let thickness = 1;
+      for (const threshold of this.morphologicalConfig.growthThresholds) {
+        if (filledCount >= threshold.count) {
+          thickness = Math.max(thickness, threshold.size);
+        }
+      }
+      return Math.min(thickness, this.morphologicalConfig.maxSize);
+    };
+
+    const hasThickEnoughChannel = (
+      x: number,
+      y: number,
+      nx: number,
+      ny: number,
+      requiredThickness: number
+    ): boolean => {
+      if (requiredThickness <= 1) return true; // No thickness constraint
+
+      const dx = nx - x;
+      const dy = ny - y;
+
+      // Only allow exactly one-axis moves (4-connectivity)
+      if ((dx === 0) === (dy === 0)) return false;
+
+      const halfThickness = Math.floor(requiredThickness / 2);
+
+      if (dx !== 0) {
+        // Horizontal move: check vertical thickness at BOTH current and destination
+        // We need the channel to be thick enough along the entire path
+        for (const checkX of [x, nx]) {
+          for (let offset = -halfThickness; offset <= halfThickness; offset++) {
+            if (!isOriginalAt(checkX, ny + offset)) {
+              return false; // Channel not thick enough
+            }
+          }
+        }
+      } else {
+        // Vertical move: check horizontal thickness at BOTH current and destination
+        for (const checkY of [y, ny]) {
+          for (let offset = -halfThickness; offset <= halfThickness; offset++) {
+            if (!isOriginalAt(nx + offset, checkY)) {
+              return false; // Channel not thick enough
+            }
+          }
+        }
+      }
+
+      return true;
+    };
+
+    const fillBorderRegion = (
+      startX: number,
+      startY: number,
+      requiredThickness: number
+    ) => {
+      const subQueue: [number, number][] = [];
+      const halfThickness = Math.floor(requiredThickness / 2);
+
+      const k = `${startX},${startY}`;
+      if (visited.has(k)) return;
+
+      subQueue.push([startX, startY]);
+      visited.add(k); // Mark as visited immediately to avoid re-processing
+
+      while (subQueue.length > 0) {
+        const [cx, cy] = subQueue.shift()!;
+        scheduleFill(cx, cy); // Schedule the current pixel of the sub-fill
+
+        const neighbors: [number, number][] = [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]];
+        for (const [nnx, nny] of neighbors) {
+          if (nnx < startX - halfThickness || nnx > startX + halfThickness ||
+              nny < startY - halfThickness || nny > startY + halfThickness) {
+            continue; // Outside the bounding box
+          }
+          const nk = `${nnx},${nny}`;
+          if (visited.has(nk)) continue;
+
+          if (isOriginalAt(nnx, nny)) {
+            visited.add(nk);
+            subQueue.push([nnx, nny]);
+          }
+        }
+      }
+    };
+
+    // Seed the queue
+    queue.push([seed[0] | 0, seed[1] | 0]);
+    visited.add(`${seed[0] | 0},${seed[1] | 0}`);
+
+    // BFS with thickness constraints
+    while (queue.length > 0) {
+      const [x, y] = queue.shift()!;
+
+      // Schedule this pixel for filling
+      scheduleFill(x, y);
+
+      // Get current thickness requirement
+      const requiredThickness = getCurrentThickness();
+
+      // Check 4-neighbors
+      const neighbors: [number, number][] = [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]];
+      for (const [nx, ny] of neighbors) {
+        const k = `${nx},${ny}`;
+        if (visited.has(k)) continue;
+
+        // Check if neighbor chunk is loaded
+        const nVoxel = new Float32Array([nx, ny, zPlane]);
+        const { key, chunkLocalIndex } = this.computeIndices(nVoxel);
+        const chunk = this.chunks.get(key) as VolumeChunk | undefined;
+        const cpu = chunk ? this.getCpuArrayForChunk(chunk) : null;
+
+        if (!cpu || chunkLocalIndex < 0) {
+          throw new Error("VoxChunkSource.floodFillPlane2D: encountered adjacency to unloaded chunk; aborting to avoid partial fill.");
+        }
+
+        if (isOriginalAt(nx, ny)) {
+          // The neighbor is a valid fill target. Now check if we can propagate from it.
+          if (hasThickEnoughChannel(x, y, nx, ny, requiredThickness)) {
+            // Channel is thick enough: Add to queue to propagate.
+            visited.add(k);
+            queue.push([nx, ny]);
+          } else {
+            fillBorderRegion(nx, ny, requiredThickness);
+          }
+        }
+      }
     }
 
-    // If we get here, BFS succeeded. Now apply to CPU arrays and schedule uploads.
+    // Apply changes to CPU arrays and schedule updates
     const chunksToUpdate = new Set<string>();
     for (const [innerKey, localIndices] of localIndicesByInnerKey.entries()) {
       const chunk = this.chunks.get(innerKey) as VolumeChunk | undefined;
       const cpu = chunk ? this.getCpuArrayForChunk(chunk) : null;
       if (!cpu) {
-        throw new Error(`VoxChunkSource.floodFillPlane2D: missing CPU array when applying updates for key=${innerKey}`);
+        throw new Error(`VoxChunkSource.floodFillPlane2D: missing CPU array for key=${innerKey}`);
       }
       for (const li of localIndices) {
         (cpu as any)[li] = fillValue as any;
@@ -323,7 +434,7 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
 
     for (const key of chunksToUpdate) this.scheduleUpdate(key);
 
-    // Build backend edits payload using full keys (including LOD)
+    // Build backend edits payload
     const edits: { key: string; indices: number[]; value: number }[] = [];
     for (const [innerKey, indices] of indicesByInnerKey.entries()) {
       const fullKey = makeVoxChunkKey(innerKey, this.lodFactor);

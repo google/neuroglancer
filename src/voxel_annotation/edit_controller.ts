@@ -204,6 +204,11 @@ export class VoxelEditController extends SharedObject {
     fillValue: number,
     maxVoxels: number,
   ): { edits: { key: string; indices: number[]; value: number }[]; filledCount: number; originalValue: number } {
+    console.info("[VoxFloodFill] controller call", {
+      start: Array.from(startPositionCanonical || []),
+      fillValue: fillValue >>> 0,
+      maxVoxels: maxVoxels | 0,
+    });
     if (!startPositionCanonical || startPositionCanonical.length < 3) {
       throw new Error("VoxelEditController.floodFillPlane2D: startPositionCanonical must be Float32Array[3].");
     }

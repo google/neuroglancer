@@ -35,18 +35,19 @@ export function exportVoxToZarr(targetUrl: string, mapConfig: VoxMapConfig): () 
 
   const { baseUrl } = normalizeBaseUrl(targetUrl);
 
-  // Start the export asynchronously; return a progress getter immediately.
   void (async () => {
     try {
       const db = await openVoxDb();
       const mapId = String(mapConfig.id);
 
-      // Pre-count LOD=1 chunks for this map in IndexedDB.
-      const lod1Count = await countLod1Chunks(db, mapId);
+      // First pass: count chunks per LOD and collect present LODs
+      const { countsByLod, totalCount } = await countAllLodChunks(db, mapId);
+      const presentLods = Array.from(countsByLod.keys()).sort((a, b) => a - b);
+      const lodsToWrite = presentLods.length > 0 ? presentLods : [1];
 
-      // We will write: root .zgroup, root .zattrs, 0/.zarray, 0/.zattrs, and N chunks.
-      const metadataFiles = 4;
-      const totalWrites = metadataFiles + lod1Count;
+      // We will write: root .zgroup + root .zattrs + per-lod (.zarray + .zattrs) + all chunks
+      const metadataFiles = 2 + lodsToWrite.length * 2;
+      const totalWrites = metadataFiles + totalCount;
       let writesCompleted = 0;
       const updateProgress = () => {
         if (totalWrites <= 0) {
@@ -59,38 +60,37 @@ export function exportVoxToZarr(targetUrl: string, mapConfig: VoxMapConfig): () 
         };
       };
 
-      // Write minimal Zarr v2 metadata
-      const { shapeZYX, chunksZYX, dtype } = deriveZarrMetadata(mapConfig);
-      // Root group
+      // Root metadata
       await putJson(joinUrl(baseUrl, ".zgroup"), { zarr_format: 2 });
       writesCompleted++; updateProgress();
-      await putJson(joinUrl(baseUrl, ".zattrs"), buildRootZattrs(mapConfig));
+      await putJson(joinUrl(baseUrl, ".zattrs"), buildRootZattrsForLods(mapConfig, lodsToWrite));
       writesCompleted++; updateProgress();
 
-      // Array at path "0"
-      const arrayBase = joinUrl(baseUrl, "0/");
-      const zarray = {
-        zarr_format: 2,
-        shape: shapeZYX,
-        chunks: chunksZYX,
-        dtype,
-        order: "C",
-        fill_value: 0,
-        filters: [] as unknown as [], // Explicitly no filters
-        compressor: null as unknown as null, // Explicitly no compressor
-        dimension_separator: ".",
-      };
-      await putJson(joinUrl(arrayBase, ".zarray"), zarray);
-      writesCompleted++; updateProgress();
-      await putJson(joinUrl(arrayBase, ".zattrs"), { _ARRAY_DIMENSIONS: ["z", "y", "x"] });
-      writesCompleted++; updateProgress();
+      // Per-LOD arrays
+      for (const lod of lodsToWrite) {
+        const { shapeZYX, chunksZYX, dtype } = deriveZarrMetadataForLod(mapConfig, lod);
+        const arrayBase = joinUrl(baseUrl, `${lod}/`);
+        const zarray = {
+          zarr_format: 2,
+          shape: shapeZYX,
+          chunks: chunksZYX,
+          dtype,
+          order: "C",
+          fill_value: 0,
+          filters: [] as unknown as [],
+          compressor: null as unknown as null,
+          dimension_separator: ".",
+        };
+        await putJson(joinUrl(arrayBase, ".zarray"), zarray);
+        writesCompleted++; updateProgress();
+        await putJson(joinUrl(arrayBase, ".zattrs"), { _ARRAY_DIMENSIONS: ["z", "y", "x"] });
+        writesCompleted++; updateProgress();
+      }
 
-      // Stream chunks: single pass to read+upload each LOD=1 chunk.
-      await iterateLod1Chunks(db, mapId, async ({ x, y, z, value }) => {
-        // Zarr v2 chunk file name uses axis order; we store array as [Z, Y, X], so name is z.y.x
-        const chunkRelPath = `0/${z}.${y}.${x}`;
+      // Second pass: upload chunks grouped by their LOD
+      await iterateAllLodChunks(db, mapId, async ({ lod, x, y, z, value }) => {
+        const chunkRelPath = `${lod}/${z}.${y}.${x}`;
         const chunkUrl = joinUrl(baseUrl, chunkRelPath);
-        // Ensure we upload the exact buffer contents.
         const buf = ensureArrayBuffer(value);
         await putBinary(chunkUrl, buf);
         writesCompleted++; updateProgress();
@@ -208,6 +208,17 @@ function deriveZarrMetadata(mapCfg: VoxMapConfig): { shapeZYX: number[]; chunksZ
   return { shapeZYX, chunksZYX, dtype };
 }
 
+function deriveZarrMetadataForLod(mapCfg: VoxMapConfig, lod: number): { shapeZYX: number[]; chunksZYX: number[]; dtype: string } {
+  if (!Number.isFinite(lod) || lod <= 0) throw new Error("deriveZarrMetadataForLod: lod must be positive");
+  const base = deriveZarrMetadata(mapCfg);
+  const shapeZYX = [
+    Math.max(1, Math.ceil(base.shapeZYX[0] / lod)),
+    Math.max(1, Math.ceil(base.shapeZYX[1] / lod)),
+    Math.max(1, Math.ceil(base.shapeZYX[2] / lod)),
+  ];
+  return { shapeZYX, chunksZYX: base.chunksZYX, dtype: base.dtype };
+}
+
 function toZarrDtype(dt: number): string {
   switch (dt) {
     case DataType.UINT32:
@@ -251,7 +262,7 @@ function toOmeLongUnit(unit: string): string {
   }
 }
 
-function buildRootZattrs(mapCfg: VoxMapConfig): unknown {
+function buildRootZattrsForLods(mapCfg: VoxMapConfig, lods: number[]): unknown {
   const rawUnit = String(mapCfg.unit);
   const scale = mapCfg.scaleMeters as unknown as ArrayLike<number>;
   if (scale == null || (scale as any).length < 3) {
@@ -265,9 +276,13 @@ function buildRootZattrs(mapCfg: VoxMapConfig): unknown {
   if (!Number.isFinite(sx) || !Number.isFinite(sy) || !Number.isFinite(sz)) {
     throw new Error("scaleMeters contains non-finite values");
   }
-  // coordinateTransformations.scale expects values in the units specified by axes[].unit.
-  // We therefore convert meter-based voxel sizes to that unit by dividing by meters-per-unit.
-  const scaleZYX = [sz / mPer, sy / mPer, sx / mPer];
+  const baseScaleZYX = [sz / mPer, sy / mPer, sx / mPer];
+  const datasets = lods.map((lod) => ({
+    path: String(lod),
+    coordinateTransformations: [
+      { type: "scale", scale: [baseScaleZYX[0] * lod, baseScaleZYX[1] * lod, baseScaleZYX[2] * lod] },
+    ],
+  }));
   return {
     multiscales: [
       {
@@ -277,22 +292,16 @@ function buildRootZattrs(mapCfg: VoxMapConfig): unknown {
           { name: "y", type: "space", unit: omeUnit },
           { name: "x", type: "space", unit: omeUnit },
         ],
-        datasets: [
-          {
-            path: "0",
-            coordinateTransformations: [
-              { type: "scale", scale: scaleZYX },
-            ],
-          },
-        ],
+        datasets,
       },
     ],
   } as const;
 }
 
-async function countLod1Chunks(db: IDBDatabase, mapId: string): Promise<number> {
-  return new Promise<number>((resolve, reject) => {
-    let count = 0;
+async function countAllLodChunks(db: IDBDatabase, mapId: string): Promise<{ countsByLod: Map<number, number>; totalCount: number }> {
+  return new Promise((resolve, reject) => {
+    const countsByLod = new Map<number, number>();
+    let totalCount = 0;
     const tx = db.transaction("chunks", "readonly");
     const store = tx.objectStore("chunks");
     const req = (store as any).openKeyCursor ? (store as any).openKeyCursor() : (store as any).openCursor();
@@ -300,7 +309,7 @@ async function countLod1Chunks(db: IDBDatabase, mapId: string): Promise<number> 
     req.onsuccess = (ev: any) => {
       const cursor: IDBCursor | IDBCursorWithValue | null = ev.target.result;
       if (!cursor) {
-        resolve(count);
+        resolve({ countsByLod, totalCount });
         return;
       }
       const key = String(cursor.key);
@@ -308,8 +317,10 @@ async function countLod1Chunks(db: IDBDatabase, mapId: string): Promise<number> 
       if (key.startsWith(prefix)) {
         const voxKey = key.substring(prefix.length);
         const info = parseVoxChunkKey(voxKey);
-        if (info && info.lod === 1) {
-          count++;
+        if (info) {
+          const c = countsByLod.get(info.lod) ?? 0;
+          countsByLod.set(info.lod, c + 1);
+          totalCount++;
         }
       }
       cursor.continue();
@@ -317,10 +328,10 @@ async function countLod1Chunks(db: IDBDatabase, mapId: string): Promise<number> 
   });
 }
 
-async function iterateLod1Chunks(
+async function iterateAllLodChunks(
   db: IDBDatabase,
   mapId: string,
-  onChunk: (args: { x: number; y: number; z: number; value: ArrayBuffer }) => Promise<void>,
+  onChunk: (args: { lod: number; x: number; y: number; z: number; value: ArrayBuffer }) => Promise<void>,
 ): Promise<void> {
   const pendingUploads: Promise<void>[] = [];
   await new Promise<void>((resolve, reject) => {
@@ -331,7 +342,6 @@ async function iterateLod1Chunks(
     req.onsuccess = (ev: any) => {
       const cursor: IDBCursorWithValue | null = ev.target.result;
       if (!cursor) {
-        // All matching entries queued; wait for uploads after this promise resolves.
         resolve();
         return;
       }
@@ -341,22 +351,19 @@ async function iterateLod1Chunks(
         if (key.startsWith(prefix)) {
           const voxKey = key.substring(prefix.length);
           const info = parseVoxChunkKey(voxKey);
-          if (info && info.lod === 1) {
+          if (info) {
             const value = cursor.value as ArrayBuffer;
-            // Clone the buffer so we can close the IDB transaction before uploading.
             const cloned = value.slice(0);
-            const uploadPromise = onChunk({ x: info.x, y: info.y, z: info.z, value: cloned });
+            const uploadPromise = onChunk({ lod: info.lod, x: info.x, y: info.y, z: info.z, value: cloned });
             pendingUploads.push(uploadPromise);
           }
         }
-        // Important: continue the cursor synchronously; do not await before calling continue.
         cursor.continue();
       } catch (e) {
         reject(e);
       }
     };
   });
-  // Ensure all queued uploads complete and propagate the first error if any.
   for (const p of pendingUploads) {
     await p;
   }

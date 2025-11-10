@@ -1,6 +1,5 @@
 # TODO List
 
-
 - LOD -> 
   -  "feat: dirty tree upscaling is kinda working, at lea
     st enough to conclude that this upscaling method wont work
