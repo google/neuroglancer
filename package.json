@@ -485,6 +485,19 @@
       "neuroglancer/kvstore/s3:disabled": "./src/util/false.ts",
       "default": "./src/kvstore/s3/register_backend.ts"
     },
+    "#kvstore/ssa_s3/register_credentials_provider": {
+      "neuroglancer/python": "./src/util/false.ts",
+      "neuroglancer/kvstore/ssa_s3:enabled": "./src/kvstore/ssa_s3/register_credentials_provider.ts",
+      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
+      "neuroglancer/kvstore/ssa_s3:disabled": "./src/util/false.ts",
+      "default": "./src/kvstore/ssa_s3/register_credentials_provider.ts"
+    },
+    "#kvstore/ssa_s3/register_frontend": {
+      "neuroglancer/kvstore/ssa_s3:enabled": "./src/kvstore/ssa_s3/register_frontend.ts",
+      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
+      "neuroglancer/kvstore/ssa_s3:disabled": "./src/util/false.ts",
+      "default": "./src/kvstore/ssa_s3/register_frontend.ts"
+    },
     "#kvstore/zip/register_frontend": {
       "neuroglancer/kvstore/zip:enabled": "./src/kvstore/zip/register_frontend.ts",
       "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",

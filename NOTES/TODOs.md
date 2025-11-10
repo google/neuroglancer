@@ -1,6 +1,6 @@
 # TODO List
 
-- FOR TOMORROW: fix plane orientation in the brush and flood tools + ask about the R2 storage on cloudflare, it is behind a "put your credit card" wall.
+- FOR TOMORROW: review, test and finish the ssa+https
 
 - LOD -> 
   -  "feat: dirty tree upscaling is kinda working, at lea
@@ -24,6 +24,8 @@
 - rework the ui (tabs)
 - add persistance to vox layer
 - add shortcuts for tools (switching tools, toogle erase mode, select label from the pointed one in the slice view and adjusting brush size) and label creation
+- the flood fill may fill an entire unwanted area if the user is zoomed in enough so the max number of loaded chunks are under the vox voxel count and the flood has an escape hole. 
+- the flood fill sometimes leaves artifacts in sharp areas
 
 # Saving/importing/exporting
 

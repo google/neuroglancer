@@ -340,7 +340,7 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
       requiredThickness: number
     ) => {
       const subQueue: [number, number][] = [];
-      const halfThickness = Math.floor(requiredThickness / 2);
+      const halfThickness = Math.floor(requiredThickness / 2) + 1;
 
       const k = `${startX},${startY}`;
       if (visited.has(k)) return;
@@ -388,19 +388,6 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
       for (const [nx, ny] of neighbors) {
         const k = `${nx},${ny}`;
         if (visited.has(k)) continue;
-
-        // Check if neighbor chunk is loaded
-        const nVoxel = new Float32Array([nx, ny, zPlane]);
-        const { key, chunkLocalIndex } = this.computeIndices(nVoxel);
-        const chunk = this.chunks.get(key) as VolumeChunk | undefined;
-        const cpu = chunk ? this.getCpuArrayForChunk(chunk) : null;
-
-        if (!cpu || chunkLocalIndex < 0) {
-          // Stop propagation at map bounds/unloaded chunks without invalidating the fill.
-          // Simply do not enqueue this neighbor.
-          visited.add(k);
-          continue;
-        }
 
         if (isOriginalAt(nx, ny)) {
           // The neighbor is a valid fill target. Now check if we can propagate from it.

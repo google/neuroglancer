@@ -10,4 +10,6 @@ import "#kvstore/ngauth/register";
 import "#kvstore/ngauth/register_credentials_provider";
 import "#kvstore/ocdbt/register_frontend";
 import "#kvstore/s3/register_frontend";
+import "#kvstore/ssa_s3/register_credentials_provider";
+import "#kvstore/ssa_s3/register_frontend";
 import "#kvstore/zip/register_frontend";
