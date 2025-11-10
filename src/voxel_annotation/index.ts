@@ -77,11 +77,11 @@ export abstract class VoxSourceWriter extends VoxSource {
     return [];
   }
 
-  callChunkReload(voxChunkKey: string) {
+  callChunkReload(voxChunkKeys: string[]) {
     if (!this.editController) {
       throw new Error("VoxSourceWriter.callChunkReload: editController not set");
     }
-    this.editController.callChunkReload([voxChunkKey]);
+    this.editController.callChunkReload(voxChunkKeys);
   }
 
   // Common helpers

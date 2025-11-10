@@ -187,6 +187,7 @@ export class VoxelEditController extends SharedObject {
     if (!src2D || !src2D[0] || src2D[0].length === 0) {
       throw new Error("VoxelEditController: No multiscale levels available.");
     }
+    const chkByLod = new Map<number, Set<string>>();
     for (const key of voxChunkKeys) {
       const parsed = parseVoxChunkKey(key);
       if (!parsed) {
@@ -195,13 +196,24 @@ export class VoxelEditController extends SharedObject {
       if (!this.mapConfig?.steps) {
         throw new Error(`VoxelEditController.callChunkReload: missing map config steps.`);
       }
-      const levelIndex = this.mapConfig?.steps.indexOf(parsed.lod) | 0;
+      const levelIndex = this.mapConfig?.steps.indexOf(parsed.lod);
+      if (levelIndex < 0) {
+        throw new Error(
+          `VoxelEditController.callChunkReload: LOD ${parsed.lod} not present in steps [${this.mapConfig?.steps.join(",")}].`,
+        );
+      }
+      if (!chkByLod.has(levelIndex)){
+        chkByLod.set(levelIndex, new Set<string>());
+      }
+      chkByLod.get(levelIndex)?.add(parsed.chunkKey);
+      }
+    for (const [levelIndex, keys] of chkByLod) {
       const level = src2D[0][levelIndex];
       if (!level || !level.chunkSource) {
         throw new Error(`VoxelEditController.callChunkReload: missing chunk source for LOD ${levelIndex}.`);
       }
       const source = level.chunkSource as unknown as VoxChunkSource;
-      source.invalidateChunksByKey([parsed.chunkKey]);
+      source.invalidateChunksByKey(Array.from(keys));
     }
   }
 }

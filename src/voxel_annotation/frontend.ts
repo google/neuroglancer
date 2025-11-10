@@ -106,16 +106,9 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
   }
 
   invalidateChunksByKey(keys: string[]) {
-    console.log("invalidateChunksByKey", keys);
-    for (const key of keys) {
-      const chunk = this.chunks.get(key) as VolumeChunk | undefined;
-      const cpuArray = chunk ? this.getCpuArrayForChunk(chunk) : null;
-      if (chunk && cpuArray) {
-        console.log("chunk:", key, " has been reloaded");
-        this.invalidateChunkUpload(chunk);
-      }
-    }
-    this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
+    console.log("invalidateChunksByKey", this.lodFactor, keys);
+    // TODO: Avoid invalidating the whole cache, instead invalidate only the chunks that are affected by the edits.
+    this.invalidateCache();
   }
 
   /** Batch paint API to minimize GPU uploads by chunk. Returns backend edits payload. */
@@ -158,39 +151,6 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
       edits.push({ key, indices, value });
     }
     return edits;
-  }
-
-  /**
-   * Build backend edits payload by grouping provided voxels into chunk keys at this source's LOD.
-   * Leverages the same index computation used for immediate CPU painting to avoid duplication.
-   */
-  buildEditsFromVoxels(
-    voxels: Float32Array[],
-    value?: number,
-  ): { key: string; indices: number[]; value?: number }[] {
-    if (!Array.isArray(voxels)) {
-      throw new Error("VoxChunkSource.buildEditsFromVoxels: 'voxels' must be an array");
-    }
-    if (!Number.isInteger(this.lodFactor) || this.lodFactor <= 0) {
-      throw new Error("VoxChunkSource.buildEditsFromVoxels: invalid lodFactor on source");
-    }
-    const grouped = new Map<string, number[]>();
-    for (const v of voxels) {
-      if (!v) continue;
-      const { key, canonicalIndex } = this.computeIndices(v);
-      const fullKey = makeVoxChunkKey(key, this.lodFactor);
-      let arr = grouped.get(fullKey);
-      if (!arr) {
-        arr = [];
-        grouped.set(fullKey, arr);
-      }
-      arr.push(canonicalIndex);
-    }
-    const out: { key: string; indices: number[]; value?: number }[] = [];
-    for (const [key, indices] of grouped.entries()) {
-      out.push(value === undefined ? { key, indices } : { key, indices, value });
-    }
-    return out;
   }
 
   /** getValueAt simply defers to base; edits are persisted in backend and applied to CPU array when present. */
@@ -247,7 +207,6 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
 
   private invalidateChunkUpload(chunk: VolumeChunk) {
     const gl = chunk.gl;
-    // If already on GPU and the concrete implementation supports in-place update, use it.
     const anyChunk = chunk as any;
     if (
       chunk.state === ChunkState.GPU_MEMORY &&
@@ -256,7 +215,6 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
       anyChunk.updateFromCpuData(gl);
       return;
     }
-    // Otherwise, just upload (don’t free first).
     chunk.copyToGPU(gl);
   }
 }

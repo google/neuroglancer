@@ -466,6 +466,7 @@ export class LocalVoxSourceWriter extends VoxSourceWriter {
       //await this.markChildrenDirtyInTree(e.key);
       touchedKeys.add(e.key);
     }
+    console.log(`Applied ${edits.length} edits to ${touchedKeys.size} chunks`);
     for (const key of touchedKeys) {
       this.propagateDownsample(key);
     }
@@ -497,7 +498,6 @@ export class LocalVoxSourceWriter extends VoxSourceWriter {
         console.log("Downsample step failed or was unnecessary, stopping cascade.");
         break;
       }
-      this.callChunkReload(targetKey);
       currentKey = targetKey;
     }
   }
@@ -602,6 +602,7 @@ export class LocalVoxSourceWriter extends VoxSourceWriter {
     }
     await txDone(tx);
     this.saveTimer = undefined;
+    this.callChunkReload(keys);
   }
 
   private async getDb(): Promise<IDBDatabase> {
