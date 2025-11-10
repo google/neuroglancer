@@ -46,6 +46,7 @@ import {
 } from "#src/ui/voxel_annotations.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import * as matrix from "#src/util/matrix.js";
+import { NullarySignal } from "#src/util/signal.js";
 import { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
 import { LabelsManager } from "#src/voxel_annotation/labels.js";
 import { VoxelAnnotationRenderLayer } from "#src/voxel_annotation/renderlayer.js";
@@ -58,7 +59,8 @@ export class VoxUserLayer extends UserLayer {
   static type = "vox";
   static typeAbbreviation = "vox";
   voxEditController?: VoxelEditController;
-  voxLabelsManager = new LabelsManager();
+  voxLabelsManager : LabelsManager;
+  labelsChanged = new NullarySignal();
 
   // Draw tool state
   voxBrushRadius: number = 3;
@@ -228,7 +230,13 @@ export class VoxUserLayer extends UserLayer {
           continue;
         }
         switch (volume.dataType) {
-          case DataType.FLOAT32:
+          case DataType.UINT32:
+            this.voxLabelsManager = new LabelsManager(DataType.UINT32, this.labelsChanged.dispatch);
+            break;
+          case DataType.UINT64:
+            this.voxLabelsManager = new LabelsManager(DataType.UINT64, this.labelsChanged.dispatch);
+            break;
+          default:
             loadedSubsource.deactivate(
               "Data type not compatible with segmentation layer",
             );
@@ -246,12 +254,6 @@ export class VoxUserLayer extends UserLayer {
 
               this.voxRenderLayerInstance = renderLayer;
               loadedSubsource.addRenderLayer(renderLayer);
-
-              try {
-                this.voxLabelsManager.initialize(this.voxEditController!);
-              } catch (e) {
-                console.warn("VoxUserLayer: labels initialization failed", e);
-              }
             }
         );
         continue;

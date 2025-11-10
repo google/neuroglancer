@@ -16,10 +16,12 @@
 
 import type { MouseSelectionState } from "#src/layer/index.js";
 import type { VoxUserLayer } from "#src/layer/vox/index.js";
+import { StatusMessage } from "#src/status.js";
 import { LegacyTool, registerLegacyTool } from "#src/ui/tool.js";
 
 export const BRUSH_TOOL_ID = "voxBrush";
 export const FLOODFILL_TOOL_ID = "voxFloodFill";
+export const ADOPT_VOXEL_LABEL_TOOL_ID = "adoptVoxelLabel";
  
  abstract class BaseVoxelLegacyTool extends LegacyTool<VoxUserLayer> {
   protected isDrawing = false;
@@ -97,8 +99,8 @@ export const FLOODFILL_TOOL_ID = "voxFloodFill";
     return out;
   }
 
-  protected abstract paintPoint(point: Float32Array, value: number): void;
-  protected abstract paintPoints(points: Float32Array[], value: number): void;
+  protected abstract paintPoint(point: Float32Array, value: bigint): void;
+  protected abstract paintPoints(points: Float32Array[], value: bigint): void;
 
   protected startDrawing(mouseState: MouseSelectionState) {
     if (this.isDrawing) return;
@@ -196,7 +198,7 @@ export class VoxelBrushLegacyTool extends BaseVoxelLegacyTool {
     return BRUSH_TOOL_ID;
   }
 
-  protected paintPoint(point: Float32Array, value: number) {
+  protected paintPoint(point: Float32Array, value: bigint) {
     const radius = Math.max(
       1,
       Math.floor((this.layer as any).voxBrushRadius ?? 3),
@@ -216,7 +218,7 @@ export class VoxelBrushLegacyTool extends BaseVoxelLegacyTool {
     );
   }
 
-  protected paintPoints(points: Float32Array[], value: number) {
+  protected paintPoints(points: Float32Array[], value: bigint) {
     const radius = Math.max(
       1,
       Math.floor((this.layer as any).voxBrushRadius ?? 3),
@@ -271,8 +273,8 @@ export class VoxelFloodFillLegacyTool extends LegacyTool<VoxUserLayer> {
         Math.floor(pos[2]!),
       ]);
 
-      console.info("[VoxFloodFill] starting flood fill", { seed: Array.from(seed), value: value >>> 0, max: Math.floor(max) });
-      ctrl.floodFillPlane2D(seed, value >>> 0, Math.floor(max)).then(({ edits, filledCount }) => {
+      console.info("[VoxFloodFill] starting flood fill", { seed: Array.from(seed), value: value, max: Math.floor(max) });
+      ctrl.floodFillPlane2D(seed, value, Math.floor(max)).then(({ edits, filledCount }) => {
         console.info("[VoxFloodFill] BFS completed", { filledCount, editsByChunk: edits.length });
 
         if (edits.length === 0) return;
@@ -297,6 +299,23 @@ export class VoxelFloodFillLegacyTool extends LegacyTool<VoxUserLayer> {
   }
 }
 
+export class AdoptVoxelLabelTool extends LegacyTool<VoxUserLayer> {
+  description = "label picker";
+  toJSON() { return ADOPT_VOXEL_LABEL_TOOL_ID; }
+  trigger(mouseState: MouseSelectionState) {
+    if (!mouseState?.active) return;
+    const raw = (mouseState as any).pickedValue as bigint | number | undefined;
+    if (raw === undefined || raw === null) return;
+    const rawBig = typeof raw === 'bigint' ? raw : BigInt(raw);
+    if (rawBig === 0n) {
+      StatusMessage.showTemporaryMessage("Cannot adopt background label 0.");
+      return;
+    }
+    const layer = this.layer as unknown as VoxUserLayer;
+    layer.voxLabelsManager.addLabel(rawBig);
+  }
+}
+
 export function registerVoxelAnnotationTools() {
   registerLegacyTool(
     BRUSH_TOOL_ID,
@@ -305,5 +324,9 @@ export function registerVoxelAnnotationTools() {
   registerLegacyTool(
     FLOODFILL_TOOL_ID,
     (layer) => new VoxelFloodFillLegacyTool(layer as unknown as VoxUserLayer),
+  );
+  registerLegacyTool(
+    ADOPT_VOXEL_LABEL_TOOL_ID,
+    (layer) => new AdoptVoxelLabelTool(layer as unknown as VoxUserLayer),
   );
 }

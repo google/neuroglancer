@@ -1,23 +1,14 @@
-/**
- * Edit controller backend: owns the authoritative VoxSourceWriter for a given map
- * and handles applying edits and label persistence independent of the volume chunk
- * streaming backend. This enables multiple VoxChunkSource instances (read-only)
- * while keeping a single writer per map owned by the edit controller.
- */
-
 import type { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import {
   VOX_EDIT_BACKEND_RPC_ID,
   VOX_EDIT_COMMIT_VOXELS_RPC_ID,
-  VOX_EDIT_LABELS_ADD_RPC_ID,
-  VOX_EDIT_LABELS_GET_RPC_ID,
   VOX_RELOAD_CHUNKS_RPC_ID,
   VOX_EDIT_FAILURE_RPC_ID,
   makeVoxChunkKey,
   parseVoxChunkKey,
 } from "#src/voxel_annotation/base.js";
-import type { RPC} from "#src/worker_rpc.js";
-import { SharedObject , registerRPC, registerPromiseRPC, registerSharedObject, initializeSharedObjectCounterpart } from "#src/worker_rpc.js";
+import type { RPC } from "#src/worker_rpc.js";
+import { SharedObject , registerRPC, registerSharedObject, initializeSharedObjectCounterpart } from "#src/worker_rpc.js";
 
 @registerSharedObject(VOX_EDIT_BACKEND_RPC_ID)
 export class VoxelEditController extends SharedObject {
@@ -27,8 +18,8 @@ export class VoxelEditController extends SharedObject {
   private pendingEdits: {
     key: string;
     indices: number[] | Uint32Array;
-    value?: number;
-    values?: ArrayLike<number>;
+    value?: bigint;
+    values?: ArrayLike<bigint>;
     size?: number[];
   }[] = [];
   private commitDebounceTimer: number | undefined;
@@ -74,7 +65,7 @@ export class VoxelEditController extends SharedObject {
     // 1. Group edits by vox chunk key (includes LOD).
     const editsByVoxKey = new Map<
       string,
-      { indices: number[]; values: number[] }
+      { indices: number[]; values: bigint[] }
     >();
     for (const edit of edits) {
       if (!editsByVoxKey.has(edit.key)) {
@@ -88,14 +79,14 @@ export class VoxelEditController extends SharedObject {
         }
         for (let i = 0; i < edit.indices.length; ++i) {
           entry.indices.push(Number(edit.indices[i]!));
-          entry.values.push(Number(vals[i]!));
+          entry.values.push(vals[i]!);
         }
       } else if (edit.value !== undefined) {
         const inds = edit.indices as ArrayLike<number>;
         for (let i = 0; i < inds.length; ++i) {
           const index = inds[i]!;
           entry.indices.push(Number(index));
-          entry.values.push(Number(edit.value));
+          entry.values.push(edit.value);
         }
       } else {
         throw new Error("flushPending: edit missing value(s)");
@@ -157,8 +148,8 @@ export class VoxelEditController extends SharedObject {
     edits: {
       key: string;
       indices: number[] | Uint32Array;
-      value?: number;
-      values?: ArrayLike<number>;
+      value?: bigint;
+      values?: ArrayLike<bigint>;
       size?: number[];
     }[],
   ) {
@@ -173,16 +164,6 @@ export class VoxelEditController extends SharedObject {
     this.commitDebounceTimer = setTimeout(() => {
       void this.flushPending();
     }, this.commitDebounceDelayMs) as unknown as number;
-  }
-
-  async getLabelIds(): Promise<number[]> {
-    // Label operations not yet implemented for multiscale edit backend.
-    return [];
-  }
-
-  async addLabel(_value: number): Promise<number[]> {
-    // Label operations not yet implemented for multiscale edit backend.
-    return [];
   }
 
   callChunkReload(voxChunkKeys: string[]) {
@@ -226,13 +207,13 @@ export class VoxelEditController extends SharedObject {
     }
   }
 
-  private calculateMode(values: number[]): number {
-    if (values.length === 0) return 0;
-    const counts = new Map<number, number>();
+  private calculateMode(values: bigint[]): bigint {
+    if (values.length === 0) return 0n;
+    const counts = new Map<bigint, number>();
     let maxCount = 0;
-    let mode = 0;
+    let mode = 0n;
     for (const v of values) {
-      if (v === 0) continue;
+      if (v === 0n) continue;
       const c = (counts.get(v) ?? 0) + 1;
       counts.set(v, c);
       if (c > maxCount) {
@@ -322,7 +303,7 @@ export class VoxelEditController extends SharedObject {
     const targetChunkH = sourceChunk.chunkDataSize[1];
 
     const indices: number[] = [];
-    const values: number[] = [];
+    const values: bigint[] = [];
 
     for (let z = 0; z < chunkD; z++) {
       for (let y = 0; y < chunkH; y++) {
@@ -338,15 +319,15 @@ export class VoxelEditController extends SharedObject {
           const plane =
             sourceChunk.chunkDataSize[0] * sourceChunk.chunkDataSize[1];
           // Gather 8 voxels from source
-          const v000 = Number((sourceChunk.data as any)[base]);
-          const v100 = Number((sourceChunk.data as any)[base + 1]);
-          const v010 = Number((sourceChunk.data as any)[base + row]);
-          const v110 = Number((sourceChunk.data as any)[base + row + 1]);
-          const v001 = Number((sourceChunk.data as any)[base + plane]);
-          const v101 = Number((sourceChunk.data as any)[base + plane + 1]);
-          const v011 = Number((sourceChunk.data as any)[base + plane + row]);
-          const v111 = Number(
-            (sourceChunk.data as any)[base + plane + row + 1],
+          const v000 = (sourceChunk.data as any)[base];
+          const v100 = ((sourceChunk.data as any)[base + 1]);
+          const v010 = ((sourceChunk.data as any)[base + row]);
+          const v110 = ((sourceChunk.data as any)[base + row + 1]);
+          const v001 = ((sourceChunk.data as any)[base + plane]);
+          const v101 = ((sourceChunk.data as any)[base + plane + 1]);
+          const v011 = ((sourceChunk.data as any)[base + plane + row]);
+          const v111 = (
+            (sourceChunk.data as any)[base + plane + row + 1]
           );
           const mode = this.calculateMode([
             v000,
@@ -365,7 +346,7 @@ export class VoxelEditController extends SharedObject {
           const tIndex =
             tz * (targetChunkW * targetChunkH) + ty * targetChunkW + tx;
           indices.push(tIndex);
-          values.push(mode >>> 0);
+          values.push(mode);
         }
       }
     }
@@ -397,16 +378,4 @@ export class VoxelEditController extends SharedObject {
 registerRPC(VOX_EDIT_COMMIT_VOXELS_RPC_ID, function (x: any) {
   const obj = this.get(x.rpcId) as VoxelEditController;
   void obj.commitVoxels(Array.isArray(x.edits) ? x.edits : []);
-});
-
-registerPromiseRPC<number[]>(VOX_EDIT_LABELS_GET_RPC_ID, async function (x: any) {
-  const obj = this.get(x.rpcId) as VoxelEditController;
-  const ids = await obj.getLabelIds();
-  return { value: ids };
-});
-
-registerPromiseRPC<number[]>(VOX_EDIT_LABELS_ADD_RPC_ID, async function (x: any) {
-  const obj = this.get(x.rpcId) as VoxelEditController;
-  const ids = await obj.addLabel(x?.value >>> 0);
-  return { value: ids };
 });

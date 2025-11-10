@@ -9,8 +9,6 @@ import type { VolumeChunkSource , MultiscaleVolumeChunkSource } from "#src/slice
 import {
   VOX_EDIT_BACKEND_RPC_ID,
   VOX_EDIT_COMMIT_VOXELS_RPC_ID,
-  VOX_EDIT_LABELS_ADD_RPC_ID,
-  VOX_EDIT_LABELS_GET_RPC_ID,
   VOX_RELOAD_CHUNKS_RPC_ID,
   VOX_EDIT_FAILURE_RPC_ID,
   makeVoxChunkKey,
@@ -144,7 +142,7 @@ export class VoxelEditController extends SharedObject {
   paintBrushWithShape(
     centerCanonical: Float32Array,
     radiusCanonical: number,
-    value: number,
+    value: bigint,
     shape: "disk" | "sphere" = "disk",
     basis?: { u: Float32Array; v: Float32Array },
   ) {
@@ -197,7 +195,7 @@ export class VoxelEditController extends SharedObject {
     }
 
     if (!voxelsToPaint || voxelsToPaint.length === 0) return;
-    const editsByVoxKey = new Map<string, { indices: number[], value: number }>();
+    const editsByVoxKey = new Map<string, { indices: number[], value: bigint }>();
 
     const lodFactor = 1 << sourceIndex;
     for (const voxelCoord of voxelsToPaint) {
@@ -217,7 +215,7 @@ export class VoxelEditController extends SharedObject {
     }
 
     // Apply edits locally on the specific source for immediate feedback.
-    const localEdits = new Map<string, {indices: number[], value: number}>();
+    const localEdits = new Map<string, {indices: number[], value: bigint}>();
     for (const [voxKey, edit] of editsByVoxKey.entries()) {
       const parsed = parseVoxChunkKey(voxKey);
       if (!parsed) continue;
@@ -225,7 +223,7 @@ export class VoxelEditController extends SharedObject {
     }
     source.applyLocalEdits(localEdits);
 
-    const backendEdits = [] as { key: string; indices: number[]; value: number }[];
+    const backendEdits = [] as { key: string; indices: number[]; value: bigint }[];
     for (const [voxKey, edit] of editsByVoxKey.entries()) {
       backendEdits.push({ key: voxKey, indices: edit.indices, value: edit.value });
     }
@@ -233,23 +231,8 @@ export class VoxelEditController extends SharedObject {
     this.commitEdits(backendEdits);
   }
 
-  async getLabelIds(): Promise<number[]> {
-    if (!this.rpc) throw new Error("VoxelEditController.getLabelIds: RPC not initialized.");
-    return this.rpc.promiseInvoke(VOX_EDIT_LABELS_GET_RPC_ID, {
-      rpcId: this.rpcId,
-    });
-  }
-
-  async addLabel(value: number): Promise<number[]> {
-    if (!this.rpc) throw new Error("VoxelEditController.addLabel: RPC not initialized.");
-    return this.rpc.promiseInvoke(VOX_EDIT_LABELS_ADD_RPC_ID, {
-      rpcId: this.rpcId,
-      value,
-    });
-  }
-
   /** Commit helper for UI tools. */
-  commitEdits(edits: { key: string; indices: number[] | Uint32Array; value?: number; values?: ArrayLike<number>; size?: number[] }[]): void {
+  commitEdits(edits: { key: string; indices: number[] | Uint32Array; value?: bigint; values?: ArrayLike<number>; size?: number[] }[]): void {
     if (!this.rpc) throw new Error("VoxelEditController.commitEdits: RPC not initialized.");
     if (!Array.isArray(edits)) {
       throw new Error("VoxelEditController.commitEdits: edits must be an array.");
@@ -267,9 +250,9 @@ export class VoxelEditController extends SharedObject {
    */
   async floodFillPlane2D(
     startPositionCanonical: Float32Array,
-    fillValue: number,
+    fillValue: bigint,
     maxVoxels: number,
-  ): Promise<{ edits: { key: string; indices: number[]; value: number }[]; filledCount: number; originalValue: number }> {
+  ): Promise<{ edits: { key: string; indices: number[]; value: bigint }[]; filledCount: number; originalValue: bigint }> {
     if (!startPositionCanonical || startPositionCanonical.length < 3) {
       throw new Error("VoxelEditController.floodFillPlane2D: startPositionCanonical must be Float32Array[3].");
     }
@@ -300,7 +283,7 @@ export class VoxelEditController extends SharedObject {
     if (originalValueResult === null) {
       throw new Error("Flood fill seed is in an unloaded or out-of-bounds chunk.");
     }
-    const originalValue = Number(originalValueResult);
+    const originalValue = typeof originalValueResult !== "bigint" ? BigInt(originalValueResult as number) : originalValueResult;
     if (originalValue === fillValue) {
       return { edits: [], filledCount: 0, originalValue };
     }
@@ -440,7 +423,7 @@ export class VoxelEditController extends SharedObject {
       }
     }
 
-    const editsByVoxKey = new Map<string, { indices: number[], value: number }>();
+    const editsByVoxKey = new Map<string, { indices: number[], value: bigint }>();
     const lodFactor = 1 << sourceIndex;
     for (const voxelCoord of voxelsToFill) {
       const { chunkGridPosition, positionWithinChunk } = source.computeChunkIndices(voxelCoord);
@@ -458,7 +441,7 @@ export class VoxelEditController extends SharedObject {
     }
 
     // Apply edits locally for preview on this source.
-    const localEdits = new Map<string, {indices: number[], value: number}>();
+    const localEdits = new Map<string, {indices: number[], value: bigint}>();
     for (const [voxKey, edit] of editsByVoxKey.entries()) {
       const parsed = parseVoxChunkKey(voxKey);
       if (!parsed) continue;
@@ -467,14 +450,14 @@ export class VoxelEditController extends SharedObject {
     source.applyLocalEdits(localEdits);
 
     // Prepare edits for the backend keyed by voxKey.
-    const backendEdits: { key: string; indices: number[]; value: number }[] = [];
+    const backendEdits: { key: string; indices: number[]; value: bigint }[] = [];
     for (const [voxKey, edit] of editsByVoxKey.entries()) {
       backendEdits.push({ key: voxKey, indices: edit.indices, value: edit.value });
     }
 
     this.commitEdits(backendEdits);
 
-    return { edits: backendEdits, filledCount, originalValue: originalValue >>> 0 };
+    return { edits: backendEdits, filledCount, originalValue: originalValue };
   }
 
   callChunkReload(voxChunkKeys: string[]) {

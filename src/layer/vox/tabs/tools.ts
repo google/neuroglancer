@@ -2,14 +2,15 @@
  * Vox Tool tab UI split from index.ts
  */
 import type { VoxUserLayer } from "#src/layer/vox/index.js";
-import { VoxelBrushLegacyTool, VoxelFloodFillLegacyTool } from "#src/ui/voxel_annotations.js";
+import {
+  VoxelBrushLegacyTool,
+  VoxelFloodFillLegacyTool,
+  AdoptVoxelLabelTool,
+} from "#src/ui/voxel_annotations.js";
 import { Tab } from "#src/widget/tab_view.js";
 
 
 export class VoxToolTab extends Tab {
-  public requestRenderLabels() {
-    this.renderLabels();
-  }
   private labelsContainer!: HTMLDivElement;
   private labelsError!: HTMLDivElement;
   private drawErrorContainer!: HTMLDivElement;
@@ -31,10 +32,10 @@ export class VoxToolTab extends Tab {
       sw.style.height = "16px";
       sw.style.borderRadius = "3px";
       sw.style.border = "1px solid rgba(0,0,0,0.2)";
-      sw.style.background = this.layer.voxLabelsManager.colorForValue(lab.id);
+      sw.style.background = this.layer.voxLabelsManager.colorForValue(lab);
       // id text (monospace)
       const txt = document.createElement("div");
-      txt.textContent = String(lab.id >>> 0);
+      txt.textContent = String(lab);
       txt.style.fontFamily = "monospace";
       txt.style.whiteSpace = "nowrap";
       txt.style.overflow = "hidden";
@@ -42,7 +43,7 @@ export class VoxToolTab extends Tab {
       row.appendChild(sw);
       row.appendChild(txt);
       // selection styling
-      const isSel = lab.id === selected;
+      const isSel = lab === selected;
       row.style.cursor = "pointer";
       row.style.padding = "2px 4px";
       row.style.borderRadius = "4px";
@@ -51,8 +52,7 @@ export class VoxToolTab extends Tab {
         row.style.outline = "1px solid rgba(100,150,255,0.6)";
       }
       row.addEventListener("click", () => {
-        this.layer.voxLabelsManager.selectVoxLabel(lab.id);
-        this.renderLabels();
+        this.layer.voxLabelsManager.selectVoxLabel(lab);
       });
       cont.appendChild(row);
     }
@@ -68,6 +68,12 @@ export class VoxToolTab extends Tab {
   }
   constructor(public layer: VoxUserLayer) {
     super();
+    this.registerDisposer(
+      this.layer.labelsChanged.add(() => {
+        this.renderLabels();
+      }),
+    );
+
     const { element } = this;
     element.classList.add("neuroglancer-vox-tools-tab");
     const toolbox = document.createElement("div");
@@ -96,6 +102,14 @@ export class VoxToolTab extends Tab {
       this.layer.tool.value = new VoxelFloodFillLegacyTool(this.layer);
     });
 
+
+    const adoptBtn = document.createElement("button");
+    adoptBtn.textContent = "Pick";
+    adoptBtn.title = "Activate tool: click a non-zero voxel to add its ID as a label";
+    adoptBtn.addEventListener("click", () => {
+      this.layer.tool.value = new AdoptVoxelLabelTool(this.layer);
+    });
+    toolsWrap.appendChild(adoptBtn);
     toolsWrap.appendChild(brushButton);
     toolsWrap.appendChild(floodButton);
     toolsRow.appendChild(toolsLabel);
@@ -278,10 +292,10 @@ export class VoxToolTab extends Tab {
     const createBtn = document.createElement("button");
     createBtn.textContent = "New label";
     createBtn.addEventListener("click", () => {
-      this.layer.voxLabelsManager.createVoxLabel(this.layer.voxEditController);
-      // Rendering will be triggered by LabelsManager via onLabelsChanged callback.
+      this.layer.voxLabelsManager.createNewLabel();
     });
     buttonsRow.appendChild(createBtn);
+
 
     this.labelsContainer = document.createElement("div");
     this.labelsContainer.className = "neuroglancer-vox-labels";
@@ -326,10 +340,8 @@ export class VoxToolTab extends Tab {
       }
     };
 
-    this.layer.voxLabelsManager.onLabelsChanged = () => this.requestRenderLabels();
     this.layer.onDrawMessageChanged = () => updateDrawError();
 
-    this.renderLabels();
     updateDrawError();
 
     element.appendChild(toolbox);

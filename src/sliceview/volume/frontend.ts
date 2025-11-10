@@ -230,7 +230,7 @@ export class VolumeChunkSource
     return this.getValueAt(chunkPosition, channelAccess);
   }
 
-  applyLocalEdits(edits: Map<string, {indices: number[], value: number}>): void {
+  applyLocalEdits(edits: Map<string, {indices: number[], value: bigint}>): void {
     const chunksToUpdate = new Set<VolumeChunk>();
     const fetches: Promise<void>[] = [];
 
@@ -244,8 +244,14 @@ export class VolumeChunkSource
         const chunkFormat = targetChunk.chunkFormat;
         if (chunkFormat instanceof UncompressedChunkFormat) {
           const cpuArray = (targetChunk as any).data as TypedArray;
+          const { dataType } = chunkFormat;
           for (const index of edit.indices) {
-            cpuArray[index] = edit.value;
+            if (dataType === DataTypeUtil.UINT32) {
+              cpuArray[index] = Number(edit.value);
+            } else {
+              // Assumes UINT64
+              cpuArray[index] = edit.value;
+            }
           }
           chunksToUpdate.add(targetChunk);
         } else if (chunkFormat instanceof CompressedChunkFormat) {
@@ -263,12 +269,12 @@ export class VolumeChunkSource
           if (dataType === DataTypeUtil.UINT32) {
             const uncompressedData = new Uint32Array(numElements);
             decodeChannelUint32(uncompressedData, compressedData, baseOffset, chunkDataSize, subchunkSize);
-            for (const index of edit.indices) { uncompressedData[index] = edit.value; }
+            for (const index of edit.indices) { uncompressedData[index] = Number(edit.value); }
             encodeChannelUint32(outputBuilder, subchunkSize, uncompressedData, chunkDataSize);
           } else { // Assumes UINT64
             const uncompressedData = new BigUint64Array(numElements);
             decodeChannelUint64(uncompressedData, compressedData, baseOffset, chunkDataSize, subchunkSize);
-            for (const index of edit.indices) { uncompressedData[index] = BigInt(edit.value); }
+            for (const index of edit.indices) { uncompressedData[index] = edit.value; }
             encodeChannelUint64(outputBuilder, subchunkSize, uncompressedData, chunkDataSize);
           }
 

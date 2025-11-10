@@ -1,20 +1,35 @@
 # TODO List
 
-- FOR TOMORROW: start to prepare the problematic/email to JMS + fix the issue with the preview not rendering on empty chunks + add label management back
+- FOR TOMORROW: start to prepare the problematic/email to JMS
 
+### priority
+- fix the issue with the preview not rendering on empty chunks
 - Fix the orientation of the disk in the brush tool
 - Add support for flood fill on different planes
--? adapt the brush size to the zoom level linearly
-- rework the ui (tabs)
-- add shortcuts for tools (switching tools, toogle erase mode, select label from the pointed one in the slice view and adjusting brush size) and label creation
-- the flood fill sometimes leaves artifacts in sharp areas
-- rework the autocomplete for the ssa+https source.
 - fix the flood fill for compressed chunks
-- rework the drawing preview for compressed chunk (see applyLocalEdits())
-- optimize flood fill tool (it is too slow on area containing uncached chunks, due to the getEnsuredValueAt() calls)
+- add shortcuts for tools (switching tools, toogle erase mode, select label from the pointed one in the slice view and adjusting brush size) and label creation
 
-- rework vox backend
-- rework label handling
+### extra
+- rework the ui (tabs)
+- optimize flood fill tool (it is too slow on area containing uncached chunks, due to the getEnsuredValueAt() calls)
+- rework the drawing preview for compressed chunk (see applyLocalEdits())
+- rework the autocomplete for the ssa+https source.
+- the flood fill sometimes leaves artifacts in sharp areas
+
+### questionable
+-? adapt the brush size to the zoom level linearly
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 ## mail
