@@ -93,6 +93,37 @@
 
 .neuroglancer-vox-toolbox {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 8px;
+}
+
+/* Slider styling */
+.neuroglancer-vox-tools-tab input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  background: linear-gradient(90deg, var(--ng-accent), color-mix(in oklab, var(--ng-accent) 35%, #333));
+  border-radius: 999px;
+  outline: none;
+}
+.neuroglancer-vox-tools-tab input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--ng-border);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--ng-accent) 45%, transparent);
+  cursor: pointer;
+}
+.neuroglancer-vox-tools-tab input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--ng-border);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--ng-accent) 45%, transparent);
+  cursor: pointer;
 }

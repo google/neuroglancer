@@ -152,13 +152,21 @@ class VoxToolTab extends Tab {
     const toolbox = document.createElement("div");
     toolbox.className = "neuroglancer-vox-toolbox";
 
+    // Section: Tool selection
+    const toolsRow = document.createElement("div");
+    toolsRow.className = "neuroglancer-vox-row";
+    const toolsLabel = document.createElement("label");
+    toolsLabel.textContent = "Tool";
+    const toolsWrap = document.createElement("div");
+    toolsWrap.style.display = "flex";
+    toolsWrap.style.gap = "8px";
+
     const pixelButton = document.createElement("button");
     pixelButton.textContent = "Pixel";
     pixelButton.title = "ctrl+click to paint a pixel";
     pixelButton.addEventListener("click", () => {
       this.layer.tool.value = new VoxelPixelLegacyTool(this.layer);
     });
-    toolbox.appendChild(pixelButton);
 
     const brushButton = document.createElement("button");
     brushButton.textContent = "Brush";
@@ -166,34 +174,57 @@ class VoxToolTab extends Tab {
     brushButton.addEventListener("click", () => {
       this.layer.tool.value = new VoxelBrushLegacyTool(this.layer);
     });
-    toolbox.appendChild(brushButton);
 
-    // Brush size control
-    const sizeWrap = document.createElement("div");
-    sizeWrap.style.display = "inline-flex";
-    sizeWrap.style.alignItems = "center";
-    sizeWrap.style.gap = "4px";
+    toolsWrap.appendChild(pixelButton);
+    toolsWrap.appendChild(brushButton);
+    toolsRow.appendChild(toolsLabel);
+    toolsRow.appendChild(toolsWrap);
+    toolbox.appendChild(toolsRow);
+
+    // Section: Brush settings
+    const brushRow = document.createElement("div");
+    brushRow.className = "neuroglancer-vox-row";
+
+    // Brush size as slider + number readout
     const sizeLabel = document.createElement("label");
     sizeLabel.textContent = "Brush size";
-    const sizeInput = document.createElement("input");
-    sizeInput.type = "number";
-    sizeInput.min = "1";
-    sizeInput.step = "1";
-    sizeInput.value = String(this.layer.voxBrushRadius ?? 3);
-    sizeInput.addEventListener("change", () => {
-      const v = Math.max(1, Math.floor(Number(sizeInput.value) || 1));
-      this.layer.voxBrushRadius = v;
-      sizeInput.value = String(v);
+    const sizeControls = document.createElement("div");
+    sizeControls.style.display = "flex";
+    sizeControls.style.alignItems = "center";
+    sizeControls.style.gap = "8px";
+
+    const sizeSlider = document.createElement("input");
+    sizeSlider.type = "range";
+    sizeSlider.min = "1";
+    sizeSlider.max = "64";
+    sizeSlider.step = "1";
+    sizeSlider.value = String(this.layer.voxBrushRadius ?? 3);
+
+    const sizeNumber = document.createElement("input");
+    sizeNumber.type = "number";
+    sizeNumber.className = "neuroglancer-vox-input";
+    sizeNumber.min = "1";
+    sizeNumber.step = "1";
+    sizeNumber.value = String(this.layer.voxBrushRadius ?? 3);
+
+    const syncSize = (v: number) => {
+      const clamped = Math.max(1, Math.min(256, Math.floor(v)));
+      this.layer.voxBrushRadius = clamped;
+      sizeSlider.value = String(clamped);
+      sizeNumber.value = String(clamped);
+    };
+
+    sizeSlider.addEventListener("input", () => {
+      syncSize(Number(sizeSlider.value) || 1);
     });
-    sizeWrap.appendChild(sizeLabel);
-    sizeWrap.appendChild(sizeInput);
-    toolbox.appendChild(sizeWrap);
+    sizeNumber.addEventListener("change", () => {
+      syncSize(Number(sizeNumber.value) || 1);
+    });
+
+    sizeControls.appendChild(sizeSlider);
+    sizeControls.appendChild(sizeNumber);
 
     // Eraser toggle
-    const erWrap = document.createElement("div");
-    erWrap.style.display = "inline-flex";
-    erWrap.style.alignItems = "center";
-    erWrap.style.gap = "4px";
     const erLabel = document.createElement("label");
     erLabel.textContent = "Eraser";
     const erChk = document.createElement("input");
@@ -202,15 +233,8 @@ class VoxToolTab extends Tab {
     erChk.addEventListener("change", () => {
       this.layer.voxEraseMode = !!erChk.checked;
     });
-    erWrap.appendChild(erLabel);
-    erWrap.appendChild(erChk);
-    toolbox.appendChild(erWrap);
 
     // Brush shape selector
-    const shapeWrap = document.createElement("div");
-    shapeWrap.style.display = "inline-flex";
-    shapeWrap.style.alignItems = "center";
-    shapeWrap.style.gap = "4px";
     const shapeLabel = document.createElement("label");
     shapeLabel.textContent = "Brush shape";
     const shapeSel = document.createElement("select");
@@ -228,9 +252,41 @@ class VoxToolTab extends Tab {
       this.layer.voxBrushShape = v;
       shapeSel.value = v;
     });
-    shapeWrap.appendChild(shapeLabel);
-    shapeWrap.appendChild(shapeSel);
-    toolbox.appendChild(shapeWrap);
+
+    // Layout within the brushRow: size controls, shape, eraser
+    const group = document.createElement("div");
+    group.style.display = "grid";
+    group.style.gridTemplateColumns = "minmax(120px,auto) 1fr";
+    group.style.columnGap = "8px";
+    group.style.rowGap = "8px";
+
+    // Row 1: Brush size
+    const sizeLabelCell = document.createElement("div");
+    sizeLabelCell.appendChild(sizeLabel);
+    const sizeControlsCell = document.createElement("div");
+    sizeControlsCell.appendChild(sizeControls);
+
+    // Row 2: Brush shape
+    const shapeLabelCell = document.createElement("div");
+    shapeLabelCell.appendChild(shapeLabel);
+    const shapeControlCell = document.createElement("div");
+    shapeControlCell.appendChild(shapeSel);
+
+    // Row 3: Eraser
+    const erLabelCell = document.createElement("div");
+    erLabelCell.appendChild(erLabel);
+    const erControlCell = document.createElement("div");
+    erControlCell.appendChild(erChk);
+
+    group.appendChild(sizeLabelCell);
+    group.appendChild(sizeControlsCell);
+    group.appendChild(shapeLabelCell);
+    group.appendChild(shapeControlCell);
+    group.appendChild(erLabelCell);
+    group.appendChild(erControlCell);
+
+    brushRow.appendChild(group);
+    toolbox.appendChild(brushRow);
 
     element.appendChild(toolbox);
   }
