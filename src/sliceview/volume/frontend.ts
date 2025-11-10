@@ -16,28 +16,24 @@
 
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
-import type {
-  SliceViewChunkSpecification} from "#src/sliceview/base.js";
+import type { SliceViewChunkSpecification } from "#src/sliceview/base.js";
 import {
-  DataType, SLICEVIEW_REQUEST_CHUNK_RPC_ID } from "#src/sliceview/base.js";
-import type {
-  SliceViewChunk,
-} from "#src/sliceview/frontend.js";
+  DataType,
+  SLICEVIEW_REQUEST_CHUNK_RPC_ID,
+} from "#src/sliceview/base.js";
+import type { SliceViewChunk } from "#src/sliceview/frontend.js";
 import {
   MultiscaleSliceViewChunkSource,
   SliceViewChunkSource,
 } from "#src/sliceview/frontend.js";
-import type {
-  UncompressedVolumeChunk,
-} from "#src/sliceview/uncompressed_chunk_format.js";
+import type { UncompressedVolumeChunk } from "#src/sliceview/uncompressed_chunk_format.js";
 import type {
   VolumeChunkSource as VolumeChunkSourceInterface,
   VolumeChunkSpecification,
   VolumeSourceOptions,
-  VolumeType} from "#src/sliceview/volume/base.js";
-import {
-  IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID
+  VolumeType,
 } from "#src/sliceview/volume/base.js";
+import { IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID } from "#src/sliceview/volume/base.js";
 import { VolumeChunk } from "#src/sliceview/volume/chunk.js";
 import { getChunkFormatHandler } from "#src/sliceview/volume/registry.js";
 import type { TypedArray } from "#src/util/array.js";
@@ -47,7 +43,6 @@ import type { GL } from "#src/webgl/context.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import { getShaderType, glsl_mixLinear } from "#src/webgl/shader_lib.js";
 import { registerSharedObjectOwner } from "#src/worker_rpc.js";
-
 
 export interface ChunkFormat {
   shaderKey: string;
@@ -315,7 +310,10 @@ export class VolumeChunkSource
 
 @registerSharedObjectOwner(IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID)
 export class InMemoryVolumeChunkSource extends VolumeChunkSource {
-  constructor(chunkManager: ChunkManager, options: { spec: VolumeChunkSpecification }) {
+  constructor(
+    chunkManager: ChunkManager,
+    options: { spec: VolumeChunkSpecification },
+  ) {
     super(chunkManager, options);
     this.initializeCounterpart(this.chunkManager.rpc!, {});
   }
@@ -330,25 +328,27 @@ export class InMemoryVolumeChunkSource extends VolumeChunkSource {
 
   invalidateChunks(keys: string[]): void {
     const update = () => {
-    const validKeys: string[] = [];
-    for (const key of keys) {
-      const chunk = this.chunks.get(key);
-      if (chunk) {
-        validKeys.push(key);
-        this.deleteChunk(key);
+      const validKeys: string[] = [];
+      for (const key of keys) {
+        const chunk = this.chunks.get(key);
+        if (chunk) {
+          validKeys.push(key);
+          this.deleteChunk(key);
+        }
       }
-    }
 
-    if (validKeys.length > 0) {
-      this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
-    }
-    }
+      if (validKeys.length > 0) {
+        this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
+      }
+    };
     // adding a small delay to avoid flickering since the base source will take some time to download the new data
+    // TODO: it would be better to reload the preview once the base source is good, with big brushes this delay is not sufficient
     setTimeout(update, 100);
   }
 
-
-  applyLocalEdits(edits: Map<string, { indices: number[]; value: bigint }>): void {
+  applyLocalEdits(
+    edits: Map<string, { indices: number[]; value: bigint }>,
+  ): void {
     const chunksToUpdate = new Set<VolumeChunk>();
     const { dataType } = this.spec;
 
@@ -357,7 +357,9 @@ export class InMemoryVolumeChunkSource extends VolumeChunkSource {
 
       let chunk = this.chunks.get(key) as UncompressedVolumeChunk | undefined;
       if (chunk === undefined) {
-        chunk = this.getChunk({ chunkGridPosition: chunkGridPosition }) as UncompressedVolumeChunk;
+        chunk = this.getChunk({
+          chunkGridPosition: chunkGridPosition,
+        }) as UncompressedVolumeChunk;
         this.addChunk(key, chunk);
       }
 
@@ -386,7 +388,9 @@ export class InMemoryVolumeChunkSource extends VolumeChunkSource {
             (cpuArray as BigUint64Array)[index] = value;
             break;
           default:
-            console.warn(`Unsupported data type for editing: ${DataType[dataType]}`);
+            console.warn(
+              `Unsupported data type for editing: ${DataType[dataType]}`,
+            );
             break;
         }
       }

@@ -16,7 +16,7 @@
 
 import { DataType } from "#src/sliceview/base.js";
 import { decodeChannel as decodeChannelUint32 } from "#src/sliceview/compressed_segmentation/decode_uint32.js";
-import { decodeChannel as decodeChannelUint64 } from "#src/sliceview/compressed_segmentation/decode_uint64.js"
+import { decodeChannel as decodeChannelUint64 } from "#src/sliceview/compressed_segmentation/decode_uint64.js";
 import type { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { mat4, vec3 } from "#src/util/geom.js";
 import * as matrix from "#src/util/matrix.js";
@@ -341,21 +341,36 @@ export class VoxelEditController extends SharedObject {
     const { parentKey, parentSource, parentRes } = parentInfo;
 
     let dataToProcess = childChunkData;
-    const { compressedSegmentationBlockSize, dataType, chunkDataSize } = childSource.spec;
+    const { compressedSegmentationBlockSize, dataType, chunkDataSize } =
+      childSource.spec;
     if (compressedSegmentationBlockSize !== undefined) {
-      const numElements = chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2];
+      const numElements =
+        chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2];
       const compressedData = childChunkData as Uint32Array;
       const baseOffset = compressedData.length > 0 ? compressedData[0] : 0;
       if (dataType === DataType.UINT32) {
         const uncompressedData = new Uint32Array(numElements);
         if (baseOffset !== 0) {
-          decodeChannelUint32(uncompressedData, compressedData, baseOffset, chunkDataSize, compressedSegmentationBlockSize);
+          decodeChannelUint32(
+            uncompressedData,
+            compressedData,
+            baseOffset,
+            chunkDataSize,
+            compressedSegmentationBlockSize,
+          );
         }
         dataToProcess = uncompressedData;
-      } else { // Assumes UINT64
+      } else {
+        // Assumes UINT64
         const uncompressedData = new BigUint64Array(numElements);
         if (baseOffset !== 0) {
-          decodeChannelUint64(uncompressedData, compressedData, baseOffset, chunkDataSize, compressedSegmentationBlockSize);
+          decodeChannelUint64(
+            uncompressedData,
+            compressedData,
+            baseOffset,
+            chunkDataSize,
+            compressedSegmentationBlockSize,
+          );
         }
         dataToProcess = uncompressedData;
       }

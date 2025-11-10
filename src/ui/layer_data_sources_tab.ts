@@ -41,11 +41,11 @@ import {
   ElementVisibilityFromTrackableBoolean,
   TrackableBooleanCheckbox,
 } from "#src/trackable_boolean.js";
-import type {
-  WatchableValueInterface} from "#src/trackable_value.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
-  makeCachedDerivedWatchableValue
-, WatchableValue } from "#src/trackable_value.js";
+  makeCachedDerivedWatchableValue,
+  WatchableValue,
+} from "#src/trackable_value.js";
 import type { DebouncedFunction } from "#src/util/animation_frame_debounce.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { DataType } from "#src/util/data_type.js";
@@ -199,7 +199,9 @@ export class DataSourceSubsourceView extends RefCounted {
     this.registerDisposer(
       loadedSource.enabledSubsourcesChanged.add(updateActiveAttribute),
     );
-    const enabledState: WatchableValueInterface<boolean> & { set value(v: boolean) } = {
+    const enabledState: WatchableValueInterface<boolean> & {
+      set value(v: boolean);
+    } = {
       get value() {
         return loadedSubsource.enabled;
       },
@@ -217,7 +219,10 @@ export class DataSourceSubsourceView extends RefCounted {
     sourceInfoLine.classList.add("neuroglancer-layer-data-sources-info-line");
     sourceInfoLine.appendChild(enabledCheckbox.element);
 
-    if (loadedSubsource.subsourceEntry.subsource.volume instanceof MultiscaleVolumeChunkSource) {
+    if (
+      loadedSubsource.subsourceEntry.subsource.volume instanceof
+      MultiscaleVolumeChunkSource
+    ) {
       const writableCheckbox = this.registerDisposer(
         new TrackableBooleanCheckbox(loadedSubsource.writable),
       );
@@ -227,17 +232,22 @@ export class DataSourceSubsourceView extends RefCounted {
       writableLabel.appendChild(writableCheckbox.element);
       writableLabel.appendChild(document.createTextNode("[Writable?]"));
 
-
-      this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
-        makeCachedDerivedWatchableValue(
-          (enabled, isPotentiallyWritable) => enabled && isPotentiallyWritable,
-          [
-            enabledState,
-            new WatchableValue(loadedSubsource.subsourceEntry.subsource.isPotentiallyWritable ?? false),
-          ],
+      this.registerDisposer(
+        new ElementVisibilityFromTrackableBoolean(
+          makeCachedDerivedWatchableValue(
+            (enabled, isPotentiallyWritable) =>
+              enabled && isPotentiallyWritable,
+            [
+              enabledState,
+              new WatchableValue(
+                loadedSubsource.subsourceEntry.subsource
+                  .isPotentiallyWritable ?? false,
+              ),
+            ],
+          ),
+          writableLabel,
         ),
-        writableLabel,
-      ));
+      );
 
       sourceInfoLine.appendChild(writableLabel);
     }

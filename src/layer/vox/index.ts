@@ -14,7 +14,11 @@
  * limitations under the License.
  */
 
-import type { LayerActionContext, MouseSelectionState, UserLayer } from "#src/layer/index.js"
+import type {
+  LayerActionContext,
+  MouseSelectionState,
+  UserLayer,
+} from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import { VoxToolTab } from "#src/layer/vox/tabs/tools.js";
 import type {
@@ -26,21 +30,13 @@ import {
   getChunkTransformParameters,
 } from "#src/render_coordinate_transform.js";
 import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
-import type {
-  MultiscaleVolumeChunkSource,
-} from "#src/sliceview/volume/frontend.js";
+import type { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import type { ImageRenderLayer } from "#src/sliceview/volume/image_renderlayer.js";
 import type { SegmentationRenderLayer } from "#src/sliceview/volume/segmentation_renderlayer.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
-import type {
-  WatchableValueInterface} from "#src/trackable_value.js";
-import {
-  TrackableValue,
-  WatchableValue
-} from "#src/trackable_value.js";
-import type {
-  UserLayerWithAnnotations,
-} from "#src/ui/annotations.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { TrackableValue, WatchableValue } from "#src/trackable_value.js";
+import type { UserLayerWithAnnotations } from "#src/ui/annotations.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { verifyFiniteFloat, verifyInt } from "#src/util/json.js";
 import { NullarySignal } from "#src/util/signal.js";
@@ -64,7 +60,6 @@ export class VoxelEditingContext
   private cachedChunkTransform: ChunkTransformParameters | undefined;
   private cachedTransformGeneration: number = -1;
   private cachedVoxelPosition: Float32Array = new Float32Array(3);
-
 
   constructor(
     public hostLayer: UserLayerWithVoxelEditing,
@@ -164,7 +159,10 @@ export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
     transform: WatchableValueInterface<RenderLayerTransformOrError>,
   ): ImageRenderLayer | SegmentationRenderLayer;
 
-  initializeVoxelEditingForSubsource(loadedSubsource: LoadedDataSubsource, renderlayer: SegmentationRenderLayer | ImageRenderLayer): void;
+  initializeVoxelEditingForSubsource(
+    loadedSubsource: LoadedDataSubsource,
+    renderlayer: SegmentationRenderLayer | ImageRenderLayer,
+  ): void;
   deinitializeVoxelEditingForSubsource(
     loadedSubsource: LoadedDataSubsource,
   ): void;
@@ -188,7 +186,6 @@ export function UserLayerWithVoxelEditingMixin<
     voxEraseMode = new TrackableBoolean(false);
     voxBrushShape = new TrackableEnum(BrushShape, BrushShape.DISK);
     voxFloodMaxVoxels = new TrackableValue<number>(10000, verifyFiniteFloat);
-
 
     voxDrawErrorMessage: string | undefined = undefined;
     onDrawMessageChanged?: () => void;
@@ -221,8 +218,10 @@ export function UserLayerWithVoxelEditingMixin<
       transform: WatchableValueInterface<RenderLayerTransformOrError>,
     ): ImageRenderLayer | SegmentationRenderLayer;
 
-
-    initializeVoxelEditingForSubsource(loadedSubsource: LoadedDataSubsource, renderlayer: SegmentationRenderLayer | ImageRenderLayer): void {
+    initializeVoxelEditingForSubsource(
+      loadedSubsource: LoadedDataSubsource,
+      renderlayer: SegmentationRenderLayer | ImageRenderLayer,
+    ): void {
       if (this.editingContexts.has(loadedSubsource)) return;
 
       const primarySource = loadedSubsource.subsourceEntry.subsource
@@ -240,7 +239,7 @@ export function UserLayerWithVoxelEditingMixin<
 
       const previewSource = new VoxelPreviewMultiscaleSource(
         this.manager.chunkManager,
-        primarySource
+        primarySource,
       );
 
       const transform = loadedSubsource.getRenderLayerTransform();
@@ -255,12 +254,11 @@ export function UserLayerWithVoxelEditingMixin<
         primarySource,
         previewSource,
         optimisticRenderLayer,
-        renderlayer
+        renderlayer,
       );
       this.editingContexts.set(loadedSubsource, context);
       this.addRenderLayer(optimisticRenderLayer);
     }
-
 
     deinitializeVoxelEditingForSubsource(loadedSubsource: LoadedDataSubsource) {
       const context = this.editingContexts.get(loadedSubsource);

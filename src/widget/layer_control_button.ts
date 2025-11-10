@@ -25,7 +25,9 @@ export function buttonLayerControl<LayerType extends UserLayer>(options: {
     makeControl: (layer, context) => {
       const control = document.createElement("button");
       control.textContent = options.text;
-      context.registerEventListener(control, "click", () => options.onClick(layer));
+      context.registerEventListener(control, "click", () =>
+        options.onClick(layer),
+      );
       return { control, controlElement: control };
     },
     activateTool: (activation) => {

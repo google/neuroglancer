@@ -50,7 +50,6 @@ export class VoxToolTab extends Tab {
     const { element } = this;
     element.classList.add("neuroglancer-vox-tools-tab");
 
-
     const toolbox = document.createElement("div");
     toolbox.className = "neuroglancer-vox-toolbox";
 
@@ -86,7 +85,6 @@ export class VoxToolTab extends Tab {
     toolsRow.appendChild(toolButtonsContainer);
     toolbox.appendChild(toolsRow);
 
-
     for (const controlDef of VOXEL_LAYER_CONTROLS) {
       const controlElement = addLayerControlToOptionsTab(
         this,
@@ -109,7 +107,11 @@ export class VoxToolTab extends Tab {
                   return layer.editingContexts.values().next().value.controller;
                 },
               },
-              (controller: VoxelEditController | undefined, _parent, context) => {
+              (
+                controller: VoxelEditController | undefined,
+                _parent,
+                context,
+              ) => {
                 if (!controller) {
                   button.disabled = true;
                   return;
@@ -142,7 +144,6 @@ export class VoxToolTab extends Tab {
     const labelsTitle = document.createElement("div");
     labelsTitle.textContent = "Labels";
     labelsTitle.style.fontWeight = "600";
-
 
     const labelsWidget = this.registerDisposer(
       new DependentViewWidget(

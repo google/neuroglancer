@@ -21,23 +21,34 @@ import {
   CoordinateSpaceCombiner,
   isChannelDimension,
   isLocalDimension,
-  TrackableCoordinateSpace
+  TrackableCoordinateSpace,
 } from "#src/coordinate_transform.js";
-import type { ManagedUserLayer, UserLayerSelectionState } from "#src/layer/index.js";
-import { registerLayerType, registerLayerTypeDetector, registerVolumeLayerType, UserLayer } from "#src/layer/index.js";
+import type {
+  ManagedUserLayer,
+  UserLayerSelectionState,
+} from "#src/layer/index.js";
+import {
+  registerLayerType,
+  registerLayerTypeDetector,
+  registerVolumeLayerType,
+  UserLayer,
+} from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import { registerVoxelLayerControls } from "#src/layer/vox/controls.js";
 import { UserLayerWithVoxelEditingMixin } from "#src/layer/vox/index.js";
 import { Overlay } from "#src/overlay.js";
 import type { RenderLayerTransformOrError } from "#src/render_coordinate_transform.js";
 import { getChannelSpace } from "#src/render_coordinate_transform.js";
-import { RenderScaleHistogram, trackableRenderScaleTarget } from "#src/render_scale_statistics.js";
+import {
+  RenderScaleHistogram,
+  trackableRenderScaleTarget,
+} from "#src/render_scale_statistics.js";
 import { DataType, VolumeType } from "#src/sliceview/volume/base.js";
 import { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import {
   defineImageLayerShader,
   getTrackableFragmentMain,
-  ImageRenderLayer
+  ImageRenderLayer,
 } from "#src/sliceview/volume/image_renderlayer.js";
 import { trackableAlphaValue } from "#src/trackable_alpha.js";
 import { BLEND_MODES, trackableBlendModeValue } from "#src/trackable_blend.js";
@@ -50,7 +61,7 @@ import {
   makeDerivedWatchableValue,
   registerNested,
   TrackableValue,
-  WatchableValue
+  WatchableValue,
 } from "#src/trackable_value.js";
 import { UserLayerWithAnnotationsMixin } from "#src/ui/annotations.js";
 import { registerVoxelTools } from "#src/ui/voxel_annotations.js";
@@ -61,28 +72,43 @@ import { verifyFloat01, verifyOptionalObjectProperty } from "#src/util/json.js";
 import { TrackableEnum } from "#src/util/trackable_enum.js";
 import {
   trackableShaderModeValue,
-  VolumeRenderingModes
+  VolumeRenderingModes,
 } from "#src/volume_rendering/trackable_volume_rendering_mode.js";
 import {
   getVolumeRenderingDepthSamplesBoundsLogScale,
   VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE,
-  VolumeRenderingRenderLayer
+  VolumeRenderingRenderLayer,
 } from "#src/volume_rendering/volume_render_layer.js";
 import type { ParameterizedShaderGetterResult } from "#src/webgl/dynamic_shader.js";
 import { makeWatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import type { ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
-import { setControlsInShader, ShaderControlState } from "#src/webgl/shader_ui_controls.js";
+import {
+  setControlsInShader,
+  ShaderControlState,
+} from "#src/webgl/shader_ui_controls.js";
 import { ChannelDimensionsWidget } from "#src/widget/channel_dimensions_widget.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import type { LayerControlDefinition } from "#src/widget/layer_control.js";
-import { addLayerControlToOptionsTab, registerLayerControl } from "#src/widget/layer_control.js";
+import {
+  addLayerControlToOptionsTab,
+  registerLayerControl,
+} from "#src/widget/layer_control.js";
 import { enumLayerControl } from "#src/widget/layer_control_enum.js";
 import { rangeLayerControl } from "#src/widget/layer_control_range.js";
-import { renderScaleLayerControl, VolumeRenderingRenderScaleWidget } from "#src/widget/render_scale_widget.js";
-import { makeShaderCodeWidgetTopRow, ShaderCodeWidget } from "#src/widget/shader_code_widget.js";
+import {
+  renderScaleLayerControl,
+  VolumeRenderingRenderScaleWidget,
+} from "#src/widget/render_scale_widget.js";
+import {
+  makeShaderCodeWidgetTopRow,
+  ShaderCodeWidget,
+} from "#src/widget/shader_code_widget.js";
 import type { LegendShaderOptions } from "#src/widget/shader_controls.js";
-import { registerLayerShaderControlsTool, ShaderControls } from "#src/widget/shader_controls.js";
+import {
+  registerLayerShaderControlsTool,
+  ShaderControls,
+} from "#src/widget/shader_controls.js";
 import { Tab } from "#src/widget/tab_view.js";
 
 const OPACITY_JSON_KEY = "opacity";
@@ -272,21 +298,19 @@ void main() {
       dataType = volume.dataType;
       loadedSubsource.activate((context) => {
         const imageRenderLayer = new ImageRenderLayer(volume, {
-            opacity: this.opacity,
-            blendMode: this.blendMode,
-            shaderControlState: this.shaderControlState,
-            shaderError: this.shaderError,
-            transform: loadedSubsource.getRenderLayerTransform(
-              this.channelCoordinateSpace,
-            ),
-            renderScaleTarget: this.sliceViewRenderScaleTarget,
-            renderScaleHistogram: this.sliceViewRenderScaleHistogram,
-            localPosition: this.localPosition,
-            channelCoordinateSpace: this.channelCoordinateSpace,
-          });
-        loadedSubsource.addRenderLayer(
-          imageRenderLayer
-        );
+          opacity: this.opacity,
+          blendMode: this.blendMode,
+          shaderControlState: this.shaderControlState,
+          shaderError: this.shaderError,
+          transform: loadedSubsource.getRenderLayerTransform(
+            this.channelCoordinateSpace,
+          ),
+          renderScaleTarget: this.sliceViewRenderScaleTarget,
+          renderScaleHistogram: this.sliceViewRenderScaleHistogram,
+          localPosition: this.localPosition,
+          channelCoordinateSpace: this.channelCoordinateSpace,
+        });
+        loadedSubsource.addRenderLayer(imageRenderLayer);
         const volumeRenderLayer = context.registerDisposer(
           new VolumeRenderingRenderLayer({
             gain: this.volumeRenderingGain,
@@ -316,14 +340,19 @@ void main() {
           }, this.volumeRenderingMode),
         );
         this.shaderError.changed.dispatch();
-        context.registerDisposer(registerNested((context, isWritable) => {
-          if (isWritable) {
-            this.initializeVoxelEditingForSubsource(loadedSubsource, imageRenderLayer);
-            context.registerDisposer(() => {
-              this.deinitializeVoxelEditingForSubsource(loadedSubsource);
-            });
-          }
-        }, loadedSubsource.writable));
+        context.registerDisposer(
+          registerNested((context, isWritable) => {
+            if (isWritable) {
+              this.initializeVoxelEditingForSubsource(
+                loadedSubsource,
+                imageRenderLayer,
+              );
+              context.registerDisposer(() => {
+                this.deinitializeVoxelEditingForSubsource(loadedSubsource);
+              });
+            }
+          }, loadedSubsource.writable),
+        );
       });
     }
     this.dataType.value = dataType;

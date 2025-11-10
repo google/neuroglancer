@@ -16,7 +16,10 @@
 
 import type { Chunk } from "#src/chunk_manager/backend.js";
 import { ChunkState } from "#src/chunk_manager/base.js";
-import { SliceViewChunk, SliceViewChunkSourceBackend } from "#src/sliceview/backend.js";
+import {
+  SliceViewChunk,
+  SliceViewChunkSourceBackend,
+} from "#src/sliceview/backend.js";
 import type { SliceViewChunkSpecification } from "#src/sliceview/base.js";
 import { DataType } from "#src/sliceview/base.js";
 import { decodeChannel as decodeChannelUint32 } from "#src/sliceview/compressed_segmentation/decode_uint32.js";
@@ -25,10 +28,10 @@ import { encodeChannel as encodeChannelUint32 } from "#src/sliceview/compressed_
 import { encodeChannel as encodeChannelUint64 } from "#src/sliceview/compressed_segmentation/encode_uint64.js";
 import type {
   VolumeChunkSource as VolumeChunkSourceInterface,
-  VolumeChunkSpecification
+  VolumeChunkSpecification,
 } from "#src/sliceview/volume/base.js";
 import { IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID } from "#src/sliceview/volume/base.js";
-import type { TypedArray} from "#src/util/array.js";
+import type { TypedArray } from "#src/util/array.js";
 import { TypedArrayBuilder } from "#src/util/array.js";
 import { DATA_TYPE_ARRAY_CONSTRUCTOR } from "#src/util/data_type.js";
 import type { vec3 } from "#src/util/geom.js";
@@ -332,7 +335,7 @@ export class VolumeChunkSource
 export class InMemoryVolumeChunkSourceBackend extends VolumeChunkSource {
   async download(chunk: VolumeChunk, _signal: AbortSignal): Promise<void> {
     chunk.data = null;
-    return new Promise(((_resolve) => {}))
+    return new Promise((_resolve) => {});
   }
 }
 

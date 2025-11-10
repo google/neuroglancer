@@ -38,8 +38,7 @@ import {
   parseVoxChunkKey,
 } from "#src/voxel_annotation/base.js";
 import type { LabelsManager } from "#src/voxel_annotation/labels.js";
-import type {
-  RPC} from "#src/worker_rpc.js";
+import type { RPC } from "#src/worker_rpc.js";
 import {
   registerRPC,
   registerSharedObjectOwner,
@@ -59,9 +58,7 @@ export class VoxelEditController extends SharedObject {
   public undoCount = new WatchableValue<number>(0);
   public redoCount = new WatchableValue<number>(0);
 
-  constructor(
-    private host: VoxelEditControllerHost
-  ) {
+  constructor(private host: VoxelEditControllerHost) {
     super();
     const rpc = this.host.rpc;
     if (!rpc) {
@@ -182,11 +179,11 @@ export class VoxelEditController extends SharedObject {
     // For V1 we use the minimum LOD (index 0)
     const voxelSize = 1;
     const sourceIndex = 0;
-    const source = this.host.previewSource.getSources(this.getIdentitySliceViewSourceOptions())[0][sourceIndex]!.chunkSource as InMemoryVolumeChunkSource;
+    const source = this.host.previewSource.getSources(
+      this.getIdentitySliceViewSourceOptions(),
+    )[0][sourceIndex]!.chunkSource as InMemoryVolumeChunkSource;
     if (!source) {
-      throw new Error(
-        "paintBrushWithShape: Missing preview source",
-      );
+      throw new Error("paintBrushWithShape: Missing preview source");
     }
 
     // Convert center and radius to the level’s voxel grid.
@@ -512,11 +509,11 @@ export class VoxelEditController extends SharedObject {
       }
     }
 
-    const previewSource = this.host.previewSource.getSources(this.getIdentitySliceViewSourceOptions())[0][sourceIndex]!.chunkSource as InMemoryVolumeChunkSource;
+    const previewSource = this.host.previewSource.getSources(
+      this.getIdentitySliceViewSourceOptions(),
+    )[0][sourceIndex]!.chunkSource as InMemoryVolumeChunkSource;
     if (!previewSource) {
-      throw new Error(
-        "paintBrushWithShape: Missing preview source",
-      );
+      throw new Error("paintBrushWithShape: Missing preview source");
     }
     const editsByVoxKey = new Map<
       string,
@@ -565,8 +562,7 @@ export class VoxelEditController extends SharedObject {
     const baseSources = this.host.primarySource.getSources(
       this.getIdentitySliceViewSourceOptions(),
     )[0];
-    if (!baseSources)
-    {
+    if (!baseSources) {
       throw new Error(
         "VoxelEditController.callChunkReload: Missing base source",
       );
@@ -591,8 +587,7 @@ export class VoxelEditController extends SharedObject {
       const previewSource = previewSources[parsed.lodIndex]?.chunkSource as
         | VolumeChunkSource
         | undefined;
-      if (previewSource)
-      {
+      if (previewSource) {
         let arr = chunksToInvalidateBySource.get(previewSource);
         if (!arr) {
           arr = [];
@@ -600,8 +595,7 @@ export class VoxelEditController extends SharedObject {
         }
         arr.push(parsed.chunkKey);
       }
-     if (baseSource)
-      {
+      if (baseSource) {
         let arr = chunksToInvalidateBySource.get(baseSource);
         if (!arr) {
           arr = [];
@@ -618,7 +612,6 @@ export class VoxelEditController extends SharedObject {
     }
   }
 
-  /** Backend failure notification handler: revert optimistic preview and show UI message. */
   handleCommitFailure(voxChunkKeys: string[], message: string): void {
     try {
       this.callChunkReload(voxChunkKeys);
@@ -630,7 +623,6 @@ export class VoxelEditController extends SharedObject {
   public undo(): void {
     if (!this.rpc)
       throw new Error("VoxelEditController.undo: RPC not initialized.");
-    console.log("VoxelEditController.undo");
     this.rpc
       .promiseInvoke<void>(VOX_EDIT_UNDO_RPC_ID, { rpcId: this.rpcId })
       .catch((error: unknown) => {
@@ -642,7 +634,6 @@ export class VoxelEditController extends SharedObject {
   public redo(): void {
     if (!this.rpc)
       throw new Error("VoxelEditController.redo: RPC not initialized.");
-    console.log("VoxelEditController.redo");
     this.rpc
       .promiseInvoke<void>(VOX_EDIT_REDO_RPC_ID, { rpcId: this.rpcId })
       .catch((error: unknown) => {

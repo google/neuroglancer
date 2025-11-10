@@ -181,8 +181,13 @@ export class LoadedDataSubsource {
       ),
     } = subsourceEntry;
     this.enabled = enabled;
-    this.writable = new TrackableBoolean(subsourceSpec?.writable ?? false, false);
-    this.writable.changed.add(loadedDataSource.layer.dataSourcesChanged.dispatch);
+    this.writable = new TrackableBoolean(
+      subsourceSpec?.writable ?? false,
+      false,
+    );
+    this.writable.changed.add(
+      loadedDataSource.layer.dataSourcesChanged.dispatch,
+    );
     this.subsourceToModelSubspaceTransform = subsourceToModelSubspaceTransform;
     this.modelSubspaceDimensionIndices = modelSubspaceDimensionIndices;
     this.isActiveChanged.add(

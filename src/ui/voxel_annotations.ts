@@ -96,19 +96,18 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
     activation.bindAction("paint-voxels", (event) => {
       event.stopPropagation();
       this.activationCallback(activation);
-        startRelativeMouseDrag(
-          event.detail as MouseEvent,
-          () => {
-            this.latestMouseState = this.mouseState;
-          },
-          () => {
-            this.deactivationCallback(activation);
-          },
-        );
+      startRelativeMouseDrag(
+        event.detail as MouseEvent,
+        () => {
+          this.latestMouseState = this.mouseState;
+        },
+        () => {
+          this.deactivationCallback(activation);
+        },
+      );
 
-        return true;
+      return true;
     });
-
   }
 
   abstract activationCallback(activation: ToolActivation<this>): void;
@@ -137,7 +136,9 @@ export class VoxelBrushTool extends BaseVoxelTool {
   activate(activation: ToolActivation<this>) {
     super.activate(activation);
     const getZoom = () => {
-      const panels = Array.from(this.layer.manager.root.display.panels) as RenderedDataPanel[];
+      const panels = Array.from(
+        this.layer.manager.root.display.panels,
+      ) as RenderedDataPanel[];
       if (panels.length > 0) {
         return panels[0].navigationState.zoomFactor.value;
       }
@@ -145,8 +146,12 @@ export class VoxelBrushTool extends BaseVoxelTool {
     };
 
     const getZoomChangedSignal = () => {
-      const panels = Array.from(this.layer.manager.root.display.panels) as RenderedDataPanel[];
-      return panels.length > 0 ? panels[0].navigationState.zoomFactor.changed : new NullarySignal();
+      const panels = Array.from(
+        this.layer.manager.root.display.panels,
+      ) as RenderedDataPanel[];
+      return panels.length > 0
+        ? panels[0].navigationState.zoomFactor.changed
+        : new NullarySignal();
     };
 
     const updateCursor = () => {
@@ -166,11 +171,13 @@ export class VoxelBrushTool extends BaseVoxelTool {
       `.replace(/\s\s+/g, " ");
 
       const cursorURL = `url('data:image/svg+xml;utf8,${encodeURIComponent(svgString)}')`;
-      this.setCursor(`${cursorURL} ${svgCenter} ${svgCenter}, crosshair`)
+      this.setCursor(`${cursorURL} ${svgCenter} ${svgCenter}, crosshair`);
     };
 
     updateCursor();
-    activation.registerDisposer(this.layer.voxBrushRadius.changed.add(updateCursor));
+    activation.registerDisposer(
+      this.layer.voxBrushRadius.changed.add(updateCursor),
+    );
     activation.registerDisposer(getZoomChangedSignal().add(updateCursor));
     activation.registerDisposer(() => {
       this.resetCursor();
@@ -309,11 +316,18 @@ export class VoxelBrushTool extends BaseVoxelTool {
       throw new Error("editContext is undefined");
     }
     for (const p of points)
-      editContext.controller?.paintBrushWithShape(p, radius, value, shapeEnum, basis);
+      editContext.controller?.paintBrushWithShape(
+        p,
+        radius,
+        value,
+        shapeEnum,
+        basis,
+      );
   }
 }
 
-const floodFillSVG = `<svg width="24px" height="24px" viewBox="0 0 24 24" fill="none"
+const floodFillSVG =
+  `<svg width="24px" height="24px" viewBox="0 0 24 24" fill="none"
      xmlns="http://www.w3.org/2000/svg" color="#000000">
   <path d="M2.63596 10.2927L9.70703 3.22168L18.1923 11.707L11.1212 18.778C10.3402 19.5591 9.07387 19.5591 8.29282 18.778L2.63596 13.1212C1.85492 12.3401 1.85492 11.0738 2.63596 10.2927Z"
         stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
@@ -335,12 +349,13 @@ const floodFillSVG = `<svg width="24px" height="24px" viewBox="0 0 24 24" fill="
 
 const floodFillCursor = `url('data:image/svg+xml;utf8,${encodeURIComponent(floodFillSVG)}') 4 19, crosshair`;
 
-
 export class VoxelFloodFillTool extends BaseVoxelTool {
   activate(activation: ToolActivation<this>) {
     super.activate(activation);
     this.setCursor(floodFillCursor);
-    activation.registerDisposer(() => {this.resetCursor()})
+    activation.registerDisposer(() => {
+      this.resetCursor();
+    });
   }
 
   activationCallback(_activation: ToolActivation<this>): void {
@@ -358,7 +373,8 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
     const layer = this.layer;
     try {
       layer.setDrawErrorMessage(undefined);
-      if (!layer.voxLabelsManager) throw new Error("Drawing backend not ready yet");
+      if (!layer.voxLabelsManager)
+        throw new Error("Drawing backend not ready yet");
       const value = layer.voxLabelsManager.getCurrentLabelValue(
         layer.voxEraseMode.value,
       );
@@ -408,7 +424,6 @@ const pickerSVG = `<svg width="24px" height="24px" stroke-width="1.5" viewBox="0
 
 const pickerCursor = `url('data:image/svg+xml;utf8,${encodeURIComponent(pickerSVG)}') 4 19, crosshair`;
 
-
 export class AdoptVoxelLabelTool extends LayerTool<UserLayerWithVoxelEditing> {
   constructor(layer: UserLayerWithVoxelEditing) {
     super(layer, /*toggle=*/ false);
@@ -437,9 +452,13 @@ export class AdoptVoxelLabelTool extends LayerTool<UserLayerWithVoxelEditing> {
   activate(activation: ToolActivation<this>): void {
     if (!this.mouseState?.active) return;
     this.setCursor(pickerCursor);
-    activation.registerDisposer(() => {this.resetCursor()})
+    activation.registerDisposer(() => {
+      this.resetCursor();
+    });
 
-    const voxelEditingContext = this.layer.editingContexts.values().next().value;
+    const voxelEditingContext = this.layer.editingContexts
+      .values()
+      .next().value;
     if (!voxelEditingContext) {
       StatusMessage.showTemporaryMessage(
         "Cannot pick label: layer is not ready.",
@@ -463,7 +482,6 @@ export class AdoptVoxelLabelTool extends LayerTool<UserLayerWithVoxelEditing> {
       StatusMessage.showTemporaryMessage("Render layer not available.", 3000);
       return;
     }
-
 
     const visibleSources = renderLayer.visibleSourcesList;
     if (visibleSources.length === 0) {
@@ -510,7 +528,19 @@ export class AdoptVoxelLabelTool extends LayerTool<UserLayerWithVoxelEditing> {
 }
 
 export function registerVoxelTools(LayerCtor: any) {
-  registerTool(LayerCtor, BRUSH_TOOL_ID, (layer: UserLayerWithVoxelEditing) => new VoxelBrushTool(layer));
-  registerTool(LayerCtor, FLOODFILL_TOOL_ID, (layer: UserLayerWithVoxelEditing) => new VoxelFloodFillTool(layer));
-  registerTool(LayerCtor, ADOPT_VOXEL_LABEL_TOOL_ID, (layer: UserLayerWithVoxelEditing) => new AdoptVoxelLabelTool(layer));
+  registerTool(
+    LayerCtor,
+    BRUSH_TOOL_ID,
+    (layer: UserLayerWithVoxelEditing) => new VoxelBrushTool(layer),
+  );
+  registerTool(
+    LayerCtor,
+    FLOODFILL_TOOL_ID,
+    (layer: UserLayerWithVoxelEditing) => new VoxelFloodFillTool(layer),
+  );
+  registerTool(
+    LayerCtor,
+    ADOPT_VOXEL_LABEL_TOOL_ID,
+    (layer: UserLayerWithVoxelEditing) => new AdoptVoxelLabelTool(layer),
+  );
 }
