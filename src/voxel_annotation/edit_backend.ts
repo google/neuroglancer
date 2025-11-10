@@ -16,7 +16,7 @@ import {
   parseVoxChunkKey,
 } from "#src/voxel_annotation/base.js";
 import type { RPC} from "#src/worker_rpc.js";
-import { SharedObject , registerPromiseRPC, registerRPC, registerSharedObject, initializeSharedObjectCounterpart } from "#src/worker_rpc.js";
+import { SharedObject , registerPromiseRPC, registerSharedObject, initializeSharedObjectCounterpart } from "#src/worker_rpc.js";
 
 @registerSharedObject(VOX_EDIT_BACKEND_RPC_ID)
 export class VoxelEditController extends SharedObject {
@@ -113,11 +113,6 @@ export class VoxelEditController extends SharedObject {
       } catch (e) {
         console.error(`Failed to write chunk ${voxKey}:`, e);
       }
-    }
-
-    // 3. Invalidate frontend caches for the modified chunks.
-    if (touchedVoxChunkKeys.length > 0) {
-      this.callChunkReload(touchedVoxChunkKeys);
     }
 
     // After base edits, enqueue downsampling for affected chunks (do not await here).
@@ -255,6 +250,20 @@ export class VoxelEditController extends SharedObject {
     ) as any;
     if (!sourceChunk) return null;
 
+    if (!sourceChunk.data) {
+      try {
+        const ac = new AbortController();
+        await src.download(sourceChunk, ac.signal);
+      } catch (e) {
+        console.warn(`Failed to download source chunk ${sourceKey} for downsampling:`, e);
+      }
+    }
+
+    if (!sourceChunk.data) {
+      console.warn(`Cannot downsample from empty or missing chunk: ${sourceKey}`);
+      return null;
+    }
+
     const targetKey = this.parentKeyOf(sourceKey);
     if (targetKey === null) return null;
 
@@ -266,8 +275,8 @@ export class VoxelEditController extends SharedObject {
     const offsetY = (info.y % 2) * chunkH;
     const offsetZ = (info.z % 2) * chunkD;
 
-    const targetSizeX = 1; // TODO: compute from parent spec if needed
-    const targetSizeY = 1;
+    const targetChunkW = sourceChunk.chunkDataSize[0];
+    const targetChunkH = sourceChunk.chunkDataSize[1];
 
     const indices: number[] = [];
     const values: number[] = [];
@@ -295,7 +304,7 @@ export class VoxelEditController extends SharedObject {
           const tx = x + offsetX;
           const ty = y + offsetY;
           const tz = z + offsetZ;
-          const tIndex = tz * (targetSizeX * targetSizeY) + ty * targetSizeX + tx;
+          const tIndex = tz * (targetChunkW * targetChunkH) + ty * targetChunkW + tx;
           indices.push(tIndex);
           values.push(mode >>> 0);
         }
@@ -320,9 +329,10 @@ export class VoxelEditController extends SharedObject {
   }
 }
 
-registerRPC(VOX_EDIT_COMMIT_VOXELS_RPC_ID, function (x: any) {
+registerPromiseRPC(VOX_EDIT_COMMIT_VOXELS_RPC_ID, async function (x: any) {
   const obj = this.get(x.rpcId) as VoxelEditController;
-  obj.commitVoxels(x.edits || []);
+  await obj.commitVoxels(x.edits || []);
+  return { value: undefined };
 });
 
 registerPromiseRPC<number[]>(VOX_EDIT_LABELS_GET_RPC_ID, async function (x: any) {

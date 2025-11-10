@@ -180,6 +180,16 @@ export class VolumeChunkSource
       const ac = new AbortController();
       await this.download(chunk, ac.signal);
     }
+
+    if (!chunk.data) {
+      try {
+        const ac = new AbortController();
+        await this.download(chunk, ac.signal);
+      } catch {
+        //
+      }
+    }
+
     if (!chunk.data) {
       // If chunk.data is null, the chunk does not exist at the source or was evicted.
       // Create a new, zero-filled chunk to apply the edits to.

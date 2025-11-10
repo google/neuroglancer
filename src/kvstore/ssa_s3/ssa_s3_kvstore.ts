@@ -242,6 +242,55 @@ export class SsaS3KvStore implements KvStore {
     }
   }
 
+  async write(key: string, value: ArrayBuffer): Promise<void> {
+    const fullKey = joinPath(this.datasetBasePrefix, key);
+    const url = await this.signSingleUrl(fullKey, "PUT");
+    try {
+      await fetchOk(url, {
+        method: "PUT",
+        body: value,
+      });
+    } catch (e) {
+      if (e instanceof HttpError && (e.status === 401 || e.status === 403)) {
+        throw new Error(
+          `Permission denied by SSA while writing ${this.getUrl(key)} (HTTP ${e.status}).`,
+          { cause: e },
+        );
+      }
+      throw new Error(
+        `Failed to write ${this.getUrl(key)} via SSA-signed URL: ${(e as Error).message}`,
+        { cause: e },
+      );
+    }
+  }
+
+  async delete(key: string): Promise<void> {
+    const fullKey = joinPath(this.datasetBasePrefix, key);
+    const url = await this.signSingleUrl(fullKey, "DELETE");
+    try {
+      await fetchOk(url, {
+        method: "DELETE",
+      });
+    } catch (e) {
+      if (e instanceof HttpError) {
+        if (e.status === 404) {
+          // Deleting a non-existent object is not considered an error in S3.
+          return;
+        }
+        if (e.status === 401 || e.status === 403) {
+          throw new Error(
+            `Permission denied by SSA while deleting ${this.getUrl(key)} (HTTP ${e.status}).`,
+            { cause: e },
+          );
+        }
+      }
+      throw new Error(
+        `Failed to delete ${this.getUrl(key)} via SSA-signed URL: ${(e as Error).message}`,
+        { cause: e },
+      );
+    }
+  }
+
   async stat(key: string, options: StatOptions): Promise<StatResponse | undefined> {
     const fullKey = joinPath(this.datasetBasePrefix, key);
     const url = await this.signSingleUrl(fullKey, "HEAD", options.signal);

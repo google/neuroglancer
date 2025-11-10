@@ -238,7 +238,7 @@ export class VoxUserLayer extends UserLayer {
             );
             continue;
         }
-        this.voxEditController = new VoxelEditController(volume);
+        this.voxEditController = new VoxelEditController(this, volume);
         loadedSubsource.activate(
             () => {
               const renderLayer = new VoxelAnnotationRenderLayer(volume, {

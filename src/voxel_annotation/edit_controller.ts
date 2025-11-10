@@ -3,6 +3,7 @@
  * Copyright 2025.
  */
 
+import type { VoxUserLayer } from "#src/layer/vox/index.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import type { VolumeChunkSource , MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import {
@@ -22,7 +23,7 @@ import {
 
 @registerSharedObjectOwner(VOX_EDIT_BACKEND_RPC_ID)
 export class VoxelEditController extends SharedObject {
-  constructor(private multiscale: MultiscaleVolumeChunkSource) {
+  constructor(private layer: VoxUserLayer, private multiscale: MultiscaleVolumeChunkSource) {
     super();
     const rpc = (this.multiscale as any)?.chunkManager?.rpc;
     if (!rpc) {
@@ -252,9 +253,13 @@ export class VoxelEditController extends SharedObject {
     if (!Array.isArray(edits)) {
       throw new Error("VoxelEditController.commitEdits: edits must be an array.");
     }
-    this.rpc.invoke(VOX_EDIT_COMMIT_VOXELS_RPC_ID, {
+    this.rpc.promiseInvoke<void>(VOX_EDIT_COMMIT_VOXELS_RPC_ID, {
       rpcId: this.rpcId,
       edits,
+    }).catch(error => {
+      const message = (error instanceof Error) ? error.message : String(error);
+      console.error("Failed to commit edits:", message);
+      this.layer.setDrawErrorMessage(message);
     });
   }
 
