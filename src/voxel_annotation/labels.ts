@@ -11,11 +11,20 @@ export class LabelsManager {
   private labelsInitialized: boolean = false;
   segmentColorHash = SegmentColorHash.getDefault();
 
-  async initialize(editController: VoxelEditController): Promise<void> {
-    if (!editController) {
-      throw new Error("LabelsManager.initialize: editController is required");
+  private readonly tempHardcodedMode = true;
+
+  async initialize(_editController: VoxelEditController): Promise<void> {
+    // Temporary hardcoded single-label setup for frontend validation.
+    this.labels = [{ id: 42 }];
+    this.selectedLabelId = 42;
+    this.labelsError = undefined;
+    this.labelsInitialized = true;
+    try {
+      this.onLabelsChanged?.();
+    } catch {
+      /* ignore */
     }
-    await this.loadLabels(editController);
+    if (!this.tempHardcodedMode) await this.loadLabels(_editController);
   }
 
   // --- Label helpers ---
@@ -117,6 +126,7 @@ export class LabelsManager {
 
   getCurrentLabelValue(eraseMode: boolean): number {
     if (eraseMode) return 0;
+    if(this.tempHardcodedMode) return 42;
     // Avoid triggering default creation during initialization.
     if (!this.labelsInitialized) return 0;
     // Ensure we have a valid selection if labels exist.

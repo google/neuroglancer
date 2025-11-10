@@ -70,7 +70,7 @@ export class VoxelEditController extends SharedObject {
       size?: number[];
     }[],
   ) {
-    if (!this.source) throw new Error("VoxEditBackend.commitVoxels: source not initialized");
+    if (!this.source) return;//throw new Error("VoxEditBackend.commitVoxels: source not initialized");
     for (const e of edits) {
       if (!e || !e.key || !e.indices) {
         throw new Error("VoxEditBackend.commitVoxels: invalid edit payload");

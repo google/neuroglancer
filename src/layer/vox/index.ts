@@ -35,6 +35,7 @@ import { VoxToolTab } from "#src/layer/vox/tabs/tools.js";
 import {
   trackableRenderScaleTarget,
 } from "#src/render_scale_statistics.js";
+import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
 import { DataType } from "#src/sliceview/base.js";
 import { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import {
@@ -86,7 +87,18 @@ export class VoxUserLayer extends UserLayer {
       throw new Error("beginRenderLodLock: render layer is not ready");
     }
     // Validate against available levels in current pyramid.
-    const sources2D = rl.multiscaleSource.getSources({} as any);
+    const { multiscaleSource } = rl;
+    const rank = multiscaleSource.rank;
+    const options: SliceViewSourceOptions = {
+      displayRank: rank,
+      multiscaleToViewTransform: new Float32Array(rank * rank),
+      modelChannelDimensionIndices: [],
+    };
+    // Create an identity transform matrix.
+    for (let i = 0; i < rank; ++i) {
+      options.multiscaleToViewTransform[i * rank + i] = 1;
+    }
+    const sources2D = multiscaleSource.getSources(options);
     const levels = sources2D?.[0]?.length ?? 0;
     if (levels <= 0) {
       throw new Error("beginRenderLodLock: multiscale source has no levels");
@@ -114,7 +126,7 @@ export class VoxUserLayer extends UserLayer {
       order: 1,
       getter: () => new VoxToolTab(this),
     });
-    this.tabs.default = "vox";
+    this.tabs.default = "vox_tools";
   }
 
   private getModelToVoxTransform(): mat4 | null {
@@ -213,6 +225,13 @@ export class VoxUserLayer extends UserLayer {
             loadedSubsource.activated!.registerDisposer(
               renderLayerTransform.changed.add(updateTransform)
             );
+
+            // Initialize labels manager (temporarily hardcoded to label 42).
+            try {
+              this.voxLabelsManager.initialize(this.voxEditController!);
+            } catch (e) {
+              console.warn("VoxUserLayer: labels initialization failed", e);
+            }
           }
         );
         continue;
