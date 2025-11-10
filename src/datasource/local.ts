@@ -31,10 +31,12 @@ import { createIdentity } from "#src/util/matrix.js";
 
 export const localAnnotationsUrl = "local://annotations";
 export const localEquivalencesUrl = "local://equivalences";
+export const localVoxelAnnotationsUrl = "local://voxel-annotations";
 
 export enum LocalDataSource {
   annotations = 0,
   equivalences = 1,
+  voxelAnnotations = 2,
 }
 
 export class LocalDataSourceProvider implements DataSourceProvider {
@@ -104,6 +106,48 @@ export class LocalDataSourceProvider implements DataSourceProvider {
           ],
         };
       }
+      case localVoxelAnnotationsUrl: {
+        const { transform } = options;
+        let modelTransform: CoordinateSpaceTransform;
+        if (transform === undefined) {
+          const baseSpace = options.globalCoordinateSpace.value;
+          const { rank, names, scales, units } = baseSpace;
+          const inputSpace = makeCoordinateSpace({
+            rank,
+            scales,
+            units,
+            names: names.map((_, i) => `${i}`),
+          });
+          const outputSpace = makeCoordinateSpace({
+            rank,
+            scales,
+            units,
+            names,
+          });
+          modelTransform = {
+            rank,
+            sourceRank: rank,
+            inputSpace,
+            outputSpace,
+            transform: createIdentity(Float64Array, rank + 1),
+          };
+        } else {
+          modelTransform = makeIdentityTransform(emptyValidCoordinateSpace);
+        }
+        return {
+          modelTransform,
+          canChangeModelSpaceRank: true,
+          subsources: [
+            {
+              id: "default",
+              default: true,
+              subsource: {
+                local: LocalDataSource.voxelAnnotations,
+              },
+            },
+          ],
+        };
+      }
     }
     throw new Error("Invalid local data source URL");
   }
@@ -122,6 +166,10 @@ export class LocalDataSourceProvider implements DataSourceProvider {
             value: "equivalences",
             description:
               "Segmentation equivalence graph stored in the JSON state",
+          },
+          {
+            value: "voxel-annotations",
+            description: "Voxel annotations stored in the JSON state",
           },
         ],
         (x) => x.value,
