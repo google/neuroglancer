@@ -27,8 +27,13 @@ import {
 } from "#src/render_coordinate_transform.js";
 import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
 import type {
+  VolumeChunkSpecification,
+  VolumeType,
+} from "#src/sliceview/volume/base.js";
+import type {
   MultiscaleVolumeChunkSource} from "#src/sliceview/volume/frontend.js";
 import {
+  SingleScaleVolumeChunkSource,
   InMemoryVolumeChunkSource
 } from "#src/sliceview/volume/frontend.js";
 import type { ImageRenderLayer } from "#src/sliceview/volume/image_renderlayer.js";
@@ -175,7 +180,7 @@ export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
     transform: WatchableValueInterface<RenderLayerTransformOrError>,
   ): ImageRenderLayer | SegmentationRenderLayer;
 
-  initializeVoxelEditingForSubsource(loadedSubsource: LoadedDataSubsource): void;
+  initializeVoxelEditingForSubsource(loadedSubsource: LoadedDataSubsource, volumeType: VolumeType): void;
   deinitializeVoxelEditingForSubsource(
     loadedSubsource: LoadedDataSubsource,
   ): void;
@@ -232,7 +237,7 @@ export function UserLayerWithVoxelEditingMixin<
     ): ImageRenderLayer | SegmentationRenderLayer;
 
 
-    initializeVoxelEditingForSubsource(loadedSubsource: LoadedDataSubsource) {
+    initializeVoxelEditingForSubsource(loadedSubsource: LoadedDataSubsource, volumeType: VolumeType) {
       if (this.editingContexts.has(loadedSubsource)) return;
 
       const primarySource = loadedSubsource.subsourceEntry.subsource
@@ -248,15 +253,26 @@ export function UserLayerWithVoxelEditingMixin<
         );
       }
 
+      const previewSpec: VolumeChunkSpecification = {
+        ...baseSpec,
+        compressedSegmentationBlockSize: undefined,
+      };
+
       const previewSource = new InMemoryVolumeChunkSource(
         this.manager.chunkManager,
-        baseSpec,
+        previewSpec,
+      );
+
+      const multiscalePreviewSource = new SingleScaleVolumeChunkSource(
+        this.manager.chunkManager,
+        previewSource,
+        volumeType
       );
 
       const transform = loadedSubsource.getRenderLayerTransform();
 
       const optimisticRenderLayer = this._createVoxelRenderLayer(
-        previewSource as any,
+        multiscalePreviewSource,
         transform,
       );
 

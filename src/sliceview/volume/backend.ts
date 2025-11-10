@@ -24,7 +24,9 @@ import type { SliceViewChunkSpecification } from "#src/sliceview/base.js";
 import { DataType } from "#src/sliceview/base.js";
 import type {
   VolumeChunkSource as VolumeChunkSourceInterface,
-  VolumeChunkSpecification,
+  VolumeChunkSpecification} from "#src/sliceview/volume/base.js";
+import {
+  IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID
 } from "#src/sliceview/volume/base.js";
 import type { TypedArray } from "#src/util/array.js";
 import { DATA_TYPE_ARRAY_CONSTRUCTOR } from "#src/util/data_type.js";
@@ -33,6 +35,7 @@ import { HttpError } from "#src/util/http_request.js";
 import * as vector from "#src/util/vector.js";
 import type { VoxelChange } from "#src/voxel_annotation/base.js";
 import type { RPC } from "#src/worker_rpc.js";
+import { registerSharedObject } from "#src/worker_rpc.js";
 
 export class VolumeChunk extends SliceViewChunk {
   source: VolumeChunkSource | null = null;
@@ -264,4 +267,26 @@ export class VolumeChunkSource
     );
   }
 }
+
+@registerSharedObject(IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID)
+export class InMemoryVolumeChunkSourceBackend extends SliceViewChunkSourceBackend {
+  // This is a dummy backend for a frontend-only source.
+  // It should never be called upon to download data.
+  download(chunk: Chunk, _signal: AbortSignal): Promise<void> {
+    chunk.state = ChunkState.FAILED;
+    return Promise.reject(new Error(`Attempted to download from an in-memory source for chunk ${chunk.key}.`));
+  }
+
+  getChunk(chunkGridPosition: Float32Array): SliceViewChunk {
+    const chunk = super.getChunk(chunkGridPosition);
+    if (chunk.state === ChunkState.NEW) {
+      // This is a new chunk. Immediately mark it as available in system memory
+      // on the worker. This prevents the chunk manager from trying to download it.
+      // Since this is a dummy source, there's no actual data to associate with it.
+      this.chunkManager.queueManager.updateChunkState(chunk, ChunkState.SYSTEM_MEMORY_WORKER);
+    }
+    return chunk;
+  }
+}
+InMemoryVolumeChunkSourceBackend.prototype.chunkConstructor = VolumeChunk;
 VolumeChunkSource.prototype.chunkConstructor = VolumeChunk;

@@ -310,3 +310,4 @@ export interface VolumeChunkSource extends SliceViewChunkSource {
 }
 
 export const VOLUME_RPC_ID = "volume";
+export const IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID = "sliceview/volume/InMemoryChunkSource";

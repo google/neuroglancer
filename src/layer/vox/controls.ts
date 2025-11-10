@@ -1,6 +1,9 @@
-import { LayerActionContext } from "#src/layer/index.js";
+import { LayerActionContext, UserLayerConstructor } from "#src/layer/index.js";
 import type { UserLayerWithVoxelEditing } from "#src/layer/vox/index.js";
-import type { LayerControlDefinition } from "#src/widget/layer_control.js";
+import {
+  LayerControlDefinition,
+  registerLayerControl,
+} from "#src/widget/layer_control.js";
 import { buttonLayerControl } from "#src/widget/layer_control_button.js";
 import { checkboxLayerControl } from "#src/widget/layer_control_checkbox.js";
 import { enumLayerControl } from "#src/widget/layer_control_enum.js";
@@ -58,3 +61,9 @@ export const VOXEL_LAYER_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEdit
     }),
   },
 ];
+
+export function registerVoxelLayerControls(layerType: UserLayerConstructor<UserLayerWithVoxelEditing>) {
+  for (const control of VOXEL_LAYER_CONTROLS) {
+    registerLayerControl(layerType, control);
+  }
+}

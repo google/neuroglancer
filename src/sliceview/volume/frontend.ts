@@ -19,15 +19,17 @@ import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import type {
   DataType,
-  SliceViewChunkSpecification,
-} from "#src/sliceview/base.js";
+  SliceViewChunkSpecification} from "#src/sliceview/base.js";
 import { SLICEVIEW_REQUEST_CHUNK_RPC_ID } from "#src/sliceview/base.js";
 import { ChunkFormat as CompressedChunkFormat } from "#src/sliceview/compressed_segmentation/chunk_format.js";
 import { decodeChannel as decodeChannelUint32 } from "#src/sliceview/compressed_segmentation/decode_uint32.js";
 import { decodeChannel as decodeChannelUint64 } from "#src/sliceview/compressed_segmentation/decode_uint64.js";
 import { encodeChannel as encodeChannelUint32 } from "#src/sliceview/compressed_segmentation/encode_uint32.js";
 import { encodeChannel as encodeChannelUint64 } from "#src/sliceview/compressed_segmentation/encode_uint64.js";
-import type { SliceViewChunk } from "#src/sliceview/frontend.js";
+import type {
+  SliceViewChunk,
+  SliceViewSingleResolutionSource,
+} from "#src/sliceview/frontend.js";
 import {
   MultiscaleSliceViewChunkSource,
   SliceViewChunkSource,
@@ -42,7 +44,9 @@ import type {
   VolumeChunkSource as VolumeChunkSourceInterface,
   VolumeChunkSpecification,
   VolumeSourceOptions,
-  VolumeType,
+  VolumeType} from "#src/sliceview/volume/base.js";
+import {
+  IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID
 } from "#src/sliceview/volume/base.js";
 import { VolumeChunk } from "#src/sliceview/volume/chunk.js";
 import { getChunkFormatHandler } from "#src/sliceview/volume/registry.js";
@@ -53,9 +57,11 @@ import {
   DataType as DataTypeUtil,
 } from "#src/util/data_type.js";
 import type { Disposable } from "#src/util/disposable.js";
+import * as matrix from "#src/util/matrix.js";
 import type { GL } from "#src/webgl/context.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import { getShaderType, glsl_mixLinear } from "#src/webgl/shader_lib.js";
+import { registerSharedObjectOwner } from "#src/worker_rpc.js";
 
 export type VolumeChunkKey = string;
 
@@ -465,15 +471,15 @@ export class VolumeChunkSource
   }
 }
 
+@registerSharedObjectOwner(IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID)
 export class InMemoryVolumeChunkSource extends VolumeChunkSource {
   constructor(chunkManager: ChunkManager, spec: VolumeChunkSpecification) {
     super(chunkManager, { spec });
+    this.initializeCounterpart(this.chunkManager.rpc!, {});
   }
 
-  initializeCounterpart() {}
-
   getChunk(chunkGridPosition: Float32Array): UncompressedVolumeChunk {
-    const key = chunkGridPosition.join();
+    const key = Array.from(chunkGridPosition).join();
     let chunk = this.chunks.get(key) as UncompressedVolumeChunk | undefined;
     if (chunk === undefined) {
       const { spec } = this;
@@ -483,13 +489,13 @@ export class InMemoryVolumeChunkSource extends VolumeChunkSource {
       const data = new (Ctor as any)(numElements) as TypedArray;
 
       chunk = new UncompressedVolumeChunk(this, {
-        chunkGridPosition: chunkGridPosition.slice(),
+        chunkGridPosition: Array.from(chunkGridPosition),
         data: data,
         chunkDataSize: chunkDataSize,
       });
 
       this.addChunk(key, chunk);
-      chunk.state = ChunkState.GPU_MEMORY;
+      chunk.state = ChunkState.SYSTEM_MEMORY;
     }
     return chunk;
   }
@@ -501,6 +507,63 @@ export abstract class MultiscaleVolumeChunkSource extends MultiscaleSliceViewChu
 > {
   abstract dataType: DataType;
   abstract volumeType: VolumeType;
+}
+
+export class SingleScaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
+  dataType: DataType;
+  volumeType: VolumeType;
+  baseSpec: VolumeChunkSpecification;
+
+  constructor(
+    chunkManager: ChunkManager,
+    public baseSource: VolumeChunkSource, // Renamed for clarity
+    volumeType: VolumeType,
+  ) {
+    super(chunkManager);
+    this.baseSpec = baseSource.spec;
+    this.dataType = this.baseSpec.dataType;
+    this.volumeType = volumeType;
+  }
+
+  get rank() {
+    return this.baseSpec.rank;
+  }
+
+  getSources(
+    _options: VolumeSourceOptions,
+  ): SliceViewSingleResolutionSource<VolumeChunkSource>[][] {
+    const { baseSource, baseSpec } = this;
+    const { rank } = baseSpec;
+
+    // --- Level 0: The actual editing source ---
+    const fineSource: SliceViewSingleResolutionSource<VolumeChunkSource> = {
+      chunkSource: baseSource,
+      chunkToMultiscaleTransform: matrix.createIdentity(Float32Array, rank + 1),
+    };
+
+    // --- Level 1: The coarse safeguard source ---
+    // This source has a single chunk that covers the entire volume.
+    const coarseChunkSize = new Uint32Array(rank);
+    for (let i = 0; i < rank; ++i) {
+      coarseChunkSize[i] = baseSpec.upperVoxelBound[i] - baseSpec.lowerVoxelBound[i];
+    }
+    const coarseSpec: VolumeChunkSpecification = {
+      ...baseSpec,
+      chunkDataSize: coarseChunkSize,
+    };
+
+    const coarseSource = this.chunkManager.memoize.get(
+      `VoxelEditingCoarseSafeguard:${JSON.stringify(coarseSpec)}`,
+      () => new InMemoryVolumeChunkSource(this.chunkManager, coarseSpec)
+    );
+
+    const coarseSourceSpec: SliceViewSingleResolutionSource<VolumeChunkSource> = {
+      chunkSource: coarseSource,
+      chunkToMultiscaleTransform: matrix.createIdentity(Float32Array, rank + 1),
+    };
+
+    return [[fineSource, coarseSourceSpec]];
+  }
 }
 
 export { VolumeChunk };

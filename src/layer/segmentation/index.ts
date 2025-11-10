@@ -35,6 +35,7 @@ import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import { layerDataSourceSpecificationFromJson } from "#src/layer/layer_data_source.js";
 import * as json_keys from "#src/layer/segmentation/json_keys.js";
 import { registerLayerControls } from "#src/layer/segmentation/layer_controls.js";
+import { registerVoxelLayerControls } from "#src/layer/vox/controls.js";
 import { UserLayerWithVoxelEditingMixin } from "#src/layer/vox/index.js";
 import {
   MeshLayer,
@@ -89,12 +90,11 @@ import { SegmentationRenderLayer } from "#src/sliceview/volume/segmentation_rend
 import { StatusMessage } from "#src/status.js";
 import { trackableAlphaValue } from "#src/trackable_alpha.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
+import type {
+  TrackableValueInterface,
+  WatchableValueInterface} from "#src/trackable_value.js";
 import {
   registerNested,
-  TrackableValueInterface,
-  WatchableValueInterface,
-} from "#src/trackable_value.js";
-import {
   IndirectTrackableValue,
   IndirectWatchableValue,
   makeCachedDerivedWatchableValue,
@@ -109,6 +109,7 @@ import { SegmentDisplayTab } from "#src/ui/segment_list.js";
 import { registerSegmentSelectTools } from "#src/ui/segment_select_tools.js";
 import { registerSegmentSplitMergeTools } from "#src/ui/segment_split_merge_tools.js";
 import { DisplayOptionsTab } from "#src/ui/segmentation_display_options_tab.js";
+import { registerVoxelTools } from "#src/ui/voxel_annotations.js";
 import { Uint64Map } from "#src/uint64_map.js";
 import { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import { Uint64Set } from "#src/uint64_set.js";
@@ -805,7 +806,7 @@ export class SegmentationUserLayer extends Base {
             )
             context.registerDisposer(registerNested((context, isWritable) => {
               if (isWritable) {
-                this.initializeVoxelEditingForSubsource(loadedSubsource);
+                this.initializeVoxelEditingForSubsource(loadedSubsource, VolumeType.SEGMENTATION);
                 context.registerDisposer(() => {
                   this.deinitializeVoxelEditingForSubsource(loadedSubsource);
                 });
@@ -1418,7 +1419,8 @@ export class SegmentationUserLayer extends Base {
 }
 
 registerLayerControls(SegmentationUserLayer);
-
+registerVoxelTools(SegmentationUserLayer);
+registerVoxelLayerControls(SegmentationUserLayer);
 registerLayerType(SegmentationUserLayer);
 registerVolumeLayerType(VolumeType.SEGMENTATION, SegmentationUserLayer);
 registerLayerTypeDetector((subsource) => {
