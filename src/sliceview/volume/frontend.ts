@@ -34,7 +34,11 @@ import type {
 import type { Disposable } from "#src/util/disposable.js";
 import type { GL } from "#src/webgl/context.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
-import { getShaderType, glsl_mixLinear } from "#src/webgl/shader_lib.js";
+import {
+  getShaderType,
+  getShaderTypeDefines,
+  glsl_mixLinear,
+} from "#src/webgl/shader_lib.js";
 
 export type VolumeChunkKey = string;
 
@@ -109,6 +113,7 @@ export function defineChunkDataShaderAccess(
   }
 
   builder.addFragmentCode(glsl_mixLinear);
+  builder.addFragmentCode(getShaderTypeDefines(dataType));
   const dataAccessCode = `
 ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
   highp ivec3 p = ivec3(max(vec3(0.0, 0.0, 0.0), min(floor(${getPositionWithinChunkExpr}), uChunkDataSize - 1.0)));
