@@ -12,6 +12,8 @@ import {
   VOX_EDIT_LABELS_GET_RPC_ID,
   VOX_EDIT_MAP_INIT_RPC_ID,
   VOX_RELOAD_CHUNKS_RPC_ID,
+  makeVoxChunkKey,
+  parseVoxChunkKey,
 } from "#src/voxel_annotation/base.js";
 import type { VoxSourceWriter } from "#src/voxel_annotation/index.js";
 import { LocalVoxSourceWriter } from "#src/voxel_annotation/local_source.js";
@@ -24,6 +26,7 @@ export class VoxelEditController extends SharedObject {
   private source?: VoxSourceWriter;
   private mapReadyPromise: Promise<void>;
   private resolveMapReady!: () => void;
+  private mapCfg?: VoxMapConfig;
 
   // Short debounce to coalesce rapid edits coming from tools.
   private pendingEdits: {
@@ -35,6 +38,11 @@ export class VoxelEditController extends SharedObject {
   }[] = [];
   private commitDebounceTimer: number | undefined;
   private readonly commitDebounceDelayMs: number = 300;
+
+  // Downsampling queue to serialize and coalesce work across edits.
+  private downsampleQueue: string[] = [];
+  private downsampleQueueSet: Set<string> = new Set();
+  private isProcessingDownsampleQueue: boolean = false;
 
   constructor(rpc: RPC, options: any) {
     super();
@@ -52,6 +60,7 @@ export class VoxelEditController extends SharedObject {
     const src = new LocalVoxSourceWriter(this);
     await src.init(map);
     this.source = src;
+    this.mapCfg = map;
     try { this.resolveMapReady(); } catch {/* ignore */}
   }
 
@@ -64,6 +73,12 @@ export class VoxelEditController extends SharedObject {
     this.commitDebounceTimer = undefined;
     if (edits.length === 0) return;
     await src.applyEdits(edits);
+    // After base edits, enqueue downsampling for affected chunks (do not await here).
+    const touched = new Set<string>();
+    for (const e of edits) touched.add(e.key);
+    for (const key of touched) {
+      this.enqueueDownsample(key);
+    }
   }
 
   async commitVoxels(
@@ -106,6 +121,157 @@ export class VoxelEditController extends SharedObject {
       rpcId: this.rpcId,
       voxChunkKeys: voxChunkKeys,
     })
+  }
+  // Downsampling helpers
+  private parentKeyOf(childKey: string): string | null {
+    if (!this.mapCfg) return null;
+    const info = parseVoxChunkKey(childKey);
+    if (info === null) return null;
+    const parentLod = info.lod * 2;
+    const maxLOD = this.mapCfg.steps[this.mapCfg.steps.length - 1];
+    if (parentLod > maxLOD) return null;
+    const px = Math.floor(info.x / 2);
+    const py = Math.floor(info.y / 2);
+    const pz = Math.floor(info.z / 2);
+    return makeVoxChunkKey(`${px},${py},${pz}`, parentLod);
+  }
+
+  private calculateDownsamplePasses(chunkSize: number): number {
+    if (chunkSize <= 1) return 0;
+    return Math.ceil(Math.log2(chunkSize));
+  }
+
+  private async performDownsampleCascadeForKey(sourceKey: string): Promise<void> {
+    const cfg = this.mapCfg;
+    const src = this.source;
+    if (!cfg || !src) return;
+    const chunkSize = cfg.chunkDataSize[0];
+    const maxPasses = this.calculateDownsamplePasses(chunkSize);
+    const maxLOD = cfg.steps[cfg.steps.length - 1];
+
+    let currentKey: string | null = sourceKey;
+    for (let i = 0; i < maxPasses; i++) {
+      if (currentKey === null) break;
+      const info = parseVoxChunkKey(currentKey);
+      if (info === null) break;
+      if (info.lod >= maxLOD) break;
+      const nextKey = await this.downsampleStep(currentKey);
+      if (nextKey === null) break;
+      currentKey = nextKey;
+    }
+  }
+
+  private calculateMode(values: number[]): number {
+    if (values.length === 0) return 0;
+    const counts = new Map<number, number>();
+    let maxCount = 0;
+    let mode = 0;
+    for (const v of values) {
+      if (v === 0) continue;
+      const c = (counts.get(v) ?? 0) + 1;
+      counts.set(v, c);
+      if (c > maxCount) {
+        maxCount = c;
+        mode = v;
+      }
+    }
+    return mode;
+  }
+
+  private enqueueDownsample(key: string): void {
+    if (key.length === 0) return;
+    if (!this.downsampleQueueSet.has(key)) {
+      this.downsampleQueueSet.add(key);
+      this.downsampleQueue.push(key);
+    }
+    if (!this.isProcessingDownsampleQueue) {
+      // Kick processing asynchronously to avoid blocking the caller.
+      this.isProcessingDownsampleQueue = true;
+      Promise.resolve().then(() => this.processDownsampleQueue());
+    }
+  }
+
+  private async processDownsampleQueue(): Promise<void> {
+    try {
+      while (this.downsampleQueue.length > 0) {
+        const key = this.downsampleQueue.shift() as string;
+        this.downsampleQueueSet.delete(key);
+        await this.performDownsampleCascadeForKey(key);
+      }
+    } finally {
+      this.isProcessingDownsampleQueue = false;
+      // If new work was enqueued during processing and flag got reset, loop again.
+      if (this.downsampleQueue.length > 0 && !this.isProcessingDownsampleQueue) {
+        this.isProcessingDownsampleQueue = true;
+        Promise.resolve().then(() => this.processDownsampleQueue());
+      }
+    }
+  }
+
+  private async downsampleStep(sourceKey: string): Promise<string | null> {
+    const cfg = this.mapCfg;
+    const src = this.source;
+    if (!cfg || !src) return null;
+    const info = parseVoxChunkKey(sourceKey);
+    if (info === null) return null;
+
+    const sourceChunk = await src.getSavedChunk(sourceKey);
+    if (!sourceChunk) return null;
+
+    const targetKey = this.parentKeyOf(sourceKey);
+    if (targetKey === null) return null;
+
+    // Prepare indices and values to write into the target chunk
+    const chunkW = sourceChunk.size[0] / 2; // target subregion width
+    const chunkH = sourceChunk.size[1] / 2;
+    const chunkD = sourceChunk.size[2] / 2;
+    const offsetX = (info.x % 2) * chunkW;
+    const offsetY = (info.y % 2) * chunkH;
+    const offsetZ = (info.z % 2) * chunkD;
+
+    const targetSizeX = cfg.chunkDataSize[0];
+    const targetSizeY = cfg.chunkDataSize[1];
+
+    const indices: number[] = [];
+    const values: number[] = [];
+
+    for (let z = 0; z < chunkD; z++) {
+      for (let y = 0; y < chunkH; y++) {
+        for (let x = 0; x < chunkW; x++) {
+          const sx = x * 2;
+          const sy = y * 2;
+          const sz = z * 2;
+          const base = sz * (sourceChunk.size[0] * sourceChunk.size[1]) + sy * sourceChunk.size[0] + sx;
+          const row = sourceChunk.size[0];
+          const plane = sourceChunk.size[0] * sourceChunk.size[1];
+          // Gather 8 voxels from source
+          const v000 = Number((sourceChunk.data as any)[base]);
+          const v100 = Number((sourceChunk.data as any)[base + 1]);
+          const v010 = Number((sourceChunk.data as any)[base + row]);
+          const v110 = Number((sourceChunk.data as any)[base + row + 1]);
+          const v001 = Number((sourceChunk.data as any)[base + plane]);
+          const v101 = Number((sourceChunk.data as any)[base + plane + 1]);
+          const v011 = Number((sourceChunk.data as any)[base + plane + row]);
+          const v111 = Number((sourceChunk.data as any)[base + plane + row + 1]);
+          const mode = this.calculateMode([v000, v100, v010, v110, v001, v101, v011, v111]);
+
+          const tx = x + offsetX;
+          const ty = y + offsetY;
+          const tz = z + offsetZ;
+          const tIndex = tz * (targetSizeX * targetSizeY) + ty * targetSizeX + tx;
+          indices.push(tIndex);
+          values.push(mode >>> 0);
+        }
+      }
+    }
+
+    if (indices.length > 0) {
+      await src.applyEdits([
+        { key: targetKey, indices, values },
+      ]);
+    }
+
+    return targetKey;
   }
 }
 
