@@ -39,10 +39,15 @@ const VOX_TOOL_INPUT_MAP = EventActionMap.fromObject({
 abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
   protected latestMouseState: MouseSelectionState | null = null;
 
+  protected getEditingContext(): VoxelEditingContext | undefined {
+    return this.layer.editingContexts.values().next().value;
+  }
+
   protected getPoint(mouseState: MouseSelectionState): Int32Array | undefined {
     // TODO: maybe getVoxelPositionFromMouse() would best fit in the userLayer
-    const editController = this.layer.editingContexts.values().next().value.controller;
-    const vox = editController.getVoxelPositionFromMouse(mouseState) as
+    const editContext = this.getEditingContext();
+    if (editContext === undefined) return undefined;
+    const vox = editContext.getVoxelPositionFromMouse(mouseState) as
       | Float32Array
       | undefined;
     if (!mouseState?.active || !vox) return undefined;
@@ -173,6 +178,14 @@ export class VoxelBrushTool extends BaseVoxelTool {
   }
 
   activationCallback(_activation: ToolActivation<this>): void {
+    if (this.getEditingContext() === undefined) {
+      StatusMessage.showTemporaryMessage(
+        'Voxel editing is not available. Please select a writable volume source in the "Source" tab.',
+        5000,
+      );
+      this.stopDrawing();
+      return;
+    }
     this.startDrawing(this.mouseState);
   }
 
@@ -291,9 +304,12 @@ export class VoxelBrushTool extends BaseVoxelTool {
       basis = { u, v };
     }
 
-    for (const [_, ed] of this.layer.editingContexts)
-      for (const p of points)
-        ed.controller?.paintBrushWithShape(p, radius, value, shapeEnum, basis);
+    const editContext = this.getEditingContext();
+    if (editContext === undefined) {
+      throw new Error("editContext is undefined");
+    }
+    for (const p of points)
+      editContext.controller?.paintBrushWithShape(p, radius, value, shapeEnum, basis);
   }
 }
 
@@ -328,6 +344,14 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
   }
 
   activationCallback(_activation: ToolActivation<this>): void {
+    const editContext = this.getEditingContext();
+    if (editContext === undefined) {
+      StatusMessage.showTemporaryMessage(
+        'Voxel editing is not available. Please select a writable volume source in the "Source" tab.',
+        5000,
+      );
+      return;
+    }
     const seed = this.getPoint(this.mouseState);
     const planeNormal = this.mouseState.planeNormal;
     if (!seed || !planeNormal) return;
@@ -342,8 +366,7 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
       if (!Number.isFinite(max) || max <= 0) {
         throw new Error("Invalid max fill voxels setting");
       }
-      for (const [_, ed] of this.layer.editingContexts)
-      ed.controller
+      editContext.controller
         .floodFillPlane2D(
           new Float32Array(seed),
           value,

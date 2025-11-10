@@ -1,7 +1,9 @@
-import { LayerActionContext, UserLayerConstructor } from "#src/layer/index.js";
+import type { UserLayerConstructor } from "#src/layer/index.js";
+import { LayerActionContext } from "#src/layer/index.js";
 import type { UserLayerWithVoxelEditing } from "#src/layer/vox/index.js";
+import type {
+  LayerControlDefinition} from "#src/widget/layer_control.js";
 import {
-  LayerControlDefinition,
   registerLayerControl,
 } from "#src/widget/layer_control.js";
 import { buttonLayerControl } from "#src/widget/layer_control_button.js";
@@ -41,7 +43,7 @@ export const VOXEL_LAYER_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEdit
     toolJson: { type: "vox-undo" },
     ...buttonLayerControl({
       text: "Undo",
-      onClick: (layer) => layer.handleAction("undo", new LayerActionContext()),
+      onClick: (layer) => layer.handleVoxAction("undo", new LayerActionContext()),
     }),
   },
   {
@@ -49,7 +51,7 @@ export const VOXEL_LAYER_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEdit
     toolJson: { type: "vox-redo" },
     ...buttonLayerControl({
       text: "Redo",
-      onClick: (layer) => layer.handleAction("redo", new LayerActionContext()),
+      onClick: (layer) => layer.handleVoxAction("redo", new LayerActionContext()),
     }),
   },
   {
@@ -57,7 +59,7 @@ export const VOXEL_LAYER_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEdit
     toolJson: { type: "vox-new-label" },
     ...buttonLayerControl({
       text: "New Label",
-      onClick: (layer) => layer.handleAction("new-label", new LayerActionContext()),
+      onClick: (layer) => layer.handleVoxAction("new-label", new LayerActionContext()),
     }),
   },
 ];

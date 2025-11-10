@@ -16,19 +16,20 @@
 
 import type { Chunk } from "#src/chunk_manager/backend.js";
 import { ChunkState } from "#src/chunk_manager/base.js";
-import {
-  SliceViewChunk,
-  SliceViewChunkSourceBackend,
-} from "#src/sliceview/backend.js";
+import { SliceViewChunk, SliceViewChunkSourceBackend } from "#src/sliceview/backend.js";
 import type { SliceViewChunkSpecification } from "#src/sliceview/base.js";
 import { DataType } from "#src/sliceview/base.js";
+import { decodeChannel as decodeChannelUint32 } from "#src/sliceview/compressed_segmentation/decode_uint32.js";
+import { decodeChannel as decodeChannelUint64 } from "#src/sliceview/compressed_segmentation/decode_uint64.js";
+import { encodeChannel as encodeChannelUint32 } from "#src/sliceview/compressed_segmentation/encode_uint32.js";
+import { encodeChannel as encodeChannelUint64 } from "#src/sliceview/compressed_segmentation/encode_uint64.js";
 import type {
   VolumeChunkSource as VolumeChunkSourceInterface,
-  VolumeChunkSpecification} from "#src/sliceview/volume/base.js";
-import {
-  IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID
+  VolumeChunkSpecification
 } from "#src/sliceview/volume/base.js";
-import type { TypedArray } from "#src/util/array.js";
+import { IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID } from "#src/sliceview/volume/base.js";
+import type { TypedArray} from "#src/util/array.js";
+import { TypedArrayBuilder } from "#src/util/array.js";
 import { DATA_TYPE_ARRAY_CONSTRUCTOR } from "#src/util/data_type.js";
 import type { vec3 } from "#src/util/geom.js";
 import { HttpError } from "#src/util/http_request.js";
@@ -185,39 +186,27 @@ export class VolumeChunkSource
     ) {
       throw new Error(`applyEdits: invalid chunk key ${chunkKey}`);
     }
-    const chunk = this.getChunk(chunkGridPosition) as VolumeChunk;
 
-    if (chunk.state > ChunkState.SYSTEM_MEMORY_WORKER) {
+    const chunk = this.getChunk(chunkGridPosition) as VolumeChunk;
+    if (chunk.state > ChunkState.SYSTEM_MEMORY_WORKER || !chunk.data) {
       const ac = new AbortController();
       await this.download(chunk, ac.signal);
     }
 
-    if (!chunk.data) {
-      try {
-        const ac = new AbortController();
-        await this.download(chunk, ac.signal);
-      } catch {
-        //
-      }
+    if (!chunk.chunkDataSize) {
+      this.computeChunkBounds(chunk);
+    }
+    if (!chunk.chunkDataSize) {
+      throw new Error(
+        `applyEdits: Cannot create new chunk ${chunkKey} because its size is unknown.`,
+      );
     }
 
     if (!chunk.data) {
-      // If chunk.data is null, the chunk does not exist at the source or was evicted.
-      // Create a new, zero-filled chunk to apply the edits to.
-      if (!chunk.chunkDataSize) {
-        this.computeChunkBounds(chunk);
-      }
-      if (!chunk.chunkDataSize) {
-        throw new Error(
-          `applyEdits: Cannot create new chunk ${chunkKey} because its size is unknown.`,
-        );
-      }
       const numElements = chunk.chunkDataSize.reduce((a, b) => a * b, 1);
       const Ctor = DATA_TYPE_ARRAY_CONSTRUCTOR[this.spec.dataType];
-      chunk.data = new (Ctor as any)(numElements);
-      // The new TypedArray is already zero-filled.
+      chunk.data = new (Ctor as any)(numElements) as TypedArray;
     }
-    const data = chunk.data as TypedArray;
 
     const ArrayCtor = DATA_TYPE_ARRAY_CONSTRUCTOR[this.spec.dataType] as any;
     const indicesCopy = new Uint32Array(indices);
@@ -230,16 +219,91 @@ export class VolumeChunkSource
     }
     const oldValuesArray = new ArrayCtor(indices.length);
 
-    for (let i = 0; i < indices.length; ++i) {
-      const idx = indices[i]!;
-      if (idx < 0 || idx >= data.length) {
-        throw new Error(
-          `applyEdits: index ${idx} out of bounds for chunk ${chunkKey}`,
+    if (this.spec.compressedSegmentationBlockSize !== undefined) {
+      const compressedData = chunk.data as Uint32Array;
+      const { chunkDataSize } = chunk;
+      const numElements =
+        chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2];
+      const { dataType, compressedSegmentationBlockSize: subchunkSize } =
+        this.spec;
+      const baseOffset = compressedData.length > 0 ? compressedData[0] : 0;
+
+      let uncompressedData: Uint32Array | BigUint64Array;
+      if (dataType === DataType.UINT32) {
+        uncompressedData = new Uint32Array(numElements);
+        if (baseOffset !== 0) {
+          decodeChannelUint32(
+            uncompressedData,
+            compressedData,
+            baseOffset,
+            chunkDataSize,
+            subchunkSize!,
+          );
+        }
+      } else {
+        uncompressedData = new BigUint64Array(numElements);
+        if (baseOffset !== 0) {
+          decodeChannelUint64(
+            uncompressedData,
+            compressedData,
+            baseOffset,
+            chunkDataSize,
+            subchunkSize!,
+          );
+        }
+      }
+
+      const ArrayCtor = DATA_TYPE_ARRAY_CONSTRUCTOR[dataType] as any;
+      const oldValuesArray = new ArrayCtor(indices.length);
+      const newValuesArray = new ArrayCtor(values.length);
+
+      for (let i = 0; i < indices.length; ++i) {
+        const idx = indices[i]!;
+        oldValuesArray[i] = uncompressedData[idx];
+        if (dataType === DataType.UINT32) {
+          (uncompressedData as Uint32Array)[idx] = Number(values[i]!);
+          newValuesArray[i] = Number(values[i]!);
+        } else {
+          (uncompressedData as BigUint64Array)[idx] = values[i]! as bigint;
+          newValuesArray[i] = values[i]! as bigint;
+        }
+      }
+
+      const outputBuilder = new TypedArrayBuilder(Uint32Array);
+      outputBuilder.resize(1);
+      outputBuilder.data[0] = 1;
+
+      if (dataType === DataType.UINT32) {
+        encodeChannelUint32(
+          outputBuilder,
+          subchunkSize!,
+          uncompressedData as Uint32Array,
+          chunkDataSize,
+        );
+      } else {
+        encodeChannelUint64(
+          outputBuilder,
+          subchunkSize!,
+          uncompressedData as BigUint64Array,
+          chunkDataSize,
         );
       }
-      oldValuesArray[i] = data[idx];
-      data[idx] = newValuesArray[i];
+
+      chunk.data = outputBuilder.view;
+    } else {
+      const data = chunk.data as TypedArray;
+      for (let i = 0; i < indices.length; ++i) {
+        const idx = indices[i]!;
+        if (idx < 0 || idx >= data.byteLength) {
+          throw new Error(
+            `applyEdits: index ${idx} out of bounds for chunk ${chunkKey}`,
+          );
+        }
+        oldValuesArray[i] = data[idx];
+        data[idx] = newValuesArray[i];
+      }
     }
+
     const maxRetries = 3;
     let lastError: Error | undefined;
 

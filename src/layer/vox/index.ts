@@ -147,7 +147,6 @@ export class VoxelEditingContext
       chunkTransform.combinedGlobalLocalToChunkTransform,
     );
     if (!ok) return undefined;
-
     return this.cachedVoxelPosition;
   }
 
@@ -187,6 +186,7 @@ export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
 
   getIdentitySliceViewSourceOptions(): SliceViewSourceOptions;
   setDrawErrorMessage(message: string | undefined): void;
+  handleVoxAction(action: string, context: LayerActionContext): void;
 }
 
 export function UserLayerWithVoxelEditingMixin<
@@ -316,7 +316,7 @@ export function UserLayerWithVoxelEditingMixin<
       };
     }
 
-    handleAction(action: string, context: LayerActionContext): void {
+    handleVoxAction(action: string, context: LayerActionContext): void {
       super.handleAction(action, context);
       const firstContext = this.editingContexts.values().next().value;
       if (!firstContext) return;

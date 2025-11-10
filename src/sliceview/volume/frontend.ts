@@ -18,14 +18,9 @@ import { ChunkState } from "#src/chunk_manager/base.js";
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import type {
-  DataType,
   SliceViewChunkSpecification} from "#src/sliceview/base.js";
-import { SLICEVIEW_REQUEST_CHUNK_RPC_ID } from "#src/sliceview/base.js";
-import { ChunkFormat as CompressedChunkFormat } from "#src/sliceview/compressed_segmentation/chunk_format.js";
-import { decodeChannel as decodeChannelUint32 } from "#src/sliceview/compressed_segmentation/decode_uint32.js";
-import { decodeChannel as decodeChannelUint64 } from "#src/sliceview/compressed_segmentation/decode_uint64.js";
-import { encodeChannel as encodeChannelUint32 } from "#src/sliceview/compressed_segmentation/encode_uint32.js";
-import { encodeChannel as encodeChannelUint64 } from "#src/sliceview/compressed_segmentation/encode_uint64.js";
+import {
+  DataType, SLICEVIEW_REQUEST_CHUNK_RPC_ID } from "#src/sliceview/base.js";
 import type {
   SliceViewChunk,
   SliceViewSingleResolutionSource,
@@ -34,11 +29,8 @@ import {
   MultiscaleSliceViewChunkSource,
   SliceViewChunkSource,
 } from "#src/sliceview/frontend.js";
-import type {
-  UncompressedChunkFormatHandler} from "#src/sliceview/uncompressed_chunk_format.js";
 import {
   UncompressedVolumeChunk,
-  ChunkFormat as UncompressedChunkFormat
 } from "#src/sliceview/uncompressed_chunk_format.js";
 import type {
   VolumeChunkSource as VolumeChunkSourceInterface,
@@ -51,10 +43,8 @@ import {
 import { VolumeChunk } from "#src/sliceview/volume/chunk.js";
 import { getChunkFormatHandler } from "#src/sliceview/volume/registry.js";
 import type { TypedArray } from "#src/util/array.js";
-import { TypedArrayBuilder } from "#src/util/array.js";
 import {
   DATA_TYPE_ARRAY_CONSTRUCTOR,
-  DataType as DataTypeUtil,
 } from "#src/util/data_type.js";
 import type { Disposable } from "#src/util/disposable.js";
 import * as matrix from "#src/util/matrix.js";
@@ -63,7 +53,6 @@ import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import { getShaderType, glsl_mixLinear } from "#src/webgl/shader_lib.js";
 import { registerSharedObjectOwner } from "#src/worker_rpc.js";
 
-export type VolumeChunkKey = string;
 
 export interface ChunkFormat {
   shaderKey: string;
@@ -253,148 +242,6 @@ export class VolumeChunkSource
     return this.getValueAt(chunkPosition, channelAccess);
   }
 
-  applyLocalEdits(
-    edits: Map<string, { indices: number[]; value: bigint }>,
-  ): void {
-    const chunksToUpdate = new Set<VolumeChunk>();
-    const fetches: Promise<void>[] = [];
-
-    for (const [key, edit] of edits.entries()) {
-      const chunk = this.chunks.get(key) as VolumeChunk | undefined;
-      if (!chunk) {
-        continue;
-      }
-
-      const processEdit = (targetChunk: VolumeChunk) => {
-        const chunkFormat = targetChunk.chunkFormat;
-        if (chunkFormat instanceof UncompressedChunkFormat) {
-          const uncompressedChunk = targetChunk as UncompressedVolumeChunk;
-          let cpuArray = uncompressedChunk.data as TypedArray | null;
-          if (cpuArray === null) {
-            // If the chunk currently has the shared fill value texture, we must
-            // detach it so that a new texture is created for the edited data.
-            const handler = uncompressedChunk.source
-              .chunkFormatHandler as UncompressedChunkFormatHandler;
-            if (uncompressedChunk.texture === handler.fillValueChunk.texture) {
-              uncompressedChunk.texture = null;
-              uncompressedChunk.textureLayout = null;
-            }
-
-            // Chunk data is null, meaning it's an empty/unloaded chunk.
-            // We must create a zero-filled buffer to apply the preview edit.
-            const { chunkDataSize, source } = uncompressedChunk;
-            const numElements = chunkDataSize.reduce((a, b) => a * b, 1);
-            const Ctor = DATA_TYPE_ARRAY_CONSTRUCTOR[source.spec.dataType];
-            cpuArray = new (Ctor as any)(numElements);
-            uncompressedChunk.data = cpuArray;
-          }
-          if (cpuArray === null) throw new Error("Unexpected null chunk data");
-          const { dataType } = chunkFormat;
-          for (const index of edit.indices) {
-            if (dataType === DataTypeUtil.UINT32) {
-              cpuArray[index] = Number(edit.value);
-            } else {
-              // Assumes UINT64
-              cpuArray[index] = edit.value;
-            }
-          }
-          chunksToUpdate.add(targetChunk);
-        } else if (chunkFormat instanceof CompressedChunkFormat) {
-          // using an idiotic logic to handle compressed chunks: uncompress -> edit -> recompress
-          // TODO: rework this
-          const compressedData = (targetChunk as any).data as Uint32Array;
-          const { chunkDataSize } = targetChunk;
-          const numElements =
-            chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2];
-          const { dataType, subchunkSize } = chunkFormat;
-          const baseOffset = compressedData[0];
-          const outputBuilder = new TypedArrayBuilder(
-            Uint32Array,
-            compressedData.length,
-          );
-          outputBuilder.resize(1);
-          outputBuilder.data[0] = 1;
-
-          if (dataType === DataTypeUtil.UINT32) {
-            const uncompressedData = new Uint32Array(numElements);
-            decodeChannelUint32(
-              uncompressedData,
-              compressedData,
-              baseOffset,
-              chunkDataSize,
-              subchunkSize,
-            );
-            for (const index of edit.indices) {
-              uncompressedData[index] = Number(edit.value);
-            }
-            encodeChannelUint32(
-              outputBuilder,
-              subchunkSize,
-              uncompressedData,
-              chunkDataSize,
-            );
-          } else {
-            // Assumes UINT64
-            const uncompressedData = new BigUint64Array(numElements);
-            decodeChannelUint64(
-              uncompressedData,
-              compressedData,
-              baseOffset,
-              chunkDataSize,
-              subchunkSize,
-            );
-            for (const index of edit.indices) {
-              uncompressedData[index] = edit.value;
-            }
-            encodeChannelUint64(
-              outputBuilder,
-              subchunkSize,
-              uncompressedData,
-              chunkDataSize,
-            );
-          }
-
-          (targetChunk as any).data = outputBuilder.view;
-          chunksToUpdate.add(targetChunk);
-        }
-      };
-
-      if ((chunk as any).data) {
-        processEdit(chunk);
-      } else {
-        const fetchPromise = this.fetchChunk(
-          chunk.chunkGridPosition,
-          (fetchedChunk) => {
-            processEdit(fetchedChunk as VolumeChunk);
-          },
-          {},
-        ).catch((err) => {
-          console.error(
-            `Failed to fetch chunk ${key} for local edit preview:`,
-            err,
-          );
-        });
-        fetches.push(fetchPromise);
-      }
-    }
-
-    this.invalidateGpuData(chunksToUpdate);
-
-    if (fetches.length > 0) {
-      Promise.all(fetches).then(() => {
-        this.invalidateGpuData(chunksToUpdate);
-      });
-    }
-  }
-
-  private invalidateGpuData(chunks: Set<VolumeChunk>): void {
-    if (chunks.size === 0) return;
-    for (const chunk of chunks) {
-      chunk.updateFromCpuData(this.chunkManager.chunkQueueManager.gl);
-    }
-    this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
-  }
-
   computeChunkIndices(voxelCoord: Float32Array): {
     chunkGridPosition: Float32Array;
     positionWithinChunk: Uint32Array;
@@ -478,6 +325,41 @@ export class InMemoryVolumeChunkSource extends VolumeChunkSource {
     this.initializeCounterpart(this.chunkManager.rpc!, {});
   }
 
+  private invalidateGpuData(chunks: Set<VolumeChunk>): void {
+    if (chunks.size === 0) return;
+    for (const chunk of chunks) {
+      chunk.updateFromCpuData(this.chunkManager.chunkQueueManager.gl);
+    }
+    this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
+  }
+
+  applyLocalEdits(edits: Map<string, { indices: number[]; value: bigint }>): void {
+    const chunksToUpdate = new Set<VolumeChunk>();
+    const { dataType } = this.spec;
+
+    console.log("applyLocalEdits", edits);
+
+    for (const [key, edit] of edits.entries()) {
+      const chunkGridPosition = new Float32Array(key.split(",").map(Number));
+
+      // getChunk on InMemoryVolumeChunkSource is guaranteed to return a chunk
+      const chunk = this.getChunk(chunkGridPosition);
+      chunksToUpdate.add(chunk);
+
+      const cpuArray = chunk.data!;
+
+      for (const index of edit.indices) {
+        if (dataType === DataType.UINT32) {
+          cpuArray[index] = Number(edit.value);
+        } else {
+          (cpuArray as BigUint64Array)[index] = edit.value;
+        }
+      }
+    }
+
+    this.invalidateGpuData(chunksToUpdate);
+  }
+
   getChunk(chunkGridPosition: Float32Array): UncompressedVolumeChunk {
     const key = Array.from(chunkGridPosition).join();
     let chunk = this.chunks.get(key) as UncompressedVolumeChunk | undefined;
@@ -542,7 +424,6 @@ export class SingleScaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
     };
 
     // --- Level 1: The coarse safeguard source ---
-    // This source has a single chunk that covers the entire volume.
     const coarseChunkSize = new Uint32Array(rank);
     for (let i = 0; i < rank; ++i) {
       coarseChunkSize[i] = baseSpec.upperVoxelBound[i] - baseSpec.lowerVoxelBound[i];
