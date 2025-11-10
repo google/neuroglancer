@@ -5,14 +5,14 @@
 
 
 ### priority
-- Fix the orientation of the disk in the brush tool
 - Add support for flood fill on different planes
 - fix the flood fill for compressed chunks
 - test uint64 support
-- fix label multiplication and wrong color in the ui list
 - fix drawing tools (flood fill and picker not working when zoomed out)
 - design a dataset creation feature
-- undo tool (keep a stack of pre-edit values lists upon commit)
+- fix undo/redo buttons activation states
+- fix flood fill morphological hole filling, it mysteriously stopped working
+
 
 ### extra
 - rework the ui (tabs)
@@ -24,8 +24,17 @@
 - add shortcuts for tools (switching tools, toogle erase mode, select label from the pointed one in the slice view and adjusting brush size) and label creation
 - write a testsuite for the downsampler and ensure its proper working on exotic lod levels
 
+
+
 ### questionable
 -? adapt the brush size to the zoom level linearly
+
+
+
+
+
+
+
 
 
 

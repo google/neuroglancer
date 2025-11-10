@@ -18,6 +18,7 @@ import type { MouseSelectionState } from "#src/layer/index.js";
 import type { VoxUserLayer } from "#src/layer/vox/index.js";
 import { StatusMessage } from "#src/status.js";
 import { LegacyTool, registerLegacyTool } from "#src/ui/tool.js";
+import { vec3 } from "#src/util/geom.js";
 
 export const BRUSH_TOOL_ID = "voxBrush";
 export const FLOODFILL_TOOL_ID = "voxFloodFill";
@@ -99,7 +100,6 @@ export const ADOPT_VOXEL_LABEL_TOOL_ID = "adoptVoxelLabel";
     return out;
   }
 
-  protected abstract paintPoint(point: Float32Array, value: bigint): void;
   protected abstract paintPoints(points: Float32Array[], value: bigint): void;
 
   protected startDrawing(mouseState: MouseSelectionState) {
@@ -125,7 +125,7 @@ export const ADOPT_VOXEL_LABEL_TOOL_ID = "adoptVoxelLabel";
 
     const value = layer.voxLabelsManager.getCurrentLabelValue(layer.voxEraseMode);
 
-    this.paintPoint(centerCanonical, value);
+    this.paintPoints([centerCanonical], value);
     this.lastPoint = start;
     // Initialize latest mouse state so RAF can process immediately
     this.latestMouseState = mouseState;
@@ -195,26 +195,6 @@ export class VoxelBrushLegacyTool extends BaseVoxelLegacyTool {
     return BRUSH_TOOL_ID;
   }
 
-  protected paintPoint(point: Float32Array, value: bigint) {
-    const radius = Math.max(
-      1,
-      Math.floor((this.layer as any).voxBrushRadius ?? 3),
-    );
-    const shape =
-      (this.layer as any).voxBrushShape === "sphere" ? "sphere" : "disk";
-    const basis =
-      shape === "disk"
-        ? (this.layer as any).getBrushPlaneBasis?.(this.currentMouseState)
-        : undefined;
-    (this.layer as any).voxEditController?.paintBrushWithShape(
-      point,
-      radius,
-      value,
-      shape,
-      basis,
-    );
-  }
-
   protected paintPoints(points: Float32Array[], value: bigint) {
     const radius = Math.max(
       1,
@@ -223,10 +203,18 @@ export class VoxelBrushLegacyTool extends BaseVoxelLegacyTool {
     const shape =
       (this.layer as any).voxBrushShape === "sphere" ? "sphere" : "disk";
     const ctrl = (this.layer as any).voxEditController;
-    const basis =
-      shape === "disk"
-        ? (this.layer as any).getBrushPlaneBasis?.(this.currentMouseState)
-        : undefined;
+    let basis = undefined;
+    if (shape === 'disk' && this.currentMouseState?.planeNormal) {
+      const n = this.currentMouseState.planeNormal;
+      const u = vec3.create();
+      const tempVec = Math.abs(vec3.dot(n, vec3.fromValues(1, 0, 0))) < 0.9 ?
+        vec3.fromValues(1, 0, 0) : vec3.fromValues(0, 1, 0);
+      vec3.cross(u, tempVec, n);
+      vec3.normalize(u, u);
+      const v = vec3.cross(vec3.create(), n, u);
+      vec3.normalize(v, v);
+      basis = { u, v };
+    }
     for (const point of points) {
       ctrl?.paintBrushWithShape(point, radius, value, shape, basis);
     }
@@ -252,9 +240,12 @@ export class VoxelFloodFillLegacyTool extends LegacyTool<VoxUserLayer> {
       }
 
       const pos = layer.getVoxelPositionFromMouse?.(mouseState) as Float32Array | undefined;
-      if (!pos || pos.length < 3) {
-        throw new Error("Flood fill: failed to get voxel position from mouse");
+      const planeNormal = mouseState.planeNormal;
+
+      if (!pos || pos.length < 3 || !planeNormal) {
+        throw new Error("Flood fill: failed to get voxel position or plane normal.");
       }
+
 
       const value = layer.voxLabelsManager.getCurrentLabelValue(layer.voxEraseMode);
       const max = Number((layer as any).voxFloodMaxVoxels);
@@ -271,7 +262,7 @@ export class VoxelFloodFillLegacyTool extends LegacyTool<VoxUserLayer> {
       ]);
 
       console.info("[VoxFloodFill] starting flood fill", { seed: Array.from(seed), value: value, max: Math.floor(max) });
-      ctrl.floodFillPlane2D(seed, value, Math.floor(max)).then(({ edits, filledCount }) => {
+      ctrl.floodFillPlane2D(seed, value, Math.floor(max), planeNormal).then(({ edits, filledCount }) => {
         console.info("[VoxFloodFill] BFS completed", { filledCount, editsByChunk: edits.length });
 
         if (edits.length === 0) return;

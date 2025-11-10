@@ -8,6 +8,7 @@ import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transf
 import type { VolumeChunkSource , MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
+import { vec3 } from "#src/util/geom.js";
 import type {
   VoxelLayerResolution} from "#src/voxel_annotation/base.js";
 import {
@@ -167,10 +168,26 @@ export class VoxelEditController extends SharedObject {
         }
       }
     } else {
-      for (let dy = -r; dy <= r; ++dy) {
-        for (let dx = -r; dx <= r; ++dx) {
-          if (dx * dx + dy * dy <= rr) {
-            voxelsToPaint.push(new Float32Array([cx + dx, cy + dy, cz]));
+      if (basis === undefined) {
+        // Fallback to old XY-plane behavior if no basis is provided
+        for (let dy = -r; dy <= r; ++dy) {
+          for (let dx = -r; dx <= r; ++dx) {
+            if (dx * dx + dy * dy <= rr) {
+              voxelsToPaint.push(new Float32Array([cx + dx, cy + dy, cz]));
+            }
+          }
+        }
+      } else {
+        // New logic for arbitrary plane
+        const { u, v } = basis;
+        for (let j = -r; j <= r; ++j) {
+          for (let i = -r; i <= r; ++i) {
+            if (i * i + j * j <= rr) {
+              const point = vec3.fromValues(cx, cy, cz);
+              vec3.scaleAndAdd(point, point, u as vec3, i);
+              vec3.scaleAndAdd(point, point, v as vec3, j);
+              voxelsToPaint.push(point as Float32Array);
+            }
           }
         }
       }
@@ -233,6 +250,7 @@ export class VoxelEditController extends SharedObject {
     startPositionCanonical: Float32Array,
     fillValue: bigint,
     maxVoxels: number,
+   _planeNormal: vec3,
   ): Promise<{ edits: { key: string; indices: number[]; value: bigint }[]; filledCount: number; originalValue: bigint }> {
     if (!startPositionCanonical || startPositionCanonical.length < 3) {
       throw new Error("VoxelEditController.floodFillPlane2D: startPositionCanonical must be Float32Array[3].");
@@ -274,8 +292,6 @@ export class VoxelEditController extends SharedObject {
     const queue: [number, number][] = [];
     let filledCount = 0;
 
-    console.log("startVoxelLod", startVoxelLod, "fillValue", fillValue, "maxVoxels", maxVoxels, "originalValue", originalValue, "zPlane", zPlane);
-
     const isOriginalAt = async (px: number, py: number): Promise<boolean> => {
       const value = await source.getEnsuredValueAt(new Float32Array([px, py, zPlane]), this.singleChannelAccess);
       return (typeof value !== "bigint" ? BigInt(value as number) : value) === originalValue;
@@ -298,32 +314,28 @@ export class VoxelEditController extends SharedObject {
       ny: number,
       requiredThickness: number
     ): boolean => {
-      if (requiredThickness <= 1) return true; // No thickness constraint
+      if (requiredThickness <= 1) return true;
 
       const dx = nx - x;
       const dy = ny - y;
 
-      // Only allow exactly one-axis moves (4-connectivity)
       if ((dx === 0) === (dy === 0)) return false;
 
       const halfThickness = Math.floor(requiredThickness / 2);
 
       if (dx !== 0) {
-        // Horizontal move: check vertical thickness at BOTH current and destination
-        // We need the channel to be thick enough along the entire path
         for (const checkX of [x, nx]) {
           for (let offset = -halfThickness; offset <= halfThickness; offset++) {
             if (!isOriginalAt(checkX, ny + offset)) {
-              return false; // Channel not thick enough
+              return false;
             }
           }
         }
       } else {
-        // Vertical move: check horizontal thickness at BOTH current and destination
         for (const checkY of [y, ny]) {
           for (let offset = -halfThickness; offset <= halfThickness; offset++) {
             if (!isOriginalAt(nx + offset, checkY)) {
-              return false; // Channel not thick enough
+              return false;
             }
           }
         }
