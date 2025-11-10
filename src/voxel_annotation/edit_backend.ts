@@ -338,7 +338,7 @@ export class VoxelEditController extends SharedObject {
             v101,
             v011,
             v111,
-          ]);
+          ].map(v => BigInt(v)));
 
           const tx = x + offsetX;
           const ty = y + offsetY;

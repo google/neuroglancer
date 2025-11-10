@@ -1,6 +1,9 @@
 # TODO List
 
 - FOR TOMORROW: start to prepare the problematic/email to JMS
+- look onto the max downscale steps calculation (is it correct?)
+- test uint64 support
+- fix label multplication and wrong color in the ui list
 
 ### priority
 - fix the issue with the preview not rendering on empty chunks
