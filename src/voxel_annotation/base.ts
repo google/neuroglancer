@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+import type { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
+import type { VoxelPreviewMultiscaleSource } from "#src/voxel_annotation/PreviewMultiscaleChunkSource.js";
+import type { RPC } from "#src/worker_rpc.js";
+
 export const VOX_RELOAD_CHUNKS_RPC_ID = "vox.chunk.reload";
 export const VOX_EDIT_BACKEND_RPC_ID = "vox.EditBackend";
 export const VOX_EDIT_COMMIT_VOXELS_RPC_ID = "vox.edit.commitVoxels";
@@ -67,4 +71,15 @@ export function parseVoxChunkKey(key: string) {
     z: parts[3],
     chunkKey: key.split("#")[1],
   };
+}
+
+export enum BrushShape {
+  DISK = 0,
+  SPHERE = 1,
+}
+
+export interface VoxelEditControllerHost {
+  primarySource: MultiscaleVolumeChunkSource;
+  previewSource: VoxelPreviewMultiscaleSource;
+  rpc: RPC;
 }

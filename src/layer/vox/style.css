@@ -14,21 +14,10 @@
  * limitations under the License.
  */
 
-:root {
-  /* best-effort variables if app doesn't define them */
-  --ng-bg: rgba(20, 22, 27, 0.9);
-  --ng-card: rgba(255, 255, 255, 0.04);
-  --ng-border: rgba(255, 255, 255, 0.15);
-  --ng-text: rgba(230, 230, 235, 0.95);
-  --ng-muted: rgba(230, 230, 235, 0.65);
-  --ng-accent: #3a6df0;
-}
-
 .neuroglancer-vox-row label {
   flex: 0 0 140px;
   min-width: 0;
   font-weight: 500;
-  color: var(--ng-muted);
 }
 
 .neuroglancer-vox-status {
@@ -36,7 +25,6 @@
   flex: 1 1 100%;
   min-width: 100%;
   padding-top: 4px;
-  color: var(--ng-muted);
 }
 
 .neuroglancer-vox-settings-tab button:hover,

@@ -528,7 +528,6 @@
       "neuroglancer/kvstore/zip:disabled": "./src/util/false.ts",
       "default": "./src/kvstore/zip/register_backend.ts"
     },
-    "#kvstore/indexeddb/register": "./src/kvstore/indexeddb/register.ts",
     "#layer/annotation": {
       "neuroglancer/layer/annotation:enabled": "./src/layer/annotation/index.ts",
       "neuroglancer/layer:none_by_default": "./src/util/false.ts",
@@ -552,12 +551,6 @@
       "neuroglancer/layer:none_by_default": "./src/util/false.ts",
       "neuroglancer/layer/single_mesh:disabled": "./src/util/false.ts",
       "default": "./src/layer/single_mesh/index.ts"
-    },
-    "#layer/vox": {
-      "neuroglancer/layer/vox:enabled": "./src/layer/vox/index.ts",
-      "neuroglancer/layer:none_by_default": "./src/util/false.ts",
-      "neuroglancer/layer/vox:disabled": "./src/util/false.ts",
-      "default": "./src/layer/vox/index.ts"
     },
     "#main": {
       "neuroglancer/python": "./src/main_python.ts",

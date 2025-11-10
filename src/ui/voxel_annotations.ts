@@ -15,8 +15,10 @@
  */
 
 import type { MouseSelectionState } from "#src/layer/index.js";
-import type { UserLayerWithVoxelEditing, VoxelEditingContext } from "#src/layer/vox/index.js";
-import { BrushShape } from "#src/layer/vox/index.js";
+import type {
+  UserLayerWithVoxelEditing,
+  VoxelEditingContext,
+} from "#src/layer/vox/index.js";
 import type { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import { StatusMessage } from "#src/status.js";
 import { LayerTool, registerTool, type ToolActivation } from "#src/ui/tool.js";
@@ -24,6 +26,7 @@ import { vec3 } from "#src/util/geom.js";
 import { EventActionMap } from "#src/util/mouse_bindings.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
 import { NullarySignal } from "#src/util/signal.js";
+import { BrushShape } from "#src/voxel_annotation/base.js";
 
 export const BRUSH_TOOL_ID = "vox-brush";
 export const FLOODFILL_TOOL_ID = "vox-flood-fill";
@@ -48,8 +51,10 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
       | Float32Array
       | undefined;
     if (!mouseState?.active || !vox) return undefined;
-    if(!mouseState.planeNormal) return;
-    const planeNormal =  editContext.transformGlobalToVoxelNormal(mouseState.planeNormal);
+    if (!mouseState.planeNormal) return;
+    const planeNormal = editContext.transformGlobalToVoxelNormal(
+      mouseState.planeNormal,
+    );
     if (!mouseState?.active || !vox || !planeNormal) return undefined;
     const CHUNK_POSITION_EPSILON = 1e-3;
     const shiftedVox = new Float32Array(3);
@@ -252,9 +257,7 @@ export class VoxelBrushTool extends BaseVoxelTool {
       );
     }
 
-    const value = this.layer.getVoxelPaintValue(
-      this.layer.voxEraseMode.value,
-    );
+    const value = this.layer.getVoxelPaintValue(this.layer.voxEraseMode.value);
 
     this.paintPoints([new Float32Array([start[0], start[1], start[2]])], value);
     this.lastPoint = start;
@@ -296,7 +299,9 @@ export class VoxelBrushTool extends BaseVoxelTool {
     const shapeEnum = this.layer.voxBrushShape.value;
     let basis = undefined as undefined | { u: Float32Array; v: Float32Array };
     if (shapeEnum === BrushShape.DISK && this.currentMouseState?.planeNormal) {
-      const n =  editContext.transformGlobalToVoxelNormal(this.currentMouseState.planeNormal);
+      const n = editContext.transformGlobalToVoxelNormal(
+        this.currentMouseState.planeNormal,
+      );
       const u = vec3.create();
       const tempVec =
         Math.abs(vec3.dot(n, vec3.fromValues(1, 0, 0))) < 0.9
@@ -308,7 +313,6 @@ export class VoxelBrushTool extends BaseVoxelTool {
       vec3.normalize(v, v);
       basis = { u, v };
     }
-
 
     for (const p of points)
       editContext.controller?.paintBrushWithShape(
@@ -363,8 +367,10 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
       return;
     }
     const seed = this.getPoint(this.mouseState);
-    if(!this.mouseState.planeNormal) return;
-    const planeNormal =  editContext.transformGlobalToVoxelNormal(this.mouseState.planeNormal);
+    if (!this.mouseState.planeNormal) return;
+    const planeNormal = editContext.transformGlobalToVoxelNormal(
+      this.mouseState.planeNormal,
+    );
     if (!seed || !planeNormal) return;
     try {
       const value = this.layer.getVoxelPaintValue(

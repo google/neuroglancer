@@ -17,8 +17,8 @@
 import type {
   LayerActionContext,
   MouseSelectionState,
-  UserLayer,
 } from "#src/layer/index.js";
+import { UserLayer } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import { VoxToolTab } from "#src/layer/vox/tabs/tools.js";
 import type {
@@ -48,13 +48,9 @@ import {
 } from "#src/util/json.js";
 import { TrackableEnum } from "#src/util/trackable_enum.js";
 import { VoxelPreviewMultiscaleSource } from "#src/voxel_annotation/PreviewMultiscaleChunkSource.js";
-import type { VoxelEditControllerHost } from "#src/voxel_annotation/edit_controller.js";
+import type { VoxelEditControllerHost } from "#src/voxel_annotation/base.js";
+import { BrushShape } from "#src/voxel_annotation/base.js";
 import { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
-
-export enum BrushShape {
-  DISK = 0,
-  SPHERE = 1,
-}
 
 const BRUSH_SIZE_JSON_KEY = "brushSize";
 const ERASE_MODE_JSON_KEY = "eraseMode";
@@ -154,10 +150,16 @@ export class VoxelEditingContext
 
     for (let chunkDim = 0; chunkDim < 3; ++chunkDim) {
       let sum = 0;
-      for (let globalDim = 0; globalDim < Math.min(globalRank, 3); ++globalDim) {
+      for (
+        let globalDim = 0;
+        globalDim < Math.min(globalRank, 3);
+        ++globalDim
+      ) {
         const layerDim = globalToRenderLayerDimensions[globalDim];
         if (layerDim !== -1) {
-          sum += layerToChunkTransform[chunkDim + layerDim * (layerRank + 1)] * globalNormal[globalDim];
+          sum +=
+            layerToChunkTransform[chunkDim + layerDim * (layerRank + 1)] *
+            globalNormal[globalDim];
         }
       }
       voxelNormal[chunkDim] = sum;
@@ -243,11 +245,23 @@ export function UserLayerWithVoxelEditingMixin<
 
     restoreState(specification: any) {
       super.restoreState(specification);
-      verifyOptionalObjectProperty(specification, BRUSH_SIZE_JSON_KEY, v => this.voxBrushRadius.restoreState(v));
-      verifyOptionalObjectProperty(specification, ERASE_MODE_JSON_KEY, v => this.voxEraseMode.restoreState(v));
-      verifyOptionalObjectProperty(specification, BRUSH_SHAPE_JSON_KEY, v => this.voxBrushShape.restoreState(v));
-      verifyOptionalObjectProperty(specification, FLOOD_FILL_MAX_VOXELS_JSON_KEY, v => this.voxFloodMaxVoxels.restoreState(v));
-      verifyOptionalObjectProperty(specification, PAINT_VALUE_JSON_KEY, v => this.paintValue.restoreState(v));
+      verifyOptionalObjectProperty(specification, BRUSH_SIZE_JSON_KEY, (v) =>
+        this.voxBrushRadius.restoreState(v),
+      );
+      verifyOptionalObjectProperty(specification, ERASE_MODE_JSON_KEY, (v) =>
+        this.voxEraseMode.restoreState(v),
+      );
+      verifyOptionalObjectProperty(specification, BRUSH_SHAPE_JSON_KEY, (v) =>
+        this.voxBrushShape.restoreState(v),
+      );
+      verifyOptionalObjectProperty(
+        specification,
+        FLOOD_FILL_MAX_VOXELS_JSON_KEY,
+        (v) => this.voxFloodMaxVoxels.restoreState(v),
+      );
+      verifyOptionalObjectProperty(specification, PAINT_VALUE_JSON_KEY, (v) =>
+        this.paintValue.restoreState(v),
+      );
     }
 
     getVoxelPaintValue(erase: boolean): bigint {
@@ -257,7 +271,6 @@ export function UserLayerWithVoxelEditingMixin<
     setVoxelPaintValue(value: bigint) {
       this.paintValue.value = value;
     }
-
 
     abstract _createVoxelRenderLayer(
       source: MultiscaleVolumeChunkSource,

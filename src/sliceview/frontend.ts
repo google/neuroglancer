@@ -438,14 +438,6 @@ export class SliceView extends Base {
             lastSeenGeneration: curUpdateGeneration,
             displayDimensionRenderInfo,
           };
-          if ((renderLayer as any).constructor?.type === "vox") {
-            console.log(
-              "[SliceView.updateVisibleLayersNow] new vox layerInfo created, allSources orientations=",
-              layerInfo.allSources.length,
-              "first orientation scales=",
-              layerInfo.allSources[0]?.length ?? 0,
-            );
-          }
           disposers.push(renderLayer.messages.addChild(layerInfo.messages));
           visibleLayers.set(renderLayer.addRef(), layerInfo);
           this.bindVisibleRenderLayer(renderLayer, disposers);
@@ -463,14 +455,6 @@ export class SliceView extends Base {
             renderLayer,
             layerInfo.messages,
           );
-          if ((renderLayer as any).constructor?.type === "vox") {
-            console.log(
-              "[SliceView.updateVisibleLayersNow] vox layer transform changed, new allSources orientations=",
-              layerInfo.allSources.length,
-              "first orientation scales=",
-              layerInfo.allSources[0]?.length ?? 0,
-            );
-          }
           disposeTransformedSources(renderLayer, allSources);
           layerInfo.visibleSources.length = 0;
           layerInfo.displayDimensionRenderInfo = displayDimensionRenderInfo;
@@ -730,14 +714,7 @@ export interface SliceViewChunkSource {
 
 /*
 export class SliceViewChunk extends Chunk {
-  chunkGridPosition: vec3;
-  declare source: SliceViewChunkSource;
-
-  constructor(source: SliceViewChunkSource, x: any) {
-    super(source);
-    this.chunkGridPosition = x.chunkGridPosition;
-    this.state = ChunkState.SYSTEM_MEMORY;
-  }
+  // MOVED to chunk_base.ts to avoid import loop
 }
 */
 

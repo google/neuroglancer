@@ -14,19 +14,20 @@
  * limitations under the License.
  */
 
-import { BrushShape } from "#src/layer/vox/index.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import type {
   VolumeChunkSource,
-  MultiscaleVolumeChunkSource,
   InMemoryVolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { vec3 } from "#src/util/geom.js";
-import type { VoxelPreviewMultiscaleSource } from "#src/voxel_annotation/PreviewMultiscaleChunkSource.js";
-import type { VoxelLayerResolution } from "#src/voxel_annotation/base.js";
+import type {
+  VoxelEditControllerHost,
+  VoxelLayerResolution,
+} from "#src/voxel_annotation/base.js";
 import {
+  BrushShape,
   VOX_EDIT_BACKEND_RPC_ID,
   VOX_EDIT_COMMIT_VOXELS_RPC_ID,
   VOX_RELOAD_CHUNKS_RPC_ID,
@@ -37,18 +38,11 @@ import {
   makeVoxChunkKey,
   parseVoxChunkKey,
 } from "#src/voxel_annotation/base.js";
-import type { RPC } from "#src/worker_rpc.js";
 import {
   registerRPC,
   registerSharedObjectOwner,
   SharedObject,
 } from "#src/worker_rpc.js";
-
-export interface VoxelEditControllerHost {
-  primarySource: MultiscaleVolumeChunkSource;
-  previewSource: VoxelPreviewMultiscaleSource;
-  rpc: RPC;
-}
 
 @registerSharedObjectOwner(VOX_EDIT_BACKEND_RPC_ID)
 export class VoxelEditController extends SharedObject {
