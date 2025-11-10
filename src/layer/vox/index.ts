@@ -17,7 +17,10 @@
 import type { LayerActionContext, MouseSelectionState, UserLayer } from "#src/layer/index.js"
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import { VoxToolTab } from "#src/layer/vox/tabs/tools.js";
-import type { ChunkTransformParameters } from "#src/render_coordinate_transform.js";
+import type {
+  ChunkTransformParameters,
+  RenderLayerTransformOrError,
+} from "#src/render_coordinate_transform.js";
 import {
   getChunkPositionFromCombinedGlobalLocalPositions,
   getChunkTransformParameters,
@@ -30,12 +33,12 @@ import {
 } from "#src/sliceview/volume/frontend.js";
 import type { ImageRenderLayer } from "#src/sliceview/volume/image_renderlayer.js";
 import type { SegmentationRenderLayer } from "#src/sliceview/volume/segmentation_renderlayer.js";
-import { BLEND_MODES } from "#src/trackable_blend.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
+import type {
+  WatchableValueInterface} from "#src/trackable_value.js";
 import {
-  makeDerivedWatchableValue,
   TrackableValue,
-  WatchableValue,
+  WatchableValue
 } from "#src/trackable_value.js";
 import type {
   UserLayerWithAnnotations,
@@ -169,6 +172,7 @@ export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
 
   abstract _createVoxelRenderLayer(
     source: MultiscaleVolumeChunkSource,
+    transform: WatchableValueInterface<RenderLayerTransformOrError>,
   ): ImageRenderLayer | SegmentationRenderLayer;
 
   initializeVoxelEditingForSubsource(loadedSubsource: LoadedDataSubsource): void;
@@ -217,13 +221,14 @@ export function UserLayerWithVoxelEditingMixin<
       this.voxFloodMaxVoxels.changed.add(this.specificationChanged.dispatch);
       this.tabs.add("Draw", {
         label: "Draw",
-        order: 10,
+        order: 20,
         getter: () => new VoxToolTab(this),
       });
     }
 
     abstract _createVoxelRenderLayer(
       source: MultiscaleVolumeChunkSource,
+      transform: WatchableValueInterface<RenderLayerTransformOrError>,
     ): ImageRenderLayer | SegmentationRenderLayer;
 
 
@@ -248,24 +253,12 @@ export function UserLayerWithVoxelEditingMixin<
         baseSpec,
       );
 
+      const transform = loadedSubsource.getRenderLayerTransform();
+
       const optimisticRenderLayer = this._createVoxelRenderLayer(
         previewSource as any,
+        transform,
       );
-
-      const originalFragmentMain = optimisticRenderLayer.fragmentMain;
-      optimisticRenderLayer.fragmentMain = makeDerivedWatchableValue(
-        (originalShader) => `
-void main() {
-  if (toRaw(getDataValue()) == 0) {
-    emitTransparent();
-    return;
-  }
-  ${originalShader}
-}
-`,
-        [originalFragmentMain],
-      );
-      optimisticRenderLayer.blendMode.value = BLEND_MODES.ADDITIVE;
 
       const context = new VoxelEditingContext(
         this,
@@ -275,17 +268,8 @@ void main() {
       );
       this.editingContexts.set(loadedSubsource, context);
       this.addRenderLayer(optimisticRenderLayer);
-
-      if (!this.isEditable.value) {
-        this.isEditable.value = true;
-        this.tabs.add("voxel-editing", {
-          label: "Draw",
-          getter: () => new VoxToolTab(this as any),
-          order: 50,
-        });
-        this.tabs.changed.dispatch();
-      }
     }
+
 
     deinitializeVoxelEditingForSubsource(loadedSubsource: LoadedDataSubsource) {
       const context = this.editingContexts.get(loadedSubsource);

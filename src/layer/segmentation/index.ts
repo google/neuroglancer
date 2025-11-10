@@ -42,6 +42,7 @@ import {
   MultiscaleMeshLayer,
   MultiscaleMeshSource,
 } from "#src/mesh/frontend.js";
+import type { RenderLayerTransformOrError } from "#src/render_coordinate_transform.js";
 import {
   RenderScaleHistogram,
   trackableRenderScaleTarget,
@@ -611,10 +612,11 @@ export class SegmentationUserLayer extends Base {
 
   _createVoxelRenderLayer(
     source: MultiscaleVolumeChunkSource,
+    transform: WatchableValueInterface<RenderLayerTransformOrError>,
   ): SegmentationRenderLayer {
     return new SegmentationRenderLayer(source, {
       ...this.displayState,
-      transform: this.transform,
+      transform: transform,
       renderScaleTarget: this.sliceViewRenderScaleTarget,
       renderScaleHistogram: this.sliceViewRenderScaleHistogram,
       localPosition: this.localPosition,
