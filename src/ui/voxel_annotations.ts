@@ -137,6 +137,7 @@ export class VoxelBrushTool extends BaseVoxelTool {
 
   activate(activation: ToolActivation<this>) {
     super.activate(activation);
+    this.updateBrushOutline();
 
     activation.registerDisposer(() => {
       this.getActivePanel()?.clearOverlay();
