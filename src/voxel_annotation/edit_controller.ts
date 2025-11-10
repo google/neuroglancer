@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { BrushShape, VoxUserLayer } from "#src/layer/vox/index.js";
+import type { VoxUserLayer } from "#src/layer/vox/index.js";
+import { BrushShape } from "#src/layer/vox/index.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import type {
   VolumeChunkSource,
@@ -186,7 +187,7 @@ export class VoxelEditController extends SharedObject {
 
     const voxelsToPaint: Float32Array[] = [];
 
-    if (shape === BrushShape.sphere) {
+    if (shape === BrushShape.SPHERE) {
       for (let dz = -r; dz <= r; ++dz) {
         for (let dy = -r; dy <= r; ++dy) {
           for (let dx = -r; dx <= r; ++dx) {

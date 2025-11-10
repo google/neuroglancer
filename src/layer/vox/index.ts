@@ -51,8 +51,8 @@ import { LabelsManager } from "#src/voxel_annotation/labels.js";
 import { VoxelAnnotationRenderLayer } from "#src/voxel_annotation/renderlayer.js";
 
 export enum BrushShape {
-  disk = 0,
-  sphere = 1,
+  DISK = 0,
+  SPHERE = 1,
 }
 
 export class VoxUserLayer extends UserLayer {
@@ -69,7 +69,7 @@ export class VoxUserLayer extends UserLayer {
   // Draw tool state (trackables for widget integration)
   voxBrushRadius = new TrackableValue<number>(3, verifyInt);
   voxEraseMode = new TrackableBoolean(false);
-  voxBrushShape = new TrackableEnum(BrushShape, BrushShape.disk);
+  voxBrushShape = new TrackableEnum(BrushShape, BrushShape.DISK);
   voxFloodMaxVoxels = new TrackableValue<number>(10000, verifyFiniteFloat);
 
   // Cached transform and voxel buffer to avoid recomputation/allocation on every mouse move
