@@ -304,15 +304,54 @@ export class AdoptVoxelLabelTool extends LegacyTool<VoxUserLayer> {
   toJSON() { return ADOPT_VOXEL_LABEL_TOOL_ID; }
   trigger(mouseState: MouseSelectionState) {
     if (!mouseState?.active) return;
-    const raw = (mouseState as any).pickedValue as bigint | number | undefined;
-    if (raw === undefined || raw === null) return;
-    const rawBig = typeof raw === 'bigint' ? raw : BigInt(raw);
-    if (rawBig === 0n) {
-      StatusMessage.showTemporaryMessage("Cannot adopt background label 0.");
+    const layer = this.layer as VoxUserLayer;
+    const pos = layer.getVoxelPositionFromMouse?.(mouseState);
+
+    if (!pos || pos.length < 3) {
+      StatusMessage.showTemporaryMessage(
+        "Cannot pick label: position is not valid.",
+        3000,
+      );
       return;
     }
-    const layer = this.layer as unknown as VoxUserLayer;
-    layer.voxLabelsManager.addLabel(rawBig);
+
+    const editController = layer.voxEditController;
+    if (!editController) {
+      StatusMessage.showTemporaryMessage(
+        "Cannot pick label: layer is not ready.",
+        3000,
+      );
+      return;
+    }
+
+    const source = editController.getSourceForLOD(
+      0,
+    );
+    const channelAccess = editController.singleChannelAccess;
+
+
+    StatusMessage.forPromise(
+      source.getEnsuredValueAt(pos, channelAccess).then((value: bigint | number | null) => {
+        if (value === null) {
+          throw new Error("Voxel data not available at the selected position.");
+        }
+        const label = BigInt(value);
+        if (label === 0n) {
+          StatusMessage.showTemporaryMessage(
+            "Cannot adopt background label (0).",
+            3000,
+          );
+          return;
+        }
+        layer.voxLabelsManager.addLabel(label);
+        StatusMessage.showTemporaryMessage(`Adopted label: ${label}`, 3000);
+      }),
+      {
+        initialMessage: "Picking voxel label...",
+        delay: true,
+        errorPrefix: "Error picking label: ",
+      },
+    );
   }
 }
 

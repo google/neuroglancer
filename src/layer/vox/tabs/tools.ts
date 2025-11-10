@@ -8,6 +8,22 @@ import {
   AdoptVoxelLabelTool,
 } from "#src/ui/voxel_annotations.js";
 import { Tab } from "#src/widget/tab_view.js";
+import { DataType } from "#src/util/data_type.js";
+
+function formatUnsignedId(id: bigint, dataType: DataType): string {
+  if (id >= 0n) {
+    return id.toString();
+  }
+  // Handle two's complement representation for negative BigInts.
+  if (dataType === DataType.UINT32) {
+    return ((1n << 32n) + id).toString();
+  }
+  if (dataType === DataType.UINT64) {
+    return ((1n << 64n) + id).toString();
+  }
+  // Fallback for other types, though this case is unlikely for labels.
+  return id.toString();
+}
 
 
 export class VoxToolTab extends Tab {
@@ -35,7 +51,7 @@ export class VoxToolTab extends Tab {
       sw.style.background = this.layer.voxLabelsManager.colorForValue(lab);
       // id text (monospace)
       const txt = document.createElement("div");
-      txt.textContent = String(lab);
+      txt.textContent = formatUnsignedId(lab, this.layer.voxLabelsManager.dataType);
       txt.style.fontFamily = "monospace";
       txt.style.whiteSpace = "nowrap";
       txt.style.overflow = "hidden";

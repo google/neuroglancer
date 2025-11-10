@@ -61,7 +61,7 @@ export class VoxelEditController extends SharedObject {
     maxSize: 9,
   };
 
-  private readonly singleChannelAccess: ChunkChannelAccessParameters = {
+  readonly singleChannelAccess: ChunkChannelAccessParameters = {
     numChannels: 1,
     channelSpaceShape: new Uint32Array([]),
     chunkChannelDimensionIndices: [],
@@ -106,7 +106,7 @@ export class VoxelEditController extends SharedObject {
     return voxelSize;
   }
 
-  private getSourceForLOD(lodIndex: number): VolumeChunkSource {
+  getSourceForLOD(lodIndex: number): VolumeChunkSource {
     const sourcesByScale = this.multiscale.getSources(this.getIdentitySliceViewSourceOptions());
     // Assuming a single orientation, which is correct for this use case.
     const sources = sourcesByScale[0];
@@ -295,7 +295,7 @@ export class VoxelEditController extends SharedObject {
 
     const isOriginalAt = async (px: number, py: number): Promise<boolean> => {
       const value = await source.getEnsuredValueAt(new Float32Array([px, py, zPlane]), this.singleChannelAccess);
-      return value === originalValue;
+      return (typeof value !== "bigint" ? BigInt(value as number) : value) === originalValue;
     };
 
     const getCurrentThickness = (): number => {

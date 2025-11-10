@@ -10,7 +10,7 @@ export class LabelsManager {
   private sessionPrefix: bigint;
   private nextLocalId: bigint = 1n;
 
-  constructor(dataType: DataType, private onLabelsChanged?: () => void) {
+  constructor(public dataType: DataType, private onLabelsChanged?: () => void) {
     switch (dataType){
       case DataType.UINT32:
         this.sessionPrefix = BigInt(Date.now() << 20);
