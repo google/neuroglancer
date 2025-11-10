@@ -2,18 +2,24 @@ import type { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { mat4, vec3 } from "#src/util/geom.js";
 import * as matrix from "#src/util/matrix.js";
 import type {
-  VoxelLayerResolution} from "#src/voxel_annotation/base.js";
+  VoxelLayerResolution,
+  EditAction,
+  VoxelChange,
+} from "#src/voxel_annotation/base.js";
 import {
   VOX_EDIT_BACKEND_RPC_ID,
   VOX_EDIT_COMMIT_VOXELS_RPC_ID,
   VOX_RELOAD_CHUNKS_RPC_ID,
   VOX_EDIT_FAILURE_RPC_ID,
+  VOX_EDIT_UNDO_RPC_ID,
+  VOX_EDIT_REDO_RPC_ID,
+  VOX_EDIT_HISTORY_UPDATE_RPC_ID,
   makeVoxChunkKey,
   parseVoxChunkKey,
   makeChunkKey,
 } from "#src/voxel_annotation/base.js";
 import type { RPC } from "#src/worker_rpc.js";
-import { SharedObject , registerRPC, registerSharedObject, initializeSharedObjectCounterpart } from "#src/worker_rpc.js";
+import { registerPromiseRPC , SharedObject , registerRPC, registerSharedObject, initializeSharedObjectCounterpart } from "#src/worker_rpc.js";
 
 @registerSharedObject(VOX_EDIT_BACKEND_RPC_ID)
 export class VoxelEditController extends SharedObject {
@@ -29,6 +35,11 @@ export class VoxelEditController extends SharedObject {
   }[] = [];
   private commitDebounceTimer: number | undefined;
   private readonly commitDebounceDelayMs: number = 300;
+
+  // Undo/redo history
+  private undoStack: EditAction[] = [];
+  private redoStack: EditAction[] = [];
+  private readonly MAX_HISTORY_SIZE: number = 100;
 
   private downsampleQueue: string[] = [];
   private downsampleQueueSet: Set<string> = new Set();
@@ -63,38 +74,43 @@ export class VoxelEditController extends SharedObject {
       }
       this.sources.set(res.lodIndex, resolved);
     }
+
+    this.notifyHistoryChanged();
   }
 
   private async flushPending(): Promise<void> {
     const edits = this.pendingEdits;
     this.pendingEdits = [];
     this.commitDebounceTimer = undefined;
-    if (edits.length === 0) return;
+    if (edits.length === 0) {
+      // Even if nothing to flush, history sizes may not have changed.
+      this.notifyHistoryChanged();
+      return;
+    }
 
-    const editsByVoxKey = new Map<
-      string,
-      { indices: number[]; values: bigint[] }
-    >();
+    const editsByVoxKey = new Map<string, Map<number, bigint>>();
+
     for (const edit of edits) {
-      if (!editsByVoxKey.has(edit.key)) {
-        editsByVoxKey.set(edit.key, { indices: [], values: [] });
+      let chunkMap = editsByVoxKey.get(edit.key);
+      if (!chunkMap) {
+        chunkMap = new Map<number, bigint>();
+        editsByVoxKey.set(edit.key, chunkMap);
       }
-      const entry = editsByVoxKey.get(edit.key)!;
+
+      const inds = edit.indices as ArrayLike<number>;
       if (edit.values) {
+        // Handle array of values
         const vals = Array.from(edit.values);
-        if (vals.length !== edit.indices.length) {
+        if (vals.length !== inds.length) {
           throw new Error("flushPending: values length mismatch with indices");
         }
-        for (let i = 0; i < edit.indices.length; ++i) {
-          entry.indices.push(Number(edit.indices[i]!));
-          entry.values.push(vals[i]!);
+        for (let i = 0; i < inds.length; ++i) {
+          chunkMap.set(inds[i]!, vals[i]!);
         }
       } else if (edit.value !== undefined) {
-        const inds = edit.indices as ArrayLike<number>;
+        // Handle single value for all indices
         for (let i = 0; i < inds.length; ++i) {
-          const index = inds[i]!;
-          entry.indices.push(Number(index));
-          entry.values.push(edit.value);
+          chunkMap.set(inds[i]!, edit.value);
         }
       } else {
         throw new Error("flushPending: edit missing value(s)");
@@ -103,6 +119,13 @@ export class VoxelEditController extends SharedObject {
 
     const failedVoxChunkKeys: string[] = [];
     let firstErrorMessage: string | undefined = undefined;
+
+    const newAction: EditAction = {
+      changes: new Map<string, VoxelChange>(),
+      timestamp: Date.now(),
+      description: "Voxel Edit",
+    };
+
     for (const [voxKey, chunkEdits] of editsByVoxKey.entries()) {
       try {
         const parsedKey = parseVoxChunkKey(voxKey);
@@ -121,11 +144,16 @@ export class VoxelEditController extends SharedObject {
           if (firstErrorMessage === undefined) firstErrorMessage = msg;
           continue;
         }
-        await (source as any).applyEdits(
+
+        const indices = Array.from(chunkEdits.keys());
+        const values = Array.from(chunkEdits.values());
+
+        const change = await source.applyEdits(
           parsedKey.chunkKey,
-          chunkEdits.indices,
-          chunkEdits.values,
+          indices,
+          values,
         );
+        newAction.changes.set(voxKey, change);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error(`Failed to write chunk ${voxKey}:`, e);
@@ -133,6 +161,17 @@ export class VoxelEditController extends SharedObject {
         if (firstErrorMessage === undefined) firstErrorMessage = msg;
       }
     }
+
+    if (newAction.changes.size > 0) {
+      this.undoStack.push(newAction);
+      if (this.undoStack.length > this.MAX_HISTORY_SIZE) {
+        this.undoStack.shift();
+      }
+      this.redoStack.length = 0;
+    }
+
+    // Notify frontend of history changes after any commit attempt
+    this.notifyHistoryChanged();
 
     if (failedVoxChunkKeys.length > 0) {
       this.rpc?.invoke(VOX_EDIT_FAILURE_RPC_ID, {
@@ -478,9 +517,94 @@ export class VoxelEditController extends SharedObject {
     }
     return mode;
   }
+  private notifyHistoryChanged(): void {
+    this.rpc?.invoke(VOX_EDIT_HISTORY_UPDATE_RPC_ID, {
+      rpcId: this.rpcId,
+      undoCount: this.undoStack.length,
+      redoCount: this.redoStack.length,
+    });
+  }
+
+  private async performUndoRedo(
+    sourceStack: EditAction[],
+    targetStack: EditAction[],
+    useOldValues: boolean,
+    actionDescription: 'undo' | 'redo'
+  ): Promise<void> {
+    await this.flushPending();
+
+    if (sourceStack.length === 0) {
+      throw new Error(`Nothing to ${actionDescription}.`);
+    }
+
+    const action = sourceStack.pop()!;
+
+    const chunksToReload = new Set<string>();
+    let success = true;
+
+    for (const [voxKey, change] of action.changes.entries()) {
+      const parsedKey = parseVoxChunkKey(voxKey);
+      if (!parsedKey) continue;
+      const source = this.sources.get(parsedKey.lodIndex);
+      if (!source) continue;
+
+      const valuesToApply = useOldValues ? change.oldValues : change.newValues;
+      try {
+        await source.applyEdits(parsedKey.chunkKey, change.indices, valuesToApply);
+        chunksToReload.add(voxKey);
+      } catch (e) {
+        success = false;
+        console.error(`performUndoRedo: failed to apply edits for ${voxKey}`, e);
+        this.rpc?.invoke(VOX_EDIT_FAILURE_RPC_ID, {
+          rpcId: this.rpcId,
+          voxChunkKeys: [voxKey],
+          message: useOldValues ? "Undo failed." : "Redo failed.",
+        });
+        // Stop processing this action on the first failure
+        break;
+      }
+    }
+
+    if (success) {
+      // Only move the action to the target stack if all operations succeeded.
+      targetStack.push(action);
+    } else {
+      // On failure, return the action to its original stack to maintain consistency.
+      sourceStack.push(action);
+    }
+
+    if (chunksToReload.size > 0 && success) {
+      for (const key of chunksToReload) {
+        this.enqueueDownsample(key);
+      }
+      this.callChunkReload(Array.from(chunksToReload));
+    }
+
+    this.notifyHistoryChanged();
+  }
+
+  public async undo(): Promise<void> {
+    await this.performUndoRedo(this.undoStack, this.redoStack, true, 'undo');
+  }
+
+  public async redo(): Promise<void> {
+    await this.performUndoRedo(this.redoStack, this.undoStack, false, 'redo');
+  }
 }
 
 registerRPC(VOX_EDIT_COMMIT_VOXELS_RPC_ID, function (x: any) {
   const obj = this.get(x.rpcId) as VoxelEditController;
   void obj.commitVoxels(Array.isArray(x.edits) ? x.edits : []);
+});
+
+registerPromiseRPC(VOX_EDIT_UNDO_RPC_ID, async function (this: RPC, x: any) {
+  const obj = this.get(x.rpcId) as VoxelEditController;
+  await obj.undo();
+  return { value: undefined };
+});
+
+registerPromiseRPC(VOX_EDIT_REDO_RPC_ID, async function (this: RPC, x: any) {
+  const obj = this.get(x.rpcId) as VoxelEditController;
+  await obj.redo();
+  return { value: undefined };
 });

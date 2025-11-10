@@ -6,6 +6,8 @@
 import type { VoxUserLayer } from "#src/layer/vox/index.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import type { VolumeChunkSource , MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
+import { StatusMessage } from "#src/status.js";
+import { WatchableValue } from "#src/trackable_value.js";
 import type {
   VoxelLayerResolution} from "#src/voxel_annotation/base.js";
 import {
@@ -13,6 +15,9 @@ import {
   VOX_EDIT_COMMIT_VOXELS_RPC_ID,
   VOX_RELOAD_CHUNKS_RPC_ID,
   VOX_EDIT_FAILURE_RPC_ID,
+  VOX_EDIT_UNDO_RPC_ID,
+  VOX_EDIT_REDO_RPC_ID,
+  VOX_EDIT_HISTORY_UPDATE_RPC_ID,
   makeVoxChunkKey,
   parseVoxChunkKey
 } from "#src/voxel_annotation/base.js";
@@ -24,6 +29,9 @@ import {
 
 @registerSharedObjectOwner(VOX_EDIT_BACKEND_RPC_ID)
 export class VoxelEditController extends SharedObject {
+  public undoCount = new WatchableValue<number>(0);
+  public redoCount = new WatchableValue<number>(0);
+
   constructor(private layer: VoxUserLayer, private multiscale: MultiscaleVolumeChunkSource) {
     super();
     const rpc = (this.multiscale as any)?.chunkManager?.rpc;
@@ -56,8 +64,7 @@ export class VoxelEditController extends SharedObject {
 
     this.initializeCounterpart(rpc, { resolutions });
   }
-  private static readonly qualityFactor = 16.0;
-  private static readonly restrictToMinLOD = true;
+
   private morphologicalConfig = {
     // At what `filledCount` thresholds the neighborhood size increases.
     growthThresholds: [
@@ -98,21 +105,6 @@ export class VoxelEditController extends SharedObject {
     } as const;
   }
 
-  // Required: compute desired voxel size (power-of-two) from brush radius.
-  getOptimalVoxelSize(brushRadius: number, minLOD = 1, maxLOD = 128) {
-    if (VoxelEditController.restrictToMinLOD) {
-      return minLOD;
-    }
-    if (!Number.isFinite(brushRadius) || brushRadius <= 0) {
-      return minLOD;
-    }
-    const targetSize = brushRadius / VoxelEditController.qualityFactor;
-    const exponent = Math.round(Math.log2(targetSize));
-    let voxelSize = Math.pow(2, exponent);
-    voxelSize = Math.max(minLOD, Math.min(voxelSize, maxLOD));
-    return voxelSize;
-  }
-
   getSourceForLOD(lodIndex: number): VolumeChunkSource {
     const sourcesByScale = this.multiscale.getSources(this.getIdentitySliceViewSourceOptions());
     // Assuming a single orientation, which is correct for this use case.
@@ -125,24 +117,6 @@ export class VoxelEditController extends SharedObject {
       throw new Error(`VoxelEditController: No chunk source found for LOD index ${lodIndex}.`);
     }
     return source;
-  }
-
-  /** Compute the edit LOD index (scale index) from a brush radius in canonical units. */
-  getEditLodIndexToDraw(brushRadiusCanonical: number): number {
-    if (VoxelEditController.restrictToMinLOD) {
-      return 0;
-    }
-    if (!Number.isFinite(brushRadiusCanonical) || brushRadiusCanonical <= 0) {
-      throw new Error(
-        "getEditLodIndexForBrush: brushRadiusCanonical must be > 0",
-      );
-    }
-    const voxelSize = this.getOptimalVoxelSize(brushRadiusCanonical);
-    const sourceIndex = Math.round(Math.log2(voxelSize));
-    if (!Number.isInteger(sourceIndex) || sourceIndex < 0) {
-      throw new Error("getEditLodIndexForBrush: computed LOD is invalid");
-    }
-    return sourceIndex;
   }
 
   // Paint a disk (slice-aligned via basis) or sphere in WORLD/ canonical units; we transform to LOD grid before sending.
@@ -163,8 +137,9 @@ export class VoxelEditController extends SharedObject {
       );
     }
 
-    const voxelSize = this.getOptimalVoxelSize(radiusCanonical);
-    const sourceIndex = Math.floor(Math.log2(voxelSize));
+    // For V1 we use the minimum LOD (index 0)
+    const voxelSize = 1;
+    const sourceIndex = 0;
     const source = this.getSourceForLOD(sourceIndex);
 
     // Convert center and radius to the level’s voxel grid.
@@ -266,9 +241,9 @@ export class VoxelEditController extends SharedObject {
       throw new Error("VoxelEditController.floodFillPlane2D: maxVoxels must be > 0.");
     }
 
-    // For V1 we use the minimum LOD (index 0) to keep behavior predictable.
-    const voxelSize = this.getOptimalVoxelSize(1); // will return min when restrictToMinLOD=true
-    const sourceIndex = Math.floor(Math.log2(voxelSize));
+    // For V1 we use the minimum LOD (index 0)
+    const voxelSize = 1;
+    const sourceIndex = 0;
     const source = this.getSourceForLOD(sourceIndex);
 
     // Convert canonical/world to level grid coordinates.
@@ -298,6 +273,8 @@ export class VoxelEditController extends SharedObject {
     const visited = new Set<string>();
     const queue: [number, number][] = [];
     let filledCount = 0;
+
+    console.log("startVoxelLod", startVoxelLod, "fillValue", fillValue, "maxVoxels", maxVoxels, "originalValue", originalValue, "zPlane", zPlane);
 
     const isOriginalAt = async (px: number, py: number): Promise<boolean> => {
       const value = await source.getEnsuredValueAt(new Float32Array([px, py, zPlane]), this.singleChannelAccess);
@@ -502,6 +479,24 @@ export class VoxelEditController extends SharedObject {
       this.layer.setDrawErrorMessage(message);
     }
   }
+
+  public undo(): void {
+    if (!this.rpc) throw new Error("VoxelEditController.undo: RPC not initialized.");
+    console.log("VoxelEditController.undo");
+    this.rpc.promiseInvoke<void>(VOX_EDIT_UNDO_RPC_ID, { rpcId: this.rpcId }).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      StatusMessage.showTemporaryMessage(`Undo failed: ${message}`, 3000);
+    });
+  }
+
+  public redo(): void {
+    if (!this.rpc) throw new Error("VoxelEditController.redo: RPC not initialized.");
+    console.log("VoxelEditController.redo");
+    this.rpc.promiseInvoke<void>(VOX_EDIT_REDO_RPC_ID, { rpcId: this.rpcId }).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      StatusMessage.showTemporaryMessage(`Redo failed: ${message}`, 3000);
+    });
+  }
 }
 
 registerRPC(VOX_RELOAD_CHUNKS_RPC_ID, function (x: any) {
@@ -515,4 +510,12 @@ registerRPC(VOX_EDIT_FAILURE_RPC_ID, function (x: any) {
   const keys: string[] = Array.isArray(x.voxChunkKeys) ? x.voxChunkKeys : [];
   const message: string = typeof x.message === 'string' ? x.message : 'Voxel edit failed.';
   obj.handleCommitFailure(keys, message);
+});
+
+registerRPC(VOX_EDIT_HISTORY_UPDATE_RPC_ID, function (x: any) {
+  const obj = this.get(x.rpcId) as VoxelEditController;
+  const undoCount = typeof x.undoCount === 'number' ? x.undoCount : 0;
+  const redoCount = typeof x.redoCount === 'number' ? x.redoCount : 0;
+  obj.undoCount.value = undoCount;
+  obj.redoCount.value = redoCount;
 });

@@ -7,8 +7,8 @@ import {
   VoxelFloodFillLegacyTool,
   AdoptVoxelLabelTool,
 } from "#src/ui/voxel_annotations.js";
-import { Tab } from "#src/widget/tab_view.js";
 import { DataType } from "#src/util/data_type.js";
+import { Tab } from "#src/widget/tab_view.js";
 
 function formatUnsignedId(id: bigint, dataType: DataType): string {
   if (id >= 0n) {
@@ -131,6 +131,58 @@ export class VoxToolTab extends Tab {
     toolsRow.appendChild(toolsLabel);
     toolsRow.appendChild(toolsWrap);
     toolbox.appendChild(toolsRow);
+
+    // Section: History (Undo/Redo)
+    const historyRow = document.createElement("div");
+    historyRow.className = "neuroglancer-vox-row";
+    const historyLabel = document.createElement("label");
+    historyLabel.textContent = "History";
+    const historyButtons = document.createElement("div");
+    historyButtons.style.display = "flex";
+    historyButtons.style.gap = "8px";
+
+    const undoButton = document.createElement("button");
+    undoButton.textContent = "Undo";
+    undoButton.title = "Undo last voxel edit";
+    undoButton.addEventListener("click", () => {
+      const controller = this.layer.voxEditController;
+      if (!controller) {
+        throw new Error("Undo failed: voxEditController is not available.");
+      }
+      controller.undo();
+    });
+
+    const redoButton = document.createElement("button");
+    redoButton.textContent = "Redo";
+    redoButton.title = "Redo last undone voxel edit";
+    redoButton.addEventListener("click", () => {
+      const controller = this.layer.voxEditController;
+      if (!controller) {
+        throw new Error("Redo failed: voxEditController is not available.");
+      }
+      controller.redo();
+    });
+
+    // TODO: move this logic to a signal activated function, so it runs after the voxEditController is instantiated
+    const ctrl = this.layer.voxEditController;
+    if (ctrl) {
+      undoButton.disabled = ctrl.undoCount.value === 0;
+      redoButton.disabled = ctrl.redoCount.value === 0;
+      this.registerDisposer(ctrl.undoCount.changed.add(() => {
+        undoButton.disabled = ctrl.undoCount.value === 0;
+      }));
+      this.registerDisposer(ctrl.redoCount.changed.add(() => {
+        redoButton.disabled = ctrl.redoCount.value === 0;
+      }));
+    } else {
+      console.error("TODO")
+    }
+
+    historyButtons.appendChild(undoButton);
+    historyButtons.appendChild(redoButton);
+    historyRow.appendChild(historyLabel);
+    historyRow.appendChild(historyButtons);
+    toolbox.appendChild(historyRow);
 
     // Section: Brush settings
     const brushRow = document.createElement("div");

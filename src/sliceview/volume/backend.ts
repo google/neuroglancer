@@ -17,7 +17,8 @@
 import type { Chunk } from "#src/chunk_manager/backend.js";
 import { ChunkState } from "#src/chunk_manager/base.js";
 import { SliceViewChunk, SliceViewChunkSourceBackend } from "#src/sliceview/backend.js";
-import { DataType, SliceViewChunkSpecification } from "#src/sliceview/base.js";
+import type { SliceViewChunkSpecification } from "#src/sliceview/base.js";
+import { DataType } from "#src/sliceview/base.js";
 import type {
   VolumeChunkSource as VolumeChunkSourceInterface,
   VolumeChunkSpecification
@@ -27,6 +28,7 @@ import { DATA_TYPE_ARRAY_CONSTRUCTOR } from "#src/util/data_type.js";
 import type { vec3 } from "#src/util/geom.js";
 import { HttpError } from "#src/util/http_request.js";
 import * as vector from "#src/util/vector.js";
+import type { VoxelChange } from "#src/voxel_annotation/base.js";
 import type { RPC } from "#src/worker_rpc.js";
 
 export class VolumeChunk extends SliceViewChunk {
@@ -160,7 +162,7 @@ export class VolumeChunkSource
     throw new Error("VolumeChunkSource.writeChunk not implemented for this datasource");
   }
 
-  async applyEdits(chunkKey: string, indices: ArrayLike<number>, values: ArrayLike<number | bigint>): Promise<void> {
+  async applyEdits(chunkKey: string, indices: ArrayLike<number>, values: ArrayLike<number | bigint>): Promise<VoxelChange> {
     if (indices.length !== values.length) {
       throw new Error("applyEdits: indices and values length mismatch");
     }
@@ -199,13 +201,22 @@ export class VolumeChunkSource
       // The new TypedArray is already zero-filled.
     }
     const data = chunk.data as TypedArray;
+
+    const ArrayCtor = DATA_TYPE_ARRAY_CONSTRUCTOR[this.spec.dataType] as any;
+    const indicesCopy = new Uint32Array(indices);
+    const newValuesArray = new ArrayCtor(values.length);
+    for (let i = 0; i < values.length; ++i) {
+      newValuesArray[i] = this.spec.dataType === DataType.UINT32 ? Number(values[i]!) : values[i]!;
+    }
+    const oldValuesArray = new ArrayCtor(indices.length);
+
     for (let i = 0; i < indices.length; ++i) {
       const idx = indices[i]!;
-      const val = values[i]!;
       if (idx < 0 || idx >= data.length) {
         throw new Error(`applyEdits: index ${idx} out of bounds for chunk ${chunkKey}`);
       }
-      data[idx] = this.spec.dataType === DataType.UINT32 ? Number(val) : val;
+      oldValuesArray[i] = data[idx];
+      data[idx] = newValuesArray[i];
     }
     const maxRetries = 3;
     let lastError: Error | undefined;
@@ -213,7 +224,11 @@ export class VolumeChunkSource
     for (let i = 0; i < maxRetries; i++) {
       try {
         await this.writeChunk(chunk);
-        return;
+        return {
+          indices: indicesCopy,
+          oldValues: oldValuesArray,
+          newValues: newValuesArray,
+        };
       } catch (e) {
         lastError = e as Error;
         if (e instanceof HttpError && e.status < 500 && e.status !== 429) {

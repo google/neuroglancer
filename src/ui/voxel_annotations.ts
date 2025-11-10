@@ -120,10 +120,7 @@ export const ADOPT_VOXEL_LABEL_TOOL_ID = "adoptVoxelLabel";
     }
 
     const centerCanonical = new Float32Array([start[0], start[1], start[2]]);
-    const editLodIndex = layer.voxEditController?.getEditLodIndexToDraw(brushRadius);
-    if (!Number.isInteger(editLodIndex) || editLodIndex == undefined || editLodIndex < 0) {
-      throw new Error("startDrawing: computed edit LOD index is invalid");
-    }
+    const editLodIndex = 0; // locked to 0 rn
     layer.beginRenderLodLock(editLodIndex);
 
     const value = layer.voxLabelsManager.getCurrentLabelValue(layer.voxEraseMode);
