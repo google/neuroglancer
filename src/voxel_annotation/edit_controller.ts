@@ -169,16 +169,8 @@ export class VoxelEditController extends SharedObject {
       }
     } else {
       if (basis === undefined) {
-        // Fallback to old XY-plane behavior if no basis is provided
-        for (let dy = -r; dy <= r; ++dy) {
-          for (let dx = -r; dx <= r; ++dx) {
-            if (dx * dx + dy * dy <= rr) {
-              voxelsToPaint.push(new Float32Array([cx + dx, cy + dy, cz]));
-            }
-          }
-        }
-      } else {
-        // New logic for arbitrary plane
+        throw new Error("paintBrushWithShape: 'basis' must be defined for disk alignment.");
+      }
         const { u, v } = basis;
         for (let j = -r; j <= r; ++j) {
           for (let i = -r; i <= r; ++i) {
@@ -189,7 +181,7 @@ export class VoxelEditController extends SharedObject {
               voxelsToPaint.push(point as Float32Array);
             }
           }
-        }
+
       }
     }
 

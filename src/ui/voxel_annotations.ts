@@ -69,10 +69,23 @@ export const ADOPT_VOXEL_LABEL_TOOL_ID = "adoptVoxelLabel";
       | Float32Array
       | undefined;
     if (!mouseState?.active || !vox) return undefined;
+    const planeNormal = mouseState?.planeNormal;
+
+    if (!mouseState?.active || !vox || !planeNormal) return undefined;
+
+    // Replicate the exact logic from the vertex shader to ensure the CPU and GPU
+    // agree on the voxel coordinate.
+
+    const CHUNK_POSITION_EPSILON = 1e-3;
+    const shiftedVox = new Float32Array(3);
+    for (let i = 0; i < 3; ++i) {
+      shiftedVox[i] = vox[i] + CHUNK_POSITION_EPSILON * Math.abs(planeNormal[i]);
+    }
+
     return new Int32Array([
-      Math.floor(vox[0]),
-      Math.floor(vox[1]),
-      Math.floor(vox[2]),
+      Math.floor(shiftedVox[0]),
+      Math.floor(shiftedVox[1]),
+      Math.floor(shiftedVox[2]),
     ]);
   }
 
