@@ -22,6 +22,8 @@ function calculateDownsamplePasses(chunkSize: number) {
   return Math.ceil(Math.log2(chunkSize));
 }
 
+
+// Simple read only local source, this class can be instantiated multiple times without side effects.
 export class LocalVoxSource extends VoxSource {
   private dbPromise: Promise<IDBDatabase> | null = null;
   
@@ -48,6 +50,7 @@ export class LocalVoxSource extends VoxSource {
 }
 
 /** IndexedDB-backed local source. */
+// More complete local source that supports writing and more, THIS CLASS SHOULD NOT BE INSTANTIATED MULTIPLE TIMES per maps
 export class LocalVoxSourceWriter extends VoxSourceWriter {
 
   // Upscaling halted

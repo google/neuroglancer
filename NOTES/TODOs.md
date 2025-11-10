@@ -1,5 +1,7 @@
 # TODO List
 
+- FOR MONDAY: see [multi-source-plan.md](multi-source-plan.md)
+
 - LOD -> 
   -  "feat: dirty tree upscaling is kinda working, at lea
     st enough to conclude that this upscaling method wont work
@@ -22,7 +24,7 @@
 - add a zarr import feature or even better design a dual source system, where you have the zarr source with most of the data and the indexedDB where the updates are stored, this would be an augmented version of the current localsource which would first look into the indexedDB and if not present, fetch the zarr source.
 - rework the ui (tabs)
 - add persistance to vox layer
-- add shortcuts for tools (switching tools, toogle erase mode and adjusting brush size) and label creation
+- add shortcuts for tools (switching tools, toogle erase mode, select label from the pointed one in the slice view and adjusting brush size) and label creation
 - add feedback for the user when the flood fill fails
 
 # Saving/importing/exporting
