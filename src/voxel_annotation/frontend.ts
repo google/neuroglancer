@@ -12,15 +12,11 @@ import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import type { TypedArray } from "#src/util/array.js";
 import {
   VOX_CHUNK_SOURCE_RPC_ID,
-  VOX_COMMIT_VOXELS_RPC_ID,
   VOX_MAP_INIT_RPC_ID,
-  VOX_LABELS_GET_RPC_ID,
-  VOX_LABELS_ADD_RPC_ID,
   makeVoxChunkKey,
-  VOX_RELOAD_CHUNKS_RPC_ID,
 } from "#src/voxel_annotation/base.js";
 import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
-import { registerRPC, registerSharedObjectOwner } from "#src/worker_rpc.js";
+import { registerSharedObjectOwner } from "#src/worker_rpc.js";
 
 /**
  * Frontend owner for VoxChunkSource, extended with a local optimistic edit overlay.
@@ -89,28 +85,6 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     return base;
   }
 
-  async getLabelIds(): Promise<number[]> {
-    try {
-      /*
-      NOTE: do not pass the rpcId as { id: this.rpcId } since the id field it will be overwritten by promiseInvoke, use another name like { rpcId: this.rpcId }
-       */
-      return await this.rpc!.promiseInvoke<number[]>(VOX_LABELS_GET_RPC_ID, {
-        rpcId: this.rpcId,
-      });
-    } catch {
-      return [];
-    }
-  }
-
-
-  async addLabel(value: number): Promise<number[]> {
-    // Do not swallow errors; caller should display them to the user and avoid UI updates on failure.
-    return await this.rpc!.promiseInvoke<number[]>(VOX_LABELS_ADD_RPC_ID, {
-      rpcId: this.rpcId,
-      value,
-    });
-  }
-
   private scheduleUpdate(key: string) {
     this.dirtyChunks.add(key);
     this.scheduleProcessPendingUploads();
@@ -144,10 +118,11 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
   }
 
-  /** Batch paint API to minimize GPU uploads by chunk. */
-  paintVoxelsBatch(voxels: Float32Array[], value: number) {
-    if (!voxels || voxels.length === 0) return;
-    const editsByKey = new Map<string, number[]>();
+  /** Batch paint API to minimize GPU uploads by chunk. Returns backend edits payload. */
+  paintVoxelsBatch(voxels: Float32Array[], value: number): { key: string; indices: number[]; value: number }[] {
+    if (!voxels || voxels.length === 0) return [];
+    const indicesByInnerKey = new Map<string, number[]>();
+    const editsByFullKey = new Map<string, number[]>();
     const chunksToUpdate = new Set<string>();
 
     for (const v of voxels) {
@@ -158,39 +133,64 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
         const chunk = this.chunks.get(key) as VolumeChunk | undefined;
         const cpuArray = chunk ? this.getCpuArrayForChunk(chunk) : null;
 
-        // Best effort immediate local write for responsive painting
         if (cpuArray) {
           (cpuArray as any)[chunkLocalIndex] = value as any;
         }
-
-        // Always schedule an update for this chunk. If the CPU array isn’t ready yet,
-        // the pending key will be retried by processPendingUploads once it becomes available.
-        // This ensures the draw becomes visible once the chunk is present.
-        //
-        // Important: we schedule even if cpuArray was null.
         chunksToUpdate.add(key);
       }
 
-      let arr = editsByKey.get(key);
-      if (!arr) editsByKey.set(key, (arr = []));
-      arr.push(canonicalIndex);
+      let arrInner = indicesByInnerKey.get(key);
+      if (!arrInner) indicesByInnerKey.set(key, (arrInner = []));
+      arrInner.push(canonicalIndex);
     }
+
+    // Schedule GPU uploads for updated chunks (using inner keys)
     for (const key of chunksToUpdate) this.scheduleUpdate(key);
 
-    if (editsByKey.size > 0) {
-      const size = Array.from(this.spec.chunkDataSize);
-      const edits = Array.from(editsByKey, ([key, indices]) => ({
-        key: makeVoxChunkKey(key, this.lodFactor),
-        indices,
-        value,
-        size,
-      }));
-      try {
-        this.rpc!.invoke(VOX_COMMIT_VOXELS_RPC_ID, { id: this.rpcId, edits });
-      } catch {
-        // ignore
-      }
+    // Build backend edits payload using full keys (including LOD)
+    for (const [innerKey, indices] of indicesByInnerKey.entries()) {
+      const fullKey = makeVoxChunkKey(innerKey, this.lodFactor);
+      editsByFullKey.set(fullKey, indices);
     }
+
+    const edits: { key: string; indices: number[]; value: number }[] = [];
+    for (const [key, indices] of editsByFullKey.entries()) {
+      edits.push({ key, indices, value });
+    }
+    return edits;
+  }
+
+  /**
+   * Build backend edits payload by grouping provided voxels into chunk keys at this source's LOD.
+   * Leverages the same index computation used for immediate CPU painting to avoid duplication.
+   */
+  buildEditsFromVoxels(
+    voxels: Float32Array[],
+    value?: number,
+  ): { key: string; indices: number[]; value?: number }[] {
+    if (!Array.isArray(voxels)) {
+      throw new Error("VoxChunkSource.buildEditsFromVoxels: 'voxels' must be an array");
+    }
+    if (!Number.isInteger(this.lodFactor) || this.lodFactor <= 0) {
+      throw new Error("VoxChunkSource.buildEditsFromVoxels: invalid lodFactor on source");
+    }
+    const grouped = new Map<string, number[]>();
+    for (const v of voxels) {
+      if (!v) continue;
+      const { key, canonicalIndex } = this.computeIndices(v);
+      const fullKey = makeVoxChunkKey(key, this.lodFactor);
+      let arr = grouped.get(fullKey);
+      if (!arr) {
+        arr = [];
+        grouped.set(fullKey, arr);
+      }
+      arr.push(canonicalIndex);
+    }
+    const out: { key: string; indices: number[]; value?: number }[] = [];
+    for (const [key, indices] of grouped.entries()) {
+      out.push(value === undefined ? { key, indices } : { key, indices, value });
+    }
+    return out;
   }
 
   /** getValueAt simply defers to base; edits are persisted in backend and applied to CPU array when present. */
@@ -261,7 +261,3 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
   }
 }
 
-registerRPC(VOX_RELOAD_CHUNKS_RPC_ID, function (x: any) {
-  const obj = this.get(x.id) as VoxChunkSource;
-  obj.invalidateChunksByKey(x.keys);
-});

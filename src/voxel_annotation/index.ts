@@ -3,8 +3,7 @@
  * The LocalVoxSource persists per-chunk arrays into IndexedDB with a debounced saver.
  */
 
-import type { VoxChunkSource } from "#src/voxel_annotation/backend.js";
-import { parseVoxChunkKey } from "#src/voxel_annotation/base.js";
+import type { VoxelEditController } from "#src/voxel_annotation/edit_backend.js";
 import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
 
 
@@ -25,6 +24,25 @@ export function compositeLabelsDbKey(mapId: string): string {
 }
 
 export abstract class VoxSource {
+  protected mapId: string = "default";
+  protected mapCfg: VoxMapConfig; // Keep the entire configuration in one place
+
+  init(map: VoxMapConfig): Promise<{ mapId: string}> {
+    if(!map)
+    {
+      throw new Error("VoxSource: init: Map config is required");
+    }
+    this.mapCfg = map;
+    this.mapId = map.id;
+    return Promise.resolve({ mapId: this.mapId });
+  }
+
+  // Abstract persistence API the backend expects
+  abstract getSavedChunk(key: string): Promise<SavedChunk | undefined>;
+}
+
+
+export abstract class VoxSourceWriter extends VoxSource {
   /**
    * Optional listing of available maps for the current source.
    * Remote sources should query their endpoint; local may enumerate local IndexedDB entries.
@@ -32,8 +50,6 @@ export abstract class VoxSource {
   async listMaps(_args?: { baseUrl?: string; token?: string }): Promise<any[]> {
     return [];
   }
-  protected mapId: string = "default";
-  protected mapCfg: VoxMapConfig; // Keep the entire configuration in one place
 
   // In-memory cache of loaded chunks
   protected maxSavedChunks = 256; // cap to prevent unbounded growth
@@ -42,7 +58,12 @@ export abstract class VoxSource {
   // Dirty tracking and debounced save
   protected dirty = new Set<string>();
   protected saveTimer: number | undefined;
-  protected voxChunkSources = new Map<number, VoxChunkSource>();
+  editController?: VoxelEditController;
+ 
+  constructor(editController?: VoxelEditController) {
+    super();
+    this.editController = editController;
+  }
 
   /**
    * Generic label persistence hooks. Subclasses override to connect to the chosen datasource.
@@ -56,30 +77,11 @@ export abstract class VoxSource {
     return [];
   }
 
-  init(map: VoxMapConfig): Promise<{ mapId: string}> {
-    if(!map)
-    {
-      throw new Error("VoxSource: init: Map config is required");
-    }
-    this.mapCfg = map;
-    this.mapId = map.id;
-    return Promise.resolve({ mapId: this.mapId });
-  }
-
-  addVoxChunkSource(vcs: VoxChunkSource) {
-    this.voxChunkSources.set(vcs.lodFactor, vcs);
-  }
-
   callChunkReload(voxChunkKey: string) {
-      const parsed_vck = parseVoxChunkKey(voxChunkKey);
-      if (!parsed_vck) {
-        console.error("VoxSource: callChunkReload: invalid chunk key", voxChunkKey);
-        return;
-      }
-      const vcs = this.voxChunkSources.get(parsed_vck.lod);
-      if (vcs) {
-        vcs.reloadChunksByKey([parsed_vck.chunkKey]);
-      }
+    if (!this.editController) {
+      throw new Error("VoxSourceWriter.callChunkReload: editController not set");
+    }
+    this.editController.callChunkReload([voxChunkKey]);
   }
 
   // Common helpers
@@ -101,7 +103,6 @@ export abstract class VoxSource {
   protected async flushSaves(): Promise<void> {}
 
   // Abstract persistence API the backend expects
-  abstract getSavedChunk(key: string): Promise<SavedChunk | undefined>;
   abstract ensureChunk(
     key: string,
     size?: Uint32Array | number[],

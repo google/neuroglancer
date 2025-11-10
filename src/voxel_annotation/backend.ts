@@ -9,54 +9,23 @@ import { DataType } from "#src/util/data_type.js";
 import {
   makeVoxChunkKey,
   VOX_CHUNK_SOURCE_RPC_ID,
-  VOX_COMMIT_VOXELS_RPC_ID,
-  VOX_LABELS_ADD_RPC_ID,
-  VOX_LABELS_GET_RPC_ID,
   VOX_MAP_INIT_RPC_ID,
-  VOX_RELOAD_CHUNKS_RPC_ID,
 } from "#src/voxel_annotation/base.js";
 import type { VoxSource } from "#src/voxel_annotation/index.js";
-import { LocalVoxSource } from "#src/voxel_annotation/local_source.js";
+import {
+  LocalVoxSource,
+} from "#src/voxel_annotation/local_source.js";
 import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
 import { RemoteVoxSource } from "#src/voxel_annotation/remote_source.js";
 import type { RPC } from "#src/worker_rpc.js";
-import { registerPromiseRPC, registerRPC, registerSharedObject } from "#src/worker_rpc.js";
+import { registerRPC, registerSharedObject } from "#src/worker_rpc.js";
+// Ensure voxel edit backend and its RPC handlers are registered in the worker bundle.
+import "#src/voxel_annotation/edit_backend.js";
 
 /**
  * Backend volume source that persists voxel edits per chunk. It returns saved data if available,
  * otherwise returns an empty chunk (filled with zeros).
  */
-// --- VoxSource registry: share per (serverUrl, token, mapId, scaleKey) ---
-const voxSourceRegistry = new Map<string, VoxSource>();
-
-function makeServerKey(serverUrl?: string, token?: string): string {
-  if (!serverUrl) return "local";
-  return `remote:${serverUrl}|${token ?? ""}`;
-}
-
-function makeRegistryKey(serverUrl: string | undefined, token: string | undefined, map: VoxMapConfig): string {
-  const sk = makeServerKey(serverUrl, token);
-  return `${sk}|${map.id}`;
-}
-
-async function getOrCreateRegisteredVoxSource(serverUrl: string | undefined, token: string | undefined, map: VoxMapConfig, vcsInstance: VoxChunkSource): Promise<VoxSource> {
-  console.log("getOrCreateRegisteredVoxSource", vcsInstance.lodFactor)
-  const key = makeRegistryKey(serverUrl, token, map);
-  console.log(voxSourceRegistry)
-  console.log("getOrCreateRegisteredVoxSource: key", key)
-  const existing = voxSourceRegistry.get(key);
-  if (existing)
-  {
-    console.log("getOrCreateRegisteredVoxSource: using existing source")
-    existing.addVoxChunkSource(vcsInstance);
-    return existing;
-  }
-  const src = serverUrl ? new RemoteVoxSource(serverUrl, token) : new LocalVoxSource();
-  await src.init(map);
-  voxSourceRegistry.set(key, src);
-  src.addVoxChunkSource(vcsInstance);
-  return src;
-}
 
 @registerSharedObject(VOX_CHUNK_SOURCE_RPC_ID)
 export class VoxChunkSource extends BaseVolumeChunkSource {
@@ -66,17 +35,6 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
   public lodFactor: number;
   private mapReadyPromise: Promise<void>;
   private resolveMapReady!: () => void;
-
-  // Debounced commit batching to minimize backend churn for rapid strokes.
-  private pendingCommitEdits: {
-    key: string;
-    indices: number[] | Uint32Array;
-    value?: number;
-    values?: ArrayLike<number>;
-    size?: number[];
-  }[] = [];
-  private commitDebounceTimer: number | undefined;
-  private readonly commitDebounceDelayMs: number = 200;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
@@ -93,11 +51,9 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     });
   }
 
-  /** Initialize map metadata and persistence backend using a VoxMapConfig. */
   async initMap(arg: { map?: VoxMapConfig } | VoxMapConfig) {
     const map: VoxMapConfig = (arg as any)?.map ?? (arg as any);
     if (!map) throw new Error("initMap: map configuration is required");
-    // Allow runtime override/validation of server settings via map
     if (map.serverUrl) {
       if (this.voxServerUrl && this.voxServerUrl !== map.serverUrl) {
         throw new Error("initMap: conflicting serverUrl provided");
@@ -110,75 +66,12 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
       }
       this.voxToken = map.token;
     }
-    // Bind to a per-(server,map,scaleKey) registered source
-    this.source = await getOrCreateRegisteredVoxSource(
-      this.voxServerUrl,
-      this.voxToken,
-      map,
-      this
-    );
-    // Signal readiness for any pending downloads/commits
-    try { this.resolveMapReady(); } catch { /* ignore multiple resolutions */ }
-  }
-
-  reloadChunksByKey(keys: string[]) {
-    this.rpc?.invoke(VOX_RELOAD_CHUNKS_RPC_ID, {
-      id: this.rpcId,
-      keys,
-    });
-  }
-
-  private async flushPendingCommitEdits(): Promise<void> {
-    await this.mapReadyPromise;
-    const src = this.source;
-    if (!src) throw new Error("flushPendingCommitEdits: source is not initialized for this map");
-    const pending = this.pendingCommitEdits;
-    this.pendingCommitEdits = [];
-    this.commitDebounceTimer = undefined;
-    if (pending.length === 0) return;
-    console.log("####################################################################################\n flushPendingCommitEdits: applying edits", pending)
-    await src.applyEdits(pending);
-  }
-
-  /** Commit voxel edits from the frontend (debounced to batch rapid updates). */
-  async commitVoxels(
-    edits: {
-      key: string;
-      indices: number[] | Uint32Array;
-      value?: number;
-      values?: ArrayLike<number>;
-      size?: number[];
-    }[],
-  ) {
-    await this.mapReadyPromise;
-    if (!this.source) throw new Error("commitVoxels: source is not initialized for this map");
-    // Enqueue edits and schedule a short debounce to coalesce frames
-    for (const e of edits) {
-      if (!e || !e.key || !e.indices) {
-        throw new Error("commitVoxels: invalid edit payload");
-      }
-      this.pendingCommitEdits.push(e);
-    }
-    if (this.commitDebounceTimer !== undefined) {
-      clearTimeout(this.commitDebounceTimer);
-    }
-    this.commitDebounceTimer = setTimeout(() => {
-      void this.flushPendingCommitEdits();
-    }, this.commitDebounceDelayMs) as unknown as number;
-  }
-
-  async getLabelIds(): Promise<number[]> {
-    await this.mapReadyPromise;
-    const src = this.source;
-    if (!src) throw new Error("getLabelIds: source is not initialized for this map");
-    return await src.getLabelIds();
-  }
-
-  async addLabel(value: number): Promise<number[]> {
-    await this.mapReadyPromise;
-    const src = this.source;
-    if (!src) throw new Error("addLabel: source is not initialized for this map");
-    return await src.addLabel(value >>> 0);
+    const src = this.voxServerUrl
+      ? new RemoteVoxSource(this.voxServerUrl, this.voxToken)
+      : new LocalVoxSource();
+    await src.init(map);
+    this.source = src;
+    try { this.resolveMapReady(); } catch { /* ignore */ }
   }
 
   async download(chunk: VolumeChunk, signal: AbortSignal): Promise<void> {
@@ -246,31 +139,8 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
   }
 }
 
-// RPC to commit voxel edits.
-registerRPC(VOX_COMMIT_VOXELS_RPC_ID, function (x: any) {
-  const obj = this.get(x.id) as VoxChunkSource;
-  obj.commitVoxels(x.edits || []);
-});
-
 // RPC to initialize map
 registerRPC(VOX_MAP_INIT_RPC_ID, function (x: any) {
   const obj = this.get(x.id) as VoxChunkSource;
   obj.initMap(x?.map || x || {});
-});
-
-// RPCs for label persistence (promise-based)
-registerPromiseRPC<number[]>(
-  VOX_LABELS_GET_RPC_ID,
-  async function (x: any): Promise<any> {
-    const obj = this.get(x.rpcId) as VoxChunkSource;
-    const ids = await obj.getLabelIds();
-    return { value: ids };
-  },
-);
-
-
-registerPromiseRPC<number[]>(VOX_LABELS_ADD_RPC_ID, async function (x: any) {
-  const obj = this.get(x.rpcId) as VoxChunkSource;
-  const ids = await obj.addLabel(x?.value >>> 0);
-  return { value: ids };
 });

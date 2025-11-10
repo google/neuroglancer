@@ -410,6 +410,7 @@ export class VoxUserLayer extends UserLayer {
         );
         // Expose a controller so tools can paint voxels via the source.
         this.voxEditController = new VoxelEditController(voxSource);
+        this.voxEditController.initializeMap(map);
 
         const sources2D = voxSource.getSources({} as any);
         for (const level of (sources2D[0] ?? [])) {

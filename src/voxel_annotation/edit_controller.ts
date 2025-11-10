@@ -4,16 +4,70 @@
  */
 
 import type { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
+import {
+  parseVoxChunkKey,
+  VOX_EDIT_BACKEND_RPC_ID,
+  VOX_EDIT_COMMIT_VOXELS_RPC_ID,
+  VOX_EDIT_LABELS_ADD_RPC_ID,
+  VOX_EDIT_LABELS_GET_RPC_ID,
+  VOX_EDIT_MAP_INIT_RPC_ID,
+  VOX_RELOAD_CHUNKS_RPC_ID,
+} from "#src/voxel_annotation/base.js";
 import type { VoxChunkSource } from "#src/voxel_annotation/frontend.js";
+import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
+import {
+  registerRPC,
+  registerSharedObjectOwner,
+  SharedObject,
+} from "#src/worker_rpc.js";
 
-export class VoxelEditController {
-  constructor(private multiscale: MultiscaleVolumeChunkSource) {}
+@registerSharedObjectOwner(VOX_EDIT_BACKEND_RPC_ID)
+export class VoxelEditController extends SharedObject {
+  constructor(private multiscale: MultiscaleVolumeChunkSource) {
+    super();
+    const rpc = (this.multiscale as any)?.chunkManager?.rpc;
+    if (!rpc) {
+      throw new Error("VoxelEditController: Missing RPC from multiscale chunk manager.");
+    }
+    this.initializeCounterpart(rpc, {});
+  }
   private static readonly qualityFactor = 16.0;
   private static readonly restrictToMinLOD = true;
+  private mapConfig?: VoxMapConfig;
+
+  private getIdentitySliceViewSourceOptions() {
+    const rank = (this.multiscale as any).rank as number | undefined;
+    if (!Number.isInteger(rank) || (rank as number) <= 0) {
+      throw new Error("VoxelEditController: Invalid multiscale rank.");
+    }
+    const r = rank as number;
+    // Identity mapping from multiscale to view for our purposes.
+    const displayRank = r;
+    const multiscaleToViewTransform = new Float32Array(displayRank * r);
+    for (let chunkDim = 0; chunkDim < r; ++chunkDim) {
+      for (let displayDim = 0; displayDim < displayRank; ++displayDim) {
+        multiscaleToViewTransform[displayRank * chunkDim + displayDim] =
+          chunkDim === displayDim ? 1 : 0;
+      }
+    }
+    return {
+      displayRank,
+      multiscaleToViewTransform,
+      modelChannelDimensionIndices: [],
+    } as const;
+  }
+
+  initializeMap(map: VoxMapConfig) {
+    if (!this.rpc) throw new Error("VoxelEditController.initializeMap: RPC not initialized.");
+    this.mapConfig = map;
+    this.rpc.invoke(VOX_EDIT_MAP_INIT_RPC_ID, { rpcId: this.rpcId, map });
+  }
 
   // Required: compute desired voxel size (power-of-two) from brush radius.
   getOptimalVoxelSize(brushRadius: number, minLOD = 1, maxLOD = 128) {
-    if (VoxelEditController.restrictToMinLOD) {return minLOD;}
+    if (VoxelEditController.restrictToMinLOD) {
+      return minLOD;
+    }
     if (!Number.isFinite(brushRadius) || brushRadius <= 0) {
       return minLOD;
     }
@@ -26,9 +80,13 @@ export class VoxelEditController {
 
   /** Compute the edit LOD index (scale index) from a brush radius in canonical units. */
   getEditLodIndexForBrush(brushRadiusCanonical: number): number {
-    if (VoxelEditController.restrictToMinLOD) {return 0;}
+    if (VoxelEditController.restrictToMinLOD) {
+      return 0;
+    }
     if (!Number.isFinite(brushRadiusCanonical) || brushRadiusCanonical <= 0) {
-      throw new Error("getEditLodIndexForBrush: brushRadiusCanonical must be > 0");
+      throw new Error(
+        "getEditLodIndexForBrush: brushRadiusCanonical must be > 0",
+      );
     }
     const voxelSize = this.getOptimalVoxelSize(brushRadiusCanonical);
     const sourceIndex = Math.round(Math.log2(voxelSize));
@@ -47,21 +105,24 @@ export class VoxelEditController {
     basis?: { u: Float32Array; v: Float32Array },
   ) {
     if (!Number.isFinite(radiusCanonical) || radiusCanonical <= 0) {
-      console.log(basis) // TODO remove this line, was only added to suppress ts errors
+      void basis; // basis is currently unused for disk alignment in this refactor
       throw new Error("paintBrushWithShape: 'radius' must be > 0.");
     }
     if (!centerCanonical || centerCanonical.length < 3) {
-      throw new Error("paintBrushWithShape: 'center' must be a Float32Array[3].");
+      throw new Error(
+        "paintBrushWithShape: 'center' must be a Float32Array[3].",
+      );
     }
 
     const voxelSize = this.getOptimalVoxelSize(radiusCanonical);
     const sourceIndex = Math.floor(Math.log2(voxelSize));
-    const src2D = this.multiscale.getSources({} as any);
+    const src2D = this.multiscale.getSources(this.getIdentitySliceViewSourceOptions());
     if (!src2D || !src2D[0] || src2D[0].length <= sourceIndex) {
       throw new Error("VoxelEditController: No multiscale levels available.");
     }
     const source = src2D[0][sourceIndex]?.chunkSource as VoxChunkSource;
-    if (!source) throw new Error("paintVoxelsBatch: Selected level has no chunk source.");
+    if (!source)
+      throw new Error("paintVoxelsBatch: Selected level has no chunk source.");
 
     // Convert center and radius to the level’s voxel grid.
     const cx = Math.floor((centerCanonical[0] ?? 0) / voxelSize);
@@ -69,7 +130,9 @@ export class VoxelEditController {
     const cz = Math.floor((centerCanonical[2] ?? 0) / voxelSize);
     const r = Math.round(radiusCanonical / voxelSize);
     if (r <= 0) {
-      throw new Error("paintBrushWithShape: radius too small for selected LOD.");
+      throw new Error(
+        "paintBrushWithShape: radius too small for selected LOD.",
+      );
     }
     const rr = r * r;
 
@@ -95,21 +158,56 @@ export class VoxelEditController {
       }
     }
 
-    source.paintVoxelsBatch(voxelsLOD, value);
+    const editsPayload = source.paintVoxelsBatch(voxelsLOD, value);
+
+    if (!this.rpc) throw new Error("VoxelEditController.paintBrushWithShape: RPC not initialized.");
+    this.rpc.invoke(VOX_EDIT_COMMIT_VOXELS_RPC_ID, {
+      rpcId: this.rpcId,
+      edits: editsPayload,
+    });
   }
 
   async getLabelIds(): Promise<number[]> {
-    const src2D = this.multiscale.getSources({} as any);
-    if (!src2D || !src2D[0] || src2D[0].length === 0) return [];
-    const src = src2D[0][0].chunkSource as VoxChunkSource | undefined;
-    if (!src) return [];
-    return await src.getLabelIds();
+    if (!this.rpc) throw new Error("VoxelEditController.getLabelIds: RPC not initialized.");
+    return this.rpc.promiseInvoke(VOX_EDIT_LABELS_GET_RPC_ID, {
+      rpcId: this.rpcId,
+    });
   }
 
   async addLabel(value: number): Promise<number[]> {
-    const src2D = this.multiscale.getSources({} as any);
-    const src = src2D?.[0]?.[0]?.chunkSource as VoxChunkSource | undefined;
-    if (!src) throw new Error("Voxel source not ready");
-    return await src.addLabel(value >>> 0);
+    if (!this.rpc) throw new Error("VoxelEditController.addLabel: RPC not initialized.");
+    return this.rpc.promiseInvoke(VOX_EDIT_LABELS_ADD_RPC_ID, {
+      rpcId: this.rpcId,
+      value,
+    });
+  }
+
+  callChunkReload(voxChunkKeys: string[]) {
+    const src2D = this.multiscale.getSources(this.getIdentitySliceViewSourceOptions());
+    if (!src2D || !src2D[0] || src2D[0].length === 0) {
+      throw new Error("VoxelEditController: No multiscale levels available.");
+    }
+    for (const key of voxChunkKeys) {
+      const parsed = parseVoxChunkKey(key);
+      if (!parsed) {
+        throw new Error(`VoxelEditController.callChunkReload: invalid chunk key '${key}'.`);
+      }
+      if (!this.mapConfig?.steps) {
+        throw new Error(`VoxelEditController.callChunkReload: missing map config steps.`);
+      }
+      const levelIndex = this.mapConfig?.steps.indexOf(parsed.lod) | 0;
+      const level = src2D[0][levelIndex];
+      if (!level || !level.chunkSource) {
+        throw new Error(`VoxelEditController.callChunkReload: missing chunk source for LOD ${levelIndex}.`);
+      }
+      const source = level.chunkSource as unknown as VoxChunkSource;
+      source.invalidateChunksByKey([parsed.chunkKey]);
+    }
   }
 }
+
+registerRPC(VOX_RELOAD_CHUNKS_RPC_ID, function (x: any) {
+  const obj = this.get(x.rpcId) as VoxelEditController;
+  const keys: string[] = Array.isArray(x.voxChunkKeys) ? x.voxChunkKeys : [];
+  obj.callChunkReload(keys);
+});

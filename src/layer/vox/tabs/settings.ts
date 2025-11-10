@@ -4,7 +4,7 @@
 import type { VoxUserLayer } from "#src/layer/vox/index.js";
 import { DataType } from "#src/util/data_type.js";
 import { exportVoxToZarr, type ExportStatus } from "#src/voxel_annotation/export_to_zarr.js";
-import { LocalVoxSource } from "#src/voxel_annotation/local_source.js";
+import { LocalVoxSourceWriter } from "#src/voxel_annotation/local_source.js";
 import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
 import { computeSteps } from "#src/voxel_annotation/map.js";
 import { RemoteVoxSource } from "#src/voxel_annotation/remote_source.js";
@@ -128,7 +128,7 @@ export class VoxSettingsTab extends Tab {
           const src = new RemoteVoxSource(this.layer.voxServerUrl, this.layer.voxServerToken);
           maps = await src.listMaps();
         } else {
-          const src = new LocalVoxSource();
+          const src = new LocalVoxSourceWriter();
           maps = await src.listMaps();
         }
         for (const m of maps) this.layer.voxMapRegistry.upsert(m as any);

@@ -1,10 +1,10 @@
 import { DataType } from "#src/sliceview/base.js";
 import type { SavedChunk} from "#src/voxel_annotation/index.js";
-import { VoxSource } from "#src/voxel_annotation/index.js";
+import { VoxSourceWriter } from "#src/voxel_annotation/index.js";
 import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
 import { computeSteps } from "#src/voxel_annotation/map.js";
 
-export class RemoteVoxSource extends VoxSource {
+export class RemoteVoxSource extends VoxSourceWriter {
   async listMaps(): Promise<VoxMapConfig[]> {
     try {
       const qs = this.qs({});

@@ -1,5 +1,5 @@
 import { makeVoxChunkKey, parseVoxChunkKey } from "#src/voxel_annotation/base.js";
-import type { SavedChunk } from "#src/voxel_annotation/index.js";
+import { SavedChunk, VoxSourceWriter } from "#src/voxel_annotation/index.js";
 import {
   compositeChunkDbKey,
   compositeLabelsDbKey,
@@ -19,8 +19,33 @@ function calculateDownsamplePasses(chunkSize: number) {
   return Math.ceil(Math.log2(chunkSize));
 }
 
-/** IndexedDB-backed local source. */
 export class LocalVoxSource extends VoxSource {
+  private dbPromise: Promise<IDBDatabase> | null = null;
+  
+  private async getDb(): Promise<IDBDatabase> {
+    if (this.dbPromise) return this.dbPromise;
+    this.dbPromise = openVoxDb();
+    return this.dbPromise;
+  }
+  
+  async getSavedChunk(key: string): Promise<SavedChunk | undefined> {
+    const db = await this.getDb();
+    const composite = compositeChunkDbKey(this.mapId, key);
+    const buf = await idbGet<ArrayBuffer>(db, "chunks", composite);
+    if (buf) {
+      const arr = new Uint32Array(buf);
+      const sc: SavedChunk = {
+        data: arr,
+        size: new Uint32Array(this.mapCfg!.chunkDataSize as any),
+      };
+      return sc;
+    }
+    return undefined;
+  }
+}
+
+/** IndexedDB-backed local source. */
+export class LocalVoxSourceWriter extends VoxSourceWriter {
 
   // Upscaling halted
   /*
@@ -30,7 +55,7 @@ export class LocalVoxSource extends VoxSource {
       const existing = this.saved.get(key);
       if (existing) return existing;
       const db = await this.getDb();
-      const composite = this.compositeKey(key);
+      const composite = compositeChunkDbKey(this.mapId, key);
       const buf = await idbGet<ArrayBuffer>(db, "chunks", composite);
       if (!buf) return undefined;
       const arr = new Uint32Array(buf);
@@ -47,14 +72,14 @@ export class LocalVoxSource extends VoxSource {
       const db = await this.getDb();
       const tx = db.transaction(LocalVoxSource.DIRTY_STORE, "readwrite");
       const store = tx.objectStore(LocalVoxSource.DIRTY_STORE);
-      const composite = this.compositeKey(key);
+      const composite = compositeChunkDbKey(this.mapId, key);
       await idbPut(store, isDirty ? 1 : 0, composite);
       await txDone(tx);
     }
 
     private async getDirtyTreeValue(key: string): Promise<0 | 1 | undefined> {
       const db = await this.getDb();
-      const composite = this.compositeKey(key);
+      const composite = compositeChunkDbKey(this.mapId, key);
       const v = await idbGet<number | undefined>(db, LocalVoxSource.DIRTY_STORE, composite);
       if (v === undefined) return undefined;
       if (v !== 0 && v !== 1) throw new Error(`Invalid dirty-tree value for ${key}: ${String(v)}`);
@@ -101,7 +126,7 @@ export class LocalVoxSource extends VoxSource {
       const tx = db.transaction(LocalVoxSource.DIRTY_STORE, "readwrite");
       const store = tx.objectStore(LocalVoxSource.DIRTY_STORE);
       for (const ck of children) {
-        await idbPut(store, 1, this.compositeKey(ck));
+        await idbPut(store, 1, compositeChunkDbKey(this.mapId, key));
       }
       await txDone(tx);
     }
@@ -363,7 +388,7 @@ export class LocalVoxSource extends VoxSource {
         return existing;
       }
       const db = await this.getDb();
-      const composite = this.compositeKey(key);
+      const composite = compositeChunkDbKey(this.mapId, key);
       const buf = await idbGet<ArrayBuffer>(db, "chunks", composite);
       if (buf) {
         const arr = new Uint32Array(buf);
@@ -398,7 +423,7 @@ export class LocalVoxSource extends VoxSource {
       }
     }*/
     const db = await this.getDb();
-    const composite = this.compositeKey(key);
+    const composite = compositeChunkDbKey(this.mapId, key);
     const buf = await idbGet<ArrayBuffer>(db, "chunks", composite);
     if (buf) {
       const arr = new Uint32Array(buf);
@@ -573,14 +598,10 @@ export class LocalVoxSource extends VoxSource {
     for (const key of keys) {
       const sc = this.saved.get(key);
       if (!sc) continue;
-      await idbPut(store, sc.data.buffer, this.compositeKey(key));
+      await idbPut(store, sc.data.buffer, compositeChunkDbKey(this.mapId, key));
     }
     await txDone(tx);
     this.saveTimer = undefined;
-  }
-
-  private compositeKey(key: string) {
-    return compositeChunkDbKey(this.mapId, key);
   }
 
   private async getDb(): Promise<IDBDatabase> {
