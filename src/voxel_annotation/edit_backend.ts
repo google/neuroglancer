@@ -12,11 +12,12 @@ import {
   VOX_EDIT_LABELS_ADD_RPC_ID,
   VOX_EDIT_LABELS_GET_RPC_ID,
   VOX_RELOAD_CHUNKS_RPC_ID,
+  VOX_EDIT_FAILURE_RPC_ID,
   makeVoxChunkKey,
   parseVoxChunkKey,
 } from "#src/voxel_annotation/base.js";
 import type { RPC} from "#src/worker_rpc.js";
-import { SharedObject , registerPromiseRPC, registerSharedObject, initializeSharedObjectCounterpart } from "#src/worker_rpc.js";
+import { SharedObject , registerRPC, registerPromiseRPC, registerSharedObject, initializeSharedObjectCounterpart } from "#src/worker_rpc.js";
 
 @registerSharedObject(VOX_EDIT_BACKEND_RPC_ID)
 export class VoxelEditController extends SharedObject {
@@ -45,8 +46,10 @@ export class VoxelEditController extends SharedObject {
     initializeSharedObjectCounterpart(this, rpc, options);
 
     const passedSources = options?.sources;
-    if (passedSources === undefined || typeof passedSources !== 'object') {
-      throw new Error("VoxelEditBackend: missing required 'sources' map during initialization");
+    if (passedSources === undefined || typeof passedSources !== "object") {
+      throw new Error(
+        "VoxelEditBackend: missing required 'sources' map during initialization",
+      );
     }
 
     for (const lodFactorStr in passedSources) {
@@ -54,7 +57,9 @@ export class VoxelEditController extends SharedObject {
       const sourceId = passedSources[lodFactorStr];
       const resolved = rpc.get(sourceId) as VolumeChunkSource | undefined;
       if (!resolved) {
-        throw new Error(`VoxelEditBackend: failed to resolve VolumeChunkSource for LOD factor ${lodFactor}`);
+        throw new Error(
+          `VoxelEditBackend: failed to resolve VolumeChunkSource for LOD factor ${lodFactor}`,
+        );
       }
       this.sources.set(lodFactor, resolved);
     }
@@ -67,7 +72,10 @@ export class VoxelEditController extends SharedObject {
     if (edits.length === 0) return;
 
     // 1. Group edits by vox chunk key (includes LOD).
-    const editsByVoxKey = new Map<string, { indices: number[]; values: number[] }>();
+    const editsByVoxKey = new Map<
+      string,
+      { indices: number[]; values: number[] }
+    >();
     for (const edit of edits) {
       if (!editsByVoxKey.has(edit.key)) {
         editsByVoxKey.set(edit.key, { indices: [], values: [] });
@@ -95,24 +103,46 @@ export class VoxelEditController extends SharedObject {
     }
 
     // 2. For each modified vox chunk, apply edits via the correct source and record vox keys to reload.
-    const touchedVoxChunkKeys: string[] = [];
+    const failedVoxChunkKeys: string[] = [];
+    let firstErrorMessage: string | undefined = undefined;
     for (const [voxKey, chunkEdits] of editsByVoxKey.entries()) {
       try {
         const parsedKey = parseVoxChunkKey(voxKey);
         if (!parsedKey) {
-          console.error(`flushPending: Failed to parse vox chunk key: ${voxKey}`);
+          const msg = `flushPending: Failed to parse vox chunk key: ${voxKey}`;
+          console.error(msg);
+          failedVoxChunkKeys.push(voxKey);
+          if (firstErrorMessage === undefined) firstErrorMessage = msg;
           continue;
         }
         const source = this.sources.get(parsedKey.lod);
         if (!source) {
-          console.error(`flushPending: No source found for LOD factor ${parsedKey.lod}`);
+          const msg = `flushPending: No source found for LOD factor ${parsedKey.lod}`;
+          console.error(msg);
+          failedVoxChunkKeys.push(voxKey);
+          if (firstErrorMessage === undefined) firstErrorMessage = msg;
           continue;
         }
-        await (source as any).applyEdits(parsedKey.chunkKey, chunkEdits.indices, chunkEdits.values);
-        touchedVoxChunkKeys.push(voxKey);
+        await (source as any).applyEdits(
+          parsedKey.chunkKey,
+          chunkEdits.indices,
+          chunkEdits.values,
+        );
       } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
         console.error(`Failed to write chunk ${voxKey}:`, e);
+        failedVoxChunkKeys.push(voxKey);
+        if (firstErrorMessage === undefined) firstErrorMessage = msg;
       }
+    }
+
+    // If any failures occurred, notify the frontend asynchronously.
+    if (failedVoxChunkKeys.length > 0) {
+      this.rpc?.invoke(VOX_EDIT_FAILURE_RPC_ID, {
+        rpcId: this.rpcId,
+        voxChunkKeys: failedVoxChunkKeys,
+        message: firstErrorMessage ?? "Voxel edit commit failed.",
+      });
     }
 
     // After base edits, enqueue downsampling for affected chunks (do not await here).
@@ -138,8 +168,11 @@ export class VoxelEditController extends SharedObject {
       }
       this.pendingEdits.push(e);
     }
-    if (this.commitDebounceTimer !== undefined) clearTimeout(this.commitDebounceTimer);
-    this.commitDebounceTimer = setTimeout(() => { void this.flushPending(); }, this.commitDebounceDelayMs) as unknown as number;
+    if (this.commitDebounceTimer !== undefined)
+      clearTimeout(this.commitDebounceTimer);
+    this.commitDebounceTimer = setTimeout(() => {
+      void this.flushPending();
+    }, this.commitDebounceDelayMs) as unknown as number;
   }
 
   async getLabelIds(): Promise<number[]> {
@@ -152,11 +185,11 @@ export class VoxelEditController extends SharedObject {
     return [];
   }
 
-  callChunkReload(voxChunkKeys: string[]){
+  callChunkReload(voxChunkKeys: string[]) {
     this.rpc?.invoke(VOX_RELOAD_CHUNKS_RPC_ID, {
       rpcId: this.rpcId,
       voxChunkKeys: voxChunkKeys,
-    })
+    });
   }
   // Downsampling helpers
   private parentKeyOf(childKey: string): string | null {
@@ -174,7 +207,9 @@ export class VoxelEditController extends SharedObject {
     return Math.ceil(Math.log2(chunkSize));
   }
 
-  private async performDownsampleCascadeForKey(sourceKey: string): Promise<void> {
+  private async performDownsampleCascadeForKey(
+    sourceKey: string,
+  ): Promise<void> {
     const chunkSize = 64;
     const maxPasses = this.calculateDownsamplePasses(chunkSize);
     const maxLOD = 256;
@@ -231,7 +266,10 @@ export class VoxelEditController extends SharedObject {
     } finally {
       this.isProcessingDownsampleQueue = false;
       // If new work was enqueued during processing and flag got reset, loop again.
-      if (this.downsampleQueue.length > 0 && !this.isProcessingDownsampleQueue) {
+      if (
+        this.downsampleQueue.length > 0 &&
+        !this.isProcessingDownsampleQueue
+      ) {
         this.isProcessingDownsampleQueue = true;
         Promise.resolve().then(() => this.processDownsampleQueue());
       }
@@ -255,12 +293,17 @@ export class VoxelEditController extends SharedObject {
         const ac = new AbortController();
         await src.download(sourceChunk, ac.signal);
       } catch (e) {
-        console.warn(`Failed to download source chunk ${sourceKey} for downsampling:`, e);
+        console.warn(
+          `Failed to download source chunk ${sourceKey} for downsampling:`,
+          e,
+        );
       }
     }
 
     if (!sourceChunk.data) {
-      console.warn(`Cannot downsample from empty or missing chunk: ${sourceKey}`);
+      console.warn(
+        `Cannot downsample from empty or missing chunk: ${sourceKey}`,
+      );
       return null;
     }
 
@@ -287,9 +330,13 @@ export class VoxelEditController extends SharedObject {
           const sx = x * 2;
           const sy = y * 2;
           const sz = z * 2;
-          const base = sz * (sourceChunk.chunkDataSize[0] * sourceChunk.chunkDataSize[1]) + sy * sourceChunk.chunkDataSize[0] + sx;
+          const base =
+            sz * (sourceChunk.chunkDataSize[0] * sourceChunk.chunkDataSize[1]) +
+            sy * sourceChunk.chunkDataSize[0] +
+            sx;
           const row = sourceChunk.chunkDataSize[0];
-          const plane = sourceChunk.chunkDataSize[0] * sourceChunk.chunkDataSize[1];
+          const plane =
+            sourceChunk.chunkDataSize[0] * sourceChunk.chunkDataSize[1];
           // Gather 8 voxels from source
           const v000 = Number((sourceChunk.data as any)[base]);
           const v100 = Number((sourceChunk.data as any)[base + 1]);
@@ -298,13 +345,25 @@ export class VoxelEditController extends SharedObject {
           const v001 = Number((sourceChunk.data as any)[base + plane]);
           const v101 = Number((sourceChunk.data as any)[base + plane + 1]);
           const v011 = Number((sourceChunk.data as any)[base + plane + row]);
-          const v111 = Number((sourceChunk.data as any)[base + plane + row + 1]);
-          const mode = this.calculateMode([v000, v100, v010, v110, v001, v101, v011, v111]);
+          const v111 = Number(
+            (sourceChunk.data as any)[base + plane + row + 1],
+          );
+          const mode = this.calculateMode([
+            v000,
+            v100,
+            v010,
+            v110,
+            v001,
+            v101,
+            v011,
+            v111,
+          ]);
 
           const tx = x + offsetX;
           const ty = y + offsetY;
           const tz = z + offsetZ;
-          const tIndex = tz * (targetChunkW * targetChunkH) + ty * targetChunkW + tx;
+          const tIndex =
+            tz * (targetChunkW * targetChunkH) + ty * targetChunkW + tx;
           indices.push(tIndex);
           values.push(mode >>> 0);
         }
@@ -316,11 +375,17 @@ export class VoxelEditController extends SharedObject {
       if (targetInfo) {
         const targetSrc = this.sources.get(targetInfo.lod);
         if (targetSrc) {
-          await (targetSrc as any).applyEdits(targetInfo.chunkKey, indices, values);
+          await (targetSrc as any).applyEdits(
+            targetInfo.chunkKey,
+            indices,
+            values,
+          );
           // Notify frontend to reload the target parent chunk at its LOD.
           this.callChunkReload([targetKey]);
         } else {
-          console.error(`Downsampling failed: could not find target source for LOD ${targetInfo.lod}`);
+          console.error(
+            `Downsampling failed: could not find target source for LOD ${targetInfo.lod}`,
+          );
         }
       }
     }
@@ -329,10 +394,9 @@ export class VoxelEditController extends SharedObject {
   }
 }
 
-registerPromiseRPC(VOX_EDIT_COMMIT_VOXELS_RPC_ID, async function (x: any) {
+registerRPC(VOX_EDIT_COMMIT_VOXELS_RPC_ID, function (x: any) {
   const obj = this.get(x.rpcId) as VoxelEditController;
-  await obj.commitVoxels(x.edits || []);
-  return { value: undefined };
+  void obj.commitVoxels(Array.isArray(x.edits) ? x.edits : []);
 });
 
 registerPromiseRPC<number[]>(VOX_EDIT_LABELS_GET_RPC_ID, async function (x: any) {

@@ -1,11 +1,9 @@
-export const VOX_CHUNK_SOURCE_RPC_ID = "vox.VoxChunkSource";
-export const VOX_MAP_INIT_RPC_ID = "vox.map.init";
 export const VOX_RELOAD_CHUNKS_RPC_ID = "vox.chunk.reload";
 export const VOX_EDIT_BACKEND_RPC_ID = "vox.EditBackend";
-export const VOX_EDIT_MAP_INIT_RPC_ID = "vox.edit.map.init";
 export const VOX_EDIT_COMMIT_VOXELS_RPC_ID = "vox.edit.commitVoxels";
 export const VOX_EDIT_LABELS_GET_RPC_ID = "vox.edit.labels.get";
 export const VOX_EDIT_LABELS_ADD_RPC_ID = "vox.edit.labels.add";
+export const VOX_EDIT_FAILURE_RPC_ID = "vox.edit.failure";
 
 export function makeVoxChunkKey(chunkKey: string, lodFactor : number) {
   return `lod${lodFactor}#${chunkKey}`;

@@ -31,6 +31,7 @@ import type {
 import type { TypedArray } from "#src/util/array.js";
 import { DATA_TYPE_ARRAY_CONSTRUCTOR } from "#src/util/data_type.js";
 import type { vec3 } from "#src/util/geom.js";
+import { HttpError } from "#src/util/http_request.js";
 import * as vector from "#src/util/vector.js";
 import type { RPC } from "#src/worker_rpc.js";
 
@@ -213,7 +214,22 @@ export class VolumeChunkSource
       }
       (data as any)[idx] = val; // TypedArray index assignment
     }
-    await this.writeChunk(chunk);
+    const maxRetries = 3;
+    let lastError: Error | undefined;
+
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        await this.writeChunk(chunk);
+        return;
+      } catch (e) {
+        lastError = e as Error;
+        if (e instanceof HttpError && e.status < 500 && e.status !== 429) {
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 250 * Math.pow(2, i)));
+      }
+    }
+    throw new Error(`Failed to write chunk ${chunkKey} after ${maxRetries} attempts.`, { cause: lastError });
   }
 }
 VolumeChunkSource.prototype.chunkConstructor = VolumeChunk;

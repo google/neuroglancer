@@ -12,6 +12,7 @@ import {
   VOX_EDIT_LABELS_ADD_RPC_ID,
   VOX_EDIT_LABELS_GET_RPC_ID,
   VOX_RELOAD_CHUNKS_RPC_ID,
+  VOX_EDIT_FAILURE_RPC_ID,
   makeVoxChunkKey,
   parseVoxChunkKey,
 } from "#src/voxel_annotation/base.js";
@@ -253,13 +254,9 @@ export class VoxelEditController extends SharedObject {
     if (!Array.isArray(edits)) {
       throw new Error("VoxelEditController.commitEdits: edits must be an array.");
     }
-    this.rpc.promiseInvoke<void>(VOX_EDIT_COMMIT_VOXELS_RPC_ID, {
+    this.rpc.invoke(VOX_EDIT_COMMIT_VOXELS_RPC_ID, {
       rpcId: this.rpcId,
       edits,
-    }).catch(error => {
-      const message = (error instanceof Error) ? error.message : String(error);
-      console.error("Failed to commit edits:", message);
-      this.layer.setDrawErrorMessage(message);
     });
   }
 
@@ -509,10 +506,26 @@ export class VoxelEditController extends SharedObject {
       }
     }
   }
+
+  /** Backend failure notification handler: revert optimistic preview and show UI message. */
+  handleCommitFailure(voxChunkKeys: string[], message: string): void {
+    try {
+      this.callChunkReload(voxChunkKeys);
+    } finally {
+      this.layer.setDrawErrorMessage(message);
+    }
+  }
 }
 
 registerRPC(VOX_RELOAD_CHUNKS_RPC_ID, function (x: any) {
   const obj = this.get(x.rpcId) as VoxelEditController;
   const keys: string[] = Array.isArray(x.voxChunkKeys) ? x.voxChunkKeys : [];
   obj.callChunkReload(keys);
+});
+
+registerRPC(VOX_EDIT_FAILURE_RPC_ID, function (x: any) {
+  const obj = this.get(x.rpcId) as VoxelEditController;
+  const keys: string[] = Array.isArray(x.voxChunkKeys) ? x.voxChunkKeys : [];
+  const message: string = typeof x.message === 'string' ? x.message : 'Voxel edit failed.';
+  obj.handleCommitFailure(keys, message);
 });
