@@ -35,10 +35,12 @@ import {
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
 import { RenderScaleHistogram, trackableRenderScaleTarget } from "#src/render_scale_statistics.js";
+import { SegmentColorHash } from "#src/segment_color.js";
 import { registerVoxelAnnotationTools, VoxelBrushLegacyTool, VoxelPixelLegacyTool } from "#src/ui/voxel_annotations.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { mat4 } from "#src/util/geom.js";
 import { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
+import { openVoxDb, idbGet, idbPut, txDone, toScaleKey, compositeLabelsDbKey } from "#src/voxel_annotation/index.js";
 import { VoxelAnnotationRenderLayer } from "#src/voxel_annotation/renderlayer.js";
 import { VoxMultiscaleVolumeChunkSource } from "#src/voxel_annotation/volume_chunk_source.js";
 import { Tab } from "#src/widget/tab_view.js";
@@ -157,6 +159,52 @@ class VoxSettingsTab extends Tab {
 }
 
 class VoxToolTab extends Tab {
+  public requestRenderLabels() { this.renderLabels(); }
+  private labelsContainer!: HTMLDivElement;
+  private renderLabels() {
+    const cont = this.labelsContainer;
+    cont.innerHTML = "";
+    const labels = this.layer.voxLabels;
+    const selected = this.layer.voxSelectedLabelId;
+    for (const lab of labels) {
+      const row = document.createElement("div");
+      row.className = "neuroglancer-vox-label-row";
+      row.style.display = "grid";
+      row.style.gridTemplateColumns = "16px 1fr";
+      row.style.alignItems = "center";
+      row.style.gap = "8px";
+      // color swatch
+      const sw = document.createElement("div");
+      sw.style.width = "16px";
+      sw.style.height = "16px";
+      sw.style.borderRadius = "3px";
+      sw.style.border = "1px solid rgba(0,0,0,0.2)";
+      sw.style.background = this.layer.colorForValue(lab.id);
+      // id text (monospace)
+      const txt = document.createElement("div");
+      txt.textContent = String(lab.id >>> 0);
+      txt.style.fontFamily = "monospace";
+      txt.style.whiteSpace = "nowrap";
+      txt.style.overflow = "hidden";
+      txt.style.textOverflow = "ellipsis";
+      row.appendChild(sw);
+      row.appendChild(txt);
+      // selection styling
+      const isSel = lab.id === selected;
+      row.style.cursor = "pointer";
+      row.style.padding = "2px 4px";
+      row.style.borderRadius = "4px";
+      if (isSel) {
+        row.style.background = "rgba(100,150,255,0.15)";
+        row.style.outline = "1px solid rgba(100,150,255,0.6)";
+      }
+      row.addEventListener("click", () => {
+        this.layer.selectVoxLabel(lab.id);
+        this.renderLabels();
+      });
+      cont.appendChild(row);
+    }
+  }
   constructor(public layer: VoxUserLayer) {
     super();
     const { element } = this;
@@ -192,6 +240,7 @@ class VoxToolTab extends Tab {
     toolsRow.appendChild(toolsLabel);
     toolsRow.appendChild(toolsWrap);
     toolbox.appendChild(toolsRow);
+
 
     // Section: Brush settings
     const brushRow = document.createElement("div");
@@ -300,12 +349,60 @@ class VoxToolTab extends Tab {
     brushRow.appendChild(group);
     toolbox.appendChild(brushRow);
 
+    // Section: Labels (moved to end, title on top for full width)
+    const labelsSection = document.createElement("div");
+    labelsSection.style.display = "flex";
+    labelsSection.style.flexDirection = "column";
+    labelsSection.style.gap = "6px";
+    labelsSection.style.marginTop = "8px";
+
+    const labelsTitle = document.createElement("div");
+    labelsTitle.textContent = "Labels";
+    labelsTitle.style.fontWeight = "600";
+
+    const buttonsRow = document.createElement("div");
+    buttonsRow.style.display = "flex";
+    buttonsRow.style.gap = "8px";
+
+    const createBtn = document.createElement("button");
+    createBtn.textContent = "New label";
+    createBtn.addEventListener("click", () => {
+      this.layer.createVoxLabel();
+      // Rendering will be triggered by layer via onLabelsChanged callback.
+    });
+    buttonsRow.appendChild(createBtn);
+
+    this.labelsContainer = document.createElement("div");
+    this.labelsContainer.className = "neuroglancer-vox-labels";
+    this.labelsContainer.style.display = "flex";
+    this.labelsContainer.style.flexDirection = "column";
+    this.labelsContainer.style.gap = "4px";
+    this.labelsContainer.style.maxHeight = "180px";
+    this.labelsContainer.style.overflowY = "auto";
+
+    labelsSection.appendChild(labelsTitle);
+    labelsSection.appendChild(buttonsRow);
+    labelsSection.appendChild(this.labelsContainer);
+
+    toolbox.appendChild(labelsSection);
+
+    this.layer.onLabelsChanged = () => this.requestRenderLabels();
+    this.renderLabels();
+
     element.appendChild(toolbox);
   }
 }
 
 
 export class VoxUserLayer extends UserLayer {
+  onLabelsChanged?: () => void;
+  private voxMapId: string | undefined;
+  private voxScaleKey: string | undefined;
+  private labelsDbPromise: Promise<IDBDatabase> | null = null;
+  // Label state for painting: only store ids; colors are hashed from id on the fly
+  voxLabels: { id: number }[] = [];
+  voxSelectedLabelId: number | undefined = undefined;
+  segmentColorHash = SegmentColorHash.getDefault();
   // Match Image/Segmentation layers: provide a per-layer cross-section render scale target/histogram.
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
@@ -327,8 +424,123 @@ export class VoxUserLayer extends UserLayer {
   voxBrushShape: "disk" | "sphere" = "disk";
   private voxLoadedSubsource?: LoadedDataSubsource;
 
+  // --- Label helpers ---
+  private genId(): number {
+    // Generate a unique uint32 per layer session. Try crypto.getRandomValues; fallback to Math.random.
+    let id = 0;
+    const used = new Set(this.voxLabels.map(l => l.id));
+    for (let attempts = 0; attempts < 10_000; attempts++) {
+      if (typeof crypto !== 'undefined' && (crypto as any).getRandomValues) {
+        const a = new Uint32Array(1);
+        (crypto as any).getRandomValues(a);
+        id = a[0] >>> 0;
+      } else {
+        id = (Math.floor(Math.random() * 0xffffffff) >>> 0);
+      }
+      if (id !== 0 && !used.has(id)) return id;
+    }
+    // As an ultimate fallback, probe sequentially from a time-based seed.
+    const base = (Date.now() ^ ((Math.random() * 0xffffffff) >>> 0)) >>> 0;
+    id = base || 1;
+    while (used.has(id)) id = (id + 1) >>> 0;
+    return id >>> 0;
+  }
+  colorForValue(v: number): string {
+    // Use segmentation-like color from SegmentColorHash seeded on numeric value
+    return this.segmentColorHash.computeCssColor(BigInt(v >>> 0));
+  }
+
+  // --- Labels persistence (IndexedDB) ---
+  private async getLabelsDb(): Promise<IDBDatabase> {
+    if (this.labelsDbPromise) return this.labelsDbPromise;
+    this.labelsDbPromise = openVoxDb();
+    return this.labelsDbPromise;
+  }
+  private compositeLabelsKey() {
+    const mapId = this.voxMapId || 'default';
+    const scaleKey = this.voxScaleKey || 'default';
+    return compositeLabelsDbKey(mapId, scaleKey);
+  }
+  private async saveLabelsToDb() {
+    try {
+      console.log('saveLabelsToDb');
+      const db = await this.getLabelsDb();
+      const tx = db.transaction('labels', 'readwrite');
+      const store = tx.objectStore('labels');
+      const key = this.compositeLabelsKey();
+      const payload = this.voxLabels.map(l => l.id >>> 0);
+      await idbPut(store, payload, key);
+      await txDone(tx);
+    } catch {
+      // ignore persistence failures
+    }
+  }
+  private async loadLabelsFromDb() {
+    try {
+      console.log('loadLabelsFromDb');
+      const db = await this.getLabelsDb();
+      const key = this.compositeLabelsKey();
+      const arr = await idbGet<number[]>(db, 'labels', key);
+      const existing = new Set(this.voxLabels.map(l => l.id >>> 0));
+      console.log("hey",existing, arr, key);
+      if (arr && Array.isArray(arr) && arr.length > 0) {
+        // Merge previously created labels (before init) with stored ones.
+        const mergedIds = new Set<number>(arr.map(id => id >>> 0));
+        for (const id of existing) mergedIds.add(id);
+        this.voxLabels = Array.from(mergedIds).map(id => ({ id }));
+        // Ensure selected label is valid
+        const sel = this.voxSelectedLabelId;
+        if (!sel || !this.voxLabels.some(l => l.id === sel)) {
+          this.voxSelectedLabelId = this.voxLabels[0].id;
+        }
+        console.log('loadLabelsFromDb', this.voxLabels);
+        console.log('loadLabelsFromDb', this.voxSelectedLabelId);
+        // Write back merged set to DB to keep in sync.
+        await this.saveLabelsToDb();
+      } else {
+        // Nothing stored: if any labels were created pre-init, persist them; otherwise, create one.
+        if (this.voxLabels.length === 0) this.ensureDefaultLabel();
+        await this.saveLabelsToDb();
+      }
+    } catch {
+      // Fallback to default if load fails
+      if (this.voxLabels.length === 0) this.ensureDefaultLabel();
+    } finally {
+      // Ensure UI reflects the loaded/merged labels.
+      try { this.onLabelsChanged?.(); } catch { /* ignore */ }
+    }
+  }
+
+  ensureDefaultLabel() {
+    if (this.voxLabels.length > 0) return;
+    this.createVoxLabel();
+  }
+  async createVoxLabel() {
+    const id = this.genId(); // unique uint32
+    this.voxLabels.push({ id });
+    this.voxSelectedLabelId = id;
+    // Persist immediately only once map meta is known to avoid wrong key.
+    console.log('createVoxLabel', this.voxMapId, this.voxScaleKey);
+    if (this.voxMapId && this.voxScaleKey) {
+      try { await this.saveLabelsToDb(); } catch { /* ignore */ }
+    }
+    // Notify UI to re-render labels list whenever a label is created.
+    try { this.onLabelsChanged?.(); } catch { /* ignore */ }
+  }
+  selectVoxLabel(id: number) {
+    const found = this.voxLabels.find(l => l.id === id);
+    if (found) this.voxSelectedLabelId = id;
+  }
+  getCurrentLabelValue(): number {
+    if (this.voxEraseMode) return 0;
+    if (!this.voxSelectedLabelId) this.ensureDefaultLabel();
+    const cur = this.voxLabels.find(l => l.id === this.voxSelectedLabelId) || this.voxLabels[0];
+    return cur ? (cur.id >>> 0) : 0;
+  }
+
   constructor(managedLayer: Borrowed<ManagedUserLayer>) {
     super(managedLayer);
+    // Do not create/save default label yet; wait for map init and load.
     this.tabs.add("vox_settings", {
       label: "Settings",
       order: 0,
@@ -499,7 +711,7 @@ export class VoxUserLayer extends UserLayer {
     const guardUnit = this.voxScaleUnit;
     ls.activate(
       () => {
-        const dummySource = new VoxMultiscaleVolumeChunkSource(
+        const voxSource = new VoxMultiscaleVolumeChunkSource(
           this.manager.chunkManager,
           {
             chunkDataSize: new Uint32Array([64, 64, 64]),
@@ -508,18 +720,32 @@ export class VoxUserLayer extends UserLayer {
           },
         );
         // Expose a controller so tools can paint voxels via the source.
-        this.voxEditController = new VoxelEditController(dummySource);
+        this.voxEditController = new VoxelEditController(voxSource);
 
         // Initialize worker-side map persistence for this source (best-effort, fire-and-forget).
-        const sources2D = dummySource.getSources({} as any);
+        const sources2D = voxSource.getSources({} as any);
         const base = sources2D[0][0];
         const source = (base.chunkSource as any);
+        // Compute deterministic identifiers on the frontend to avoid relying on an RPC return value.
+        const cfgCds = new Uint32Array(Array.from(((voxSource as any)['cfgChunkDataSize']) ?? [64, 64, 64]));
+        const lowerArr: Float32Array = lower;
+        const upperArr: Float32Array = upper;
+        const scaleKey = toScaleKey(cfgCds, lowerArr, upperArr);
+        // mapId can be any stable string; default to 'local' unless already set.
+        if (!this.voxMapId) this.voxMapId = 'local';
+        this.voxScaleKey = scaleKey;
+        // Kick off label load immediately; persistence now has proper keys.
+        void this.loadLabelsFromDb().catch(() => {
+          console.warn("Failed to load labels from IndexedDB");
+        });
         void source.initializeMap({
-          dataType: dummySource.dataType,
-          chunkDataSize: Array.from(((dummySource as any)['cfgChunkDataSize']) ?? [64, 64, 64]),
-          baseVoxelOffset: Array.from(lower as any),
-          upperVoxelBound: Array.from(upper as any),
+          mapId: this.voxMapId,
+          dataType: voxSource.dataType,
+          chunkDataSize: cfgCds,
+          baseVoxelOffset: lowerArr,
+          upperVoxelBound: upperArr,
           unit: this.voxScaleUnit,
+          scaleKey,
         }).catch(() => { /* ignore init failures */ });
 
         // Build transform with current scale and units.
@@ -532,7 +758,7 @@ export class VoxUserLayer extends UserLayer {
         );
 
         ls.addRenderLayer(
-          new VoxelAnnotationRenderLayer(dummySource, {
+          new VoxelAnnotationRenderLayer(voxSource, {
             transform: transform as any,
             renderScaleTarget: this.sliceViewRenderScaleTarget,
             renderScaleHistogram: undefined,

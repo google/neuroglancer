@@ -18,6 +18,21 @@ export interface SavedChunk {
   size: Uint32Array; // canonical size used for linearization (usually spec.chunkDataSize)
 }
 
+export function toScaleKey(chunkDataSize: number[] | Uint32Array, baseVoxelOffset?: number[] | Uint32Array | Float32Array, upperVoxelBound?: number[] | Uint32Array | Float32Array): string {
+  const cds = Array.from(chunkDataSize);
+  const lower = Array.from(baseVoxelOffset ?? [0, 0, 0]);
+  const upper = Array.from(upperVoxelBound ?? [0, 0, 0]);
+  return `${cds[0]}_${cds[1]}_${cds[2]}:${lower[0]}_${lower[1]}_${lower[2]}-${upper[0]}_${upper[1]}_${upper[2]}`;
+}
+
+export function compositeChunkDbKey(mapId: string, scaleKey: string, chunkKey: string): string {
+  return `${mapId}:${scaleKey}:${chunkKey}`;
+}
+
+export function compositeLabelsDbKey(mapId: string, scaleKey: string): string {
+  return `${mapId}:${scaleKey}:labels`;
+}
+
 export class VoxSource {
   protected mapId: string = 'default';
   protected scaleKey: string = '';
@@ -48,10 +63,7 @@ export class VoxSource {
     if (opts.scaleKey) {
       this.scaleKey = opts.scaleKey;
     } else {
-      const cds = Array.from(this.chunkDataSize);
-      const lower = Array.from(this.baseVoxelOffset);
-      const upper = Array.from(this.upperVoxelBound);
-      this.scaleKey = `${cds[0]}_${cds[1]}_${cds[2]}:${lower[0]}_${lower[1]}_${lower[2]}-${upper[0]}_${upper[1]}_${upper[2]}`;
+      this.scaleKey = toScaleKey(this.chunkDataSize, this.baseVoxelOffset, this.upperVoxelBound);
     }
     return Promise.resolve({ mapId: this.mapId, scaleKey: this.scaleKey });
   }
@@ -203,21 +215,12 @@ export class LocalVoxSource extends VoxSource {
   }
 
   private compositeKey(key: string) {
-    return `${this.mapId}:${this.scaleKey}:${key}`;
+    return compositeChunkDbKey(this.mapId, this.scaleKey, key);
   }
 
   private async getDb(): Promise<IDBDatabase> {
     if (this.dbPromise) return this.dbPromise;
-    this.dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-      const req = indexedDB.open('neuroglancer_vox', 1);
-      req.onerror = () => reject(req.error);
-      req.onupgradeneeded = () => {
-        const db = req.result;
-        if (!db.objectStoreNames.contains('maps')) db.createObjectStore('maps');
-        if (!db.objectStoreNames.contains('chunks')) db.createObjectStore('chunks');
-      };
-      req.onsuccess = () => resolve(req.result);
-    });
+    this.dbPromise = openVoxDb();
     return this.dbPromise;
   }
 }
@@ -228,8 +231,22 @@ export class RemoteVoxSource extends VoxSource {
   }
 }
 
+export function openVoxDb(): Promise<IDBDatabase> {
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const req = indexedDB.open('neuroglancer_vox', 2);
+    req.onerror = () => reject(req.error);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('maps')) db.createObjectStore('maps');
+      if (!db.objectStoreNames.contains('chunks')) db.createObjectStore('chunks');
+      if (!db.objectStoreNames.contains('labels')) db.createObjectStore('labels');
+    };
+    req.onsuccess = () => resolve(req.result);
+  });
+}
+
 // --- Small IDB helpers ---
-function idbGet<T>(db: IDBDatabase, storeName: string, key: IDBValidKey): Promise<T | undefined> {
+export function idbGet<T>(db: IDBDatabase, storeName: string, key: IDBValidKey): Promise<T | undefined> {
   return new Promise<T | undefined>((resolve, reject) => {
     const tx = db.transaction(storeName, 'readonly');
     const store = tx.objectStore(storeName);
@@ -239,7 +256,7 @@ function idbGet<T>(db: IDBDatabase, storeName: string, key: IDBValidKey): Promis
   });
 }
 
-function idbPut(store: IDBObjectStore, value: any, key?: IDBValidKey) {
+export function idbPut(store: IDBObjectStore, value: any, key?: IDBValidKey) {
   return new Promise<void>((resolve, reject) => {
     const req = key === undefined ? store.put(value) : store.put(value, key);
     req.onerror = () => reject(req.error);
@@ -247,7 +264,7 @@ function idbPut(store: IDBObjectStore, value: any, key?: IDBValidKey) {
   });
 }
 
-function txDone(tx: IDBTransaction) {
+export function txDone(tx: IDBTransaction) {
   return new Promise<void>((resolve, reject) => {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);

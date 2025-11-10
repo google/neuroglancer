@@ -71,7 +71,7 @@ abstract class BaseVoxelLegacyTool extends LegacyTool<VoxUserLayer> {
     if (this.isDrawing) return;
     this.isDrawing = true;
     this.currentMouseState = mouseState;
-    const value = (this.layer as any).voxEraseMode ? 0 : 42;
+    const value = (this.layer as any).getCurrentLabelValue?.() ?? ((this.layer as any).voxEraseMode ? 0 : 42);
     const start = this.getPoint(mouseState);
     if (start) {
       this.paintPoint(new Float32Array([start[0], start[1], start[2]]), value);

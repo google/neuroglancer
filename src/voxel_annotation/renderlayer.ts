@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { SegmentColorShaderManager } from "#src/segment_color.js";
 import type { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import type { RenderLayerOptions } from "#src/sliceview/volume/renderlayer.js";
 import { SliceViewVolumeRenderLayer } from "#src/sliceview/volume/renderlayer.js";
@@ -33,6 +34,7 @@ import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 type EmptyParams = Record<string, never>;
 
 export class VoxelAnnotationRenderLayer extends SliceViewVolumeRenderLayer<EmptyParams> {
+  private segmentColorShaderManager = new SegmentColorShaderManager("segmentColorHash");
 
   constructor(
     multiscaleSource: MultiscaleVolumeChunkSource,
@@ -48,10 +50,21 @@ export class VoxelAnnotationRenderLayer extends SliceViewVolumeRenderLayer<Empty
   }
 
   defineShader(builder: ShaderBuilder) {
+    // Define segment color hashing function and uint64 helpers
+    this.segmentColorShaderManager.defineShader(builder);
+    builder.addFragmentCode(`
+uint64_t getUint64DataValue() {
+  return toUint64(getDataValue());
+}
+`);
+
     builder.setFragmentMain(`
-  float t = float(getDataValue().value);
-  vec4 color = t > 10.0 ? vec4(1.0, 1.0, 0.0, 0.5) : vec4(clamp(t, 0.0, 1.0), 0.0, 0.0, t > 0.0 ? 0.3 : 0.0);
-  emit(color);
+  uint64_t v64 = getUint64DataValue();
+  vec3 rgb = segmentColorHash(v64);
+  // Transparent if zero, otherwise semi-opaque
+  bool isZero = (v64.value[0] == 0u && v64.value[1] == 0u);
+  float alpha = isZero ? 0.0 : 0.5;
+  emit(vec4(rgb, alpha));
   `);
 
     /**
@@ -63,18 +76,19 @@ export class VoxelAnnotationRenderLayer extends SliceViewVolumeRenderLayer<Empty
      */
     try {
       builder.build();
-    }catch (e) {
-      builder.print()
-      console.error(e)
+    } catch (e) {
+      builder.print();
+      console.error(e);
     }
   }
 
   initializeShader(
     _sliceView: any,
-    _shader: ShaderProgram,
+    shader: ShaderProgram,
     _parameters: EmptyParams,
     _fallback: boolean,
   ) {
-    // No specific uniforms for the checkerboard yet, but this is where they would go.
+    // Use default seed 0 to match UI hashing (SegmentColorHash.getDefault())
+    this.segmentColorShaderManager.enable(this.gl, shader, 0);
   }
 }

@@ -8,7 +8,7 @@ import { VolumeChunkSource as BaseVolumeChunkSource } from '#src/sliceview/volum
 import { DataType } from '#src/util/data_type.js';
 import { VOX_CHUNK_SOURCE_RPC_ID, VOX_COMMIT_VOXELS_RPC_ID, VOX_MAP_INIT_RPC_ID } from '#src/voxel_annotation/base.js';
 import type { VoxMapInitOptions } from '#src/voxel_annotation/index.js';
-import { LocalVoxSource } from '#src/voxel_annotation/index.js';
+import { LocalVoxSource, toScaleKey } from '#src/voxel_annotation/index.js';
 import type { RPC } from '#src/worker_rpc.js';
 import { registerRPC, registerSharedObject } from '#src/worker_rpc.js';
 
@@ -26,12 +26,12 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
 
   /** Initialize map metadata and persistence backend. */
   async initMap(opts: { mapId?: string; dataType?: number; chunkDataSize?: number[]; upperVoxelBound?: number[]; baseVoxelOffset?: number[]; unit?: string; scaleKey?: string}) {
-    const cds = Array.from(opts.chunkDataSize ?? Array.from(this.spec.chunkDataSize));
-    const uvb = Array.from(opts.upperVoxelBound ?? Array.from(this.spec.upperVoxelBound ?? [0, 0, 0] as any));
+    const cds: number[] = Array.from(opts.chunkDataSize ?? Array.from(this.spec.chunkDataSize));
+    const uvb: number[] = Array.from(opts.upperVoxelBound ?? Array.from(this.spec.upperVoxelBound ?? [0, 0, 0] as any));
     const dt = opts.dataType ?? this.spec.dataType;
-    const scaleKey = opts.scaleKey ?? `${cds[0]}_${cds[1]}_${cds[2]}`;
     // Default base offset to spec.baseVoxelOffset if not provided
-    const bvo = Array.from(opts.baseVoxelOffset ?? Array.from((this.spec as any).baseVoxelOffset ?? [0, 0, 0]));
+    const bvo: number[] = Array.from(opts.baseVoxelOffset ?? Array.from((this.spec as any).baseVoxelOffset ?? [0, 0, 0]));
+    const scaleKey = opts.scaleKey ?? toScaleKey(cds, bvo, uvb);
     const initOpts = {
       mapId: opts.mapId,
       dataType: dt,
