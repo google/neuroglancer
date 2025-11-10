@@ -333,24 +333,11 @@ export class VolumeChunkSource
 }
 
 @registerSharedObject(IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID)
-export class InMemoryVolumeChunkSourceBackend extends SliceViewChunkSourceBackend {
-  // This is a dummy backend for a frontend-only source.
-  // It should never be called upon to download data.
-  download(chunk: Chunk, _signal: AbortSignal): Promise<void> {
-    chunk.state = ChunkState.FAILED;
-    return Promise.reject(new Error(`Attempted to download from an in-memory source for chunk ${chunk.key}.`));
-  }
-
-  getChunk(chunkGridPosition: Float32Array): SliceViewChunk {
-    const chunk = super.getChunk(chunkGridPosition);
-    if (chunk.state === ChunkState.NEW) {
-      // This is a new chunk. Immediately mark it as available in system memory
-      // on the worker. This prevents the chunk manager from trying to download it.
-      // Since this is a dummy source, there's no actual data to associate with it.
-      this.chunkManager.queueManager.updateChunkState(chunk, ChunkState.SYSTEM_MEMORY_WORKER);
-    }
-    return chunk;
+export class InMemoryVolumeChunkSourceBackend extends VolumeChunkSource {
+  async download(chunk: VolumeChunk, _signal: AbortSignal): Promise<void> {
+    chunk.data = null;
+    return new Promise(((_resolve) => {}))
   }
 }
-InMemoryVolumeChunkSourceBackend.prototype.chunkConstructor = VolumeChunk;
+
 VolumeChunkSource.prototype.chunkConstructor = VolumeChunk;

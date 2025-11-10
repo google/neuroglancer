@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import { ChunkState } from "#src/chunk_manager/base.js";
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import type {
@@ -28,7 +27,7 @@ import {
   MultiscaleSliceViewChunkSource,
   SliceViewChunkSource,
 } from "#src/sliceview/frontend.js";
-import {
+import type {
   UncompressedVolumeChunk,
 } from "#src/sliceview/uncompressed_chunk_format.js";
 import type {
@@ -42,9 +41,7 @@ import {
 import { VolumeChunk } from "#src/sliceview/volume/chunk.js";
 import { getChunkFormatHandler } from "#src/sliceview/volume/registry.js";
 import type { TypedArray } from "#src/util/array.js";
-import {
-  DATA_TYPE_ARRAY_CONSTRUCTOR,
-} from "#src/util/data_type.js";
+import { DATA_TYPE_ARRAY_CONSTRUCTOR } from "#src/util/data_type.js";
 import type { Disposable } from "#src/util/disposable.js";
 import type { GL } from "#src/webgl/context.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
@@ -338,8 +335,17 @@ export class InMemoryVolumeChunkSource extends VolumeChunkSource {
     for (const [key, edit] of edits.entries()) {
       const chunkGridPosition = new Float32Array(key.split(",").map(Number));
 
-      // getChunk on InMemoryVolumeChunkSource is guaranteed to return a chunk
-      const chunk = this.getChunk({ chunkGridPosition: chunkGridPosition });
+      let chunk = this.chunks.get(key) as UncompressedVolumeChunk | undefined;
+      if (chunk === undefined) {
+        chunk = this.getChunk({ chunkGridPosition: chunkGridPosition }) as UncompressedVolumeChunk;
+        this.addChunk(key, chunk);
+      }
+
+      if (chunk.data == undefined) {
+        const numElements = chunk.chunkDataSize.reduce((a, b) => a * b, 1);
+        const Ctor = DATA_TYPE_ARRAY_CONSTRUCTOR[dataType];
+        chunk.data = new (Ctor as any)(numElements) as TypedArray;
+      }
       chunksToUpdate.add(chunk);
 
       const cpuArray = chunk.data!;
@@ -367,36 +373,6 @@ export class InMemoryVolumeChunkSource extends VolumeChunkSource {
     }
 
     this.invalidateGpuData(chunksToUpdate);
-  }
-
-  // at least 10h of debugging just because this parameter is of a type any -- this was horrible
-  getChunk(x: any): UncompressedVolumeChunk {
-    const key = Array.from(x.chunkGridPosition).join();
-    let chunk = this.chunks.get(key) as UncompressedVolumeChunk | undefined;
-
-    if (chunk === undefined) {
-      const { spec } = this;
-      const chunkDataSize = spec.chunkDataSize;
-      const numElements = chunkDataSize.reduce((a, b) => a * b, 1);
-      const Ctor = DATA_TYPE_ARRAY_CONSTRUCTOR[spec.dataType];
-      const data = new (Ctor as any)(numElements) as TypedArray;
-      if (
-        spec.dataType === DataType.UINT64
-      ) {
-        (data as BigUint64Array).fill(1n);
-      } else if( spec.dataType === DataType.UINT32) {
-        (data as Uint32Array).fill(1);
-      }
-      chunk = new UncompressedVolumeChunk(this, {
-        chunkGridPosition: Array.from(x.chunkGridPosition),
-        data: data,
-        chunkDataSize: chunkDataSize,
-      });
-
-      this.addChunk(key, chunk);
-      chunk.state = ChunkState.SYSTEM_MEMORY;
-    }
-    return chunk;
   }
 }
 
