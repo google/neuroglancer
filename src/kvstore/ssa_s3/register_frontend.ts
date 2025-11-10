@@ -49,18 +49,22 @@ function getDisplayBase(url: string): string {
 }
 
 interface SsaAuthenticateResponseLite {
-  readable_prefixes: string[];
-  endpoints: { sign_requests: string; list_files: string };
+  permissions: { read: string[]; write: string[] };
+  endpoints: { signRequests: string; listFiles: string };
 }
 
 function parseAuthenticateResponseLite(json: unknown): SsaAuthenticateResponseLite {
   const obj = verifyObject(json);
-  const endpoints = verifyObjectProperty(obj, "endpoints", verifyObject);
+  const endpointsObj = verifyObjectProperty(obj, "endpoints", verifyObject);
+  const permissionsObj = verifyObjectProperty(obj, "permissions", verifyObject);
   return {
-    readable_prefixes: verifyObjectProperty(obj, "readable_prefixes", verifyStringArray),
+    permissions: {
+      read: verifyObjectProperty(permissionsObj, "read", verifyStringArray),
+      write: verifyObjectProperty(permissionsObj, "write", verifyStringArray),
+    },
     endpoints: {
-      sign_requests: verifyObjectProperty(endpoints, "sign_requests", verifyString),
-      list_files: verifyObjectProperty(endpoints, "list_files", verifyString),
+      signRequests: verifyObjectProperty(endpointsObj, "signRequests", verifyString),
+      listFiles: verifyObjectProperty(endpointsObj, "listFiles", verifyString),
     },
   };
 }
@@ -103,9 +107,9 @@ async function completeSsaUrl(
   // Determine context for completion.
   const { dir, base } = dirnameAndBasename(datasetBasePrefix);
 
-  // Root-level completion: suggest readable prefixes.
+  // Root-level completion: suggest directories from read permissions.
   if (dir === "") {
-    const candidates = authenticateResponse.readable_prefixes.map((p) => (p.endsWith("/") ? p : p + "/"));
+    const candidates = authenticateResponse.permissions.read.map((p) => (p.endsWith("/") ? p : p + "/"));
     const matches = candidates
       .filter((p) => p.startsWith(base))
       .map((p) => ({ value: p }));
@@ -115,18 +119,32 @@ async function completeSsaUrl(
 
   // Within a directory: use list-files for current dir prefix.
   const listResponse = verifyObject(
-    await (await fetchOkToWorker(`${workerOrigin}${authenticateResponse.endpoints.list_files}`, {
+    await (await fetchOkToWorker(`${workerOrigin}${authenticateResponse.endpoints.listFiles}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ prefix: dir }),
       signal: options.signal,
     })).json(),
   );
-  const directories = verifyObjectProperty(listResponse, "directories", verifyStringArray);
-  const entries = verifyObjectProperty(listResponse, "entries", verifyStringArray);
+  const objects = verifyObjectProperty(listResponse, "objects", (x) => x as unknown as any[]);
+  const childDirs = new Set<string>();
+  const childFiles = new Set<string>();
+  for (const entry of objects) {
+    const obj = verifyObject(entry);
+    const key = verifyObjectProperty(obj, "key", verifyString);
+    if (!key.startsWith(dir)) continue;
+    const remainder = key.substring(dir.length);
+    const slash = remainder.indexOf("/");
+    if (slash === -1) {
+      if (remainder !== "") childFiles.add(remainder);
+    } else {
+      const first = remainder.substring(0, slash + 1);
+      childDirs.add(first);
+    }
+  }
   const candidates = [
-    ...directories.map((d) => (d.endsWith("/") ? d : d + "/")),
-    ...entries,
+    ...Array.from(childDirs).map((d) => (d.endsWith("/") ? d : d + "/")),
+    ...Array.from(childFiles),
   ];
   const matches = candidates
     .filter((p) => p.startsWith(base))

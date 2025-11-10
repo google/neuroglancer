@@ -44,53 +44,85 @@ function joinPath(base: string, suffix: string) {
 }
 
 interface SsaAuthenticateResponse {
-  readablePrefixes: string[];
+  bucket: string;
   endpoints: {
     signRequests: string; // path relative to worker origin, e.g. "/sign-requests"
     listFiles: string; // path relative to worker origin, e.g. "/list-files"
+  };
+  permissions: {
+    read: string[];
+    write: string[];
   };
 }
 
 function parseAuthenticateResponse(json: unknown): SsaAuthenticateResponse {
   const obj = verifyObject(json);
+  const bucket = verifyObjectProperty(obj, "bucket", verifyString);
   const endpointsObj = verifyObjectProperty(obj, "endpoints", verifyObject);
+  const permissionsObj = verifyObjectProperty(obj, "permissions", verifyObject);
   return {
-    readablePrefixes: verifyObjectProperty(obj, "readable_prefixes", verifyStringArray),
+    bucket,
     endpoints: {
-      signRequests: verifyObjectProperty(endpointsObj, "sign_requests", verifyString),
-      listFiles: verifyObjectProperty(endpointsObj, "list_files", verifyString),
+      signRequests: verifyObjectProperty(endpointsObj, "signRequests", verifyString),
+      listFiles: verifyObjectProperty(endpointsObj, "listFiles", verifyString),
+    },
+    permissions: {
+      read: verifyObjectProperty(permissionsObj, "read", verifyStringArray),
+      write: verifyObjectProperty(permissionsObj, "write", verifyStringArray),
     },
   };
 }
 
 interface SsaSignRequestBody {
   requests: Array<{
-    method: "GET" | "HEAD";
-    path: string; // key within the SSA-managed bucket
+    action: "GET" | "PUT" | "HEAD" | "DELETE";
+    key: string; // key within the SSA-managed bucket
   }>;
 }
 
+interface SsaSignRequestsResponseItem { key: string; url: string }
 interface SsaSignRequestsResponse {
-  urls: string[]; // Presigned URLs matching the requests order
+  signedRequests: SsaSignRequestsResponseItem[];
 }
 
 function parseSignRequestsResponse(json: unknown): SsaSignRequestsResponse {
   const obj = verifyObject(json);
-  const urls = verifyObjectProperty(obj, "urls", verifyStringArray);
-  return { urls };
+  const signedRequestsArrayUnknown = verifyObjectProperty(obj, "signedRequests", (v) => {
+    if (!Array.isArray(v)) {
+      throw new Error("signedRequests must be an array");
+    }
+    return v as unknown[];
+  });
+  const signedRequests: SsaSignRequestsResponseItem[] = signedRequestsArrayUnknown.map((entry) => {
+    const entryObj = verifyObject(entry);
+    const key = verifyObjectProperty(entryObj, "key", verifyString);
+    const url = verifyObjectProperty(entryObj, "url", verifyString);
+    return { key, url };
+  });
+  return { signedRequests };
 }
 
+interface SsaListFilesObject { key: string; size: number; lastModified: string }
 interface SsaListFilesResponse {
-  directories: string[];
-  entries: string[]; // file paths relative to the requested prefix
+  prefix: string;
+  objects: SsaListFilesObject[];
 }
 
 function parseListFilesResponse(json: unknown): SsaListFilesResponse {
   const obj = verifyObject(json);
-  return {
-    directories: verifyObjectProperty(obj, "directories", verifyStringArray),
-    entries: verifyObjectProperty(obj, "entries", verifyStringArray),
-  };
+  const prefix = verifyObjectProperty(obj, "prefix", verifyString);
+  const objectsArray = verifyObjectProperty(obj, "objects", (x) => x as unknown as any[]);
+  const objects: SsaListFilesObject[] = objectsArray.map((entry) => {
+    const e = verifyObject(entry);
+    const key = verifyObjectProperty(e, "key", verifyString);
+    const sizeStr = verifyObjectProperty(e, "size", (v) => {
+      if (typeof v !== "number") throw new Error("Expected number");
+      return v;
+    });
+    const lastModified = verifyObjectProperty(e, "lastModified", verifyString);
+    return { key, size: sizeStr, lastModified };
+  });
+  return { prefix, objects };
 }
 
 export class SsaS3KvStore implements KvStore {
@@ -172,8 +204,8 @@ export class SsaS3KvStore implements KvStore {
   }
 
   private async signSingleUrl(
-    method: "GET" | "HEAD",
     fullKey: string,
+    type: 'GET' | 'PUT' | 'HEAD' | 'DELETE',
     signal?: AbortSignal,
   ): Promise<string> {
     const { endpoints } = await this.ensureAuthenticated(signal);
@@ -185,17 +217,17 @@ export class SsaS3KvStore implements KvStore {
           signal,
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            requests: [{ method, path: fullKey }],
+            requests: [{ action: type, key: fullKey }],
           } satisfies SsaSignRequestBody),
         },
       );
-      const { urls } = parseSignRequestsResponse(await response.json());
-      if (urls.length !== 1) {
+      const { signedRequests } = parseSignRequestsResponse(await response.json());
+      if (signedRequests.length !== 1) {
         throw new Error(
-          `SSA /sign-requests returned ${urls.length} urls, expected 1 for key ${JSON.stringify(fullKey)}`,
+          `SSA /sign-requests returned ${signedRequests.length} entries, expected 1 for key ${JSON.stringify(fullKey)}`,
         );
       }
-      return urls[0];
+      return signedRequests[0].url;
     } catch (e) {
       if (e instanceof HttpError && (e.status === 401 || e.status === 403)) {
         throw new Error(
@@ -212,7 +244,7 @@ export class SsaS3KvStore implements KvStore {
 
   async stat(key: string, options: StatOptions): Promise<StatResponse | undefined> {
     const fullKey = joinPath(this.datasetBasePrefix, key);
-    const url = await this.signSingleUrl("HEAD", fullKey, options.signal);
+    const url = await this.signSingleUrl(fullKey, "HEAD", options.signal);
     try {
       const response = await fetchOk(url, { method: "HEAD", signal: options.signal, progressListener: options.progressListener });
       const contentLength = response.headers.get("content-length");
@@ -241,7 +273,7 @@ export class SsaS3KvStore implements KvStore {
 
   async read(key: string, options: DriverReadOptions): Promise<ReadResponse | undefined> {
     const fullKey = joinPath(this.datasetBasePrefix, key);
-    const url = await this.signSingleUrl("GET", fullKey, options.signal);
+    const url = await this.signSingleUrl(fullKey, "GET", options.signal);
 
     // Construct Range header based on options.byteRange for efficient reads.
     let rangeHeader: string | undefined;
@@ -370,10 +402,24 @@ export class SsaS3KvStore implements KvStore {
         },
       );
       const parsed = parseListFilesResponse(await response.json());
-      // Convert SSA list response into KvStore ListResponse shape.
+      // Compute immediate children relative to the requested prefix.
+      const childDirSet = new Set<string>();
+      const childFileSet = new Set<string>();
+      for (const obj of parsed.objects) {
+        const key = obj.key;
+        if (!key.startsWith(parsed.prefix)) continue;
+        const remainder = key.substring(parsed.prefix.length);
+        if (remainder === "") continue;
+        const slash = remainder.indexOf("/");
+        if (slash === -1) {
+          childFileSet.add(remainder);
+        } else {
+          childDirSet.add(remainder.substring(0, slash + 1));
+        }
+      }
       return {
-        directories: parsed.directories,
-        entries: parsed.entries.map((key) => ({ key })),
+        directories: Array.from(childDirSet),
+        entries: Array.from(childFileSet).map((k) => ({ key: k })),
       };
     } catch (e) {
       if (e instanceof HttpError && (e.status === 401 || e.status === 403)) {

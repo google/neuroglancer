@@ -31,6 +31,7 @@ import {
   verifyOptionalObjectProperty,
   verifyString,
 } from "#src/util/json.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
 import { ProgressSpan } from "#src/util/progress_listener.js";
 
 interface SsaConfiguration {
@@ -146,6 +147,45 @@ async function createPkcePair(): Promise<{ verifier: string; challenge: string }
   return { verifier, challenge };
 }
 
+interface StoredSsaToken {
+  accessToken: string;
+  refreshToken: string;
+  tokenType: string;
+  expiresAt: number;
+  email?: string;
+}
+
+function getLocalStorageKeyForWorker(workerOrigin: string): string {
+  return `ssa_oidc_token_${workerOrigin}`;
+}
+
+function loadStoredSsaToken(workerOrigin: string): StoredSsaToken | null {
+  const key = getLocalStorageKeyForWorker(workerOrigin);
+  const raw = localStorage.getItem(key);
+  if (raw === null) return null;
+  const parsed = JSON.parse(raw);
+  const obj = verifyObject(parsed);
+  const accessToken = verifyObjectProperty(obj, "accessToken", verifyString);
+  const refreshToken = verifyObjectProperty(obj, "refreshToken", verifyString);
+  const tokenType = verifyObjectProperty(obj, "tokenType", verifyString);
+  const expiresAt = Number(verifyObjectProperty(obj, "expiresAt", (v) => {
+    if (typeof v !== "number") throw new Error("expiresAt must be a number");
+    return v;
+  }));
+  const email = verifyOptionalObjectProperty(obj, "email", verifyString);
+  return { accessToken, refreshToken, tokenType, expiresAt, email };
+}
+
+function saveStoredSsaToken(workerOrigin: string, value: StoredSsaToken): void {
+  const key = getLocalStorageKeyForWorker(workerOrigin);
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function clearStoredSsaToken(workerOrigin: string): void {
+  const key = getLocalStorageKeyForWorker(workerOrigin);
+  localStorage.removeItem(key);
+}
+
 export class SsaCredentialsProvider extends CredentialsProvider<OAuth2Credentials> {
   constructor(public readonly workerOrigin: string) {
     super();
@@ -162,7 +202,9 @@ export class SsaCredentialsProvider extends CredentialsProvider<OAuth2Credential
     }
   }
 
-  get = makeCredentialsGetter(async (options) => {
+  private async performInteractiveLogin(
+    options: ProgressOptions,
+  ): Promise<StoredSsaToken> {
     using _span = new ProgressSpan(options.progressListener, {
       message: `Requesting SSA login via ${this.workerOrigin}`,
     });
@@ -170,7 +212,6 @@ export class SsaCredentialsProvider extends CredentialsProvider<OAuth2Credential
     const { issuer } = await discoverSsaConfiguration(this.workerOrigin);
     const { authorization_endpoint, token_endpoint } = await discoverOpenIdConfiguration(issuer);
 
-    // Application configuration. For SPA public clients, no client secret is used.
     const clientId = "neuroglancer";
     const redirectUri = `${location.origin}/`;
     const scope = "openid profile email";
@@ -188,25 +229,24 @@ export class SsaCredentialsProvider extends CredentialsProvider<OAuth2Credential
     });
     const popupUrl = `${authorization_endpoint}?${authParams.toString()}`;
 
-    return await getCredentialsWithStatus<OAuth2Credentials>(
+    await getCredentialsWithStatus<OAuth2Credentials>(
       {
         description: `SSA at ${this.workerOrigin}`,
         requestDescription: "login",
-        get: async (signal, _immediate) => {
+        get: async (innerSignal) => {
           const abortController = new AbortController();
-          signal = AbortSignal.any([abortController.signal, signal]);
+          const combined = AbortSignal.any([abortController.signal, innerSignal, options.signal]);
           try {
             const popup = openPopupCentered(popupUrl, 450, 700);
             monitorAuthPopupWindow(popup, abortController);
             const appOrigin = new URL(redirectUri).origin;
             const { code, state: returnedState } = await raceWithAbort(
               waitForOidcCodeMessage(appOrigin, popup, abortController.signal),
-              signal,
+              combined,
             );
             if (returnedState !== state) {
               throw new Error("OIDC state mismatch detected");
             }
-            // Exchange authorization code for tokens.
             const tokenResp = await fetchOk(token_endpoint, {
               method: "POST",
               headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -217,12 +257,27 @@ export class SsaCredentialsProvider extends CredentialsProvider<OAuth2Credential
                 client_id: clientId,
                 code_verifier: codeVerifier,
               }),
-              signal,
+              signal: combined,
             });
             const tokenJson = verifyObject(await tokenResp.json());
             const access_token = verifyObjectProperty(tokenJson, "access_token", verifyString);
             const token_type = verifyObjectProperty(tokenJson, "token_type", verifyString);
+            const refresh_token = verifyObjectProperty(tokenJson, "refresh_token", verifyString);
+            const expires_in = Number(
+              verifyObjectProperty(tokenJson, "expires_in", (v) => {
+                if (typeof v !== "number") throw new Error("expires_in must be a number");
+                return v;
+              }),
+            );
             const email = verifyOptionalObjectProperty(tokenJson, "email", verifyString);
+            const stored: StoredSsaToken = {
+              accessToken: access_token,
+              refreshToken: refresh_token,
+              tokenType: token_type,
+              expiresAt: Date.now() + expires_in * 1000,
+              email,
+            };
+            saveStoredSsaToken(this.workerOrigin, stored);
             return { tokenType: token_type, accessToken: access_token, email };
           } finally {
             abortController.abort();
@@ -231,5 +286,71 @@ export class SsaCredentialsProvider extends CredentialsProvider<OAuth2Credential
       },
       options.signal,
     );
+
+    // The above getCredentialsWithStatus returns OAuth2Credentials. We already saved full token.
+    const stored = loadStoredSsaToken(this.workerOrigin);
+    if (stored === null) {
+      throw new Error("Failed to persist SSA token to localStorage after interactive login");
+    }
+    return stored;
+  }
+
+  private async refreshTokenSilently(refreshToken: string, signal: AbortSignal): Promise<StoredSsaToken> {
+    const { issuer } = await discoverSsaConfiguration(this.workerOrigin);
+    const { token_endpoint } = await discoverOpenIdConfiguration(issuer);
+    const clientId = "neuroglancer";
+
+    const resp = await fetchOk(token_endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        client_id: clientId,
+      }),
+      signal,
+    });
+    const json = verifyObject(await resp.json());
+    const access_token = verifyObjectProperty(json, "access_token", verifyString);
+    const token_type = verifyObjectProperty(json, "token_type", verifyString);
+    const new_refresh = verifyOptionalObjectProperty(json, "refresh_token", verifyString) ?? refreshToken;
+    const expires_in = Number(
+      verifyObjectProperty(json, "expires_in", (v) => {
+        if (typeof v !== "number") throw new Error("expires_in must be a number");
+        return v;
+      }),
+    );
+    const email = verifyOptionalObjectProperty(json, "email", verifyString);
+    const stored: StoredSsaToken = {
+      accessToken: access_token,
+      refreshToken: new_refresh,
+      tokenType: token_type,
+      expiresAt: Date.now() + expires_in * 1000,
+      email,
+    };
+    saveStoredSsaToken(this.workerOrigin, stored);
+    return stored;
+  }
+
+  get = makeCredentialsGetter(async (options) => {
+    // 1) Try localStorage
+    const existing = loadStoredSsaToken(this.workerOrigin);
+    if (existing !== null) {
+      if (Date.now() < existing.expiresAt) {
+        return { tokenType: existing.tokenType, accessToken: existing.accessToken, email: existing.email };
+      }
+      // Try silent refresh
+      try {
+        const refreshed = await this.refreshTokenSilently(existing.refreshToken, options.signal);
+        return { tokenType: refreshed.tokenType, accessToken: refreshed.accessToken, email: refreshed.email };
+      } catch (e) {
+        clearStoredSsaToken(this.workerOrigin);
+        // Fall through to interactive login
+      }
+    }
+
+    // 4) Interactive login
+    const stored = await this.performInteractiveLogin(options);
+    return { tokenType: stored.tokenType, accessToken: stored.accessToken, email: stored.email };
   });
 }
