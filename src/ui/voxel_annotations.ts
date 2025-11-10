@@ -48,7 +48,8 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
       | Float32Array
       | undefined;
     if (!mouseState?.active || !vox) return undefined;
-    const planeNormal = mouseState?.planeNormal;
+    if(!mouseState.planeNormal) return;
+    const planeNormal =  editContext.transformGlobalToVoxelNormal(mouseState.planeNormal);
     if (!mouseState?.active || !vox || !planeNormal) return undefined;
     const CHUNK_POSITION_EPSILON = 1e-3;
     const shiftedVox = new Float32Array(3);
@@ -288,10 +289,14 @@ export class VoxelBrushTool extends BaseVoxelTool {
       1,
       Math.floor(this.layer.voxBrushRadius.value ?? 3),
     );
+    const editContext = this.getEditingContext();
+    if (editContext === undefined) {
+      throw new Error("editContext is undefined");
+    }
     const shapeEnum = this.layer.voxBrushShape.value;
     let basis = undefined as undefined | { u: Float32Array; v: Float32Array };
     if (shapeEnum === BrushShape.DISK && this.currentMouseState?.planeNormal) {
-      const n = this.currentMouseState.planeNormal;
+      const n =  editContext.transformGlobalToVoxelNormal(this.currentMouseState.planeNormal);
       const u = vec3.create();
       const tempVec =
         Math.abs(vec3.dot(n, vec3.fromValues(1, 0, 0))) < 0.9
@@ -304,10 +309,7 @@ export class VoxelBrushTool extends BaseVoxelTool {
       basis = { u, v };
     }
 
-    const editContext = this.getEditingContext();
-    if (editContext === undefined) {
-      throw new Error("editContext is undefined");
-    }
+
     for (const p of points)
       editContext.controller?.paintBrushWithShape(
         p,
@@ -361,7 +363,8 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
       return;
     }
     const seed = this.getPoint(this.mouseState);
-    const planeNormal = this.mouseState.planeNormal;
+    if(!this.mouseState.planeNormal) return;
+    const planeNormal =  editContext.transformGlobalToVoxelNormal(this.mouseState.planeNormal);
     if (!seed || !planeNormal) return;
     try {
       const value = this.layer.getVoxelPaintValue(

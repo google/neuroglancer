@@ -39,6 +39,7 @@ import { TrackableValue, WatchableValue } from "#src/trackable_value.js";
 import type { UserLayerWithAnnotations } from "#src/ui/annotations.js";
 import { randomUint64 } from "#src/util/bigint.js";
 import { RefCounted } from "#src/util/disposable.js";
+import { vec3 } from "#src/util/geom.js";
 import {
   parseUint64,
   verifyFiniteFloat,
@@ -140,6 +141,29 @@ export class VoxelEditingContext
     );
     if (!ok) return undefined;
     return this.cachedVoxelPosition;
+  }
+
+  transformGlobalToVoxelNormal(globalNormal: vec3): vec3 {
+    const chunkTransform = this.cachedChunkTransform;
+    if (chunkTransform === undefined)
+      throw new Error("Chunk transform not computed");
+    const { modelTransform, layerToChunkTransform, layerRank } = chunkTransform;
+    const { globalToRenderLayerDimensions } = modelTransform;
+    const globalRank = globalToRenderLayerDimensions.length;
+    const voxelNormal = vec3.create();
+
+    for (let chunkDim = 0; chunkDim < 3; ++chunkDim) {
+      let sum = 0;
+      for (let globalDim = 0; globalDim < Math.min(globalRank, 3); ++globalDim) {
+        const layerDim = globalToRenderLayerDimensions[globalDim];
+        if (layerDim !== -1) {
+          sum += layerToChunkTransform[chunkDim + layerDim * (layerRank + 1)] * globalNormal[globalDim];
+        }
+      }
+      voxelNormal[chunkDim] = sum;
+    }
+    vec3.normalize(voxelNormal, voxelNormal);
+    return voxelNormal;
   }
 }
 
