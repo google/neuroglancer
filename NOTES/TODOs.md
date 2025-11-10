@@ -11,6 +11,7 @@
 - Add support for flood fill on different planes
 - fix the flood fill for compressed chunks
 - add shortcuts for tools (switching tools, toogle erase mode, select label from the pointed one in the slice view and adjusting brush size) and label creation
+- write a testsuite for the downsampler
 
 ### extra
 - rework the ui (tabs)
@@ -18,6 +19,7 @@
 - rework the drawing preview for compressed chunk (see applyLocalEdits())
 - rework the autocomplete for the ssa+https source.
 - the flood fill sometimes leaves artifacts in sharp areas
+- isolate the downsampling
 
 ### questionable
 -? adapt the brush size to the zoom level linearly

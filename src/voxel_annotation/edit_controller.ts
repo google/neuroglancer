@@ -6,13 +6,15 @@
 import type { VoxUserLayer } from "#src/layer/vox/index.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import type { VolumeChunkSource , MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
+import type {
+  VoxelLayerResolution} from "#src/voxel_annotation/base.js";
 import {
   VOX_EDIT_BACKEND_RPC_ID,
   VOX_EDIT_COMMIT_VOXELS_RPC_ID,
   VOX_RELOAD_CHUNKS_RPC_ID,
   VOX_EDIT_FAILURE_RPC_ID,
   makeVoxChunkKey,
-  parseVoxChunkKey,
+  parseVoxChunkKey
 } from "#src/voxel_annotation/base.js";
 import {
   registerRPC,
@@ -36,18 +38,23 @@ export class VoxelEditController extends SharedObject {
       throw new Error("VoxelEditController: Could not retrieve sources from multiscale object.");
     }
 
-    const sourceMap: { [key: number]: number } = {};
+    const resolutions: VoxelLayerResolution[] = [];
+
     for (let i = 0; i < sources.length; ++i) {
       const source = sources[i]!.chunkSource;
-      const lodFactor = 1 << i; // LOD factor is 2^i
       const rpcId = source.rpcId;
       if (rpcId == null) {
         throw new Error(`VoxelEditController: Source at LOD index ${i} has null rpcId during initialization.`);
       }
-      sourceMap[lodFactor] = rpcId;
+      resolutions.push({
+        lodIndex: i,
+        transform: Array.from(sources[i]!.chunkToMultiscaleTransform),
+        chunkSize: Array.from(source.spec.chunkDataSize),
+        sourceRpc: rpcId
+      });
     }
 
-    this.initializeCounterpart(rpc, { sources: sourceMap });
+    this.initializeCounterpart(rpc, { resolutions });
   }
   private static readonly qualityFactor = 16.0;
   private static readonly restrictToMinLOD = true;
@@ -197,11 +204,10 @@ export class VoxelEditController extends SharedObject {
     if (!voxelsToPaint || voxelsToPaint.length === 0) return;
     const editsByVoxKey = new Map<string, { indices: number[], value: bigint }>();
 
-    const lodFactor = 1 << sourceIndex;
     for (const voxelCoord of voxelsToPaint) {
       const { chunkGridPosition, positionWithinChunk } = source.computeChunkIndices(voxelCoord);
       const chunkKey = chunkGridPosition.join();
-      const voxKey = makeVoxChunkKey(chunkKey, lodFactor);
+      const voxKey = makeVoxChunkKey(chunkKey, sourceIndex);
 
       let entry = editsByVoxKey.get(voxKey);
       if (!entry) {
@@ -424,11 +430,10 @@ export class VoxelEditController extends SharedObject {
     }
 
     const editsByVoxKey = new Map<string, { indices: number[], value: bigint }>();
-    const lodFactor = 1 << sourceIndex;
     for (const voxelCoord of voxelsToFill) {
       const { chunkGridPosition, positionWithinChunk } = source.computeChunkIndices(voxelCoord);
       const chunkKey = chunkGridPosition.join();
-      const voxKey = makeVoxChunkKey(chunkKey, lodFactor);
+      const voxKey = makeVoxChunkKey(chunkKey, sourceIndex);
 
       let entry = editsByVoxKey.get(voxKey);
       if (!entry) {
@@ -472,8 +477,7 @@ export class VoxelEditController extends SharedObject {
     for (const voxKey of voxChunkKeys) {
       const parsed = parseVoxChunkKey(voxKey);
       if (!parsed) continue;
-      const lodIndex = Math.log2(parsed.lod);
-      const source = sources[lodIndex]?.chunkSource as VolumeChunkSource | undefined;
+      const source = sources[parsed.lodIndex]?.chunkSource as VolumeChunkSource | undefined;
       if (!source) continue;
       let arr = chunksToInvalidateBySource.get(source);
       if (!arr) {

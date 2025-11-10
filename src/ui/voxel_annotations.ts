@@ -237,7 +237,7 @@ export class VoxelBrushLegacyTool extends BaseVoxelLegacyTool {
 }
 
 export class VoxelFloodFillLegacyTool extends LegacyTool<VoxUserLayer> {
-  description = "flood fill (2D plane, 4-connected)";
+  description = "flood fill";
 
   toJSON() {
     return FLOODFILL_TOOL_ID;

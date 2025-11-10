@@ -1,4 +1,8 @@
 import type { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
+import { mat4, vec3 } from "#src/util/geom.js";
+import * as matrix from "#src/util/matrix.js";
+import type {
+  VoxelLayerResolution} from "#src/voxel_annotation/base.js";
 import {
   VOX_EDIT_BACKEND_RPC_ID,
   VOX_EDIT_COMMIT_VOXELS_RPC_ID,
@@ -6,6 +10,7 @@ import {
   VOX_EDIT_FAILURE_RPC_ID,
   makeVoxChunkKey,
   parseVoxChunkKey,
+  makeChunkKey,
 } from "#src/voxel_annotation/base.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { SharedObject , registerRPC, registerSharedObject, initializeSharedObjectCounterpart } from "#src/worker_rpc.js";
@@ -13,8 +18,8 @@ import { SharedObject , registerRPC, registerSharedObject, initializeSharedObjec
 @registerSharedObject(VOX_EDIT_BACKEND_RPC_ID)
 export class VoxelEditController extends SharedObject {
   private sources = new Map<number, VolumeChunkSource>();
+  private resolutions = new Map<number, VoxelLayerResolution & { invTransform: mat4 }>();
 
-  // Short debounce to coalesce rapid edits coming from tools.
   private pendingEdits: {
     key: string;
     indices: number[] | Uint32Array;
@@ -25,34 +30,38 @@ export class VoxelEditController extends SharedObject {
   private commitDebounceTimer: number | undefined;
   private readonly commitDebounceDelayMs: number = 300;
 
-  // Downsampling queue to serialize and coalesce work across edits.
   private downsampleQueue: string[] = [];
   private downsampleQueueSet: Set<string> = new Set();
   private isProcessingDownsampleQueue: boolean = false;
 
   constructor(rpc: RPC, options: any) {
     super();
-    // Initialize as a counterpart in the worker so RPC references are valid.
-    // This registers the object under the provided rpc/id and sets up ref counting.
     initializeSharedObjectCounterpart(this, rpc, options);
 
-    const passedSources = options?.sources;
-    if (passedSources === undefined || typeof passedSources !== "object") {
+    const passedResolutions = options?.resolutions as
+      | VoxelLayerResolution[]
+      | undefined;
+    if (
+      passedResolutions === undefined ||
+      !Array.isArray(passedResolutions)
+    ) {
       throw new Error(
-        "VoxelEditBackend: missing required 'sources' map during initialization",
+        "VoxelEditBackend: missing required 'resolutions' array during initialization",
       );
     }
 
-    for (const lodFactorStr in passedSources) {
-      const lodFactor = Number(lodFactorStr);
-      const sourceId = passedSources[lodFactorStr];
-      const resolved = rpc.get(sourceId) as VolumeChunkSource | undefined;
+    for (const res of passedResolutions) {
+      const rank = res.chunkSize.length;
+      const invTransform = new Float32Array((rank + 1) ** 2);
+      matrix.inverse(invTransform, rank + 1, new Float32Array(res.transform), rank + 1, rank + 1);
+      this.resolutions.set(res.lodIndex, { ...res, invTransform: invTransform as mat4 });
+      const resolved = rpc.get(res.sourceRpc) as VolumeChunkSource | undefined;
       if (!resolved) {
         throw new Error(
-          `VoxelEditBackend: failed to resolve VolumeChunkSource for LOD factor ${lodFactor}`,
+          `VoxelEditBackend: failed to resolve VolumeChunkSource for LOD ${res.lodIndex}`,
         );
       }
-      this.sources.set(lodFactor, resolved);
+      this.sources.set(res.lodIndex, resolved);
     }
   }
 
@@ -62,7 +71,6 @@ export class VoxelEditController extends SharedObject {
     this.commitDebounceTimer = undefined;
     if (edits.length === 0) return;
 
-    // 1. Group edits by vox chunk key (includes LOD).
     const editsByVoxKey = new Map<
       string,
       { indices: number[]; values: bigint[] }
@@ -93,7 +101,6 @@ export class VoxelEditController extends SharedObject {
       }
     }
 
-    // 2. For each modified vox chunk, apply edits via the correct source and record vox keys to reload.
     const failedVoxChunkKeys: string[] = [];
     let firstErrorMessage: string | undefined = undefined;
     for (const [voxKey, chunkEdits] of editsByVoxKey.entries()) {
@@ -106,9 +113,9 @@ export class VoxelEditController extends SharedObject {
           if (firstErrorMessage === undefined) firstErrorMessage = msg;
           continue;
         }
-        const source = this.sources.get(parsedKey.lod);
+        const source = this.sources.get(parsedKey.lodIndex);
         if (!source) {
-          const msg = `flushPending: No source found for LOD factor ${parsedKey.lod}`;
+          const msg = `flushPending: No source found for LOD index ${parsedKey.lodIndex}`;
           console.error(msg);
           failedVoxChunkKeys.push(voxKey);
           if (firstErrorMessage === undefined) firstErrorMessage = msg;
@@ -127,7 +134,6 @@ export class VoxelEditController extends SharedObject {
       }
     }
 
-    // If any failures occurred, notify the frontend asynchronously.
     if (failedVoxChunkKeys.length > 0) {
       this.rpc?.invoke(VOX_EDIT_FAILURE_RPC_ID, {
         rpcId: this.rpcId,
@@ -136,7 +142,6 @@ export class VoxelEditController extends SharedObject {
       });
     }
 
-    // After base edits, enqueue downsampling for affected chunks (do not await here).
     const touched = new Set<string>();
     for (const e of edits) touched.add(e.key);
     for (const key of touched) {
@@ -155,7 +160,7 @@ export class VoxelEditController extends SharedObject {
   ) {
     for (const e of edits) {
       if (!e || !e.key || !e.indices) {
-        throw new Error("VoxEditBackend.commitVoxels: invalid edit payload");
+        throw new Error("VoxelEditController.commitVoxels: invalid edit payload");
       }
       this.pendingEdits.push(e);
     }
@@ -172,57 +177,8 @@ export class VoxelEditController extends SharedObject {
       voxChunkKeys: voxChunkKeys,
     });
   }
-  // Downsampling helpers
-  private parentKeyOf(childKey: string): string | null {
-    const info = parseVoxChunkKey(childKey);
-    if (info === null) return null;
-    const parentLod = info.lod * 2;
-    const px = Math.floor(info.x / 2);
-    const py = Math.floor(info.y / 2);
-    const pz = Math.floor(info.z / 2);
-    return makeVoxChunkKey(`${px},${py},${pz}`, parentLod);
-  }
 
-  private calculateDownsamplePasses(chunkSize: number): number {
-    if (chunkSize <= 1) return 0;
-    return Math.ceil(Math.log2(chunkSize));
-  }
-
-  private async performDownsampleCascadeForKey(
-    sourceKey: string,
-  ): Promise<void> {
-    const chunkSize = 64;
-    const maxPasses = this.calculateDownsamplePasses(chunkSize);
-    const maxLOD = 256;
-
-    let currentKey: string | null = sourceKey;
-    for (let i = 0; i < maxPasses; i++) {
-      if (currentKey === null) break;
-      const info = parseVoxChunkKey(currentKey);
-      if (info === null) break;
-      if (info.lod >= maxLOD) break;
-      const nextKey = await this.downsampleStep(currentKey);
-      if (nextKey === null) break;
-      currentKey = nextKey;
-    }
-  }
-
-  private calculateMode(values: bigint[]): bigint {
-    if (values.length === 0) return 0n;
-    const counts = new Map<bigint, number>();
-    let maxCount = 0;
-    let mode = 0n;
-    for (const v of values) {
-      if (v === 0n) continue;
-      const c = (counts.get(v) ?? 0) + 1;
-      counts.set(v, c);
-      if (c > maxCount) {
-        maxCount = c;
-        mode = v;
-      }
-    }
-    return mode;
-  }
+  // --- Start of Downsampling Logic ---
 
   private enqueueDownsample(key: string): void {
     if (key.length === 0) return;
@@ -231,7 +187,6 @@ export class VoxelEditController extends SharedObject {
       this.downsampleQueue.push(key);
     }
     if (!this.isProcessingDownsampleQueue) {
-      // Kick processing asynchronously to avoid blocking the caller.
       this.isProcessingDownsampleQueue = true;
       Promise.resolve().then(() => this.processDownsampleQueue());
     }
@@ -246,7 +201,6 @@ export class VoxelEditController extends SharedObject {
       }
     } finally {
       this.isProcessingDownsampleQueue = false;
-      // If new work was enqueued during processing and flag got reset, loop again.
       if (
         this.downsampleQueue.length > 0 &&
         !this.isProcessingDownsampleQueue
@@ -257,121 +211,275 @@ export class VoxelEditController extends SharedObject {
     }
   }
 
-  private async downsampleStep(sourceKey: string): Promise<string | null> {
-    const info = parseVoxChunkKey(sourceKey);
-    if (info === null) return null;
-
-    const src = this.sources.get(info.lod);
-    if (!src) return null;
-
-    const sourceChunk = src.getChunk(
-      new Float32Array([info.x, info.y, info.z]),
-    ) as any;
-    if (!sourceChunk) return null;
-
-    if (!sourceChunk.data) {
-      try {
-        const ac = new AbortController();
-        await src.download(sourceChunk, ac.signal);
-      } catch (e) {
-        console.warn(
-          `Failed to download source chunk ${sourceKey} for downsampling:`,
-          e,
-        );
-      }
+  private async performDownsampleCascadeForKey(sourceKey: string): Promise<void> {
+    let currentKey: string | null = sourceKey;
+    while (currentKey !== null) {
+      currentKey = await this.downsampleStep(currentKey);
     }
+  }
 
-    if (!sourceChunk.data) {
-      console.warn(
-        `Cannot downsample from empty or missing chunk: ${sourceKey}`,
-      );
+  /**
+   * Performs a single downsampling step from a child chunk to its parent.
+   * @returns The key of the parent chunk that was updated, or null if the cascade should stop.
+   */
+  private async downsampleStep(childKey: string): Promise<string | null> {
+    // 1. Get child chunk and ensure its data is loaded.
+    const childInfo = parseVoxChunkKey(childKey);
+    if (childInfo === null) {
+      console.error(`[Downsample] Invalid child key format: ${childKey}`);
+      return null;
+    }
+    const childSource = this.sources.get(childInfo.lodIndex);
+    if (!childSource) {
+      console.error(`[Downsample] No source found for child LOD: ${childInfo.lodIndex}`);
       return null;
     }
 
-    const targetKey = this.parentKeyOf(sourceKey);
-    if (targetKey === null) return null;
+    const childChunk = childSource.getChunk(new Float32Array([childInfo.x, childInfo.y, childInfo.z])) as any;
+    if (!childChunk.data) {
+      try {
+        await childSource.download(childChunk, new AbortController().signal);
+      } catch (e) {
+        console.warn(`[Downsample] Failed to download source chunk ${childKey}:`, e);
+        return null;
+      }
+    }
+    const childChunkData = childChunk.data as (Uint32Array | BigUint64Array);
+    const childRes = this.resolutions.get(childInfo.lodIndex)!;
 
-    // Prepare indices and values to write into the target chunk
-    const chunkW = sourceChunk.chunkDataSize[0] / 2; // target subregion width
-    const chunkH = sourceChunk.chunkDataSize[1] / 2;
-    const chunkD = sourceChunk.chunkDataSize[2] / 2;
-    const offsetX = (info.x % 2) * chunkW;
-    const offsetY = (info.y % 2) * chunkH;
-    const offsetZ = (info.z % 2) * chunkD;
+    // 2. Determine the parent chunk that corresponds to this child chunk.
+    const parentInfo = this._getParentChunkInfo(childKey, childRes);
+    if (parentInfo === null) {
+      // Reached the coarsest LOD, stop the cascade.
+      return null;
+    }
+    const { parentKey, parentSource, parentRes } = parentInfo;
 
-    const targetChunkW = sourceChunk.chunkDataSize[0];
-    const targetChunkH = sourceChunk.chunkDataSize[1];
+    // 3. Calculate the update for the parent chunk based on the child chunk's data.
+    const update = this._calculateParentUpdate(childChunkData, childRes, parentRes, childInfo);
+    if (update.indices.length === 0) {
+      console.log(`[Downsample] No update required for parent chunk ${parentKey}.`);
+      return parentKey;
+    }
 
+    // 4. Commit the update to the parent chunk and notify the frontend.
+    try {
+      console.log(`[Downsample] Committing ${update.indices.length} voxels to ${parentKey}.`);
+      await parentSource.applyEdits(parentInfo.chunkKey, update.indices, update.values);
+      this.callChunkReload([parentKey]);
+    } catch (e) {
+      console.error(`[Downsample] Failed to apply edits to parent chunk ${parentKey}:`, e);
+      this.rpc?.invoke(VOX_EDIT_FAILURE_RPC_ID, {
+        rpcId: this.rpcId,
+        voxChunkKeys: [parentKey],
+        message: `Downsampling to ${parentKey} failed.`,
+      });
+      return null; // Stop cascade on failure.
+    }
+
+    return parentKey;
+  }
+
+  /**
+   * Helper to find and describe the parent chunk.
+   */
+  private _getParentChunkInfo(childKey: string, childRes: VoxelLayerResolution) {
+    const childInfo = parseVoxChunkKey(childKey)!;
+    const parentLodIndex = childInfo.lodIndex + 1;
+    const parentRes = this.resolutions.get(parentLodIndex);
+    if (parentRes === undefined) return null; // No parent LOD exists
+
+    const parentSource = this.sources.get(parentLodIndex)!;
+    const rank = childRes.chunkSize.length;
+
+    // Find the world coordinate of the child chunk's origin
+    const childVoxelOrigin = new Float32Array(rank);
+    childVoxelOrigin.set([
+      childInfo.x * childRes.chunkSize[0],
+      childInfo.y * childRes.chunkSize[1],
+      childInfo.z * childRes.chunkSize[2],
+    ]);
+    const childPhysOrigin = new Float32Array(rank);
+    matrix.transformPoint(childPhysOrigin, new Float32Array(childRes.transform), rank + 1, childVoxelOrigin, rank);
+
+    // Transform that world coordinate into the parent's voxel space
+    const parentVoxelCoordOfChildOrigin = new Float32Array(rank);
+    matrix.transformPoint(parentVoxelCoordOfChildOrigin, parentRes.invTransform, rank + 1, childPhysOrigin, rank);
+
+    // Determine the parent chunk's grid position
+    const parentX = Math.floor(parentVoxelCoordOfChildOrigin[0] / parentRes.chunkSize[0]);
+    const parentY = Math.floor(parentVoxelCoordOfChildOrigin[1] / parentRes.chunkSize[1]);
+    const parentZ = Math.floor(parentVoxelCoordOfChildOrigin[2] / parentRes.chunkSize[2]);
+
+    const parentChunkKey = makeChunkKey(parentX, parentY, parentZ);
+    const parentKey = makeVoxChunkKey(parentChunkKey, parentLodIndex);
+    return { parentKey, chunkKey: parentChunkKey, parentRes, parentSource };
+  }
+
+
+  /**
+   * Calculates the downsampled voxel values for a region of a parent chunk.
+   * This is the core aggregation logic.
+   */
+  private _calculateParentUpdate(
+    childChunkData: Uint32Array | BigUint64Array,
+    childRes: VoxelLayerResolution & { invTransform: mat4 },
+    parentRes: VoxelLayerResolution & { invTransform: mat4 },
+    childInfo: { x: number, y: number, z: number }
+  ) {
     const indices: number[] = [];
     const values: bigint[] = [];
+    const rank = childRes.chunkSize.length;
+    const childChunkSize = childRes.chunkSize;
+    const parentChunkSize = parentRes.chunkSize;
 
-    for (let z = 0; z < chunkD; z++) {
-      for (let y = 0; y < chunkH; y++) {
-        for (let x = 0; x < chunkW; x++) {
-          const sx = x * 2;
-          const sy = y * 2;
-          const sz = z * 2;
-          const base =
-            sz * (sourceChunk.chunkDataSize[0] * sourceChunk.chunkDataSize[1]) +
-            sy * sourceChunk.chunkDataSize[0] +
-            sx;
-          const row = sourceChunk.chunkDataSize[0];
-          const plane =
-            sourceChunk.chunkDataSize[0] * sourceChunk.chunkDataSize[1];
-          // Gather 8 voxels from source
-          const v000 = (sourceChunk.data as any)[base];
-          const v100 = ((sourceChunk.data as any)[base + 1]);
-          const v010 = ((sourceChunk.data as any)[base + row]);
-          const v110 = ((sourceChunk.data as any)[base + row + 1]);
-          const v001 = ((sourceChunk.data as any)[base + plane]);
-          const v101 = ((sourceChunk.data as any)[base + plane + 1]);
-          const v011 = ((sourceChunk.data as any)[base + plane + row]);
-          const v111 = (
-            (sourceChunk.data as any)[base + plane + row + 1]
-          );
-          const mode = this.calculateMode([
-            v000,
-            v100,
-            v010,
-            v110,
-            v001,
-            v101,
-            v011,
-            v111,
-          ].map(v => BigInt(v)));
+    // Transform to map a point in parent-voxel-space to a point in child-voxel-space.
+    const parentVoxelToChildVoxelTransform = mat4.multiply(
+      mat4.create(),
+      childRes.invTransform,
+      new Float32Array(parentRes.transform) as mat4
+    );
 
-          const tx = x + offsetX;
-          const ty = y + offsetY;
-          const tz = z + offsetZ;
-          const tIndex =
-            tz * (targetChunkW * targetChunkH) + ty * targetChunkW + tx;
-          indices.push(tIndex);
-          values.push(mode);
+    // Calculate the child chunk's origin and extent in absolute child-voxel-space
+    const childChunkOrigin = new Float32Array([
+      childInfo.x * childChunkSize[0],
+      childInfo.y * childChunkSize[1],
+      childInfo.z * childChunkSize[2],
+    ]);
+    const childChunkMax = new Float32Array([
+      (childInfo.x + 1) * childChunkSize[0],
+      (childInfo.y + 1) * childChunkSize[1],
+      (childInfo.z + 1) * childChunkSize[2],
+    ]);
+
+    // Transform child chunk bounds to physical space
+    const childPhysOrigin = new Float32Array(rank);
+    matrix.transformPoint(childPhysOrigin, new Float32Array(childRes.transform), rank + 1, childChunkOrigin, rank);
+    const childPhysMax = new Float32Array(rank);
+    matrix.transformPoint(childPhysMax, new Float32Array(childRes.transform), rank + 1, childChunkMax, rank);
+
+    // Transform to parent-voxel-space to find the affected region
+    const parentVoxelMin = new Float32Array(rank);
+    matrix.transformPoint(parentVoxelMin, parentRes.invTransform, rank + 1, childPhysOrigin, rank);
+    const parentVoxelMax = new Float32Array(rank);
+    matrix.transformPoint(parentVoxelMax, parentRes.invTransform, rank + 1, childPhysMax, rank);
+
+    // Determine which parent chunk this corresponds to (should match _getParentChunkInfo)
+    const parentChunkGridX = Math.floor(parentVoxelMin[0] / parentChunkSize[0]);
+    const parentChunkGridY = Math.floor(parentVoxelMin[1] / parentChunkSize[1]);
+    const parentChunkGridZ = Math.floor(parentVoxelMin[2] / parentChunkSize[2]);
+
+    // Calculate the parent chunk's origin in absolute parent-voxel-space
+    const parentChunkOriginInParentVoxels = new Float32Array([
+      parentChunkGridX * parentChunkSize[0],
+      parentChunkGridY * parentChunkSize[1],
+      parentChunkGridZ * parentChunkSize[2],
+    ]);
+
+    // Calculate the region to iterate over in the parent chunk's LOCAL coordinate space (0 to chunkSize)
+    const parentLocalMin = new Float32Array(rank);
+    const parentLocalMax = new Float32Array(rank);
+    for (let i = 0; i < rank; ++i) {
+      parentLocalMin[i] = Math.max(0, Math.floor(parentVoxelMin[i] - parentChunkOriginInParentVoxels[i]));
+      parentLocalMax[i] = Math.min(parentChunkSize[i], Math.ceil(parentVoxelMax[i] - parentChunkOriginInParentVoxels[i]));
+    }
+
+    const [startX, startY, startZ] = parentLocalMin;
+    const [endX, endY, endZ] = parentLocalMax;
+
+    const corners = new Array(8).fill(0).map(() => vec3.create());
+    const transformedCorners = new Array(8).fill(0).map(() => vec3.create());
+    const sourceVoxels: bigint[] = [];
+    const [childW, childH, childD] = childChunkSize;
+    const [parentW, parentH] = parentChunkSize;
+
+    // Iterate over each voxel in the affected region of the parent chunk (in local coordinates)
+    for (let pz = startZ; pz < endZ; ++pz) {
+      for (let py = startY; py < endY; ++py) {
+        for (let px = startX; px < endX; ++px) {
+          // Convert from parent-chunk-local to absolute parent-voxel-space
+          const absParentX = parentChunkOriginInParentVoxels[0] + px;
+          const absParentY = parentChunkOriginInParentVoxels[1] + py;
+          const absParentZ = parentChunkOriginInParentVoxels[2] + pz;
+
+          // Define the 8 corners of the current parent voxel in absolute parent-voxel-space
+          vec3.set(corners[0], absParentX, absParentY, absParentZ);
+          vec3.set(corners[1], absParentX + 1, absParentY, absParentZ);
+          vec3.set(corners[2], absParentX, absParentY + 1, absParentZ);
+          vec3.set(corners[3], absParentX + 1, absParentY + 1, absParentZ);
+          vec3.set(corners[4], absParentX, absParentY, absParentZ + 1);
+          vec3.set(corners[5], absParentX + 1, absParentY, absParentZ + 1);
+          vec3.set(corners[6], absParentX, absParentY + 1, absParentZ + 1);
+          vec3.set(corners[7], absParentX + 1, absParentY + 1, absParentZ + 1);
+
+          // Transform corners to absolute child-voxel-space
+          for (let i = 0; i < 8; ++i) {
+            vec3.transformMat4(transformedCorners[i], corners[i], parentVoxelToChildVoxelTransform);
+          }
+
+          // Find bounding box in absolute child-voxel-space
+          const childMin = vec3.clone(transformedCorners[0]);
+          const childMax = vec3.clone(transformedCorners[0]);
+          for (let i = 1; i < 8; ++i) {
+            vec3.min(childMin, childMin, transformedCorners[i]);
+            vec3.max(childMax, childMax, transformedCorners[i]);
+          }
+
+          // Convert to child-chunk-local coordinates for array indexing
+          const localChildMin = vec3.create();
+          const localChildMax = vec3.create();
+          vec3.subtract(localChildMin, childMin, childChunkOrigin as any);
+          vec3.subtract(localChildMax, childMax, childChunkOrigin as any);
+
+          // Collect all child voxels within this bounding box (in local coordinates)
+          sourceVoxels.length = 0;
+          const cStartX = Math.max(0, Math.floor(localChildMin[0]));
+          const cEndX = Math.min(childW, Math.ceil(localChildMax[0]));
+          const cStartY = Math.max(0, Math.floor(localChildMin[1]));
+          const cEndY = Math.min(childH, Math.ceil(localChildMax[1]));
+          const cStartZ = Math.max(0, Math.floor(localChildMin[2]));
+          const cEndZ = Math.min(childD, Math.ceil(localChildMax[2]));
+
+          for (let cz = cStartZ; cz < cEndZ; ++cz) {
+            for (let cy = cStartY; cy < cEndY; ++cy) {
+              for (let cx = cStartX; cx < cEndX; ++cx) {
+                const srcIndex = cz * (childW * childH) + cy * childW + cx;
+                sourceVoxels.push(BigInt(childChunkData[srcIndex]));
+              }
+            }
+          }
+
+          if (sourceVoxels.length > 0) {
+            const mode = this._calculateMode(sourceVoxels);
+            // Use local coordinates for the parent chunk index
+            const parentIndex = pz * (parentW * parentH) + py * parentW + px;
+            indices.push(parentIndex);
+            values.push(mode);
+          }
         }
       }
     }
 
-    if (indices.length > 0) {
-      const targetInfo = parseVoxChunkKey(targetKey);
-      if (targetInfo) {
-        const targetSrc = this.sources.get(targetInfo.lod);
-        if (targetSrc) {
-          await (targetSrc as any).applyEdits(
-            targetInfo.chunkKey,
-            indices,
-            values,
-          );
-          // Notify frontend to reload the target parent chunk at its LOD.
-          this.callChunkReload([targetKey]);
-        } else {
-          console.error(
-            `Downsampling failed: could not find target source for LOD ${targetInfo.lod}`,
-          );
-        }
+    console.log(`[Downsample] Downsampled ${indices.length} voxels from child chunk (${childInfo.x},${childInfo.y},${childInfo.z}).`);
+    return { indices, values };
+  }
+
+  private _calculateMode(values: (bigint | number)[]): bigint {
+    if (values.length === 0) return 0n;
+    const counts = new Map<bigint, number>();
+    let maxCount = 0;
+    let mode = 0n;
+    for (const v of values) {
+      const bigV = BigInt(v);
+      if (bigV === 0n) continue;
+      const c = (counts.get(bigV) ?? 0) + 1;
+      counts.set(bigV, c);
+      if (c > maxCount) {
+        maxCount = c;
+        mode = bigV;
       }
     }
-
-    return targetKey;
+    return mode;
   }
 }
 
