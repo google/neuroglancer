@@ -14,13 +14,20 @@
  * limitations under the License.
  */
 
+import { VOXEL_LAYER_CONTROLS } from "#src/layer/vox/controls.js";
 import type { VoxUserLayer } from "#src/layer/vox/index.js";
+import { observeWatchable } from "#src/trackable_value.js";
+import { makeToolButton } from "#src/ui/tool.js";
 import {
-  VoxelBrushLegacyTool,
-  VoxelFloodFillLegacyTool,
-  AdoptVoxelLabelTool,
+  ADOPT_VOXEL_LABEL_TOOL_ID,
+  BRUSH_TOOL_ID,
+  FLOODFILL_TOOL_ID,
 } from "#src/ui/voxel_annotations.js";
 import { DataType } from "#src/util/data_type.js";
+import type { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
+import type { LabelsManager } from "#src/voxel_annotation/labels.js";
+import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
+import { addLayerControlToOptionsTab } from "#src/widget/layer_control.js";
 import { Tab } from "#src/widget/tab_view.js";
 
 function formatUnsignedId(id: bigint, dataType: DataType): string {
@@ -34,335 +41,98 @@ function formatUnsignedId(id: bigint, dataType: DataType): string {
   if (dataType === DataType.UINT64) {
     return ((1n << 64n) + id).toString();
   }
-  // Fallback for other types, though this case is unlikely for labels.
   return id.toString();
 }
 
 export class VoxToolTab extends Tab {
-  private labelsContainer!: HTMLDivElement;
-  private labelsError!: HTMLDivElement;
-  private drawErrorContainer!: HTMLDivElement;
-  private renderLabels() {
-    const cont = this.labelsContainer;
-    cont.innerHTML = "";
-    const labels = this.layer.voxLabelsManager.labels;
-    const selected = this.layer.voxLabelsManager.selectedLabelId;
-    for (const lab of labels) {
-      const row = document.createElement("div");
-      row.className = "neuroglancer-vox-label-row";
-      row.style.display = "grid";
-      row.style.gridTemplateColumns = "16px 1fr";
-      row.style.alignItems = "center";
-      row.style.gap = "8px";
-      // color swatch
-      const sw = document.createElement("div");
-      sw.style.width = "16px";
-      sw.style.height = "16px";
-      sw.style.borderRadius = "3px";
-      sw.style.border = "1px solid rgba(0,0,0,0.2)";
-      sw.style.background = this.layer.voxLabelsManager.colorForValue(lab);
-      // id text (monospace)
-      const txt = document.createElement("div");
-      txt.textContent = formatUnsignedId(
-        lab,
-        this.layer.voxLabelsManager.dataType,
-      );
-      txt.style.fontFamily = "monospace";
-      txt.style.whiteSpace = "nowrap";
-      txt.style.overflow = "hidden";
-      txt.style.textOverflow = "ellipsis";
-      row.appendChild(sw);
-      row.appendChild(txt);
-      // selection styling
-      const isSel = lab === selected;
-      row.style.cursor = "pointer";
-      row.style.padding = "2px 4px";
-      row.style.borderRadius = "4px";
-      if (isSel) {
-        row.style.background = "rgba(100,150,255,0.15)";
-        row.style.outline = "1px solid rgba(100,150,255,0.6)";
-      }
-      row.addEventListener("click", () => {
-        this.layer.voxLabelsManager.selectVoxLabel(lab);
-      });
-      cont.appendChild(row);
-    }
-    // Update error message area
-    const err = this.layer.voxLabelsManager.labelsError;
-    if (err && err.length > 0) {
-      this.labelsError.textContent = err;
-      this.labelsError.style.display = "block";
-    } else {
-      this.labelsError.textContent = "";
-      this.labelsError.style.display = "none";
-    }
-  }
   constructor(public layer: VoxUserLayer) {
     super();
-    this.registerDisposer(
-      this.layer.labelsChanged.add(() => {
-        this.renderLabels();
-      }),
-    );
-
     const { element } = this;
     element.classList.add("neuroglancer-vox-tools-tab");
+
+
     const toolbox = document.createElement("div");
     toolbox.className = "neuroglancer-vox-toolbox";
 
-    // Section: Tool selection
     const toolsRow = document.createElement("div");
     toolsRow.className = "neuroglancer-vox-row";
-    const toolsLabel = document.createElement("label");
-    toolsLabel.textContent = "Tool";
-    const toolsWrap = document.createElement("div");
-    toolsWrap.style.display = "flex";
-    toolsWrap.style.gap = "8px";
+    const toolsTitle = document.createElement("div");
+    toolsTitle.textContent = "Tools";
+    toolsTitle.style.fontWeight = "600";
+    toolsRow.appendChild(toolsTitle);
 
-    const brushButton = document.createElement("button");
-    brushButton.textContent = "Brush";
-    brushButton.title = "ctrl+click to paint a small sphere";
-    brushButton.addEventListener("click", () => {
-      this.layer.tool.value = new VoxelBrushLegacyTool(this.layer);
+    const toolButtonsContainer = document.createElement("div");
+    toolButtonsContainer.style.display = "flex";
+    toolButtonsContainer.style.gap = "8px";
+
+    const brushButton = makeToolButton(this, layer.toolBinder, {
+      toolJson: { type: BRUSH_TOOL_ID },
+      label: "Brush",
     });
 
-    const floodButton = document.createElement("button");
-    floodButton.textContent = "Flood fill";
-    floodButton.title =
-      "Click a voxel to flood fill the connected region on the current Z plane";
-    floodButton.addEventListener("click", () => {
-      this.layer.tool.value = new VoxelFloodFillLegacyTool(this.layer);
+    const floodFillButton = makeToolButton(this, layer.toolBinder, {
+      toolJson: { type: FLOODFILL_TOOL_ID },
+      label: "Flood Fill",
     });
 
-    const adoptBtn = document.createElement("button");
-    adoptBtn.textContent = "Pick";
-    adoptBtn.title =
-      "Activate tool: click a non-zero voxel to add its ID as a label";
-    adoptBtn.addEventListener("click", () => {
-      this.layer.tool.value = new AdoptVoxelLabelTool(this.layer);
+    const pickButton = makeToolButton(this, layer.toolBinder, {
+      toolJson: { type: ADOPT_VOXEL_LABEL_TOOL_ID },
+      label: "Seg Picker",
     });
-    toolsWrap.appendChild(adoptBtn);
-    toolsWrap.appendChild(brushButton);
-    toolsWrap.appendChild(floodButton);
-    toolsRow.appendChild(toolsLabel);
-    toolsRow.appendChild(toolsWrap);
+
+    toolButtonsContainer.appendChild(brushButton);
+    toolButtonsContainer.appendChild(floodFillButton);
+    toolButtonsContainer.appendChild(pickButton);
+    toolsRow.appendChild(toolButtonsContainer);
     toolbox.appendChild(toolsRow);
 
-    // Section: History (Undo/Redo)
-    const historyRow = document.createElement("div");
-    historyRow.className = "neuroglancer-vox-row";
-    const historyLabel = document.createElement("label");
-    historyLabel.textContent = "History";
-    const historyButtons = document.createElement("div");
-    historyButtons.style.display = "flex";
-    historyButtons.style.gap = "8px";
 
-    const undoButton = document.createElement("button");
-    undoButton.textContent = "Undo";
-    undoButton.title = "Undo last voxel edit";
-    undoButton.addEventListener("click", () => {
-      const controller = this.layer.voxEditController;
-      if (!controller) {
-        throw new Error("Undo failed: voxEditController is not available.");
-      }
-      controller.undo();
-    });
-
-    const redoButton = document.createElement("button");
-    redoButton.textContent = "Redo";
-    redoButton.title = "Redo last undone voxel edit";
-    redoButton.addEventListener("click", () => {
-      const controller = this.layer.voxEditController;
-      if (!controller) {
-        throw new Error("Redo failed: voxEditController is not available.");
-      }
-      controller.redo();
-    });
-
-    // TODO: move this logic to a signal activated function, so it runs after the voxEditController is instantiated
-    const ctrl = this.layer.voxEditController;
-    if (ctrl) {
-      undoButton.disabled = ctrl.undoCount.value === 0;
-      redoButton.disabled = ctrl.redoCount.value === 0;
-      this.registerDisposer(
-        ctrl.undoCount.changed.add(() => {
-          undoButton.disabled = ctrl.undoCount.value === 0;
-        }),
+    for (const controlDef of VOXEL_LAYER_CONTROLS) {
+      const controlElement = addLayerControlToOptionsTab(
+        this,
+        this.layer,
+        this.visibility,
+        controlDef,
       );
-      this.registerDisposer(
-        ctrl.redoCount.changed.add(() => {
-          redoButton.disabled = ctrl.redoCount.value === 0;
-        }),
-      );
-    } else {
-      console.error("TODO");
+
+      if (
+        controlDef.toolJson.type === "vox:undo" ||
+        controlDef.toolJson.type === "vox:redo"
+      ) {
+        const button = controlElement.querySelector("button");
+        if (button) {
+          this.registerDisposer(
+            new DependentViewWidget(
+              {
+                changed: this.layer.layersChanged,
+                get value() {
+                  return layer.voxEditController;
+                },
+              },
+              (controller: VoxelEditController | undefined, _parent, context) => {
+                if (!controller) {
+                  button.disabled = true;
+                  return;
+                }
+                const watchable =
+                  controlDef.toolJson.type === "vox:undo"
+                    ? controller.undoCount
+                    : controller.redoCount;
+                context.registerDisposer(
+                  observeWatchable((count) => {
+                    button.disabled = count === 0;
+                  }, watchable),
+                );
+              },
+              this.visibility,
+            ),
+          );
+        }
+      }
+
+      toolbox.appendChild(controlElement);
     }
 
-    historyButtons.appendChild(undoButton);
-    historyButtons.appendChild(redoButton);
-    historyRow.appendChild(historyLabel);
-    historyRow.appendChild(historyButtons);
-    toolbox.appendChild(historyRow);
-
-    // Section: Brush settings
-    const brushRow = document.createElement("div");
-    brushRow.className = "neuroglancer-vox-row";
-
-    // Brush size as slider + number readout
-    const sizeLabel = document.createElement("label");
-    sizeLabel.textContent = "Brush size";
-    const sizeControls = document.createElement("div");
-    sizeControls.style.display = "flex";
-    sizeControls.style.alignItems = "center";
-    sizeControls.style.gap = "8px";
-
-    const sizeSlider = document.createElement("input");
-    sizeSlider.type = "range";
-    sizeSlider.min = "1";
-    sizeSlider.max = "64";
-    sizeSlider.step = "1";
-    sizeSlider.value = String(this.layer.voxBrushRadius ?? 3);
-
-    const sizeNumber = document.createElement("input");
-    sizeNumber.type = "number";
-    sizeNumber.className = "neuroglancer-vox-input";
-    sizeNumber.min = "1";
-    sizeNumber.step = "1";
-    sizeNumber.value = String(this.layer.voxBrushRadius ?? 3);
-
-    const syncSize = (v: number) => {
-      const clamped = Math.max(1, Math.min(128, Math.floor(v)));
-      this.layer.voxBrushRadius = clamped;
-      sizeSlider.value = String(clamped);
-      sizeNumber.value = String(clamped);
-    };
-
-    sizeSlider.addEventListener("input", () => {
-      syncSize(Number(sizeSlider.value) || 1);
-    });
-    sizeNumber.addEventListener("change", () => {
-      syncSize(Number(sizeNumber.value) || 1);
-    });
-
-    sizeControls.appendChild(sizeSlider);
-    sizeControls.appendChild(sizeNumber);
-
-    // Eraser toggle
-    const erLabel = document.createElement("label");
-    erLabel.textContent = "Eraser";
-    const erChk = document.createElement("input");
-    erChk.type = "checkbox";
-    erChk.checked = !!this.layer.voxEraseMode;
-    erChk.addEventListener("change", () => {
-      this.layer.voxEraseMode = !!erChk.checked;
-    });
-
-    // Brush shape selector
-    const shapeLabel = document.createElement("label");
-    shapeLabel.textContent = "Brush shape";
-    const shapeSel = document.createElement("select");
-    const optDisk = document.createElement("option");
-    optDisk.value = "disk";
-    optDisk.textContent = "disk";
-    const optSphere = document.createElement("option");
-    optSphere.value = "sphere";
-    optSphere.textContent = "sphere";
-    shapeSel.appendChild(optDisk);
-    shapeSel.appendChild(optSphere);
-    shapeSel.value = this.layer.voxBrushShape === "sphere" ? "sphere" : "disk";
-    shapeSel.addEventListener("change", () => {
-      const v = shapeSel.value === "sphere" ? "sphere" : "disk";
-      this.layer.voxBrushShape = v;
-      shapeSel.value = v;
-    });
-
-    // Layout within the brushRow: size controls, shape, eraser
-    const group = document.createElement("div");
-    group.style.display = "grid";
-    group.style.gridTemplateColumns = "minmax(120px,auto) 1fr";
-    group.style.columnGap = "8px";
-    group.style.rowGap = "8px";
-
-    // Row 1: Brush size
-    const sizeLabelCell = document.createElement("div");
-    sizeLabelCell.appendChild(sizeLabel);
-    const sizeControlsCell = document.createElement("div");
-    sizeControlsCell.appendChild(sizeControls);
-
-    // Row 2: Brush shape
-    const shapeLabelCell = document.createElement("div");
-    shapeLabelCell.appendChild(shapeLabel);
-    const shapeControlCell = document.createElement("div");
-    shapeControlCell.appendChild(shapeSel);
-
-    // Row 3: Eraser
-    const erLabelCell = document.createElement("div");
-    erLabelCell.appendChild(erLabel);
-    const erControlCell = document.createElement("div");
-    erControlCell.appendChild(erChk);
-
-    group.appendChild(sizeLabelCell);
-    group.appendChild(sizeControlsCell);
-    group.appendChild(shapeLabelCell);
-    group.appendChild(shapeControlCell);
-    group.appendChild(erLabelCell);
-    group.appendChild(erControlCell);
-
-    brushRow.appendChild(group);
-    toolbox.appendChild(brushRow);
-
-    // Section: Flood fill settings
-    const floodRow = document.createElement("div");
-    floodRow.className = "neuroglancer-vox-row";
-
-    const floodLabel = document.createElement("label");
-    floodLabel.textContent = "Max fill voxels";
-    const floodControls = document.createElement("div");
-    floodControls.style.display = "flex";
-    floodControls.style.alignItems = "center";
-    floodControls.style.gap = "8px";
-
-    const floodMaxInput = document.createElement("input");
-    floodMaxInput.type = "number";
-    floodMaxInput.className = "neuroglancer-vox-input";
-    floodMaxInput.min = "1";
-    floodMaxInput.step = "1";
-
-    // Initialize with an explicit safe default if not set.
-    if (!Number.isFinite((this.layer as any).voxFloodMaxVoxels)) {
-      (this.layer as any).voxFloodMaxVoxels = 10000;
-    }
-    floodMaxInput.value = String((this.layer as any).voxFloodMaxVoxels);
-
-    floodMaxInput.addEventListener("change", () => {
-      const v = Math.floor(Number(floodMaxInput.value));
-      if (!Number.isFinite(v) || v <= 0) {
-        throw new Error("VoxToolTab: Invalid max fill voxels value");
-      }
-      (this.layer as any).voxFloodMaxVoxels = v;
-      floodMaxInput.value = String(v);
-    });
-
-    floodControls.appendChild(floodMaxInput);
-
-    const floodGroup = document.createElement("div");
-    floodGroup.style.display = "grid";
-    floodGroup.style.gridTemplateColumns = "minmax(120px,auto) 1fr";
-    floodGroup.style.columnGap = "8px";
-    floodGroup.style.rowGap = "8px";
-
-    const floodLabelCell = document.createElement("div");
-    floodLabelCell.appendChild(floodLabel);
-    const floodControlsCell = document.createElement("div");
-    floodControlsCell.appendChild(floodControls);
-
-    floodGroup.appendChild(floodLabelCell);
-    floodGroup.appendChild(floodControlsCell);
-
-    floodRow.appendChild(floodGroup);
-    toolbox.appendChild(floodRow);
-
-    // Section: Labels (moved to end, title on top for full width)
     const labelsSection = document.createElement("div");
     labelsSection.style.display = "flex";
     labelsSection.style.flexDirection = "column";
@@ -373,63 +143,105 @@ export class VoxToolTab extends Tab {
     labelsTitle.textContent = "Labels";
     labelsTitle.style.fontWeight = "600";
 
-    const buttonsRow = document.createElement("div");
-    buttonsRow.style.display = "flex";
-    buttonsRow.style.gap = "8px";
 
-    const createBtn = document.createElement("button");
-    createBtn.textContent = "New label";
-    createBtn.addEventListener("click", () => {
-      this.layer.voxLabelsManager.createNewLabel();
-    });
-    buttonsRow.appendChild(createBtn);
+    const labelsWidget = this.registerDisposer(
+      new DependentViewWidget(
+        {
+          changed: this.layer.labelsChanged,
+          get value() {
+            return layer.voxLabelsManager;
+          },
+        },
+        (labelsManager: LabelsManager | undefined, parent) => {
+          if (labelsManager === undefined) return;
 
-    this.labelsContainer = document.createElement("div");
-    this.labelsContainer.className = "neuroglancer-vox-labels";
-    this.labelsContainer.style.display = "flex";
-    this.labelsContainer.style.flexDirection = "column";
-    this.labelsContainer.style.gap = "4px";
-    this.labelsContainer.style.maxHeight = "180px";
-    this.labelsContainer.style.overflowY = "auto";
+          const list = document.createElement("div");
+          list.className = "neuroglancer-vox-labels";
+          list.style.display = "flex";
+          list.style.flexDirection = "column";
+          list.style.gap = "4px";
+          list.style.maxHeight = "180px";
+          list.style.overflowY = "auto";
 
-    this.labelsError = document.createElement("div");
-    this.labelsError.className = "neuroglancer-vox-labels-error";
-    this.labelsError.style.color = "#b00020"; // Material red 700-ish
-    this.labelsError.style.fontSize = "12px";
-    this.labelsError.style.whiteSpace = "pre-wrap";
-    this.labelsError.style.display = "none";
+          for (const label of labelsManager.labels) {
+            const row = document.createElement("div");
+            row.className = "neuroglancer-vox-label-row";
+            row.style.display = "grid";
+            row.style.gridTemplateColumns = "16px 1fr";
+            row.style.alignItems = "center";
+            row.style.gap = "8px";
+
+            const swatch = document.createElement("div");
+            swatch.style.width = "16px";
+            swatch.style.height = "16px";
+            swatch.style.borderRadius = "3px";
+            swatch.style.border = "1px solid rgba(0,0,0,0.2)";
+            swatch.style.background = labelsManager.colorForValue(label);
+
+            const text = document.createElement("div");
+            text.textContent = formatUnsignedId(label, labelsManager.dataType);
+            text.style.fontFamily = "monospace";
+            text.style.whiteSpace = "nowrap";
+            text.style.overflow = "hidden";
+            text.style.textOverflow = "ellipsis";
+
+            row.appendChild(swatch);
+            row.appendChild(text);
+
+            if (label === labelsManager.selectedLabelId) {
+              row.style.background = "rgba(100,150,255,0.15)";
+              row.style.outline = "1px solid rgba(100,150,255,0.6)";
+            }
+            row.style.cursor = "pointer";
+            row.style.padding = "2px 4px";
+            row.style.borderRadius = "4px";
+            row.addEventListener("click", () => {
+              labelsManager.selectVoxLabel(label);
+            });
+
+            list.appendChild(row);
+          }
+
+          if (labelsManager.labelsError) {
+            const errorDiv = document.createElement("div");
+            errorDiv.className = "neuroglancer-vox-labels-error";
+            errorDiv.style.color = "#b00020";
+            errorDiv.style.fontSize = "12px";
+            errorDiv.style.whiteSpace = "pre-wrap";
+            errorDiv.textContent = labelsManager.labelsError;
+            parent.appendChild(errorDiv);
+          }
+
+          parent.appendChild(list);
+        },
+        this.visibility,
+      ),
+    );
 
     labelsSection.appendChild(labelsTitle);
-    labelsSection.appendChild(buttonsRow);
-    labelsSection.appendChild(this.labelsContainer);
-    labelsSection.appendChild(this.labelsError);
-
+    labelsSection.appendChild(labelsWidget.element);
     toolbox.appendChild(labelsSection);
 
-    // Draw error message area at the very end of the Draw tab
-    this.drawErrorContainer = document.createElement("div");
-    this.drawErrorContainer.className = "neuroglancer-vox-draw-error";
-    this.drawErrorContainer.style.color = "#b00020";
-    this.drawErrorContainer.style.fontSize = "12px";
-    this.drawErrorContainer.style.whiteSpace = "pre-wrap";
-    this.drawErrorContainer.style.marginTop = "8px";
-    this.drawErrorContainer.style.display = "none";
-    toolbox.appendChild(this.drawErrorContainer);
+    const drawErrorContainer = document.createElement("div");
+    drawErrorContainer.className = "neuroglancer-vox-draw-error";
+    drawErrorContainer.style.color = "#b00020";
+    drawErrorContainer.style.fontSize = "12px";
+    drawErrorContainer.style.whiteSpace = "pre-wrap";
+    drawErrorContainer.style.marginTop = "8px";
+    drawErrorContainer.style.display = "none";
+    toolbox.appendChild(drawErrorContainer);
 
-    const updateDrawError = () => {
+    this.layer.onDrawMessageChanged = () => {
       const msg = this.layer.voxDrawErrorMessage;
       if (msg && msg.length > 0) {
-        this.drawErrorContainer.textContent = msg;
-        this.drawErrorContainer.style.display = "block";
+        drawErrorContainer.textContent = msg;
+        drawErrorContainer.style.display = "block";
       } else {
-        this.drawErrorContainer.textContent = "";
-        this.drawErrorContainer.style.display = "none";
+        drawErrorContainer.textContent = "";
+        drawErrorContainer.style.display = "none";
       }
     };
-
-    this.layer.onDrawMessageChanged = () => updateDrawError();
-
-    updateDrawError();
+    this.layer.onDrawMessageChanged();
 
     element.appendChild(toolbox);
   }

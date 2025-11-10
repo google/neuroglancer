@@ -24,96 +24,19 @@
   --ng-accent: #3a6df0;
 }
 
-.neuroglancer-vox-settings-tab,
-.neuroglancer-vox-tools-tab {
-  box-sizing: border-box;
-  padding: 8px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  color: var(--ng-text);
-  max-width: 100%;
-  overflow-x: hidden;
-}
-
-.neuroglancer-vox-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 6px 8px;
-  background: var(--ng-card);
-  border: 1px solid var(--ng-border);
-  border-radius: 6px;
-  width: 100%;
-  box-sizing: border-box;
-}
-
 .neuroglancer-vox-row label {
-  flex: 0 0 140px; /* fixed column for label */
+  flex: 0 0 140px;
   min-width: 0;
   font-weight: 500;
   color: var(--ng-muted);
 }
 
-.neuroglancer-vox-input,
-.neuroglancer-vox-settings-tab select {
-  box-sizing: border-box;
-  flex: 1 1 8.5em; /* prefer ~8.5em but allow shrink/grow */
-  min-width: 0; /* critical to allow shrinking within flex rows */
-  width: auto;
-  max-width: 100%;
-  padding: 6px 8px;
-  border-radius: 6px;
-  border: 1px solid var(--ng-border);
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--ng-text);
-  outline: none;
-}
-
-/* Ensure any non-label child in a row can shrink and wrap instead of forcing horizontal overflow */
-.neuroglancer-vox-row > :not(label) {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-/* Buttons inside rows should not shrink to unreadable widths */
-.neuroglancer-vox-row button {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-
-/* Status text can occupy a full line to improve readability */
 .neuroglancer-vox-status {
   display: block;
   flex: 1 1 100%;
   min-width: 100%;
   padding-top: 4px;
   color: var(--ng-muted);
-}
-
-.neuroglancer-vox-input:focus,
-.neuroglancer-vox-settings-tab select:focus {
-  border-color: color-mix(in oklab, var(--ng-accent) 60%, var(--ng-border));
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--ng-accent) 25%, transparent);
-}
-
-.neuroglancer-vox-settings-tab button,
-.neuroglancer-vox-tools-tab button {
-  align-self: flex-start;
-  padding: 8px 12px;
-  border-radius: 6px;
-  border: 1px solid color-mix(in oklab, var(--ng-accent) 55%, var(--ng-border));
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklab, var(--ng-accent) 88%, #2a2a2a) 0%,
-    color-mix(in oklab, var(--ng-accent) 70%, #1f1f1f) 100%
-  );
-  color: #fff;
-  cursor: pointer;
-  transition:
-    filter 120ms ease,
-    transform 60ms ease;
 }
 
 .neuroglancer-vox-settings-tab button:hover,
@@ -130,39 +53,4 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-/* Slider styling */
-.neuroglancer-vox-tools-tab input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 6px;
-  background: linear-gradient(
-    90deg,
-    var(--ng-accent),
-    color-mix(in oklab, var(--ng-accent) 35%, #333)
-  );
-  border-radius: 999px;
-  outline: none;
-}
-.neuroglancer-vox-tools-tab input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #fff;
-  border: 1px solid var(--ng-border);
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--ng-accent) 45%, transparent);
-  cursor: pointer;
-}
-.neuroglancer-vox-tools-tab input[type="range"]::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #fff;
-  border: 1px solid var(--ng-border);
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--ng-accent) 45%, transparent);
-  cursor: pointer;
 }

@@ -19,6 +19,7 @@ import "#src/layer/vox/style.css";
 import type { CoordinateTransformSpecification } from "#src/coordinate_transform.js";
 import type { DataSourceSpecification } from "#src/datasource/index.js";
 import {
+  LayerActionContext,
   type ManagedUserLayer,
   type MouseSelectionState,
   registerLayerType,
@@ -26,6 +27,7 @@ import {
   UserLayer,
 } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
+import { registerLayerControls } from "#src/layer/vox/controls.js";
 import { VoxToolTab } from "#src/layer/vox/tabs/tools.js";
 import type { ChunkTransformParameters } from "#src/render_coordinate_transform.js";
 import {
@@ -36,14 +38,22 @@ import { trackableRenderScaleTarget } from "#src/render_scale_statistics.js";
 import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
 import { DataType } from "#src/sliceview/base.js";
 import { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
-import { constantWatchableValue } from "#src/trackable_value.js";
-import { registerVoxelAnnotationTools } from "#src/ui/voxel_annotations.js";
+import { TrackableBoolean } from "#src/trackable_boolean.js";
+import { constantWatchableValue, TrackableValue } from "#src/trackable_value.js";
+import { registerVoxelTools } from "#src/ui/voxel_annotations.js";
 import type { Borrowed } from "#src/util/disposable.js";
+import { verifyFiniteFloat, verifyInt } from "#src/util/json.js";
 import * as matrix from "#src/util/matrix.js";
 import { NullarySignal } from "#src/util/signal.js";
+import { TrackableEnum } from "#src/util/trackable_enum.js";
 import { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
 import { LabelsManager } from "#src/voxel_annotation/labels.js";
 import { VoxelAnnotationRenderLayer } from "#src/voxel_annotation/renderlayer.js";
+
+export enum BrushShape {
+  disk = 0,
+  sphere = 1,
+}
 
 export class VoxUserLayer extends UserLayer {
   // While drawing, we keep a reference to the vox render layer to control temporary LOD locks.
@@ -56,10 +66,11 @@ export class VoxUserLayer extends UserLayer {
   voxLabelsManager: LabelsManager;
   labelsChanged = new NullarySignal();
 
-  // Draw tool state
-  voxBrushRadius: number = 3;
-  voxEraseMode: boolean = false;
-  voxBrushShape: "disk" | "sphere" = "disk";
+  // Draw tool state (trackables for widget integration)
+  voxBrushRadius = new TrackableValue<number>(3, verifyInt);
+  voxEraseMode = new TrackableBoolean(false);
+  voxBrushShape = new TrackableEnum(BrushShape, BrushShape.disk);
+  voxFloodMaxVoxels = new TrackableValue<number>(10000, verifyFiniteFloat);
 
   // Cached transform and voxel buffer to avoid recomputation/allocation on every mouse move
   private cachedChunkTransform: ChunkTransformParameters | undefined;
@@ -75,6 +86,22 @@ export class VoxUserLayer extends UserLayer {
       this.onDrawMessageChanged?.();
     } catch {
       /* ignore */
+    }
+  }
+
+  handleAction(action: string, _context: LayerActionContext): void {
+    if(!this.voxEditController || !this.voxLabelsManager)
+      return;
+    switch (action) {
+      case "undo":
+        this.voxEditController.undo();
+        break;
+      case "redo":
+        this.voxEditController.redo();
+        break;
+      case "new-label":
+        this.voxLabelsManager.createNewLabel();
+        break;
     }
   }
 
@@ -272,7 +299,8 @@ export class VoxUserLayer extends UserLayer {
   }
 }
 
-registerVoxelAnnotationTools();
+registerVoxelTools(VoxUserLayer);
+registerLayerControls(VoxUserLayer);
 registerLayerType(VoxUserLayer);
 registerLayerTypeDetector((subsource) => {
   // Accept non-local datasources at low priority to avoid interfering with other layers.

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { VoxUserLayer } from "#src/layer/vox/index.js";
+import { BrushShape, VoxUserLayer } from "#src/layer/vox/index.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import type {
   VolumeChunkSource,
@@ -154,7 +154,7 @@ export class VoxelEditController extends SharedObject {
     centerCanonical: Float32Array,
     radiusCanonical: number,
     value: bigint,
-    shape: "disk" | "sphere" = "disk",
+    shape: BrushShape,
     basis?: { u: Float32Array; v: Float32Array },
   ) {
     if (!Number.isFinite(radiusCanonical) || radiusCanonical <= 0) {
@@ -186,7 +186,7 @@ export class VoxelEditController extends SharedObject {
 
     const voxelsToPaint: Float32Array[] = [];
 
-    if (shape === "sphere") {
+    if (shape === BrushShape.sphere) {
       for (let dz = -r; dz <= r; ++dz) {
         for (let dy = -r; dy <= r; ++dy) {
           for (let dx = -r; dx <= r; ++dx) {

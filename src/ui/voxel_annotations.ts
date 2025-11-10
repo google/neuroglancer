@@ -16,25 +16,23 @@
 
 import type { MouseSelectionState } from "#src/layer/index.js";
 import type { VoxUserLayer } from "#src/layer/vox/index.js";
+import { BrushShape } from "#src/layer/vox/index.js";
 import { StatusMessage } from "#src/status.js";
-import { LegacyTool, registerLegacyTool } from "#src/ui/tool.js";
+import { LayerTool, registerTool, type ToolActivation } from "#src/ui/tool.js";
 import { vec3 } from "#src/util/geom.js";
 
-export const BRUSH_TOOL_ID = "voxBrush";
-export const FLOODFILL_TOOL_ID = "voxFloodFill";
-export const ADOPT_VOXEL_LABEL_TOOL_ID = "adoptVoxelLabel";
+export const BRUSH_TOOL_ID = "vox-brush";
+export const FLOODFILL_TOOL_ID = "vox-flood-fill";
+export const ADOPT_VOXEL_LABEL_TOOL_ID = "vox-pick-label";
 
-abstract class BaseVoxelLegacyTool extends LegacyTool<VoxUserLayer> {
+abstract class BaseVoxelTool extends LayerTool<VoxUserLayer> {
   protected isDrawing = false;
   protected lastPoint: Int32Array | undefined;
   protected mouseDisposer: (() => void) | undefined;
-  protected onMouseUp = () => this.stopDrawing();
   protected currentMouseState: MouseSelectionState | undefined;
-  // Store the latest mouse state without processing it immediately.
   private latestMouseState: MouseSelectionState | null = null;
   private animationFrameHandle: number | null = null;
 
-  // The main drawing loop synchronized to display refresh
   private drawLoop = (): void => {
     if (!this.isDrawing) {
       this.animationFrameHandle = null;
@@ -44,14 +42,8 @@ abstract class BaseVoxelLegacyTool extends LegacyTool<VoxUserLayer> {
       this.animationFrameHandle = requestAnimationFrame(this.drawLoop);
       return;
     }
-
-    const layer = this.layer as unknown as VoxUserLayer;
-    const value = layer.voxLabelsManager.getCurrentLabelValue(
-      layer.voxEraseMode,
-    );
     const cur = this.getPoint(this.latestMouseState);
-    this.latestMouseState = null; // mark processed
-
+    this.latestMouseState = null;
     if (cur) {
       const last = this.lastPoint;
       if (
@@ -60,34 +52,30 @@ abstract class BaseVoxelLegacyTool extends LegacyTool<VoxUserLayer> {
       ) {
         const points = this.linePoints(last, cur);
         if (points.length > 0) {
+          const value = this.layer.voxLabelsManager.getCurrentLabelValue(
+            this.layer.voxEraseMode.value,
+          );
           this.paintPoints(points, value);
         }
       }
       this.lastPoint = cur;
     }
-
     this.animationFrameHandle = requestAnimationFrame(this.drawLoop);
   };
 
   protected getPoint(mouseState: MouseSelectionState): Int32Array | undefined {
-    const vox = (this.layer as any).getVoxelPositionFromMouse?.(mouseState) as
+    const vox = this.layer.getVoxelPositionFromMouse?.(mouseState) as
       | Float32Array
       | undefined;
     if (!mouseState?.active || !vox) return undefined;
     const planeNormal = mouseState?.planeNormal;
-
     if (!mouseState?.active || !vox || !planeNormal) return undefined;
-
-    // Replicate the exact logic from the vertex shader to ensure the CPU and GPU
-    // agree on the voxel coordinate.
-
     const CHUNK_POSITION_EPSILON = 1e-3;
     const shiftedVox = new Float32Array(3);
     for (let i = 0; i < 3; ++i) {
       shiftedVox[i] =
         vox[i] + CHUNK_POSITION_EPSILON * Math.abs(planeNormal[i]);
     }
-
     return new Int32Array([
       Math.floor(shiftedVox[0]),
       Math.floor(shiftedVox[1]),
@@ -126,16 +114,6 @@ abstract class BaseVoxelLegacyTool extends LegacyTool<VoxUserLayer> {
     this.isDrawing = true;
     this.currentMouseState = mouseState;
 
-    const layer = this.layer as unknown as VoxUserLayer;
-    const brushRadius = Math.max(
-      1,
-      Math.floor((layer as any).voxBrushRadius ?? 3),
-    );
-    if (!Number.isFinite(brushRadius) || brushRadius <= 0) {
-      throw new Error("startDrawing: invalid brushRadius");
-    }
-
-    // Compute starting point and lock render LOD before first paint.
     const start = this.getPoint(mouseState);
     if (!start) {
       throw new Error(
@@ -143,37 +121,22 @@ abstract class BaseVoxelLegacyTool extends LegacyTool<VoxUserLayer> {
       );
     }
 
-    const centerCanonical = new Float32Array([start[0], start[1], start[2]]);
-    const editLodIndex = 0; // locked to 0 rn
-    layer.beginRenderLodLock(editLodIndex);
+    // Lock render LOD to base level during edits
+    this.layer.beginRenderLodLock(0);
 
-    const value = layer.voxLabelsManager.getCurrentLabelValue(
-      layer.voxEraseMode,
+    const value = this.layer.voxLabelsManager.getCurrentLabelValue(
+      this.layer.voxEraseMode.value,
     );
 
-    this.paintPoints([centerCanonical], value);
+    this.paintPoints([new Float32Array([start[0], start[1], start[2]])], value);
     this.lastPoint = start;
-    // Initialize latest mouse state so RAF can process immediately
     this.latestMouseState = mouseState;
 
-    // On mouse move, just update the latest position.
     this.mouseDisposer = mouseState.changed.add(() => {
       this.latestMouseState = mouseState;
       this.currentMouseState = mouseState;
     });
 
-    // On mouse up, stop drawing and cleanup.
-    const mouseUpHandler = () => {
-      this.stopDrawing();
-      window.removeEventListener("mouseup", mouseUpHandler);
-      if (this.mouseDisposer) {
-        this.mouseDisposer();
-        this.mouseDisposer = undefined;
-      }
-    };
-    window.addEventListener("mouseup", mouseUpHandler);
-
-    // Start the animation loop if not running
     if (this.animationFrameHandle === null) {
       this.animationFrameHandle = requestAnimationFrame(this.drawLoop);
     }
@@ -183,57 +146,54 @@ abstract class BaseVoxelLegacyTool extends LegacyTool<VoxUserLayer> {
     if (!this.isDrawing) return;
     this.isDrawing = false;
     this.lastPoint = undefined;
-
     if (this.animationFrameHandle !== null) {
       cancelAnimationFrame(this.animationFrameHandle);
       this.animationFrameHandle = null;
     }
-
     if (this.mouseDisposer) {
       this.mouseDisposer();
       this.mouseDisposer = undefined;
     }
-
-    // Always release any active render LOD lock.
     try {
       this.layer.endRenderLodLock();
-    } catch (e) {
-      console.warn("stopDrawing: failed to end render LOD lock:", e);
+    } catch {
+      /* ignore */
     }
-  }
-
-  trigger(mouseState: MouseSelectionState) {
-    if ((this.layer as any)?.constructor?.type !== "vox") return;
-    try {
-      this.startDrawing(mouseState);
-    } catch (e) {
-      console.error(`[${this.constructor.name}] Error:`, e);
-      this.stopDrawing();
-    }
-  }
-
-  deactivate() {
-    this.stopDrawing();
   }
 }
 
-export class VoxelBrushLegacyTool extends BaseVoxelLegacyTool {
-  description = "brush";
+export class VoxelBrushTool extends BaseVoxelTool {
+  constructor(layer: VoxUserLayer) {
+    super(layer, /*toggle=*/ true);
+  }
 
   toJSON() {
     return BRUSH_TOOL_ID;
   }
 
+  get description() {
+    return "Brush tool";
+  }
+
+  activate(activation: ToolActivation<this>): void {
+    // Bind mouse down to start drawing, release to stop
+    activation.bindAction("mousedown0", (event) => {
+      event.stopPropagation();
+      this.startDrawing(this.mouseState);
+    });
+    activation.registerEventListener(window, "mouseup", () => {
+      this.stopDrawing();
+    });
+  }
+
   protected paintPoints(points: Float32Array[], value: bigint) {
-    const radius = Math.max(
-      1,
-      Math.floor((this.layer as any).voxBrushRadius ?? 3),
-    );
-    const shape =
-      (this.layer as any).voxBrushShape === "sphere" ? "sphere" : "disk";
-    const ctrl = (this.layer as any).voxEditController;
-    let basis = undefined;
-    if (shape === "disk" && this.currentMouseState?.planeNormal) {
+    const radius = Math.max(1, Math.floor(this.layer.voxBrushRadius.value ?? 3));
+    const shapeEnum = this.layer.voxBrushShape.value;
+    const ctrl = this.layer.voxEditController;
+    let basis = undefined as
+      | undefined
+      | { u: Float32Array; v: Float32Array };
+    if (shapeEnum === BrushShape.disk && this.currentMouseState?.planeNormal) {
       const n = this.currentMouseState.planeNormal;
       const u = vec3.create();
       const tempVec =
@@ -246,101 +206,71 @@ export class VoxelBrushLegacyTool extends BaseVoxelLegacyTool {
       vec3.normalize(v, v);
       basis = { u, v };
     }
-    for (const point of points) {
-      ctrl?.paintBrushWithShape(point, radius, value, shape, basis);
-    }
+    for (const p of points) ctrl?.paintBrushWithShape(p, radius, value, shapeEnum, basis);
   }
 }
 
-export class VoxelFloodFillLegacyTool extends BaseVoxelLegacyTool {
-  protected paintPoints(_points: Float32Array[], _value: bigint): void {
-    throw new Error("Method not implemented.");
+export class VoxelFloodFillTool extends BaseVoxelTool {
+  constructor(layer: VoxUserLayer) {
+    super(layer, /*toggle=*/ true);
   }
-  description = "flood fill";
 
   toJSON() {
     return FLOODFILL_TOOL_ID;
   }
 
-  trigger(mouseState: MouseSelectionState) {
-    const layer = this.layer as unknown as VoxUserLayer;
-    try {
-      // Clear any previous draw error message
-      layer.setDrawErrorMessage(undefined);
+  get description() {
+    return "Flood fill tool";
+  }
 
-      if (!mouseState?.active) {
-        console.info("[VoxFloodFill] trigger ignored: mouse inactive");
-        return;
-      }
-
-      const seed = this.getPoint(mouseState);
-      const planeNormal = mouseState.planeNormal;
-
-      if (!seed || !planeNormal) {
-        throw new Error(
-          "Flood fill: failed to get voxel position or plane normal.",
-        );
-      }
-
-      const value = layer.voxLabelsManager.getCurrentLabelValue(
-        layer.voxEraseMode,
-      );
-      const max = Number((layer as any).voxFloodMaxVoxels);
-      if (!Number.isFinite(max) || max <= 0) {
-        throw new Error(
-          "Flood fill: invalid max voxels; set it in the tool panel",
-        );
-      }
-      const ctrl = layer.voxEditController;
-      if (!ctrl) throw new Error("Flood fill: drawing backend not ready yet");
-
-      console.info("[VoxFloodFill] starting flood fill", {
-        seed: Array.from(seed),
-        value: value,
-        max: Math.floor(max),
-      });
-      ctrl
-        .floodFillPlane2D(new Float32Array(seed), value, Math.floor(max), planeNormal)
-        .then(({ edits, filledCount }) => {
-          console.info("[VoxFloodFill] BFS completed", {
-            filledCount,
-            editsByChunk: edits.length,
-          });
-
-          if (edits.length === 0) return;
-          if (typeof ctrl.commitEdits === "function") {
-            ctrl.commitEdits(edits);
-            console.info("[VoxFloodFill] committed edits");
-          } else if ((ctrl as any).rpc && (ctrl as any).rpc.invoke) {
-            (ctrl as any).rpc.invoke("VOX_EDIT_COMMIT_VOXELS", {
-              rpcId: (ctrl as any).rpcId,
-              edits,
-            });
-            console.info("[VoxFloodFill] committed edits via fallback path");
-          } else {
-            throw new Error("Flood fill: no way to commit edits");
-          }
-        });
-    } catch (e: any) {
-      const msg = typeof e?.message === "string" ? e.message : String(e);
+  activate(activation: ToolActivation<this>): void {
+    activation.bindAction("mousedown0", (event) => {
+      event.stopPropagation();
+      const seed = this.getPoint(this.mouseState);
+      const planeNormal = this.mouseState.planeNormal;
+      if (!seed || !planeNormal) return;
+      const layer = this.layer;
       try {
-        layer.setDrawErrorMessage(msg);
-      } catch {
-        /* ignore */
+        layer.setDrawErrorMessage(undefined);
+        const value = layer.voxLabelsManager.getCurrentLabelValue(
+          layer.voxEraseMode.value,
+        );
+        const max = Number(layer.voxFloodMaxVoxels.value);
+        if (!Number.isFinite(max) || max <= 0) {
+          throw new Error("Invalid max fill voxels setting");
+        }
+        const ctrl = layer.voxEditController;
+        if (!ctrl) throw new Error("Drawing backend not ready yet");
+        ctrl
+          .floodFillPlane2D(new Float32Array(seed), value, Math.floor(max), planeNormal)
+          .catch((e: any) => layer.setDrawErrorMessage?.(String(e?.message ?? e)));
+      } catch (e: any) {
+        layer.setDrawErrorMessage?.(String(e?.message ?? e));
       }
-    }
+    });
+  }
+  protected paintPoints(): void {
+    /* not used */
   }
 }
 
-export class AdoptVoxelLabelTool extends LegacyTool<VoxUserLayer> {
-  description = "label picker";
+export class AdoptVoxelLabelTool extends LayerTool<VoxUserLayer> {
+  constructor(layer: VoxUserLayer) {
+    super(layer, /*toggle=*/ false);
+  }
+
   toJSON() {
     return ADOPT_VOXEL_LABEL_TOOL_ID;
   }
-  trigger(mouseState: MouseSelectionState) {
-    if (!mouseState?.active) return;
+
+  get description() {
+    return "Picking tool";
+  }
+
+  activate(_activation: ToolActivation<this>): void {
+    if (!this.mouseState?.active) return;
     const layer = this.layer as VoxUserLayer;
-    const pos = layer.getVoxelPositionFromMouse?.(mouseState);
+    const pos = layer.getVoxelPositionFromMouse?.(this.mouseState);
 
     if (!pos || pos.length < 3) {
       StatusMessage.showTemporaryMessage(
@@ -391,17 +321,8 @@ export class AdoptVoxelLabelTool extends LegacyTool<VoxUserLayer> {
   }
 }
 
-export function registerVoxelAnnotationTools() {
-  registerLegacyTool(
-    BRUSH_TOOL_ID,
-    (layer) => new VoxelBrushLegacyTool(layer as unknown as VoxUserLayer),
-  );
-  registerLegacyTool(
-    FLOODFILL_TOOL_ID,
-    (layer) => new VoxelFloodFillLegacyTool(layer as unknown as VoxUserLayer),
-  );
-  registerLegacyTool(
-    ADOPT_VOXEL_LABEL_TOOL_ID,
-    (layer) => new AdoptVoxelLabelTool(layer as unknown as VoxUserLayer),
-  );
+export function registerVoxelTools(LayerCtor: any) {
+  registerTool(LayerCtor, BRUSH_TOOL_ID, (layer: VoxUserLayer) => new VoxelBrushTool(layer));
+  registerTool(LayerCtor, FLOODFILL_TOOL_ID, (layer: VoxUserLayer) => new VoxelFloodFillTool(layer));
+  registerTool(LayerCtor, ADOPT_VOXEL_LABEL_TOOL_ID, (layer: VoxUserLayer) => new AdoptVoxelLabelTool(layer));
 }
