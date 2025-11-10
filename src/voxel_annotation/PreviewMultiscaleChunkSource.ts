@@ -41,13 +41,6 @@ export class VoxelPreviewMultiscaleSource extends MultiscaleVolumeChunkSource {
           { spec: previewSpec },
         );
 
-        console.log(
-            "%c[CHECKPOINT 5]%c Preview source created:",
-            "color: purple; font-weight: bold;",
-            "",
-            previewSource,
-        );
-
         return {
           chunkSource: previewSource,
           chunkToMultiscaleTransform: primaryResSource.chunkToMultiscaleTransform,

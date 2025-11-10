@@ -466,13 +466,11 @@ export class ChunkSource extends SharedObject {
 
   invalidateChunks(keys: string[]): void {
     const validKeys: string[] = [];
-    let changed = false;
     for (const key of keys) {
       const chunk = this.chunks.get(key);
       if (chunk) {
         validKeys.push(key);
         this.deleteChunk(key);
-        changed = true;
       }
     }
 
@@ -481,9 +479,7 @@ export class ChunkSource extends SharedObject {
         id: this.rpcId,
         keys: validKeys,
       });
-    }
 
-    if (changed) {
       this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
     }
   }

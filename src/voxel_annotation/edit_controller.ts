@@ -562,28 +562,53 @@ export class VoxelEditController extends SharedObject {
 
   callChunkReload(voxChunkKeys: string[]) {
     if (!Array.isArray(voxChunkKeys) || voxChunkKeys.length === 0) return;
-    // This assumes the multiscale source has a single orientation.
-    const sourcesByScale = this.host.primarySource.getSources(
+    const baseSources = this.host.primarySource.getSources(
       this.getIdentitySliceViewSourceOptions(),
-    );
-    const sources = sourcesByScale && sourcesByScale[0];
-    if (!sources) return;
+    )[0];
+    if (!baseSources)
+    {
+      throw new Error(
+        "VoxelEditController.callChunkReload: Missing base source",
+      );
+    }
+    const previewSources = this.host.previewSource.getSources(
+      this.getIdentitySliceViewSourceOptions(),
+    )[0];
+    if (!previewSources) {
+      throw new Error(
+        "VoxelEditController.callChunkReload: Missing preview source",
+      );
+    }
 
     const chunksToInvalidateBySource = new Map<VolumeChunkSource, string[]>();
 
     for (const voxKey of voxChunkKeys) {
       const parsed = parseVoxChunkKey(voxKey);
       if (!parsed) continue;
-      const source = sources[parsed.lodIndex]?.chunkSource as
+      const baseSource = baseSources[parsed.lodIndex]?.chunkSource as
         | VolumeChunkSource
         | undefined;
-      if (!source) continue;
-      let arr = chunksToInvalidateBySource.get(source);
-      if (!arr) {
-        arr = [];
-        chunksToInvalidateBySource.set(source, arr);
+      const previewSource = previewSources[parsed.lodIndex]?.chunkSource as
+        | VolumeChunkSource
+        | undefined;
+      if (previewSource)
+      {
+        let arr = chunksToInvalidateBySource.get(previewSource);
+        if (!arr) {
+          arr = [];
+          chunksToInvalidateBySource.set(previewSource, arr);
+        }
+        arr.push(parsed.chunkKey);
       }
-      arr.push(parsed.chunkKey);
+     if (baseSource)
+      {
+        let arr = chunksToInvalidateBySource.get(baseSource);
+        if (!arr) {
+          arr = [];
+          chunksToInvalidateBySource.set(baseSource, arr);
+        }
+        arr.push(parsed.chunkKey);
+      }
     }
 
     for (const [source, keys] of chunksToInvalidateBySource.entries()) {

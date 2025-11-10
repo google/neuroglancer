@@ -328,6 +328,26 @@ export class InMemoryVolumeChunkSource extends VolumeChunkSource {
     this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
   }
 
+  invalidateChunks(keys: string[]): void {
+    const update = () => {
+    const validKeys: string[] = [];
+    for (const key of keys) {
+      const chunk = this.chunks.get(key);
+      if (chunk) {
+        validKeys.push(key);
+        this.deleteChunk(key);
+      }
+    }
+
+    if (validKeys.length > 0) {
+      this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
+    }
+    }
+    // adding a small delay to avoid flickering since the base source will take some time to download the new data
+    setTimeout(update, 100);
+  }
+
+
   applyLocalEdits(edits: Map<string, { indices: number[]; value: bigint }>): void {
     const chunksToUpdate = new Set<VolumeChunk>();
     const { dataType } = this.spec;
