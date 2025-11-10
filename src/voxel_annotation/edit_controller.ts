@@ -548,22 +548,14 @@ export class VoxelEditController extends SharedObject {
     return { edits: backendEdits, filledCount, originalValue };
   }
 
-  callChunkReload(voxChunkKeys: string[]) {
+  callChunkReload(voxChunkKeys: string[], isForPreviewChunks: boolean) {
     if (!Array.isArray(voxChunkKeys) || voxChunkKeys.length === 0) return;
-    const baseSources = this.host.primarySource.getSources(
-      this.getIdentitySliceViewSourceOptions(),
-    )[0];
-    if (!baseSources) {
+    const sources = (
+      isForPreviewChunks ? this.host.previewSource : this.host.primarySource
+    ).getSources(this.getIdentitySliceViewSourceOptions())[0];
+    if (!sources) {
       throw new Error(
         "VoxelEditController.callChunkReload: Missing base source",
-      );
-    }
-    const previewSources = this.host.previewSource.getSources(
-      this.getIdentitySliceViewSourceOptions(),
-    )[0];
-    if (!previewSources) {
-      throw new Error(
-        "VoxelEditController.callChunkReload: Missing preview source",
       );
     }
 
@@ -572,25 +564,14 @@ export class VoxelEditController extends SharedObject {
     for (const voxKey of voxChunkKeys) {
       const parsed = parseVoxChunkKey(voxKey);
       if (!parsed) continue;
-      const baseSource = baseSources[parsed.lodIndex]?.chunkSource as
+      const source = sources[parsed.lodIndex]?.chunkSource as
         | VolumeChunkSource
         | undefined;
-      const previewSource = previewSources[parsed.lodIndex]?.chunkSource as
-        | VolumeChunkSource
-        | undefined;
-      if (previewSource) {
-        let arr = chunksToInvalidateBySource.get(previewSource);
+      if (source) {
+        let arr = chunksToInvalidateBySource.get(source);
         if (!arr) {
           arr = [];
-          chunksToInvalidateBySource.set(previewSource, arr);
-        }
-        arr.push(parsed.chunkKey);
-      }
-      if (baseSource) {
-        let arr = chunksToInvalidateBySource.get(baseSource);
-        if (!arr) {
-          arr = [];
-          chunksToInvalidateBySource.set(baseSource, arr);
+          chunksToInvalidateBySource.set(source, arr);
         }
         arr.push(parsed.chunkKey);
       }
@@ -605,7 +586,7 @@ export class VoxelEditController extends SharedObject {
 
   handleCommitFailure(voxChunkKeys: string[], message: string): void {
     try {
-      this.callChunkReload(voxChunkKeys);
+      this.callChunkReload(voxChunkKeys, true);
     } finally {
       StatusMessage.showTemporaryMessage(message);
     }
@@ -637,7 +618,7 @@ export class VoxelEditController extends SharedObject {
 registerRPC(VOX_RELOAD_CHUNKS_RPC_ID, function (x: any) {
   const obj = this.get(x.rpcId) as VoxelEditController;
   const keys: string[] = Array.isArray(x.voxChunkKeys) ? x.voxChunkKeys : [];
-  obj.callChunkReload(keys);
+  obj.callChunkReload(keys, x.isForPreviewChunks);
 });
 
 registerRPC(VOX_EDIT_FAILURE_RPC_ID, function (x: any) {

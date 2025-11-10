@@ -196,6 +196,8 @@ export class VoxelEditController extends SharedObject {
       }
     }
 
+    this.callChunkReload(editsByVoxKey.keys().toArray());
+
     if (newAction.changes.size > 0) {
       this.undoStack.push(newAction);
       if (this.undoStack.length > this.MAX_HISTORY_SIZE) {
@@ -246,10 +248,11 @@ export class VoxelEditController extends SharedObject {
     }, this.commitDebounceDelayMs) as unknown as number;
   }
 
-  callChunkReload(voxChunkKeys: string[]) {
+  callChunkReload(voxChunkKeys: string[], isForPreviewChunks = false) {
     this.rpc?.invoke(VOX_RELOAD_CHUNKS_RPC_ID, {
       rpcId: this.rpcId,
       voxChunkKeys: voxChunkKeys,
+      isForPreviewChunks,
     });
   }
 
@@ -278,7 +281,7 @@ export class VoxelEditController extends SharedObject {
           allModifiedKeys.push(currentKey);
           currentKey = await this.downsampleStep(currentKey);
         }
-        this.callChunkReload(allModifiedKeys);
+        this.callChunkReload(allModifiedKeys, true);
       }
     } finally {
       this.isProcessingDownsampleQueue = false;
