@@ -14,16 +14,15 @@
  * limitations under the License.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import type { ChunkManager } from '#src/chunk_manager/frontend.js';
 import type { SliceViewSingleResolutionSource } from '#src/sliceview/frontend.js';
 import type { VolumeSourceOptions } from '#src/sliceview/volume/base.js';
 import { makeVolumeChunkSpecification, VolumeType } from '#src/sliceview/volume/base.js';
 import {
   MultiscaleVolumeChunkSource,
-  VolumeChunkSource,
 } from '#src/sliceview/volume/frontend.js';
 import { DataType } from '#src/util/data_type.js';
+import { VoxDummyChunkSource } from '#src/voxel_annotation/frontend.js';
 
 /**
  * This is an abstract representation of 3D (volumetric) data that can exist at multiple resolutions or "scales."
@@ -61,7 +60,7 @@ export class DummyMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSourc
       upperVoxelBound,
     });
 
-    const chunkSource = new VolumeChunkSource(this.chunkManager, { spec });
+    const chunkSource: VoxDummyChunkSource = this.chunkManager.getChunkSource(VoxDummyChunkSource as any, { spec });
 
     const identity = new Float32Array((rank + 1) * (rank + 1));
     for (let i = 0; i < rank; ++i) {
@@ -69,7 +68,7 @@ export class DummyMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSourc
     }
     identity[rank * (rank + 1) + rank] = 1;
 
-    const single: SliceViewSingleResolutionSource<VolumeChunkSource> = {
+    const single: SliceViewSingleResolutionSource<VoxDummyChunkSource> = {
       chunkSource,
       chunkToMultiscaleTransform: identity,
       lowerClipBound: spec.lowerVoxelBound,
