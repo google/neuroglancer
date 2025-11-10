@@ -19,13 +19,12 @@ import type {
   UserLayerWithVoxelEditing,
   VoxelEditingContext,
 } from "#src/layer/vox/index.js";
-import type { RenderedDataPanel } from "#src/rendered_data_panel.js";
+import { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import { StatusMessage } from "#src/status.js";
 import { LayerTool, registerTool, type ToolActivation } from "#src/ui/tool.js";
 import { vec3 } from "#src/util/geom.js";
 import { EventActionMap } from "#src/util/mouse_bindings.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
-import { NullarySignal } from "#src/util/signal.js";
 import { BrushShape } from "#src/voxel_annotation/base.js";
 
 export const BRUSH_TOOL_ID = "vox-brush";
@@ -138,53 +137,41 @@ export class VoxelBrushTool extends BaseVoxelTool {
 
   activate(activation: ToolActivation<this>) {
     super.activate(activation);
-    const getZoom = () => {
-      const panels = Array.from(
-        this.layer.manager.root.display.panels,
-      ) as RenderedDataPanel[];
-      if (panels.length > 0) {
-        return panels[0].navigationState.zoomFactor.value;
-      }
-      return 1.0;
-    };
 
-    const getZoomChangedSignal = () => {
-      const panels = Array.from(
-        this.layer.manager.root.display.panels,
-      ) as RenderedDataPanel[];
-      return panels.length > 0
-        ? panels[0].navigationState.zoomFactor.changed
-        : new NullarySignal();
-    };
-
-    const updateCursor = () => {
-      const radiusInVoxels = this.layer.voxBrushRadius.value;
-      const zoom = getZoom();
-      const radiusInPixels = Math.max(1, radiusInVoxels / zoom);
-      const svgSize = 2 * radiusInPixels + 4;
-      const svgCenter = svgSize / 2;
-
-      const svgString = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="${svgSize}" height="${svgSize}">
-          <circle cx="${svgCenter}" cy="${svgCenter}" r="${radiusInPixels}" 
-                  stroke="white" stroke-width="3" fill="rgba(255, 255, 255, 0.2)" />
-          <circle cx="${svgCenter}" cy="${svgCenter}" r="${radiusInPixels}" 
-                  stroke="black" stroke-width="1.5" fill="rgba(255, 255, 255, 0)" />
-        </svg>
-      `.replace(/\s\s+/g, " ");
-
-      const cursorURL = `url('data:image/svg+xml;utf8,${encodeURIComponent(svgString)}')`;
-      this.setCursor(`${cursorURL} ${svgCenter} ${svgCenter}, crosshair`);
-    };
-
-    updateCursor();
-    activation.registerDisposer(
-      this.layer.voxBrushRadius.changed.add(updateCursor),
-    );
-    activation.registerDisposer(getZoomChangedSignal().add(updateCursor));
     activation.registerDisposer(() => {
+      this.getActivePanel()?.clearOverlay();
       this.resetCursor();
     });
+    activation.registerDisposer(
+      this.mouseState.changed.add(() => {
+        this.updateBrushOutline();
+      })
+    );
+  }
+
+  private getActivePanel(): RenderedDataPanel | undefined {
+    let activePanel: RenderedDataPanel | undefined;
+    for (const panel of this.layer.manager.root.display.panels) {
+      if (panel instanceof RenderedDataPanel) {
+        if (panel.mouseX !== -1) {
+          activePanel = panel;
+        } else {
+          panel.clearOverlay();
+        }
+      }
+    }
+    return activePanel;
+  }
+
+  private updateBrushOutline() {
+    const panel = this.getActivePanel();
+    if (!panel) return;
+
+    const zoom = panel.navigationState.zoomFactor.value;
+    const radiusInVoxels = this.layer.voxBrushRadius.value;
+    const radiusInPixels = radiusInVoxels / zoom;
+
+    panel.drawBrushCursor(panel.mouseX, panel.mouseY, radiusInPixels);
   }
 
   activationCallback(_activation: ToolActivation<this>): void {
