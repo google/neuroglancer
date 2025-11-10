@@ -106,53 +106,6 @@ export class LocalDataSourceProvider implements DataSourceProvider {
           ],
         };
       }
-      case localVoxelAnnotationsUrl: {
-        // Voxels data source: by default, provide a fixed 3D identity model transform.
-        // Rationale: Many voxel-based layers (like our demo vox layer) expect a concrete 3D
-        // model space. Mirroring the global space rank/names can lead to ambiguous or rank-0
-        // cases depending on viewer state. Keeping a stable 3D identity model transform here
-        // reduces surprises while still allowing an explicit transform override via options.
-        const { transform } = options;
-        let modelTransform: CoordinateSpaceTransform;
-        if (transform === undefined) {
-          const inputSpace = makeCoordinateSpace({
-            rank: 3,
-            scales: new Float64Array([1, 1, 1]),
-            units: ["", "", ""],
-            names: ["x", "y", "z"],
-          });
-          const outputSpace = makeCoordinateSpace({
-            rank: 3,
-            scales: new Float64Array([1, 1, 1]),
-            units: ["", "", ""],
-            names: ["x", "y", "z"],
-          });
-          modelTransform = {
-            rank: 3,
-            sourceRank: 3,
-            inputSpace,
-            outputSpace,
-            transform: createIdentity(Float64Array, 4),
-          };
-        } else {
-          // If an explicit transform is provided, just pass through an identity over empty space,
-          // consistent with other local sources.
-          modelTransform = makeIdentityTransform(emptyValidCoordinateSpace);
-        }
-        return {
-          modelTransform,
-          canChangeModelSpaceRank: true,
-          subsources: [
-            {
-              id: "default",
-              default: true,
-              subsource: {
-                local: LocalDataSource.voxelAnnotations,
-              },
-            },
-          ],
-        };
-      }
     }
     throw new Error("Invalid local data source URL");
   }
@@ -171,11 +124,7 @@ export class LocalDataSourceProvider implements DataSourceProvider {
             value: "equivalences",
             description:
               "Segmentation equivalence graph stored in the JSON state",
-          },
-          {
-            value: "voxel-annotations",
-            description: "Voxel annotations stored in the JSON state",
-          },
+          }
         ],
         (x) => x.value,
         (x) => x.description,

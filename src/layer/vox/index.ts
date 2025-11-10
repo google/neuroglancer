@@ -18,11 +18,6 @@ import "#src/layer/vox/style.css";
 
 import { vec3 } from "gl-matrix";
 import type { CoordinateTransformSpecification } from "#src/coordinate_transform.js";
-import {
-  makeCoordinateSpace,
-  makeIdentityTransform,
-  WatchableCoordinateSpaceTransform,
-} from "#src/coordinate_transform.js";
 import type { DataSourceSpecification } from "#src/datasource/index.js";
 import {
   LocalDataSource,
@@ -36,12 +31,15 @@ import {
   UserLayer,
 } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
-import { VoxSettingsTab } from "#src/layer/vox/tabs/settings.js";
 import { VoxToolTab } from "#src/layer/vox/tabs/tools.js";
-import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
 import {
   trackableRenderScaleTarget,
 } from "#src/render_scale_statistics.js";
+import { DataType } from "#src/sliceview/base.js";
+import { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
+import {
+  constantWatchableValue,
+} from "#src/trackable_value.js";
 import {
   registerVoxelAnnotationTools,
 } from "#src/ui/voxel_annotations.js";
@@ -49,9 +47,7 @@ import type { Borrowed } from "#src/util/disposable.js";
 import { mat4 } from "#src/util/geom.js";
 import { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
 import { LabelsManager } from "#src/voxel_annotation/labels.js";
-import { VoxMapRegistry } from "#src/voxel_annotation/map.js";
 import { VoxelAnnotationRenderLayer } from "#src/voxel_annotation/renderlayer.js";
-import { VoxMultiscaleVolumeChunkSource } from "#src/voxel_annotation/volume_chunk_source.js";
 
 export class VoxUserLayer extends UserLayer {
   // While drawing, we keep a reference to the vox render layer to control temporary LOD locks.
@@ -62,13 +58,12 @@ export class VoxUserLayer extends UserLayer {
   static typeAbbreviation = "vox";
   voxEditController?: VoxelEditController;
   voxLabelsManager = new LabelsManager();
-  voxMapRegistry = new VoxMapRegistry();
+  private modelToVoxTransform: mat4 | null;
 
   // Draw tool state
   voxBrushRadius: number = 3;
   voxEraseMode: boolean = false;
   voxBrushShape: "disk" | "sphere" = "disk";
-  private voxLoadedSubsource?: LoadedDataSubsource;
 
   // Draw tab error messaging
   voxDrawErrorMessage: string | undefined = undefined;
@@ -114,11 +109,6 @@ export class VoxUserLayer extends UserLayer {
 
   constructor(managedLayer: Borrowed<ManagedUserLayer>) {
     super(managedLayer);
-    this.tabs.add("vox_settings", {
-      label: "Map",
-      order: 0,
-      getter: () => new VoxSettingsTab(this),
-    });
     this.tabs.add("vox_tools", {
       label: "Draw",
       order: 1,
@@ -127,45 +117,8 @@ export class VoxUserLayer extends UserLayer {
     this.tabs.default = "vox";
   }
 
-  private createIdentity3D() {
-    const map = this.voxMapRegistry.getCurrent();
-    if (!map || !map.scaleMeters || !map.unit) {
-      console.log("debug: ", map)
-      throw new Error("createIdentity3D: no map selected or missing properties");
-    }
-    
-    const units = [
-      map.unit,
-      map.unit,
-      map.unit,
-    ] as string[];
-
-    return new WatchableCoordinateSpaceTransform(
-      makeIdentityTransform(
-        makeCoordinateSpace({
-          rank: 3,
-          names: ["x", "y", "z"],
-          units,
-          scales: new Float64Array(map.scaleMeters as number[]),
-        }),
-      ),
-    );
-  }
-
-  private getModelToVoxTransform(): mat4 | undefined {
-    const identity3D = this.createIdentity3D();
-    const watchable = getWatchableRenderLayerTransform(
-      this.manager.root.coordinateSpace,
-      this.localPosition.coordinateSpace,
-      identity3D,
-      undefined,
-    );
-    const tOrError = watchable.value as any;
-    if (tOrError?.error) return undefined;
-    return (
-      mat4.invert(mat4.create(), tOrError.modelToRenderLayerTransform) ||
-      mat4.identity(mat4.create())
-    );
+  private getModelToVoxTransform(): mat4 | null {
+    return this.modelToVoxTransform;
   }
 
   getVoxelPositionFromMouse(
@@ -184,68 +137,6 @@ export class VoxUserLayer extends UserLayer {
     } catch {
       return undefined;
     }
-  }
-
-  private async loadLabels(): Promise<void> {
-    const controller = this.voxEditController;
-    if (!controller) return;
-    await this.voxLabelsManager.initialize(controller);
-  }
-
-  buildOrRebuildVoxLayer() {
-    const ls = this.voxLoadedSubsource;
-    if (!ls) return;
-
-    // Require an explicit map selection/creation
-    const map = this.voxMapRegistry.getCurrent();
-    if (!map) return;
-
-    const guardScale = Array.from(map?.scaleMeters || [1, 1, 1]);
-    // Use map bounds for guard and source
-    const upper = new Float32Array(map.upperVoxelBound as number[]);
-    const guardBounds = Array.from(upper);
-    const guardUnit = map.unit;
-
-    ls.activate(
-      () => {
-        const voxSource = new VoxMultiscaleVolumeChunkSource(
-          this.manager.chunkManager,
-          {
-            map: map,
-          },
-        );
-        // Expose a controller so tools can paint voxels via the source.
-        this.voxEditController = new VoxelEditController(voxSource);
-        this.voxEditController.initializeMap(map);
-
-        const sources2D = voxSource.getSources({} as any);
-        for (const level of (sources2D[0] ?? [])) {
-          (level.chunkSource as any).initializeMap(map);
-        }
-        this.loadLabels();
-
-        // Build transform with current scale and units.
-        const identity3D = this.createIdentity3D();
-        const transform = getWatchableRenderLayerTransform(
-          this.manager.root.coordinateSpace,
-          this.localPosition.coordinateSpace,
-          identity3D,
-          undefined,
-        );
-
-        const renderLayer = new VoxelAnnotationRenderLayer(voxSource, {
-          transform: transform as any,
-          renderScaleTarget: this.sliceViewRenderScaleTarget,
-          renderScaleHistogram: undefined,
-          localPosition: this.localPosition,
-        } as any);
-        this.voxRenderLayerInstance = renderLayer;
-        ls.addRenderLayer(renderLayer);
-      },
-      guardScale,
-      guardBounds,
-      guardUnit,
-    );
   }
 
   getLegacyDataSourceSpecifications(
@@ -276,19 +167,60 @@ export class VoxUserLayer extends UserLayer {
 
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>): void {
     for (const loadedSubsource of subsources) {
-      const { subsourceEntry } = loadedSubsource;
-      const { subsource } = subsourceEntry;
-      const isLocalVox = subsource.local === LocalDataSource.voxelAnnotations;
+      const { volume } =
+        loadedSubsource.subsourceEntry.subsource;
+      if (volume instanceof MultiscaleVolumeChunkSource) {
+        if (volume === undefined) {
+          loadedSubsource.deactivate("No volume source");
+          continue;
+        }
+        switch (volume.dataType) {
+          case DataType.FLOAT32:
+            loadedSubsource.deactivate(
+              "Data type not compatible with segmentation layer",
+            );
+            continue;
+        }
+        this.voxEditController = new VoxelEditController(volume);
+        loadedSubsource.activate(
+          () => {
+            const renderLayerTransform = loadedSubsource.getRenderLayerTransform();
 
-      if (isLocalVox) {
-        // Local in-memory vox datasource.
-        this.voxLoadedSubsource = loadedSubsource;
+            const renderLayer = new VoxelAnnotationRenderLayer(volume, {
+                transform: loadedSubsource.getRenderLayerTransform(),
+                renderScaleTarget: this.sliceViewRenderScaleTarget,
+                localPosition: this.localPosition,
+                shaderParameters: constantWatchableValue({})
+              });
+
+            this.voxRenderLayerInstance = renderLayer;
+            loadedSubsource.addRenderLayer(renderLayer);
+
+            // 3. Calculate and store the inverse transform needed for mouse picking.
+            const updateTransform = () => {
+              const transformOrError = renderLayerTransform.value;
+              if (transformOrError.error !== undefined) {
+                this.modelToVoxTransform = null;
+              } else {
+                this.modelToVoxTransform = mat4.invert(
+                  mat4.create(),
+                  transformOrError.modelToRenderLayerTransform as mat4,
+                );
+              }
+            };
+
+            updateTransform();
+            loadedSubsource.activated!.registerDisposer(
+              renderLayerTransform.changed.add(updateTransform)
+            );
+          }
+        );
         continue;
       }
 
       // Reject anything else.
       loadedSubsource.deactivate(
-        "Not compatible with vox layer; supported sources: local://voxel-annotations",
+        "Not compatible with vox layer",
       );
     }
   }

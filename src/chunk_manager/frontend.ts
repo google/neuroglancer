@@ -463,6 +463,20 @@ export class ChunkSource extends SharedObject {
     this.chunks.delete(key);
   }
 
+  invalidateChunks(keys: string[]): void {
+    let changed = false;
+    for (const key of keys) {
+      const chunk = this.chunks.get(key);
+      if (chunk) {
+        this.deleteChunk(key);
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
+    }
+  }
+
   addChunk(key: string, chunk: Chunk) {
     this.chunks.set(key, chunk);
   }

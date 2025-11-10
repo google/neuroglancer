@@ -5,28 +5,22 @@
  * while keeping a single writer per map owned by the edit controller.
  */
 
+import type { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import {
   VOX_EDIT_BACKEND_RPC_ID,
   VOX_EDIT_COMMIT_VOXELS_RPC_ID,
   VOX_EDIT_LABELS_ADD_RPC_ID,
   VOX_EDIT_LABELS_GET_RPC_ID,
-  VOX_EDIT_MAP_INIT_RPC_ID,
   VOX_RELOAD_CHUNKS_RPC_ID,
   makeVoxChunkKey,
   parseVoxChunkKey,
 } from "#src/voxel_annotation/base.js";
-import type { VoxSourceWriter } from "#src/voxel_annotation/index.js";
-import { LocalVoxSourceWriter } from "#src/voxel_annotation/local_source.js";
-import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
 import type { RPC} from "#src/worker_rpc.js";
 import { SharedObject , registerPromiseRPC, registerRPC, registerSharedObject, initializeSharedObjectCounterpart } from "#src/worker_rpc.js";
 
 @registerSharedObject(VOX_EDIT_BACKEND_RPC_ID)
 export class VoxelEditController extends SharedObject {
-  private source?: VoxSourceWriter;
-  private mapReadyPromise: Promise<void>;
-  private resolveMapReady!: () => void;
-  private mapCfg?: VoxMapConfig;
+  private source?: VolumeChunkSource;
 
   // Short debounce to coalesce rapid edits coming from tools.
   private pendingEdits: {
@@ -49,30 +43,16 @@ export class VoxelEditController extends SharedObject {
     // Initialize as a counterpart in the worker so RPC references are valid.
     // This registers the object under the provided rpc/id and sets up ref counting.
     initializeSharedObjectCounterpart(this, rpc, options);
-    this.mapReadyPromise = new Promise<void>((resolve) => {
-      this.resolveMapReady = resolve;
-    });
-  }
-
-  async initMap(arg: { map?: VoxMapConfig } | VoxMapConfig) {
-    const map: VoxMapConfig = (arg as any)?.map ?? (arg as any);
-    if (!map) throw new Error("VoxEditBackend.initMap: map configuration is required");
-    const src = new LocalVoxSourceWriter(this);
-    await src.init(map);
-    this.source = src;
-    this.mapCfg = map;
-    try { this.resolveMapReady(); } catch {/* ignore */}
   }
 
   private async flushPending(): Promise<void> {
-    await this.mapReadyPromise;
     const src = this.source;
     if (!src) throw new Error("VoxEditBackend.flushPending: source not initialized");
     const edits = this.pendingEdits;
     this.pendingEdits = [];
     this.commitDebounceTimer = undefined;
     if (edits.length === 0) return;
-    await src.applyEdits(edits);
+    // await src.applyEdits(edits); TODO: add writting capability to VolumeChunkSource
     // After base edits, enqueue downsampling for affected chunks (do not await here).
     const touched = new Set<string>();
     for (const e of edits) touched.add(e.key);
@@ -90,7 +70,6 @@ export class VoxelEditController extends SharedObject {
       size?: number[];
     }[],
   ) {
-    await this.mapReadyPromise;
     if (!this.source) throw new Error("VoxEditBackend.commitVoxels: source not initialized");
     for (const e of edits) {
       if (!e || !e.key || !e.indices) {
@@ -103,17 +82,15 @@ export class VoxelEditController extends SharedObject {
   }
 
   async getLabelIds(): Promise<number[]> {
-    await this.mapReadyPromise;
     const src = this.source;
     if (!src) throw new Error("VoxEditBackend.getLabelIds: source not initialized");
-    return await src.getLabelIds();
+    return [] // await src.getLabelIds();
   }
 
-  async addLabel(value: number): Promise<number[]> {
-    await this.mapReadyPromise;
+  async addLabel(_value: number): Promise<number[]> {
     const src = this.source;
     if (!src) throw new Error("VoxEditBackend.addLabel: source not initialized");
-    return await src.addLabel(value >>> 0);
+    return [] // await src.addLabel(value >>> 0);
   }
 
   callChunkReload(voxChunkKeys: string[]){
@@ -124,12 +101,9 @@ export class VoxelEditController extends SharedObject {
   }
   // Downsampling helpers
   private parentKeyOf(childKey: string): string | null {
-    if (!this.mapCfg) return null;
     const info = parseVoxChunkKey(childKey);
     if (info === null) return null;
     const parentLod = info.lod * 2;
-    const maxLOD = this.mapCfg.steps[this.mapCfg.steps.length - 1];
-    if (parentLod > maxLOD) return null;
     const px = Math.floor(info.x / 2);
     const py = Math.floor(info.y / 2);
     const pz = Math.floor(info.z / 2);
@@ -142,12 +116,11 @@ export class VoxelEditController extends SharedObject {
   }
 
   private async performDownsampleCascadeForKey(sourceKey: string): Promise<void> {
-    const cfg = this.mapCfg;
     const src = this.source;
-    if (!cfg || !src) return;
-    const chunkSize = cfg.chunkDataSize[0];
+    if (!src) return;
+    const chunkSize = 64;
     const maxPasses = this.calculateDownsamplePasses(chunkSize);
-    const maxLOD = cfg.steps[cfg.steps.length - 1];
+    const maxLOD = 256;
 
     let currentKey: string | null = sourceKey;
     for (let i = 0; i < maxPasses; i++) {
@@ -209,13 +182,14 @@ export class VoxelEditController extends SharedObject {
   }
 
   private async downsampleStep(sourceKey: string): Promise<string | null> {
-    const cfg = this.mapCfg;
     const src = this.source;
-    if (!cfg || !src) return null;
+    if (!src) return null;
     const info = parseVoxChunkKey(sourceKey);
     if (info === null) return null;
 
-    const sourceChunk = await src.getSavedChunk(sourceKey);
+    const sourceChunk = src.getChunk(
+      new Float32Array([info.x, info.y, info.z]),
+    ) as any;
     if (!sourceChunk) return null;
 
     const targetKey = this.parentKeyOf(sourceKey);
@@ -229,8 +203,8 @@ export class VoxelEditController extends SharedObject {
     const offsetY = (info.y % 2) * chunkH;
     const offsetZ = (info.z % 2) * chunkD;
 
-    const targetSizeX = cfg.chunkDataSize[0];
-    const targetSizeY = cfg.chunkDataSize[1];
+    const targetSizeX = 1// cfg.chunkDataSize[0];
+    const targetSizeY =1 // cfg.chunkDataSize[1];
 
     const indices: number[] = [];
     const values: number[] = [];
@@ -266,20 +240,14 @@ export class VoxelEditController extends SharedObject {
     }
 
     if (indices.length > 0) {
-      await src.applyEdits([
-        { key: targetKey, indices, values },
-      ]);
+      //await src.applyEdits([
+      //  { key: targetKey, indices, values },
+      //]);
     }
 
     return targetKey;
   }
 }
-
-// RPC wire-up
-registerRPC(VOX_EDIT_MAP_INIT_RPC_ID, function (x: any) {
-  const obj = this.get(x.rpcId) as VoxelEditController;
-  obj.initMap(x?.map || x || {});
-});
 
 registerRPC(VOX_EDIT_COMMIT_VOXELS_RPC_ID, function (x: any) {
   const obj = this.get(x.rpcId) as VoxelEditController;

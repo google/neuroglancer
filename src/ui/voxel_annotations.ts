@@ -85,7 +85,7 @@ export const FLOODFILL_TOOL_ID = "voxFloodFill";
     }
 
     const centerCanonical = new Float32Array([start[0], start[1], start[2]]);
-    const editLodIndex = layer.voxEditController?.getEditLodIndexForBrush(brushRadius);
+    const editLodIndex = layer.voxEditController?.getEditLodIndexToDraw(brushRadius);
     if (!Number.isInteger(editLodIndex) || editLodIndex == undefined || editLodIndex < 0) {
       throw new Error("startDrawing: computed edit LOD index is invalid");
     }
@@ -230,19 +230,20 @@ export class VoxelFloodFillLegacyTool extends LegacyTool<VoxUserLayer> {
       ]);
 
       console.info("[VoxFloodFill] starting flood fill", { seed: Array.from(seed), value: value >>> 0, max: Math.floor(max) });
-      const { edits, filledCount } = ctrl.floodFillPlane2D(seed, value >>> 0, Math.floor(max));
-      console.info("[VoxFloodFill] BFS completed", { filledCount, editsByChunk: edits.length });
+      ctrl.floodFillPlane2D(seed, value >>> 0, Math.floor(max)).then(({ edits, filledCount }) => {
+        console.info("[VoxFloodFill] BFS completed", { filledCount, editsByChunk: edits.length });
 
-      if (edits.length === 0) return;
-      if (typeof ctrl.commitEdits === "function") {
-        ctrl.commitEdits(edits);
-        console.info("[VoxFloodFill] committed edits");
-      } else if ((ctrl as any).rpc && (ctrl as any).rpc.invoke) {
-        (ctrl as any).rpc.invoke("VOX_EDIT_COMMIT_VOXELS", { rpcId: (ctrl as any).rpcId, edits });
-        console.info("[VoxFloodFill] committed edits via fallback path");
-      } else {
-        throw new Error("Flood fill: no way to commit edits");
-      }
+        if (edits.length === 0) return;
+        if (typeof ctrl.commitEdits === "function") {
+          ctrl.commitEdits(edits);
+          console.info("[VoxFloodFill] committed edits");
+        } else if ((ctrl as any).rpc && (ctrl as any).rpc.invoke) {
+          (ctrl as any).rpc.invoke("VOX_EDIT_COMMIT_VOXELS", { rpcId: (ctrl as any).rpcId, edits });
+          console.info("[VoxFloodFill] committed edits via fallback path");
+        } else {
+          throw new Error("Flood fill: no way to commit edits");
+        }
+      });
     } catch (e: any) {
       const msg = typeof e?.message === "string" ? e.message : String(e);
       try {
