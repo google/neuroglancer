@@ -36,6 +36,8 @@ import {
   UserLayer,
 } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
+import { VoxSettingsTab } from "#src/layer/vox/tabs/settings.js";
+import { VoxToolTab } from "#src/layer/vox/tabs/tools.js";
 import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
 import {
   RenderScaleHistogram,
@@ -44,394 +46,18 @@ import {
 import { SegmentColorHash } from "#src/segment_color.js";
 import {
   registerVoxelAnnotationTools,
-  VoxelBrushLegacyTool,
-  VoxelPixelLegacyTool,
 } from "#src/ui/voxel_annotations.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { mat4 } from "#src/util/geom.js";
 import { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
-import { toScaleKey } from "#src/voxel_annotation/index.js";
+import { RemoteVoxSource } from "#src/voxel_annotation/index.js";
+import { VoxMapRegistry } from "#src/voxel_annotation/map.js";
 import { VoxelAnnotationRenderLayer } from "#src/voxel_annotation/renderlayer.js";
 import { VoxMultiscaleVolumeChunkSource } from "#src/voxel_annotation/volume_chunk_source.js";
-import { Tab } from "#src/widget/tab_view.js";
-
-class VoxSettingsTab extends Tab {
-  constructor(public layer: VoxUserLayer) {
-    super();
-    const { element } = this;
-    element.classList.add("neuroglancer-vox-settings-tab");
-
-    const row = (label: string, inputs: HTMLElement[]) => {
-      const div = document.createElement("div");
-      div.className = "neuroglancer-vox-row";
-      const lab = document.createElement("label");
-      lab.textContent = label;
-      lab.style.display = "inline-block";
-      lab.style.width = "140px";
-      div.appendChild(lab);
-      for (const inp of inputs) {
-        inp.classList.add("neuroglancer-vox-input");
-        inp.setAttribute("size", "8");
-        div.appendChild(inp);
-      }
-      return div;
-    };
-
-    const makeNumberInput = (value: number, step: string) => {
-      const inp = document.createElement("input");
-      inp.type = "number";
-      inp.step = step;
-      inp.value = String(value);
-      return inp;
-    };
-
-    const sMeters = this.layer.voxScale; // stored in meters
-    const a = this.layer.voxCornerA;
-    const c = this.layer.voxCornerB;
-
-    // Unit helpers
-    const unitFactor: Record<string, number> = {
-      m: 1,
-      mm: 1e-3,
-      µm: 1e-6,
-      nm: 1e-9,
-    };
-    const currentUnit =
-      this.layer.voxScaleUnit in unitFactor ? this.layer.voxScaleUnit : "m";
-    const factor = (u: string) => unitFactor[u] ?? 1;
-
-    // Prepare UI elements
-    const unitSel = document.createElement("select");
-    for (const u of ["m", "mm", "µm", "nm"]) {
-      const opt = document.createElement("option");
-      opt.value = u;
-      opt.textContent = u;
-      if (u === currentUnit) opt.selected = true;
-      unitSel.appendChild(opt);
-    }
-    let prevUnit = currentUnit;
-
-    // Show scale values in the chosen unit for convenience
-    const sx = makeNumberInput(sMeters[0] / factor(currentUnit), "any");
-    const sy = makeNumberInput(sMeters[1] / factor(currentUnit), "any");
-    const sz = makeNumberInput(sMeters[2] / factor(currentUnit), "any");
-
-    const ax = makeNumberInput(a[0], "1");
-    const ay = makeNumberInput(a[1], "1");
-    const az = makeNumberInput(a[2], "1");
-
-    const bx = makeNumberInput(c[0], "1");
-    const by = makeNumberInput(c[1], "1");
-    const bz = makeNumberInput(c[2], "1");
-
-    element.appendChild(row("Scale (x,y,z)", [sx, sy, sz]));
-    element.appendChild(row("Scale unit", [unitSel]));
-    element.appendChild(row("Corner A (x,y,z)", [ax, ay, az]));
-    element.appendChild(row("Corner B (x,y,z)", [bx, by, bz]));
-
-    // When unit changes, rescale the displayed numbers to preserve physical value in meters
-    unitSel.addEventListener("change", () => {
-      const newU = unitSel.value;
-      const conv = factor(prevUnit) / factor(newU);
-      // Update the input values in-place
-      const x = Number.parseFloat(sx.value);
-      const y = Number.parseFloat(sy.value);
-      const z = Number.parseFloat(sz.value);
-      if (Number.isFinite(x)) sx.value = String(x * conv);
-      if (Number.isFinite(y)) sy.value = String(y * conv);
-      if (Number.isFinite(z)) sz.value = String(z * conv);
-      prevUnit = newU;
-    });
-
-    const apply = document.createElement("button");
-    apply.textContent = "Regen source";
-    apply.title =
-      "Regenerate the source volume with the new settings, warning old local source will be deleted";
-    apply.addEventListener("click", () => {
-      const u = unitSel.value || currentUnit;
-      const f = factor(u);
-      // Convert user-entered values back to meters
-      const sxNum = Number.parseFloat(sx.value);
-      const syNum = Number.parseFloat(sy.value);
-      const szNum = Number.parseFloat(sz.value);
-      const ns = new Float64Array([
-        Number.isFinite(sxNum) ? sxNum * f : sMeters[0],
-        Number.isFinite(syNum) ? syNum * f : sMeters[1],
-        Number.isFinite(szNum) ? szNum * f : sMeters[2],
-      ]);
-      const ca = new Float32Array([
-        Math.floor(Number(ax.value) || this.layer.voxCornerA[0]),
-        Math.floor(Number(ay.value) || this.layer.voxCornerA[1]),
-        Math.floor(Number(az.value) || this.layer.voxCornerA[2]),
-      ]);
-      const cb = new Float32Array([
-        Math.floor(Number(bx.value) || this.layer.voxCornerB[0]),
-        Math.floor(Number(by.value) || this.layer.voxCornerB[1]),
-        Math.floor(Number(bz.value) || this.layer.voxCornerB[2]),
-      ]);
-      this.layer.applyVoxSettings(ns, u, ca, cb);
-    });
-    element.appendChild(apply);
-  }
-}
-
-class VoxToolTab extends Tab {
-  public requestRenderLabels() {
-    this.renderLabels();
-  }
-  private labelsContainer!: HTMLDivElement;
-  private labelsError!: HTMLDivElement;
-  private renderLabels() {
-    const cont = this.labelsContainer;
-    cont.innerHTML = "";
-    const labels = this.layer.voxLabels;
-    const selected = this.layer.voxSelectedLabelId;
-    for (const lab of labels) {
-      const row = document.createElement("div");
-      row.className = "neuroglancer-vox-label-row";
-      row.style.display = "grid";
-      row.style.gridTemplateColumns = "16px 1fr";
-      row.style.alignItems = "center";
-      row.style.gap = "8px";
-      // color swatch
-      const sw = document.createElement("div");
-      sw.style.width = "16px";
-      sw.style.height = "16px";
-      sw.style.borderRadius = "3px";
-      sw.style.border = "1px solid rgba(0,0,0,0.2)";
-      sw.style.background = this.layer.colorForValue(lab.id);
-      // id text (monospace)
-      const txt = document.createElement("div");
-      txt.textContent = String(lab.id >>> 0);
-      txt.style.fontFamily = "monospace";
-      txt.style.whiteSpace = "nowrap";
-      txt.style.overflow = "hidden";
-      txt.style.textOverflow = "ellipsis";
-      row.appendChild(sw);
-      row.appendChild(txt);
-      // selection styling
-      const isSel = lab.id === selected;
-      row.style.cursor = "pointer";
-      row.style.padding = "2px 4px";
-      row.style.borderRadius = "4px";
-      if (isSel) {
-        row.style.background = "rgba(100,150,255,0.15)";
-        row.style.outline = "1px solid rgba(100,150,255,0.6)";
-      }
-      row.addEventListener("click", () => {
-        this.layer.selectVoxLabel(lab.id);
-        this.renderLabels();
-      });
-      cont.appendChild(row);
-    }
-    // Update error message area
-    const err = this.layer.voxLabelsError;
-    if (err && err.length > 0) {
-      this.labelsError.textContent = err;
-      this.labelsError.style.display = "block";
-    } else {
-      this.labelsError.textContent = "";
-      this.labelsError.style.display = "none";
-    }
-  }
-  constructor(public layer: VoxUserLayer) {
-    super();
-    const { element } = this;
-    element.classList.add("neuroglancer-vox-tools-tab");
-    const toolbox = document.createElement("div");
-    toolbox.className = "neuroglancer-vox-toolbox";
-
-    // Section: Tool selection
-    const toolsRow = document.createElement("div");
-    toolsRow.className = "neuroglancer-vox-row";
-    const toolsLabel = document.createElement("label");
-    toolsLabel.textContent = "Tool";
-    const toolsWrap = document.createElement("div");
-    toolsWrap.style.display = "flex";
-    toolsWrap.style.gap = "8px";
-
-    const pixelButton = document.createElement("button");
-    pixelButton.textContent = "Pixel";
-    pixelButton.title = "ctrl+click to paint a pixel";
-    pixelButton.addEventListener("click", () => {
-      this.layer.tool.value = new VoxelPixelLegacyTool(this.layer);
-    });
-
-    const brushButton = document.createElement("button");
-    brushButton.textContent = "Brush";
-    brushButton.title = "ctrl+click to paint a small sphere";
-    brushButton.addEventListener("click", () => {
-      this.layer.tool.value = new VoxelBrushLegacyTool(this.layer);
-    });
-
-    toolsWrap.appendChild(pixelButton);
-    toolsWrap.appendChild(brushButton);
-    toolsRow.appendChild(toolsLabel);
-    toolsRow.appendChild(toolsWrap);
-    toolbox.appendChild(toolsRow);
-
-    // Section: Brush settings
-    const brushRow = document.createElement("div");
-    brushRow.className = "neuroglancer-vox-row";
-
-    // Brush size as slider + number readout
-    const sizeLabel = document.createElement("label");
-    sizeLabel.textContent = "Brush size";
-    const sizeControls = document.createElement("div");
-    sizeControls.style.display = "flex";
-    sizeControls.style.alignItems = "center";
-    sizeControls.style.gap = "8px";
-
-    const sizeSlider = document.createElement("input");
-    sizeSlider.type = "range";
-    sizeSlider.min = "1";
-    sizeSlider.max = "64";
-    sizeSlider.step = "1";
-    sizeSlider.value = String(this.layer.voxBrushRadius ?? 3);
-
-    const sizeNumber = document.createElement("input");
-    sizeNumber.type = "number";
-    sizeNumber.className = "neuroglancer-vox-input";
-    sizeNumber.min = "1";
-    sizeNumber.step = "1";
-    sizeNumber.value = String(this.layer.voxBrushRadius ?? 3);
-
-    const syncSize = (v: number) => {
-      const clamped = Math.max(1, Math.min(256, Math.floor(v)));
-      this.layer.voxBrushRadius = clamped;
-      sizeSlider.value = String(clamped);
-      sizeNumber.value = String(clamped);
-    };
-
-    sizeSlider.addEventListener("input", () => {
-      syncSize(Number(sizeSlider.value) || 1);
-    });
-    sizeNumber.addEventListener("change", () => {
-      syncSize(Number(sizeNumber.value) || 1);
-    });
-
-    sizeControls.appendChild(sizeSlider);
-    sizeControls.appendChild(sizeNumber);
-
-    // Eraser toggle
-    const erLabel = document.createElement("label");
-    erLabel.textContent = "Eraser";
-    const erChk = document.createElement("input");
-    erChk.type = "checkbox";
-    erChk.checked = !!this.layer.voxEraseMode;
-    erChk.addEventListener("change", () => {
-      this.layer.voxEraseMode = !!erChk.checked;
-    });
-
-    // Brush shape selector
-    const shapeLabel = document.createElement("label");
-    shapeLabel.textContent = "Brush shape";
-    const shapeSel = document.createElement("select");
-    const optDisk = document.createElement("option");
-    optDisk.value = "disk";
-    optDisk.textContent = "disk";
-    const optSphere = document.createElement("option");
-    optSphere.value = "sphere";
-    optSphere.textContent = "sphere";
-    shapeSel.appendChild(optDisk);
-    shapeSel.appendChild(optSphere);
-    shapeSel.value = this.layer.voxBrushShape === "sphere" ? "sphere" : "disk";
-    shapeSel.addEventListener("change", () => {
-      const v = shapeSel.value === "sphere" ? "sphere" : "disk";
-      this.layer.voxBrushShape = v;
-      shapeSel.value = v;
-    });
-
-    // Layout within the brushRow: size controls, shape, eraser
-    const group = document.createElement("div");
-    group.style.display = "grid";
-    group.style.gridTemplateColumns = "minmax(120px,auto) 1fr";
-    group.style.columnGap = "8px";
-    group.style.rowGap = "8px";
-
-    // Row 1: Brush size
-    const sizeLabelCell = document.createElement("div");
-    sizeLabelCell.appendChild(sizeLabel);
-    const sizeControlsCell = document.createElement("div");
-    sizeControlsCell.appendChild(sizeControls);
-
-    // Row 2: Brush shape
-    const shapeLabelCell = document.createElement("div");
-    shapeLabelCell.appendChild(shapeLabel);
-    const shapeControlCell = document.createElement("div");
-    shapeControlCell.appendChild(shapeSel);
-
-    // Row 3: Eraser
-    const erLabelCell = document.createElement("div");
-    erLabelCell.appendChild(erLabel);
-    const erControlCell = document.createElement("div");
-    erControlCell.appendChild(erChk);
-
-    group.appendChild(sizeLabelCell);
-    group.appendChild(sizeControlsCell);
-    group.appendChild(shapeLabelCell);
-    group.appendChild(shapeControlCell);
-    group.appendChild(erLabelCell);
-    group.appendChild(erControlCell);
-
-    brushRow.appendChild(group);
-    toolbox.appendChild(brushRow);
-
-    // Section: Labels (moved to end, title on top for full width)
-    const labelsSection = document.createElement("div");
-    labelsSection.style.display = "flex";
-    labelsSection.style.flexDirection = "column";
-    labelsSection.style.gap = "6px";
-    labelsSection.style.marginTop = "8px";
-
-    const labelsTitle = document.createElement("div");
-    labelsTitle.textContent = "Labels";
-    labelsTitle.style.fontWeight = "600";
-
-    const buttonsRow = document.createElement("div");
-    buttonsRow.style.display = "flex";
-    buttonsRow.style.gap = "8px";
-
-    const createBtn = document.createElement("button");
-    createBtn.textContent = "New label";
-    createBtn.addEventListener("click", () => {
-      this.layer.createVoxLabel();
-      // Rendering will be triggered by layer via onLabelsChanged callback.
-    });
-    buttonsRow.appendChild(createBtn);
-
-    this.labelsContainer = document.createElement("div");
-    this.labelsContainer.className = "neuroglancer-vox-labels";
-    this.labelsContainer.style.display = "flex";
-    this.labelsContainer.style.flexDirection = "column";
-    this.labelsContainer.style.gap = "4px";
-    this.labelsContainer.style.maxHeight = "180px";
-    this.labelsContainer.style.overflowY = "auto";
-
-    this.labelsError = document.createElement("div");
-    this.labelsError.className = "neuroglancer-vox-labels-error";
-    this.labelsError.style.color = "#b00020"; // Material red 700-ish
-    this.labelsError.style.fontSize = "12px";
-    this.labelsError.style.whiteSpace = "pre-wrap";
-    this.labelsError.style.display = "none";
-
-    labelsSection.appendChild(labelsTitle);
-    labelsSection.appendChild(buttonsRow);
-    labelsSection.appendChild(this.labelsContainer);
-    labelsSection.appendChild(this.labelsError);
-
-    toolbox.appendChild(labelsSection);
-
-    this.layer.onLabelsChanged = () => this.requestRenderLabels();
-    this.renderLabels();
-
-    element.appendChild(toolbox);
-  }
-}
 
 export class VoxUserLayer extends UserLayer {
   onLabelsChanged?: () => void;
-  private voxMapId: string | undefined;
+  voxMapId: string | undefined;
   // Label state for painting: only store ids; colors are hashed from id on the fly
   voxLabels: { id: number }[] = [];
   voxSelectedLabelId: number | undefined = undefined;
@@ -463,8 +89,8 @@ export class VoxUserLayer extends UserLayer {
   private voxLoadedSubsource?: LoadedDataSubsource;
 
   // Remote server configuration when using vox+http(s):// data sources
-  private voxServerUrl?: string;
-  private voxServerToken?: string;
+  voxServerUrl?: string;
+  voxServerToken?: string;
 
   // --- Label helpers ---
   private genId(): number {
@@ -514,7 +140,6 @@ export class VoxUserLayer extends UserLayer {
       const msg = `Failed to load labels: ${e?.message || e}`;
       console.error(msg);
       this.voxLabelsError = msg;
-      // Do NOT create a default label on error.
     } finally {
       // Mark labels as initialized; UI/painting should not trigger default creation before this point.
       this.voxLabelsInitialized = true;
@@ -577,9 +202,8 @@ export class VoxUserLayer extends UserLayer {
 
   constructor(managedLayer: Borrowed<ManagedUserLayer>) {
     super(managedLayer);
-    // Do not create/save default label yet; wait for map init and load.
     this.tabs.add("vox_settings", {
-      label: "Settings",
+      label: "Map",
       order: 0,
       getter: () => new VoxSettingsTab(this),
     });
@@ -744,12 +368,6 @@ export class VoxUserLayer extends UserLayer {
     }
   }
 
-  private qsToken(token?: string) {
-    const usp = new URLSearchParams();
-    if (token) usp.set("token", token);
-    const s = usp.toString();
-    return s ? `?${s}` : "";
-  }
 
   private parseVoxRemoteUrl(url: string): { scheme: string; baseUrl: string; token?: string } | undefined {
     const m = url.match(/^(vox\+https?):\/\/(.+)$/);
@@ -771,44 +389,33 @@ export class VoxUserLayer extends UserLayer {
   }
 
   private async verifyVoxRemote(baseUrl: string, token?: string): Promise<void> {
-    const q = this.qsToken(token);
-    const health = await fetch(`${baseUrl}/health${q}`, {
-      method: "GET",
-      credentials: "omit",
-    });
-    if (!health.ok) throw new Error(`/health -> ${health.status}`);
-    const info = await fetch(`${baseUrl}/info${q}`, {
-      method: "GET",
-      credentials: "omit",
-    });
-    if (!info.ok) throw new Error(`/info -> ${info.status}`);
+    // Delegate verification to VoxSource: attempt to list maps via RemoteVoxSource.
+    const src = new RemoteVoxSource(baseUrl, token);
+    await src.listMaps();
   }
 
-  private buildOrRebuildVoxLayer() {
+  buildOrRebuildVoxLayer() {
     const ls = this.voxLoadedSubsource;
     if (!ls) return;
+
+    console.log("buildOrRebuildVoxLayer");
+    // Require an explicit map selection/creation
+    const map = VoxMapRegistry.getCurrent();
+    if (!map) return;
+
     const guardScale = Array.from(this.voxScale);
-    // Derive region from corners for guard and source
-    const lower = new Float32Array(3);
-    const upper = new Float32Array(3);
-    for (let i = 0; i < 3; ++i) {
-      const lo = Math.floor(Math.min(this.voxCornerA[i], this.voxCornerB[i]));
-      const up = Math.ceil(Math.max(this.voxCornerA[i], this.voxCornerB[i]));
-      lower[i] = lo;
-      upper[i] = Math.max(up, lo + 1);
-    }
+    // Use map bounds for guard and source
+    const upper = new Float32Array(map.upperVoxelBound as any);
     const guardBounds = Array.from(upper);
-    const guardUnit = this.voxScaleUnit;
+    const guardUnit = map.unit || this.voxScaleUnit;
+
     ls.activate(
       () => {
+        console.log("buildOrRebuildVoxLayer: activate source", map.id);
         const voxSource = new VoxMultiscaleVolumeChunkSource(
           this.manager.chunkManager,
           {
-            chunkDataSize: new Uint32Array([64, 64, 64]),
-            baseVoxelOffset: lower,
-            upperVoxelBound: upper,
-            voxServerUrl: this.voxServerUrl,
-            voxToken: this.voxServerToken,
+            map: map as any,
           },
         );
         // Expose a controller so tools can paint voxels via the source.
@@ -816,30 +423,24 @@ export class VoxUserLayer extends UserLayer {
 
         // Initialize worker-side map persistence for this source (best-effort, fire-and-forget).
         const sources2D = voxSource.getSources({} as any);
-        const base = sources2D[0][0];
-        const source = base.chunkSource as any;
-        // Compute deterministic identifiers on the frontend to avoid relying on an RPC return value.
-        const cfgCds = new Uint32Array(
-          Array.from((voxSource as any)["cfgChunkDataSize"] ?? [64, 64, 64]),
-        );
-        const lowerArr: Float32Array = lower;
-        const upperArr: Float32Array = upper;
-        const scaleKey = toScaleKey(cfgCds, lowerArr, upperArr);
-        // mapId can be any stable string; default to 'local' unless already set.
-        if (!this.voxMapId) this.voxMapId = "local";
-        // Initialize backend map first, then load labels from the chosen datasource.
-        source.initializeMap({
-          mapId: this.voxMapId,
-          dataType: voxSource.dataType,
-          chunkDataSize: cfgCds,
-          baseVoxelOffset: lowerArr,
-          upperVoxelBound: upperArr,
-          unit: this.voxScaleUnit,
-          scaleKey,
-          serverUrl: this.voxServerUrl,
-          token: this.voxServerToken,
-        });
-        this.loadLabels();
+        const base = sources2D[0]?.[0];
+        if (base) {
+          const source = base.chunkSource as any;
+          // Ensure we have a stable id on the map for persistence purposes.
+          const mapId = map.id || this.voxMapId || "local";
+          this.voxMapId = mapId;
+          const mapForInit = {
+            ...map,
+            id: mapId,
+            unit: guardUnit,
+            serverUrl: map.serverUrl ?? this.voxServerUrl,
+            token: map.token ?? this.voxServerToken,
+            dataType: map.dataType ?? voxSource.dataType,
+          } as any;
+          // Initialize backend map first, then load labels from the chosen datasource.
+          source.initializeMap(mapForInit);
+          this.loadLabels();
+        }
 
         // Build transform with current scale and units.
         const identity3D = this.createIdentity3D();

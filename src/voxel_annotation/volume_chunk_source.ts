@@ -24,6 +24,7 @@ import {
 import { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import { DataType } from "#src/util/data_type.js";
 import { VoxChunkSource } from "#src/voxel_annotation/frontend.js";
+import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
 
 /**
  * This is an abstract representation of 3D (volumetric) data that can exist at multiple resolutions or "scales."
@@ -38,11 +39,7 @@ import { VoxChunkSource } from "#src/voxel_annotation/frontend.js";
  * - Asynchronous: Data loading is typically asynchronous, as it might involve fetching from a remote server or reading from large local files.
  */
 export interface VoxMultiscaleOptions {
-  chunkDataSize?: Uint32Array | number[];
-  upperVoxelBound?: Float32Array | number[];
-  baseVoxelOffset?: Float32Array | number[];
-  voxServerUrl?: string;
-  voxToken?: string;
+  map?: VoxMapConfig;
 }
 
 export class VoxMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
@@ -52,96 +49,63 @@ export class VoxMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource 
     return 3;
   }
 
-  private cfgChunkDataSize: Uint32Array;
-  private cfgUpperVoxelBound: Float32Array;
-  private cfgBaseVoxelOffset: Float32Array;
-  private voxServerUrl?: string;
-  private voxToken?: string;
+  private mapCfg?: VoxMapConfig;
 
   constructor(chunkManager: ChunkManager, options?: VoxMultiscaleOptions) {
     super(chunkManager);
-    this.cfgChunkDataSize = new Uint32Array(
-      options?.chunkDataSize ? Array.from(options.chunkDataSize) : [64, 64, 64],
-    );
-    this.cfgUpperVoxelBound = new Float32Array(
-      options?.upperVoxelBound
-        ? Array.from(options.upperVoxelBound)
-        : [1_000, 1_000, 1_000],
-    );
-    this.cfgBaseVoxelOffset = new Float32Array(
-      options?.baseVoxelOffset
-        ? Array.from(options.baseVoxelOffset)
-        : [0, 0, 0],
-    );
-    this.voxServerUrl = options?.voxServerUrl;
-    this.voxToken = options?.voxToken;
+    this.mapCfg = options?.map;
+    if (this.mapCfg?.dataType != null) {
+      this.dataType = this.mapCfg.dataType as any;
+    }
   }
 
   getSources(_options: VolumeSourceOptions) {
-    // Provide a base scale and a coarse "guard" scale to avoid memory blowups at extreme zoom out.
+    // Steps are computed during map creation and saved. Here we just consume the bound map.
+    const map = this.mapCfg;
+    if (!map) return [];
     const rank = this.rank;
 
-    // Base (fine) scale specification.
+    const chunkDataSize = new Uint32Array(Array.from(map.chunkDataSize));
+    const upperVoxelBound = new Float32Array(Array.from(map.upperVoxelBound));
+    const baseVoxelOffset = new Float32Array(Array.from(map.baseVoxelOffset));
+
     const baseSpec = makeVolumeChunkSpecification({
       rank,
       dataType: this.dataType,
-      chunkDataSize: this.cfgChunkDataSize,
-      upperVoxelBound: this.cfgUpperVoxelBound,
-      baseVoxelOffset: this.cfgBaseVoxelOffset,
+      chunkDataSize,
+      upperVoxelBound,
+      baseVoxelOffset,
     });
     const baseSource: VoxChunkSource = this.chunkManager.getChunkSource(
       VoxChunkSource as any,
-      { spec: baseSpec, vox: { serverUrl: this.voxServerUrl, token: this.voxToken } },
+      {
+        spec: baseSpec,
+        vox: {
+          serverUrl: map.serverUrl,
+          token: map.token,
+        },
+      },
     );
 
-    // Identity transform for base scale.
-    const identity = new Float32Array((rank + 1) * (rank + 1));
-    for (let i = 0; i < rank; ++i) {
-      identity[i * (rank + 1) + i] = 1;
-    }
-    identity[rank * (rank + 1) + rank] = 1;
-
-    const base: SliceViewSingleResolutionSource<VoxChunkSource> = {
-      chunkSource: baseSource,
-      chunkToMultiscaleTransform: identity,
-      lowerClipBound: baseSpec.lowerVoxelBound,
-      upperClipBound: baseSpec.upperVoxelBound,
+    // Helper to make a homogeneous scaling transform matrix with scale factor f.
+    const makeScale = (f: number) => {
+      const m = new Float32Array((rank + 1) * (rank + 1));
+      for (let i = 0; i < rank; ++i) m[i * (rank + 1) + i] = f;
+      m[rank * (rank + 1) + rank] = 1;
+      return m;
     };
 
-    // Coarse guard scale: no chunks will be created (zero-sized bounds) but it will be selected
-    // at extremely low zoom levels due to a very large voxel scale transform.
-    const guardSpec = makeVolumeChunkSpecification({
-      rank,
-      dataType: this.dataType,
-      // Use same chunk size; since bounds are empty below, no chunks are actually requested.
-      chunkDataSize: this.cfgChunkDataSize,
-      // Zero-sized bounds => lowerChunkBound === upperChunkBound, therefore 0 chunks.
-      upperVoxelBound: new Float32Array(rank),
-      lowerVoxelBound: new Float32Array(rank),
-    });
+    const factors = map.steps && map.steps.length > 0 ? [...map.steps] : [1];
 
-    const guardSource: VoxChunkSource = this.chunkManager.getChunkSource(
-      VoxChunkSource as any,
-      { spec: guardSpec, vox: { serverUrl: this.voxServerUrl, token: this.voxToken } },
+    const levels: SliceViewSingleResolutionSource<VoxChunkSource>[] = factors.map(
+      (f) => ({
+        chunkSource: baseSource,
+        chunkToMultiscaleTransform: makeScale(f),
+        lowerClipBound: baseSpec.lowerVoxelBound,
+        upperClipBound: baseSpec.upperVoxelBound,
+      }),
     );
 
-    // Large diagonal scale to make effective voxel size huge, ensuring guard scale is used when
-    // zoomed out. Homogeneous (rank+1)x(rank+1) matrix.
-    const scale = 10;
-    const guardXform = new Float32Array((rank + 1) * (rank + 1));
-    for (let i = 0; i < rank; ++i) {
-      guardXform[i * (rank + 1) + i] = scale;
-    }
-    guardXform[rank * (rank + 1) + rank] = 1;
-
-    const guard: SliceViewSingleResolutionSource<VoxChunkSource> = {
-      chunkSource: guardSource,
-      chunkToMultiscaleTransform: guardXform,
-      lowerClipBound: guardSpec.lowerVoxelBound,
-      upperClipBound: guardSpec.upperVoxelBound,
-    };
-
-    // Outer array: orientations. Inner array: scales ordered from finest -> coarsest.
-    return [[base, guard]];
+    return [levels];
   }
 }

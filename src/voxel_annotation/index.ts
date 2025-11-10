@@ -4,16 +4,9 @@
  */
 
 import { DataType } from "#src/util/data_type.js";
+import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
+import { computeSteps } from "#src/voxel_annotation/map.js";
 
-export interface VoxMapInitOptions {
-  mapId?: string;
-  dataType?: number;
-  chunkDataSize: number[] | Uint32Array;
-  upperVoxelBound?: number[] | Uint32Array | Float32Array;
-  baseVoxelOffset?: number[] | Uint32Array | Float32Array;
-  unit?: string;
-  scaleKey?: string;
-}
 
 export interface SavedChunk {
   data: Uint32Array | BigUint64Array; // Supports UINT32 and UINT64
@@ -44,13 +37,16 @@ export function compositeLabelsDbKey(mapId: string, scaleKey: string): string {
 }
 
 export abstract class VoxSource {
+  /**
+   * Optional listing of available maps for the current source.
+   * Remote sources should query their endpoint; local may enumerate local IndexedDB entries.
+   */
+  async listMaps(_args?: { baseUrl?: string; token?: string }): Promise<any[]> {
+    return [];
+  }
   protected mapId: string = "default";
   protected scaleKey: string = "";
-  protected chunkDataSize: Uint32Array = new Uint32Array([64, 64, 64]);
-  protected upperVoxelBound: Uint32Array = new Uint32Array([0, 0, 0]);
-  protected baseVoxelOffset: Uint32Array = new Uint32Array([0, 0, 0]);
-  protected dataType: number = 6; // DataType.UINT32 default
-  protected unit: string = "";
+  protected mapCfg?: VoxMapConfig; // Keep the entire configuration in one place
 
   // In-memory cache of loaded chunks
   protected maxSavedChunks = 128; // cap to prevent unbounded growth
@@ -72,33 +68,36 @@ export abstract class VoxSource {
     return [];
   }
 
-  init(_opts: VoxMapInitOptions): Promise<{ mapId: string; scaleKey: string }> {
-    // Base provides default bookkeeping; persistence layer does real work.
-    const opts = _opts || ({} as VoxMapInitOptions);
-    this.mapId =
-      opts.mapId ||
-      this.mapId ||
-      (typeof crypto !== "undefined" && (crypto as any).randomUUID?.()) ||
-      String(Date.now());
-    this.chunkDataSize = new Uint32Array(Array.from(opts.chunkDataSize));
-    this.upperVoxelBound = new Uint32Array(
-      Array.from(opts.upperVoxelBound ?? [0, 0, 0]),
-    );
-    this.baseVoxelOffset = new Uint32Array(
-      Array.from(opts.baseVoxelOffset ?? [0, 0, 0]),
-    );
-    this.dataType = opts.dataType ?? this.dataType;
-    this.unit = opts.unit ?? "";
-    // Default scaleKey includes region to avoid collisions if not provided explicitly
-    if (opts.scaleKey) {
-      this.scaleKey = opts.scaleKey;
-    } else {
-      this.scaleKey = toScaleKey(
-        this.chunkDataSize,
-        this.baseVoxelOffset,
-        this.upperVoxelBound,
-      );
-    }
+  init(map: VoxMapConfig): Promise<{ mapId: string; scaleKey: string }> {
+    // Store the whole map config instead of decomposing into many fields.
+    const cfgIn = (map || ({} as VoxMapConfig));
+    // Normalize arrays and defaults while keeping a single cfg object.
+    const id = cfgIn.id || this.mapId || (typeof crypto !== "undefined" && (crypto as any).randomUUID?.()) || String(Date.now());
+    const chunkDataSize = new Uint32Array(Array.from(cfgIn.chunkDataSize ?? [64, 64, 64]));
+    const upperVoxelBound = new Float32Array(Array.from(cfgIn.upperVoxelBound ?? [0, 0, 0]));
+    const baseVoxelOffset = new Float32Array(Array.from(cfgIn.baseVoxelOffset ?? [0, 0, 0]));
+    const dataType = (cfgIn.dataType ?? DataType.UINT32) as number;
+    const unit = cfgIn.unit ?? "";
+    const steps = Array.isArray(cfgIn.steps) && cfgIn.steps.length > 0 ? [...cfgIn.steps] : [1];
+    const scaleMeters = cfgIn.scaleMeters
+      ? new Float64Array(Array.from(cfgIn.scaleMeters as any))
+      : undefined;
+
+    this.mapCfg = {
+      ...cfgIn,
+      id,
+      chunkDataSize,
+      upperVoxelBound,
+      baseVoxelOffset,
+      dataType,
+      unit,
+      steps,
+      scaleMeters,
+    } as VoxMapConfig;
+
+    this.mapId = id;
+    // Compute scaleKey from config to avoid collisions across regions
+    this.scaleKey = toScaleKey(chunkDataSize, baseVoxelOffset, upperVoxelBound);
     return Promise.resolve({ mapId: this.mapId, scaleKey: this.scaleKey });
   }
 
@@ -170,6 +169,65 @@ export abstract class VoxSource {
 
 /** IndexedDB-backed local source. */
 export class LocalVoxSource extends VoxSource {
+  override async listMaps(): Promise<VoxMapConfig[]> {
+    try {
+      const db = await this.getDb();
+      const tx = db.transaction("maps", "readonly");
+      const store = tx.objectStore("maps");
+      const getAll = (store as any).getAll?.bind(store);
+      const rows: any[] = await new Promise((resolve, reject) => {
+        if (getAll) {
+          const req = getAll();
+          req.onerror = () => reject(req.error);
+          req.onsuccess = () => resolve(req.result || []);
+          return;
+        }
+        const out: any[] = [];
+        const req = store.openCursor();
+        req.onerror = () => reject(req.error);
+        req.onsuccess = (ev: any) => {
+          const cursor = ev.target.result as IDBCursorWithValue | null;
+          if (cursor) {
+            out.push(cursor.value);
+            cursor.continue();
+          } else {
+            resolve(out);
+          }
+        };
+      });
+      const maps: VoxMapConfig[] = [];
+      for (const r of rows) {
+        try {
+          const id = String(r?.mapId ?? r?.id ?? `local-${Date.now()}`);
+          const lower = Array.from(r?.baseVoxelOffset ?? [0, 0, 0]).map((v: any) => Number(v) | 0) as number[];
+          const upper = Array.from(r?.upperVoxelBound ?? [0, 0, 0]).map((v: any) => Number(v) | 0) as number[];
+          const cds = Array.from(r?.chunkDataSize ?? [64, 64, 64]).map((v: any) => Math.max(1, Number(v) | 0)) as number[];
+          const bounds = [
+            (upper[0] | 0) - (lower[0] | 0),
+            (upper[1] | 0) - (lower[1] | 0),
+            (upper[2] | 0) - (lower[2] | 0),
+          ];
+          const steps = computeSteps(bounds, cds);
+          maps.push({
+            id,
+            name: r?.name ?? id,
+            baseVoxelOffset: new Float32Array(lower as any),
+            upperVoxelBound: new Float32Array(upper as any),
+            chunkDataSize: new Uint32Array(cds as any),
+            dataType: r?.dataType ?? DataType.UINT32,
+            scaleMeters: r?.scaleMeters ?? undefined,
+            unit: r?.unit ?? undefined,
+            steps,
+          });
+        } catch {
+          // skip malformed
+        }
+      }
+      return maps;
+    } catch {
+      return [] as VoxMapConfig[];
+    }
+  }
   private dbPromise: Promise<IDBDatabase> | null = null;
 
   override async getLabelIds(): Promise<number[]> {
@@ -223,19 +281,20 @@ export class LocalVoxSource extends VoxSource {
     }
   }
 
-  override async init(opts: VoxMapInitOptions) {
-    const meta = await super.init(opts);
+  override async init(map: VoxMapConfig) {
+    const meta = await super.init(map);
     const db = await this.getDb();
     // Persist/update map metadata
     const tx = db.transaction("maps", "readwrite");
+    const cfg = this.mapCfg!;
     tx.objectStore("maps").put(
       {
         mapId: this.mapId,
-        dataType: this.dataType,
-        chunkDataSize: Array.from(this.chunkDataSize),
-        upperVoxelBound: Array.from(this.upperVoxelBound),
-        baseVoxelOffset: Array.from(this.baseVoxelOffset),
-        unit: this.unit,
+        dataType: cfg.dataType,
+        chunkDataSize: Array.from(cfg.chunkDataSize as any),
+        upperVoxelBound: Array.from(cfg.upperVoxelBound as any),
+        baseVoxelOffset: Array.from(cfg.baseVoxelOffset as any),
+        unit: cfg.unit,
         scaleKey: this.scaleKey,
         updatedAt: Date.now(),
       },
@@ -258,7 +317,7 @@ export class LocalVoxSource extends VoxSource {
       const arr = new Uint32Array(buf);
       const sc: SavedChunk = {
         data: arr,
-        size: new Uint32Array(this.chunkDataSize),
+        size: new Uint32Array(this.mapCfg!.chunkDataSize as any),
       };
       this.saved.set(key, sc);
       this.enforceCap();
@@ -281,12 +340,13 @@ export class LocalVoxSource extends VoxSource {
     const buf = await idbGet<ArrayBuffer>(db, "chunks", composite);
     if (buf) {
       const arr = new Uint32Array(buf);
-      sc = { data: arr, size: new Uint32Array(this.chunkDataSize) };
+      sc = { data: arr, size: new Uint32Array(this.mapCfg!.chunkDataSize as any) };
       this.saved.set(key, sc);
       this.enforceCap();
       return sc;
     }
-    const sz = new Uint32Array(size ?? this.chunkDataSize);
+    const fallbackSize = new Uint32Array(this.mapCfg!.chunkDataSize as any);
+    const sz = new Uint32Array(size ?? fallbackSize);
     let total = 1;
     for (let i = 0; i < 3; ++i) total *= sz[i];
     const arr = new Uint32Array(total);
@@ -309,7 +369,7 @@ export class LocalVoxSource extends VoxSource {
     for (const e of edits) {
       const sc = await this.ensureChunk(
         e.key,
-        e.size ? new Uint32Array(e.size) : this.chunkDataSize,
+        e.size ? new Uint32Array(e.size) : (this.mapCfg!.chunkDataSize as any),
       );
       this.applyEditsIntoChunk(sc, e.indices, e.value, e.values);
       this.markDirty(e.key);
@@ -347,6 +407,51 @@ export class LocalVoxSource extends VoxSource {
 }
 
 export class RemoteVoxSource extends VoxSource {
+  async listMaps(): Promise<VoxMapConfig[]> {
+    try {
+      const qs = this.qs({});
+      const json = await this.httpGetJson(`${this.baseUrl}/info${qs}`);
+      const datasets = Array.isArray(json?.datasets) ? json.datasets : [];
+      const out: VoxMapConfig[] = [];
+      const toXYZ = (ary: number[]) => {
+        const a = ary.map((v) => Math.max(0, Math.floor(v ?? 0)));
+        if (a.length >= 3) return [a[2] || 0, a[1] || 0, a[0] || 0];
+        return [a[0] || 0, a[1] || 0, a[2] || 0];
+      };
+      for (const ds of datasets) {
+        try {
+          const id: string = String(ds?.mapId ?? ds?.id ?? ds?.name ?? ds?.url ?? `map-${Date.now()}`);
+          const arrays = Array.isArray(ds?.arrays) ? ds.arrays : [];
+          let arr = arrays.find((a: any) => a?.path === "0") ?? arrays[0];
+          if (!arr) continue;
+          const shapeRaw = Array.isArray(arr?.shape) ? arr.shape : [0, 0, 0];
+          const chunksRaw = Array.isArray(arr?.chunks) ? arr.chunks : [64, 64, 64];
+          const dtypeRaw = String(arr?.dtype || "uint32");
+          const dtype = dtypeRaw === "uint64" ? DataType.UINT64 : DataType.UINT32;
+          const upper = toXYZ(shapeRaw);
+          const cds = toXYZ(chunksRaw).map((v) => Math.max(1, v));
+          const lower = [0, 0, 0];
+          const steps = computeSteps(upper, cds);
+          out.push({
+            id,
+            name: ds?.name ?? id,
+            baseVoxelOffset: new Float32Array(lower),
+            upperVoxelBound: new Float32Array(upper),
+            chunkDataSize: new Uint32Array(cds),
+            dataType: dtype,
+            steps,
+            serverUrl: this.baseUrl,
+            token: this.token,
+          });
+        } catch {
+          // ignore
+        }
+      }
+      return out;
+    } catch {
+      return [] as VoxMapConfig[];
+    }
+  }
   private labelsCache: number[] = [];
   private baseUrl: string;
   private token?: string;
@@ -358,10 +463,10 @@ export class RemoteVoxSource extends VoxSource {
   }
 
   // ---- Public API overrides ----
-  override async init(opts: VoxMapInitOptions) {
-    const meta = await super.init(opts);
+  override async init(map: VoxMapConfig) {
+    const meta = await super.init(map);
     // Bind dtype string
-    const dtypeStr = this.dtypeToString(this.dataType);
+    const dtypeStr = this.dtypeToString((this.mapCfg?.dataType ?? DataType.UINT32) as number);
     // Call /init (best-effort; server may already have it)
     const qs = this.qs({
       mapId: this.mapId,
@@ -384,7 +489,7 @@ export class RemoteVoxSource extends VoxSource {
       const buf = await this.httpGetArrayBuffer(`${this.baseUrl}/chunk${qs}`);
       if (!buf) return undefined;
       const arr = this.makeTypedArrayFromBuffer(buf);
-      const sc: SavedChunk = { data: arr, size: new Uint32Array(this.chunkDataSize) };
+      const sc: SavedChunk = { data: arr, size: new Uint32Array(this.mapCfg!.chunkDataSize as any) };
       this.saved.set(key, sc);
       this.enforceCap();
       return sc;
@@ -400,7 +505,8 @@ export class RemoteVoxSource extends VoxSource {
     sc = await this.getSavedChunk(key);
     if (sc) return sc;
     // allocate zero-filled
-    const sz = new Uint32Array(size ?? this.chunkDataSize);
+    const fallbackSize = new Uint32Array(this.mapCfg!.chunkDataSize as any);
+    const sz = new Uint32Array(size ?? fallbackSize);
     const total = (sz[0] | 0) * (sz[1] | 0) * (sz[2] | 0);
     const data = this.allocateTypedArray(total);
     sc = { data, size: new Uint32Array(sz) };
@@ -422,7 +528,7 @@ export class RemoteVoxSource extends VoxSource {
     for (const e of edits) {
       const sc = await this.ensureChunk(
         e.key,
-        e.size ? new Uint32Array(e.size) : this.chunkDataSize,
+        e.size ? new Uint32Array(e.size) : (this.mapCfg!.chunkDataSize as any),
       );
       this.applyEditsIntoChunk(sc, e.indices, e.value, e.values);
       this.markDirty(e.key);
@@ -467,12 +573,12 @@ export class RemoteVoxSource extends VoxSource {
   }
 
   private allocateTypedArray(total: number): Uint32Array | BigUint64Array {
-    if (this.dataType === DataType.UINT64) return new BigUint64Array(total);
+    if ((this.mapCfg?.dataType ?? DataType.UINT32) === DataType.UINT64) return new BigUint64Array(total);
     return new Uint32Array(total);
   }
 
   private makeTypedArrayFromBuffer(buf: ArrayBuffer): Uint32Array | BigUint64Array {
-    if (this.dataType === DataType.UINT64) return new BigUint64Array(buf);
+    if ((this.mapCfg?.dataType ?? DataType.UINT32) === DataType.UINT64) return new BigUint64Array(buf);
     return new Uint32Array(buf);
   }
 

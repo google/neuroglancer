@@ -13,8 +13,8 @@ import {
   VOX_LABELS_GET_RPC_ID,
   VOX_LABELS_ADD_RPC_ID,
 } from "#src/voxel_annotation/base.js";
-import type { VoxMapInitOptions } from "#src/voxel_annotation/index.js";
-import { LocalVoxSource, RemoteVoxSource, toScaleKey } from "#src/voxel_annotation/index.js";
+import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
+import { LocalVoxSource, RemoteVoxSource } from "#src/voxel_annotation/index.js";
 import type { VoxSource } from "#src/voxel_annotation/index.js";
 import type { RPC } from "#src/worker_rpc.js";
 import {
@@ -44,50 +44,20 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
       : new LocalVoxSource();
   }
 
-  /** Initialize map metadata and persistence backend. */
-  async initMap(opts: {
-    mapId?: string;
-    dataType?: number;
-    chunkDataSize?: number[];
-    upperVoxelBound?: number[];
-    baseVoxelOffset?: number[];
-    unit?: string;
-    scaleKey?: string;
-    serverUrl?: string;
-    token?: string;
-  }) {
-    // Allow runtime override of server settings via init options
-    if (opts.serverUrl) this.voxServerUrl = opts.serverUrl;
-    if (opts.token) this.voxToken = opts.token;
+  /** Initialize map metadata and persistence backend using a VoxMapConfig. */
+  async initMap(arg: { map?: VoxMapConfig } | VoxMapConfig) {
+    const map: VoxMapConfig = (arg as any)?.map ?? (arg as any);
+    if (!map) return;
+    // Allow runtime override of server settings via map
+    if (map.serverUrl) this.voxServerUrl = map.serverUrl;
+    if (map.token) this.voxToken = map.token;
     // Swap source if configuration changed
     this.source = this.voxServerUrl
       ? new RemoteVoxSource(this.voxServerUrl, this.voxToken)
       : new LocalVoxSource();
 
-    const cds: number[] = Array.from(
-      opts.chunkDataSize ?? Array.from(this.spec.chunkDataSize),
-    );
-    const uvb: number[] = Array.from(
-      opts.upperVoxelBound ??
-        Array.from(this.spec.upperVoxelBound ?? ([0, 0, 0] as any)),
-    );
-    const dt = opts.dataType ?? this.spec.dataType;
-    // Default base offset to spec.baseVoxelOffset if not provided
-    const bvo: number[] = Array.from(
-      opts.baseVoxelOffset ??
-        Array.from((this.spec as any).baseVoxelOffset ?? [0, 0, 0]),
-    );
-    const scaleKey = opts.scaleKey ?? toScaleKey(cds, bvo, uvb);
-    const initOpts = {
-      mapId: opts.mapId,
-      dataType: dt,
-      chunkDataSize: cds as number[],
-      upperVoxelBound: uvb as number[],
-      baseVoxelOffset: bvo as number[],
-      unit: opts.unit,
-      scaleKey,
-    } satisfies VoxMapInitOptions;
-    return await this.source.init(initOpts);
+    // Initialize underlying source with the provided map config
+    await this.source.init(map);
   }
 
   /** Commit voxel edits from the frontend. */
@@ -174,7 +144,7 @@ registerRPC(VOX_COMMIT_VOXELS_RPC_ID, function (x: any) {
 // RPC to initialize map
 registerRPC(VOX_MAP_INIT_RPC_ID, function (x: any) {
   const obj = this.get(x.id) as VoxChunkSource;
-  obj.initMap(x || {});
+  obj.initMap(x?.map || x || {});
 });
 
 // RPCs for label persistence (promise-based)

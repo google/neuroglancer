@@ -18,6 +18,7 @@ import {
   VOX_LABELS_ADD_RPC_ID,
 } from "#src/voxel_annotation/base.js";
 import { registerSharedObjectOwner } from "#src/worker_rpc.js";
+import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
 
 /**
  * Frontend owner for VoxChunkSource, extended with a local optimistic edit overlay.
@@ -37,17 +38,9 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
   );
 
   /** Initialize map in the worker/backend for this source. */
-  initializeMap(opts: {
-    mapId?: string;
-    dataType?: number;
-    chunkDataSize?: number[];
-    upperVoxelBound?: number[];
-    baseVoxelOffset?: number[];
-    unit?: string;
-    scaleKey?: string;
-  }) {
+  initializeMap(map: VoxMapConfig) {
     try {
-      this.rpc!.invoke(VOX_MAP_INIT_RPC_ID, { id: this.rpcId, ...opts });
+      this.rpc!.invoke(VOX_MAP_INIT_RPC_ID, { id: this.rpcId, map });
     } catch {
       // initialization is best-effort; continue even if it fails
       console.warn(
