@@ -1,6 +1,6 @@
 # TODO List
 
-- FOR TOMORROW: review, test and finish the ssa+https
+- FOR TOMORROW: start to prepare the problematic/email to JMS + go through the todo list
 
 - LOD -> 
   -  "feat: dirty tree upscaling is kinda working, at lea
@@ -26,6 +26,7 @@
 - add shortcuts for tools (switching tools, toogle erase mode, select label from the pointed one in the slice view and adjusting brush size) and label creation
 - the flood fill may fill an entire unwanted area if the user is zoomed in enough so the max number of loaded chunks are under the vox voxel count and the flood has an escape hole. 
 - the flood fill sometimes leaves artifacts in sharp areas
+- rework the autocomplete for the ssa+https source.
 
 # Saving/importing/exporting
 

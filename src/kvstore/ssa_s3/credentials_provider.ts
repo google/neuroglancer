@@ -142,7 +142,7 @@ function generateRandomAscii(length: number): string {
 }
 
 async function createPkcePair(): Promise<{ verifier: string; challenge: string }> {
-  const verifier = generateRandomAscii(64);
+  const verifier = generateRandomAscii(128);
   const challenge = base64UrlEncode(await sha256Bytes(new TextEncoder().encode(verifier)));
   return { verifier, challenge };
 }

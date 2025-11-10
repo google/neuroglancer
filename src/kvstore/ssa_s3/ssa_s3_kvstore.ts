@@ -16,7 +16,6 @@
 
 import type { OAuth2Credentials } from "#src/credentials_provider/oauth2.js";
 import { fetchOkWithOAuth2CredentialsAdapter } from "#src/credentials_provider/oauth2.js";
-import type { SharedKvStoreContextBase } from "#src/kvstore/register.js";
 import type {
   DriverReadOptions,
   KvStore,
@@ -25,6 +24,7 @@ import type {
   StatResponse,
   ReadResponse,
 } from "#src/kvstore/index.js";
+import type { SharedKvStoreContextBase } from "#src/kvstore/register.js";
 import type { SsaCredentialsProvider } from "#src/kvstore/ssa_s3/credentials_provider.js";
 import { pipelineUrlJoin } from "#src/kvstore/url.js";
 import type { FetchOk } from "#src/util/http_request.js";

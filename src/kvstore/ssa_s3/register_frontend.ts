@@ -20,33 +20,8 @@ import type { BaseKvStoreProvider, BaseKvStoreCompleteUrlOptions, CompletionResu
 import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
 import { frontendOnlyKvStoreProviderRegistry } from "#src/kvstore/frontend.js";
 import { SsaS3KvStore } from "#src/kvstore/ssa_s3/ssa_s3_kvstore.js";
+import { ensureSsaHttpsUrl, getWorkerOriginAndDatasetPrefix, getDisplayBase } from "#src/kvstore/ssa_s3/url_utils.js";
 import { verifyObject, verifyObjectProperty, verifyString, verifyStringArray } from "#src/util/json.js";
-
-const SSA_SCHEME_PREFIX = "ssa+";
-
-function ensureSsaHttpsUrl(url: string): URL {
-  if (!url.startsWith("ssa+https://")) {
-    throw new Error(`Invalid URL ${JSON.stringify(url)}: expected ssa+https scheme`);
-  }
-  const httpUrl = url.substring(SSA_SCHEME_PREFIX.length);
-  const parsed = new URL(httpUrl);
-  if (parsed.hash) throw new Error("Fragment not supported in ssa+https URLs");
-  if (parsed.username || parsed.password) throw new Error("Basic auth credentials are not supported in ssa+https URLs");
-  return parsed;
-}
-
-function getWorkerOriginAndDatasetPrefix(parsed: URL): { workerOrigin: string; datasetBasePrefix: string } {
-  const workerOrigin = parsed.origin;
-  const datasetBasePrefix = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
-  return { workerOrigin, datasetBasePrefix };
-}
-
-function getDisplayBase(url: string): string {
-  // Keep exactly the ssa+https://host/ base with any search parameters preserved on base.
-  const parsed = ensureSsaHttpsUrl(url);
-  // Construct base without the path, but keep scheme and origin.
-  return `${SSA_SCHEME_PREFIX}${parsed.origin}/`;
-}
 
 interface SsaAuthenticateResponseLite {
   permissions: { read: string[]; write: string[] };
