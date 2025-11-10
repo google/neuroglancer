@@ -17,11 +17,13 @@
 import type { MouseSelectionState } from "#src/layer/index.js";
 import type { VoxUserLayer } from "#src/layer/vox/index.js";
 import { BrushShape } from "#src/layer/vox/index.js";
+import type { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import { StatusMessage } from "#src/status.js";
 import { LayerTool, registerTool, type ToolActivation } from "#src/ui/tool.js";
 import { vec3 } from "#src/util/geom.js";
 import { EventActionMap } from "#src/util/mouse_bindings.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
+import { NullarySignal } from "#src/util/signal.js";
 
 export const BRUSH_TOOL_ID = "vox-brush";
 export const FLOODFILL_TOOL_ID = "vox-flood-fill";
@@ -102,6 +104,17 @@ abstract class BaseVoxelTool extends LayerTool<VoxUserLayer> {
   abstract activationCallback(activation: ToolActivation<this>): void;
   abstract deactivationCallback(activation: ToolActivation<this>): void;
 
+  protected setCursor(cursor: string) {
+    for (const panel of this.layer.manager.root.display.panels) {
+      panel.element.style.setProperty("cursor", cursor, "important");
+    }
+  }
+
+  protected resetCursor() {
+    for (const panel of this.layer.manager.root.display.panels) {
+      panel.element.style.removeProperty("cursor");
+    }
+  }
 }
 
 export class VoxelBrushTool extends BaseVoxelTool {
@@ -111,12 +124,57 @@ export class VoxelBrushTool extends BaseVoxelTool {
   private currentMouseState: MouseSelectionState | undefined;
   private animationFrameHandle: number | null = null;
 
+  activate(activation: ToolActivation<this>) {
+    super.activate(activation);
+    const getZoom = () => {
+      const panels = Array.from(this.layer.manager.root.display.panels) as RenderedDataPanel[];
+      if (panels.length > 0) {
+        return panels[0].navigationState.zoomFactor.value;
+      }
+      return 1.0;
+    };
+
+    const getZoomChangedSignal = () => {
+      const panels = Array.from(this.layer.manager.root.display.panels) as RenderedDataPanel[];
+      return panels.length > 0 ? panels[0].navigationState.zoomFactor.changed : new NullarySignal();
+    };
+
+    const updateCursor = () => {
+      const radiusInVoxels = this.layer.voxBrushRadius.value;
+      const zoom = getZoom();
+      const radiusInPixels = Math.max(1, radiusInVoxels / zoom);
+      const svgSize = 2 * radiusInPixels + 4;
+      const svgCenter = svgSize / 2;
+
+      const svgString = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="${svgSize}" height="${svgSize}">
+          <circle cx="${svgCenter}" cy="${svgCenter}" r="${radiusInPixels}" 
+                  stroke="white" stroke-width="3" fill="rgba(255, 255, 255, 0.2)" />
+          <circle cx="${svgCenter}" cy="${svgCenter}" r="${radiusInPixels}" 
+                  stroke="black" stroke-width="1.5" fill="rgba(255, 255, 255, 0)" />
+        </svg>
+      `.replace(/\s\s+/g, " ");
+
+      const cursorURL = `url('data:image/svg+xml;utf8,${encodeURIComponent(svgString)}')`;
+      this.setCursor(`${cursorURL} ${svgCenter} ${svgCenter}, crosshair`)
+    };
+
+    updateCursor();
+    activation.registerDisposer(this.layer.voxBrushRadius.changed.add(updateCursor));
+    activation.registerDisposer(getZoomChangedSignal().add(updateCursor));
+    activation.registerDisposer(() => {
+      this.resetCursor();
+    });
+  }
+
   activationCallback(_activation: ToolActivation<this>): void {
     this.startDrawing(this.mouseState);
   }
+
   deactivationCallback(_activation: ToolActivation<this>): void {
     this.stopDrawing();
   }
+
   constructor(layer: VoxUserLayer) {
     super(layer, /*toggle=*/ true);
   }
@@ -237,7 +295,36 @@ export class VoxelBrushTool extends BaseVoxelTool {
   }
 }
 
+const floodFillSVG = `<svg width="24px" height="24px" viewBox="0 0 24 24" fill="none"
+     xmlns="http://www.w3.org/2000/svg" color="#000000">
+  <path d="M2.63596 10.2927L9.70703 3.22168L18.1923 11.707L11.1212 18.778C10.3402 19.5591 9.07387 19.5591 8.29282 18.778L2.63596 13.1212C1.85492 12.3401 1.85492 11.0738 2.63596 10.2927Z"
+        stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M8.29297 1.80762L9.70718 3.22183"
+        stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path fill-rule="evenodd" clip-rule="evenodd"
+        d="M19.9991 15C19.9991 15 22.9991 17.9934 22.9994 19.8865C22.9997 21.5422 21.6552 22.8865 19.9997 22.8865C18.3442 22.8865 17.012 21.5422 17 19.8865C17.0098 17.9924 19.9991 15 19.9991 15Z"
+        stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <path d="M2.63596 10.2927L9.70703 3.22168L18.1923 11.707L11.1212 18.778C10.3402 19.5591 9.07387 19.5591 8.29282 18.778L2.63596 13.1212C1.85492 12.3401 1.85492 11.0738 2.63596 10.2927Z"
+        stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M8.29297 1.80762L9.70718 3.22183"
+        stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path fill-rule="evenodd" clip-rule="evenodd"
+        d="M19.9991 15C19.9991 15 22.9991 17.9934 22.9994 19.8865C22.9997 21.5422 21.6552 22.8865 19.9997 22.8865C18.3442 22.8865 17.012 21.5422 17 19.8865C17.0098 17.9924 19.9991 15 19.9991 15Z"
+        stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+`.replace(/\s\s+/g, " ");
+
+const floodFillCursor = `url('data:image/svg+xml;utf8,${encodeURIComponent(floodFillSVG)}') 4 19, crosshair`;
+
+
 export class VoxelFloodFillTool extends BaseVoxelTool {
+  activate(activation: ToolActivation<this>) {
+    super.activate(activation);
+    this.setCursor(floodFillCursor);
+    activation.registerDisposer(() => {this.resetCursor()})
+  }
+
   activationCallback(_activation: ToolActivation<this>): void {
     const seed = this.getPoint(this.mouseState);
     const planeNormal = this.mouseState.planeNormal;
