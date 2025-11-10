@@ -35,24 +35,24 @@ export const VOXEL_LAYER_CONTROLS: LayerControlDefinition<VoxUserLayer>[] = [
     })),
   },
   {
-    label: "",
-    toolJson: { type: "vox:undo" },
+    label: "Undo",
+    toolJson: { type: "vox-undo" },
     ...buttonLayerControl({
       text: "Undo",
       onClick: (layer) => layer.handleAction("undo", new LayerActionContext()),
     }),
   },
   {
-    label: "",
-    toolJson: { type: "vox:redo" },
+    label: "Redo",
+    toolJson: { type: "vox-redo" },
     ...buttonLayerControl({
       text: "Redo",
       onClick: (layer) => layer.handleAction("redo", new LayerActionContext()),
     }),
   },
   {
-    label: "",
-    toolJson: { type: "vox:new-label" },
+    label: "New label",
+    toolJson: { type: "vox-new-label" },
     ...buttonLayerControl({
       text: "New Label",
       onClick: (layer) => layer.handleAction("new-label", new LayerActionContext()),

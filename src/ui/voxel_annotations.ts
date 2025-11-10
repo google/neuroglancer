@@ -408,7 +408,22 @@ export class AdoptVoxelLabelTool extends LayerTool<VoxUserLayer> {
       return;
     }
 
-    const source = editController.getSourceForLOD(0);
+    const renderLayer = layer.voxRenderLayerInstance;
+    if (!renderLayer) {
+      StatusMessage.showTemporaryMessage("Render layer not available.", 3000);
+      return;
+    }
+
+    const visibleSources = renderLayer.visibleSourcesList;
+    if (visibleSources.length === 0) {
+      StatusMessage.showTemporaryMessage(
+        "No data is visible at the current zoom level.",
+        3000,
+      );
+      return;
+    }
+
+    const source = visibleSources[0].source;
     const channelAccess = editController.singleChannelAccess;
 
     StatusMessage.forPromise(

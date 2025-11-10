@@ -57,7 +57,7 @@ export enum BrushShape {
 
 export class VoxUserLayer extends UserLayer {
   // While drawing, we keep a reference to the vox render layer to control temporary LOD locks.
-  private voxRenderLayerInstance?: VoxelAnnotationRenderLayer;
+  voxRenderLayerInstance?: VoxelAnnotationRenderLayer;
   // Match Image/Segmentation layers: provide a per-layer cross-section render scale target/histogram.
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
   static type = "vox";
