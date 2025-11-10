@@ -8,6 +8,7 @@ export interface VoxMapInitOptions {
   dataType?: number;
   chunkDataSize: number[] | Uint32Array;
   upperVoxelBound?: number[] | Uint32Array | Float32Array;
+  baseVoxelOffset?: number[] | Uint32Array | Float32Array;
   unit?: string;
   scaleKey?: string;
 }
@@ -22,6 +23,7 @@ export class VoxSource {
   protected scaleKey: string = '';
   protected chunkDataSize: Uint32Array = new Uint32Array([64, 64, 64]);
   protected upperVoxelBound: Uint32Array = new Uint32Array([0, 0, 0]);
+  protected baseVoxelOffset: Uint32Array = new Uint32Array([0, 0, 0]);
   protected dataType: number = 6; // DataType.UINT32 default
   protected unit: string = '';
 
@@ -39,9 +41,18 @@ export class VoxSource {
     this.mapId = opts.mapId || this.mapId || (typeof crypto !== 'undefined' && (crypto as any).randomUUID?.()) || String(Date.now());
     this.chunkDataSize = new Uint32Array(Array.from(opts.chunkDataSize));
     this.upperVoxelBound = new Uint32Array(Array.from(opts.upperVoxelBound ?? [0, 0, 0]));
+    this.baseVoxelOffset = new Uint32Array(Array.from(opts.baseVoxelOffset ?? [0, 0, 0]));
     this.dataType = opts.dataType ?? this.dataType;
     this.unit = opts.unit ?? '';
-    this.scaleKey = opts.scaleKey || `${this.chunkDataSize[0]}_${this.chunkDataSize[1]}_${this.chunkDataSize[2]}`;
+    // Default scaleKey includes region to avoid collisions if not provided explicitly
+    if (opts.scaleKey) {
+      this.scaleKey = opts.scaleKey;
+    } else {
+      const cds = Array.from(this.chunkDataSize);
+      const lower = Array.from(this.baseVoxelOffset);
+      const upper = Array.from(this.upperVoxelBound);
+      this.scaleKey = `${cds[0]}_${cds[1]}_${cds[2]}:${lower[0]}_${lower[1]}_${lower[2]}-${upper[0]}_${upper[1]}_${upper[2]}`;
+    }
     return Promise.resolve({ mapId: this.mapId, scaleKey: this.scaleKey });
   }
 
@@ -119,6 +130,7 @@ export class LocalVoxSource extends VoxSource {
       dataType: this.dataType,
       chunkDataSize: Array.from(this.chunkDataSize),
       upperVoxelBound: Array.from(this.upperVoxelBound),
+      baseVoxelOffset: Array.from(this.baseVoxelOffset),
       unit: this.unit,
       scaleKey: this.scaleKey,
       updatedAt: Date.now(),

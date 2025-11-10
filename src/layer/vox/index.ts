@@ -74,7 +74,8 @@ class VoxSettingsTab extends Tab {
     };
 
     const sMeters = this.layer.voxScale; // stored in meters
-    const b = this.layer.voxUpperBound;
+    const a = this.layer.voxCornerA;
+    const c = this.layer.voxCornerB;
 
     // Unit helpers
     const unitFactor: Record<string, number> = { m: 1, mm: 1e-3, "µm": 1e-6, nm: 1e-9 };
@@ -97,13 +98,18 @@ class VoxSettingsTab extends Tab {
     const sy = makeNumberInput(sMeters[1] / factor(currentUnit), "any");
     const sz = makeNumberInput(sMeters[2] / factor(currentUnit), "any");
 
-    const bx = makeNumberInput(b[0], "1");
-    const by = makeNumberInput(b[1], "1");
-    const bz = makeNumberInput(b[2], "1");
+    const ax = makeNumberInput(a[0], "1");
+    const ay = makeNumberInput(a[1], "1");
+    const az = makeNumberInput(a[2], "1");
+
+    const bx = makeNumberInput(c[0], "1");
+    const by = makeNumberInput(c[1], "1");
+    const bz = makeNumberInput(c[2], "1");
 
     element.appendChild(row("Scale (x,y,z)", [sx, sy, sz]));
     element.appendChild(row("Scale unit", [unitSel]));
-    element.appendChild(row("Upper bounds (x,y,z)", [bx, by, bz]));
+    element.appendChild(row("Corner A (x,y,z)", [ax, ay, az]));
+    element.appendChild(row("Corner B (x,y,z)", [bx, by, bz]));
 
     // When unit changes, rescale the displayed numbers to preserve physical value in meters
     unitSel.addEventListener("change", () => {
@@ -134,12 +140,17 @@ class VoxSettingsTab extends Tab {
         Number.isFinite(syNum) ? syNum * f : sMeters[1],
         Number.isFinite(szNum) ? szNum * f : sMeters[2],
       ]);
-      const nb = new Float32Array([
-        Math.max(1, Math.floor(Number(bx.value) || this.layer.voxUpperBound[0])),
-        Math.max(1, Math.floor(Number(by.value) || this.layer.voxUpperBound[1])),
-        Math.max(1, Math.floor(Number(bz.value) || this.layer.voxUpperBound[2])),
+      const ca = new Float32Array([
+        Math.floor(Number(ax.value) || this.layer.voxCornerA[0]),
+        Math.floor(Number(ay.value) || this.layer.voxCornerA[1]),
+        Math.floor(Number(az.value) || this.layer.voxCornerA[2]),
       ]);
-      this.layer.applyVoxSettings(ns, u, nb);
+      const cb = new Float32Array([
+        Math.floor(Number(bx.value) || this.layer.voxCornerB[0]),
+        Math.floor(Number(by.value) || this.layer.voxCornerB[1]),
+        Math.floor(Number(bz.value) || this.layer.voxCornerB[2]),
+      ]);
+      this.layer.applyVoxSettings(ns, u, ca, cb);
     });
     element.appendChild(apply);
   }
@@ -307,9 +318,9 @@ export class VoxUserLayer extends UserLayer {
     0.000000008, 0.000000008, 0.000000008,
   ]);
   voxScaleUnit: string = "nm";
-  voxUpperBound: Float32Array = new Float32Array([
-    1_000_000, 1_000_000, 1_000_000,
-  ]);
+  // Region selection via corners
+  voxCornerA: Float32Array = new Float32Array([0, 0, 0]);
+  voxCornerB: Float32Array = new Float32Array([1_000_000, 1_000_000, 1_000_000]);
   // Draw tool state
   voxBrushRadius: number = 3;
   voxEraseMode: boolean = false;
@@ -318,8 +329,8 @@ export class VoxUserLayer extends UserLayer {
 
   constructor(managedLayer: Borrowed<ManagedUserLayer>) {
     super(managedLayer);
-    this.tabs.add("vox", {
-      label: "Voxel",
+    this.tabs.add("vox_settings", {
+      label: "Settings",
       order: 0,
       getter: () => new VoxSettingsTab(this),
     });
@@ -334,19 +345,31 @@ export class VoxUserLayer extends UserLayer {
   applyVoxSettings(
     scale: Float64Array,
     unit: string,
-    upperBound: Float32Array,
+    cornerA: Float32Array,
+    cornerB: Float32Array,
   ) {
     // Update and rebuild if values changed.
     let changed = false;
+    // Update scale
     for (let i = 0; i < 3; ++i) {
       if (this.voxScale[i] !== scale[i]) {
         this.voxScale[i] = scale[i];
         changed = true;
       }
-      if (this.voxUpperBound[i] !== upperBound[i]) {
-        this.voxUpperBound[i] = upperBound[i];
-        changed = true;
-      }
+    }
+    // Normalize corners to an axis-aligned [lower, upper) box
+    const lower = new Float32Array(3);
+    const upper = new Float32Array(3);
+    for (let i = 0; i < 3; ++i) {
+      const lo = Math.floor(Math.min(cornerA[i], cornerB[i]));
+      const up = Math.ceil(Math.max(cornerA[i], cornerB[i]));
+      lower[i] = lo;
+      upper[i] = Math.max(up, lo + 1); // enforce non-empty
+    }
+    // Update stored corners and derived upper bound
+    for (let i = 0; i < 3; ++i) {
+      if (this.voxCornerA[i] !== cornerA[i]) { this.voxCornerA[i] = cornerA[i]; changed = true; }
+      if (this.voxCornerB[i] !== cornerB[i]) { this.voxCornerB[i] = cornerB[i]; changed = true; }
     }
     if (this.voxScaleUnit !== unit) {
       this.voxScaleUnit = unit;
@@ -463,7 +486,16 @@ export class VoxUserLayer extends UserLayer {
     const ls = this.voxLoadedSubsource;
     if (!ls) return;
     const guardScale = Array.from(this.voxScale);
-    const guardBounds = Array.from(this.voxUpperBound);
+    // Derive region from corners for guard and source
+    const lower = new Float32Array(3);
+    const upper = new Float32Array(3);
+    for (let i = 0; i < 3; ++i) {
+      const lo = Math.floor(Math.min(this.voxCornerA[i], this.voxCornerB[i]));
+      const up = Math.ceil(Math.max(this.voxCornerA[i], this.voxCornerB[i]));
+      lower[i] = lo;
+      upper[i] = Math.max(up, lo + 1);
+    }
+    const guardBounds = Array.from(upper);
     const guardUnit = this.voxScaleUnit;
     ls.activate(
       () => {
@@ -471,7 +503,8 @@ export class VoxUserLayer extends UserLayer {
           this.manager.chunkManager,
           {
             chunkDataSize: new Uint32Array([64, 64, 64]),
-            upperVoxelBound: this.voxUpperBound,
+            baseVoxelOffset: lower,
+            upperVoxelBound: upper,
           },
         );
         // Expose a controller so tools can paint voxels via the source.
@@ -484,7 +517,8 @@ export class VoxUserLayer extends UserLayer {
         void source.initializeMap({
           dataType: dummySource.dataType,
           chunkDataSize: Array.from(((dummySource as any)['cfgChunkDataSize']) ?? [64, 64, 64]),
-          upperVoxelBound: Array.from(this.voxUpperBound),
+          baseVoxelOffset: Array.from(lower as any),
+          upperVoxelBound: Array.from(upper as any),
           unit: this.voxScaleUnit,
         }).catch(() => { /* ignore init failures */ });
 

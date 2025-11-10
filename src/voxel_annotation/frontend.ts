@@ -27,7 +27,7 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
   );
 
   /** Initialize map in the worker/backend for this source. */
-  async initializeMap(opts: { mapId?: string; dataType?: number; chunkDataSize?: number[]; upperVoxelBound?: number[]; unit?: string; scaleKey?: string }) {
+  async initializeMap(opts: { mapId?: string; dataType?: number; chunkDataSize?: number[]; upperVoxelBound?: number[]; baseVoxelOffset?: number[]; unit?: string; scaleKey?: string}) {
     try {
       return await this.rpc!.invoke(VOX_MAP_INIT_RPC_ID, { id: this.rpcId, ...opts });
     } catch {

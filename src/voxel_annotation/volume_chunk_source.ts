@@ -39,6 +39,7 @@ import { VoxChunkSource } from '#src/voxel_annotation/frontend.js';
 export interface VoxMultiscaleOptions {
   chunkDataSize?: Uint32Array | number[];
   upperVoxelBound?: Float32Array | number[];
+  baseVoxelOffset?: Float32Array | number[];
 }
 
 export class VoxMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
@@ -50,6 +51,7 @@ export class VoxMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource 
 
   private cfgChunkDataSize: Uint32Array;
   private cfgUpperVoxelBound: Float32Array;
+  private cfgBaseVoxelOffset: Float32Array;
 
   constructor(chunkManager: ChunkManager, options?: VoxMultiscaleOptions) {
     super(chunkManager);
@@ -58,6 +60,9 @@ export class VoxMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource 
     );
     this.cfgUpperVoxelBound = new Float32Array(
       options?.upperVoxelBound ? Array.from(options.upperVoxelBound) : [1_000, 1_000, 1_000],
+    );
+    this.cfgBaseVoxelOffset = new Float32Array(
+      options?.baseVoxelOffset ? Array.from(options.baseVoxelOffset) : [0, 0, 0],
     );
   }
 
@@ -71,6 +76,7 @@ export class VoxMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource 
       dataType: this.dataType,
       chunkDataSize: this.cfgChunkDataSize,
       upperVoxelBound: this.cfgUpperVoxelBound,
+      baseVoxelOffset: this.cfgBaseVoxelOffset,
     });
     const baseSource: VoxChunkSource = this.chunkManager.getChunkSource(
       VoxChunkSource as any,

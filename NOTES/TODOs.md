@@ -1,4 +1,5 @@
 # TODO List
+- look into compression format/datasource ans see for export/imporrt of data
 - optimize drawing tools (they are not really responsive rn)
 - add color picker
 - Fix the orientation of the disk in the brush tool 
