@@ -3,7 +3,8 @@
 - LOD -> where am I:
   - choosing the lod level depanding on the brush size, live rendering is working local data saving is working.
   - there are some performance issues at very high brush sizes (>1000)
-  - TODO FOR TOMORROW: implement down/upsampling locally (see diagram below), note we may need a way to trigger redownload on the front from the backend.
+  - fix the redownload trigger from the backend to the front -> making VoxLayer a true singleton
+  - implement upscaling and dirty chunks marks
 
 - cleanup label handling code (more specifically in the ui code: layer/vox/index.ts, would be nice to have a handler similar to the one for maps)
 - Add redundancy to avoid corrupt/unsaved chunks on the remote
@@ -17,6 +18,11 @@
 - Add Uint64 support for annotation id
 - Replace the current map settings to use the built-ins of neuroglancer (viewable under the datasource url), handle multimap with link choices, look into how to keep the init/creation logic.
 - adapt the brush size to the zoom level linearly
+
+
+
+
+
 
 
 # Saving/importing/exporting

@@ -61,6 +61,20 @@
   min-width: 0;
 }
 
+/* Buttons inside rows should not shrink to unreadable widths */
+.neuroglancer-vox-row button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* Status text can occupy a full line to improve readability */
+.neuroglancer-vox-row .neuroglancer-vox-status {
+  flex: 1 1 100%;
+  min-width: 100%;
+  padding-top: 4px;
+  color: var(--ng-muted);
+}
+
 .neuroglancer-vox-input:focus,
 .neuroglancer-vox-settings-tab select:focus {
   border-color: color-mix(in oklab, var(--ng-accent) 60%, var(--ng-border));

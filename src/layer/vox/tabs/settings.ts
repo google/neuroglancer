@@ -3,6 +3,7 @@
  */
 import type { VoxUserLayer } from "#src/layer/vox/index.js";
 import { DataType } from "#src/util/data_type.js";
+import { exportVoxToZarr, type ExportStatus } from "#src/voxel_annotation/export_to_zarr.js";
 import { LocalVoxSource } from "#src/voxel_annotation/local_source.js";
 import type { VoxMapConfig } from "#src/voxel_annotation/map.js";
 import { computeSteps } from "#src/voxel_annotation/map.js";
@@ -25,7 +26,7 @@ export class VoxSettingsTab extends Tab {
       div.appendChild(lab);
       for (const inp of inputs) {
         inp.classList.add("neuroglancer-vox-input");
-        inp.setAttribute("size", "8");
+        // Do not force a tiny size; allow CSS/layout to determine width for readability.
         div.appendChild(inp);
       }
       return div;
@@ -207,12 +208,83 @@ export class VoxSettingsTab extends Tab {
     selectBtn.textContent = "Select Map";
     selectBtn.addEventListener("click", () => {
       const id = mapsSel.value;
-      const found = this.layer.voxMapRegistry.list().find((m) => m.id === id);
+      const found = this.layer.voxMapRegistry.list().find((m: VoxMapConfig) => m.id === id);
       if (found) {
         this.layer.voxMapRegistry.setCurrent(found);
         this.layer.buildOrRebuildVoxLayer();
       }
     });
     element.appendChild(selectBtn);
+
+    // --- Export to Zarr (LOD 1 only) ---
+    const exportUrlInput = document.createElement("input");
+    exportUrlInput.type = "text";
+    exportUrlInput.placeholder = "Export base URL (http(s)://..., s3+http(s)://endpoint/bucket/prefix, or s3://bucket/prefix [AWS]) e.g. http://localhost:9000/zarr/mydataset/";
+    exportUrlInput.size = 40;
+
+    const exportButton = document.createElement("button");
+    exportButton.textContent = "Export to Zarr";
+    exportButton.title = "Exports current map LOD=1 chunks to a Zarr v2 dataset at path '0' under the provided base URL";
+
+    const exportStatusSpan = document.createElement("span");
+    exportStatusSpan.classList.add("neuroglancer-vox-status");
+    exportStatusSpan.style.marginLeft = "0";
+
+    let exportPollTimer: number | undefined = undefined;
+
+    const setExportStatus = (text: string) => {
+      exportStatusSpan.textContent = text;
+    };
+
+    const stopPolling = () => {
+      if (exportPollTimer !== undefined) {
+        clearInterval(exportPollTimer);
+        exportPollTimer = undefined;
+      }
+    };
+
+    exportButton.addEventListener("click", () => {
+      try {
+        const map = this.layer.voxMapRegistry.getCurrent();
+        if (!map) throw new Error("No active map selected");
+        const url = exportUrlInput.value.trim();
+        if (url.length === 0) throw new Error("Export URL is required");
+
+        // Start export and polling
+        const getProgress = exportVoxToZarr(url, map as VoxMapConfig);
+        exportButton.disabled = true;
+        setExportStatus("Starting export...");
+        stopPolling();
+        exportPollTimer = setInterval(() => {
+          try {
+            const status = getProgress() as ExportStatus;
+            if (status.status === "loading") {
+              const pct = Math.round((status.progress ?? 0) * 100);
+              setExportStatus(`Export in progress: ${pct}%`);
+            } else if (status.status === "done") {
+              setExportStatus("Export completed");
+              exportButton.disabled = false;
+              stopPolling();
+            } else if (status.status === "error") {
+              setExportStatus(`Export failed: ${status.error}`);
+              exportButton.disabled = false;
+              stopPolling();
+            } else {
+              throw new Error("Unknown export status");
+            }
+          } catch (e: any) {
+            setExportStatus(`Export status error: ${e?.message || String(e)}`);
+            exportButton.disabled = false;
+            stopPolling();
+          }
+        }, 500) as unknown as number;
+      } catch (e: any) {
+        setExportStatus(`Cannot start export: ${e?.message || String(e)}`);
+        exportButton.disabled = false;
+        stopPolling();
+      }
+    });
+
+    element.appendChild(row("Export to Zarr", [exportUrlInput, exportButton, exportStatusSpan]));
   }
 }
