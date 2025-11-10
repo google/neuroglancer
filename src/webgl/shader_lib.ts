@@ -19,11 +19,10 @@ import {
   DATA_TYPE_SIGNED,
   DataType,
 } from "#src/util/data_type.js";
-import {
-  getShader,
-  type AttributeIndex,
-  type ShaderBuilder,
-  type ShaderCodePart,
+import type {
+  AttributeIndex,
+  ShaderBuilder,
+  ShaderCodePart,
 } from "#src/webgl/shader.js";
 
 export const glsl_mixLinear = `
