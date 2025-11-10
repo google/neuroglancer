@@ -16,17 +16,28 @@
 
 import "#src/layer/vox/style.css";
 
+import { vec3 } from "gl-matrix";
 import type { CoordinateTransformSpecification } from "#src/coordinate_transform.js";
-import { makeCoordinateSpace, makeIdentityTransform, WatchableCoordinateSpaceTransform } from "#src/coordinate_transform.js";
+import {
+  makeCoordinateSpace,
+  makeIdentityTransform,
+  WatchableCoordinateSpaceTransform
+} from "#src/coordinate_transform.js";
 import type { DataSourceSpecification } from "#src/datasource/index.js";
 import { LocalDataSource, localVoxelAnnotationsUrl } from "#src/datasource/local.js";
-import type { ManagedUserLayer } from "#src/layer/index.js";
-import { registerLayerType, registerLayerTypeDetector, UserLayer } from "#src/layer/index.js";
+import {
+  type ManagedUserLayer,
+  type MouseSelectionState,
+  registerLayerType,
+  registerLayerTypeDetector,
+  UserLayer
+} from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
 import { RenderScaleHistogram, trackableRenderScaleTarget } from "#src/render_scale_statistics.js";
-import { VoxelPixelLegacyTool, registerVoxelAnnotationTools } from "#src/ui/voxel_annotations.js";
+import { registerVoxelAnnotationTools, VoxelBrushLegacyTool, VoxelPixelLegacyTool } from "#src/ui/voxel_annotations.js";
 import type { Borrowed } from "#src/util/disposable.js";
+import { mat4 } from "#src/util/geom.js";
 import { DummyMultiscaleVolumeChunkSource } from "#src/voxel_annotation/dummy_volume_chunk_source.js";
 import { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
 import { VoxelAnnotationRenderLayer } from "#src/voxel_annotation/renderlayer.js";
@@ -140,13 +151,23 @@ class VoxToolTab extends Tab {
     element.classList.add("neuroglancer-vox-tools-tab");
     const toolbox = document.createElement("div");
     toolbox.className = "neuroglancer-vox-toolbox";
-    const legacyButton = document.createElement("button");
-    legacyButton.textContent = "Pixel";
-    legacyButton.title = "ctrl+click to paint a pixel";
-    legacyButton.addEventListener("click", () => {
+
+    const pixelButton = document.createElement("button");
+    pixelButton.textContent = "Pixel";
+    pixelButton.title = "ctrl+click to paint a pixel";
+    pixelButton.addEventListener("click", () => {
       this.layer.tool.value = new VoxelPixelLegacyTool(this.layer);
     });
-    toolbox.appendChild(legacyButton);
+    toolbox.appendChild(pixelButton);
+
+    const brushButton = document.createElement("button");
+    brushButton.textContent = "Brush";
+    brushButton.title = "ctrl+click to paint a small sphere";
+    brushButton.addEventListener("click", () => {
+      this.layer.tool.value = new VoxelBrushLegacyTool(this.layer);
+    });
+    toolbox.appendChild(brushButton);
+
     element.appendChild(toolbox);
   }
 }
@@ -161,9 +182,13 @@ export class VoxUserLayer extends UserLayer {
   voxEditController?: VoxelEditController;
 
   // Settings state
-  voxScale: Float64Array = new Float64Array([0.000000008, 0.000000008, 0.000000008]);
+  voxScale: Float64Array = new Float64Array([
+    0.00000008, 0.00000008, 0.00000008,
+  ]);
   voxScaleUnit: string = "nm";
-  voxUpperBound: Float32Array = new Float32Array([1_000_000, 1_000_000, 1_000_000]);
+  voxUpperBound: Float32Array = new Float32Array([
+    1_000_000, 1_000_000, 1_000_000,
+  ]);
   private voxLoadedSubsource?: LoadedDataSubsource;
 
   constructor(managedLayer: Borrowed<ManagedUserLayer>) {
@@ -181,15 +206,77 @@ export class VoxUserLayer extends UserLayer {
     this.tabs.default = "vox";
   }
 
-  applyVoxSettings(scale: Float64Array, unit: string, upperBound: Float32Array) {
+  applyVoxSettings(
+    scale: Float64Array,
+    unit: string,
+    upperBound: Float32Array,
+  ) {
     // Update and rebuild if values changed.
     let changed = false;
     for (let i = 0; i < 3; ++i) {
-      if (this.voxScale[i] !== scale[i]) { this.voxScale[i] = scale[i]; changed = true; }
-      if (this.voxUpperBound[i] !== upperBound[i]) { this.voxUpperBound[i] = upperBound[i]; changed = true; }
+      if (this.voxScale[i] !== scale[i]) {
+        this.voxScale[i] = scale[i];
+        changed = true;
+      }
+      if (this.voxUpperBound[i] !== upperBound[i]) {
+        this.voxUpperBound[i] = upperBound[i];
+        changed = true;
+      }
     }
-    if (this.voxScaleUnit !== unit) { this.voxScaleUnit = unit; changed = true; }
+    if (this.voxScaleUnit !== unit) {
+      this.voxScaleUnit = unit;
+      changed = true;
+    }
     if (changed) this.buildOrRebuildVoxLayer();
+  }
+
+  private createIdentity3D() {
+    const units = [
+      this.voxScaleUnit,
+      this.voxScaleUnit,
+      this.voxScaleUnit,
+    ] as string[];
+
+    return new WatchableCoordinateSpaceTransform(
+      makeIdentityTransform(
+        makeCoordinateSpace({
+          rank: 3,
+          names: ["x", "y", "z"],
+          units,
+          scales: new Float64Array(this.voxScale),
+        }),
+      ),
+    );
+  }
+
+  getVoxelPositionFromMouse(
+    mouseState: MouseSelectionState,
+  ): Float32Array | undefined {
+    try {
+      if (!mouseState?.active || !mouseState?.position) return undefined;
+
+      // There might be a simpler way to retrieve global transform?
+      const identity3D = this.createIdentity3D();
+      const watchable = getWatchableRenderLayerTransform(
+        this.manager.root.coordinateSpace,
+        this.localPosition.coordinateSpace,
+        identity3D,
+        undefined,
+      );
+      const tOrError = watchable.value as any;
+      if (tOrError?.error) return undefined;
+
+      const p = mouseState.position;
+
+      return vec3.transformMat4(
+        vec3.create(),
+        vec3.fromValues(p[0], p[1], p[2]),
+        mat4.invert(mat4.create(), tOrError.modelToRenderLayerTransform) ||
+          mat4.identity(mat4.create()),
+      );
+    } catch {
+      return undefined;
+    }
   }
 
   private buildOrRebuildVoxLayer() {
@@ -198,48 +285,40 @@ export class VoxUserLayer extends UserLayer {
     const guardScale = Array.from(this.voxScale);
     const guardBounds = Array.from(this.voxUpperBound);
     const guardUnit = this.voxScaleUnit;
-    ls.activate(() => {
-      const dummySource = new DummyMultiscaleVolumeChunkSource(
-        this.manager.chunkManager,
-        {
-          chunkDataSize: new Uint32Array([64, 64, 64]),
-          upperVoxelBound: this.voxUpperBound,
-        },
-      );
-      // Expose a controller so tools can paint voxels via the source.
-      this.voxEditController = new VoxelEditController(dummySource);
-
-      // Build transform with current scale and units.
-      const units = [this.voxScaleUnit, this.voxScaleUnit, this.voxScaleUnit] as string[];
-      const identity3D = new WatchableCoordinateSpaceTransform(
-        makeIdentityTransform(
-          makeCoordinateSpace({
-            rank: 3,
-            names: ["x", "y", "z"],
-            units,
-            scales: new Float64Array(this.voxScale),
-          }),
-        ),
-      );
-      const transform = getWatchableRenderLayerTransform(
-        this.manager.root.coordinateSpace,
-        this.localPosition.coordinateSpace,
-        identity3D,
-        undefined,
-      );
-
-      ls.addRenderLayer(
-        new VoxelAnnotationRenderLayer(
-          dummySource,
+    ls.activate(
+      () => {
+        const dummySource = new DummyMultiscaleVolumeChunkSource(
+          this.manager.chunkManager,
           {
+            chunkDataSize: new Uint32Array([64, 64, 64]),
+            upperVoxelBound: this.voxUpperBound,
+          },
+        );
+        // Expose a controller so tools can paint voxels via the source.
+        this.voxEditController = new VoxelEditController(dummySource);
+
+        // Build transform with current scale and units.
+        const identity3D = this.createIdentity3D();
+        const transform = getWatchableRenderLayerTransform(
+          this.manager.root.coordinateSpace,
+          this.localPosition.coordinateSpace,
+          identity3D,
+          undefined,
+        );
+
+        ls.addRenderLayer(
+          new VoxelAnnotationRenderLayer(dummySource, {
             transform: transform as any,
             renderScaleTarget: this.sliceViewRenderScaleTarget,
             renderScaleHistogram: undefined,
             localPosition: this.localPosition,
-          } as any,
-        ),
-      );
-    }, guardScale, guardBounds, guardUnit);
+          } as any),
+        );
+      },
+      guardScale,
+      guardBounds,
+      guardUnit,
+    );
   }
 
   getLegacyDataSourceSpecifications(

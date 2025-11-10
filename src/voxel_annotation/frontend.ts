@@ -32,7 +32,6 @@ class VoxelEditOverlay {
     for (const [idx, val] of m) {
       if (idx >= 0 && idx < baseArray.length) {
         (baseArray as any)[idx] = val as any;
-        console.log(`Merged edit into chunk ${key} at index ${idx} with value ${val}`);
       }
     }
     console.log(`Merged edits into chunk ${key}`);

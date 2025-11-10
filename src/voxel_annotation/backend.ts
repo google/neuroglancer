@@ -34,6 +34,7 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     const array = this.allocateTypedArray(dataType, size, Number(fillValue ?? 0));
 
     // Populate a simple 3D pattern for visualization
+    const d = 1;
     const cds = chunk.chunkDataSize!;
     let index = 0;
     for (let z = 0; z < cds[2]; ++z) {
@@ -43,7 +44,7 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
           const gy = origin[1] + y;
           const gz = origin[2] + z;
           // Checker pattern in world space with large squares
-          const square = ((Math.floor(gx / 16) + Math.floor(gy / 16) + Math.floor(gz / 16)) & 1) !== 0;
+          const square = ((Math.floor(gx / d) + Math.floor(gy / d) + Math.floor(gz / d)) & 1) !== 0;
           array[index] = square ? 5 : 0;
         }
       }
