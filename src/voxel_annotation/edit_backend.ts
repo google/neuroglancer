@@ -258,13 +258,11 @@ export class VoxelEditController extends SharedObject {
     // 3. Calculate the update for the parent chunk based on the child chunk's data.
     const update = this._calculateParentUpdate(childChunkData, childRes, parentRes, childInfo);
     if (update.indices.length === 0) {
-      console.log(`[Downsample] No update required for parent chunk ${parentKey}.`);
       return parentKey;
     }
 
     // 4. Commit the update to the parent chunk and notify the frontend.
     try {
-      console.log(`[Downsample] Committing ${update.indices.length} voxels to ${parentKey}.`);
       await parentSource.applyEdits(parentInfo.chunkKey, update.indices, update.values);
       this.callChunkReload([parentKey]);
     } catch (e) {
@@ -460,7 +458,6 @@ export class VoxelEditController extends SharedObject {
       }
     }
 
-    console.log(`[Downsample] Downsampled ${indices.length} voxels from child chunk (${childInfo.x},${childInfo.y},${childInfo.z}).`);
     return { indices, values };
   }
 

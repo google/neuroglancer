@@ -3,10 +3,11 @@
 - FOR TOMORROW: start to prepare the problematic/email to JMS
 - look onto the max downscale steps calculation (is it correct?)
 - test uint64 support
-- fix label multplication and wrong color in the ui list
+- fix label multiplication and wrong color in the ui list
+- fix drawing tools (flood fill and picker not working when zoomed out)
+- design a dataset creation feature
 
 ### priority
-- fix the issue with the preview not rendering on empty chunks
 - Fix the orientation of the disk in the brush tool
 - Add support for flood fill on different planes
 - fix the flood fill for compressed chunks

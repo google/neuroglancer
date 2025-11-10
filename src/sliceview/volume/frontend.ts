@@ -25,7 +25,11 @@ import { encodeChannel as encodeChannelUint32 } from "#src/sliceview/compressed_
 import { encodeChannel as encodeChannelUint64 } from "#src/sliceview/compressed_segmentation/encode_uint64.js";
 import type { SliceViewChunk } from "#src/sliceview/frontend.js";
 import { MultiscaleSliceViewChunkSource, SliceViewChunkSource } from "#src/sliceview/frontend.js";
-import { ChunkFormat as UncompressedChunkFormat } from "#src/sliceview/uncompressed_chunk_format.js";
+import {
+  ChunkFormat as UncompressedChunkFormat,
+  UncompressedChunkFormatHandler,
+  UncompressedVolumeChunk,
+} from "#src/sliceview/uncompressed_chunk_format.js";
 import type {
   VolumeChunkSource as VolumeChunkSourceInterface,
   VolumeChunkSpecification,
@@ -36,7 +40,10 @@ import { VolumeChunk } from "#src/sliceview/volume/chunk.js";
 import { getChunkFormatHandler } from "#src/sliceview/volume/registry.js";
 import type { TypedArray} from "#src/util/array.js";
 import { TypedArrayBuilder } from "#src/util/array.js";
-import { DataType as DataTypeUtil } from "#src/util/data_type.js";
+import {
+  DATA_TYPE_ARRAY_CONSTRUCTOR,
+  DataType as DataTypeUtil,
+} from "#src/util/data_type.js";
 import type { Disposable } from "#src/util/disposable.js";
 import type { GL } from "#src/webgl/context.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
@@ -243,7 +250,28 @@ export class VolumeChunkSource
       const processEdit = (targetChunk: VolumeChunk) => {
         const chunkFormat = targetChunk.chunkFormat;
         if (chunkFormat instanceof UncompressedChunkFormat) {
-          const cpuArray = (targetChunk as any).data as TypedArray;
+          const uncompressedChunk = targetChunk as UncompressedVolumeChunk;
+          let cpuArray = uncompressedChunk.data as TypedArray | null;
+          if (cpuArray === null) {
+            // If the chunk currently has the shared fill value texture, we must
+            // detach it so that a new texture is created for the edited data.
+            const handler =
+              uncompressedChunk.source.chunkFormatHandler as UncompressedChunkFormatHandler;
+            if (uncompressedChunk.texture === handler.fillValueChunk.texture) {
+              uncompressedChunk.texture = null;
+              uncompressedChunk.textureLayout = null;
+            }
+
+            // Chunk data is null, meaning it's an empty/unloaded chunk.
+            // We must create a zero-filled buffer to apply the preview edit.
+            const { chunkDataSize, source } = uncompressedChunk;
+            const numElements = chunkDataSize.reduce((a, b) => a * b, 1);
+            const Ctor = DATA_TYPE_ARRAY_CONSTRUCTOR[source.spec.dataType];
+            cpuArray = new (Ctor as any)(numElements);
+            uncompressedChunk.data = cpuArray;
+          }
+          if (cpuArray === null)
+            throw new Error("Unexpected null chunk data");
           const { dataType } = chunkFormat;
           for (const index of edit.indices) {
             if (dataType === DataTypeUtil.UINT32) {
