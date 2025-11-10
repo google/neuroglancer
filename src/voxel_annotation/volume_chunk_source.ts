@@ -14,15 +14,16 @@
  * limitations under the License.
  */
 
-import type { ChunkManager } from '#src/chunk_manager/frontend.js';
-import type { SliceViewSingleResolutionSource } from '#src/sliceview/frontend.js';
-import type { VolumeSourceOptions } from '#src/sliceview/volume/base.js';
-import { makeVolumeChunkSpecification, VolumeType } from '#src/sliceview/volume/base.js';
+import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
+import type { VolumeSourceOptions } from "#src/sliceview/volume/base.js";
 import {
-  MultiscaleVolumeChunkSource,
-} from '#src/sliceview/volume/frontend.js';
-import { DataType } from '#src/util/data_type.js';
-import { VoxChunkSource } from '#src/voxel_annotation/frontend.js';
+  makeVolumeChunkSpecification,
+  VolumeType,
+} from "#src/sliceview/volume/base.js";
+import { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
+import { DataType } from "#src/util/data_type.js";
+import { VoxChunkSource } from "#src/voxel_annotation/frontend.js";
 
 /**
  * This is an abstract representation of 3D (volumetric) data that can exist at multiple resolutions or "scales."
@@ -59,10 +60,14 @@ export class VoxMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource 
       options?.chunkDataSize ? Array.from(options.chunkDataSize) : [64, 64, 64],
     );
     this.cfgUpperVoxelBound = new Float32Array(
-      options?.upperVoxelBound ? Array.from(options.upperVoxelBound) : [1_000, 1_000, 1_000],
+      options?.upperVoxelBound
+        ? Array.from(options.upperVoxelBound)
+        : [1_000, 1_000, 1_000],
     );
     this.cfgBaseVoxelOffset = new Float32Array(
-      options?.baseVoxelOffset ? Array.from(options.baseVoxelOffset) : [0, 0, 0],
+      options?.baseVoxelOffset
+        ? Array.from(options.baseVoxelOffset)
+        : [0, 0, 0],
     );
   }
 

@@ -32,6 +32,7 @@ Of course the browser will free them all if you refresh the page or visit a new 
 ## What’s in util/disposable.ts
 
 It’s not a general-purpose GC. It provides:
+
 - A Disposable interface: anything with dispose(): void.
 - RefCounted: a base class with addRef() and dispose() that decrements a refCount, and when it reaches zero runs registered cleanup actions.
 - Disposer helpers:

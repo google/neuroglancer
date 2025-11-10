@@ -71,7 +71,9 @@ abstract class BaseVoxelLegacyTool extends LegacyTool<VoxUserLayer> {
     if (this.isDrawing) return;
     this.isDrawing = true;
     this.currentMouseState = mouseState;
-    const value = (this.layer as any).getCurrentLabelValue?.() ?? ((this.layer as any).voxEraseMode ? 0 : 42);
+    const value =
+      (this.layer as any).getCurrentLabelValue?.() ??
+      ((this.layer as any).voxEraseMode ? 0 : 42);
     const start = this.getPoint(mouseState);
     if (start) {
       this.paintPoint(new Float32Array([start[0], start[1], start[2]]), value);
@@ -154,7 +156,10 @@ export class VoxelBrushLegacyTool extends BaseVoxelLegacyTool {
     );
     const shape =
       (this.layer as any).voxBrushShape === "sphere" ? "sphere" : "disk";
-    const basis = shape === "disk" ? (this.layer as any).getBrushPlaneBasis?.(this.currentMouseState) : undefined;
+    const basis =
+      shape === "disk"
+        ? (this.layer as any).getBrushPlaneBasis?.(this.currentMouseState)
+        : undefined;
     (this.layer as any).voxEditController?.paintBrushWithShape(
       point,
       radius,
@@ -172,7 +177,10 @@ export class VoxelBrushLegacyTool extends BaseVoxelLegacyTool {
     const shape =
       (this.layer as any).voxBrushShape === "sphere" ? "sphere" : "disk";
     const ctrl = (this.layer as any).voxEditController;
-    const basis = shape === "disk" ? (this.layer as any).getBrushPlaneBasis?.(this.currentMouseState) : undefined;
+    const basis =
+      shape === "disk"
+        ? (this.layer as any).getBrushPlaneBasis?.(this.currentMouseState)
+        : undefined;
     for (const point of points) {
       ctrl?.paintBrushWithShape(point, radius, value, shape, basis);
     }

@@ -21,22 +21,32 @@ import type { CoordinateTransformSpecification } from "#src/coordinate_transform
 import {
   makeCoordinateSpace,
   makeIdentityTransform,
-  WatchableCoordinateSpaceTransform
+  WatchableCoordinateSpaceTransform,
 } from "#src/coordinate_transform.js";
 import type { DataSourceSpecification } from "#src/datasource/index.js";
-import { LocalDataSource, localVoxelAnnotationsUrl } from "#src/datasource/local.js";
+import {
+  LocalDataSource,
+  localVoxelAnnotationsUrl,
+} from "#src/datasource/local.js";
 import {
   type ManagedUserLayer,
   type MouseSelectionState,
   registerLayerType,
   registerLayerTypeDetector,
-  UserLayer
+  UserLayer,
 } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
-import { RenderScaleHistogram, trackableRenderScaleTarget } from "#src/render_scale_statistics.js";
+import {
+  RenderScaleHistogram,
+  trackableRenderScaleTarget,
+} from "#src/render_scale_statistics.js";
 import { SegmentColorHash } from "#src/segment_color.js";
-import { registerVoxelAnnotationTools, VoxelBrushLegacyTool, VoxelPixelLegacyTool } from "#src/ui/voxel_annotations.js";
+import {
+  registerVoxelAnnotationTools,
+  VoxelBrushLegacyTool,
+  VoxelPixelLegacyTool,
+} from "#src/ui/voxel_annotations.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { mat4 } from "#src/util/geom.js";
 import { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
@@ -80,8 +90,14 @@ class VoxSettingsTab extends Tab {
     const c = this.layer.voxCornerB;
 
     // Unit helpers
-    const unitFactor: Record<string, number> = { m: 1, mm: 1e-3, "µm": 1e-6, nm: 1e-9 };
-    const currentUnit = this.layer.voxScaleUnit in unitFactor ? this.layer.voxScaleUnit : "m";
+    const unitFactor: Record<string, number> = {
+      m: 1,
+      mm: 1e-3,
+      µm: 1e-6,
+      nm: 1e-9,
+    };
+    const currentUnit =
+      this.layer.voxScaleUnit in unitFactor ? this.layer.voxScaleUnit : "m";
     const factor = (u: string) => unitFactor[u] ?? 1;
 
     // Prepare UI elements
@@ -129,7 +145,8 @@ class VoxSettingsTab extends Tab {
 
     const apply = document.createElement("button");
     apply.textContent = "Regen source";
-    apply.title = "Regenerate the source volume with the new settings, warning old local source will be deleted";
+    apply.title =
+      "Regenerate the source volume with the new settings, warning old local source will be deleted";
     apply.addEventListener("click", () => {
       const u = unitSel.value || currentUnit;
       const f = factor(u);
@@ -159,7 +176,9 @@ class VoxSettingsTab extends Tab {
 }
 
 class VoxToolTab extends Tab {
-  public requestRenderLabels() { this.renderLabels(); }
+  public requestRenderLabels() {
+    this.renderLabels();
+  }
   private labelsContainer!: HTMLDivElement;
   private renderLabels() {
     const cont = this.labelsContainer;
@@ -241,7 +260,6 @@ class VoxToolTab extends Tab {
     toolsRow.appendChild(toolsWrap);
     toolbox.appendChild(toolsRow);
 
-
     // Section: Brush settings
     const brushRow = document.createElement("div");
     brushRow.className = "neuroglancer-vox-row";
@@ -307,9 +325,9 @@ class VoxToolTab extends Tab {
     optSphere.textContent = "sphere";
     shapeSel.appendChild(optDisk);
     shapeSel.appendChild(optSphere);
-    shapeSel.value = (this.layer.voxBrushShape === 'sphere') ? 'sphere' : 'disk';
+    shapeSel.value = this.layer.voxBrushShape === "sphere" ? "sphere" : "disk";
     shapeSel.addEventListener("change", () => {
-      const v = shapeSel.value === 'sphere' ? 'sphere' : 'disk';
+      const v = shapeSel.value === "sphere" ? "sphere" : "disk";
       this.layer.voxBrushShape = v;
       shapeSel.value = v;
     });
@@ -393,7 +411,6 @@ class VoxToolTab extends Tab {
   }
 }
 
-
 export class VoxUserLayer extends UserLayer {
   onLabelsChanged?: () => void;
   private voxMapId: string | undefined;
@@ -415,7 +432,9 @@ export class VoxUserLayer extends UserLayer {
   voxScaleUnit: string = "nm";
   // Region selection via corners
   voxCornerA: Float32Array = new Float32Array([0, 0, 0]);
-  voxCornerB: Float32Array = new Float32Array([1_000_000, 1_000_000, 1_000_000]);
+  voxCornerB: Float32Array = new Float32Array([
+    1_000_000, 1_000_000, 1_000_000,
+  ]);
   // Draw tool state
   voxBrushRadius: number = 3;
   voxEraseMode: boolean = false;
@@ -426,14 +445,14 @@ export class VoxUserLayer extends UserLayer {
   private genId(): number {
     // Generate a unique uint32 per layer session. Try crypto.getRandomValues; fallback to Math.random.
     let id = 0;
-    const used = new Set(this.voxLabels.map(l => l.id));
+    const used = new Set(this.voxLabels.map((l) => l.id));
     for (let attempts = 0; attempts < 10_000; attempts++) {
-      if (typeof crypto !== 'undefined' && (crypto as any).getRandomValues) {
+      if (typeof crypto !== "undefined" && (crypto as any).getRandomValues) {
         const a = new Uint32Array(1);
         (crypto as any).getRandomValues(a);
         id = a[0] >>> 0;
       } else {
-        id = (Math.floor(Math.random() * 0xffffffff) >>> 0);
+        id = Math.floor(Math.random() * 0xffffffff) >>> 0;
       }
       if (id !== 0 && !used.has(id)) return id;
     }
@@ -451,7 +470,7 @@ export class VoxUserLayer extends UserLayer {
   // --- Labels persistence (via VoxSource) ---
   private async saveLabels() {
     try {
-      const ids = this.voxLabels.map(l => l.id >>> 0);
+      const ids = this.voxLabels.map((l) => l.id >>> 0);
       await this.voxEditController?.setLabelIds(ids);
     } catch {
       // ignore persistence failures
@@ -460,15 +479,15 @@ export class VoxUserLayer extends UserLayer {
   private async loadLabels() {
     try {
       const arr = await this.voxEditController?.getLabelIds();
-      const existing = new Set(this.voxLabels.map(l => l.id >>> 0));
+      const existing = new Set(this.voxLabels.map((l) => l.id >>> 0));
       if (arr && Array.isArray(arr) && arr.length > 0) {
         // Merge previously created labels (before init) with stored ones.
-        const mergedIds = new Set<number>(arr.map(id => id >>> 0));
+        const mergedIds = new Set<number>(arr.map((id) => id >>> 0));
         for (const id of existing) mergedIds.add(id);
-        this.voxLabels = Array.from(mergedIds).map(id => ({ id }));
+        this.voxLabels = Array.from(mergedIds).map((id) => ({ id }));
         // Ensure selected label is valid
         const sel = this.voxSelectedLabelId;
-        if (!sel || !this.voxLabels.some(l => l.id === sel)) {
+        if (!sel || !this.voxLabels.some((l) => l.id === sel)) {
           this.voxSelectedLabelId = this.voxLabels[0].id;
         }
         // Write back merged set to keep in sync.
@@ -483,7 +502,11 @@ export class VoxUserLayer extends UserLayer {
       if (this.voxLabels.length === 0) this.ensureDefaultLabel();
     } finally {
       // Ensure UI reflects the loaded/merged labels.
-      try { this.onLabelsChanged?.(); } catch { /* ignore */ }
+      try {
+        this.onLabelsChanged?.();
+      } catch {
+        /* ignore */
+      }
     }
   }
 
@@ -497,20 +520,30 @@ export class VoxUserLayer extends UserLayer {
     this.voxSelectedLabelId = id;
     // Persist immediately once the source/controller is available.
     if (this.voxEditController) {
-      try { await this.saveLabels(); } catch { /* ignore */ }
+      try {
+        await this.saveLabels();
+      } catch {
+        /* ignore */
+      }
     }
     // Notify UI to re-render labels list whenever a label is created.
-    try { this.onLabelsChanged?.(); } catch { /* ignore */ }
+    try {
+      this.onLabelsChanged?.();
+    } catch {
+      /* ignore */
+    }
   }
   selectVoxLabel(id: number) {
-    const found = this.voxLabels.find(l => l.id === id);
+    const found = this.voxLabels.find((l) => l.id === id);
     if (found) this.voxSelectedLabelId = id;
   }
   getCurrentLabelValue(): number {
     if (this.voxEraseMode) return 0;
     if (!this.voxSelectedLabelId) this.ensureDefaultLabel();
-    const cur = this.voxLabels.find(l => l.id === this.voxSelectedLabelId) || this.voxLabels[0];
-    return cur ? (cur.id >>> 0) : 0;
+    const cur =
+      this.voxLabels.find((l) => l.id === this.voxSelectedLabelId) ||
+      this.voxLabels[0];
+    return cur ? cur.id >>> 0 : 0;
   }
 
   constructor(managedLayer: Borrowed<ManagedUserLayer>) {
@@ -555,8 +588,14 @@ export class VoxUserLayer extends UserLayer {
     }
     // Update stored corners and derived upper bound
     for (let i = 0; i < 3; ++i) {
-      if (this.voxCornerA[i] !== cornerA[i]) { this.voxCornerA[i] = cornerA[i]; changed = true; }
-      if (this.voxCornerB[i] !== cornerB[i]) { this.voxCornerB[i] = cornerB[i]; changed = true; }
+      if (this.voxCornerA[i] !== cornerA[i]) {
+        this.voxCornerA[i] = cornerA[i];
+        changed = true;
+      }
+      if (this.voxCornerB[i] !== cornerB[i]) {
+        this.voxCornerB[i] = cornerB[i];
+        changed = true;
+      }
     }
     if (this.voxScaleUnit !== unit) {
       this.voxScaleUnit = unit;
@@ -623,17 +662,23 @@ export class VoxUserLayer extends UserLayer {
    *  vectors along those axes through the renderLayer->voxel transform.
    *  TODO: this is not working, ai are dogshit at 3d stuffs.
    */
-  getBrushPlaneBasis(mouseState?: MouseSelectionState): { u: Float32Array; v: Float32Array } | undefined {
+  getBrushPlaneBasis(
+    mouseState?: MouseSelectionState,
+  ): { u: Float32Array; v: Float32Array } | undefined {
     try {
       const inv = this.getModelToVoxTransform();
       if (!inv) return undefined;
       const di = mouseState?.displayDimensions?.displayDimensionIndices;
       const rank = mouseState?.displayDimensions?.displayRank ?? 0;
-      const i0 = (di && rank >= 2) ? di[0] : 0;
-      const i1 = (di && rank >= 2) ? di[1] : 1;
+      const i0 = di && rank >= 2 ? di[0] : 0;
+      const i1 = di && rank >= 2 ? di[1] : 1;
 
       // Build origin and unit vectors in model/render-layer coordinate space aligned to displayed axes.
-      const p0 = vec3.transformMat4(vec3.create(), vec3.fromValues(0, 0, 0), inv);
+      const p0 = vec3.transformMat4(
+        vec3.create(),
+        vec3.fromValues(0, 0, 0),
+        inv,
+      );
       const uModel = [0, 0, 0] as number[];
       const vModel = [0, 0, 0] as number[];
       if (i0 >= 0 && i0 < 3) uModel[i0] = 1;
@@ -659,7 +704,8 @@ export class VoxUserLayer extends UserLayer {
 
       const ul = Math.hypot(ux, uy, uz);
       const vl = Math.hypot(vx, vy, vz);
-      if (!Number.isFinite(ul) || ul === 0 || !Number.isFinite(vl) || vl === 0) return undefined;
+      if (!Number.isFinite(ul) || ul === 0 || !Number.isFinite(vl) || vl === 0)
+        return undefined;
 
       const u = new Float32Array([ux / ul, uy / ul, uz / ul]);
       const v = new Float32Array([vx / vl, vy / vl, vz / vl]);
@@ -700,14 +746,16 @@ export class VoxUserLayer extends UserLayer {
         // Initialize worker-side map persistence for this source (best-effort, fire-and-forget).
         const sources2D = voxSource.getSources({} as any);
         const base = sources2D[0][0];
-        const source = (base.chunkSource as any);
+        const source = base.chunkSource as any;
         // Compute deterministic identifiers on the frontend to avoid relying on an RPC return value.
-        const cfgCds = new Uint32Array(Array.from(((voxSource as any)['cfgChunkDataSize']) ?? [64, 64, 64]));
+        const cfgCds = new Uint32Array(
+          Array.from((voxSource as any)["cfgChunkDataSize"] ?? [64, 64, 64]),
+        );
         const lowerArr: Float32Array = lower;
         const upperArr: Float32Array = upper;
         const scaleKey = toScaleKey(cfgCds, lowerArr, upperArr);
         // mapId can be any stable string; default to 'local' unless already set.
-        if (!this.voxMapId) this.voxMapId = 'local';
+        if (!this.voxMapId) this.voxMapId = "local";
         // Initialize backend map first, then load labels from the chosen datasource.
         source.initializeMap({
           mapId: this.voxMapId,

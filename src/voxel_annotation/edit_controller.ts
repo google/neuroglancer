@@ -3,8 +3,8 @@
  * Copyright 2025.
  */
 
-import type { MultiscaleVolumeChunkSource } from '#src/sliceview/volume/frontend.js';
-import type { VoxChunkSource } from '#src/voxel_annotation/frontend.js';
+import type { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
+import type { VoxChunkSource } from "#src/voxel_annotation/frontend.js";
 
 /** Tiny controller to forward voxel edits from tools to the VoxChunkSource. */
 export class VoxelEditController {
@@ -35,7 +35,7 @@ export class VoxelEditController {
     center: Float32Array,
     radius: number,
     value: number,
-    shape: 'disk' | 'sphere' = 'disk',
+    shape: "disk" | "sphere" = "disk",
     basis?: { u: Float32Array; v: Float32Array },
   ) {
     if (!Number.isFinite(radius) || radius <= 0) return;
@@ -47,7 +47,7 @@ export class VoxelEditController {
     const source = this.getSource();
     if (!source) return;
     const voxels: Float32Array[] = [];
-    if (shape === 'sphere') {
+    if (shape === "sphere") {
       for (let dz = -r; dz <= r; ++dz) {
         for (let dy = -r; dy <= r; ++dy) {
           for (let dx = -r; dx <= r; ++dx) {
@@ -61,7 +61,16 @@ export class VoxelEditController {
       // Oriented disk in the provided slice plane; if basis not provided, fall back to XY at fixed Z = cz.
       const u = basis?.u;
       const v = basis?.v;
-      if (u && v && Number.isFinite(u[0]) && Number.isFinite(u[1]) && Number.isFinite(u[2]) && Number.isFinite(v[0]) && Number.isFinite(v[1]) && Number.isFinite(v[2])) {
+      if (
+        u &&
+        v &&
+        Number.isFinite(u[0]) &&
+        Number.isFinite(u[1]) &&
+        Number.isFinite(u[2]) &&
+        Number.isFinite(v[0]) &&
+        Number.isFinite(v[1]) &&
+        Number.isFinite(v[2])
+      ) {
         // Normalize u and v for safety.
         const ul = Math.hypot(u[0], u[1], u[2]) || 1;
         const vl = Math.hypot(v[0], v[1], v[2]) || 1;
@@ -77,7 +86,7 @@ export class VoxelEditController {
               const ix = Math.round(px);
               const iy = Math.round(py);
               const iz = Math.round(pz);
-              const key = ix + ',' + iy + ',' + iz;
+              const key = ix + "," + iy + "," + iz;
               if (!seen.has(key)) {
                 seen.add(key);
                 voxels.push(new Float32Array([ix, iy, iz]));
@@ -86,7 +95,9 @@ export class VoxelEditController {
           }
         }
       } else {
-        console.warn('No basis provided for disk brush, falling back to XY plane at fixed Z = cz.');
+        console.warn(
+          "No basis provided for disk brush, falling back to XY plane at fixed Z = cz.",
+        );
         // Fallback: Disk in XY plane at fixed Z = cz
         for (let dy = -r; dy <= r; ++dy) {
           for (let dx = -r; dx <= r; ++dx) {
@@ -102,7 +113,7 @@ export class VoxelEditController {
 
   /** Backward-compat spherical brush API. */
   paintBrush(center: Float32Array, radius: number, value: number) {
-    this.paintBrushWithShape(center, radius, value, 'sphere');
+    this.paintBrushWithShape(center, radius, value, "sphere");
   }
 
   async getLabelIds(): Promise<number[]> {

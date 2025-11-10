@@ -146,7 +146,10 @@ export abstract class SingleTextureVolumeChunk<
     gl.bindTexture(textureTarget, null);
   }
 
-  updateFromCpuData(gl: GL, _region?: { offset: Uint32Array; size: Uint32Array }) {
+  updateFromCpuData(
+    gl: GL,
+    _region?: { offset: Uint32Array; size: Uint32Array },
+  ) {
     if (this.data == null) return;
 
     // If there is no existing texture, just perform the normal upload path.
@@ -156,27 +159,36 @@ export abstract class SingleTextureVolumeChunk<
     }
 
     const fmt = this.chunkFormat as any; // Both uncompressed and compressed implement TextureFormat-like fields
-    const textureTarget = textureTargetForSamplerType[this.chunkFormat.shaderSamplerType];
+    const textureTarget =
+      textureTargetForSamplerType[this.chunkFormat.shaderSamplerType];
     gl.bindTexture(textureTarget, this.texture);
     gl.pixelStorei(WebGL2RenderingContext.UNPACK_ALIGNMENT, 1);
 
     // If we have a textureLayout with a definite shape (uncompressed path), we can sub-update.
     const layout: any = this.textureLayout;
-    const hasShape = layout && layout.textureShape && layout.textureShape.length >= 2;
+    const hasShape =
+      layout && layout.textureShape && layout.textureShape.length >= 2;
 
     try {
       // Prefer texSubImage path when we can compute exact sizes (uncompressed formats):
-      if (hasShape && typeof fmt.textureDims === 'number') {
+      if (hasShape && typeof fmt.textureDims === "number") {
         const texelsPerElement = fmt.texelsPerElement ?? 1;
         const w = layout.textureShape[0] * texelsPerElement;
         const h = layout.textureShape[1] ?? 1;
-        const d = fmt.textureDims === 3 ? (layout.textureShape[2] ?? 1) : undefined;
+        const d =
+          fmt.textureDims === 3 ? (layout.textureShape[2] ?? 1) : undefined;
 
         // Ensure typed array type matches GL expectations
         let data: any = this.data;
-        const ctor = fmt.arrayConstructor as { new (b: ArrayBuffer, o: number, l: number): any } | undefined;
+        const ctor = fmt.arrayConstructor as
+          | { new (b: ArrayBuffer, o: number, l: number): any }
+          | undefined;
         if (ctor && data.constructor !== ctor) {
-          data = new (ctor as any)(data.buffer, data.byteOffset, data.byteLength / (ctor as any).BYTES_PER_ELEMENT);
+          data = new (ctor as any)(
+            data.buffer,
+            data.byteOffset,
+            data.byteLength / (ctor as any).BYTES_PER_ELEMENT,
+          );
         }
 
         if (fmt.textureDims === 3 && d !== undefined) {

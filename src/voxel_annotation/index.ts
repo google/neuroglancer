@@ -18,14 +18,22 @@ export interface SavedChunk {
   size: Uint32Array; // canonical size used for linearization (usually spec.chunkDataSize)
 }
 
-export function toScaleKey(chunkDataSize: number[] | Uint32Array, baseVoxelOffset?: number[] | Uint32Array | Float32Array, upperVoxelBound?: number[] | Uint32Array | Float32Array): string {
+export function toScaleKey(
+  chunkDataSize: number[] | Uint32Array,
+  baseVoxelOffset?: number[] | Uint32Array | Float32Array,
+  upperVoxelBound?: number[] | Uint32Array | Float32Array,
+): string {
   const cds = Array.from(chunkDataSize);
   const lower = Array.from(baseVoxelOffset ?? [0, 0, 0]);
   const upper = Array.from(upperVoxelBound ?? [0, 0, 0]);
   return `${cds[0]}_${cds[1]}_${cds[2]}:${lower[0]}_${lower[1]}_${lower[2]}-${upper[0]}_${upper[1]}_${upper[2]}`;
 }
 
-export function compositeChunkDbKey(mapId: string, scaleKey: string, chunkKey: string): string {
+export function compositeChunkDbKey(
+  mapId: string,
+  scaleKey: string,
+  chunkKey: string,
+): string {
   return `${mapId}:${scaleKey}:${chunkKey}`;
 }
 
@@ -34,13 +42,13 @@ export function compositeLabelsDbKey(mapId: string, scaleKey: string): string {
 }
 
 export abstract class VoxSource {
-  protected mapId: string = 'default';
-  protected scaleKey: string = '';
+  protected mapId: string = "default";
+  protected scaleKey: string = "";
   protected chunkDataSize: Uint32Array = new Uint32Array([64, 64, 64]);
   protected upperVoxelBound: Uint32Array = new Uint32Array([0, 0, 0]);
   protected baseVoxelOffset: Uint32Array = new Uint32Array([0, 0, 0]);
   protected dataType: number = 6; // DataType.UINT32 default
-  protected unit: string = '';
+  protected unit: string = "";
 
   // In-memory cache of loaded chunks
   protected maxSavedChunks = 128; // cap to prevent unbounded growth
@@ -54,23 +62,39 @@ export abstract class VoxSource {
    * Generic label persistence hooks. Subclasses override to connect to the chosen datasource.
    * Default implementation is a no-op empty list.
    */
-  async getLabelIds(): Promise<number[]> { return []; }
-  async setLabelIds(_ids: number[]): Promise<void> { /* no-op */ }
+  async getLabelIds(): Promise<number[]> {
+    return [];
+  }
+  async setLabelIds(_ids: number[]): Promise<void> {
+    /* no-op */
+  }
 
   init(_opts: VoxMapInitOptions): Promise<{ mapId: string; scaleKey: string }> {
     // Base provides default bookkeeping; persistence layer does real work.
     const opts = _opts || ({} as VoxMapInitOptions);
-    this.mapId = opts.mapId || this.mapId || (typeof crypto !== 'undefined' && (crypto as any).randomUUID?.()) || String(Date.now());
+    this.mapId =
+      opts.mapId ||
+      this.mapId ||
+      (typeof crypto !== "undefined" && (crypto as any).randomUUID?.()) ||
+      String(Date.now());
     this.chunkDataSize = new Uint32Array(Array.from(opts.chunkDataSize));
-    this.upperVoxelBound = new Uint32Array(Array.from(opts.upperVoxelBound ?? [0, 0, 0]));
-    this.baseVoxelOffset = new Uint32Array(Array.from(opts.baseVoxelOffset ?? [0, 0, 0]));
+    this.upperVoxelBound = new Uint32Array(
+      Array.from(opts.upperVoxelBound ?? [0, 0, 0]),
+    );
+    this.baseVoxelOffset = new Uint32Array(
+      Array.from(opts.baseVoxelOffset ?? [0, 0, 0]),
+    );
     this.dataType = opts.dataType ?? this.dataType;
-    this.unit = opts.unit ?? '';
+    this.unit = opts.unit ?? "";
     // Default scaleKey includes region to avoid collisions if not provided explicitly
     if (opts.scaleKey) {
       this.scaleKey = opts.scaleKey;
     } else {
-      this.scaleKey = toScaleKey(this.chunkDataSize, this.baseVoxelOffset, this.upperVoxelBound);
+      this.scaleKey = toScaleKey(
+        this.chunkDataSize,
+        this.baseVoxelOffset,
+        this.upperVoxelBound,
+      );
     }
     return Promise.resolve({ mapId: this.mapId, scaleKey: this.scaleKey });
   }
@@ -84,14 +108,22 @@ export abstract class VoxSource {
   protected scheduleSave() {
     if (this.saveTimer !== undefined) return;
     // Debounce writes ~750ms
-    this.saveTimer = (setTimeout(() => this.flushSaves(), 750) as unknown) as number;
+    this.saveTimer = setTimeout(
+      () => this.flushSaves(),
+      750,
+    ) as unknown as number;
   }
 
   // Overridden by subclass to actually persist dirty chunks.
   protected async flushSaves(): Promise<void> {}
 
   // Apply edits into an in-memory chunk array; returns the SavedChunk.
-  protected applyEditsIntoChunk(sc: SavedChunk, indices: ArrayLike<number>, value?: number, values?: ArrayLike<number>) {
+  protected applyEditsIntoChunk(
+    sc: SavedChunk,
+    indices: ArrayLike<number>,
+    value?: number,
+    values?: ArrayLike<number>,
+  ) {
     const dst = sc.data;
     if (values != null) {
       const vv = values as ArrayLike<number>;
@@ -120,8 +152,8 @@ export class LocalVoxSource extends VoxSource {
     try {
       const db = await this.getDb();
       const key = compositeLabelsDbKey(this.mapId, this.scaleKey);
-      const arr = await idbGet<number[]>(db, 'labels', key);
-      if (arr && Array.isArray(arr)) return arr.map(v => v >>> 0);
+      const arr = await idbGet<number[]>(db, "labels", key);
+      if (arr && Array.isArray(arr)) return arr.map((v) => v >>> 0);
       return [];
     } catch {
       return [];
@@ -131,10 +163,10 @@ export class LocalVoxSource extends VoxSource {
   override async setLabelIds(ids: number[]): Promise<void> {
     try {
       const db = await this.getDb();
-      const tx = db.transaction('labels', 'readwrite');
-      const store = tx.objectStore('labels');
+      const tx = db.transaction("labels", "readwrite");
+      const store = tx.objectStore("labels");
       const key = compositeLabelsDbKey(this.mapId, this.scaleKey);
-      const payload = ids.map(v => v >>> 0);
+      const payload = ids.map((v) => v >>> 0);
       await idbPut(store, payload, key);
       await txDone(tx);
     } catch {
@@ -154,7 +186,10 @@ export class LocalVoxSource extends VoxSource {
     while (this.saved.size > this.maxSavedChunks) {
       let oldestKey: string | undefined = undefined;
       for (const k of this.saved.keys()) {
-        if (!this.dirty.has(k)) { oldestKey = k; break; }
+        if (!this.dirty.has(k)) {
+          oldestKey = k;
+          break;
+        }
       }
       if (oldestKey === undefined) {
         // All entries are dirty; wait until they are flushed before evicting.
@@ -168,30 +203,39 @@ export class LocalVoxSource extends VoxSource {
     const meta = await super.init(opts);
     const db = await this.getDb();
     // Persist/update map metadata
-    const tx = db.transaction('maps', 'readwrite');
-    tx.objectStore('maps').put({
-      mapId: this.mapId,
-      dataType: this.dataType,
-      chunkDataSize: Array.from(this.chunkDataSize),
-      upperVoxelBound: Array.from(this.upperVoxelBound),
-      baseVoxelOffset: Array.from(this.baseVoxelOffset),
-      unit: this.unit,
-      scaleKey: this.scaleKey,
-      updatedAt: Date.now(),
-    }, this.mapId);
+    const tx = db.transaction("maps", "readwrite");
+    tx.objectStore("maps").put(
+      {
+        mapId: this.mapId,
+        dataType: this.dataType,
+        chunkDataSize: Array.from(this.chunkDataSize),
+        upperVoxelBound: Array.from(this.upperVoxelBound),
+        baseVoxelOffset: Array.from(this.baseVoxelOffset),
+        unit: this.unit,
+        scaleKey: this.scaleKey,
+        updatedAt: Date.now(),
+      },
+      this.mapId,
+    );
     await txDone(tx);
     return meta;
   }
 
   async getSavedChunk(key: string): Promise<SavedChunk | undefined> {
     const existing = this.saved.get(key);
-    if (existing) { this.touch(key); return existing; }
+    if (existing) {
+      this.touch(key);
+      return existing;
+    }
     const db = await this.getDb();
     const composite = this.compositeKey(key);
-    const buf = await idbGet<ArrayBuffer>(db, 'chunks', composite);
+    const buf = await idbGet<ArrayBuffer>(db, "chunks", composite);
     if (buf) {
       const arr = new Uint32Array(buf);
-      const sc: SavedChunk = { data: arr, size: new Uint32Array(this.chunkDataSize) };
+      const sc: SavedChunk = {
+        data: arr,
+        size: new Uint32Array(this.chunkDataSize),
+      };
       this.saved.set(key, sc);
       this.enforceCap();
       return sc;
@@ -199,12 +243,18 @@ export class LocalVoxSource extends VoxSource {
     return undefined;
   }
 
-  async ensureChunk(key: string, size?: Uint32Array | number[]): Promise<SavedChunk> {
+  async ensureChunk(
+    key: string,
+    size?: Uint32Array | number[],
+  ): Promise<SavedChunk> {
     let sc = this.saved.get(key);
-    if (sc) { this.touch(key); return sc; }
+    if (sc) {
+      this.touch(key);
+      return sc;
+    }
     const db = await this.getDb();
     const composite = this.compositeKey(key);
-    const buf = await idbGet<ArrayBuffer>(db, 'chunks', composite);
+    const buf = await idbGet<ArrayBuffer>(db, "chunks", composite);
     if (buf) {
       const arr = new Uint32Array(buf);
       sc = { data: arr, size: new Uint32Array(this.chunkDataSize) };
@@ -213,7 +263,8 @@ export class LocalVoxSource extends VoxSource {
       return sc;
     }
     const sz = new Uint32Array(size ?? this.chunkDataSize);
-    let total = 1; for (let i = 0; i < 3; ++i) total *= sz[i];
+    let total = 1;
+    for (let i = 0; i < 3; ++i) total *= sz[i];
     const arr = new Uint32Array(total);
     sc = { data: arr, size: new Uint32Array(sz) };
     this.saved.set(key, sc);
@@ -222,9 +273,20 @@ export class LocalVoxSource extends VoxSource {
     return sc;
   }
 
-  async applyEdits(edits: { key: string; indices: ArrayLike<number>; value?: number; values?: ArrayLike<number>; size?: number[] }[]) {
+  async applyEdits(
+    edits: {
+      key: string;
+      indices: ArrayLike<number>;
+      value?: number;
+      values?: ArrayLike<number>;
+      size?: number[];
+    }[],
+  ) {
     for (const e of edits) {
-      const sc = await this.ensureChunk(e.key, e.size ? new Uint32Array(e.size) : this.chunkDataSize);
+      const sc = await this.ensureChunk(
+        e.key,
+        e.size ? new Uint32Array(e.size) : this.chunkDataSize,
+      );
       this.applyEditsIntoChunk(sc, e.indices, e.value, e.values);
       this.markDirty(e.key);
     }
@@ -232,11 +294,14 @@ export class LocalVoxSource extends VoxSource {
 
   protected override async flushSaves() {
     const keys = Array.from(this.dirty);
-    if (keys.length === 0) { this.saveTimer = undefined; return; }
+    if (keys.length === 0) {
+      this.saveTimer = undefined;
+      return;
+    }
     this.dirty.clear();
     const db = await this.getDb();
-    const tx = db.transaction('chunks', 'readwrite');
-    const store = tx.objectStore('chunks');
+    const tx = db.transaction("chunks", "readwrite");
+    const store = tx.objectStore("chunks");
     for (const key of keys) {
       const sc = this.saved.get(key);
       if (!sc) continue;
@@ -269,28 +334,34 @@ export class RemoteVoxSource extends VoxSource {
   }
   override async setLabelIds(ids: number[]): Promise<void> {
     // Placeholder: post to remote endpoint; cache locally as best-effort.
-    this.labelsCache = ids.map(v => v >>> 0);
+    this.labelsCache = ids.map((v) => v >>> 0);
   }
 }
 
 export function openVoxDb(): Promise<IDBDatabase> {
   return new Promise<IDBDatabase>((resolve, reject) => {
-    const req = indexedDB.open('neuroglancer_vox', 2);
+    const req = indexedDB.open("neuroglancer_vox", 2);
     req.onerror = () => reject(req.error);
     req.onupgradeneeded = () => {
       const db = req.result;
-      if (!db.objectStoreNames.contains('maps')) db.createObjectStore('maps');
-      if (!db.objectStoreNames.contains('chunks')) db.createObjectStore('chunks');
-      if (!db.objectStoreNames.contains('labels')) db.createObjectStore('labels');
+      if (!db.objectStoreNames.contains("maps")) db.createObjectStore("maps");
+      if (!db.objectStoreNames.contains("chunks"))
+        db.createObjectStore("chunks");
+      if (!db.objectStoreNames.contains("labels"))
+        db.createObjectStore("labels");
     };
     req.onsuccess = () => resolve(req.result);
   });
 }
 
 // --- Small IDB helpers ---
-export function idbGet<T>(db: IDBDatabase, storeName: string, key: IDBValidKey): Promise<T | undefined> {
+export function idbGet<T>(
+  db: IDBDatabase,
+  storeName: string,
+  key: IDBValidKey,
+): Promise<T | undefined> {
   return new Promise<T | undefined>((resolve, reject) => {
-    const tx = db.transaction(storeName, 'readonly');
+    const tx = db.transaction(storeName, "readonly");
     const store = tx.objectStore(storeName);
     const req = store.get(key);
     req.onerror = () => reject(req.error);

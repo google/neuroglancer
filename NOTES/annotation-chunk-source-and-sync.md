@@ -7,17 +7,18 @@ In Neuroglancer, rendering and data flow are built around chunked sources:
 - The two halves are paired via a small RPC layer. The frontend owner has a type id; the backend counterpart class registers itself under the same id. When the frontend initializes, it requests the backend to construct the counterpart, and they talk by sending messages with ids.
 
 For annotations, the system uses three closely-related chunk sources on the frontend side (with backend counterparts):
+
 - AnnotationGeometryChunkSource: provides spatially indexed geometry of annotations to draw (slice-view geometry per chunk).
 - AnnotationSubsetGeometryChunkSource: a filtered geometry source tied to segmentation relationships; supplies geometry subsets keyed by segment id.
 - AnnotationMetadataChunkSource: per-annotation metadata keyed by annotation id (used to keep the value of AnnotationReference in sync).
 
 These objects are owned on the frontend and mirrored on the backend. They’re coordinated by MultiscaleAnnotationSource, which:
+
 - Holds and wires the three sources together.
 - Keeps local references and local-update state for edits (add/update/delete).
 - Initializes its counterparts in the worker (passing nested shared-object references, like its metadata/filtered sources and the chunk manager id).
 
 The voxel_annotation dummy volume you added (VoxDummyChunkSource) uses the same pairing mechanism as the standard volume/annotation sources: the frontend owner sets a shared type id; the backend counterpart registers with the same id and implements download(), which fills chunk.data with a procedurally generated pattern.
-
 
 ### Frontend↔Backend synchronization: the RPC pairing
 
@@ -26,16 +27,18 @@ The voxel_annotation dummy volume you added (VoxDummyChunkSource) uses the same 
 - Both sides keep ref-counted object handles with a shared numeric id. You can nest references to other shared objects inside options (e.g., pass a MetadataChunkSource id to the backend inside the parent’s initialize payload).
 
 For annotation commit flow specifically, there are two named RPCs (strings exported from annotation/base):
+
 - ANNOTATION_COMMIT_UPDATE_RPC_ID: frontend→backend to request an add/update/delete commit.
 - ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID: backend→frontend to return success/failure and the updated annotation (or null for deletion).
-
 
 ### The annotation edit pipeline (buffering + commit system)
 
 The key design goal is to show edits immediately on the frontend (optimistic UI), while guaranteeing consistency as the authoritative backend accepts/rejects them.
 
-1) Local overlay buffering on the frontend
+1. Local overlay buffering on the frontend
+
 - MultiscaleAnnotationSource maintains:
+
   - references: Map from annotation id to AnnotationReference; each holds the current value and a changed signal for listeners.
   - localUpdates: Map from id → LocalUpdateUndoState. Tracks:
     - existingAnnotation: the server-committed annotation prior to local edits (if any).
@@ -47,7 +50,8 @@ The key design goal is to show edits immediately on the frontend (optimistic UI)
   - applyLocalUpdate() moves geometry bytes out of any existing visible geometry chunks (deleteAnnotation from those chunks) and writes the edited geometry into the temporary overlay chunk (updateAnnotation). This ensures rendering immediately reflects the local edit.
   - It updates the AnnotationReference.value on the frontend and notifies listeners (notifyChanged), causing render invalidation and UI updates without waiting for the backend.
 
-2) Sending the commit request
+2. Sending the commit request
+
 - If commit=true, applyLocalUpdate() either:
   - queues the new edit into pendingCommit if a commit is already in-flight for that annotation, or
   - calls sendCommitRequest():
@@ -58,14 +62,17 @@ The key design goal is to show edits immediately on the frontend (optimistic UI)
       - annotationId set + newAnnotation → update
       - annotationId set + newAnnotation null → delete
 
-3) Backend receives commit
+3. Backend receives commit
+
 - The worker-side registerRPC(ANNOTATION_COMMIT_UPDATE_RPC_ID, …) handler looks up the AnnotationSource counterpart object from x.id and dispatches to obj.add/delete/update as appropriate. Those methods are expected to return a Promise with the outcome.
 - Once resolved, it invokes ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID to the frontend with { id, annotationId, newAnnotation | error }. Note there’s a FIXME in the backend handler: “Handle new chunks requested prior to update but not yet sent to frontend.” This is a hint that the backend does not yet buffer/resynchronize in-flight visible-chunk streams vs. the commit result; the frontend overlay is the primary buffering mechanism for edits.
 
-4) Frontend applies commit result
+4. Frontend applies commit result
+
 - The frontend registerRPC(ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, …) handler calls either handleSuccessfulUpdate or handleFailedUpdate.
 
 - On success (handleSuccessfulUpdate):
+
   - Decrement the global commit counter and potentially clear the “Committing annotations” StatusMessage.
   - If the server returned a new id (common on add), re-key all local state:
     - Update AnnotationReference.id and references map entries.
@@ -81,13 +88,14 @@ The key design goal is to show edits immediately on the frontend (optimistic UI)
     - Restore AnnotationReference.value to existingAnnotation (or null) and dispatch its changed signal.
   - Decrement the global commit counter.
 
-5) Reverting overlay after a successful cycle
+5. Reverting overlay after a successful cycle
+
 - If there is no pending commit, revertLocalUpdate() is called to remove the overlay and restore the world to a “no local edits pending” state. Since existingAnnotation has already been updated to the committed version, the visible chunks + metadata now represent the committed data, and the temporary overlay can be dropped.
 
-6) Metadata sync for live references
+6. Metadata sync for live references
+
 - MetadataChunkSource is used so that references.get(id) consumers stay synced: when a metadata chunk arrives for an id, AnnotationMetadataChunkSource.addChunk sets the associated AnnotationReference.value and dispatches changed.
 - notifyChanged() is also called whenever local overlay changes the value, so UI stays responsive.
-
 
 ### How chunk streaming and visibility interact with edits
 
@@ -95,17 +103,16 @@ The key design goal is to show edits immediately on the frontend (optimistic UI)
 - The frontend overlay logic in temporary ensures local edits appear immediately, regardless of when backend geometry chunks stream in. The overlay is kept separate from streamed chunks and is applied/removed deterministically during the commit flow.
 - A note in backend commit handling acknowledges a potential race: a chunk could be requested based on an outdated state. The overlay strategy on the frontend is what guarantees the user sees their edits; any mismatches are corrected as commits resolve and overlay is removed.
 
-
 ### The buffering model in a nutshell
 
 - Frontend buffering: a dedicated temporary chunk stores serialized geometry for locally edited annotations. It is immediately read by the renderer to display edits. This buffer is the single source of truth for in-flight user edits.
 - Queuing and coalescing: if an edit for the same annotation happens while a commit is in-flight, the new payload is queued in pendingCommit. As soon as the in-flight commit returns, the queued payload is updated with the authoritative id (if needed) and is sent immediately. This effectively debounces rapid user edits into a linear sequence of commits without losing intermediate UI responsiveness.
 - Backend buffering: the backend does not do significant edit buffering; it executes add/update/delete and returns results. The FIXME suggests future work could better correlate pre-commit chunk requests with post-commit state, but the current design relies on the frontend overlay to mask such transitions.
 
-
 ### Where to look in code (ready-made pointers)
 
 Frontend (src/annotation/frontend_source.ts):
+
 - MultiscaleAnnotationSource
   - applyLocalUpdate() — creates/updates the local overlay, manages pending/active commit flags.
   - sendCommitRequest() — sends ANNOTATION_COMMIT_UPDATE_RPC_ID and marks commitInProgress.
@@ -116,17 +123,17 @@ Frontend (src/annotation/frontend_source.ts):
 - AnnotationGeometryChunkSource, AnnotationSubsetGeometryChunkSource, AnnotationMetadataChunkSource — the three chunk sources used by the layer to render and to keep references synced.
 
 Backend (src/annotation/backend.ts):
+
 - registerRPC(ANNOTATION_COMMIT_UPDATE_RPC_ID, …) — receives commit requests, routes them to add/update/delete, sends result via ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID.
 - AnnotationSpatiallyIndexedRenderLayerBackend.recomputeChunkPriorities() — visibility-driven chunk scheduling that requests geometry chunks.
-
 
 ### Relation to your VoxDummyChunkSource
 
 Your voxel_annotation VoxDummyChunkSource mirrors the standard infrastructure used above:
+
 - Frontend owner: VoxDummyChunkSource (src/voxel_annotation/frontend.ts) extends volume/frontend VolumeChunkSource and is annotated with @registerSharedObjectOwner(VOX_DUMMY_CHUNK_SOURCE_RPC_ID).
 - Backend counterpart: VoxDummyChunkSource (src/voxel_annotation/backend.ts) extends volume/backend VolumeChunkSource and is decorated with @registerSharedObject(VOX_DUMMY_CHUNK_SOURCE_RPC_ID). It implements download() to fill chunk.data with a checkerboard pattern.
 - The RPC pairing and chunk lifecycle are the same: frontend requests visible chunks, backend download() produces bytes, they’re transferred back and uploaded to GPU by the frontend’s format handler; rendering samples those textures in your custom render layer.
-
 
 ### Practical implications for modifying or extending the commit/buffering logic
 
@@ -134,7 +141,6 @@ Your voxel_annotation VoxDummyChunkSource mirrors the standard infrastructure us
 - To draw overlay differently (e.g., highlight uncommitted edits): modify how the temporary chunk is fed into the shader/render mix. Today, temporary bytes are written in a separate chunk object; your render layer or geometry-data upload path could add a visual flag.
 - To ensure consistency with streaming chunks: if you need stronger guarantees that streamed chunks reflect post-commit state, you could implement a small backend-side buffer or generation tracking in the annotation geometry sources, then drop or re-request chunks when a commit completes.
 - To wire new properties into commit: extend AnnotationPropertySerializer and the serialize/deserialize paths used by updateAnnotation/deleteAnnotation/computeNumPickIds.
-
 
 ### TL;DR flow
 

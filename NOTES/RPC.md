@@ -15,6 +15,7 @@ Once you keep those three ideas in mind, the rest of the patterns (like sharing 
 Core file: src/worker_rpc.ts
 
 - Message router
+
   - registerRPC(name, handler) records a function capable of handling messages named “name”.
   - rpc.invoke(name, payload, transfers?) serializes your payload and posts it to the other side. The other side looks up handler by name and calls it.
 
@@ -23,6 +24,7 @@ Core file: src/worker_rpc.ts
   - rpc.promiseInvoke(name, payload, { signal, progressListener, transfers }) sends the request and returns a Promise. If you pass an AbortSignal, the other side will receive a cancellation via the standard PROMISE_CANCEL_ID. If you pass a progressListener, the other side can emit progress spans back.
 
 Key snippets (file: src/worker_rpc.ts):
+
 - Registry and invoke: handlers map, registerRPC, RPC.invoke (lines ~42–46, 225–236).
 - Promise protocol: registerPromiseRPC and rpc.promiseInvoke with cancel and progress (lines ~74–108, 238–269, 110–145, 130–140).
 - Ready/queue: when the peer worker isn’t ready yet, outgoing messages get queued until onPeerReady flushes them (lines ~158–189).
@@ -38,10 +40,11 @@ Core file: src/worker_rpc.ts
 - A SharedObject is a RefCounted instance that exists on both sides (owner and counterpart). The owner creates the counterpart using a factory call; the counterpart is a lightweight representation used to send signals back to the owner. Both halves refer to each other via an RPC id.
 
 - Ownership and lifecycle
+
   - Owner side calls initializeCounterpart(rpc, options). That:
-    1) sets up bookkeeping (rpc, rpcId),
-    2) marks itself as owner,
-    3) invokes SharedObject.new with type and options so the other side constructs the counterpart (lines ~290–298).
+    1. sets up bookkeeping (rpc, rpcId),
+    2. marks itself as owner,
+    3. invokes SharedObject.new with type and options so the other side constructs the counterpart (lines ~290–298).
   - Counterpart creation (other side): SharedObject.new handler looks up the registered constructor by the type string and new()’s it (lines ~439–446). Counterpart starts with refCount zero.
   - Reference model: addCounterpartRef() returns { id, gen }, where gen is a monotonically increasing generation number that tracks references flowing to the other side (line ~307–309). When a counterpart’s refcount drops to zero, it notifies the owner via SharedObject.refCountReachedZero (lines ~398–402), passing back the generation that reached zero.
   - Cleanup:
@@ -62,9 +65,11 @@ Plain-English analogy: imagine the frontend owns a remote handle in the worker. 
 Also in src/worker_rpc.ts
 
 - @registerSharedObjectOwner(identifier)
+
   - Sets RPC_TYPE_ID on the class prototype to the given string (lines ~411–415). This is used when the owner class will initiate a counterpart. On initializeCounterpart, that RPC_TYPE_ID is sent so the other side knows which constructor to call.
 
 - @registerSharedObject(identifier?)
+
   - Registers a class constructor in a global map keyed by identifier (lines ~425–437). This is meant for counterpart classes (the classes to construct when a “SharedObject.new” message arrives). If you omit the identifier, the class’s prototype must already have RPC_TYPE_ID.
 
 - How they combine:
@@ -72,6 +77,7 @@ Also in src/worker_rpc.ts
   - Counterpart side: a class decorated with @registerSharedObject("My.Type") is discoverable by the SharedObject.new handler, which constructs it with (rpc, options).
 
 In the code:
+
 - Owner example (frontend):
   - src/annotation/renderlayer.ts: AnnotationLayerSharedObject is decorated with @registerSharedObjectOwner(ANNOTATION_RENDER_LAYER_RPC_ID) and calls this.initializeCounterpart(...) to spin up the backend counterpart with the same identifier (lines ~182–201).
 - Counterpart example (backend):
@@ -84,12 +90,14 @@ This pattern appears broadly across the codebase for chunk sources, mesh layers,
 ### Example: sharing visibility across threads with a mixin
 
 Files:
+
 - src/visibility_priority/frontend.ts
 - src/visibility_priority/backend.ts
 
 withSharedVisibility is a mixin that augments a SharedObject-based class with a “visibility” property that’s actually a shared, cross-thread WatchableValue. It demonstrates how to embed another shared object inside your own options during initializeCounterpart.
 
 - Frontend side mixin (owner):
+
   - Adds visibility = new VisibilityPriorityAggregator() (an aggregator of watchable priorities).
   - In initializeCounterpart, it constructs a SharedWatchableValue from the existing WatchableValue and injects the rpcId into options.visibility before calling super.initializeCounterpart (frontend.ts lines ~96–105). This means the backend will receive an rpc id to a SharedWatchableValue.
 
@@ -116,21 +124,25 @@ This is the building block used by withSharedVisibility and also elsewhere when 
 
 Let’s walk through a concrete case from annotations (simplified):
 
-1) Frontend creates an owner object
-  - class AnnotationLayerSharedObject extends withSharedVisibility(...) is decorated with @registerSharedObjectOwner(ANNOTATION_RENDER_LAYER_RPC_ID).
-  - Its constructor calls initializeCounterpart(this.chunkManager.rpc, { source: source.rpcId, segmentationStates: ..., visibility: SharedWatchableValue.makeFromExisting(...).rpcId })
+1. Frontend creates an owner object
 
-2) RPC constructs the backend counterpart
-  - The owner call triggers rpc.invoke("SharedObject.new", { id, type: ANNOTATION_RENDER_LAYER_RPC_ID, ...options }).
-  - On the backend, the SharedObject.new handler looks up the registered constructor for that id (registered by @registerSharedObject on the backend class) and constructs it with (rpc, options).
-  - The backend counterpart receives options.visibility as a reference id and does rpc.get(options.visibility) to obtain the SharedWatchableValue handle for ongoing updates.
+- class AnnotationLayerSharedObject extends withSharedVisibility(...) is decorated with @registerSharedObjectOwner(ANNOTATION_RENDER_LAYER_RPC_ID).
+- Its constructor calls initializeCounterpart(this.chunkManager.rpc, { source: source.rpcId, segmentationStates: ..., visibility: SharedWatchableValue.makeFromExisting(...).rpcId })
 
-3) Runtime updates
-  - If frontend changes visibility, SharedWatchableValue sends a CHANGED message; backend’s handler updates its copy and may reprioritize chunk requests.
-  - If backend needs to respond with progress or results, it uses RPC handlers or registerPromiseRPC to return data.
+2. RPC constructs the backend counterpart
 
-4) Cleanup
-  - Any references sent to the other side are stamped with a generation (addCounterpartRef()). When the counterpart’s refcount drops to zero, it notifies the owner (SharedObject.refCountReachedZero). When both sides are done for the current generation and the owner’s own refcount is zero, the owner sends SharedObject.dispose, and both sides free their mapping.
+- The owner call triggers rpc.invoke("SharedObject.new", { id, type: ANNOTATION_RENDER_LAYER_RPC_ID, ...options }).
+- On the backend, the SharedObject.new handler looks up the registered constructor for that id (registered by @registerSharedObject on the backend class) and constructs it with (rpc, options).
+- The backend counterpart receives options.visibility as a reference id and does rpc.get(options.visibility) to obtain the SharedWatchableValue handle for ongoing updates.
+
+3. Runtime updates
+
+- If frontend changes visibility, SharedWatchableValue sends a CHANGED message; backend’s handler updates its copy and may reprioritize chunk requests.
+- If backend needs to respond with progress or results, it uses RPC handlers or registerPromiseRPC to return data.
+
+4. Cleanup
+
+- Any references sent to the other side are stamped with a generation (addCounterpartRef()). When the counterpart’s refcount drops to zero, it notifies the owner (SharedObject.refCountReachedZero). When both sides are done for the current generation and the owner’s own refcount is zero, the owner sends SharedObject.dispose, and both sides free their mapping.
 
 ---
 
@@ -138,11 +150,13 @@ Let’s walk through a concrete case from annotations (simplified):
 
 - Decide which side “owns” it (the side that will call initializeCounterpart()).
 - On the owner class:
+
   - Decorate: @registerSharedObjectOwner("my.unique.type")
   - Derive from SharedObject or a mixin that includes it (e.g., withSharedVisibility(SharedObject)).
   - In your constructor, call this.initializeCounterpart(rpc, { ...options }) and include any nested shared object ids (e.g., visibility: SharedWatchableValue.makeFromExisting(rpc, myWatchable).rpcId).
 
 - On the counterpart class (other thread):
+
   - Decorate: @registerSharedObject("my.unique.type")
   - Derive from SharedObjectCounterpart or another mixin chain suitable for the backend (e.g., withSharedVisibility(ChunkRequesterBase)).
   - In the constructor(rpc, options), read back nested shared objects using rpc.get(options.someSharedId) and wire up listeners.
@@ -156,12 +170,15 @@ Let’s walk through a concrete case from annotations (simplified):
 ### Debugging tips
 
 - Confirm the type id matches on both sides
+
   - The string passed to @registerSharedObject on the counterpart must match the RPC_TYPE_ID of the owner class (or the string you gave to @registerSharedObjectOwner). Mismatches lead to SharedObject.new failing to find a constructor.
 
 - Check map sizes and ids
+
   - RPC keeps a map of id -> object on each side. If you leak references, numObjects will grow. The debug logs (guarded by DEBUG) can help trace lifecycle.
 
 - Progress/cancel plumbing
+
   - If you pass a progressListener to promiseInvoke, ensure the backend handler is registered with registerPromiseRPC and that it uses the provided progressListener to add/remove spans. Cancellation will call abortController.abort() on the backend.
 
 - Be careful with structured clone
@@ -172,12 +189,15 @@ Let’s walk through a concrete case from annotations (simplified):
 ### Pointers to concrete code you can read next
 
 - RPC core, SharedObject lifecycle, and decorators:
+
   - src/worker_rpc.ts
 
 - A minimal, reusable shared value:
+
   - src/shared_watchable_value.ts
 
 - A realistic composite use (visibility sharing):
+
   - src/visibility_priority/frontend.ts (owner side mixin)
   - src/visibility_priority/backend.ts (counterpart side mixin)
 

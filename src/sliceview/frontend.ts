@@ -434,9 +434,13 @@ export class SliceView extends Base {
             lastSeenGeneration: curUpdateGeneration,
             displayDimensionRenderInfo,
           };
-          if ((renderLayer as any).constructor?.type === 'vox') {
-            console.log('[SliceView.updateVisibleLayersNow] new vox layerInfo created, allSources orientations=', layerInfo.allSources.length,
-              'first orientation scales=', layerInfo.allSources[0]?.length ?? 0);
+          if ((renderLayer as any).constructor?.type === "vox") {
+            console.log(
+              "[SliceView.updateVisibleLayersNow] new vox layerInfo created, allSources orientations=",
+              layerInfo.allSources.length,
+              "first orientation scales=",
+              layerInfo.allSources[0]?.length ?? 0,
+            );
           }
           disposers.push(renderLayer.messages.addChild(layerInfo.messages));
           visibleLayers.set(renderLayer.addRef(), layerInfo);
@@ -455,9 +459,13 @@ export class SliceView extends Base {
             renderLayer,
             layerInfo.messages,
           );
-          if ((renderLayer as any).constructor?.type === 'vox') {
-            console.log('[SliceView.updateVisibleLayersNow] vox layer transform changed, new allSources orientations=', layerInfo.allSources.length,
-              'first orientation scales=', layerInfo.allSources[0]?.length ?? 0);
+          if ((renderLayer as any).constructor?.type === "vox") {
+            console.log(
+              "[SliceView.updateVisibleLayersNow] vox layer transform changed, new allSources orientations=",
+              layerInfo.allSources.length,
+              "first orientation scales=",
+              layerInfo.allSources[0]?.length ?? 0,
+            );
           }
           disposeTransformedSources(renderLayer, allSources);
           layerInfo.visibleSources.length = 0;

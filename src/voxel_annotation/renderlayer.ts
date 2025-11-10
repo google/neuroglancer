@@ -34,7 +34,9 @@ import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 type EmptyParams = Record<string, never>;
 
 export class VoxelAnnotationRenderLayer extends SliceViewVolumeRenderLayer<EmptyParams> {
-  private segmentColorShaderManager = new SegmentColorShaderManager("segmentColorHash");
+  private segmentColorShaderManager = new SegmentColorShaderManager(
+    "segmentColorHash",
+  );
 
   constructor(
     multiscaleSource: MultiscaleVolumeChunkSource,
@@ -42,7 +44,8 @@ export class VoxelAnnotationRenderLayer extends SliceViewVolumeRenderLayer<Empty
   ) {
     super(multiscaleSource, {
       ...options,
-      shaderParameters: options.shaderParameters ?? constantWatchableValue({} as EmptyParams),
+      shaderParameters:
+        options.shaderParameters ?? constantWatchableValue({} as EmptyParams),
       encodeShaderParameters: () => 0,
     });
   }

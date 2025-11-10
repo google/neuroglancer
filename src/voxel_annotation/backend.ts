@@ -3,14 +3,24 @@
  * Copyright 2025.
  */
 
-import type { VolumeChunk } from '#src/sliceview/volume/backend.js';
-import { VolumeChunkSource as BaseVolumeChunkSource } from '#src/sliceview/volume/backend.js';
-import { DataType } from '#src/util/data_type.js';
-import { VOX_CHUNK_SOURCE_RPC_ID, VOX_COMMIT_VOXELS_RPC_ID, VOX_MAP_INIT_RPC_ID, VOX_LABELS_GET_RPC_ID, VOX_LABELS_SET_RPC_ID } from '#src/voxel_annotation/base.js';
-import type { VoxMapInitOptions } from '#src/voxel_annotation/index.js';
-import { LocalVoxSource, toScaleKey } from '#src/voxel_annotation/index.js';
-import type { RPC } from '#src/worker_rpc.js';
-import { registerRPC, registerPromiseRPC, registerSharedObject } from '#src/worker_rpc.js';
+import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
+import { VolumeChunkSource as BaseVolumeChunkSource } from "#src/sliceview/volume/backend.js";
+import { DataType } from "#src/util/data_type.js";
+import {
+  VOX_CHUNK_SOURCE_RPC_ID,
+  VOX_COMMIT_VOXELS_RPC_ID,
+  VOX_MAP_INIT_RPC_ID,
+  VOX_LABELS_GET_RPC_ID,
+  VOX_LABELS_SET_RPC_ID,
+} from "#src/voxel_annotation/base.js";
+import type { VoxMapInitOptions } from "#src/voxel_annotation/index.js";
+import { LocalVoxSource, toScaleKey } from "#src/voxel_annotation/index.js";
+import type { RPC } from "#src/worker_rpc.js";
+import {
+  registerRPC,
+  registerPromiseRPC,
+  registerSharedObject,
+} from "#src/worker_rpc.js";
 
 /**
  * Backend volume source that persists voxel edits per chunk. It returns saved data if available,
@@ -25,12 +35,28 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
   }
 
   /** Initialize map metadata and persistence backend. */
-  async initMap(opts: { mapId?: string; dataType?: number; chunkDataSize?: number[]; upperVoxelBound?: number[]; baseVoxelOffset?: number[]; unit?: string; scaleKey?: string}) {
-    const cds: number[] = Array.from(opts.chunkDataSize ?? Array.from(this.spec.chunkDataSize));
-    const uvb: number[] = Array.from(opts.upperVoxelBound ?? Array.from(this.spec.upperVoxelBound ?? [0, 0, 0] as any));
+  async initMap(opts: {
+    mapId?: string;
+    dataType?: number;
+    chunkDataSize?: number[];
+    upperVoxelBound?: number[];
+    baseVoxelOffset?: number[];
+    unit?: string;
+    scaleKey?: string;
+  }) {
+    const cds: number[] = Array.from(
+      opts.chunkDataSize ?? Array.from(this.spec.chunkDataSize),
+    );
+    const uvb: number[] = Array.from(
+      opts.upperVoxelBound ??
+        Array.from(this.spec.upperVoxelBound ?? ([0, 0, 0] as any)),
+    );
     const dt = opts.dataType ?? this.spec.dataType;
     // Default base offset to spec.baseVoxelOffset if not provided
-    const bvo: number[] = Array.from(opts.baseVoxelOffset ?? Array.from((this.spec as any).baseVoxelOffset ?? [0, 0, 0]));
+    const bvo: number[] = Array.from(
+      opts.baseVoxelOffset ??
+        Array.from((this.spec as any).baseVoxelOffset ?? [0, 0, 0]),
+    );
     const scaleKey = opts.scaleKey ?? toScaleKey(cds, bvo, uvb);
     const initOpts = {
       mapId: opts.mapId,
@@ -45,12 +71,20 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
   }
 
   /** Commit voxel edits from the frontend. */
-  async commitVoxels(edits: { key: string; indices: number[] | Uint32Array; value?: number; values?: ArrayLike<number>; size?: number[] }[]) {
+  async commitVoxels(
+    edits: {
+      key: string;
+      indices: number[] | Uint32Array;
+      value?: number;
+      values?: ArrayLike<number>;
+      size?: number[];
+    }[],
+  ) {
     await this.local.applyEdits(edits);
   }
 
   async download(chunk: VolumeChunk, signal: AbortSignal): Promise<void> {
-    if (signal.aborted) throw signal.reason ?? new Error('aborted');
+    if (signal.aborted) throw signal.reason ?? new Error("aborted");
     // Determine chunk key and size (may be clipped at upper bound).
     this.computeChunkBounds(chunk);
     const cds = chunk.chunkDataSize!;
@@ -61,8 +95,12 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     // Load saved chunk if present and copy overlapping region
     const saved = await this.local.getSavedChunk(key);
     if (saved) {
-      const sxS = saved.size[0], syS = saved.size[1], szS = saved.size[2];
-      const sxD = cds[0], syD = cds[1], szD = cds[2];
+      const sxS = saved.size[0],
+        syS = saved.size[1],
+        szS = saved.size[2];
+      const sxD = cds[0],
+        syD = cds[1],
+        szD = cds[2];
       const ox = Math.min(sxS, sxD);
       const oy = Math.min(syS, syD);
       const oz = Math.min(szS, szD);
@@ -120,11 +158,14 @@ registerRPC(VOX_MAP_INIT_RPC_ID, function (x: any) {
 });
 
 // RPCs for label persistence (promise-based)
-registerPromiseRPC<number[]>(VOX_LABELS_GET_RPC_ID, async function (x: any): Promise<any> {
-  const obj = this.get(x.rpcId) as VoxChunkSource;
-  const ids = await obj.local.getLabelIds();
-  return { value: ids };
-});
+registerPromiseRPC<number[]>(
+  VOX_LABELS_GET_RPC_ID,
+  async function (x: any): Promise<any> {
+    const obj = this.get(x.rpcId) as VoxChunkSource;
+    const ids = await obj.local.getLabelIds();
+    return { value: ids };
+  },
+);
 
 registerRPC(VOX_LABELS_SET_RPC_ID, function (x: any) {
   const obj = this.get(x.id) as VoxChunkSource;
