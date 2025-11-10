@@ -24,6 +24,11 @@ import { registerSharedObjectOwner } from "#src/worker_rpc.js";
  */
 @registerSharedObjectOwner(VOX_CHUNK_SOURCE_RPC_ID)
 export class VoxChunkSource extends BaseVolumeChunkSource {
+  declare OPTIONS: {
+    spec: VolumeChunkSpecification;
+    vox?: { serverUrl?: string; token?: string };
+  };
+  private voxOptions?: { serverUrl?: string; token?: string };
   private tempVoxChunkGridPosition = new Float32Array(3);
   private tempLocalPosition = new Uint32Array(3);
   private dirtyChunks = new Set<string>();
@@ -53,9 +58,32 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
 
   constructor(
     chunkManager: ChunkManager,
-    options: { spec: VolumeChunkSpecification },
+    options: { spec: VolumeChunkSpecification; vox?: { serverUrl?: string; token?: string } },
   ) {
     super(chunkManager, options);
+    this.voxOptions = options.vox;
+  }
+
+  override initializeCounterpart(rpc: any, options: any) {
+    const opts = { ...(options || {}), spec: this.spec };
+    if (this.voxOptions) {
+      (opts as any).vox = { ...this.voxOptions };
+    }
+    super.initializeCounterpart(rpc, opts);
+  }
+
+  static override encodeOptions(options: {
+    spec: VolumeChunkSpecification;
+    vox?: { serverUrl?: string; token?: string };
+  }) {
+    const base = (BaseVolumeChunkSource as any).encodeOptions(options);
+    if (options?.vox) {
+      (base as any).vox = {
+        serverUrl: options.vox.serverUrl,
+        token: options.vox.token,
+      };
+    }
+    return base;
   }
 
   async getLabelIds(): Promise<number[]> {

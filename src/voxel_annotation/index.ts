@@ -3,6 +3,8 @@
  * The LocalVoxSource persists per-chunk arrays into IndexedDB with a debounced saver.
  */
 
+import { DataType } from "#src/util/data_type.js";
+
 export interface VoxMapInitOptions {
   mapId?: string;
   dataType?: number;
@@ -14,7 +16,7 @@ export interface VoxMapInitOptions {
 }
 
 export interface SavedChunk {
-  data: Uint32Array; // MVP stores UINT32 labels
+  data: Uint32Array | BigUint64Array; // Supports UINT32 and UINT64
   size: Uint32Array; // canonical size used for linearization (usually spec.chunkDataSize)
 }
 
@@ -117,6 +119,22 @@ export abstract class VoxSource {
   // Overridden by subclass to actually persist dirty chunks.
   protected async flushSaves(): Promise<void> {}
 
+  // Abstract persistence API the backend expects
+  abstract getSavedChunk(key: string): Promise<SavedChunk | undefined>;
+  abstract ensureChunk(
+    key: string,
+    size?: Uint32Array | number[],
+  ): Promise<SavedChunk>;
+  abstract applyEdits(
+    edits: {
+      key: string;
+      indices: ArrayLike<number>;
+      value?: number;
+      values?: ArrayLike<number>;
+      size?: number[];
+    }[],
+  ): Promise<void>;
+
   // Apply edits into an in-memory chunk array; returns the SavedChunk.
   protected applyEditsIntoChunk(
     sc: SavedChunk,
@@ -124,16 +142,21 @@ export abstract class VoxSource {
     value?: number,
     values?: ArrayLike<number>,
   ) {
-    const dst = sc.data;
+    const dst = sc.data as any;
+    const is64 = dst instanceof BigUint64Array;
     if (values != null) {
       const vv = values as ArrayLike<number>;
       const n = Math.min((indices as any).length ?? 0, (vv as any).length ?? 0);
       for (let i = 0; i < n; ++i) {
         const idx = (indices as any)[i] | 0;
-        if (idx >= 0 && idx < dst.length) dst[idx] = (vv as any)[i] >>> 0;
+        if (idx >= 0 && idx < dst.length) {
+          const v = (vv as any)[i] >>> 0;
+          dst[idx] = is64 ? BigInt(v) : v;
+        }
       }
     } else if (value != null) {
-      const v = value >>> 0;
+      const vNum = value >>> 0;
+      const v = (is64 ? BigInt(vNum) : vNum) as any;
       const n = (indices as any).length ?? 0;
       for (let i = 0; i < n; ++i) {
         const idx = (indices as any)[i] | 0;
@@ -324,17 +347,190 @@ export class LocalVoxSource extends VoxSource {
 
 export class RemoteVoxSource extends VoxSource {
   private labelsCache: number[] = [];
-  constructor(public url: string) {
+  private baseUrl: string;
+  private token?: string;
+
+  constructor(url: string, token?: string) {
     super();
+    this.baseUrl = url.replace(/\/$/, "");
+    this.token = token;
   }
+
+  // ---- Public API overrides ----
+  override async init(opts: VoxMapInitOptions) {
+    const meta = await super.init(opts);
+    // Bind dtype string
+    const dtypeStr = this.dtypeToString(this.dataType);
+    // Call /init (best-effort; server may already have it)
+    const qs = this.qs({
+      mapId: this.mapId,
+      scaleKey: this.scaleKey,
+      dtype: dtypeStr,
+    });
+    try {
+      await this.httpGet(`${this.baseUrl}/init${qs}`);
+    } catch {
+      // ignore
+    }
+    return meta;
+  }
+
+  async getSavedChunk(key: string): Promise<SavedChunk | undefined> {
+    const existing = this.saved.get(key);
+    if (existing) return existing;
+    const qs = this.qs({ mapId: this.mapId, chunkKey: key });
+    try {
+      const buf = await this.httpGetArrayBuffer(`${this.baseUrl}/chunk${qs}`);
+      if (!buf) return undefined;
+      const arr = this.makeTypedArrayFromBuffer(buf);
+      const sc: SavedChunk = { data: arr, size: new Uint32Array(this.chunkDataSize) };
+      this.saved.set(key, sc);
+      this.enforceCap();
+      return sc;
+    } catch (e: any) {
+      // 404 → not found
+      return undefined;
+    }
+  }
+
+  async ensureChunk(key: string, size?: Uint32Array | number[]): Promise<SavedChunk> {
+    let sc = this.saved.get(key);
+    if (sc) return sc;
+    sc = await this.getSavedChunk(key);
+    if (sc) return sc;
+    // allocate zero-filled
+    const sz = new Uint32Array(size ?? this.chunkDataSize);
+    const total = (sz[0] | 0) * (sz[1] | 0) * (sz[2] | 0);
+    const data = this.allocateTypedArray(total);
+    sc = { data, size: new Uint32Array(sz) };
+    this.saved.set(key, sc);
+    this.enforceCap();
+    this.markDirty(key);
+    return sc;
+  }
+
+  async applyEdits(
+    edits: {
+      key: string;
+      indices: ArrayLike<number>;
+      value?: number;
+      values?: ArrayLike<number>;
+      size?: number[];
+    }[],
+  ) {
+    for (const e of edits) {
+      const sc = await this.ensureChunk(
+        e.key,
+        e.size ? new Uint32Array(e.size) : this.chunkDataSize,
+      );
+      this.applyEditsIntoChunk(sc, e.indices, e.value, e.values);
+      this.markDirty(e.key);
+    }
+  }
+
+  protected override async flushSaves() {
+    const keys = Array.from(this.dirty);
+    if (keys.length === 0) {
+      this.saveTimer = undefined;
+      return;
+    }
+    this.dirty.clear();
+    for (const key of keys) {
+      const sc = this.saved.get(key);
+      if (!sc) continue;
+      const qs = this.qs({ mapId: this.mapId, chunkKey: key });
+      try {
+        await this.httpPutArrayBuffer(`${this.baseUrl}/chunk${qs}`, sc.data as any);
+      } catch (e) {
+        // If failed, keep dirty to retry later
+        this.dirty.add(key);
+      }
+    }
+    this.saveTimer = undefined;
+  }
+
+  // ---- Helpers ----
+  private qs(params: Record<string, string | number | undefined>) {
+    const usp = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v === undefined || v === null) continue;
+      usp.set(k, String(v));
+    }
+    if (this.token) usp.set("token", this.token);
+    const s = usp.toString();
+    return s ? `?${s}` : "";
+  }
+
+  private dtypeToString(dt: number): "uint32" | "uint64" {
+    return dt === DataType.UINT64 ? "uint64" : "uint32";
+  }
+
+  private allocateTypedArray(total: number): Uint32Array | BigUint64Array {
+    if (this.dataType === DataType.UINT64) return new BigUint64Array(total);
+    return new Uint32Array(total);
+  }
+
+  private makeTypedArrayFromBuffer(buf: ArrayBuffer): Uint32Array | BigUint64Array {
+    if (this.dataType === DataType.UINT64) return new BigUint64Array(buf);
+    return new Uint32Array(buf);
+  }
+
+  private async httpGet(url: string): Promise<Response> {
+    const res = await fetch(url, { method: "GET", credentials: "omit" });
+    if (!res.ok) throw new Error(`GET ${url} -> ${res.status}`);
+    return res;
+  }
+
+  private async httpGetArrayBuffer(url: string): Promise<ArrayBuffer | undefined> {
+    const res = await fetch(url, { method: "GET", credentials: "omit" });
+    if (res.status === 404) return undefined;
+    if (!res.ok) throw new Error(`GET ${url} -> ${res.status}`);
+    return await res.arrayBuffer();
+  }
+
+  private async httpPutArrayBuffer(
+    url: string,
+    body: ArrayBufferLike | ArrayBufferView,
+  ): Promise<void> {
+    // Ensure we pass an ArrayBufferView to satisfy fetch BodyInit typing across platforms.
+    let payload: ArrayBufferView;
+    if (body instanceof ArrayBuffer) {
+      payload = new Uint8Array(body);
+    } else if ((body as any).buffer && (body as any).byteLength !== undefined) {
+      payload = body as ArrayBufferView;
+    } else {
+      payload = new Uint8Array(body as ArrayBufferLike);
+    }
+    const res = await fetch(url, {
+      method: "PUT",
+      body: payload as any,
+      headers: { "Content-Type": "application/octet-stream" },
+      credentials: "omit",
+    });
+    if (!res.ok) throw new Error(`PUT ${url} -> ${res.status}`);
+  }
+
+  // Keep labels local (in-memory) unless remote endpoints are added later
   override async getLabelIds(): Promise<number[]> {
-    // Placeholder: if a remote endpoint exists, fetch from `${url}/labels` with map/scale.
-    // For now, return in-memory cache.
     return Array.from(this.labelsCache);
   }
   override async setLabelIds(ids: number[]): Promise<void> {
-    // Placeholder: post to remote endpoint; cache locally as best-effort.
     this.labelsCache = ids.map((v) => v >>> 0);
+  }
+
+  // LRU-style cap similar to LocalVoxSource
+  private enforceCap() {
+    while (this.saved.size > this.maxSavedChunks) {
+      let oldestKey: string | undefined;
+      for (const k of this.saved.keys()) {
+        if (!this.dirty.has(k)) {
+          oldestKey = k;
+          break;
+        }
+      }
+      if (oldestKey === undefined) break;
+      this.saved.delete(oldestKey);
+    }
   }
 }
 

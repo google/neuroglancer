@@ -441,6 +441,10 @@ export class VoxUserLayer extends UserLayer {
   voxBrushShape: "disk" | "sphere" = "disk";
   private voxLoadedSubsource?: LoadedDataSubsource;
 
+  // Remote server configuration when using vox+http(s):// data sources
+  private voxServerUrl?: string;
+  private voxServerToken?: string;
+
   // --- Label helpers ---
   private genId(): number {
     // Generate a unique uint32 per layer session. Try crypto.getRandomValues; fallback to Math.random.
@@ -715,6 +719,46 @@ export class VoxUserLayer extends UserLayer {
     }
   }
 
+  private qsToken(token?: string) {
+    const usp = new URLSearchParams();
+    if (token) usp.set("token", token);
+    const s = usp.toString();
+    return s ? `?${s}` : "";
+  }
+
+  private parseVoxRemoteUrl(url: string): { scheme: string; baseUrl: string; token?: string } | undefined {
+    const m = url.match(/^(vox\+https?):\/\/(.+)$/);
+    if (!m) return undefined;
+    const scheme = m[1]; // vox+http or vox+https
+    const rest = m[2];
+    // Build a temporary URL for parsing. Always ensure there is a protocol.
+    const proto = scheme.substring(4); // http or https
+    // If rest already contains a path/query, URL will parse it.
+    let tmp: URL;
+    try {
+      tmp = new URL(`${proto}://${rest}`);
+    } catch {
+      return undefined;
+    }
+    const baseUrl = `${proto}://${tmp.host}`;
+    const token = tmp.searchParams.get("token") || undefined;
+    return { scheme, baseUrl, token };
+  }
+
+  private async verifyVoxRemote(baseUrl: string, token?: string): Promise<void> {
+    const q = this.qsToken(token);
+    const health = await fetch(`${baseUrl}/health${q}`, {
+      method: "GET",
+      credentials: "omit",
+    });
+    if (!health.ok) throw new Error(`/health -> ${health.status}`);
+    const info = await fetch(`${baseUrl}/info${q}`, {
+      method: "GET",
+      credentials: "omit",
+    });
+    if (!info.ok) throw new Error(`/info -> ${info.status}`);
+  }
+
   private buildOrRebuildVoxLayer() {
     const ls = this.voxLoadedSubsource;
     if (!ls) return;
@@ -738,6 +782,8 @@ export class VoxUserLayer extends UserLayer {
             chunkDataSize: new Uint32Array([64, 64, 64]),
             baseVoxelOffset: lower,
             upperVoxelBound: upper,
+            voxServerUrl: this.voxServerUrl,
+            voxToken: this.voxServerToken,
           },
         );
         // Expose a controller so tools can paint voxels via the source.
@@ -765,6 +811,8 @@ export class VoxUserLayer extends UserLayer {
           upperVoxelBound: upperArr,
           unit: this.voxScaleUnit,
           scaleKey,
+          serverUrl: this.voxServerUrl,
+          token: this.voxServerToken,
         });
         this.loadLabels();
 
@@ -822,14 +870,42 @@ export class VoxUserLayer extends UserLayer {
     for (const loadedSubsource of subsources) {
       const { subsourceEntry } = loadedSubsource;
       const { subsource } = subsourceEntry;
-      if (subsource.local === LocalDataSource.voxelAnnotations) {
-        // Accept this data source; remember it and build the layer from current settings.
+      const isLocalVox = subsource.local === LocalDataSource.voxelAnnotations;
+      const urlStr = loadedSubsource.loadedDataSource.layerDataSource.spec.url;
+
+      if (isLocalVox) {
+        // Local in-memory vox datasource.
+        this.voxServerUrl = undefined;
+        this.voxServerToken = undefined;
+        this.voxMapId = "local";
         this.voxLoadedSubsource = loadedSubsource;
         this.buildOrRebuildVoxLayer();
         continue;
       }
+
+      // Non-local: only accept vox+http(s) schemes.
+      const parsed = this.parseVoxRemoteUrl(urlStr);
+      if (parsed) {
+        // Verify the remote server before activation.
+        (async () => {
+          try {
+            await this.verifyVoxRemote(parsed.baseUrl, parsed.token);
+            this.voxServerUrl = parsed.baseUrl;
+            this.voxServerToken = parsed.token;
+            this.voxMapId = "remote";
+            this.voxLoadedSubsource = loadedSubsource;
+            this.buildOrRebuildVoxLayer();
+          } catch (e: any) {
+            const msg = `Vox remote source check failed: ${e?.message || e}`;
+            loadedSubsource.deactivate(msg);
+          }
+        })();
+        continue;
+      }
+
+      // Reject anything else.
       loadedSubsource.deactivate(
-        "Not compatible with vox layer; only local://voxel-annotations is supported",
+        "Not compatible with vox layer; supported sources: local://voxel-annotations, vox+http://host[:port]/(?token=TOKEN), vox+https://host[:port]/(?token=TOKEN)",
       );
     }
   }
@@ -840,6 +916,10 @@ registerLayerType(VoxUserLayer);
 registerLayerTypeDetector((subsource) => {
   if (subsource.local === LocalDataSource.voxelAnnotations) {
     return { layerConstructor: VoxUserLayer, priority: 100 };
+  }
+  // Accept non-local datasources at low priority to avoid interfering with other layers.
+  if (subsource.local === undefined) {
+    return { layerConstructor: VoxUserLayer, priority: 0 };
   }
   return undefined;
 });

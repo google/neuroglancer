@@ -14,7 +14,8 @@ import {
   VOX_LABELS_SET_RPC_ID,
 } from "#src/voxel_annotation/base.js";
 import type { VoxMapInitOptions } from "#src/voxel_annotation/index.js";
-import { LocalVoxSource, toScaleKey } from "#src/voxel_annotation/index.js";
+import { LocalVoxSource, RemoteVoxSource, toScaleKey } from "#src/voxel_annotation/index.js";
+import type { VoxSource } from "#src/voxel_annotation/index.js";
 import type { RPC } from "#src/worker_rpc.js";
 import {
   registerRPC,
@@ -28,10 +29,19 @@ import {
  */
 @registerSharedObject(VOX_CHUNK_SOURCE_RPC_ID)
 export class VoxChunkSource extends BaseVolumeChunkSource {
-  local = new LocalVoxSource();
+  source: VoxSource;
+  private voxServerUrl?: string;
+  private voxToken?: string;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
+    // Detect remote server configuration from options (flexible keys)
+    const o = options || {};
+    this.voxServerUrl = o.voxServerUrl || o.serverUrl || o.vox?.serverUrl;
+    this.voxToken = o.voxToken || o.token || o.vox?.token;
+    this.source = this.voxServerUrl
+      ? new RemoteVoxSource(this.voxServerUrl, this.voxToken)
+      : new LocalVoxSource();
   }
 
   /** Initialize map metadata and persistence backend. */
@@ -43,7 +53,17 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     baseVoxelOffset?: number[];
     unit?: string;
     scaleKey?: string;
+    serverUrl?: string;
+    token?: string;
   }) {
+    // Allow runtime override of server settings via init options
+    if (opts.serverUrl) this.voxServerUrl = opts.serverUrl;
+    if (opts.token) this.voxToken = opts.token;
+    // Swap source if configuration changed
+    this.source = this.voxServerUrl
+      ? new RemoteVoxSource(this.voxServerUrl, this.voxToken)
+      : new LocalVoxSource();
+
     const cds: number[] = Array.from(
       opts.chunkDataSize ?? Array.from(this.spec.chunkDataSize),
     );
@@ -67,7 +87,7 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
       unit: opts.unit,
       scaleKey,
     } satisfies VoxMapInitOptions;
-    return await this.local.init(initOpts);
+    return await this.source.init(initOpts);
   }
 
   /** Commit voxel edits from the frontend. */
@@ -80,7 +100,7 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
       size?: number[];
     }[],
   ) {
-    await this.local.applyEdits(edits);
+    await this.source.applyEdits(edits);
   }
 
   async download(chunk: VolumeChunk, signal: AbortSignal): Promise<void> {
@@ -93,7 +113,7 @@ export class VoxChunkSource extends BaseVolumeChunkSource {
     // Always produce a typed array matching the spec type; MVP uses UINT32
     const array = this.allocateTypedArray(this.spec.dataType, total, 0);
     // Load saved chunk if present and copy overlapping region
-    const saved = await this.local.getSavedChunk(key);
+    const saved = await this.source.getSavedChunk(key);
     if (saved) {
       const sxS = saved.size[0],
         syS = saved.size[1],
@@ -162,12 +182,12 @@ registerPromiseRPC<number[]>(
   VOX_LABELS_GET_RPC_ID,
   async function (x: any): Promise<any> {
     const obj = this.get(x.rpcId) as VoxChunkSource;
-    const ids = await obj.local.getLabelIds();
+    const ids = await obj.source.getLabelIds();
     return { value: ids };
   },
 );
 
 registerRPC(VOX_LABELS_SET_RPC_ID, function (x: any) {
   const obj = this.get(x.id) as VoxChunkSource;
-  obj.local.setLabelIds(Array.isArray(x?.ids) ? x.ids : []);
+  obj.source.setLabelIds(Array.isArray(x?.ids) ? x.ids : []);
 });

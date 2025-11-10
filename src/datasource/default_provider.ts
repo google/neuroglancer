@@ -25,6 +25,7 @@ import type {
 } from "#src/datasource/index.js";
 import { DataSourceRegistry } from "#src/datasource/index.js";
 import { LocalDataSourceProvider } from "#src/datasource/local.js";
+import { VoxRemoteDataSourceProvider } from "#src/datasource/vox_remote.js";
 import { AutoDetectRegistry } from "#src/kvstore/auto_detect.js";
 import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
 
@@ -50,6 +51,9 @@ export function registerKvStoreBasedDataProvider(
 export function getDefaultDataSourceProvider(options: ProviderOptions) {
   const registry = new DataSourceRegistry(options.kvStoreContext);
   registry.register(new LocalDataSourceProvider());
+  // Register vox remote providers (HTTP/HTTPS)
+  registry.register(new VoxRemoteDataSourceProvider("vox+http"));
+  registry.register(new VoxRemoteDataSourceProvider("vox+https"));
   for (const provider of providers) {
     registry.register(provider);
   }

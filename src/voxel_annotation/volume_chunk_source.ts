@@ -41,6 +41,8 @@ export interface VoxMultiscaleOptions {
   chunkDataSize?: Uint32Array | number[];
   upperVoxelBound?: Float32Array | number[];
   baseVoxelOffset?: Float32Array | number[];
+  voxServerUrl?: string;
+  voxToken?: string;
 }
 
 export class VoxMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
@@ -53,6 +55,8 @@ export class VoxMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource 
   private cfgChunkDataSize: Uint32Array;
   private cfgUpperVoxelBound: Float32Array;
   private cfgBaseVoxelOffset: Float32Array;
+  private voxServerUrl?: string;
+  private voxToken?: string;
 
   constructor(chunkManager: ChunkManager, options?: VoxMultiscaleOptions) {
     super(chunkManager);
@@ -69,6 +73,8 @@ export class VoxMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource 
         ? Array.from(options.baseVoxelOffset)
         : [0, 0, 0],
     );
+    this.voxServerUrl = options?.voxServerUrl;
+    this.voxToken = options?.voxToken;
   }
 
   getSources(_options: VolumeSourceOptions) {
@@ -85,7 +91,7 @@ export class VoxMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource 
     });
     const baseSource: VoxChunkSource = this.chunkManager.getChunkSource(
       VoxChunkSource as any,
-      { spec: baseSpec },
+      { spec: baseSpec, vox: { serverUrl: this.voxServerUrl, token: this.voxToken } },
     );
 
     // Identity transform for base scale.
@@ -116,7 +122,7 @@ export class VoxMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource 
 
     const guardSource: VoxChunkSource = this.chunkManager.getChunkSource(
       VoxChunkSource as any,
-      { spec: guardSpec },
+      { spec: guardSpec, vox: { serverUrl: this.voxServerUrl, token: this.voxToken } },
     );
 
     // Large diagonal scale to make effective voxel size huge, ensuring guard scale is used when
