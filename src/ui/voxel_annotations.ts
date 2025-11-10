@@ -20,6 +20,7 @@ import type {
   VoxelEditingContext,
 } from "#src/layer/vox/index.js";
 import { RenderedDataPanel } from "#src/rendered_data_panel.js";
+import { SliceViewPanel } from "#src/sliceview/panel.js";
 import { StatusMessage } from "#src/status.js";
 import { LayerTool, registerTool, type ToolActivation } from "#src/ui/tool.js";
 import { vec3 } from "#src/util/geom.js";
@@ -146,7 +147,7 @@ export class VoxelBrushTool extends BaseVoxelTool {
     activation.registerDisposer(
       this.mouseState.changed.add(() => {
         this.updateBrushOutline();
-      })
+      }),
     );
   }
 
@@ -154,7 +155,7 @@ export class VoxelBrushTool extends BaseVoxelTool {
     let activePanel: RenderedDataPanel | undefined;
     for (const panel of this.layer.manager.root.display.panels) {
       if (panel instanceof RenderedDataPanel) {
-        if (panel.mouseX !== -1) {
+        if (panel.mouseX !== -1 && panel instanceof SliceViewPanel) {
           activePanel = panel;
         } else {
           panel.clearOverlay();

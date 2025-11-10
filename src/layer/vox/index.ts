@@ -300,7 +300,8 @@ export function UserLayerWithVoxelEditingMixin<
         value = BigInt(x);
       }
 
-      const info = DATA_TYPE_BIT_INFO[dataType as keyof typeof DATA_TYPE_BIT_INFO];
+      const info =
+        DATA_TYPE_BIT_INFO[dataType as keyof typeof DATA_TYPE_BIT_INFO];
       if (!info) {
         this.paintValue.value = value;
         return value;
@@ -313,14 +314,13 @@ export function UserLayerWithVoxelEditingMixin<
       if (signed) {
         const signBit = 1n << BigInt(bits - 1);
         if ((truncated & signBit) !== 0n) {
-          truncated -= (1n << BigInt(bits));
+          truncated -= 1n << BigInt(bits);
         }
       }
 
       this.paintValue.value = truncated;
       return truncated;
     }
-
 
     abstract _createVoxelRenderLayer(
       source: MultiscaleVolumeChunkSource,

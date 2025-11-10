@@ -816,16 +816,16 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       },
     );
 
-    this.overlay_canvas = document.createElement('canvas');
-    this.overlay_canvas.style.position = 'absolute';
-    this.overlay_canvas.style.top = '0';
-    this.overlay_canvas.style.left = '0';
-    this.overlay_canvas.style.width = '100%';
-    this.overlay_canvas.style.height = '100%';
-    this.overlay_canvas.style.pointerEvents = 'none';
-    this.overlay_canvas.style.zIndex = '10';
+    this.overlay_canvas = document.createElement("canvas");
+    this.overlay_canvas.style.position = "absolute";
+    this.overlay_canvas.style.top = "0";
+    this.overlay_canvas.style.left = "0";
+    this.overlay_canvas.style.width = "100%";
+    this.overlay_canvas.style.height = "100%";
+    this.overlay_canvas.style.pointerEvents = "none";
+    this.overlay_canvas.style.zIndex = "10";
     this.element.appendChild(this.overlay_canvas);
-    this.overlay_context = this.overlay_canvas.getContext('2d')!;
+    this.overlay_context = this.overlay_canvas.getContext("2d")!;
 
     this.boundsUpdated.add(() => {
       this.overlay_canvas.width = this.renderViewport.logicalWidth;
@@ -842,19 +842,24 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     if (radius > 0) {
       ctx.beginPath();
       ctx.arc(x, y, radius, 0, 2 * Math.PI);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
       ctx.fill();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 1)';
+      ctx.strokeStyle = "rgba(255, 255, 255, 1)";
       ctx.lineWidth = 3;
       ctx.stroke();
-      ctx.strokeStyle = 'rgba(0, 0, 0, 1)';
+      ctx.strokeStyle = "rgba(0, 0, 0, 1)";
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }
   }
 
   clearOverlay() {
-    this.overlay_context.clearRect(0, 0, this.overlay_canvas.width, this.overlay_canvas.height);
+    this.overlay_context.clearRect(
+      0,
+      0,
+      this.overlay_canvas.width,
+      this.overlay_canvas.height,
+    );
   }
 
   abstract translateDataPointByViewportPixels(
