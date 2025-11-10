@@ -37,6 +37,30 @@ export class VoxelAnnotationRenderLayer extends SliceViewVolumeRenderLayer<Empty
   private segmentColorShaderManager = new SegmentColorShaderManager(
     "segmentColorHash",
   );
+  private forcedSourceIndexLock: number | undefined;
+
+  /** Expose forced LOD index to SliceView.filterVisibleSources when a stroke is active. */
+  getForcedSourceIndexOverride(): number | undefined {
+    return this.forcedSourceIndexLock;
+  }
+
+  /** Set or clear the forced LOD index. Triggers a visible-sources recomputation. */
+  setForcedSourceIndexLock(index: number | undefined): void {
+    if (index !== undefined) {
+      if (!Number.isInteger(index) || index < 0) {
+        throw new Error("setForcedSourceIndexLock: index must be a non-negative integer");
+      }
+    }
+    this.forcedSourceIndexLock = index;
+    // Nudge the sliceview to recompute visible sources by toggling the render scale target.
+    const current = this.renderScaleTarget.value;
+    const epsilon = 1e-9;
+    this.renderScaleTarget.value = current + epsilon;
+    this.renderScaleTarget.value = current;
+    // Ensure a redraw as well.
+    this.redrawNeeded.dispatch();
+    this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
+  }
 
   constructor(
     multiscaleSource: MultiscaleVolumeChunkSource,

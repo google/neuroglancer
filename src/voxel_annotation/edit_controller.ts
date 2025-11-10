@@ -8,7 +8,7 @@ import type { VoxChunkSource } from "#src/voxel_annotation/frontend.js";
 
 export class VoxelEditController {
   constructor(private multiscale: MultiscaleVolumeChunkSource) {}
-  private static readonly qualityFactor = 5.0;
+  private static readonly qualityFactor = 16.0;
 
   // Required: compute desired voxel size (power-of-two) from brush radius.
   getOptimalVoxelSize(brushRadius: number, minLOD = 1, maxLOD = 128) {
@@ -20,6 +20,19 @@ export class VoxelEditController {
     let voxelSize = Math.pow(2, exponent);
     voxelSize = Math.max(minLOD, Math.min(voxelSize, maxLOD));
     return voxelSize;
+  }
+
+  /** Compute the edit LOD index (scale index) from a brush radius in canonical units. */
+  getEditLodIndexForBrush(brushRadiusCanonical: number): number {
+    if (!Number.isFinite(brushRadiusCanonical) || brushRadiusCanonical <= 0) {
+      throw new Error("getEditLodIndexForBrush: brushRadiusCanonical must be > 0");
+    }
+    const voxelSize = this.getOptimalVoxelSize(brushRadiusCanonical);
+    const sourceIndex = Math.round(Math.log2(voxelSize));
+    if (!Number.isInteger(sourceIndex) || sourceIndex < 0) {
+      throw new Error("getEditLodIndexForBrush: computed LOD is invalid");
+    }
+    return sourceIndex;
   }
 
   // Paint a disk (slice-aligned via basis) or sphere in WORLD/ canonical units; we transform to LOD grid before sending.

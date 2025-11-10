@@ -70,14 +70,32 @@ abstract class BaseVoxelLegacyTool extends LegacyTool<VoxUserLayer> {
     if (this.isDrawing) return;
     this.isDrawing = true;
     this.currentMouseState = mouseState;
-    const value =
-      (this.layer as any).getCurrentLabelValue?.() ??
-      ((this.layer as any).voxEraseMode ? 0 : 42);
-    const start = this.getPoint(mouseState);
-    if (start) {
-      this.paintPoint(new Float32Array([start[0], start[1], start[2]]), value);
-      this.lastPoint = start;
+
+    const layer = this.layer as unknown as VoxUserLayer;
+    const brushRadius = Math.max(1, Math.floor((layer as any).voxBrushRadius ?? 3));
+    if (!Number.isFinite(brushRadius) || brushRadius <= 0) {
+      throw new Error("startDrawing: invalid brushRadius");
     }
+
+    // Compute starting point and lock render LOD before first paint.
+    const start = this.getPoint(mouseState);
+    if (!start) {
+      throw new Error("startDrawing: could not compute a starting voxel position from mouse");
+    }
+
+    const centerCanonical = new Float32Array([start[0], start[1], start[2]]);
+    const editLodIndex = layer.voxEditController?.getEditLodIndexForBrush(brushRadius);
+    if (!Number.isInteger(editLodIndex) || editLodIndex == undefined || editLodIndex < 0) {
+      throw new Error("startDrawing: computed edit LOD index is invalid");
+    }
+    layer.beginRenderLodLock(editLodIndex);
+
+    const value =
+      layer.getCurrentLabelValue() ??
+      (layer.voxEraseMode ? 0 : 42);
+
+    this.paintPoint(centerCanonical, value);
+    this.lastPoint = start;
 
     this.mouseDisposer = mouseState.changed.add(() => {
       if (!this.isDrawing) return;
@@ -90,8 +108,7 @@ abstract class BaseVoxelLegacyTool extends LegacyTool<VoxUserLayer> {
         this.lastPoint = cur;
         return;
       }
-      if (cur[0] === last[0] && cur[1] === last[1] && cur[2] === last[2])
-        return;
+      if (cur[0] === last[0] && cur[1] === last[1] && cur[2] === last[2]) return;
       const points = this.linePoints(last, cur);
       if (points.length > 0) {
         this.paintPoints(points, value);
@@ -108,6 +125,12 @@ abstract class BaseVoxelLegacyTool extends LegacyTool<VoxUserLayer> {
     if (this.mouseDisposer) {
       this.mouseDisposer();
       this.mouseDisposer = undefined;
+    }
+    // Always release any active render LOD lock.
+    try {
+      this.layer.endRenderLodLock();
+    } catch (e) {
+      console.warn("stopDrawing: failed to end render LOD lock:", e);
     }
   }
 

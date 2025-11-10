@@ -56,6 +56,8 @@ import { VoxelAnnotationRenderLayer } from "#src/voxel_annotation/renderlayer.js
 import { VoxMultiscaleVolumeChunkSource } from "#src/voxel_annotation/volume_chunk_source.js";
 
 export class VoxUserLayer extends UserLayer {
+  // While drawing, we keep a reference to the vox render layer to control temporary LOD locks.
+  private voxRenderLayerInstance?: VoxelAnnotationRenderLayer;
   onLabelsChanged?: () => void;
   voxMapRegistry = new VoxMapRegistry();
   // Label state for painting: only store ids; colors are hashed from id on the fly
@@ -81,6 +83,42 @@ export class VoxUserLayer extends UserLayer {
   // Remote server configuration when using vox+http(s):// data sources
   voxServerUrl?: string;
   voxServerToken?: string;
+
+  beginRenderLodLock(lockedIndex: number): void {
+    if (!Number.isInteger(lockedIndex) || lockedIndex < 0) {
+      throw new Error("beginRenderLodLock: lockedIndex must be a non-negative integer");
+    }
+    const rl = this.voxRenderLayerInstance;
+    if (!rl) {
+      throw new Error("beginRenderLodLock: render layer is not ready");
+    }
+    // Validate against available levels in current pyramid.
+    const sources2D = rl.multiscaleSource.getSources({} as any);
+    const levels = sources2D?.[0]?.length ?? 0;
+    if (levels <= 0) {
+      throw new Error("beginRenderLodLock: multiscale source has no levels");
+    }
+    if (lockedIndex >= levels) {
+      throw new Error(
+        `beginRenderLodLock: requested LOD ${lockedIndex} exceeds available levels (${levels})`,
+      );
+    }
+    rl.setForcedSourceIndexLock(lockedIndex);
+    console.log("beginRenderLodLock: lockedIndex", lockedIndex);
+  }
+
+  endRenderLodLock(): void {
+    const rl = this.voxRenderLayerInstance;
+    if (!rl) return;
+    rl.setForcedSourceIndexLock(undefined);
+    console.log("endRenderLodLock");
+  }
+
+  getActiveRenderedLodIndex(): number | undefined {
+    const rl = this.voxRenderLayerInstance;
+    if (!rl) return undefined;
+    return rl.getForcedSourceIndexOverride?.();
+  }
 
   // --- Label helpers ---
   private genId(): number {
@@ -390,14 +428,14 @@ export class VoxUserLayer extends UserLayer {
           undefined,
         );
 
-        ls.addRenderLayer(
-          new VoxelAnnotationRenderLayer(voxSource, {
-            transform: transform as any,
-            renderScaleTarget: this.sliceViewRenderScaleTarget,
-            renderScaleHistogram: undefined,
-            localPosition: this.localPosition,
-          } as any),
-        );
+        const renderLayer = new VoxelAnnotationRenderLayer(voxSource, {
+          transform: transform as any,
+          renderScaleTarget: this.sliceViewRenderScaleTarget,
+          renderScaleHistogram: undefined,
+          localPosition: this.localPosition,
+        } as any);
+        this.voxRenderLayerInstance = renderLayer;
+        ls.addRenderLayer(renderLayer);
       },
       guardScale,
       guardBounds,
