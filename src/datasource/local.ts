@@ -31,12 +31,10 @@ import { createIdentity } from "#src/util/matrix.js";
 
 export const localAnnotationsUrl = "local://annotations";
 export const localEquivalencesUrl = "local://equivalences";
-export const localVoxelAnnotationsUrl = "local://voxel-annotations";
 
 export enum LocalDataSource {
   annotations = 0,
   equivalences = 1,
-  voxelAnnotations = 2,
 }
 
 export class LocalDataSourceProvider implements DataSourceProvider {

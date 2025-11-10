@@ -232,61 +232,70 @@ export class VolumeChunkSource
 
   applyLocalEdits(edits: Map<string, {indices: number[], value: number}>): void {
     const chunksToUpdate = new Set<VolumeChunk>();
+    const fetches: Promise<void>[] = [];
+
     for (const [key, edit] of edits.entries()) {
       const chunk = this.chunks.get(key) as VolumeChunk | undefined;
-      if (!chunk || !(chunk as any).data) {
+      if (!chunk) {
         continue;
       }
 
-      const chunkFormat = chunk.chunkFormat;
-
-      if (chunkFormat instanceof UncompressedChunkFormat) {
-        const cpuArray = (chunk as any).data as TypedArray;
-        for (const index of edit.indices) {
-          cpuArray[index] = edit.value;
-        }
-        chunksToUpdate.add(chunk);
-      } else if (chunkFormat instanceof CompressedChunkFormat) {
-        // using an idiotic logic to handle compressed chunks: uncompress -> edit -> recompress
-        // TODO: rework this
-        const compressedData = (chunk as any).data as Uint32Array;
-        const { chunkDataSize } = chunk;
-        const numElements = chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2];
-        const { dataType, subchunkSize } = chunkFormat;
-
-        // Note: Assuming single-channel for simplicity. Multi-channel would require handling offsets.
-        const baseOffset = compressedData[0];
-
-        const outputBuilder = new TypedArrayBuilder(Uint32Array, compressedData.length);
-        // Write multi-channel header (for single channel)
-        outputBuilder.resize(1);
-        outputBuilder.data[0] = 1;
-
-        if (dataType === DataTypeUtil.UINT32) {
-          const uncompressedData = new Uint32Array(numElements);
-          decodeChannelUint32(uncompressedData, compressedData, baseOffset, chunkDataSize, subchunkSize);
-
+      const processEdit = (targetChunk: VolumeChunk) => {
+        const chunkFormat = targetChunk.chunkFormat;
+        if (chunkFormat instanceof UncompressedChunkFormat) {
+          const cpuArray = (targetChunk as any).data as TypedArray;
           for (const index of edit.indices) {
-            uncompressedData[index] = edit.value;
+            cpuArray[index] = edit.value;
+          }
+          chunksToUpdate.add(targetChunk);
+        } else if (chunkFormat instanceof CompressedChunkFormat) {
+          // using an idiotic logic to handle compressed chunks: uncompress -> edit -> recompress
+          // TODO: rework this
+          const compressedData = (targetChunk as any).data as Uint32Array;
+          const { chunkDataSize } = targetChunk;
+          const numElements = chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2];
+          const { dataType, subchunkSize } = chunkFormat;
+          const baseOffset = compressedData[0];
+          const outputBuilder = new TypedArrayBuilder(Uint32Array, compressedData.length);
+          outputBuilder.resize(1);
+          outputBuilder.data[0] = 1;
+
+          if (dataType === DataTypeUtil.UINT32) {
+            const uncompressedData = new Uint32Array(numElements);
+            decodeChannelUint32(uncompressedData, compressedData, baseOffset, chunkDataSize, subchunkSize);
+            for (const index of edit.indices) { uncompressedData[index] = edit.value; }
+            encodeChannelUint32(outputBuilder, subchunkSize, uncompressedData, chunkDataSize);
+          } else { // Assumes UINT64
+            const uncompressedData = new BigUint64Array(numElements);
+            decodeChannelUint64(uncompressedData, compressedData, baseOffset, chunkDataSize, subchunkSize);
+            for (const index of edit.indices) { uncompressedData[index] = BigInt(edit.value); }
+            encodeChannelUint64(outputBuilder, subchunkSize, uncompressedData, chunkDataSize);
           }
 
-          encodeChannelUint32(outputBuilder, subchunkSize, uncompressedData, chunkDataSize);
-        } else { // Assumes UINT64
-          const uncompressedData = new BigUint64Array(numElements);
-          decodeChannelUint64(uncompressedData, compressedData, baseOffset, chunkDataSize, subchunkSize);
-
-          for (const index of edit.indices) {
-            uncompressedData[index] = BigInt(edit.value);
-          }
-
-          encodeChannelUint64(outputBuilder, subchunkSize, uncompressedData, chunkDataSize);
+          (targetChunk as any).data = outputBuilder.view;
+          chunksToUpdate.add(targetChunk);
         }
+      };
 
-        (chunk as any).data = outputBuilder.view;
-        chunksToUpdate.add(chunk);
+      if ((chunk as any).data) {
+        processEdit(chunk);
+      } else {
+        const fetchPromise = this.fetchChunk(chunk.chunkGridPosition, (fetchedChunk) => {
+          processEdit(fetchedChunk as VolumeChunk);
+        }, {}).catch(err => {
+          console.error(`Failed to fetch chunk ${key} for local edit preview:`, err);
+        });
+        fetches.push(fetchPromise);
       }
     }
+
     this.invalidateGpuData(chunksToUpdate);
+
+    if (fetches.length > 0) {
+      Promise.all(fetches).then(() => {
+        this.invalidateGpuData(chunksToUpdate);
+      });
+    }
   }
 
   private invalidateGpuData(chunks: Set<VolumeChunk>): void {

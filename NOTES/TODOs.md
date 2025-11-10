@@ -1,6 +1,6 @@
 # TODO List
 
-- FOR TOMORROW: start to prepare the problematic/email to JMS + strengthen the drawing pipeline + add label management back
+- FOR TOMORROW: start to prepare the problematic/email to JMS + fix the issue with the preview not rendering on empty chunks + add label management back
 
 - Fix the orientation of the disk in the brush tool
 - Add support for flood fill on different planes

@@ -19,10 +19,6 @@ import "#src/layer/vox/style.css";
 import type { CoordinateTransformSpecification } from "#src/coordinate_transform.js";
 import type { DataSourceSpecification } from "#src/datasource/index.js";
 import {
-  LocalDataSource,
-  localVoxelAnnotationsUrl,
-} from "#src/datasource/local.js";
-import {
   type ManagedUserLayer,
   type MouseSelectionState,
   registerLayerType,
@@ -214,7 +210,7 @@ export class VoxUserLayer extends UserLayer {
     // Default to the special local voxel annotations data source.
     return [
       {
-        url: localVoxelAnnotationsUrl,
+        url: "TODO",
         transform: legacyTransform,
         enableDefaultSubsources: true,
         subsources: new Map(),
@@ -272,9 +268,6 @@ export class VoxUserLayer extends UserLayer {
 registerVoxelAnnotationTools();
 registerLayerType(VoxUserLayer);
 registerLayerTypeDetector((subsource) => {
-  if (subsource.local === LocalDataSource.voxelAnnotations) {
-    return { layerConstructor: VoxUserLayer, priority: 100 };
-  }
   // Accept non-local datasources at low priority to avoid interfering with other layers.
   if (subsource.local === undefined) {
     return { layerConstructor: VoxUserLayer, priority: 0 };
