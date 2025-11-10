@@ -3,7 +3,9 @@
 ### priority
 
 - url completion for the ssa+https source
-
+- add json state for every tools and settings of voxel painting
+- replace the current label system with a new system linked to the segment in the segmantation layer and with a color picker for the image layer
+- fix the case of multiple datasources in the same layer
 - should we support compressed chunks? if yes, we should find a better way to handle them.
 
 ### later

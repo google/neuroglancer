@@ -110,7 +110,8 @@ export function layerDataSourceSpecificationFromJson(
 }
 
 function dataSubsourceSpecificationToJson(spec: DataSubsourceSpecification) {
-  return spec.enabled;
+  const { enabled, writable } = spec;
+  return { enabled, writable };
 }
 
 export function layerDataSourceSpecificationToJson(
@@ -501,6 +502,7 @@ export class LayerDataSource extends RefCounted {
                 loadedSubsource.enabled !== defaultEnabledValue
                   ? loadedSubsource.enabled
                   : undefined,
+              writable: loadedSubsource.writable.value ? true : undefined,
             },
           ];
         }),
