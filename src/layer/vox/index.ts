@@ -82,22 +82,53 @@ export class VoxelEditingContext
   extends RefCounted
   implements VoxelEditControllerHost
 {
-  controller: VoxelEditController;
+  controller: VoxelEditController | undefined = undefined;
 
   private cachedChunkTransform: ChunkTransformParameters | undefined;
   private cachedTransformGeneration: number = -1;
   private cachedVoxelPosition: Float32Array = new Float32Array(3);
+  optimisticRenderLayer:
+    | ImageRenderLayer
+    | SegmentationRenderLayer
+    | undefined = undefined;
+  previewSource: VoxelPreviewMultiscaleSource | undefined = undefined;
 
   constructor(
     public hostLayer: UserLayerWithVoxelEditing,
     public primarySource: MultiscaleVolumeChunkSource,
-    public previewSource: VoxelPreviewMultiscaleSource,
-    public optimisticRenderLayer: ImageRenderLayer | SegmentationRenderLayer,
     public primaryRenderLayer: ImageRenderLayer | SegmentationRenderLayer,
+    public writable: boolean,
   ) {
     super();
+
+    if (!writable) return;
+
+    this.previewSource = new VoxelPreviewMultiscaleSource(
+      this.hostLayer.manager.chunkManager,
+      primarySource,
+    );
+
+    const transform = primaryRenderLayer.transform;
+
+    this.optimisticRenderLayer = this.hostLayer._createVoxelRenderLayer(
+      this.previewSource,
+      transform,
+    );
+
+    // since we only allow drawing at max res, we can lock the optimistic render layer to it
+    this.optimisticRenderLayer.filterVisibleSources = function* (
+      this: SliceViewRenderLayer,
+      _sliceView: SliceViewBase,
+      sources: readonly TransformedSource[],
+    ): Iterable<TransformedSource> {
+      if (sources.length > 0) {
+        yield sources[0];
+      }
+    };
+
+    this.hostLayer.addRenderLayer(this.optimisticRenderLayer);
+
     this.controller = new VoxelEditController(this);
-    //this.registerDisposer(optimisticRenderLayer);
   }
 
   get rpc() {
@@ -105,14 +136,16 @@ export class VoxelEditingContext
   }
 
   disposed() {
-    this.controller.dispose();
+    if (this.controller) this.controller.dispose();
+    if (this.optimisticRenderLayer)
+      this.hostLayer.removeRenderLayer(this.optimisticRenderLayer);
     super.disposed();
   }
 
   getVoxelPositionFromMouse(
     mouseState: MouseSelectionState,
   ): Float32Array | undefined {
-    const renderLayer = this.optimisticRenderLayer;
+    const renderLayer = this.primaryRenderLayer;
     const renderLayerTransform = renderLayer.transform.value;
     if (renderLayerTransform.error !== undefined) {
       return undefined;
@@ -335,51 +368,26 @@ export function UserLayerWithVoxelEditingMixin<
     initializeVoxelEditingForSubsource(
       loadedSubsource: LoadedDataSubsource,
       renderlayer: SegmentationRenderLayer | ImageRenderLayer,
+      writable: boolean = true,
     ): void {
       if (this.editingContexts.has(loadedSubsource)) return;
 
       const primarySource = loadedSubsource.subsourceEntry.subsource
         .volume as MultiscaleVolumeChunkSource;
 
-      const previewSource = new VoxelPreviewMultiscaleSource(
-        this.manager.chunkManager,
-        primarySource,
-      );
-
-      const transform = loadedSubsource.getRenderLayerTransform();
-
-      const optimisticRenderLayer = this._createVoxelRenderLayer(
-        previewSource,
-        transform,
-      );
-
-      // since we only allow drawing at max res, we can lock the optimistic render layer to it
-      optimisticRenderLayer.filterVisibleSources = function* (
-        this: SliceViewRenderLayer,
-        _sliceView: SliceViewBase,
-        sources: readonly TransformedSource[],
-      ): Iterable<TransformedSource> {
-        if (sources.length > 0) {
-          yield sources[0];
-        }
-      };
-
       const context = new VoxelEditingContext(
         this,
         primarySource,
-        previewSource,
-        optimisticRenderLayer,
         renderlayer,
+        writable,
       );
       this.editingContexts.set(loadedSubsource, context);
-      this.addRenderLayer(optimisticRenderLayer);
-      this.isEditable.value = true;
+      this.isEditable.value = writable;
     }
 
     deinitializeVoxelEditingForSubsource(loadedSubsource: LoadedDataSubsource) {
       const context = this.editingContexts.get(loadedSubsource);
       if (context) {
-        this.removeRenderLayer(context.optimisticRenderLayer);
         context.dispose();
         this.editingContexts.delete(loadedSubsource);
       }

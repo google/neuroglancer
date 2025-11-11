@@ -3,7 +3,6 @@
 ### priority
 
 - url completion for the ssa+https source
-- fix the case of multiple datasources in the same layer
 
 ### later
 

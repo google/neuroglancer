@@ -80,6 +80,6 @@ export enum BrushShape {
 
 export interface VoxelEditControllerHost {
   primarySource: MultiscaleVolumeChunkSource;
-  previewSource: VoxelPreviewMultiscaleSource;
+  previewSource?: VoxelPreviewMultiscaleSource;
   rpc: RPC;
 }

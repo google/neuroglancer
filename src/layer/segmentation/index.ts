@@ -805,15 +805,14 @@ export class SegmentationUserLayer extends Base {
           loadedSubsource.addRenderLayer(segmentationRenderLayer);
           context.registerDisposer(
             registerNested((context, isWritable) => {
-              if (isWritable) {
-                this.initializeVoxelEditingForSubsource(
-                  loadedSubsource,
-                  segmentationRenderLayer,
-                );
-                context.registerDisposer(() => {
-                  this.deinitializeVoxelEditingForSubsource(loadedSubsource);
-                });
-              }
+              this.initializeVoxelEditingForSubsource(
+                loadedSubsource,
+                segmentationRenderLayer,
+                isWritable,
+              );
+              context.registerDisposer(() => {
+                this.deinitializeVoxelEditingForSubsource(loadedSubsource);
+              });
             }, loadedSubsource.writable),
           );
         }, this.displayState.segmentationGroupState.value);

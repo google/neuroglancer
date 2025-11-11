@@ -170,6 +170,10 @@ export class VoxelEditController extends SharedObject {
     // For V1 we use the minimum LOD (index 0)
     const voxelSize = 1;
     const sourceIndex = 0;
+    if (!this.host.previewSource)
+      throw new Error(
+        "paintBrushWithShape: ERROR Missing preview source from host.",
+      );
     const source = this.host.previewSource.getSources(
       this.getIdentitySliceViewSourceOptions(),
     )[0][sourceIndex]!.chunkSource as InMemoryVolumeChunkSource;
@@ -496,7 +500,10 @@ export class VoxelEditController extends SharedObject {
         }
       }
     }
-
+    if (!this.host.previewSource)
+      throw new Error(
+        "paintBrushWithShape: ERROR Missing preview source from host.",
+      );
     const previewSource = this.host.previewSource.getSources(
       this.getIdentitySliceViewSourceOptions(),
     )[0][sourceIndex]!.chunkSource as InMemoryVolumeChunkSource;
@@ -547,9 +554,17 @@ export class VoxelEditController extends SharedObject {
 
   callChunkReload(voxChunkKeys: string[], isForPreviewChunks: boolean) {
     if (!Array.isArray(voxChunkKeys) || voxChunkKeys.length === 0) return;
-    const sources = (
-      isForPreviewChunks ? this.host.previewSource : this.host.primarySource
-    ).getSources(this.getIdentitySliceViewSourceOptions())[0];
+    const multiscaleSource = isForPreviewChunks
+      ? this.host.previewSource
+      : this.host.primarySource;
+    if (!multiscaleSource) {
+      throw new Error(
+        "VoxelEditController.callChunkReload: ERROR Missing source",
+      );
+    }
+    const sources = multiscaleSource.getSources(
+      this.getIdentitySliceViewSourceOptions(),
+    )[0];
     if (!sources) {
       throw new Error(
         "VoxelEditController.callChunkReload: Missing base source",

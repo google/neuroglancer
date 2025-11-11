@@ -342,15 +342,14 @@ void main() {
         this.shaderError.changed.dispatch();
         context.registerDisposer(
           registerNested((context, isWritable) => {
-            if (isWritable) {
-              this.initializeVoxelEditingForSubsource(
-                loadedSubsource,
-                imageRenderLayer,
-              );
-              context.registerDisposer(() => {
-                this.deinitializeVoxelEditingForSubsource(loadedSubsource);
-              });
-            }
+            this.initializeVoxelEditingForSubsource(
+              loadedSubsource,
+              imageRenderLayer,
+              isWritable,
+            );
+            context.registerDisposer(() => {
+              this.deinitializeVoxelEditingForSubsource(loadedSubsource);
+            });
           }, loadedSubsource.writable),
         );
       });

@@ -19,6 +19,7 @@ import type {
   UserLayerWithVoxelEditing,
   VoxelEditingContext,
 } from "#src/layer/vox/index.js";
+import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import { SliceViewPanel } from "#src/sliceview/panel.js";
 import { StatusMessage } from "#src/status.js";
@@ -40,7 +41,12 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
   protected latestMouseState: MouseSelectionState | null = null;
 
   protected getEditingContext(): VoxelEditingContext | undefined {
-    return this.layer.editingContexts.values().next().value;
+    const it = this.layer.editingContexts.values();
+    let ctx: VoxelEditingContext;
+    while ((ctx = it.next().value) !== undefined) {
+      if (ctx.writable) return ctx;
+    }
+    return undefined;
   }
 
   protected getPoint(mouseState: MouseSelectionState): Int32Array | undefined {
@@ -369,6 +375,8 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
       if (!Number.isFinite(max) || max <= 0) {
         throw new Error("Invalid max fill voxels setting");
       }
+      if (!editContext.controller)
+        throw new Error("Error: No controller available");
       editContext.controller
         .floodFillPlane2D(
           new Float32Array(seed),
@@ -412,6 +420,16 @@ const pickerSVG = `<svg width="24px" height="24px" stroke-width="1.5" viewBox="0
 const pickerCursor = `url('data:image/svg+xml;utf8,${encodeURIComponent(pickerSVG)}') 4 19, crosshair`;
 
 export class AdoptVoxelValueTool extends LayerTool<UserLayerWithVoxelEditing> {
+  private lastPickPosition: Float32Array | undefined;
+  private lastCheckedSourceIndex = -1;
+
+  readonly singleChannelAccess: ChunkChannelAccessParameters = {
+    numChannels: 1,
+    channelSpaceShape: new Uint32Array([]),
+    chunkChannelDimensionIndices: [],
+    chunkChannelCoordinates: new Uint32Array([0]),
+  };
+
   constructor(layer: UserLayerWithVoxelEditing) {
     super(layer, /*toggle=*/ false);
   }
@@ -443,64 +461,71 @@ export class AdoptVoxelValueTool extends LayerTool<UserLayerWithVoxelEditing> {
       this.resetCursor();
     });
 
-    const voxelEditingContext = this.layer.editingContexts
-      .values()
-      .next().value;
-    if (!voxelEditingContext) {
+    const currentPosition = this.mouseState.position.slice() as vec3;
+
+    if (
+      this.lastPickPosition === undefined ||
+      !vec3.equals(this.lastPickPosition as vec3, currentPosition)
+    ) {
+      this.lastPickPosition = currentPosition;
+      this.lastCheckedSourceIndex = -1;
+    }
+
+    const allContexts = Array.from(this.layer.editingContexts.values());
+
+    if (allContexts.length === 0) {
       StatusMessage.showTemporaryMessage(
-        "Cannot pick value: layer is not ready.",
+        "No volume sources found in this layer.",
         3000,
       );
       return;
     }
 
-    const pos = voxelEditingContext.getVoxelPositionFromMouse(this.mouseState);
+    const numSources = allContexts.length;
+    const startIndex = this.lastCheckedSourceIndex + 1;
 
-    if (!pos || pos.length < 3) {
+    const checkNextSource = async () => {
+      for (let i = 0; i < numSources; ++i) {
+        const sourceIndex = (startIndex + i) % numSources;
+        const context = allContexts[sourceIndex]!;
+
+        const voxelCoord = context.getVoxelPositionFromMouse(this.mouseState);
+        if (voxelCoord === undefined) continue;
+
+        const source = context.primarySource.getSources(
+          this.layer.getIdentitySliceViewSourceOptions(),
+        )[0][0]!.chunkSource;
+
+        const valueResult = await source.getEnsuredValueAt(
+          voxelCoord,
+          this.singleChannelAccess,
+        );
+        const value = Array.isArray(valueResult) ? valueResult[0] : valueResult;
+        const bigValue = BigInt(value || 0);
+
+        if (bigValue !== 0n) {
+          this.layer.setVoxelPaintValue(bigValue);
+          this.lastCheckedSourceIndex = sourceIndex;
+          StatusMessage.showTemporaryMessage(
+            `Adopted value: ${bigValue} (from source ${sourceIndex + 1}/${numSources})`,
+            3000,
+          );
+          return;
+        }
+      }
+
+      this.lastCheckedSourceIndex = -1;
       StatusMessage.showTemporaryMessage(
-        "Cannot pick value: position is not valid.",
+        "No further segments found at this position.",
         3000,
       );
-      return;
-    }
+    };
 
-    const renderLayer = voxelEditingContext.primaryRenderLayer;
-    if (!renderLayer) {
-      StatusMessage.showTemporaryMessage("Render layer not available.", 3000);
-      return;
-    }
-
-    const visibleSources = renderLayer.visibleSourcesList;
-    if (visibleSources.length === 0) {
-      StatusMessage.showTemporaryMessage(
-        "No data is visible at the current zoom level.",
-        3000,
-      );
-      return;
-    }
-
-    const source = visibleSources[0].source;
-    const channelAccess = voxelEditingContext.controller.singleChannelAccess;
-
-    StatusMessage.forPromise(
-      source
-        .getEnsuredValueAt(pos, channelAccess)
-        .then((data: bigint | number | null) => {
-          if (data === null) {
-            throw new Error(
-              "Voxel data not available at the selected position.",
-            );
-          }
-          const value = BigInt(data);
-          this.layer.setVoxelPaintValue(value);
-          StatusMessage.showTemporaryMessage(`Adopted value: ${value}`, 3000);
-        }),
-      {
-        initialMessage: "Picking voxel value...",
-        delay: true,
-        errorPrefix: "Error picking value: ",
-      },
-    );
+    StatusMessage.forPromise(checkNextSource(), {
+      initialMessage: "Picking voxel value...",
+      delay: true,
+      errorPrefix: "Error picking value: ",
+    });
   }
 }
 
