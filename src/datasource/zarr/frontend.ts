@@ -475,6 +475,11 @@ function resolveUrl(options: GetKvStoreBasedDataSourceOptions) {
   };
 }
 
+const dataTypeToZarrV2Dtype: { [key: string]: string } = {
+  "uint8": "|u1", "uint16": "<u2", "uint32": "<u4", "uint64": "<u8",
+  "int8": "|i1", "int16": "<i2", "int32": "<i4", "float32": "<f4",
+};
+
 export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
   constructor(public zarrVersion: 2 | 3 | undefined = undefined) {}
   get scheme() {
@@ -600,65 +605,95 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
       ),
     );
   }
+  private buildOmeZattrs(metadata: Record<string, any>): string {
+    const { scales, axes, name } = metadata;
+    const datasets = scales.map((scale: any, i: number) => ({
+      path: `s${i}`,
+      coordinateTransformations: [{
+        type: "scale",
+        scale: scale.transform,
+      }],
+    }));
+
+    const omeMetadata = {
+      multiscales: [{
+        version: "0.4",
+        axes: axes,
+        datasets: datasets,
+        name: name || 'default',
+      }],
+    };
+    return JSON.stringify(omeMetadata, null, 2);
+  }
+
+  private buildZarray(scaleMetadata: Record<string, any>): string {
+    const { shape, chunks, dtype, compressor, fillValue } = scaleMetadata;
+    const zarrMetadata = {
+      zarr_format: 2,
+      shape: shape,
+      chunks: chunks,
+      dtype: dtype,
+      compressor: compressor,
+      fill_value: fillValue || 0,
+      order: 'C',
+      filters: null,
+    };
+    return JSON.stringify(zarrMetadata, null, 2);
+  }
+
   async create(options: CreateDataSourceOptions): Promise<void> {
-    const { kvStoreUrl, metadata } = options;
-    const { sharedKvStoreContext } = options.registry;
-    const { kvStoreContext } = sharedKvStoreContext;
+    const { kvStoreUrl, registry } = options;
+    const { sharedKvStoreContext } = registry;
+    const kvStore = sharedKvStoreContext.kvStoreContext.getKvStore(kvStoreUrl);
 
-    const kvStore = kvStoreContext.getKvStore(kvStoreUrl);
+    const baseShape = [30024, 30024, 30024];
+    const chunkShape = [64, 64, 64];
+    const dataType = "uint32";
+    const baseVoxelSize = [4, 4, 40];
+    const voxelUnit = "nanometer";
+    const numScales = 6;
+    const downsamplingFactor = [2, 2, 2];
 
-    const zarrVersion = metadata.zarrVersion || this.zarrVersion || 2;
-    let metadataFilename: string;
-    let metadataContent: string;
-
-    if (zarrVersion === 3) {
-      metadataFilename = "zarr.json";
-      const zarrMetadata = {
-        zarr_format: 3,
-        node_type: "array",
-        shape: metadata.shape,
-        data_type: metadata.dataType,
-        chunk_grid: {
-          name: "regular",
-          configuration: { chunk_shape: metadata.chunkShape },
-        },
-        chunk_key_encoding: {
-          name: "default",
-          configuration: { separator: "/" },
-        },
-        codecs: metadata.codecs || [
-          { name: "bytes", configuration: { endian: "little" } },
-          { name: "gzip", configuration: { level: 1 } },
-        ],
-        fill_value: metadata.fillValue || 0,
-        attributes: metadata.attributes || {},
-      };
-      metadataContent = JSON.stringify(zarrMetadata, null, 2);
-    } else {
-      // zarrVersion === 2
-      metadataFilename = ".zarray";
-      const zarrMetadata = {
-        zarr_format: 2,
-        shape: metadata.shape,
-        chunks: metadata.chunkShape,
-        dtype: metadata.dtype,
-        compressor: metadata.compressor || { id: "gzip", level: 1 },
-        fill_value: metadata.fillValue || 0,
-        order: "C",
-        filters: null,
-      };
-      metadataContent = JSON.stringify(zarrMetadata, null, 2);
+    const scales = [];
+    for (let i = 0; i < numScales; ++i) {
+      const downsampleCoeffs = downsamplingFactor.map(f => Math.pow(f, i));
+      scales.push({
+        shape: baseShape.map((dim, j) => Math.ceil(dim / downsampleCoeffs[j])),
+        chunks: chunkShape,
+        dtype: dataTypeToZarrV2Dtype[dataType],
+        compressor: null,
+        transform: baseVoxelSize.map((v, j) => v * downsampleCoeffs[j]),
+      });
     }
 
-    const metadataUrl = kvStore.store.getUrl(
-      joinPath(kvStore.path, metadataFilename),
+    const metadata = {
+      scales,
+      axes: [
+        { name: 'x', type: 'space', unit: voxelUnit },
+        { name: 'y', type: 'space', unit: voxelUnit },
+        { name: 'z', type: 'space', unit: voxelUnit },
+      ],
+    };
+
+    const zattrsContent = this.buildOmeZattrs(metadata);
+    const zattrsUrl = kvStore.store.getUrl(joinPath(kvStore.path, '.zattrs'));
+    const writeZattrsPromise = proxyWrite(
+      sharedKvStoreContext,
+      zattrsUrl,
+      new TextEncoder().encode(zattrsContent).buffer as ArrayBuffer,
     );
 
-    await proxyWrite(
-      sharedKvStoreContext,
-      metadataUrl,
-      new TextEncoder().encode(metadataContent).buffer as ArrayBuffer,
-    );
+    const writeZarrayPromises = metadata.scales.map((scale: any, i: number) => {
+      const zarrayUrl = kvStore.store.getUrl(joinPath(kvStore.path, `s${i}`, '.zarray'));
+      const zarrayContent = this.buildZarray(scale);
+      return proxyWrite(
+        sharedKvStoreContext,
+        zarrayUrl,
+        new TextEncoder().encode(zarrayContent).buffer as ArrayBuffer,
+      );
+    });
+
+    await Promise.all([writeZattrsPromise, ...writeZarrayPromises]);
   }
 }
 
