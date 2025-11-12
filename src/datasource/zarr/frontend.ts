@@ -30,10 +30,9 @@ import type {
   CreateDataSourceOptions,
   DataSource,
   GetKvStoreBasedDataSourceOptions,
-  KvStoreBasedDataSourceProvider} from "#src/datasource/index.js";
-import {
-  DataSourceCreationState
+  KvStoreBasedDataSourceProvider,
 } from "#src/datasource/index.js";
+import { DataSourceCreationState } from "#src/datasource/index.js";
 import { getKvStorePathCompletions } from "#src/datasource/kvstore_completions.js";
 import { VolumeChunkSourceParameters } from "#src/datasource/zarr/base.js";
 import "#src/datasource/zarr/codec/bytes/resolve.js";
@@ -505,7 +504,9 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
     return `Zarr${versionStr} data source`;
   }
 
-  get creationState(){ return this.zarrVersion ? new ZarrCreationState() : undefined};
+  get creationState() {
+    return this.zarrVersion ? new ZarrCreationState() : undefined;
+  }
 
   get(options: GetKvStoreBasedDataSourceOptions): Promise<DataSource> {
     let { kvStoreUrl, additionalPath, fragment } = resolveUrl(options);

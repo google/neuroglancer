@@ -14,24 +14,27 @@
  * limitations under the License.
  */
 
-import type { CreateDataSourceOptions, CommonCreationMetadata , DataSourceCreationState } from '#src/datasource/index.js';
-import type { LayerListSpecification } from '#src/layer/index.js';
-import { Overlay } from '#src/overlay.js';
-import { StatusMessage } from '#src/status.js';
-import { TrackableValue } from '#src/trackable_value.js';
-import { TrackableVec3 } from '#src/trackable_vec3.js';
-import { DataType } from '#src/util/data_type.js';
-import { removeChildren } from '#src/util/dom.js';
-import { vec3 } from '#src/util/geom.js';
-import { verifyInt, verifyString } from '#src/util/json.js';
-import { CompoundTrackable, type Trackable } from '#src/util/trackable.js';
-import { TrackableEnum } from '#src/util/trackable_enum.js';
+import type {
+  CreateDataSourceOptions,
+  CommonCreationMetadata,
+  DataSourceCreationState,
+} from "#src/datasource/index.js";
+import type { LayerListSpecification } from "#src/layer/index.js";
+import { Overlay } from "#src/overlay.js";
+import { StatusMessage } from "#src/status.js";
+import { TrackableValue } from "#src/trackable_value.js";
+import { TrackableVec3 } from "#src/trackable_vec3.js";
+import { DataType } from "#src/util/data_type.js";
+import { removeChildren } from "#src/util/dom.js";
+import { vec3 } from "#src/util/geom.js";
+import { verifyInt, verifyString } from "#src/util/json.js";
+import { CompoundTrackable, type Trackable } from "#src/util/trackable.js";
+import { TrackableEnum } from "#src/util/trackable_enum.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
-import { EnumSelectWidget } from '#src/widget/enum_widget.js';
-import { NumberInputWidget } from '#src/widget/number_input_widget.js';
-import { TextInputWidget } from '#src/widget/text_input.js';
-import { Vec3Widget } from '#src/widget/vec3_entry_widget.js';
-
+import { EnumSelectWidget } from "#src/widget/enum_widget.js";
+import { NumberInputWidget } from "#src/widget/number_input_widget.js";
+import { TextInputWidget } from "#src/widget/text_input.js";
+import { Vec3Widget } from "#src/widget/vec3_entry_widget.js";
 
 function createControlForTrackable(trackable: Trackable): HTMLElement {
   if (trackable instanceof TrackableVec3) {
@@ -42,36 +45,45 @@ function createControlForTrackable(trackable: Trackable): HTMLElement {
   }
   if (trackable instanceof TrackableValue) {
     const value = trackable.value;
-    if (typeof value === 'number') {
+    if (typeof value === "number") {
       return new NumberInputWidget(trackable as TrackableValue<number>).element;
     }
-    if (typeof value === 'string') {
+    if (typeof value === "string") {
       return new TextInputWidget(trackable as TrackableValue<string>).element;
     }
   }
-  const unsupportedElement = document.createElement('div');
+  const unsupportedElement = document.createElement("div");
   unsupportedElement.textContent = `Unsupported control type`;
   return unsupportedElement;
 }
 
 class CommonMetadataState extends CompoundTrackable {
-  shape = new TrackableVec3(vec3.fromValues(30024, 30024, 30024), vec3.fromValues(30024, 30024, 30024));
+  shape = new TrackableVec3(
+    vec3.fromValues(30024, 30024, 30024),
+    vec3.fromValues(30024, 30024, 30024),
+  );
   dataType = new TrackableEnum(DataType, DataType.UINT32);
-  voxelSize = new TrackableVec3(vec3.fromValues(4, 4, 40), vec3.fromValues(4, 4, 40));
-  voxelUnit = new TrackableValue<string>('nm', verifyString);
+  voxelSize = new TrackableVec3(
+    vec3.fromValues(4, 4, 40),
+    vec3.fromValues(4, 4, 40),
+  );
+  voxelUnit = new TrackableValue<string>("nm", verifyString);
   numScales = new TrackableValue<number>(6, verifyInt);
-  downsamplingFactor = new TrackableVec3(vec3.fromValues(2, 2, 2), vec3.fromValues(2, 2, 2));
-  name = new TrackableValue<string>('new-dataset', verifyString);
+  downsamplingFactor = new TrackableVec3(
+    vec3.fromValues(2, 2, 2),
+    vec3.fromValues(2, 2, 2),
+  );
+  name = new TrackableValue<string>("new-dataset", verifyString);
 
   constructor() {
     super();
-    this.add('shape', this.shape);
-    this.add('dataType', this.dataType);
-    this.add('voxelSize', this.voxelSize);
-    this.add('voxelUnit', this.voxelUnit);
-    this.add('numScales', this.numScales);
-    this.add('downsamplingFactor', this.downsamplingFactor);
-    this.add('name', this.name);
+    this.add("shape", this.shape);
+    this.add("dataType", this.dataType);
+    this.add("voxelSize", this.voxelSize);
+    this.add("voxelUnit", this.voxelUnit);
+    this.add("numScales", this.numScales);
+    this.add("downsamplingFactor", this.downsamplingFactor);
+    this.add("name", this.name);
   }
 
   toJSON(): CommonCreationMetadata {
@@ -90,95 +102,118 @@ class CommonMetadataState extends CompoundTrackable {
   reset() {}
 }
 
-
 export class DatasetCreationDialog extends Overlay {
   state = new CommonMetadataState();
-  dataSourceType = new TrackableValue<string>('', verifyString);
+  dataSourceType = new TrackableValue<string>("", verifyString);
   private dataSourceOptions: DataSourceCreationState | undefined;
 
-  constructor(public manager: LayerListSpecification, public url: string) {
+  constructor(
+    public manager: LayerListSpecification,
+    public url: string,
+  ) {
     super();
 
     const { content } = this;
-    content.classList.add('neuroglancer-dataset-creation-dialog');
+    content.classList.add("neuroglancer-dataset-creation-dialog");
 
-    const titleElement = document.createElement('h2');
-    titleElement.textContent = 'Create New Dataset';
+    const titleElement = document.createElement("h2");
+    titleElement.textContent = "Create New Dataset";
     content.appendChild(titleElement);
 
-    const topControls = document.createElement('div');
-    topControls.className = 'neuroglancer-creation-top-controls';
+    const topControls = document.createElement("div");
+    topControls.className = "neuroglancer-creation-top-controls";
     content.appendChild(topControls);
 
-    topControls.appendChild(this.registerDisposer(new DependentViewWidget(
-      { changed: this.manager.rootLayers.layersChanged, get value() { return null; } },
-      (_value, parentElement) => {
-        const compatibleLayers = this.manager.rootLayers.managedLayers.filter(
-          layer => layer.getCreationMetadata() !== undefined
-        );
-        if (compatibleLayers.length === 0) return;
+    topControls.appendChild(
+      this.registerDisposer(
+        new DependentViewWidget(
+          {
+            changed: this.manager.rootLayers.layersChanged,
+            get value() {
+              return null;
+            },
+          },
+          (_value, parentElement) => {
+            const compatibleLayers =
+              this.manager.rootLayers.managedLayers.filter(
+                (layer) => layer.getCreationMetadata() !== undefined,
+              );
+            if (compatibleLayers.length === 0) return;
 
-        const label = document.createElement('label');
-        label.textContent = 'Copy settings from layer';
-        parentElement.appendChild(label);
+            const label = document.createElement("label");
+            label.textContent = "Copy settings from layer";
+            parentElement.appendChild(label);
 
-        const select = document.createElement('select');
-        const defaultOption = document.createElement('option');
-        defaultOption.textContent = 'None';
-        defaultOption.value = '';
-        select.appendChild(defaultOption);
+            const select = document.createElement("select");
+            const defaultOption = document.createElement("option");
+            defaultOption.textContent = "None";
+            defaultOption.value = "";
+            select.appendChild(defaultOption);
 
-        compatibleLayers.forEach(layer => {
-          const option = document.createElement('option');
-          option.textContent = layer.name;
-          option.value = layer.name;
-          select.appendChild(option);
-        });
+            compatibleLayers.forEach((layer) => {
+              const option = document.createElement("option");
+              option.textContent = layer.name;
+              option.value = layer.name;
+              select.appendChild(option);
+            });
 
-        this.registerEventListener(select, 'change', () => {
-          if (!select.value) return;
-          const layer = this.manager.rootLayers.getLayerByName(select.value);
-          if (layer) {
-            const metadata = layer.getCreationMetadata();
-            if (metadata) {
-              this.state.shape.value = vec3.fromValues(metadata.shape[0], metadata.shape[1], metadata.shape[2]);
-              (this.state.dataType as TrackableEnum<DataType>).value = metadata.dataType;
-              this.state.voxelSize.value = vec3.fromValues(metadata.voxelSize[0], metadata.voxelSize[1], metadata.voxelSize[2]);
-              this.state.voxelUnit.value = metadata.voxelUnit;
-              this.state.name.value = metadata.name;
-            }
-          }
-        });
-        parentElement.appendChild(select);
-      }
-    )).element);
+            this.registerEventListener(select, "change", () => {
+              if (!select.value) return;
+              const layer = this.manager.rootLayers.getLayerByName(
+                select.value,
+              );
+              if (layer) {
+                const metadata = layer.getCreationMetadata();
+                if (metadata) {
+                  this.state.shape.value = vec3.fromValues(
+                    metadata.shape[0],
+                    metadata.shape[1],
+                    metadata.shape[2],
+                  );
+                  (this.state.dataType as TrackableEnum<DataType>).value =
+                    metadata.dataType;
+                  this.state.voxelSize.value = vec3.fromValues(
+                    metadata.voxelSize[0],
+                    metadata.voxelSize[1],
+                    metadata.voxelSize[2],
+                  );
+                  this.state.voxelUnit.value = metadata.voxelUnit;
+                  this.state.name.value = metadata.name;
+                }
+              }
+            });
+            parentElement.appendChild(select);
+          },
+        ),
+      ).element,
+    );
 
-    const commonFields = document.createElement('div');
-    commonFields.className = 'neuroglancer-creation-fields-grid';
+    const commonFields = document.createElement("div");
+    commonFields.className = "neuroglancer-creation-fields-grid";
     content.appendChild(commonFields);
 
     const addCommonControl = (trackable: Trackable, label: string) => {
-      const labelElement = document.createElement('label');
+      const labelElement = document.createElement("label");
       labelElement.textContent = label;
       commonFields.appendChild(labelElement);
       commonFields.appendChild(createControlForTrackable(trackable));
     };
 
-    addCommonControl(this.state.name, 'Name');
-    addCommonControl(this.state.shape, 'Shape');
-    addCommonControl(this.state.dataType, 'Data Type');
-    addCommonControl(this.state.voxelSize, 'Voxel Size');
-    addCommonControl(this.state.voxelUnit, 'Voxel Unit');
-    addCommonControl(this.state.numScales, 'Number of Scales');
-    addCommonControl(this.state.downsamplingFactor, 'Downsampling Factor');
+    addCommonControl(this.state.name, "Name");
+    addCommonControl(this.state.shape, "Shape");
+    addCommonControl(this.state.dataType, "Data Type");
+    addCommonControl(this.state.voxelSize, "Voxel Size");
+    addCommonControl(this.state.voxelUnit, "Voxel Unit");
+    addCommonControl(this.state.numScales, "Number of Scales");
+    addCommonControl(this.state.downsamplingFactor, "Downsampling Factor");
 
-    const dataSourceSelect = document.createElement('select');
+    const dataSourceSelect = document.createElement("select");
     const creatableProviders = Array.from(
-      this.manager.dataSourceProviderRegistry.kvStoreBasedDataSources.values()
-    ).filter(p => p.creationState !== undefined);
+      this.manager.dataSourceProviderRegistry.kvStoreBasedDataSources.values(),
+    ).filter((p) => p.creationState !== undefined);
 
-    creatableProviders.forEach(p => {
-      const option = document.createElement('option');
+    creatableProviders.forEach((p) => {
+      const option = document.createElement("option");
       option.value = p.scheme;
       option.textContent = p.description || p.scheme;
       dataSourceSelect.appendChild(option);
@@ -187,59 +222,78 @@ export class DatasetCreationDialog extends Overlay {
     if (creatableProviders.length > 0) {
       this.dataSourceType.value = creatableProviders[0].scheme;
     } else {
-      const noProviderMessage = document.createElement('div');
-      noProviderMessage.textContent = 'No creatable data source types are configured.';
+      const noProviderMessage = document.createElement("div");
+      noProviderMessage.textContent =
+        "No creatable data source types are configured.";
       content.appendChild(noProviderMessage);
     }
 
-    const dsLabel = document.createElement('label');
-    dsLabel.textContent = 'Data Source Type';
+    const dsLabel = document.createElement("label");
+    dsLabel.textContent = "Data Source Type";
     topControls.appendChild(dsLabel);
     topControls.appendChild(dataSourceSelect);
 
-    this.registerEventListener(dataSourceSelect, 'change', () => {
+    this.registerEventListener(dataSourceSelect, "change", () => {
       this.dataSourceType.value = dataSourceSelect.value;
     });
 
-    const optionsContainer = document.createElement('fieldset');
-    optionsContainer.className = 'neuroglancer-creation-datasource-options';
-    const optionsLegend = document.createElement('legend');
+    const optionsContainer = document.createElement("fieldset");
+    optionsContainer.className = "neuroglancer-creation-datasource-options";
+    const optionsLegend = document.createElement("legend");
     optionsContainer.appendChild(optionsLegend);
-    const optionsGrid = document.createElement('div');
-    optionsGrid.className = 'neuroglancer-creation-fields-grid';
+    const optionsGrid = document.createElement("div");
+    optionsGrid.className = "neuroglancer-creation-fields-grid";
     optionsContainer.appendChild(optionsGrid);
     content.appendChild(optionsContainer);
 
-    this.registerDisposer(this.dataSourceType.changed.add(() => {
-      this.updateDataSourceOptions(optionsGrid, optionsLegend);
-    }));
+    this.registerDisposer(
+      this.dataSourceType.changed.add(() => {
+        this.updateDataSourceOptions(optionsGrid, optionsLegend);
+      }),
+    );
     this.updateDataSourceOptions(optionsGrid, optionsLegend);
 
-    const actions = document.createElement('div');
-    actions.className = 'neuroglancer-creation-actions';
-    const createButton = document.createElement('button');
-    createButton.textContent = 'Create';
-    this.registerEventListener(createButton, 'click', () => this.createDataset());
+    const actions = document.createElement("div");
+    actions.className = "neuroglancer-creation-actions";
+    const createButton = document.createElement("button");
+    createButton.textContent = "Create";
+    this.registerEventListener(createButton, "click", () =>
+      this.createDataset(),
+    );
     actions.appendChild(createButton);
     content.appendChild(actions);
   }
 
-  private updateDataSourceOptions(container: HTMLElement, legend: HTMLLegendElement) {
+  private updateDataSourceOptions(
+    container: HTMLElement,
+    legend: HTMLLegendElement,
+  ) {
     if (this.dataSourceOptions) {
       this.dataSourceOptions.dispose();
       this.dataSourceOptions = undefined;
     }
     removeChildren(container);
-    const provider = this.manager.dataSourceProviderRegistry.getKvStoreBasedProvider(this.dataSourceType.value);
+    const provider =
+      this.manager.dataSourceProviderRegistry.getKvStoreBasedProvider(
+        this.dataSourceType.value,
+      );
     legend.textContent = `${provider?.description || this.dataSourceType.value} Options`;
-    const creationState = provider?.creationState as (DataSourceCreationState | undefined);
+    const creationState = provider?.creationState as
+      | DataSourceCreationState
+      | undefined;
     if (creationState) {
       this.dataSourceOptions = creationState;
       for (const key of Object.keys(creationState)) {
-        if (key === 'changed' || key === 'toJSON' || key === 'restoreState' || key === 'reset') continue;
+        if (
+          key === "changed" ||
+          key === "toJSON" ||
+          key === "restoreState" ||
+          key === "reset"
+        )
+          continue;
         const trackable = (creationState as any)[key];
-        if (trackable && typeof trackable.changed?.add === 'function') {
-          const labelElement = document.createElement('label');
+        if (trackable && typeof trackable.changed?.add === "function") {
+          const labelElement = document.createElement("label");
           labelElement.textContent = key;
           container.appendChild(labelElement);
           container.appendChild(createControlForTrackable(trackable));
@@ -248,11 +302,16 @@ export class DatasetCreationDialog extends Overlay {
     }
   }
 
-
   private async createDataset() {
-    const provider = this.manager.dataSourceProviderRegistry.getKvStoreBasedProvider(this.dataSourceType.value);
+    const provider =
+      this.manager.dataSourceProviderRegistry.getKvStoreBasedProvider(
+        this.dataSourceType.value,
+      );
     if (!provider?.create) {
-      StatusMessage.showTemporaryMessage(`Data source '${this.dataSourceType.value}' does not support creation.`, 5000);
+      StatusMessage.showTemporaryMessage(
+        `Data source '${this.dataSourceType.value}' does not support creation.`,
+        5000,
+      );
       return;
     }
 
@@ -262,18 +321,15 @@ export class DatasetCreationDialog extends Overlay {
       metadata: {
         common: this.state.toJSON(),
         sourceRelated: this.dataSourceOptions,
-      }
+      },
     };
 
-    StatusMessage.forPromise(
-      provider.create(options),
-      {
-        initialMessage: `Creating dataset at ${this.url}...`,
-        delay: true,
-        errorPrefix: 'Creation failed: ',
-      }
-    ).then(() => {
-      StatusMessage.showTemporaryMessage('Dataset created successfully.', 3000);
+    StatusMessage.forPromise(provider.create(options), {
+      initialMessage: `Creating dataset at ${this.url}...`,
+      delay: true,
+      errorPrefix: "Creation failed: ",
+    }).then(() => {
+      StatusMessage.showTemporaryMessage("Dataset created successfully.", 3000);
       this.dispose();
     });
   }

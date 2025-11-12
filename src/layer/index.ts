@@ -876,7 +876,7 @@ export class ManagedUserLayer extends RefCounted {
 
           const scales = volume.getSources(identityOptions)[0];
           if (!scales || scales.length === 0) continue;
-          
+
           const highResSource = scales[0];
           const shape = Array.from(
             highResSource.chunkSource.spec.upperVoxelBound,
