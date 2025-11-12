@@ -240,6 +240,13 @@ export function makeEmptyDataSourceSpecification(): DataSourceSpecification {
   };
 }
 
+export interface CreateDataSourceOptions {
+  kvStoreUrl: string;
+  metadata: Record<string, any>;
+  registry: DataSourceRegistry;
+  signal?: AbortSignal;
+}
+
 export interface DataSourceProvider {
   scheme: string;
   description?: string;
@@ -264,6 +271,7 @@ export interface KvStoreBasedDataSourceProvider {
   completeUrl?: (
     options: GetKvStoreBasedDataSourceOptions,
   ) => Promise<CompletionResult>;
+  create?(options: CreateDataSourceOptions): Promise<void>;
 }
 
 export interface GetKvStoreBasedDataSourceOptions
@@ -297,6 +305,11 @@ export class DataSourceRegistry extends RefCounted {
   }
   registerKvStoreBasedProvider(provider: KvStoreBasedDataSourceProvider) {
     this.kvStoreBasedDataSources.set(provider.scheme, provider);
+  }
+  getKvStoreBasedProvider(
+    scheme: string,
+  ): KvStoreBasedDataSourceProvider | undefined {
+    return this.kvStoreBasedDataSources.get(scheme);
   }
 
   getProvider(url: string): [DataSourceProvider, string, string] {

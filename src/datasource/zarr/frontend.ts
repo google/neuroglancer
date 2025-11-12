@@ -27,6 +27,7 @@ import {
 } from "#src/coordinate_transform.js";
 import type {
   ChannelMetadata,
+  CreateDataSourceOptions,
   DataSource,
   GetKvStoreBasedDataSourceOptions,
   KvStoreBasedDataSourceProvider,
@@ -57,8 +58,10 @@ import { simpleFilePresenceAutoDetectDirectorySpec } from "#src/kvstore/auto_det
 import { WithSharedKvStoreContext } from "#src/kvstore/chunk_source_frontend.js";
 import type { CompletionResult } from "#src/kvstore/context.js";
 import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
+import { proxyWrite } from "#src/kvstore/proxy.js";
 import {
   joinBaseUrlAndPath,
+  joinPath,
   kvstoreEnsureDirectoryPipelineUrl,
   parseUrlSuffix,
   pipelineUrlJoin,
@@ -595,6 +598,66 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
         fragment,
         supportedQueryParameters,
       ),
+    );
+  }
+  async create(options: CreateDataSourceOptions): Promise<void> {
+    const { kvStoreUrl, metadata } = options;
+    const { sharedKvStoreContext } = options.registry;
+    const { kvStoreContext } = sharedKvStoreContext;
+
+    const kvStore = kvStoreContext.getKvStore(kvStoreUrl);
+
+    const zarrVersion = metadata.zarrVersion || this.zarrVersion || 2;
+    let metadataFilename: string;
+    let metadataContent: string;
+
+    if (zarrVersion === 3) {
+      metadataFilename = "zarr.json";
+      const zarrMetadata = {
+        zarr_format: 3,
+        node_type: "array",
+        shape: metadata.shape,
+        data_type: metadata.dataType,
+        chunk_grid: {
+          name: "regular",
+          configuration: { chunk_shape: metadata.chunkShape },
+        },
+        chunk_key_encoding: {
+          name: "default",
+          configuration: { separator: "/" },
+        },
+        codecs: metadata.codecs || [
+          { name: "bytes", configuration: { endian: "little" } },
+          { name: "gzip", configuration: { level: 1 } },
+        ],
+        fill_value: metadata.fillValue || 0,
+        attributes: metadata.attributes || {},
+      };
+      metadataContent = JSON.stringify(zarrMetadata, null, 2);
+    } else {
+      // zarrVersion === 2
+      metadataFilename = ".zarray";
+      const zarrMetadata = {
+        zarr_format: 2,
+        shape: metadata.shape,
+        chunks: metadata.chunkShape,
+        dtype: metadata.dtype,
+        compressor: metadata.compressor || { id: "gzip", level: 1 },
+        fill_value: metadata.fillValue || 0,
+        order: "C",
+        filters: null,
+      };
+      metadataContent = JSON.stringify(zarrMetadata, null, 2);
+    }
+
+    const metadataUrl = kvStore.store.getUrl(
+      joinPath(kvStore.path, metadataFilename),
+    );
+
+    await proxyWrite(
+      sharedKvStoreContext,
+      metadataUrl,
+      new TextEncoder().encode(metadataContent).buffer as ArrayBuffer,
     );
   }
 }

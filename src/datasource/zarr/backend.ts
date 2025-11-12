@@ -195,8 +195,8 @@ export class ZarrVolumeChunkSource extends WithParameters(
       sep = metadata.dimensionSeparator;
     }
 
-    const key = getChunkKey(chunkGridPosition, baseKey) as string | unknown;
+    const key = getChunkKey(chunkGridPosition, baseKey);
     const arrayBuffer = new Uint8Array(encoded).buffer;
-    await kvStore.write!(key as any, arrayBuffer);
+    await kvStore.write!(key, arrayBuffer);
   }
 }
