@@ -1,276 +1,280 @@
-// src/ui/dataset_creation.ts
+/**
+ * @license
+ * Copyright 2025 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may not use this file except in compliance with the License.
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-import { makeCoordinateSpace } from "#src/coordinate_transform.js";
-import type { LayerListSpecification } from "#src/layer/index.js";
-import { LayerReference } from "#src/layer/index.js";
-import { Overlay } from "#src/overlay.js";
-import { StatusMessage } from "#src/status.js";
-import { TrackableValue } from "#src/trackable_value.js";
-import { DataType } from "#src/util/data_type.js";
-import type { Owned } from "#src/util/disposable.js";
-import { LayerReferenceWidget } from "#src/widget/layer_reference.js";
+import type { CreateDataSourceOptions, CommonCreationMetadata , DataSourceCreationState } from '#src/datasource/index.js';
+import type { LayerListSpecification } from '#src/layer/index.js';
+import { Overlay } from '#src/overlay.js';
+import { StatusMessage } from '#src/status.js';
+import { TrackableValue } from '#src/trackable_value.js';
+import { TrackableVec3 } from '#src/trackable_vec3.js';
+import { DataType } from '#src/util/data_type.js';
+import { removeChildren } from '#src/util/dom.js';
+import { vec3 } from '#src/util/geom.js';
+import { verifyInt, verifyString } from '#src/util/json.js';
+import { CompoundTrackable, type Trackable } from '#src/util/trackable.js';
+import { TrackableEnum } from '#src/util/trackable_enum.js';
+import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
+import { EnumSelectWidget } from '#src/widget/enum_widget.js';
+import { NumberInputWidget } from '#src/widget/number_input_widget.js';
+import { TextInputWidget } from '#src/widget/text_input.js';
+import { Vec3Widget } from '#src/widget/vec3_entry_widget.js';
+
+
+function createControlForTrackable(trackable: Trackable): HTMLElement {
+  if (trackable instanceof TrackableVec3) {
+    return new Vec3Widget(trackable).element;
+  }
+  if (trackable instanceof TrackableEnum) {
+    return new EnumSelectWidget(trackable).element;
+  }
+  if (trackable instanceof TrackableValue) {
+    const value = trackable.value;
+    if (typeof value === 'number') {
+      return new NumberInputWidget(trackable as TrackableValue<number>).element;
+    }
+    if (typeof value === 'string') {
+      return new TextInputWidget(trackable as TrackableValue<string>).element;
+    }
+  }
+  const unsupportedElement = document.createElement('div');
+  unsupportedElement.textContent = `Unsupported control type`;
+  return unsupportedElement;
+}
+
+class CommonMetadataState extends CompoundTrackable {
+  shape = new TrackableVec3(vec3.fromValues(30024, 30024, 30024), vec3.fromValues(30024, 30024, 30024));
+  dataType = new TrackableEnum(DataType, DataType.UINT32);
+  voxelSize = new TrackableVec3(vec3.fromValues(4, 4, 40), vec3.fromValues(4, 4, 40));
+  voxelUnit = new TrackableValue<string>('nm', verifyString);
+  numScales = new TrackableValue<number>(6, verifyInt);
+  downsamplingFactor = new TrackableVec3(vec3.fromValues(2, 2, 2), vec3.fromValues(2, 2, 2));
+  name = new TrackableValue<string>('new-dataset', verifyString);
+
+  constructor() {
+    super();
+    this.add('shape', this.shape);
+    this.add('dataType', this.dataType);
+    this.add('voxelSize', this.voxelSize);
+    this.add('voxelUnit', this.voxelUnit);
+    this.add('numScales', this.numScales);
+    this.add('downsamplingFactor', this.downsamplingFactor);
+    this.add('name', this.name);
+  }
+
+  toJSON(): CommonCreationMetadata {
+    return {
+      shape: Array.from(this.shape.value),
+      dataType: this.dataType.value,
+      voxelSize: Array.from(this.voxelSize.value),
+      voxelUnit: this.voxelUnit.value,
+      numScales: this.numScales.value,
+      downsamplingFactor: Array.from(this.downsamplingFactor.value),
+      name: this.name.value,
+    };
+  }
+
+  restoreState(_obj: any) {}
+  reset() {}
+}
+
 
 export class DatasetCreationDialog extends Overlay {
-  private format = new TrackableValue<"precomputed" | "zarr" | "n5">(
-    "precomputed",
-    (x) => x as any,
-  );
-  private copySource = new TrackableValue<"manual" | "copy">(
-    "manual",
-    (x) => x,
-  );
+  state = new CommonMetadataState();
+  dataSourceType = new TrackableValue<string>('', verifyString);
+  private dataSourceOptions: DataSourceCreationState | undefined;
 
-  private dataType = new TrackableValue<DataType>(DataType.UINT8, (x) => x);
-  private bounds = new TrackableValue<string>("128,128,128", (x) => x);
-  private resolution = new TrackableValue<string>("4,4,40", (x) => x);
-  private chunkSize = new TrackableValue<string>("64,64,64", (x) => x);
-
-  private layerReference: Owned<LayerReference>;
-
-  constructor(
-    public manager: LayerListSpecification,
-    public url: string,
-  ) {
+  constructor(public manager: LayerListSpecification, public url: string) {
     super();
 
-    this.layerReference = this.registerDisposer(
-      new LayerReference(this.manager.rootLayers.addRef(), () => true),
-    );
-    this.registerDisposer(
-      this.layerReference.changed.add(() => this.copyLayerConfig()),
-    );
-
     const { content } = this;
-    content.classList.add("neuroglancer-dataset-creation-dialog");
+    content.classList.add('neuroglancer-dataset-creation-dialog');
 
-    content.innerHTML = `
-      <h2>Create New Dataset</h2>
-      <div style="font-size: smaller; color: #ccc;">At: ${this.url}</div>
-      <div class="neuroglancer-dataset-creation-row">
-        <label>Format</label>
-        <select id="format-select">
-          <option value="precomputed">Precomputed</option>
-          <option value="zarr">Zarr</option>
-          <option value="n5">N5</option>
-        </select>
-      </div>
-      <div class="neuroglancer-dataset-creation-row">
-        <label>Configuration</label>
-        <div>
-          <input type="radio" name="config-source" value="manual" id="config-manual" checked> <label for="config-manual">Manual</label>
-          <input type="radio" name="config-source" value="copy" id="config-copy"> <label for="config-copy">Copy from Layer</label>
-        </div>
-      </div>
-      <div id="copy-layer-widget-container" style="display: none; padding-left: 20px;"></div>
-      <fieldset>
-        <legend>Dataset Properties</legend>
-        <div class="neuroglancer-dataset-creation-row">
-          <label>Data Type</label>
-          <select id="data-type-select">
-            ${Object.keys(DataType)
-              .filter((k) => !isNaN(Number(k)))
-              .map(
-                (k) =>
-                  `<option value="${k}">${DataType[Number(k)]
-                    .toLowerCase()
-                    .replace("_", "")}</option>`,
-              )
-              .join("")}
-          </select>
-        </div>
-        <div class="neuroglancer-dataset-creation-row">
-          <label>Volume Size (voxels)</label>
-          <input type="text" id="bounds-input" placeholder="e.g. 128,128,128">
-        </div>
-        <div class="neuroglancer-dataset-creation-row">
-          <label>Resolution (nm)</label>
-          <input type="text" id="resolution-input" placeholder="e.g. 4,4,40">
-        </div>
-        <div class="neuroglancer-dataset-creation-row">
-          <label>Chunk Size (voxels)</label>
-          <input type="text" id="chunk-size-input" placeholder="e.g. 64,64,64">
-        </div>
-      </fieldset>
-      <div class="neuroglancer-dataset-creation-actions">
-        <button id="create-button">Create</button>
-        <button id="cancel-button">Cancel</button>
-      </div>
-    `;
+    const titleElement = document.createElement('h2');
+    titleElement.textContent = 'Create New Dataset';
+    content.appendChild(titleElement);
 
-    // Bindings and event listeners
-    const formatSelect =
-      content.querySelector<HTMLSelectElement>("#format-select")!;
-    formatSelect.addEventListener("change", () => {
-      this.format.value = formatSelect.value as any;
-    });
+    const topControls = document.createElement('div');
+    topControls.className = 'neuroglancer-creation-top-controls';
+    content.appendChild(topControls);
 
-    const configSourceRadios = content.querySelectorAll<HTMLInputElement>(
-      'input[name="config-source"]',
-    );
-    const copyLayerContainer = content.querySelector<HTMLElement>(
-      "#copy-layer-widget-container",
-    )!;
-    configSourceRadios.forEach((radio) => {
-      radio.addEventListener("change", () => {
-        this.copySource.value = radio.value as any;
-        copyLayerContainer.style.display =
-          this.copySource.value === "copy" ? "block" : "none";
-      });
-    });
-
-    const layerRefWidget = this.registerDisposer(
-      new LayerReferenceWidget(this.layerReference),
-    );
-    copyLayerContainer.appendChild(layerRefWidget.element);
-
-    const dataTypeSelect =
-      content.querySelector<HTMLSelectElement>("#data-type-select")!;
-    dataTypeSelect.addEventListener("change", () => {
-      this.dataType.value = parseInt(dataTypeSelect.value, 10);
-    });
-    this.dataType.changed.add(
-      () => (dataTypeSelect.value = this.dataType.value.toString()),
-    );
-
-    const boundsInput =
-      content.querySelector<HTMLInputElement>("#bounds-input")!;
-    boundsInput.addEventListener(
-      "input",
-      () => (this.bounds.value = boundsInput.value),
-    );
-    this.bounds.changed.add(() => (boundsInput.value = this.bounds.value));
-    boundsInput.value = this.bounds.value;
-
-    const resolutionInput =
-      content.querySelector<HTMLInputElement>("#resolution-input")!;
-    resolutionInput.addEventListener(
-      "input",
-      () => (this.resolution.value = resolutionInput.value),
-    );
-    this.resolution.changed.add(
-      () => (resolutionInput.value = this.resolution.value),
-    );
-    resolutionInput.value = this.resolution.value;
-
-    const chunkSizeInput =
-      content.querySelector<HTMLInputElement>("#chunk-size-input")!;
-    chunkSizeInput.addEventListener(
-      "input",
-      () => (this.chunkSize.value = chunkSizeInput.value),
-    );
-    this.chunkSize.changed.add(
-      () => (chunkSizeInput.value = this.chunkSize.value),
-    );
-    chunkSizeInput.value = this.chunkSize.value;
-
-    content
-      .querySelector("#create-button")!
-      .addEventListener("click", () => this.createDataset());
-    content
-      .querySelector("#cancel-button")!
-      .addEventListener("click", () => this.dispose());
-  }
-
-  private copyLayerConfig() {
-    const layer = this.layerReference.layer?.layer;
-    if (!layer || !layer.dataSources[0]) return;
-
-    const source = layer.dataSources[0];
-    const { loadState } = source;
-    if (loadState === undefined || loadState.error) return;
-
-    const { subsourceEntry } = loadState.subsources[0];
-    if (!subsourceEntry.subsource.volume) return;
-    const multiscaleSource = subsourceEntry.subsource.volume;
-    if (!multiscaleSource) return;
-
-    const finestResolutionSource = multiscaleSource.getSources({
-      displayRank: 3,
-      multiscaleToViewTransform: new Float32Array(9),
-      modelChannelDimensionIndices: [],
-    })[0][0];
-
-    if (!finestResolutionSource) return;
-    const spec = finestResolutionSource.chunkSource.spec;
-
-    this.dataType.value = spec.dataType;
-    this.bounds.value = spec.upperVoxelBound.join(",");
-    this.chunkSize.value = spec.chunkDataSize.join(",");
-
-    const coordSpace = loadState.transform.value.inputSpace;
-    this.resolution.value = coordSpace.scales.map((s) => s * 1e9).join(",");
-  }
-
-  private createDataset() {
-    try {
-      const parseVec = (input: string) => {
-        const parts = input.split(",").map((s) => parseFloat(s.trim()));
-        if (parts.length !== 3 || parts.some(isNaN)) {
-          throw new Error(`Invalid vector format: "${input}"`);
-        }
-        return new Float32Array(parts);
-      };
-
-      const boundsVec = parseVec(this.bounds.value);
-      const resolutionVec = parseVec(this.resolution.value).map((s) => s / 1e9); // nm to m
-      const chunkSizeVec = parseVec(this.chunkSize.value);
-
-      const coordinateSpace = makeCoordinateSpace({
-        rank: 3,
-        names: ["x", "y", "z"],
-        units: ["m", "m", "m"],
-        scales: new Float64Array(resolutionVec),
-        bounds: {
-          lowerBounds: new Float64Array([0, 0, 0]),
-          upperBounds: new Float64Array(boundsVec),
-          voxelCenterAtIntegerCoordinates: [false, false, false],
-        },
-      });
-
-      const configuration = {
-        dataType: this.dataType.value,
-        coordinateSpace,
-        chunkSize: new Uint32Array(chunkSizeVec),
-        format: this.format.value,
-      };
-
-      const dataSourceProvider = this.manager.dataSourceProviderRegistry;
-      const provider = dataSourceProvider.getKvStoreBasedProvider(
-        configuration.format,
-      );
-
-      if (provider?.create === undefined) {
-        throw new Error(
-          `Dataset creation not supported for format: "${configuration}"`,
+    topControls.appendChild(this.registerDisposer(new DependentViewWidget(
+      { changed: this.manager.rootLayers.layersChanged, get value() { return null; } },
+      (_value, parentElement) => {
+        const compatibleLayers = this.manager.rootLayers.managedLayers.filter(
+          layer => layer.getCreationMetadata() !== undefined
         );
-      }
+        if (compatibleLayers.length === 0) return;
 
-      const promise = provider.create({
-        registry: dataSourceProvider,
-        kvStoreUrl: this.url,
-        metadata: configuration,
-      });
+        const label = document.createElement('label');
+        label.textContent = 'Copy settings from layer';
+        parentElement.appendChild(label);
 
-      StatusMessage.forPromise(promise, {
-        initialMessage: `Creating ${this.format.value} dataset at ${this.url}`,
-        errorPrefix: "Creation failed: ",
-        delay: true,
-      });
+        const select = document.createElement('select');
+        const defaultOption = document.createElement('option');
+        defaultOption.textContent = 'None';
+        defaultOption.value = '';
+        select.appendChild(defaultOption);
 
-      promise.then(() => {
-        for (const layer of this.manager.rootLayers.managedLayers) {
-          const dataSource = layer.layer?.dataSources.find(
-            (ds) => ds.spec.url === this.url,
-          );
-          if (dataSource) {
-            dataSource.spec = { ...dataSource.spec };
-            break;
+        compatibleLayers.forEach(layer => {
+          const option = document.createElement('option');
+          option.textContent = layer.name;
+          option.value = layer.name;
+          select.appendChild(option);
+        });
+
+        this.registerEventListener(select, 'change', () => {
+          if (!select.value) return;
+          const layer = this.manager.rootLayers.getLayerByName(select.value);
+          if (layer) {
+            const metadata = layer.getCreationMetadata();
+            if (metadata) {
+              this.state.shape.value = vec3.fromValues(metadata.shape[0], metadata.shape[1], metadata.shape[2]);
+              (this.state.dataType as TrackableEnum<DataType>).value = metadata.dataType;
+              this.state.voxelSize.value = vec3.fromValues(metadata.voxelSize[0], metadata.voxelSize[1], metadata.voxelSize[2]);
+              this.state.voxelUnit.value = metadata.voxelUnit;
+              this.state.name.value = metadata.name;
+            }
           }
-        }
-        this.dispose();
-      });
-    } catch (e) {
-      StatusMessage.showTemporaryMessage(`Error: ${(e as Error).message}`);
+        });
+        parentElement.appendChild(select);
+      }
+    )).element);
+
+    const commonFields = document.createElement('div');
+    commonFields.className = 'neuroglancer-creation-fields-grid';
+    content.appendChild(commonFields);
+
+    const addCommonControl = (trackable: Trackable, label: string) => {
+      const labelElement = document.createElement('label');
+      labelElement.textContent = label;
+      commonFields.appendChild(labelElement);
+      commonFields.appendChild(createControlForTrackable(trackable));
+    };
+
+    addCommonControl(this.state.name, 'Name');
+    addCommonControl(this.state.shape, 'Shape');
+    addCommonControl(this.state.dataType, 'Data Type');
+    addCommonControl(this.state.voxelSize, 'Voxel Size');
+    addCommonControl(this.state.voxelUnit, 'Voxel Unit');
+    addCommonControl(this.state.numScales, 'Number of Scales');
+    addCommonControl(this.state.downsamplingFactor, 'Downsampling Factor');
+
+    const dataSourceSelect = document.createElement('select');
+    const creatableProviders = Array.from(
+      this.manager.dataSourceProviderRegistry.kvStoreBasedDataSources.values()
+    ).filter(p => p.creationState !== undefined);
+
+    creatableProviders.forEach(p => {
+      const option = document.createElement('option');
+      option.value = p.scheme;
+      option.textContent = p.description || p.scheme;
+      dataSourceSelect.appendChild(option);
+    });
+
+    if (creatableProviders.length > 0) {
+      this.dataSourceType.value = creatableProviders[0].scheme;
+    } else {
+      const noProviderMessage = document.createElement('div');
+      noProviderMessage.textContent = 'No creatable data source types are configured.';
+      content.appendChild(noProviderMessage);
     }
+
+    const dsLabel = document.createElement('label');
+    dsLabel.textContent = 'Data Source Type';
+    topControls.appendChild(dsLabel);
+    topControls.appendChild(dataSourceSelect);
+
+    this.registerEventListener(dataSourceSelect, 'change', () => {
+      this.dataSourceType.value = dataSourceSelect.value;
+    });
+
+    const optionsContainer = document.createElement('fieldset');
+    optionsContainer.className = 'neuroglancer-creation-datasource-options';
+    const optionsLegend = document.createElement('legend');
+    optionsContainer.appendChild(optionsLegend);
+    const optionsGrid = document.createElement('div');
+    optionsGrid.className = 'neuroglancer-creation-fields-grid';
+    optionsContainer.appendChild(optionsGrid);
+    content.appendChild(optionsContainer);
+
+    this.registerDisposer(this.dataSourceType.changed.add(() => {
+      this.updateDataSourceOptions(optionsGrid, optionsLegend);
+    }));
+    this.updateDataSourceOptions(optionsGrid, optionsLegend);
+
+    const actions = document.createElement('div');
+    actions.className = 'neuroglancer-creation-actions';
+    const createButton = document.createElement('button');
+    createButton.textContent = 'Create';
+    this.registerEventListener(createButton, 'click', () => this.createDataset());
+    actions.appendChild(createButton);
+    content.appendChild(actions);
+  }
+
+  private updateDataSourceOptions(container: HTMLElement, legend: HTMLLegendElement) {
+    if (this.dataSourceOptions) {
+      this.dataSourceOptions.dispose();
+      this.dataSourceOptions = undefined;
+    }
+    removeChildren(container);
+    const provider = this.manager.dataSourceProviderRegistry.getKvStoreBasedProvider(this.dataSourceType.value);
+    legend.textContent = `${provider?.description || this.dataSourceType.value} Options`;
+    const creationState = provider?.creationState as (DataSourceCreationState | undefined);
+    if (creationState) {
+      this.dataSourceOptions = creationState;
+      for (const key of Object.keys(creationState)) {
+        if (key === 'changed' || key === 'toJSON' || key === 'restoreState' || key === 'reset') continue;
+        const trackable = (creationState as any)[key];
+        if (trackable && typeof trackable.changed?.add === 'function') {
+          const labelElement = document.createElement('label');
+          labelElement.textContent = key;
+          container.appendChild(labelElement);
+          container.appendChild(createControlForTrackable(trackable));
+        }
+      }
+    }
+  }
+
+
+  private async createDataset() {
+    const provider = this.manager.dataSourceProviderRegistry.getKvStoreBasedProvider(this.dataSourceType.value);
+    if (!provider?.create) {
+      StatusMessage.showTemporaryMessage(`Data source '${this.dataSourceType.value}' does not support creation.`, 5000);
+      return;
+    }
+
+    const options: CreateDataSourceOptions = {
+      kvStoreUrl: this.url,
+      registry: this.manager.dataSourceProviderRegistry,
+      metadata: {
+        common: this.state.toJSON(),
+        sourceRelated: this.dataSourceOptions,
+      }
+    };
+
+    StatusMessage.forPromise(
+      provider.create(options),
+      {
+        initialMessage: `Creating dataset at ${this.url}...`,
+        delay: true,
+        errorPrefix: 'Creation failed: ',
+      }
+    ).then(() => {
+      StatusMessage.showTemporaryMessage('Dataset created successfully.', 3000);
+      this.dispose();
+    });
   }
 }

@@ -1,0 +1,79 @@
+/**
+ * @license
+ * Copyright 2025 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.neuroglancer-dataset-creation-dialog {
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  max-width: 600px;
+  font-family: sans-serif;
+}
+
+.neuroglancer-dataset-creation-dialog h2 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  font-size: 18px;
+  text-align: center;
+}
+
+.neuroglancer-creation-top-controls {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 8px 10px;
+  margin-bottom: 15px;
+}
+
+.neuroglancer-creation-fields-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 8px 10px;
+  margin-bottom: 15px;
+}
+
+.neuroglancer-creation-fields-grid > label {
+  justify-self: end;
+  font-weight: 500;
+}
+
+.neuroglancer-vec3-widget {
+  display: flex;
+  gap: 5px;
+}
+
+.neuroglancer-vec3-widget > .neuroglancer-number-input {
+  flex: 1;
+}
+
+.neuroglancer-creation-datasource-options {
+  border: 1px solid #555;
+  border-radius: 4px;
+  padding: 10px;
+  margin-top: 5px;
+  margin-bottom: 15px;
+}
+
+.neuroglancer-creation-datasource-options > legend {
+  padding: 0 5px;
+  color: #bbb;
+}
+
+.neuroglancer-creation-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}

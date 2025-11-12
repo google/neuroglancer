@@ -32,6 +32,7 @@ import {
   TrackableCoordinateSpace,
 } from "#src/coordinate_transform.js";
 import type {
+  CommonCreationMetadata,
   DataSourceRegistry,
   DataSourceSpecification,
   DataSubsource,
@@ -64,6 +65,7 @@ import type {
   VisibilityTrackedRenderLayer,
 } from "#src/renderlayer.js";
 import type { VolumeType } from "#src/sliceview/volume/base.js";
+import { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import { StatusMessage } from "#src/status.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type {
@@ -85,7 +87,7 @@ import { LayerToolBinder, SelectedLegacyTool } from "#src/ui/tool.js";
 import { gatherUpdate } from "#src/util/array.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { invokeDisposers, RefCounted } from "#src/util/disposable.js";
-import type { vec3 } from "#src/util/geom.js";
+import { vec3 } from "#src/util/geom.js";
 import {
   emptyToUndefined,
   parseArray,
@@ -845,6 +847,74 @@ export class ManagedUserLayer extends RefCounted {
       this.archived = false;
     }
     this.layerChanged.dispatch();
+  }
+
+  getCreationMetadata(): CommonCreationMetadata | undefined {
+    const userLayer = this.layer;
+    if (userLayer === null) return undefined;
+
+    for (const dataSource of userLayer.dataSources) {
+      const loadState = dataSource.loadState;
+      if (loadState === undefined || loadState.error !== undefined) continue;
+
+      for (const subsource of loadState.subsources) {
+        if (!subsource.enabled) continue;
+        const { volume } = subsource.subsourceEntry.subsource;
+
+        if (volume instanceof MultiscaleVolumeChunkSource) {
+          const { modelTransform } = loadState.dataSource;
+          const modelSpace = modelTransform.outputSpace;
+          const { rank } = modelSpace;
+
+          const identityOptions = {
+            displayRank: rank,
+            multiscaleToViewTransform: new Float32Array(rank * rank).fill(0),
+            modelChannelDimensionIndices: [],
+          };
+          for (let i = 0; i < rank; ++i)
+            identityOptions.multiscaleToViewTransform[i * rank + i] = 1;
+
+          const scales = volume.getSources(identityOptions)[0];
+          if (!scales || scales.length === 0) continue;
+          
+          const highResSource = scales[0];
+          const shape = Array.from(
+            highResSource.chunkSource.spec.upperVoxelBound,
+          );
+          const highResTransform = highResSource.chunkToMultiscaleTransform;
+          const voxelSize = new Array(rank);
+          for (let i = 0; i < rank; ++i) {
+            voxelSize[i] = highResTransform[i * (rank + 1) + i];
+          }
+
+          const numScales = scales.length;
+
+          const downsamplingFactor = vec3.fromValues(1, 1, 1);
+          if (scales.length > 1) {
+            const lowResSource = scales[1];
+            const lowResTransform = lowResSource.chunkToMultiscaleTransform;
+            for (let i = 0; i < rank; ++i) {
+              const highResScale = highResTransform[i * (rank + 1) + i];
+              const lowResScale = lowResTransform[i * (rank + 1) + i];
+              if (highResScale !== 0) {
+                downsamplingFactor[i] = Math.round(lowResScale / highResScale);
+              }
+            }
+          }
+
+          return {
+            shape,
+            dataType: volume.dataType,
+            voxelSize,
+            voxelUnit: modelSpace.units[0] || "",
+            numScales,
+            downsamplingFactor: Array.from(downsamplingFactor),
+            name: `${this.name}_copy`,
+          };
+        }
+      }
+    }
+    return undefined;
   }
 
   disposed() {

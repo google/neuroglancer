@@ -30,7 +30,9 @@ import type {
   CreateDataSourceOptions,
   DataSource,
   GetKvStoreBasedDataSourceOptions,
-  KvStoreBasedDataSourceProvider,
+  KvStoreBasedDataSourceProvider} from "#src/datasource/index.js";
+import {
+  DataSourceCreationState
 } from "#src/datasource/index.js";
 import { getKvStorePathCompletions } from "#src/datasource/kvstore_completions.js";
 import { VolumeChunkSourceParameters } from "#src/datasource/zarr/base.js";
@@ -39,6 +41,7 @@ import "#src/datasource/zarr/codec/crc32c/resolve.js";
 import "#src/datasource/zarr/codec/gzip/resolve.js";
 import "#src/datasource/zarr/codec/sharding_indexed/resolve.js";
 import "#src/datasource/zarr/codec/transpose/resolve.js";
+import { getZarrCreator } from "#src/datasource/zarr/creation.js";
 import type {
   ArrayMetadata,
   DimensionSeparator,
@@ -58,10 +61,8 @@ import { simpleFilePresenceAutoDetectDirectorySpec } from "#src/kvstore/auto_det
 import { WithSharedKvStoreContext } from "#src/kvstore/chunk_source_frontend.js";
 import type { CompletionResult } from "#src/kvstore/context.js";
 import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
-import { proxyWrite } from "#src/kvstore/proxy.js";
 import {
   joinBaseUrlAndPath,
-  joinPath,
   kvstoreEnsureDirectoryPipelineUrl,
   parseUrlSuffix,
   pipelineUrlJoin,
@@ -90,6 +91,21 @@ import {
 import * as matrix from "#src/util/matrix.js";
 import type { ProgressOptions } from "#src/util/progress_listener.js";
 import { ProgressSpan } from "#src/util/progress_listener.js";
+import { TrackableEnum } from "#src/util/trackable_enum.js";
+
+export enum ZarrCompression {
+  raw = 0,
+  gzip = 1,
+}
+
+export class ZarrCreationState extends DataSourceCreationState {
+  compression = new TrackableEnum(ZarrCompression, ZarrCompression.raw);
+
+  constructor() {
+    super();
+    this.add("compression", this.compression);
+  }
+}
 
 class ZarrVolumeChunkSource extends WithParameters(
   WithSharedKvStoreContext(VolumeChunkSource),
@@ -475,11 +491,6 @@ function resolveUrl(options: GetKvStoreBasedDataSourceOptions) {
   };
 }
 
-const dataTypeToZarrV2Dtype: { [key: string]: string } = {
-  "uint8": "|u1", "uint16": "<u2", "uint32": "<u4", "uint64": "<u8",
-  "int8": "|i1", "int16": "<i2", "int32": "<i4", "float32": "<f4",
-};
-
 export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
   constructor(public zarrVersion: 2 | 3 | undefined = undefined) {}
   get scheme() {
@@ -493,6 +504,9 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
       this.zarrVersion === undefined ? "" : ` v${this.zarrVersion}`;
     return `Zarr${versionStr} data source`;
   }
+
+  get creationState(){ return this.zarrVersion ? new ZarrCreationState() : undefined};
+
   get(options: GetKvStoreBasedDataSourceOptions): Promise<DataSource> {
     let { kvStoreUrl, additionalPath, fragment } = resolveUrl(options);
     kvStoreUrl = kvstoreEnsureDirectoryPipelineUrl(
@@ -605,95 +619,10 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
       ),
     );
   }
-  private buildOmeZattrs(metadata: Record<string, any>): string {
-    const { scales, axes, name } = metadata;
-    const datasets = scales.map((scale: any, i: number) => ({
-      path: `s${i}`,
-      coordinateTransformations: [{
-        type: "scale",
-        scale: scale.transform,
-      }],
-    }));
-
-    const omeMetadata = {
-      multiscales: [{
-        version: "0.4",
-        axes: axes,
-        datasets: datasets,
-        name: name || 'default',
-      }],
-    };
-    return JSON.stringify(omeMetadata, null, 2);
-  }
-
-  private buildZarray(scaleMetadata: Record<string, any>): string {
-    const { shape, chunks, dtype, compressor, fillValue } = scaleMetadata;
-    const zarrMetadata = {
-      zarr_format: 2,
-      shape: shape,
-      chunks: chunks,
-      dtype: dtype,
-      compressor: compressor,
-      fill_value: fillValue || 0,
-      order: 'C',
-      filters: null,
-    };
-    return JSON.stringify(zarrMetadata, null, 2);
-  }
-
   async create(options: CreateDataSourceOptions): Promise<void> {
-    const { kvStoreUrl, registry } = options;
-    const { sharedKvStoreContext } = registry;
-    const kvStore = sharedKvStoreContext.kvStoreContext.getKvStore(kvStoreUrl);
-
-    const baseShape = [30024, 30024, 30024];
-    const chunkShape = [64, 64, 64];
-    const dataType = "uint32";
-    const baseVoxelSize = [4, 4, 40];
-    const voxelUnit = "nanometer";
-    const numScales = 6;
-    const downsamplingFactor = [2, 2, 2];
-
-    const scales = [];
-    for (let i = 0; i < numScales; ++i) {
-      const downsampleCoeffs = downsamplingFactor.map(f => Math.pow(f, i));
-      scales.push({
-        shape: baseShape.map((dim, j) => Math.ceil(dim / downsampleCoeffs[j])),
-        chunks: chunkShape,
-        dtype: dataTypeToZarrV2Dtype[dataType],
-        compressor: null,
-        transform: baseVoxelSize.map((v, j) => v * downsampleCoeffs[j]),
-      });
-    }
-
-    const metadata = {
-      scales,
-      axes: [
-        { name: 'x', type: 'space', unit: voxelUnit },
-        { name: 'y', type: 'space', unit: voxelUnit },
-        { name: 'z', type: 'space', unit: voxelUnit },
-      ],
-    };
-
-    const zattrsContent = this.buildOmeZattrs(metadata);
-    const zattrsUrl = kvStore.store.getUrl(joinPath(kvStore.path, '.zattrs'));
-    const writeZattrsPromise = proxyWrite(
-      sharedKvStoreContext,
-      zattrsUrl,
-      new TextEncoder().encode(zattrsContent).buffer as ArrayBuffer,
-    );
-
-    const writeZarrayPromises = metadata.scales.map((scale: any, i: number) => {
-      const zarrayUrl = kvStore.store.getUrl(joinPath(kvStore.path, `s${i}`, '.zarray'));
-      const zarrayContent = this.buildZarray(scale);
-      return proxyWrite(
-        sharedKvStoreContext,
-        zarrayUrl,
-        new TextEncoder().encode(zarrayContent).buffer as ArrayBuffer,
-      );
-    });
-
-    await Promise.all([writeZattrsPromise, ...writeZarrayPromises]);
+    console.log("ZarrDataSource.create", options);
+    const creator = getZarrCreator(this.zarrVersion);
+    await creator.create(options);
   }
 }
 
