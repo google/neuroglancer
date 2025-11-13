@@ -216,9 +216,9 @@ export class VolumeChunkSource
     const newValuesArray = new ArrayCtor(values.length);
     for (let i = 0; i < values.length; ++i) {
       newValuesArray[i] =
-        this.spec.dataType === DataType.UINT32
-          ? Number(values[i]!)
-          : values[i]!;
+        this.spec.dataType === DataType.UINT64
+          ? values[i]!
+          : Number(values[i]!);
     }
     const oldValuesArray = new ArrayCtor(indices.length);
 
