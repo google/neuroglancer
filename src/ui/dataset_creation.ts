@@ -59,13 +59,13 @@ function createControlForTrackable(trackable: Trackable): HTMLElement {
 
 class CommonMetadataState extends CompoundTrackable {
   shape = new TrackableVec3(
-    vec3.fromValues(30024, 30024, 30024),
-    vec3.fromValues(30024, 30024, 30024),
+    vec3.fromValues(42000, 42000, 42000),
+    vec3.fromValues(42000, 42000, 42000),
   );
   dataType = new TrackableEnum(DataType, DataType.UINT32);
   voxelSize = new TrackableVec3(
-    vec3.fromValues(4, 4, 40),
-    vec3.fromValues(4, 4, 40),
+    vec3.fromValues(8, 8, 8),
+    vec3.fromValues(8, 8, 8),
   );
   voxelUnit = new TrackableValue<string>("nm", verifyString);
   numScales = new TrackableValue<number>(6, verifyInt);
@@ -340,7 +340,17 @@ export class DatasetCreationDialog extends Overlay {
       errorPrefix: "Creation failed: ",
     }).then(() => {
       StatusMessage.showTemporaryMessage("Dataset created successfully.", 3000);
-      this.dispose();
+      for (const layer of this.manager.rootLayers.managedLayers) {
+        if (layer.layer) {
+          for (const ds of layer.layer.dataSources) {
+            if (ds.spec.url === this.url) {
+              ds.spec = { ...ds.spec };
+              this.dispose();
+              return;
+            }
+          }
+        }
+      }
     });
   }
 }

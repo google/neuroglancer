@@ -608,7 +608,6 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
     );
   }
   async create(options: CreateDataSourceOptions): Promise<void> {
-    console.log("ZarrDataSource.create", options);
     const creator = getZarrCreator(this.zarrVersion);
     await creator.create(options);
   }
