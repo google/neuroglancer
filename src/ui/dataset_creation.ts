@@ -107,6 +107,22 @@ export class DatasetCreationDialog extends Overlay {
   dataSourceType = new TrackableValue<string>("", verifyString);
   private dataSourceOptions: DataSourceCreationState | undefined;
 
+  addControl = (trackable: Trackable, label: string, parent: HTMLElement) => {
+    const container = document.createElement("div");
+    container.style.display = "flex";
+    const labelElement = document.createElement("label");
+    labelElement.textContent = label + ": ";
+    container.appendChild(labelElement);
+    const ctrl = createControlForTrackable(trackable);
+    const ctrlContainer = document.createElement("div");
+    ctrlContainer.style.display = "flex";
+    ctrlContainer.style.flexGrow = "1";
+    ctrlContainer.style.justifyContent = "flex-end";
+    ctrlContainer.appendChild(ctrl);
+    container.appendChild(ctrlContainer);
+    parent.appendChild(container);
+  };
+
   constructor(
     public manager: LayerListSpecification,
     public url: string,
@@ -114,15 +130,46 @@ export class DatasetCreationDialog extends Overlay {
     super();
 
     const { content } = this;
-    content.classList.add("neuroglancer-dataset-creation-dialog");
 
     const titleElement = document.createElement("h2");
     titleElement.textContent = "Create New Dataset";
     content.appendChild(titleElement);
 
     const topControls = document.createElement("div");
-    topControls.className = "neuroglancer-creation-top-controls";
+    topControls.style.display = "flex";
+    topControls.style.flexDirection = "column";
+
     content.appendChild(topControls);
+
+    const dataSourceSelect = document.createElement("select");
+    const creatableProviders = Array.from(
+      this.manager.dataSourceProviderRegistry.kvStoreBasedDataSources.values(),
+    ).filter((p) => p.creationState !== undefined);
+
+    creatableProviders.forEach((p) => {
+      const option = document.createElement("option");
+      option.value = p.scheme;
+      option.textContent = p.description || p.scheme;
+      dataSourceSelect.appendChild(option);
+    });
+
+    if (creatableProviders.length > 0) {
+      this.dataSourceType.value = creatableProviders[0].scheme;
+    } else {
+      const noProviderMessage = document.createElement("div");
+      noProviderMessage.textContent =
+        "No creatable data source types are configured.";
+      content.appendChild(noProviderMessage);
+    }
+
+    const dsLabel = document.createElement("label");
+    dsLabel.textContent = "Data Source Type: ";
+    topControls.appendChild(dsLabel);
+    topControls.appendChild(dataSourceSelect);
+
+    this.registerEventListener(dataSourceSelect, "change", () => {
+      this.dataSourceType.value = dataSourceSelect.value;
+    });
 
     topControls.appendChild(
       this.registerDisposer(
@@ -141,7 +188,7 @@ export class DatasetCreationDialog extends Overlay {
             if (compatibleLayers.length === 0) return;
 
             const label = document.createElement("label");
-            label.textContent = "Copy settings from layer";
+            label.textContent = "Copy settings from layer: ";
             parentElement.appendChild(label);
 
             const select = document.createElement("select");
@@ -188,61 +235,28 @@ export class DatasetCreationDialog extends Overlay {
       ).element,
     );
 
-    const commonFields = document.createElement("div");
-    commonFields.className = "neuroglancer-creation-fields-grid";
+    const commonFields = document.createElement("fieldset");
+    const commonLegend = document.createElement("legend");
+    commonLegend.textContent = "Common Metadata";
+    commonFields.appendChild(commonLegend);
     content.appendChild(commonFields);
 
-    const addCommonControl = (trackable: Trackable, label: string) => {
-      const labelElement = document.createElement("label");
-      labelElement.textContent = label;
-      commonFields.appendChild(labelElement);
-      commonFields.appendChild(createControlForTrackable(trackable));
-    };
-
-    addCommonControl(this.state.name, "Name");
-    addCommonControl(this.state.shape, "Shape");
-    addCommonControl(this.state.dataType, "Data Type");
-    addCommonControl(this.state.voxelSize, "Voxel Size");
-    addCommonControl(this.state.voxelUnit, "Voxel Unit");
-    addCommonControl(this.state.numScales, "Number of Scales");
-    addCommonControl(this.state.downsamplingFactor, "Downsampling Factor");
-
-    const dataSourceSelect = document.createElement("select");
-    const creatableProviders = Array.from(
-      this.manager.dataSourceProviderRegistry.kvStoreBasedDataSources.values(),
-    ).filter((p) => p.creationState !== undefined);
-
-    creatableProviders.forEach((p) => {
-      const option = document.createElement("option");
-      option.value = p.scheme;
-      option.textContent = p.description || p.scheme;
-      dataSourceSelect.appendChild(option);
-    });
-
-    if (creatableProviders.length > 0) {
-      this.dataSourceType.value = creatableProviders[0].scheme;
-    } else {
-      const noProviderMessage = document.createElement("div");
-      noProviderMessage.textContent =
-        "No creatable data source types are configured.";
-      content.appendChild(noProviderMessage);
-    }
-
-    const dsLabel = document.createElement("label");
-    dsLabel.textContent = "Data Source Type";
-    topControls.appendChild(dsLabel);
-    topControls.appendChild(dataSourceSelect);
-
-    this.registerEventListener(dataSourceSelect, "change", () => {
-      this.dataSourceType.value = dataSourceSelect.value;
-    });
+    this.addControl(this.state.name, "Name", commonFields);
+    this.addControl(this.state.shape, "Shape", commonFields);
+    this.addControl(this.state.dataType, "Data Type", commonFields);
+    this.addControl(this.state.voxelSize, "Voxel Size", commonFields);
+    this.addControl(this.state.voxelUnit, "Voxel Unit", commonFields);
+    this.addControl(this.state.numScales, "Number of Scales", commonFields);
+    this.addControl(
+      this.state.downsamplingFactor,
+      "Downsampling Factor",
+      commonFields,
+    );
 
     const optionsContainer = document.createElement("fieldset");
-    optionsContainer.className = "neuroglancer-creation-datasource-options";
     const optionsLegend = document.createElement("legend");
     optionsContainer.appendChild(optionsLegend);
     const optionsGrid = document.createElement("div");
-    optionsGrid.className = "neuroglancer-creation-fields-grid";
     optionsContainer.appendChild(optionsGrid);
     content.appendChild(optionsContainer);
 
@@ -254,7 +268,6 @@ export class DatasetCreationDialog extends Overlay {
     this.updateDataSourceOptions(optionsGrid, optionsLegend);
 
     const actions = document.createElement("div");
-    actions.className = "neuroglancer-creation-actions";
     const createButton = document.createElement("button");
     createButton.textContent = "Create";
     this.registerEventListener(createButton, "click", () =>
@@ -277,7 +290,7 @@ export class DatasetCreationDialog extends Overlay {
       this.manager.dataSourceProviderRegistry.getKvStoreBasedProvider(
         this.dataSourceType.value,
       );
-    legend.textContent = `${provider?.description || this.dataSourceType.value} Options`;
+    legend.textContent = `${provider?.description || this.dataSourceType.value} Metadata`;
     const creationState = provider?.creationState as
       | DataSourceCreationState
       | undefined;
@@ -293,10 +306,7 @@ export class DatasetCreationDialog extends Overlay {
           continue;
         const trackable = (creationState as any)[key];
         if (trackable && typeof trackable.changed?.add === "function") {
-          const labelElement = document.createElement("label");
-          labelElement.textContent = key;
-          container.appendChild(labelElement);
-          container.appendChild(createControlForTrackable(trackable));
+          this.addControl(trackable, key, container);
         }
       }
     }

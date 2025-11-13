@@ -32,7 +32,6 @@ import type {
   GetKvStoreBasedDataSourceOptions,
   KvStoreBasedDataSourceProvider,
 } from "#src/datasource/index.js";
-import { DataSourceCreationState } from "#src/datasource/index.js";
 import { getKvStorePathCompletions } from "#src/datasource/kvstore_completions.js";
 import { VolumeChunkSourceParameters } from "#src/datasource/zarr/base.js";
 import "#src/datasource/zarr/codec/bytes/resolve.js";
@@ -40,7 +39,10 @@ import "#src/datasource/zarr/codec/crc32c/resolve.js";
 import "#src/datasource/zarr/codec/gzip/resolve.js";
 import "#src/datasource/zarr/codec/sharding_indexed/resolve.js";
 import "#src/datasource/zarr/codec/transpose/resolve.js";
-import { getZarrCreator } from "#src/datasource/zarr/creation.js";
+import {
+  getZarrCreator,
+  ZarrCreationState,
+} from "#src/datasource/zarr/metadata/creation.js";
 import type {
   ArrayMetadata,
   DimensionSeparator,
@@ -90,21 +92,6 @@ import {
 import * as matrix from "#src/util/matrix.js";
 import type { ProgressOptions } from "#src/util/progress_listener.js";
 import { ProgressSpan } from "#src/util/progress_listener.js";
-import { TrackableEnum } from "#src/util/trackable_enum.js";
-
-export enum ZarrCompression {
-  raw = 0,
-  gzip = 1,
-}
-
-export class ZarrCreationState extends DataSourceCreationState {
-  compression = new TrackableEnum(ZarrCompression, ZarrCompression.raw);
-
-  constructor() {
-    super();
-    this.add("compression", this.compression);
-  }
-}
 
 class ZarrVolumeChunkSource extends WithParameters(
   WithSharedKvStoreContext(VolumeChunkSource),

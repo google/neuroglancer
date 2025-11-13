@@ -18,9 +18,39 @@ import type {
   CreateDataSourceOptions,
   CommonCreationMetadata,
 } from "#src/datasource/index.js";
+import { DataSourceCreationState } from "#src/datasource/index.js";
 import { proxyWrite } from "#src/kvstore/proxy.js";
 import { joinPath } from "#src/kvstore/url.js";
 import { DataType } from "#src/util/data_type.js";
+
+import { TrackableEnum } from "#src/util/trackable_enum.js";
+
+export enum ZarrCompression {
+  raw = 0,
+  //gzip = 1,
+  // ...
+}
+
+export class ZarrCreationState extends DataSourceCreationState {
+  compression = new TrackableEnum(ZarrCompression, ZarrCompression.raw);
+
+  constructor() {
+    super();
+    this.add("compression", this.compression);
+  }
+}
+
+const zarrV2UnitMapping: { [key: string]: string } = {
+  nm: "nanometer",
+  um: "micrometer",
+  mm: "millimeter",
+  cm: "centimeter",
+  m: "meter",
+  s: "second",
+  ms: "millisecond",
+  us: "microsecond",
+  ns: "nanosecond",
+};
 
 const dataTypeToZarrV2Dtype: { [key in DataType]?: string } = {
   [DataType.UINT8]: "|u1",
@@ -43,8 +73,15 @@ class ZarrV2Creator implements ZarrCreator {
     const { sharedKvStoreContext } = registry;
     const kvStore = sharedKvStoreContext.kvStoreContext.getKvStore(kvStoreUrl);
 
+    const zgroupContent = JSON.stringify({ zarr_format: 2 });
+    const writeZgroupPromise = proxyWrite(
+      sharedKvStoreContext,
+      kvStore.store.getUrl(joinPath(kvStore.path, ".zgroup")),
+      new TextEncoder().encode(zgroupContent).buffer as ArrayBuffer,
+    );
+
     const commonMetadata = metadata.common as CommonCreationMetadata;
-    //const zarrMetadata = metadata.sourceRelated as ZarrCreationState;
+    const zarrMetadata = metadata.sourceRelated as ZarrCreationState;
 
     const scales = [];
     for (let i = 0; i < commonMetadata.numScales; ++i) {
@@ -57,7 +94,7 @@ class ZarrV2Creator implements ZarrCreator {
         ),
         chunks: [64, 64, 64],
         dtype: dataTypeToZarrV2Dtype[commonMetadata.dataType],
-        compressor: null,
+        compressor: this._buildV2ZarrayCompressorMetadata(zarrMetadata),
         transform: commonMetadata.voxelSize.map(
           (v: number, j: number) => v * downsampleCoeffs[j],
         ),
@@ -83,13 +120,27 @@ class ZarrV2Creator implements ZarrCreator {
       );
     });
 
-    await Promise.all([writeZattrsPromise, ...writeZarrayPromises]);
+    await Promise.all([
+      writeZgroupPromise,
+      writeZattrsPromise,
+      ...writeZarrayPromises,
+    ]);
   }
 
   private _buildV2OmeZattrs(
     common: CommonCreationMetadata,
     scales: any[],
   ): string {
+    const fullVoxelUnit =
+      zarrV2UnitMapping[common.voxelUnit] ?? common.voxelUnit;
+    const rank = common.shape.length;
+    const defaultAxes = ["x", "y", "z", "c", "t"];
+    const axes = Array.from({ length: rank }, (_, i) => ({
+      name: defaultAxes[i] || `dim_${i}`,
+      type: "space",
+      unit: fullVoxelUnit,
+    }));
+
     const datasets = scales.map((scale, i) => ({
       path: `s${i}`,
       coordinateTransformations: [
@@ -104,17 +155,33 @@ class ZarrV2Creator implements ZarrCreator {
       multiscales: [
         {
           version: "0.4",
-          axes: [
-            { name: "x", type: "space", unit: common.voxelUnit },
-            { name: "y", type: "space", unit: common.voxelUnit },
-            { name: "z", type: "space", unit: common.voxelUnit },
-          ],
+          axes,
           datasets,
           name: common.name || "default",
+          type: "unknown",
+          metadata: null,
         },
       ],
     };
     return JSON.stringify(omeMetadata, null, 2);
+  }
+
+  private _buildV2ZarrayCompressorMetadata(
+    zarrState: ZarrCreationState,
+  ): object | null {
+    switch (zarrState.compression.value) {
+      /*case ZarrCompressor.BLOSC:
+        return {
+          id: "blosc",
+          cname: zarrState.bloscCodec.value,
+          clevel: zarrState.bloscLevel.value,
+          shuffle: zarrState.bloscShuffle.value,
+        };
+      case ZarrCompressor.GZIP:
+        return { id: "gzip", level: 1 };*/
+      case ZarrCompression.raw:
+        return null;
+    }
   }
 
   private _buildV2Zarray(scaleMetadata: any): string {
