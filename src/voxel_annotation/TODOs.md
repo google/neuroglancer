@@ -6,7 +6,7 @@
 - writable float32 dataset is not working (expected), either block its usage or fix
 - the brush circle is only correct in Euclidean space (expected since it cannot be an ellipse)
 - look into @chrisj comment
-- rework zarr writing to support compression and v3
+- blosc encoding is wrong
 
 - Dataset creation:
   - the copy from existing seems to not be right on all settings
@@ -27,8 +27,6 @@ decode_common.ts:56 Uncaught TypeError: Cannot mix BigInt and other types, use e
 ```
 
 after a page reload, the painting works again with no issues; the previously painted voxels are not present.
-
-- complete zarr support (compression and zarr v3)
 
 ### later
 

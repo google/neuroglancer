@@ -10,7 +10,10 @@ for (const [name, compressionFormat] of [
   registerCodec({
     name,
     kind: CodecKind.bytesToBytes,
-    async encode(configuration: Configuration, decoded: Uint8Array): Promise<Uint8Array> {
+    async encode(
+      configuration: Configuration,
+      decoded: Uint8Array,
+    ): Promise<Uint8Array> {
       configuration;
       const result = await encodeGzip(decoded, compressionFormat);
       return new Uint8Array(result);

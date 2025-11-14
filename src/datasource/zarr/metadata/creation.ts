@@ -32,7 +32,10 @@ export enum ZarrCompression {
 }
 
 export class ZarrCreationState extends DataSourceCreationState {
-  compression = new TrackableEnum<ZarrCompression>(ZarrCompression, ZarrCompression.RAW);
+  compression = new TrackableEnum<ZarrCompression>(
+    ZarrCompression,
+    ZarrCompression.RAW,
+  );
 
   constructor() {
     super();
@@ -131,8 +134,7 @@ class ZarrV2Creator implements ZarrCreator {
     common: CommonCreationMetadata,
     scales: any[],
   ): string {
-    const fullVoxelUnit =
-      zarrUnitMapping[common.voxelUnit] ?? common.voxelUnit;
+    const fullVoxelUnit = zarrUnitMapping[common.voxelUnit] ?? common.voxelUnit;
     const rank = common.shape.length;
     const defaultAxes = ["x", "y", "z", "c", "t"];
     const axes = Array.from({ length: rank }, (_, i) => ({
@@ -212,7 +214,6 @@ const dataTypeToZarrV3Dtype: { [key in DataType]?: string } = {
   [DataType.FLOAT32]: "float32",
 };
 
-
 class ZarrV3Creator implements ZarrCreator {
   async create(options: CreateDataSourceOptions): Promise<void> {
     const { kvStoreUrl, registry, metadata } = options;
@@ -250,10 +251,7 @@ class ZarrV3Creator implements ZarrCreator {
       const arrayMetaUrl = kvStore.store.getUrl(
         joinPath(kvStore.path, `s${i}`, "zarr.json"),
       );
-      const arrayMetaContent = this._buildV3ArrayMetadata(
-        scale,
-        zarrMetadata,
-      );
+      const arrayMetaContent = this._buildV3ArrayMetadata(scale, zarrMetadata);
       return proxyWrite(
         sharedKvStoreContext,
         arrayMetaUrl,
@@ -270,7 +268,7 @@ class ZarrV3Creator implements ZarrCreator {
     const axes = Array.from({ length: rank }, (_, i) => ({
       name: defaultAxes[i] || `dim_${i}`,
       type: "space",
-      unit:  zarrUnitMapping[common.voxelUnit],
+      unit: zarrUnitMapping[common.voxelUnit],
     }));
 
     const datasets = Array.from({ length: common.numScales }, (_, i) => ({
@@ -278,8 +276,8 @@ class ZarrV3Creator implements ZarrCreator {
       coordinateTransformations: [
         {
           type: "scale",
-          scale: common.downsamplingFactor.map((f, j) =>
-            (common.voxelSize[j] * Math.pow(f, i)),
+          scale: common.downsamplingFactor.map(
+            (f, j) => common.voxelSize[j] * Math.pow(f, i),
           ),
         },
       ],
@@ -296,11 +294,15 @@ class ZarrV3Creator implements ZarrCreator {
       ],
     };
 
-    return JSON.stringify({
-      zarr_format: 3,
-      node_type: "group",
-      attributes: omeMetadata,
-    }, null, 2);
+    return JSON.stringify(
+      {
+        zarr_format: 3,
+        node_type: "group",
+        attributes: omeMetadata,
+      },
+      null,
+      2,
+    );
   }
 
   private _buildV3ArrayMetadata(

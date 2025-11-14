@@ -45,9 +45,13 @@ export async function encodeArray(
   }
 
   const arrayToBytesCodecSpec = codecs[CodecKind.arrayToBytes];
-  const arrayToBytesImpl = codecRegistry[CodecKind.arrayToBytes].get(arrayToBytesCodecSpec.name);
+  const arrayToBytesImpl = codecRegistry[CodecKind.arrayToBytes].get(
+    arrayToBytesCodecSpec.name,
+  );
   if (!arrayToBytesImpl) {
-    throw new Error(`Unsupported array -> bytes codec for writing: ${arrayToBytesCodecSpec.name}`);
+    throw new Error(
+      `Unsupported array -> bytes codec for writing: ${arrayToBytesCodecSpec.name}`,
+    );
   }
   const arrayInfo = codecs.arrayInfo[codecs.arrayInfo.length - 1];
   let data = await arrayToBytesImpl.encode(
@@ -58,9 +62,13 @@ export async function encodeArray(
   );
 
   for (const codecSpec of codecs[CodecKind.bytesToBytes]) {
-    const bytesToBytesImpl = codecRegistry[CodecKind.bytesToBytes].get(codecSpec.name);
+    const bytesToBytesImpl = codecRegistry[CodecKind.bytesToBytes].get(
+      codecSpec.name,
+    );
     if (!bytesToBytesImpl) {
-      throw new Error(`Unsupported bytes -> bytes codec for writing: ${codecSpec.name}`);
+      throw new Error(
+        `Unsupported bytes -> bytes codec for writing: ${codecSpec.name}`,
+      );
     }
     data = await bytesToBytesImpl.encode(codecSpec.configuration, data, signal);
   }

@@ -17,6 +17,10 @@ registerCodec({
   ): Promise<Uint8Array> {
     const bytesPerElement = DATA_TYPE_BYTES[encodedArrayInfo.dataType];
     convertEndian(decoded, configuration.endian, bytesPerElement);
-    return new Uint8Array(decoded.buffer, decoded.byteOffset, decoded.byteLength);
+    return new Uint8Array(
+      decoded.buffer,
+      decoded.byteOffset,
+      decoded.byteLength,
+    );
   },
 });
