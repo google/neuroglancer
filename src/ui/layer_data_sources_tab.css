@@ -19,6 +19,10 @@
   flex-direction: column;
 }
 
+.neuroglancer-layer-data-source-writable-label {
+  margin-right: 5px;
+}
+
 .neuroglancer-layer-data-sources-container {
   overflow-y: auto;
   display: flex;

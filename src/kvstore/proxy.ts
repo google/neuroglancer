@@ -30,6 +30,7 @@ import {
   READ_RPC_ID,
   STAT_RPC_ID,
   COMPLETE_URL_RPC_ID,
+  WRITE_RPC_ID,
 } from "#src/kvstore/shared_common.js";
 import {
   finalPipelineUrlComponent,
@@ -224,6 +225,48 @@ registerPromiseRPC(
     return {
       value: result,
     };
+  },
+);
+
+export async function proxyWrite(
+  sharedKvStoreContext: SharedKvStoreContextBase,
+  url: string,
+  data: ArrayBuffer,
+): Promise<void> {
+  await sharedKvStoreContext.rpc!.promiseInvoke<void>(
+    WRITE_RPC_ID,
+    {
+      sharedKvStoreContext: sharedKvStoreContext.rpcId,
+      url,
+      data,
+    },
+    { transfers: [data] },
+  );
+}
+
+registerPromiseRPC(
+  WRITE_RPC_ID,
+  async function (
+    this: RPC,
+    options: {
+      sharedKvStoreContext: number;
+      url: string;
+      data: ArrayBuffer;
+    },
+  ) {
+    const sharedKvStoreContext: SharedKvStoreContextBase = this.get(
+      options.sharedKvStoreContext,
+    );
+    const { store, path } = sharedKvStoreContext.kvStoreContext.getKvStore(
+      options.url,
+    );
+    if (store.write === undefined) {
+      throw new Error(
+        `The specified storage location is not writable: ${options.url}`,
+      );
+    }
+    await store.write(path, options.data);
+    return { value: undefined };
   },
 );
 

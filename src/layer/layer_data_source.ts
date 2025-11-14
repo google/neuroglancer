@@ -36,7 +36,10 @@ import { makeEmptyDataSourceSpecification } from "#src/datasource/index.js";
 import type { UserLayer } from "#src/layer/index.js";
 import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
 import type { RenderLayer } from "#src/renderlayer.js";
+import { StatusMessage } from "#src/status.js";
+import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { DatasetCreationDialog } from "#src/ui/dataset_creation.js";
 import { arraysEqual } from "#src/util/array.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { disposableOnce, RefCounted } from "#src/util/disposable.js";
@@ -63,6 +66,7 @@ export function parseDataSubsourceSpecificationFromJson(
   verifyObject(json);
   return {
     enabled: verifyOptionalObjectProperty(json, "enabled", verifyBoolean),
+    writable: verifyOptionalObjectProperty(json, "writable", verifyBoolean),
   };
 }
 
@@ -108,7 +112,8 @@ export function layerDataSourceSpecificationFromJson(
 }
 
 function dataSubsourceSpecificationToJson(spec: DataSubsourceSpecification) {
-  return spec.enabled;
+  const { enabled, writable } = spec;
+  return { enabled, writable };
 }
 
 export function layerDataSourceSpecificationToJson(
@@ -146,6 +151,7 @@ export class LoadedDataSubsource {
   subsourceToModelSubspaceTransform: Float32Array;
   modelSubspaceDimensionIndices: number[];
   enabled: boolean;
+  writable: TrackableBoolean;
   activated: RefCounted | undefined = undefined;
   guardValues: any[] = [];
   messages = new MessageList();
@@ -178,6 +184,13 @@ export class LoadedDataSubsource {
       ),
     } = subsourceEntry;
     this.enabled = enabled;
+    this.writable = new TrackableBoolean(
+      subsourceSpec?.writable ?? false,
+      false,
+    );
+    this.writable.changed.add(
+      loadedDataSource.layer.dataSourcesChanged.dispatch,
+    );
     this.subsourceToModelSubspaceTransform = subsourceToModelSubspaceTransform;
     this.modelSubspaceDimensionIndices = modelSubspaceDimensionIndices;
     this.isActiveChanged.add(
@@ -451,6 +464,23 @@ export class LayerDataSource extends RefCounted {
         if (refCounted.wasDisposed) return;
         this.loadState_ = { error };
         this.messages.clearMessages();
+
+        const status = new StatusMessage(/*delay=*/ false, /*modal=*/ true);
+        status.element.innerHTML = `Dataset not found at <code>${this.spec_.url}</code>. `;
+        const createButton = document.createElement("button");
+        createButton.textContent = "Create Dataset";
+        createButton.addEventListener("click", () => {
+          status.dispose();
+          new DatasetCreationDialog(this.layer.manager, this.spec_.url);
+        });
+        const cancelButton = document.createElement("button");
+        cancelButton.textContent = "Cancel";
+        cancelButton.addEventListener("click", () => {
+          status.dispose();
+        });
+        status.element.appendChild(createButton);
+        status.element.appendChild(cancelButton);
+
         this.messages.addMessage({
           severity: MessageSeverity.error,
           message: formatErrorMessage(error),
@@ -491,6 +521,7 @@ export class LayerDataSource extends RefCounted {
                 loadedSubsource.enabled !== defaultEnabledValue
                   ? loadedSubsource.enabled
                   : undefined,
+              writable: loadedSubsource.writable.value ? true : undefined,
             },
           ];
         }),

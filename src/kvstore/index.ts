@@ -91,7 +91,15 @@ export interface ListableKvStore {
   list?: (prefix: string, options: DriverListOptions) => Promise<ListResponse>;
 }
 
-export interface KvStore extends ReadableKvStore, ListableKvStore {
+export interface WritableKvStore<Key = string> {
+  write?: (key: Key, value: ArrayBuffer) => Promise<void>;
+  delete?: (key: Key) => Promise<void>;
+}
+
+export interface KvStore<Key = string>
+  extends ReadableKvStore<Key>,
+    ListableKvStore,
+    WritableKvStore<Key> {
   // Indicates that the only valid key is the empty string.
   singleKey?: boolean;
 }

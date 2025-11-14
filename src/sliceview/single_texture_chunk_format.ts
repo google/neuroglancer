@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
+import { VolumeChunk } from "#src/sliceview/volume/chunk.js";
 import type {
   VolumeChunkSource,
   ChunkFormat,
 } from "#src/sliceview/volume/frontend.js";
-import { VolumeChunk } from "#src/sliceview/volume/frontend.js";
 import type { TypedArray } from "#src/util/array.js";
 import type { DataType } from "#src/util/data_type.js";
 import type { Disposable } from "#src/util/disposable.js";
@@ -144,6 +144,31 @@ export abstract class SingleTextureVolumeChunk<
     gl.bindTexture(textureTarget, texture);
     this.setTextureData(gl);
     gl.bindTexture(textureTarget, null);
+  }
+
+  updateFromCpuData(
+    gl: GL,
+    _region?: { offset: Uint32Array; size: Uint32Array },
+  ) {
+    if (this.data == null) return;
+
+    if (this.texture == null) {
+      this.copyToGPU(gl);
+      return;
+    }
+
+    const textureTarget =
+      textureTargetForSamplerType[this.chunkFormat.shaderSamplerType];
+    gl.bindTexture(textureTarget, this.texture);
+    try {
+      this.chunkFormat.setTextureData(
+        gl,
+        this.textureLayout!,
+        this.data as unknown as TypedArray,
+      );
+    } finally {
+      gl.bindTexture(textureTarget, null);
+    }
   }
 
   freeGPUMemory(gl: GL) {
