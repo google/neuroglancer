@@ -41,7 +41,11 @@ import { SKELETON_LAYER_RPC_ID } from "#src/skeleton/base.js";
 import type { SliceViewPanel } from "#src/sliceview/panel.js";
 import type { SliceViewPanelRenderContext } from "#src/sliceview/renderlayer.js";
 import { SliceViewPanelRenderLayer } from "#src/sliceview/renderlayer.js";
-import { TrackableValue, WatchableValue } from "#src/trackable_value.js";
+import {
+  AggregateWatchableValue,
+  TrackableValue,
+  WatchableValue,
+} from "#src/trackable_value.js";
 import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import type { vec3 } from "#src/util/geom.js";
@@ -62,6 +66,7 @@ import type { GL } from "#src/webgl/context.js";
 import type { WatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import {
   makeTrackableFragmentMain,
+  makeWatchableShaderError,
   parameterizedEmitterDependentShaderGetter,
   shaderCodeWithLineDirective,
 } from "#src/webgl/dynamic_shader.js";
@@ -75,7 +80,6 @@ import type {
   ShaderProgram,
   ShaderSamplerType,
 } from "#src/webgl/shader.js";
-import type { ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
 import {
   addControlsToBuilder,
   getFallbackBuilderState,
@@ -142,6 +146,15 @@ class RenderHelper extends RefCounted {
   ) {
     super();
     this.vertexIdHelper = this.registerDisposer(VertexIdHelper.get(this.gl));
+
+    const parameters = new AggregateWatchableValue(() => ({
+      shaderBuilderState:
+        this.base.displayState.skeletonRenderingOptions.shaderControlState
+          .builderState,
+      segmentColorShaderBuilderState:
+        this.base.displayState.segmentColorShaderControlState.builderState,
+    }));
+
     this.edgeShaderGetter = parameterizedEmitterDependentShaderGetter(
       this,
       this.gl,
@@ -150,14 +163,12 @@ class RenderHelper extends RefCounted {
           type: "skeleton/SkeletonShaderManager/edge",
           vertexAttributes: this.vertexAttributes,
         },
-        fallbackParameters: this.base.fallbackShaderParameters,
-        parameters:
-          this.base.displayState.skeletonRenderingOptions.shaderControlState
-            .builderState,
+        // fallbackParameters: this.base.fallbackShaderParameters, TODO
+        parameters,
         shaderError: this.base.displayState.shaderError,
         defineShader: (
           builder: ShaderBuilder,
-          shaderBuilderState: ShaderControlsBuilderState,
+          { shaderBuilderState, segmentColorShaderBuilderState },
         ) => {
           if (shaderBuilderState.parseResult.errors.length !== 0) {
             throw new Error("Invalid UI control specification");
@@ -174,16 +185,20 @@ emitLine(uProjection, vertexA, vertexB, uLineWidth);
 highp uint lineEndpointIndex = getLineEndpointIndex();
 highp uint vertexIndex = aVertexIndex.x * (1u - lineEndpointIndex) + aVertexIndex.y * lineEndpointIndex;
 `;
-
+          const segmentColor = shaderCodeWithLineDirective(
+            segmentColorShaderBuilderState.parseResult.code,
+          );
+          builder.addFragmentCode(segmentColor + "\n");
           builder.addFragmentCode(`
-vec4 segmentColor() {
-  return uColor;
-}
+// vec4 segmentColor() {
+//   return uColor;
+// }
 void emitRGB(vec3 color) {
   emit(vec4(color * uColor.a, uColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
 }
 void emitDefault() {
-  emit(vec4(uColor.rgb, uColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
+  highp vec4 color = segmentColor(uColor);
+  emit(vec4(color.rgb, color.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
 }
 `);
           builder.addFragmentCode(glsl_COLORMAPS);
@@ -215,14 +230,12 @@ void emitDefault() {
           type: "skeleton/SkeletonShaderManager/node",
           vertexAttributes: this.vertexAttributes,
         },
-        fallbackParameters: this.base.fallbackShaderParameters,
-        parameters:
-          this.base.displayState.skeletonRenderingOptions.shaderControlState
-            .builderState,
+        // fallbackParameters: this.base.fallbackShaderParameters, TODO
+        parameters,
         shaderError: this.base.displayState.shaderError,
         defineShader: (
           builder: ShaderBuilder,
-          shaderBuilderState: ShaderControlsBuilderState,
+          { shaderBuilderState, segmentColorShaderBuilderState },
         ) => {
           if (shaderBuilderState.parseResult.errors.length !== 0) {
             throw new Error("Invalid UI control specification");
@@ -239,11 +252,14 @@ highp uint vertexIndex = uint(gl_InstanceID);
 highp vec3 vertexPosition = readAttribute0(vertexIndex);
 emitCircle(uProjection * vec4(vertexPosition, 1.0), uNodeDiameter, 0.0);
 `;
-
+          const segmentColor = shaderCodeWithLineDirective(
+            segmentColorShaderBuilderState.parseResult.code,
+          );
+          builder.addFragmentCode(segmentColor + "\n");
           builder.addFragmentCode(`
-vec4 segmentColor() {
-  return uColor;
-}
+// vec4 segmentColor() {
+//   return uColor;
+// }
 void emitRGBA(vec4 color) {
   vec4 borderColor = color;
   emit(getCircleColor(color, borderColor), uPickID);
@@ -252,7 +268,7 @@ void emitRGB(vec3 color) {
   emitRGBA(vec4(color, 1.0));
 }
 void emitDefault() {
-  emitRGBA(uColor);
+  emitRGBA(segmentColor(uColor));
 }
 `);
           builder.addFragmentCode(glsl_COLORMAPS);
@@ -428,6 +444,7 @@ export class SkeletonRenderingOptions implements Trackable {
   }
 
   shader = makeTrackableFragmentMain(DEFAULT_FRAGMENT_MAIN);
+  shaderError = makeWatchableShaderError();
   shaderControlState = new ShaderControlState(this.shader);
   params2d: ViewSpecificSkeletonRenderingOptions = {
     mode: new TrackableSkeletonRenderMode(SkeletonRenderMode.LINES_AND_POINTS),
@@ -584,7 +601,7 @@ export class SkeletonLayer extends RefCounted {
       gl,
       edgeShader,
       shaderControlState,
-      edgeShaderParameters.parseResult.controls,
+      edgeShaderParameters.shaderBuilderState.parseResult.controls,
     );
     gl.uniform1f(edgeShader.uniform("uLineWidth"), lineWidth!);
 
@@ -595,7 +612,7 @@ export class SkeletonLayer extends RefCounted {
       gl,
       nodeShader,
       shaderControlState,
-      nodeShaderParameters.parseResult.controls,
+      nodeShaderParameters.shaderBuilderState.parseResult.controls,
     );
 
     const skeletons = source.chunks;

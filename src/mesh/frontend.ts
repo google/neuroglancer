@@ -43,6 +43,7 @@ import type {
 import { PerspectiveViewRenderLayer } from "#src/perspective_view/render_layer.js";
 import type { ThreeDimensionalRenderLayerAttachmentState } from "#src/renderlayer.js";
 import { update3dRenderLayerAttachment } from "#src/renderlayer.js";
+import { SegmentColorShaderManager } from "#src/segment_color.js";
 import {
   forEachVisibleSegment,
   getObjectKey,
@@ -68,8 +69,17 @@ import {
 import * as matrix from "#src/util/matrix.js";
 import { GLBuffer } from "#src/webgl/buffer.js";
 import type { GL } from "#src/webgl/context.js";
-import { parameterizedEmitterDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
+import type { WatchableShaderError } from "#src/webgl/dynamic_shader.js";
+import {
+  parameterizedEmitterDependentShaderGetter,
+  shaderCodeWithLineDirective,
+} from "#src/webgl/dynamic_shader.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
+import type { ShaderControlState } from "#src/webgl/shader_ui_controls.js";
+import {
+  addControlsToBuilder,
+  setControlsInShader,
+} from "#src/webgl/shader_ui_controls.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { registerSharedObjectOwner } from "#src/worker_rpc.js";
 
@@ -349,16 +359,33 @@ export class MeshShaderManager {
   }
 
   makeGetter(layer: RefCounted & { gl: GL; displayState: MeshDisplayState }) {
-    const silhouetteRenderingEnabled = layer.registerDisposer(
+    const parameters = layer.registerDisposer(
       makeCachedDerivedWatchableValue(
-        (x) => x > 0,
-        [layer.displayState.silhouetteRendering],
+        (silhouetteRendering, shaderBuilderState) => {
+          return {
+            silhouetteRenderingEnabled: silhouetteRendering > 0,
+            shaderBuilderState,
+          };
+        },
+        [
+          layer.displayState.silhouetteRendering,
+          layer.displayState.segmentColorShaderControlState.builderState,
+        ],
       ),
     );
+
     return parameterizedEmitterDependentShaderGetter(layer, layer.gl, {
       memoizeKey: `mesh/MeshShaderManager/${this.fragmentRelativeVertices}/${this.vertexPositionFormat}`,
-      parameters: silhouetteRenderingEnabled,
-      defineShader: (builder, silhouetteRenderingEnabled) => {
+      parameters,
+      encodeParameters: (p) => {
+        return `${p.silhouetteRenderingEnabled}/${p.shaderBuilderState.parseResult.code}`;
+      },
+      shaderError: layer.displayState.shaderError,
+      defineShader: (
+        builder,
+        { silhouetteRenderingEnabled, shaderBuilderState },
+      ) => {
+        addControlsToBuilder(shaderBuilderState, builder);
         this.vertexPositionHandler.defineShader(builder);
         builder.addAttribute("highp vec2", "aVertexNormal");
         builder.addVarying("highp vec4", "vColor");
@@ -367,6 +394,7 @@ export class MeshShaderManager {
         builder.addUniform("highp mat3", "uNormalMatrix");
         builder.addUniform("highp mat4", "uModelViewProjection");
         builder.addUniform("highp uint", "uPickID");
+
         if (silhouetteRenderingEnabled) {
           builder.addUniform("highp float", "uSilhouettePower");
         }
@@ -393,7 +421,9 @@ vec3 origNormal = decodeNormalOctahedronSnorm8(aVertexNormal);
 vec3 normal = normalize(uNormalMatrix * (normalMultiplier * origNormal));
 float absCosAngle = abs(dot(normal, uLightDirection.xyz));
 float lightingFactor = absCosAngle + uLightDirection.w;
-vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
+vColor = uColor;
+vColor = segmentColor(vColor);
+vColor = vec4(lightingFactor * vColor.rgb, vColor.a);
 `;
         if (silhouetteRenderingEnabled) {
           vertexMain += `
@@ -401,7 +431,13 @@ vColor *= pow(1.0 - absCosAngle, uSilhouettePower);
 `;
         }
         builder.setVertexMain(vertexMain);
+        const shaderManager = new SegmentColorShaderManager("getColor");
+        shaderManager.defineShader(builder);
         builder.setFragmentMain("emit(vColor, uPickID);");
+        const segmentColor = shaderCodeWithLineDirective(
+          shaderBuilderState.parseResult.code,
+        );
+        builder.addVertexCode(segmentColor + "\n");
       },
     });
   }
@@ -409,6 +445,8 @@ vColor *= pow(1.0 - absCosAngle, uSilhouettePower);
 
 export interface MeshDisplayState extends SegmentationDisplayState3D {
   silhouetteRendering: WatchableValueInterface<number>;
+  segmentColorShaderControlState: ShaderControlState;
+  shaderError: WatchableShaderError;
 }
 
 export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRenderLayerAttachmentState> {
@@ -431,6 +469,14 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
     registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
     this.registerDisposer(
       displayState.silhouetteRendering.changed.add(this.redrawNeeded.dispatch),
+    );
+    this.registerDisposer(
+      displayState.segmentColorShaderControlState.changed.add(this.redrawNeeded.dispatch),
+    );
+    this.registerDisposer(
+      displayState.segmentColorShaderControlState.parseResult.changed.add(
+        this.redrawNeeded.dispatch,
+      ),
     );
 
     const sharedObject = (this.backend = this.registerDisposer(
@@ -490,11 +536,17 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
     if (modelMatrix === undefined) {
       return;
     }
-    const { shader } = this.getShader(renderContext.emitter);
+    const { shader, parameters } = this.getShader(renderContext.emitter);
     if (shader === null) return;
     shader.bind();
     meshShaderManager.beginLayer(gl, shader, renderContext, this.displayState);
     meshShaderManager.beginModel(gl, shader, renderContext, modelMatrix);
+    setControlsInShader(
+      gl,
+      shader,
+      this.displayState.segmentColorShaderControlState,
+      parameters.shaderBuilderState.parseResult.controls,
+    );
 
     const manifestChunks = this.source.chunks;
 

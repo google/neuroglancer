@@ -56,6 +56,7 @@ import { kOneVec, vec4 } from "#src/util/geom.js";
 import { parseUint64 } from "#src/util/json.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
+import type { ShaderControlState } from "#src/webgl/shader_ui_controls.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import { makeEyeButton } from "#src/widget/eye_button.js";
 import { makeFilterButton } from "#src/widget/filter_button.js";
@@ -183,6 +184,7 @@ export interface SegmentationColorGroupState {
 }
 
 export interface SegmentationDisplayState {
+  layer: SegmentationUserLayer;
   segmentSelectionState: SegmentSelectionState;
   saturation: TrackableAlphaValue;
   hoverHighlight: WatchableValueInterface<boolean>;
@@ -190,10 +192,12 @@ export interface SegmentationDisplayState {
   baseSegmentHighlighting: WatchableValueInterface<boolean>;
   segmentationGroupState: WatchableValueInterface<SegmentationGroupState>;
   segmentationColorGroupState: WatchableValueInterface<SegmentationColorGroupState>;
+  segmentColorShaderControlState: ShaderControlState;
 
   selectSegment: (id: bigint, pin: boolean | "toggle") => void;
   filterBySegmentLabel: (id: bigint) => void;
   moveToSegment: (id: bigint) => void;
+  getShaderSegmentColor: (id: bigint, color: Float32Array) => Float32Array;
 
   // Indirect properties
   hideSegmentZero: WatchableValueInterface<boolean>;
@@ -867,6 +871,9 @@ export function registerCallbackWhenSegmentationDisplayStateChanged(
     displayState.baseSegmentColoring.changed.add(callback),
   );
   context.registerDisposer(displayState.hoverHighlight.changed.add(callback));
+  context.registerDisposer(
+    displayState.layer.displayState.fragmentSegmentColor.changed.add(callback),
+  );
 }
 
 export function registerRedrawWhenSegmentationDisplayStateChanged(
@@ -928,11 +935,15 @@ export function getBaseObjectColor(
   displayState: SegmentationDisplayState | undefined | null,
   objectId: bigint,
   color: Float32Array = tempColor,
+  useColorShader = true,
 ) {
   if (displayState == null) {
     color.fill(1);
     return color;
   }
+  const shaderSegmentColor = useColorShader
+    ? displayState.getShaderSegmentColor
+    : (_: bigint, color: Float32Array) => color;
   const colorGroupState = displayState.segmentationColorGroupState.value;
   const { segmentStatedColors } = colorGroupState;
   let statedColor: bigint | undefined;
@@ -945,17 +956,17 @@ export function getBaseObjectColor(
     color[0] = Number(statedColor & 0x0000ffn) / 255.0;
     color[1] = (Number(statedColor & 0x00ff00n) >>> 8) / 255.0;
     color[2] = (Number(statedColor & 0xff0000n) >>> 16) / 255.0;
-    return color;
+    return shaderSegmentColor(objectId, color);
   }
   const segmentDefaultColor = colorGroupState.segmentDefaultColor.value;
   if (segmentDefaultColor !== undefined) {
     color[0] = segmentDefaultColor[0];
     color[1] = segmentDefaultColor[1];
     color[2] = segmentDefaultColor[2];
-    return color;
+    return shaderSegmentColor(objectId, color);
   }
   colorGroupState.segmentColorHash.compute(color, objectId);
-  return color;
+  return shaderSegmentColor(objectId, color);
 }
 
 /**
@@ -965,10 +976,11 @@ export function getObjectColor(
   displayState: SegmentationDisplayState,
   objectId: bigint,
   alpha = 1,
+  useColorShader = true,
 ) {
   const color = tempColor;
   color[3] = alpha;
-  getBaseObjectColor(displayState, objectId, color);
+  getBaseObjectColor(displayState, objectId, color, useColorShader);
   let saturation = displayState.saturation.value;
   if (
     displayState.hoverHighlight.value &&
@@ -1061,6 +1073,7 @@ export function forEachVisibleSegmentToDraw(
             displayState,
             baseSegmentColoring ? objectId : rootObjectId,
             alpha,
+            false /* use color shader */,
           )
         : undefined;
       callback(objectId, color, pickIndex, rootObjectId);

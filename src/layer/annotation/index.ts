@@ -771,7 +771,7 @@ export class AnnotationUserLayer extends Base {
 function makeShaderCodeWidget(layer: AnnotationUserLayer) {
   return new ShaderCodeWidget({
     shaderError: layer.annotationDisplayState.shaderError,
-    fragmentMain: layer.annotationDisplayState.shader,
+    fragment: layer.annotationDisplayState.shader,
     shaderControlState: layer.annotationDisplayState.shaderControls,
   });
 }

@@ -129,7 +129,14 @@ import {
   verifyString,
 } from "#src/util/json.js";
 import { Signal } from "#src/util/signal.js";
-import { makeWatchableShaderError } from "#src/webgl/dynamic_shader.js";
+import { GLBuffer } from "#src/webgl/buffer.js";
+import { initializeWebGL } from "#src/webgl/context.js";
+import {
+  makeTrackableFragmentMain,
+  makeWatchableShaderError,
+  parameterizedEmitterDependentShaderGetter,
+} from "#src/webgl/dynamic_shader.js";
+import { ShaderControlState } from "#src/webgl/shader_ui_controls.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import { registerLayerShaderControlsTool } from "#src/widget/shader_controls.js";
 
@@ -410,11 +417,21 @@ class LinkedSegmentationGroupState<
   }
 }
 
+const DEFAULT_FRAGMENT_SEGMENT_COLOR = `
+vec4 segmentColor(vec4 color) {
+  return color;
+}
+`;
+
 class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
+  private getSegmentColorShader;
+
   constructor(public layer: SegmentationUserLayer) {
     // Even though `SegmentationUserLayer` assigns this to its `displayState` property, redundantly
     // assign it here first in order to allow it to be accessed by `segmentationGroupState`.
     layer.displayState = this;
+
+    this.getSegmentColorShader = this.makeSegmentColorShaderGetter();
 
     this.linkedSegmentationGroup = layer.registerDisposer(
       new LinkedLayerGroup(
@@ -536,6 +553,8 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   ignoreNullVisibleSet = new TrackableBoolean(true, true);
   skeletonRenderingOptions = new SkeletonRenderingOptions();
   shaderError = makeWatchableShaderError();
+  fragmentSegmentColor = makeTrackableFragmentMain(DEFAULT_FRAGMENT_SEGMENT_COLOR);
+  segmentColorShaderControlState = new ShaderControlState(this.fragmentSegmentColor);
   renderScaleHistogram = new RenderScaleHistogram();
   renderScaleTarget = trackableRenderScaleTarget(1);
   selectSegment: (id: bigint, pin: boolean | "toggle") => void;
@@ -549,6 +568,65 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
 
   moveToSegment = (id: bigint) => {
     this.layer.moveToSegment(id);
+  };
+
+  makeSegmentColorShaderGetter = () => {
+    const gl = initializeWebGL(new OffscreenCanvas(1, 1));
+    const parameters = this.segmentColorShaderControlState.builderState;
+    return parameterizedEmitterDependentShaderGetter(this.layer, gl, {
+      memoizeKey: `segmentColorShaderTODO`,
+      parameters,
+      encodeParameters: (p) => {
+        return `${p.parseResult.code}`;
+      },
+      shaderError: this.layer.displayState.shaderError, // TODO can I reuse this?
+      defineShader: (builder, shaderBuilderState) => {
+        builder.addAttribute("highp vec4", "aVertexPosition");
+        builder.addUniform("highp vec4", "uColor");
+        builder.addUniform("highp uvec2", "uID");
+        builder.addVarying("highp vec4", "vColor");
+        builder.addVertexCode(shaderBuilderState.parseResult.code);
+        builder.addVertexMain(`
+gl_Position = aVertexPosition;
+vColor = segmentColor(uColor);
+`);
+        builder.addOutputBuffer("vec4", "out_fragColor", 0);
+        builder.setFragmentMain("out_fragColor = vColor;");
+      },
+    });
+  };
+
+  context = () => {}; // TEMP how to get rid of this?
+
+  getShaderSegmentColor = (id: bigint, color: Float32Array) => {
+    id; // TODO
+    const { shader, parameters } = this.getSegmentColorShader(this.context);
+    if (shader === null) return color;
+    parameters;
+    shader.bind();
+    const { gl } = shader;
+    const positionBuffer = GLBuffer.fromData(
+      gl,
+      new Float32Array([1, 1, -1, 1, 1, -1, -1, -1]),
+    );
+    positionBuffer.bindToVertexAttrib(shader.attribute("aVertexPosition"), 2);
+    gl.uniform4fv(shader.uniform("uColor"), color);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    const data = new Uint8Array(4);
+    // TODO can I read straight to float?
+    gl.readPixels(
+      0,
+      0,
+      1,
+      1,
+      WebGL2RenderingContext.RGBA,
+      WebGL2RenderingContext.UNSIGNED_BYTE,
+      data,
+    );
+    for (let i = 0; i < data.length; i++) {
+      color[i] = data[i] / 255.0;
+    }
+    return color;
   };
 
   linkedSegmentationGroup: LinkedLayerGroup;
@@ -688,6 +766,9 @@ export class SegmentationUserLayer extends Base {
     );
     this.displayState.linkedSegmentationGroup.changed.add(() =>
       this.updateDataSubsourceActivations(),
+    );
+    this.displayState.fragmentSegmentColor.changed.add(
+      this.specificationChanged.dispatch,
     );
     this.tabs.add("rendering", {
       label: "Render",
@@ -996,6 +1077,9 @@ export class SegmentationUserLayer extends Base {
     this.displayState.ignoreNullVisibleSet.restoreState(
       specification[json_keys.IGNORE_NULL_VISIBLE_SET_JSON_KEY],
     );
+    this.displayState.fragmentSegmentColor.restoreState(
+      specification[json_keys.SEGMENT_COLOR_SHADER_JSON_KEY],
+    );
 
     const { skeletonRenderingOptions } = this.displayState;
     skeletonRenderingOptions.restoreState(
@@ -1066,6 +1150,7 @@ export class SegmentationUserLayer extends Base {
       this.displayState.renderScaleTarget.toJSON();
     x[json_keys.CROSS_SECTION_RENDER_SCALE_JSON_KEY] =
       this.sliceViewRenderScaleTarget.toJSON();
+    x[json_keys.SEGMENT_COLOR_SHADER_JSON_KEY] = this.displayState.fragmentSegmentColor.toJSON();
 
     const { linkedSegmentationGroup, linkedSegmentationColorGroup } =
       this.displayState;
@@ -1365,6 +1450,7 @@ export class SegmentationUserLayer extends Base {
 
     const visibleSegments = [...visibleSegmentsSet];
     const colors = visibleSegments.map((id) => {
+      // here we can do a batch get of colors using the segment color shader instead of one at a time
       const color = getCssColor(getBaseObjectColor(displayState, id));
       return { color, id };
     });
@@ -1400,6 +1486,10 @@ registerLayerTypeDetector((subsource) => {
   }
   return undefined;
 });
+
+registerLayerShaderControlsTool(SegmentationUserLayer, (layer) => ({
+  shaderControlState: layer.displayState.segmentColorShaderControlState,
+}));
 
 registerLayerShaderControlsTool(
   SegmentationUserLayer,

@@ -27,7 +27,7 @@ export interface GL extends WebGL2RenderingContext {
 
 export const DEBUG_SHADERS = false;
 
-export function initializeWebGL(canvas: HTMLCanvasElement) {
+export function initializeWebGL(canvas: HTMLCanvasElement | OffscreenCanvas) {
   const options: any = {
     antialias: false,
     stencil: true,
