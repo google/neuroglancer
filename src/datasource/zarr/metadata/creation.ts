@@ -26,13 +26,13 @@ import { DataType } from "#src/util/data_type.js";
 import { TrackableEnum } from "#src/util/trackable_enum.js";
 
 export enum ZarrCompression {
-  raw = 0,
-  //gzip = 1,
-  // ...
+  RAW = 0,
+  GZIP = 1,
+  BLOSC = 2,
 }
 
 export class ZarrCreationState extends DataSourceCreationState {
-  compression = new TrackableEnum(ZarrCompression, ZarrCompression.raw);
+  compression = new TrackableEnum<ZarrCompression>(ZarrCompression, ZarrCompression.RAW);
 
   constructor() {
     super();
@@ -40,7 +40,7 @@ export class ZarrCreationState extends DataSourceCreationState {
   }
 }
 
-const zarrV2UnitMapping: { [key: string]: string } = {
+const zarrUnitMapping: { [key: string]: string } = {
   nm: "nanometer",
   um: "micrometer",
   mm: "millimeter",
@@ -132,7 +132,7 @@ class ZarrV2Creator implements ZarrCreator {
     scales: any[],
   ): string {
     const fullVoxelUnit =
-      zarrV2UnitMapping[common.voxelUnit] ?? common.voxelUnit;
+      zarrUnitMapping[common.voxelUnit] ?? common.voxelUnit;
     const rank = common.shape.length;
     const defaultAxes = ["x", "y", "z", "c", "t"];
     const axes = Array.from({ length: rank }, (_, i) => ({
@@ -170,16 +170,17 @@ class ZarrV2Creator implements ZarrCreator {
     zarrState: ZarrCreationState,
   ): object | null {
     switch (zarrState.compression.value) {
-      /*case ZarrCompressor.BLOSC:
+      case ZarrCompression.BLOSC:
         return {
           id: "blosc",
-          cname: zarrState.bloscCodec.value,
-          clevel: zarrState.bloscLevel.value,
-          shuffle: zarrState.bloscShuffle.value,
+          cname: "lz4",
+          clevel: 5,
+          shuffle: 1,
         };
-      case ZarrCompressor.GZIP:
-        return { id: "gzip", level: 1 };*/
-      case ZarrCompression.raw:
+      case ZarrCompression.GZIP:
+        return { id: "gzip", level: 1 };
+      case ZarrCompression.RAW:
+      default:
         return null;
     }
   }
@@ -200,14 +201,23 @@ class ZarrV2Creator implements ZarrCreator {
   }
 }
 
+const dataTypeToZarrV3Dtype: { [key in DataType]?: string } = {
+  [DataType.UINT8]: "uint8",
+  [DataType.UINT16]: "uint16",
+  [DataType.UINT32]: "uint32",
+  [DataType.UINT64]: "uint64",
+  [DataType.INT8]: "int8",
+  [DataType.INT16]: "int16",
+  [DataType.INT32]: "int32",
+  [DataType.FLOAT32]: "float32",
+};
+
+
 class ZarrV3Creator implements ZarrCreator {
   async create(options: CreateDataSourceOptions): Promise<void> {
     const { kvStoreUrl, registry, metadata } = options;
     const { sharedKvStoreContext } = registry;
     const kvStore = sharedKvStoreContext.kvStoreContext.getKvStore(kvStoreUrl);
-
-    // This logic is a placeholder and needs to be filled out with the specifics
-    // of generating Zarr v3 metadata files.
 
     const rootGroupContent = this._buildV3RootGroupMetadata(metadata.common);
     const writeRootPromise = proxyWrite(
@@ -216,14 +226,34 @@ class ZarrV3Creator implements ZarrCreator {
       new TextEncoder().encode(rootGroupContent).buffer as ArrayBuffer,
     );
 
-    // Placeholder for scale calculation.
-    const scales: any[] = [];
+    const commonMetadata = metadata.common as CommonCreationMetadata;
+    const zarrMetadata = metadata.sourceRelated as ZarrCreationState;
+
+    const scales = [];
+    for (let i = 0; i < commonMetadata.numScales; ++i) {
+      const downsampleCoeffs = commonMetadata.downsamplingFactor.map(
+        (f: number) => Math.pow(f, i),
+      );
+      scales.push({
+        shape: commonMetadata.shape.map((dim: number, j: number) =>
+          Math.ceil(dim / downsampleCoeffs[j]),
+        ),
+        chunks: [64, 64, 64],
+        dataType: dataTypeToZarrV3Dtype[commonMetadata.dataType],
+        transform: commonMetadata.voxelSize.map(
+          (v: number, j: number) => v * downsampleCoeffs[j],
+        ),
+      });
+    }
 
     const writeArrayPromises = scales.map((scale: any, i: number) => {
       const arrayMetaUrl = kvStore.store.getUrl(
         joinPath(kvStore.path, `s${i}`, "zarr.json"),
       );
-      const arrayMetaContent = this._buildV3ArrayMetadata(scale);
+      const arrayMetaContent = this._buildV3ArrayMetadata(
+        scale,
+        zarrMetadata,
+      );
       return proxyWrite(
         sharedKvStoreContext,
         arrayMetaUrl,
@@ -234,35 +264,96 @@ class ZarrV3Creator implements ZarrCreator {
     await Promise.all([writeRootPromise, ...writeArrayPromises]);
   }
 
-  private _buildV3RootGroupMetadata(metadata: any): string {
-    // Generates the root zarr.json for an OME-NGFF group using Zarr v3 spec.
-    // This is where you would construct the OME-NGFF v0.5+ multiscale metadata.
-    console.log("Building V3 Root Group Metadata with:", metadata);
-    const zarrV3Root = {
+  private _buildV3RootGroupMetadata(common: CommonCreationMetadata): string {
+    const rank = common.shape.length;
+    const defaultAxes = ["x", "y", "z", "c", "t"];
+    const axes = Array.from({ length: rank }, (_, i) => ({
+      name: defaultAxes[i] || `dim_${i}`,
+      type: "space",
+      unit:  zarrUnitMapping[common.voxelUnit],
+    }));
+
+    const datasets = Array.from({ length: common.numScales }, (_, i) => ({
+      path: `s${i}`,
+      coordinateTransformations: [
+        {
+          type: "scale",
+          scale: common.downsamplingFactor.map((f, j) =>
+            (common.voxelSize[j] * Math.pow(f, i)),
+          ),
+        },
+      ],
+    }));
+
+    const omeMetadata = {
+      multiscales: [
+        {
+          version: "0.5", // OME-NGFF version compatible with Zarr v3
+          axes,
+          datasets,
+          name: common.name || "default",
+        },
+      ],
+    };
+
+    return JSON.stringify({
       zarr_format: 3,
       node_type: "group",
-      attributes: {
-        multiscales: [
-          // OME-NGFF v0.5+ multiscale object goes here
-        ],
-      },
-    };
-    return JSON.stringify(zarrV3Root, null, 2);
+      attributes: omeMetadata,
+    }, null, 2);
   }
 
-  private _buildV3ArrayMetadata(scaleMetadata: any): string {
+  private _buildV3ArrayMetadata(
+    scaleMetadata: any,
+    zarrState: ZarrCreationState,
+  ): string {
+    const { shape, chunks, dataType } = scaleMetadata;
+
+    const codecs: { name: string; configuration?: any }[] = [
+      {
+        name: "bytes",
+        configuration: {
+          endian: "little",
+        },
+      },
+    ];
+
+    switch (zarrState.compression.value) {
+      case ZarrCompression.GZIP:
+        codecs.push({ name: "gzip", configuration: { level: 1 } });
+        break;
+      case ZarrCompression.BLOSC:
+        codecs.push({
+          name: "blosc",
+          configuration: {
+            cname: "lz4",
+            clevel: 5,
+            shuffle: "bit",
+          },
+        });
+        break;
+    }
+
     const zarrV3Array = {
       zarr_format: 3,
       node_type: "array",
-      shape: scaleMetadata.shape,
-      data_type: "uint32", // This needs to be mapped from DataType enum
+      shape: shape,
+      data_type: dataType,
       chunk_grid: {
         name: "regular",
-        configuration: { chunk_shape: scaleMetadata.chunks },
+        configuration: {
+          chunk_shape: chunks,
+        },
       },
-      codecs: [
-        // Codec configuration (e.g., blosc, gzip) goes here
-      ],
+      chunk_key_encoding: {
+        name: "default",
+        configuration: {
+          separator: "/",
+        },
+      },
+      codecs: codecs,
+      fill_value: 0,
+      attributes: {},
     };
     return JSON.stringify(zarrV3Array, null, 2);
   }

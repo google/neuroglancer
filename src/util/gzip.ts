@@ -67,3 +67,18 @@ export async function maybeDecompressGzip(data: ArrayBuffer | ArrayBufferView) {
   }
   return byteView;
 }
+
+export async function encodeGzip(
+  data: Uint8Array | ArrayBuffer,
+  format: CompressionFormat,
+): Promise<ArrayBuffer> {
+  const readableStream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(data);
+      controller.close();
+    },
+  });
+  const compressionStream = new CompressionStream(format);
+  const compressedStream = readableStream.pipeThrough(compressionStream);
+  return await new Response(compressedStream).arrayBuffer();
+}

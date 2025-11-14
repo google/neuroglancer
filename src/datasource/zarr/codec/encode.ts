@@ -1,25 +1,69 @@
-/**
- * Minimal Zarr encode pipeline to persist chunks.
- * Supports only the common case of raw bytes (no transpose/compression/sharding).
- */
-import type { CodecChainSpec } from "#src/datasource/zarr/codec/index.js";
+import type {
+  CodecChainSpec,
+  Codec,
+  CodecArrayInfo,
+} from "#src/datasource/zarr/codec/index.js";
 import { CodecKind } from "#src/datasource/zarr/codec/index.js";
+
+interface ArrayToBytesCodec<Configuration = unknown> extends Codec {
+  kind: CodecKind.arrayToBytes;
+  encode(
+    configuration: Configuration,
+    encodedArrayInfo: CodecArrayInfo,
+    decoded: ArrayBufferView,
+    signal: AbortSignal,
+  ): Promise<Uint8Array>;
+}
+
+interface BytesToBytesCodec<Configuration = unknown> extends Codec {
+  kind: CodecKind.bytesToBytes;
+  encode(
+    configuration: Configuration,
+    decoded: Uint8Array,
+    signal: AbortSignal,
+  ): Promise<Uint8Array>;
+}
+
+const codecRegistry = {
+  [CodecKind.arrayToBytes]: new Map<string, ArrayToBytesCodec>(),
+  [CodecKind.bytesToBytes]: new Map<string, BytesToBytesCodec>(),
+};
+
+export function registerCodec<Configuration>(
+  codec: ArrayToBytesCodec<Configuration> | BytesToBytesCodec<Configuration>,
+) {
+  codecRegistry[codec.kind].set(codec.name, codec as any);
+}
 
 export async function encodeArray(
   codecs: CodecChainSpec,
-  typed: ArrayBufferView<ArrayBufferLike>,
-  _signal: AbortSignal,
-): Promise<Uint8Array<ArrayBufferLike>> {
-  // Only support simple "bytes" encoding with no array-to-array and no bytes-to-bytes codecs.
-  const hasArrayToArray = codecs[CodecKind.arrayToArray].length > 0;
-  const hasBytesToBytes = codecs[CodecKind.bytesToBytes].length > 0;
-  const arrayToBytes = codecs[CodecKind.arrayToBytes];
-  if (hasArrayToArray || hasBytesToBytes || arrayToBytes.name !== "bytes") {
-    throw new Error(
-      `encodeArray: Unsupported codec chain; only raw 'bytes' without additional codecs is supported. Got arrayToArray=${hasArrayToArray}, bytesToBytes=${hasBytesToBytes}, arrayToBytes=${arrayToBytes.name}`,
-    );
+  decoded: ArrayBufferView<ArrayBufferLike>,
+  signal: AbortSignal,
+): Promise<Uint8Array> {
+  if (codecs[CodecKind.arrayToArray].length > 0) {
+    throw new Error("array -> array codecs are not supported for writing.");
   }
-  // For raw bytes, we can write the underlying buffer.
-  const { buffer, byteOffset, byteLength } = typed;
-  return new Uint8Array(buffer, byteOffset, byteLength);
+
+  const arrayToBytesCodecSpec = codecs[CodecKind.arrayToBytes];
+  const arrayToBytesImpl = codecRegistry[CodecKind.arrayToBytes].get(arrayToBytesCodecSpec.name);
+  if (!arrayToBytesImpl) {
+    throw new Error(`Unsupported array -> bytes codec for writing: ${arrayToBytesCodecSpec.name}`);
+  }
+  const arrayInfo = codecs.arrayInfo[codecs.arrayInfo.length - 1];
+  let data = await arrayToBytesImpl.encode(
+    arrayToBytesCodecSpec.configuration,
+    arrayInfo,
+    decoded,
+    signal,
+  );
+
+  for (const codecSpec of codecs[CodecKind.bytesToBytes]) {
+    const bytesToBytesImpl = codecRegistry[CodecKind.bytesToBytes].get(codecSpec.name);
+    if (!bytesToBytesImpl) {
+      throw new Error(`Unsupported bytes -> bytes codec for writing: ${codecSpec.name}`);
+    }
+    data = await bytesToBytesImpl.encode(codecSpec.configuration, data, signal);
+  }
+
+  return data;
 }
