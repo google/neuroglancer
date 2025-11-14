@@ -21,7 +21,11 @@ import type {
   Codec,
 } from "#src/datasource/zarr/codec/index.js";
 import { CodecKind } from "#src/datasource/zarr/codec/index.js";
-import type { KvStoreWithPath, ReadableKvStore } from "#src/kvstore/index.js";
+import type {
+  KvStore,
+  KvStoreWithPath,
+  ReadableKvStore,
+} from "#src/kvstore/index.js";
 import type { RefCounted } from "#src/util/disposable.js";
 
 export interface ArrayToArrayCodec<Configuration = unknown> extends Codec {
@@ -141,14 +145,14 @@ export function applySharding(
   codecs: CodecChainSpec,
   baseKvStore: KvStoreWithPath,
 ): {
-  kvStore: ReadableKvStore<unknown>;
+  kvStore: KvStore<unknown>;
   getChunkKey: (
     chunkGridPosition: ArrayLike<number>,
     baseKey: string,
   ) => unknown;
   decodeCodecs: CodecChainSpec;
 } {
-  let kvStore: ReadableKvStore<unknown> = baseKvStore.store;
+  let kvStore: KvStore<unknown> = baseKvStore.store;
   let curCodecs = codecs;
   while (true) {
     const { shardingInfo } = curCodecs;

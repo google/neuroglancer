@@ -107,7 +107,7 @@ export class ZarrVolumeChunkSource extends WithParameters(
   }
 
   async writeChunk(chunk: VolumeChunk): Promise<void> {
-    const { kvStore, getChunkKey, decodeCodecs } = this.chunkKvStore as any;
+    const { kvStore, getChunkKey, decodeCodecs } = this.chunkKvStore;
     if (!kvStore.write) {
       throw new Error(
         "ZarrVolumeChunkSource.writeChunk: underlying kvStore is not writable",
