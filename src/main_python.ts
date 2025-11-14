@@ -147,12 +147,7 @@ configState.add("volumeRequests", volumeHandler.requestState);
 let sharedState: Trackable | undefined = viewer.state;
 
 if (window.location.hash) {
-  const hashBinding = viewer.registerDisposer(
-    new UrlHashBinding(
-      viewer.state,
-      viewer.dataSourceProvider.sharedKvStoreContext,
-    ),
-  );
+  const hashBinding = viewer.registerDisposer(new UrlHashBinding(viewer));
   hashBinding.updateFromUrlHash();
   sharedState = undefined;
 }
