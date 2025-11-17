@@ -383,6 +383,8 @@ export function UserLayerWithVoxelEditingMixin<
       );
       this.editingContexts.set(loadedSubsource, context);
       this.isEditable.value = writable;
+      // This will trigger the datatype validation
+      this.setVoxelPaintValue(this.paintValue.value);
     }
 
     deinitializeVoxelEditingForSubsource(loadedSubsource: LoadedDataSubsource) {

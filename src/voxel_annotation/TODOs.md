@@ -2,7 +2,6 @@
 
 ### priority
 
-- ~~preview colors are wrong with signed dataset~~ -> happens when the seg value is higher than the max value of the datatype (other than uint64), preview will render this value, but it will be truncated when writing the data... selecting a value higher than the max value should not be possible but can be achieved by first going to a uint64 dataset, for example, and then switching to a uint16; the seg value is not reset. -> fix by resetting the seg value when switching dataset
 - writable float32 dataset is not working (expected), either block its usage or fix
 - blosc encoding is wrong
 
