@@ -207,7 +207,12 @@ export class VolumeChunkSource
 
     if (!chunk.data) {
       const numElements = chunk.chunkDataSize.reduce((a, b) => a * b, 1);
-      const Ctor = DATA_TYPE_ARRAY_CONSTRUCTOR[this.spec.dataType];
+      let Ctor;
+      if (this.spec.compressedSegmentationBlockSize !== undefined) {
+        Ctor = Uint32Array;
+      } else {
+        Ctor = DATA_TYPE_ARRAY_CONSTRUCTOR[this.spec.dataType];
+      }
       chunk.data = new (Ctor as any)(numElements) as TypedArray;
     }
 
