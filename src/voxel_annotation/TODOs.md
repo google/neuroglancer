@@ -4,7 +4,6 @@
 
 - preview colors are wrong with signed dataset
 - writable float32 dataset is not working (expected), either block its usage or fix
-- the brush circle is only correct in Euclidean space (expected since it cannot be an ellipse)
 - blosc encoding is wrong
 
 - Dataset creation:

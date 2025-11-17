@@ -833,15 +833,23 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     });
   }
 
-  drawBrushCursor(x: number, y: number, radius: number) {
+  drawBrushCursor(
+    x: number,
+    y: number,
+    radiusX: number,
+    radiusY: number,
+    rotation: number,
+  ) {
     const ctx = this.overlay_context;
     const { logicalWidth, logicalHeight } = this.renderViewport;
 
     ctx.clearRect(0, 0, logicalWidth, logicalHeight);
 
-    if (radius > 0) {
+    if (radiusX > 0 && radiusY > 0) {
+      ctx.save();
       ctx.beginPath();
-      ctx.arc(x, y, radius, 0, 2 * Math.PI);
+      ctx.ellipse(x, y, radiusX, radiusY, rotation, 0, 2 * Math.PI);
+      ctx.restore();
       ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
       ctx.fill();
       ctx.strokeStyle = "rgba(255, 255, 255, 1)";
