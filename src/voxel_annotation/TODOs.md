@@ -3,7 +3,6 @@
 ### priority
 
 - writable float32 dataset is not working (expected), either block its usage or fix
-- blosc encoding is wrong
 
 - Dataset creation:
   - the copy from existing seems to not be right on all settings

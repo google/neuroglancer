@@ -12,12 +12,13 @@ registerCodec({
     decoded: Uint8Array,
     signal: AbortSignal,
   ): Promise<Uint8Array> {
+    configuration;
     return requestAsyncComputation(
       encodeBlosc,
       signal,
       [decoded.buffer],
       decoded,
-      configuration,
+      {},
     );
   },
 });
