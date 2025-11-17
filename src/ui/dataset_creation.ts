@@ -43,8 +43,10 @@ import { NumberInputWidget } from "#src/widget/number_input_widget.js";
 import { TextInputWidget } from "#src/widget/text_input.js";
 import { Vec3Widget } from "#src/widget/vec3_entry_widget.js";
 
-const verifyNumberArray = (value: unknown) => parseArray(value, verifyFiniteFloat);
-const verifyPositiveNumberArray = (value: unknown) => parseArray(value, verifyFinitePositiveFloat);
+const verifyNumberArray = (value: unknown) =>
+  parseArray(value, verifyFiniteFloat);
+const verifyPositiveNumberArray = (value: unknown) =>
+  parseArray(value, verifyFinitePositiveFloat);
 
 class DynamicVectorWidget extends RefCounted {
   element = document.createElement("div");
@@ -116,7 +118,10 @@ function createControlForTrackable(trackable: Trackable): HTMLElement {
     }
     if (Array.isArray(value)) {
       const isString = value.every((v) => typeof v === "string");
-      return new DynamicVectorWidget(trackable as TrackableValue<number[] | string[]>, isString).element;
+      return new DynamicVectorWidget(
+        trackable as TrackableValue<number[] | string[]>,
+        isString,
+      ).element;
     }
   }
   const unsupportedElement = document.createElement("div");
@@ -125,12 +130,24 @@ function createControlForTrackable(trackable: Trackable): HTMLElement {
 }
 
 class CommonMetadataState extends CompoundTrackable {
-  shape = new TrackableValue<number[]>([42000, 42000, 42000], verifyNumberArray);
+  shape = new TrackableValue<number[]>(
+    [42000, 42000, 42000],
+    verifyNumberArray,
+  );
   dataType = new TrackableEnum<DataType>(DataType, DataType.UINT32);
-  voxelSize = new TrackableValue<number[]>([8, 8, 8], verifyPositiveNumberArray);
-  voxelUnit = new TrackableValue<string[]>(["nm", "nm", "nm"], verifyStringArray);
+  voxelSize = new TrackableValue<number[]>(
+    [8, 8, 8],
+    verifyPositiveNumberArray,
+  );
+  voxelUnit = new TrackableValue<string[]>(
+    ["nm", "nm", "nm"],
+    verifyStringArray,
+  );
   numScales = new TrackableValue<number>(6, verifyInt);
-  downsamplingFactor = new TrackableValue<number[]>([2, 2, 2], verifyPositiveNumberArray);
+  downsamplingFactor = new TrackableValue<number[]>(
+    [2, 2, 2],
+    verifyPositiveNumberArray,
+  );
   name = new TrackableValue<string>("new-dataset", verifyString);
   rank = new TrackableValue<number>(3, verifyInt);
 
@@ -298,7 +315,8 @@ export class DatasetCreationDialog extends Overlay {
                   this.state.voxelSize.value = metadata.voxelSize;
                   this.state.voxelUnit.value = metadata.voxelUnit;
                   this.state.name.value = metadata.name;
-                  this.state.downsamplingFactor.value = metadata.downsamplingFactor;
+                  this.state.downsamplingFactor.value =
+                    metadata.downsamplingFactor;
                 }
               }
             });

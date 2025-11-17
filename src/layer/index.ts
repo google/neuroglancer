@@ -87,7 +87,7 @@ import { LayerToolBinder, SelectedLegacyTool } from "#src/ui/tool.js";
 import { gatherUpdate } from "#src/util/array.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { invokeDisposers, RefCounted } from "#src/util/disposable.js";
-import { vec3 } from "#src/util/geom.js";
+import type { vec3 } from "#src/util/geom.js";
 import {
   emptyToUndefined,
   parseArray,
