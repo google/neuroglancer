@@ -134,13 +134,12 @@ class ZarrV2Creator implements ZarrCreator {
     common: CommonCreationMetadata,
     scales: any[],
   ): string {
-    const fullVoxelUnit = zarrUnitMapping[common.voxelUnit] ?? common.voxelUnit;
     const rank = common.shape.length;
     const defaultAxes = ["x", "y", "z", "c", "t"];
     const axes = Array.from({ length: rank }, (_, i) => ({
       name: defaultAxes[i] || `dim_${i}`,
       type: "space",
-      unit: fullVoxelUnit,
+      unit: zarrUnitMapping[common.voxelUnit[i]],
     }));
 
     const datasets = scales.map((scale, i) => ({
@@ -268,7 +267,7 @@ class ZarrV3Creator implements ZarrCreator {
     const axes = Array.from({ length: rank }, (_, i) => ({
       name: defaultAxes[i] || `dim_${i}`,
       type: "space",
-      unit: zarrUnitMapping[common.voxelUnit],
+      unit: zarrUnitMapping[common.voxelUnit[i]],
     }));
 
     const datasets = Array.from({ length: common.numScales }, (_, i) => ({

@@ -874,6 +874,7 @@ export class ManagedUserLayer extends RefCounted {
           for (let i = 0; i < rank; ++i)
             identityOptions.multiscaleToViewTransform[i * rank + i] = 1;
 
+          const inputSpace = modelTransform.inputSpace;
           const scales = volume.getSources(identityOptions)[0];
           if (!scales || scales.length === 0) continue;
 
@@ -889,7 +890,7 @@ export class ManagedUserLayer extends RefCounted {
 
           const numScales = scales.length;
 
-          const downsamplingFactor = vec3.fromValues(1, 1, 1);
+          const downsamplingFactor = new Array(rank).fill(1);
           if (scales.length > 1) {
             const lowResSource = scales[1];
             const lowResTransform = lowResSource.chunkToMultiscaleTransform;
@@ -905,8 +906,8 @@ export class ManagedUserLayer extends RefCounted {
           return {
             shape,
             dataType: volume.dataType,
-            voxelSize,
-            voxelUnit: modelSpace.units[0] || "",
+            voxelSize: Array.from(inputSpace.scales),
+            voxelUnit: Array.from(inputSpace.units),
             numScales,
             downsamplingFactor: Array.from(downsamplingFactor),
             name: `${this.name}_copy`,

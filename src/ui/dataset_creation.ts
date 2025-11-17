@@ -3,7 +3,7 @@
  * Copyright 2025 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
- * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
  *      http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -25,9 +25,16 @@ import { StatusMessage } from "#src/status.js";
 import { TrackableValue } from "#src/trackable_value.js";
 import { TrackableVec3 } from "#src/trackable_vec3.js";
 import { DataType } from "#src/util/data_type.js";
+import { RefCounted } from "#src/util/disposable.js";
 import { removeChildren } from "#src/util/dom.js";
-import { vec3 } from "#src/util/geom.js";
-import { verifyInt, verifyString } from "#src/util/json.js";
+import {
+  parseArray,
+  verifyFiniteFloat,
+  verifyFinitePositiveFloat,
+  verifyInt,
+  verifyString,
+  verifyStringArray,
+} from "#src/util/json.js";
 import { CompoundTrackable, type Trackable } from "#src/util/trackable.js";
 import { TrackableEnum } from "#src/util/trackable_enum.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
@@ -35,6 +42,62 @@ import { EnumSelectWidget } from "#src/widget/enum_widget.js";
 import { NumberInputWidget } from "#src/widget/number_input_widget.js";
 import { TextInputWidget } from "#src/widget/text_input.js";
 import { Vec3Widget } from "#src/widget/vec3_entry_widget.js";
+
+const verifyNumberArray = (value: unknown) => parseArray(value, verifyFiniteFloat);
+const verifyPositiveNumberArray = (value: unknown) => parseArray(value, verifyFinitePositiveFloat);
+
+class DynamicVectorWidget extends RefCounted {
+  element = document.createElement("div");
+  private inputs: HTMLInputElement[] = [];
+
+  constructor(
+    public trackable: TrackableValue<number[] | string[]>,
+    private isStringArray: boolean = false,
+  ) {
+    super();
+    this.element.style.display = "flex";
+    this.element.style.gap = "4px";
+    this.registerDisposer(trackable.changed.add(() => this.updateView()));
+    this.updateView();
+  }
+
+  private updateView() {
+    const value = this.trackable.value;
+    const rank = value.length;
+
+    if (this.inputs.length !== rank) {
+      removeChildren(this.element);
+      this.inputs = [];
+      for (let i = 0; i < rank; i++) {
+        const input = document.createElement("input");
+        input.type = this.isStringArray ? "text" : "number";
+        if (!this.isStringArray) input.step = "any";
+        input.addEventListener("change", () => {
+          if (this.isStringArray) {
+            const newValues = [...this.trackable.value] as string[];
+            newValues[i] = input.value;
+            (this.trackable as TrackableValue<string[]>).value = newValues;
+          } else {
+            const newValues = [...this.trackable.value] as number[];
+            const parsedValue = parseFloat(input.value);
+            if (!isNaN(parsedValue)) {
+              newValues[i] = parsedValue;
+              (this.trackable as TrackableValue<number[]>).value = newValues;
+            } else {
+              input.value = (this.trackable.value[i] ?? "").toString();
+            }
+          }
+        });
+        this.inputs.push(input);
+        this.element.appendChild(input);
+      }
+    }
+
+    for (let i = 0; i < rank; i++) {
+      this.inputs[i].value = value[i].toString();
+    }
+  }
+}
 
 function createControlForTrackable(trackable: Trackable): HTMLElement {
   if (trackable instanceof TrackableVec3) {
@@ -51,6 +114,10 @@ function createControlForTrackable(trackable: Trackable): HTMLElement {
     if (typeof value === "string") {
       return new TextInputWidget(trackable as TrackableValue<string>).element;
     }
+    if (Array.isArray(value)) {
+      const isString = value.every((v) => typeof v === "string");
+      return new DynamicVectorWidget(trackable as TrackableValue<number[] | string[]>, isString).element;
+    }
   }
   const unsupportedElement = document.createElement("div");
   unsupportedElement.textContent = `Unsupported control type`;
@@ -58,22 +125,14 @@ function createControlForTrackable(trackable: Trackable): HTMLElement {
 }
 
 class CommonMetadataState extends CompoundTrackable {
-  shape = new TrackableVec3(
-    vec3.fromValues(42000, 42000, 42000),
-    vec3.fromValues(42000, 42000, 42000),
-  );
-  dataType = new TrackableEnum(DataType, DataType.UINT32);
-  voxelSize = new TrackableVec3(
-    vec3.fromValues(8, 8, 8),
-    vec3.fromValues(8, 8, 8),
-  );
-  voxelUnit = new TrackableValue<string>("nm", verifyString);
+  shape = new TrackableValue<number[]>([42000, 42000, 42000], verifyNumberArray);
+  dataType = new TrackableEnum<DataType>(DataType, DataType.UINT32);
+  voxelSize = new TrackableValue<number[]>([8, 8, 8], verifyPositiveNumberArray);
+  voxelUnit = new TrackableValue<string[]>(["nm", "nm", "nm"], verifyStringArray);
   numScales = new TrackableValue<number>(6, verifyInt);
-  downsamplingFactor = new TrackableVec3(
-    vec3.fromValues(2, 2, 2),
-    vec3.fromValues(2, 2, 2),
-  );
+  downsamplingFactor = new TrackableValue<number[]>([2, 2, 2], verifyPositiveNumberArray);
   name = new TrackableValue<string>("new-dataset", verifyString);
+  rank = new TrackableValue<number>(3, verifyInt);
 
   constructor() {
     super();
@@ -84,16 +143,37 @@ class CommonMetadataState extends CompoundTrackable {
     this.add("numScales", this.numScales);
     this.add("downsamplingFactor", this.downsamplingFactor);
     this.add("name", this.name);
+    this.add("rank", this.rank);
+
+    this.rank.changed.add(() => {
+      const newRank = this.rank.value;
+      const resize = (
+        trackable: TrackableValue<number[] | string[]>,
+        defaultValue: number | string,
+      ) => {
+        const arr = trackable.value;
+        if (arr.length === newRank) return;
+        const newArr = new Array(newRank);
+        for (let i = 0; i < newRank; ++i) {
+          newArr[i] = i < arr.length ? arr[i] : defaultValue;
+        }
+        trackable.value = newArr;
+      };
+      resize(this.shape, 42000);
+      resize(this.voxelSize, 8);
+      resize(this.voxelUnit, "nm");
+      resize(this.downsamplingFactor, 2);
+    });
   }
 
   toJSON(): CommonCreationMetadata {
     return {
-      shape: Array.from(this.shape.value),
+      shape: this.shape.value,
       dataType: this.dataType.value,
-      voxelSize: Array.from(this.voxelSize.value),
+      voxelSize: this.voxelSize.value,
       voxelUnit: this.voxelUnit.value,
       numScales: this.numScales.value,
-      downsamplingFactor: Array.from(this.downsamplingFactor.value),
+      downsamplingFactor: this.downsamplingFactor.value,
       name: this.name.value,
     };
   }
@@ -188,7 +268,7 @@ export class DatasetCreationDialog extends Overlay {
             if (compatibleLayers.length === 0) return;
 
             const label = document.createElement("label");
-            label.textContent = "Copy settings from layer: ";
+            label.textContent = "Copy metadata from data source: ";
             parentElement.appendChild(label);
 
             const select = document.createElement("select");
@@ -212,20 +292,13 @@ export class DatasetCreationDialog extends Overlay {
               if (layer) {
                 const metadata = layer.getCreationMetadata();
                 if (metadata) {
-                  this.state.shape.value = vec3.fromValues(
-                    metadata.shape[0],
-                    metadata.shape[1],
-                    metadata.shape[2],
-                  );
-                  (this.state.dataType as TrackableEnum<DataType>).value =
-                    metadata.dataType;
-                  this.state.voxelSize.value = vec3.fromValues(
-                    metadata.voxelSize[0],
-                    metadata.voxelSize[1],
-                    metadata.voxelSize[2],
-                  );
+                  this.state.rank.value = metadata.shape.length;
+                  this.state.shape.value = metadata.shape;
+                  this.state.dataType.value = metadata.dataType;
+                  this.state.voxelSize.value = metadata.voxelSize;
                   this.state.voxelUnit.value = metadata.voxelUnit;
                   this.state.name.value = metadata.name;
+                  this.state.downsamplingFactor.value = metadata.downsamplingFactor;
                 }
               }
             });
@@ -242,6 +315,7 @@ export class DatasetCreationDialog extends Overlay {
     content.appendChild(commonFields);
 
     this.addControl(this.state.name, "Name", commonFields);
+    this.addControl(this.state.rank, "Rank", commonFields);
     this.addControl(this.state.shape, "Shape", commonFields);
     this.addControl(this.state.dataType, "Data Type", commonFields);
     this.addControl(this.state.voxelSize, "Voxel Size", commonFields);

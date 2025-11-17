@@ -5,7 +5,7 @@
 - writable float32 dataset is not working (expected), either block its usage or fix
 
 - Dataset creation:
-  - the copy from existing seems to not be right on all settings
+  - the chunk size is currently hardcoded to 64x64x64, preventing use of rank different than 3 
 
 ### later
 

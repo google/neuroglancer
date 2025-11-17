@@ -246,7 +246,7 @@ export interface CommonCreationMetadata {
   shape: number[];
   dataType: DataType;
   voxelSize: number[];
-  voxelUnit: string;
+  voxelUnit: string[];
   numScales: number;
   downsamplingFactor: number[];
   name: string;
