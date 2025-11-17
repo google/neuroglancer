@@ -54,8 +54,18 @@ import {
   registerRedrawWhenSegmentationDisplayState3DChanged,
   SegmentationLayerSharedObject,
 } from "#src/segmentation_display_state/frontend.js";
+import {
+  extractUsedSegmentProperties,
+  getShaderOutputType,
+  getShaderUniformValueSetter,
+  shaderCodeWithPropertyPreprocessing,
+} from "#src/segmentation_display_state/property_map.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
-import { makeCachedDerivedWatchableValue } from "#src/trackable_value.js";
+import {
+  AggregateWatchableValue,
+  makeCachedDerivedWatchableValue,
+} from "#src/trackable_value.js";
+import { DataType } from "#src/util/data_type.js";
 import type { Borrowed, RefCounted } from "#src/util/disposable.js";
 import type { vec4 } from "#src/util/geom.js";
 import {
@@ -360,30 +370,30 @@ export class MeshShaderManager {
 
   makeGetter(layer: RefCounted & { gl: GL; displayState: MeshDisplayState }) {
     const parameters = layer.registerDisposer(
-      makeCachedDerivedWatchableValue(
-        (silhouetteRendering, shaderBuilderState) => {
-          return {
-            silhouetteRenderingEnabled: silhouetteRendering > 0,
-            shaderBuilderState,
-          };
-        },
-        [
-          layer.displayState.silhouetteRendering,
+      new AggregateWatchableValue((refCounted) => ({
+        shaderBuilderState:
           layer.displayState.segmentColorShaderControlState.builderState,
-        ],
-      ),
+        silhouetteRenderingEnabled: refCounted.registerDisposer(
+          makeCachedDerivedWatchableValue(
+            (x) => x > 0,
+            [layer.displayState.silhouetteRendering],
+          ),
+        ),
+        segmentProperties:
+          layer.displayState.segmentationGroupState.value.segmentPropertyMap,
+      })),
     );
 
     return parameterizedEmitterDependentShaderGetter(layer, layer.gl, {
       memoizeKey: `mesh/MeshShaderManager/${this.fragmentRelativeVertices}/${this.vertexPositionFormat}`,
       parameters,
       encodeParameters: (p) => {
-        return `${p.silhouetteRenderingEnabled}/${p.shaderBuilderState.parseResult.code}`;
+        return `${p.silhouetteRenderingEnabled}/${p.shaderBuilderState.parseResult.code}/${p.segmentProperties?.numericalProperties.length ?? 0}`; // TODO
       },
       shaderError: layer.displayState.shaderError,
       defineShader: (
         builder,
-        { silhouetteRenderingEnabled, shaderBuilderState },
+        { silhouetteRenderingEnabled, shaderBuilderState, segmentProperties },
       ) => {
         addControlsToBuilder(shaderBuilderState, builder);
         this.vertexPositionHandler.defineShader(builder);
@@ -415,6 +425,22 @@ highp vec3 vertexPosition = getVertexPosition();
 highp vec3 normalMultiplier = vec3(1.0, 1.0, 1.0);
 `;
         }
+
+        for (const [i, property] of extractUsedSegmentProperties(
+          segmentProperties,
+          shaderBuilderState.parseResult.code,
+        )) {
+          builder.addVertexCode(`highp ${getShaderOutputType(property.dataType)} segmentNumericalProperty${i};`);
+          builder.addUniform(
+            `highp ${getShaderOutputType(property.dataType)}`,
+            `uSegmentNumericalProperty${i}`,
+          );
+          vertexMain += `
+segmentNumericalProperty${i} = uSegmentNumericalProperty${i};
+`;
+        }
+
+
         vertexMain += `
 gl_Position = uModelViewProjection * vec4(vertexPosition, 1.0);
 vec3 origNormal = decodeNormalOctahedronSnorm8(aVertexNormal);
@@ -435,7 +461,10 @@ vColor *= pow(1.0 - absCosAngle, uSilhouettePower);
         shaderManager.defineShader(builder);
         builder.setFragmentMain("emit(vColor, uPickID);");
         const segmentColor = shaderCodeWithLineDirective(
-          shaderBuilderState.parseResult.code,
+          shaderCodeWithPropertyPreprocessing(
+            segmentProperties,
+            shaderBuilderState.parseResult.code,
+          ),
         );
         builder.addVertexCode(segmentColor + "\n");
       },
@@ -471,7 +500,9 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
       displayState.silhouetteRendering.changed.add(this.redrawNeeded.dispatch),
     );
     this.registerDisposer(
-      displayState.segmentColorShaderControlState.changed.add(this.redrawNeeded.dispatch),
+      displayState.segmentColorShaderControlState.changed.add(
+        this.redrawNeeded.dispatch,
+      ),
     );
     this.registerDisposer(
       displayState.segmentColorShaderControlState.parseResult.changed.add(
@@ -952,6 +983,34 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
         if (renderContext.emitPickID) {
           meshShaderManager.setPickID(gl, shader, pickIndex!);
         }
+
+        const {
+          segmentPropertyMap: { value: segmentPropertyMap },
+        } = displayState.segmentationGroupState.value;
+        if (segmentPropertyMap) {
+          const { code } =
+            displayState.segmentColorShaderControlState.parseResult.value;
+          const index = segmentPropertyMap.getSegmentInlineIndex(objectId);
+
+          if (index !== -1) {
+            for (const [i, property] of extractUsedSegmentProperties(
+              segmentPropertyMap,
+              code,
+            )) {
+              const value = property.values[index];
+              const uniformSetter = getShaderUniformValueSetter(
+                gl,
+                property.dataType,
+              );
+              uniformSetter.call(
+                gl,
+                shader.uniform(`uSegmentNumericalProperty${i}`),
+                value,
+              );
+            }
+          }
+        }
+
         getMultiscaleChunksToDraw(
           manifest,
           modelViewProjection,

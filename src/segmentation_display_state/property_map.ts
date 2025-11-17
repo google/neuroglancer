@@ -16,6 +16,7 @@
 
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { ChunkSource } from "#src/chunk_manager/frontend.js";
+import { HashMapUint64 } from "#src/gpu_hash/hash_table.js";
 import type { IndexedSegmentProperty } from "#src/segmentation_display_state/base.js";
 import type { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import type { Uint64Set } from "#src/uint64_set.js";
@@ -40,6 +41,8 @@ import {
 } from "#src/util/lerp.js";
 import { getObjectId } from "#src/util/object_id.js";
 import { defaultStringCompare } from "#src/util/string.js";
+import { GL } from "#src/webgl/context.js";
+import { ShaderProgram } from "#src/webgl/shader.js";
 
 export type InlineSegmentProperty =
   | InlineSegmentStringProperty
@@ -1336,3 +1339,167 @@ export function queryIncludesColumn(
     includeColumns.includes(fieldId)
   );
 }
+
+// export function propertyToUniform(property: InlineSegmentNumericalProperty, inlineProperties: InlineSegmentPropertyMap, id: bigint) {
+//   const index = inlineProperties.ids.indexOf(id);
+//   if (index === -1) return 0;
+//   return property.values[index];
+// }
+
+
+export function propertyToHashMap(property: InlineSegmentNumericalProperty, inlineProperties: InlineSegmentPropertyMap) {
+    const floatArr = new Float64Array(1);
+  const uint64Arr = new BigUint64Array(floatArr.buffer);
+
+  const floatToBigInt = (value: number) => {
+    floatArr[0] = value;
+    return uint64Arr[0];
+  }
+  floatToBigInt;
+  const propertyValueMap = new HashMapUint64();
+  for (const [segmentIndex, value] of property.values.entries()) {
+    if (Number.isNaN(value)) continue;
+    // const valueBigInt = Number.isInteger(value) ? BigInt(value) : floatToBigInt(value);
+    const valueBigInt = BigInt(value);
+    propertyValueMap.set(inlineProperties.ids[segmentIndex], valueBigInt);
+  }
+  return propertyValueMap;
+}
+
+export function getShaderOutputType(ioType: DataType): string {
+  switch (ioType) {
+    case DataType.UINT8:
+    case DataType.UINT16:
+    case DataType.UINT32:
+      return "uint";
+    case DataType.INT8:
+    case DataType.INT16:
+    case DataType.INT32:
+      return "int";
+    case DataType.FLOAT32:
+      return "float";
+    case DataType.UINT64:
+      return "uvec2";
+  }
+}
+
+// TODO, this can be improved
+export function extractUsedSegmentProperties(
+  segmentProperties: PreprocessedSegmentPropertyMap | undefined,
+  code: string,
+) {
+  console.log("extractUsedSegmentProperties");
+  const res:  [number, InlineSegmentNumericalProperty][] = [];
+  if (!segmentProperties) return res;
+  // const res = {
+  //   tags: [] as string[],
+  //   numericalProperties: [] as [number, InlineSegmentNumericalProperty][],
+  // };
+  const { numericalProperties, tags } = segmentProperties;
+  tags;
+  // if (tags) {
+  //   for (const tag of tags.tags) {
+  //     if (code.includes(`tag("${tag}")`)) {
+  //       res.tags.push(tag);
+  //     }
+  //   }
+  // }
+
+  const {inlineProperties} = segmentProperties.segmentPropertyMap;
+  if (!inlineProperties) return res;
+  // numericalProperties;
+
+  console.log("numericalProperties:", numericalProperties);
+
+  for (const [i, property] of numericalProperties.entries()) {
+    if (code.includes(`prop("${property.id}")`)) {
+      res.push([i, property]);
+  //     console.log("Found used property:", i, property);
+  //     const propertyValueMap = new HashMapUint64();
+  //     for (const [segmentIndex, value] of property.values.entries()) {
+  //       if (Number.isNaN(value)) continue;
+  //       // const valueBigInt = Number.isInteger(value) ? BigInt(value) : floatToBigInt(value);
+  //       const valueBigInt = BigInt(value);
+  //       propertyValueMap.set(inlineProperties.ids[segmentIndex], valueBigInt);
+  //     }
+  //     console.log("propertyValueMap:", propertyValueMap);
+    }
+  }
+  return res;
+}
+
+// export function
+
+export function shaderCodeWithPropertyPreprocessing(
+  segmentProperties: PreprocessedSegmentPropertyMap | undefined,
+  code: string,
+) {
+  if (!segmentProperties) return code;
+  const { numericalProperties, tags } = segmentProperties;
+  if (tags) {
+    for (const [i, tag] of tags.tags.entries()) {
+      code = code.replaceAll(`tag("${tag}")`, `uSegmentTagProperty${i} == 1u`);
+    }
+  }
+  for (const [i, property] of numericalProperties.entries()) {
+    code = code.replaceAll(
+      `prop("${property.id}")`,
+      `segmentNumericalProperty${i}`,
+    );
+  }
+  return code;
+}
+
+export const getShaderUniformValueSetter = (gl: GL, ioType: DataType) => {
+  switch (ioType) {
+    case DataType.UINT8:
+    case DataType.UINT16:
+    case DataType.UINT32:
+      return gl.uniform1ui;
+    case DataType.INT8:
+    case DataType.INT16:
+    case DataType.INT32:
+      return gl.uniform1i;
+    case DataType.FLOAT32:
+      return gl.uniform1f;
+    case DataType.UINT64:
+      throw new Error("nope");
+    // return gl.uniform
+  }
+};
+
+export const setSegmentPropertyUniforms = (
+  gl: GL,
+  shader: ShaderProgram,
+  segmentPropertyMap: PreprocessedSegmentPropertyMap,
+  id: bigint,
+) => {
+  const index = segmentPropertyMap.getSegmentInlineIndex(id);
+  const {
+    labels,
+    tags: tagsProperty,
+    numericalProperties,
+  } = segmentPropertyMap;
+  labels; // TODO, support labels
+  for (const [i, property] of numericalProperties.entries()) {
+    const value = index !== -1 ? property.values[index] : 0;
+    const uniformSetter = getShaderUniformValueSetter(gl, property.dataType);
+    uniformSetter.call(
+      gl,
+      shader.uniform(`uSegmentNumericalProperty${i}`),
+      value,
+    );
+  }
+  if (tagsProperty !== undefined) {
+    const { values, tags } = tagsProperty;
+    for (let i = 0; i < tags.length; ++i) {
+      gl.uniform1ui(shader.uniform(`uSegmentTagProperty${i}`), 0);
+    }
+    const tagIndices = index !== -1 ? values[index] : "";
+    for (let i = 0, length = tagIndices.length; i < length; ++i) {
+      const tagIdx = tagIndices.charCodeAt(i);
+      // console.log('enabling tagIdx', tagIdx);
+      gl.uniform1ui(shader.uniform(`uSegmentTagProperty${tagIdx}`), 1);
+    }
+  }
+};

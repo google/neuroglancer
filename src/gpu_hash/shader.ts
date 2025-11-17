@@ -128,10 +128,18 @@ export class HashSetShaderManager {
       samplerName,
       this.textureUnitSymbol,
     );
+    // TODO, should this be available in vertex shader as an option?
+    // nah I don't need it since we only need texture for sliceview (fragment)
+
+    // const vertex = true;
+    // const adder = vertex ? builder.addVertexCode.bind(builder) : builder.addFragmentCode.bind(builder);
+    // adder(glsl_hashCombine);
+
     builder.addFragmentCode(glsl_hashCombine);
     builder.addFragmentCode(glsl_uint64);
     builder.addFragmentCode(glsl_equalUint64);
     this.accessHelper.defineShader(builder);
+    // TODO, can we use DataType.Float32 here for float segment properties?
     builder.addFragmentCode(
       this.accessHelper.getAccessor(
         this.readTable,

@@ -30,6 +30,13 @@ import type {
   SegmentationGroupState,
 } from "#src/segmentation_display_state/frontend.js";
 import { registerRedrawWhenSegmentationDisplayStateChanged } from "#src/segmentation_display_state/frontend.js";
+import {
+  extractUsedSegmentProperties,
+  getShaderOutputType,
+  PreprocessedSegmentPropertyMap,
+  propertyToHashMap,
+  shaderCodeWithPropertyPreprocessing,
+} from "#src/segmentation_display_state/property_map.js";
 import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
 import type {
   SliceView,
@@ -88,6 +95,7 @@ interface ShaderParameters {
   hasSegmentDefaultColor: boolean;
   hasHighlightColor: boolean;
   shaderBuilderState: ShaderControlsBuilderState;
+  segmentProperties: PreprocessedSegmentPropertyMap | undefined;
 }
 
 const HAS_SELECTED_SEGMENT_FLAG = 1;
@@ -112,14 +120,26 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
   private gpuEquivalencesHashTable;
   private gpuTemporaryEquivalencesHashTable;
 
+  private segmentPropertyTextures = new Map<
+    number,
+    [HashMapShaderManager, GPUHashTable<HashMapUint64>]
+  >();
+
   constructor(
     multiscaleSource: MultiscaleVolumeChunkSource,
     public displayState: SliceViewSegmentationDisplayState,
   ) {
     super(multiscaleSource, {
+      encodeShaderParameters: (displayState) => {
+        displayState; // TODODODODODOO
+        return "hi";
+      },
       shaderParameters: new AggregateWatchableValue((refCounted) => ({
+        segmentProperties: displayState.segmentationGroupState.value
+          .segmentPropertyMap,
         shaderBuilderState:
-          displayState.layer.displayState.segmentColorShaderControlState.builderState,
+          displayState.layer.displayState.segmentColorShaderControlState
+            .builderState,
         hasEquivalences: refCounted.registerDisposer(
           makeCachedDerivedWatchableValue(
             (x) => x.size !== 0,
@@ -211,6 +231,61 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
     this.registerDisposer(
       displayState.ignoreNullVisibleSet.changed.add(this.redrawNeeded.dispatch),
     );
+
+    const { segmentPropertyMap } = this.segmentationGroupState;
+
+    const updateSegmentPropertyTextures = () => {
+      const { value: segmentProperties } = segmentPropertyMap;
+      const inlineProperties =
+        segmentProperties?.segmentPropertyMap.inlineProperties;
+      if (!segmentProperties || !inlineProperties) {
+        // TODO ugly
+        for (const [, [, texture]] of this.segmentPropertyTextures) {
+          texture.dispose();
+        }
+        this.segmentPropertyTextures.clear();
+        // no need to redraw
+        return;
+      }
+
+      const { code } =
+        this.shaderParameters.value.shaderBuilderState.parseResult;
+
+      const activeProperties = extractUsedSegmentProperties(
+        segmentProperties,
+
+        code,
+      );
+
+      for (const [id, [, texture]] of this.segmentPropertyTextures) {
+        if (!activeProperties.some(([id2]) => id === id2)) {
+          texture.dispose();
+          this.segmentPropertyTextures.delete(id);
+        }
+      }
+
+      for (const [i, property] of activeProperties) {
+        if (!this.segmentPropertyTextures.has(i)) {
+          const hashMap = propertyToHashMap(property, inlineProperties);
+          const gpuTexture = GPUHashTable.get(this.gl, hashMap);
+          const shaderManager = new HashMapShaderManager(
+            "SegmentNumericalProperty" + i,
+          );
+          this.segmentPropertyTextures.set(i, [shaderManager, gpuTexture]);
+        }
+      }
+
+      this.redrawNeeded.dispatch();
+    };
+
+    this.registerDisposer(
+      segmentPropertyMap.changed.add(updateSegmentPropertyTextures),
+    );
+
+    // TODO, only care about shaderParameters.value.shaderBuilderState.parseResult.code changes
+    this.registerDisposer(
+      this.shaderParameters.changed.add(updateSegmentPropertyTextures),
+    );
   }
 
   disposed() {
@@ -227,7 +302,12 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
   }
 
   defineShader(builder: ShaderBuilder, parameters: ShaderParameters) {
-    this.hashTableManager.defineShader(builder);
+    this.hashTableManager.defineShader(builder); // here is where they add the hash table code
+
+    for (const [, [shaderManager]] of this.segmentPropertyTextures) {
+      shaderManager.defineShader(builder);
+    }
+  
     let getUint64Code = `
 uint64_t getUint64DataValue() {
   uint64_t x = toUint64(getDataValue());
@@ -328,6 +408,19 @@ uint64_t getMappedObjectId(uint64_t value) {
 `;
     builder.addFragmentCode(getMappedIdColor);
 
+                for (const [i, property] of extractUsedSegmentProperties(
+                parameters.segmentProperties,
+                parameters.shaderBuilderState.parseResult.code,
+            )) {
+              builder.addFragmentCode(`highp ${getShaderOutputType(property.dataType)} segmentNumericalProperty${i};`);
+              const shaderManager = this.segmentPropertyTextures.get(i)![0];
+              fragmentMain += `
+uint64_t segmentNumericalProperty64${i};
+${shaderManager.getFunctionName}(valueForColor, segmentNumericalProperty64${i});
+segmentNumericalProperty${i} = segmentNumericalProperty64${i}.value[0];
+`;
+            }
+
     fragmentMain += `
   vec4 rgba = getMappedIdColor(valueForColor);
   if (rgba.a > 0.0) {
@@ -337,10 +430,27 @@ uint64_t getMappedObjectId(uint64_t value) {
   emit(vec4(mix(vec3(1.0,1.0,1.0), vec3(rgba), saturation), alpha));
 `;
     builder.setFragmentMain(fragmentMain);
-    const segmentColor = shaderCodeWithLineDirective(
-      parameters.shaderBuilderState.parseResult.code,
-    );
-    builder.addFragmentCode(segmentColor + "\n");
+
+
+            const segmentColor = shaderCodeWithLineDirective(
+              shaderCodeWithPropertyPreprocessing(
+                parameters.segmentProperties,
+                parameters.shaderBuilderState.parseResult.code,
+              ),
+            );
+            builder.addFragmentCode(segmentColor + "\n");
+    
+
+    // for (const [i, property] of extractUsedSegmentProperties(
+    //   segmentProperties,
+    //   parameters.shaderBuilderState.parseResult.code,
+    // )) {
+    //   console.log("adding uniform for property:", i, property.id);
+    //   builder.addUniform(
+    //     `highp ${getShaderOutputType(property.dataType)}`,
+    //     `uSegmentNumericalProperty${i}`,
+    //   );
+    // }
   }
 
   initializeShader(
@@ -450,6 +560,10 @@ uint64_t getMappedObjectId(uint64_t value) {
     }
     if (highlightColor !== undefined) {
       gl.uniform4fv(shader.uniform("uHighlightColor"), highlightColor);
+    }
+
+    for (const [shaderManager, texture] of this.segmentPropertyTextures.values()) {
+      shaderManager.enable(gl, shader, texture);
     }
   }
   endSlice(
