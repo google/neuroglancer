@@ -15,28 +15,36 @@
  */
 
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import type { CoordinateSpace } from "#src/coordinate_transform.js";
+import type { CommonCreationMetadata } from "#src/datasource/index.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
-import type {
+import type { SliceViewChunkSpecification } from "#src/sliceview/base.js";
+import {
   DataType,
-  SliceViewChunkSpecification,
+  SLICEVIEW_REQUEST_CHUNK_RPC_ID,
 } from "#src/sliceview/base.js";
+import type { SliceViewChunk } from "#src/sliceview/frontend.js";
 import {
   MultiscaleSliceViewChunkSource,
-  SliceViewChunk,
   SliceViewChunkSource,
 } from "#src/sliceview/frontend.js";
+import type { UncompressedVolumeChunk } from "#src/sliceview/uncompressed_chunk_format.js";
 import type {
   VolumeChunkSource as VolumeChunkSourceInterface,
   VolumeChunkSpecification,
   VolumeSourceOptions,
   VolumeType,
 } from "#src/sliceview/volume/base.js";
+import { IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID } from "#src/sliceview/volume/base.js";
+import { VolumeChunk } from "#src/sliceview/volume/chunk.js";
+import { getChunkFormatHandler } from "#src/sliceview/volume/registry.js";
+import type { TypedArray } from "#src/util/array.js";
+import { DATA_TYPE_ARRAY_CONSTRUCTOR } from "#src/util/data_type.js";
 import type { Disposable } from "#src/util/disposable.js";
 import type { GL } from "#src/webgl/context.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import { getShaderType, glsl_mixLinear } from "#src/webgl/shader_lib.js";
-
-export type VolumeChunkKey = string;
+import { registerSharedObjectOwner } from "#src/worker_rpc.js";
 
 export interface ChunkFormat {
   shaderKey: string;
@@ -154,27 +162,6 @@ export interface ChunkFormatHandler extends Disposable {
   getChunk(source: SliceViewChunkSource, x: any): SliceViewChunk;
 }
 
-export type ChunkFormatHandlerFactory = (
-  gl: GL,
-  spec: VolumeChunkSpecification,
-) => ChunkFormatHandler | null;
-
-const chunkFormatHandlers = new Array<ChunkFormatHandlerFactory>();
-
-export function registerChunkFormatHandler(factory: ChunkFormatHandlerFactory) {
-  chunkFormatHandlers.push(factory);
-}
-
-export function getChunkFormatHandler(gl: GL, spec: VolumeChunkSpecification) {
-  for (const handler of chunkFormatHandlers) {
-    const result = handler(gl, spec);
-    if (result != null) {
-      return result;
-    }
-  }
-  throw new Error("No chunk format handler found.");
-}
-
 export class VolumeChunkSource
   extends SliceViewChunkSource<VolumeChunkSpecification, VolumeChunk>
   implements VolumeChunkSourceInterface
@@ -210,6 +197,62 @@ export class VolumeChunkSource
 
   get chunkFormat() {
     return this.chunkFormatHandler.chunkFormat;
+  }
+
+  async getEnsuredValueAt(
+    chunkPosition: Float32Array,
+    channelAccess: ChunkChannelAccessParameters,
+  ): Promise<number | bigint | any[] | null> {
+    const initialValue = this.getValueAt(chunkPosition, channelAccess);
+    if (initialValue != null) {
+      return initialValue;
+    }
+
+    const { spec } = this;
+    const { rank, chunkDataSize } = spec;
+    const chunkGridPosition = this.tempChunkGridPosition;
+
+    for (let chunkDim = 0; chunkDim < rank; ++chunkDim) {
+      const voxel = chunkPosition[chunkDim];
+      const chunkSize = chunkDataSize[chunkDim];
+      chunkGridPosition[chunkDim] = Math.floor(voxel / chunkSize);
+    }
+
+    try {
+      await this.rpc!.promiseInvoke(SLICEVIEW_REQUEST_CHUNK_RPC_ID, {
+        source: this.rpcId,
+        chunkGridPosition: chunkGridPosition,
+      });
+    } catch (e) {
+      console.error(
+        `Failed to fetch chunk for position ${chunkPosition.join()}:`,
+        e,
+      );
+      return null;
+    }
+
+    return this.getValueAt(chunkPosition, channelAccess);
+  }
+
+  computeChunkIndices(voxelCoord: Float32Array): {
+    chunkGridPosition: Float32Array;
+    positionWithinChunk: Uint32Array;
+  } {
+    const { spec } = this;
+    const { rank, chunkDataSize } = spec;
+    const chunkGridPosition = this.tempChunkGridPosition;
+    const positionWithinChunk = this.tempPositionWithinChunk;
+
+    for (let chunkDim = 0; chunkDim < rank; ++chunkDim) {
+      const voxel = voxelCoord[chunkDim];
+      const chunkSize = chunkDataSize[chunkDim];
+      const chunkIndex = Math.floor(voxel / chunkSize);
+      chunkGridPosition[chunkDim] = chunkIndex;
+      positionWithinChunk[chunkDim] = Math.floor(
+        voxel - chunkSize * chunkIndex,
+      );
+    }
+    return { chunkGridPosition, positionWithinChunk };
   }
 
   getValueAt(
@@ -267,20 +310,95 @@ export class VolumeChunkSource
   }
 }
 
-export abstract class VolumeChunk extends SliceViewChunk {
-  declare source: VolumeChunkSource;
-  chunkDataSize: Uint32Array;
-  declare CHUNK_FORMAT_TYPE: ChunkFormat;
-
-  get chunkFormat(): this["CHUNK_FORMAT_TYPE"] {
-    return this.source.chunkFormat;
+@registerSharedObjectOwner(IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID)
+export class InMemoryVolumeChunkSource extends VolumeChunkSource {
+  constructor(
+    chunkManager: ChunkManager,
+    options: { spec: VolumeChunkSpecification },
+  ) {
+    super(chunkManager, options);
+    this.initializeCounterpart(this.chunkManager.rpc!, {});
   }
 
-  constructor(source: VolumeChunkSource, x: any) {
-    super(source, x);
-    this.chunkDataSize = x.chunkDataSize || source.spec.chunkDataSize;
+  private invalidateGpuData(chunks: Set<VolumeChunk>): void {
+    if (chunks.size === 0) return;
+    for (const chunk of chunks) {
+      chunk.updateFromCpuData(this.chunkManager.chunkQueueManager.gl);
+    }
+    this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
   }
-  abstract getValueAt(dataPosition: Uint32Array): any;
+
+  invalidateChunks(keys: string[]): void {
+    const update = () => {
+      const validKeys: string[] = [];
+      for (const key of keys) {
+        const chunk = this.chunks.get(key);
+        if (chunk) {
+          validKeys.push(key);
+          this.deleteChunk(key);
+        }
+      }
+
+      if (validKeys.length > 0) {
+        this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
+      }
+    };
+    // adding a small delay to avoid flickering since the base source will take some time to download the new data
+    setTimeout(update, 100);
+  }
+
+  applyLocalEdits(
+    edits: Map<string, { indices: number[]; value: bigint }>,
+  ): void {
+    const chunksToUpdate = new Set<VolumeChunk>();
+    const { dataType } = this.spec;
+
+    for (const [key, edit] of edits.entries()) {
+      const chunkGridPosition = new Float32Array(key.split(",").map(Number));
+
+      let chunk = this.chunks.get(key) as UncompressedVolumeChunk | undefined;
+      if (chunk === undefined) {
+        chunk = this.getChunk({
+          chunkGridPosition: chunkGridPosition,
+        }) as UncompressedVolumeChunk;
+        this.addChunk(key, chunk);
+      }
+
+      if (chunk.data == undefined) {
+        const numElements = chunk.chunkDataSize.reduce((a, b) => a * b, 1);
+        const Ctor = DATA_TYPE_ARRAY_CONSTRUCTOR[dataType];
+        chunk.data = new (Ctor as any)(numElements) as TypedArray;
+      }
+      chunksToUpdate.add(chunk);
+
+      const cpuArray = chunk.data!;
+
+      for (const index of edit.indices) {
+        const value = edit.value;
+        switch (dataType) {
+          case DataType.UINT8:
+          case DataType.INT8:
+          case DataType.UINT16:
+          case DataType.INT16:
+          case DataType.UINT32:
+          case DataType.INT32:
+          case DataType.FLOAT32:
+            cpuArray[index] = Number(value);
+            break;
+          case DataType.UINT64:
+            (cpuArray as BigUint64Array)[index] = value;
+            break;
+          default:
+            console.warn(
+              `Unsupported data type for editing: ${DataType[dataType]}`,
+            );
+            break;
+        }
+      }
+    }
+
+    this.invalidateGpuData(chunksToUpdate);
+  }
 }
 
 export abstract class MultiscaleVolumeChunkSource extends MultiscaleSliceViewChunkSource<
@@ -289,4 +407,57 @@ export abstract class MultiscaleVolumeChunkSource extends MultiscaleSliceViewChu
 > {
   abstract dataType: DataType;
   abstract volumeType: VolumeType;
+
+  getCreationMetadata(
+    layerName: string,
+    inputSpace: CoordinateSpace,
+  ): CommonCreationMetadata {
+    const rank = this.rank;
+    const identityOptions = {
+      displayRank: rank,
+      multiscaleToViewTransform: new Float32Array(rank * rank).fill(0),
+      modelChannelDimensionIndices: [],
+    };
+    for (let i = 0; i < rank; ++i)
+      identityOptions.multiscaleToViewTransform[i * rank + i] = 1;
+
+    const scales = this.getSources(identityOptions)[0];
+    if (!scales || scales.length === 0) {
+      throw new Error("Data source has no resolution scales.");
+    }
+
+    const highResSource = scales[0];
+    const shape = Array.from(highResSource.chunkSource.spec.upperVoxelBound);
+    const highResTransform = highResSource.chunkToMultiscaleTransform;
+    const voxelSize = new Array(rank);
+    for (let i = 0; i < rank; ++i) {
+      voxelSize[i] = highResTransform[i * (rank + 1) + i];
+    }
+
+    const numScales = scales.length;
+    const downsamplingFactor = new Array(rank).fill(1);
+    if (scales.length > 1) {
+      const lowResSource = scales[1];
+      const lowResTransform = lowResSource.chunkToMultiscaleTransform;
+      for (let i = 0; i < rank; ++i) {
+        const highResScale = highResTransform[i * (rank + 1) + i];
+        const lowResScale = lowResTransform[i * (rank + 1) + i];
+        if (highResScale !== 0) {
+          downsamplingFactor[i] = Math.round(lowResScale / highResScale);
+        }
+      }
+    }
+
+    return {
+      shape,
+      dataType: this.dataType,
+      voxelSize: Array.from(inputSpace.scales),
+      voxelUnit: Array.from(inputSpace.units),
+      numScales,
+      downsamplingFactor,
+      name: `${layerName}_copy`,
+    };
+  }
 }
+
+export { VolumeChunk };

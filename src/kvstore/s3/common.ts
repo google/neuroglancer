@@ -35,10 +35,10 @@ import {
 } from "#src/kvstore/s3/list.js";
 import { joinBaseUrlAndPath } from "#src/kvstore/url.js";
 import type { FetchOk } from "#src/util/http_request.js";
-import { fetchOk } from "#src/util/http_request.js";
+import { HttpError, fetchOk } from "#src/util/http_request.js";
 import { ProgressSpan } from "#src/util/progress_listener.js";
 
-export class ReadableS3KvStore<
+export class S3KvStoreBase<
   SharedKvStoreContext extends SharedKvStoreContextBase,
 > implements KvStore
 {
@@ -88,6 +88,32 @@ export class ReadableS3KvStore<
     );
   }
 
+  async write(key: string, value: ArrayBuffer): Promise<void> {
+    const url = joinBaseUrlAndPath(this.baseUrl, key);
+    try {
+      await this.fetchOkImpl(url, {
+        method: "PUT",
+        body: value,
+      });
+    } catch (e) {
+      throw new Error(`Failed to write to ${url}.`, { cause: e });
+    }
+  }
+
+  async delete(key: string): Promise<void> {
+    const url = joinBaseUrlAndPath(this.baseUrl, key);
+    try {
+      await this.fetchOkImpl(url, {
+        method: "DELETE",
+      });
+    } catch (e) {
+      if (e instanceof HttpError && e.status === 404) {
+        return;
+      }
+      throw new Error(`Failed to delete ${url}.`, { cause: e });
+    }
+  }
+
   getUrl(path: string) {
     return joinBaseUrlAndPath(this.baseUrlForDisplay, path);
   }
@@ -104,7 +130,7 @@ function amazonS3Provider<
   SharedKvStoreContext extends SharedKvStoreContextBase,
 >(
   sharedKvStoreContext: SharedKvStoreContext,
-  s3KvStoreClass: typeof ReadableS3KvStore<SharedKvStoreContext>,
+  s3KvStoreClass: typeof S3KvStoreBase<SharedKvStoreContext>,
 ): BaseKvStoreProvider {
   return {
     scheme: "s3",
@@ -131,7 +157,7 @@ function amazonS3Provider<
 function s3Provider<SharedKvStoreContext extends SharedKvStoreContextBase>(
   sharedKvStoreContext: SharedKvStoreContext,
   httpScheme: "http" | "https",
-  s3KvStoreClass: typeof ReadableS3KvStore<SharedKvStoreContext>,
+  s3KvStoreClass: typeof S3KvStoreBase<SharedKvStoreContext>,
 ): BaseKvStoreProvider {
   return {
     scheme: `s3+${httpScheme}`,
@@ -161,7 +187,7 @@ export function registerProviders<
   SharedKvStoreContext extends SharedKvStoreContextBase,
 >(
   registry: KvStoreProviderRegistry<SharedKvStoreContext>,
-  s3KvStoreClass: typeof ReadableS3KvStore<SharedKvStoreContext>,
+  s3KvStoreClass: typeof S3KvStoreBase<SharedKvStoreContext>,
 ) {
   registry.registerBaseKvStoreProvider((context) =>
     amazonS3Provider(context, s3KvStoreClass),

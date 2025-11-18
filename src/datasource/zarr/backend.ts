@@ -19,6 +19,10 @@ import "#src/datasource/zarr/codec/zstd/decode.js";
 import "#src/datasource/zarr/codec/bytes/decode.js";
 import "#src/datasource/zarr/codec/crc32c/decode.js";
 
+import "#src/datasource/zarr/codec/bytes/encode.js";
+import "#src/datasource/zarr/codec/gzip/encode.js";
+import "#src/datasource/zarr/codec/blosc/encode.js";
+
 import { WithParameters } from "#src/chunk_manager/backend.js";
 import { VolumeChunkSourceParameters } from "#src/datasource/zarr/base.js";
 import {
@@ -28,11 +32,15 @@ import {
 import "#src/datasource/zarr/codec/gzip/decode.js";
 import "#src/datasource/zarr/codec/sharding_indexed/decode.js";
 import "#src/datasource/zarr/codec/transpose/decode.js";
+import { encodeArray } from "#src/datasource/zarr/codec/encode.js";
 import { ChunkKeyEncoding } from "#src/datasource/zarr/metadata/index.js";
 import { WithSharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
 import { postProcessRawData } from "#src/sliceview/backend_chunk_decoders/postprocess.js";
+import { decodeChannel as decodeChannelUint32 } from "#src/sliceview/compressed_segmentation/decode_uint32.js";
+import { decodeChannel as decodeChannelUint64 } from "#src/sliceview/compressed_segmentation/decode_uint64.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
+import { DataType } from "#src/util/data_type.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
 
 @registerSharedObject()
@@ -96,5 +104,103 @@ export class ZarrVolumeChunkSource extends WithParameters(
       );
       await postProcessRawData(chunk, signal, decoded);
     }
+  }
+
+  async writeChunk(chunk: VolumeChunk): Promise<void> {
+    const { kvStore, getChunkKey, decodeCodecs } = this.chunkKvStore;
+    if (!kvStore.write) {
+      throw new Error(
+        "ZarrVolumeChunkSource.writeChunk: underlying kvStore is not writable",
+      );
+    }
+    if (!chunk.data) {
+      throw new Error("ZarrVolumeChunkSource.writeChunk: missing chunk.data");
+    }
+    let dataToWrite = chunk.data;
+
+    const { compressedSegmentationBlockSize } = this.spec;
+    if (compressedSegmentationBlockSize !== undefined) {
+      const compressedData = chunk.data as Uint32Array;
+      const { chunkDataSize } = chunk;
+      if (!chunkDataSize) {
+        throw new Error("Cannot write chunk with unknown size.");
+      }
+      const numElements =
+        chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2];
+      const { dataType } = this.spec;
+      const baseOffset = compressedData.length > 0 ? compressedData[0] : 0;
+
+      if (dataType === DataType.UINT32) {
+        const uncompressedData = new Uint32Array(numElements);
+        if (baseOffset !== 0) {
+          decodeChannelUint32(
+            uncompressedData,
+            compressedData,
+            baseOffset,
+            chunkDataSize,
+            compressedSegmentationBlockSize,
+          );
+        }
+        dataToWrite = uncompressedData;
+      } else {
+        const uncompressedData = new BigUint64Array(numElements);
+        if (baseOffset !== 0) {
+          decodeChannelUint64(
+            uncompressedData,
+            compressedData,
+            baseOffset,
+            chunkDataSize,
+            compressedSegmentationBlockSize,
+          );
+        }
+        dataToWrite = uncompressedData;
+      }
+    }
+
+    const encoded = await encodeArray(
+      decodeCodecs,
+      dataToWrite as ArrayBufferView<ArrayBufferLike>,
+      new AbortController().signal,
+    );
+
+    const { parameters } = this;
+    const { chunkGridPosition } = chunk;
+    const { metadata } = parameters;
+    let baseKey = "";
+    const rank = this.spec.rank;
+    const { physicalToLogicalDimension } = metadata.codecs.layoutInfo[0];
+    let sep: string;
+    if (metadata.chunkKeyEncoding === ChunkKeyEncoding.DEFAULT) {
+      baseKey += "c";
+      sep = metadata.dimensionSeparator;
+    } else {
+      sep = "";
+      if (rank === 0) {
+        baseKey += "0";
+      }
+    }
+    const keyCoords = new Array<number>(rank);
+    const { readChunkShape } = metadata.codecs.layoutInfo[0];
+    const { chunkShape } = metadata;
+    for (
+      let fOrderPhysicalDim = 0;
+      fOrderPhysicalDim < rank;
+      ++fOrderPhysicalDim
+    ) {
+      const decodedDim =
+        physicalToLogicalDimension[rank - 1 - fOrderPhysicalDim];
+      keyCoords[decodedDim] = Math.floor(
+        (chunkGridPosition[fOrderPhysicalDim] * readChunkShape[decodedDim]) /
+          chunkShape[decodedDim],
+      );
+    }
+    for (let i = 0; i < rank; ++i) {
+      baseKey += `${sep}${keyCoords[i]}`;
+      sep = metadata.dimensionSeparator;
+    }
+
+    const key = getChunkKey(chunkGridPosition, baseKey);
+    const arrayBuffer = new Uint8Array(encoded).buffer;
+    await kvStore.write!(key, arrayBuffer);
   }
 }

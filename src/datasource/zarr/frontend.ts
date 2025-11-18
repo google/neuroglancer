@@ -27,6 +27,7 @@ import {
 } from "#src/coordinate_transform.js";
 import type {
   ChannelMetadata,
+  CreateDataSourceOptions,
   DataSource,
   GetKvStoreBasedDataSourceOptions,
   KvStoreBasedDataSourceProvider,
@@ -38,6 +39,10 @@ import "#src/datasource/zarr/codec/crc32c/resolve.js";
 import "#src/datasource/zarr/codec/gzip/resolve.js";
 import "#src/datasource/zarr/codec/sharding_indexed/resolve.js";
 import "#src/datasource/zarr/codec/transpose/resolve.js";
+import {
+  getZarrCreator,
+  ZarrCreationState,
+} from "#src/datasource/zarr/metadata/creation.js";
 import type {
   ArrayMetadata,
   DimensionSeparator,
@@ -485,6 +490,11 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
       this.zarrVersion === undefined ? "" : ` v${this.zarrVersion}`;
     return `Zarr${versionStr} data source`;
   }
+
+  get creationState() {
+    return this.zarrVersion ? new ZarrCreationState() : undefined;
+  }
+
   get(options: GetKvStoreBasedDataSourceOptions): Promise<DataSource> {
     let { kvStoreUrl, additionalPath, fragment } = resolveUrl(options);
     kvStoreUrl = kvstoreEnsureDirectoryPipelineUrl(
@@ -556,7 +566,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
               id: "default",
               default: true,
               url: undefined,
-              subsource: { volume },
+              subsource: { volume, isPotentiallyWritable: true },
             },
             {
               id: "bounds",
@@ -596,6 +606,10 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
         supportedQueryParameters,
       ),
     );
+  }
+  async create(options: CreateDataSourceOptions): Promise<void> {
+    const creator = getZarrCreator(this.zarrVersion);
+    await creator.create(options);
   }
 }
 

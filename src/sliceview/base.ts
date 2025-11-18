@@ -169,6 +169,14 @@ export interface SliceViewRenderLayer {
   localPosition: WatchableValueInterface<Float32Array>;
   renderScaleTarget: WatchableValueInterface<number>;
 
+  /**
+   * If implemented by a render layer, return a non-negative integer scale index to override
+   * automatic multiscale selection. When defined, the sliceview must use only the specified
+   * scale from the current orientation. Implementations must ensure the index is valid for
+   * their multiscale source; this function should return undefined when no override is desired.
+   */
+  getForcedSourceIndexOverride?(): number | undefined;
+
   filterVisibleSources(
     sliceView: SliceViewBase<SliceViewChunkSource, SliceViewRenderLayer>,
     sources: readonly TransformedSource[],
@@ -686,6 +694,22 @@ export function* filterVisibleSources(
   renderLayer: SliceViewRenderLayer,
   sources: readonly TransformedSource[],
 ): Iterable<TransformedSource> {
+  // First: allow a render layer to force a specific multiscale index for safety-critical flows.
+  const forcedIndex = renderLayer.getForcedSourceIndexOverride?.();
+  if (forcedIndex !== undefined) {
+    if (
+      !Number.isInteger(forcedIndex) ||
+      forcedIndex < 0 ||
+      forcedIndex >= sources.length
+    ) {
+      throw new Error(
+        `filterVisibleSources: forced source index ${forcedIndex} is out of range [0, ${sources.length - 1}]`,
+      );
+    }
+    yield sources[forcedIndex];
+    return;
+  }
+
   // Increase pixel size by a small margin.
   const pixelSize = sliceView.projectionParameters.value.pixelSize * 1.1;
   // At the smallest scale, all alternative sources must have the same voxel size, which is

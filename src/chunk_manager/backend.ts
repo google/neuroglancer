@@ -20,6 +20,7 @@ import type {
   LayerChunkProgressInfo,
 } from "#src/chunk_manager/base.js";
 import {
+  CHUNK_SOURCE_INVALIDATE_CHUNKS_RPC_ID,
   CHUNK_LAYER_STATISTICS_RPC_ID,
   CHUNK_MANAGER_RPC_ID,
   CHUNK_QUEUE_MANAGER_RPC_ID,
@@ -1110,8 +1111,10 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     }
   }
 
-  invalidateSourceCache(source: ChunkSource) {
-    for (const chunk of source.chunks.values()) {
+  invalidateCachedChunks(source: ChunkSource, keys: string[]) {
+    for (const key of keys) {
+      const chunk = source.chunks.get(key);
+      if (!chunk) continue;
       switch (chunk.state) {
         case ChunkState.DOWNLOADING:
           cancelChunkDownload(chunk);
@@ -1123,6 +1126,10 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
       // Note: After calling this, chunk may no longer be valid.
       this.updateChunkState(chunk, ChunkState.QUEUED);
     }
+  }
+
+  invalidateSourceCache(source: ChunkSource) {
+    this.invalidateCachedChunks(source, [...source.chunks.keys()]);
     this.rpc!.invoke("Chunk.update", { source: source.rpcId });
     this.scheduleUpdate();
   }
@@ -1376,6 +1383,12 @@ export function withChunkManager<
 registerRPC(CHUNK_SOURCE_INVALIDATE_RPC_ID, function (x) {
   const source = <ChunkSource>this.get(x.id);
   source.chunkManager.queueManager.invalidateSourceCache(source);
+});
+
+registerRPC(CHUNK_SOURCE_INVALIDATE_CHUNKS_RPC_ID, function (x) {
+  const source = <ChunkSource>this.get(x.id);
+  source.chunkManager.queueManager.invalidateCachedChunks(source, x.keys);
+  source.chunkManager.queueManager.scheduleUpdate();
 });
 
 registerPromiseRPC(

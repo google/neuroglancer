@@ -279,6 +279,12 @@ export class SliceViewPanel extends RenderedDataPanel {
     );
   }
 
+  handleMouseMove(clientX: number, clientY: number) {
+    super.handleMouseMove(clientX, clientY);
+    this.viewer.mouseState.planeNormal =
+      this.sliceView.projectionParameters.value.viewportNormalInCanonicalCoordinates;
+  }
+
   translateByViewportPixels(deltaX: number, deltaY: number): void {
     const { pose } = this.viewer.navigationState;
     pose.updateDisplayPosition((pos) => {
