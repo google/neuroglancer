@@ -14,10 +14,17 @@
  * limitations under the License.
  */
 
+import { MultiscaleAnnotationSource } from "#src/annotation/frontend_source.js";
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { ChunkSource } from "#src/chunk_manager/frontend.js";
 import { HashMapUint64 } from "#src/gpu_hash/hash_table.js";
+import { GPUHashTable, HashMapShaderManager } from "#src/gpu_hash/shader.js";
 import type { IndexedSegmentProperty } from "#src/segmentation_display_state/base.js";
+import {
+  makeCachedLazyDerivedWatchableValue,
+  WatchableValue,
+  WatchableValueInterface,
+} from "#src/trackable_value.js";
 import type { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import type { Uint64Set } from "#src/uint64_set.js";
 import type {
@@ -28,7 +35,7 @@ import type {
 import { mergeSequences } from "#src/util/array.js";
 import { bigintCompare } from "#src/util/bigint.js";
 import { DataType } from "#src/util/data_type.js";
-import type { Borrowed } from "#src/util/disposable.js";
+import { RefCounted, type Borrowed } from "#src/util/disposable.js";
 import { murmurHash3_x86_32Hash64Bits_Bigint } from "#src/util/hash.js";
 import { parseUint64 } from "#src/util/json.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
@@ -40,9 +47,12 @@ import {
   parseDataTypeValue,
 } from "#src/util/lerp.js";
 import { getObjectId } from "#src/util/object_id.js";
+import { Signal } from "#src/util/signal.js";
 import { defaultStringCompare } from "#src/util/string.js";
 import { GL } from "#src/webgl/context.js";
-import { ShaderProgram } from "#src/webgl/shader.js";
+import { shaderCodeWithLineDirective } from "#src/webgl/dynamic_shader.js";
+import { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
+import { SegmentationDisplayState } from "./frontend";
 
 export type InlineSegmentProperty =
   | InlineSegmentStringProperty
@@ -1340,21 +1350,190 @@ export function queryIncludesColumn(
   );
 }
 
-// export function propertyToUniform(property: InlineSegmentNumericalProperty, inlineProperties: InlineSegmentPropertyMap, id: bigint) {
-//   const index = inlineProperties.ids.indexOf(id);
-//   if (index === -1) return 0;
-//   return property.values[index];
-// }
+export class SegmentationColorUserShader extends RefCounted {
+  activeProperties: WatchableValueInterface<
+    [number, InlineSegmentNumericalProperty][]
+  >;
 
+  changed = new Signal();
 
-export function propertyToHashMap(property: InlineSegmentNumericalProperty, inlineProperties: InlineSegmentPropertyMap) {
-    const floatArr = new Float64Array(1);
+  constructor(protected displayState: SegmentationDisplayState) {
+    super();
+    this.activeProperties = this.registerDisposer(
+      makeCachedLazyDerivedWatchableValue(
+        (segmentPropertyMap, parseResult) => {
+          return extractUsedSegmentProperties(
+            segmentPropertyMap,
+            parseResult.code,
+          );
+        },
+        this.displayState.segmentationGroupState.value.segmentPropertyMap,
+        this.displayState.segmentColorShaderControlState.parseResult,
+      ),
+    );
+
+    this.activeProperties.changed.add(() => {
+      this.changed.dispatch();
+    });
+  }
+
+  protected get segmentColorShaderCode() {
+    const { code } =
+      this.displayState.segmentColorShaderControlState.parseResult.value;
+    const segmentProperties =
+      this.displayState.segmentationGroupState.value.segmentPropertyMap.value;
+    return shaderCodeWithLineDirective(
+      shaderCodeWithPropertyPreprocessing(segmentProperties, code),
+    );
+  }
+
+  defineShader(builder: ShaderBuilder) {
+    for (const [i, property] of this.activeProperties.value) {
+      builder.addVertexCode(
+        `highp ${getShaderOutputType(property.dataType)} segmentNumericalProperty${i};`,
+      );
+      builder.addUniform(
+        `highp ${getShaderOutputType(property.dataType)}`,
+        `uSegmentNumericalProperty${i}`,
+      );
+    }
+    let loadSegmentPropertiesCode = `
+void loadSegmentProperties() {
+${this.activeProperties.value.map(([i]) => `segmentNumericalProperty${i} = uSegmentNumericalProperty${i};`).join("\n")}
+}`;
+    builder.addVertexCode(loadSegmentPropertiesCode);
+    builder.addVertexCode(this.segmentColorShaderCode);
+  }
+
+    setSegmentPropertyUniforms(id: bigint, gl: GL, shader: ShaderProgram) {
+    const {
+      segmentPropertyMap: { value: segmentPropertyMap },
+    } = this.displayState.segmentationGroupState.value;
+    if (!segmentPropertyMap) return;
+
+    const index = segmentPropertyMap.getSegmentInlineIndex(id);
+    const {
+      labels,
+      tags: tagsProperty,
+      numericalProperties,
+    } = segmentPropertyMap;
+    labels; // TODO, support labels
+    for (const [i, property] of numericalProperties.entries()) {
+      const value = index !== -1 ? property.values[index] : 0;
+      const uniformSetter = getShaderUniformValueSetter(gl, property.dataType);
+      uniformSetter.call(
+        gl,
+        shader.uniform(`uSegmentNumericalProperty${i}`),
+        value,
+      );
+    }
+    if (tagsProperty !== undefined) {
+      const { values, tags } = tagsProperty;
+      for (let i = 0; i < tags.length; ++i) {
+        gl.uniform1ui(shader.uniform(`uSegmentTagProperty${i}`), 0);
+      }
+      const tagIndices = index !== -1 ? values[index] : "";
+      for (let i = 0, length = tagIndices.length; i < length; ++i) {
+        const tagIdx = tagIndices.charCodeAt(i);
+        // console.log('enabling tagIdx', tagIdx);
+        gl.uniform1ui(shader.uniform(`uSegmentTagProperty${tagIdx}`), 1);
+      }
+    }
+  }
+}
+
+export class SegmentationColorUserShaderTexture extends SegmentationColorUserShader {
+  public segmentPropertyTextures = new Map<
+    number,
+    [HashMapShaderManager, GPUHashTable<HashMapUint64>]
+  >();
+
+  constructor(
+    displayState: SegmentationDisplayState,
+    private gl: GL,
+  ) {
+    super(displayState);
+
+    this.registerDisposer(
+      this.activeProperties.changed.add(() => {
+        const segmentProperties =
+          this.displayState.segmentationGroupState.value.segmentPropertyMap
+            .value;
+        const inlineProperties =
+          segmentProperties?.segmentPropertyMap.inlineProperties;
+        if (!segmentProperties || !inlineProperties) {
+          for (const [, texture] of this.segmentPropertyTextures.values()) {
+            texture.dispose();
+          }
+          this.segmentPropertyTextures.clear();
+          return;
+        }
+        const activeProperties = this.activeProperties.value;
+        for (const [id, [, texture]] of this.segmentPropertyTextures) {
+          if (!activeProperties.some(([id2]) => id === id2)) {
+            texture.dispose();
+            this.segmentPropertyTextures.delete(id);
+          }
+        }
+        for (const [i, property] of activeProperties) {
+          if (!this.segmentPropertyTextures.has(i)) {
+            const hashMap = propertyToHashMap(property, inlineProperties);
+            const gpuTexture = GPUHashTable.get(this.gl, hashMap);
+            const shaderManager = new HashMapShaderManager(
+              "SegmentNumericalProperty" + i,
+            );
+            this.segmentPropertyTextures.set(i, [shaderManager, gpuTexture]);
+          }
+        }
+        this.changed.dispatch();
+      }),
+    );
+  }
+
+  defineShader(builder: ShaderBuilder) {
+    for (const [, [shaderManager]] of this.segmentPropertyTextures) {
+      shaderManager.defineShader(builder);
+    }
+    for (const [i, property] of this.activeProperties.value) {
+      builder.addFragmentCode(
+        `highp ${getShaderOutputType(property.dataType)} segmentNumericalProperty${i};`, // TODO this line is shared but its vertex vs fragment
+      );
+    }
+    builder.addFragmentCode(this.segmentColorShaderCode);
+    let loadSegmentPropertiesCode = `
+void loadSegmentProperties(uint64_t id) {
+${Array.from(
+  this.segmentPropertyTextures,
+  ([i, [shaderManager]]) => `
+uint64_t segmentNumericalProperty64${i};
+${shaderManager.getFunctionName}(id, segmentNumericalProperty64${i});
+segmentNumericalProperty${i} = segmentNumericalProperty64${i}.value[0]; // todo support non-uint64
+`,
+).join("\n")}
+}`;
+    builder.addFragmentCode(loadSegmentPropertiesCode);
+  }
+
+  enable(gl: GL, shader: ShaderProgram) {
+    for (const [
+      shaderManager,
+      texture,
+    ] of this.segmentPropertyTextures.values()) {
+      shaderManager.enable(gl, shader, texture);
+    }
+  }
+}
+
+function propertyToHashMap(
+  property: InlineSegmentNumericalProperty,
+  inlineProperties: InlineSegmentPropertyMap,
+) {
+  const floatArr = new Float64Array(1);
   const uint64Arr = new BigUint64Array(floatArr.buffer);
-
   const floatToBigInt = (value: number) => {
     floatArr[0] = value;
     return uint64Arr[0];
-  }
+  };
   floatToBigInt;
   const propertyValueMap = new HashMapUint64();
   for (const [segmentIndex, value] of property.values.entries()) {
@@ -1366,7 +1545,7 @@ export function propertyToHashMap(property: InlineSegmentNumericalProperty, inli
   return propertyValueMap;
 }
 
-export function getShaderOutputType(ioType: DataType): string {
+function getShaderOutputType(ioType: DataType): string {
   switch (ioType) {
     case DataType.UINT8:
     case DataType.UINT16:
@@ -1384,12 +1563,11 @@ export function getShaderOutputType(ioType: DataType): string {
 }
 
 // TODO, this can be improved
-export function extractUsedSegmentProperties(
+function extractUsedSegmentProperties(
   segmentProperties: PreprocessedSegmentPropertyMap | undefined,
   code: string,
 ) {
-  console.log("extractUsedSegmentProperties");
-  const res:  [number, InlineSegmentNumericalProperty][] = [];
+  const res: [number, InlineSegmentNumericalProperty][] = [];
   if (!segmentProperties) return res;
   // const res = {
   //   tags: [] as string[],
@@ -1405,32 +1583,29 @@ export function extractUsedSegmentProperties(
   //   }
   // }
 
-  const {inlineProperties} = segmentProperties.segmentPropertyMap;
+  const { inlineProperties } = segmentProperties.segmentPropertyMap;
   if (!inlineProperties) return res;
   // numericalProperties;
-
-  console.log("numericalProperties:", numericalProperties);
 
   for (const [i, property] of numericalProperties.entries()) {
     if (code.includes(`prop("${property.id}")`)) {
       res.push([i, property]);
-  //     console.log("Found used property:", i, property);
-  //     const propertyValueMap = new HashMapUint64();
-  //     for (const [segmentIndex, value] of property.values.entries()) {
-  //       if (Number.isNaN(value)) continue;
-  //       // const valueBigInt = Number.isInteger(value) ? BigInt(value) : floatToBigInt(value);
-  //       const valueBigInt = BigInt(value);
-  //       propertyValueMap.set(inlineProperties.ids[segmentIndex], valueBigInt);
-  //     }
-  //     console.log("propertyValueMap:", propertyValueMap);
+      //     console.log("Found used property:", i, property);
+      //     const propertyValueMap = new HashMapUint64();
+      //     for (const [segmentIndex, value] of property.values.entries()) {
+      //       if (Number.isNaN(value)) continue;
+      //       // const valueBigInt = Number.isInteger(value) ? BigInt(value) : floatToBigInt(value);
+      //       const valueBigInt = BigInt(value);
+      //       propertyValueMap.set(inlineProperties.ids[segmentIndex], valueBigInt);
+      //     }
+      //     console.log("propertyValueMap:", propertyValueMap);
     }
   }
   return res;
 }
 
-// export function
 
-export function shaderCodeWithPropertyPreprocessing(
+function shaderCodeWithPropertyPreprocessing(
   segmentProperties: PreprocessedSegmentPropertyMap | undefined,
   code: string,
 ) {
@@ -1450,7 +1625,7 @@ export function shaderCodeWithPropertyPreprocessing(
   return code;
 }
 
-export const getShaderUniformValueSetter = (gl: GL, ioType: DataType) => {
+const getShaderUniformValueSetter = (gl: GL, ioType: DataType) => {
   switch (ioType) {
     case DataType.UINT8:
     case DataType.UINT16:
@@ -1465,41 +1640,5 @@ export const getShaderUniformValueSetter = (gl: GL, ioType: DataType) => {
     case DataType.UINT64:
       throw new Error("nope");
     // return gl.uniform
-  }
-};
-
-export const setSegmentPropertyUniforms = (
-  gl: GL,
-  shader: ShaderProgram,
-  segmentPropertyMap: PreprocessedSegmentPropertyMap,
-  id: bigint,
-) => {
-  const index = segmentPropertyMap.getSegmentInlineIndex(id);
-  const {
-    labels,
-    tags: tagsProperty,
-    numericalProperties,
-  } = segmentPropertyMap;
-  labels; // TODO, support labels
-  for (const [i, property] of numericalProperties.entries()) {
-    const value = index !== -1 ? property.values[index] : 0;
-    const uniformSetter = getShaderUniformValueSetter(gl, property.dataType);
-    uniformSetter.call(
-      gl,
-      shader.uniform(`uSegmentNumericalProperty${i}`),
-      value,
-    );
-  }
-  if (tagsProperty !== undefined) {
-    const { values, tags } = tagsProperty;
-    for (let i = 0; i < tags.length; ++i) {
-      gl.uniform1ui(shader.uniform(`uSegmentTagProperty${i}`), 0);
-    }
-    const tagIndices = index !== -1 ? values[index] : "";
-    for (let i = 0, length = tagIndices.length; i < length; ++i) {
-      const tagIdx = tagIndices.charCodeAt(i);
-      // console.log('enabling tagIdx', tagIdx);
-      gl.uniform1ui(shader.uniform(`uSegmentTagProperty${tagIdx}`), 1);
-    }
   }
 };

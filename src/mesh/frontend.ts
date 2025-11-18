@@ -57,15 +57,13 @@ import {
 import {
   extractUsedSegmentProperties,
   getShaderOutputType,
-  getShaderUniformValueSetter,
-  shaderCodeWithPropertyPreprocessing,
+  SegmentationColorUserShader,
 } from "#src/segmentation_display_state/property_map.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   AggregateWatchableValue,
   makeCachedDerivedWatchableValue,
 } from "#src/trackable_value.js";
-import { DataType } from "#src/util/data_type.js";
 import type { Borrowed, RefCounted } from "#src/util/disposable.js";
 import type { vec4 } from "#src/util/geom.js";
 import {
@@ -368,7 +366,7 @@ export class MeshShaderManager {
     gl.disableVertexAttribArray(shader.attribute("aVertexNormal"));
   }
 
-  makeGetter(layer: RefCounted & { gl: GL; displayState: MeshDisplayState }) {
+  makeGetter(layer: RefCounted & { gl: GL; displayState: MeshDisplayState, segmentationColorUserShader: SegmentationColorUserShader }) {
     const parameters = layer.registerDisposer(
       new AggregateWatchableValue((refCounted) => ({
         shaderBuilderState:
@@ -393,7 +391,7 @@ export class MeshShaderManager {
       shaderError: layer.displayState.shaderError,
       defineShader: (
         builder,
-        { silhouetteRenderingEnabled, shaderBuilderState, segmentProperties },
+        { silhouetteRenderingEnabled, shaderBuilderState },
       ) => {
         addControlsToBuilder(shaderBuilderState, builder);
         this.vertexPositionHandler.defineShader(builder);
@@ -426,19 +424,7 @@ highp vec3 normalMultiplier = vec3(1.0, 1.0, 1.0);
 `;
         }
 
-        for (const [i, property] of extractUsedSegmentProperties(
-          segmentProperties,
-          shaderBuilderState.parseResult.code,
-        )) {
-          builder.addVertexCode(`highp ${getShaderOutputType(property.dataType)} segmentNumericalProperty${i};`);
-          builder.addUniform(
-            `highp ${getShaderOutputType(property.dataType)}`,
-            `uSegmentNumericalProperty${i}`,
-          );
-          vertexMain += `
-segmentNumericalProperty${i} = uSegmentNumericalProperty${i};
-`;
-        }
+        layer.segmentationColorUserShader.defineShader(builder);
 
 
         vertexMain += `
@@ -448,6 +434,7 @@ vec3 normal = normalize(uNormalMatrix * (normalMultiplier * origNormal));
 float absCosAngle = abs(dot(normal, uLightDirection.xyz));
 float lightingFactor = absCosAngle + uLightDirection.w;
 vColor = uColor;
+loadSegmentProperties();
 vColor = segmentColor(vColor);
 vColor = vec4(lightingFactor * vColor.rgb, vColor.a);
 `;
@@ -460,13 +447,6 @@ vColor *= pow(1.0 - absCosAngle, uSilhouettePower);
         const shaderManager = new SegmentColorShaderManager("getColor");
         shaderManager.defineShader(builder);
         builder.setFragmentMain("emit(vColor, uPickID);");
-        const segmentColor = shaderCodeWithLineDirective(
-          shaderCodeWithPropertyPreprocessing(
-            segmentProperties,
-            shaderBuilderState.parseResult.code,
-          ),
-        );
-        builder.addVertexCode(segmentColor + "\n");
       },
     });
   }
@@ -481,6 +461,7 @@ export interface MeshDisplayState extends SegmentationDisplayState3D {
 export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRenderLayerAttachmentState> {
   protected meshShaderManager;
   private getShader;
+  public segmentationColorUserShader;
   backend: SegmentationLayerSharedObject;
 
   constructor(
@@ -493,6 +474,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
       /*fragmentRelativeVertices=*/ false,
       VertexPositionFormat.float32,
     );
+    this.segmentationColorUserShader = new SegmentationColorUserShader(displayState);
     this.getShader = this.meshShaderManager.makeGetter(this);
 
     registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
@@ -838,6 +820,7 @@ function hasFragmentChunk(
 export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRenderLayerAttachmentState> {
   protected meshShaderManager: MeshShaderManager;
   private getShader;
+  public segmentationColorUserShader;
   backend: SegmentationLayerSharedObject;
 
   constructor(
@@ -850,6 +833,10 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
       /*fragmentRelativeVertices=*/ source.format.fragmentRelativeVertices,
       source.format.vertexPositionFormat,
     );
+
+    this.segmentationColorUserShader = new SegmentationColorUserShader(displayState);
+
+
     this.getShader = this.meshShaderManager.makeGetter(this);
 
     registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
@@ -984,32 +971,35 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
           meshShaderManager.setPickID(gl, shader, pickIndex!);
         }
 
-        const {
-          segmentPropertyMap: { value: segmentPropertyMap },
-        } = displayState.segmentationGroupState.value;
-        if (segmentPropertyMap) {
-          const { code } =
-            displayState.segmentColorShaderControlState.parseResult.value;
-          const index = segmentPropertyMap.getSegmentInlineIndex(objectId);
+        this.segmentationColorUserShader.setSegmentPropertyUniforms(objectId, gl, shader);
+        // const {
+        //   segmentPropertyMap: { value: segmentPropertyMap },
+        // } = displayState.segmentationGroupState.value;
+        // if (segmentPropertyMap) {
+        //   const { code } =
+        //     displayState.segmentColorShaderControlState.parseResult.value;
+        //   const index = segmentPropertyMap.getSegmentInlineIndex(objectId);
 
-          if (index !== -1) {
-            for (const [i, property] of extractUsedSegmentProperties(
-              segmentPropertyMap,
-              code,
-            )) {
-              const value = property.values[index];
-              const uniformSetter = getShaderUniformValueSetter(
-                gl,
-                property.dataType,
-              );
-              uniformSetter.call(
-                gl,
-                shader.uniform(`uSegmentNumericalProperty${i}`),
-                value,
-              );
-            }
-          }
-        }
+        //   // setSegmentPropertyUniforms()
+
+        //   if (index !== -1) {
+        //     for (const [i, property] of extractUsedSegmentProperties(
+        //       segmentPropertyMap,
+        //       code,
+        //     )) {
+        //       const value = property.values[index];
+        //       const uniformSetter = getShaderUniformValueSetter(
+        //         gl,
+        //         property.dataType,
+        //       );
+        //       uniformSetter.call(
+        //         gl,
+        //         shader.uniform(`uSegmentNumericalProperty${i}`),
+        //         value,
+        //       );
+        //     }
+        //   }
+        // }
 
         getMultiscaleChunksToDraw(
           manifest,

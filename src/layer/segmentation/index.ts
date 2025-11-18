@@ -65,7 +65,12 @@ import type {
   PreprocessedSegmentPropertyMap,
   SegmentPropertyMap,
 } from "#src/segmentation_display_state/property_map.js";
-import { getPreprocessedSegmentPropertyMap } from "#src/segmentation_display_state/property_map.js";
+import {
+  extractUsedSegmentProperties,
+  getPreprocessedSegmentPropertyMap,
+  getShaderOutputType,
+  SegmentationColorUserShader,
+} from "#src/segmentation_display_state/property_map.js";
 import { LocalSegmentationGraphSource } from "#src/segmentation_graph/local.js";
 import { VisibleSegmentEquivalencePolicy } from "#src/segmentation_graph/segment_id.js";
 import type {
@@ -92,6 +97,7 @@ import type {
   WatchableValueInterface,
 } from "#src/trackable_value.js";
 import {
+  AggregateWatchableValue,
   IndirectTrackableValue,
   IndirectWatchableValue,
   makeCachedDerivedWatchableValue,
@@ -431,8 +437,6 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
     // assign it here first in order to allow it to be accessed by `segmentationGroupState`.
     layer.displayState = this;
 
-    this.getSegmentColorShader = this.makeSegmentColorShaderGetter();
-
     this.linkedSegmentationGroup = layer.registerDisposer(
       new LinkedLayerGroup(
         layer.manager.rootLayers,
@@ -479,6 +483,8 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         "originalSegmentationColorGroupState",
       ),
     );
+
+    this.getSegmentColorShader = this.makeSegmentColorShaderGetter();
 
     this.selectSegment = layer.selectSegment;
     this.filterBySegmentLabel = layer.filterBySegmentLabel;
@@ -537,6 +543,29 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         (group) => group.segmentPropertyMap,
       ),
     );
+
+    // this.segmentPropertyMap.changed.add(() => {
+    //   console.log(
+    //     "segmentPropertyMap changed",
+    //     this.segmentPropertyMap.value,
+    //   );
+    // });
+
+    // this.segmentationGroupState.changed.add(() => {
+    //   console.log(
+    //     "segmentationGroupState changed",
+    //     this.segmentationGroupState.value,
+    //   );
+    // });
+
+    // this.segmentationGroupState.value.segmentPropertyMap.changed.add(() => {
+    //   console.log(
+    //     "segmentationGroupState.value.segmentPropertyMap changed",
+    //     this.segmentationGroupState.value,
+    //   );
+    // });
+
+    this.segmentationColorUserShader = new SegmentationColorUserShader(this);
   }
 
   segmentSelectionState = new SegmentSelectionState();
@@ -553,8 +582,12 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   ignoreNullVisibleSet = new TrackableBoolean(true, true);
   skeletonRenderingOptions = new SkeletonRenderingOptions();
   shaderError = makeWatchableShaderError();
-  fragmentSegmentColor = makeTrackableFragmentMain(DEFAULT_FRAGMENT_SEGMENT_COLOR);
-  segmentColorShaderControlState = new ShaderControlState(this.fragmentSegmentColor);
+  fragmentSegmentColor = makeTrackableFragmentMain(
+    DEFAULT_FRAGMENT_SEGMENT_COLOR,
+  );
+  segmentColorShaderControlState = new ShaderControlState(
+    this.fragmentSegmentColor,
+  );
   renderScaleHistogram = new RenderScaleHistogram();
   renderScaleTarget = trackableRenderScaleTarget(1);
   selectSegment: (id: bigint, pin: boolean | "toggle") => void;
@@ -564,6 +597,8 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   useTempSegmentStatedColors2d: SharedWatchableValue<boolean>;
   hasVolume = new TrackableBoolean(false, false);
 
+  segmentationColorUserShader;
+
   filterBySegmentLabel: (id: bigint) => void;
 
   moveToSegment = (id: bigint) => {
@@ -572,24 +607,51 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
 
   makeSegmentColorShaderGetter = () => {
     const gl = initializeWebGL(new OffscreenCanvas(1, 1));
-    const parameters = this.segmentColorShaderControlState.builderState;
+    const parameters = this.layer.registerDisposer(
+      new AggregateWatchableValue(() => ({
+        shaderBuilderState: this.segmentColorShaderControlState.builderState,
+        segmentProperties: this.segmentationGroupState.value.segmentPropertyMap,
+      })),
+    );
     return parameterizedEmitterDependentShaderGetter(this.layer, gl, {
       memoizeKey: `segmentColorShaderTODO`,
       parameters,
       encodeParameters: (p) => {
-        return `${p.parseResult.code}`;
+        return `${p.shaderBuilderState.parseResult.code}/${p.segmentProperties?.numericalProperties.length}`;
       },
       shaderError: this.layer.displayState.shaderError, // TODO can I reuse this?
-      defineShader: (builder, shaderBuilderState) => {
+      defineShader: (builder, { }) => {
         builder.addAttribute("highp vec4", "aVertexPosition");
         builder.addUniform("highp vec4", "uColor");
         builder.addUniform("highp uvec2", "uID");
         builder.addVarying("highp vec4", "vColor");
-        builder.addVertexCode(shaderBuilderState.parseResult.code);
-        builder.addVertexMain(`
+
+        let vertexMain = ``;
+
+        // TODO this is basically a copy from mesh/frontend.ts
+        // TODO we error when segment properties is undefined
+//         for (const [i, property] of extractUsedSegmentProperties(
+//           segmentProperties,
+//           shaderBuilderState.parseResult.code,
+//         )) {
+//           builder.addVertexCode(
+//             `highp ${getShaderOutputType(property.dataType)} segmentNumericalProperty${i};`,
+//           );
+//           builder.addUniform(
+//             `highp ${getShaderOutputType(property.dataType)}`,
+//             `uSegmentNumericalProperty${i}`,
+//           );
+//           vertexMain += `
+// segmentNumericalProperty${i} = uSegmentNumericalProperty${i};
+//         `;
+//         }
+        this.segmentationColorUserShader.defineShader(builder);
+        vertexMain += `
 gl_Position = aVertexPosition;
+loadSegmentProperties();
 vColor = segmentColor(uColor);
-`);
+`;
+        builder.addVertexMain(vertexMain);
         builder.addOutputBuffer("vec4", "out_fragColor", 0);
         builder.setFragmentMain("out_fragColor = vColor;");
       },
@@ -599,7 +661,6 @@ vColor = segmentColor(uColor);
   context = () => {}; // TEMP how to get rid of this?
 
   getShaderSegmentColor = (id: bigint, color: Float32Array) => {
-    id; // TODO
     const { shader, parameters } = this.getSegmentColorShader(this.context);
     if (shader === null) return color;
     parameters;
@@ -611,6 +672,9 @@ vColor = segmentColor(uColor);
     );
     positionBuffer.bindToVertexAttrib(shader.attribute("aVertexPosition"), 2);
     gl.uniform4fv(shader.uniform("uColor"), color);
+
+    this.segmentationColorUserShader.setSegmentPropertyUniforms(id, gl, shader);
+
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     const data = new Uint8Array(4);
     // TODO can I read straight to float?
@@ -1150,7 +1214,8 @@ export class SegmentationUserLayer extends Base {
       this.displayState.renderScaleTarget.toJSON();
     x[json_keys.CROSS_SECTION_RENDER_SCALE_JSON_KEY] =
       this.sliceViewRenderScaleTarget.toJSON();
-    x[json_keys.SEGMENT_COLOR_SHADER_JSON_KEY] = this.displayState.fragmentSegmentColor.toJSON();
+    x[json_keys.SEGMENT_COLOR_SHADER_JSON_KEY] =
+      this.displayState.fragmentSegmentColor.toJSON();
 
     const { linkedSegmentationGroup, linkedSegmentationColorGroup } =
       this.displayState;

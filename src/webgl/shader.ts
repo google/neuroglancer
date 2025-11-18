@@ -137,6 +137,8 @@ export function getShader(
       }
     }
 
+    console.log("we got a shader error", log);
+
     throw new ShaderCompilationError(
       shaderType,
       source,
