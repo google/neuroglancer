@@ -95,7 +95,7 @@ class ZarrV2Creator implements ZarrCreator {
         shape: commonMetadata.shape.map((dim: number, j: number) =>
           Math.ceil(dim / downsampleCoeffs[j]),
         ),
-        chunks: [64, 64, 64],
+        chunks: new Array(commonMetadata.shape.length).fill(64),
         dtype: dataTypeToZarrV2Dtype[commonMetadata.dataType],
         compressor: this._buildV2ZarrayCompressorMetadata(zarrMetadata),
         transform: commonMetadata.voxelSize.map(
@@ -238,7 +238,7 @@ class ZarrV3Creator implements ZarrCreator {
         shape: commonMetadata.shape.map((dim: number, j: number) =>
           Math.ceil(dim / downsampleCoeffs[j]),
         ),
-        chunks: [64, 64, 64],
+        chunks: new Array(commonMetadata.shape.length).fill(64),
         dataType: dataTypeToZarrV3Dtype[commonMetadata.dataType],
         transform: commonMetadata.voxelSize.map(
           (v: number, j: number) => v * downsampleCoeffs[j],

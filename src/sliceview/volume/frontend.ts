@@ -15,6 +15,8 @@
  */
 
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import type { CoordinateSpace } from "#src/coordinate_transform.js";
+import type { CommonCreationMetadata } from "#src/datasource/index.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import type { SliceViewChunkSpecification } from "#src/sliceview/base.js";
 import {
@@ -405,6 +407,57 @@ export abstract class MultiscaleVolumeChunkSource extends MultiscaleSliceViewChu
 > {
   abstract dataType: DataType;
   abstract volumeType: VolumeType;
+
+  getCreationMetadata(
+    layerName: string,
+    inputSpace: CoordinateSpace,
+  ): CommonCreationMetadata {
+    const rank = this.rank;
+    const identityOptions = {
+      displayRank: rank,
+      multiscaleToViewTransform: new Float32Array(rank * rank).fill(0),
+      modelChannelDimensionIndices: [],
+    };
+    for (let i = 0; i < rank; ++i)
+      identityOptions.multiscaleToViewTransform[i * rank + i] = 1;
+
+    const scales = this.getSources(identityOptions)[0];
+    if (!scales || scales.length === 0) {
+      throw new Error("Data source has no resolution scales.");
+    }
+
+    const highResSource = scales[0];
+    const shape = Array.from(highResSource.chunkSource.spec.upperVoxelBound);
+    const highResTransform = highResSource.chunkToMultiscaleTransform;
+    const voxelSize = new Array(rank);
+    for (let i = 0; i < rank; ++i) {
+      voxelSize[i] = highResTransform[i * (rank + 1) + i];
+    }
+
+    const numScales = scales.length;
+    const downsamplingFactor = new Array(rank).fill(1);
+    if (scales.length > 1) {
+      const lowResSource = scales[1];
+      const lowResTransform = lowResSource.chunkToMultiscaleTransform;
+      for (let i = 0; i < rank; ++i) {
+        const highResScale = highResTransform[i * (rank + 1) + i];
+        const lowResScale = lowResTransform[i * (rank + 1) + i];
+        if (highResScale !== 0) {
+          downsamplingFactor[i] = Math.round(lowResScale / highResScale);
+        }
+      }
+    }
+
+    return {
+      shape,
+      dataType: this.dataType,
+      voxelSize: Array.from(inputSpace.scales),
+      voxelUnit: Array.from(inputSpace.units),
+      numScales,
+      downsamplingFactor,
+      name: `${layerName}_copy`,
+    };
+  }
 }
 
 export { VolumeChunk };

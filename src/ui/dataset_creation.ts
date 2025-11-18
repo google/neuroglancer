@@ -14,13 +14,19 @@
  * limitations under the License.
  */
 
+import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import type {
   CreateDataSourceOptions,
   CommonCreationMetadata,
   DataSourceCreationState,
 } from "#src/datasource/index.js";
-import type { LayerListSpecification } from "#src/layer/index.js";
+import type {
+  LayerListSpecification,
+  ManagedUserLayer,
+} from "#src/layer/index.js";
+import type { LayerDataSource } from "#src/layer/layer_data_source.js";
 import { Overlay } from "#src/overlay.js";
+import type { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import { StatusMessage } from "#src/status.js";
 import { TrackableValue } from "#src/trackable_value.js";
 import { TrackableVec3 } from "#src/trackable_vec3.js";
@@ -278,11 +284,34 @@ export class DatasetCreationDialog extends Overlay {
             },
           },
           (_value, parentElement) => {
-            const compatibleLayers =
-              this.manager.rootLayers.managedLayers.filter(
-                (layer) => layer.getCreationMetadata() !== undefined,
-              );
-            if (compatibleLayers.length === 0) return;
+            const compatibleDataSources: {
+              layer: ManagedUserLayer;
+              dataSource: LayerDataSource;
+              inputSpace: CoordinateSpace;
+              volume: MultiscaleVolumeChunkSource;
+            }[] = [];
+
+            for (const layer of this.manager.rootLayers.managedLayers) {
+              if (!layer.layer) continue;
+              for (const dataSource of layer.layer.dataSources) {
+                const loadState = dataSource.loadState;
+                if (loadState === undefined || loadState.error !== undefined)
+                  continue;
+
+                for (const subsource of loadState.dataSource.subsources) {
+                  const volume = subsource.subsource.volume;
+                  if (volume) {
+                    compatibleDataSources.push({
+                      layer,
+                      dataSource,
+                      inputSpace:
+                        loadState.dataSource.modelTransform.inputSpace,
+                      volume,
+                    });
+                  }
+                }
+              }
+            }
 
             const label = document.createElement("label");
             label.textContent = "Copy metadata from data source: ";
@@ -294,20 +323,25 @@ export class DatasetCreationDialog extends Overlay {
             defaultOption.value = "";
             select.appendChild(defaultOption);
 
-            compatibleLayers.forEach((layer) => {
+            compatibleDataSources.forEach(({ layer, dataSource }, index) => {
               const option = document.createElement("option");
-              option.textContent = layer.name;
-              option.value = layer.name;
+              option.textContent = `${layer.name} - ${dataSource.spec.url}`;
+              option.value = index.toString();
               select.appendChild(option);
             });
 
             this.registerEventListener(select, "change", () => {
-              if (!select.value) return;
-              const layer = this.manager.rootLayers.getLayerByName(
-                select.value,
-              );
-              if (layer) {
-                const metadata = layer.getCreationMetadata();
+              const selectedIndex = parseInt(select.value, 10);
+              if (selectedIndex === -1) return;
+
+              const selection = compatibleDataSources[selectedIndex];
+              if (selection) {
+                const { layer, inputSpace, volume } = selection;
+
+                const metadata = volume.getCreationMetadata(
+                  layer.name,
+                  inputSpace,
+                );
                 if (metadata) {
                   this.state.rank.value = metadata.shape.length;
                   this.state.shape.value = metadata.shape;
