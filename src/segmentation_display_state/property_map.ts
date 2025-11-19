@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import { MultiscaleAnnotationSource } from "#src/annotation/frontend_source.js";
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { ChunkSource } from "#src/chunk_manager/frontend.js";
 import { HashMapUint64 } from "#src/gpu_hash/hash_table.js";
@@ -22,8 +21,6 @@ import { GPUHashTable, HashMapShaderManager } from "#src/gpu_hash/shader.js";
 import type { IndexedSegmentProperty } from "#src/segmentation_display_state/base.js";
 import {
   makeCachedLazyDerivedWatchableValue,
-  WatchableValue,
-  WatchableValueInterface,
 } from "#src/trackable_value.js";
 import type { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import type { Uint64Set } from "#src/uint64_set.js";
@@ -1351,9 +1348,7 @@ export function queryIncludesColumn(
 }
 
 export class SegmentationColorUserShader extends RefCounted {
-  activeProperties: WatchableValueInterface<
-    [number, InlineSegmentNumericalProperty][]
-  >;
+  activeProperties;
 
   changed = new Signal();
 
@@ -1388,24 +1383,30 @@ export class SegmentationColorUserShader extends RefCounted {
   }
 
   defineShader(builder: ShaderBuilder) {
-    for (const [i, property] of this.activeProperties.value) {
-      builder.addVertexCode(
-        `highp ${getShaderOutputType(property.dataType)} segmentNumericalProperty${i};`,
-      );
+    const { numericalProperties, tags } = this.activeProperties.value;
+    for (const [i, property] of numericalProperties) {
       builder.addUniform(
         `highp ${getShaderOutputType(property.dataType)}`,
         `uSegmentNumericalProperty${i}`,
       );
+      builder.addVertexCode(
+        `highp ${getShaderOutputType(property.dataType)} segmentNumericalProperty${i};`,
+      );
+    }
+    for (const [i] of tags) {
+      builder.addUniform(`highp uint`, `uSegmentTagProperty${i}`);
+      builder.addVertexCode(`highp uint segmentTagProperty${i};`);
     }
     let loadSegmentPropertiesCode = `
 void loadSegmentProperties() {
-${this.activeProperties.value.map(([i]) => `segmentNumericalProperty${i} = uSegmentNumericalProperty${i};`).join("\n")}
+${numericalProperties.map(([i]) => `segmentNumericalProperty${i} = uSegmentNumericalProperty${i};`).join("\n")}
+${tags.map(([i]) => `segmentTagProperty${i} = uSegmentTagProperty${i};`).join("\n")}
 }`;
     builder.addVertexCode(loadSegmentPropertiesCode);
     builder.addVertexCode(this.segmentColorShaderCode);
   }
 
-    setSegmentPropertyUniforms(id: bigint, gl: GL, shader: ShaderProgram) {
+  setSegmentPropertyUniforms(id: bigint, gl: GL, shader: ShaderProgram) {
     const {
       segmentPropertyMap: { value: segmentPropertyMap },
     } = this.displayState.segmentationGroupState.value;
@@ -1435,7 +1436,6 @@ ${this.activeProperties.value.map(([i]) => `segmentNumericalProperty${i} = uSegm
       const tagIndices = index !== -1 ? values[index] : "";
       for (let i = 0, length = tagIndices.length; i < length; ++i) {
         const tagIdx = tagIndices.charCodeAt(i);
-        // console.log('enabling tagIdx', tagIdx);
         gl.uniform1ui(shader.uniform(`uSegmentTagProperty${tagIdx}`), 1);
       }
     }
@@ -1459,6 +1459,7 @@ export class SegmentationColorUserShaderTexture extends SegmentationColorUserSha
         const segmentProperties =
           this.displayState.segmentationGroupState.value.segmentPropertyMap
             .value;
+          console.log("sergment properties", segmentProperties);
         const inlineProperties =
           segmentProperties?.segmentPropertyMap.inlineProperties;
         if (!segmentProperties || !inlineProperties) {
@@ -1468,16 +1469,16 @@ export class SegmentationColorUserShaderTexture extends SegmentationColorUserSha
           this.segmentPropertyTextures.clear();
           return;
         }
-        const activeProperties = this.activeProperties.value;
+        const { numericalProperties } = this.activeProperties.value;
         for (const [id, [, texture]] of this.segmentPropertyTextures) {
-          if (!activeProperties.some(([id2]) => id === id2)) {
+          if (!numericalProperties.some(([id2]) => id === id2)) {
             texture.dispose();
             this.segmentPropertyTextures.delete(id);
           }
         }
-        for (const [i, property] of activeProperties) {
+        for (const [i, property] of numericalProperties) {
           if (!this.segmentPropertyTextures.has(i)) {
-            const hashMap = propertyToHashMap(property, inlineProperties);
+            const hashMap = numericalPropertyToHashMap(property, inlineProperties);
             const gpuTexture = GPUHashTable.get(this.gl, hashMap);
             const shaderManager = new HashMapShaderManager(
               "SegmentNumericalProperty" + i,
@@ -1491,18 +1492,22 @@ export class SegmentationColorUserShaderTexture extends SegmentationColorUserSha
   }
 
   defineShader(builder: ShaderBuilder) {
+    const { numericalProperties, tags } = this.activeProperties.value;
     for (const [, [shaderManager]] of this.segmentPropertyTextures) {
       shaderManager.defineShader(builder);
     }
-    for (const [i, property] of this.activeProperties.value) {
+    for (const [i, property] of numericalProperties) {
       builder.addFragmentCode(
         `highp ${getShaderOutputType(property.dataType)} segmentNumericalProperty${i};`, // TODO this line is shared but its vertex vs fragment
       );
     }
+    for (const [i] of tags) {
+      builder.addFragmentCode(`highp uint segmentTagProperty${i};`);
+    }
     builder.addFragmentCode(this.segmentColorShaderCode);
     let loadSegmentPropertiesCode = `
 void loadSegmentProperties(uint64_t id) {
-${Array.from(
+${Array.from( // TODO this code is assuming numerical property, should we abstract it? should we move away from indices?
   this.segmentPropertyTextures,
   ([i, [shaderManager]]) => `
 uint64_t segmentNumericalProperty64${i};
@@ -1524,7 +1529,7 @@ segmentNumericalProperty${i} = segmentNumericalProperty64${i}.value[0]; // todo 
   }
 }
 
-function propertyToHashMap(
+function numericalPropertyToHashMap(
   property: InlineSegmentNumericalProperty,
   inlineProperties: InlineSegmentPropertyMap,
 ) {
@@ -1544,6 +1549,28 @@ function propertyToHashMap(
   }
   return propertyValueMap;
 }
+
+function tagPropertyToHashMap(
+  property: InlineSegmentNumericalProperty,
+  inlineProperties: InlineSegmentPropertyMap,
+) {
+  const floatArr = new Float64Array(1);
+  const uint64Arr = new BigUint64Array(floatArr.buffer);
+  const floatToBigInt = (value: number) => {
+    floatArr[0] = value;
+    return uint64Arr[0];
+  };
+  floatToBigInt;
+  const propertyValueMap = new HashMapUint64();
+  for (const [segmentIndex, value] of property.values.entries()) {
+    if (Number.isNaN(value)) continue;
+    // const valueBigInt = Number.isInteger(value) ? BigInt(value) : floatToBigInt(value);
+    const valueBigInt = BigInt(value);
+    propertyValueMap.set(inlineProperties.ids[segmentIndex], valueBigInt);
+  }
+  return propertyValueMap;
+}
+tagPropertyToHashMap;
 
 function getShaderOutputType(ioType: DataType): string {
   switch (ioType) {
@@ -1567,44 +1594,28 @@ function extractUsedSegmentProperties(
   segmentProperties: PreprocessedSegmentPropertyMap | undefined,
   code: string,
 ) {
-  const res: [number, InlineSegmentNumericalProperty][] = [];
+  const res = {
+    tags: [] as [number, string][],
+    numericalProperties: [] as [number, InlineSegmentNumericalProperty][],
+  };
   if (!segmentProperties) return res;
-  // const res = {
-  //   tags: [] as string[],
-  //   numericalProperties: [] as [number, InlineSegmentNumericalProperty][],
-  // };
   const { numericalProperties, tags } = segmentProperties;
-  tags;
-  // if (tags) {
-  //   for (const tag of tags.tags) {
-  //     if (code.includes(`tag("${tag}")`)) {
-  //       res.tags.push(tag);
-  //     }
-  //   }
-  // }
-
-  const { inlineProperties } = segmentProperties.segmentPropertyMap;
-  if (!inlineProperties) return res;
-  // numericalProperties;
-
+  if (tags) {
+    for (const [i, tag] of tags.tags.entries()) {
+      if (code.includes(`tag("${tag}")`)) {
+        res.tags.push([i, tag]);
+      }
+    }
+  }
   for (const [i, property] of numericalProperties.entries()) {
     if (code.includes(`prop("${property.id}")`)) {
-      res.push([i, property]);
-      //     console.log("Found used property:", i, property);
-      //     const propertyValueMap = new HashMapUint64();
-      //     for (const [segmentIndex, value] of property.values.entries()) {
-      //       if (Number.isNaN(value)) continue;
-      //       // const valueBigInt = Number.isInteger(value) ? BigInt(value) : floatToBigInt(value);
-      //       const valueBigInt = BigInt(value);
-      //       propertyValueMap.set(inlineProperties.ids[segmentIndex], valueBigInt);
-      //     }
-      //     console.log("propertyValueMap:", propertyValueMap);
+      res.numericalProperties.push([i, property]);
     }
   }
   return res;
 }
 
-
+// TODO, this could use activeProperties instead
 function shaderCodeWithPropertyPreprocessing(
   segmentProperties: PreprocessedSegmentPropertyMap | undefined,
   code: string,
@@ -1613,7 +1624,7 @@ function shaderCodeWithPropertyPreprocessing(
   const { numericalProperties, tags } = segmentProperties;
   if (tags) {
     for (const [i, tag] of tags.tags.entries()) {
-      code = code.replaceAll(`tag("${tag}")`, `uSegmentTagProperty${i} == 1u`);
+      code = code.replaceAll(`tag("${tag}")`, `segmentTagProperty${i} == 1u`);
     }
   }
   for (const [i, property] of numericalProperties.entries()) {
