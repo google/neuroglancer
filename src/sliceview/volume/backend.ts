@@ -263,6 +263,11 @@ export class VolumeChunkSource
 
       for (let i = 0; i < indices.length; ++i) {
         const idx = indices[i]!;
+        if (idx < 0 || idx >= uncompressedData.length) {
+          throw new Error(
+            `applyEdits: index ${idx} out of bounds for chunk ${chunkKey}`,
+          );
+        }
         oldValuesArray[i] = uncompressedData[idx];
         if (dataType === DataType.UINT32) {
           (uncompressedData as Uint32Array)[idx] = Number(values[i]!);
@@ -298,7 +303,7 @@ export class VolumeChunkSource
       const data = chunk.data as TypedArray;
       for (let i = 0; i < indices.length; ++i) {
         const idx = indices[i]!;
-        if (idx < 0 || idx >= data.byteLength) {
+        if (idx < 0 || idx >= data.length) {
           throw new Error(
             `applyEdits: index ${idx} out of bounds for chunk ${chunkKey}`,
           );

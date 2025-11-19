@@ -2,7 +2,6 @@
 
 ### priority
 
-
 ### later
 
 - add preview for the undo/redo

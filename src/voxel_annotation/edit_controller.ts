@@ -421,7 +421,7 @@ export class VoxelEditController extends SharedObject {
     ) => {
       const subQueue: [number, number][] = [];
       // The bounding box for the local fill is defined in the (u, v) coordinate system
-      const halfSize = requiredThickness * 2; // multiply by 2 to avoid small artefacts
+      const halfSize = requiredThickness * 2; // multiply by 2 to avoid small artifacts
       const startKey = `${startU},${startV}`;
       if (visited.has(startKey)) return;
 
