@@ -36,6 +36,8 @@ import type {
   InlineSegmentNumericalProperty,
   InlineSegmentProperty,
   PreprocessedSegmentPropertyMap,
+  SegmentationColorUserShader,
+  SegmentationColorUserShaderManager,
 } from "#src/segmentation_display_state/property_map.js";
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
 import type { TrackableAlphaValue } from "#src/trackable_alpha.js";
@@ -203,6 +205,8 @@ export interface SegmentationDisplayState {
   segmentationGroupState: WatchableValueInterface<SegmentationGroupState>;
   segmentationColorGroupState: WatchableValueInterface<SegmentationColorGroupState>;
   segmentColorShaderControlState: ShaderControlState;
+
+  segmentationColorUserShader: SegmentationColorUserShaderManager;
 
   selectSegment: (id: bigint, pin: boolean | "toggle") => void;
   filterBySegmentLabel: (id: bigint) => void;

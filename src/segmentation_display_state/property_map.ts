@@ -19,9 +19,7 @@ import { ChunkSource } from "#src/chunk_manager/frontend.js";
 import { HashMapUint64 } from "#src/gpu_hash/hash_table.js";
 import { GPUHashTable, HashMapShaderManager } from "#src/gpu_hash/shader.js";
 import type { IndexedSegmentProperty } from "#src/segmentation_display_state/base.js";
-import {
-  makeCachedLazyDerivedWatchableValue,
-} from "#src/trackable_value.js";
+import { makeCachedLazyDerivedWatchableValue } from "#src/trackable_value.js";
 import type { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import type { Uint64Set } from "#src/uint64_set.js";
 import type {
@@ -1347,12 +1345,30 @@ export function queryIncludesColumn(
   );
 }
 
-export class SegmentationColorUserShader extends RefCounted {
-  activeProperties;
-
+export class SegmentationColorUserShaderManager extends RefCounted {
   changed = new Signal();
 
-  constructor(protected displayState: SegmentationDisplayState) {
+  public segmentPropertyTextures = new Map<
+    number,
+    [HashMapShaderManager, GPUHashTable<HashMapUint64>]
+  >();
+
+  activeProperties;
+
+  protected get segmentColorShaderCode() {
+    const { code } =
+      this.displayState.segmentColorShaderControlState.parseResult.value;
+    const segmentProperties =
+      this.displayState.segmentationGroupState.value.segmentPropertyMap.value;
+    return shaderCodeWithLineDirective(
+      shaderCodeWithPropertyPreprocessing(segmentProperties, code),
+    );
+  }
+
+  constructor(
+    private displayState: SegmentationDisplayState,
+    private gl: GL,
+  ) {
     super();
     this.activeProperties = this.registerDisposer(
       makeCachedLazyDerivedWatchableValue(
@@ -1367,99 +1383,12 @@ export class SegmentationColorUserShader extends RefCounted {
       ),
     );
 
-    this.activeProperties.changed.add(() => {
-      this.changed.dispatch();
-    });
-  }
-
-  protected get segmentColorShaderCode() {
-    const { code } =
-      this.displayState.segmentColorShaderControlState.parseResult.value;
-    const segmentProperties =
-      this.displayState.segmentationGroupState.value.segmentPropertyMap.value;
-    return shaderCodeWithLineDirective(
-      shaderCodeWithPropertyPreprocessing(segmentProperties, code),
-    );
-  }
-
-  defineShader(builder: ShaderBuilder) {
-    const { numericalProperties, tags } = this.activeProperties.value;
-    for (const [i, property] of numericalProperties) {
-      builder.addUniform(
-        `highp ${getShaderOutputType(property.dataType)}`,
-        `uSegmentNumericalProperty${i}`,
-      );
-      builder.addVertexCode(
-        `highp ${getShaderOutputType(property.dataType)} segmentNumericalProperty${i};`,
-      );
-    }
-    for (const [i] of tags) {
-      builder.addUniform(`highp uint`, `uSegmentTagProperty${i}`);
-      builder.addVertexCode(`highp uint segmentTagProperty${i};`);
-    }
-    let loadSegmentPropertiesCode = `
-void loadSegmentProperties() {
-${numericalProperties.map(([i]) => `segmentNumericalProperty${i} = uSegmentNumericalProperty${i};`).join("\n")}
-${tags.map(([i]) => `segmentTagProperty${i} = uSegmentTagProperty${i};`).join("\n")}
-}`;
-    builder.addVertexCode(loadSegmentPropertiesCode);
-    builder.addVertexCode(this.segmentColorShaderCode);
-  }
-
-  setSegmentPropertyUniforms(id: bigint, gl: GL, shader: ShaderProgram) {
-    const {
-      segmentPropertyMap: { value: segmentPropertyMap },
-    } = this.displayState.segmentationGroupState.value;
-    if (!segmentPropertyMap) return;
-
-    const index = segmentPropertyMap.getSegmentInlineIndex(id);
-    const {
-      labels,
-      tags: tagsProperty,
-      numericalProperties,
-    } = segmentPropertyMap;
-    labels; // TODO, support labels
-    for (const [i, property] of numericalProperties.entries()) {
-      const value = index !== -1 ? property.values[index] : 0;
-      const uniformSetter = getShaderUniformValueSetter(gl, property.dataType);
-      uniformSetter.call(
-        gl,
-        shader.uniform(`uSegmentNumericalProperty${i}`),
-        value,
-      );
-    }
-    if (tagsProperty !== undefined) {
-      const { values, tags } = tagsProperty;
-      for (let i = 0; i < tags.length; ++i) {
-        gl.uniform1ui(shader.uniform(`uSegmentTagProperty${i}`), 0);
-      }
-      const tagIndices = index !== -1 ? values[index] : "";
-      for (let i = 0, length = tagIndices.length; i < length; ++i) {
-        const tagIdx = tagIndices.charCodeAt(i);
-        gl.uniform1ui(shader.uniform(`uSegmentTagProperty${tagIdx}`), 1);
-      }
-    }
-  }
-}
-
-export class SegmentationColorUserShaderTexture extends SegmentationColorUserShader {
-  public segmentPropertyTextures = new Map<
-    number,
-    [HashMapShaderManager, GPUHashTable<HashMapUint64>]
-  >();
-
-  constructor(
-    displayState: SegmentationDisplayState,
-    private gl: GL,
-  ) {
-    super(displayState);
-
     this.registerDisposer(
       this.activeProperties.changed.add(() => {
         const segmentProperties =
           this.displayState.segmentationGroupState.value.segmentPropertyMap
             .value;
-          console.log("sergment properties", segmentProperties);
+        console.log("sergment properties", segmentProperties);
         const inlineProperties =
           segmentProperties?.segmentPropertyMap.inlineProperties;
         if (!segmentProperties || !inlineProperties) {
@@ -1478,7 +1407,10 @@ export class SegmentationColorUserShaderTexture extends SegmentationColorUserSha
         }
         for (const [i, property] of numericalProperties) {
           if (!this.segmentPropertyTextures.has(i)) {
-            const hashMap = numericalPropertyToHashMap(property, inlineProperties);
+            const hashMap = numericalPropertyToHashMap(
+              property,
+              inlineProperties,
+            );
             const gpuTexture = GPUHashTable.get(this.gl, hashMap);
             const shaderManager = new HashMapShaderManager(
               "SegmentNumericalProperty" + i,
@@ -1491,23 +1423,27 @@ export class SegmentationColorUserShaderTexture extends SegmentationColorUserSha
     );
   }
 
-  defineShader(builder: ShaderBuilder) {
+  defineShader(builder: ShaderBuilder, fragment: boolean) {
     const { numericalProperties, tags } = this.activeProperties.value;
     for (const [, [shaderManager]] of this.segmentPropertyTextures) {
-      shaderManager.defineShader(builder);
+      shaderManager.defineShader(builder, fragment);
     }
+    const addCode = fragment
+      ? builder.addFragmentCode.bind(builder)
+      : builder.addVertexCode.bind(builder);
     for (const [i, property] of numericalProperties) {
-      builder.addFragmentCode(
+      addCode(
         `highp ${getShaderOutputType(property.dataType)} segmentNumericalProperty${i};`, // TODO this line is shared but its vertex vs fragment
       );
     }
     for (const [i] of tags) {
-      builder.addFragmentCode(`highp uint segmentTagProperty${i};`);
+      addCode(`highp uint segmentTagProperty${i};`);
     }
-    builder.addFragmentCode(this.segmentColorShaderCode);
+    addCode(this.segmentColorShaderCode);
     let loadSegmentPropertiesCode = `
 void loadSegmentProperties(uint64_t id) {
-${Array.from( // TODO this code is assuming numerical property, should we abstract it? should we move away from indices?
+${Array.from(
+  // TODO this code is assuming numerical property, should we abstract it? should we move away from indices?
   this.segmentPropertyTextures,
   ([i, [shaderManager]]) => `
 uint64_t segmentNumericalProperty64${i};
@@ -1516,7 +1452,7 @@ segmentNumericalProperty${i} = segmentNumericalProperty64${i}.value[0]; // todo 
 `,
 ).join("\n")}
 }`;
-    builder.addFragmentCode(loadSegmentPropertiesCode);
+    addCode(loadSegmentPropertiesCode);
   }
 
   enable(gl: GL, shader: ShaderProgram) {
@@ -1635,21 +1571,3 @@ function shaderCodeWithPropertyPreprocessing(
   }
   return code;
 }
-
-const getShaderUniformValueSetter = (gl: GL, ioType: DataType) => {
-  switch (ioType) {
-    case DataType.UINT8:
-    case DataType.UINT16:
-    case DataType.UINT32:
-      return gl.uniform1ui;
-    case DataType.INT8:
-    case DataType.INT16:
-    case DataType.INT32:
-      return gl.uniform1i;
-    case DataType.FLOAT32:
-      return gl.uniform1f;
-    case DataType.UINT64:
-      throw new Error("nope");
-    // return gl.uniform
-  }
-};

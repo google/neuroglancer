@@ -70,6 +70,7 @@ import {
   getPreprocessedSegmentPropertyMap,
   getShaderOutputType,
   SegmentationColorUserShader,
+  SegmentationColorUserShaderManager,
 } from "#src/segmentation_display_state/property_map.js";
 import { LocalSegmentationGraphSource } from "#src/segmentation_graph/local.js";
 import { VisibleSegmentEquivalencePolicy } from "#src/segmentation_graph/segment_id.js";
@@ -432,6 +433,8 @@ vec4 segmentColor(vec4 color) {
 class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   private getSegmentColorShader;
 
+  segmentationColorUserShader: SegmentationColorUserShaderManager;
+
   constructor(public layer: SegmentationUserLayer) {
     // Even though `SegmentationUserLayer` assigns this to its `displayState` property, redundantly
     // assign it here first in order to allow it to be accessed by `segmentationGroupState`.
@@ -483,8 +486,6 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         "originalSegmentationColorGroupState",
       ),
     );
-
-    this.getSegmentColorShader = this.makeSegmentColorShaderGetter();
 
     this.selectSegment = layer.selectSegment;
     this.filterBySegmentLabel = layer.filterBySegmentLabel;
@@ -544,29 +545,18 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
       ),
     );
 
-    // this.segmentPropertyMap.changed.add(() => {
-    //   console.log(
-    //     "segmentPropertyMap changed",
-    //     this.segmentPropertyMap.value,
-    //   );
-    // });
+    // so 2d/3d share GL context
+    // the offscreen canvas is a separate context that doesn't share textures
+    this.segmentationColorUserShader = new SegmentationColorUserShaderManager(this, this.layer.manager.chunkManager.chunkQueueManager.gl);
+  
+    this.offscreenGL = initializeWebGL(new OffscreenCanvas(1, 1));
+    this.offscreenSegmentationColorUserShader = new SegmentationColorUserShaderManager(this, this.offscreenGL);
+    this.getSegmentColorShader = this.makeSegmentColorShaderGetter();
 
-    // this.segmentationGroupState.changed.add(() => {
-    //   console.log(
-    //     "segmentationGroupState changed",
-    //     this.segmentationGroupState.value,
-    //   );
-    // });
+  };
 
-    // this.segmentationGroupState.value.segmentPropertyMap.changed.add(() => {
-    //   console.log(
-    //     "segmentationGroupState.value.segmentPropertyMap changed",
-    //     this.segmentationGroupState.value,
-    //   );
-    // });
-
-    this.segmentationColorUserShader = new SegmentationColorUserShader(this);
-  }
+  offscreenGL;
+  offscreenSegmentationColorUserShader;
 
   segmentSelectionState = new SegmentSelectionState();
   selectedAlpha = trackableAlphaValue(0.5);
@@ -597,8 +587,6 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   useTempSegmentStatedColors2d: SharedWatchableValue<boolean>;
   hasVolume = new TrackableBoolean(false, false);
 
-  segmentationColorUserShader;
-
   filterBySegmentLabel: (id: bigint) => void;
 
   moveToSegment = (id: bigint) => {
@@ -606,14 +594,13 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   };
 
   makeSegmentColorShaderGetter = () => {
-    const gl = initializeWebGL(new OffscreenCanvas(1, 1));
     const parameters = this.layer.registerDisposer(
       new AggregateWatchableValue(() => ({
         shaderBuilderState: this.segmentColorShaderControlState.builderState,
         segmentProperties: this.segmentationGroupState.value.segmentPropertyMap,
       })),
     );
-    return parameterizedEmitterDependentShaderGetter(this.layer, gl, {
+    return parameterizedEmitterDependentShaderGetter(this.layer, this.offscreenGL, {
       memoizeKey: `segmentColorShaderTODO`,
       parameters,
       encodeParameters: (p) => {
@@ -621,34 +608,14 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
       },
       shaderError: this.layer.displayState.shaderError, // TODO can I reuse this?
       defineShader: (builder, { }) => {
+        this.offscreenSegmentationColorUserShader.defineShader(builder, /*fragment=*/ false);
         builder.addAttribute("highp vec4", "aVertexPosition");
         builder.addUniform("highp vec4", "uColor");
         builder.addUniform("highp uvec2", "uID");
         builder.addVarying("highp vec4", "vColor");
-
-        let vertexMain = ``;
-
-        // TODO this is basically a copy from mesh/frontend.ts
-        // TODO we error when segment properties is undefined
-//         for (const [i, property] of extractUsedSegmentProperties(
-//           segmentProperties,
-//           shaderBuilderState.parseResult.code,
-//         )) {
-//           builder.addVertexCode(
-//             `highp ${getShaderOutputType(property.dataType)} segmentNumericalProperty${i};`,
-//           );
-//           builder.addUniform(
-//             `highp ${getShaderOutputType(property.dataType)}`,
-//             `uSegmentNumericalProperty${i}`,
-//           );
-//           vertexMain += `
-// segmentNumericalProperty${i} = uSegmentNumericalProperty${i};
-//         `;
-//         }
-        this.segmentationColorUserShader.defineShader(builder);
-        vertexMain += `
+        let vertexMain = `
 gl_Position = aVertexPosition;
-loadSegmentProperties();
+loadSegmentProperties(uint64_t(uID));
 vColor = segmentColor(uColor);
 `;
         builder.addVertexMain(vertexMain);
@@ -673,8 +640,12 @@ vColor = segmentColor(uColor);
     positionBuffer.bindToVertexAttrib(shader.attribute("aVertexPosition"), 2);
     gl.uniform4fv(shader.uniform("uColor"), color);
 
-    this.segmentationColorUserShader.setSegmentPropertyUniforms(id, gl, shader);
-
+    this.offscreenSegmentationColorUserShader.enable(gl, shader);
+    gl.uniform2ui(
+      shader.uniform(`uID`),
+      Number(id & 0xffffffffn),
+      Number(id >> 32n),
+    );
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     const data = new Uint8Array(4);
     // TODO can I read straight to float?

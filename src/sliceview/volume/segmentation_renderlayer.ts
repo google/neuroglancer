@@ -32,7 +32,7 @@ import type {
 import { registerRedrawWhenSegmentationDisplayStateChanged } from "#src/segmentation_display_state/frontend.js";
 import {
   PreprocessedSegmentPropertyMap,
-  SegmentationColorUserShaderTexture,
+  SegmentationColorUserShaderManager,
 } from "#src/segmentation_display_state/property_map.js";
 import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
 import type {
@@ -115,8 +115,6 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
   private temporaryEquivalencesHashMap;
   private gpuEquivalencesHashTable;
   private gpuTemporaryEquivalencesHashTable;
-
-  private segmentationColorUserShader;
 
   constructor(
     multiscaleSource: MultiscaleVolumeChunkSource,
@@ -225,12 +223,7 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
     this.registerDisposer(
       displayState.ignoreNullVisibleSet.changed.add(this.redrawNeeded.dispatch),
     );
-    this.segmentationColorUserShader = this.registerDisposer(
-      new SegmentationColorUserShaderTexture(displayState, this.gl),
-    );
-    this.registerDisposer(
-      this.segmentationColorUserShader.changed.add(this.redrawNeeded.dispatch),
-    );
+    displayState.segmentationColorUserShader.changed.add(this.redrawNeeded.dispatch);
   }
 
   disposed() {
@@ -248,8 +241,7 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
 
   defineShader(builder: ShaderBuilder, parameters: ShaderParameters) {
     this.hashTableManager.defineShader(builder); // here is where they add the hash table code
-
-    this.segmentationColorUserShader.defineShader(builder);
+    this.displayState.segmentationColorUserShader.defineShader(builder, true);
 
     let getUint64Code = `
 uint64_t getUint64DataValue() {
@@ -471,7 +463,7 @@ uint64_t getMappedObjectId(uint64_t value) {
       gl.uniform4fv(shader.uniform("uHighlightColor"), highlightColor);
     }
 
-    this.segmentationColorUserShader.enable(gl, shader);
+    displayState.segmentationColorUserShader.enable(gl, shader);
   }
   endSlice(
     sliceView: SliceView,
