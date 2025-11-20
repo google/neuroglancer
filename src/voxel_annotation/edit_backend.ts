@@ -258,6 +258,13 @@ export class VoxelEditController extends SharedObject {
 
   // --- Start of Downsampling Logic ---
 
+  /**
+   * NOTE: Architecture Limitation
+   * The current downsampling architecture assumes a Many-to-1 (or 1-to-1) mapping between
+   * child chunks and parent chunks. It calculates a single parent chunk key for a given
+   * child chunk.
+   */
+
   private enqueueDownsample(key: string): void {
     if (key.length === 0) return;
     if (!this.downsampleQueueSet.has(key)) {

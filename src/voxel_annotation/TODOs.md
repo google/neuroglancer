@@ -17,7 +17,7 @@
 
 - src/voxel_annotation/edit_backend.ts
   - [x] \_calculateParentUpdate
-  - [ ] \_getParentChunkInfo
+  - [x] \_getParentChunkInfo
   - [ ] downsampleStep
   - [ ] undo/redo
   - [ ] flushPending

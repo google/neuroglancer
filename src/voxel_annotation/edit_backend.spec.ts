@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mat4 } from "#src/util/geom.js";
+import { makeVoxChunkKey } from "#src/voxel_annotation/base.js";
 import { VoxelEditController } from "#src/voxel_annotation/edit_backend.js";
 import type { RPC } from "#src/worker_rpc.js";
 
@@ -364,5 +365,117 @@ describe("VoxelEditController: _calculateParentUpdate", () => {
       Uint32Array,
       [-2, 0, 0],
     );
+  });
+
+  it("Fractional Scale: Aggregates across fractional boundaries (2.5x)", () => {
+    runScenario(
+      [2.5, 1, 1],
+      [2, 1, 1],
+      [[[1, 1, 2, 2, 2]]],
+      [
+        { x: 0, y: 0, z: 0, val: 1 },
+        { x: 1, y: 0, z: 0, val: 2 },
+      ],
+    );
+  });
+});
+
+describe("VoxelEditController: _getParentChunkInfo (Coordinate Mapping)", () => {
+  let controller: VoxelEditController;
+
+  const setupController = (resConfigs: any[]) => {
+    (mockRpc.get as any).mockImplementation((id: number) => ({
+      rpcId: id,
+      spec: { rank: 3, chunkDataSize: new Uint32Array([2, 2, 2]), dataType: 0 },
+      applyEdits: vi.fn(),
+      getChunk: vi.fn(),
+    }));
+    controller = new VoxelEditController(mockRpc, { resolutions: resConfigs });
+    return controller;
+  };
+
+  it("Standard Alignment: 2x scaling", () => {
+    const childRes = resConfig(0, [1, 1, 1], [4, 4, 4]);
+    const parentRes = resConfig(1, [2, 2, 2], [4, 4, 4]);
+
+    setupController([childRes, parentRes]);
+    const getInfo = (controller as any)._getParentChunkInfo.bind(controller);
+
+    let res = getInfo(makeVoxChunkKey("0,0,0", 0), childRes);
+    expect(res.chunkKey).toBe("0,0,0");
+    expect(res.parentKey).toBe(makeVoxChunkKey("0,0,0", 1));
+
+    res = getInfo(makeVoxChunkKey("1,0,0", 0), childRes);
+    expect(res.chunkKey).toBe("0,0,0");
+
+    res = getInfo(makeVoxChunkKey("2,0,0", 0), childRes);
+    expect(res.chunkKey).toBe("1,0,0");
+  });
+
+  it("Matrix Translation: Parent Origin Shift", () => {
+    const childRes = resConfig(0, [1, 1, 1], [4, 4, 4]);
+    const parentRes = resConfig(1, [1, 1, 1], [4, 4, 4], [-4, 0, 0]);
+
+    setupController([childRes, parentRes]);
+    const getInfo = (controller as any)._getParentChunkInfo.bind(controller);
+
+    const res = getInfo(makeVoxChunkKey("0,0,0", 0), childRes);
+    expect(res.chunkKey).toBe("1,0,0");
+  });
+
+  it("Negative Coordinates", () => {
+    const childRes = resConfig(0, [1, 1, 1], [4, 4, 4]);
+    const parentRes = resConfig(1, [1, 1, 1], [4, 4, 4]);
+
+    setupController([childRes, parentRes]);
+    const getInfo = (controller as any)._getParentChunkInfo.bind(controller);
+
+    const res = getInfo(makeVoxChunkKey("-1,-1,-1", 0), childRes);
+    expect(res.chunkKey).toBe("-1,-1,-1");
+  });
+
+  it("Max LOD Boundary", () => {
+    const childRes = resConfig(0, [1, 1, 1], [4, 4, 4]);
+    setupController([childRes]);
+    const getInfo = (controller as any)._getParentChunkInfo.bind(controller);
+
+    const res = getInfo(makeVoxChunkKey("0,0,0", 0), childRes);
+    expect(res).toBeNull();
+  });
+
+  it("Odd Integer Scale (3x)", () => {
+    const childRes = resConfig(0, [1, 1, 1], [2, 2, 2]);
+    const parentRes = resConfig(1, [3, 3, 3], [2, 2, 2]);
+
+    setupController([childRes, parentRes]);
+    const getInfo = (controller as any)._getParentChunkInfo.bind(controller);
+
+    const res = getInfo(makeVoxChunkKey("3,0,0", 0), childRes);
+    expect(res.chunkKey).toBe("1,0,0");
+  });
+
+  it("Fractional Scale (2.5x)", () => {
+    const childRes = resConfig(0, [1, 1, 1], [10, 10, 10]);
+    const parentRes = resConfig(1, [2.5, 2.5, 2.5], [10, 10, 10]);
+
+    setupController([childRes, parentRes]);
+    const getInfo = (controller as any)._getParentChunkInfo.bind(controller);
+
+    let res = getInfo(makeVoxChunkKey("2,0,0", 0), childRes);
+    expect(res.chunkKey).toBe("0,0,0");
+
+    res = getInfo(makeVoxChunkKey("3,0,0", 0), childRes);
+    expect(res.chunkKey).toBe("1,0,0");
+  });
+
+  it("Anisotropic Scale (1x, 2x, 5x)", () => {
+    const childRes = resConfig(0, [1, 1, 1], [10, 10, 10]);
+    const parentRes = resConfig(1, [1, 2, 5], [10, 10, 10]);
+
+    setupController([childRes, parentRes]);
+    const getInfo = (controller as any)._getParentChunkInfo.bind(controller);
+
+    const res = getInfo(makeVoxChunkKey("1,1,1", 0), childRes);
+    expect(res.chunkKey).toBe("1,0,0");
   });
 });
