@@ -380,7 +380,7 @@ describe("VoxelEditController: _calculateParentUpdate", () => {
   });
 });
 
-describe("VoxelEditController: _getParentChunkInfo (Coordinate Mapping)", () => {
+describe("VoxelEditController: _getParentChunkInfo", () => {
   let controller: VoxelEditController;
 
   const setupController = (resConfigs: any[]) => {
@@ -477,5 +477,183 @@ describe("VoxelEditController: _getParentChunkInfo (Coordinate Mapping)", () => 
 
     const res = getInfo(makeVoxChunkKey("1,1,1", 0), childRes);
     expect(res.chunkKey).toBe("1,0,0");
+  });
+});
+
+describe("VoxelEditController: Downsampling Integration", () => {
+  let controller: VoxelEditController;
+  let childSource: any;
+  let parentSource: any;
+  let grandParentSource: any;
+
+  const setupIntegration = (numLevels: number = 2) => {
+    childSource = {
+      spec: { rank: 3, chunkDataSize: new Uint32Array([2, 2, 2]), dataType: 0 },
+      getChunk: vi.fn().mockReturnValue({ data: new Uint32Array(8).fill(1) }),
+      download: vi.fn().mockResolvedValue(undefined),
+      applyEdits: vi.fn().mockResolvedValue({}),
+      invalidateChunks: vi.fn(),
+    };
+
+    parentSource = {
+      spec: { rank: 3, chunkDataSize: new Uint32Array([2, 2, 2]), dataType: 0 },
+      getChunk: vi.fn().mockReturnValue({ data: new Uint32Array(8).fill(0) }),
+      download: vi.fn().mockResolvedValue(undefined),
+      applyEdits: vi.fn().mockResolvedValue({}),
+      invalidateChunks: vi.fn(),
+    };
+
+    grandParentSource = {
+      spec: { rank: 3, chunkDataSize: new Uint32Array([2, 2, 2]), dataType: 0 },
+      getChunk: vi.fn().mockReturnValue({ data: new Uint32Array(8).fill(0) }),
+      download: vi.fn().mockResolvedValue(undefined),
+      applyEdits: vi.fn().mockResolvedValue({}),
+      invalidateChunks: vi.fn(),
+    };
+
+    (mockRpc.get as any).mockImplementation((id: number) => {
+      if (id === 100) return childSource;
+      if (id === 101) return parentSource;
+      if (id === 102) return grandParentSource;
+      return null;
+    });
+
+    const resolutions = [
+      resConfig(0, [1, 1, 1], [2, 2, 2]), // Child
+      resConfig(1, [2, 2, 2], [2, 2, 2]), // Parent (2x scale)
+    ];
+
+    if (numLevels > 2) {
+      resolutions.push(resConfig(2, [4, 4, 4], [2, 2, 2])); // Grandparent (4x scale)
+    }
+
+    controller = new VoxelEditController(mockRpc, { resolutions });
+
+    vi.spyOn(controller as any, "callChunkReload");
+  };
+
+  it("Single Step Flow: Writes to parent and notifies frontend", async () => {
+    setupIntegration(2);
+    const key = makeVoxChunkKey("0,0,0", 0);
+
+    (controller as any).enqueueDownsample(key);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(childSource.getChunk).toHaveBeenCalled();
+
+    expect(parentSource.applyEdits).toHaveBeenCalledWith(
+      "0,0,0",
+      expect.any(Array),
+      expect.arrayContaining([1n]),
+    );
+
+    expect((controller as any).callChunkReload).toHaveBeenCalledWith([
+      makeVoxChunkKey("0,0,0", 1),
+    ]);
+
+    expect((controller as any).callChunkReload).toHaveBeenCalledWith(
+      [makeVoxChunkKey("0,0,0", 0), makeVoxChunkKey("0,0,0", 1)],
+      true, // isForPreviewChunks
+    );
+  });
+
+  it("Recursive Propagation: L0 -> L1 -> L2", async () => {
+    setupIntegration(3);
+
+    parentSource.applyEdits.mockImplementation(async () => {
+      parentSource.getChunk.mockReturnValue({
+        data: new Uint32Array(8).fill(1),
+      });
+    });
+
+    const key = makeVoxChunkKey("0,0,0", 0);
+    (controller as any).enqueueDownsample(key);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(parentSource.applyEdits).toHaveBeenCalled();
+
+    expect(grandParentSource.applyEdits).toHaveBeenCalled();
+
+    const reloadCalls = (controller as any).callChunkReload.mock.calls;
+    const keysReloaded = reloadCalls.flatMap((c: any) => c[0]);
+
+    expect(keysReloaded).toContain(makeVoxChunkKey("0,0,0", 1));
+    expect(keysReloaded).toContain(makeVoxChunkKey("0,0,0", 2));
+  });
+
+  it("Queue Deduplication: Processes same key once per batch", async () => {
+    setupIntegration(2);
+    const key = makeVoxChunkKey("0,0,0", 0);
+
+    (controller as any).enqueueDownsample(key);
+    (controller as any).enqueueDownsample(key);
+    (controller as any).enqueueDownsample(key);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(parentSource.applyEdits).toHaveBeenCalledTimes(1);
+  });
+
+  it("Lazy Loading: Downloads child chunk if missing", async () => {
+    setupIntegration(2);
+
+    const emptyChunk = { data: null };
+    childSource.getChunk.mockReturnValue(emptyChunk);
+
+    childSource.download.mockImplementation(async (chunk: any) => {
+      chunk.data = new Uint32Array(8).fill(1);
+    });
+
+    const key = makeVoxChunkKey("0,0,0", 0);
+    (controller as any).enqueueDownsample(key);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(childSource.download).toHaveBeenCalled();
+    expect(parentSource.applyEdits).toHaveBeenCalled();
+  });
+
+  it("Error Handling: Child download failure aborts chain gracefully", async () => {
+    setupIntegration(2);
+    const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    childSource.getChunk.mockReturnValue({ data: null });
+    childSource.download.mockRejectedValue(new Error("Network Error"));
+
+    const key = makeVoxChunkKey("0,0,0", 0);
+    (controller as any).enqueueDownsample(key);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(parentSource.applyEdits).not.toHaveBeenCalled();
+
+    consoleSpy.mockRestore();
+  });
+
+  it("Error Handling: Parent write failure reports error and stops recursion", async () => {
+    setupIntegration(3);
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    parentSource.applyEdits.mockRejectedValue(new Error("Write Failed"));
+
+    const key = makeVoxChunkKey("0,0,0", 0);
+    (controller as any).enqueueDownsample(key);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(parentSource.applyEdits).toHaveBeenCalled();
+
+    expect(grandParentSource.applyEdits).not.toHaveBeenCalled();
+
+    expect(mockRpc.invoke).toHaveBeenCalledWith(
+      "vox.edit.failure",
+      expect.objectContaining({
+        voxChunkKeys: [makeVoxChunkKey("0,0,0", 1)],
+      }),
+    );
+
+    consoleSpy.mockRestore();
   });
 });
