@@ -660,6 +660,8 @@ export class VoxelEditController extends SharedObject {
       if (c > maxCount) {
         maxCount = c;
         mode = bigV;
+      } else if (c === maxCount && bigV < mode) {
+        mode = bigV;
       }
     }
     return mode;

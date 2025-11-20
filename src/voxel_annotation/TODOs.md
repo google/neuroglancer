@@ -11,5 +11,27 @@
 ### questionable
 
 - add support for volumes with rank different from 3
-- write a testsuite for the downsampler and ensure its proper working on exotic lod levels
 - adapt the brush size to the zoom level linearly
+
+## Tests
+
+- src/voxel_annotation/edit_backend.ts
+  - [x] \_calculateParentUpdate
+  - [ ] \_getParentChunkInfo
+  - [ ] downsampleStep
+  - [ ] undo/redo
+  - [ ] flushPending
+- src/voxel_annotation/edit_controller.ts
+  - [ ] floodFillPlane2D
+  - [ ] paintBrushWithShape
+- src/layer/vox/index.ts
+  - [ ] getVoxelPositionFromMouse
+  - [ ] setVoxelPaintValue
+  - [ ] transformGlobalToVoxelNormal
+- src/sliceview/volume/backend.ts
+  - [x] applyEdits
+  - [ ] computeChunkBounds
+- src/sliceview/volume/frontend.ts
+  - [ ] applyLocalEdits
+- src/datasource/zarr/backend.ts
+  - [ ] writeChunk
