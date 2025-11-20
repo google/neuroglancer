@@ -48,7 +48,9 @@ import {
 } from "#src/trackable_value.js";
 import type { Uint64Map } from "#src/uint64_map.js";
 import type { DisjointUint64Sets } from "#src/util/disjoint_sets.js";
+import { shaderCodeWithLineDirective } from "#src/webgl/dynamic_shader.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
+import type { ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
 
 export class EquivalencesHashMap {
   generation = Number.NaN;
@@ -85,6 +87,7 @@ interface ShaderParameters {
   hideSegmentZero: boolean;
   hasSegmentDefaultColor: boolean;
   hasHighlightColor: boolean;
+  shaderBuilderState: ShaderControlsBuilderState;
 }
 
 const HAS_SELECTED_SEGMENT_FLAG = 1;
@@ -115,6 +118,8 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
   ) {
     super(multiscaleSource, {
       shaderParameters: new AggregateWatchableValue((refCounted) => ({
+        shaderBuilderState:
+          displayState.layer.displayState.segmentColorShaderControlState.builderState,
         hasEquivalences: refCounted.registerDisposer(
           makeCachedDerivedWatchableValue(
             (x) => x.size !== 0,
@@ -328,9 +333,14 @@ uint64_t getMappedObjectId(uint64_t value) {
   if (rgba.a > 0.0) {
     alpha = rgba.a;
   }
+  rgba = segmentColor(rgba);
   emit(vec4(mix(vec3(1.0,1.0,1.0), vec3(rgba), saturation), alpha));
 `;
     builder.setFragmentMain(fragmentMain);
+    const segmentColor = shaderCodeWithLineDirective(
+      parameters.shaderBuilderState.parseResult.code,
+    );
+    builder.addFragmentCode(segmentColor + "\n");
   }
 
   initializeShader(
