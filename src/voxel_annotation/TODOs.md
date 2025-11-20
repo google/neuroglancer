@@ -18,9 +18,9 @@
 - src/voxel_annotation/edit_backend.ts
   - [x] \_calculateParentUpdate
   - [x] \_getParentChunkInfo
-  - [ ] downsampleStep
+  - [x] downsampleStep
   - [ ] undo/redo
-  - [ ] flushPending
+  - [x] flushPending
 - src/voxel_annotation/edit_controller.ts
   - [ ] floodFillPlane2D
   - [ ] paintBrushWithShape

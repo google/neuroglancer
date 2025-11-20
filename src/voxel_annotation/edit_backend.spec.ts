@@ -1,6 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mat4 } from "#src/util/geom.js";
-import { makeVoxChunkKey } from "#src/voxel_annotation/base.js";
+import {
+  makeVoxChunkKey,
+  VOX_EDIT_FAILURE_RPC_ID,
+  VOX_EDIT_HISTORY_UPDATE_RPC_ID,
+} from "#src/voxel_annotation/base.js";
 import { VoxelEditController } from "#src/voxel_annotation/edit_backend.js";
 import type { RPC } from "#src/worker_rpc.js";
 
@@ -655,5 +659,196 @@ describe("VoxelEditController: Downsampling Integration", () => {
     );
 
     consoleSpy.mockRestore();
+  });
+});
+
+describe("VoxelEditController: flushPending", () => {
+  let controller: VoxelEditController;
+  let mockSource0: any;
+  let mockSource1: any;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+
+    mockSource0 = {
+      spec: { rank: 3, chunkDataSize: new Uint32Array([2, 2, 2]), dataType: 0 },
+      applyEdits: vi.fn().mockResolvedValue({
+        indices: new Uint32Array([]),
+        oldValues: new BigUint64Array([]),
+        newValues: new BigUint64Array([]),
+      }),
+    };
+
+    mockSource1 = {
+      spec: { rank: 3, chunkDataSize: new Uint32Array([2, 2, 2]), dataType: 0 },
+      applyEdits: vi.fn().mockResolvedValue({}),
+    };
+
+    (mockRpc.get as any).mockImplementation((id: number) => {
+      if (id === 100) return mockSource0;
+      if (id === 101) return mockSource1;
+      return null;
+    });
+
+    controller = new VoxelEditController(mockRpc, {
+      resolutions: [
+        resConfig(0, [1, 1, 1], [2, 2, 2]),
+        resConfig(1, [2, 2, 2], [2, 2, 2]),
+      ],
+    });
+
+    vi.spyOn(controller as any, "enqueueDownsample").mockImplementation(
+      () => {},
+    );
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("Batching: Aggregates multiple edits to the same chunk into one write", async () => {
+    const key = makeVoxChunkKey("0,0,0", 0);
+
+    await controller.commitVoxels([
+      { key, indices: [1], value: 50n },
+      { key, indices: [2], value: 60n },
+    ]);
+
+    const otherKey = makeVoxChunkKey("1,0,0", 0);
+    await controller.commitVoxels([
+      { key: otherKey, indices: [5], value: 99n },
+    ]);
+
+    await controller.commitVoxels([
+      { key, indices: [1], value: 42n },
+      { key, indices: [3], value: 70n },
+    ]);
+
+    await vi.runAllTimersAsync();
+
+    expect(mockSource0.applyEdits).toHaveBeenCalledWith(
+      "0,0,0",
+      [1, 2, 3],
+      [42n, 60n, 70n],
+    );
+
+    expect(mockSource0.applyEdits).toHaveBeenCalledWith("1,0,0", [5], [99n]);
+  });
+
+  it("History: Updates stacks and notifies frontend correctly", async () => {
+    const key = makeVoxChunkKey("0,0,0", 0);
+
+    (controller as any).redoStack.push({
+      changes: new Map(),
+      timestamp: 0,
+      description: "dummy",
+    });
+    expect((controller as any).redoStack.length).toBe(1);
+
+    await controller.commitVoxels([{ key, indices: [1], value: 50n }]);
+    await vi.runAllTimersAsync();
+
+    expect((controller as any).undoStack.length).toBe(1);
+
+    expect((controller as any).redoStack.length).toBe(0);
+
+    expect(mockRpc.invoke).toHaveBeenCalledWith(
+      VOX_EDIT_HISTORY_UPDATE_RPC_ID,
+      expect.objectContaining({
+        undoCount: 1,
+        redoCount: 0,
+      }),
+    );
+  });
+
+  it("Partial Failure: Succeeds for valid chunks even if one chunk fails", async () => {
+    const validKey = makeVoxChunkKey("0,0,0", 0);
+    const failKey = makeVoxChunkKey("1,0,0", 0);
+
+    mockSource0.applyEdits.mockImplementation((chunkKey: string) => {
+      if (chunkKey === "1,0,0") {
+        return Promise.reject(new Error("Network Error"));
+      }
+      return Promise.resolve({
+        indices: new Uint32Array([1]),
+        oldValues: new BigUint64Array([0n]),
+        newValues: new BigUint64Array([50n]),
+      });
+    });
+
+    await controller.commitVoxels([
+      { key: validKey, indices: [1], value: 50n },
+      { key: failKey, indices: [1], value: 50n },
+    ]);
+
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await vi.runAllTimersAsync();
+
+    expect(mockSource0.applyEdits).toHaveBeenCalledWith(
+      "0,0,0",
+      expect.anything(),
+      expect.anything(),
+    );
+
+    expect(mockSource0.applyEdits).toHaveBeenCalledWith(
+      "1,0,0",
+      expect.anything(),
+      expect.anything(),
+    );
+
+    expect(mockRpc.invoke).toHaveBeenCalledWith(
+      VOX_EDIT_FAILURE_RPC_ID,
+      expect.objectContaining({
+        voxChunkKeys: [failKey],
+      }),
+    );
+
+    const undoStack = (controller as any).undoStack;
+    expect(undoStack.length).toBe(1);
+    expect(undoStack[0].changes.has(validKey)).toBe(true);
+    expect(undoStack[0].changes.has(failKey)).toBe(false);
+
+    errorSpy.mockRestore();
+  });
+
+  it("Invalid Data: Handles malformed keys gracefully without crashing", async () => {
+    const validKey = makeVoxChunkKey("0,0,0", 0);
+    const badKey = "invalid_format_key";
+
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await controller.commitVoxels([
+      { key: validKey, indices: [1], value: 50n },
+      { key: badKey, indices: [1], value: 50n },
+    ]);
+
+    await vi.runAllTimersAsync();
+
+    expect(mockSource0.applyEdits).toHaveBeenCalledWith(
+      "0,0,0",
+      expect.anything(),
+      expect.anything(),
+    );
+
+    expect(mockRpc.invoke).toHaveBeenCalledWith(
+      VOX_EDIT_FAILURE_RPC_ID,
+      expect.objectContaining({
+        voxChunkKeys: [badKey],
+      }),
+    );
+
+    errorSpy.mockRestore();
+  });
+
+  it("Downsample Trigger: Enqueues modified keys for processing", async () => {
+    const key = makeVoxChunkKey("0,0,0", 0);
+    const enqueueSpy = vi.spyOn(controller as any, "enqueueDownsample");
+
+    await controller.commitVoxels([{ key, indices: [1], value: 50n }]);
+    await vi.runAllTimersAsync();
+
+    expect(enqueueSpy).toHaveBeenCalledWith(key);
   });
 });
