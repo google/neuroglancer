@@ -39,6 +39,7 @@ import type { SliceViewRenderLayer } from "#src/sliceview/renderlayer.js";
 import type { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import type { ImageRenderLayer } from "#src/sliceview/volume/image_renderlayer.js";
 import type { SegmentationRenderLayer } from "#src/sliceview/volume/segmentation_renderlayer.js";
+import { StatusMessage } from "#src/status.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
@@ -103,6 +104,15 @@ export class VoxelEditingContext
 
     if (!writable) return;
 
+    // NOTE: each of the following 3 checks may be removed if support for the checked contraint is added
+    if (primarySource.rank !== 3) {
+      throw new Error(`Voxel annotation only supports rank 3 volumes (got ${primarySource.rank}).`);
+    }
+    if (primarySource.dataType === DataType.FLOAT32) {
+      throw new Error(`Voxel annotation does not support Float32 datasets.`);
+    }
+    this.validateHierarchy(primarySource);
+
     this.previewSource = new VoxelPreviewMultiscaleSource(
       this.hostLayer.manager.chunkManager,
       primarySource,
@@ -140,6 +150,57 @@ export class VoxelEditingContext
     if (this.optimisticRenderLayer)
       this.hostLayer.removeRenderLayer(this.optimisticRenderLayer);
     super.disposed();
+  }
+
+  /**
+   * Verifies that the size of a parent chunk is an integer multiple
+   * of the size of a child chunk.
+   */
+  private validateHierarchy(primarySource: MultiscaleVolumeChunkSource) {
+    const rank = primarySource.rank;
+
+    const identityOptions = this.hostLayer.getIdentitySliceViewSourceOptions();
+    const scales = primarySource.getSources(identityOptions)[0];
+
+    if (!scales || scales.length < 2) return;
+
+    const getPhysicalChunkExtent = (lodIndex: number) => {
+      const source = scales[lodIndex];
+      const transform = source.chunkToMultiscaleTransform;
+      const chunkVoxels = source.chunkSource.spec.chunkDataSize;
+
+      const extent = new Float32Array(rank);
+
+
+      for (let i = 0; i < rank; i++) {
+        let sumSq = 0;
+        for (let row = 0; row < rank; row++) {
+          const val = transform[i * (rank + 1) + row];
+          sumSq += val * val;
+        }
+        const scaleFactor = Math.sqrt(sumSq);
+        extent[i] = chunkVoxels[i] * scaleFactor;
+      }
+      return extent;
+    };
+
+    for (let i = 0; i < scales.length - 1; i++) {
+      const childExtents = getPhysicalChunkExtent(i);
+      const parentExtents = getPhysicalChunkExtent(i + 1);
+
+      for (let d = 0; d < rank; d++) {
+        const ratio = parentExtents[d] / childExtents[d];
+        const isInteger = Math.abs(ratio - Math.round(ratio)) < 0.001;
+
+        if (!isInteger) {
+          throw new Error(
+            `Hierarchy mismatch between LOD ${i} and ${i + 1}. ` +
+            `Parent chunk must contain a whole number of child chunks. ` +
+            `Ratio dim ${d}: ${ratio.toFixed(3)}`
+          );
+        }
+      }
+    }
   }
 
   getVoxelPositionFromMouse(
@@ -375,16 +436,24 @@ export function UserLayerWithVoxelEditingMixin<
       const primarySource = loadedSubsource.subsourceEntry.subsource
         .volume as MultiscaleVolumeChunkSource;
 
-      const context = new VoxelEditingContext(
-        this,
-        primarySource,
-        renderlayer,
-        writable,
-      );
-      this.editingContexts.set(loadedSubsource, context);
-      this.isEditable.value = writable;
-      // This will trigger the datatype validation
-      this.setVoxelPaintValue(this.paintValue.value);
+      try {
+        const context = new VoxelEditingContext(
+          this,
+          primarySource,
+          renderlayer,
+          writable,
+        );
+        this.editingContexts.set(loadedSubsource, context);
+        this.isEditable.value = writable;
+        this.setVoxelPaintValue(this.paintValue.value);
+      } catch (e) {
+        if (writable) {
+          loadedSubsource.writable.value = false;
+          const msg = e instanceof Error ? e.message : String(e);
+          console.warn("Failed to initialize voxel editing:", msg);
+          StatusMessage.showTemporaryMessage(msg, 5000);
+        }
+      }
     }
 
     deinitializeVoxelEditingForSubsource(loadedSubsource: LoadedDataSubsource) {
