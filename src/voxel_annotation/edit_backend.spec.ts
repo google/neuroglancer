@@ -852,3 +852,230 @@ describe("VoxelEditController: flushPending", () => {
     expect(enqueueSpy).toHaveBeenCalledWith(key);
   });
 });
+
+describe("VoxelEditController: Undo/Redo", () => {
+  let controller: VoxelEditController;
+  let mockSource0: any;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockSource0 = {
+      spec: { rank: 3, chunkDataSize: new Uint32Array([2, 2, 2]), dataType: 0 },
+      applyEdits: vi.fn().mockResolvedValue({
+        indices: new Uint32Array([]),
+        oldValues: new BigUint64Array([]),
+        newValues: new BigUint64Array([]),
+      }),
+      invalidateChunks: vi.fn(),
+    };
+
+    (mockRpc.get as any).mockImplementation((id: number) => {
+      if (id === 100) return mockSource0;
+      return null;
+    });
+
+    controller = new VoxelEditController(mockRpc, {
+      resolutions: [resConfig(0, [1, 1, 1], [2, 2, 2])],
+    });
+
+    vi.spyOn(controller as any, "callChunkReload");
+    vi.spyOn(controller as any, "enqueueDownsample").mockImplementation(
+      () => {},
+    );
+    (mockRpc.invoke as any).mockClear();
+  });
+
+  it("Successful Undo and Redo Lifecycle", async () => {
+    const key = makeVoxChunkKey("0,0,0", 0);
+    const editAction = {
+      changes: new Map([
+        [
+          key,
+          {
+            indices: new Uint32Array([0]),
+            oldValues: new BigUint64Array([10n]),
+            newValues: new BigUint64Array([20n]),
+          },
+        ],
+      ]),
+      timestamp: Date.now(),
+      description: "Test Action",
+    };
+
+    (controller as any).undoStack.push(editAction);
+
+    await controller.undo();
+
+    expect(mockSource0.applyEdits).toHaveBeenCalledWith(
+      "0,0,0",
+      expect.any(Uint32Array),
+      expect.any(BigUint64Array),
+    );
+    const undoCallArgs = mockSource0.applyEdits.mock.calls[0];
+    expect(undoCallArgs[2][0]).toBe(10n);
+
+    expect((controller as any).callChunkReload).toHaveBeenCalledWith([key]);
+    expect(mockRpc.invoke).toHaveBeenCalledWith(
+      VOX_EDIT_HISTORY_UPDATE_RPC_ID,
+      expect.objectContaining({ undoCount: 0, redoCount: 1 }),
+    );
+
+    expect((controller as any).undoStack.length).toBe(0);
+    expect((controller as any).redoStack.length).toBe(1);
+
+    mockSource0.applyEdits.mockClear();
+    (mockRpc.invoke as any).mockClear();
+
+    await controller.redo();
+
+    expect(mockSource0.applyEdits).toHaveBeenCalledWith(
+      "0,0,0",
+      expect.any(Uint32Array),
+      expect.any(BigUint64Array),
+    );
+    const redoCallArgs = mockSource0.applyEdits.mock.calls[0];
+    expect(redoCallArgs[2][0]).toBe(20n);
+
+    expect((controller as any).callChunkReload).toHaveBeenCalledWith([key]);
+    expect(mockRpc.invoke).toHaveBeenCalledWith(
+      VOX_EDIT_HISTORY_UPDATE_RPC_ID,
+      expect.objectContaining({ undoCount: 1, redoCount: 0 }),
+    );
+
+    expect((controller as any).redoStack.length).toBe(0);
+    expect((controller as any).undoStack.length).toBe(1);
+  });
+
+  it("Empty Stack Behavior", async () => {
+    await expect(controller.undo()).rejects.toThrow(/Nothing to undo/);
+    await expect(controller.redo()).rejects.toThrow(/Nothing to redo/);
+  });
+
+  it("Undo Failure Handling", async () => {
+    const key = makeVoxChunkKey("0,0,0", 0);
+    const editAction = {
+      changes: new Map([
+        [
+          key,
+          {
+            indices: new Uint32Array([0]),
+            oldValues: new BigUint64Array([10n]),
+            newValues: new BigUint64Array([20n]),
+          },
+        ],
+      ]),
+      timestamp: Date.now(),
+      description: "Test Action",
+    };
+    (controller as any).undoStack.push(editAction);
+
+    mockSource0.applyEdits.mockRejectedValue(new Error("Backend Write Failed"));
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await controller.undo();
+
+    expect(mockRpc.invoke).toHaveBeenCalledWith(
+      VOX_EDIT_FAILURE_RPC_ID,
+      expect.objectContaining({
+        voxChunkKeys: [key],
+        message: "Undo failed.",
+      }),
+    );
+
+    expect((controller as any).undoStack.length).toBe(1);
+    expect((controller as any).redoStack.length).toBe(0);
+
+    expect((controller as any).callChunkReload).not.toHaveBeenCalled();
+
+    consoleSpy.mockRestore();
+  });
+
+  it("Redo Failure Handling", async () => {
+    const key = makeVoxChunkKey("0,0,0", 0);
+    const editAction = {
+      changes: new Map([
+        [
+          key,
+          {
+            indices: new Uint32Array([0]),
+            oldValues: new BigUint64Array([10n]),
+            newValues: new BigUint64Array([20n]),
+          },
+        ],
+      ]),
+      timestamp: Date.now(),
+      description: "Test Action",
+    };
+    (controller as any).redoStack.push(editAction);
+
+    mockSource0.applyEdits.mockRejectedValue(new Error("Backend Write Failed"));
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await controller.redo();
+
+    expect(mockRpc.invoke).toHaveBeenCalledWith(
+      VOX_EDIT_FAILURE_RPC_ID,
+      expect.objectContaining({
+        voxChunkKeys: [key],
+        message: "Redo failed.",
+      }),
+    );
+
+    expect((controller as any).redoStack.length).toBe(1);
+    expect((controller as any).undoStack.length).toBe(0);
+
+    consoleSpy.mockRestore();
+  });
+
+  it("Multi-Chunk Action Consistency", async () => {
+    const key1 = makeVoxChunkKey("0,0,0", 0);
+    const key2 = makeVoxChunkKey("1,0,0", 0);
+
+    const editAction = {
+      changes: new Map([
+        [
+          key1,
+          {
+            indices: new Uint32Array([0]),
+            oldValues: new BigUint64Array([1n]),
+            newValues: new BigUint64Array([2n]),
+          },
+        ],
+        [
+          key2,
+          {
+            indices: new Uint32Array([0]),
+            oldValues: new BigUint64Array([3n]),
+            newValues: new BigUint64Array([4n]),
+          },
+        ],
+      ]),
+      timestamp: Date.now(),
+      description: "Multi Chunk Action",
+    };
+
+    (controller as any).undoStack.push(editAction);
+
+    await controller.undo();
+
+    expect(mockSource0.applyEdits).toHaveBeenCalledTimes(2);
+    expect(mockSource0.applyEdits).toHaveBeenCalledWith(
+      "0,0,0",
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(mockSource0.applyEdits).toHaveBeenCalledWith(
+      "1,0,0",
+      expect.anything(),
+      expect.anything(),
+    );
+
+    expect((controller as any).callChunkReload).toHaveBeenCalledWith(
+      expect.arrayContaining([key1, key2]),
+    );
+
+    expect((controller as any).undoStack.length).toBe(0);
+    expect((controller as any).redoStack.length).toBe(1);
+  });
+});

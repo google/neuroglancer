@@ -19,7 +19,7 @@
   - [x] \_calculateParentUpdate
   - [x] \_getParentChunkInfo
   - [x] downsampleStep
-  - [ ] undo/redo
+  - [x] undo/redo
   - [x] flushPending
 - src/voxel_annotation/edit_controller.ts
   - [ ] floodFillPlane2D
