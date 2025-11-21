@@ -26,9 +26,9 @@
   - [ ] floodFillPlane2D
   - [ ] paintBrushWithShape
 - src/layer/vox/index.ts
-  - [ ] getVoxelPositionFromMouse
-  - [ ] setVoxelPaintValue
-  - [ ] transformGlobalToVoxelNormal
+  - [x] getVoxelPositionFromMouse
+  - [x] setVoxelPaintValue
+  - [x] transformGlobalToVoxelNormal
 - src/sliceview/volume/backend.ts
   - [x] applyEdits
 - src/sliceview/volume/frontend.ts

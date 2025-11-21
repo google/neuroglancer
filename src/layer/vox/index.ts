@@ -106,7 +106,9 @@ export class VoxelEditingContext
 
     // NOTE: each of the following 3 checks may be removed if support for the checked contraint is added
     if (primarySource.rank !== 3) {
-      throw new Error(`Voxel annotation only supports rank 3 volumes (got ${primarySource.rank}).`);
+      throw new Error(
+        `Voxel annotation only supports rank 3 volumes (got ${primarySource.rank}).`,
+      );
     }
     if (primarySource.dataType === DataType.FLOAT32) {
       throw new Error(`Voxel annotation does not support Float32 datasets.`);
@@ -171,7 +173,6 @@ export class VoxelEditingContext
 
       const extent = new Float32Array(rank);
 
-
       for (let i = 0; i < rank; i++) {
         let sumSq = 0;
         for (let row = 0; row < rank; row++) {
@@ -195,8 +196,8 @@ export class VoxelEditingContext
         if (!isInteger) {
           throw new Error(
             `Hierarchy mismatch between LOD ${i} and ${i + 1}. ` +
-            `Parent chunk must contain a whole number of child chunks. ` +
-            `Ratio dim ${d}: ${ratio.toFixed(3)}`
+              `Parent chunk must contain a whole number of child chunks. ` +
+              `Ratio dim ${d}: ${ratio.toFixed(3)}`,
           );
         }
       }
