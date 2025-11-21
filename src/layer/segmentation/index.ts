@@ -544,13 +544,16 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
 
     // so 2d/3d share GL context
     // the offscreen canvas is a separate context that doesn't share textures
-    this.segmentationColorUserShader = new SegmentationColorUserShaderManager(this, this.layer.manager.chunkManager.chunkQueueManager.gl);
-  
-    this.offscreenGL = initializeWebGL(new OffscreenCanvas(1, 1));
-    this.offscreenSegmentationColorUserShader = new SegmentationColorUserShaderManager(this, this.offscreenGL);
-    this.getSegmentColorShader = this.makeSegmentColorShaderGetter();
+    this.segmentationColorUserShader = new SegmentationColorUserShaderManager(
+      this,
+      this.layer.manager.chunkManager.chunkQueueManager.gl,
+    );
 
-  };
+    this.offscreenGL = initializeWebGL(new OffscreenCanvas(1, 1));
+    this.offscreenSegmentationColorUserShader =
+      new SegmentationColorUserShaderManager(this, this.offscreenGL);
+    this.getSegmentColorShader = this.makeSegmentColorShaderGetter();
+  }
 
   offscreenGL;
   offscreenSegmentationColorUserShader;
@@ -597,29 +600,36 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         segmentProperties: this.segmentationGroupState.value.segmentPropertyMap,
       })),
     );
-    return parameterizedEmitterDependentShaderGetter(this.layer, this.offscreenGL, {
-      memoizeKey: `segmentColorShaderTODO`,
-      parameters,
-      encodeParameters: (p) => {
-        return `${p.shaderBuilderState.parseResult.code}/${p.segmentProperties?.numericalProperties.length}`;
-      },
-      shaderError: this.layer.displayState.shaderError, // TODO can I reuse this?
-      defineShader: (builder, { }) => {
-        this.offscreenSegmentationColorUserShader.defineShader(builder, /*fragment=*/ false);
-        builder.addAttribute("highp vec4", "aVertexPosition");
-        builder.addUniform("highp vec4", "uColor");
-        builder.addUniform("highp uvec2", "uID");
-        builder.addVarying("highp vec4", "vColor");
-        let vertexMain = `
+    return parameterizedEmitterDependentShaderGetter(
+      this.layer,
+      this.offscreenGL,
+      {
+        memoizeKey: `segmentColorShaderTODO`,
+        parameters,
+        encodeParameters: (p) => {
+          return `${p.shaderBuilderState.parseResult.code}/${p.segmentProperties?.numericalProperties.length}`;
+        },
+        shaderError: this.layer.displayState.shaderError, // TODO can I reuse this?
+        defineShader: (builder) => {
+          this.offscreenSegmentationColorUserShader.defineShader(
+            builder,
+            /*fragment=*/ false,
+          );
+          builder.addAttribute("highp vec4", "aVertexPosition");
+          builder.addUniform("highp vec4", "uColor");
+          builder.addUniform("highp uvec2", "uID");
+          builder.addVarying("highp vec4", "vColor");
+          const vertexMain = `
 gl_Position = aVertexPosition;
 loadSegmentProperties(uint64_t(uID));
 vColor = segmentColor(uColor);
 `;
-        builder.addVertexMain(vertexMain);
-        builder.addOutputBuffer("vec4", "out_fragColor", 0);
-        builder.setFragmentMain("out_fragColor = vColor;");
+          builder.addVertexMain(vertexMain);
+          builder.addOutputBuffer("vec4", "out_fragColor", 0);
+          builder.setFragmentMain("out_fragColor = vColor;");
+        },
       },
-    });
+    );
   };
 
   context = () => {}; // TEMP how to get rid of this?

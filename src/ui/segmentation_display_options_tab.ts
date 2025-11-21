@@ -78,7 +78,9 @@ export class DisplayOptionsTab extends Tab {
       );
     }
 
-    const segmentColorCodeWidget = this.registerDisposer(makeShaderCodeWidget(layer));
+    const segmentColorCodeWidget = this.registerDisposer(
+      makeShaderCodeWidget(layer),
+    );
     element.appendChild(
       makeShaderCodeWidgetTopRow(
         this.layer,

@@ -30,9 +30,7 @@ import type {
   SegmentationGroupState,
 } from "#src/segmentation_display_state/frontend.js";
 import { registerRedrawWhenSegmentationDisplayStateChanged } from "#src/segmentation_display_state/frontend.js";
-import {
-  PreprocessedSegmentPropertyMap,
-} from "#src/segmentation_display_state/property_map.js";
+import type { PreprocessedSegmentPropertyMap } from "#src/segmentation_display_state/property_map.js";
 import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
 import type {
   SliceView,
@@ -221,7 +219,9 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
     this.registerDisposer(
       displayState.ignoreNullVisibleSet.changed.add(this.redrawNeeded.dispatch),
     );
-    displayState.segmentationColorUserShader.changed.add(this.redrawNeeded.dispatch);
+    displayState.segmentationColorUserShader.changed.add(
+      this.redrawNeeded.dispatch,
+    );
   }
 
   disposed() {

@@ -18,7 +18,9 @@ import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { ChunkSource } from "#src/chunk_manager/frontend.js";
 import { HashMapUint64 } from "#src/gpu_hash/hash_table.js";
 import { GPUHashTable, HashMapShaderManager } from "#src/gpu_hash/shader.js";
+import { DEFAULT_FRAGMENT_SEGMENT_COLOR } from "#src/layer/segmentation/index.js";
 import type { IndexedSegmentProperty } from "#src/segmentation_display_state/base.js";
+import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
 import type { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import type { Uint64Set } from "#src/uint64_set.js";
 import type {
@@ -43,10 +45,8 @@ import {
 import { getObjectId } from "#src/util/object_id.js";
 import { Signal } from "#src/util/signal.js";
 import { defaultStringCompare } from "#src/util/string.js";
-import { GL } from "#src/webgl/context.js";
-import { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
-import { DEFAULT_FRAGMENT_SEGMENT_COLOR } from "#src/layer/segmentation/index.js";
-import { SegmentationDisplayState } from "./frontend";
+import type { GL } from "#src/webgl/context.js";
+import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import { glsl_uint64_as_float } from "#src/webgl/shader_lib.js";
 
 export type InlineSegmentProperty =
@@ -1504,7 +1504,7 @@ export class SegmentationColorUserShaderManager extends RefCounted {
         addCode(`highp ${getShaderOutputType(dataType)} ${identifier};`);
       }
     }
-    let loadSegmentPropertiesCode = `
+    const loadSegmentPropertiesCode = `
 void loadSegmentProperties(uint64_t id) {
 ${Array.from(
   this.segmentPropertyShaderData,
@@ -1518,7 +1518,7 @@ ${manager.getFunctionName}(id, ${identifier}_64);
 ${identifier} = asFloat(${identifier}_64);
 `;
     } else {
-      // TODO, will 
+      // TODO, will
       return `
 uint64_t ${identifier}_64;
 ${manager.getFunctionName}(id, ${identifier}_64);

@@ -73,9 +73,7 @@ import * as matrix from "#src/util/matrix.js";
 import { GLBuffer } from "#src/webgl/buffer.js";
 import type { GL } from "#src/webgl/context.js";
 import type { WatchableShaderError } from "#src/webgl/dynamic_shader.js";
-import {
-  parameterizedEmitterDependentShaderGetter,
-} from "#src/webgl/dynamic_shader.js";
+import { parameterizedEmitterDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import { glsl_uint64 } from "#src/webgl/shader_lib.js";
 import type { ShaderControlState } from "#src/webgl/shader_ui_controls.js";
@@ -398,7 +396,10 @@ export class MeshShaderManager {
       ) => {
         addControlsToBuilder(shaderBuilderState, builder);
         this.vertexPositionHandler.defineShader(builder);
-        layer.displayState.segmentationColorUserShader.defineShader(builder, /*fragment=*/ false);
+        layer.displayState.segmentationColorUserShader.defineShader(
+          builder,
+          /*fragment=*/ false,
+        );
         builder.addAttribute("highp vec2", "aVertexNormal");
         builder.addVarying("highp vec4", "vColor");
         builder.addUniform("highp vec4", "uLightDirection");

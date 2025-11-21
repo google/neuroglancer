@@ -120,7 +120,9 @@ export class HashSetShaderManager {
   }
 
   defineShader(builder: ShaderBuilder, fragment = true) {
-    const addCode = fragment ? builder.addFragmentCode.bind(builder) : builder.addVertexCode.bind(builder);
+    const addCode = fragment
+      ? builder.addFragmentCode.bind(builder)
+      : builder.addVertexCode.bind(builder);
     const { hashSeedsName, samplerName, numAlternatives, hashKeyMask } = this;
     builder.addUniform("highp uint", hashSeedsName, numAlternatives);
     builder.addUniform("highp uint", hashKeyMask);
@@ -203,7 +205,9 @@ bool ${this.hasFunctionName}(uint64_t x) {
 
 export class HashMapShaderManager extends HashSetShaderManager {
   defineShader(builder: ShaderBuilder, fragment = true) {
-    const addCode = fragment ? builder.addFragmentCode.bind(builder) : builder.addVertexCode.bind(builder);
+    const addCode = fragment
+      ? builder.addFragmentCode.bind(builder)
+      : builder.addVertexCode.bind(builder);
     super.defineShader(builder, fragment);
     const { numAlternatives, hashSeedsName, hashKeyMask } = this;
     let s = `
