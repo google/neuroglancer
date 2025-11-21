@@ -122,7 +122,6 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
   ) {
     super(multiscaleSource, {
       encodeShaderParameters: (displayState) => {
-        console.log("encodeShaderParameters called");
         displayState.shaderBuilderState.parseResult.code; // TODODODODODOO
         return "hi" + displayState.shaderBuilderState.parseResult.code;
       },

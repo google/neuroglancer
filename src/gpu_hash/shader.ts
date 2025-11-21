@@ -139,8 +139,7 @@ export class HashSetShaderManager {
     addCode(glsl_hashCombine);
     addCode(glsl_uint64);
     addCode(glsl_equalUint64);
-    console.log("what does this next thing do?");
-    this.accessHelper.defineShader(builder); // TODO does thsi do anything?
+    this.accessHelper.defineShader(builder);
     // TODO, can we use DataType.Float32 here for float segment properties?
     addCode(
       this.accessHelper.getAccessor(

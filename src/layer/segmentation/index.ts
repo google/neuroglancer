@@ -66,10 +66,7 @@ import type {
   SegmentPropertyMap,
 } from "#src/segmentation_display_state/property_map.js";
 import {
-  extractUsedSegmentProperties,
   getPreprocessedSegmentPropertyMap,
-  getShaderOutputType,
-  SegmentationColorUserShader,
   SegmentationColorUserShaderManager,
 } from "#src/segmentation_display_state/property_map.js";
 import { LocalSegmentationGraphSource } from "#src/segmentation_graph/local.js";
@@ -424,7 +421,7 @@ class LinkedSegmentationGroupState<
   }
 }
 
-const DEFAULT_FRAGMENT_SEGMENT_COLOR = `
+export const DEFAULT_FRAGMENT_SEGMENT_COLOR = `
 vec4 segmentColor(vec4 color) {
   return color;
 }
