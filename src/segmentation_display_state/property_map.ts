@@ -47,7 +47,7 @@ import { GL } from "#src/webgl/context.js";
 import { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import { DEFAULT_FRAGMENT_SEGMENT_COLOR } from "#src/layer/segmentation/index.js";
 import { SegmentationDisplayState } from "./frontend";
-import { glsl_uint64, glsl_uint64_as_float } from "#src/webgl/shader_lib.js";
+import { glsl_uint64_as_float } from "#src/webgl/shader_lib.js";
 
 export type InlineSegmentProperty =
   | InlineSegmentStringProperty
@@ -1518,7 +1518,7 @@ ${manager.getFunctionName}(id, ${identifier}_64);
 ${identifier} = asFloat(${identifier}_64);
 `;
     } else {
-      // TODO, will this work for INT types?
+      // TODO, will 
       return `
 uint64_t ${identifier}_64;
 ${manager.getFunctionName}(id, ${identifier}_64);

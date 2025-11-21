@@ -32,7 +32,6 @@ import type {
 import { registerRedrawWhenSegmentationDisplayStateChanged } from "#src/segmentation_display_state/frontend.js";
 import {
   PreprocessedSegmentPropertyMap,
-  SegmentationColorUserShaderManager,
 } from "#src/segmentation_display_state/property_map.js";
 import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
 import type {

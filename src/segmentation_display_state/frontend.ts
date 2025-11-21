@@ -36,7 +36,6 @@ import type {
   InlineSegmentNumericalProperty,
   InlineSegmentProperty,
   PreprocessedSegmentPropertyMap,
-  SegmentationColorUserShader,
   SegmentationColorUserShaderManager,
 } from "#src/segmentation_display_state/property_map.js";
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
