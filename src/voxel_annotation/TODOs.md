@@ -32,6 +32,6 @@
 - src/sliceview/volume/backend.ts
   - [x] applyEdits
 - src/sliceview/volume/frontend.ts
-  - [ ] applyLocalEdits
+  - [x] applyLocalEdits
 - src/datasource/zarr/backend.ts
   - [ ] writeChunk
