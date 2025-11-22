@@ -267,10 +267,18 @@ class CoordinateSpace:
                 self.units = ()
                 self.coordinate_arrays = ()
         else:
-            if not isinstance(json, dict):
-                raise TypeError
-            self.names = tuple(json.keys())
-            values = tuple(DimensionScale.from_json(v) for v in json.values())
+            if isinstance(json, dict):
+                self.names = tuple(json.keys())
+                values = tuple(DimensionScale.from_json(v) for v in json.values())
+            else:
+                if not isinstance(json, Sequence):
+                    raise TypeError(
+                        "Expected a sequence of dimensions or a single JSON object"
+                    )
+                self.names = tuple(val["name"] for val in json)
+                values = tuple(
+                    DimensionScale.from_json(v.get("scale") or v) for v in json
+                )
             self.scales = np.array([v.scale for v in values], dtype=np.float64)
             self.units = tuple(v.unit for v in values)
             self.coordinate_arrays = tuple(v.coordinate_array for v in values)
@@ -309,12 +317,17 @@ class CoordinateSpace:
         return f"CoordinateSpace({self.to_json()!r})"
 
     def to_json(self):
-        d = {}
+        d = []
         for name, scale, unit, coordinate_array in zip(
             self.names, self.scales, self.units, self.coordinate_arrays
         ):
             if coordinate_array is None:
-                d[name] = [scale, unit]
+                d.append(
+                    {
+                        "name": name,
+                        "scale": [scale, unit],
+                    }
+                )
             else:
-                d[name] = coordinate_array.to_json()
+                d.append({"name": name} | coordinate_array.to_json())
         return d

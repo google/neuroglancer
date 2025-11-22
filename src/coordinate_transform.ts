@@ -283,46 +283,29 @@ export function coordinateSpaceFromJson(
   allowNumericalDimensions = false,
 ): CoordinateSpace {
   if (obj === undefined) return emptyInvalidCoordinateSpace;
-  verifyObject(obj);
-  const names = dimensionNamesFromJson(
-    Object.keys(obj),
-    allowNumericalDimensions,
-  );
+  if (obj === null || typeof obj !== "object") {
+    throw new Error(
+      `Invalid coordinate space JSON: expected object or array, but received ${JSON.stringify(obj)}.`,
+    );
+  }
+  const isLegacyDict = obj.constructor === Object;
+  const unparsedNames = isLegacyDict
+    ? Object.keys(obj)
+    : obj.map((x: any) => x.name);
+  const names = dimensionNamesFromJson(unparsedNames, allowNumericalDimensions);
   const rank = names.length;
   const units = new Array<string>(rank);
   const scales = new Float64Array(rank);
   const coordinateArrays = new Array<CoordinateArray | undefined>(rank);
   for (let i = 0; i < rank; ++i) {
-    verifyObjectProperty(obj, names[i], (mem) => {
-      if (Array.isArray(mem)) {
-        // Normal unit-scale dimension.
-        const { unit, scale } = unitAndScaleFromJson(mem);
-        units[i] = unit;
-        scales[i] = scale;
-      } else {
-        // Coordinate array dimension.
-        verifyObject(mem);
-        const coordinates = verifyObjectProperty(
-          mem,
-          "coordinates",
-          verifyIntegerArray,
-        );
-        const labels = verifyObjectProperty(mem, "labels", verifyStringArray);
-        const length = coordinates.length;
-        if (length !== labels.length) {
-          throw new Error(
-            `Length of coordinates array (${length}) ` +
-              `does not match length of labels array (${labels.length})`,
-          );
-        }
-        units[i] = "";
-        scales[i] = 1;
-        coordinateArrays[i] = {
-          explicit: true,
-          ...normalizeCoordinateArray(coordinates, labels),
-        };
-      }
-    });
+    if (isLegacyDict) {
+      verifyObjectProperty(obj, names[i], (mem) => {
+        handleCoordinateArray(mem, units, i, scales, coordinateArrays);
+      });
+    } else {
+      const mem = "scale" in obj[i] ? obj[i].scale : obj[i];
+      handleCoordinateArray(mem, units, i, scales, coordinateArrays);
+    }
   }
   return makeCoordinateSpace({
     valid: false,
@@ -333,21 +316,66 @@ export function coordinateSpaceFromJson(
   });
 }
 
+function handleCoordinateArray(
+  coordinateData: any,
+  units: string[],
+  i: number,
+  scales: Float64Array<ArrayBuffer>,
+  coordinateArrays: (CoordinateArray | undefined)[],
+) {
+  if (Array.isArray(coordinateData)) {
+    // Normal unit-scale dimension.
+    const { unit, scale } = unitAndScaleFromJson(coordinateData);
+    units[i] = unit;
+    scales[i] = scale;
+  } else {
+    // Coordinate array dimension.
+    verifyObject(coordinateData);
+    const coordinates = verifyObjectProperty(
+      coordinateData,
+      "coordinates",
+      verifyIntegerArray,
+    );
+    const labels = verifyObjectProperty(
+      coordinateData,
+      "labels",
+      verifyStringArray,
+    );
+    const length = coordinates.length;
+    if (length !== labels.length) {
+      throw new Error(
+        `Length of coordinates array (${length}) ` +
+          `does not match length of labels array (${labels.length})`,
+      );
+    }
+    units[i] = "";
+    scales[i] = 1;
+    coordinateArrays[i] = {
+      explicit: true,
+      ...normalizeCoordinateArray(coordinates, labels),
+    };
+  }
+}
+
 export function coordinateSpaceToJson(coordinateSpace: CoordinateSpace): any {
   const { rank } = coordinateSpace;
   if (rank === 0) return undefined;
   const { names, units, scales, coordinateArrays } = coordinateSpace;
-  const json: any = {};
+  const json: any = [];
   for (let i = 0; i < rank; ++i) {
     const name = names[i];
     const coordinateArray = coordinateArrays[i];
     if (coordinateArray?.explicit) {
-      json[name] = {
+      json.push({
+        name: name,
         coordinates: Array.from(coordinateArray.coordinates),
         labels: coordinateArray.labels,
-      };
+      });
     } else {
-      json[name] = [scales[i], units[i]];
+      json.push({
+        name: name,
+        scale: [scales[i], units[i]],
+      });
     }
   }
   return json;

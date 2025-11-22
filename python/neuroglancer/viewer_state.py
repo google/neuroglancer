@@ -1869,6 +1869,12 @@ class ViewerState(JsonObjectWrapper):
         "toolPalettes", typed_map(key_type=str, value_type=ToolPalette)
     )
 
+    def __init__(self, json_data=None, _readonly=False, **kwargs):
+        if isinstance(json_data, dict) and "dimensions" in json_data:
+            # Patch to convert old viewer state JSON dimensions that was dict to array
+            json_data["dimensions"] = CoordinateSpace(json_data["dimensions"]).to_json()
+        super().__init__(json_data, _readonly=_readonly, **kwargs)
+
     @staticmethod
     def interpolate(a, b, t):
         c = copy.deepcopy(a)
