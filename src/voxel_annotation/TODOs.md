@@ -2,6 +2,10 @@
 
 ### priority
 
+- finish the unit tests list below
+- add integration tests
+- fix the security flaw (see PR)
+
 ### later
 
 - add preview for the undo/redo
@@ -23,8 +27,8 @@
   - [x] undo/redo
   - [x] flushPending
 - src/voxel_annotation/edit_controller.ts
-  - [ ] floodFillPlane2D
-  - [ ] paintBrushWithShape
+  - [x] floodFillPlane2D
+  - [x] paintBrushWithShape
 - src/layer/vox/index.ts
   - [x] getVoxelPositionFromMouse
   - [x] setVoxelPaintValue
