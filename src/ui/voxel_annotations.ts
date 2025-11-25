@@ -394,14 +394,9 @@ export class VoxelBrushTool extends BaseVoxelTool {
       basis = { u, v };
     }
 
-    for (const p of points)
-      editContext.controller?.paintBrushWithShape(
-        p,
-        radius,
-        value,
-        shapeEnum,
-        basis,
-      );
+    for (const p of points) {
+      void editContext.paintBrushWithShape(p, radius, value, shapeEnum, basis);
+    }
   }
 }
 
@@ -460,9 +455,8 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
       if (!Number.isFinite(max) || max <= 0) {
         throw new Error("Invalid max fill voxels setting");
       }
-      if (!editContext.controller)
-        throw new Error("Error: No controller available");
-      editContext.controller
+
+      void editContext
         .floodFillPlane2D(
           new Float32Array(seed),
           value,

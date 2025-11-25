@@ -83,7 +83,9 @@ export class VoxelEditingContext
   extends RefCounted
   implements VoxelEditControllerHost
 {
-  controller: VoxelEditController | undefined = undefined;
+  private readonly _controller: VoxelEditController | undefined = undefined;
+  private _pendingPermissionPromise: Promise<boolean> | undefined;
+  private hasUserConfirmedWriting = false;
 
   private cachedChunkTransform: ChunkTransformParameters | undefined;
   private cachedTransformGeneration: number = -1;
@@ -99,6 +101,7 @@ export class VoxelEditingContext
     public primarySource: MultiscaleVolumeChunkSource,
     public primaryRenderLayer: ImageRenderLayer | SegmentationRenderLayer,
     public writable: boolean,
+    public dataSourceUrl: string | undefined,
   ) {
     super();
 
@@ -140,7 +143,90 @@ export class VoxelEditingContext
 
     this.hostLayer.addRenderLayer(this.optimisticRenderLayer);
 
-    this.controller = new VoxelEditController(this);
+    this._controller = new VoxelEditController(this);
+  }
+
+  private async checkPermission(): Promise<boolean> {
+    if (this.hasUserConfirmedWriting) {
+      return true;
+    }
+    if (this._pendingPermissionPromise) {
+      return this._pendingPermissionPromise;
+    }
+
+    this._pendingPermissionPromise = new Promise<boolean>((resolve) => {
+      const msg = new StatusMessage(/*delay=*/ false, /*modal=*/ true);
+      msg.element.textContent = `Are you sure you want to write to ${this.dataSourceUrl} `;
+
+      const yes = document.createElement("button");
+      yes.textContent = "Yes";
+      yes.onclick = () => {
+        this.hasUserConfirmedWriting = true;
+        msg.dispose();
+        resolve(true);
+      };
+      const no = document.createElement("button");
+      no.textContent = "No";
+      no.onclick = () => {
+        msg.dispose();
+        resolve(false);
+      };
+      msg.element.appendChild(yes);
+      msg.element.appendChild(no);
+      msg.setVisible(true);
+    }).then((result) => {
+      this._pendingPermissionPromise = undefined;
+      return result;
+    });
+
+    return this._pendingPermissionPromise;
+  }
+
+  async paintBrushWithShape(
+    centerCanonical: Float32Array,
+    radiusCanonical: number,
+    value: bigint,
+    shape: BrushShape,
+    basis?: { u: Float32Array; v: Float32Array },
+  ) {
+    if (await this.checkPermission()) {
+      this._controller?.paintBrushWithShape(
+        centerCanonical,
+        radiusCanonical,
+        value,
+        shape,
+        basis,
+      );
+    }
+  }
+
+  async floodFillPlane2D(
+    startPositionCanonical: Float32Array,
+    fillValue: bigint,
+    maxVoxels: number,
+    planeNormal: vec3,
+  ) {
+    if (await this.checkPermission()) {
+      return this._controller?.floodFillPlane2D(
+        startPositionCanonical,
+        fillValue,
+        maxVoxels,
+        planeNormal,
+      );
+    }
+    return undefined;
+  }
+
+  async undo() {
+    if (await this.checkPermission()) {
+      this._controller?.undo();
+    }
+  }
+
+  async redo() {
+    if (await this.checkPermission()) {
+      this._controller?.redo();
+    }
   }
 
   get rpc() {
@@ -148,7 +234,7 @@ export class VoxelEditingContext
   }
 
   disposed() {
-    if (this.controller) this.controller.dispose();
+    if (this._controller) this._controller.dispose();
     if (this.optimisticRenderLayer)
       this.hostLayer.removeRenderLayer(this.optimisticRenderLayer);
     super.disposed();
@@ -443,6 +529,7 @@ export function UserLayerWithVoxelEditingMixin<
           primarySource,
           renderlayer,
           writable,
+          loadedSubsource.loadedDataSource.dataSource.canonicalUrl,
         );
         this.editingContexts.set(loadedSubsource, context);
         this.isEditable.value = writable;
@@ -486,15 +573,15 @@ export function UserLayerWithVoxelEditingMixin<
     }
 
     handleVoxAction(action: string, _context: LayerActionContext): void {
-      const firstContext = this.editingContexts.values().next().value;
+      const firstContext = this.editingContexts.values().next()
+        .value as VoxelEditingContext;
       if (!firstContext) return;
-      const controller = firstContext.controller;
       switch (action) {
         case "undo":
-          controller.undo();
+          void firstContext.undo();
           break;
         case "redo":
-          controller.redo();
+          void firstContext.redo();
           break;
         case "randomize-paint-value":
           this.setVoxelPaintValue(randomUint64());
