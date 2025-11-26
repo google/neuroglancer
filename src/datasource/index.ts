@@ -54,12 +54,10 @@ import {
   emptyCompletionResult,
   getPrefixMatchesWithDescriptions,
 } from "#src/util/completion.js";
-import type { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import type { vec3 } from "#src/util/geom.js";
 import { type ProgressOptions } from "#src/util/progress_listener.js";
 import type { Trackable } from "#src/util/trackable.js";
-import { CompoundTrackable } from "#src/util/trackable.js";
 
 export type CompletionResult = BasicCompletionResult<CompletionWithDescription>;
 
@@ -242,25 +240,6 @@ export function makeEmptyDataSourceSpecification(): DataSourceSpecification {
   };
 }
 
-export interface CommonCreationMetadata {
-  shape: number[];
-  dataType: DataType;
-  voxelSize: number[];
-  voxelUnit: string[];
-  numScales: number;
-  downsamplingFactor: number[];
-  name: string;
-}
-export abstract class DataSourceCreationState extends CompoundTrackable {}
-export interface CreateDataSourceOptions {
-  kvStoreUrl: string;
-  registry: DataSourceRegistry;
-  metadata: {
-    common: CommonCreationMetadata;
-    sourceRelated?: DataSourceCreationState;
-  };
-}
-
 export interface DataSourceProvider {
   scheme: string;
   description?: string;
@@ -285,8 +264,6 @@ export interface KvStoreBasedDataSourceProvider {
   completeUrl?: (
     options: GetKvStoreBasedDataSourceOptions,
   ) => Promise<CompletionResult>;
-  create?(options: CreateDataSourceOptions): Promise<void>;
-  creationState?: CompoundTrackable;
 }
 
 export interface GetKvStoreBasedDataSourceOptions
@@ -320,11 +297,6 @@ export class DataSourceRegistry extends RefCounted {
   }
   registerKvStoreBasedProvider(provider: KvStoreBasedDataSourceProvider) {
     this.kvStoreBasedDataSources.set(provider.scheme, provider);
-  }
-  getKvStoreBasedProvider(
-    scheme: string,
-  ): KvStoreBasedDataSourceProvider | undefined {
-    return this.kvStoreBasedDataSources.get(scheme);
   }
 
   getProvider(url: string): [DataSourceProvider, string, string] {
