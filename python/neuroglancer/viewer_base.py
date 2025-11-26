@@ -14,6 +14,7 @@
 
 
 import collections
+import collections.abc
 import contextlib
 import json
 import re
@@ -190,9 +191,9 @@ class ViewerCommonBase:
         layer: str,
         *,
         dimensions: coordinate_space.CoordinateSpace | None = None,
-    ) -> "Future[ts.TensorStore]":
+    ) -> "Future[viewer_config_state.VolumeInfo]":
         request_id = make_random_token()
-        future: Future[ts.TensorStore] = Future()
+        future: Future[viewer_config_state.VolumeInfo] = Future()
         self._volume_info_promises[request_id] = future
 
         def add_request(s):
@@ -230,8 +231,12 @@ class ViewerCommonBase:
                     )
                 ]
 
-                def read_function(domain: ts.IndexDomain, array, params):
-                    read_promise, read_future = ts.Promise.new()
+                def read_function(
+                    domain: ts.IndexDomain,
+                    array: np.ndarray,
+                    params: ts.VirtualChunkedReadParameters,
+                ) -> ts.Future[None]:
+                    read_promise, read_future = ts.Promise[None].new()
                     origin = domain.origin
                     grid_origin = info.grid_origin
                     chunk_shape = info.chunk_shape

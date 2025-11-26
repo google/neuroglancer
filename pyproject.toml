@@ -85,7 +85,6 @@ module = [
   "google.*",
   "zarr",
   "zarrita",
-  "tensorstore",
   "dask",
   "dask.*",
   "scipy",
@@ -100,17 +99,20 @@ dev = [
   "requests>=2.32.3",
   "selenium>=4",
   "tensorstore>=0.1.71",
+  "pandas-stubs>=2.2.3.241126",
+  "types-atomicwrites>=1.4.5.1",
+  "types-pillow>=10.2.0.20240822",
+  "types-requests>=2.32.0.20241016",
+  "types-setuptools>=75.8.0.20250110",
 ]
 ruff = [
   "ruff==0.3.2",
 ]
 mypy = [
   "mypy>=1.14.1",
-  "pandas-stubs>=2.2.3.241126",
-  "types-atomicwrites>=1.4.5.1",
-  "types-pillow>=10.2.0.20240822",
-  "types-requests>=2.32.0.20241016",
-  "types-setuptools>=75.8.0.20250110",
+]
+ty = [
+  "ty",
 ]
 test = [
   "pytest>=6.1.2",
@@ -141,3 +143,6 @@ default-groups = ["dev", "ruff", "mypy", "test", "docs"]
 testpaths = [
   "python/tests",
 ]
+
+[tool.ty.src]
+include = ["python"]

@@ -92,13 +92,13 @@ class AnnotationMap(typing.Generic[K, V]):
         """Checks if a given key is present."""
         if self._kvstore is None:
             raise KeyError("required index kind not available")
-        return self._key_encoder(key) in self._kvstore
+        return self._key_encoder(key) in self._kvstore  # type: ignore[operator]
 
-    def get(self, key: K, batch: ts.Batch | None = None) -> ts.Future:
+    def get(self, key: K, batch: ts.Batch | None = None) -> ts.Future[V | None]:
         """Reads a given key, returning a Future."""
         if self._kvstore is None:
             raise KeyError("required index kind not available")
-        promise, future = ts.Promise.new()
+        promise, future = ts.Promise[V | None].new()
 
         def done_callback(future):
             try:

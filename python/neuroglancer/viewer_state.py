@@ -1452,7 +1452,11 @@ class LinkedType(typing.Generic[T], JsonObjectWrapper):
 
     __slots__ = ()
     link = wrapped_property("link", optional(navigation_link_type, "linked"))
-    value: T
+    if _BUILDING_DOCS:
+        # For some reason `T` doesn't get resolved properly by sphinx-immaterial.
+        value: typing.Any
+    else:
+        value: T  # type: ignore[no-redef]
 
     _interpolate_function: typing.ClassVar[
         typing.Callable[[typing.Any, typing.Any, float], typing.Any]

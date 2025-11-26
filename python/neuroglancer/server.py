@@ -68,7 +68,7 @@ global_static_content_source = None
 
 global_server_args = dict(bind_address="127.0.0.1", bind_port=0)
 
-debug = False
+debug: bool = False
 
 _IS_GOOGLE_COLAB = "google.colab" in sys.modules
 
