@@ -30,12 +30,10 @@ import {
   getChunkTransformParameters,
 } from "#src/render_coordinate_transform.js";
 import type {
-  SliceViewBase,
   SliceViewSourceOptions,
-  TransformedSource,
+  SliceViewRenderLayer,
 } from "#src/sliceview/base.js";
 import { DataType } from "#src/sliceview/base.js";
-import type { SliceViewRenderLayer } from "#src/sliceview/renderlayer.js";
 import type { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import type { ImageRenderLayer } from "#src/sliceview/volume/image_renderlayer.js";
 import type { SegmentationRenderLayer } from "#src/sliceview/volume/segmentation_renderlayer.js";
@@ -131,15 +129,9 @@ export class VoxelEditingContext
     );
 
     // since we only allow drawing at max res, we can lock the optimistic render layer to it
-    this.optimisticRenderLayer.filterVisibleSources = function* (
-      this: SliceViewRenderLayer,
-      _sliceView: SliceViewBase,
-      sources: readonly TransformedSource[],
-    ): Iterable<TransformedSource> {
-      if (sources.length > 0) {
-        yield sources[0];
-      }
-    };
+    (
+      this.optimisticRenderLayer as SliceViewRenderLayer
+    ).getForcedSourceIndexOverride = () => 0;
 
     this.hostLayer.addRenderLayer(this.optimisticRenderLayer);
 

@@ -1072,6 +1072,7 @@ export function getVolumetricTransformedSources(
           effectiveVoxelSize[i] * globalScales[i],
         );
       }
+      effectiveVoxelSize.fill(1, displayRank);
       return {
         layerRank,
         lowerClipBound,
