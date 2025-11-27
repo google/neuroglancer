@@ -224,13 +224,13 @@ export class DataSourceSubsourceView extends RefCounted {
       MultiscaleVolumeChunkSource
     ) {
       const writableCheckbox = this.registerDisposer(
-        new TrackableBooleanCheckbox(loadedSubsource.writable),
+        new TrackableBooleanCheckbox(loadedSubsource.writingEnabled),
       );
       writableCheckbox.element.title = "Enable voxel editing for this source";
       const writableLabel = document.createElement("label");
       writableLabel.className = "neuroglancer-layer-data-source-writable-label";
       writableLabel.appendChild(writableCheckbox.element);
-      writableLabel.appendChild(document.createTextNode("[Writable?]"));
+      writableLabel.appendChild(document.createTextNode("[Enable writing?]"));
 
       this.registerDisposer(
         new ElementVisibilityFromTrackableBoolean(

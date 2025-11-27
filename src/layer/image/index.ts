@@ -341,16 +341,16 @@ void main() {
         );
         this.shaderError.changed.dispatch();
         context.registerDisposer(
-          registerNested((context, isWritable) => {
+          registerNested((context, writingEnabled) => {
             this.initializeVoxelEditingForSubsource(
               loadedSubsource,
               imageRenderLayer,
-              isWritable,
+              writingEnabled,
             );
             context.registerDisposer(() => {
               this.deinitializeVoxelEditingForSubsource(loadedSubsource);
             });
-          }, loadedSubsource.writable),
+          }, loadedSubsource.writingEnabled),
         );
       });
     }

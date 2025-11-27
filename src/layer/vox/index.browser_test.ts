@@ -207,7 +207,7 @@ describe("Voxel Editing Utilities", () => {
       });
       loadedSubsource.addRenderLayer(renderLayer);
 
-      loadedSubsource.writable.value = true;
+      loadedSubsource.writingEnabled.value = true;
       userLayer.initializeVoxelEditingForSubsource(
         loadedSubsource,
         renderLayer,
@@ -432,7 +432,9 @@ describe("Voxel Editing Utilities", () => {
     it("No Context: Fails", () => {
       const { userLayer } = createLayer(DataType.UINT64);
       userLayer.editingContexts.clear();
-      expect(() => userLayer.setVoxelPaintValue(1)).toThrow();
+      expect(() => userLayer.setVoxelPaintValue(1)).toThrow(
+        "No voxel editing context available",
+      );
     });
   });
 });

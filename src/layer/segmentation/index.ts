@@ -804,16 +804,16 @@ export class SegmentationUserLayer extends Base {
           });
           loadedSubsource.addRenderLayer(segmentationRenderLayer);
           context.registerDisposer(
-            registerNested((context, isWritable) => {
+            registerNested((context, writingEnabled) => {
               this.initializeVoxelEditingForSubsource(
                 loadedSubsource,
                 segmentationRenderLayer,
-                isWritable,
+                writingEnabled,
               );
               context.registerDisposer(() => {
                 this.deinitializeVoxelEditingForSubsource(loadedSubsource);
               });
-            }, loadedSubsource.writable),
+            }, loadedSubsource.writingEnabled),
           );
         }, this.displayState.segmentationGroupState.value);
       } else if (mesh !== undefined) {

@@ -98,12 +98,12 @@ export class VoxelEditingContext
     public hostLayer: UserLayerWithVoxelEditing,
     public primarySource: MultiscaleVolumeChunkSource,
     public primaryRenderLayer: ImageRenderLayer | SegmentationRenderLayer,
-    public writable: boolean,
+    public writingEnabled: boolean,
     public dataSourceUrl: string | undefined,
   ) {
     super();
 
-    if (!writable) return;
+    if (!writingEnabled) return;
 
     // NOTE: each of the following 3 checks may be removed if support for the checked contraint is added
     if (primarySource.rank !== 3) {
@@ -369,7 +369,7 @@ export class VoxelEditingContext
 }
 
 export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
-  isEditable: WatchableValue<boolean>;
+  hasSubsourcesWithWritingEnabled: WatchableValue<boolean>;
 
   voxBrushRadius: TrackableValue<number>;
   voxEraseMode: TrackableBoolean;
@@ -393,7 +393,7 @@ export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
   deinitializeVoxelEditingForSubsource(
     loadedSubsource: LoadedDataSubsource,
   ): void;
-
+  updateHasSubsourcesWithWritingEnabled(): void;
   getIdentitySliceViewSourceOptions(): SliceViewSourceOptions;
   handleVoxAction(action: string, context: LayerActionContext): void;
 }
@@ -403,7 +403,7 @@ export function UserLayerWithVoxelEditingMixin<
 >(Base: TBase) {
   abstract class C extends Base implements UserLayerWithVoxelEditing {
     editingContexts = new Map<LoadedDataSubsource, VoxelEditingContext>();
-    isEditable = new WatchableValue<boolean>(false);
+    hasSubsourcesWithWritingEnabled = new WatchableValue<boolean>(false);
     paintValue = new TrackableValue<bigint>(1n, (x) => parseUint64(x));
 
     // Brush properties
@@ -430,7 +430,7 @@ export function UserLayerWithVoxelEditingMixin<
         order: 20,
         hidden: makeDerivedWatchableValue(
           (editable) => !editable,
-          this.isEditable,
+          this.hasSubsourcesWithWritingEnabled,
         ),
         getter: () => new VoxToolTab(this),
       });
@@ -474,6 +474,7 @@ export function UserLayerWithVoxelEditingMixin<
 
     setVoxelPaintValue(x: any) {
       const editContext = this.editingContexts.values().next().value;
+      if (!editContext) throw new Error("No voxel editing context available");
       const dataType = editContext.primarySource.dataType;
       let value: bigint;
 
@@ -511,10 +512,16 @@ export function UserLayerWithVoxelEditingMixin<
       transform: WatchableValueInterface<RenderLayerTransformOrError>,
     ): ImageRenderLayer | SegmentationRenderLayer;
 
+    updateHasSubsourcesWithWritingEnabled(): void {
+      this.hasSubsourcesWithWritingEnabled.value = this.editingContexts
+        .entries()
+        .some((value) => value[1].writingEnabled);
+    }
+
     initializeVoxelEditingForSubsource(
       loadedSubsource: LoadedDataSubsource,
       renderlayer: SegmentationRenderLayer | ImageRenderLayer,
-      writable: boolean = true,
+      writingEnabled: boolean = true,
     ): void {
       if (this.editingContexts.has(loadedSubsource)) return;
 
@@ -526,15 +533,16 @@ export function UserLayerWithVoxelEditingMixin<
           this,
           primarySource,
           renderlayer,
-          writable,
+          writingEnabled,
           loadedSubsource.loadedDataSource.dataSource.canonicalUrl,
         );
         this.editingContexts.set(loadedSubsource, context);
-        this.isEditable.value = writable;
+        this.updateHasSubsourcesWithWritingEnabled();
         this.setVoxelPaintValue(this.paintValue.value);
       } catch (e) {
-        if (writable) {
-          loadedSubsource.writable.value = false;
+        if (writingEnabled) {
+          loadedSubsource.writingEnabled.value = false;
+          this.updateHasSubsourcesWithWritingEnabled();
           const msg = e instanceof Error ? e.message : String(e);
           console.warn("Failed to initialize voxel editing:", msg);
           StatusMessage.showTemporaryMessage(msg, 5000);
@@ -548,9 +556,7 @@ export function UserLayerWithVoxelEditingMixin<
         context.dispose();
         this.editingContexts.delete(loadedSubsource);
       }
-      if (this.editingContexts.size === 0 && this.isEditable.value) {
-        this.isEditable.value = false;
-      }
+      this.updateHasSubsourcesWithWritingEnabled();
     }
 
     getIdentitySliceViewSourceOptions(): SliceViewSourceOptions {

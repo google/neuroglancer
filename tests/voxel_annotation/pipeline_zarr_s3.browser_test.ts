@@ -145,7 +145,7 @@ test("Pipeline: Zarr V2 (UINT8) Undo/Redo with Brush", async () => {
     type: "image",
     source: {
       url: `s3+http://localhost:9000/${BUCKET}/data.zarr`,
-      subsources: { default: { enabled: true, writable: true } },
+      subsources: { default: { enabled: true, writingEnabled: true } },
       enableDefaultSubsources: false,
     },
   });
@@ -212,7 +212,7 @@ test("Pipeline: Zarr V3 (UINT64) Brush", async () => {
     type: "segmentation",
     source: {
       url: `s3+http://localhost:9000/${BUCKET}/data.zarr|zarr3:`,
-      subsources: { default: { enabled: true, writable: true } },
+      subsources: { default: { enabled: true, writingEnabled: true } },
       enableDefaultSubsources: false,
     },
   });
@@ -262,7 +262,7 @@ test("Pipeline: Zarr V2 (UINT32) with Slash Separator", async () => {
     type: "segmentation",
     source: {
       url: `s3+http://localhost:9000/${BUCKET}/data.zarr`,
-      subsources: { default: { enabled: true, writable: true } },
+      subsources: { default: { enabled: true, writingEnabled: true } },
       enableDefaultSubsources: false,
     },
   });
@@ -326,7 +326,7 @@ test("Pipeline: Flood Fill (Zarr V2 UINT8 on img layer)", async () => {
     type: "image",
     source: {
       url: `s3+http://localhost:9000/${BUCKET}/data.zarr`,
-      subsources: { default: { enabled: true, writable: true } },
+      subsources: { default: { enabled: true, writingEnabled: true } },
       enableDefaultSubsources: false,
     },
   });

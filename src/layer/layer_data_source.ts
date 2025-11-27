@@ -64,7 +64,11 @@ export function parseDataSubsourceSpecificationFromJson(
   verifyObject(json);
   return {
     enabled: verifyOptionalObjectProperty(json, "enabled", verifyBoolean),
-    writable: verifyOptionalObjectProperty(json, "writable", verifyBoolean),
+    writingEnabled: verifyOptionalObjectProperty(
+      json,
+      "writingEnabled",
+      verifyBoolean,
+    ),
   };
 }
 
@@ -110,8 +114,8 @@ export function layerDataSourceSpecificationFromJson(
 }
 
 function dataSubsourceSpecificationToJson(spec: DataSubsourceSpecification) {
-  const { enabled, writable } = spec;
-  return { enabled, writable };
+  const { enabled, writingEnabled } = spec;
+  return { enabled, writingEnabled };
 }
 
 export function layerDataSourceSpecificationToJson(
@@ -149,7 +153,7 @@ export class LoadedDataSubsource {
   subsourceToModelSubspaceTransform: Float32Array;
   modelSubspaceDimensionIndices: number[];
   enabled: boolean;
-  writable: TrackableBoolean;
+  writingEnabled: TrackableBoolean;
   activated: RefCounted | undefined = undefined;
   guardValues: any[] = [];
   messages = new MessageList();
@@ -182,11 +186,11 @@ export class LoadedDataSubsource {
       ),
     } = subsourceEntry;
     this.enabled = enabled;
-    this.writable = new TrackableBoolean(
-      subsourceSpec?.writable ?? false,
+    this.writingEnabled = new TrackableBoolean(
+      subsourceSpec?.writingEnabled ?? false,
       false,
     );
-    this.writable.changed.add(
+    this.writingEnabled.changed.add(
       loadedDataSource.layer.dataSourcesChanged.dispatch,
     );
     this.subsourceToModelSubspaceTransform = subsourceToModelSubspaceTransform;
@@ -503,7 +507,9 @@ export class LayerDataSource extends RefCounted {
                 loadedSubsource.enabled !== defaultEnabledValue
                   ? loadedSubsource.enabled
                   : undefined,
-              writable: loadedSubsource.writable.value ? true : undefined,
+              writingEnabled: loadedSubsource.writingEnabled.value
+                ? true
+                : undefined,
             },
           ];
         }),
