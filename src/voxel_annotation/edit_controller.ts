@@ -58,7 +58,6 @@ export class VoxelEditController extends SharedObject {
       );
     }
 
-    // Get all sources for all scales and orientations
     const sourcesByScale = this.host.primarySource.getSources(
       this.getIdentitySliceViewSourceOptions(),
     );
@@ -113,7 +112,6 @@ export class VoxelEditController extends SharedObject {
       throw new Error("VoxelEditController: Invalid multiscale rank.");
     }
     const r = rank as number;
-    // Identity mapping from multiscale to view for our purposes.
     const displayRank = r;
     const multiscaleToViewTransform = new Float32Array(displayRank * r);
     for (let chunkDim = 0; chunkDim < r; ++chunkDim) {
@@ -149,7 +147,7 @@ export class VoxelEditController extends SharedObject {
     return source;
   }
 
-  // Paint a disk (slice-aligned via basis) or sphere in WORLD/ canonical units; we transform to LOD grid before sending.
+  // Paint a disk (require the basis) or a sphere
   paintBrushWithShape(
     centerCanonical: Float32Array,
     radiusCanonical: number,
@@ -158,7 +156,6 @@ export class VoxelEditController extends SharedObject {
     basis?: { u: Float32Array; v: Float32Array },
   ) {
     if (!Number.isFinite(radiusCanonical) || radiusCanonical <= 0) {
-      void basis; // basis is currently unused for disk alignment in this refactor
       throw new Error("paintBrushWithShape: 'radius' must be > 0.");
     }
     if (!centerCanonical || centerCanonical.length < 3) {
@@ -167,7 +164,7 @@ export class VoxelEditController extends SharedObject {
       );
     }
 
-    // For V1 we use the minimum LOD (index 0)
+    // Hardcode drawing at LOD 0 for now.
     const voxelSize = 1;
     const sourceIndex = 0;
     if (!this.host.previewSource)
@@ -181,7 +178,6 @@ export class VoxelEditController extends SharedObject {
       throw new Error("paintBrushWithShape: Missing preview source");
     }
 
-    // Convert center and radius to the level’s voxel grid.
     const cx = Math.round((centerCanonical[0] ?? 0) / voxelSize);
     const cy = Math.round((centerCanonical[1] ?? 0) / voxelSize);
     const cz = Math.round((centerCanonical[2] ?? 0) / voxelSize);
@@ -250,7 +246,6 @@ export class VoxelEditController extends SharedObject {
       entry.indices.push(index);
     }
 
-    // Apply edits locally on the specific source for immediate feedback.
     const localEdits = new Map<string, { indices: number[]; value: bigint }>();
     for (const [voxKey, edit] of editsByVoxKey.entries()) {
       const parsed = parseVoxChunkKey(voxKey);
@@ -275,7 +270,6 @@ export class VoxelEditController extends SharedObject {
     this.commitEdits(backendEdits);
   }
 
-  /** Commit helper for UI tools. */
   commitEdits(
     edits: {
       key: string;
@@ -299,9 +293,7 @@ export class VoxelEditController extends SharedObject {
   }
 
   /**
-   * Frontend 2D flood fill helper: computes on currently selected LOD and returns an edits payload
-   * suitable for VOX_EDIT_COMMIT_VOXELS without committing. Hard-cap deny semantics.
-   * The seed is simply the first clicked voxel in canonical/world units.
+   * 2D flood fill with failsafe to avoid propagating via small holes (see morphologicalConfig to configure).
    */
   async floodFillPlane2D(
     startPositionCanonical: Float32Array,
@@ -385,11 +377,9 @@ export class VoxelEditController extends SharedObject {
       const du = nu - u;
       const dv = nv - v;
 
-      // Perpendicular direction
       const perpU = -dv;
       const perpV = du;
 
-      // Check if the NEIGHBOR position has sufficient thickness on both sides
       for (let offset = -halfThickness; offset <= halfThickness; ++offset) {
         const testU = nu + perpU * offset;
         const testV = nv + perpV * offset;
@@ -409,7 +399,6 @@ export class VoxelEditController extends SharedObject {
       requiredThickness: number,
     ) => {
       const subQueue: [number, number][] = [];
-      // The bounding box for the local fill is defined in the (u, v) coordinate system
       const halfSize = requiredThickness * 2; // multiply by 2 to avoid small artifacts
       const startKey = `${startU},${startV}`;
       if (visited.has(startKey)) return;

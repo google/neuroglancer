@@ -723,16 +723,13 @@ export class VoxelEditController extends SharedObject {
           voxChunkKeys: [voxKey],
           message: useOldValues ? "Undo failed." : "Redo failed.",
         });
-        // Stop processing this action on the first failure
         break;
       }
     }
 
     if (success) {
-      // Only move the action to the target stack if all operations succeeded.
       targetStack.push(action);
     } else {
-      // On failure, return the action to its original stack to maintain consistency.
       sourceStack.push(action);
     }
 
