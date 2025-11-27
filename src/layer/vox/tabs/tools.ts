@@ -32,13 +32,10 @@ export class VoxToolTab extends Tab {
   constructor(public layer: UserLayerWithVoxelEditing) {
     super();
     const { element } = this;
-    element.classList.add("neuroglancer-vox-tools-tab");
 
     const toolbox = document.createElement("div");
-    toolbox.className = "neuroglancer-vox-toolbox";
 
     const toolsRow = document.createElement("div");
-    toolsRow.className = "neuroglancer-vox-row";
     const toolsTitle = document.createElement("div");
     toolsTitle.textContent = "Tools";
     toolsTitle.style.fontWeight = "600";
@@ -69,6 +66,11 @@ export class VoxToolTab extends Tab {
     toolsRow.appendChild(toolButtonsContainer);
     toolbox.appendChild(toolsRow);
 
+    const settingsTitle = document.createElement("div");
+    settingsTitle.textContent = "Settings";
+    settingsTitle.style.fontWeight = "600";
+    toolbox.appendChild(settingsTitle);
+
     for (const controlDef of VOXEL_LAYER_CONTROLS) {
       const controlElement = addLayerControlToOptionsTab(
         this,
@@ -78,8 +80,8 @@ export class VoxToolTab extends Tab {
       );
 
       if (
-        controlDef.toolJson.type === "vox:undo" ||
-        controlDef.toolJson.type === "vox:redo"
+        controlDef.toolJson.type === "vox-undo" ||
+        controlDef.toolJson.type === "vox-redo"
       ) {
         const button = controlElement.querySelector("button");
         if (button) {
@@ -88,7 +90,10 @@ export class VoxToolTab extends Tab {
               {
                 changed: this.layer.layersChanged,
                 get value() {
-                  return layer.editingContexts.values().next().value.controller;
+                  return (
+                    layer.editingContexts.values().next().value?._controller ??
+                    undefined
+                  );
                 },
               },
               (
@@ -101,7 +106,7 @@ export class VoxToolTab extends Tab {
                   return;
                 }
                 const watchable =
-                  controlDef.toolJson.type === "vox:undo"
+                  controlDef.toolJson.type === "vox-undo"
                     ? controller.undoCount
                     : controller.redoCount;
                 context.registerDisposer(
@@ -114,6 +119,13 @@ export class VoxToolTab extends Tab {
             ),
           );
         }
+      }
+
+      if (controlDef.toolJson.type === "vox-undo") {
+        const actionsTitle = document.createElement("div");
+        actionsTitle.textContent = "Actions";
+        actionsTitle.style.fontWeight = "600";
+        toolbox.appendChild(actionsTitle);
       }
 
       toolbox.appendChild(controlElement);

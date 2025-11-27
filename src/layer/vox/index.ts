@@ -121,11 +121,9 @@ export class VoxelEditingContext
       primarySource,
     );
 
-    const transform = primaryRenderLayer.transform;
-
     this.optimisticRenderLayer = this.hostLayer._createVoxelRenderLayer(
       this.previewSource,
-      transform,
+      primaryRenderLayer.transform,
     );
 
     // since we only allow drawing at max res, we can lock the optimistic render layer to it
@@ -181,8 +179,10 @@ export class VoxelEditingContext
     shape: BrushShape,
     basis?: { u: Float32Array; v: Float32Array },
   ) {
+    if (!this._controller)
+      throw new Error("Cannot use paintBrushWithShape without a controller");
     if (await this.checkPermission()) {
-      this._controller?.paintBrushWithShape(
+      this._controller.paintBrushWithShape(
         centerCanonical,
         radiusCanonical,
         value,
@@ -198,8 +198,10 @@ export class VoxelEditingContext
     maxVoxels: number,
     planeNormal: vec3,
   ) {
+    if (!this._controller)
+      throw new Error("Cannot use floodFillPlane2D without a controller");
     if (await this.checkPermission()) {
-      return this._controller?.floodFillPlane2D(
+      return this._controller.floodFillPlane2D(
         startPositionCanonical,
         fillValue,
         maxVoxels,
@@ -210,14 +212,18 @@ export class VoxelEditingContext
   }
 
   async undo() {
+    if (!this._controller)
+      throw new Error("Cannot use undo without a controller");
     if (await this.checkPermission()) {
-      this._controller?.undo();
+      this._controller.undo();
     }
   }
 
   async redo() {
+    if (!this._controller)
+      throw new Error("Cannot use redo without a controller");
     if (await this.checkPermission()) {
-      this._controller?.redo();
+      this._controller.redo();
     }
   }
 
