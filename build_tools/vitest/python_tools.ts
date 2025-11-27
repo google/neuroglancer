@@ -15,18 +15,12 @@
  */
 
 import { spawnSync } from "node:child_process";
-import path from "node:path";
-
-export const PYTHON_TEST_TOOLS_PATH = path.join(
-  import.meta.dirname,
-  "python_tools",
-);
 
 export async function syncPythonTools() {
   // Note: For unknown reasons, using `await promisify(spawn)` in place of
   // `spawnSync` causes the vitest process to exit as soon as the child
   // process completes.
-  spawnSync("uv", ["sync", "--project", PYTHON_TEST_TOOLS_PATH], {
+  spawnSync("uv", ["sync", "--only-group", "vitest"], {
     stdio: ["ignore", "inherit", "inherit"],
   });
 }

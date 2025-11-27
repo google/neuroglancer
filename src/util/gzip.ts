@@ -25,7 +25,7 @@ export function isGzipFormat(data: ArrayBufferView) {
 }
 
 export async function decodeGzip(
-  data: ArrayBuffer | ArrayBufferView | Response,
+  data: ArrayBuffer | ArrayBufferView<ArrayBuffer> | Response,
   format: CompressionFormat,
   signal?: AbortSignal,
 ) {
@@ -55,8 +55,10 @@ export function decodeGzipStream(
 /**
  * Decompress `data` if it is in gzip format, otherwise just return it.
  */
-export async function maybeDecompressGzip(data: ArrayBuffer | ArrayBufferView) {
-  let byteView: Uint8Array;
+export async function maybeDecompressGzip(
+  data: ArrayBuffer | ArrayBufferView<ArrayBuffer>,
+) {
+  let byteView: Uint8Array<ArrayBuffer>;
   if (data instanceof ArrayBuffer) {
     byteView = new Uint8Array(data);
   } else {

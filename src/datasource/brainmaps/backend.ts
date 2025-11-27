@@ -491,6 +491,7 @@ async function makeBatchMeshRequest<T>(
     const objectId = id.substring(0, splitIndex);
     const fragmentId = id.substring(splitIndex + 1);
     if (objectId !== prevObjectId) {
+      prevObjectId = objectId;
       batches.push({ object_id: objectId, fragment_keys: [] });
     }
     batches[batches.length - 1].fragment_keys.push(fragmentId);

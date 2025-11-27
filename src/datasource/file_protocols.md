@@ -24,7 +24,6 @@ File-backed data sources, which include [precomputed](./precomputed), [zarr](./z
   must be configured to send an appropriate `Access-Control-Allow-Origin` header.
 
 - `gs://BUCKET/PATH`: access to Google Cloud Storage (GCS) buckets
-
   - When not using the Python integration, Neuroglancer can only access buckets that allow public read
     access and do not require [requester pays](https://cloud.google.com/storage/docs/requester-pays).
 

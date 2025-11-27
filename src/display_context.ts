@@ -686,7 +686,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     this.framerateMonitor.grabAnyFinishedQueryResults(gl);
   }
 
-  getDepthArray(): Float32Array {
+  getDepthArray(): Float32Array<ArrayBuffer> {
     const { width, height } = this.canvas;
     const depthArray = new Float32Array(width * height);
     for (const panel of this.panels) {

@@ -155,7 +155,7 @@ def cibuildwheel(session: nox.Session):
         env={
             "CIBW_BUILD_FRONTEND": "build[uv]",
             "CIBW_ARCHS_MACOS": "x86_64 arm64",
-            "CIBW_SKIP": "pp* *_i686 *-win32 *-musllinux* cp314*",
+            "CIBW_SKIP": "pp* *_i686 *-win32 *-musllinux* cp314* cp315*",
             "CIBW_TEST_GROUPS": "test",
             "CIBW_TEST_COMMAND": "python -m pytest {project}/python/tests -vv -s --skip-browser-tests",
             "CIBW_MANYLINUX_X86_64_IMAGE": "manylinux_2_28",

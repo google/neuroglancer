@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-export function toBase64(array: ArrayBufferView): Promise<string> {
+export function toBase64(array: ArrayBufferView<ArrayBuffer>): Promise<string> {
   return new Promise((resolve) => {
     const blob = new Blob([array], { type: "application/octet-stream" });
     const reader = new FileReader();

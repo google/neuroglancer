@@ -69,23 +69,27 @@ function readAllUsingYauzl(zipPath: string) {
   });
 }
 
+async function compareToYauzl(relativePath: string) {
+  const url = (await serverFixture.serverUrl()) + `${relativePath}|zip:`;
+  const { kvStoreContext } = await sharedKvStoreContext();
+  const kvStore = kvStoreContext.getKvStore(url);
+  const contentFromZip = await readAllFromKvStore(kvStore.store, kvStore.path);
+  const expectedFiles = await readAllUsingYauzl(
+    path.join(TEST_DATA_DIR, relativePath),
+  );
+  expect(contentFromZip).toEqual(expectedFiles);
+}
+
 describe("yauzl success cases", async () => {
   const relativePath = "zip/from-yauzl/success";
   const zipFiles = await fs.readdir(path.join(TEST_DATA_DIR, relativePath));
   test.for(zipFiles)("%s", async (zipFile) => {
-    const url =
-      (await serverFixture.serverUrl()) + `${relativePath}/${zipFile}|zip:`;
-    const { kvStoreContext } = await sharedKvStoreContext();
-    const kvStore = kvStoreContext.getKvStore(url);
-    const contentFromZip = await readAllFromKvStore(
-      kvStore.store,
-      kvStore.path,
-    );
-    const expectedFiles = await readAllUsingYauzl(
-      path.join(TEST_DATA_DIR, relativePath, zipFile),
-    );
-    expect(contentFromZip).toEqual(expectedFiles);
+    await compareToYauzl(`${relativePath}/${zipFile}`);
   });
+});
+
+test("zip64 larger than 65557", async () => {
+  await compareToYauzl("zip/zip64_larger_than_65557.zip");
 });
 
 describe("yauzl failure cases", async () => {

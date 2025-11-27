@@ -1,4 +1,0 @@
-[style]
-based_on_style: pep8
-column_limit: 100
-split_arguments_when_comma_terminated: true

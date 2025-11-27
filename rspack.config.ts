@@ -1,9 +1,10 @@
 import path from "node:path";
+import { defineConfig } from "@rspack/cli";
 import { HtmlRspackPlugin, ProgressPlugin } from "@rspack/core";
 import { normalizeConfigurationWithDefine } from "./build_tools/rspack/configuration_with_define.js";
-import packageJson from "./package.json";
+import packageJson from "./package.json" with { type: "json" };
 
-export default (env, args) => {
+export default defineConfig((env, args) => {
   const mode = args.mode === "production" ? "production" : "development";
   const config = {
     mode,
@@ -124,4 +125,4 @@ export default (env, args) => {
   return env.NEUROGLANCER_CLI
     ? config
     : normalizeConfigurationWithDefine(config);
-};
+});

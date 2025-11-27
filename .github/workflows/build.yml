@@ -31,12 +31,12 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.x
+          node-version: 24.x
           cache: "npm"
           cache-dependency-path: |
             package-lock.json
       # uv required for javascript tests
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: false
       # go needed for fake_gcs_server used by the javascript tests
@@ -60,8 +60,6 @@ jobs:
       - name: Build Python client bundles
         run: npm run build-python -- --no-typecheck --no-lint
       - run: npm run build-package
-      - run: npm publish --dry-run
-        working-directory: dist/package
       - name: Run JavaScript tests (including WebGL)
         run: npm test
         if: ${{ runner.os != 'macOS' }}
@@ -92,13 +90,13 @@ jobs:
           version: 10
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.x
+          node-version: 24.x
           cache: "pnpm"
           cache-dependency-path: |
             examples/**/pnpm-lock.yaml
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.x
+          node-version: 24.x
           cache: "npm"
           cache-dependency-path: |
             package-lock.json
@@ -122,8 +120,8 @@ jobs:
     strategy:
       matrix:
         python-version:
-          - "3.9"
-          - "3.12"
+          - "3.11"
+          - "3.13"
         os:
           - "ubuntu-latest"
           - "windows-latest"
@@ -136,13 +134,10 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.x
-      - uses: astral-sh/setup-uv@v5
+          node-version: 24.x
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: false
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
           python-version: ${{ matrix.python-version }}
       - uses: ./.github/actions/setup-firefox
       - name: Setup tmate session
@@ -185,15 +180,11 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.x
+          node-version: 24.x
           cache: "npm"
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: false
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.x
       - name: Get uv cache dir
         id: uv-cache
         run: |
@@ -227,13 +218,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: false
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.12
       - name: Setup Graphviz
         uses: ts-graphviz/setup-graphviz@b1de5da23ed0a6d14e0aeee8ed52fdd87af2363c # v2.0.2
         with:
@@ -260,7 +247,7 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22.x
+          node-version: 24.x
           registry-url: "https://registry.npmjs.org"
       - uses: actions/download-artifact@v4
         with:

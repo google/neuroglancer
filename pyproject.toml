@@ -1,6 +1,6 @@
 [project]
 name = "neuroglancer"
-requires-python = ">= 3.10"
+requires-python = ">= 3.11"
 dynamic = ["version"]
 description = "Python integration for neuroglancer, a WebGL-based viewer for volumetric data"
 readme = "README.md"
@@ -38,7 +38,7 @@ requires = [
   "wheel",
   "setuptools_scm>=8.1.0",
   "numpy>=2",
-  "nodejs-wheel>=22",
+  "nodejs-wheel>=22.18",
 ]
 build-backend = "setuptools.build_meta"
 
@@ -128,6 +128,9 @@ docs = [
 ]
 cibuildwheel = [
   "cibuildwheel>=2.22.0",
+]
+vitest = [
+  "moto[s3,server]>=5.0.28",
 ]
 
 [tool.uv]

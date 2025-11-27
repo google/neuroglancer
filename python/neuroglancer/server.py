@@ -538,8 +538,6 @@ def set_dev_server_content_source():
             "dev-server-python",
             "--",
             "--port=0",
-            "--no-lint",
-            "--no-typecheck",
         ],
         cwd=root_dir,
         stdin=subprocess.PIPE,

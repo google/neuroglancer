@@ -24,8 +24,6 @@ import { fetchOk } from "#src/util/http_request.js";
 import { fixture, type Fixture } from "#tests/fixtures/fixture.js";
 import type { mswFixture } from "#tests/fixtures/msw";
 
-declare const PYTHON_TEST_TOOLS_PATH: string;
-
 export function fakeS3ServerFixture(
   options: {
     msw?: ReturnType<typeof mswFixture>;
@@ -34,11 +32,9 @@ export function fakeS3ServerFixture(
   const { msw } = options;
   const s3Server = fixture(async (stack) => {
     const proc = stack.use(
-      spawn(
-        "uv",
-        ["--project", PYTHON_TEST_TOOLS_PATH, "run", "moto_server", "-p", "0"],
-        { stdio: ["ignore", "ignore", "pipe"] },
-      ),
+      spawn("uv", ["run", "--only-group", "vitest", "moto_server", "-p", "0"], {
+        stdio: ["ignore", "ignore", "pipe"],
+      }),
     );
 
     const { resolve, reject, promise } = Promise.withResolvers<string>();
