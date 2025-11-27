@@ -206,15 +206,7 @@ export class VolumeChunkSource
       return initialValue;
     }
 
-    const { spec } = this;
-    const { rank, chunkDataSize } = spec;
-    const chunkGridPosition = this.tempChunkGridPosition;
-
-    for (let chunkDim = 0; chunkDim < rank; ++chunkDim) {
-      const voxel = chunkPosition[chunkDim];
-      const chunkSize = chunkDataSize[chunkDim];
-      chunkGridPosition[chunkDim] = Math.floor(voxel / chunkSize);
-    }
+    const { chunkGridPosition } = this.computeChunkIndices(chunkPosition);
 
     try {
       await this.rpc!.promiseInvoke(SLICEVIEW_REQUEST_CHUNK_RPC_ID, {
@@ -341,7 +333,7 @@ export class InMemoryVolumeChunkSource extends VolumeChunkSource {
         this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
       }
     };
-    // adding a small delay to avoid flickering since the base source will take some time to download the new data
+    // adding a small delay to avoid flickering due to the base source taking some time to download the new data
     setTimeout(update, 100);
   }
 

@@ -196,7 +196,7 @@ export class VoxelEditingContext
     startPositionCanonical: Float32Array,
     fillValue: bigint,
     maxVoxels: number,
-    planeNormal: vec3,
+    basis: { u: Float32Array; v: Float32Array },
   ) {
     if (!this._controller)
       throw new Error("Cannot use floodFillPlane2D without a controller");
@@ -205,7 +205,7 @@ export class VoxelEditingContext
         startPositionCanonical,
         fillValue,
         maxVoxels,
-        planeNormal,
+        basis,
       );
     }
     return undefined;

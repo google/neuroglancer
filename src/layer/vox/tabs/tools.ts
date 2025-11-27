@@ -19,7 +19,7 @@ import type { UserLayerWithVoxelEditing } from "#src/layer/vox/index.js";
 import { observeWatchable } from "#src/trackable_value.js";
 import { makeToolButton } from "#src/ui/tool.js";
 import {
-  ADOPT_VOXEL_LABEL_TOOL_ID,
+  SEG_PICKER_TOOL_ID,
   BRUSH_TOOL_ID,
   FLOODFILL_TOOL_ID,
 } from "#src/ui/voxel_annotations.js";
@@ -56,7 +56,7 @@ export class VoxToolTab extends Tab {
     });
 
     const pickButton = makeToolButton(this, layer.toolBinder, {
-      toolJson: { type: ADOPT_VOXEL_LABEL_TOOL_ID },
+      toolJson: { type: SEG_PICKER_TOOL_ID },
       label: "Seg Picker",
     });
 

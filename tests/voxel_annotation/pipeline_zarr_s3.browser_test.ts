@@ -28,7 +28,6 @@ import type {
   VoxelEditingContext,
   UserLayerWithVoxelEditing,
 } from "#src/layer/vox/index.js";
-import { vec3 } from "#src/util/geom.js";
 import { Viewer } from "#src/viewer.js";
 import { mswFixture } from "#tests/fixtures/msw";
 
@@ -338,12 +337,15 @@ test("Pipeline: Flood Fill (Zarr V2 UINT8 on img layer)", async () => {
   const seed = new Float32Array([15, 15, 0]);
   const fillValue = 128n;
   const maxVoxels = 1000;
-  const planeNormal = vec3.fromValues(0, 0, 1);
+  const basis = {
+    u: new Float32Array([1, 0, 0]),
+    v: new Float32Array([0, 1, 0]),
+  };
 
   await poll(
     async () => {
       try {
-        await context.floodFillPlane2D(seed, fillValue, maxVoxels, planeNormal);
+        await context.floodFillPlane2D(seed, fillValue, maxVoxels, basis);
         return true;
       } catch (e: any) {
         if (e.message.includes("unloaded")) {

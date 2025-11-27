@@ -694,7 +694,7 @@ export function* filterVisibleSources(
   renderLayer: SliceViewRenderLayer,
   sources: readonly TransformedSource[],
 ): Iterable<TransformedSource> {
-  // First: allow a render layer to force a specific multiscale index for safety-critical flows.
+  // allows a render layer to force a specific multiscale
   const forcedIndex = renderLayer.getForcedSourceIndexOverride?.();
   if (forcedIndex !== undefined) {
     if (

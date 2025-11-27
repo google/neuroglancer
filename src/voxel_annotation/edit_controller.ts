@@ -307,7 +307,7 @@ export class VoxelEditController extends SharedObject {
     startPositionCanonical: Float32Array,
     fillValue: bigint,
     maxVoxels: number,
-    planeNormal: vec3, // MUST be a normalized vector
+    basis: { u: Float32Array; v: Float32Array },
   ): Promise<{
     edits: { key: string; indices: number[]; value: bigint }[];
     filledCount: number;
@@ -338,17 +338,6 @@ export class VoxelEditController extends SharedObject {
       return { edits: [], filledCount: 0, originalValue };
     }
 
-    const U = vec3.create();
-    const V = vec3.create();
-    const tempVec =
-      Math.abs(vec3.dot(planeNormal, vec3.fromValues(1, 0, 0))) < 0.9
-        ? vec3.fromValues(1, 0, 0)
-        : vec3.fromValues(0, 1, 0);
-    vec3.cross(U, tempVec, planeNormal);
-    vec3.normalize(U, U);
-    vec3.cross(V, planeNormal, U);
-    vec3.normalize(V, V);
-
     const visited = new Set<string>();
     const queue: [number, number][] = [];
     let filledCount = 0;
@@ -356,8 +345,8 @@ export class VoxelEditController extends SharedObject {
 
     const map2dTo3d = (u: number, v: number): vec3 => {
       const point = vec3.clone(startVoxelLod);
-      vec3.scaleAndAdd(point, point, U, u);
-      vec3.scaleAndAdd(point, point, V, v);
+      vec3.scaleAndAdd(point, point, basis.u as vec3, u);
+      vec3.scaleAndAdd(point, point, basis.v as vec3, v);
       return vec3.round(vec3.create(), point);
     };
 

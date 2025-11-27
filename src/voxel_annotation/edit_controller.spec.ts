@@ -15,7 +15,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { vec3 } from "#src/util/geom.js";
 import {
   BrushShape,
   VOX_EDIT_COMMIT_VOXELS_RPC_ID,
@@ -202,13 +201,16 @@ describe("VoxelEditController", () => {
       const seed = new Float32Array([3, 3, 0]);
       const fillValue = 5n;
       const maxVoxels = 100;
-      const planeNormal = vec3.fromValues(0, 0, 1);
+      const basis = {
+        u: new Float32Array([1, 0, 0]),
+        v: new Float32Array([0, 1, 0]),
+      };
 
       const result = await controller.floodFillPlane2D(
         seed,
         fillValue,
         maxVoxels,
-        planeNormal,
+        basis,
       );
 
       expect(result.filledCount).toBe(9);
@@ -222,10 +224,13 @@ describe("VoxelEditController", () => {
     it("respects the plane constraint", async () => {
       const seed = new Float32Array([50, 50, 5]);
       const maxVoxels = 20;
-      const planeNormal = vec3.fromValues(0, 0, 1);
+      const basis = {
+        u: new Float32Array([1, 0, 0]),
+        v: new Float32Array([0, 1, 0]),
+      };
 
       await expect(
-        controller.floodFillPlane2D(seed, 2n, maxVoxels, planeNormal),
+        controller.floodFillPlane2D(seed, 2n, maxVoxels, basis),
       ).rejects.toThrow(/exceeds the limit/);
 
       mockPrimarySource.dataMap.set("51,50,5", 1n);
@@ -233,12 +238,7 @@ describe("VoxelEditController", () => {
       mockPrimarySource.dataMap.set("50,51,5", 1n);
       mockPrimarySource.dataMap.set("50,49,5", 1n);
 
-      const result = await controller.floodFillPlane2D(
-        seed,
-        2n,
-        100,
-        planeNormal,
-      );
+      const result = await controller.floodFillPlane2D(seed, 2n, 100, basis);
 
       expect(result.filledCount).toBe(1);
       expect(result.edits[0].indices.length).toBe(1);
@@ -251,27 +251,25 @@ describe("VoxelEditController", () => {
     it("throws when max voxels exceeded", async () => {
       const seed = new Float32Array([10, 10, 0]);
       const maxVoxels = 10;
+      const basis = {
+        u: new Float32Array([1, 0, 0]),
+        v: new Float32Array([0, 1, 0]),
+      };
 
       await expect(
-        controller.floodFillPlane2D(
-          seed,
-          9n,
-          maxVoxels,
-          vec3.fromValues(0, 0, 1),
-        ),
+        controller.floodFillPlane2D(seed, 9n, maxVoxels, basis),
       ).rejects.toThrow("Flood fill region exceeds the limit");
     });
 
     it("does nothing if seed value equals fill value", async () => {
       mockPrimarySource.dataMap.set("10,10,0", 5n);
       const seed = new Float32Array([10, 10, 0]);
+      const basis = {
+        u: new Float32Array([1, 0, 0]),
+        v: new Float32Array([0, 1, 0]),
+      };
 
-      const result = await controller.floodFillPlane2D(
-        seed,
-        5n,
-        100,
-        vec3.fromValues(0, 0, 1),
-      );
+      const result = await controller.floodFillPlane2D(seed, 5n, 100, basis);
 
       expect(result.filledCount).toBe(0);
       expect(result.edits.length).toBe(0);
@@ -292,24 +290,27 @@ describe("VoxelEditController", () => {
 
       const size = 20;
       for (let i = 0; i <= size; i++) {
-        mockPrimarySource.dataMap.set(`${i},0,0`, 1n);
-        mockPrimarySource.dataMap.set(`${i},${size},0`, 1n);
+        mockPrimarySource.dataMap.set(`0,0,${i}`, 1n);
+        mockPrimarySource.dataMap.set(`0,${size},${i}`, 1n);
         mockPrimarySource.dataMap.set(`0,${i},0`, 1n);
         if (i !== 10) {
-          mockPrimarySource.dataMap.set(`${size},${i},0`, 1n);
+          mockPrimarySource.dataMap.set(`0,${i},${size}`, 1n);
         }
       }
 
-      const seed = new Float32Array([10, 10, 0]);
+      const seed = new Float32Array([0, 10, 10]);
       const fillValue = 2n;
       const maxVoxels = 2000;
-      const planeNormal = vec3.fromValues(0, 0, 1);
+      const basis = {
+        u: new Float32Array([0, 0, 1]),
+        v: new Float32Array([0, 1, 0]),
+      };
 
       const result = await controller.floodFillPlane2D(
         seed,
         fillValue,
         maxVoxels,
-        planeNormal,
+        basis,
       );
 
       expect(result.filledCount).toBeLessThan(1000);
