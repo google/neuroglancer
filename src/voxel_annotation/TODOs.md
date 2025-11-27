@@ -2,14 +2,9 @@
 
 ### priority
 
-- finish the unit tests list below
-- add integration tests
-- fix the security flaw (see PR)
-
 ### later
 
 - add preview for the undo/redo
-- url completion for the ssa+https source
 
 ### questionable
 
@@ -17,25 +12,3 @@
 - add support to float32 dataset
 - add support to unaligned hierarchy (e.g. child chunks that may have multiple parents)
 - adapt the brush size to the zoom level linearly
-
-## Tests
-
-- src/voxel_annotation/edit_backend.ts
-  - [x] \_calculateParentUpdate
-  - [x] \_getParentChunkInfo
-  - [x] downsampleStep
-  - [x] undo/redo
-  - [x] flushPending
-- src/voxel_annotation/edit_controller.ts
-  - [x] floodFillPlane2D
-  - [x] paintBrushWithShape
-- src/layer/vox/index.ts
-  - [x] getVoxelPositionFromMouse
-  - [x] setVoxelPaintValue
-  - [x] transformGlobalToVoxelNormal
-- src/sliceview/volume/backend.ts
-  - [x] applyEdits
-- src/sliceview/volume/frontend.ts
-  - [x] applyLocalEdits
-- src/datasource/zarr/backend.ts
-  - [ ] writeChunk
