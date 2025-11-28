@@ -98,7 +98,7 @@ export class DisplayOptionsTab extends Tab {
     element.appendChild(
       this.registerDisposer(
         new ShaderControls(
-          layer.annotationDisplayState.shaderControls,
+          layer.displayState.segmentColorShaderControlState,
           this.layer.manager.root.display,
           this.layer,
           { visibility: this.visibility },

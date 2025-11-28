@@ -113,7 +113,7 @@ import { DisplayOptionsTab } from "#src/ui/segmentation_display_options_tab.js";
 import { Uint64Map } from "#src/uint64_map.js";
 import { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import { Uint64Set } from "#src/uint64_set.js";
-import { gatherUpdate } from "#src/util/array.js";
+import { gatherUpdate, TypedNumberArray } from "#src/util/array.js";
 import {
   packColor,
   parseRGBColorSpecification,
@@ -140,7 +140,11 @@ import {
   makeWatchableShaderError,
   parameterizedEmitterDependentShaderGetter,
 } from "#src/webgl/dynamic_shader.js";
-import { ShaderControlState } from "#src/webgl/shader_ui_controls.js";
+import {
+  addControlsToBuilder,
+  setControlsInShader,
+  ShaderControlState,
+} from "#src/webgl/shader_ui_controls.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import { registerLayerShaderControlsTool } from "#src/widget/shader_controls.js";
 
@@ -422,7 +426,7 @@ class LinkedSegmentationGroupState<
 }
 
 export const DEFAULT_FRAGMENT_SEGMENT_COLOR = `
-vec4 segmentColor(vec4 color) {
+vec4 segmentColor(vec4 color, bool hasProperties) {
   return color;
 }
 `;
@@ -431,6 +435,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   private getSegmentColorShader;
 
   segmentationColorUserShader: SegmentationColorUserShaderManager;
+  segmentColorShaderControlState: ShaderControlState;
 
   constructor(public layer: SegmentationUserLayer) {
     // Even though `SegmentationUserLayer` assigns this to its `displayState` property, redundantly
@@ -542,7 +547,31 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
       ),
     );
 
-    // so 2d/3d share GL context
+    this.segmentColorShaderControlState = new ShaderControlState(
+      this.fragmentSegmentColor,
+      makeCachedLazyDerivedWatchableValue((segmentPropertyMap) => {
+        const properties = new Map<string, DataType>();
+        const values = new Map<string, TypedNumberArray<ArrayBuffer>>();
+        if (segmentPropertyMap === undefined) {
+          return null;
+        }
+        for (const property of segmentPropertyMap.numericalProperties) {
+          properties.set(property.id, property.dataType);
+          values.set(property.id, property.values);
+        }
+
+        const shaderName = (property: string) => {
+          const propertyIdx = segmentPropertyMap.numericalProperties.findIndex(
+            (p) => p.id === property,
+          );
+          return `numerical${propertyIdx}`; // TEMP extract this from the SegmentationColorUserShaderManager
+        };
+
+        return { properties, values, shaderName };
+      }, this.segmentationGroupState.value.segmentPropertyMap),
+    );
+
+    // 2d/3d share GL context
     // the offscreen canvas is a separate context that doesn't share textures
     this.segmentationColorUserShader = new SegmentationColorUserShaderManager(
       this,
@@ -575,9 +604,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   fragmentSegmentColor = makeTrackableFragmentMain(
     DEFAULT_FRAGMENT_SEGMENT_COLOR,
   );
-  segmentColorShaderControlState = new ShaderControlState(
-    this.fragmentSegmentColor,
-  );
+
   renderScaleHistogram = new RenderScaleHistogram();
   renderScaleTarget = trackableRenderScaleTarget(1);
   selectSegment: (id: bigint, pin: boolean | "toggle") => void;
@@ -597,7 +624,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
     const parameters = this.layer.registerDisposer(
       new AggregateWatchableValue(() => ({
         shaderBuilderState: this.segmentColorShaderControlState.builderState,
-        segmentProperties: this.segmentationGroupState.value.segmentPropertyMap,
+        segmentProperties: this.segmentationGroupState.value.segmentPropertyMap, // TODO can I swap this with the property manager
       })),
     );
     return parameterizedEmitterDependentShaderGetter(
@@ -607,10 +634,11 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         memoizeKey: `segmentColorShaderTODO`,
         parameters,
         encodeParameters: (p) => {
-          return `${p.shaderBuilderState.parseResult.code}/${p.segmentProperties?.numericalProperties.length}`;
+          return `${p.shaderBuilderState.parseResult.code}/${p.shaderBuilderState.referencedProperties}/${p.segmentProperties?.numericalProperties.length}`; // then replace numerical properties with the texture ids
         },
         shaderError: this.layer.displayState.shaderError, // TODO can I reuse this?
-        defineShader: (builder) => {
+        defineShader: (builder, { shaderBuilderState }) => {
+          addControlsToBuilder(shaderBuilderState, builder, /* fragment=*/ false);
           this.offscreenSegmentationColorUserShader.defineShader(
             builder,
             /*fragment=*/ false,
@@ -621,8 +649,8 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
           builder.addVarying("highp vec4", "vColor");
           const vertexMain = `
 gl_Position = aVertexPosition;
-loadSegmentProperties(uint64_t(uID));
-vColor = segmentColor(uColor);
+bool hasProperties = loadSegmentProperties(uint64_t(uID));
+vColor = segmentColor(uColor, hasProperties);
 `;
           builder.addVertexMain(vertexMain);
           builder.addOutputBuffer("vec4", "out_fragColor", 0);
@@ -640,13 +668,18 @@ vColor = segmentColor(uColor);
     parameters;
     shader.bind();
     const { gl } = shader;
+    setControlsInShader(
+      gl,
+      shader,
+      this.segmentColorShaderControlState,
+      parameters.shaderBuilderState.parseResult.controls,
+    );
     const positionBuffer = GLBuffer.fromData(
       gl,
       new Float32Array([1, 1, -1, 1, 1, -1, -1, -1]),
     );
     positionBuffer.bindToVertexAttrib(shader.attribute("aVertexPosition"), 2);
     gl.uniform4fv(shader.uniform("uColor"), color);
-
     this.offscreenSegmentationColorUserShader.enable(gl, shader);
     gl.uniform2ui(
       shader.uniform(`uID`),
@@ -810,6 +843,9 @@ export class SegmentationUserLayer extends Base {
       this.updateDataSubsourceActivations(),
     );
     this.displayState.fragmentSegmentColor.changed.add(
+      this.specificationChanged.dispatch,
+    );
+    this.displayState.segmentColorShaderControlState.changed.add(
       this.specificationChanged.dispatch,
     );
     this.tabs.add("rendering", {
@@ -1166,6 +1202,9 @@ export class SegmentationUserLayer extends Base {
     this.displayState.segmentationColorGroupState.value.restoreState(
       specification,
     );
+    this.displayState.segmentColorShaderControlState.restoreState(
+      specification[json_keys.SHADER_CONTROLS_JSON_KEY],
+    );
   }
 
   toJSON() {
@@ -1217,6 +1256,8 @@ export class SegmentationUserLayer extends Base {
         this.displayState.segmentationColorGroupState.value.toJSON(),
       );
     }
+    x[json_keys.SHADER_CONTROLS_JSON_KEY] =
+      this.displayState.segmentColorShaderControlState.toJSON();
     return x;
   }
 

@@ -91,7 +91,6 @@ const CHUNK_POSITION_EPSILON = 1e-3;
 const tempMat4 = mat4.create();
 
 function defineVolumeShader(builder: ShaderBuilder, wireFrame: boolean) {
-  console.log("defineVolumeShader");
   defineVertexId(builder);
   defineBoundingBoxCrossSectionShader(builder);
 

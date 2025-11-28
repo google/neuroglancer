@@ -23,7 +23,7 @@ import { IndirectRenderedPanel } from "#src/display_context.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import type { ToolActivation } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
-import type { DataType } from "#src/util/data_type.js";
+import { DataType } from "#src/util/data_type.js";
 import type { Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeChildren, updateInputFieldWidth } from "#src/util/dom.js";
@@ -66,12 +66,13 @@ import { ShaderBuilder } from "#src/webgl/shader.js";
 import { getShaderType } from "#src/webgl/shader_lib.js";
 import type { InvlerpParameters } from "#src/webgl/shader_ui_controls.js";
 import { getSquareCornersBuffer } from "#src/webgl/square_corners_buffer.js";
-import { setRawTextureParameters } from "#src/webgl/texture.js";
+import { createTexture, readTexture, setRawTextureParameters } from "#src/webgl/texture.js";
 import { makeIcon } from "#src/widget/icon.js";
 import { AutoRangeFinder } from "#src/widget/invlerp_range_finder.js";
 import type { LayerControlTool } from "#src/widget/layer_control.js";
 import type { LegendShaderOptions } from "#src/widget/shader_controls.js";
 import { Tab } from "#src/widget/tab_view.js";
+import { TypedNumberArray } from "#src/util/array.js";
 
 const inputEventMap = EventActionMap.fromObject({
   "shift?+mousedown0": { action: "set" },
@@ -80,6 +81,7 @@ const inputEventMap = EventActionMap.fromObject({
 });
 
 export function createCDFLineShader(gl: GL, textureUnit: symbol) {
+  // here is the line shader
   const builder = new ShaderBuilder(gl);
   defineLineShader(builder);
   builder.addTextureSampler("sampler2D", "uHistogramSampler", textureUnit);
@@ -442,7 +444,10 @@ out_color = uColor;
       gl.drawArrays(WebGL2RenderingContext.TRIANGLE_FAN, 0, 4);
       gl.disableVertexAttribArray(aVertexPosition);
     }
-    if (this.parent.histogramSpecifications.producerVisibility.visible) {
+    if (
+      this.parent.histogramSpecifications.producerVisibility.visible ||
+      this.parent.values.value
+    ) {
       const { renderViewport } = this;
       lineShader.bind();
       initializeLineShader(
@@ -460,8 +465,9 @@ out_color = uColor;
         lineShader.uniform("uBoundsFraction"),
         getIntervalBoundsEffectiveFraction(dataType, bounds.window),
       );
+      const texture = this.parent.texture;
       gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + histogramTextureUnit);
-      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, this.parent.texture);
+      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
       setRawTextureParameters(gl);
       const aDataValue = lineShader.attribute("aDataValue");
       this.dataValuesBuffer.bindToVertexAttribI(
@@ -728,15 +734,86 @@ export function adjustInvlerpBrightnessContrast(
   };
 }
 
-export class InvlerpWidget extends Tab {
+// The first and last bin are for values below the lower bound/above the upper
+// To simulate output from the GLSL shader function on CPU
+function countDataInBins(
+  inputData: TypedNumberArray<ArrayBuffer>,
+  dataType: DataType,
+  min: number | bigint,
+  max: number | bigint,
+  numDataBins: number = 254,
+): Float32Array {
+  // Total number of bins is numDataBins + 2, one for values below the lower
+  // bound and one for values above the upper bound.
+  const counts = new Float32Array(numDataBins + 2).fill(0);
+  let binSize: number;
+  let binIndex: number;
+  if (dataType === DataType.UINT64) {
+    binSize = Number((max as bigint) - (min as bigint)) / numDataBins;
+  } else {
+    binSize = ((max as number) - (min as number)) / numDataBins;
+  }
+  for (let i = 0; i < inputData.length; i++) {
+    const value = inputData[i];
+    if (dataTypeCompare(value, min) < 0) {
+      counts[0]++;
+    } else if (dataTypeCompare(value, max) > 0) {
+      counts[numDataBins + 1]++;
+    } else {
+      // TODO segment properties doesn't support uint64 yet
+      // if (dataType === DataType.UINT64) {
+      //   binIndex = Math.floor(
+      //     Number((value as bigint) - (min as bigint)) / binSize,
+      //   );
+      // } else {
+      binIndex = Math.floor(((value as number) - (min as number)) / binSize);
+      // }
+      counts[binIndex + 1]++;
+    }
+  }
+  return counts;
+}
+
+export class InvlerpWidget extends Tab { // TODO should this implement ParentInverpWidget?
   cdfPanel;
   boundElements;
   invertArrows: HTMLElement[];
   autoRangeFinder: AutoRangeFinder;
+
+  prevTexture: WebGLTexture | null = null;
+  prevValues: TypedNumberArray<ArrayBuffer> | undefined = undefined;
+  prevWindow: DataTypeInterval | null = null;
+
   get texture() {
-    return this.histogramSpecifications.getFramebuffers(this.display.gl)[
-      this.histogramIndex
-    ].colorBuffers[0].texture;
+    const {
+      values: { value: values },
+      dataType,
+    } = this;
+    if (values !== undefined) {
+      if (this.prevValues === values && this.prevWindow && dataTypeIntervalEqual(this.prevWindow, this.trackable.value.window) && this.prevTexture !== null) {
+        return this.prevTexture
+      }
+
+      if (this.prevTexture) {
+        this.display.gl.deleteTexture(this.prevTexture);
+      }
+      console.log("generating new texture");
+        const histogram = countDataInBins(
+        values,
+        dataType,
+        this.trackable.value.window[0],
+        this.trackable.value.window[1],
+        NUM_HISTOGRAM_BINS_IN_RANGE,
+      );
+      const texture =  createTexture(this.display.gl, histogram);
+      this.prevValues = values;
+      this.prevWindow = this.trackable.value.window.slice() as DataTypeInterval;
+      this.prevTexture = texture;
+      return texture;
+    }
+    return this.histogramSpecifications.getFramebuffers(
+      this.display.gl,
+    )[this.histogramIndex].colorBuffers[0].texture;
   }
   private invertRange() {
     invertInvlerpRange(this.trackable);
@@ -749,6 +826,9 @@ export class InvlerpWidget extends Tab {
     public histogramSpecifications: HistogramSpecifications,
     public histogramIndex: number,
     public legendShaderOptions: LegendShaderOptions | undefined,
+    public values: WatchableValueInterface<
+      TypedNumberArray<ArrayBuffer> | undefined
+    >,
   ) {
     super(visibility);
     this.cdfPanel = this.registerDisposer(new CdfPanel(this));
@@ -785,6 +865,13 @@ export class InvlerpWidget extends Tab {
     this.updateView();
     this.registerDisposer(
       trackable.changed.add(
+        this.registerCancellable(
+          animationFrameDebounce(() => this.updateView()),
+        ),
+      ),
+    );
+    this.registerDisposer(
+      values.changed.add(
         this.registerCancellable(
           animationFrameDebounce(() => this.updateView()),
         ),
@@ -847,6 +934,9 @@ export class VariableDataTypeInvlerpWidget extends Tab {
     public histogramSpecifications: HistogramSpecifications,
     public histogramIndex: number,
     public legendShaderOptions: LegendShaderOptions | undefined,
+    public values: WatchableValueInterface<
+      TypedNumberArray<ArrayBuffer> | undefined
+    >,
   ) {
     super(visibility);
     this.invlerpWidget = this.makeInvlerpWidget();
@@ -870,6 +960,7 @@ export class VariableDataTypeInvlerpWidget extends Tab {
 
   private makeInvlerpWidget() {
     const { dataType } = this;
+    console.log("making widget!");
     const widget = new InvlerpWidget(
       this.visibility,
       this.display,
@@ -878,6 +969,7 @@ export class VariableDataTypeInvlerpWidget extends Tab {
       this.histogramSpecifications,
       this.histogramIndex,
       this.legendShaderOptions,
+      this.values,
     );
     this.element.appendChild(widget.element);
     return widget;

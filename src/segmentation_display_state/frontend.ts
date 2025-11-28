@@ -975,6 +975,9 @@ export function registerCallbackWhenSegmentationDisplayStateChanged(
   context.registerDisposer(
     displayState.layer.displayState.fragmentSegmentColor.changed.add(callback),
   );
+  context.registerDisposer(
+    displayState.segmentColorShaderControlState.changed.add(callback), // TODO look at this more
+  );
 }
 
 export function registerRedrawWhenSegmentationDisplayStateChanged(
@@ -1082,6 +1085,7 @@ export function getObjectColor(
   const color = tempColor;
   color[3] = alpha;
   getBaseObjectColor(displayState, objectId, color, useColorShader);
+  // TODO move saturation to color shader
   let saturation = displayState.saturation.value;
   if (
     displayState.hoverHighlight.value &&

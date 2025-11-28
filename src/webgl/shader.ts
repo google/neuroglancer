@@ -404,14 +404,18 @@ export class ShaderCode {
   code = "";
   parts = new Set<ShaderCodePart>();
 
-  add(x: ShaderCodePart) {
+  add(x: ShaderCodePart, beginning = false) { // TODO, janky
     if (this.parts.has(x)) {
       return;
     }
     this.parts.add(x);
     switch (typeof x) {
       case "string":
-        this.code += x;
+        if (beginning) {
+          this.code = x + this.code;
+        } else {
+          this.code += x;
+        }
         break;
       case "function":
         this.add((<ShaderCodePartFunction>x)());
@@ -481,6 +485,7 @@ export class ShaderBuilder {
   private nextSymbolID = 0;
   private nextTextureUnit = 0;
   private uniformsCode = "";
+  private globalsCode = "";
   private attributesCode = "";
   private varyingsCodeVS = "";
   private varyingsCodeFS = "";
@@ -586,12 +591,12 @@ export class ShaderBuilder {
     this.fragmentExtensions += `#extension ${name} : require\n`;
   }
 
-  addVertexCode(code: ShaderCodePart) {
-    this.vertexCode.add(code);
+  addVertexCode(code: ShaderCodePart, beginning = false) {
+    this.vertexCode.add(code, beginning);
   }
 
-  addFragmentCode(code: ShaderCodePart) {
-    this.fragmentCode.add(code);
+  addFragmentCode(code: ShaderCodePart, beginning = false) {
+    this.fragmentCode.add(code, beginning);
   }
 
   setVertexMain(code: string) {

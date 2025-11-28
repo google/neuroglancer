@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
+import { DataType } from "#src/sliceview/volume/base.js";
 import type { GL } from "#src/webgl/context.js";
+import { computeTextureFormat, setOneDimensionalTextureData, TextureFormat } from "#src/webgl/texture_access.js";
 
 /**
  * Sets parameters to make a texture suitable for use as a raw array: NEAREST
@@ -148,4 +150,89 @@ export function setTextureFromCanvas(
   );
   gl.pixelStorei(WebGL2RenderingContext.UNPACK_FLIP_Y_WEBGL, 0);
   gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
+}
+
+
+export function readTexture(gl: GL, texture: WebGLTexture, length: number = 256) {
+  // make a framebuffer
+  const fb = gl.createFramebuffer();
+
+  // make this the current frame buffer
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+
+  // attach the texture to the framebuffer.
+  gl.framebufferTexture2D(
+    gl.FRAMEBUFFER,
+    gl.COLOR_ATTACHMENT0,
+    gl.TEXTURE_2D,
+    texture,
+    0,
+  );
+
+  // check if you can read from this type of texture.
+  let canRead =
+    gl.checkFramebufferStatus(gl.FRAMEBUFFER) == gl.FRAMEBUFFER_COMPLETE;
+
+  // Unbind the framebuffer
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+  if (canRead) {
+    // bind the framebuffer
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+
+    // read the pixels
+    const output = new Float32Array(length);
+    gl.readPixels(0, 0, length, 1, gl.RED, gl.FLOAT, output);
+
+    // Unbind the framebuffer
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    console.log("read texture output", output);
+  } else {
+    console.log("can't read texture");
+  }
+}
+
+export function createTexture(gl: GL, data: Float32Array) {
+    const texture = gl.createTexture();
+  // for now, immediately load the data into the texture
+  {
+    const format = computeTextureFormat(
+      new TextureFormat(),
+      DataType.FLOAT32,
+      1,
+    );
+    gl.activeTexture(
+      WebGL2RenderingContext.TEXTURE0 + gl.tempTextureUnit,
+    );
+    gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
+    {
+      // setOneDimensionalTextureData(gl, textureFormat, data);
+
+      const {
+        // arrayConstructor,
+        // arrayElementsPerTexel,
+        textureInternalFormat,
+        textureFormat,
+        // texelsPerElement,
+      } = format;
+
+      // const padded = maybePadArray(data, requiredSize);
+        gl.pixelStorei(WebGL2RenderingContext.UNPACK_ALIGNMENT, 1);
+        setRawTextureParameters(gl);
+        gl.texImage2D(
+          WebGL2RenderingContext.TEXTURE_2D,
+          /*level=*/ 0,
+          textureInternalFormat,
+          /*width=*/ data.length,
+          /*height=*/ 1,
+          /*border=*/ 0,
+          textureFormat,
+          format.texelType,
+          data,
+        );
+    }
+    gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
+  }
+  return texture;
 }

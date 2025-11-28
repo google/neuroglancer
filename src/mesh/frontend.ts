@@ -387,14 +387,15 @@ export class MeshShaderManager {
       memoizeKey: `mesh/MeshShaderManager/${this.fragmentRelativeVertices}/${this.vertexPositionFormat}`,
       parameters,
       encodeParameters: (p) => {
-        return `${p.silhouetteRenderingEnabled}/${p.shaderBuilderState.parseResult.code}/${p.segmentProperties?.numericalProperties.length ?? 0}`; // TODO
+        // TODO work on this
+        return `${p.silhouetteRenderingEnabled}/${p.shaderBuilderState.parseResult.code}/${p.shaderBuilderState.referencedProperties}/${p.segmentProperties?.numericalProperties.length ?? 0}`; // TODO
       },
       shaderError: layer.displayState.shaderError,
       defineShader: (
         builder,
         { silhouetteRenderingEnabled, shaderBuilderState },
       ) => {
-        addControlsToBuilder(shaderBuilderState, builder);
+        addControlsToBuilder(shaderBuilderState, builder, /* fragment=*/ false);
         this.vertexPositionHandler.defineShader(builder);
         layer.displayState.segmentationColorUserShader.defineShader(
           builder,
@@ -437,8 +438,8 @@ vec3 normal = normalize(uNormalMatrix * (normalMultiplier * origNormal));
 float absCosAngle = abs(dot(normal, uLightDirection.xyz));
 float lightingFactor = absCosAngle + uLightDirection.w;
 vColor = uColor;
-loadSegmentProperties(uint64_t(uID));
-vColor = segmentColor(vColor);
+bool hasProperties = loadSegmentProperties(uint64_t(uID));
+vColor = segmentColor(vColor, hasProperties);
 vColor = vec4(lightingFactor * vColor.rgb, vColor.a);
 `;
         if (silhouetteRenderingEnabled) {
@@ -482,17 +483,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
     this.registerDisposer(
       displayState.silhouetteRendering.changed.add(this.redrawNeeded.dispatch),
     );
-    this.registerDisposer(
-      displayState.segmentColorShaderControlState.changed.add(
-        this.redrawNeeded.dispatch,
-      ),
-    );
-    this.registerDisposer(
-      displayState.segmentationColorUserShader.changed.add(
-        this.redrawNeeded.dispatch,
-      ),
-    );
-
+    
     const sharedObject = (this.backend = this.registerDisposer(
       new SegmentationLayerSharedObject(
         chunkManager,
@@ -834,14 +825,13 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
       /*fragmentRelativeVertices=*/ source.format.fragmentRelativeVertices,
       source.format.vertexPositionFormat,
     );
-
     this.getShader = this.meshShaderManager.makeGetter(this);
 
     registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
     this.registerDisposer(
       displayState.silhouetteRendering.changed.add(this.redrawNeeded.dispatch),
     );
-
+  
     const sharedObject = (this.backend = this.registerDisposer(
       new SegmentationLayerSharedObject(
         chunkManager,
@@ -897,10 +887,17 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
       attachment,
     );
     if (modelMatrix === undefined) return;
-    const { shader } = this.getShader(renderContext.emitter);
+    const { shader, parameters } = this.getShader(renderContext.emitter);
     if (shader === null) return;
     shader.bind();
     meshShaderManager.beginLayer(gl, shader, renderContext, this.displayState);
+    displayState.segmentationColorUserShader.enable(gl, shader);
+    setControlsInShader(
+      gl,
+      shader,
+      this.displayState.segmentColorShaderControlState,
+      parameters.shaderBuilderState.parseResult.controls,
+    );
 
     const { renderScaleHistogram } = this.displayState;
     if (renderContext.emitColor) {
@@ -969,8 +966,6 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
           meshShaderManager.setPickID(gl, shader, pickIndex!);
         }
         meshShaderManager.setID(gl, shader, objectId);
-
-        displayState.segmentationColorUserShader.enable(gl, shader);
 
         getMultiscaleChunksToDraw(
           manifest,

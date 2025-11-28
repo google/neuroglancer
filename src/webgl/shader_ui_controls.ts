@@ -26,7 +26,7 @@ import {
   makeCachedLazyDerivedWatchableValue,
   TrackableValue,
 } from "#src/trackable_value.js";
-import { arraysEqual, arraysEqualWithPredicate } from "#src/util/array.js";
+import { arraysEqual, arraysEqualWithPredicate, TypedNumberArray } from "#src/util/array.js";
 import {
   parseRGBColorSpecification,
   serializeColor,
@@ -102,6 +102,8 @@ export interface ShaderPropertyInvlerpControl {
   type: "propertyInvlerp";
   clamp: boolean;
   properties: PropertiesSpecification;
+//  values?: Map<string, TypedNumberArray<ArrayBuffer>>;
+  shaderName?: (arg0: string) => string;
   default: PropertyInvlerpParameters;
 }
 
@@ -430,12 +432,13 @@ function parseInvlerpDirective(
   parameters: DirectiveParameters,
   dataContext: ShaderDataContext,
 ): DirectiveParseResult {
-  const { imageData, properties } = dataContext;
+  console.log("failing here");
+  const { imageData, properties, values, shaderName } = dataContext;
   if (imageData !== undefined) {
     return parseImageInvlerpDirective(valueType, parameters, imageData);
   }
-  if (properties !== undefined) {
-    return parsePropertyInvlerpDirective(valueType, parameters, properties);
+  if (properties !== undefined && properties.size > 0) { // TEMP FIX
+    return parsePropertyInvlerpDirective(valueType, parameters, properties, values, shaderName);
   }
   const errors = [];
   errors.push("invlerp control not supported");
@@ -511,6 +514,8 @@ function parsePropertyInvlerpDirective(
   valueType: string,
   parameters: DirectiveParameters,
   properties: Map<string, DataType>,
+  values?: Map<string, TypedNumberArray<ArrayBuffer>>,
+  shaderName?: (arg0: string) => string,
 ) {
   const errors = [];
   if (valueType !== "invlerp") {
@@ -578,8 +583,10 @@ function parsePropertyInvlerpDirective(
       type: "propertyInvlerp",
       clamp,
       properties,
-      default: { range, window, property, dataType },
-    } as ShaderPropertyInvlerpControl,
+      values,
+      shaderName,
+      default: { range, window, property: property!, dataType },
+    } satisfies ShaderPropertyInvlerpControl,
     errors: undefined,
   };
 }
@@ -672,6 +679,8 @@ export interface ImageDataSpecification {
 export interface ShaderDataContext {
   imageData?: ImageDataSpecification;
   properties?: Map<string, DataType>;
+  values?: Map<string, TypedNumberArray<ArrayBuffer>>;
+  shaderName?: (arg0: string) => string;
 }
 
 const controlParsers = new Map<
@@ -764,7 +773,9 @@ function uniformName(controlName: string) {
 export function addControlsToBuilder(
   builderState: ShaderControlsBuilderState,
   builder: ShaderBuilder,
+  fragment = true,
 ) {
+  const addCode = fragment ? builder.addFragmentCode.bind(builder) : builder.addVertexCode.bind(builder);
   const { builderValues } = builderState;
   for (const [name, control] of builderState.parseResult.controls) {
     const uName = uniformName(name);
@@ -784,33 +795,34 @@ float ${uName}() {
 }
 `,
         ];
-        builder.addFragmentCode(code);
-        builder.addFragmentCode(`#define ${name} ${uName}\n`);
+        addCode(code);
+        addCode(`#define ${name} ${uName}\n`);
         break;
       }
       case "propertyInvlerp": {
         const property = builderValue.property;
         const dataType = control.properties.get(property)!;
+        const propertyShaderName = control.shaderName ? control.shaderName(property) : `prop_${property}()`;
         const code = [
           defineInvlerpShaderFunction(builder, uName, dataType, control.clamp),
           `
 float ${uName}() {
-  return ${uName}(prop_${property}());
+  return ${uName}(${propertyShaderName});
 }
 `,
         ];
-        builder.addVertexCode(code);
-        builder.addVertexCode(`#define ${name} ${uName}\n`);
+        addCode(code);
+        addCode(`#define ${name} ${uName}\n`);
         break;
       }
       case "checkbox": {
         const code = `#define ${name} ${builderValue.value}\n`;
-        builder.addFragmentCode(code);
-        builder.addVertexCode(code);
+        addCode(code);
+        addCode(code);
         break;
       }
       case "transferFunction": {
-        builder.addFragmentCode(`#define ${name} ${uName}\n`);
+        addCode(`#define ${name} ${uName}\n`);
         builder.addFragmentCode(
           defineTransferFunctionShader(
             builder,
@@ -823,8 +835,7 @@ float ${uName}() {
       }
       default: {
         builder.addUniform(`highp ${control.valueType}`, uName);
-        builder.addVertexCode(`#define ${name} ${uName}\n`);
-        builder.addFragmentCode(`#define ${name} ${uName}\n`);
+        addCode(`#define ${name} ${uName}\n`);
         break;
       }
     }
@@ -878,6 +889,7 @@ export interface PropertyInvlerpParameters {
   window: DataTypeInterval | undefined;
   property: string;
   dataType: DataType;
+  values?: TypedNumberArray<ArrayBuffer>;
 }
 
 function parseImageInvlerpParameters(
@@ -1563,6 +1575,8 @@ export class ShaderControlState
     const { state } = this;
     verifyObject(value);
     const controls = this.controls.value;
+    // TODO this is undefined and we are losing state
+    console.warn("oops");
     if (controls === undefined) {
       this.unparsedJson = value;
       this.changed.dispatch();

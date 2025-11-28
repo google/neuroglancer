@@ -17,7 +17,10 @@
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { ChunkSource } from "#src/chunk_manager/frontend.js";
 import { HashMapUint64 } from "#src/gpu_hash/hash_table.js";
-import { GPUHashTable, HashMapShaderManager } from "#src/gpu_hash/shader.js";
+import {
+  GPUHashTable,
+  HashMapShaderManager,
+} from "#src/gpu_hash/shader.js";
 import { DEFAULT_FRAGMENT_SEGMENT_COLOR } from "#src/layer/segmentation/index.js";
 import type { IndexedSegmentProperty } from "#src/segmentation_display_state/base.js";
 import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
@@ -45,9 +48,16 @@ import {
 import { getObjectId } from "#src/util/object_id.js";
 import { Signal } from "#src/util/signal.js";
 import { defaultStringCompare } from "#src/util/string.js";
+import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
 import type { GL } from "#src/webgl/context.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
-import { glsl_uint64_as_float } from "#src/webgl/shader_lib.js";
+import {
+  computeTextureFormat,
+  getSamplerPrefixForDataType,
+  OneDimensionalTextureAccessHelper,
+  setOneDimensionalTextureData,
+  TextureFormat,
+} from "#src/webgl/texture_access.js";
 
 export type InlineSegmentProperty =
   | InlineSegmentStringProperty
@@ -303,7 +313,7 @@ function remapNumericalProperty(
   numMerged: number,
   toMerged: Uint32Array,
 ): InlineSegmentNumericalProperty {
-  const values = new Float32Array(numMerged);
+  const values = property.values.slice(0, numMerged);
   values.fill(Number.NaN);
   remapArray(property.values, values, toMerged);
   return { ...property, values };
@@ -1346,8 +1356,8 @@ export function queryIncludesColumn(
 }
 
 interface SegmentPropertyShaderData {
-  manager: HashMapShaderManager;
-  texture: GPUHashTable<HashMapUint64>;
+  accessHelper: OneDimensionalTextureAccessHelper;
+  texture: WebGLTexture;
   stale: boolean;
   dataType: DataType;
 }
@@ -1362,10 +1372,12 @@ export class SegmentationColorUserShaderManager extends RefCounted {
 
   private segmentColorShaderCode: string;
 
+  manager = new HashMapShaderManager("SegmentToPropertyIndex");
+  segmentPropertyIndexMap = new HashMapUint64();
+
   updateShaderData(
     identifier: string,
-    values: TypedNumberArray | number[],
-    ids: ArrayLike<bigint>,
+    values: TypedNumberArray<ArrayBuffer>,
     dataType: DataType,
   ) {
     if (this.segmentPropertyShaderData.has(identifier)) {
@@ -1373,13 +1385,7 @@ export class SegmentationColorUserShaderManager extends RefCounted {
     } else {
       this.segmentPropertyShaderData.set(
         identifier,
-        createSegmentPropertyShaderData(
-          identifier,
-          values,
-          ids,
-          this.gl,
-          dataType,
-        ),
+        createSegmentPropertyShaderData(identifier, values, this.gl, dataType),
       );
     }
   }
@@ -1395,11 +1401,10 @@ export class SegmentationColorUserShaderManager extends RefCounted {
     if (tagIdx === -1) return; // TODO should we output an error to the user?
     const propertyShaderIdentifier = `tag${tagIdx}`;
     const codeUnit = String.fromCharCode(tagIdx);
-    const valuesForTag = values.map((x) => (x.includes(codeUnit) ? 1 : 0)); // TODO, waste to generate this if we don't need it but cleaner
+    const valuesForTag = values.map((x) => (x.includes(codeUnit) ? 1 : 0));
     this.updateShaderData(
       propertyShaderIdentifier,
-      valuesForTag,
-      segmentPropertyMap.segmentPropertyMap.inlineProperties!.ids,
+      new Uint8Array(valuesForTag),
       DataType.UINT8,
     );
     return propertyShaderIdentifier;
@@ -1419,7 +1424,6 @@ export class SegmentationColorUserShaderManager extends RefCounted {
     this.updateShaderData(
       propertyShaderIdentifier,
       property.values,
-      segmentPropertyMap.segmentPropertyMap.inlineProperties!.ids,
       property.dataType,
     );
     return propertyShaderIdentifier;
@@ -1432,14 +1436,20 @@ export class SegmentationColorUserShaderManager extends RefCounted {
     super();
 
     const update = () => {
+      const { referencedProperties } =
+        this.displayState.segmentColorShaderControlState.builderState.value;
       let { code } =
         this.displayState.segmentColorShaderControlState.parseResult.value;
       const tagRegex = /tag\("([^()]+)"\)/g;
       const numericRegex = /prop\("([^()]+)"\)/g;
       const tagNames = new Set(code.matchAll(tagRegex).map((m) => m[1]));
-      const numericNames = new Set(
-        code.matchAll(numericRegex).map((m) => m[1]),
-      );
+      const numericNames = new Set([
+        ...referencedProperties,
+        ...code.matchAll(numericRegex).map((m) => m[1]),
+      ]);
+      for (const [_, data] of this.segmentPropertyShaderData) {
+        data.stale = true;
+      }
       if (tagNames.size > 0 || numericNames.size > 0) {
         const {
           segmentPropertyMap: { value: segmentPropertyMap },
@@ -1448,6 +1458,18 @@ export class SegmentationColorUserShaderManager extends RefCounted {
           segmentPropertyMap &&
           segmentPropertyMap.segmentPropertyMap.inlineProperties
         ) {
+          const { segmentPropertyIndexMap } = this;
+          if (
+            segmentPropertyIndexMap.size === 0 &&
+            segmentPropertyMap.numericalProperties.length
+          ) {
+            // initialize segmentPropertyIndexMap
+            const { inlineProperties } = segmentPropertyMap.segmentPropertyMap;
+            for (let i = 0; i < inlineProperties.ids.length; i++) {
+              const id = inlineProperties.ids[i];
+              segmentPropertyIndexMap.set(id, BigInt(i));
+            }
+          }
           for (const tag of tagNames) {
             const identifier = this.tagToShaderData(tag, segmentPropertyMap);
             if (identifier) {
@@ -1470,14 +1492,22 @@ export class SegmentationColorUserShaderManager extends RefCounted {
       }
       this.segmentColorShaderCode = code;
       // release unused textures
-      for (const [id, propertyData] of this.segmentPropertyShaderData) {
-        if (propertyData.stale) {
-          propertyData.texture.dispose();
+      for (const [id, { texture, stale }] of this.segmentPropertyShaderData) {
+        if (stale) {
+          gl.deleteTexture(texture);
           this.segmentPropertyShaderData.delete(id);
         }
       }
+      if (this.segmentPropertyShaderData.size === 0) {
+        // TODO, clear out the manager as well
+      }
       this.changed.dispatch();
     };
+    this.registerDisposer(
+      this.displayState.segmentColorShaderControlState.builderState.changed.add(
+        update,
+      ),
+    );
     this.registerDisposer(
       this.displayState.segmentationGroupState.value.segmentPropertyMap.changed.add(
         update,
@@ -1494,84 +1524,86 @@ export class SegmentationColorUserShaderManager extends RefCounted {
     const addCode = fragment
       ? builder.addFragmentCode.bind(builder)
       : builder.addVertexCode.bind(builder);
-    addCode(glsl_uint64_as_float);
-    for (const [identifier, { manager, dataType }] of this
+    addCode(glsl_COLORMAPS);
+    const { manager } = this;
+    manager.defineShader(builder, fragment);
+    for (const [identifier, { accessHelper, dataType }] of this
       .segmentPropertyShaderData) {
-      manager.defineShader(builder, fragment);
-      if (dataType === DataType.UINT64) {
-        addCode(`${getShaderOutputType(dataType)} ${identifier};`);
-      } else {
-        addCode(`highp ${getShaderOutputType(dataType)} ${identifier};`);
-      }
+      builder.addTextureSampler(
+        `${getSamplerPrefixForDataType(dataType)}sampler2D`,
+        `${identifier}_sampler`,
+        Symbol.for(identifier),
+      );
+      accessHelper.defineShader(builder);
+      addCode(
+        accessHelper.getAccessor(
+          `${identifier}_read`,
+          `${identifier}_sampler`,
+          dataType,
+        ),
+      );
+      addCode(
+        `highp ${getShaderOutputType(dataType)} ${identifier};`,
+        /*beginning=*/ true,
+      );
     }
     const loadSegmentPropertiesCode = `
-void loadSegmentProperties(uint64_t id) {
-${Array.from(
-  this.segmentPropertyShaderData,
-  ([identifier, { manager, dataType }]) => {
-    if (dataType === DataType.UINT64) {
-      return `${manager.getFunctionName}(id, ${identifier});`;
-    } else if (dataType === DataType.FLOAT32) {
-      return `
-uint64_t ${identifier}_64;
-${manager.getFunctionName}(id, ${identifier}_64);
-${identifier} = asFloat(${identifier}_64);
+bool loadSegmentProperties(uint64_t id) {
+  uint64_t propertyIndex_64;
+  if (!${manager.getFunctionName}(id, propertyIndex_64)) {
+    return false;
+  }
+  uint propertyIndex = propertyIndex_64.value[0];
+ ${Array.from(this.segmentPropertyShaderData, ([identifier, { dataType }]) => {
+   return `
+  ${identifier} = ${identifier}_read(propertyIndex)${dataType === DataType.FLOAT32 ? "" : ".value"};
 `;
-    } else {
-      // TODO, will
-      return `
-uint64_t ${identifier}_64;
-${manager.getFunctionName}(id, ${identifier}_64);
-${identifier} = ${identifier}_64.value[0];
-`;
-    }
-  },
-).join("\n")}
+ }).join("\n")}
+  return true;
 }`;
     addCode(loadSegmentPropertiesCode);
     addCode(this.segmentColorShaderCode);
   }
 
   enable(gl: GL, shader: ShaderProgram) {
-    for (const {
-      manager,
-      texture,
-    } of this.segmentPropertyShaderData.values()) {
-      manager.enable(gl, shader, texture);
+    this.manager.enable(
+      gl,
+      shader,
+      GPUHashTable.get(this.gl, this.segmentPropertyIndexMap),
+    );
+    for (const [identifier, { texture }] of this.segmentPropertyShaderData) {
+      const textureUnit = shader.textureUnit(Symbol.for(identifier));
+      gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + textureUnit);
+      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
     }
   }
 }
 
-const floatArr = new Float32Array(1);
-const uint32Arr = new Uint32Array(floatArr.buffer);
-const floatToUint32 = (value: number) => {
-  floatArr[0] = value;
-  return uint32Arr[0];
-};
-
 function createSegmentPropertyShaderData(
   identifier: string,
-  values: TypedNumberArray | number[],
-  ids: ArrayLike<bigint>,
+  values: TypedNumberArray<ArrayBuffer>,
   gl: GL,
   dataType: DataType,
 ) {
-  const propertyValueMap = new HashMapUint64();
-  for (const [segmentIndex, value] of values.entries()) {
-    if (Number.isNaN(value)) continue;
-    if (Number.isInteger(value)) {
-      const valueBigInt = BigInt(value);
-      propertyValueMap.set(ids[segmentIndex], valueBigInt);
-    } else {
-      const valueAsInt = floatToUint32(value);
-      propertyValueMap.set(ids[segmentIndex], BigInt(valueAsInt));
-    }
+  const texture = gl.createTexture();
+  // for now, immediately load the data into the texture
+  {
+    const textureFormat = computeTextureFormat(
+      new TextureFormat(),
+      dataType,
+      1,
+    );
+    gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + gl.tempTextureUnit);
+    gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
+    setOneDimensionalTextureData(gl, textureFormat, values);
+    gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
   }
-  const gpuTexture = GPUHashTable.get(gl, propertyValueMap);
-  const shaderManager = new HashMapShaderManager(identifier);
+
   return {
-    manager: shaderManager,
-    texture: gpuTexture,
+    accessHelper: new OneDimensionalTextureAccessHelper(
+      `segmentproperty_${identifier}`,
+    ),
+    texture,
     stale: false,
     dataType,
   } satisfies SegmentPropertyShaderData;

@@ -465,27 +465,6 @@ highp int subtractSaturate(highp int x, highp uint y) {
 `,
 ];
 
-// TODO ENDIANNESS
-export const glsl_uint64_as_float = [
-  glsl_uint64,
-  `
-float asFloat(uint64_t x) {
-  uint valueAsInt = x.value[0];
-  uint totalBitCount = 32u;
-  uint significandBitCount = 23u;
-  uint signBit = (valueAsInt >> (totalBitCount - 1u)) & 1u;
-  int sign = 1 - 2 * int(signBit);
-  uint exponent = (valueAsInt >> 23u) & 0xFFu;
-  uint significandBits = valueAsInt & 0x7FFFFFu;
-  float significand = 1.0;
-  for (uint i = 1u; i <= significandBitCount; i++) {
-    uint bitOn = ((significandBits >> (significandBitCount - i)) & 1u);
-    significand += float(bitOn) * pow(2.0, float(-int(i)));
-  }
-  return float(sign) * significand * pow(2.0, float(int(exponent) - 127));
-}`,
-];
-
 export function getShaderType(dataType: DataType, numComponents = 1) {
   switch (dataType) {
     case DataType.FLOAT32:

@@ -16,7 +16,8 @@
 
 import type { UserLayer } from "#src/layer/index.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
-import { makeCachedDerivedWatchableValue } from "#src/trackable_value.js";
+import { makeCachedDerivedWatchableValue, WatchableValue } from "#src/trackable_value.js";
+import { TypedNumberArray } from "#src/util/array.js";
 import { DataType } from "#src/util/data_type.js";
 import {
   convertDataTypeInterval,
@@ -40,21 +41,29 @@ export function propertyInvlerpLayerControl<LayerType extends UserLayer>(
   getter: (layer: LayerType) => {
     watchableValue: WatchableValueInterface<PropertyInvlerpParameters>;
     properties: PropertiesSpecification;
+    values?: Map<string, TypedNumberArray<ArrayBuffer>>;
     histogramSpecifications: HistogramSpecifications;
     histogramIndex: number;
     legendShaderOptions: LegendShaderOptions | undefined;
   },
 ): LayerControlFactory<LayerType, VariableDataTypeInvlerpWidget> {
+  console.log("propertyInvlerpLayerControl called");
   return {
     makeControl: (layer, context, options) => {
+      console.log("propertyInvlerpLayerControl makeControl");
       const {
         watchableValue,
         properties,
+        values,
         histogramSpecifications,
         legendShaderOptions,
         histogramIndex,
       } = getter(layer);
       {
+        if (values) {
+          console.log("we made a propertyInvlerpLayerControl with values");
+        }
+
         const propertySelectElement = document.createElement("select");
         for (const [property, dataType] of properties) {
           const optionElement = document.createElement("option");
@@ -65,8 +74,10 @@ export function propertyInvlerpLayerControl<LayerType extends UserLayer>(
           propertySelectElement.appendChild(optionElement);
         }
         const updateModel = () => {
+          console.log("update model");
           const property = propertySelectElement.value;
           const dataType = properties.get(property)!;
+          // const valuesForProperty = values.get(property);
           const { window, range } = watchableValue.value;
           watchableValue.value = {
             window:
@@ -79,8 +90,16 @@ export function propertyInvlerpLayerControl<LayerType extends UserLayer>(
                 : undefined,
             property,
             dataType,
+            // values: valuesForProperty,
           };
+          console.log("watchableValue.value", watchableValue.value);
+          // if (valuesForProperty) {
+          //   console.log(
+          //     `propertyInvlerpLayerControl using values for property ${property}`,
+          //   );
+          // }
         };
+        updateModel();
         const updateView = () => {
           propertySelectElement.value = watchableValue.value.property;
         };
@@ -93,9 +112,16 @@ export function propertyInvlerpLayerControl<LayerType extends UserLayer>(
         updateView();
         options.labelContainer.appendChild(propertySelectElement);
       }
-      const derivedWatchableValue = {
+      const derivedValuesWatchable = makeCachedDerivedWatchableValue(
+        (p) => {
+          if (values) {
+            return values.get(p.property);
+          }
+          return undefined;
+        }, [watchableValue]);
+      const derivedWatchableValue: WatchableValueInterface<InvlerpParameters> = {
         changed: watchableValue.changed,
-        get value(): InvlerpParameters {
+        get value() {
           let { dataType, window, range } = watchableValue.value;
           if (range === undefined) {
             range = defaultDataTypeRange[dataType];
@@ -114,6 +140,11 @@ export function propertyInvlerpLayerControl<LayerType extends UserLayer>(
         (p) => p.dataType,
         [watchableValue],
       );
+      // const derivedValuesWatchable2 = makeCachedDerivedWatchableValue(
+      //   (p) => p.values,
+      //   [watchableValue],
+      // );
+      // const derivedValuesWatchable = new WatchableValue(values);
       const control = context.registerDisposer(
         new VariableDataTypeInvlerpWidget(
           options.visibility,
@@ -123,6 +154,7 @@ export function propertyInvlerpLayerControl<LayerType extends UserLayer>(
           histogramSpecifications,
           histogramIndex,
           legendShaderOptions,
+          derivedValuesWatchable,
         ),
       );
       return { control, controlElement: control.element };

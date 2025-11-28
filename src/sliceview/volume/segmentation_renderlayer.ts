@@ -50,7 +50,7 @@ import {
 import type { Uint64Map } from "#src/uint64_map.js";
 import type { DisjointUint64Sets } from "#src/util/disjoint_sets.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
-import type { ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
+import { addControlsToBuilder, setControlsInShader, type ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
 
 export class EquivalencesHashMap {
   generation = Number.NaN;
@@ -219,9 +219,12 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
     this.registerDisposer(
       displayState.ignoreNullVisibleSet.changed.add(this.redrawNeeded.dispatch),
     );
-    displayState.segmentationColorUserShader.changed.add(
+    this.registerDisposer(displayState.segmentationColorUserShader.changed.add(
       this.redrawNeeded.dispatch,
-    );
+    ));
+    this.registerDisposer(displayState.segmentColorShaderControlState.changed.add(
+      this.redrawNeeded.dispatch,
+    ));
   }
 
   disposed() {
@@ -238,6 +241,7 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
   }
 
   defineShader(builder: ShaderBuilder, parameters: ShaderParameters) {
+    addControlsToBuilder(parameters.shaderBuilderState, builder);
     this.hashTableManager.defineShader(builder); // here is where they add the hash table code
     this.displayState.segmentationColorUserShader.defineShader(builder, true);
 
@@ -345,8 +349,8 @@ uint64_t getMappedObjectId(uint64_t value) {
   if (rgba.a > 0.0) {
     alpha = rgba.a;
   }
-  loadSegmentProperties(valueForColor);
-  rgba = segmentColor(rgba);
+  bool hasProperties = loadSegmentProperties(valueForColor);
+  rgba = segmentColor(rgba, hasProperties);
   emit(vec4(mix(vec3(1.0,1.0,1.0), vec3(rgba), saturation), alpha));
 `;
     builder.setFragmentMain(fragmentMain);
@@ -462,6 +466,12 @@ uint64_t getMappedObjectId(uint64_t value) {
     }
 
     displayState.segmentationColorUserShader.enable(gl, shader);
+    setControlsInShader(
+      gl,
+      shader,
+      this.displayState.segmentColorShaderControlState,
+      parameters.shaderBuilderState.parseResult.controls,
+    );
   }
   endSlice(
     sliceView: SliceView,
