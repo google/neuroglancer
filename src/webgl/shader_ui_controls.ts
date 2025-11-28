@@ -26,7 +26,8 @@ import {
   makeCachedLazyDerivedWatchableValue,
   TrackableValue,
 } from "#src/trackable_value.js";
-import { arraysEqual, arraysEqualWithPredicate, TypedNumberArray } from "#src/util/array.js";
+import type { TypedNumberArray } from "#src/util/array.js";
+import { arraysEqual, arraysEqualWithPredicate } from "#src/util/array.js";
 import {
   parseRGBColorSpecification,
   serializeColor,
@@ -102,7 +103,7 @@ export interface ShaderPropertyInvlerpControl {
   type: "propertyInvlerp";
   clamp: boolean;
   properties: PropertiesSpecification;
-//  values?: Map<string, TypedNumberArray<ArrayBuffer>>;
+  //  values?: Map<string, TypedNumberArray<ArrayBuffer>>;
   shaderName?: (arg0: string) => string;
   default: PropertyInvlerpParameters;
 }
@@ -437,8 +438,15 @@ function parseInvlerpDirective(
   if (imageData !== undefined) {
     return parseImageInvlerpDirective(valueType, parameters, imageData);
   }
-  if (properties !== undefined && properties.size > 0) { // TEMP FIX
-    return parsePropertyInvlerpDirective(valueType, parameters, properties, values, shaderName);
+  if (properties !== undefined && properties.size > 0) {
+    // TEMP FIX
+    return parsePropertyInvlerpDirective(
+      valueType,
+      parameters,
+      properties,
+      values,
+      shaderName,
+    );
   }
   const errors = [];
   errors.push("invlerp control not supported");
@@ -775,7 +783,9 @@ export function addControlsToBuilder(
   builder: ShaderBuilder,
   fragment = true,
 ) {
-  const addCode = fragment ? builder.addFragmentCode.bind(builder) : builder.addVertexCode.bind(builder);
+  const addCode = fragment
+    ? builder.addFragmentCode.bind(builder)
+    : builder.addVertexCode.bind(builder);
   const { builderValues } = builderState;
   for (const [name, control] of builderState.parseResult.controls) {
     const uName = uniformName(name);
@@ -802,7 +812,9 @@ float ${uName}() {
       case "propertyInvlerp": {
         const property = builderValue.property;
         const dataType = control.properties.get(property)!;
-        const propertyShaderName = control.shaderName ? control.shaderName(property) : `prop_${property}()`;
+        const propertyShaderName = control.shaderName
+          ? control.shaderName(property)
+          : `prop_${property}()`;
         const code = [
           defineInvlerpShaderFunction(builder, uName, dataType, control.clamp),
           `

@@ -23,6 +23,7 @@ import { IndirectRenderedPanel } from "#src/display_context.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import type { ToolActivation } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import type { TypedNumberArray } from "#src/util/array.js";
 import { DataType } from "#src/util/data_type.js";
 import type { Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -66,13 +67,13 @@ import { ShaderBuilder } from "#src/webgl/shader.js";
 import { getShaderType } from "#src/webgl/shader_lib.js";
 import type { InvlerpParameters } from "#src/webgl/shader_ui_controls.js";
 import { getSquareCornersBuffer } from "#src/webgl/square_corners_buffer.js";
-import { createTexture, readTexture, setRawTextureParameters } from "#src/webgl/texture.js";
+import { setRawTextureParameters } from "#src/webgl/texture.js";
+import { create1DTexture } from "#src/webgl/texture_access.js";
 import { makeIcon } from "#src/widget/icon.js";
 import { AutoRangeFinder } from "#src/widget/invlerp_range_finder.js";
 import type { LayerControlTool } from "#src/widget/layer_control.js";
 import type { LegendShaderOptions } from "#src/widget/shader_controls.js";
 import { Tab } from "#src/widget/tab_view.js";
-import { TypedNumberArray } from "#src/util/array.js";
 
 const inputEventMap = EventActionMap.fromObject({
   "shift?+mousedown0": { action: "set" },
@@ -774,7 +775,8 @@ function countDataInBins(
   return counts;
 }
 
-export class InvlerpWidget extends Tab { // TODO should this implement ParentInverpWidget?
+export class InvlerpWidget extends Tab {
+  // TODO should this implement ParentInverpWidget?
   cdfPanel;
   boundElements;
   invertArrows: HTMLElement[];
@@ -790,30 +792,33 @@ export class InvlerpWidget extends Tab { // TODO should this implement ParentInv
       dataType,
     } = this;
     if (values !== undefined) {
-      if (this.prevValues === values && this.prevWindow && dataTypeIntervalEqual(this.prevWindow, this.trackable.value.window) && this.prevTexture !== null) {
-        return this.prevTexture
+      if (
+        this.prevValues === values &&
+        this.prevWindow &&
+        dataTypeIntervalEqual(this.prevWindow, this.trackable.value.window) &&
+        this.prevTexture !== null
+      ) {
+        return this.prevTexture;
       }
-
       if (this.prevTexture) {
         this.display.gl.deleteTexture(this.prevTexture);
       }
-      console.log("generating new texture");
-        const histogram = countDataInBins(
+      const histogram = countDataInBins(
         values,
         dataType,
         this.trackable.value.window[0],
         this.trackable.value.window[1],
         NUM_HISTOGRAM_BINS_IN_RANGE,
       );
-      const texture =  createTexture(this.display.gl, histogram);
+      const texture = create1DTexture(this.display.gl, histogram);
       this.prevValues = values;
       this.prevWindow = this.trackable.value.window.slice() as DataTypeInterval;
       this.prevTexture = texture;
       return texture;
     }
-    return this.histogramSpecifications.getFramebuffers(
-      this.display.gl,
-    )[this.histogramIndex].colorBuffers[0].texture;
+    return this.histogramSpecifications.getFramebuffers(this.display.gl)[
+      this.histogramIndex
+    ].colorBuffers[0].texture;
   }
   private invertRange() {
     invertInvlerpRange(this.trackable);

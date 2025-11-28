@@ -483,7 +483,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
     this.registerDisposer(
       displayState.silhouetteRendering.changed.add(this.redrawNeeded.dispatch),
     );
-    
+
     const sharedObject = (this.backend = this.registerDisposer(
       new SegmentationLayerSharedObject(
         chunkManager,
@@ -831,7 +831,7 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
     this.registerDisposer(
       displayState.silhouetteRendering.changed.add(this.redrawNeeded.dispatch),
     );
-  
+
     const sharedObject = (this.backend = this.registerDisposer(
       new SegmentationLayerSharedObject(
         chunkManager,

@@ -298,7 +298,6 @@ void emitDefault() {
     textureAccessHelper.defineShader(builder);
     const numAttributes = this.vertexAttributes.length;
     for (let j = vertexAttributeSamplerSymbols.length; j < numAttributes; ++j) {
-
       // TODO look more here to see how skeeltons do attribute access
       vertexAttributeSamplerSymbols[j] = Symbol(
         `SkeletonShader.vertexAttributeTextureUnit${j}`,

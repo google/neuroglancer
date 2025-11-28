@@ -16,8 +16,8 @@
 
 import type { UserLayer } from "#src/layer/index.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
-import { makeCachedDerivedWatchableValue, WatchableValue } from "#src/trackable_value.js";
-import { TypedNumberArray } from "#src/util/array.js";
+import { makeCachedDerivedWatchableValue } from "#src/trackable_value.js";
+import type { TypedNumberArray } from "#src/util/array.js";
 import { DataType } from "#src/util/data_type.js";
 import {
   convertDataTypeInterval,
@@ -118,24 +118,27 @@ export function propertyInvlerpLayerControl<LayerType extends UserLayer>(
             return values.get(p.property);
           }
           return undefined;
-        }, [watchableValue]);
-      const derivedWatchableValue: WatchableValueInterface<InvlerpParameters> = {
-        changed: watchableValue.changed,
-        get value() {
-          let { dataType, window, range } = watchableValue.value;
-          if (range === undefined) {
-            range = defaultDataTypeRange[dataType];
-          }
-          return {
-            window: normalizeDataTypeInterval(window ?? range),
-            range,
-          };
         },
-        set value(newValue: InvlerpParameters) {
-          const { window, range } = newValue;
-          watchableValue.value = { ...watchableValue.value, window, range };
-        },
-      };
+        [watchableValue],
+      );
+      const derivedWatchableValue: WatchableValueInterface<InvlerpParameters> =
+        {
+          changed: watchableValue.changed,
+          get value() {
+            let { dataType, window, range } = watchableValue.value;
+            if (range === undefined) {
+              range = defaultDataTypeRange[dataType];
+            }
+            return {
+              window: normalizeDataTypeInterval(window ?? range),
+              range,
+            };
+          },
+          set value(newValue: InvlerpParameters) {
+            const { window, range } = newValue;
+            watchableValue.value = { ...watchableValue.value, window, range };
+          },
+        };
       const derivedDataTypeWatchable = makeCachedDerivedWatchableValue(
         (p) => p.dataType,
         [watchableValue],

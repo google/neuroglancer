@@ -15,8 +15,8 @@
  */
 
 import type { DisplayContext } from "#src/display_context.js";
-import { WatchableValueInterface } from "#src/trackable_value.js";
-import { TypedNumberArray } from "#src/util/array.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import type { TypedNumberArray } from "#src/util/array.js";
 import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { computePercentilesFromEmpiricalHistogram } from "#src/util/empirical_cdf.js";
@@ -91,7 +91,9 @@ export class AutoRangeFinder extends RefCounted {
 
   autoComputeRange(minPercentile: number, maxPercentile: number) {
     if (this.parent.values && this.parent.values.value) {
-      const { values: {value: values} } = this.parent;
+      const {
+        values: { value: values },
+      } = this.parent;
       const valuesWithoutNaN = values.filter((x) => !Number.isNaN(x));
       const valuesSorted = valuesWithoutNaN.slice().sort((a, b) => a - b);
       const n = valuesSorted.length;

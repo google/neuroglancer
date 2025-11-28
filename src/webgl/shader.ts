@@ -404,7 +404,8 @@ export class ShaderCode {
   code = "";
   parts = new Set<ShaderCodePart>();
 
-  add(x: ShaderCodePart, beginning = false) { // TODO, janky
+  add(x: ShaderCodePart, beginning = false) {
+    // TODO, janky
     if (this.parts.has(x)) {
       return;
     }

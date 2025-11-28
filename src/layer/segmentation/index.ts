@@ -113,7 +113,8 @@ import { DisplayOptionsTab } from "#src/ui/segmentation_display_options_tab.js";
 import { Uint64Map } from "#src/uint64_map.js";
 import { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import { Uint64Set } from "#src/uint64_set.js";
-import { gatherUpdate, TypedNumberArray } from "#src/util/array.js";
+import type { TypedNumberArray } from "#src/util/array.js";
+import { gatherUpdate } from "#src/util/array.js";
 import {
   packColor,
   parseRGBColorSpecification,
@@ -638,7 +639,11 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         },
         shaderError: this.layer.displayState.shaderError, // TODO can I reuse this?
         defineShader: (builder, { shaderBuilderState }) => {
-          addControlsToBuilder(shaderBuilderState, builder, /* fragment=*/ false);
+          addControlsToBuilder(
+            shaderBuilderState,
+            builder,
+            /* fragment=*/ false,
+          );
           this.offscreenSegmentationColorUserShader.defineShader(
             builder,
             /*fragment=*/ false,

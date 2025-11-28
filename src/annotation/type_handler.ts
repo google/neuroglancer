@@ -327,9 +327,8 @@ export abstract class AnnotationRenderHelper extends AnnotationRenderHelperBase 
     memoizeKey: any,
     defineShader: (builder: ShaderBuilder) => void,
   ): AnnotationShaderGetter {
-
     this.shaderControlState.builderState.changed.add(() => {
-      console.log('anno builder state changed');
+      console.log("anno builder state changed");
     });
 
     return parameterizedEmitterDependentShaderGetter(this, this.gl, {
@@ -776,7 +775,11 @@ gl_PointSize = 1.0;
         gl.drawArrays(WebGL2RenderingContext.POINTS, 0, context.count);
         if (DEBUG_HISTOGRAMS) {
           const histogram = copyHistogramToCPU(gl);
-          console.log("histogram property:", propertyIdentifier, histogram.join(" "));
+          console.log(
+            "histogram property:",
+            propertyIdentifier,
+            histogram.join(" "),
+          );
         }
         binder.disable();
         break;

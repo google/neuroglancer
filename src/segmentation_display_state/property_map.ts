@@ -17,10 +17,7 @@
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { ChunkSource } from "#src/chunk_manager/frontend.js";
 import { HashMapUint64 } from "#src/gpu_hash/hash_table.js";
-import {
-  GPUHashTable,
-  HashMapShaderManager,
-} from "#src/gpu_hash/shader.js";
+import { GPUHashTable, HashMapShaderManager } from "#src/gpu_hash/shader.js";
 import { DEFAULT_FRAGMENT_SEGMENT_COLOR } from "#src/layer/segmentation/index.js";
 import type { IndexedSegmentProperty } from "#src/segmentation_display_state/base.js";
 import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";

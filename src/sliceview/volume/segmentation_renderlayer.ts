@@ -50,7 +50,11 @@ import {
 import type { Uint64Map } from "#src/uint64_map.js";
 import type { DisjointUint64Sets } from "#src/util/disjoint_sets.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
-import { addControlsToBuilder, setControlsInShader, type ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
+import {
+  addControlsToBuilder,
+  setControlsInShader,
+  type ShaderControlsBuilderState,
+} from "#src/webgl/shader_ui_controls.js";
 
 export class EquivalencesHashMap {
   generation = Number.NaN;
@@ -219,12 +223,16 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
     this.registerDisposer(
       displayState.ignoreNullVisibleSet.changed.add(this.redrawNeeded.dispatch),
     );
-    this.registerDisposer(displayState.segmentationColorUserShader.changed.add(
-      this.redrawNeeded.dispatch,
-    ));
-    this.registerDisposer(displayState.segmentColorShaderControlState.changed.add(
-      this.redrawNeeded.dispatch,
-    ));
+    this.registerDisposer(
+      displayState.segmentationColorUserShader.changed.add(
+        this.redrawNeeded.dispatch,
+      ),
+    );
+    this.registerDisposer(
+      displayState.segmentColorShaderControlState.changed.add(
+        this.redrawNeeded.dispatch,
+      ),
+    );
   }
 
   disposed() {
