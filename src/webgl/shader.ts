@@ -486,7 +486,6 @@ export class ShaderBuilder {
   private nextSymbolID = 0;
   private nextTextureUnit = 0;
   private uniformsCode = "";
-  private globalsCode = "";
   private attributesCode = "";
   private varyingsCodeVS = "";
   private varyingsCodeFS = "";

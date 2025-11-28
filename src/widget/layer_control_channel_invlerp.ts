@@ -17,7 +17,11 @@
 import type { CoordinateSpaceCombiner } from "#src/coordinate_transform.js";
 import type { UserLayer } from "#src/layer/index.js";
 import { Position } from "#src/navigation_state.js";
-import type { WatchableValueInterface } from "#src/trackable_value.js";
+import {
+  WatchableValue,
+  type WatchableValueInterface,
+} from "#src/trackable_value.js";
+import type { TypedNumberArray } from "#src/util/array.js";
 import { arraysEqual } from "#src/util/array.js";
 import type { DataType } from "#src/util/data_type.js";
 import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
@@ -86,6 +90,9 @@ export function channelInvlerpLayerControl<LayerType extends UserLayer>(
         context.registerDisposer(watchableValue.changed.add(updatePosition));
         options.labelContainer.appendChild(positionWidget.element);
       }
+      const values = new WatchableValue<
+        TypedNumberArray<ArrayBuffer> | undefined
+      >(undefined);
       const control = context.registerDisposer(
         new InvlerpWidget(
           options.visibility,
@@ -95,6 +102,7 @@ export function channelInvlerpLayerControl<LayerType extends UserLayer>(
           histogramSpecifications,
           histogramIndex,
           defaultChannel.length === 0 ? legendShaderOptions : undefined,
+          values,
         ),
       );
       return { control, controlElement: control.element };

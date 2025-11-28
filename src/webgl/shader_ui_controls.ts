@@ -103,7 +103,7 @@ export interface ShaderPropertyInvlerpControl {
   type: "propertyInvlerp";
   clamp: boolean;
   properties: PropertiesSpecification;
-  //  values?: Map<string, TypedNumberArray<ArrayBuffer>>;
+  values?: Map<string, TypedNumberArray<ArrayBuffer>>;
   shaderName?: (arg0: string) => string;
   default: PropertyInvlerpParameters;
 }
