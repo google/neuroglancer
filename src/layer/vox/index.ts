@@ -442,7 +442,8 @@ export function UserLayerWithVoxelEditingMixin<
       json[ERASE_MODE_JSON_KEY] = this.voxEraseMode.toJSON();
       json[BRUSH_SHAPE_JSON_KEY] = this.voxBrushShape.toJSON();
       json[FLOOD_FILL_MAX_VOXELS_JSON_KEY] = this.voxFloodMaxVoxels.toJSON();
-      json[PAINT_VALUE_JSON_KEY] = this.paintValue.toJSON();
+      const pv = this.paintValue.toJSON();
+      json[PAINT_VALUE_JSON_KEY] = pv === undefined ? undefined : pv.toString();
       return json;
     }
 
