@@ -839,6 +839,8 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     radiusX: number,
     radiusY: number,
     rotation: number,
+    color: string,
+    isEraser: boolean,
   ) {
     const ctx = this.overlay_context;
     const { logicalWidth, logicalHeight } = this.renderViewport;
@@ -850,12 +852,16 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       ctx.beginPath();
       ctx.ellipse(x, y, radiusX, radiusY, rotation, 0, 2 * Math.PI);
       ctx.restore();
-      ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
+      ctx.fillStyle = isEraser ? "red" : color;
+      ctx.globalAlpha = 0.2;
       ctx.fill();
-      ctx.strokeStyle = "rgba(255, 255, 255, 1)";
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = isEraser
+        ? "rgb(255,136,136)"
+        : "rgba(255, 255, 255, 1)";
       ctx.lineWidth = 3;
       ctx.stroke();
-      ctx.strokeStyle = "rgba(0, 0, 0, 1)";
+      ctx.strokeStyle = isEraser ? "rgb(97,0,0)" : "rgba(0, 0, 0, 1)";
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }

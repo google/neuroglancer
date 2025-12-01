@@ -278,6 +278,8 @@ export class VoxelBrushTool extends BaseVoxelTool {
       radiusX,
       radiusY,
       rotation,
+      "white",
+      this.layer.voxEraseMode.value,
     );
   }
 
@@ -400,33 +402,38 @@ export class VoxelBrushTool extends BaseVoxelTool {
   }
 }
 
-const floodFillSVG =
-  `<svg width="24px" height="24px" viewBox="0 0 24 24" fill="none"
+export class VoxelFloodFillTool extends BaseVoxelTool {
+  private getCursor() {
+    const lightColor = this.layer.voxEraseMode.value ? "#FF8888" : "#FFFFFF";
+    const darkColor = this.layer.voxEraseMode.value ? "#610000" : "#000000";
+
+    const floodFillSVG =
+      `<svg width="24px" height="24px" viewBox="0 0 24 24" fill="none"
      xmlns="http://www.w3.org/2000/svg" color="#000000">
   <path d="M2.63596 10.2927L9.70703 3.22168L18.1923 11.707L11.1212 18.778C10.3402 19.5591 9.07387 19.5591 8.29282 18.778L2.63596 13.1212C1.85492 12.3401 1.85492 11.0738 2.63596 10.2927Z"
-        stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        stroke="${lightColor}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M8.29297 1.80762L9.70718 3.22183"
-        stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        stroke="${lightColor}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
   <path fill-rule="evenodd" clip-rule="evenodd"
         d="M19.9991 15C19.9991 15 22.9991 17.9934 22.9994 19.8865C22.9997 21.5422 21.6552 22.8865 19.9997 22.8865C18.3442 22.8865 17.012 21.5422 17 19.8865C17.0098 17.9924 19.9991 15 19.9991 15Z"
-        stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        stroke="${lightColor}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
 
   <path d="M2.63596 10.2927L9.70703 3.22168L18.1923 11.707L11.1212 18.778C10.3402 19.5591 9.07387 19.5591 8.29282 18.778L2.63596 13.1212C1.85492 12.3401 1.85492 11.0738 2.63596 10.2927Z"
-        stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        stroke="${darkColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M8.29297 1.80762L9.70718 3.22183"
-        stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        stroke="${darkColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
   <path fill-rule="evenodd" clip-rule="evenodd"
         d="M19.9991 15C19.9991 15 22.9991 17.9934 22.9994 19.8865C22.9997 21.5422 21.6552 22.8865 19.9997 22.8865C18.3442 22.8865 17.012 21.5422 17 19.8865C17.0098 17.9924 19.9991 15 19.9991 15Z"
-        stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        stroke="${darkColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
 `.replace(/\s\s+/g, " ");
 
-const floodFillCursor = `url('data:image/svg+xml;utf8,${encodeURIComponent(floodFillSVG)}') 4 19, crosshair`;
+    return `url('data:image/svg+xml;utf8,${encodeURIComponent(floodFillSVG)}') 4 19, crosshair`;
+  }
 
-export class VoxelFloodFillTool extends BaseVoxelTool {
   activate(activation: ToolActivation<this>) {
     super.activate(activation);
-    this.setCursor(floodFillCursor);
+    this.setCursor(this.getCursor());
     activation.registerDisposer(() => {
       this.resetCursor();
     });
