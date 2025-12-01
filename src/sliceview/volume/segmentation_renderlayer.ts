@@ -21,7 +21,6 @@ import {
   HashSetShaderManager,
 } from "#src/gpu_hash/shader.js";
 import {
-  SegmentColorShaderManager,
   SegmentStatedColorShaderManager,
 } from "#src/segment_color.js";
 import { getVisibleSegments } from "#src/segmentation_display_state/base.js";

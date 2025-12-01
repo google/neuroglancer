@@ -60,7 +60,6 @@ import {
   makeCachedDerivedWatchableValue,
 } from "#src/trackable_value.js";
 import type { Borrowed, RefCounted } from "#src/util/disposable.js";
-import type { vec4 } from "#src/util/geom.js";
 import {
   getFrustrumPlanes,
   mat3,
@@ -276,9 +275,9 @@ export class MeshShaderManager {
     }
   }
 
-  setColor(gl: GL, shader: ShaderProgram, color: vec4) {
-    gl.uniform4fv(shader.uniform("uColor"), color);
-  }
+  // setColor(gl: GL, shader: ShaderProgram, color: vec4) {
+  //   gl.uniform4fv(shader.uniform("uColor"), color);
+  // }
 
   setPickID(gl: GL, shader: ShaderProgram, pickID: number) {
     gl.uniform1ui(shader.uniform("uPickID"), pickID);
@@ -404,7 +403,7 @@ export class MeshShaderManager {
         builder.addAttribute("highp vec2", "aVertexNormal");
         builder.addVarying("highp vec4", "vColor");
         builder.addUniform("highp vec4", "uLightDirection");
-        builder.addUniform("highp vec4", "uColor");
+        // builder.addUniform("highp vec4", "uColor");
         builder.addUniform("highp mat3", "uNormalMatrix");
         builder.addUniform("highp mat4", "uModelViewProjection");
         builder.addUniform("highp uint", "uPickID");
@@ -437,7 +436,7 @@ vec3 origNormal = decodeNormalOctahedronSnorm8(aVertexNormal);
 vec3 normal = normalize(uNormalMatrix * (normalMultiplier * origNormal));
 float absCosAngle = abs(dot(normal, uLightDirection.xyz));
 float lightingFactor = absCosAngle + uLightDirection.w;
-vColor = uColor;
+//vColor = uColor;
 vColor = segmentColorUserShader(vColor, uint64_t(uID));
 vColor = vec4(lightingFactor * vColor.rgb, vColor.a);
 `;
@@ -571,7 +570,8 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
         if (manifestChunk === undefined) return;
         ++presentChunks;
         if (renderContext.emitColor) {
-          meshShaderManager.setColor(gl, shader, color!);
+          color;
+          // meshShaderManager.setColor(gl, shader, color!);
         }
         if (renderContext.emitPickID) {
           meshShaderManager.setPickID(gl, shader, pickIndex!);
@@ -959,7 +959,8 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
           }
         }
         if (renderContext.emitColor) {
-          meshShaderManager.setColor(gl, shader, color!);
+          color;
+          // meshShaderManager.setColor(gl, shader, color!);
         }
         if (renderContext.emitPickID) {
           meshShaderManager.setPickID(gl, shader, pickIndex!);
