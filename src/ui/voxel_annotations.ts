@@ -45,7 +45,7 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
     const it = this.layer.editingContexts.values();
     let ctx: VoxelEditingContext;
     while ((ctx = it.next().value) !== undefined) {
-      if (ctx.writable) return ctx;
+      if (ctx.writingEnabled) return ctx;
     }
     return undefined;
   }
