@@ -1069,7 +1069,7 @@ export function getBaseObjectColor(
     color[2] = segmentDefaultColor[2];
     return shaderSegmentColor(objectId, color);
   }
-  colorGroupState.segmentColorHash.compute(color, objectId);
+  colorGroupState.segmentColorHash.compute(color, objectId); // no need to do hash if we do it in the shader
   return shaderSegmentColor(objectId, color);
 }
 
@@ -1178,7 +1178,7 @@ export function forEachVisibleSegmentToDraw(
             displayState,
             baseSegmentColoring ? objectId : rootObjectId,
             alpha,
-            false /* use color shader */,
+            /*useColorShader=*/ false,
           )
         : undefined;
       callback(objectId, color, pickIndex, rootObjectId);

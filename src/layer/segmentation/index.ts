@@ -654,8 +654,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
           builder.addVarying("highp vec4", "vColor");
           const vertexMain = `
 gl_Position = aVertexPosition;
-bool hasProperties = loadSegmentProperties(uint64_t(uID));
-vColor = segmentColor(uColor, hasProperties);
+vColor = segmentColorUserShader(uColor, uint64_t(uID));
 `;
           builder.addVertexMain(vertexMain);
           builder.addOutputBuffer("vec4", "out_fragColor", 0);

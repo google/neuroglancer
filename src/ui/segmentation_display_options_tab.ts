@@ -29,7 +29,7 @@ import {
 import { ShaderControls } from "#src/widget/shader_controls.js";
 import { Tab } from "#src/widget/tab_view.js";
 
-function makeShaderCodeWidget(layer: SegmentationUserLayer) {
+function makeSegmentColorShaderCodeWidget(layer: SegmentationUserLayer) {
   return new ShaderCodeWidget({
     fragment: layer.displayState.fragmentSegmentColor,
     shaderError: layer.displayState.shaderError,
@@ -79,13 +79,13 @@ export class DisplayOptionsTab extends Tab {
     }
 
     const segmentColorCodeWidget = this.registerDisposer(
-      makeShaderCodeWidget(layer),
+      makeSegmentColorShaderCodeWidget(layer),
     );
     element.appendChild(
       makeShaderCodeWidgetTopRow(
         this.layer,
         segmentColorCodeWidget,
-        ShaderCodeOverlay,
+        SegmentColorShaderCodeOverlay,
         {
           title: "Documentation on image layer rendering",
           href: "https://github.com/google/neuroglancer/blob/master/src/annotation/rendering.md",
@@ -130,7 +130,7 @@ export class DisplayOptionsTab extends Tab {
             makeShaderCodeWidgetTopRow(
               this.layer,
               codeWidget,
-              ShaderCodeOverlay,
+              SkeletonShaderCodeOverlay,
               {
                 title: "Documentation on image layer rendering",
                 href: "https://github.com/google/neuroglancer/blob/master/src/sliceview/image_layer_rendering.md",
@@ -162,7 +162,22 @@ export class DisplayOptionsTab extends Tab {
   }
 }
 
-class ShaderCodeOverlay extends Overlay {
+class SegmentColorShaderCodeOverlay extends Overlay {
+  codeWidget: ShaderCodeWidget;
+  constructor(public layer: SegmentationUserLayer) {
+    super();
+    this.codeWidget = this.registerDisposer(
+      makeSegmentColorShaderCodeWidget(layer),
+    );
+    this.content.classList.add(
+      "neuroglancer-segmentation-layer-segment-color-shader-overlay",
+    );
+    this.content.appendChild(this.codeWidget.element);
+    this.codeWidget.textEditor.refresh();
+  }
+}
+
+class SkeletonShaderCodeOverlay extends Overlay {
   codeWidget: ShaderCodeWidget;
   constructor(public layer: SegmentationUserLayer) {
     super();

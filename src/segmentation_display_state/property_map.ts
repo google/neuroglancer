@@ -19,6 +19,7 @@ import { ChunkSource } from "#src/chunk_manager/frontend.js";
 import { HashMapUint64 } from "#src/gpu_hash/hash_table.js";
 import { GPUHashTable, HashMapShaderManager } from "#src/gpu_hash/shader.js";
 import { DEFAULT_FRAGMENT_SEGMENT_COLOR } from "#src/layer/segmentation/index.js";
+import { SegmentColorShaderManager } from "#src/segment_color.js";
 import type { IndexedSegmentProperty } from "#src/segmentation_display_state/base.js";
 import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
 import type { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
@@ -1362,12 +1363,45 @@ interface SegmentPropertyShaderData {
 export class SegmentationColorUserShaderManager extends RefCounted {
   changed = new Signal();
 
+  protected segmentColorShaderManager = new SegmentColorShaderManager(
+    "segmentColorHash",
+  );
+
   public segmentPropertyShaderData = new Map<
     string,
     SegmentPropertyShaderData
   >();
 
-  private segmentColorShaderCode: string;
+  private _segmentColorShaderCode: string;
+
+  private get segmentColorShaderCode() {
+    return this._segmentColorShaderCode;
+  }
+
+  private set segmentColorShaderCode(code: string) {
+    this._segmentColorShaderCode = `
+${code}
+vec4 segmentColorUserShader(in vec4 originalColor, uint64_t segmentId) {
+
+  vec4 otherOg = vec4(segmentColorHash(segmentId), 0.0);
+
+  bool hasProperties = loadSegmentProperties(segmentId);
+  bool has = true; // TEMP
+  float saturation = uSaturation;
+  if (uSelectedSegment == segmentId.value) {
+    float adjustment = has ? 0.5 : 0.75;
+    if (saturation > adjustment) {
+      saturation -= adjustment;
+    } else {
+      saturation += adjustment;
+    }
+  }
+  float alpha = originalColor.a;
+  vec4 rgba = segmentColor(otherOg, hasProperties);
+  return vec4(mix(vec3(1.0,1.0,1.0), vec3(rgba), saturation), alpha);
+}
+`;
+  }
 
   manager = new HashMapShaderManager("SegmentToPropertyIndex");
   segmentPropertyIndexMap = new HashMapUint64();
@@ -1447,26 +1481,26 @@ export class SegmentationColorUserShaderManager extends RefCounted {
       for (const [_, data] of this.segmentPropertyShaderData) {
         data.stale = true;
       }
-      if (tagNames.size > 0 || numericNames.size > 0) {
-        const {
-          segmentPropertyMap: { value: segmentPropertyMap },
-        } = this.displayState.segmentationGroupState.value;
+      const {
+        segmentPropertyMap: { value: segmentPropertyMap },
+      } = this.displayState.segmentationGroupState.value;
+      if (
+        segmentPropertyMap &&
+        segmentPropertyMap.segmentPropertyMap.inlineProperties
+      ) {
+        const { segmentPropertyIndexMap } = this;
         if (
-          segmentPropertyMap &&
-          segmentPropertyMap.segmentPropertyMap.inlineProperties
+          segmentPropertyIndexMap.size === 0 &&
+          segmentPropertyMap.numericalProperties.length
         ) {
-          const { segmentPropertyIndexMap } = this;
-          if (
-            segmentPropertyIndexMap.size === 0 &&
-            segmentPropertyMap.numericalProperties.length
-          ) {
-            // initialize segmentPropertyIndexMap
-            const { inlineProperties } = segmentPropertyMap.segmentPropertyMap;
-            for (let i = 0; i < inlineProperties.ids.length; i++) {
-              const id = inlineProperties.ids[i];
-              segmentPropertyIndexMap.set(id, BigInt(i));
-            }
+          // initialize segmentPropertyIndexMap
+          const { inlineProperties } = segmentPropertyMap.segmentPropertyMap;
+          for (let i = 0; i < inlineProperties.ids.length; i++) {
+            const id = inlineProperties.ids[i];
+            segmentPropertyIndexMap.set(id, BigInt(i));
           }
+        }
+        if (tagNames.size > 0 || numericNames.size > 0) {
           for (const tag of tagNames) {
             const identifier = this.tagToShaderData(tag, segmentPropertyMap);
             if (identifier) {
@@ -1482,9 +1516,10 @@ export class SegmentationColorUserShaderManager extends RefCounted {
               code = code.replaceAll(`prop("${propName}")`, identifier);
             }
           }
-        }
-        if (this.segmentPropertyShaderData.size === 0) {
-          code = DEFAULT_FRAGMENT_SEGMENT_COLOR;
+          // if trying to use property values but texture data is not available, use default shader code
+          if (this.segmentPropertyShaderData.size === 0) {
+            code = DEFAULT_FRAGMENT_SEGMENT_COLOR;
+          }
         }
       }
       this.segmentColorShaderCode = code;
@@ -1494,9 +1529,6 @@ export class SegmentationColorUserShaderManager extends RefCounted {
           gl.deleteTexture(texture);
           this.segmentPropertyShaderData.delete(id);
         }
-      }
-      if (this.segmentPropertyShaderData.size === 0) {
-        // TODO, clear out the manager as well
       }
       this.changed.dispatch();
     };
@@ -1518,6 +1550,10 @@ export class SegmentationColorUserShaderManager extends RefCounted {
   }
 
   defineShader(builder: ShaderBuilder, fragment: boolean) {
+    this.segmentColorShaderManager.defineShader(builder, fragment);
+    builder.addUniform("highp float", "uSaturation");
+    builder.addUniform("highp uvec2", "uSelectedSegment");
+
     const addCode = fragment
       ? builder.addFragmentCode.bind(builder)
       : builder.addVertexCode.bind(builder);
@@ -1563,6 +1599,56 @@ bool loadSegmentProperties(uint64_t id) {
   }
 
   enable(gl: GL, shader: ShaderProgram) {
+    {
+      const { displayState } = this;
+      const { segmentColorHash: {value: segmentColorHash }} = displayState;
+      this.segmentColorShaderManager.enable(gl, shader, segmentColorHash);
+
+      const HAS_SELECTED_SEGMENT_FLAG = 1;
+      // const SHOW_ALL_SEGMENTS_FLAG = 2;
+
+      //  const {
+      //       segmentDefaultColor: { value: segmentDefaultColor },
+      //       segmentColorHash: { value: segmentColorHash },
+      //       highlightColor: { value: highlightColor },
+      //       tempSegmentDefaultColor2d: { value: tempSegmentDefaultColor2d },
+      //     } = this.displayState;
+      // const visibleSegments = getVisibleSegments(segmentationGroupState);
+      // const ignoreNullSegmentSet = this.displayState.ignoreNullVisibleSet.value;
+      let selectedSegmentLow = 0;
+      let selectedSegmentHigh = 0;
+      let flags = 0;
+      const { segmentSelectionState } = this.displayState;
+      if (
+        segmentSelectionState.hasSelectedSegment &&
+        displayState.hoverHighlight.value
+      ) {
+        const seg = displayState.baseSegmentHighlighting.value
+          ? segmentSelectionState.baseSelectedSegment
+          : segmentSelectionState.selectedSegment;
+        selectedSegmentLow = Number(seg & 0xffffffffn);
+        selectedSegmentHigh = Number(seg >> 32n);
+        flags |= HAS_SELECTED_SEGMENT_FLAG;
+      }
+      // gl.uniform1f(
+      //   shader.uniform("uSelectedAlpha"),
+      //   displayState.selectedAlpha.value,
+      // );
+      gl.uniform1f(
+        shader.uniform("uSaturation"),
+        displayState.saturation.value,
+      );
+      // gl.uniform1f(
+      //   shader.uniform("uNotSelectedAlpha"),
+      //   displayState.notSelectedAlpha.value,
+      // );
+      gl.uniform2ui(
+        shader.uniform("uSelectedSegment"),
+        selectedSegmentLow,
+        selectedSegmentHigh,
+      );
+    }
+
     this.manager.enable(
       gl,
       shader,

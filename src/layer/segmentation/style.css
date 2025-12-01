@@ -31,6 +31,8 @@
   align-items: center;
 }
 
+.neuroglancer-segmentation-layer-segment-color-shader-overlay
+  .neuroglancer-shader-code-widget,
 .neuroglancer-segmentation-layer-skeleton-shader-overlay
   .neuroglancer-shader-code-widget {
   width: 80vw;

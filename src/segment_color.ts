@@ -38,12 +38,13 @@ export class SegmentColorShaderManager {
     this.seedName = prefix + "_seed";
   }
 
-  defineShader(builder: ShaderBuilder) {
+  defineShader(builder: ShaderBuilder, fragment = true) {
+    const addCode = fragment ? builder.addFragmentCode.bind(builder) : builder.addVertexCode.bind(builder);
     const { seedName } = this;
     builder.addUniform("highp uint", seedName);
-    builder.addFragmentCode(glsl_uint64);
-    builder.addFragmentCode(glsl_hashCombine);
-    builder.addFragmentCode(glsl_hsvToRgb);
+    addCode(glsl_uint64);
+    addCode(glsl_hashCombine);
+    addCode(glsl_hsvToRgb);
     let s = `
 vec3 ${this.prefix}(uint64_t x) {
   uint h = hashCombine(${seedName}, x);
@@ -60,7 +61,7 @@ vec3 ${this.prefix}(uint64_t x) {
   return hsvToRgb(hsv);
 }
 `;
-    builder.addFragmentCode(s);
+    addCode(s);
   }
 
   enable(gl: GL, shader: ShaderProgram, segmentColorHash: number) {
