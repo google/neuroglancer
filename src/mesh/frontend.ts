@@ -548,6 +548,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
     shader.bind();
     meshShaderManager.beginLayer(gl, shader, renderContext, this.displayState);
     meshShaderManager.beginModel(gl, shader, renderContext, modelMatrix);
+    displayState.segmentationColorUserShader.enable(gl, shader);
     setControlsInShader(
       gl,
       shader,
