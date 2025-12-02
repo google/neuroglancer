@@ -29,22 +29,21 @@ if (tag("myTag") {
 
 ### Examples
 
-
 ```glsl
 #uicontrol invlerp property1(window=[1, 10])
-vec4 segmentColor(vec4 color, bool hasProperties) {  
+vec4 segmentColor(vec4 color, bool hasProperties) {
   if (!hasProperties) {
     return vec4(0.5, 0.5, 0.5, 1.0);
   }
   vec4 newColor = vec4(0.0, 0.0, 0.0, 1.0);
   newColor.rgb = colormapJet(property1());
-  
+
   if (tag("lot-of-axon")) {
     return vec4(1.0, 1.0, 1.0, 1.0);
   }
-  
+
   newColor.a = 1.0;
-  
+
   return newColor;
 }
 ```

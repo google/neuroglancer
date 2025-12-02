@@ -365,7 +365,8 @@ export class MeshShaderManager {
   makeGetter(layer: RefCounted & { gl: GL; displayState: MeshDisplayState }) {
     const parameters = layer.registerDisposer(
       new AggregateWatchableValue((refCounted) => ({
-        segmentColorState: layer.displayState.segmentationColorUserShader.shaderParameters,
+        segmentColorState:
+          layer.displayState.segmentationColorUserShader.shaderParameters,
         shaderBuilderState:
           layer.displayState.segmentColorShaderControlState.builderState,
         silhouetteRenderingEnabled: refCounted.registerDisposer(
@@ -385,7 +386,7 @@ export class MeshShaderManager {
       memoizeKey: `mesh/MeshShaderManager/${this.fragmentRelativeVertices}/${this.vertexPositionFormat}`,
       parameters,
       encodeParameters: (p) => {
-        console.log('encode params');
+        console.log("encode params");
         // TODO work on this
         return `${JSON.stringify(p.segmentColorState)}/${p.silhouetteRenderingEnabled}/${p.shaderBuilderState.parseResult.code}/${p.shaderBuilderState.referencedProperties}`; // TODO do I need referenced properties?
       },
@@ -573,7 +574,10 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
         if (manifestChunk === undefined) return;
         ++presentChunks;
         if (renderContext.emitColor) {
-          gl.uniform1f(shader.uniform("uAlpha"), displayState.objectAlpha.value);
+          gl.uniform1f(
+            shader.uniform("uAlpha"),
+            displayState.objectAlpha.value,
+          );
         }
         if (renderContext.emitPickID) {
           meshShaderManager.setPickID(gl, shader, pickIndex!);
@@ -961,7 +965,10 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
           }
         }
         if (renderContext.emitColor) {
-          gl.uniform1f(shader.uniform("uAlpha"), displayState.objectAlpha.value);
+          gl.uniform1f(
+            shader.uniform("uAlpha"),
+            displayState.objectAlpha.value,
+          );
         }
         if (renderContext.emitPickID) {
           meshShaderManager.setPickID(gl, shader, pickIndex!);

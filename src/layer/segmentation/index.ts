@@ -625,7 +625,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
     const parameters = this.layer.registerDisposer(
       new AggregateWatchableValue(() => ({
         shaderBuilderState: this.segmentColorShaderControlState.builderState,
-        segmentColorState: this.segmentationColorUserShader.shaderParameters
+        segmentColorState: this.segmentationColorUserShader.shaderParameters,
       })),
     );
     return parameterizedEmitterDependentShaderGetter(

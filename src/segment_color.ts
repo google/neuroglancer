@@ -39,7 +39,9 @@ export class SegmentColorShaderManager {
   }
 
   defineShader(builder: ShaderBuilder, fragment = true) {
-    const addCode = fragment ? builder.addFragmentCode.bind(builder) : builder.addVertexCode.bind(builder);
+    const addCode = fragment
+      ? builder.addFragmentCode.bind(builder)
+      : builder.addVertexCode.bind(builder);
     const { seedName } = this;
     builder.addUniform("highp uint", seedName);
     addCode(glsl_uint64);

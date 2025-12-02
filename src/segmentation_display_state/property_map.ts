@@ -29,7 +29,7 @@ import {
   makeCachedDerivedWatchableValue,
   WatchableValue,
 } from "#src/trackable_value.js";
-import { Uint64Map } from "#src/uint64_map.js";
+import type { Uint64Map } from "#src/uint64_map.js";
 import type { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import type { Uint64Set } from "#src/uint64_set.js";
 import type {
@@ -1683,20 +1683,8 @@ ${
   enable(gl: GL, shader: ShaderProgram) {
     {
       const { displayState } = this;
-      const HAS_SELECTED_SEGMENT_FLAG = 1;
-      // const SHOW_ALL_SEGMENTS_FLAG = 2;
-
-      //  const {
-      //       segmentDefaultColor: { value: segmentDefaultColor },
-      //       segmentColorHash: { value: segmentColorHash },
-      //       highlightColor: { value: highlightColor },
-      //       tempSegmentDefaultColor2d: { value: tempSegmentDefaultColor2d },
-      //     } = this.displayState;
-      // const visibleSegments = getVisibleSegments(segmentationGroupState);
-      // const ignoreNullSegmentSet = this.displayState.ignoreNullVisibleSet.value;
       let selectedSegmentLow = 0;
       let selectedSegmentHigh = 0;
-      let flags = 0;
       const { segmentSelectionState } = this.displayState;
       if (
         segmentSelectionState.hasSelectedSegment &&
@@ -1707,7 +1695,6 @@ ${
           : segmentSelectionState.selectedSegment;
         selectedSegmentLow = Number(seg & 0xffffffffn);
         selectedSegmentHigh = Number(seg >> 32n);
-        flags |= HAS_SELECTED_SEGMENT_FLAG;
       }
       gl.uniform1f(
         shader.uniform("uSaturation"),

@@ -118,7 +118,8 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
         return `${JSON.stringify(p.segmentColorState)}/`;
       },
       shaderParameters: new AggregateWatchableValue((refCounted) => ({
-        segmentColorState: displayState.segmentationColorUserShader.shaderParameters,
+        segmentColorState:
+          displayState.segmentationColorUserShader.shaderParameters,
         shaderBuilderState:
           displayState.layer.displayState.segmentColorShaderControlState
             .builderState,
@@ -147,7 +148,8 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
             ],
           ),
         ),
-        hasHighlightColor: refCounted.registerDisposer( // TODO move to segment color user shader manager? it might only apply to 2d
+        hasHighlightColor: refCounted.registerDisposer(
+          // TODO move to segment color user shader manager? it might only apply to 2d
           makeCachedDerivedWatchableValue(
             (x) => x !== undefined,
             [displayState.highlightColor],
@@ -285,13 +287,13 @@ uint64_t getMappedObjectId(uint64_t value) {
   bool has = (uFlags & ${SHOW_ALL_SEGMENTS_FLAG}u) != 0u ? true : ${this.hashTableManager.hasFunctionName}(value);
   if ((uFlags & ${HAS_SELECTED_SEGMENT_FLAG}u) != 0u && uSelectedSegment == valueForHighlight.value) {
 `;
-//     if (parameters.hasHighlightColor) {
-//       builder.addUniform("highp vec4", "uHighlightColor");
-//       fragmentMain += `
-//     //emit(uHighlightColor);
-//     return;
-// `;
-//     }
+    //     if (parameters.hasHighlightColor) {
+    //       builder.addUniform("highp vec4", "uHighlightColor");
+    //       fragmentMain += `
+    //     //emit(uHighlightColor);
+    //     return;
+    // `;
+    //     }
     fragmentMain += `
   } else if (!has) {
     alpha = uNotSelectedAlpha;
