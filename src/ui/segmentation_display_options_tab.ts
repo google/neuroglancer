@@ -87,8 +87,8 @@ export class DisplayOptionsTab extends Tab {
         segmentColorCodeWidget,
         SegmentColorShaderCodeOverlay,
         {
-          title: "Documentation on image layer rendering",
-          href: "https://github.com/google/neuroglancer/blob/master/src/annotation/rendering.md",
+          title: "Documentation on segmentation layer rendering",
+          href: "https://github.com/seung-lab/neuroglancer/blob/cj-color-shader-share/src/layer/segmentation/rendering.md",
         },
         "neuroglancer-segmentation-dropdown-segment-color-shader-header",
         "Segment Color Shader",
