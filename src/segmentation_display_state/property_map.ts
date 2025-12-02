@@ -1595,7 +1595,7 @@ export class SegmentColorUserShaderManager extends RefCounted {
 `;
     } else {
       this.segmentColorShaderManager.defineShader(builder, fragment);
-      getMappedIdColor += `  return vec4(segmentColorHash(value), 0.0);
+      getMappedIdColor += `  return vec4(segmentColorHash(value), -1.0);
 `;
     }
     getMappedIdColor += `
@@ -1670,6 +1670,9 @@ ${
     ? `
   bool hasProperties = loadSegmentProperties(segmentId);
   color = segmentColor(color, hasProperties);
+  if (color.a >= 0.0) {
+    alpha = color.a;
+  }
 `
     : ""
 }
@@ -1706,18 +1709,10 @@ ${
         selectedSegmentHigh = Number(seg >> 32n);
         flags |= HAS_SELECTED_SEGMENT_FLAG;
       }
-      // gl.uniform1f(
-      //   shader.uniform("uSelectedAlpha"),
-      //   displayState.selectedAlpha.value,
-      // );
       gl.uniform1f(
         shader.uniform("uSaturation"),
         displayState.saturation.value,
       );
-      // gl.uniform1f(
-      //   shader.uniform("uNotSelectedAlpha"),
-      //   displayState.notSelectedAlpha.value,
-      // );
       gl.uniform2ui(
         shader.uniform("uSelectedSegment"),
         selectedSegmentLow,
@@ -1731,7 +1726,7 @@ ${
         } = displayState;
         if (segmentDefaultColor) {
           const [r, g, b] = segmentDefaultColor;
-          gl.uniform4f(shader.uniform("uSegmentDefaultColor"), r, g, b, 0);
+          gl.uniform4f(shader.uniform("uSegmentDefaultColor"), r, g, b, -1.0);
           // TODO, override with displayState.tempSegmentDefaultColor2d.value in segemntation_renderlayer
         }
       } else {

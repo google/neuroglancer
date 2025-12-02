@@ -1175,7 +1175,6 @@ export function forEachVisibleSegmentToDraw(
             displayState,
             baseSegmentColoring ? objectId : rootObjectId,
             alpha,
-            /*useColorShader=*/ false,
           )
         : undefined;
       callback(objectId, color, pickIndex, rootObjectId);

@@ -407,6 +407,7 @@ export class MeshShaderManager {
         builder.addUniform("highp mat4", "uModelViewProjection");
         builder.addUniform("highp uint", "uPickID");
         builder.addUniform("highp uvec2", "uID");
+        builder.addUniform("highp float", "uAlpha");
 
         if (silhouetteRenderingEnabled) {
           builder.addUniform("highp float", "uSilhouettePower");
@@ -436,7 +437,11 @@ vec3 normal = normalize(uNormalMatrix * (normalMultiplier * origNormal));
 float absCosAngle = abs(dot(normal, uLightDirection.xyz));
 float lightingFactor = absCosAngle + uLightDirection.w;
 vColor = segmentColorUserShader(uint64_t(uID));
-vColor = vec4(lightingFactor * vColor.rgb, vColor.a);
+float alpha = uAlpha;
+if (vColor.a >= 0.0) {
+  alpha *= vColor.a;
+}
+vColor = vec4(lightingFactor * vColor.rgb, alpha);
 `;
         if (silhouetteRenderingEnabled) {
           vertexMain += `
@@ -567,6 +572,9 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
         ++totalChunks;
         if (manifestChunk === undefined) return;
         ++presentChunks;
+        if (renderContext.emitColor) {
+          gl.uniform1f(shader.uniform("uAlpha"), displayState.objectAlpha.value);
+        }
         if (renderContext.emitPickID) {
           meshShaderManager.setPickID(gl, shader, pickIndex!);
         }
@@ -951,6 +959,9 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
           } catch (e) {
             console.log(`invalid octree for object=${objectId}: ${e.message}`);
           }
+        }
+        if (renderContext.emitColor) {
+          gl.uniform1f(shader.uniform("uAlpha"), displayState.objectAlpha.value);
         }
         if (renderContext.emitPickID) {
           meshShaderManager.setPickID(gl, shader, pickIndex!);

@@ -301,7 +301,7 @@ uint64_t getMappedObjectId(uint64_t value) {
 
   vec4 rgba = segmentColorUserShader(valueForColor);
   if (rgba.a >= 0.0) {
-    alpha = rgba.a;
+    alpha *= rgba.a;
   }
   emit(vec4(rgba.rgb, alpha));
 `;
