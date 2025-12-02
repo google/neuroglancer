@@ -115,7 +115,11 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
   ) {
     super(multiscaleSource, {
       encodeShaderParameters: (p) => {
-        return `${JSON.stringify(p.segmentColorState)}/`;
+        const { shaderBuilderState, ...rest } = p;
+        return {
+          shaderBuilderStateCode: shaderBuilderState.parseResult.code,
+          ...rest,
+        };
       },
       shaderParameters: new AggregateWatchableValue((refCounted) => ({
         segmentColorState:
