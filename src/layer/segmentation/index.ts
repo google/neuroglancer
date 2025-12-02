@@ -67,7 +67,7 @@ import type {
 } from "#src/segmentation_display_state/property_map.js";
 import {
   getPreprocessedSegmentPropertyMap,
-  SegmentationColorUserShaderManager,
+  SegmentColorUserShaderManager,
 } from "#src/segmentation_display_state/property_map.js";
 import { LocalSegmentationGraphSource } from "#src/segmentation_graph/local.js";
 import { VisibleSegmentEquivalencePolicy } from "#src/segmentation_graph/segment_id.js";
@@ -435,7 +435,7 @@ vec4 segmentColor(vec4 color, bool hasProperties) {
 class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   private getSegmentColorShader;
 
-  segmentationColorUserShader: SegmentationColorUserShaderManager;
+  segmentationColorUserShader: SegmentColorUserShaderManager;
   segmentColorShaderControlState: ShaderControlState;
 
   constructor(public layer: SegmentationUserLayer) {
@@ -574,14 +574,14 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
 
     // 2d/3d share GL context
     // the offscreen canvas is a separate context that doesn't share textures
-    this.segmentationColorUserShader = new SegmentationColorUserShaderManager(
+    this.segmentationColorUserShader = new SegmentColorUserShaderManager(
       this,
       this.layer.manager.chunkManager.chunkQueueManager.gl,
     );
 
     this.offscreenGL = initializeWebGL(new OffscreenCanvas(1, 1));
     this.offscreenSegmentationColorUserShader =
-      new SegmentationColorUserShaderManager(this, this.offscreenGL);
+      new SegmentColorUserShaderManager(this, this.offscreenGL);
     this.getSegmentColorShader = this.makeSegmentColorShaderGetter();
   }
 
@@ -625,7 +625,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
     const parameters = this.layer.registerDisposer(
       new AggregateWatchableValue(() => ({
         shaderBuilderState: this.segmentColorShaderControlState.builderState,
-        segmentProperties: this.segmentationGroupState.value.segmentPropertyMap, // TODO can I swap this with the property manager
+        segmentColorState: this.segmentationColorUserShader.shaderParameters
       })),
     );
     return parameterizedEmitterDependentShaderGetter(
@@ -635,7 +635,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         memoizeKey: `segmentColorShaderTODO`,
         parameters,
         encodeParameters: (p) => {
-          return `${p.shaderBuilderState.parseResult.code}/${p.shaderBuilderState.referencedProperties}/${p.segmentProperties?.numericalProperties.length}`; // then replace numerical properties with the texture ids
+          return `${JSON.stringify(p.segmentColorState)}${p.shaderBuilderState.parseResult.code}/${p.shaderBuilderState.referencedProperties}`; // then replace numerical properties with the texture ids
         },
         shaderError: this.layer.displayState.shaderError, // TODO can I reuse this?
         defineShader: (builder, { shaderBuilderState }) => {
@@ -649,12 +649,11 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
             /*fragment=*/ false,
           );
           builder.addAttribute("highp vec4", "aVertexPosition");
-          builder.addUniform("highp vec4", "uColor");
           builder.addUniform("highp uvec2", "uID");
           builder.addVarying("highp vec4", "vColor");
           const vertexMain = `
 gl_Position = aVertexPosition;
-vColor = segmentColorUserShader(uColor, uint64_t(uID));
+vColor = segmentColorUserShader(uint64_t(uID));
 `;
           builder.addVertexMain(vertexMain);
           builder.addOutputBuffer("vec4", "out_fragColor", 0);

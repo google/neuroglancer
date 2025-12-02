@@ -20,16 +20,13 @@ import {
   HashMapShaderManager,
   HashSetShaderManager,
 } from "#src/gpu_hash/shader.js";
-import {
-  SegmentStatedColorShaderManager,
-} from "#src/segment_color.js";
 import { getVisibleSegments } from "#src/segmentation_display_state/base.js";
 import type {
   SegmentationDisplayState,
   SegmentationGroupState,
 } from "#src/segmentation_display_state/frontend.js";
 import { registerRedrawWhenSegmentationDisplayStateChanged } from "#src/segmentation_display_state/frontend.js";
-import type { PreprocessedSegmentPropertyMap } from "#src/segmentation_display_state/property_map.js";
+import type { SegmentationColorUserShaderManagerParameters } from "#src/segmentation_display_state/property_map.js";
 import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
 import type {
   SliceView,
@@ -83,15 +80,16 @@ export interface SliceViewSegmentationDisplayState
 }
 
 interface ShaderParameters {
+  segmentColorState: SegmentationColorUserShaderManagerParameters;
   hasEquivalences: boolean;
   baseSegmentColoring: boolean;
   baseSegmentHighlighting: boolean;
-  hasSegmentStatedColors: boolean;
+  // hasSegmentStatedColors: boolean;
   hideSegmentZero: boolean;
-  hasSegmentDefaultColor: boolean;
+  // hasSegmentDefaultColor: boolean;
   hasHighlightColor: boolean;
   shaderBuilderState: ShaderControlsBuilderState;
-  segmentProperties: PreprocessedSegmentPropertyMap | undefined;
+  // segmentProperties: PreprocessedSegmentPropertyMap | undefined;
 }
 
 const HAS_SELECTED_SEGMENT_FLAG = 1;
@@ -99,11 +97,6 @@ const SHOW_ALL_SEGMENTS_FLAG = 2;
 
 export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderParameters> {
   public readonly segmentationGroupState: SegmentationGroupState;
-  // protected segmentColorShaderManager = new SegmentColorShaderManager(
-  //   "segmentColorHash",
-  // );
-  protected segmentStatedColorShaderManager =
-    new SegmentStatedColorShaderManager("segmentStatedColor");
   private gpuSegmentStatedColorHashTable:
     | GPUHashTable<HashMapUint64>
     | undefined;
@@ -121,13 +114,11 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
     public displayState: SliceViewSegmentationDisplayState,
   ) {
     super(multiscaleSource, {
-      encodeShaderParameters: (displayState) => {
-        displayState.shaderBuilderState.parseResult.code; // TODODODODODOO
-        return "hi" + displayState.shaderBuilderState.parseResult.code;
+      encodeShaderParameters: (p) => {
+        return `${JSON.stringify(p.segmentColorState)}/`;
       },
       shaderParameters: new AggregateWatchableValue((refCounted) => ({
-        segmentProperties:
-          displayState.segmentationGroupState.value.segmentPropertyMap,
+        segmentColorState: displayState.segmentationColorUserShader.shaderParameters,
         shaderBuilderState:
           displayState.layer.displayState.segmentColorShaderControlState
             .builderState,
@@ -156,21 +147,7 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
             ],
           ),
         ),
-        hasSegmentDefaultColor: refCounted.registerDisposer(
-          makeCachedDerivedWatchableValue(
-            (segmentDefaultColor, tempSegmentDefaultColor2d) => {
-              return (
-                segmentDefaultColor !== undefined ||
-                tempSegmentDefaultColor2d !== undefined
-              );
-            },
-            [
-              displayState.segmentDefaultColor,
-              displayState.tempSegmentDefaultColor2d,
-            ],
-          ),
-        ),
-        hasHighlightColor: refCounted.registerDisposer(
+        hasHighlightColor: refCounted.registerDisposer( // TODO move to segment color user shader manager? it might only apply to 2d
           makeCachedDerivedWatchableValue(
             (x) => x !== undefined,
             [displayState.highlightColor],
@@ -306,17 +283,7 @@ uint64_t getMappedObjectId(uint64_t value) {
     }
     fragmentMain += `
   bool has = (uFlags & ${SHOW_ALL_SEGMENTS_FLAG}u) != 0u ? true : ${this.hashTableManager.hasFunctionName}(value);
-  // if ((uFlags & ${HAS_SELECTED_SEGMENT_FLAG}u) != 0u && uSelectedSegment == valueForHighlight.value) {
-  // if it is a visible segment and it is selected
-    // float adjustment = has ? 0.5 : 0.75;
-    // if (saturation > adjustment) {
-    //   saturation -= adjustment;
-    // } else {
-    //   saturation += adjustment;
-    // }
-
-
-    if (has) {
+  if ((uFlags & ${HAS_SELECTED_SEGMENT_FLAG}u) != 0u && uSelectedSegment == valueForHighlight.value) {
 `;
 //     if (parameters.hasHighlightColor) {
 //       builder.addUniform("highp vec4", "uHighlightColor");
@@ -330,42 +297,13 @@ uint64_t getMappedObjectId(uint64_t value) {
     alpha = uNotSelectedAlpha;
   }
 `;
-//     let getMappedIdColor = `vec4 getMappedIdColor(uint64_t value) {
-// `;
-//     // If the value has a mapped color, use it; otherwise, compute the color.
-//     if (parameters.hasSegmentStatedColors) {
-//       this.segmentStatedColorShaderManager.defineShader(builder);
-//       getMappedIdColor += `
-//   vec4 rgba;
-//   if (${this.segmentStatedColorShaderManager.getFunctionName}(value, rgba)) {
-//     return rgba;
-//   }
-// `;
-//     }
-//     if (parameters.hasSegmentDefaultColor) {
-//       builder.addUniform("highp vec4", "uSegmentDefaultColor");
-//       getMappedIdColor += `  return uSegmentDefaultColor;
-// `;
-//     } else {
-//       this.segmentColorShaderManager.defineShader(builder);
-//       getMappedIdColor += `  return vec4(segmentColorHash(value), 0.0);
-// `;
-//     }
-//     getMappedIdColor += `
-// }
-// `;
-//     builder.addFragmentCode(getMappedIdColor);
     fragmentMain += `
-  // vec4 rgba = getMappedIdColor(valueForColor);
-  // if (rgba.a > 0.0) {
-  //   alpha = rgba.a;
-  // }
-  vec4 rgba = segmentColorUserShader(vec4(1.0, 1.0, 1.0, alpha), valueForColor);
-  // TODO, let segmentColor set alpha here
 
-
-  emit(rgba);
-  //emit(vec4(mix(vec3(1.0,1.0,1.0), vec3(rgba), saturation), alpha));
+  vec4 rgba = segmentColorUserShader(valueForColor);
+  if (rgba.a >= 0.0) {
+    alpha = rgba.a;
+  }
+  emit(vec4(rgba.rgb, alpha));
 `;
     builder.setFragmentMain(fragmentMain);
   }
@@ -469,11 +407,11 @@ uint64_t getMappedObjectId(uint64_t value) {
         this.gpuSegmentStatedColorHashTable = gpuSegmentStatedColorHashTable =
           GPUHashTable.get(gl, segmentStatedColors.hashTable);
       }
-      this.segmentStatedColorShaderManager.enable(
-        gl,
-        shader,
-        gpuSegmentStatedColorHashTable,
-      );
+      // this.segmentStatedColorShaderManager.enable(
+      //   gl,
+      //   shader,
+      //   gpuSegmentStatedColorHashTable,
+      // );
     }
     if (highlightColor !== undefined) {
       gl.uniform4fv(shader.uniform("uHighlightColor"), highlightColor);
@@ -497,9 +435,9 @@ uint64_t getMappedObjectId(uint64_t value) {
     if (parameters.hasEquivalences) {
       this.equivalencesShaderManager.disable(gl, shader);
     }
-    if (parameters.hasSegmentStatedColors) {
-      this.segmentStatedColorShaderManager.disable(gl, shader);
-    }
+    // if (parameters.hasSegmentStatedColors) {
+    //   this.segmentStatedColorShaderManager.disable(gl, shader);
+    // }
     super.endSlice(sliceView, shader, parameters);
   }
 }

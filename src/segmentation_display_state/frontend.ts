@@ -36,7 +36,7 @@ import type {
   InlineSegmentNumericalProperty,
   InlineSegmentProperty,
   PreprocessedSegmentPropertyMap,
-  SegmentationColorUserShaderManager,
+  SegmentColorUserShaderManager,
 } from "#src/segmentation_display_state/property_map.js";
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
 import type { TrackableAlphaValue } from "#src/trackable_alpha.js";
@@ -205,7 +205,7 @@ export interface SegmentationDisplayState {
   segmentationColorGroupState: WatchableValueInterface<SegmentationColorGroupState>;
   segmentColorShaderControlState: ShaderControlState;
 
-  segmentationColorUserShader: SegmentationColorUserShaderManager;
+  segmentationColorUserShader: SegmentColorUserShaderManager;
 
   selectSegment: (id: bigint, pin: boolean | "toggle") => void;
   filterBySegmentLabel: (id: bigint) => void;
@@ -1039,38 +1039,36 @@ export function getBaseObjectColor(
   displayState: SegmentationDisplayState | undefined | null,
   objectId: bigint,
   color: Float32Array = tempColor,
-  useColorShader = true,
 ) {
   if (displayState == null) {
     color.fill(1);
     return color;
   }
-  const shaderSegmentColor = useColorShader
-    ? displayState.getShaderSegmentColor
-    : (_: bigint, color: Float32Array) => color;
-  const colorGroupState = displayState.segmentationColorGroupState.value;
-  const { segmentStatedColors } = colorGroupState;
-  let statedColor: bigint | undefined;
-  if (
-    segmentStatedColors.size !== 0 &&
-    (statedColor = colorGroupState.segmentStatedColors.get(objectId)) !==
-      undefined
-  ) {
-    // If displayState maps the ID to a color, use it
-    color[0] = Number(statedColor & 0x0000ffn) / 255.0;
-    color[1] = (Number(statedColor & 0x00ff00n) >>> 8) / 255.0;
-    color[2] = (Number(statedColor & 0xff0000n) >>> 16) / 255.0;
-    return shaderSegmentColor(objectId, color);
-  }
-  const segmentDefaultColor = colorGroupState.segmentDefaultColor.value;
-  if (segmentDefaultColor !== undefined) {
-    color[0] = segmentDefaultColor[0];
-    color[1] = segmentDefaultColor[1];
-    color[2] = segmentDefaultColor[2];
-    return shaderSegmentColor(objectId, color);
-  }
-  colorGroupState.segmentColorHash.compute(color, objectId); // no need to do hash if we do it in the shader
-  return shaderSegmentColor(objectId, color);
+  const { getShaderSegmentColor } = displayState;
+  return getShaderSegmentColor(objectId, color);
+  // const colorGroupState = displayState.segmentationColorGroupState.value;
+  // const { segmentStatedColors } = colorGroupState;
+  // let statedColor: bigint | undefined;
+  // if (
+  //   segmentStatedColors.size !== 0 &&
+  //   (statedColor = colorGroupState.segmentStatedColors.get(objectId)) !==
+  //     undefined
+  // ) {
+  //   // If displayState maps the ID to a color, use it
+  //   color[0] = Number(statedColor & 0x0000ffn) / 255.0;
+  //   color[1] = (Number(statedColor & 0x00ff00n) >>> 8) / 255.0;
+  //   color[2] = (Number(statedColor & 0xff0000n) >>> 16) / 255.0;
+  //   return getShaderSegmentColor(objectId, color);
+  // }
+  // const segmentDefaultColor = colorGroupState.segmentDefaultColor.value;
+  // if (segmentDefaultColor !== undefined) {
+  //   color[0] = segmentDefaultColor[0];
+  //   color[1] = segmentDefaultColor[1];
+  //   color[2] = segmentDefaultColor[2];
+  //   return getShaderSegmentColor(objectId, color);
+  // }
+  // colorGroupState.segmentColorHash.compute(color, objectId); // no need to do hash if we do it in the shader
+  // return getShaderSegmentColor(objectId, color);
 }
 
 /**
@@ -1080,30 +1078,29 @@ export function getObjectColor(
   displayState: SegmentationDisplayState,
   objectId: bigint,
   alpha = 1,
-  useColorShader = true,
 ) {
   const color = tempColor;
   color[3] = alpha;
-  getBaseObjectColor(displayState, objectId, color, useColorShader);
+  getBaseObjectColor(displayState, objectId, color);
   // TODO move saturation to color shader
-  let saturation = displayState.saturation.value;
-  if (
-    displayState.hoverHighlight.value &&
-    displayState.segmentSelectionState.isSelected(objectId)
-  ) {
-    if (saturation > 0.5) {
-      saturation = saturation -= 0.5;
-    } else {
-      saturation += 0.5;
-    }
-  }
-  for (let i = 0; i < 3; ++i) {
-    color[i] = color[i] * saturation + (1 - saturation);
-  }
+  // let saturation = displayState.saturation.value;
+  // if (
+  //   displayState.hoverHighlight.value &&
+  //   displayState.segmentSelectionState.isSelected(objectId)
+  // ) {
+  //   if (saturation > 0.5) {
+  //     saturation = saturation -= 0.5;
+  //   } else {
+  //     saturation += 0.5;
+  //   }
+  // }
+  // for (let i = 0; i < 3; ++i) {
+  //   color[i] = color[i] * saturation + (1 - saturation);
+  // }
 
-  color[0] *= alpha;
-  color[1] *= alpha;
-  color[2] *= alpha;
+  // color[0] *= alpha;
+  // color[1] *= alpha;
+  // color[2] *= alpha;
   return color;
 }
 

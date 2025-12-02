@@ -275,10 +275,6 @@ export class MeshShaderManager {
     }
   }
 
-  // setColor(gl: GL, shader: ShaderProgram, color: vec4) {
-  //   gl.uniform4fv(shader.uniform("uColor"), color);
-  // }
-
   setPickID(gl: GL, shader: ShaderProgram, pickID: number) {
     gl.uniform1ui(shader.uniform("uPickID"), pickID);
   }
@@ -369,6 +365,7 @@ export class MeshShaderManager {
   makeGetter(layer: RefCounted & { gl: GL; displayState: MeshDisplayState }) {
     const parameters = layer.registerDisposer(
       new AggregateWatchableValue((refCounted) => ({
+        segmentColorState: layer.displayState.segmentationColorUserShader.shaderParameters,
         shaderBuilderState:
           layer.displayState.segmentColorShaderControlState.builderState,
         silhouetteRenderingEnabled: refCounted.registerDisposer(
@@ -377,17 +374,20 @@ export class MeshShaderManager {
             [layer.displayState.silhouetteRendering],
           ),
         ),
-        segmentProperties:
-          layer.displayState.segmentationGroupState.value.segmentPropertyMap,
       })),
     );
+
+    parameters.changed.add(() => {
+      console.log("parameters changed");
+    });
 
     return parameterizedEmitterDependentShaderGetter(layer, layer.gl, {
       memoizeKey: `mesh/MeshShaderManager/${this.fragmentRelativeVertices}/${this.vertexPositionFormat}`,
       parameters,
       encodeParameters: (p) => {
+        console.log('encode params');
         // TODO work on this
-        return `${p.silhouetteRenderingEnabled}/${p.shaderBuilderState.parseResult.code}/${p.shaderBuilderState.referencedProperties}/${p.segmentProperties?.numericalProperties.length ?? 0}`; // TODO
+        return `${JSON.stringify(p.segmentColorState)}/${p.silhouetteRenderingEnabled}/${p.shaderBuilderState.parseResult.code}/${p.shaderBuilderState.referencedProperties}`; // TODO do I need referenced properties?
       },
       shaderError: layer.displayState.shaderError,
       defineShader: (
@@ -403,7 +403,6 @@ export class MeshShaderManager {
         builder.addAttribute("highp vec2", "aVertexNormal");
         builder.addVarying("highp vec4", "vColor");
         builder.addUniform("highp vec4", "uLightDirection");
-        // builder.addUniform("highp vec4", "uColor");
         builder.addUniform("highp mat3", "uNormalMatrix");
         builder.addUniform("highp mat4", "uModelViewProjection");
         builder.addUniform("highp uint", "uPickID");
@@ -436,8 +435,7 @@ vec3 origNormal = decodeNormalOctahedronSnorm8(aVertexNormal);
 vec3 normal = normalize(uNormalMatrix * (normalMultiplier * origNormal));
 float absCosAngle = abs(dot(normal, uLightDirection.xyz));
 float lightingFactor = absCosAngle + uLightDirection.w;
-//vColor = uColor;
-vColor = segmentColorUserShader(vColor, uint64_t(uID));
+vColor = segmentColorUserShader(uint64_t(uID));
 vColor = vec4(lightingFactor * vColor.rgb, vColor.a);
 `;
         if (silhouetteRenderingEnabled) {
@@ -561,18 +559,14 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
     forEachVisibleSegmentToDraw(
       displayState,
       this,
-      renderContext.emitColor,
+      /*emitColor=*/ false,
       renderContext.emitPickID ? renderContext.pickIDs : undefined,
-      (objectId, color, pickIndex) => {
+      (objectId, _color, pickIndex) => {
         const key = getObjectKey(objectId);
         const manifestChunk = manifestChunks.get(key);
         ++totalChunks;
         if (manifestChunk === undefined) return;
         ++presentChunks;
-        if (renderContext.emitColor) {
-          color;
-          // meshShaderManager.setColor(gl, shader, color!);
-        }
         if (renderContext.emitPickID) {
           meshShaderManager.setPickID(gl, shader, pickIndex!);
         }
@@ -940,9 +934,9 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
     forEachVisibleSegmentToDraw(
       displayState,
       this,
-      renderContext.emitColor,
+      /*emitColor=*/ false,
       renderContext.emitPickID ? renderContext.pickIDs : undefined,
-      (objectId, color, pickIndex) => {
+      (objectId, _color, pickIndex) => {
         const key = getObjectKey(objectId);
         const manifestChunk = chunks.get(key);
         ++totalManifestChunks;
@@ -957,10 +951,6 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
           } catch (e) {
             console.log(`invalid octree for object=${objectId}: ${e.message}`);
           }
-        }
-        if (renderContext.emitColor) {
-          color;
-          // meshShaderManager.setColor(gl, shader, color!);
         }
         if (renderContext.emitPickID) {
           meshShaderManager.setPickID(gl, shader, pickIndex!);

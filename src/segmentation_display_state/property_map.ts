@@ -18,10 +18,18 @@ import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { ChunkSource } from "#src/chunk_manager/frontend.js";
 import { HashMapUint64 } from "#src/gpu_hash/hash_table.js";
 import { GPUHashTable, HashMapShaderManager } from "#src/gpu_hash/shader.js";
-import { DEFAULT_FRAGMENT_SEGMENT_COLOR } from "#src/layer/segmentation/index.js";
-import { SegmentColorShaderManager } from "#src/segment_color.js";
+import {
+  SegmentColorShaderManager,
+  SegmentStatedColorShaderManager,
+} from "#src/segment_color.js";
 import type { IndexedSegmentProperty } from "#src/segmentation_display_state/base.js";
 import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
+import {
+  AggregateWatchableValue,
+  makeCachedDerivedWatchableValue,
+  WatchableValue,
+} from "#src/trackable_value.js";
+import { Uint64Map } from "#src/uint64_map.js";
 import type { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import type { Uint64Set } from "#src/uint64_set.js";
 import type {
@@ -1360,48 +1368,29 @@ interface SegmentPropertyShaderData {
   dataType: DataType;
 }
 
-export class SegmentationColorUserShaderManager extends RefCounted {
+export interface SegmentationColorUserShaderManagerParameters {
+  userCode: string;
+  hasSegmentDefaultColor: boolean;
+  hasSegmentStatedColors: boolean;
+}
+
+export class SegmentColorUserShaderManager extends RefCounted {
+  // move to SegmentColor?
   changed = new Signal();
 
   protected segmentColorShaderManager = new SegmentColorShaderManager(
     "segmentColorHash",
   );
 
+  protected segmentStatedColorShaderManager =
+    new SegmentStatedColorShaderManager("segmentStatedColor");
+
   public segmentPropertyShaderData = new Map<
     string,
     SegmentPropertyShaderData
   >();
 
-  private _segmentColorShaderCode: string;
-
-  private get segmentColorShaderCode() {
-    return this._segmentColorShaderCode;
-  }
-
-  private set segmentColorShaderCode(code: string) {
-    this._segmentColorShaderCode = `
-${code}
-vec4 segmentColorUserShader(in vec4 originalColor, uint64_t segmentId) {
-
-  vec4 otherOg = vec4(segmentColorHash(segmentId), 0.0);
-
-  bool hasProperties = loadSegmentProperties(segmentId);
-  bool has = true; // TEMP
-  float saturation = uSaturation;
-  if (uSelectedSegment == segmentId.value) {
-    float adjustment = has ? 0.5 : 0.75;
-    if (saturation > adjustment) {
-      saturation -= adjustment;
-    } else {
-      saturation += adjustment;
-    }
-  }
-  float alpha = originalColor.a;
-  vec4 rgba = segmentColor(otherOg, hasProperties);
-  return vec4(mix(vec3(1.0,1.0,1.0), vec3(rgba), saturation), alpha);
-}
-`;
-  }
+  private userCode = new WatchableValue<string>("");
 
   manager = new HashMapShaderManager("SegmentToPropertyIndex");
   segmentPropertyIndexMap = new HashMapUint64();
@@ -1460,12 +1449,46 @@ vec4 segmentColorUserShader(in vec4 originalColor, uint64_t segmentId) {
     return propertyShaderIdentifier;
   }
 
+  shaderParameters: AggregateWatchableValue<SegmentationColorUserShaderManagerParameters>;
+
+  get getFunctionName() {
+    // TODO do we want this?
+    return `segmentColorUserShader`;
+  }
+
   constructor(
     private displayState: SegmentationDisplayState,
     private gl: GL,
   ) {
     super();
 
+    this.registerDisposer(
+      (this.shaderParameters = new AggregateWatchableValue((refCounted) => ({
+        userCode: this.userCode,
+        hasSegmentDefaultColor: refCounted.registerDisposer(
+          makeCachedDerivedWatchableValue(
+            (segmentDefaultColor) => {
+              return segmentDefaultColor !== undefined;
+            },
+            [displayState.segmentDefaultColor],
+          ),
+        ),
+        hasSegmentStatedColors: refCounted.registerDisposer(
+          makeCachedDerivedWatchableValue(
+            (segmentStatedColors: Uint64Map) => {
+              return segmentStatedColors.size !== 0;
+            },
+            [displayState.segmentStatedColors],
+          ),
+        ),
+      }))),
+    );
+
+    this.registerDisposer(
+      this.shaderParameters.changed.add(() => this.changed.dispatch()),
+    );
+
+    // TODO can make this lazy derived property
     const update = () => {
       const { referencedProperties } =
         this.displayState.segmentColorShaderControlState.builderState.value;
@@ -1516,13 +1539,13 @@ vec4 segmentColorUserShader(in vec4 originalColor, uint64_t segmentId) {
               code = code.replaceAll(`prop("${propName}")`, identifier);
             }
           }
-          // if trying to use property values but texture data is not available, use default shader code
+          // if trying to use property values but texture data is not available, disable user shader
           if (this.segmentPropertyShaderData.size === 0) {
-            code = DEFAULT_FRAGMENT_SEGMENT_COLOR;
+            code = "";
           }
         }
       }
-      this.segmentColorShaderCode = code;
+      this.userCode.value = code;
       // release unused textures
       for (const [id, { texture, stale }] of this.segmentPropertyShaderData) {
         if (stale) {
@@ -1549,11 +1572,41 @@ vec4 segmentColorUserShader(in vec4 originalColor, uint64_t segmentId) {
     );
   }
 
+  private getMappedIdColor(builder: ShaderBuilder, fragment: boolean) {
+    const {
+      shaderParameters: { value: shaderParameters },
+    } = this;
+    const { hasSegmentStatedColors, hasSegmentDefaultColor } = shaderParameters;
+
+    let getMappedIdColor = `vec4 getMappedIdColor(uint64_t value) {
+`;
+    if (hasSegmentStatedColors) {
+      this.segmentStatedColorShaderManager.defineShader(builder);
+      getMappedIdColor += `
+  vec4 rgba;
+  if (${this.segmentStatedColorShaderManager.getFunctionName}(value, rgba)) {
+    return rgba;
+  }
+`;
+    }
+    if (hasSegmentDefaultColor) {
+      builder.addUniform("highp vec4", "uSegmentDefaultColor");
+      getMappedIdColor += `  return uSegmentDefaultColor;
+`;
+    } else {
+      this.segmentColorShaderManager.defineShader(builder, fragment);
+      getMappedIdColor += `  return vec4(segmentColorHash(value), 0.0);
+`;
+    }
+    getMappedIdColor += `
+}
+`;
+    return getMappedIdColor;
+  }
+
   defineShader(builder: ShaderBuilder, fragment: boolean) {
-    this.segmentColorShaderManager.defineShader(builder, fragment);
     builder.addUniform("highp float", "uSaturation");
     builder.addUniform("highp uvec2", "uSelectedSegment");
-
     const addCode = fragment
       ? builder.addFragmentCode.bind(builder)
       : builder.addVertexCode.bind(builder);
@@ -1594,16 +1647,39 @@ bool loadSegmentProperties(uint64_t id) {
  }).join("\n")}
   return true;
 }`;
+    addCode(this.getMappedIdColor(builder, fragment));
     addCode(loadSegmentPropertiesCode);
-    addCode(this.segmentColorShaderCode);
+    addCode(this.userCode.value);
+    addCode(`
+vec4 segmentColorUserShader(uint64_t segmentId) {
+  float alpha = -1.0; // negative means use original alpha
+  vec4 color = getMappedIdColor(segmentId);
+  float saturation = uSaturation;
+  if (uSelectedSegment == segmentId.value) {
+    bool has = true; // TEMP
+    float adjustment = has ? 0.5 : 0.75; // segmentation renderlayer uses 0.75 for not selected
+    // since this is only a 2d feature, maybe I should move this out of the user manager?
+    if (saturation > adjustment) {
+      saturation -= adjustment;
+    } else {
+      saturation += adjustment;
+    }
+  }
+${
+  this.userCode.value
+    ? `
+  bool hasProperties = loadSegmentProperties(segmentId);
+  color = segmentColor(color, hasProperties);
+`
+    : ""
+}
+  return vec4(mix(vec3(1.0,1.0,1.0), vec3(color), saturation), alpha);
+}`);
   }
 
   enable(gl: GL, shader: ShaderProgram) {
     {
       const { displayState } = this;
-      const { segmentColorHash: {value: segmentColorHash }} = displayState;
-      this.segmentColorShaderManager.enable(gl, shader, segmentColorHash);
-
       const HAS_SELECTED_SEGMENT_FLAG = 1;
       // const SHOW_ALL_SEGMENTS_FLAG = 2;
 
@@ -1647,6 +1723,23 @@ bool loadSegmentProperties(uint64_t id) {
         selectedSegmentLow,
         selectedSegmentHigh,
       );
+
+      const { hasSegmentDefaultColor } = this.shaderParameters.value;
+      if (hasSegmentDefaultColor) {
+        const {
+          segmentDefaultColor: { value: segmentDefaultColor },
+        } = displayState;
+        if (segmentDefaultColor) {
+          const [r, g, b] = segmentDefaultColor;
+          gl.uniform4f(shader.uniform("uSegmentDefaultColor"), r, g, b, 0);
+          // TODO, override with displayState.tempSegmentDefaultColor2d.value in segemntation_renderlayer
+        }
+      } else {
+        const {
+          segmentColorHash: { value: segmentColorHash },
+        } = displayState;
+        this.segmentColorShaderManager.enable(gl, shader, segmentColorHash);
+      }
     }
 
     this.manager.enable(
