@@ -288,7 +288,9 @@ export class VoxelEditController extends SharedObject {
           allModifiedKeys.push(currentKey);
           currentKey = await this.downsampleStep(currentKey);
         }
-        this.callChunkReload(allModifiedKeys, true);
+        const pendingKeys = new Set(this.pendingEdits.map((e) => e.key));
+        const keysToReload = allModifiedKeys.filter((k) => !pendingKeys.has(k));
+        if (keysToReload.length > 0) this.callChunkReload(keysToReload, true);
       }
     } finally {
       this.isProcessingDownsampleQueue = false;

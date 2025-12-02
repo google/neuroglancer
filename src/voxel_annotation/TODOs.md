@@ -4,10 +4,8 @@
 
 - add dynamic brush cursor resizing
 - align brush cursor transform with brush transform
-- look into the sometime disappearing preview
 - add value-based erasing
 - preview is missing when erasing
-- flood fill wont work on erase mode
 
 ### later
 
