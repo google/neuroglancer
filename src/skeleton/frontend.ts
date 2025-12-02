@@ -59,9 +59,9 @@ import {
 } from "#src/webgl/circles.js";
 import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
 import type { GL } from "#src/webgl/context.js";
-import type { WatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import {
   makeTrackableFragmentMain,
+  makeWatchableShaderError,
   parameterizedEmitterDependentShaderGetter,
   shaderCodeWithLineDirective,
 } from "#src/webgl/dynamic_shader.js";
@@ -154,7 +154,8 @@ class RenderHelper extends RefCounted {
         parameters:
           this.base.displayState.skeletonRenderingOptions.shaderControlState
             .builderState,
-        shaderError: this.base.displayState.shaderError,
+        shaderError:
+          this.base.displayState.skeletonRenderingOptions.shaderError,
         defineShader: (
           builder: ShaderBuilder,
           shaderBuilderState: ShaderControlsBuilderState,
@@ -219,7 +220,8 @@ void emitDefault() {
         parameters:
           this.base.displayState.skeletonRenderingOptions.shaderControlState
             .builderState,
-        shaderError: this.base.displayState.shaderError,
+        shaderError:
+          this.base.displayState.skeletonRenderingOptions.shaderError,
         defineShader: (
           builder: ShaderBuilder,
           shaderBuilderState: ShaderControlsBuilderState,
@@ -428,6 +430,7 @@ export class SkeletonRenderingOptions implements Trackable {
   }
 
   shader = makeTrackableFragmentMain(DEFAULT_FRAGMENT_MAIN);
+  shaderError = makeWatchableShaderError();
   shaderControlState = new ShaderControlState(this.shader);
   params2d: ViewSpecificSkeletonRenderingOptions = {
     mode: new TrackableSkeletonRenderMode(SkeletonRenderMode.LINES_AND_POINTS),
@@ -467,7 +470,6 @@ export class SkeletonRenderingOptions implements Trackable {
 }
 
 export interface SkeletonLayerDisplayState extends SegmentationDisplayState3D {
-  shaderError: WatchableShaderError;
   skeletonRenderingOptions: SkeletonRenderingOptions;
 }
 
@@ -492,11 +494,12 @@ export class SkeletonLayer extends RefCounted {
     super();
 
     registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
-    this.displayState.shaderError.value = undefined;
+    const { shaderError } = this.displayState.skeletonRenderingOptions;
+    shaderError.value = undefined;
     const { skeletonRenderingOptions: renderingOptions } = displayState;
     this.registerDisposer(
       renderingOptions.shader.changed.add(() => {
-        this.displayState.shaderError.value = undefined;
+        shaderError.value = undefined;
         this.redrawNeeded.dispatch();
       }),
     );

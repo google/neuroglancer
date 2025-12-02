@@ -394,27 +394,28 @@ uint64_t getMappedObjectId(uint64_t value) {
     } else {
       // this.segmentColorShaderManager.enable(gl, shader, segmentColorHash);
     }
-    if (parameters.hasSegmentStatedColors) {
-      const segmentStatedColors = displayState.useTempSegmentStatedColors2d
-        .value
-        ? displayState.tempSegmentStatedColors2d.value
-        : displayState.segmentStatedColors.value;
-      let { gpuSegmentStatedColorHashTable } = this;
-      if (
-        gpuSegmentStatedColorHashTable === undefined ||
-        gpuSegmentStatedColorHashTable.hashTable !==
-          segmentStatedColors.hashTable
-      ) {
-        gpuSegmentStatedColorHashTable?.dispose();
-        this.gpuSegmentStatedColorHashTable = gpuSegmentStatedColorHashTable =
-          GPUHashTable.get(gl, segmentStatedColors.hashTable);
-      }
-      // this.segmentStatedColorShaderManager.enable(
-      //   gl,
-      //   shader,
-      //   gpuSegmentStatedColorHashTable,
-      // );
-    }
+    // TODO re-enable
+    // if (parameters.hasSegmentStatedColors) {
+    //   const segmentStatedColors = displayState.useTempSegmentStatedColors2d
+    //     .value
+    //     ? displayState.tempSegmentStatedColors2d.value
+    //     : displayState.segmentStatedColors.value;
+    //   let { gpuSegmentStatedColorHashTable } = this;
+    //   if (
+    //     gpuSegmentStatedColorHashTable === undefined ||
+    //     gpuSegmentStatedColorHashTable.hashTable !==
+    //       segmentStatedColors.hashTable
+    //   ) {
+    //     gpuSegmentStatedColorHashTable?.dispose();
+    //     this.gpuSegmentStatedColorHashTable = gpuSegmentStatedColorHashTable =
+    //       GPUHashTable.get(gl, segmentStatedColors.hashTable);
+    //   }
+    //   this.segmentStatedColorShaderManager.enable(
+    //     gl,
+    //     shader,
+    //     gpuSegmentStatedColorHashTable,
+    //   );
+    // }
     if (highlightColor !== undefined) {
       gl.uniform4fv(shader.uniform("uHighlightColor"), highlightColor);
     }
