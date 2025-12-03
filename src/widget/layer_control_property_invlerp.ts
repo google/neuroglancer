@@ -16,7 +16,10 @@
 
 import type { UserLayer } from "#src/layer/index.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
-import { makeCachedDerivedWatchableValue } from "#src/trackable_value.js";
+import {
+  makeCachedDerivedWatchableValue,
+  makeCachedLazyDerivedWatchableValue,
+} from "#src/trackable_value.js";
 import type { TypedNumberArray } from "#src/util/array.js";
 import { DataType } from "#src/util/data_type.js";
 import {
@@ -47,10 +50,8 @@ export function propertyInvlerpLayerControl<LayerType extends UserLayer>(
     legendShaderOptions: LegendShaderOptions | undefined;
   },
 ): LayerControlFactory<LayerType, VariableDataTypeInvlerpWidget> {
-  console.log("propertyInvlerpLayerControl called");
   return {
     makeControl: (layer, context, options) => {
-      console.log("propertyInvlerpLayerControl makeControl");
       const {
         watchableValue,
         properties,
@@ -70,10 +71,8 @@ export function propertyInvlerpLayerControl<LayerType extends UserLayer>(
           propertySelectElement.appendChild(optionElement);
         }
         const updateModel = () => {
-          console.log("update model");
           const property = propertySelectElement.value;
           const dataType = properties.get(property)!;
-          // const valuesForProperty = values.get(property);
           const { window, range } = watchableValue.value;
           watchableValue.value = {
             window:
@@ -86,14 +85,7 @@ export function propertyInvlerpLayerControl<LayerType extends UserLayer>(
                 : undefined,
             property,
             dataType,
-            // values: valuesForProperty,
           };
-          console.log("watchableValue.value", watchableValue.value);
-          // if (valuesForProperty) {
-          //   console.log(
-          //     `propertyInvlerpLayerControl using values for property ${property}`,
-          //   );
-          // }
         };
         const updateView = () => {
           propertySelectElement.value = watchableValue.value.property;
@@ -106,18 +98,9 @@ export function propertyInvlerpLayerControl<LayerType extends UserLayer>(
         context.registerDisposer(watchableValue.changed.add(updateView));
         updateView();
         updateModel(); // need to update model after update view, otherwise we lose existing watchableValue.value.property
-        // though should I have added updateModel?
+        // though should I have added the call to updateModel?
         options.labelContainer.appendChild(propertySelectElement);
       }
-      const derivedValuesWatchable = makeCachedDerivedWatchableValue(
-        (p) => {
-          if (values) {
-            return values.get(p.property);
-          }
-          return undefined;
-        },
-        [watchableValue],
-      );
       const derivedWatchableValue: WatchableValueInterface<InvlerpParameters> =
         {
           changed: watchableValue.changed,
@@ -140,11 +123,15 @@ export function propertyInvlerpLayerControl<LayerType extends UserLayer>(
         (p) => p.dataType,
         [watchableValue],
       );
-      // const derivedValuesWatchable2 = makeCachedDerivedWatchableValue(
-      //   (p) => p.values,
-      //   [watchableValue],
-      // );
-      // const derivedValuesWatchable = new WatchableValue(values);
+      const derivedValuesWatchable = makeCachedLazyDerivedWatchableValue(
+        (p) => {
+          if (values) {
+            return values.get(p.property);
+          }
+          return undefined;
+        },
+        watchableValue,
+      );
       const control = context.registerDisposer(
         new VariableDataTypeInvlerpWidget(
           options.visibility,

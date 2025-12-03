@@ -72,12 +72,11 @@ export class AutoRangeFinder extends RefCounted {
 
   constructor(public parent: ParentInvlerpWidget) {
     super();
-    if (parent.values)
-      this.makeAutoRangeButtons(
-        () => this.autoComputeRange(0.0, 1.0),
-        () => this.autoComputeRange(0.01, 0.99),
-        () => this.autoComputeRange(0.05, 0.95),
-      );
+    this.makeAutoRangeButtons(
+      () => this.autoComputeRange(0.0, 1.0),
+      () => this.autoComputeRange(0.01, 0.99),
+      () => this.autoComputeRange(0.05, 0.95),
+    );
   }
 
   get computedRange() {
@@ -90,11 +89,9 @@ export class AutoRangeFinder extends RefCounted {
   }
 
   autoComputeRange(minPercentile: number, maxPercentile: number) {
-    if (this.parent.values && this.parent.values.value) {
-      const {
-        values: { value: values },
-      } = this.parent;
-      const valuesWithoutNaN = values.filter((x) => !Number.isNaN(x));
+    const { values } = this.parent;
+    if (values?.value) {
+      const valuesWithoutNaN = values.value.filter((x) => !Number.isNaN(x));
       const valuesSorted = valuesWithoutNaN.slice().sort((a, b) => a - b);
       const n = valuesSorted.length;
       const minIndex = Math.floor(minPercentile * (n - 1));

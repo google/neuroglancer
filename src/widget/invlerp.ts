@@ -82,7 +82,6 @@ const inputEventMap = EventActionMap.fromObject({
 });
 
 export function createCDFLineShader(gl: GL, textureUnit: symbol) {
-  // here is the line shader
   const builder = new ShaderBuilder(gl);
   defineLineShader(builder);
   builder.addTextureSampler("sampler2D", "uHistogramSampler", textureUnit);
@@ -447,7 +446,7 @@ out_color = uColor;
     }
     if (
       this.parent.histogramSpecifications.producerVisibility.visible ||
-      this.parent.values.value
+      this.parent.values
     ) {
       const { renderViewport } = this;
       lineShader.bind();
@@ -466,9 +465,8 @@ out_color = uColor;
         lineShader.uniform("uBoundsFraction"),
         getIntervalBoundsEffectiveFraction(dataType, bounds.window),
       );
-      const texture = this.parent.texture;
       gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + histogramTextureUnit);
-      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
+      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, this.parent.texture);
       setRawTextureParameters(gl);
       const aDataValue = lineShader.attribute("aDataValue");
       this.dataValuesBuffer.bindToVertexAttribI(
@@ -782,39 +780,31 @@ export class InvlerpWidget extends Tab {
   invertArrows: HTMLElement[];
   autoRangeFinder: AutoRangeFinder;
 
-  prevTexture: WebGLTexture | null = null;
-  prevValues: TypedNumberArray<ArrayBuffer> | undefined = undefined;
-  prevWindow: DataTypeInterval | null = null;
+  textureFromValues: WebGLTexture | null = null;
 
-  get texture() {
-    const {
-      values: { value: values },
-      dataType,
-    } = this;
-    if (values !== undefined) {
-      if (
-        this.prevValues === values &&
-        this.prevWindow &&
-        dataTypeIntervalEqual(this.prevWindow, this.trackable.value.window) &&
-        this.prevTexture !== null
-      ) {
-        return this.prevTexture;
-      }
-      if (this.prevTexture) {
-        this.display.gl.deleteTexture(this.prevTexture);
-      }
+  // TODO should rebuild texture when window changes
+  updateTextureFromValues() {
+    const { gl } = this.display;
+    if (this.textureFromValues !== null) {
+      gl.deleteTexture(this.textureFromValues);
+      this.textureFromValues = null;
+    }
+    const { values, dataType } = this;
+    if (values?.value) {
       const histogram = countDataInBins(
-        values,
+        values.value,
         dataType,
         this.trackable.value.window[0],
         this.trackable.value.window[1],
         NUM_HISTOGRAM_BINS_IN_RANGE,
       );
-      const texture = create1DTexture(this.display.gl, histogram);
-      this.prevValues = values;
-      this.prevWindow = this.trackable.value.window.slice() as DataTypeInterval;
-      this.prevTexture = texture;
-      return texture;
+      this.textureFromValues = create1DTexture(this.display.gl, histogram);
+    }
+  }
+
+  get texture() {
+    if (this.textureFromValues) {
+      return this.textureFromValues;
     }
     return this.histogramSpecifications.getFramebuffers(this.display.gl)[
       this.histogramIndex
@@ -831,7 +821,7 @@ export class InvlerpWidget extends Tab {
     public histogramSpecifications: HistogramSpecifications,
     public histogramIndex: number,
     public legendShaderOptions: LegendShaderOptions | undefined,
-    public values: WatchableValueInterface<
+    public values?: WatchableValueInterface<
       TypedNumberArray<ArrayBuffer> | undefined
     >,
   ) {
@@ -876,13 +866,6 @@ export class InvlerpWidget extends Tab {
       ),
     );
     this.registerDisposer(
-      values.changed.add(
-        this.registerCancellable(
-          animationFrameDebounce(() => this.updateView()),
-        ),
-      ),
-    );
-    this.registerDisposer(
       this.display.updateFinished.add(() => {
         this.autoRangeFinder.maybeAutoComputeRange();
       }),
@@ -890,6 +873,7 @@ export class InvlerpWidget extends Tab {
   }
 
   updateView() {
+    this.updateTextureFromValues(); // TODO this doesn't need to change if the range changes
     const { boundElements } = this;
     const {
       trackable: { value: bounds },
@@ -939,7 +923,7 @@ export class VariableDataTypeInvlerpWidget extends Tab {
     public histogramSpecifications: HistogramSpecifications,
     public histogramIndex: number,
     public legendShaderOptions: LegendShaderOptions | undefined,
-    public values: WatchableValueInterface<
+    public values?: WatchableValueInterface<
       TypedNumberArray<ArrayBuffer> | undefined
     >,
   ) {
@@ -965,7 +949,6 @@ export class VariableDataTypeInvlerpWidget extends Tab {
 
   private makeInvlerpWidget() {
     const { dataType } = this;
-    console.log("making widget!");
     const widget = new InvlerpWidget(
       this.visibility,
       this.display,

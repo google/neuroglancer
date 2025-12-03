@@ -433,7 +433,6 @@ function parseInvlerpDirective(
   parameters: DirectiveParameters,
   dataContext: ShaderDataContext,
 ): DirectiveParseResult {
-  console.log("failing here");
   const { imageData, properties, values, shaderName } = dataContext;
   if (imageData !== undefined) {
     return parseImageInvlerpDirective(valueType, parameters, imageData);
@@ -900,7 +899,6 @@ export interface PropertyInvlerpParameters {
   window: DataTypeInterval | undefined;
   property: string;
   dataType: DataType;
-  values?: TypedNumberArray<ArrayBuffer>;
 }
 
 function parseImageInvlerpParameters(

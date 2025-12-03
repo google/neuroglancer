@@ -1102,7 +1102,7 @@ function updatePropertyHistogram(
   const { values } = property;
   const [min, max] = bounds as [number, number];
   const multiplier = max <= min ? 0 : numBins / (max - min);
-  const histogram = new Uint32Array(numBins + 2);
+  const histogram = new Uint32Array(numBins + 2); // TODO here we have 258 entries, are the texture ones 256?
   const { numericalConstraints } = queryResult!.query as FilterQuery;
   const constraintIndex = numericalConstraints.findIndex(
     (c) => c.fieldId === property.id,
@@ -1490,6 +1490,7 @@ export class SegmentColorUserShaderManager extends RefCounted {
     this.usedProperties = this.registerDisposer(
       makeCachedDerivedWatchableValue(
         ({ referencedProperties }, segmentPropertyMap, { code }) => {
+          console.log("updating usedProperties");
           const tagRegex = /tag\("([^()]+)"\)/g;
           const numericRegex = /prop\("([^()]+)"\)/g;
           const tagNames = new Set(code.matchAll(tagRegex).map((m) => m[1]));
@@ -1564,6 +1565,10 @@ export class SegmentColorUserShaderManager extends RefCounted {
         ],
       ),
     );
+
+    this.usedProperties.changed.add(() => {
+      console.log("this.usedProperties changed", this.usedProperties.value);
+    });
   }
 
   private getMappedIdColor(builder: ShaderBuilder, fragment: boolean) {
