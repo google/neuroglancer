@@ -1660,10 +1660,10 @@ ${
   this.userCode.value
     ? `
   bool hasProperties = loadSegmentProperties(segmentId);
-  color = segmentColor(color, hasProperties, alpha);
-  // if (color.a >= 0.0) {
-  //   alpha = color.a;
-  // }
+  color = segmentColor(color, hasProperties);
+  if (color.a >= 0.0) {
+    alpha = color.a;
+  }
 `
     : ""
 }
