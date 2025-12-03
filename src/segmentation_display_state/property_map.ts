@@ -1651,14 +1651,11 @@ bool loadSegmentProperties(uint64_t id) {
     addCode(loadSegmentPropertiesCode);
     addCode(this.userCode.value);
     addCode(`
-vec4 segmentColorUserShader(uint64_t segmentId) {
+vec4 segmentColorUserShader(uint64_t segmentId, float adjustment) {
   float alpha = -1.0; // negative means use original alpha
   vec4 color = getMappedIdColor(segmentId);
   float saturation = uSaturation;
   if (uSelectedSegment == segmentId.value) {
-    bool has = true; // TEMP
-    float adjustment = has ? 0.5 : 0.75; // segmentation renderlayer uses 0.75 for not selected
-    // since this is only a 2d feature, maybe I should move this out of the user manager?
     if (saturation > adjustment) {
       saturation -= adjustment;
     } else {
@@ -1669,15 +1666,20 @@ ${
   this.userCode.value
     ? `
   bool hasProperties = loadSegmentProperties(segmentId);
-  color = segmentColor(color, hasProperties);
-  if (color.a >= 0.0) {
-    alpha = color.a;
-  }
+  color = segmentColor(color, hasProperties, alpha);
+  // if (color.a >= 0.0) {
+  //   alpha = color.a;
+  // }
 `
     : ""
 }
   return vec4(mix(vec3(1.0,1.0,1.0), vec3(color), saturation), alpha);
 }`);
+    addCode(`
+  vec4 segmentColorUserShader(uint64_t segmentId) {
+    return segmentColorUserShader(segmentId, 0.5);
+  }
+`);
   }
 
   enable(gl: GL, shader: ShaderProgram) {
