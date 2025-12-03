@@ -830,7 +830,6 @@ float ${uName}() {
       case "checkbox": {
         const code = `#define ${name} ${builderValue.value}\n`;
         addCode(code);
-        addCode(code);
         break;
       }
       case "transferFunction": {

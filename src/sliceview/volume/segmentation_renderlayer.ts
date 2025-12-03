@@ -89,6 +89,7 @@ interface ShaderParameters {
   // hasSegmentDefaultColor: boolean;
   hasHighlightColor: boolean;
   shaderBuilderState: ShaderControlsBuilderState;
+  usedProperties: Set<string>;
   // segmentProperties: PreprocessedSegmentPropertyMap | undefined;
 }
 
@@ -116,17 +117,22 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
     super(multiscaleSource, {
       encodeShaderParameters: (p) => {
         const { shaderBuilderState, ...rest } = p;
+        const {
+          parseResult: { code },
+          referencedProperties,
+        } = shaderBuilderState;
         return {
-          shaderBuilderStateCode: shaderBuilderState.parseResult.code,
+          shaderBuilderStateCode: code,
+          shaderBuilderStateReferencedProperties: referencedProperties,
           ...rest,
         };
       },
       shaderParameters: new AggregateWatchableValue((refCounted) => ({
+        usedProperties: displayState.segmentationColorUserShader.usedProperties,
         segmentColorState:
           displayState.segmentationColorUserShader.shaderParameters,
         shaderBuilderState:
-          displayState.layer.displayState.segmentColorShaderControlState
-            .builderState,
+          displayState.segmentColorShaderControlState.builderState,
         hasEquivalences: refCounted.registerDisposer(
           makeCachedDerivedWatchableValue(
             (x) => x.size !== 0,
@@ -205,11 +211,12 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
     this.registerDisposer(
       displayState.ignoreNullVisibleSet.changed.add(this.redrawNeeded.dispatch),
     );
-    this.registerDisposer(
-      displayState.segmentationColorUserShader.changed.add(
-        this.redrawNeeded.dispatch,
-      ),
-    );
+    // TODO maybe I need to redraw when usedProperties changes?
+    // this.registerDisposer(
+    //   displayState.segmentationColorUserShader.changed.add(
+    //     this.redrawNeeded.dispatch,
+    //   ),
+    // );
     this.registerDisposer(
       displayState.segmentColorShaderControlState.changed.add(
         this.redrawNeeded.dispatch,
@@ -231,6 +238,7 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
   }
 
   defineShader(builder: ShaderBuilder, parameters: ShaderParameters) {
+    console.log("define shader", parameters.usedProperties);
     addControlsToBuilder(parameters.shaderBuilderState, builder);
     this.hashTableManager.defineShader(builder); // here is where they add the hash table code
     this.displayState.segmentationColorUserShader.defineShader(builder, true);

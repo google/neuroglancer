@@ -27,7 +27,9 @@ import type { SegmentationDisplayState } from "#src/segmentation_display_state/f
 import {
   AggregateWatchableValue,
   makeCachedDerivedWatchableValue,
+  makeCachedLazyDerivedWatchableValue,
   WatchableValue,
+  WatchableValueInterface,
 } from "#src/trackable_value.js";
 import type { Uint64Map } from "#src/uint64_map.js";
 import type { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
@@ -1376,7 +1378,7 @@ export interface SegmentationColorUserShaderManagerParameters {
 
 export class SegmentColorUserShaderManager extends RefCounted {
   // move to SegmentColor?
-  changed = new Signal();
+  // changed = new Signal();
 
   protected segmentColorShaderManager = new SegmentColorShaderManager(
     "segmentColorHash",
@@ -1385,7 +1387,7 @@ export class SegmentColorUserShaderManager extends RefCounted {
   protected segmentStatedColorShaderManager =
     new SegmentStatedColorShaderManager("segmentStatedColor");
 
-  public segmentPropertyShaderData = new Map<
+  private segmentPropertyShaderData = new Map<
     string,
     SegmentPropertyShaderData
   >();
@@ -1451,6 +1453,8 @@ export class SegmentColorUserShaderManager extends RefCounted {
 
   shaderParameters: AggregateWatchableValue<SegmentationColorUserShaderManagerParameters>;
 
+  usedProperties: WatchableValueInterface<Set<string>>;
+
   get getFunctionName() {
     // TODO do we want this?
     return `segmentColorUserShader`;
@@ -1484,17 +1488,8 @@ export class SegmentColorUserShaderManager extends RefCounted {
       }))),
     );
 
-    this.registerDisposer(
-      this.shaderParameters.changed.add(() => this.changed.dispatch()),
-    );
-
-    // TODO can make this lazy derived property
-    const update = () => {
-      const { referencedProperties } =
-        this.displayState.segmentColorShaderControlState.builderState.value;
-      let { code } =
-        this.displayState.segmentColorShaderControlState.parseResult.value;
-      const tagRegex = /tag\("([^()]+)"\)/g;
+    this.usedProperties = this.registerDisposer(makeCachedDerivedWatchableValue(({ referencedProperties }, segmentPropertyMap, {code}) => {
+            const tagRegex = /tag\("([^()]+)"\)/g;
       const numericRegex = /prop\("([^()]+)"\)/g;
       const tagNames = new Set(code.matchAll(tagRegex).map((m) => m[1]));
       const numericNames = new Set([
@@ -1504,9 +1499,6 @@ export class SegmentColorUserShaderManager extends RefCounted {
       for (const [_, data] of this.segmentPropertyShaderData) {
         data.stale = true;
       }
-      const {
-        segmentPropertyMap: { value: segmentPropertyMap },
-      } = this.displayState.segmentationGroupState.value;
       if (
         segmentPropertyMap &&
         segmentPropertyMap.segmentPropertyMap.inlineProperties
@@ -1553,23 +1545,13 @@ export class SegmentColorUserShaderManager extends RefCounted {
           this.segmentPropertyShaderData.delete(id);
         }
       }
-      this.changed.dispatch();
-    };
-    this.registerDisposer(
-      this.displayState.segmentColorShaderControlState.builderState.changed.add(
-        update,
-      ),
-    );
-    this.registerDisposer(
-      this.displayState.segmentationGroupState.value.segmentPropertyMap.changed.add(
-        update,
-      ),
-    );
-    this.registerDisposer(
-      this.displayState.segmentColorShaderControlState.parseResult.changed.add(
-        update,
-      ),
-    );
+      // TEMP can we make this more useful?
+      return new Set(this.segmentPropertyShaderData.keys());
+    }, [
+      this.displayState.segmentColorShaderControlState.builderState,
+      this.displayState.segmentationGroupState.value.segmentPropertyMap,
+      this.displayState.segmentColorShaderControlState.parseResult,
+    ]));
   }
 
   private getMappedIdColor(builder: ShaderBuilder, fragment: boolean) {

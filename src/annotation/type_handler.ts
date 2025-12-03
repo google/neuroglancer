@@ -443,7 +443,7 @@ float getMaxSubspaceClipCoefficient(float modelPointA[${this.rank}],  float mode
 }
 
 `);
-        addControlsToBuilder(parameters, builder);
+        addControlsToBuilder(parameters, builder, /*fragment=*/ false);
         builder.addVertexCode(`
 const bool PROJECTION_VIEW = ${!this.targetIsSliceView};
 bool ng_discardValue;
