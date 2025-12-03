@@ -24,12 +24,11 @@ import {
 } from "#src/segment_color.js";
 import type { IndexedSegmentProperty } from "#src/segmentation_display_state/base.js";
 import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   AggregateWatchableValue,
   makeCachedDerivedWatchableValue,
-  makeCachedLazyDerivedWatchableValue,
   WatchableValue,
-  WatchableValueInterface,
 } from "#src/trackable_value.js";
 import type { Uint64Map } from "#src/uint64_map.js";
 import type { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
@@ -54,7 +53,6 @@ import {
   parseDataTypeValue,
 } from "#src/util/lerp.js";
 import { getObjectId } from "#src/util/object_id.js";
-import { Signal } from "#src/util/signal.js";
 import { defaultStringCompare } from "#src/util/string.js";
 import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
 import type { GL } from "#src/webgl/context.js";
@@ -1488,70 +1486,84 @@ export class SegmentColorUserShaderManager extends RefCounted {
       }))),
     );
 
-    this.usedProperties = this.registerDisposer(makeCachedDerivedWatchableValue(({ referencedProperties }, segmentPropertyMap, {code}) => {
-            const tagRegex = /tag\("([^()]+)"\)/g;
-      const numericRegex = /prop\("([^()]+)"\)/g;
-      const tagNames = new Set(code.matchAll(tagRegex).map((m) => m[1]));
-      const numericNames = new Set([
-        ...referencedProperties,
-        ...code.matchAll(numericRegex).map((m) => m[1]),
-      ]);
-      for (const [_, data] of this.segmentPropertyShaderData) {
-        data.stale = true;
-      }
-      if (
-        segmentPropertyMap &&
-        segmentPropertyMap.segmentPropertyMap.inlineProperties
-      ) {
-        const { segmentPropertyIndexMap } = this;
-        if (
-          segmentPropertyIndexMap.size === 0 &&
-          segmentPropertyMap.numericalProperties.length
-        ) {
-          // initialize segmentPropertyIndexMap
-          const { inlineProperties } = segmentPropertyMap.segmentPropertyMap;
-          for (let i = 0; i < inlineProperties.ids.length; i++) {
-            const id = inlineProperties.ids[i];
-            segmentPropertyIndexMap.set(id, BigInt(i));
+    // TODO, I can make this lazy if we use this value to trigger defineShader
+    this.usedProperties = this.registerDisposer(
+      makeCachedDerivedWatchableValue(
+        ({ referencedProperties }, segmentPropertyMap, { code }) => {
+          const tagRegex = /tag\("([^()]+)"\)/g;
+          const numericRegex = /prop\("([^()]+)"\)/g;
+          const tagNames = new Set(code.matchAll(tagRegex).map((m) => m[1]));
+          const numericNames = new Set([
+            ...referencedProperties,
+            ...code.matchAll(numericRegex).map((m) => m[1]),
+          ]);
+          for (const [_, data] of this.segmentPropertyShaderData) {
+            data.stale = true;
           }
-        }
-        if (tagNames.size > 0 || numericNames.size > 0) {
-          for (const tag of tagNames) {
-            const identifier = this.tagToShaderData(tag, segmentPropertyMap);
-            if (identifier) {
-              code = code.replaceAll(`tag("${tag}")`, `${identifier} == 1u`);
+          if (
+            segmentPropertyMap &&
+            segmentPropertyMap.segmentPropertyMap.inlineProperties
+          ) {
+            const { segmentPropertyIndexMap } = this;
+            if (
+              segmentPropertyIndexMap.size === 0 &&
+              segmentPropertyMap.numericalProperties.length
+            ) {
+              // initialize segmentPropertyIndexMap
+              const { inlineProperties } =
+                segmentPropertyMap.segmentPropertyMap;
+              for (let i = 0; i < inlineProperties.ids.length; i++) {
+                const id = inlineProperties.ids[i];
+                segmentPropertyIndexMap.set(id, BigInt(i));
+              }
+            }
+            if (tagNames.size > 0 || numericNames.size > 0) {
+              for (const tag of tagNames) {
+                const identifier = this.tagToShaderData(
+                  tag,
+                  segmentPropertyMap,
+                );
+                if (identifier) {
+                  code = code.replaceAll(
+                    `tag("${tag}")`,
+                    `${identifier} == 1u`,
+                  );
+                }
+              }
+              for (const propName of numericNames) {
+                const identifier = this.numericToShaderData(
+                  propName,
+                  segmentPropertyMap,
+                );
+                if (identifier) {
+                  code = code.replaceAll(`prop("${propName}")`, identifier);
+                }
+              }
+              // if trying to use property values but texture data is not available, disable user shader
+              if (this.segmentPropertyShaderData.size === 0) {
+                code = "";
+              }
             }
           }
-          for (const propName of numericNames) {
-            const identifier = this.numericToShaderData(
-              propName,
-              segmentPropertyMap,
-            );
-            if (identifier) {
-              code = code.replaceAll(`prop("${propName}")`, identifier);
+          this.userCode.value = code;
+          // release unused textures
+          for (const [id, { texture, stale }] of this
+            .segmentPropertyShaderData) {
+            if (stale) {
+              gl.deleteTexture(texture);
+              this.segmentPropertyShaderData.delete(id);
             }
           }
-          // if trying to use property values but texture data is not available, disable user shader
-          if (this.segmentPropertyShaderData.size === 0) {
-            code = "";
-          }
-        }
-      }
-      this.userCode.value = code;
-      // release unused textures
-      for (const [id, { texture, stale }] of this.segmentPropertyShaderData) {
-        if (stale) {
-          gl.deleteTexture(texture);
-          this.segmentPropertyShaderData.delete(id);
-        }
-      }
-      // TEMP can we make this more useful?
-      return new Set(this.segmentPropertyShaderData.keys());
-    }, [
-      this.displayState.segmentColorShaderControlState.builderState,
-      this.displayState.segmentationGroupState.value.segmentPropertyMap,
-      this.displayState.segmentColorShaderControlState.parseResult,
-    ]));
+          // TEMP can we make this more useful?
+          return new Set(this.segmentPropertyShaderData.keys());
+        },
+        [
+          this.displayState.segmentColorShaderControlState.builderState,
+          this.displayState.segmentationGroupState.value.segmentPropertyMap,
+          this.displayState.segmentColorShaderControlState.parseResult,
+        ],
+      ),
+    );
   }
 
   private getMappedIdColor(builder: ShaderBuilder, fragment: boolean) {
