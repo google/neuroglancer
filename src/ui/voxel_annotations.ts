@@ -149,6 +149,120 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
   }
 }
 
+export function getActivePanel(
+  layer: UserLayerWithVoxelEditing,
+): RenderedDataPanel | undefined {
+  let activePanel: RenderedDataPanel | undefined;
+  for (const panel of layer.manager.root.display.panels) {
+    if (panel instanceof RenderedDataPanel) {
+      if (panel.mouseX !== -1 && panel instanceof SliceViewPanel) {
+        activePanel = panel;
+      } else {
+        panel.clearOverlay();
+      }
+    }
+  }
+  return activePanel;
+}
+
+export function updateBrushOutline(layer: UserLayerWithVoxelEditing) {
+  const panel = getActivePanel(layer);
+  if (!panel || !(panel instanceof SliceViewPanel)) {
+    if (panel) panel.clearOverlay();
+    return;
+  }
+
+  const { projectionParameters } = panel.sliceView;
+  const { displayDimensionRenderInfo, viewMatrix } = projectionParameters.value;
+  const { canonicalVoxelFactors, displayRank } = displayDimensionRenderInfo;
+
+  if (displayRank < 2) {
+    panel.clearOverlay();
+    return;
+  }
+
+  const radiusInVoxels = layer.voxBrushRadius.value;
+
+  const n_canonical =
+    projectionParameters.value.viewportNormalInCanonicalCoordinates;
+
+  const canonicalVoxelFactorsVec3 = vec3.fromValues(
+    canonicalVoxelFactors[0],
+    canonicalVoxelFactors[1],
+    canonicalVoxelFactors[2],
+  );
+
+  // Convert to voxel coordinates by dividing by canonical voxel factors.
+  const n_vox = vec3.create();
+  vec3.divide(n_vox, n_canonical as vec3, canonicalVoxelFactorsVec3);
+  vec3.normalize(n_vox, n_vox);
+
+  // Create an orthonormal basis for the plane in voxel coordinates
+  const u_vox = vec3.create();
+  const tempVec = vec3.fromValues(1, 0, 0);
+  if (Math.abs(vec3.dot(n_vox, tempVec)) > 0.999) {
+    vec3.set(tempVec, 0, 1, 0);
+  }
+  vec3.cross(u_vox, n_vox, tempVec);
+  vec3.normalize(u_vox, u_vox);
+
+  const v_vox = vec3.cross(vec3.create(), n_vox, u_vox);
+
+  // Scale basis vectors by radius to get two orthogonal radius vectors of the brush circle
+  // in voxel coordinates.
+  vec3.scale(u_vox, u_vox, radiusInVoxels);
+  vec3.scale(v_vox, v_vox, radiusInVoxels);
+
+  const u_cam = vec3.create();
+  const v_cam = vec3.create();
+  // The viewMatrix transforms from world/voxel space to camera space.
+  // We use a mat3 to only apply rotation and scaling, not translation.
+  const viewMatrix3 = mat3.fromMat4(mat3.create(), viewMatrix);
+
+  // Transform voxel-space vectors directly to camera-space vectors.
+  // This avoids the double-scaling error.
+  vec3.transformMat3(u_cam, u_vox, viewMatrix3);
+  vec3.transformMat3(v_cam, v_vox, viewMatrix3);
+
+  // The x, y components of these vectors are conjugate semi-diameters of the ellipse on screen.
+  const u_scr_x = u_cam[0];
+  const u_scr_y = u_cam[1];
+  const v_scr_x = v_cam[0];
+  const v_scr_y = v_cam[1];
+
+  // From the conjugate semi-diameters, compute the ellipse parameters (radii and rotation).
+  // We analyze the quadratic form matrix Q = A * A^T where A = [[u_scr_x, v_scr_x], [u_scr_y, v_scr_y]].
+  const Q11 = u_scr_x * u_scr_x + v_scr_x * v_scr_x;
+  const Q12 = u_scr_x * u_scr_y + v_scr_x * v_scr_y;
+  const Q22 = u_scr_y * u_scr_y + v_scr_y * v_scr_y;
+
+  const trace = Q11 + Q22;
+  const det = Q11 * Q22 - Q12 * Q12;
+
+  // Eigenvalues are roots of lambda^2 - trace*lambda + det = 0
+  const D_sq = trace * trace - 4 * det;
+  const D = D_sq < 0 ? 0 : Math.sqrt(D_sq);
+
+  const lambda1 = (trace + D) / 2;
+  const lambda2 = (trace - D) / 2;
+
+  const radiusX = Math.sqrt(lambda1);
+  const radiusY = Math.sqrt(lambda2);
+
+  // Eigenvector for lambda1 is proportional to [Q12, lambda1 - Q11]
+  const rotation = Math.atan2(lambda1 - Q11, Q12);
+
+  panel.drawBrushCursor(
+    panel.mouseX,
+    panel.mouseY,
+    radiusX,
+    radiusY,
+    rotation,
+    "white",
+    layer.voxEraseMode.value,
+  );
+}
+
 export class VoxelBrushTool extends BaseVoxelTool {
   private isDrawing = false;
   private lastPoint: Int32Array | undefined;
@@ -157,129 +271,16 @@ export class VoxelBrushTool extends BaseVoxelTool {
 
   activate(activation: ToolActivation<this>) {
     super.activate(activation);
-    this.updateBrushOutline();
+    updateBrushOutline(this.layer);
 
     activation.registerDisposer(() => {
-      this.getActivePanel()?.clearOverlay();
+      getActivePanel(this.layer)?.clearOverlay();
       this.resetCursor();
     });
     activation.registerDisposer(
       this.mouseState.changed.add(() => {
-        this.updateBrushOutline();
+        updateBrushOutline(this.layer);
       }),
-    );
-  }
-
-  private getActivePanel(): RenderedDataPanel | undefined {
-    let activePanel: RenderedDataPanel | undefined;
-    for (const panel of this.layer.manager.root.display.panels) {
-      if (panel instanceof RenderedDataPanel) {
-        if (panel.mouseX !== -1 && panel instanceof SliceViewPanel) {
-          activePanel = panel;
-        } else {
-          panel.clearOverlay();
-        }
-      }
-    }
-    return activePanel;
-  }
-
-  private updateBrushOutline() {
-    const panel = this.getActivePanel();
-    if (!panel || !(panel instanceof SliceViewPanel)) {
-      if (panel) panel.clearOverlay();
-      return;
-    }
-
-    const { projectionParameters } = panel.sliceView;
-    const { displayDimensionRenderInfo, viewMatrix } =
-      projectionParameters.value;
-    const { canonicalVoxelFactors, displayRank } = displayDimensionRenderInfo;
-
-    if (displayRank < 2) {
-      panel.clearOverlay();
-      return;
-    }
-
-    const radiusInVoxels = this.layer.voxBrushRadius.value;
-
-    const n_canonical =
-      projectionParameters.value.viewportNormalInCanonicalCoordinates;
-
-    const canonicalVoxelFactorsVec3 = vec3.fromValues(
-      canonicalVoxelFactors[0],
-      canonicalVoxelFactors[1],
-      canonicalVoxelFactors[2],
-    );
-
-    // Convert to voxel coordinates by dividing by canonical voxel factors.
-    const n_vox = vec3.create();
-    vec3.divide(n_vox, n_canonical as vec3, canonicalVoxelFactorsVec3);
-    vec3.normalize(n_vox, n_vox);
-
-    // Create an orthonormal basis for the plane in voxel coordinates
-    const u_vox = vec3.create();
-    const tempVec = vec3.fromValues(1, 0, 0);
-    if (Math.abs(vec3.dot(n_vox, tempVec)) > 0.999) {
-      vec3.set(tempVec, 0, 1, 0);
-    }
-    vec3.cross(u_vox, n_vox, tempVec);
-    vec3.normalize(u_vox, u_vox);
-
-    const v_vox = vec3.cross(vec3.create(), n_vox, u_vox);
-
-    // Scale basis vectors by radius to get two orthogonal radius vectors of the brush circle
-    // in voxel coordinates.
-    vec3.scale(u_vox, u_vox, radiusInVoxels);
-    vec3.scale(v_vox, v_vox, radiusInVoxels);
-
-    const u_cam = vec3.create();
-    const v_cam = vec3.create();
-    // The viewMatrix transforms from world/voxel space to camera space.
-    // We use a mat3 to only apply rotation and scaling, not translation.
-    const viewMatrix3 = mat3.fromMat4(mat3.create(), viewMatrix);
-
-    // Transform voxel-space vectors directly to camera-space vectors.
-    // This avoids the double-scaling error.
-    vec3.transformMat3(u_cam, u_vox, viewMatrix3);
-    vec3.transformMat3(v_cam, v_vox, viewMatrix3);
-
-    // The x, y components of these vectors are conjugate semi-diameters of the ellipse on screen.
-    const u_scr_x = u_cam[0];
-    const u_scr_y = u_cam[1];
-    const v_scr_x = v_cam[0];
-    const v_scr_y = v_cam[1];
-
-    // From the conjugate semi-diameters, compute the ellipse parameters (radii and rotation).
-    // We analyze the quadratic form matrix Q = A * A^T where A = [[u_scr_x, v_scr_x], [u_scr_y, v_scr_y]].
-    const Q11 = u_scr_x * u_scr_x + v_scr_x * v_scr_x;
-    const Q12 = u_scr_x * u_scr_y + v_scr_x * v_scr_y;
-    const Q22 = u_scr_y * u_scr_y + v_scr_y * v_scr_y;
-
-    const trace = Q11 + Q22;
-    const det = Q11 * Q22 - Q12 * Q12;
-
-    // Eigenvalues are roots of lambda^2 - trace*lambda + det = 0
-    const D_sq = trace * trace - 4 * det;
-    const D = D_sq < 0 ? 0 : Math.sqrt(D_sq);
-
-    const lambda1 = (trace + D) / 2;
-    const lambda2 = (trace - D) / 2;
-
-    const radiusX = Math.sqrt(lambda1);
-    const radiusY = Math.sqrt(lambda2);
-
-    // Eigenvector for lambda1 is proportional to [Q12, lambda1 - Q11]
-    const rotation = Math.atan2(lambda1 - Q11, Q12);
-
-    panel.drawBrushCursor(
-      panel.mouseX,
-      panel.mouseY,
-      radiusX,
-      radiusY,
-      rotation,
-      "white",
-      this.layer.voxEraseMode.value,
     );
   }
 

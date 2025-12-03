@@ -305,14 +305,6 @@ describe("Voxel Editing Utilities", () => {
   });
 
   describe("transformGlobalToVoxelNormal", () => {
-    it("Uninitialized Cache: throws error", () => {
-      const { userLayer, loadedSubsource } = createLayer(DataType.UINT64);
-      const context = userLayer.editingContexts.get(loadedSubsource)!;
-      expect(() => {
-        context.transformGlobalToVoxelNormal(vec3.create());
-      }).toThrow("Chunk transform not computed");
-    });
-
     it("Identity Transform: returns same vector", () => {
       const { userLayer, loadedSubsource } = createLayer(DataType.UINT64);
       const context = userLayer.editingContexts.get(loadedSubsource)!;

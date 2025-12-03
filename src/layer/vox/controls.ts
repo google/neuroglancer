@@ -18,6 +18,10 @@ import type { UserLayerConstructor } from "#src/layer/index.js";
 import { LayerActionContext } from "#src/layer/index.js";
 import type { UserLayerWithVoxelEditing } from "#src/layer/vox/index.js";
 import { observeWatchable } from "#src/trackable_value.js";
+import {
+  getActivePanel,
+  updateBrushOutline,
+} from "#src/ui/voxel_annotations.js";
 import type { LayerControlDefinition } from "#src/widget/layer_control.js";
 import { registerLayerControl } from "#src/widget/layer_control.js";
 import { buttonLayerControl } from "#src/widget/layer_control_button.js";
@@ -30,10 +34,39 @@ export const VOXEL_LAYER_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEdit
     {
       label: "Brush size",
       toolJson: { type: "vox-brush-size" },
-      ...rangeLayerControl((layer) => ({
-        value: layer.voxBrushRadius,
-        options: { min: 1, max: 64, step: 1 },
-      })),
+      ...(() => {
+        const control = rangeLayerControl(
+          (layer: UserLayerWithVoxelEditing) => ({
+            value: layer.voxBrushRadius,
+            options: { min: 1, max: 64, step: 1 },
+          }),
+        );
+        const originalActivateTool = control.activateTool;
+        return {
+          ...control,
+          activateTool: (activation, controlContext) => {
+            originalActivateTool(activation, controlContext as any);
+
+            const layer = activation.tool.layer as UserLayerWithVoxelEditing;
+            const updateCursor = () => {
+              updateBrushOutline(layer);
+            };
+
+            updateCursor();
+            activation.registerDisposer(
+              layer.manager.root.layerSelectedValues.mouseState.changed.add(
+                updateCursor,
+              ),
+            );
+            activation.registerDisposer(
+              layer.voxBrushRadius.changed.add(updateCursor),
+            );
+            activation.registerDisposer(() => {
+              getActivePanel(layer)?.clearOverlay();
+            });
+          },
+        };
+      })(),
     },
     {
       label: "Eraser",

@@ -288,9 +288,7 @@ export class VoxelEditingContext
     }
   }
 
-  getVoxelPositionFromMouse(
-    mouseState: MouseSelectionState,
-  ): Float32Array | undefined {
+  getChunkTransform(): ChunkTransformParameters | undefined {
     const renderLayer = this.primaryRenderLayer;
     const renderLayerTransform = renderLayer.transform.value;
     if (renderLayerTransform.error !== undefined) {
@@ -314,8 +312,13 @@ export class VoxelEditingContext
         return undefined;
       }
     }
+    return this.cachedChunkTransform;
+  }
 
-    const chunkTransform = this.cachedChunkTransform;
+  getVoxelPositionFromMouse(
+    mouseState: MouseSelectionState,
+  ): Float32Array | undefined {
+    const chunkTransform = this.getChunkTransform();
     if (chunkTransform === undefined) return undefined;
 
     if (
@@ -339,7 +342,7 @@ export class VoxelEditingContext
   }
 
   transformGlobalToVoxelNormal(globalNormal: vec3): vec3 {
-    const chunkTransform = this.cachedChunkTransform;
+    const chunkTransform = this.getChunkTransform();
     if (chunkTransform === undefined)
       throw new Error("Chunk transform not computed");
     const { modelTransform, layerToChunkTransform, layerRank } = chunkTransform;
