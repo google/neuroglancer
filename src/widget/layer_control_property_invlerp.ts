@@ -60,10 +60,6 @@ export function propertyInvlerpLayerControl<LayerType extends UserLayer>(
         histogramIndex,
       } = getter(layer);
       {
-        if (values) {
-          console.log("we made a propertyInvlerpLayerControl with values");
-        }
-
         const propertySelectElement = document.createElement("select");
         for (const [property, dataType] of properties) {
           const optionElement = document.createElement("option");
@@ -99,7 +95,6 @@ export function propertyInvlerpLayerControl<LayerType extends UserLayer>(
           //   );
           // }
         };
-        updateModel();
         const updateView = () => {
           propertySelectElement.value = watchableValue.value.property;
         };
@@ -110,6 +105,8 @@ export function propertyInvlerpLayerControl<LayerType extends UserLayer>(
         );
         context.registerDisposer(watchableValue.changed.add(updateView));
         updateView();
+        updateModel(); // need to update model after update view, otherwise we lose existing watchableValue.value.property
+        // though should I have added updateModel?
         options.labelContainer.appendChild(propertySelectElement);
       }
       const derivedValuesWatchable = makeCachedDerivedWatchableValue(
