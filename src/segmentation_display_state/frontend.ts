@@ -23,7 +23,10 @@ import type { PickIDManager } from "#src/object_picking.js";
 import type { WatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
 import type { RenderScaleHistogram } from "#src/render_scale_statistics.js";
 import type { RenderLayer } from "#src/renderlayer.js";
-import type { SegmentColorHash } from "#src/segment_color.js";
+import type {
+  SegmentColorHash,
+  SegmentColorUserShaderManager,
+} from "#src/segment_color.js";
 import { getCssColor } from "#src/segment_color.js";
 import type { VisibleSegmentsState } from "#src/segmentation_display_state/base.js";
 import {
@@ -36,7 +39,6 @@ import type {
   InlineSegmentNumericalProperty,
   InlineSegmentProperty,
   PreprocessedSegmentPropertyMap,
-  SegmentColorUserShaderManager,
 } from "#src/segmentation_display_state/property_map.js";
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
 import type { TrackableAlphaValue } from "#src/trackable_alpha.js";
@@ -204,7 +206,6 @@ export interface SegmentationDisplayState {
   segmentationGroupState: WatchableValueInterface<SegmentationGroupState>;
   segmentationColorGroupState: WatchableValueInterface<SegmentationColorGroupState>;
   segmentColorShaderControlState: ShaderControlState;
-
   segmentationColorUserShader: SegmentColorUserShaderManager;
 
   selectSegment: (id: bigint, pin: boolean | "toggle") => void;

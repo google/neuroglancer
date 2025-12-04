@@ -20,13 +20,13 @@ import {
   HashMapShaderManager,
   HashSetShaderManager,
 } from "#src/gpu_hash/shader.js";
+import type { SegmentationColorUserShaderManagerParameters } from "#src/segment_color.js";
 import { getVisibleSegments } from "#src/segmentation_display_state/base.js";
 import type {
   SegmentationDisplayState,
   SegmentationGroupState,
 } from "#src/segmentation_display_state/frontend.js";
 import { registerRedrawWhenSegmentationDisplayStateChanged } from "#src/segmentation_display_state/frontend.js";
-import type { SegmentationColorUserShaderManagerParameters } from "#src/segmentation_display_state/property_map.js";
 import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
 import type {
   SliceView,

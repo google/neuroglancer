@@ -45,7 +45,11 @@ import {
   RenderScaleHistogram,
   trackableRenderScaleTarget,
 } from "#src/render_scale_statistics.js";
-import { getCssColor, SegmentColorHash } from "#src/segment_color.js";
+import {
+  getCssColor,
+  SegmentColorHash,
+  SegmentColorUserShaderManager,
+} from "#src/segment_color.js";
 import type {
   SegmentationColorGroupState,
   SegmentationDisplayState,
@@ -65,10 +69,7 @@ import type {
   PreprocessedSegmentPropertyMap,
   SegmentPropertyMap,
 } from "#src/segmentation_display_state/property_map.js";
-import {
-  getPreprocessedSegmentPropertyMap,
-  SegmentColorUserShaderManager,
-} from "#src/segmentation_display_state/property_map.js";
+import { getPreprocessedSegmentPropertyMap } from "#src/segmentation_display_state/property_map.js";
 import { LocalSegmentationGraphSource } from "#src/segmentation_graph/local.js";
 import { VisibleSegmentEquivalencePolicy } from "#src/segmentation_graph/segment_id.js";
 import type {
