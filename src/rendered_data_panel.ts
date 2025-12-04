@@ -831,8 +831,12 @@ export abstract class RenderedDataPanel extends RenderedPanel {
   handleMouseMove(clientX: number, clientY: number) {
     const { element } = this;
     const bounds = element.getBoundingClientRect();
-    const mouseX = clientX - (bounds.left + element.clientLeft);
-    const mouseY = clientY - (bounds.top + element.clientTop);
+    const mouseX =
+      ((clientX - bounds.left) / bounds.width) * element.offsetWidth -
+      element.clientLeft;
+    const mouseY =
+      ((clientY - bounds.top) / bounds.height) * element.offsetHeight +
+      element.clientTop;
     const { mouseState } = this.viewer;
     mouseState.pageX = clientX + window.scrollX;
     mouseState.pageY = clientY + window.scrollY;
