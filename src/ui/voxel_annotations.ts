@@ -27,11 +27,12 @@ import { LayerTool, registerTool, type ToolActivation } from "#src/ui/tool.js";
 import { vec3, mat3 } from "#src/util/geom.js";
 import { EventActionMap } from "#src/util/mouse_bindings.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
-import { BrushShape } from "#src/voxel_annotation/base.js";
-
-export const BRUSH_TOOL_ID = "vox-brush";
-export const FLOODFILL_TOOL_ID = "vox-flood-fill";
-export const SEG_PICKER_TOOL_ID = "vox-seg-picker";
+import {
+  BrushShape,
+  BRUSH_TOOL_ID,
+  FLOODFILL_TOOL_ID,
+  SEG_PICKER_TOOL_ID,
+} from "#src/voxel_annotation/base.js";
 
 const VOX_TOOL_INPUT_MAP = EventActionMap.fromObject({
   ["at:control+mousedown0"]: "paint-voxels",

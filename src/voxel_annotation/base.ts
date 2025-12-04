@@ -26,6 +26,10 @@ export const VOX_EDIT_UNDO_RPC_ID = "vox.edit.undo";
 export const VOX_EDIT_REDO_RPC_ID = "vox.edit.redo";
 export const VOX_EDIT_HISTORY_UPDATE_RPC_ID = "vox.edit.historyUpdate";
 
+export const BRUSH_TOOL_ID = "vox-brush";
+export const FLOODFILL_TOOL_ID = "vox-flood-fill";
+export const SEG_PICKER_TOOL_ID = "vox-seg-picker";
+
 export interface VoxelLayerResolution {
   lodIndex: number;
   transform: number[];

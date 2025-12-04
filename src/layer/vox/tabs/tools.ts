@@ -14,15 +14,10 @@
  * limitations under the License.
  */
 
-import { VOXEL_LAYER_CONTROLS } from "#src/layer/vox/controls.js";
+import { VOXEL_TAB_LAYOUT } from "#src/layer/vox/controls.js";
 import type { UserLayerWithVoxelEditing } from "#src/layer/vox/index.js";
 import { observeWatchable } from "#src/trackable_value.js";
 import { makeToolButton } from "#src/ui/tool.js";
-import {
-  SEG_PICKER_TOOL_ID,
-  BRUSH_TOOL_ID,
-  FLOODFILL_TOOL_ID,
-} from "#src/ui/voxel_annotations.js";
 import type { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 import { addLayerControlToOptionsTab } from "#src/widget/layer_control.js";
@@ -35,100 +30,78 @@ export class VoxToolTab extends Tab {
 
     const toolbox = document.createElement("div");
 
-    const toolsRow = document.createElement("div");
-    const toolsTitle = document.createElement("div");
-    toolsTitle.textContent = "Tools";
-    toolsTitle.style.fontWeight = "600";
-    toolsRow.appendChild(toolsTitle);
+    for (const elementDef of VOXEL_TAB_LAYOUT) {
+      if ("type" in elementDef && elementDef.type === "header") {
+        const title = document.createElement("div");
+        title.textContent = elementDef.label;
+        title.style.fontWeight = "600";
+        toolbox.appendChild(title);
+      } else if ("type" in elementDef && elementDef.type === "tool-row") {
+        const toolButtonsContainer = document.createElement("div");
+        toolButtonsContainer.style.display = "flex";
+        toolButtonsContainer.style.gap = "8px";
 
-    const toolButtonsContainer = document.createElement("div");
-    toolButtonsContainer.style.display = "flex";
-    toolButtonsContainer.style.gap = "8px";
+        for (const tool of elementDef.tools) {
+          const button = makeToolButton(this, layer.toolBinder, {
+            toolJson: tool.toolId,
+            label: tool.label,
+          });
+          toolButtonsContainer.appendChild(button);
+        }
+        toolbox.appendChild(toolButtonsContainer);
+      } else {
+        const controlDef = elementDef as any;
+        const controlElement = addLayerControlToOptionsTab(
+          this,
+          this.layer,
+          this.visibility,
+          controlDef,
+        );
 
-    const brushButton = makeToolButton(this, layer.toolBinder, {
-      toolJson: { type: BRUSH_TOOL_ID },
-      label: "Brush",
-    });
-
-    const floodFillButton = makeToolButton(this, layer.toolBinder, {
-      toolJson: { type: FLOODFILL_TOOL_ID },
-      label: "Flood Fill",
-    });
-
-    const pickButton = makeToolButton(this, layer.toolBinder, {
-      toolJson: { type: SEG_PICKER_TOOL_ID },
-      label: "Seg Picker",
-    });
-
-    toolButtonsContainer.appendChild(brushButton);
-    toolButtonsContainer.appendChild(floodFillButton);
-    toolButtonsContainer.appendChild(pickButton);
-    toolsRow.appendChild(toolButtonsContainer);
-    toolbox.appendChild(toolsRow);
-
-    const settingsTitle = document.createElement("div");
-    settingsTitle.textContent = "Settings";
-    settingsTitle.style.fontWeight = "600";
-    toolbox.appendChild(settingsTitle);
-
-    for (const controlDef of VOXEL_LAYER_CONTROLS) {
-      const controlElement = addLayerControlToOptionsTab(
-        this,
-        this.layer,
-        this.visibility,
-        controlDef,
-      );
-
-      if (
-        controlDef.toolJson.type === "vox-undo" ||
-        controlDef.toolJson.type === "vox-redo"
-      ) {
-        const button = controlElement.querySelector("button");
-        if (button) {
-          this.registerDisposer(
-            new DependentViewWidget(
-              {
-                changed: this.layer.layersChanged,
-                get value() {
-                  return (
-                    layer.editingContexts.values().next().value?._controller ??
-                    undefined
+        if (
+          controlDef.toolJson.type === "vox-undo" ||
+          controlDef.toolJson.type === "vox-redo"
+        ) {
+          const button = controlElement.querySelector("button");
+          if (button) {
+            this.registerDisposer(
+              new DependentViewWidget(
+                {
+                  changed: this.layer.layersChanged,
+                  get value() {
+                    return (
+                      layer.editingContexts.values().next().value
+                        ?._controller ?? undefined
+                    );
+                  },
+                },
+                (
+                  controller: VoxelEditController | undefined,
+                  _parent,
+                  context,
+                ) => {
+                  if (!controller) {
+                    button.disabled = true;
+                    return;
+                  }
+                  const watchable =
+                    controlDef.toolJson.type === "vox-undo"
+                      ? controller.undoCount
+                      : controller.redoCount;
+                  context.registerDisposer(
+                    observeWatchable((count) => {
+                      button.disabled = count === 0;
+                    }, watchable),
                   );
                 },
-              },
-              (
-                controller: VoxelEditController | undefined,
-                _parent,
-                context,
-              ) => {
-                if (!controller) {
-                  button.disabled = true;
-                  return;
-                }
-                const watchable =
-                  controlDef.toolJson.type === "vox-undo"
-                    ? controller.undoCount
-                    : controller.redoCount;
-                context.registerDisposer(
-                  observeWatchable((count) => {
-                    button.disabled = count === 0;
-                  }, watchable),
-                );
-              },
-              this.visibility,
-            ),
-          );
+                this.visibility,
+              ),
+            );
+          }
         }
-      }
 
-      if (controlDef.toolJson.type === "vox-undo") {
-        const actionsTitle = document.createElement("div");
-        actionsTitle.textContent = "Actions";
-        actionsTitle.style.fontWeight = "600";
-        toolbox.appendChild(actionsTitle);
+        toolbox.appendChild(controlElement);
       }
-
-      toolbox.appendChild(controlElement);
     }
 
     element.appendChild(toolbox);

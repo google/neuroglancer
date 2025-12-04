@@ -2,7 +2,6 @@
 
 ### priority
 
-- add dynamic brush cursor resizing
 - align brush cursor transform with brush transform
 - add value-based erasing
 - preview is missing when erasing
