@@ -18,7 +18,7 @@ import collections.abc
 import contextlib
 import json
 import re
-import threading
+import typing
 from concurrent.futures import Future
 
 import numpy as np
@@ -41,12 +41,16 @@ except ImportError:
 
 
 class LocalVolumeManager(trackable_state.ChangeNotifier):
-    def __init__(self, token_prefix):
+    def __init__(self, token_prefix: str) -> None:
         super().__init__()
-        self.volumes = dict()
-        self.__token_prefix = token_prefix
+        self.volumes: dict[str, local_volume.LocalVolume | skeleton.SkeletonSource] = (
+            dict()
+        )
+        self.__token_prefix: str = token_prefix
 
-    def register_volume(self, v):
+    def register_volume(
+        self, v: local_volume.LocalVolume | skeleton.SkeletonSource
+    ) -> str:
         if v.token not in self.volumes:
             self.volumes[v.token] = v
             self._dispatch_changed_callbacks()
@@ -56,10 +60,12 @@ class LocalVolumeManager(trackable_state.ChangeNotifier):
             source_type = "skeleton"
         return f"python://{source_type}/{self.get_volume_key(v)}"
 
-    def get_volume_key(self, v):
+    def get_volume_key(
+        self, v: local_volume.LocalVolume | skeleton.SkeletonSource
+    ) -> str:
         return self.__token_prefix + v.token
 
-    def update(self, json_str):
+    def update(self, json_str: str) -> None:
         pattern = "|".join(self.volumes)
         present_tokens = set()
         for m in re.finditer(pattern, json_str):
@@ -75,7 +81,9 @@ class LocalVolumeManager(trackable_state.ChangeNotifier):
 
 
 class ViewerCommonBase:
-    def __init__(self, token=None, allow_credentials=None):
+    def __init__(
+        self, token: str | None = None, allow_credentials: bool | None = None
+    ) -> None:
         if token is None:
             token = make_random_token()
             if allow_credentials is None:
@@ -85,9 +93,9 @@ class ViewerCommonBase:
                 allow_credentials = False
         self.allow_credentials = allow_credentials
         self.token = token
-        self.config_state = trackable_state.TrackableState(
+        self.config_state: trackable_state.TrackableState[
             viewer_config_state.ConfigState
-        )
+        ] = trackable_state.TrackableState(viewer_config_state.ConfigState)
 
         def set_actions(actions):
             def func(s):
@@ -99,21 +107,72 @@ class ViewerCommonBase:
 
         self.volume_manager = LocalVolumeManager(self.token + ".")
 
-        self.__watched_volumes = dict()
+        self.__watched_volumes: dict[
+            str, local_volume.LocalVolume | skeleton.SkeletonSource
+        ] = dict()
 
         self.volume_manager.add_changed_callback(self._handle_volumes_changed)
 
         self._next_screenshot_id = 0
-        self._screenshot_callbacks = {}
+        self._screenshot_callbacks: dict[
+            str,
+            tuple[
+                typing.Callable[[viewer_config_state.ActionState], None],
+                typing.Callable[[viewer_config_state.ScreenshotStatistics], None]
+                | None,
+            ],
+        ] = {}
         self._volume_info_promises: dict[
-            str, "Future[viewer_config_state.VolumeInfo]"
+            str, Future[viewer_config_state.VolumeInfo]
         ] = {}
         self._volume_chunk_promises: dict[str, Future[np.ndarray]] = {}
         self.actions.add("screenshot", self._handle_screenshot_reply)
         self.actions.add("screenshotStatistics", self._handle_screenshot_statistics)
 
-    def async_screenshot(self, callback, include_depth=False, statistics_callback=None):
+    @typing.overload
+    def async_screenshot(
+        self,
+        callback: typing.Callable[[viewer_config_state.ActionState], None],
+        *,
+        include_depth: bool = False,
+        statistics_callback: typing.Callable[
+            [viewer_config_state.ScreenshotStatistics], None
+        ]
+        | None = None,
+    ) -> None: ...
+
+    @typing.overload
+    def async_screenshot(
+        self,
+        *,
+        include_depth: bool = False,
+        statistics_callback: typing.Callable[
+            [viewer_config_state.ScreenshotStatistics], None
+        ]
+        | None = None,
+    ) -> Future[viewer_config_state.ActionState]: ...
+
+    def async_screenshot(
+        self,
+        callback: typing.Callable[[viewer_config_state.ActionState], None]
+        | None = None,
+        *,
+        include_depth: bool = False,
+        statistics_callback: typing.Callable[
+            [viewer_config_state.ScreenshotStatistics], None
+        ]
+        | None = None,
+    ) -> Future[viewer_config_state.ActionState] | None:
         """Captures a screenshot asynchronously."""
+
+        future: Future[viewer_config_state.ActionState] | None = None
+
+        if callback is None:
+            future = Future()
+
+            def callback(s: viewer_config_state.ActionState) -> None:
+                future.set_result(s)
+
         screenshot_id = str(self._next_screenshot_id)
         if include_depth:
             screenshot_id = screenshot_id + "_includeDepth"
@@ -125,7 +184,17 @@ class ViewerCommonBase:
         self.config_state.retry_txn(set_screenshot_id, lock=True)
         self._screenshot_callbacks[screenshot_id] = (callback, statistics_callback)
 
-    def screenshot(self, size=None, include_depth=False, statistics_callback=None):
+        return future
+
+    def screenshot(
+        self,
+        size: tuple[int, int] | None = None,
+        include_depth: bool = False,
+        statistics_callback: typing.Callable[
+            [viewer_config_state.ScreenshotStatistics], None
+        ]
+        | None = None,
+    ) -> viewer_config_state.ActionState:
         """Captures a screenshot synchronously.
 
         :param size: Optional.  List of [width, height] specifying the dimension
@@ -138,38 +207,33 @@ class ViewerCommonBase:
 
         :returns: The screenshot.
         """
-        if size is not None:
-            prior_state = self.config_state.state
-            with self.config_state.txn() as s:
-                s.show_ui_controls = False
-                s.show_panel_borders = False
-                s.viewer_size = size
-        for _ in range(5):
-            # Allow multiple retries in case size is not respected on first attempt
-            event = threading.Event()
-            result = [None]
+        try:
+            if size is not None:
+                prior_state = self.config_state.state
+                with self.config_state.txn() as s:
+                    s.show_ui_controls = False
+                    s.show_panel_borders = False
+                    s.viewer_size = size
+            for _ in range(5):
+                # Allow multiple retries in case size is not respected on first attempt
+                result = self.async_screenshot(
+                    include_depth=include_depth,
+                    statistics_callback=statistics_callback,
+                ).result()
+                if result.screenshot is None:
+                    continue
+                if (
+                    size is not None
+                    and (result.screenshot.width, result.screenshot.height) != size
+                ):
+                    continue
+                break
+        finally:
+            if size is not None:
+                self.config_state.set_state(prior_state)
+        return result
 
-            def handler(s):
-                result[0] = s
-                event.set()
-
-            self.async_screenshot(
-                handler,
-                include_depth=include_depth,
-                statistics_callback=statistics_callback,
-            )
-            event.wait()
-            if size is not None and (
-                result[0].screenshot.width != size[0]
-                or result[0].screenshot.height != size[1]
-            ):
-                continue
-            break
-        if size is not None:
-            self.config_state.set_state(prior_state)
-        return result[0]
-
-    def _handle_screenshot_reply(self, s):
+    def _handle_screenshot_reply(self, s: viewer_config_state.ActionState):
         def set_screenshot_id(s):
             s.screenshot = None
 
@@ -179,7 +243,7 @@ class ViewerCommonBase:
         if callback is not None:
             callback[0](s)
 
-    def _handle_screenshot_statistics(self, s):
+    def _handle_screenshot_statistics(self, s: viewer_config_state.ActionState):
         screenshot_id = s.screenshot_statistics.id
         callback = self._screenshot_callbacks.get(screenshot_id)
         if callback is None or callback[1] is None:
@@ -388,15 +452,17 @@ class ViewerCommonBase:
             new_state = decode_json(json.dumps(new_state, default=encoder))
         return new_state
 
-    def txn(self):
+    def txn(self) -> typing.ContextManager[viewer_state.ViewerState]:
         raise NotImplementedError
 
 
 class ViewerBase(ViewerCommonBase):
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.shared_state = trackable_state.TrackableState(
-            viewer_state.ViewerState, self._transform_viewer_state
+        self.shared_state: trackable_state.TrackableState[viewer_state.ViewerState] = (
+            trackable_state.TrackableState(
+                viewer_state.ViewerState, self._transform_viewer_state
+            )
         )
         self.shared_state.add_changed_callback(
             lambda: self.volume_manager.update(encode_json(self.shared_state.raw_state))
@@ -409,7 +475,7 @@ class ViewerBase(ViewerCommonBase):
     def set_state(self, *args, **kwargs):
         return self.shared_state.set_state(*args, **kwargs)
 
-    def txn(self, *args, **kwargs):
+    def txn(self, *args, **kwargs) -> typing.ContextManager[viewer_state.ViewerState]:
         return self.shared_state.txn(*args, **kwargs)
 
     def retry_txn(self, *args, **kwargs):
@@ -422,15 +488,20 @@ class UnsynchronizedViewerBase(ViewerCommonBase):
         self.state = viewer_state.ViewerState()
 
     @property
-    def raw_state(self):
+    def raw_state(self) -> typing.Any:
         return self._transform_viewer_state(self.state)
 
-    def set_state(self, new_state):
+    def set_state(self, new_state: typing.Any | viewer_state.ViewerState) -> None:
         self.state = viewer_state.ViewerState(new_state)
 
     @contextlib.contextmanager
-    def txn(self):
+    def txn(self) -> collections.abc.Iterator[viewer_state.ViewerState]:
         yield self.state
 
-    def retry_txn(self, func, retries=None):  # pylint: disable=unused-argument
+    def retry_txn(
+        self,
+        func: typing.Callable[[viewer_state.ViewerState], None],
+        retries: int | None = None,
+    ):
+        del retries
         return func(self.state)

@@ -90,11 +90,11 @@ class TrackableState(ChangeNotifier, typing.Generic[State]):
         transform_state: typing.Callable[[State], typing.Any] | None = None,
     ):
         super().__init__()
-        self._raw_state = {}
+        self._raw_state: typing.Any = {}
         self._lock = threading.RLock()
         self._generation = make_random_token()
-        self._wrapped_state = None
-        self._wrapper_type = wrapper_type
+        self._wrapped_state: State | None = None
+        self._wrapper_type: type[State] = wrapper_type
         if transform_state is None:
 
             def transform_state_function(new_state):
@@ -167,7 +167,7 @@ class TrackableState(ChangeNotifier, typing.Generic[State]):
         with self._lock:
             wrapped_state = self._wrapped_state
             if wrapped_state is None:
-                wrapped_state = self._wrapped_state = self._wrapper_type(
+                wrapped_state = self._wrapped_state = self._wrapper_type(  # type: ignore[call-arg]
                     self._raw_state, _readonly=True
                 )
             return wrapped_state
