@@ -491,10 +491,17 @@ bool loadSegmentProperties(uint64_t id) {
     addCode(this.getMappedIdColor(builder, fragment));
     addCode(loadSegmentPropertiesCode);
     addCode(this.userCode.value);
+    if (this.userCode.value.includes("vec3 segmentColor(")) {
+      addCode(`
+  vec4 segmentColor(vec4 color, bool hasProperties) {
+    return vec4(segmentColor(color.rgb, hasProperties), color.a);
+}`);
+    }
     addCode(`
 vec4 segmentColorUserShader(uint64_t segmentId, float adjustment) {
   float alpha = -1.0; // negative means use original alpha
   vec4 color = getMappedIdColor(segmentId);
+  color.a = alpha; // TODO mapped color can include alpha right?
   float saturation = uSaturation;
   if (uSelectedSegment == segmentId.value) {
     if (saturation > adjustment) {
@@ -508,13 +515,10 @@ ${
     ? `
   bool hasProperties = loadSegmentProperties(segmentId);
   color = segmentColor(color, hasProperties);
-  if (color.a >= 0.0) {
-    alpha = color.a;
-  }
 `
     : ""
 }
-  return vec4(mix(vec3(1.0,1.0,1.0), vec3(color), saturation), alpha);
+  return vec4(mix(vec3(1.0,1.0,1.0), vec3(color), saturation), color.a);
 }`);
     addCode(`
   vec4 segmentColorUserShader(uint64_t segmentId) {
