@@ -20,7 +20,11 @@ import svg_arrowLeft from "ikonate/icons/arrow-left.svg?raw";
 import svg_arrowRight from "ikonate/icons/arrow-right.svg?raw";
 import type { DisplayContext } from "#src/display_context.js";
 import { IndirectRenderedPanel } from "#src/display_context.js";
-import type { WatchableValueInterface } from "#src/trackable_value.js";
+import {
+  makeCachedDerivedWatchableValue,
+  makeCachedLazyDerivedWatchableValue,
+  type WatchableValueInterface,
+} from "#src/trackable_value.js";
 import type { ToolActivation } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import type { TypedNumberArray } from "#src/util/array.js";
@@ -465,8 +469,9 @@ out_color = uColor;
         lineShader.uniform("uBoundsFraction"),
         getIntervalBoundsEffectiveFraction(dataType, bounds.window),
       );
+      const { texture } = this.parent;
       gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + histogramTextureUnit);
-      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, this.parent.texture);
+      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
       setRawTextureParameters(gl);
       const aDataValue = lineShader.attribute("aDataValue");
       this.dataValuesBuffer.bindToVertexAttribI(
@@ -773,39 +778,33 @@ function countDataInBins(
   return counts;
 }
 
+const createHistogramTextureFromValues = (
+  values: TypedNumberArray<ArrayBuffer>,
+  window: DataTypeInterval,
+  dataType: DataType,
+  gl: GL,
+) => {
+  const histogram = countDataInBins(
+    values,
+    dataType,
+    window[0],
+    window[1],
+    NUM_HISTOGRAM_BINS_IN_RANGE,
+  );
+  return create1DTexture(gl, histogram);
+};
+
 export class InvlerpWidget extends Tab {
   // TODO should this implement ParentInverpWidget?
   cdfPanel;
   boundElements;
   invertArrows: HTMLElement[];
   autoRangeFinder: AutoRangeFinder;
-
-  textureFromValues: WebGLTexture | null = null;
-
-  // TODO should rebuild texture when window changes
-  updateTextureFromValues() {
-    const { gl } = this.display;
-    if (this.textureFromValues !== null) {
-      gl.deleteTexture(this.textureFromValues);
-      this.textureFromValues = null;
-    }
-    const { values, dataType } = this;
-    if (values?.value) {
-      const histogram = countDataInBins(
-        values.value,
-        dataType,
-        this.trackable.value.window[0],
-        this.trackable.value.window[1],
-        NUM_HISTOGRAM_BINS_IN_RANGE,
-      );
-      this.textureFromValues = create1DTexture(this.display.gl, histogram);
-    }
-    this.cdfPanel.scheduleRedraw();
-  }
+  textureFromValues?: WatchableValueInterface<WebGLTexture | undefined>;
 
   get texture() {
-    if (this.textureFromValues) {
-      return this.textureFromValues;
+    if (this.textureFromValues?.value) {
+      return this.textureFromValues.value;
     }
     return this.histogramSpecifications.getFramebuffers(this.display.gl)[
       this.histogramIndex
@@ -871,10 +870,38 @@ export class InvlerpWidget extends Tab {
         this.autoRangeFinder.maybeAutoComputeRange();
       }),
     );
+
+    const derivedWindowWatchable = makeCachedDerivedWatchableValue(
+      (p) => p.window,
+      [this.trackable],
+    );
+
+    if (values) {
+      let previousTextureFromValues: WebGLTexture | null = null;
+      this.textureFromValues = this.registerDisposer(
+        makeCachedLazyDerivedWatchableValue(
+          (values, window) => {
+            const { gl } = this.display;
+            gl.deleteTexture(previousTextureFromValues);
+            if (!values || !window) return;
+            const { dataType } = this;
+            const texture = createHistogramTextureFromValues(
+              values,
+              window,
+              dataType,
+              gl,
+            );
+            previousTextureFromValues = texture;
+            return texture;
+          },
+          values,
+          derivedWindowWatchable,
+        ),
+      );
+    }
   }
 
   updateView() {
-    this.updateTextureFromValues(); // TODO this doesn't need to change if the range changes
     const { boundElements } = this;
     const {
       trackable: { value: bounds },
