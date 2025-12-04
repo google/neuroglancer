@@ -338,6 +338,7 @@ class ConfigState(JsonObjectWrapper):
     show_panel_borders = showPanelBorders = wrapped_property(
         "showPanelBorders", optional(bool, True)
     )
+    pick_radius = pickRadius = wrapped_property("pickRadius", optional(int, 5))
     scale_bar_options = scaleBarOptions = wrapped_property(
         "scaleBarOptions", ScaleBarOptions
     )

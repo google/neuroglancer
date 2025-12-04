@@ -101,6 +101,7 @@ export interface ViewerUIState
   crossSectionBackgroundColor: TrackableRGB;
   perspectiveViewBackgroundColor: TrackableRGB;
   hideCrossSectionBackground3D: TrackableBoolean;
+  pickRadius: TrackableValue<number>;
 }
 
 export interface DataDisplayLayout extends RefCounted {
@@ -183,6 +184,7 @@ export function getCommonViewerState(viewer: ViewerUIState) {
     visibility: viewer.visibility,
     scaleBarOptions: viewer.scaleBarOptions,
     hideCrossSectionBackground3D: viewer.hideCrossSectionBackground3D,
+    pickRadius: viewer.pickRadius,
   };
 }
 
