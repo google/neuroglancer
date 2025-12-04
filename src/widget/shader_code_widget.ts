@@ -78,7 +78,6 @@ export class ShaderCodeWidget extends RefCounted {
 
   constructor(public state: ShaderCodeState) {
     super();
-    console.log("ShaderCodeWidget", state);
     this.textEditor = CodeMirror((_element) => {}, {
       value: this.state.fragment.value,
       mode: "glsl",

@@ -625,18 +625,21 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   makeSegmentColorShaderGetter = () => {
     const parameters = this.layer.registerDisposer(
       new AggregateWatchableValue(() => ({
+        segmentColorParameters:
+          this.segmentationColorUserShader.shaderParameters,
+        segmentColorProperties:
+          this.segmentationColorUserShader.usedProperties,
         shaderBuilderState: this.segmentColorShaderControlState.builderState,
-        segmentColorState: this.segmentationColorUserShader.shaderParameters,
       })),
     );
     return parameterizedEmitterDependentShaderGetter(
       this.layer,
       this.offscreenGL,
       {
-        memoizeKey: `segmentColorShaderTODO`,
+        memoizeKey: `segmentation/ColorShader`,
         parameters,
         encodeParameters: (p) => {
-          return `${JSON.stringify(p.segmentColorState)}${p.shaderBuilderState.parseResult.code}/${p.shaderBuilderState.referencedProperties}`; // then replace numerical properties with the texture ids
+          return `${p.shaderBuilderState.parseResult.code}/${JSON.stringify(p.segmentColorParameters)}/${JSON.stringify([...p.segmentColorProperties])}`;
         },
         shaderError: this.layer.displayState.shaderError, // TODO can I reuse this?
         defineShader: (builder, { shaderBuilderState }) => {
