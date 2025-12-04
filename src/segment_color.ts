@@ -233,10 +233,10 @@ export class SegmentColorUserShaderManager extends RefCounted {
 
   private userCode = new WatchableValue<string>("");
 
-  manager = new HashMapShaderManager("SegmentToPropertyIndex");
+  hashMapManager = new HashMapShaderManager("SegmentToPropertyIndex");
   segmentPropertyIndexMap = new HashMapUint64();
 
-  updateShaderData(
+  private updateShaderData(
     identifier: string,
     values: TypedNumberArray<ArrayBuffer>,
     dataType: DataType,
@@ -251,7 +251,7 @@ export class SegmentColorUserShaderManager extends RefCounted {
     }
   }
 
-  tagToShaderData(
+  private tagToShaderData(
     tag: string,
     segmentPropertyMap: PreprocessedSegmentPropertyMap,
   ) {
@@ -271,7 +271,7 @@ export class SegmentColorUserShaderManager extends RefCounted {
     return propertyShaderIdentifier;
   }
 
-  numericToShaderData(
+  private numericToShaderData(
     identifier: string,
     segmentPropertyMap: PreprocessedSegmentPropertyMap,
   ) {
@@ -330,7 +330,7 @@ export class SegmentColorUserShaderManager extends RefCounted {
     // TODO, I can make this lazy if we use this value to trigger defineShader
     this.usedProperties = this.registerDisposer(
       makeCachedDerivedWatchableValue(
-        ({ referencedProperties }, segmentPropertyMap, { code }) => {
+        ({ referencedProperties }, { code }, segmentPropertyMap) => {
           console.log("updating usedProperties");
           const tagRegex = /tag\("([^()]+)"\)/g;
           const numericRegex = /prop\("([^()]+)"\)/g;
@@ -401,9 +401,10 @@ export class SegmentColorUserShaderManager extends RefCounted {
         },
         [
           this.displayState.segmentColorShaderControlState.builderState,
-          this.displayState.segmentationGroupState.value.segmentPropertyMap,
           this.displayState.segmentColorShaderControlState.parseResult,
+          this.displayState.segmentationGroupState.value.segmentPropertyMap,
         ],
+        (a, b) => a.size === b.size && a.isSubsetOf(b), // cache equality check
       ),
     );
 
@@ -451,8 +452,8 @@ export class SegmentColorUserShaderManager extends RefCounted {
       ? builder.addFragmentCode.bind(builder)
       : builder.addVertexCode.bind(builder);
     addCode(glsl_COLORMAPS);
-    const { manager } = this;
-    manager.defineShader(builder, fragment);
+    const { hashMapManager } = this;
+    hashMapManager.defineShader(builder, fragment);
     for (const [identifier, { accessHelper, dataType }] of this
       .segmentPropertyShaderData) {
       builder.addTextureSampler(
@@ -476,7 +477,7 @@ export class SegmentColorUserShaderManager extends RefCounted {
     const loadSegmentPropertiesCode = `
 bool loadSegmentProperties(uint64_t id) {
   uint64_t propertyIndex_64;
-  if (!${manager.getFunctionName}(id, propertyIndex_64)) {
+  if (!${hashMapManager.getFunctionName}(id, propertyIndex_64)) {
     return false;
   }
   uint propertyIndex = propertyIndex_64.value[0];
@@ -566,7 +567,7 @@ ${
       }
     }
 
-    this.manager.enable(
+    this.hashMapManager.enable(
       gl,
       shader,
       GPUHashTable.get(this.gl, this.segmentPropertyIndexMap),

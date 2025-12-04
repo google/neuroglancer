@@ -365,8 +365,10 @@ export class MeshShaderManager {
   makeGetter(layer: RefCounted & { gl: GL; displayState: MeshDisplayState }) {
     const parameters = layer.registerDisposer(
       new AggregateWatchableValue((refCounted) => ({
-        segmentColorState:
+        segmentColorParameters:
           layer.displayState.segmentationColorUserShader.shaderParameters,
+        segmentColorProperties:
+          layer.displayState.segmentationColorUserShader.usedProperties,
         shaderBuilderState:
           layer.displayState.segmentColorShaderControlState.builderState,
         silhouetteRenderingEnabled: refCounted.registerDisposer(
@@ -378,17 +380,11 @@ export class MeshShaderManager {
       })),
     );
 
-    parameters.changed.add(() => {
-      console.log("parameters changed");
-    });
-
     return parameterizedEmitterDependentShaderGetter(layer, layer.gl, {
       memoizeKey: `mesh/MeshShaderManager/${this.fragmentRelativeVertices}/${this.vertexPositionFormat}`,
       parameters,
       encodeParameters: (p) => {
-        console.log("encode params");
-        // TODO work on this
-        return `${JSON.stringify(p.segmentColorState)}/${p.silhouetteRenderingEnabled}/${p.shaderBuilderState.parseResult.code}/${p.shaderBuilderState.referencedProperties}`; // TODO do I need referenced properties?
+        return `${p.shaderBuilderState.parseResult.code}/${JSON.stringify(p.segmentColorParameters)}/${JSON.stringify([...p.segmentColorProperties])}/${p.silhouetteRenderingEnabled}`;
       },
       shaderError: layer.displayState.shaderError,
       defineShader: (
