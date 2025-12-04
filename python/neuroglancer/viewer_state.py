@@ -1781,6 +1781,58 @@ add_data_panel_layout_types()
 
 
 @export
+class SegmentIdMapEntry(typing.NamedTuple):
+    key: int
+    value: int | None = None
+    label: str | None = None
+
+
+@export
+def layer_selected_value(x):
+    if isinstance(x, numbers.Number):
+        return x
+    if isinstance(x, str):
+        return int(x)
+    if isinstance(x, dict):
+        value = x.get("value")
+        if value is not None:
+            value = int(value)
+        return SegmentIdMapEntry(int(x["key"]), value, x.get("label"))
+    return None
+
+
+_set_type_annotation(layer_selected_value, None | numbers.Number | SegmentIdMapEntry)
+
+
+@export
+class LayerSelectionState(JsonObjectWrapper):
+    __slots__ = ()
+    supports_validation = True
+    local_position = wrapped_property(
+        "localPosition", optional(array_wrapper(np.float32))
+    )
+    value = wrapped_property("value", optional(layer_selected_value))
+
+
+if typing.TYPE_CHECKING or _BUILDING_DOCS:
+    _LayerSelectedValuesBase = Map[str, LayerSelectionState]
+else:
+    _LayerSelectedValuesBase = typed_map(str, LayerSelectionState)
+
+
+@export
+class LayerSelectedValues(_LayerSelectedValuesBase):
+    """Specifies the data values associated with the current mouse position."""
+
+
+@export
+class DataSelectionState(SidePanelLocation):
+    position = wrapped_property("position", optional(array_wrapper(np.float32)))
+
+    layers = wrapped_property("layers", LayerSelectedValues)
+
+
+@export
 class ViewerState(JsonObjectWrapper):
     __slots__ = ()
     title = wrapped_property("title", optional(str))
@@ -1872,6 +1924,7 @@ class ViewerState(JsonObjectWrapper):
     tool_palettes = toolPalettes = wrapped_property(
         "toolPalettes", typed_map(key_type=str, value_type=ToolPalette)
     )
+    selection = wrapped_property("selection", DataSelectionState)
 
     @staticmethod
     def interpolate(a, b, t):
