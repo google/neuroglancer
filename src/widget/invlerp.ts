@@ -800,6 +800,7 @@ export class InvlerpWidget extends Tab {
       );
       this.textureFromValues = create1DTexture(this.display.gl, histogram);
     }
+    this.cdfPanel.scheduleRedraw();
   }
 
   get texture() {
