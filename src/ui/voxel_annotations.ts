@@ -260,7 +260,7 @@ export function updateBrushOutline(layer: UserLayerWithVoxelEditing) {
     radiusY,
     rotation,
     "white",
-    layer.voxEraseMode.value,
+    layer.shouldErase(),
   );
 }
 
@@ -332,10 +332,7 @@ export class VoxelBrushTool extends BaseVoxelTool {
       ) {
         const points = this.linePoints(last, cur);
         if (points.length > 0) {
-          const value = this.layer.getVoxelPaintValue(
-            this.layer.voxEraseMode.value,
-          );
-          this.paintPoints(points, value);
+          this.paintPoints(points);
         }
       }
       this.lastPoint = cur;
@@ -354,9 +351,7 @@ export class VoxelBrushTool extends BaseVoxelTool {
       );
     }
 
-    const value = this.layer.getVoxelPaintValue(this.layer.voxEraseMode.value);
-
-    this.paintPoints([new Float32Array([start[0], start[1], start[2]])], value);
+    this.paintPoints([new Float32Array([start[0], start[1], start[2]])]);
     this.lastPoint = start;
     this.latestMouseState = mouseState;
 
@@ -383,7 +378,7 @@ export class VoxelBrushTool extends BaseVoxelTool {
     }
   }
 
-  private paintPoints(points: Float32Array[], value: bigint) {
+  private paintPoints(points: Float32Array[]) {
     const radius = Math.max(
       1,
       Math.floor(this.layer.voxBrushRadius.value ?? 3),
@@ -398,16 +393,28 @@ export class VoxelBrushTool extends BaseVoxelTool {
       basis = this.getBasis();
     }
 
+    const value = this.layer.getVoxelPaintValue(this.layer.shouldErase());
+    const filterValue = this.layer.voxEraseSelectedMode
+      ? this.layer.getVoxelPaintValue(false)
+      : undefined;
+
     for (const p of points) {
-      void editContext.paintBrushWithShape(p, radius, value, shapeEnum, basis);
+      void editContext.paintBrushWithShape(
+        p,
+        radius,
+        value,
+        shapeEnum,
+        basis,
+        filterValue,
+      );
     }
   }
 }
 
 export class VoxelFloodFillTool extends BaseVoxelTool {
   private getCursor() {
-    const lightColor = this.layer.voxEraseMode.value ? "#FF8888" : "#FFFFFF";
-    const darkColor = this.layer.voxEraseMode.value ? "#610000" : "#000000";
+    const lightColor = this.layer.shouldErase() ? "#FF8888" : "#FFFFFF";
+    const darkColor = this.layer.shouldErase() ? "#610000" : "#000000";
 
     const floodFillSVG =
       `<svg width="24px" height="24px" viewBox="0 0 24 24" fill="none"
@@ -460,16 +467,24 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
       return;
     }
     try {
-      const value = this.layer.getVoxelPaintValue(
-        this.layer.voxEraseMode.value,
-      );
+      const value = this.layer.getVoxelPaintValue(this.layer.shouldErase());
       const max = Number(this.layer.voxFloodMaxVoxels.value);
       if (!Number.isFinite(max) || max <= 0) {
         throw new Error("Invalid max fill voxels setting");
       }
 
+      const filterValue = this.layer.voxEraseSelectedMode
+        ? this.layer.getVoxelPaintValue(false)
+        : undefined;
+
       void editContext
-        .floodFillPlane2D(new Float32Array(seed), value, Math.floor(max), basis)
+        .floodFillPlane2D(
+          new Float32Array(seed),
+          value,
+          Math.floor(max),
+          basis,
+          filterValue,
+        )
         .catch((e: any) =>
           StatusMessage.showTemporaryMessage(String(e?.message ?? e)),
         );

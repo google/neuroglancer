@@ -63,6 +63,7 @@ import { VoxelEditController } from "#src/voxel_annotation/frontend.js";
 
 const BRUSH_SIZE_JSON_KEY = "brushSize";
 const ERASE_MODE_JSON_KEY = "eraseMode";
+const ERASE_SELECTED_MODE_JSON_KEY = "eraseSelectedMode";
 const BRUSH_SHAPE_JSON_KEY = "brushShape";
 const FLOOD_FILL_MAX_VOXELS_JSON_KEY = "floodFillMaxVoxels";
 const PAINT_VALUE_JSON_KEY = "paintValue";
@@ -178,16 +179,18 @@ export class VoxelEditingContext
     value: bigint,
     shape: BrushShape,
     basis?: { u: Float32Array; v: Float32Array },
+    filterValue?: bigint,
   ) {
     if (!this._controller)
       throw new Error("Cannot use paintBrushWithShape without a controller");
     if (await this.checkPermission()) {
-      this._controller.paintBrushWithShape(
+      await this._controller.paintBrushWithShape(
         centerCanonical,
         radiusCanonical,
         value,
         shape,
         basis,
+        filterValue,
       );
     }
   }
@@ -197,6 +200,7 @@ export class VoxelEditingContext
     fillValue: bigint,
     maxVoxels: number,
     basis: { u: Float32Array; v: Float32Array },
+    filterValue?: bigint,
   ) {
     if (!this._controller)
       throw new Error("Cannot use floodFillPlane2D without a controller");
@@ -206,6 +210,7 @@ export class VoxelEditingContext
         fillValue,
         maxVoxels,
         basis,
+        filterValue,
       );
     }
     return undefined;
@@ -376,6 +381,7 @@ export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
 
   voxBrushRadius: TrackableValue<number>;
   voxEraseMode: TrackableBoolean;
+  voxEraseSelectedMode: TrackableBoolean;
   voxBrushShape: TrackableEnum<BrushShape>;
   voxFloodMaxVoxels: TrackableValue<number>;
   paintValue: TrackableValue<bigint>;
@@ -388,6 +394,7 @@ export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
   ): ImageRenderLayer | SegmentationRenderLayer;
   abstract getVoxelPaintValue(erase: boolean): bigint;
   abstract setVoxelPaintValue(value: any): bigint;
+  shouldErase(): boolean;
 
   initializeVoxelEditingForSubsource(
     loadedSubsource: LoadedDataSubsource,
@@ -412,6 +419,7 @@ export function UserLayerWithVoxelEditingMixin<
     // Brush properties
     voxBrushRadius = new TrackableValue<number>(3, verifyInt);
     voxEraseMode = new TrackableBoolean(false);
+    voxEraseSelectedMode = new TrackableBoolean(false);
     voxBrushShape = new TrackableEnum(BrushShape, BrushShape.DISK);
     voxFloodMaxVoxels = new TrackableValue<number>(10000, verifyFiniteFloat);
 
@@ -425,9 +433,26 @@ export function UserLayerWithVoxelEditingMixin<
       });
       this.voxBrushRadius.changed.add(this.specificationChanged.dispatch);
       this.voxEraseMode.changed.add(this.specificationChanged.dispatch);
+      this.voxEraseSelectedMode.changed.add(this.specificationChanged.dispatch);
       this.voxBrushShape.changed.add(this.specificationChanged.dispatch);
       this.voxFloodMaxVoxels.changed.add(this.specificationChanged.dispatch);
       this.paintValue.changed.add(this.specificationChanged.dispatch);
+
+      this.registerDisposer(
+        this.voxEraseMode.changed.add(() => {
+          if (this.voxEraseMode.value) {
+            this.voxEraseSelectedMode.value = false;
+          }
+        }),
+      );
+      this.registerDisposer(
+        this.voxEraseSelectedMode.changed.add(() => {
+          if (this.voxEraseSelectedMode.value) {
+            this.voxEraseMode.value = false;
+          }
+        }),
+      );
+
       this.tabs.add("Draw", {
         label: "Draw",
         order: 20,
@@ -439,10 +464,15 @@ export function UserLayerWithVoxelEditingMixin<
       });
     }
 
+    shouldErase(): boolean {
+      return this.voxEraseMode.value || this.voxEraseSelectedMode.value;
+    }
+
     toJSON() {
       const json = super.toJSON();
       json[BRUSH_SIZE_JSON_KEY] = this.voxBrushRadius.toJSON();
       json[ERASE_MODE_JSON_KEY] = this.voxEraseMode.toJSON();
+      json[ERASE_SELECTED_MODE_JSON_KEY] = this.voxEraseSelectedMode.toJSON();
       json[BRUSH_SHAPE_JSON_KEY] = this.voxBrushShape.toJSON();
       json[FLOOD_FILL_MAX_VOXELS_JSON_KEY] = this.voxFloodMaxVoxels.toJSON();
       const pv = this.paintValue.toJSON();
@@ -457,6 +487,11 @@ export function UserLayerWithVoxelEditingMixin<
       );
       verifyOptionalObjectProperty(specification, ERASE_MODE_JSON_KEY, (v) =>
         this.voxEraseMode.restoreState(v),
+      );
+      verifyOptionalObjectProperty(
+        specification,
+        ERASE_SELECTED_MODE_JSON_KEY,
+        (v) => this.voxEraseSelectedMode.restoreState(v),
       );
       verifyOptionalObjectProperty(specification, BRUSH_SHAPE_JSON_KEY, (v) =>
         this.voxBrushShape.restoreState(v),

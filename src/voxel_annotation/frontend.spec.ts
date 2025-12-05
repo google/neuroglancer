@@ -45,6 +45,11 @@ class MockVolumeSource {
     return this.dataMap.get(key) ?? 0n;
   });
 
+  getValueAt = vi.fn((pos: Float32Array) => {
+    const key = `${Math.round(pos[0])},${Math.round(pos[1])},${Math.round(pos[2])}`;
+    return this.dataMap.get(key) ?? 0n;
+  });
+
   computeChunkIndices(voxelCoord: Float32Array) {
     return {
       chunkGridPosition: new Float32Array([0, 0, 0]),
@@ -108,12 +113,12 @@ describe("VoxelEditController", () => {
   });
 
   describe("paintBrushWithShape", () => {
-    it("paints a 3D Sphere correctly", () => {
+    it("paints a 3D Sphere correctly", async () => {
       const center = new Float32Array([10, 10, 10]);
       const radius = 2;
       const value = 5n;
 
-      controller.paintBrushWithShape(
+      await controller.paintBrushWithShape(
         center,
         radius,
         value,
@@ -149,7 +154,7 @@ describe("VoxelEditController", () => {
       expect(indicesSet.has(getIdx(12, 11, 10))).toBe(false);
     });
 
-    it("paints a 2D Disk aligned to basis vectors", () => {
+    it("paints a 2D Disk aligned to basis vectors", async () => {
       const center = new Float32Array([10, 10, 5]);
       const radius = 2;
       const value = 3n;
@@ -158,7 +163,7 @@ describe("VoxelEditController", () => {
         v: new Float32Array([0, 1, 0]),
       };
 
-      controller.paintBrushWithShape(
+      await controller.paintBrushWithShape(
         center,
         radius,
         value,

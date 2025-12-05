@@ -86,7 +86,12 @@ export const VOXEL_TAB_LAYOUT: VoxelTabElement[] = [
     })(),
   },
   {
-    label: "Eraser",
+    label: "Eraser (selected value)",
+    toolJson: { type: "vox-erase-selected-mode" },
+    ...checkboxLayerControl((layer) => layer.voxEraseSelectedMode),
+  },
+  {
+    label: "Eraser (everything)",
     toolJson: { type: "vox-erase-mode" },
     ...checkboxLayerControl((layer) => layer.voxEraseMode),
   },

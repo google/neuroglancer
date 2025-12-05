@@ -18,6 +18,7 @@ import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transf
 import type {
   VolumeChunkSource,
   InMemoryVolumeChunkSource,
+  MultiscaleVolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
@@ -127,11 +128,17 @@ export class VoxelEditController extends SharedObject {
     } as const;
   }
 
-  getSourceForLOD(lodIndex: number): VolumeChunkSource {
-    const sourcesByScale = this.host.primarySource.getSources(
+  private getSourceForLOD(
+    multiscale: MultiscaleVolumeChunkSource | undefined,
+    lodIndex: number,
+  ): VolumeChunkSource {
+    if (!multiscale)
+      throw new Error(
+        `VoxelEditController: Invalid multiscale object: ${multiscale}`,
+      );
+    const sourcesByScale = multiscale.getSources(
       this.getIdentitySliceViewSourceOptions(),
     );
-    // Assuming a single orientation, which is correct for this use case.
     const sources = sourcesByScale[0];
     if (!sources || sources.length <= lodIndex) {
       throw new Error(
@@ -147,13 +154,106 @@ export class VoxelEditController extends SharedObject {
     return source;
   }
 
+  private setupSources(lodIndex: number) {
+    const primarySource = this.getSourceForLOD(
+      this.host.primarySource,
+      lodIndex,
+    );
+    const previewSource = this.getSourceForLOD(
+      this.host.previewSource,
+      lodIndex,
+    ) as InMemoryVolumeChunkSource;
+
+    return {
+      primarySource,
+      previewSource,
+      getEnsuredValue: this.getEnsuredValueBuilder(
+        previewSource,
+        primarySource,
+      ),
+    };
+  }
+
+  private getEnsuredValueBuilder =
+    (previewSource: VolumeChunkSource, primarySource: VolumeChunkSource) =>
+    async (voxelCoord: Float32Array): Promise<bigint | null> => {
+      let val = previewSource.getValueAt(voxelCoord, this.singleChannelAccess);
+      if (val != null) {
+        val = typeof val === "bigint" ? val : BigInt(val);
+        if (val !== 0n) return val;
+      }
+      val = await primarySource.getEnsuredValueAt(
+        voxelCoord,
+        this.singleChannelAccess,
+      );
+      if (val === null) return null;
+      return typeof val === "bigint" ? val : BigInt(val as number);
+    };
+
+  private processEdits(
+    voxelsToPaint: Float32Array[],
+    previewSource: InMemoryVolumeChunkSource,
+    value: bigint,
+    lodIndex: number,
+  ) {
+    const editsByVoxKey = new Map<
+      string,
+      { indices: number[]; value: bigint }
+    >();
+
+    for (const voxelCoord of voxelsToPaint) {
+      const { chunkGridPosition, positionWithinChunk } =
+        previewSource.computeChunkIndices(voxelCoord);
+      const chunkKey = chunkGridPosition.join();
+      const voxKey = makeVoxChunkKey(chunkKey, lodIndex);
+
+      let entry = editsByVoxKey.get(voxKey);
+      if (!entry) {
+        entry = { indices: [], value };
+        editsByVoxKey.set(voxKey, entry);
+      }
+
+      const { chunkDataSize } = previewSource.spec;
+      const index =
+        (positionWithinChunk[2] * chunkDataSize[1] + positionWithinChunk[1]) *
+          chunkDataSize[0] +
+        positionWithinChunk[0];
+      entry.indices.push(index);
+    }
+
+    const localEdits = new Map<string, { indices: number[]; value: bigint }>();
+    for (const [voxKey, edit] of editsByVoxKey.entries()) {
+      const parsed = parseVoxChunkKey(voxKey);
+      if (!parsed) continue;
+      localEdits.set(parsed.chunkKey, edit);
+    }
+    previewSource.applyLocalEdits(localEdits);
+
+    const backendEdits = [] as {
+      key: string;
+      indices: number[];
+      value: bigint;
+    }[];
+    for (const [voxKey, edit] of editsByVoxKey.entries()) {
+      backendEdits.push({
+        key: voxKey,
+        indices: edit.indices,
+        value: edit.value,
+      });
+    }
+
+    this.commitEdits(backendEdits);
+    return backendEdits;
+  }
+
   // Paint a disk (require the basis) or a sphere
-  paintBrushWithShape(
+  async paintBrushWithShape(
     centerCanonical: Float32Array,
     radiusCanonical: number,
     value: bigint,
     shape: BrushShape,
     basis?: { u: Float32Array; v: Float32Array },
+    filterValue?: bigint,
   ) {
     if (!Number.isFinite(radiusCanonical) || radiusCanonical <= 0) {
       throw new Error("paintBrushWithShape: 'radius' must be > 0.");
@@ -167,16 +267,7 @@ export class VoxelEditController extends SharedObject {
     // Hardcode drawing at LOD 0 for now.
     const voxelSize = 1;
     const sourceIndex = 0;
-    if (!this.host.previewSource)
-      throw new Error(
-        "paintBrushWithShape: ERROR Missing preview source from host.",
-      );
-    const source = this.host.previewSource.getSources(
-      this.getIdentitySliceViewSourceOptions(),
-    )[0][sourceIndex]!.chunkSource as InMemoryVolumeChunkSource;
-    if (!source) {
-      throw new Error("paintBrushWithShape: Missing preview source");
-    }
+    const { previewSource, getEnsuredValue } = this.setupSources(sourceIndex);
 
     const cx = Math.round((centerCanonical[0] ?? 0) / voxelSize);
     const cy = Math.round((centerCanonical[1] ?? 0) / voxelSize);
@@ -191,13 +282,19 @@ export class VoxelEditController extends SharedObject {
 
     const voxelsToPaint: Float32Array[] = [];
 
+    const pushIf = async (point: Float32Array) => {
+      const v = await getEnsuredValue(point);
+      if (v === value || (filterValue !== undefined && v !== filterValue))
+        return;
+      voxelsToPaint.push(point);
+    };
+
     if (shape === BrushShape.SPHERE) {
       for (let dz = -r; dz <= r; ++dz) {
         for (let dy = -r; dy <= r; ++dy) {
           for (let dx = -r; dx <= r; ++dx) {
-            if (dx * dx + dy * dy + dz * dz <= rr) {
-              voxelsToPaint.push(new Float32Array([cx + dx, cy + dy, cz + dz]));
-            }
+            if (dx * dx + dy * dy + dz * dz <= rr)
+              await pushIf(new Float32Array([cx + dx, cy + dy, cz + dz]));
           }
         }
       }
@@ -214,60 +311,13 @@ export class VoxelEditController extends SharedObject {
             const point = vec3.fromValues(cx, cy, cz);
             vec3.scaleAndAdd(point, point, u as vec3, i);
             vec3.scaleAndAdd(point, point, v as vec3, j);
-            voxelsToPaint.push(point as Float32Array);
+            await pushIf(point as Float32Array);
           }
         }
       }
     }
-
     if (!voxelsToPaint || voxelsToPaint.length === 0) return;
-    const editsByVoxKey = new Map<
-      string,
-      { indices: number[]; value: bigint }
-    >();
-
-    for (const voxelCoord of voxelsToPaint) {
-      const { chunkGridPosition, positionWithinChunk } =
-        source.computeChunkIndices(voxelCoord);
-      const chunkKey = chunkGridPosition.join();
-      const voxKey = makeVoxChunkKey(chunkKey, sourceIndex);
-
-      let entry = editsByVoxKey.get(voxKey);
-      if (!entry) {
-        entry = { indices: [], value };
-        editsByVoxKey.set(voxKey, entry);
-      }
-
-      const { chunkDataSize } = source.spec;
-      const index =
-        (positionWithinChunk[2] * chunkDataSize[1] + positionWithinChunk[1]) *
-          chunkDataSize[0] +
-        positionWithinChunk[0];
-      entry.indices.push(index);
-    }
-
-    const localEdits = new Map<string, { indices: number[]; value: bigint }>();
-    for (const [voxKey, edit] of editsByVoxKey.entries()) {
-      const parsed = parseVoxChunkKey(voxKey);
-      if (!parsed) continue;
-      localEdits.set(parsed.chunkKey, edit);
-    }
-    source.applyLocalEdits(localEdits);
-
-    const backendEdits = [] as {
-      key: string;
-      indices: number[];
-      value: bigint;
-    }[];
-    for (const [voxKey, edit] of editsByVoxKey.entries()) {
-      backendEdits.push({
-        key: voxKey,
-        indices: edit.indices,
-        value: edit.value,
-      });
-    }
-
-    this.commitEdits(backendEdits);
+    this.processEdits(voxelsToPaint, previewSource, value, sourceIndex);
   }
 
   commitEdits(
@@ -300,31 +350,27 @@ export class VoxelEditController extends SharedObject {
     fillValue: bigint,
     maxVoxels: number,
     basis: { u: Float32Array; v: Float32Array },
+    filterValue?: bigint,
   ): Promise<{
     edits: { key: string; indices: number[]; value: bigint }[];
     filledCount: number;
     originalValue: bigint;
   }> {
     const sourceIndex = 0;
-    const source = this.getSourceForLOD(sourceIndex);
+    const { previewSource, getEnsuredValue } = this.setupSources(sourceIndex);
     const startVoxelLod = vec3.round(
       vec3.create(),
       startPositionCanonical as vec3,
     );
 
-    const originalValueResult = await source.getEnsuredValueAt(
-      startVoxelLod as Float32Array,
-      this.singleChannelAccess,
-    );
-    if (originalValueResult === null) {
+    const originalValue = await getEnsuredValue(startVoxelLod as Float32Array);
+    if (originalValue === null) {
       throw new Error(
         "Flood fill seed is in an unloaded or out-of-bounds chunk.",
       );
     }
-    const originalValue =
-      typeof originalValueResult !== "bigint"
-        ? BigInt(originalValueResult as number)
-        : originalValueResult;
+    if (filterValue !== undefined && originalValue !== filterValue)
+      throw new Error("This is not the value selected for erasing");
 
     if (originalValue === fillValue) {
       return { edits: [], filledCount: 0, originalValue };
@@ -343,15 +389,10 @@ export class VoxelEditController extends SharedObject {
     };
 
     const isFillable = async (p: vec3): Promise<boolean> => {
-      const value = await source.getEnsuredValueAt(
-        p as Float32Array,
-        this.singleChannelAccess,
-      );
+      const value = await getEnsuredValue(p as Float32Array);
       if (value === null) return false;
-      const bigValue =
-        typeof value !== "bigint" ? BigInt(value as number) : value;
-      if (originalValue === 0n) return bigValue === 0n;
-      return bigValue === originalValue;
+      if (originalValue === 0n) return value === 0n;
+      return value === originalValue;
     };
 
     const getCurrentThickness = (): number => {
@@ -478,56 +519,18 @@ export class VoxelEditController extends SharedObject {
         }
       }
     }
-    if (!this.host.previewSource)
-      throw new Error(
-        "paintBrushWithShape: ERROR Missing preview source from host.",
-      );
-    const previewSource = this.host.previewSource.getSources(
-      this.getIdentitySliceViewSourceOptions(),
-    )[0][sourceIndex]!.chunkSource as InMemoryVolumeChunkSource;
-    if (!previewSource) {
-      throw new Error("paintBrushWithShape: Missing preview source");
-    }
-    const editsByVoxKey = new Map<
-      string,
-      { indices: number[]; value: bigint }
-    >();
-    for (const voxelCoord of voxelsToFill) {
-      const { chunkGridPosition, positionWithinChunk } =
-        previewSource.computeChunkIndices(voxelCoord);
-      const chunkKey = chunkGridPosition.join();
-      const voxKey = makeVoxChunkKey(chunkKey, sourceIndex);
-      let entry = editsByVoxKey.get(voxKey);
-      if (!entry) {
-        entry = { indices: [], value: fillValue };
-        editsByVoxKey.set(voxKey, entry);
-      }
-      const { chunkDataSize } = previewSource.spec;
-      const index =
-        (positionWithinChunk[2] * chunkDataSize[1] + positionWithinChunk[1]) *
-          chunkDataSize[0] +
-        positionWithinChunk[0];
-      entry.indices.push(index);
-    }
-    const localEdits = new Map<string, { indices: number[]; value: bigint }>();
-    for (const [voxKey, edit] of editsByVoxKey.entries()) {
-      const parsed = parseVoxChunkKey(voxKey);
-      if (!parsed) continue;
-      localEdits.set(parsed.chunkKey, edit);
-    }
-    previewSource.applyLocalEdits(localEdits);
-    const backendEdits: { key: string; indices: number[]; value: bigint }[] =
-      [];
-    for (const [voxKey, edit] of editsByVoxKey.entries()) {
-      backendEdits.push({
-        key: voxKey,
-        indices: edit.indices,
-        value: edit.value,
-      });
-    }
-    this.commitEdits(backendEdits);
 
-    return { edits: backendEdits, filledCount, originalValue };
+    const edits = this.processEdits(
+      voxelsToFill,
+      previewSource,
+      fillValue,
+      sourceIndex,
+    );
+    return {
+      edits,
+      filledCount,
+      originalValue,
+    };
   }
 
   callChunkReload(voxChunkKeys: string[], isForPreviewChunks: boolean) {
