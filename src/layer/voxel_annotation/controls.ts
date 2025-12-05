@@ -16,7 +16,7 @@
 
 import type { UserLayerConstructor } from "#src/layer/index.js";
 import { LayerActionContext } from "#src/layer/index.js";
-import type { UserLayerWithVoxelEditing } from "#src/layer/vox/index.js";
+import type { UserLayerWithVoxelEditing } from "#src/layer/voxel_annotation/index.js";
 import { observeWatchable } from "#src/trackable_value.js";
 import {
   getActivePanel,

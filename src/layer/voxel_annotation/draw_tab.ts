@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import { VOXEL_TAB_LAYOUT } from "#src/layer/vox/controls.js";
-import type { UserLayerWithVoxelEditing } from "#src/layer/vox/index.js";
+import { VOXEL_TAB_LAYOUT } from "#src/layer/voxel_annotation/controls.js";
+import type { UserLayerWithVoxelEditing } from "#src/layer/voxel_annotation/index.js";
 import { observeWatchable } from "#src/trackable_value.js";
 import { makeToolButton } from "#src/ui/tool.js";
-import type { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
+import type { VoxelEditController } from "#src/voxel_annotation/frontend.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 import { addLayerControlToOptionsTab } from "#src/widget/layer_control.js";
 import { Tab } from "#src/widget/tab_view.js";

@@ -20,7 +20,7 @@ import type {
 } from "#src/layer/index.js";
 import { UserLayer } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
-import { VoxToolTab } from "#src/layer/vox/tabs/tools.js";
+import { VoxToolTab } from "#src/layer/voxel_annotation/draw_tab.js";
 import type {
   ChunkTransformParameters,
   RenderLayerTransformOrError,
@@ -59,7 +59,7 @@ import { TrackableEnum } from "#src/util/trackable_enum.js";
 import { VoxelPreviewMultiscaleSource } from "#src/voxel_annotation/PreviewMultiscaleChunkSource.js";
 import type { VoxelEditControllerHost } from "#src/voxel_annotation/base.js";
 import { BrushShape } from "#src/voxel_annotation/base.js";
-import { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
+import { VoxelEditController } from "#src/voxel_annotation/frontend.js";
 
 const BRUSH_SIZE_JSON_KEY = "brushSize";
 const ERASE_MODE_JSON_KEY = "eraseMode";

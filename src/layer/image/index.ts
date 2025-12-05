@@ -34,8 +34,8 @@ import {
   UserLayer,
 } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
-import { registerVoxelLayerControls } from "#src/layer/vox/controls.js";
-import { UserLayerWithVoxelEditingMixin } from "#src/layer/vox/index.js";
+import { registerVoxelLayerControls } from "#src/layer/voxel_annotation/controls.js";
+import { UserLayerWithVoxelEditingMixin } from "#src/layer/voxel_annotation/index.js";
 import { Overlay } from "#src/overlay.js";
 import type { RenderLayerTransformOrError } from "#src/render_coordinate_transform.js";
 import { getChannelSpace } from "#src/render_coordinate_transform.js";

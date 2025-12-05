@@ -18,7 +18,7 @@ import type { MouseSelectionState } from "#src/layer/index.js";
 import type {
   UserLayerWithVoxelEditing,
   VoxelEditingContext,
-} from "#src/layer/vox/index.js";
+} from "#src/layer/voxel_annotation/index.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import { SliceViewPanel } from "#src/sliceview/panel.js";

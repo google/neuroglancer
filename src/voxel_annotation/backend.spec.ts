@@ -16,12 +16,12 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mat4 } from "#src/util/geom.js";
+import { VoxelEditController } from "#src/voxel_annotation/backend.js";
 import {
   makeVoxChunkKey,
   VOX_EDIT_FAILURE_RPC_ID,
   VOX_EDIT_HISTORY_UPDATE_RPC_ID,
 } from "#src/voxel_annotation/base.js";
-import { VoxelEditController } from "#src/voxel_annotation/edit_backend.js";
 import type { RPC } from "#src/worker_rpc.js";
 
 const mockRpc = {

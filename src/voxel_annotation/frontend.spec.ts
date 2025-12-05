@@ -19,7 +19,7 @@ import {
   BrushShape,
   VOX_EDIT_COMMIT_VOXELS_RPC_ID,
 } from "#src/voxel_annotation/base.js";
-import { VoxelEditController } from "#src/voxel_annotation/edit_controller.js";
+import { VoxelEditController } from "#src/voxel_annotation/frontend.js";
 import type { RPC } from "#src/worker_rpc.js";
 
 const mockRpc = {
