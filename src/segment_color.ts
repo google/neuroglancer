@@ -27,6 +27,7 @@ import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   AggregateWatchableValue,
   makeCachedDerivedWatchableValue,
+  makeCachedLazyDerivedWatchableValue,
   WatchableValue,
 } from "#src/trackable_value.js";
 import type { Uint64Map } from "#src/uint64_map.js";
@@ -41,6 +42,11 @@ import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
 import type { GL } from "#src/webgl/context.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import { glsl_hsvToRgb, glsl_uint64 } from "#src/webgl/shader_lib.js";
+import type { Controls } from "#src/webgl/shader_ui_controls.js";
+import {
+  addControlsToBuilder,
+  setControlsInShader,
+} from "#src/webgl/shader_ui_controls.js";
 import {
   computeTextureFormat,
   getSamplerPrefixForDataType,
@@ -217,8 +223,6 @@ export interface SegmentationColorUserShaderManagerParameters {
 }
 
 export class SegmentColorUserShaderManager extends RefCounted {
-  // changed = new Signal();
-
   protected segmentColorShaderManager = new SegmentColorShaderManager(
     "segmentColorHash",
   );
@@ -304,7 +308,6 @@ export class SegmentColorUserShaderManager extends RefCounted {
     private gl: GL,
   ) {
     super();
-
     this.shaderParameters = this.registerDisposer(
       new AggregateWatchableValue((refCounted) => ({
         userCode: this.userCode,
@@ -329,7 +332,7 @@ export class SegmentColorUserShaderManager extends RefCounted {
 
     // TODO, I can make this lazy if we use this value to trigger defineShader
     this.usedProperties = this.registerDisposer(
-      makeCachedDerivedWatchableValue(
+      makeCachedLazyDerivedWatchableValue(
         ({ referencedProperties }, { code }, segmentPropertyMap) => {
           console.log("updating usedProperties");
           const tagRegex = /tag\("([^()]+)"\)/g;
@@ -399,12 +402,11 @@ export class SegmentColorUserShaderManager extends RefCounted {
           // TEMP can we make this more useful?
           return new Set(this.segmentPropertyShaderData.keys());
         },
-        [
-          this.displayState.segmentColorShaderControlState.builderState,
-          this.displayState.segmentColorShaderControlState.parseResult,
-          this.displayState.segmentationGroupState.value.segmentPropertyMap,
-        ],
-        (a, b) => a.size === b.size && a.isSubsetOf(b), // cache equality check
+        this.displayState.segmentColorShaderControlState.builderState,
+        this.displayState.segmentColorShaderControlState.parseResult,
+        this.displayState.segmentationGroupState.value.segmentPropertyMap,
+        // ,
+        // (a, b) => a.size === b.size && a.isSubsetOf(b), // cache equality check
       ),
     );
 
@@ -446,6 +448,12 @@ export class SegmentColorUserShaderManager extends RefCounted {
   }
 
   defineShader(builder: ShaderBuilder, fragment: boolean) {
+    addControlsToBuilder(
+      this.displayState.segmentColorShaderControlState.builderState.value,
+      builder,
+      fragment,
+    );
+
     builder.addUniform("highp float", "uSaturation");
     builder.addUniform("highp uvec2", "uSelectedSegment");
     const addCode = fragment
@@ -527,50 +535,49 @@ ${
 `);
   }
 
-  enable(gl: GL, shader: ShaderProgram) {
-    {
-      const { displayState } = this;
-      let selectedSegmentLow = 0;
-      let selectedSegmentHigh = 0;
-      const { segmentSelectionState } = this.displayState;
-      if (
-        segmentSelectionState.hasSelectedSegment &&
-        displayState.hoverHighlight.value
-      ) {
-        const seg = displayState.baseSegmentHighlighting.value
-          ? segmentSelectionState.baseSelectedSegment
-          : segmentSelectionState.selectedSegment;
-        selectedSegmentLow = Number(seg & 0xffffffffn);
-        selectedSegmentHigh = Number(seg >> 32n);
-      }
-      gl.uniform1f(
-        shader.uniform("uSaturation"),
-        displayState.saturation.value,
-      );
-      gl.uniform2ui(
-        shader.uniform("uSelectedSegment"),
-        selectedSegmentLow,
-        selectedSegmentHigh,
-      );
-
-      const { hasSegmentDefaultColor } = this.shaderParameters.value;
-      if (hasSegmentDefaultColor) {
-        const {
-          segmentDefaultColor: { value: segmentDefaultColor },
-        } = displayState;
-        if (segmentDefaultColor) {
-          const [r, g, b] = segmentDefaultColor;
-          gl.uniform4f(shader.uniform("uSegmentDefaultColor"), r, g, b, -1.0);
-          // TODO, override with displayState.tempSegmentDefaultColor2d.value in segemntation_renderlayer
-        }
-      } else {
-        const {
-          segmentColorHash: { value: segmentColorHash },
-        } = displayState;
-        this.segmentColorShaderManager.enable(gl, shader, segmentColorHash);
-      }
+  enable(gl: GL, shader: ShaderProgram, controls: Controls) {
+    const { displayState } = this;
+    let selectedSegmentLow = 0;
+    let selectedSegmentHigh = 0;
+    const { segmentSelectionState } = this.displayState;
+    if (
+      segmentSelectionState.hasSelectedSegment &&
+      displayState.hoverHighlight.value
+    ) {
+      const seg = displayState.baseSegmentHighlighting.value
+        ? segmentSelectionState.baseSelectedSegment
+        : segmentSelectionState.selectedSegment;
+      selectedSegmentLow = Number(seg & 0xffffffffn);
+      selectedSegmentHigh = Number(seg >> 32n);
     }
-
+    gl.uniform1f(shader.uniform("uSaturation"), displayState.saturation.value);
+    gl.uniform2ui(
+      shader.uniform("uSelectedSegment"),
+      selectedSegmentLow,
+      selectedSegmentHigh,
+    );
+    const { hasSegmentDefaultColor } = this.shaderParameters.value;
+    if (hasSegmentDefaultColor) {
+      const {
+        segmentDefaultColor: { value: segmentDefaultColor },
+      } = displayState;
+      if (segmentDefaultColor) {
+        const [r, g, b] = segmentDefaultColor;
+        gl.uniform4f(shader.uniform("uSegmentDefaultColor"), r, g, b, -1.0);
+        // TODO, override with displayState.tempSegmentDefaultColor2d.value in segemntation_renderlayer
+      }
+    } else {
+      const {
+        segmentColorHash: { value: segmentColorHash },
+      } = displayState;
+      this.segmentColorShaderManager.enable(gl, shader, segmentColorHash);
+    }
+    setControlsInShader(
+      gl,
+      shader,
+      this.displayState.segmentColorShaderControlState,
+      controls,
+    );
     this.hashMapManager.enable(
       gl,
       shader,

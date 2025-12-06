@@ -207,6 +207,7 @@ export interface SegmentationDisplayState {
   segmentationColorGroupState: WatchableValueInterface<SegmentationColorGroupState>;
   segmentColorShaderControlState: ShaderControlState;
   segmentationColorUserShader: SegmentColorUserShaderManager;
+  fragmentSegmentColor: WatchableValueInterface<string>;
 
   selectSegment: (id: bigint, pin: boolean | "toggle") => void;
   filterBySegmentLabel: (id: bigint) => void;
@@ -977,7 +978,7 @@ export function registerCallbackWhenSegmentationDisplayStateChanged(
     displayState.layer.displayState.fragmentSegmentColor.changed.add(callback),
   );
   context.registerDisposer(
-    displayState.segmentColorShaderControlState.changed.add(callback), // TODO look at this more
+    displayState.segmentColorShaderControlState.changed.add(callback),
   );
 }
 

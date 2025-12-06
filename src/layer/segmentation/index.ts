@@ -142,11 +142,7 @@ import {
   makeWatchableShaderError,
   parameterizedEmitterDependentShaderGetter,
 } from "#src/webgl/dynamic_shader.js";
-import {
-  addControlsToBuilder,
-  setControlsInShader,
-  ShaderControlState,
-} from "#src/webgl/shader_ui_controls.js";
+import { ShaderControlState } from "#src/webgl/shader_ui_controls.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import { registerLayerShaderControlsTool } from "#src/widget/shader_controls.js";
 
@@ -428,7 +424,7 @@ class LinkedSegmentationGroupState<
 }
 
 export const DEFAULT_FRAGMENT_SEGMENT_COLOR = `
-vec4 segmentColor(vec4 color, bool hasProperties) {
+vec3 segmentColor(vec3 color, bool hasProperties) {
   return color;
 }
 `;
@@ -436,8 +432,8 @@ vec4 segmentColor(vec4 color, bool hasProperties) {
 class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   private getSegmentColorShader;
 
-  segmentationColorUserShader: SegmentColorUserShaderManager;
   segmentColorShaderControlState: ShaderControlState;
+  segmentationColorUserShader: SegmentColorUserShaderManager;
 
   constructor(public layer: SegmentationUserLayer) {
     // Even though `SegmentationUserLayer` assigns this to its `displayState` property, redundantly
@@ -561,7 +557,6 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
           properties.set(property.id, property.dataType);
           values.set(property.id, property.values);
         }
-
         const shaderName = (property: string) => {
           const propertyIdx = segmentPropertyMap.numericalProperties.findIndex(
             (p) => p.id === property,
@@ -627,8 +622,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
       new AggregateWatchableValue(() => ({
         segmentColorParameters:
           this.segmentationColorUserShader.shaderParameters,
-        segmentColorProperties:
-          this.segmentationColorUserShader.usedProperties,
+        segmentColorProperties: this.segmentationColorUserShader.usedProperties,
         shaderBuilderState: this.segmentColorShaderControlState.builderState,
       })),
     );
@@ -642,12 +636,8 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
           return `${p.shaderBuilderState.parseResult.code}/${JSON.stringify(p.segmentColorParameters)}/${JSON.stringify([...p.segmentColorProperties])}`;
         },
         shaderError: this.layer.displayState.shaderError, // TODO can I reuse this?
-        defineShader: (builder, { shaderBuilderState }) => {
-          addControlsToBuilder(
-            shaderBuilderState,
-            builder,
-            /* fragment=*/ false,
-          );
+        defineShader: (builder) => {
+          console.log("define shader html");
           this.offscreenSegmentationColorUserShader.defineShader(
             builder,
             /*fragment=*/ false,
@@ -672,22 +662,19 @@ vColor = segmentColorUserShader(uint64_t(uID));
   getShaderSegmentColor = (id: bigint, color: Float32Array) => {
     const { shader, parameters } = this.getSegmentColorShader(this.context);
     if (shader === null) return color;
-    parameters;
     shader.bind();
     const { gl } = shader;
-    setControlsInShader(
-      gl,
-      shader,
-      this.segmentColorShaderControlState,
-      parameters.shaderBuilderState.parseResult.controls,
-    );
     const positionBuffer = GLBuffer.fromData(
       gl,
       new Float32Array([1, 1, -1, 1, 1, -1, -1, -1]),
     );
     positionBuffer.bindToVertexAttrib(shader.attribute("aVertexPosition"), 2);
     gl.uniform4fv(shader.uniform("uColor"), color);
-    this.offscreenSegmentationColorUserShader.enable(gl, shader);
+    this.offscreenSegmentationColorUserShader.enable(
+      gl,
+      shader,
+      parameters.shaderBuilderState.parseResult.controls,
+    );
     gl.uniform2ui(
       shader.uniform(`uID`),
       Number(id & 0xffffffffn),

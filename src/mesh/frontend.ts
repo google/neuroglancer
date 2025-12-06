@@ -75,11 +75,6 @@ import type { WatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import { parameterizedEmitterDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import { glsl_uint64 } from "#src/webgl/shader_lib.js";
-import type { ShaderControlState } from "#src/webgl/shader_ui_controls.js";
-import {
-  addControlsToBuilder,
-  setControlsInShader,
-} from "#src/webgl/shader_ui_controls.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { registerSharedObjectOwner } from "#src/worker_rpc.js";
 
@@ -387,11 +382,8 @@ export class MeshShaderManager {
         return `${p.shaderBuilderState.parseResult.code}/${JSON.stringify(p.segmentColorParameters)}/${JSON.stringify([...p.segmentColorProperties])}/${p.silhouetteRenderingEnabled}`;
       },
       shaderError: layer.displayState.shaderError,
-      defineShader: (
-        builder,
-        { silhouetteRenderingEnabled, shaderBuilderState },
-      ) => {
-        addControlsToBuilder(shaderBuilderState, builder, /* fragment=*/ false);
+      defineShader: (builder, { silhouetteRenderingEnabled }) => {
+        console.log("define shader mesh");
         this.vertexPositionHandler.defineShader(builder);
         layer.displayState.segmentationColorUserShader.defineShader(
           builder,
@@ -456,7 +448,7 @@ vColor *= pow(1.0 - absCosAngle, uSilhouettePower);
 
 export interface MeshDisplayState extends SegmentationDisplayState3D {
   silhouetteRendering: WatchableValueInterface<number>;
-  segmentColorShaderControlState: ShaderControlState;
+  // segmentColorShaderControlState: ShaderControlState;
   shaderError: WatchableShaderError;
 }
 
@@ -544,11 +536,9 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
     shader.bind();
     meshShaderManager.beginLayer(gl, shader, renderContext, this.displayState);
     meshShaderManager.beginModel(gl, shader, renderContext, modelMatrix);
-    displayState.segmentationColorUserShader.enable(gl, shader);
-    setControlsInShader(
+    displayState.segmentationColorUserShader.enable(
       gl,
       shader,
-      this.displayState.segmentColorShaderControlState,
       parameters.shaderBuilderState.parseResult.controls,
     );
 
@@ -893,11 +883,9 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
     if (shader === null) return;
     shader.bind();
     meshShaderManager.beginLayer(gl, shader, renderContext, this.displayState);
-    displayState.segmentationColorUserShader.enable(gl, shader);
-    setControlsInShader(
+    displayState.segmentationColorUserShader.enable(
       gl,
       shader,
-      this.displayState.segmentColorShaderControlState,
       parameters.shaderBuilderState.parseResult.controls,
     );
 

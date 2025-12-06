@@ -366,6 +366,7 @@ export function enableLerpShaderFunction(
         gl.uniform2i(bLocation, lower, shift);
       }
       gl.uniform1f(shader.uniform(`uLerpScalar_${name}`), scalar);
+      console.log("invlerp enabled", bLocation, lower, shift, scalar);
       break;
     }
     case DataType.UINT64: {

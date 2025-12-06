@@ -46,11 +46,7 @@ import {
 import type { Uint64Map } from "#src/uint64_map.js";
 import type { DisjointUint64Sets } from "#src/util/disjoint_sets.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
-import {
-  addControlsToBuilder,
-  setControlsInShader,
-  type ShaderControlsBuilderState,
-} from "#src/webgl/shader_ui_controls.js";
+import { type ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
 
 export class EquivalencesHashMap {
   generation = Number.NaN;
@@ -218,6 +214,7 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
     //   ),
     // );
     this.registerDisposer(
+      // TODO prob need to re-add this
       displayState.segmentColorShaderControlState.changed.add(
         this.redrawNeeded.dispatch,
       ),
@@ -238,8 +235,6 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
   }
 
   defineShader(builder: ShaderBuilder, parameters: ShaderParameters) {
-    console.log("define shader", parameters.usedProperties);
-    addControlsToBuilder(parameters.shaderBuilderState, builder);
     this.hashTableManager.defineShader(builder); // here is where they add the hash table code
     this.displayState.segmentationColorUserShader.defineShader(builder, true);
 
@@ -432,13 +427,17 @@ uint64_t getMappedObjectId(uint64_t value) {
       gl.uniform4fv(shader.uniform("uHighlightColor"), highlightColor);
     }
 
-    displayState.segmentationColorUserShader.enable(gl, shader);
-    setControlsInShader(
+    displayState.segmentationColorUserShader.enable(
       gl,
       shader,
-      this.displayState.segmentColorShaderControlState,
       parameters.shaderBuilderState.parseResult.controls,
     );
+    // setControlsInShader(
+    //   gl,
+    //   shader,
+    //   this.displayState.segmentColorShaderControlState,
+    //   parameters.shaderBuilderState.parseResult.controls,
+    // );
   }
   endSlice(
     sliceView: SliceView,

@@ -327,10 +327,6 @@ export abstract class AnnotationRenderHelper extends AnnotationRenderHelperBase 
     memoizeKey: any,
     defineShader: (builder: ShaderBuilder) => void,
   ): AnnotationShaderGetter {
-    this.shaderControlState.builderState.changed.add(() => {
-      console.log("anno builder state changed");
-    });
-
     return parameterizedEmitterDependentShaderGetter(this, this.gl, {
       memoizeKey: {
         t: "annotation",
