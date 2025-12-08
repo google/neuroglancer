@@ -14,29 +14,50 @@
  * limitations under the License.
  */
 
+import "#src/ui/voxel_annotations.css";
+
 import type { MouseSelectionState } from "#src/layer/index.js";
+import {
+  getActivePanel,
+  updateBrushOutline,
+  VOXEL_LAYER_CONTROLS,
+} from "#src/layer/voxel_annotation/controls.js";
 import type {
   UserLayerWithVoxelEditing,
   VoxelEditingContext,
 } from "#src/layer/voxel_annotation/index.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
-import { RenderedDataPanel } from "#src/rendered_data_panel.js";
-import { SliceViewPanel } from "#src/sliceview/panel.js";
 import { StatusMessage } from "#src/status.js";
-import { LayerTool, registerTool, type ToolActivation } from "#src/ui/tool.js";
-import { vec3, mat3 } from "#src/util/geom.js";
+import {
+  LayerTool,
+  makeToolActivationStatusMessageWithHeader,
+  registerTool,
+  ToolBindingWidget,
+  type ToolActivation,
+} from "#src/ui/tool.js";
+import { vec3 } from "#src/util/geom.js";
 import { EventActionMap } from "#src/util/mouse_bindings.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
+import { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 import {
-  BrushShape,
   BRUSH_TOOL_ID,
+  BrushShape,
   FLOODFILL_TOOL_ID,
   SEG_PICKER_TOOL_ID,
 } from "#src/voxel_annotation/base.js";
 
-const VOX_TOOL_INPUT_MAP = EventActionMap.fromObject({
+const BRUSH_INPUT_MAP = EventActionMap.fromObject({
   ["at:control+mousedown0"]: "paint-voxels",
 });
+
+const FLOOD_INPUT_MAP = EventActionMap.fromObject({
+  ["at:control+mousedown0"]: "paint-voxels",
+});
+
+const CONTROLS_FOR_TOOL = new Map<string, string[]>([
+  [BRUSH_TOOL_ID, ["vox-brush-size", "vox-brush-shape"]],
+  [FLOODFILL_TOOL_ID, ["vox-flood-max-voxels"]],
+]);
 
 abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
   protected latestMouseState: MouseSelectionState | null = null;
@@ -99,8 +120,11 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
     return out;
   }
 
+  abstract bindToolInput(activation: ToolActivation<this>): void;
+
   activate(activation: ToolActivation<this>): void {
-    activation.bindInputEventMap(VOX_TOOL_INPUT_MAP);
+    this.showToolOptionsBar(activation);
+    this.bindToolInput(activation);
 
     activation.bindAction("paint-voxels", (event) => {
       event.stopPropagation();
@@ -117,6 +141,77 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
 
       return true;
     });
+  }
+
+  private showToolOptionsBar(activation: ToolActivation<this>) {
+    const toolId = this.toJSON();
+    const controlTypes = CONTROLS_FOR_TOOL.get(toolId);
+
+    const { header, body } =
+      makeToolActivationStatusMessageWithHeader(activation);
+    header.textContent = `${this.layer.managedLayer.name} - ${this.description}`;
+    header.classList.add("neuroglancer-tool-activation-status-header");
+    body.classList.add("neuroglancer-voxel-tool-options-body");
+
+    if (!controlTypes) return;
+
+    const visibility = new WatchableVisibilityPriority(
+      WatchableVisibilityPriority.VISIBLE,
+    );
+
+    for (const type of controlTypes) {
+      const def = VOXEL_LAYER_CONTROLS.find(
+        (c) => c.toolJson && c.toolJson.type === type,
+      );
+      if (!def) continue;
+
+      const controlContainer = document.createElement("label");
+      controlContainer.classList.add("neuroglancer-layer-control-container");
+      controlContainer.addEventListener("mousedown", (event) => {
+        event.stopPropagation();
+      });
+
+      const labelContainer = document.createElement("div");
+      labelContainer.classList.add(
+        "neuroglancer-layer-control-label-container",
+      );
+      controlContainer.appendChild(labelContainer);
+
+      const label = document.createElement("div");
+      label.classList.add("neuroglancer-layer-control-label");
+      if (def.title) {
+        label.title = def.title;
+      }
+      labelContainer.appendChild(label);
+
+      const labelTextContainer = document.createElement("div");
+      labelTextContainer.classList.add(
+        "neuroglancer-layer-control-label-text-container",
+      );
+      labelTextContainer.textContent = def.label;
+      label.appendChild(labelTextContainer);
+
+      const { controlElement } = def.makeControl(this.layer, activation, {
+        labelContainer,
+        labelTextContainer,
+        display: this.layer.manager.root.display,
+        visibility,
+      });
+      controlElement.classList.add("neuroglancer-layer-control-control");
+      controlContainer.appendChild(controlElement);
+
+      if (def.toolJson) {
+        const widget = new ToolBindingWidget(
+          this.layer.toolBinder,
+          def.toolJson,
+          controlContainer,
+        );
+        activation.registerDisposer(widget);
+        label.prepend(widget.element);
+      }
+
+      body.appendChild(controlContainer);
+    }
   }
 
   abstract activationCallback(activation: ToolActivation<this>): void;
@@ -148,120 +243,6 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
     vec3.normalize(v, v);
     return { u, v };
   }
-}
-
-export function getActivePanel(
-  layer: UserLayerWithVoxelEditing,
-): RenderedDataPanel | undefined {
-  let activePanel: RenderedDataPanel | undefined;
-  for (const panel of layer.manager.root.display.panels) {
-    if (panel instanceof RenderedDataPanel) {
-      if (panel.mouseX !== -1 && panel instanceof SliceViewPanel) {
-        activePanel = panel;
-      } else {
-        panel.clearOverlay();
-      }
-    }
-  }
-  return activePanel;
-}
-
-export function updateBrushOutline(layer: UserLayerWithVoxelEditing) {
-  const panel = getActivePanel(layer);
-  if (!panel || !(panel instanceof SliceViewPanel)) {
-    if (panel) panel.clearOverlay();
-    return;
-  }
-
-  const { projectionParameters } = panel.sliceView;
-  const { displayDimensionRenderInfo, viewMatrix } = projectionParameters.value;
-  const { canonicalVoxelFactors, displayRank } = displayDimensionRenderInfo;
-
-  if (displayRank < 2) {
-    panel.clearOverlay();
-    return;
-  }
-
-  const radiusInVoxels = layer.voxBrushRadius.value;
-
-  const n_canonical =
-    projectionParameters.value.viewportNormalInCanonicalCoordinates;
-
-  const canonicalVoxelFactorsVec3 = vec3.fromValues(
-    canonicalVoxelFactors[0],
-    canonicalVoxelFactors[1],
-    canonicalVoxelFactors[2],
-  );
-
-  // Convert to voxel coordinates by dividing by canonical voxel factors.
-  const n_vox = vec3.create();
-  vec3.divide(n_vox, n_canonical as vec3, canonicalVoxelFactorsVec3);
-  vec3.normalize(n_vox, n_vox);
-
-  // Create an orthonormal basis for the plane in voxel coordinates
-  const u_vox = vec3.create();
-  const tempVec = vec3.fromValues(1, 0, 0);
-  if (Math.abs(vec3.dot(n_vox, tempVec)) > 0.999) {
-    vec3.set(tempVec, 0, 1, 0);
-  }
-  vec3.cross(u_vox, n_vox, tempVec);
-  vec3.normalize(u_vox, u_vox);
-
-  const v_vox = vec3.cross(vec3.create(), n_vox, u_vox);
-
-  // Scale basis vectors by radius to get two orthogonal radius vectors of the brush circle
-  // in voxel coordinates.
-  vec3.scale(u_vox, u_vox, radiusInVoxels);
-  vec3.scale(v_vox, v_vox, radiusInVoxels);
-
-  const u_cam = vec3.create();
-  const v_cam = vec3.create();
-  // The viewMatrix transforms from world/voxel space to camera space.
-  // We use a mat3 to only apply rotation and scaling, not translation.
-  const viewMatrix3 = mat3.fromMat4(mat3.create(), viewMatrix);
-
-  // Transform voxel-space vectors directly to camera-space vectors.
-  // This avoids the double-scaling error.
-  vec3.transformMat3(u_cam, u_vox, viewMatrix3);
-  vec3.transformMat3(v_cam, v_vox, viewMatrix3);
-
-  // The x, y components of these vectors are conjugate semi-diameters of the ellipse on screen.
-  const u_scr_x = u_cam[0];
-  const u_scr_y = u_cam[1];
-  const v_scr_x = v_cam[0];
-  const v_scr_y = v_cam[1];
-
-  // From the conjugate semi-diameters, compute the ellipse parameters (radii and rotation).
-  // We analyze the quadratic form matrix Q = A * A^T where A = [[u_scr_x, v_scr_x], [u_scr_y, v_scr_y]].
-  const Q11 = u_scr_x * u_scr_x + v_scr_x * v_scr_x;
-  const Q12 = u_scr_x * u_scr_y + v_scr_x * v_scr_y;
-  const Q22 = u_scr_y * u_scr_y + v_scr_y * v_scr_y;
-
-  const trace = Q11 + Q22;
-  const det = Q11 * Q22 - Q12 * Q12;
-
-  // Eigenvalues are roots of lambda^2 - trace*lambda + det = 0
-  const D_sq = trace * trace - 4 * det;
-  const D = D_sq < 0 ? 0 : Math.sqrt(D_sq);
-
-  const lambda1 = (trace + D) / 2;
-  const lambda2 = (trace - D) / 2;
-
-  const radiusX = Math.sqrt(lambda1);
-  const radiusY = Math.sqrt(lambda2);
-
-  // Eigenvector for lambda1 is proportional to [Q12, lambda1 - Q11]
-  const rotation = Math.atan2(lambda1 - Q11, Q12);
-
-  panel.drawBrushCursor(
-    panel.mouseX,
-    panel.mouseY,
-    radiusX,
-    radiusY,
-    rotation,
-    "white",
-    layer.shouldErase(),
-  );
 }
 
 export class VoxelBrushTool extends BaseVoxelTool {
@@ -311,6 +292,10 @@ export class VoxelBrushTool extends BaseVoxelTool {
 
   get description() {
     return "Brush tool";
+  }
+
+  bindToolInput(activation: ToolActivation<this>) {
+    activation.bindInputEventMap(BRUSH_INPUT_MAP);
   }
 
   private drawLoop = (): void => {
@@ -491,6 +476,10 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
     } catch (e: any) {
       StatusMessage.showTemporaryMessage(String(e?.message ?? e));
     }
+  }
+
+  bindToolInput(activation: ToolActivation<this>) {
+    activation.bindInputEventMap(FLOOD_INPUT_MAP);
   }
 
   deactivationCallback(_activation: ToolActivation<this>): void {
