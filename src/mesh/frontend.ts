@@ -448,7 +448,6 @@ vColor *= pow(1.0 - absCosAngle, uSilhouettePower);
 
 export interface MeshDisplayState extends SegmentationDisplayState3D {
   silhouetteRendering: WatchableValueInterface<number>;
-  // segmentColorShaderControlState: ShaderControlState;
   shaderError: WatchableShaderError;
 }
 

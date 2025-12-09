@@ -89,9 +89,6 @@ interface ShaderParameters {
   // segmentProperties: PreprocessedSegmentPropertyMap | undefined;
 }
 
-const HAS_SELECTED_SEGMENT_FLAG = 1;
-const SHOW_ALL_SEGMENTS_FLAG = 2;
-
 export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderParameters> {
   public readonly segmentationGroupState: SegmentationGroupState;
   private gpuSegmentStatedColorHashTable:
@@ -123,6 +120,7 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
           ...rest,
         };
       },
+      shaderError: displayState.shaderError,
       shaderParameters: new AggregateWatchableValue((refCounted) => ({
         usedProperties: displayState.segmentationColorUserShader.usedProperties,
         segmentColorState:
@@ -264,11 +262,9 @@ uint64_t getMappedObjectId(uint64_t value) {
 }
 `);
     }
-    // builder.addUniform("highp uvec2", "uSelectedSegment");
-    builder.addUniform("highp uint", "uFlags");
+    builder.addUniform("bool", "uShowAllSegments");
     builder.addUniform("highp float", "uSelectedAlpha");
     builder.addUniform("highp float", "uNotSelectedAlpha");
-    // builder.addUniform("highp float", "uSaturation");
     let fragmentMain = `
   uint64_t baseValue = getUint64DataValue();
   uint64_t value = getMappedObjectId(baseValue);
@@ -280,7 +276,6 @@ uint64_t getMappedObjectId(uint64_t value) {
   };
 
   float alpha = uSelectedAlpha;
-  // float saturation = uSaturation;
 `;
     if (parameters.hideSegmentZero) {
       fragmentMain += `
@@ -291,8 +286,8 @@ uint64_t getMappedObjectId(uint64_t value) {
 `;
     }
     fragmentMain += `
-  bool has = (uFlags & ${SHOW_ALL_SEGMENTS_FLAG}u) != 0u ? true : ${this.hashTableManager.hasFunctionName}(value);
-  if ((uFlags & ${HAS_SELECTED_SEGMENT_FLAG}u) != 0u && uSelectedSegment == valueForHighlight.value) {
+  bool has = uShowAllSegments || ${this.hashTableManager.hasFunctionName}(value);
+  if (uHasSelectedSegment && uSelectedSegment == valueForHighlight.value) {
 `;
     //     if (parameters.hasHighlightColor) {
     //       builder.addUniform("highp vec4", "uHighlightColor");
@@ -307,7 +302,6 @@ uint64_t getMappedObjectId(uint64_t value) {
   }
 `;
     fragmentMain += `
-
   vec4 rgba = segmentColorUserShader(valueForColor, has ? 0.5 : 0.75);
   if (rgba.a >= 0.0) {
     alpha *= rgba.a;
@@ -326,45 +320,24 @@ uint64_t getMappedObjectId(uint64_t value) {
     const { displayState, segmentationGroupState } = this;
     const {
       segmentDefaultColor: { value: segmentDefaultColor },
-      // segmentColorHash: { value: segmentColorHash },
       highlightColor: { value: highlightColor },
       tempSegmentDefaultColor2d: { value: tempSegmentDefaultColor2d },
     } = this.displayState;
     const visibleSegments = getVisibleSegments(segmentationGroupState);
     const ignoreNullSegmentSet = this.displayState.ignoreNullVisibleSet.value;
-    // let selectedSegmentLow = 0;
-    // let selectedSegmentHigh = 0;
-    let flags = 0;
-    const { segmentSelectionState } = this.displayState;
-    if (
-      segmentSelectionState.hasSelectedSegment &&
-      displayState.hoverHighlight.value
-    ) {
-      // const seg = displayState.baseSegmentHighlighting.value
-      //   ? segmentSelectionState.baseSelectedSegment
-      //   : segmentSelectionState.selectedSegment;
-      // selectedSegmentLow = Number(seg & 0xffffffffn);
-      // selectedSegmentHigh = Number(seg >> 32n);
-      flags |= HAS_SELECTED_SEGMENT_FLAG;
-    }
     gl.uniform1f(
       shader.uniform("uSelectedAlpha"),
       displayState.selectedAlpha.value,
     );
-    //gl.uniform1f(shader.uniform("uSaturation"), displayState.saturation.value);
     gl.uniform1f(
       shader.uniform("uNotSelectedAlpha"),
       displayState.notSelectedAlpha.value,
     );
-    // gl.uniform2ui(
-    //   shader.uniform("uSelectedSegment"),
-    //   selectedSegmentLow,
-    //   selectedSegmentHigh,
-    // );
-    if (visibleSegments.hashTable.size === 0 && ignoreNullSegmentSet) {
-      flags |= SHOW_ALL_SEGMENTS_FLAG;
-    }
-    gl.uniform1ui(shader.uniform("uFlags"), flags);
+    const showAllSegments = visibleSegments.hashTable.size === 0 && ignoreNullSegmentSet;
+    gl.uniform1ui(
+      shader.uniform("uShowAllSegments"),
+      showAllSegments ? 1 : 0,
+    );
     this.hashTableManager.enable(
       gl,
       shader,

@@ -125,7 +125,7 @@ import {
 } from "#src/util/color.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
-import type { vec3, vec4 } from "#src/util/geom.js";
+import { vec3, vec4 } from "#src/util/geom.js";
 import {
   parseArray,
   parseUint64,
@@ -551,7 +551,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         const properties = new Map<string, DataType>();
         const values = new Map<string, TypedNumberArray<ArrayBuffer>>();
         if (segmentPropertyMap === undefined) {
-          return null;
+          return {};
         }
         for (const property of segmentPropertyMap.numericalProperties) {
           properties.set(property.id, property.dataType);
@@ -573,11 +573,12 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
     this.segmentationColorUserShader = new SegmentColorUserShaderManager(
       this,
       this.layer.manager.chunkManager.chunkQueueManager.gl,
+      "foo"
     );
 
     this.offscreenGL = initializeWebGL(new OffscreenCanvas(1, 1));
     this.offscreenSegmentationColorUserShader =
-      new SegmentColorUserShaderManager(this, this.offscreenGL);
+      new SegmentColorUserShaderManager(this, this.offscreenGL, "bar");
     this.getSegmentColorShader = this.makeSegmentColorShaderGetter();
   }
 
@@ -622,7 +623,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
       new AggregateWatchableValue(() => ({
         segmentColorParameters:
           this.segmentationColorUserShader.shaderParameters,
-        segmentColorProperties: this.segmentationColorUserShader.usedProperties,
+        segmentColorProperties: this.offscreenSegmentationColorUserShader.usedProperties,
         shaderBuilderState: this.segmentColorShaderControlState.builderState,
       })),
     );
@@ -648,6 +649,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
           const vertexMain = `
 gl_Position = aVertexPosition;
 vColor = segmentColorUserShader(uint64_t(uID));
+//vColor.a = 1.0;
 `;
           builder.addVertexMain(vertexMain);
           builder.addOutputBuffer("vec4", "out_fragColor", 0);
@@ -659,9 +661,11 @@ vColor = segmentColorUserShader(uint64_t(uID));
 
   context = () => {}; // TEMP how to get rid of this?
 
-  getShaderSegmentColor = (id: bigint, color: Float32Array) => {
+  private tempColor = vec4.create();
+
+  getShaderSegmentColor = (id: bigint) => {
     const { shader, parameters } = this.getSegmentColorShader(this.context);
-    if (shader === null) return color;
+    if (shader === null) return;
     shader.bind();
     const { gl } = shader;
     const positionBuffer = GLBuffer.fromData(
@@ -669,7 +673,6 @@ vColor = segmentColorUserShader(uint64_t(uID));
       new Float32Array([1, 1, -1, 1, 1, -1, -1, -1]),
     );
     positionBuffer.bindToVertexAttrib(shader.attribute("aVertexPosition"), 2);
-    gl.uniform4fv(shader.uniform("uColor"), color);
     this.offscreenSegmentationColorUserShader.enable(
       gl,
       shader,
@@ -693,9 +696,9 @@ vColor = segmentColorUserShader(uint64_t(uID));
       data,
     );
     for (let i = 0; i < data.length; i++) {
-      color[i] = data[i] / 255.0;
+      this.tempColor[i] = data[i] / 255.0;
     }
-    return color;
+    return this.tempColor;
   };
 
   linkedSegmentationGroup: LinkedLayerGroup;

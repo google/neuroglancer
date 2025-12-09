@@ -437,8 +437,7 @@ function parseInvlerpDirective(
   if (imageData !== undefined) {
     return parseImageInvlerpDirective(valueType, parameters, imageData);
   }
-  if (properties !== undefined && properties.size > 0) {
-    // TEMP FIX
+  if (properties !== undefined) {
     return parsePropertyInvlerpDirective(
       valueType,
       parameters,

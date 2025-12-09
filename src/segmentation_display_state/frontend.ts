@@ -212,7 +212,7 @@ export interface SegmentationDisplayState {
   selectSegment: (id: bigint, pin: boolean | "toggle") => void;
   filterBySegmentLabel: (id: bigint) => void;
   moveToSegment: (id: bigint) => void;
-  getShaderSegmentColor: (id: bigint, color: Float32Array) => Float32Array;
+  getShaderSegmentColor: (id: bigint) => Float32Array | undefined;
 
   // Indirect properties
   hideSegmentZero: WatchableValueInterface<boolean>;
@@ -1047,7 +1047,7 @@ export function getBaseObjectColor(
     return color;
   }
   const { getShaderSegmentColor } = displayState;
-  return getShaderSegmentColor(objectId, color);
+  return getShaderSegmentColor(objectId) ?? color;
   // const colorGroupState = displayState.segmentationColorGroupState.value;
   // const { segmentStatedColors } = colorGroupState;
   // let statedColor: bigint | undefined;

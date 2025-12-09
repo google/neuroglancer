@@ -126,6 +126,7 @@ export class ShaderCodeWidget extends RefCounted {
   updateErrorState() {
     const { sourceStringNumber = 1 } = this.state;
     const error = this.state.shaderError.value;
+    console.log("error", error);
     let controlParseErrors: ShaderControlParseError[];
     const { shaderControlState } = this.state;
     if (shaderControlState !== undefined) {
