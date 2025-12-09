@@ -552,7 +552,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         const properties = new Map<string, DataType>();
         const values = new Map<string, TypedNumberArray<ArrayBuffer>>();
         if (segmentPropertyMap === undefined) {
-          return {};
+          return null;
         }
         for (const property of segmentPropertyMap.numericalProperties) {
           properties.set(property.id, property.dataType);
