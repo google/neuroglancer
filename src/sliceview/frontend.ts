@@ -424,7 +424,9 @@ export class SliceView extends Base {
     visibleLayerList.length = 0;
     for (const renderLayer of this.layerManager.readyRenderLayers()) {
       if (renderLayer instanceof SliceViewRenderLayer) {
-        visibleLayerList.push(renderLayer);
+        if (!renderLayer.forceHiddenFromMainRenderLoop) {
+          visibleLayerList.push(renderLayer);
+        }
         let layerInfo = visibleLayers.get(renderLayer);
         if (layerInfo === undefined) {
           const disposers: Disposer[] = [];

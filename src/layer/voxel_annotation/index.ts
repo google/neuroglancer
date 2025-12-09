@@ -36,7 +36,7 @@ import type {
 import { DataType } from "#src/sliceview/base.js";
 import type { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import type { ImageRenderLayer } from "#src/sliceview/volume/image_renderlayer.js";
-import type { SegmentationRenderLayer } from "#src/sliceview/volume/segmentation_renderlayer.js";
+import { SegmentationRenderLayer } from "#src/sliceview/volume/segmentation_renderlayer.js";
 import { StatusMessage } from "#src/status.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
@@ -126,6 +126,14 @@ export class VoxelEditingContext
       this.previewSource,
       primaryRenderLayer.transform,
     );
+
+    if (
+      this.primaryRenderLayer instanceof SegmentationRenderLayer &&
+      this.optimisticRenderLayer instanceof SegmentationRenderLayer
+    ) {
+      this.optimisticRenderLayer.forceHiddenFromMainRenderLoop = true;
+      this.primaryRenderLayer.setVoxelPreviewLayer(this.optimisticRenderLayer);
+    }
 
     // since we only allow drawing at max res, we can lock the optimistic render layer to it
     (

@@ -171,6 +171,7 @@ export class VoxelEditController extends SharedObject {
         previewSource,
         primarySource,
       ),
+      processEdits: this.processEditsBuilder(previewSource),
     };
   }
 
@@ -190,61 +191,61 @@ export class VoxelEditController extends SharedObject {
       return typeof val === "bigint" ? val : BigInt(val as number);
     };
 
-  private processEdits(
-    voxelsToPaint: Float32Array[],
-    previewSource: InMemoryVolumeChunkSource,
-    value: bigint,
-    lodIndex: number,
-  ) {
-    const editsByVoxKey = new Map<
-      string,
-      { indices: number[]; value: bigint }
-    >();
+  private processEditsBuilder =
+    (previewSource: InMemoryVolumeChunkSource) =>
+    (voxelsToPaint: Float32Array[], value: bigint, lodIndex: number) => {
+      const editsByVoxKey = new Map<
+        string,
+        { indices: number[]; value: bigint }
+      >();
 
-    for (const voxelCoord of voxelsToPaint) {
-      const { chunkGridPosition, positionWithinChunk } =
-        previewSource.computeChunkIndices(voxelCoord);
-      const chunkKey = chunkGridPosition.join();
-      const voxKey = makeVoxChunkKey(chunkKey, lodIndex);
+      for (const voxelCoord of voxelsToPaint) {
+        const { chunkGridPosition, positionWithinChunk } =
+          previewSource.computeChunkIndices(voxelCoord);
+        const chunkKey = chunkGridPosition.join();
+        const voxKey = makeVoxChunkKey(chunkKey, lodIndex);
 
-      let entry = editsByVoxKey.get(voxKey);
-      if (!entry) {
-        entry = { indices: [], value };
-        editsByVoxKey.set(voxKey, entry);
+        let entry = editsByVoxKey.get(voxKey);
+        if (!entry) {
+          entry = { indices: [], value };
+          editsByVoxKey.set(voxKey, entry);
+        }
+
+        const { chunkDataSize } = previewSource.spec;
+        const index =
+          (positionWithinChunk[2] * chunkDataSize[1] + positionWithinChunk[1]) *
+            chunkDataSize[0] +
+          positionWithinChunk[0];
+        entry.indices.push(index);
       }
 
-      const { chunkDataSize } = previewSource.spec;
-      const index =
-        (positionWithinChunk[2] * chunkDataSize[1] + positionWithinChunk[1]) *
-          chunkDataSize[0] +
-        positionWithinChunk[0];
-      entry.indices.push(index);
-    }
+      const localEdits = new Map<
+        string,
+        { indices: number[]; value: bigint }
+      >();
+      for (const [voxKey, edit] of editsByVoxKey.entries()) {
+        const parsed = parseVoxChunkKey(voxKey);
+        if (!parsed) continue;
+        localEdits.set(parsed.chunkKey, edit);
+      }
+      previewSource.applyLocalEdits(localEdits);
 
-    const localEdits = new Map<string, { indices: number[]; value: bigint }>();
-    for (const [voxKey, edit] of editsByVoxKey.entries()) {
-      const parsed = parseVoxChunkKey(voxKey);
-      if (!parsed) continue;
-      localEdits.set(parsed.chunkKey, edit);
-    }
-    previewSource.applyLocalEdits(localEdits);
+      const backendEdits = [] as {
+        key: string;
+        indices: number[];
+        value: bigint;
+      }[];
+      for (const [voxKey, edit] of editsByVoxKey.entries()) {
+        backendEdits.push({
+          key: voxKey,
+          indices: edit.indices,
+          value: edit.value,
+        });
+      }
 
-    const backendEdits = [] as {
-      key: string;
-      indices: number[];
-      value: bigint;
-    }[];
-    for (const [voxKey, edit] of editsByVoxKey.entries()) {
-      backendEdits.push({
-        key: voxKey,
-        indices: edit.indices,
-        value: edit.value,
-      });
-    }
-
-    this.commitEdits(backendEdits);
-    return backendEdits;
-  }
+      this.commitEdits(backendEdits);
+      return backendEdits;
+    };
 
   // Paint a disk (require the basis) or a sphere
   async paintBrushWithShape(
@@ -267,7 +268,7 @@ export class VoxelEditController extends SharedObject {
     // Hardcode drawing at LOD 0 for now.
     const voxelSize = 1;
     const sourceIndex = 0;
-    const { previewSource, getEnsuredValue } = this.setupSources(sourceIndex);
+    const { processEdits, getEnsuredValue } = this.setupSources(sourceIndex);
 
     const cx = Math.round((centerCanonical[0] ?? 0) / voxelSize);
     const cy = Math.round((centerCanonical[1] ?? 0) / voxelSize);
@@ -317,7 +318,7 @@ export class VoxelEditController extends SharedObject {
       }
     }
     if (!voxelsToPaint || voxelsToPaint.length === 0) return;
-    this.processEdits(voxelsToPaint, previewSource, value, sourceIndex);
+    processEdits(voxelsToPaint, value, sourceIndex);
   }
 
   commitEdits(
@@ -357,7 +358,7 @@ export class VoxelEditController extends SharedObject {
     originalValue: bigint;
   }> {
     const sourceIndex = 0;
-    const { previewSource, getEnsuredValue } = this.setupSources(sourceIndex);
+    const { processEdits, getEnsuredValue } = this.setupSources(sourceIndex);
     const startVoxelLod = vec3.round(
       vec3.create(),
       startPositionCanonical as vec3,
@@ -520,12 +521,7 @@ export class VoxelEditController extends SharedObject {
       }
     }
 
-    const edits = this.processEdits(
-      voxelsToFill,
-      previewSource,
-      fillValue,
-      sourceIndex,
-    );
+    const edits = processEdits(voxelsToFill, fillValue, sourceIndex);
     return {
       edits,
       filledCount,
