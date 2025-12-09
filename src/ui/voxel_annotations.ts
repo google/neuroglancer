@@ -394,7 +394,7 @@ export class VoxelBrushTool extends BaseVoxelTool {
     }
 
     const value = this.layer.getVoxelPaintValue(this.layer.shouldErase());
-    const filterValue = this.layer.voxEraseSelectedMode
+    const filterValue = this.layer.voxEraseSelectedMode.value
       ? this.layer.getVoxelPaintValue(false)
       : undefined;
 
@@ -473,7 +473,7 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
         throw new Error("Invalid max fill voxels setting");
       }
 
-      const filterValue = this.layer.voxEraseSelectedMode
+      const filterValue = this.layer.voxEraseSelectedMode.value
         ? this.layer.getVoxelPaintValue(false)
         : undefined;
 
