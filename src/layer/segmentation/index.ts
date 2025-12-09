@@ -125,7 +125,8 @@ import {
 } from "#src/util/color.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { vec3, vec4 } from "#src/util/geom.js";
+import type { vec3 } from "#src/util/geom.js";
+import { vec4 } from "#src/util/geom.js";
 import {
   parseArray,
   parseUint64,
@@ -573,7 +574,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
     this.segmentationColorUserShader = new SegmentColorUserShaderManager(
       this,
       this.layer.manager.chunkManager.chunkQueueManager.gl,
-      "foo"
+      "foo",
     );
 
     this.offscreenGL = initializeWebGL(new OffscreenCanvas(1, 1));
@@ -623,7 +624,8 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
       new AggregateWatchableValue(() => ({
         segmentColorParameters:
           this.segmentationColorUserShader.shaderParameters,
-        segmentColorProperties: this.offscreenSegmentationColorUserShader.usedProperties,
+        segmentColorProperties:
+          this.offscreenSegmentationColorUserShader.usedProperties,
         shaderBuilderState: this.segmentColorShaderControlState.builderState,
       })),
     );

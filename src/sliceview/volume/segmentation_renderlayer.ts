@@ -333,11 +333,9 @@ uint64_t getMappedObjectId(uint64_t value) {
       shader.uniform("uNotSelectedAlpha"),
       displayState.notSelectedAlpha.value,
     );
-    const showAllSegments = visibleSegments.hashTable.size === 0 && ignoreNullSegmentSet;
-    gl.uniform1ui(
-      shader.uniform("uShowAllSegments"),
-      showAllSegments ? 1 : 0,
-    );
+    const showAllSegments =
+      visibleSegments.hashTable.size === 0 && ignoreNullSegmentSet;
+    gl.uniform1ui(shader.uniform("uShowAllSegments"), showAllSegments ? 1 : 0);
     this.hashTableManager.enable(
       gl,
       shader,
