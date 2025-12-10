@@ -57,7 +57,10 @@ import {
 } from "#src/util/json.js";
 import { TrackableEnum } from "#src/util/trackable_enum.js";
 import { VoxelPreviewMultiscaleSource } from "#src/voxel_annotation/PreviewMultiscaleChunkSource.js";
-import type { VoxelEditControllerHost } from "#src/voxel_annotation/base.js";
+import type {
+  VoxelEditControllerHost,
+  VoxelValueGetter,
+} from "#src/voxel_annotation/base.js";
 import { BrushShape } from "#src/voxel_annotation/base.js";
 import { VoxelEditController } from "#src/voxel_annotation/frontend.js";
 
@@ -184,7 +187,7 @@ export class VoxelEditingContext
   async paintBrushWithShape(
     centerCanonical: Float32Array,
     radiusCanonical: number,
-    value: bigint,
+    value: VoxelValueGetter,
     shape: BrushShape,
     basis?: { u: Float32Array; v: Float32Array },
     filterValue?: bigint,
@@ -205,7 +208,7 @@ export class VoxelEditingContext
 
   async floodFillPlane2D(
     startPositionCanonical: Float32Array,
-    fillValue: bigint,
+    fillValue: VoxelValueGetter,
     maxVoxels: number,
     basis: { u: Float32Array; v: Float32Array },
     filterValue?: bigint,
@@ -400,7 +403,7 @@ export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
     source: MultiscaleVolumeChunkSource,
     transform: WatchableValueInterface<RenderLayerTransformOrError>,
   ): ImageRenderLayer | SegmentationRenderLayer;
-  abstract getVoxelPaintValue(erase: boolean): bigint;
+  abstract getVoxelPaintValue(erase: boolean): VoxelValueGetter;
   abstract setVoxelPaintValue(value: any): bigint;
   shouldErase(): boolean;
 
@@ -514,9 +517,8 @@ export function UserLayerWithVoxelEditingMixin<
       );
     }
 
-    getVoxelPaintValue(erase: boolean): bigint {
-      if (erase) return 0n;
-      return this.paintValue.value;
+    getVoxelPaintValue(erase: boolean): VoxelValueGetter {
+      return (_isPreview: boolean) => (erase ? 0n : this.paintValue.value);
     }
 
     setVoxelPaintValue(x: any) {

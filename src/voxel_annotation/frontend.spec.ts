@@ -117,11 +117,12 @@ describe("VoxelEditController", () => {
       const center = new Float32Array([10, 10, 10]);
       const radius = 2;
       const value = 5n;
+      const getter = (_isPreview: boolean) => value;
 
       await controller.paintBrushWithShape(
         center,
         radius,
-        value,
+        getter,
         BrushShape.SPHERE,
         undefined,
       );
@@ -158,6 +159,7 @@ describe("VoxelEditController", () => {
       const center = new Float32Array([10, 10, 5]);
       const radius = 2;
       const value = 3n;
+      const getter = (_isPreview: boolean) => value;
       const basis = {
         u: new Float32Array([1, 0, 0]),
         v: new Float32Array([0, 1, 0]),
@@ -166,7 +168,7 @@ describe("VoxelEditController", () => {
       await controller.paintBrushWithShape(
         center,
         radius,
-        value,
+        getter,
         BrushShape.DISK,
         basis,
       );
@@ -213,7 +215,7 @@ describe("VoxelEditController", () => {
 
       const result = await controller.floodFillPlane2D(
         seed,
-        fillValue,
+        (_) => fillValue,
         maxVoxels,
         basis,
       );
@@ -235,7 +237,7 @@ describe("VoxelEditController", () => {
       };
 
       await expect(
-        controller.floodFillPlane2D(seed, 2n, maxVoxels, basis),
+        controller.floodFillPlane2D(seed, (_) => 2n, maxVoxels, basis),
       ).rejects.toThrow(/exceeds the limit/);
 
       mockPrimarySource.dataMap.set("51,50,5", 1n);
@@ -243,7 +245,12 @@ describe("VoxelEditController", () => {
       mockPrimarySource.dataMap.set("50,51,5", 1n);
       mockPrimarySource.dataMap.set("50,49,5", 1n);
 
-      const result = await controller.floodFillPlane2D(seed, 2n, 100, basis);
+      const result = await controller.floodFillPlane2D(
+        seed,
+        (_) => 2n,
+        100,
+        basis,
+      );
 
       expect(result.filledCount).toBe(1);
       expect(result.edits[0].indices.length).toBe(1);
@@ -262,7 +269,7 @@ describe("VoxelEditController", () => {
       };
 
       await expect(
-        controller.floodFillPlane2D(seed, 9n, maxVoxels, basis),
+        controller.floodFillPlane2D(seed, (_) => 9n, maxVoxels, basis),
       ).rejects.toThrow("Flood fill region exceeds the limit");
     });
 
@@ -274,7 +281,12 @@ describe("VoxelEditController", () => {
         v: new Float32Array([0, 1, 0]),
       };
 
-      const result = await controller.floodFillPlane2D(seed, 5n, 100, basis);
+      const result = await controller.floodFillPlane2D(
+        seed,
+        (_) => 5n,
+        100,
+        basis,
+      );
 
       expect(result.filledCount).toBe(0);
       expect(result.edits.length).toBe(0);
@@ -313,7 +325,7 @@ describe("VoxelEditController", () => {
 
       const result = await controller.floodFillPlane2D(
         seed,
-        fillValue,
+        (_) => fillValue,
         maxVoxels,
         basis,
       );

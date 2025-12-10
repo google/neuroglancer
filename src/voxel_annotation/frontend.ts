@@ -26,6 +26,7 @@ import { vec3 } from "#src/util/geom.js";
 import type {
   VoxelEditControllerHost,
   VoxelLayerResolution,
+  VoxelValueGetter,
 } from "#src/voxel_annotation/base.js";
 import {
   BrushShape,
@@ -193,11 +194,12 @@ export class VoxelEditController extends SharedObject {
 
   private processEditsBuilder =
     (previewSource: InMemoryVolumeChunkSource) =>
-    (voxelsToPaint: Float32Array[], value: bigint, lodIndex: number) => {
-      const editsByVoxKey = new Map<
-        string,
-        { indices: number[]; value: bigint }
-      >();
+    (
+      voxelsToPaint: Float32Array[],
+      valueGetter: VoxelValueGetter,
+      lodIndex: number,
+    ) => {
+      const indicesByVoxKey = new Map<string, number[]>();
 
       for (const voxelCoord of voxelsToPaint) {
         const { chunkGridPosition, positionWithinChunk } =
@@ -205,10 +207,10 @@ export class VoxelEditController extends SharedObject {
         const chunkKey = chunkGridPosition.join();
         const voxKey = makeVoxChunkKey(chunkKey, lodIndex);
 
-        let entry = editsByVoxKey.get(voxKey);
-        if (!entry) {
-          entry = { indices: [], value };
-          editsByVoxKey.set(voxKey, entry);
+        let indices = indicesByVoxKey.get(voxKey);
+        if (!indices) {
+          indices = [];
+          indicesByVoxKey.set(voxKey, indices);
         }
 
         const { chunkDataSize } = previewSource.spec;
@@ -216,30 +218,32 @@ export class VoxelEditController extends SharedObject {
           (positionWithinChunk[2] * chunkDataSize[1] + positionWithinChunk[1]) *
             chunkDataSize[0] +
           positionWithinChunk[0];
-        entry.indices.push(index);
+        indices.push(index);
       }
 
+      const previewValue = valueGetter(true);
       const localEdits = new Map<
         string,
         { indices: number[]; value: bigint }
       >();
-      for (const [voxKey, edit] of editsByVoxKey.entries()) {
+      for (const [voxKey, indices] of indicesByVoxKey.entries()) {
         const parsed = parseVoxChunkKey(voxKey);
         if (!parsed) continue;
-        localEdits.set(parsed.chunkKey, edit);
+        localEdits.set(parsed.chunkKey, { indices, value: previewValue });
       }
       previewSource.applyLocalEdits(localEdits);
 
+      const storageValue = valueGetter(false);
       const backendEdits = [] as {
         key: string;
         indices: number[];
         value: bigint;
       }[];
-      for (const [voxKey, edit] of editsByVoxKey.entries()) {
+      for (const [voxKey, indices] of indicesByVoxKey.entries()) {
         backendEdits.push({
           key: voxKey,
-          indices: edit.indices,
-          value: edit.value,
+          indices: indices,
+          value: storageValue,
         });
       }
 
@@ -251,7 +255,7 @@ export class VoxelEditController extends SharedObject {
   async paintBrushWithShape(
     centerCanonical: Float32Array,
     radiusCanonical: number,
-    value: bigint,
+    valueGetter: VoxelValueGetter,
     shape: BrushShape,
     basis?: { u: Float32Array; v: Float32Array },
     filterValue?: bigint,
@@ -282,6 +286,8 @@ export class VoxelEditController extends SharedObject {
     const rr = r * r;
 
     const voxelsToPaint: Float32Array[] = [];
+
+    const value = valueGetter(false);
 
     const pushIf = async (point: Float32Array) => {
       const v = await getEnsuredValue(point);
@@ -318,7 +324,7 @@ export class VoxelEditController extends SharedObject {
       }
     }
     if (!voxelsToPaint || voxelsToPaint.length === 0) return;
-    processEdits(voxelsToPaint, value, sourceIndex);
+    processEdits(voxelsToPaint, valueGetter, sourceIndex);
   }
 
   commitEdits(
@@ -348,7 +354,7 @@ export class VoxelEditController extends SharedObject {
    */
   async floodFillPlane2D(
     startPositionCanonical: Float32Array,
-    fillValue: bigint,
+    fillValueGetter: VoxelValueGetter,
     maxVoxels: number,
     basis: { u: Float32Array; v: Float32Array },
     filterValue?: bigint,
@@ -372,6 +378,8 @@ export class VoxelEditController extends SharedObject {
     }
     if (filterValue !== undefined && originalValue !== filterValue)
       throw new Error("This is not the value selected for erasing");
+
+    const fillValue = fillValueGetter(false);
 
     if (originalValue === fillValue) {
       return { edits: [], filledCount: 0, originalValue };
@@ -521,7 +529,7 @@ export class VoxelEditController extends SharedObject {
       }
     }
 
-    const edits = processEdits(voxelsToFill, fillValue, sourceIndex);
+    const edits = processEdits(voxelsToFill, fillValueGetter, sourceIndex);
     return {
       edits,
       filledCount,

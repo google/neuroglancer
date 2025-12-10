@@ -395,7 +395,7 @@ export class VoxelBrushTool extends BaseVoxelTool {
 
     const value = this.layer.getVoxelPaintValue(this.layer.shouldErase());
     const filterValue = this.layer.voxEraseSelectedMode.value
-      ? this.layer.getVoxelPaintValue(false)
+      ? this.layer.getVoxelPaintValue(false)(false)
       : undefined;
 
     for (const p of points) {
@@ -474,7 +474,7 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
       }
 
       const filterValue = this.layer.voxEraseSelectedMode.value
-        ? this.layer.getVoxelPaintValue(false)
+        ? this.layer.getVoxelPaintValue(false)(false)
         : undefined;
 
       void editContext

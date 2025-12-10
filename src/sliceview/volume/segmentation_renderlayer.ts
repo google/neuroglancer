@@ -87,7 +87,7 @@ interface ShaderParameters {
   hideSegmentZero: boolean;
   hasSegmentDefaultColor: boolean;
   hasHighlightColor: boolean;
-  forceDiscard: boolean;
+  isForOptimisticPreview: boolean;
 }
 
 const HAS_SELECTED_SEGMENT_FLAG = 1;
@@ -112,13 +112,13 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
   private gpuEquivalencesHashTable;
   private gpuTemporaryEquivalencesHashTable;
   private voxelPreviewLayer: SegmentationRenderLayer | undefined;
-  public forceDiscard: WatchableValue<boolean>;
+  public isForOptimisticPreview: WatchableValue<boolean>;
 
   constructor(
     multiscaleSource: MultiscaleVolumeChunkSource,
     public displayState: SliceViewSegmentationDisplayState,
   ) {
-    const forceDiscard = new WatchableValue(false);
+    const isForOptimisticPreview = new WatchableValue(false);
     super(multiscaleSource, {
       shaderParameters: new AggregateWatchableValue((refCounted) => ({
         hasEquivalences: refCounted.registerDisposer(
@@ -169,14 +169,14 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
         hideSegmentZero: displayState.hideSegmentZero,
         baseSegmentColoring: displayState.baseSegmentColoring,
         baseSegmentHighlighting: displayState.baseSegmentHighlighting,
-        forceDiscard: forceDiscard,
+        isForOptimisticPreview: isForOptimisticPreview,
       })),
       transform: displayState.transform,
       renderScaleHistogram: displayState.renderScaleHistogram,
       renderScaleTarget: displayState.renderScaleTarget,
       localPosition: displayState.localPosition,
     });
-    this.forceDiscard = forceDiscard;
+    this.isForOptimisticPreview = isForOptimisticPreview;
     this.segmentationGroupState = displayState.segmentationGroupState.value;
     this.gpuHashTable = this.registerDisposer(
       GPUHashTable.get(
@@ -275,10 +275,21 @@ uint64_t getMappedObjectId(uint64_t value) {
   float alpha = uSelectedAlpha;
   float saturation = uSaturation;
 `;
+    if (parameters.isForOptimisticPreview)
+      fragmentMain += `
+  if (baseValue.value[0] == 0xfffffffeu && baseValue.value[1] == 0xffffffffu) {
+    emit(vec4(0, 0, 0, 0));
+    return;
+  }
+  if (value.value[0] == 0u && value.value[1] == 0u) {
+    discard;
+  }
+      `;
     if (parameters.hideSegmentZero) {
       fragmentMain += `
   if (value.value[0] == 0u && value.value[1] == 0u) {
-    ${parameters.forceDiscard ? "discard;" : "emit(vec4(vec4(0, 0, 0, 0))); return;"}
+    emit(vec4(vec4(0, 0, 0, 0))); 
+    return;
   }
 `;
     }
@@ -466,7 +477,7 @@ uint64_t getMappedObjectId(uint64_t value) {
   }
   setVoxelPreviewLayer(layer: SegmentationRenderLayer) {
     this.voxelPreviewLayer = layer;
-    layer.forceDiscard.value = true;
+    layer.isForOptimisticPreview.value = true;
   }
 
   draw(renderContext: SliceViewRenderContext) {
