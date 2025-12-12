@@ -475,9 +475,9 @@ uint64_t getMappedObjectId(uint64_t value) {
     }
     super.endSlice(sliceView, shader, parameters);
   }
-  setVoxelPreviewLayer(layer: SegmentationRenderLayer) {
+  setVoxelPreviewLayer(layer: SegmentationRenderLayer | undefined) {
     this.voxelPreviewLayer = layer;
-    layer.isForOptimisticPreview.value = true;
+    if (layer) layer.isForOptimisticPreview.value = true;
   }
 
   draw(renderContext: SliceViewRenderContext) {

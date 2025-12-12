@@ -249,8 +249,15 @@ export class VoxelEditingContext
 
   disposed() {
     if (this._controller) this._controller.dispose();
-    if (this.optimisticRenderLayer)
+    if (this.optimisticRenderLayer) {
+      if (
+        this.primaryRenderLayer instanceof SegmentationRenderLayer &&
+        this.optimisticRenderLayer instanceof SegmentationRenderLayer
+      ) {
+        this.primaryRenderLayer.setVoxelPreviewLayer(undefined);
+      }
       this.hostLayer.removeRenderLayer(this.optimisticRenderLayer);
+    }
     super.disposed();
   }
 
