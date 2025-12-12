@@ -579,6 +579,17 @@ export function UserLayerWithVoxelEditingMixin<
       renderlayer: SegmentationRenderLayer | ImageRenderLayer,
       writingEnabled: boolean = true,
     ): void {
+      if (writingEnabled) {
+        for (const [otherSubsource, _] of this.editingContexts) {
+          if (
+            otherSubsource !== loadedSubsource &&
+            otherSubsource.writingEnabled.value
+          ) {
+            otherSubsource.writingEnabled.value = false;
+          }
+        }
+      }
+
       if (this.editingContexts.has(loadedSubsource)) return;
 
       const primarySource = loadedSubsource.subsourceEntry.subsource
