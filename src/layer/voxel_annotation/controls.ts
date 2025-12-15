@@ -28,6 +28,7 @@ import { mat3, vec3 } from "#src/util/geom.js";
 import {
   BRUSH_TOOL_ID,
   FLOODFILL_TOOL_ID,
+  getBasisFromNormal,
   SEG_PICKER_TOOL_ID,
 } from "#src/voxel_annotation/base.js";
 import type { LayerControlDefinition } from "#src/widget/layer_control.js";
@@ -102,16 +103,7 @@ export function updateBrushOutline(layer: UserLayerWithVoxelEditing) {
     projectionParameters.value.viewportNormalInCanonicalCoordinates;
   const n_chunk = context.transformGlobalToVoxelNormal(n_world);
 
-  // TODO: regroupe this with the getBasis of VoxToolBase
-  const u_chunk = vec3.create();
-  const tempVec =
-    Math.abs(vec3.dot(n_chunk, vec3.fromValues(1, 0, 0))) < 0.9
-      ? vec3.fromValues(1, 0, 0)
-      : vec3.fromValues(0, 1, 0);
-  vec3.cross(u_chunk, tempVec, n_chunk);
-  vec3.normalize(u_chunk, u_chunk);
-  const v_chunk = vec3.cross(vec3.create(), n_chunk, u_chunk);
-  vec3.normalize(v_chunk, v_chunk);
+  const { u: u_chunk, v: v_chunk } = getBasisFromNormal(n_chunk);
 
   const radius = layer.voxBrushRadius.value;
   vec3.scale(u_chunk, u_chunk, radius);

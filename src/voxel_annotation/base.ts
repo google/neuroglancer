@@ -15,6 +15,7 @@
  */
 
 import type { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
+import { vec3 } from "#src/util/geom.js";
 import type { VoxelPreviewMultiscaleSource } from "#src/voxel_annotation/PreviewMultiscaleChunkSource.js";
 import type { RPC } from "#src/worker_rpc.js";
 
@@ -80,6 +81,19 @@ export function parseVoxChunkKey(key: string) {
     z: parts[3],
     chunkKey: key.split("#")[1],
   };
+}
+
+export function getBasisFromNormal(n: vec3) {
+  const u = vec3.create();
+  const tempVec =
+    Math.abs(vec3.dot(n, vec3.fromValues(1, 0, 0))) < 0.9
+      ? vec3.fromValues(1, 0, 0)
+      : vec3.fromValues(0, 1, 0);
+  vec3.cross(u, tempVec, n);
+  vec3.normalize(u, u);
+  const v = vec3.cross(vec3.create(), n, u);
+  vec3.normalize(v, v);
+  return { u, v };
 }
 
 export enum BrushShape {

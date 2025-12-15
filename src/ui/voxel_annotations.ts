@@ -41,6 +41,7 @@ import {
   BRUSH_TOOL_ID,
   BrushShape,
   FLOODFILL_TOOL_ID,
+  getBasisFromNormal,
   SEG_PICKER_TOOL_ID,
 } from "#src/voxel_annotation/base.js";
 
@@ -221,20 +222,10 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
   protected getBasis() {
     const n = this.lastNormal;
     if (!n) {
-      // Should never happen as getPoint is always called before... this could be cleaner
       console.error("getBasis: Unexpected behavior: lastNormal is undefined");
       return undefined;
     }
-    const u = vec3.create();
-    const tempVec =
-      Math.abs(vec3.dot(n, vec3.fromValues(1, 0, 0))) < 0.9
-        ? vec3.fromValues(1, 0, 0)
-        : vec3.fromValues(0, 1, 0);
-    vec3.cross(u, tempVec, n);
-    vec3.normalize(u, u);
-    const v = vec3.cross(vec3.create(), n, u);
-    vec3.normalize(v, v);
-    return { u, v };
+    return getBasisFromNormal(n);
   }
 }
 
