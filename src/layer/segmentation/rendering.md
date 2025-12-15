@@ -14,6 +14,20 @@ You may find the WebGL reference card helpful: <https://www.khronos.org/files/we
 
 ## API
 
+### Format of user shader
+
+The basic user shader is in the form of:
+
+```glsl
+vec3 segmentColor(vec3 color, bool hasProperties) {
+  return color;
+}
+```
+
+Color in this case is the color that would be displayed if you chose not to override it. The return value is the color that will be output aside from some potential post processing such as selected segment highlights.
+
+A vec4 version of segmentColor can also be used if you want to override the opacity.
+
 ### Accessing segmentation properties
 
 To retrieve a numerical property named `myNumericalProperty`, use the syntax `prop("myNumericalProperty")`.
@@ -26,6 +40,8 @@ if (tag("myTag") {
     // do something
 }
 ```
+
+Numerical properties can also be accessed by creating an invlerp uicontrol.
 
 ### Examples
 
