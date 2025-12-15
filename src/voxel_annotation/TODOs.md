@@ -2,8 +2,6 @@
 
 ### priority
 
-- align brush cursor transform with brush transform
-
 ### later
 
 ### questionable

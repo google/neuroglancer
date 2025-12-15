@@ -19,13 +19,11 @@ import "#src/ui/voxel_annotations.css";
 import type { MouseSelectionState } from "#src/layer/index.js";
 import {
   getActivePanel,
+  getEditingContext,
   updateBrushOutline,
   VOXEL_LAYER_CONTROLS,
 } from "#src/layer/voxel_annotation/controls.js";
-import type {
-  UserLayerWithVoxelEditing,
-  VoxelEditingContext,
-} from "#src/layer/voxel_annotation/index.js";
+import type { UserLayerWithVoxelEditing } from "#src/layer/voxel_annotation/index.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import { StatusMessage } from "#src/status.js";
 import {
@@ -63,17 +61,8 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
   protected latestMouseState: MouseSelectionState | null = null;
   private lastNormal: vec3 | undefined = undefined;
 
-  protected getEditingContext(): VoxelEditingContext | undefined {
-    const it = this.layer.editingContexts.values();
-    let ctx: VoxelEditingContext;
-    while ((ctx = it.next().value) !== undefined) {
-      if (ctx.writingEnabled) return ctx;
-    }
-    return undefined;
-  }
-
   protected getPoint(mouseState: MouseSelectionState): Int32Array | undefined {
-    const editContext = this.getEditingContext();
+    const editContext = getEditingContext(this.layer);
     if (editContext === undefined) return undefined;
     const vox = editContext.getVoxelPositionFromMouse(mouseState) as
       | Float32Array
@@ -231,7 +220,11 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
 
   protected getBasis() {
     const n = this.lastNormal;
-    if (!n) return undefined; // Should never happen as getPoint is always called before... this is not clean
+    if (!n) {
+      // Should never happen as getPoint is always called before... this could be cleaner
+      console.error("getBasis: Unexpected behavior: lastNormal is undefined");
+      return undefined;
+    }
     const u = vec3.create();
     const tempVec =
       Math.abs(vec3.dot(n, vec3.fromValues(1, 0, 0))) < 0.9
@@ -267,7 +260,7 @@ export class VoxelBrushTool extends BaseVoxelTool {
   }
 
   activationCallback(_activation: ToolActivation<this>): void {
-    if (this.getEditingContext() === undefined) {
+    if (getEditingContext(this.layer) === undefined) {
       StatusMessage.showTemporaryMessage(
         'Voxel editing is not available. Please select a writable volume source in the "Source" tab.',
         5000,
@@ -368,7 +361,7 @@ export class VoxelBrushTool extends BaseVoxelTool {
       1,
       Math.floor(this.layer.voxBrushRadius.value ?? 3),
     );
-    const editContext = this.getEditingContext();
+    const editContext = getEditingContext(this.layer);
     if (editContext === undefined) {
       throw new Error("editContext is undefined");
     }
@@ -434,7 +427,7 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
   }
 
   activationCallback(_activation: ToolActivation<this>): void {
-    const editContext = this.getEditingContext();
+    const editContext = getEditingContext(this.layer);
     if (editContext === undefined) {
       StatusMessage.showTemporaryMessage(
         'Voxel editing is not available. Please select a writable volume source in the "Source" tab.',
