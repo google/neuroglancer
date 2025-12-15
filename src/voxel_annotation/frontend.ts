@@ -46,6 +46,16 @@ import {
   SharedObject,
 } from "#src/worker_rpc.js";
 
+const OFFSETS_26_CONNECTED: number[][] = [];
+for (let z = -1; z <= 1; z++) {
+  for (let y = -1; y <= 1; y++) {
+    for (let x = -1; x <= 1; x++) {
+      if (x === 0 && y === 0 && z === 0) continue;
+      OFFSETS_26_CONNECTED.push([x, y, z]);
+    }
+  }
+}
+
 @registerSharedObjectOwner(VOX_EDIT_BACKEND_RPC_ID)
 export class VoxelEditController extends SharedObject {
   public undoCount = new WatchableValue<number>(0);
@@ -176,6 +186,68 @@ export class VoxelEditController extends SharedObject {
     };
   }
 
+  // when painting in not axis-aligned slices, flood fill and brush algorithms will leave gaps; this function fills them.
+  private fillPlaneAliasingGaps(
+    voxels: Float32Array[],
+    basis: { u: Float32Array; v: Float32Array },
+    center: Float32Array,
+  ): Float32Array[] {
+    const u = basis.u as vec3;
+    const v = basis.v as vec3;
+    const normal = vec3.create();
+    vec3.cross(normal, u, v);
+    vec3.normalize(normal, normal);
+
+    // skip if we are axis aligned
+    const SKIP_THRESHOLD = 0.99;
+    if (
+      Math.abs(normal[0]) > SKIP_THRESHOLD ||
+      Math.abs(normal[1]) > SKIP_THRESHOLD ||
+      Math.abs(normal[2]) > SKIP_THRESHOLD
+    ) {
+      return voxels;
+    }
+
+    const d = -vec3.dot(normal, center as vec3);
+
+    const voxelSet = new Set<string>();
+    const output = [...voxels];
+    for (const v of voxels) {
+      voxelSet.add(
+        `${Math.round(v[0])},${Math.round(v[1])},${Math.round(v[2])}`,
+      );
+    }
+
+    const DISTANCE_THRESHOLD =
+      Math.abs(normal[0]) + Math.abs(normal[1]) + Math.abs(normal[2]) + 1e-5;
+
+    for (const p of voxels) {
+      const px = Math.round(p[0]);
+      const py = Math.round(p[1]);
+      const pz = Math.round(p[2]);
+
+      for (const [ox, oy, oz] of OFFSETS_26_CONNECTED) {
+        const nx = px + ox;
+        const ny = py + oy;
+        const nz = pz + oz;
+        const key = `${nx},${ny},${nz}`;
+
+        if (voxelSet.has(key)) continue;
+
+        const dist = Math.abs(
+          normal[0] * nx + normal[1] * ny + normal[2] * nz + d,
+        );
+
+        if (dist <= DISTANCE_THRESHOLD) {
+          voxelSet.add(key);
+          const newVoxel = new Float32Array([nx, ny, nz]);
+          output.push(newVoxel);
+        }
+      }
+    }
+    return output;
+  }
+
   private getEnsuredValueBuilder =
     (previewSource: VolumeChunkSource, primarySource: VolumeChunkSource) =>
     async (voxelCoord: Float32Array): Promise<bigint | null> => {
@@ -198,8 +270,16 @@ export class VoxelEditController extends SharedObject {
       voxelsToPaint: Float32Array[],
       valueGetter: VoxelValueGetter,
       lodIndex: number,
+      basis?: { u: Float32Array; v: Float32Array },
+      center?: Float32Array,
     ) => {
       const indicesByVoxKey = new Map<string, number[]>();
+      if (basis && center)
+        voxelsToPaint = this.fillPlaneAliasingGaps(
+          voxelsToPaint,
+          basis,
+          center,
+        );
 
       for (const voxelCoord of voxelsToPaint) {
         const { chunkGridPosition, positionWithinChunk } =
@@ -324,7 +404,13 @@ export class VoxelEditController extends SharedObject {
       }
     }
     if (!voxelsToPaint || voxelsToPaint.length === 0) return;
-    processEdits(voxelsToPaint, valueGetter, sourceIndex);
+    processEdits(
+      voxelsToPaint,
+      valueGetter,
+      sourceIndex,
+      basis,
+      centerCanonical,
+    );
   }
 
   commitEdits(
@@ -529,7 +615,13 @@ export class VoxelEditController extends SharedObject {
       }
     }
 
-    const edits = processEdits(voxelsToFill, fillValueGetter, sourceIndex);
+    const edits = processEdits(
+      voxelsToFill,
+      fillValueGetter,
+      sourceIndex,
+      basis,
+      startPositionCanonical,
+    );
     return {
       edits,
       filledCount,
