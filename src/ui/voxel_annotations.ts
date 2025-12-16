@@ -194,7 +194,7 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
         const widget = new ToolBindingWidget(
           this.layer.toolBinder,
           def.toolJson,
-          controlContainer,
+          undefined,
         );
         activation.registerDisposer(widget);
         label.prepend(widget.element);
