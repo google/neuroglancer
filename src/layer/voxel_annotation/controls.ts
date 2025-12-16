@@ -105,7 +105,7 @@ export function updateBrushOutline(layer: UserLayerWithVoxelEditing) {
 
   const { u: u_chunk, v: v_chunk } = getBasisFromNormal(n_chunk);
 
-  const radius = layer.voxBrushRadius.value;
+  const radius = layer.brushRadius.value;
   vec3.scale(u_chunk, u_chunk, radius);
   vec3.scale(v_chunk, v_chunk, radius);
 
@@ -178,7 +178,7 @@ const TOOL_SPECIFIC_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEditing>[
       ...(() => {
         const control = rangeLayerControl(
           (layer: UserLayerWithVoxelEditing) => ({
-            value: layer.voxBrushRadius,
+            value: layer.brushRadius,
             options: { min: 1, max: 64, step: 1 },
           }),
         );
@@ -200,7 +200,7 @@ const TOOL_SPECIFIC_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEditing>[
               ),
             );
             activation.registerDisposer(
-              layer.voxBrushRadius.changed.add(updateCursor),
+              layer.brushRadius.changed.add(updateCursor),
             );
             activation.registerDisposer(() => {
               getActivePanel(layer)?.clearOverlay();
@@ -213,14 +213,14 @@ const TOOL_SPECIFIC_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEditing>[
       label: "Brush shape",
       toolJson: { type: "vox-brush-shape" },
       ...enumLayerControl(
-        (layer: UserLayerWithVoxelEditing) => layer.voxBrushShape,
+        (layer: UserLayerWithVoxelEditing) => layer.brushShape,
       ),
     },
     {
       label: "Max fill voxels",
       toolJson: { type: "vox-flood-max-voxels" },
       ...rangeLayerControl((layer) => ({
-        value: layer.voxFloodMaxVoxels,
+        value: layer.floodMaxVoxels,
         options: { min: 1, max: 1000000, step: 1000 },
       })),
     },
@@ -229,14 +229,9 @@ const TOOL_SPECIFIC_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEditing>[
 const COMMON_CONTROLS: VoxelTabElement[] = [
   { type: "header", label: "Settings" },
   {
-    label: "Eraser (selected value)",
-    toolJson: { type: "vox-erase-selected-mode" },
-    ...checkboxLayerControl((layer) => layer.voxEraseSelectedMode),
-  },
-  {
-    label: "Eraser (everything)",
+    label: "Erase only selected value",
     toolJson: { type: "vox-erase-mode" },
-    ...checkboxLayerControl((layer) => layer.voxEraseMode),
+    ...checkboxLayerControl((layer) => layer.lockToSelectedValue),
   },
   { type: "header", label: "Actions" },
   {

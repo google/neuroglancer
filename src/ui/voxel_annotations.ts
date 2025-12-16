@@ -46,11 +46,11 @@ import {
 } from "#src/voxel_annotation/base.js";
 
 const BRUSH_INPUT_MAP = EventActionMap.fromObject({
-  ["at:control+mousedown0"]: "paint-voxels",
+  ["at:control+shift?+mousedown0"]: "paint-voxels",
 });
 
 const FLOOD_INPUT_MAP = EventActionMap.fromObject({
-  ["at:control+mousedown0"]: "paint-voxels",
+  ["at:control+shift?+mousedown0"]: "paint-voxels",
 });
 
 const CONTROLS_FOR_TOOL = new Map<string, string[]>([
@@ -118,6 +118,9 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
 
     activation.bindAction("paint-voxels", (event) => {
       event.stopPropagation();
+      if ((event.detail as MouseEvent).shiftKey) {
+        this.layer.setEraseState(true);
+      }
       this.activationCallback(activation);
       startRelativeMouseDrag(
         event.detail as MouseEvent,
@@ -126,6 +129,7 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
         },
         () => {
           this.deactivationCallback(activation);
+          this.layer.setEraseState(false);
         },
       );
 
@@ -348,24 +352,22 @@ export class VoxelBrushTool extends BaseVoxelTool {
   }
 
   private paintPoints(points: Float32Array[]) {
-    const radius = Math.max(
-      1,
-      Math.floor(this.layer.voxBrushRadius.value ?? 3),
-    );
+    const radius = Math.max(1, Math.floor(this.layer.brushRadius.value ?? 3));
     const editContext = getEditingContext(this.layer);
     if (editContext === undefined) {
       throw new Error("editContext is undefined");
     }
-    const shapeEnum = this.layer.voxBrushShape.value;
+    const shapeEnum = this.layer.brushShape.value;
     let basis: undefined | { u: Float32Array; v: Float32Array } = undefined;
     if (shapeEnum === BrushShape.DISK) {
       basis = this.getBasis();
     }
 
     const value = this.layer.getVoxelPaintValue(this.layer.shouldErase());
-    const filterValue = this.layer.voxEraseSelectedMode.value
-      ? this.layer.getVoxelPaintValue(false)(false)
-      : undefined;
+    const filterValue =
+      this.layer.lockToSelectedValue.value && this.layer.shouldErase()
+        ? this.layer.getVoxelPaintValue(false)(false)
+        : undefined;
 
     for (const p of points) {
       void editContext.paintBrushWithShape(
@@ -437,14 +439,15 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
     }
     try {
       const value = this.layer.getVoxelPaintValue(this.layer.shouldErase());
-      const max = Number(this.layer.voxFloodMaxVoxels.value);
+      const max = Number(this.layer.floodMaxVoxels.value);
       if (!Number.isFinite(max) || max <= 0) {
         throw new Error("Invalid max fill voxels setting");
       }
 
-      const filterValue = this.layer.voxEraseSelectedMode.value
-        ? this.layer.getVoxelPaintValue(false)(false)
-        : undefined;
+      const filterValue =
+        this.layer.lockToSelectedValue.value && this.layer.shouldErase()
+          ? this.layer.getVoxelPaintValue(false)(false)
+          : undefined;
 
       void editContext
         .floodFillPlane2D(
