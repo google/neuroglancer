@@ -34,6 +34,7 @@ import {
   type ToolActivation,
 } from "#src/ui/tool.js";
 import { vec3 } from "#src/util/geom.js";
+import type { ActionEvent } from "#src/util/mouse_bindings.js";
 import { EventActionMap } from "#src/util/mouse_bindings.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
 import { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
@@ -46,11 +47,13 @@ import {
 } from "#src/voxel_annotation/base.js";
 
 const BRUSH_INPUT_MAP = EventActionMap.fromObject({
-  ["at:control+shift?+mousedown0"]: "paint-voxels",
+  ["at:control+mousedown0"]: "paint-voxels",
+  ["at:control+shift+mousedown0"]: "erase-voxels",
 });
 
 const FLOOD_INPUT_MAP = EventActionMap.fromObject({
-  ["at:control+shift?+mousedown0"]: "paint-voxels",
+  ["at:control+mousedown0"]: "paint-voxels",
+  ["at:control+shift+mousedown0"]: "erase-voxels",
 });
 
 const CONTROLS_FOR_TOOL = new Map<string, string[]>([
@@ -116,25 +119,26 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
     this.showToolOptionsBar(activation);
     this.bindToolInput(activation);
 
-    activation.bindAction("paint-voxels", (event) => {
-      event.stopPropagation();
-      if ((event.detail as MouseEvent).shiftKey) {
-        this.layer.setEraseState(true);
-      }
-      this.activationCallback(activation);
-      startRelativeMouseDrag(
-        event.detail as MouseEvent,
-        () => {
-          this.latestMouseState = this.mouseState;
-        },
-        () => {
-          this.deactivationCallback(activation);
-          this.layer.setEraseState(false);
-        },
-      );
+    const paintCallback =
+      (erasing: boolean) => (event: ActionEvent<MouseEvent>) => {
+        event.stopPropagation();
+        this.layer.setEraseState(erasing);
+        this.activationCallback(activation);
+        startRelativeMouseDrag(
+          event.detail as MouseEvent,
+          () => {
+            this.latestMouseState = this.mouseState;
+          },
+          () => {
+            this.deactivationCallback(activation);
+            this.layer.setEraseState(false);
+          },
+        );
+        return true;
+      };
 
-      return true;
-    });
+    activation.bindAction("paint-voxels", paintCallback(false));
+    activation.bindAction("erase-voxels", paintCallback(true));
   }
 
   private showToolOptionsBar(activation: ToolActivation<this>) {
