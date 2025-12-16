@@ -65,7 +65,10 @@ export function getEditingContext(
   return undefined;
 }
 
-export function updateBrushOutline(layer: UserLayerWithVoxelEditing) {
+export function updateBrushOutline(
+  layer: UserLayerWithVoxelEditing,
+  eraseMode: boolean,
+) {
   const context = getEditingContext(layer);
   if (context === undefined) {
     StatusMessage.showTemporaryMessage(
@@ -162,7 +165,7 @@ export function updateBrushOutline(layer: UserLayerWithVoxelEditing) {
     radiusY,
     rotation,
     "white",
-    layer.shouldErase(),
+    eraseMode,
   );
 }
 export type VoxelTabElement =
@@ -190,7 +193,7 @@ const TOOL_SPECIFIC_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEditing>[
 
             const layer = activation.tool.layer as UserLayerWithVoxelEditing;
             const updateCursor = () => {
-              updateBrushOutline(layer);
+              updateBrushOutline(layer, layer.shouldErase());
             };
 
             updateCursor();

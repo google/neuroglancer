@@ -26,6 +26,7 @@ import {
 import type { UserLayerWithVoxelEditing } from "#src/layer/voxel_annotation/index.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import { StatusMessage } from "#src/status.js";
+import { TrackableBoolean } from "#src/trackable_boolean.js";
 import {
   LayerTool,
   makeToolActivationStatusMessageWithHeader,
@@ -64,6 +65,7 @@ const CONTROLS_FOR_TOOL = new Map<string, string[]>([
 abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
   protected latestMouseState: MouseSelectionState | null = null;
   private lastNormal: vec3 | undefined = undefined;
+  protected cursorEraseMode = new TrackableBoolean(false);
 
   protected getPoint(mouseState: MouseSelectionState): Int32Array | undefined {
     const editContext = getEditingContext(this.layer);
@@ -118,6 +120,13 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
   activate(activation: ToolActivation<this>): void {
     this.showToolOptionsBar(activation);
     this.bindToolInput(activation);
+
+    const updateCursorState = (e: KeyboardEvent | MouseEvent) => {
+      this.cursorEraseMode.value = e.ctrlKey && e.shiftKey;
+    };
+    activation.registerEventListener(window, "keydown", updateCursorState);
+    activation.registerEventListener(window, "keyup", updateCursorState);
+    activation.registerEventListener(window, "mousemove", updateCursorState);
 
     const paintCallback =
       (erasing: boolean) => (event: ActionEvent<MouseEvent>) => {
@@ -245,15 +254,20 @@ export class VoxelBrushTool extends BaseVoxelTool {
 
   activate(activation: ToolActivation<this>) {
     super.activate(activation);
-    updateBrushOutline(this.layer);
+    updateBrushOutline(this.layer, this.cursorEraseMode.value);
 
+    activation.registerDisposer(
+      this.cursorEraseMode.changed.add(() => {
+        updateBrushOutline(this.layer, this.cursorEraseMode.value);
+      }),
+    );
     activation.registerDisposer(() => {
       getActivePanel(this.layer)?.clearOverlay();
       this.resetCursor();
     });
     activation.registerDisposer(
       this.mouseState.changed.add(() => {
-        updateBrushOutline(this.layer);
+        updateBrushOutline(this.layer, this.cursorEraseMode.value);
       }),
     );
   }
@@ -388,8 +402,8 @@ export class VoxelBrushTool extends BaseVoxelTool {
 
 export class VoxelFloodFillTool extends BaseVoxelTool {
   private getCursor() {
-    const lightColor = this.layer.shouldErase() ? "#FF8888" : "#FFFFFF";
-    const darkColor = this.layer.shouldErase() ? "#610000" : "#000000";
+    const lightColor = this.cursorEraseMode.value ? "#FF8888" : "#FFFFFF";
+    const darkColor = this.cursorEraseMode.value ? "#610000" : "#000000";
 
     const floodFillSVG =
       `<svg width="24px" height="24px" viewBox="0 0 24 24" fill="none"
@@ -418,6 +432,11 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
   activate(activation: ToolActivation<this>) {
     super.activate(activation);
     this.setCursor(this.getCursor());
+    activation.registerDisposer(
+      this.cursorEraseMode.changed.add(() => {
+        this.setCursor(this.getCursor());
+      }),
+    );
     activation.registerDisposer(() => {
       this.resetCursor();
     });
