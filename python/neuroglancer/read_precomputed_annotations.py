@@ -220,6 +220,57 @@ _ANNOTATION_TYPE_CHECK_BOUNDS = {
 }
 
 
+def _get_possibly_sharded_kvstore(
+    context: ts.Context, base_spec: ts.KvStore.Spec, metadata: dict[str, typing.Any]
+) -> ts.KvStore:
+    if "sharding" in metadata:
+        return ts.KvStore.open(
+            {
+                "driver": "neuroglancer_uint64_sharded",
+                "base": base_spec,
+                "metadata": metadata["sharding"],
+            },
+            context=context,
+        ).result()
+    return ts.KvStore.open(base_spec, context=context).result()
+
+
+def _get_uint64_map_args(
+    context: ts.Context,
+    base_spec: ts.KvStore.Spec,
+    metadata: typing.Any,
+    value_decoder: typing.Callable[[K, bytes], V],
+    staleness_bound: float,
+):
+    return dict(
+        kvstore=_get_possibly_sharded_kvstore(
+            context=context, base_spec=base_spec, metadata=metadata
+        ),
+        metadata=metadata,
+        key_encoder=_get_uint64_key_encoder(metadata),
+        value_decoder=value_decoder,
+        staleness_bound=staleness_bound,
+    )
+
+
+def _get_uint64_map(
+    context: ts.Context,
+    base_spec: ts.KvStore.Spec,
+    metadata: typing.Any,
+    value_decoder: typing.Callable[[K, bytes], V],
+    staleness_bound: float,
+) -> AnnotationMap[K, V]:
+    return AnnotationMap(
+        **_get_uint64_map_args(
+            context=context,
+            base_spec=base_spec,
+            metadata=metadata,
+            value_decoder=value_decoder,
+            staleness_bound=staleness_bound,
+        )
+    )
+
+
 class AnnotationReader:
     """Provides read access to a Neuroglancer Precomputed annotation dataset."""
 
@@ -434,31 +485,33 @@ class AnnotationReader:
             for annotation_i in range(count)
         ]
 
-    def _get_child_kvstore(self, metadata: typing.Any) -> ts.KvStore | None:
+    def _get_child_kvstore_spec(self, metadata: typing.Any) -> ts.KvStore.Spec | None:
         if metadata is None:
             return None
         base_spec = self.base_spec.copy()
         base_spec.path += metadata["key"] + "/"
-        if "sharding" in metadata:
-            return ts.KvStore.open(
-                {
-                    "driver": "neuroglancer_uint64_sharded",
-                    "base": base_spec,
-                    "metadata": metadata["sharding"],
-                },
-                context=self._context,
-            ).result()
-        return ts.KvStore.open(base_spec, context=self._context).result()
+        return base_spec
+
+    def _get_child_kvstore(self, metadata: typing.Any) -> ts.KvStore | None:
+        child_spec = self._get_child_kvstore_spec(metadata)
+        if child_spec is None:
+            return None
+        return _get_possibly_sharded_kvstore(
+            context=self._context, base_spec=child_spec, metadata=metadata
+        )
 
     def _get_child_uint64_map(
         self, metadata: typing.Any, value_decoder: typing.Callable[[K, bytes], V]
     ):
-        return AnnotationMap(
-            kvstore=self._get_child_kvstore(metadata),
+        child_spec = self._get_child_kvstore_spec(metadata)
+        if child_spec is None:
+            return None
+        return _get_uint64_map(
+            context=self._context,
+            base_spec=child_spec,
             metadata=metadata,
-            key_encoder=_get_uint64_key_encoder(metadata),
-            value_decoder=value_decoder,
             staleness_bound=self.staleness_bound,
+            value_decoder=value_decoder,
         )
 
     def _get_child_spatial_map(self, metadata):
@@ -475,7 +528,7 @@ class AnnotationReader:
         *,
         lower_bound: typing.Sequence[float] | None = None,
         upper_bound: typing.Sequence[float] | None = None,
-        min_spatial_index_level=0,
+        max_spatial_index_level: int | None = None,
         limit: int | None = None,
         max_parallelism: int = 128,
     ) -> typing.Iterator[viewer_state.Annotation]:
@@ -486,9 +539,9 @@ class AnnotationReader:
               If not specified, defaults to `.lower_bound`.
           upper_bound: Upper bound within `.coordinate_space`.
               If not specified, defaults to `.upper_bound`.
-          min_spatial_index_level: Minimum spatial index level to use.
-          limit: Maximum number of iterations to return.
-
+          max_spatial_index_level: Maximum (finest) spatial index level to use.
+          limit: Maximum number of annotations to return.
+          max_parallelism: Maximum number of concurrent requests.
         Group:
           I/O
         """
@@ -547,7 +600,14 @@ class AnnotationReader:
                 (spatial_index.get(coords), req_lower_bound, req_upper_bound)
             )
 
-        for level in range(len(self.spatial) - 1, min_spatial_index_level - 1, -1):
+        if max_spatial_index_level is None:
+            max_spatial_index_level = len(self.spatial) - 1
+        else:
+            max_spatial_index_level = min(
+                max_spatial_index_level, len(self.spatial) - 1
+            )
+
+        for level in range(max_spatial_index_level + 1):
             if limit is not None and count >= limit:
                 return
             spatial_index = self.spatial[level]
