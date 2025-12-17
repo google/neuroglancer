@@ -117,7 +117,15 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
 
   abstract bindToolInput(activation: ToolActivation<this>): void;
 
-  activate(activation: ToolActivation<this>): void {
+  activate(activation: ToolActivation<this>): boolean {
+    if (!this.layer.hasSubsourcesWithWritingEnabled.value) {
+      StatusMessage.showTemporaryMessage(
+        'Voxel editing is not available. Please select a writable volume source in the "Source" tab.',
+        5000,
+      );
+      activation.cancel();
+      return false;
+    }
     this.showToolOptionsBar(activation);
     this.bindToolInput(activation);
 
@@ -148,6 +156,7 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
 
     activation.bindAction("paint-voxels", paintCallback(false));
     activation.bindAction("erase-voxels", paintCallback(true));
+    return true;
   }
 
   private showToolOptionsBar(activation: ToolActivation<this>) {
@@ -252,8 +261,8 @@ export class VoxelBrushTool extends BaseVoxelTool {
   private mouseDisposer: (() => void) | undefined;
   private animationFrameHandle: number | null = null;
 
-  activate(activation: ToolActivation<this>) {
-    super.activate(activation);
+  activate(activation: ToolActivation<this>): boolean {
+    if (!super.activate(activation)) return false;
     updateBrushOutline(this.layer, this.cursorEraseMode.value);
 
     activation.registerDisposer(
@@ -270,6 +279,7 @@ export class VoxelBrushTool extends BaseVoxelTool {
         updateBrushOutline(this.layer, this.cursorEraseMode.value);
       }),
     );
+    return true;
   }
 
   activationCallback(_activation: ToolActivation<this>): void {
@@ -430,7 +440,7 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
   }
 
   activate(activation: ToolActivation<this>) {
-    super.activate(activation);
+    if (!super.activate(activation)) return false;
     this.setCursor(this.getCursor());
     activation.registerDisposer(
       this.cursorEraseMode.changed.add(() => {
@@ -440,6 +450,7 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
     activation.registerDisposer(() => {
       this.resetCursor();
     });
+    return true;
   }
 
   activationCallback(_activation: ToolActivation<this>): void {
@@ -555,6 +566,14 @@ export class AdoptVoxelValueTool extends LayerTool<UserLayerWithVoxelEditing> {
   }
 
   activate(activation: ToolActivation<this>): void {
+    if (!this.layer.hasSubsourcesWithWritingEnabled.value) {
+      StatusMessage.showTemporaryMessage(
+        'Voxel editing is not available. Please select a writable volume source in the "Source" tab.',
+        5000,
+      );
+      activation.cancel();
+      return;
+    }
     if (!this.mouseState?.active) return;
     this.setCursor(pickerCursor);
     activation.registerDisposer(() => {
