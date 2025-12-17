@@ -44,6 +44,8 @@ def mypy(session):
         "dev",
         "--extra",
         "webdriver",
+        "--extra",
+        "osteoid",
         "--group",
         "test",
         env={"UV_PROJECT_ENVIRONMENT": session.virtualenv.location},
@@ -65,6 +67,8 @@ def ty(session):
         "--extra",
         "webdriver",
         "--group",
+        "--extra",
+        "osteoid",
         "test",
         env={"UV_PROJECT_ENVIRONMENT": session.virtualenv.location},
     )
@@ -79,6 +83,8 @@ def docs(session: nox.Session):
         "--no-default-groups",
         "--group",
         "docs",
+        "--extra",
+        "osteoid",
         "--no-install-workspace",
         env={"UV_PROJECT_ENVIRONMENT": session.virtualenv.location},
     )
