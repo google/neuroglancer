@@ -143,10 +143,11 @@ export class VoxelEditController extends SharedObject {
     multiscale: MultiscaleVolumeChunkSource | undefined,
     lodIndex: number,
   ): VolumeChunkSource {
-    if (!multiscale)
+    if (!multiscale) {
       throw new Error(
         `VoxelEditController: Invalid multiscale object: ${multiscale}`,
       );
+    }
     const sourcesByScale = multiscale.getSources(
       this.getIdentitySliceViewSourceOptions(),
     );
