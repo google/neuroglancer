@@ -14,16 +14,24 @@
  * limitations under the License.
  */
 
+import { ChunkState } from "#src/chunk_manager/base.js";
 import { DataType } from "#src/sliceview/base.js";
 import { decodeChannel as decodeChannelUint32 } from "#src/sliceview/compressed_segmentation/decode_uint32.js";
 import { decodeChannel as decodeChannelUint64 } from "#src/sliceview/compressed_segmentation/decode_uint64.js";
-import type { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
+import type {
+  VolumeChunk,
+  VolumeChunkSource,
+} from "#src/sliceview/volume/backend.js";
+import { computeChunkGridPosition } from "#src/sliceview/volume/base.js";
 import { mat4, vec3 } from "#src/util/geom.js";
 import * as matrix from "#src/util/matrix.js";
 import type {
   VoxelLayerResolution,
   EditAction,
   VoxelChange,
+  VoxelOperation,
+  BrushOperation,
+  FloodFillOperation,
 } from "#src/voxel_annotation/base.js";
 import {
   VOX_EDIT_BACKEND_RPC_ID,
@@ -33,6 +41,9 @@ import {
   VOX_EDIT_UNDO_RPC_ID,
   VOX_EDIT_REDO_RPC_ID,
   VOX_EDIT_HISTORY_UPDATE_RPC_ID,
+  VOX_EDIT_OPERATION_RPC_ID,
+  VoxelOperationType,
+  BrushShape,
   makeVoxChunkKey,
   parseVoxChunkKey,
   makeChunkKey,
@@ -46,6 +57,166 @@ import {
   initializeSharedObjectCounterpart,
 } from "#src/worker_rpc.js";
 
+const OFFSETS_26_CONNECTED_BACKEND: number[][] = [];
+for (let z = -1; z <= 1; z++) {
+  for (let y = -1; y <= 1; y++) {
+    for (let x = -1; x <= 1; x++) {
+      if (x === 0 && y === 0 && z === 0) continue;
+      OFFSETS_26_CONNECTED_BACKEND.push([x, y, z]);
+    }
+  }
+}
+
+
+class BackendVoxelAccessor {
+  private activeChunk: VolumeChunk | null = null;
+  private activeChunkData: Uint32Array | BigUint64Array | Uint8Array | Int8Array | Uint16Array | Int16Array | Int32Array | Float32Array | null = null;
+  private activeChunkGridKey: string | null = null;
+
+  private activeBoundsMinX = 0;
+  private activeBoundsMaxX = 0;
+  private activeBoundsMinY = 0;
+  private activeBoundsMaxY = 0;
+  private activeBoundsMinZ = 0;
+  private activeBoundsMaxZ = 0;
+
+  private activeStrideX = 1;
+  private activeStrideY = 1;
+  private activeStrideZ = 1;
+
+  private fillValue: bigint;
+
+  constructor(private source: VolumeChunkSource) {
+    const fv = source.spec.fillValue;
+    this.fillValue = typeof fv === 'bigint' ? fv : BigInt(fv);
+  }
+
+  async getValue(x: number, y: number, z: number): Promise<bigint | null> {
+    const { lowerVoxelBound, upperVoxelBound } = this.source.spec;
+    if (
+      x < lowerVoxelBound[0] || x >= upperVoxelBound[0] ||
+      y < lowerVoxelBound[1] || y >= upperVoxelBound[1] ||
+      z < lowerVoxelBound[2] || z >= upperVoxelBound[2]
+    ) {
+      return null;
+    }
+
+    if (
+      this.activeChunk &&
+      x >= this.activeBoundsMinX && x < this.activeBoundsMaxX &&
+      y >= this.activeBoundsMinY && y < this.activeBoundsMaxY &&
+      z >= this.activeBoundsMinZ && z < this.activeBoundsMaxZ
+    ) {
+      return this.readLocal(x, y, z);
+    }
+
+    return this.loadChunk(x, y, z);
+  }
+
+  private readLocal(x: number, y: number, z: number): bigint {
+    if (this.activeChunkData !== null) {
+      const lx = x - this.activeBoundsMinX;
+      const ly = y - this.activeBoundsMinY;
+      const lz = z - this.activeBoundsMinZ;
+
+      const index = lz * this.activeStrideZ + ly * this.activeStrideY + lx * this.activeStrideX;
+      const val = this.activeChunkData[index];
+      return typeof val === 'bigint' ? val : BigInt(val);
+    }
+    return this.fillValue;
+  }
+
+  private async loadChunk(x: number, y: number, z: number): Promise<bigint | null> {
+    const { chunkDataSize } = this.source.spec;
+
+    const gx = Math.floor(x / chunkDataSize[0]);
+    const gy = Math.floor(y / chunkDataSize[1]);
+    const gz = Math.floor(z / chunkDataSize[2]);
+    const key = `${gx},${gy},${gz}`;
+
+    if (this.activeChunkGridKey === key) {
+      return this.readLocal(x, y, z);
+    }
+
+    const chunkGridPosition = new Float32Array([gx, gy, gz]);
+
+    let chunk = this.source.chunks.get(key) as VolumeChunk | undefined;
+    if (!chunk) {
+      chunk = this.source.getChunk(chunkGridPosition) as VolumeChunk;
+    }
+
+    if (!chunk.chunkDataSize) {
+      this.source.computeChunkBounds(chunk);
+    }
+
+    if (chunk.state > ChunkState.SYSTEM_MEMORY_WORKER || !chunk.data) {
+      try {
+        await this.source.download(chunk, new AbortController().signal);
+        if (!chunk.chunkDataSize) this.source.computeChunkBounds(chunk);
+      } catch {
+        // Download failed
+      }
+    }
+
+    this.activeChunk = chunk;
+    this.activeChunkGridKey = key;
+
+    const size = chunk.chunkDataSize || chunkDataSize;
+    this.activeBoundsMinX = gx * chunkDataSize[0];
+    this.activeBoundsMinY = gy * chunkDataSize[1];
+    this.activeBoundsMinZ = gz * chunkDataSize[2];
+    this.activeBoundsMaxX = this.activeBoundsMinX + size[0];
+    this.activeBoundsMaxY = this.activeBoundsMinY + size[1];
+    this.activeBoundsMaxZ = this.activeBoundsMinZ + size[2];
+
+    this.activeStrideX = 1;
+    this.activeStrideY = size[0];
+    this.activeStrideZ = size[0] * size[1];
+
+    if (chunk.data) {
+      this.prepareData(chunk);
+    } else {
+      this.activeChunkData = null;
+    }
+
+    if (
+      x >= this.activeBoundsMinX && x < this.activeBoundsMaxX &&
+      y >= this.activeBoundsMinY && y < this.activeBoundsMaxY &&
+      z >= this.activeBoundsMinZ && z < this.activeBoundsMaxZ
+    ) {
+      return this.readLocal(x, y, z);
+    }
+    return null;
+  }
+
+  private prepareData(chunk: VolumeChunk) {
+    const { spec } = this.source;
+    if (spec.compressedSegmentationBlockSize) {
+      const size = chunk.chunkDataSize!;
+      const numElements = size[0] * size[1] * size[2];
+      const compressedData = chunk.data as Uint32Array;
+      const baseOffset = compressedData.length > 0 ? compressedData[0] : 0;
+
+      const { dataType, compressedSegmentationBlockSize: subchunkSize } = spec;
+
+      if (dataType === DataType.UINT32) {
+        const out = new Uint32Array(numElements);
+        if (baseOffset !== 0) {
+          decodeChannelUint32(out, compressedData, baseOffset, size, subchunkSize!);
+        }
+        this.activeChunkData = out;
+      } else {
+        const out = new BigUint64Array(numElements);
+        if (baseOffset !== 0) {
+          decodeChannelUint64(out, compressedData, baseOffset, size, subchunkSize!);
+        }
+        this.activeChunkData = out;
+      }
+    } else {
+      this.activeChunkData = chunk.data as any;
+    }
+  }
+}
 @registerSharedObject(VOX_EDIT_BACKEND_RPC_ID)
 export class VoxelEditController extends SharedObject {
   private sources = new Map<number, VolumeChunkSource>();
@@ -72,6 +243,16 @@ export class VoxelEditController extends SharedObject {
   private downsampleQueue: string[] = [];
   private downsampleQueueSet: Set<string> = new Set();
   private isProcessingDownsampleQueue: boolean = false;
+
+  private morphologicalConfig = {
+    growthThresholds: [
+      { count: 100, size: 1 },
+      { count: 1000, size: 3 },
+      { count: 10000, size: 5 },
+      { count: 100000, size: 7 },
+    ],
+    maxSize: 9,
+  };
 
   constructor(rpc: RPC, options: any) {
     super();
@@ -752,6 +933,322 @@ export class VoxelEditController extends SharedObject {
   public async redo(): Promise<void> {
     await this.performUndoRedo(this.redoStack, this.undoStack, false, "redo");
   }
+
+  async performOperation(operation: VoxelOperation): Promise<void> {
+    switch (operation.type) {
+      case VoxelOperationType.BRUSH:
+        return this.performBrush(operation);
+      case VoxelOperationType.FLOOD_FILL:
+        return this.performFloodFill(operation);
+      default:
+        throw new Error(
+          `Unknown voxel operation type: ${(operation as any).type}`,
+        );
+    }
+  }
+
+  private async performBrush(op: BrushOperation): Promise<void> {
+    const { center, radius, value, shape, basis, filterValue } = op;
+    const voxelSize = 1; // Hardcoded LOD 0
+    const sourceIndex = 0;
+    const source = this.sources.get(sourceIndex);
+    if (!source)
+      throw new Error(`Brush operation requires a source.`);
+    const accessor = new BackendVoxelAccessor(source);
+
+    const cx = Math.round((center[0] ?? 0) / voxelSize);
+    const cy = Math.round((center[1] ?? 0) / voxelSize);
+    const cz = Math.round((center[2] ?? 0) / voxelSize);
+    const r = Math.round(radius / voxelSize);
+    if (r <= 0)
+      throw new Error(`Brush radius must be positive.`);
+    const rr = r * r;
+
+    const voxelsToPaint: Float32Array[] = [];
+
+    const pushIf = async (point: Float32Array) => {
+      const v = await accessor.getValue(point[0], point[1], point[2]);
+      if (v === null) return;
+      if (v === value || (filterValue !== undefined && v !== filterValue))
+        return;
+      voxelsToPaint.push(point);
+    };
+
+    if (shape === BrushShape.SPHERE) {
+      for (let dz = -r; dz <= r; ++dz) {
+        for (let dy = -r; dy <= r; ++dy) {
+          for (let dx = -r; dx <= r; ++dx) {
+            if (dx * dx + dy * dy + dz * dz <= rr)
+              await pushIf(new Float32Array([cx + dx, cy + dy, cz + dz]));
+          }
+        }
+      }
+    } else {
+      if (basis === undefined)
+        throw new Error("Brush shape requires a basis.");
+      const { u, v } = basis;
+      for (let j = -r; j <= r; ++j) {
+        for (let i = -r; i <= r; ++i) {
+          if (i * i + j * j <= rr) {
+            const point = vec3.fromValues(cx, cy, cz);
+            vec3.scaleAndAdd(point, point, u as vec3, i);
+            vec3.scaleAndAdd(point, point, v as vec3, j);
+            await pushIf(point as Float32Array);
+          }
+        }
+      }
+    }
+
+    if (voxelsToPaint.length === 0) return;
+
+    let finalVoxels = voxelsToPaint;
+    if (basis && shape === BrushShape.DISK) {
+      finalVoxels = this.fillPlaneAliasingGaps(voxelsToPaint, basis, center);
+    }
+
+    await this.processBackendEdits(finalVoxels, value, sourceIndex);
+  }
+
+  private async performFloodFill(op: FloodFillOperation): Promise<void> {
+    const { seed, value: fillValue, maxVoxels, basis, filterValue } = op;
+    const sourceIndex = 0;
+    const source = this.sources.get(sourceIndex);
+    if (!source) return;
+    const accessor = new BackendVoxelAccessor(source);
+
+    const startVoxelLod = vec3.round(vec3.create(), seed as vec3);
+    const originalValue = await accessor.getValue(
+      startVoxelLod[0],
+      startVoxelLod[1],
+      startVoxelLod[2],
+    );
+
+    if (originalValue === null) return;
+    if (filterValue !== undefined && originalValue !== filterValue) return;
+    if (originalValue === fillValue) return;
+
+    const visited = new Set<string>();
+    const queue: [number, number][] = [];
+    let filledCount = 0;
+    const voxelsToFill: Float32Array[] = [];
+
+    const map2dTo3d = (u: number, v: number): vec3 => {
+      const point = vec3.clone(startVoxelLod);
+      vec3.scaleAndAdd(point, point, basis.u as vec3, u);
+      vec3.scaleAndAdd(point, point, basis.v as vec3, v);
+      return vec3.round(vec3.create(), point);
+    };
+
+    const isFillable = async (p: vec3): Promise<boolean> => {
+      const val = await accessor.getValue(p[0], p[1], p[2]);
+      if (val === null) return false;
+      if (originalValue === 0n) return val === 0n;
+      return val === originalValue;
+    };
+
+    const getCurrentThickness = (): number => {
+      let thickness = 1;
+      for (const threshold of this.morphologicalConfig.growthThresholds) {
+        if (filledCount >= threshold.count) {
+          thickness = Math.max(thickness, threshold.size);
+        }
+      }
+      return Math.min(thickness, this.morphologicalConfig.maxSize);
+    };
+
+    const hasThickEnoughChannel = async (
+      u: number,
+      v: number,
+      nu: number,
+      nv: number,
+      requiredThickness: number,
+    ): Promise<boolean> => {
+      if (requiredThickness <= 1) return true;
+      const halfThickness = Math.floor(requiredThickness / 2);
+      const du = nu - u;
+      const dv = nv - v;
+      const perpU = -dv;
+      const perpV = du;
+
+      for (let offset = -halfThickness; offset <= halfThickness; ++offset) {
+        const testU = nu + perpU * offset;
+        const testV = nv + perpV * offset;
+        const pointToTest = map2dTo3d(testU, testV);
+        if (!(await isFillable(pointToTest))) return false;
+      }
+      return true;
+    };
+
+    const fillBorderRegion = async (
+      startU: number,
+      startV: number,
+      requiredThickness: number,
+    ) => {
+      const subQueue: [number, number][] = [];
+      const halfSize = requiredThickness * 2;
+      const startKey = `${startU},${startV}`;
+      if (visited.has(startKey)) return;
+
+      subQueue.push([startU, startV]);
+      visited.add(startKey);
+
+      while (subQueue.length > 0) {
+        if (filledCount >= maxVoxels) return;
+        const [u, v] = subQueue.shift()!;
+        const currentPoint = map2dTo3d(u, v);
+        filledCount++;
+        voxelsToFill.push(currentPoint as Float32Array);
+
+        const neighbors2d: [number, number][] = [
+          [u + 1, v],
+          [u - 1, v],
+          [u, v + 1],
+          [u, v - 1],
+        ];
+        for (const [nu, nv] of neighbors2d) {
+          const du = nu - startU;
+          const dv = nv - startV;
+          if (du * du + dv * dv > halfSize * halfSize) continue;
+          const neighborKey = `${nu},${nv}`;
+          if (visited.has(neighborKey)) continue;
+          if (await isFillable(map2dTo3d(nu, nv))) {
+            visited.add(neighborKey);
+            subQueue.push([nu, nv]);
+          }
+        }
+      }
+    };
+
+    queue.push([0, 0]);
+    visited.add("0,0");
+
+    while (queue.length > 0) {
+      if (filledCount >= maxVoxels) break; // Or throw error
+      const [u, v] = queue.shift()!;
+      const currentPoint = map2dTo3d(u, v);
+      filledCount++;
+      voxelsToFill.push(currentPoint as Float32Array);
+
+      const requiredThickness = getCurrentThickness();
+      const neighbors2d: [number, number][] = [
+        [u + 1, v],
+        [u - 1, v],
+        [u, v + 1],
+        [u, v - 1],
+      ];
+
+      for (const [nu, nv] of neighbors2d) {
+        const k = `${nu},${nv}`;
+        if (visited.has(k)) continue;
+        const neighborPoint = map2dTo3d(nu, nv);
+        if (await isFillable(neighborPoint)) {
+          if (await hasThickEnoughChannel(u, v, nu, nv, requiredThickness)) {
+            visited.add(k);
+            queue.push([nu, nv]);
+          } else {
+            await fillBorderRegion(nu, nv, requiredThickness);
+          }
+        }
+      }
+    }
+
+    const finalVoxels = this.fillPlaneAliasingGaps(voxelsToFill, basis, seed);
+    await this.processBackendEdits(finalVoxels, fillValue, sourceIndex);
+  }
+
+  private fillPlaneAliasingGaps(
+    voxels: Float32Array[],
+    basis: { u: Float32Array; v: Float32Array },
+    center: Float32Array,
+  ): Float32Array[] {
+    const u = basis.u as vec3;
+    const v = basis.v as vec3;
+    const normal = vec3.create();
+    vec3.cross(normal, u, v);
+    vec3.normalize(normal, normal);
+
+    const SKIP_THRESHOLD = 0.99;
+    if (
+      Math.abs(normal[0]) > SKIP_THRESHOLD ||
+      Math.abs(normal[1]) > SKIP_THRESHOLD ||
+      Math.abs(normal[2]) > SKIP_THRESHOLD
+    ) {
+      return voxels;
+    }
+
+    const d = -vec3.dot(normal, center as vec3);
+    const voxelSet = new Set<string>();
+    const output = [...voxels];
+    for (const v of voxels) {
+      voxelSet.add(
+        `${Math.round(v[0])},${Math.round(v[1])},${Math.round(v[2])}`,
+      );
+    }
+
+    const DISTANCE_THRESHOLD =
+      Math.abs(normal[0]) + Math.abs(normal[1]) + Math.abs(normal[2]) + 1e-5;
+
+    for (const p of voxels) {
+      const px = Math.round(p[0]);
+      const py = Math.round(p[1]);
+      const pz = Math.round(p[2]);
+
+      for (const [ox, oy, oz] of OFFSETS_26_CONNECTED_BACKEND) {
+        const nx = px + ox;
+        const ny = py + oy;
+        const nz = pz + oz;
+        const key = `${nx},${ny},${nz}`;
+        if (voxelSet.has(key)) continue;
+
+        const dist = Math.abs(
+          normal[0] * nx + normal[1] * ny + normal[2] * nz + d,
+        );
+        if (dist <= DISTANCE_THRESHOLD) {
+          voxelSet.add(key);
+          output.push(new Float32Array([nx, ny, nz]));
+        }
+      }
+    }
+    return output;
+  }
+
+  private async processBackendEdits(
+    voxels: Float32Array[],
+    value: bigint,
+    lodIndex: number,
+  ) {
+    const source = this.sources.get(lodIndex);
+    if (!source) return;
+
+    const { rank, chunkDataSize } = source.spec;
+    const tempGridPos = new Float32Array(rank);
+    const tempPosInChunk = new Uint32Array(rank);
+
+    const indicesByVoxKey = new Map<string, number[]>();
+    for (const voxelCoord of voxels) {
+      computeChunkGridPosition(tempGridPos, tempPosInChunk, voxelCoord, chunkDataSize);
+      const chunkKey = tempGridPos.join();
+      const voxKey = makeVoxChunkKey(chunkKey, lodIndex);
+
+      let indices = indicesByVoxKey.get(voxKey);
+      if (!indices) {
+        indices = [];
+        indicesByVoxKey.set(voxKey, indices);
+      }
+
+      const index =
+        (tempPosInChunk[2] * chunkDataSize[1] + tempPosInChunk[1]) *
+          chunkDataSize[0] +
+        tempPosInChunk[0];
+      indices.push(index);
+    }
+
+    const backendEdits = [];
+    for (const [voxKey, indices] of indicesByVoxKey.entries()) {
+      backendEdits.push({ key: voxKey, indices, value });
+    }
+    await this.commitVoxels(backendEdits);
+  }
 }
 
 registerRPC(VOX_EDIT_COMMIT_VOXELS_RPC_ID, function (x: any) {
@@ -770,3 +1267,12 @@ registerPromiseRPC(VOX_EDIT_REDO_RPC_ID, async function (this: RPC, x: any) {
   await obj.redo();
   return { value: undefined };
 });
+
+registerPromiseRPC(
+  VOX_EDIT_OPERATION_RPC_ID,
+  async function (this: RPC, x: any) {
+    const obj = this.get(x.rpcId) as VoxelEditController;
+    await obj.performOperation(x.operation);
+    return { value: undefined };
+  },
+);

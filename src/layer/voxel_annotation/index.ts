@@ -188,7 +188,7 @@ export class VoxelEditingContext
     radiusCanonical: number,
     value: VoxelValueGetter,
     shape: BrushShape,
-    basis?: { u: Float32Array; v: Float32Array },
+    basis: { u: Float32Array; v: Float32Array },
     filterValue?: bigint,
   ) {
     if (!this._controller)
@@ -215,7 +215,7 @@ export class VoxelEditingContext
     if (!this._controller)
       throw new Error("Cannot use floodFillPlane2D without a controller");
     if (await this.checkPermission()) {
-      return this._controller.floodFillPlane2D(
+      await this._controller.floodFillPlane2D(
         startPositionCanonical,
         fillValue,
         maxVoxels,
@@ -223,7 +223,6 @@ export class VoxelEditingContext
         filterValue,
       );
     }
-    return undefined;
   }
 
   async undo() {

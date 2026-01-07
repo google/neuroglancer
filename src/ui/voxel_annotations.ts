@@ -41,7 +41,6 @@ import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
 import { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 import {
   BRUSH_TOOL_ID,
-  BrushShape,
   FLOODFILL_TOOL_ID,
   getBasisFromNormal,
   SEG_PICKER_TOOL_ID,
@@ -386,9 +385,9 @@ export class VoxelBrushTool extends BaseVoxelTool {
       throw new Error("editContext is undefined");
     }
     const shapeEnum = this.layer.brushShape.value;
-    let basis: undefined | { u: Float32Array; v: Float32Array } = undefined;
-    if (shapeEnum === BrushShape.DISK) {
-      basis = this.getBasis();
+    const basis = this.getBasis();
+    if (!basis) {
+      throw new Error("basis is undefined");
     }
 
     const value = this.layer.getVoxelPaintValue(this.layer.shouldErase());
@@ -615,7 +614,7 @@ export class AdoptVoxelValueTool extends LayerTool<UserLayerWithVoxelEditing> {
           this.layer.getIdentitySliceViewSourceOptions(),
         )[0][0]!.chunkSource;
 
-        const valueResult = await source.getEnsuredValueAt(
+        const valueResult = source.getValueAt(
           voxelCoord,
           this.singleChannelAccess,
         );

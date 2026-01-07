@@ -19,7 +19,6 @@ import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transf
 import type { SliceViewChunkSpecification } from "#src/sliceview/base.js";
 import {
   DataType,
-  SLICEVIEW_REQUEST_CHUNK_RPC_ID,
 } from "#src/sliceview/base.js";
 import type { SliceViewChunk } from "#src/sliceview/frontend.js";
 import {
@@ -31,9 +30,10 @@ import type {
   VolumeChunkSource as VolumeChunkSourceInterface,
   VolumeChunkSpecification,
   VolumeSourceOptions,
-  VolumeType,
-} from "#src/sliceview/volume/base.js";
-import { IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID } from "#src/sliceview/volume/base.js";
+  VolumeType} from "#src/sliceview/volume/base.js";
+import {
+  computeChunkGridPosition
+, IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID } from "#src/sliceview/volume/base.js";
 import { VolumeChunk } from "#src/sliceview/volume/chunk.js";
 import { getChunkFormatHandler } from "#src/sliceview/volume/registry.js";
 import type { TypedArray } from "#src/util/array.js";
@@ -197,52 +197,20 @@ export class VolumeChunkSource
     return this.chunkFormatHandler.chunkFormat;
   }
 
-  async getEnsuredValueAt(
-    chunkPosition: Float32Array,
-    channelAccess: ChunkChannelAccessParameters,
-  ): Promise<number | bigint | any[] | null> {
-    const initialValue = this.getValueAt(chunkPosition, channelAccess);
-    if (initialValue != null) {
-      return initialValue;
-    }
-
-    const { chunkGridPosition } = this.computeChunkIndices(chunkPosition);
-
-    try {
-      await this.rpc!.promiseInvoke(SLICEVIEW_REQUEST_CHUNK_RPC_ID, {
-        source: this.rpcId,
-        chunkGridPosition: chunkGridPosition,
-      });
-    } catch (e) {
-      console.error(
-        `Failed to fetch chunk for position ${chunkPosition.join()}:`,
-        e,
-      );
-      return null;
-    }
-
-    return this.getValueAt(chunkPosition, channelAccess);
-  }
-
   computeChunkIndices(voxelCoord: Float32Array): {
     chunkGridPosition: Float32Array;
     positionWithinChunk: Uint32Array;
   } {
-    const { spec } = this;
-    const { rank, chunkDataSize } = spec;
-    const chunkGridPosition = this.tempChunkGridPosition;
-    const positionWithinChunk = this.tempPositionWithinChunk;
-
-    for (let chunkDim = 0; chunkDim < rank; ++chunkDim) {
-      const voxel = voxelCoord[chunkDim];
-      const chunkSize = chunkDataSize[chunkDim];
-      const chunkIndex = Math.floor(voxel / chunkSize);
-      chunkGridPosition[chunkDim] = chunkIndex;
-      positionWithinChunk[chunkDim] = Math.floor(
-        voxel - chunkSize * chunkIndex,
-      );
-    }
-    return { chunkGridPosition, positionWithinChunk };
+    computeChunkGridPosition(
+      this.tempChunkGridPosition,
+      this.tempPositionWithinChunk,
+      voxelCoord,
+      this.spec.chunkDataSize,
+    );
+    return {
+      chunkGridPosition: this.tempChunkGridPosition,
+      positionWithinChunk: this.tempPositionWithinChunk,
+    };
   }
 
   getValueAt(

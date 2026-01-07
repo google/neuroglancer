@@ -153,6 +153,22 @@ export function makeVolumeChunkSpecification(
   };
 }
 
+export function computeChunkGridPosition(
+  chunkGridPosition: Float32Array,
+  positionWithinChunk: Uint32Array,
+  voxelCoord: Float32Array,
+  chunkDataSize: Uint32Array | Float32Array,
+) {
+  const rank = chunkGridPosition.length;
+  for (let i = 0; i < rank; ++i) {
+    const voxel = voxelCoord[i];
+    const size = chunkDataSize[i];
+    const chunkIndex = Math.floor(voxel / size);
+    chunkGridPosition[i] = chunkIndex;
+    positionWithinChunk[i] = Math.floor(voxel - size * chunkIndex);
+  }
+}
+
 function shouldTranscodeToCompressedSegmentation(
   options: VolumeChunkSpecificationDefaultCompressionOptions &
     VolumeChunkSpecificationOptions &

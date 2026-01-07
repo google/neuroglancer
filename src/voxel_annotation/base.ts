@@ -27,6 +27,38 @@ export const VOX_EDIT_UNDO_RPC_ID = "vox.edit.undo";
 export const VOX_EDIT_REDO_RPC_ID = "vox.edit.redo";
 export const VOX_EDIT_HISTORY_UPDATE_RPC_ID = "vox.edit.historyUpdate";
 
+export const VOX_EDIT_OPERATION_RPC_ID = "vox.edit.operation";
+
+export enum VoxelOperationType {
+  BRUSH = 0,
+  FLOOD_FILL = 1,
+}
+
+export interface VoxelOperationBase {
+  type: VoxelOperationType;
+}
+
+export interface BrushOperation extends VoxelOperationBase {
+  type: VoxelOperationType.BRUSH;
+  center: Float32Array;
+  radius: number;
+  value: bigint;
+  shape: BrushShape;
+  basis: { u: Float32Array; v: Float32Array };
+  filterValue?: bigint;
+}
+
+export interface FloodFillOperation extends VoxelOperationBase {
+  type: VoxelOperationType.FLOOD_FILL;
+  seed: Float32Array;
+  value: bigint;
+  maxVoxels: number;
+  basis: { u: Float32Array; v: Float32Array };
+  filterValue?: bigint;
+}
+
+export type VoxelOperation = BrushOperation | FloodFillOperation;
+
 export const BRUSH_TOOL_ID = "vox-brush";
 export const FLOODFILL_TOOL_ID = "vox-flood-fill";
 export const SEG_PICKER_TOOL_ID = "vox-seg-picker";
