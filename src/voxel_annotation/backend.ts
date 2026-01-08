@@ -23,6 +23,7 @@ import type {
   VolumeChunkSource,
 } from "#src/sliceview/volume/backend.js";
 import { computeChunkGridPosition } from "#src/sliceview/volume/base.js";
+import type { TypedArray } from "#src/util/array.js";
 import { mat4, vec3 } from "#src/util/geom.js";
 import * as matrix from "#src/util/matrix.js";
 import type {
@@ -67,156 +68,147 @@ for (let z = -1; z <= 1; z++) {
   }
 }
 
+function getFlatChunkData(
+  chunk: VolumeChunk,
+  spec: any,
+): Uint32Array | BigUint64Array | TypedArray | null {
+  if (!chunk.data) return null;
+
+  if (!spec.compressedSegmentationBlockSize) {
+    return chunk.data as TypedArray;
+  }
+
+  const size = chunk.chunkDataSize!;
+  const numElements = size[0] * size[1] * size[2];
+  const compressedData = chunk.data as Uint32Array;
+  const baseOffset = compressedData.length > 0 ? compressedData[0] : 0;
+  const subchunkSize = spec.compressedSegmentationBlockSize;
+
+  if (spec.dataType === DataType.UINT32) {
+    const out = new Uint32Array(numElements);
+    if (baseOffset !== 0) {
+      decodeChannelUint32(out, compressedData, baseOffset, size, subchunkSize);
+    }
+    return out;
+  } else {
+    const out = new BigUint64Array(numElements);
+    if (baseOffset !== 0) {
+      decodeChannelUint64(out, compressedData, baseOffset, size, subchunkSize);
+    }
+    return out;
+  }
+}
 
 class BackendVoxelAccessor {
-  private activeChunk: VolumeChunk | null = null;
-  private activeChunkData: Uint32Array | BigUint64Array | Uint8Array | Int8Array | Uint16Array | Int16Array | Int32Array | Float32Array | null = null;
-  private activeChunkGridKey: string | null = null;
+  private activeData: TypedArray | null = null;
+  private activeKey: string | null = null;
 
-  private activeBoundsMinX = 0;
-  private activeBoundsMaxX = 0;
-  private activeBoundsMinY = 0;
-  private activeBoundsMaxY = 0;
-  private activeBoundsMinZ = 0;
-  private activeBoundsMaxZ = 0;
+  private minX = 0;
+  private maxX = 0;
+  private minY = 0;
+  private maxY = 0;
+  private minZ = 0;
+  private maxZ = 0;
 
-  private activeStrideX = 1;
-  private activeStrideY = 1;
-  private activeStrideZ = 1;
+  private strideY = 0;
+  private strideZ = 0;
 
-  private fillValue: bigint;
+  private readonly volMin: Float32Array;
+  private readonly volMax: Float32Array;
+  private readonly chunkDimension: Uint32Array;
+  private readonly fillValue: bigint;
 
   constructor(private source: VolumeChunkSource) {
-    const fv = source.spec.fillValue;
-    this.fillValue = typeof fv === 'bigint' ? fv : BigInt(fv);
+    const spec = source.spec;
+    this.volMin = spec.lowerVoxelBound;
+    this.volMax = spec.upperVoxelBound;
+    this.chunkDimension = spec.chunkDataSize;
+    const fv = spec.fillValue;
+    this.fillValue = typeof fv === "bigint" ? fv : BigInt(fv);
   }
 
   async getValue(x: number, y: number, z: number): Promise<bigint | null> {
-    const { lowerVoxelBound, upperVoxelBound } = this.source.spec;
     if (
-      x < lowerVoxelBound[0] || x >= upperVoxelBound[0] ||
-      y < lowerVoxelBound[1] || y >= upperVoxelBound[1] ||
-      z < lowerVoxelBound[2] || z >= upperVoxelBound[2]
+      x >= this.minX &&
+      x < this.maxX &&
+      y >= this.minY &&
+      y < this.maxY &&
+      z >= this.minZ &&
+      z < this.maxZ
+    ) {
+      return this.readLocal(x, y, z);
+    }
+
+    if (
+      x < this.volMin[0] ||
+      x >= this.volMax[0] ||
+      y < this.volMin[1] ||
+      y >= this.volMax[1] ||
+      z < this.volMin[2] ||
+      z >= this.volMax[2]
     ) {
       return null;
     }
 
-    if (
-      this.activeChunk &&
-      x >= this.activeBoundsMinX && x < this.activeBoundsMaxX &&
-      y >= this.activeBoundsMinY && y < this.activeBoundsMaxY &&
-      z >= this.activeBoundsMinZ && z < this.activeBoundsMaxZ
-    ) {
-      return this.readLocal(x, y, z);
-    }
-
-    return this.loadChunk(x, y, z);
+    await this.loadChunk(x, y, z);
+    return this.readLocal(x, y, z);
   }
 
   private readLocal(x: number, y: number, z: number): bigint {
-    if (this.activeChunkData !== null) {
-      const lx = x - this.activeBoundsMinX;
-      const ly = y - this.activeBoundsMinY;
-      const lz = z - this.activeBoundsMinZ;
+    if (!this.activeData) return this.fillValue;
 
-      const index = lz * this.activeStrideZ + ly * this.activeStrideY + lx * this.activeStrideX;
-      const val = this.activeChunkData[index];
-      return typeof val === 'bigint' ? val : BigInt(val);
-    }
-    return this.fillValue;
+    const lx = x - this.minX;
+    const ly = y - this.minY;
+    const lz = z - this.minZ;
+    const index = lz * this.strideZ + ly * this.strideY + lx;
+
+    const val = this.activeData[index];
+    return typeof val === "bigint" ? val : BigInt(val);
   }
 
-  private async loadChunk(x: number, y: number, z: number): Promise<bigint | null> {
-    const { chunkDataSize } = this.source.spec;
+  private async loadChunk(x: number, y: number, z: number) {
+    const cx = Math.floor(x / this.chunkDimension[0]);
+    const cy = Math.floor(y / this.chunkDimension[1]);
+    const cz = Math.floor(z / this.chunkDimension[2]);
+    const key = `${cx},${cy},${cz}`;
 
-    const gx = Math.floor(x / chunkDataSize[0]);
-    const gy = Math.floor(y / chunkDataSize[1]);
-    const gz = Math.floor(z / chunkDataSize[2]);
-    const key = `${gx},${gy},${gz}`;
-
-    if (this.activeChunkGridKey === key) {
-      return this.readLocal(x, y, z);
-    }
-
-    const chunkGridPosition = new Float32Array([gx, gy, gz]);
+    if (this.activeKey === key) return;
 
     let chunk = this.source.chunks.get(key) as VolumeChunk | undefined;
     if (!chunk) {
-      chunk = this.source.getChunk(chunkGridPosition) as VolumeChunk;
+      chunk = this.source.getChunk(
+        new Float32Array([cx, cy, cz]),
+      ) as VolumeChunk;
+    }
+
+    if (chunk.state > ChunkState.SYSTEM_MEMORY_WORKER || !chunk.data) {
+      try {
+        await this.source.download(chunk, new AbortController().signal);
+      } catch {
+        this.activeData = null;
+      }
     }
 
     if (!chunk.chunkDataSize) {
       this.source.computeChunkBounds(chunk);
     }
 
-    if (chunk.state > ChunkState.SYSTEM_MEMORY_WORKER || !chunk.data) {
-      try {
-        await this.source.download(chunk, new AbortController().signal);
-        if (!chunk.chunkDataSize) this.source.computeChunkBounds(chunk);
-      } catch {
-        // Download failed
-      }
-    }
+    this.activeKey = key;
+    this.activeData = getFlatChunkData(chunk, this.source.spec);
 
-    this.activeChunk = chunk;
-    this.activeChunkGridKey = key;
+    const size = chunk.chunkDataSize || this.chunkDimension;
+    this.minX = cx * this.chunkDimension[0];
+    this.minY = cy * this.chunkDimension[1];
+    this.minZ = cz * this.chunkDimension[2];
+    this.maxX = this.minX + size[0];
+    this.maxY = this.minY + size[1];
+    this.maxZ = this.minZ + size[2];
 
-    const size = chunk.chunkDataSize || chunkDataSize;
-    this.activeBoundsMinX = gx * chunkDataSize[0];
-    this.activeBoundsMinY = gy * chunkDataSize[1];
-    this.activeBoundsMinZ = gz * chunkDataSize[2];
-    this.activeBoundsMaxX = this.activeBoundsMinX + size[0];
-    this.activeBoundsMaxY = this.activeBoundsMinY + size[1];
-    this.activeBoundsMaxZ = this.activeBoundsMinZ + size[2];
-
-    this.activeStrideX = 1;
-    this.activeStrideY = size[0];
-    this.activeStrideZ = size[0] * size[1];
-
-    if (chunk.data) {
-      this.prepareData(chunk);
-    } else {
-      this.activeChunkData = null;
-    }
-
-    if (
-      x >= this.activeBoundsMinX && x < this.activeBoundsMaxX &&
-      y >= this.activeBoundsMinY && y < this.activeBoundsMaxY &&
-      z >= this.activeBoundsMinZ && z < this.activeBoundsMaxZ
-    ) {
-      return this.readLocal(x, y, z);
-    }
-    return null;
-  }
-
-  private prepareData(chunk: VolumeChunk) {
-    const { spec } = this.source;
-    if (spec.compressedSegmentationBlockSize) {
-      const size = chunk.chunkDataSize!;
-      const numElements = size[0] * size[1] * size[2];
-      const compressedData = chunk.data as Uint32Array;
-      const baseOffset = compressedData.length > 0 ? compressedData[0] : 0;
-
-      const { dataType, compressedSegmentationBlockSize: subchunkSize } = spec;
-
-      if (dataType === DataType.UINT32) {
-        const out = new Uint32Array(numElements);
-        if (baseOffset !== 0) {
-          decodeChannelUint32(out, compressedData, baseOffset, size, subchunkSize!);
-        }
-        this.activeChunkData = out;
-      } else {
-        const out = new BigUint64Array(numElements);
-        if (baseOffset !== 0) {
-          decodeChannelUint64(out, compressedData, baseOffset, size, subchunkSize!);
-        }
-        this.activeChunkData = out;
-      }
-    } else {
-      this.activeChunkData = chunk.data as any;
-    }
+    this.strideY = size[0];
+    this.strideZ = size[0] * size[1];
   }
 }
+
 @registerSharedObject(VOX_EDIT_BACKEND_RPC_ID)
 export class VoxelEditController extends SharedObject {
   private sources = new Map<number, VolumeChunkSource>();
@@ -952,16 +944,14 @@ export class VoxelEditController extends SharedObject {
     const voxelSize = 1; // Hardcoded LOD 0
     const sourceIndex = 0;
     const source = this.sources.get(sourceIndex);
-    if (!source)
-      throw new Error(`Brush operation requires a source.`);
+    if (!source) throw new Error(`Brush operation requires a source.`);
     const accessor = new BackendVoxelAccessor(source);
 
     const cx = Math.round((center[0] ?? 0) / voxelSize);
     const cy = Math.round((center[1] ?? 0) / voxelSize);
     const cz = Math.round((center[2] ?? 0) / voxelSize);
     const r = Math.round(radius / voxelSize);
-    if (r <= 0)
-      throw new Error(`Brush radius must be positive.`);
+    if (r <= 0) throw new Error(`Brush radius must be positive.`);
     const rr = r * r;
 
     const voxelsToPaint: Float32Array[] = [];
@@ -974,7 +964,7 @@ export class VoxelEditController extends SharedObject {
       voxelsToPaint.push(point);
     };
 
-    if (shape === BrushShape.SPHERE) {
+    if (shape !== BrushShape.DISK) {
       for (let dz = -r; dz <= r; ++dz) {
         for (let dy = -r; dy <= r; ++dy) {
           for (let dx = -r; dx <= r; ++dx) {
@@ -984,8 +974,7 @@ export class VoxelEditController extends SharedObject {
         }
       }
     } else {
-      if (basis === undefined)
-        throw new Error("Brush shape requires a basis.");
+      if (basis === undefined) throw new Error("Brush shape requires a basis.");
       const { u, v } = basis;
       for (let j = -r; j <= r; ++j) {
         for (let i = -r; i <= r; ++i) {
@@ -1226,7 +1215,12 @@ export class VoxelEditController extends SharedObject {
 
     const indicesByVoxKey = new Map<string, number[]>();
     for (const voxelCoord of voxels) {
-      computeChunkGridPosition(tempGridPos, tempPosInChunk, voxelCoord, chunkDataSize);
+      computeChunkGridPosition(
+        tempGridPos,
+        tempPosInChunk,
+        voxelCoord,
+        chunkDataSize,
+      );
       const chunkKey = tempGridPos.join();
       const voxKey = makeVoxChunkKey(chunkKey, lodIndex);
 

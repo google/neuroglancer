@@ -131,6 +131,8 @@ export function getBasisFromNormal(n: vec3) {
 export enum BrushShape {
   DISK = 0,
   SPHERE = 1,
+  SPHERE_DISPLAYING_DISK = 2,
+  SPHERE_DISPLAYING_3_DISKS = 3,
 }
 
 export interface VoxelEditControllerHost {

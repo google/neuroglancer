@@ -17,9 +17,7 @@
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import type { SliceViewChunkSpecification } from "#src/sliceview/base.js";
-import {
-  DataType,
-} from "#src/sliceview/base.js";
+import { DataType } from "#src/sliceview/base.js";
 import type { SliceViewChunk } from "#src/sliceview/frontend.js";
 import {
   MultiscaleSliceViewChunkSource,
@@ -30,10 +28,12 @@ import type {
   VolumeChunkSource as VolumeChunkSourceInterface,
   VolumeChunkSpecification,
   VolumeSourceOptions,
-  VolumeType} from "#src/sliceview/volume/base.js";
+  VolumeType,
+} from "#src/sliceview/volume/base.js";
 import {
-  computeChunkGridPosition
-, IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID } from "#src/sliceview/volume/base.js";
+  computeChunkGridPosition,
+  IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID,
+} from "#src/sliceview/volume/base.js";
 import { VolumeChunk } from "#src/sliceview/volume/chunk.js";
 import { getChunkFormatHandler } from "#src/sliceview/volume/registry.js";
 import type { TypedArray } from "#src/util/array.js";

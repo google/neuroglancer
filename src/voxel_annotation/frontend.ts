@@ -16,8 +16,8 @@
 
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import type {
-  VolumeChunkSource,
   InMemoryVolumeChunkSource,
+  VolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
@@ -25,19 +25,20 @@ import { vec3 } from "#src/util/geom.js";
 import type {
   VoxelEditControllerHost,
   VoxelLayerResolution,
-  VoxelValueGetter,
   VoxelOperation,
-  BrushShape} from "#src/voxel_annotation/base.js";
+  VoxelValueGetter,
+} from "#src/voxel_annotation/base.js";
 import {
+  BrushShape,
+  parseVoxChunkKey,
   VOX_EDIT_BACKEND_RPC_ID,
-  VOX_RELOAD_CHUNKS_RPC_ID,
   VOX_EDIT_FAILURE_RPC_ID,
-  VOX_EDIT_UNDO_RPC_ID,
-  VOX_EDIT_REDO_RPC_ID,
   VOX_EDIT_HISTORY_UPDATE_RPC_ID,
   VOX_EDIT_OPERATION_RPC_ID,
+  VOX_EDIT_REDO_RPC_ID,
+  VOX_EDIT_UNDO_RPC_ID,
+  VOX_RELOAD_CHUNKS_RPC_ID,
   VoxelOperationType,
-  parseVoxChunkKey,
 } from "#src/voxel_annotation/base.js";
 import {
   registerRPC,
@@ -139,52 +140,92 @@ export class VoxelEditController extends SharedObject {
     const cy = Math.round((centerCanonical[1] ?? 0) / voxelSize);
     const cz = Math.round((centerCanonical[2] ?? 0) / voxelSize);
     const r = Math.round(radiusCanonical / voxelSize);
-    if (r <= 0)
-    {
+    if (r <= 0) {
       throw new Error("Brush radius must be positive.");
-      }
-      const rr = r * r;
-      const { u, v } = basis;
-      const voxelsToPaint: Float32Array[] = [];
+    }
+    const rr = r * r;
+    const { u, v } = basis as { u: vec3; v: vec3 };
+    const n = vec3.create();
+    vec3.cross(n, u, v);
+    vec3.normalize(n, n);
+    const voxelsToPaint: Float32Array[] = [];
 
+    if (
+      shape === BrushShape.DISK ||
+      shape === BrushShape.SPHERE_DISPLAYING_DISK
+    ) {
       for (let j = -r; j <= r; ++j) {
         for (let i = -r; i <= r; ++i) {
           if (i * i + j * j <= rr) {
             const point = vec3.fromValues(cx, cy, cz);
-            vec3.scaleAndAdd(point, point, u as vec3, i);
-            vec3.scaleAndAdd(point, point, v as vec3, j);
+            vec3.scaleAndAdd(point, point, u, i);
+            vec3.scaleAndAdd(point, point, v, j);
             voxelsToPaint.push(point as Float32Array);
           }
         }
       }
-
-      if (voxelsToPaint.length > 0) {
-        const previewSource = this.host.previewSource!.getSources(
-          this.getIdentitySliceViewSourceOptions(),
-        )[0][0].chunkSource as InMemoryVolumeChunkSource;
-        const value = valueGetter(true);
-
-        const edits = new Map<string, { indices: number[]; value: bigint }>();
-
-        for (const voxelCoord of voxelsToPaint) {
-          const { chunkGridPosition, positionWithinChunk } =
-            previewSource.computeChunkIndices(voxelCoord);
-          const key = chunkGridPosition.join();
-          let entry = edits.get(key);
-          if (!entry) {
-            entry = { indices: [], value };
-            edits.set(key, entry);
+    } else if (shape === BrushShape.SPHERE) {
+      for (let dz = -r; dz <= r; ++dz) {
+        for (let dy = -r; dy <= r; ++dy) {
+          for (let dx = -r; dx <= r; ++dx) {
+            if (dx * dx + dy * dy + dz * dz <= rr) {
+              voxelsToPaint.push(new Float32Array([cx + dx, cy + dy, cz + dz]));
+            }
           }
-          const { chunkDataSize } = previewSource.spec;
-          const index =
-            (positionWithinChunk[2] * chunkDataSize[1] +
-              positionWithinChunk[1]) *
-              chunkDataSize[0] +
-            positionWithinChunk[0];
-          entry.indices.push(index);
         }
-        previewSource.applyLocalEdits(edits);
       }
+    } else {
+      const point = vec3.create();
+      const center = vec3.fromValues(cx, cy, cz);
+
+      for (let j = -r; j <= r; ++j) {
+        for (let i = -r; i <= r; ++i) {
+          if (i * i + j * j <= rr) {
+            vec3.copy(point, center);
+            vec3.scaleAndAdd(point, point, u, i);
+            vec3.scaleAndAdd(point, point, v, j);
+            voxelsToPaint.push(Float32Array.from(point));
+
+            vec3.copy(point, center);
+            vec3.scaleAndAdd(point, point, u, i);
+            vec3.scaleAndAdd(point, point, n, j);
+            voxelsToPaint.push(Float32Array.from(point));
+
+            vec3.copy(point, center);
+            vec3.scaleAndAdd(point, point, n, i);
+            vec3.scaleAndAdd(point, point, v, j);
+            voxelsToPaint.push(Float32Array.from(point));
+          }
+        }
+      }
+    }
+
+    if (voxelsToPaint.length > 0) {
+      const previewSource = this.host.previewSource!.getSources(
+        this.getIdentitySliceViewSourceOptions(),
+      )[0][0].chunkSource as InMemoryVolumeChunkSource;
+      const value = valueGetter(true);
+
+      const edits = new Map<string, { indices: number[]; value: bigint }>();
+
+      for (const voxelCoord of voxelsToPaint) {
+        const { chunkGridPosition, positionWithinChunk } =
+          previewSource.computeChunkIndices(voxelCoord);
+        const key = chunkGridPosition.join();
+        let entry = edits.get(key);
+        if (!entry) {
+          entry = { indices: [], value };
+          edits.set(key, entry);
+        }
+        const { chunkDataSize } = previewSource.spec;
+        const index =
+          (positionWithinChunk[2] * chunkDataSize[1] + positionWithinChunk[1]) *
+            chunkDataSize[0] +
+          positionWithinChunk[0];
+        entry.indices.push(index);
+      }
+      previewSource.applyLocalEdits(edits);
+    }
 
     const storageValue = valueGetter(false);
     await this.dispatchOperation({
@@ -205,7 +246,6 @@ export class VoxelEditController extends SharedObject {
     basis: { u: Float32Array; v: Float32Array },
     filterValue?: bigint,
   ) {
-
     const storageValue = fillValueGetter(false);
     await this.dispatchOperation({
       type: VoxelOperationType.FLOOD_FILL,
