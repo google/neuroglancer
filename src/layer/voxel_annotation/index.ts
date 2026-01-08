@@ -152,7 +152,7 @@ export class VoxelEditingContext
       return true;
     }
     if (this._pendingPermissionPromise) {
-      return this._pendingPermissionPromise;
+      return false; // this._pendingPermissionPromise;
     }
 
     this._pendingPermissionPromise = new Promise<boolean>((resolve) => {
@@ -180,7 +180,7 @@ export class VoxelEditingContext
       return result;
     });
 
-    return this._pendingPermissionPromise;
+    return false; // this._pendingPermissionPromise;
   }
 
   async paintBrushWithShape(
