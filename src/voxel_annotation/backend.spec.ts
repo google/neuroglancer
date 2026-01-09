@@ -15,12 +15,17 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
+import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
+import { DATA_TYPE_ARRAY_CONSTRUCTOR, DataType } from "#src/util/data_type.js";
 import { mat4 } from "#src/util/geom.js";
 import { VoxelEditController } from "#src/voxel_annotation/backend.js";
 import {
   makeVoxChunkKey,
   VOX_EDIT_FAILURE_RPC_ID,
   VOX_EDIT_HISTORY_UPDATE_RPC_ID,
+  VoxelOperationType,
+  BrushShape,
 } from "#src/voxel_annotation/base.js";
 import type { RPC } from "#src/worker_rpc.js";
 
@@ -75,6 +80,27 @@ function flattenGrid(grid: Grid3D, Ctor: any = Uint32Array) {
     }
   }
   return { data, size: [w, h, d] as [number, number, number] };
+}
+
+class MockBackendSource extends VolumeChunkSource {
+  public serverStorage = new Map<string, ArrayBuffer>();
+
+  async download(chunk: VolumeChunk) {
+    const key = chunk.chunkGridPosition.join(",");
+    if (this.serverStorage.has(key)) {
+      const buffer = this.serverStorage.get(key)!;
+      const Ctor =
+        DATA_TYPE_ARRAY_CONSTRUCTOR[this.spec.dataType];
+      chunk.data = new Ctor(buffer.slice(0));
+    }
+  }
+
+  async writeChunk(chunk: VolumeChunk) {
+    const key = chunk.chunkGridPosition.join(",");
+    if (chunk.data) {
+      this.serverStorage.set(key, chunk.data.buffer.slice(0) as ArrayBuffer);
+    }
+  }
 }
 
 describe("VoxelEditController: _calculateParentUpdate", () => {
@@ -1093,5 +1119,299 @@ describe("VoxelEditController: Undo/Redo", () => {
 
     expect((controller as any).undoStack.length).toBe(0);
     expect((controller as any).redoStack.length).toBe(1);
+  });
+});
+
+describe("VoxelEditController: Tool Operations", () => {
+  let controller: VoxelEditController;
+  let mockSource: MockBackendSource;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+
+    const mockChunkManager = {
+      queueManager: {
+        sources: new Set(),
+        adjustCapacitiesForChunk: vi.fn(),
+        updateChunkState: vi.fn(),
+        scheduleUpdate: vi.fn(),
+        moveChunkToFrontend: vi.fn(),
+        markRecentlyUsed: vi.fn(),
+        gl: {},
+      },
+    };
+
+    (mockRpc.get as any).mockImplementation((id: number) => {
+      if (id === 0) return mockChunkManager;
+      return null;
+    });
+
+    const spec = {
+      rank: 3,
+      chunkDataSize: new Uint32Array([10, 10, 10]),
+      dataType: DataType.UINT64,
+      lowerVoxelBound: new Float32Array([0, 0, 0]),
+      upperVoxelBound: new Float32Array([100, 100, 100]),
+      baseVoxelOffset: new Float32Array([0, 0, 0]),
+      fillValue: 0n,
+    };
+    mockSource = new MockBackendSource(mockRpc, {
+      spec: spec,
+      chunkManager: 0,
+    });
+    vi.spyOn(mockSource, "applyEdits").mockResolvedValue({
+      indices: new Uint32Array([]),
+      oldValues: new BigUint64Array([]),
+      newValues: new BigUint64Array([]),
+    });
+
+    (mockRpc.get as any).mockImplementation((id: number) => {
+      if (id === 0) return mockChunkManager;
+      if (id === 100) return mockSource;
+      return null;
+    });
+
+    controller = new VoxelEditController(mockRpc, {
+      resolutions: [resConfig(0, [1, 1, 1], [10, 10, 10])],
+    });
+
+    vi.spyOn(controller as any, "enqueueDownsample").mockImplementation(
+      () => {},
+    );
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("paintBrushWithShape: 3D Sphere", async () => {
+    const center = new Float32Array([5, 5, 5]);
+    const radius = 2;
+    const value = 5n;
+
+    await controller.performOperation({
+      type: VoxelOperationType.BRUSH,
+      center,
+      radius,
+      value,
+      shape: BrushShape.SPHERE,
+      basis: { u: new Float32Array([1, 0, 0]), v: new Float32Array([0, 1, 0]) },
+    });
+
+    await vi.runAllTimersAsync();
+
+    expect(mockSource.applyEdits).toHaveBeenCalledWith(
+      "0,0,0",
+      expect.any(Array),
+      expect.any(Array),
+    );
+
+    const call = (mockSource.applyEdits as any).mock.calls[0];
+    const indices = call[1];
+    const values = call[2];
+    const indexSet = new Set(indices);
+
+    const getIdx = (x: number, y: number, z: number) => z * 100 + y * 10 + x;
+    expect(indexSet.has(getIdx(5, 5, 5))).toBe(true);
+    expect(indexSet.has(getIdx(7, 5, 5))).toBe(true);
+    expect(indexSet.has(getIdx(8, 5, 5))).toBe(false);
+    expect(values[0]).toBe(5n);
+  });
+
+  it("paintBrushWithShape: 2D Disk", async () => {
+    const center = new Float32Array([5, 5, 5]);
+    const radius = 2;
+    const value = 3n;
+    const basis = {
+      u: new Float32Array([1, 0, 0]),
+      v: new Float32Array([0, 1, 0]),
+    };
+
+    await controller.performOperation({
+      type: VoxelOperationType.BRUSH,
+      center,
+      radius,
+      value,
+      shape: BrushShape.DISK,
+      basis,
+    });
+
+    await vi.runAllTimersAsync();
+
+    const call = (mockSource.applyEdits as any).mock.calls[0];
+    const indices = call[1];
+    const values = call[2];
+    const indexSet = new Set(indices);
+    const getIdx = (x: number, y: number, z: number) => z * 100 + y * 10 + x;
+
+    for (const idx of indices) {
+      const z = Math.floor(idx / 100);
+      expect(z).toBe(5);
+    }
+    expect(indexSet.has(getIdx(5, 5, 5))).toBe(true);
+    expect(indexSet.has(getIdx(7, 5, 5))).toBe(true);
+    expect(values[0]).toBe(3n);
+  });
+
+  it("floodFillPlane2D: Bounded region (Bucket)", async () => {
+    const data = new BigUint64Array(1000);
+    for (let x = 3; x <= 7; x++) {
+      data[0 * 100 + 3 * 10 + x] = 1n; // y=3
+      data[0 * 100 + 7 * 10 + x] = 1n; // y=7
+    }
+    for (let y = 3; y <= 7; y++) {
+      data[0 * 100 + y * 10 + 3] = 1n; // x=3
+      data[0 * 100 + y * 10 + 7] = 1n; // x=7
+    }
+    mockSource.serverStorage.set("0,0,0", data.buffer);
+
+    const seed = new Float32Array([5, 5, 0]);
+    const fillValue = 5n;
+    const maxVoxels = 100;
+    const basis = {
+      u: new Float32Array([1, 0, 0]),
+      v: new Float32Array([0, 1, 0]),
+    };
+
+    await controller.performOperation({
+      type: VoxelOperationType.FLOOD_FILL,
+      seed,
+      value: fillValue,
+      maxVoxels,
+      basis,
+    });
+
+    await vi.runAllTimersAsync();
+
+    const call = (mockSource.applyEdits as any).mock.calls[0];
+    const indices = call[1];
+    expect(indices.length).toBe(9);
+  });
+
+  it("floodFillPlane2D: Plane constraint", async () => {
+    const data = new BigUint64Array(1000);
+    const z = 5;
+    for (let x = 3; x <= 7; x++) {
+      data[z * 100 + 3 * 10 + x] = 1n;
+      data[z * 100 + 7 * 10 + x] = 1n;
+    }
+    for (let y = 3; y <= 7; y++) {
+      data[z * 100 + y * 10 + 3] = 1n;
+      data[z * 100 + y * 10 + 7] = 1n;
+    }
+    mockSource.serverStorage.set("0,0,0", data.buffer);
+
+    const seed = new Float32Array([5, 5, 5]);
+    const basis = {
+      u: new Float32Array([1, 0, 0]),
+      v: new Float32Array([0, 1, 0]),
+    };
+
+    await controller.performOperation({
+      type: VoxelOperationType.FLOOD_FILL,
+      seed,
+      value: 2n,
+      maxVoxels: 100,
+      basis,
+    });
+
+    await vi.runAllTimersAsync();
+
+    const call = (mockSource.applyEdits as any).mock.calls[0];
+    const indices = call[1];
+    expect(indices.length).toBe(9);
+    for (const idx of indices) {
+      const cz = Math.floor(idx / 100);
+      expect(cz).toBe(5);
+    }
+  });
+
+  it("floodFillPlane2D: Max voxels exceeded", async () => {
+    const seed = new Float32Array([5, 5, 0]);
+    const maxVoxels = 5;
+    const basis = {
+      u: new Float32Array([1, 0, 0]),
+      v: new Float32Array([0, 1, 0]),
+    };
+
+    await controller.performOperation({
+      type: VoxelOperationType.FLOOD_FILL,
+      seed,
+      value: 9n,
+      maxVoxels,
+      basis,
+    });
+
+    await vi.runAllTimersAsync();
+
+    const call = (mockSource.applyEdits as any).mock.calls[0];
+    const indices = call[1];
+    expect(indices.length).toBe(5);
+  });
+
+  it("floodFillPlane2D: Seed value equals fill value", async () => {
+    const data = new BigUint64Array(1000);
+    const seedIdx = 0 * 100 + 5 * 10 + 5;
+    data[seedIdx] = 5n;
+    mockSource.serverStorage.set("0,0,0", data.buffer);
+
+    const seed = new Float32Array([5, 5, 0]);
+    const basis = {
+      u: new Float32Array([1, 0, 0]),
+      v: new Float32Array([0, 1, 0]),
+    };
+
+    await controller.performOperation({
+      type: VoxelOperationType.FLOOD_FILL,
+      seed,
+      value: 5n,
+      maxVoxels: 100,
+      basis,
+    });
+
+    await vi.runAllTimersAsync();
+
+    expect(mockSource.applyEdits).not.toHaveBeenCalled();
+  });
+
+  it("floodFillPlane2D: Leak prevention (morphological)", async () => {
+    (controller as any).morphologicalConfig = {
+      growthThresholds: [{ count: 5, size: 3 }],
+      maxSize: 9,
+    };
+
+    const data = new BigUint64Array(1000);
+    // Box 0..9 in X, Y, at Z=0.
+    for (let x = 0; x <= 9; x++) {
+      if (x !== 0) data[0 * 100 + 0 * 10 + x] = 1n; // y=0
+      data[0 * 100 + 9 * 10 + x] = 1n; // y=9
+    }
+    for (let y = 0; y <= 9; y++) {
+      if (y !== 5) data[0 * 100 + y * 10 + 0] = 1n; // x=0 (hole at y=5)
+      data[0 * 100 + y * 10 + 9] = 1n; // x=9
+    }
+    mockSource.serverStorage.set("0,0,0", data.buffer);
+
+    const seed = new Float32Array([5, 5, 0]);
+    const basis = {
+      u: new Float32Array([1, 0, 0]),
+      v: new Float32Array([0, 1, 0]),
+    };
+
+    await controller.performOperation({
+      type: VoxelOperationType.FLOOD_FILL,
+      seed,
+      value: 2n,
+      maxVoxels: 1000,
+      basis,
+    });
+
+    await vi.runAllTimersAsync();
+
+    expect(mockSource.applyEdits).toHaveBeenCalled();
+    const indices = (mockSource.applyEdits as any).mock.calls[0][1];
+    expect(indices.length).toBeLessThan(100);
+    expect(indices.length).toBeGreaterThan(50);
   });
 });
