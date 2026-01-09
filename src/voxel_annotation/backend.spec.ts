@@ -89,8 +89,7 @@ class MockBackendSource extends VolumeChunkSource {
     const key = chunk.chunkGridPosition.join(",");
     if (this.serverStorage.has(key)) {
       const buffer = this.serverStorage.get(key)!;
-      const Ctor =
-        DATA_TYPE_ARRAY_CONSTRUCTOR[this.spec.dataType];
+      const Ctor = DATA_TYPE_ARRAY_CONSTRUCTOR[this.spec.dataType];
       chunk.data = new Ctor(buffer.slice(0));
     }
   }
