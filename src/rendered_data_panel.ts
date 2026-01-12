@@ -859,7 +859,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       ctx.strokeStyle = isEraser
         ? "rgb(255,136,136)"
         : "rgba(255, 255, 255, 1)";
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 4;
       ctx.stroke();
       ctx.strokeStyle = isEraser ? "rgb(97,0,0)" : "rgba(0, 0, 0, 1)";
       ctx.lineWidth = 1.5;
