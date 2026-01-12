@@ -139,10 +139,11 @@ export class VoxelEditController extends SharedObject {
     const cx = Math.round((centerCanonical[0] ?? 0) / voxelSize);
     const cy = Math.round((centerCanonical[1] ?? 0) / voxelSize);
     const cz = Math.round((centerCanonical[2] ?? 0) / voxelSize);
-    const r = Math.round(radiusCanonical / voxelSize);
+    let r = Math.round(radiusCanonical / voxelSize);
     if (r <= 0) {
       throw new Error("Brush radius must be positive.");
     }
+    r -= 1;
     const rr = r * r;
     const { u, v } = basis as { u: vec3; v: vec3 };
     const n = vec3.create();

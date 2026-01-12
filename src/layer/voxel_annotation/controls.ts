@@ -108,7 +108,7 @@ export function updateBrushOutline(
 
   const { u: u_chunk, v: v_chunk } = getBasisFromNormal(n_chunk);
 
-  const radius = layer.brushRadius.value;
+  const radius = layer.brushRadius.value - 0.5;
   vec3.scale(u_chunk, u_chunk, radius);
   vec3.scale(v_chunk, v_chunk, radius);
 

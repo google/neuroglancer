@@ -952,8 +952,9 @@ export class VoxelEditController extends SharedObject {
     const cx = Math.round((center[0] ?? 0) / voxelSize);
     const cy = Math.round((center[1] ?? 0) / voxelSize);
     const cz = Math.round((center[2] ?? 0) / voxelSize);
-    const r = Math.round(radius / voxelSize);
+    let r = Math.round(radius / voxelSize);
     if (r <= 0) throw new Error(`Brush radius must be positive.`);
+    r -= 1;
     const rr = r * r;
 
     const voxelsToPaint: Float32Array[] = [];
