@@ -127,7 +127,9 @@ class BackendVoxelAccessor {
     this.fillValue = typeof fv === "bigint" ? fv : BigInt(fv);
   }
 
-  async getValue(x: number, y: number, z: number): Promise<bigint | null> {
+  async getValue(point: Float32Array): Promise<bigint | null> {
+    if (point.length !== 3) throw new Error("getValue: invalid point size");
+    const [x, y, z] = point.map((v) => Math.round(v));
     if (
       x >= this.minX &&
       x < this.maxX &&
@@ -957,7 +959,7 @@ export class VoxelEditController extends SharedObject {
     const voxelsToPaint: Float32Array[] = [];
 
     const pushIf = async (point: Float32Array) => {
-      const v = await accessor.getValue(point[0], point[1], point[2]);
+      const v = await accessor.getValue(point);
       if (v === null) return;
       if (v === value || (filterValue !== undefined && v !== filterValue))
         return;
@@ -1006,11 +1008,7 @@ export class VoxelEditController extends SharedObject {
     const accessor = new BackendVoxelAccessor(source);
 
     const startVoxelLod = vec3.round(vec3.create(), seed as vec3);
-    const originalValue = await accessor.getValue(
-      startVoxelLod[0],
-      startVoxelLod[1],
-      startVoxelLod[2],
-    );
+    const originalValue = await accessor.getValue(startVoxelLod);
 
     if (originalValue === null) return;
     if (filterValue !== undefined && originalValue !== filterValue) return;
@@ -1029,7 +1027,7 @@ export class VoxelEditController extends SharedObject {
     };
 
     const isFillable = async (p: vec3): Promise<boolean> => {
-      const val = await accessor.getValue(p[0], p[1], p[2]);
+      const val = await accessor.getValue(p);
       if (val === null) return false;
       if (originalValue === 0n) return val === 0n;
       return val === originalValue;
