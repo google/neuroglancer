@@ -29,6 +29,9 @@ export const VOX_EDIT_HISTORY_UPDATE_RPC_ID = "vox.edit.historyUpdate";
 
 export const VOX_EDIT_OPERATION_RPC_ID = "vox.edit.operation";
 
+export const FLOODFILL_MAX_POSSIBLE_VOXELS = 1000000;
+export const FLOODFILL_MIN_POSSIBLE_VOXELS = 1000;
+
 export enum VoxelOperationType {
   BRUSH = 0,
   FLOOD_FILL = 1,
@@ -66,7 +69,7 @@ export const SEG_PICKER_TOOL_ID = "vox-seg-picker";
 // Special value used to indicate to the optimistic renderer that a voxel has been erased
 export const SEG_ERASE_SENTINEL = ~1n;
 
-export const MAX_VOXEL_EDIT_CAPACITY = 200;
+export const MAX_VOXEL_EDIT_CAPACITY = 1000;
 
 export type VoxelValueGetter = (isPreview: boolean) => bigint;
 

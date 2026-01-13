@@ -65,6 +65,8 @@ import type {
   VoxelValueGetter,
 } from "#src/voxel_annotation/base.js";
 import {
+  FLOODFILL_MAX_POSSIBLE_VOXELS,
+  FLOODFILL_MIN_POSSIBLE_VOXELS,
   BRUSH_TOOL_ID,
   BrushShape,
   MAX_VOXEL_EDIT_CAPACITY,
@@ -205,6 +207,7 @@ export class VoxelEditingContext
     cost: number,
     op: () => Promise<T>,
   ): Promise<T | void> {
+    if (this.localLoadEstimate.value >= MAX_VOXEL_EDIT_CAPACITY) return;
     this.localLoadEstimate.value += cost;
     try {
       if (await this.checkPermission()) {
@@ -225,7 +228,7 @@ export class VoxelEditingContext
   ) {
     if (!this._controller)
       throw new Error("Cannot use paintBrushWithShape without a controller");
-    const cost = radiusCanonical * (shape === BrushShape.DISK ? 0.1 : 0.5);
+    const cost = radiusCanonical * (shape === BrushShape.DISK ? 0.05 : 0.5);
     await this.withCost(cost, () =>
       this._controller!.paintBrushWithShape(
         centerCanonical,
@@ -247,7 +250,11 @@ export class VoxelEditingContext
   ) {
     if (!this._controller)
       throw new Error("Cannot use floodFillPlane2D without a controller");
-    await this.withCost(20, () =>
+    const cost =
+      50 +
+      (500 * (maxVoxels - FLOODFILL_MIN_POSSIBLE_VOXELS)) /
+        (FLOODFILL_MAX_POSSIBLE_VOXELS - FLOODFILL_MIN_POSSIBLE_VOXELS);
+    await this.withCost(cost, () =>
       this._controller!.floodFillPlane2D(
         startPositionCanonical,
         fillValue,
@@ -261,13 +268,13 @@ export class VoxelEditingContext
   async undo() {
     if (!this._controller)
       throw new Error("Cannot use undo without a controller");
-    await this.withCost(5, () => this._controller!.undo());
+    await this.withCost(100, () => this._controller!.undo());
   }
 
   async redo() {
     if (!this._controller)
       throw new Error("Cannot use redo without a controller");
-    await this.withCost(5, () => this._controller!.redo());
+    await this.withCost(100, () => this._controller!.redo());
   }
 
   get rpc() {
@@ -588,17 +595,47 @@ export function UserLayerWithVoxelEditingMixin<
         return;
       }
 
-      const w = 60;
-      const h = 6;
+      const w = 42;
+      const h = 5;
+      const radius = h / 2;
+
       // TODO: use the radiusY of updateBrushCursor to properly offset
-      const yOffset = 40 + (isBrushActive ? this.brushRadius.value : 0);
-      const bx = x - w / 2;
+      const yOffset = 16 + (isBrushActive ? this.brushRadius.value * 2 : 0);
+      const xOffset = 1;
+      const bx = x - w / 2 + xOffset;
       const by = y + yOffset;
 
-      ctx.fillStyle = "rgba(0,0,0,0.5)";
-      ctx.fillRect(bx, by, w, h);
-      ctx.fillStyle = ratio > 0.3 ? "#00FF00" : "#FF0000";
-      ctx.fillRect(bx, by, w * ratio, h);
+      ctx.save();
+
+      if (ratio === 0) {
+        const [text, textX, textY] = ["WAIT!", x + xOffset, by + 8];
+        ctx.fillStyle = "#ff0000";
+        ctx.textAlign = "center";
+        ctx.font = "bold 16px monospace";
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "rgba(0, 0, 0, 0.8)";
+        ctx.lineJoin = "round";
+        ctx.strokeText(text, textX, textY);
+        ctx.fillText(text, textX, textY);
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(bx + radius, by);
+        ctx.lineTo(bx + w - radius, by);
+        ctx.arcTo(bx + w, by, bx + w, by + h, radius);
+        ctx.arcTo(bx + w, by + h, bx, by + h, radius);
+        ctx.arcTo(bx, by + h, bx, by, radius);
+        ctx.arcTo(bx, by, bx + w, by, radius);
+        ctx.closePath();
+
+        ctx.fillStyle = "rgba(159,159,159,0.5)";
+        ctx.fill();
+
+        ctx.clip();
+
+        ctx.fillStyle = ratio > 0.3 ? "#5e5e5e" : "#FF0000";
+        ctx.fillRect(bx, by, w * ratio, h);
+      }
+      ctx.restore();
     }
 
     setEraseState(erase: boolean): void {

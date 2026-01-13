@@ -1121,7 +1121,8 @@ export class VoxelEditController extends SharedObject {
     visited.add("0,0");
 
     while (queue.length > 0) {
-      if (filledCount >= maxVoxels) break; // Or throw error
+      if (filledCount >= maxVoxels)
+        throw new Error(`Flood fill failed: too many voxels filled.`);
       const [u, v] = queue.shift()!;
       const currentPoint = map2dTo3d(u, v);
       filledCount++;

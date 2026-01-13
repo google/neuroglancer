@@ -26,6 +26,8 @@ import { observeWatchable } from "#src/trackable_value.js";
 import { mat3, vec3 } from "#src/util/geom.js";
 import {
   BRUSH_TOOL_ID,
+  FLOODFILL_MAX_POSSIBLE_VOXELS,
+  FLOODFILL_MIN_POSSIBLE_VOXELS,
   FLOODFILL_TOOL_ID,
   getBasisFromNormal,
   SEG_PICKER_TOOL_ID,
@@ -214,7 +216,11 @@ const TOOL_SPECIFIC_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEditing>[
       toolJson: { type: "vox-flood-max-voxels" },
       ...rangeLayerControl((layer) => ({
         value: layer.floodMaxVoxels,
-        options: { min: 1, max: 1000000, step: 1000 },
+        options: {
+          min: FLOODFILL_MIN_POSSIBLE_VOXELS,
+          max: FLOODFILL_MAX_POSSIBLE_VOXELS,
+          step: FLOODFILL_MIN_POSSIBLE_VOXELS,
+        },
       })),
     },
   ];
