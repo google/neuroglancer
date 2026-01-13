@@ -15,6 +15,7 @@
  */
 
 import { ChunkState } from "#src/chunk_manager/base.js";
+import type { SharedWatchableValue } from "#src/shared_watchable_value.js";
 import { DataType } from "#src/sliceview/base.js";
 import { decodeChannel as decodeChannelUint32 } from "#src/sliceview/compressed_segmentation/decode_uint32.js";
 import { decodeChannel as decodeChannelUint64 } from "#src/sliceview/compressed_segmentation/decode_uint64.js";
@@ -226,6 +227,12 @@ export class VoxelEditController extends SharedObject {
     values?: ArrayLike<bigint>;
     size?: number[];
   }[] = [];
+  private _inFlightCount = 0;
+  public pendingOpCount: SharedWatchableValue<number>;
+
+  private updatePendingCount() {
+    this.pendingOpCount.value = this.pendingEdits.length + this._inFlightCount;
+  }
   private commitDebounceTimer: number | undefined;
   private readonly commitDebounceDelayMs: number = 300;
 
@@ -250,6 +257,7 @@ export class VoxelEditController extends SharedObject {
 
   constructor(rpc: RPC, options: any) {
     super();
+    this.pendingOpCount = rpc.get(options.pendingOpCount);
     initializeSharedObjectCounterpart(this, rpc, options);
 
     const passedResolutions = options?.resolutions as
@@ -290,6 +298,7 @@ export class VoxelEditController extends SharedObject {
   private async flushPending(): Promise<void> {
     const edits = this.pendingEdits;
     this.pendingEdits = [];
+    this.updatePendingCount();
     this.commitDebounceTimer = undefined;
     if (edits.length === 0) {
       // Even if nothing to flush, history sizes may not have changed.
@@ -399,7 +408,7 @@ export class VoxelEditController extends SharedObject {
     }
   }
 
-  async commitVoxels(
+  commitVoxels(
     edits: {
       key: string;
       indices: number[] | Uint32Array;
@@ -416,6 +425,7 @@ export class VoxelEditController extends SharedObject {
       }
       this.pendingEdits.push(e);
     }
+    this.updatePendingCount();
     if (this.commitDebounceTimer !== undefined)
       clearTimeout(this.commitDebounceTimer);
     this.commitDebounceTimer = setTimeout(() => {
@@ -1240,13 +1250,13 @@ export class VoxelEditController extends SharedObject {
     for (const [voxKey, indices] of indicesByVoxKey.entries()) {
       backendEdits.push({ key: voxKey, indices, value });
     }
-    await this.commitVoxels(backendEdits);
+    this.commitVoxels(backendEdits);
   }
 }
 
 registerRPC(VOX_EDIT_COMMIT_VOXELS_RPC_ID, function (x: any) {
   const obj = this.get(x.rpcId) as VoxelEditController;
-  void obj.commitVoxels(Array.isArray(x.edits) ? x.edits : []);
+  obj.commitVoxels(Array.isArray(x.edits) ? x.edits : []);
 });
 
 registerPromiseRPC(VOX_EDIT_UNDO_RPC_ID, async function (this: RPC, x: any) {

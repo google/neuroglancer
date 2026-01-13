@@ -66,6 +66,8 @@ export const SEG_PICKER_TOOL_ID = "vox-seg-picker";
 // Special value used to indicate to the optimistic renderer that a voxel has been erased
 export const SEG_ERASE_SENTINEL = ~1n;
 
+export const MAX_VOXEL_EDIT_CAPACITY = 200;
+
 export type VoxelValueGetter = (isPreview: boolean) => bigint;
 
 export interface VoxelLayerResolution {

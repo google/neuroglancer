@@ -20,6 +20,7 @@ import type {
 } from "#src/layer/index.js";
 import { UserLayer } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
+import { drawBrushCursor } from "#src/layer/voxel_annotation/controls.js";
 import { VoxToolTab } from "#src/layer/voxel_annotation/draw_tab.js";
 import type {
   ChunkTransformParameters,
@@ -29,11 +30,13 @@ import {
   getChunkPositionFromCombinedGlobalLocalPositions,
   getChunkTransformParameters,
 } from "#src/render_coordinate_transform.js";
+import type { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import type {
   SliceViewSourceOptions,
   SliceViewRenderLayer,
 } from "#src/sliceview/base.js";
 import { DataType } from "#src/sliceview/base.js";
+import { SliceViewPanel } from "#src/sliceview/panel.js";
 import type { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import type { ImageRenderLayer } from "#src/sliceview/volume/image_renderlayer.js";
 import { SegmentationRenderLayer } from "#src/sliceview/volume/segmentation_renderlayer.js";
@@ -61,7 +64,11 @@ import type {
   VoxelEditControllerHost,
   VoxelValueGetter,
 } from "#src/voxel_annotation/base.js";
-import { BrushShape } from "#src/voxel_annotation/base.js";
+import {
+  BRUSH_TOOL_ID,
+  BrushShape,
+  MAX_VOXEL_EDIT_CAPACITY,
+} from "#src/voxel_annotation/base.js";
 import { VoxelEditController } from "#src/voxel_annotation/frontend.js";
 
 const BRUSH_SIZE_JSON_KEY = "brushSize";
@@ -96,6 +103,9 @@ export class VoxelEditingContext
     | SegmentationRenderLayer
     | undefined = undefined;
   previewSource: VoxelPreviewMultiscaleSource | undefined = undefined;
+
+  private localLoadEstimate = new WatchableValue<number>(0);
+  public totalPending: WatchableValueInterface<number>;
 
   constructor(
     public hostLayer: UserLayerWithVoxelEditing,
@@ -145,6 +155,14 @@ export class VoxelEditingContext
     this.hostLayer.addRenderLayer(this.optimisticRenderLayer);
 
     this._controller = new VoxelEditController(this);
+
+    this.totalPending = this.registerDisposer(
+      makeDerivedWatchableValue(
+        (local, backend) => local + backend,
+        this.localLoadEstimate,
+        this._controller.pendingOpCount,
+      ),
+    );
   }
 
   private async checkPermission(): Promise<boolean> {
@@ -183,6 +201,20 @@ export class VoxelEditingContext
     return false; // this._pendingPermissionPromise;
   }
 
+  private async withCost<T>(
+    cost: number,
+    op: () => Promise<T>,
+  ): Promise<T | void> {
+    this.localLoadEstimate.value += cost;
+    try {
+      if (await this.checkPermission()) {
+        return await op();
+      }
+    } finally {
+      this.localLoadEstimate.value -= cost;
+    }
+  }
+
   async paintBrushWithShape(
     centerCanonical: Float32Array,
     radiusCanonical: number,
@@ -193,16 +225,17 @@ export class VoxelEditingContext
   ) {
     if (!this._controller)
       throw new Error("Cannot use paintBrushWithShape without a controller");
-    if (await this.checkPermission()) {
-      await this._controller.paintBrushWithShape(
+    const cost = radiusCanonical * (shape === BrushShape.DISK ? 0.1 : 0.5);
+    await this.withCost(cost, () =>
+      this._controller!.paintBrushWithShape(
         centerCanonical,
         radiusCanonical,
         value,
         shape,
         basis,
         filterValue,
-      );
-    }
+      ),
+    );
   }
 
   async floodFillPlane2D(
@@ -214,31 +247,27 @@ export class VoxelEditingContext
   ) {
     if (!this._controller)
       throw new Error("Cannot use floodFillPlane2D without a controller");
-    if (await this.checkPermission()) {
-      await this._controller.floodFillPlane2D(
+    await this.withCost(20, () =>
+      this._controller!.floodFillPlane2D(
         startPositionCanonical,
         fillValue,
         maxVoxels,
         basis,
         filterValue,
-      );
-    }
+      ),
+    );
   }
 
   async undo() {
     if (!this._controller)
       throw new Error("Cannot use undo without a controller");
-    if (await this.checkPermission()) {
-      this._controller.undo();
-    }
+    await this.withCost(5, () => this._controller!.undo());
   }
 
   async redo() {
     if (!this._controller)
       throw new Error("Cannot use redo without a controller");
-    if (await this.checkPermission()) {
-      this._controller.redo();
-    }
+    await this.withCost(5, () => this._controller!.redo());
   }
 
   get rpc() {
@@ -454,6 +483,34 @@ export function UserLayerWithVoxelEditingMixin<
       this.floodMaxVoxels.changed.add(this.specificationChanged.dispatch);
       this.paintValue.changed.add(this.specificationChanged.dispatch);
 
+      this.bindOverlayToPanels();
+      this.registerDisposer(
+        this.manager.root.display.updateStarted.add(() =>
+          this.bindOverlayToPanels(),
+        ),
+      );
+
+      const trigger = () => {
+        for (const panel of this.manager.root.display.panels) {
+          if (panel instanceof SliceViewPanel) {
+            panel.scheduleOverlayRedraw();
+          }
+        }
+      };
+
+      this.brushRadius.changed.add(trigger);
+      this.manager.root.layerSelectedValues.mouseState.changed.add(trigger);
+
+      this.layersChanged.add(() => {
+        const ctx = this.editingContexts.values().next().value as
+          | VoxelEditingContext
+          | undefined;
+        if (ctx) {
+          this.registerDisposer(ctx.totalPending.changed.add(trigger));
+        }
+      });
+      trigger();
+
       this.tabs.add("Draw", {
         label: "Draw",
         order: 20,
@@ -463,6 +520,85 @@ export function UserLayerWithVoxelEditingMixin<
         ),
         getter: () => new VoxToolTab(this),
       });
+    }
+
+    private boundPanelCleanups = new Map<RenderedDataPanel, () => void>();
+    private bindOverlayToPanels() {
+      for (const panel of this.manager.root.display.panels) {
+        if (
+          panel instanceof SliceViewPanel &&
+          !this.boundPanelCleanups.has(panel)
+        ) {
+          const rm = panel.overlayDraw.add((ctx, _w, _h, p) =>
+            this.handleOverlayDraw(ctx, p),
+          );
+          this.boundPanelCleanups.set(panel, rm);
+        }
+      }
+      for (const [panel, cleanup] of this.boundPanelCleanups) {
+        if (!this.manager.root.display.panels.has(panel)) {
+          cleanup();
+          this.boundPanelCleanups.delete(panel);
+        }
+      }
+    }
+
+    private handleOverlayDraw(
+      ctx: CanvasRenderingContext2D,
+      panel: RenderedDataPanel,
+    ) {
+      if (panel.mouseX < 0 || panel.mouseY < 0) {
+        return;
+      }
+      const globalToolBinder = this.manager.root.toolBinder;
+      const activation = globalToolBinder.activeTool_;
+      let isBrushActive = false;
+
+      if (
+        activation &&
+        activation.tool.localBinder === this.toolBinder &&
+        activation.tool.toJSON() === BRUSH_TOOL_ID
+      ) {
+        drawBrushCursor(this, panel, ctx);
+        isBrushActive = true;
+      }
+
+      const editContext = this.editingContexts.values().next().value as
+        | VoxelEditingContext
+        | undefined;
+      const pending = editContext?.totalPending.value || 0;
+      this.drawStaminaBar(
+        ctx,
+        panel.mouseX,
+        panel.mouseY,
+        pending,
+        isBrushActive,
+      );
+    }
+
+    private drawStaminaBar(
+      ctx: CanvasRenderingContext2D,
+      x: number,
+      y: number,
+      pendingCount: number,
+      isBrushActive: boolean,
+    ) {
+      const ratio = Math.max(0, 1.0 - pendingCount / MAX_VOXEL_EDIT_CAPACITY);
+      if (ratio > 0.99) {
+        return;
+      }
+
+      const w = 60;
+      const h = 6;
+      // TODO: use the radiusY of updateBrushCursor to properly offset
+      const yOffset = 40 + (isBrushActive ? this.brushRadius.value : 0);
+      const bx = x - w / 2;
+      const by = y + yOffset;
+
+      ctx.fillStyle = "rgba(0,0,0,0.5)";
+      ctx.fillRect(bx, by, w, h);
+      ctx.fillStyle = ratio > 0.3 ? "#00FF00" : "#FF0000";
+      ctx.fillRect(bx, by, w * ratio, h);
     }
 
     setEraseState(erase: boolean): void {

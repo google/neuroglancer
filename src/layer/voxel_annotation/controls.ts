@@ -20,9 +20,8 @@ import type {
   UserLayerWithVoxelEditing,
   VoxelEditingContext,
 } from "#src/layer/voxel_annotation/index.js";
-import { RenderedDataPanel } from "#src/rendered_data_panel.js";
+import type { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import { SliceViewPanel } from "#src/sliceview/panel.js";
-import { StatusMessage } from "#src/status.js";
 import { observeWatchable } from "#src/trackable_value.js";
 import { mat3, vec3 } from "#src/util/geom.js";
 import {
@@ -38,22 +37,6 @@ import { checkboxLayerControl } from "#src/widget/layer_control_checkbox.js";
 import { enumLayerControl } from "#src/widget/layer_control_enum.js";
 import { rangeLayerControl } from "#src/widget/layer_control_range.js";
 
-export function getActivePanel(
-  layer: UserLayerWithVoxelEditing,
-): RenderedDataPanel | undefined {
-  let activePanel: RenderedDataPanel | undefined;
-  for (const panel of layer.manager.root.display.panels) {
-    if (panel instanceof RenderedDataPanel) {
-      if (panel.mouseX !== -1 && panel instanceof SliceViewPanel) {
-        activePanel = panel;
-      } else {
-        panel.clearOverlay();
-      }
-    }
-  }
-  return activePanel;
-}
-
 export function getEditingContext(
   layer: UserLayerWithVoxelEditing,
 ): VoxelEditingContext | undefined {
@@ -65,22 +48,13 @@ export function getEditingContext(
   return undefined;
 }
 
-export function updateBrushOutline(
+export function drawBrushCursor(
   layer: UserLayerWithVoxelEditing,
-  eraseMode: boolean,
+  panel: RenderedDataPanel,
+  ctx: CanvasRenderingContext2D,
 ) {
   const context = getEditingContext(layer);
-  if (context === undefined) {
-    StatusMessage.showTemporaryMessage(
-      'Voxel editing is not available. Please select a writable volume source in the "Source" tab.',
-      5000,
-    );
-    return;
-  }
-
-  const panel = getActivePanel(layer);
-  if (!panel || !(panel instanceof SliceViewPanel)) {
-    if (panel) panel.clearOverlay();
+  if (context === undefined || !(panel instanceof SliceViewPanel)) {
     return;
   }
 
@@ -89,13 +63,11 @@ export function updateBrushOutline(
   const { displayRank } = displayDimensionRenderInfo;
 
   if (displayRank < 2) {
-    panel.clearOverlay();
     return;
   }
 
   const chunkTransform = context.getChunkTransform();
   if (!chunkTransform) {
-    panel.clearOverlay();
     return;
   }
   const { chunkToLayerTransform, layerRank } = chunkTransform;
@@ -158,16 +130,35 @@ export function updateBrushOutline(
 
   const rotation = Math.atan2(lambda1 - Q11, Q12);
 
-  panel.drawBrushCursor(
-    panel.mouseX,
-    panel.mouseY,
-    radiusX,
-    radiusY,
-    rotation,
-    "white",
-    eraseMode,
-  );
+  if (radiusX > 0 && radiusY > 0) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(
+      panel.mouseX,
+      panel.mouseY,
+      radiusX,
+      radiusY,
+      rotation,
+      0,
+      2 * Math.PI,
+    );
+    ctx.restore();
+
+    const isEraser = layer.shouldErase();
+    const color = "white";
+    ctx.fillStyle = isEraser ? "red" : color;
+    ctx.globalAlpha = 0.2;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = isEraser ? "rgb(255,136,136)" : "rgba(255, 255, 255, 1)";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.strokeStyle = isEraser ? "rgb(97,0,0)" : "rgba(0, 0, 0, 1)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
 }
+
 export type VoxelTabElement =
   | { type: "header"; label: string }
   | { type: "tool-row"; tools: { toolId: string; label: string }[] }
@@ -185,28 +176,27 @@ const TOOL_SPECIFIC_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEditing>[
             options: { min: 1, max: 64, step: 1 },
           }),
         );
-        const originalActivateTool = control.activateTool;
         return {
           ...control,
-          activateTool: (activation, controlContext) => {
-            originalActivateTool(activation, controlContext as any);
-
+          activateTool: (activation, _controlContext) => {
             const layer = activation.tool.layer as UserLayerWithVoxelEditing;
-            const updateCursor = () => {
-              updateBrushOutline(layer, layer.shouldErase());
+            const trigger = () => {
+              for (const panel of layer.manager.root.display.panels) {
+                if (panel instanceof SliceViewPanel) {
+                  panel.scheduleOverlayRedraw();
+                }
+              }
             };
 
-            updateCursor();
+            trigger();
             activation.registerDisposer(
               layer.manager.root.layerSelectedValues.mouseState.changed.add(
-                updateCursor,
+                trigger,
               ),
             );
-            activation.registerDisposer(
-              layer.brushRadius.changed.add(updateCursor),
-            );
+            activation.registerDisposer(layer.brushRadius.changed.add(trigger));
             activation.registerDisposer(() => {
-              getActivePanel(layer)?.clearOverlay();
+              trigger();
             });
           },
         };

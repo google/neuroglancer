@@ -40,6 +40,7 @@ import { KeyboardEventBinder } from "#src/util/keyboard_bindings.js";
 import * as matrix from "#src/util/matrix.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
+import { Signal } from "#src/util/signal.js";
 import type {
   TouchPinchInfo,
   TouchTranslateInfo,
@@ -833,46 +834,33 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     });
   }
 
-  drawBrushCursor(
-    x: number,
-    y: number,
-    radiusX: number,
-    radiusY: number,
-    rotation: number,
-    color: string,
-    isEraser: boolean,
-  ) {
-    const ctx = this.overlay_context;
-    const { logicalWidth, logicalHeight } = this.renderViewport;
+  overlayDraw = new Signal<
+    (
+      ctx: CanvasRenderingContext2D,
+      width: number,
+      height: number,
+      panel: RenderedDataPanel,
+    ) => void
+  >();
 
-    ctx.clearRect(0, 0, logicalWidth, logicalHeight);
-
-    if (radiusX > 0 && radiusY > 0) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.ellipse(x, y, radiusX, radiusY, rotation, 0, 2 * Math.PI);
-      ctx.restore();
-      ctx.fillStyle = isEraser ? "red" : color;
-      ctx.globalAlpha = 0.2;
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = isEraser
-        ? "rgb(255,136,136)"
-        : "rgba(255, 255, 255, 1)";
-      ctx.lineWidth = 4;
-      ctx.stroke();
-      ctx.strokeStyle = isEraser ? "rgb(97,0,0)" : "rgba(0, 0, 0, 1)";
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
+  scheduleOverlayRedraw() {
+    if (this.visible) {
+      requestAnimationFrame(this.drawOverlayInternal.bind(this));
     }
   }
 
-  clearOverlay() {
+  private drawOverlayInternal() {
     this.overlay_context.clearRect(
       0,
       0,
-      this.overlay_canvas.width,
-      this.overlay_canvas.height,
+      this.renderViewport.logicalWidth,
+      this.renderViewport.logicalHeight,
+    );
+    this.overlayDraw.dispatch(
+      this.overlay_context,
+      this.renderViewport.logicalWidth,
+      this.renderViewport.logicalHeight,
+      this,
     );
   }
 

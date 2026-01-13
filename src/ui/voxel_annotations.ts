@@ -18,13 +18,12 @@ import "#src/ui/voxel_annotations.css";
 
 import type { MouseSelectionState } from "#src/layer/index.js";
 import {
-  getActivePanel,
   getEditingContext,
-  updateBrushOutline,
   VOXEL_LAYER_CONTROLS,
 } from "#src/layer/voxel_annotation/controls.js";
 import type { UserLayerWithVoxelEditing } from "#src/layer/voxel_annotation/index.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
+import { SliceViewPanel } from "#src/sliceview/panel.js";
 import { StatusMessage } from "#src/status.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import {
@@ -262,22 +261,20 @@ export class VoxelBrushTool extends BaseVoxelTool {
 
   activate(activation: ToolActivation<this>): boolean {
     if (!super.activate(activation)) return false;
-    updateBrushOutline(this.layer, this.cursorEraseMode.value);
-
-    activation.registerDisposer(
-      this.cursorEraseMode.changed.add(() => {
-        updateBrushOutline(this.layer, this.cursorEraseMode.value);
-      }),
-    );
+    const trigger = () => {
+      for (const panel of this.layer.manager.root.display.panels) {
+        if (panel instanceof SliceViewPanel) {
+          panel.scheduleOverlayRedraw();
+        }
+      }
+    };
+    trigger();
+    activation.registerDisposer(this.cursorEraseMode.changed.add(trigger));
     activation.registerDisposer(() => {
-      getActivePanel(this.layer)?.clearOverlay();
+      trigger();
       this.resetCursor();
     });
-    activation.registerDisposer(
-      this.mouseState.changed.add(() => {
-        updateBrushOutline(this.layer, this.cursorEraseMode.value);
-      }),
-    );
+    activation.registerDisposer(this.mouseState.changed.add(trigger));
     return true;
   }
 

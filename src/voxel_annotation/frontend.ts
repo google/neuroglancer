@@ -15,6 +15,7 @@
  */
 
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
+import { SharedWatchableValue } from "#src/shared_watchable_value.js";
 import type {
   InMemoryVolumeChunkSource,
   VolumeChunkSource,
@@ -50,6 +51,7 @@ import {
 export class VoxelEditController extends SharedObject {
   public undoCount = new WatchableValue<number>(0);
   public redoCount = new WatchableValue<number>(0);
+  public pendingOpCount: SharedWatchableValue<number>;
 
   constructor(private host: VoxelEditControllerHost) {
     super();
@@ -88,7 +90,14 @@ export class VoxelEditController extends SharedObject {
       });
     }
 
-    this.initializeCounterpart(rpc, { resolutions });
+    this.pendingOpCount = this.registerDisposer(
+      SharedWatchableValue.make(this.host.rpc, 0),
+    );
+
+    this.initializeCounterpart(rpc, {
+      resolutions,
+      pendingOpCount: this.pendingOpCount.rpcId,
+    });
   }
 
   private async dispatchOperation(operation: VoxelOperation) {
@@ -310,10 +319,10 @@ export class VoxelEditController extends SharedObject {
     }
   }
 
-  public undo(): void {
+  public async undo() {
     if (!this.rpc)
       throw new Error("VoxelEditController.undo: RPC not initialized.");
-    this.rpc
+    await this.rpc
       .promiseInvoke<void>(VOX_EDIT_UNDO_RPC_ID, { rpcId: this.rpcId })
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
@@ -321,10 +330,10 @@ export class VoxelEditController extends SharedObject {
       });
   }
 
-  public redo(): void {
+  public async redo() {
     if (!this.rpc)
       throw new Error("VoxelEditController.redo: RPC not initialized.");
-    this.rpc
+    await this.rpc
       .promiseInvoke<void>(VOX_EDIT_REDO_RPC_ID, { rpcId: this.rpcId })
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);

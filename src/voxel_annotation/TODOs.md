@@ -1,6 +1,13 @@
 ## TODOs
 
+FOR TOMORROW: the "compute load indicator"
+
 ### priority
+
+- add `ctrl + middleclick` to flood fill when the brush is active
+- rework the sphere/disk calculation to only calculate the difference between the new sphree/disk and the last one
+- optimize spheres using the full chunk
+- see about the list of pending edits for the preview
 
 ### later
 
