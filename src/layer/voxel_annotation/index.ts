@@ -20,7 +20,10 @@ import type {
 } from "#src/layer/index.js";
 import { UserLayer } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
-import { drawBrushCursor } from "#src/layer/voxel_annotation/controls.js";
+import {
+  drawBrushCursor,
+  getEditingContext,
+} from "#src/layer/voxel_annotation/controls.js";
 import { VoxToolTab } from "#src/layer/voxel_annotation/draw_tab.js";
 import type {
   ChunkTransformParameters,
@@ -509,9 +512,7 @@ export function UserLayerWithVoxelEditingMixin<
       this.manager.root.layerSelectedValues.mouseState.changed.add(trigger);
 
       this.layersChanged.add(() => {
-        const ctx = this.editingContexts.values().next().value as
-          | VoxelEditingContext
-          | undefined;
+        const ctx = getEditingContext(this);
         if (ctx) {
           this.registerDisposer(ctx.totalPending.changed.add(trigger));
         }
@@ -554,7 +555,11 @@ export function UserLayerWithVoxelEditingMixin<
       ctx: CanvasRenderingContext2D,
       panel: RenderedDataPanel,
     ) {
-      if (panel.mouseX < 0 || panel.mouseY < 0) {
+      if (
+        panel.mouseX < 0 ||
+        panel.mouseY < 0 ||
+        !this.hasSubsourcesWithWritingEnabled.value
+      ) {
         return;
       }
       const globalToolBinder = this.manager.root.toolBinder;
@@ -570,9 +575,7 @@ export function UserLayerWithVoxelEditingMixin<
         isBrushActive = true;
       }
 
-      const editContext = this.editingContexts.values().next().value as
-        | VoxelEditingContext
-        | undefined;
+      const editContext = getEditingContext(this);
       const pending = editContext?.totalPending.value || 0;
       this.drawStaminaBar(
         ctx,
