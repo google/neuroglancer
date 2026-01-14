@@ -1118,6 +1118,10 @@ export class VoxelEditController extends SharedObject {
       if (shouldSkip(point[0], point[1], point[2])) {
         return;
       }
+      if (filterValue == undefined) {
+        voxelsToPaint.push(point);
+        return;
+      }
       toAwait.add(
         accessor.getValue(point).then((v) => {
           if (v == null) return;
