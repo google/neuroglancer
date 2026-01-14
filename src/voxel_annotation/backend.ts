@@ -23,7 +23,6 @@ import type {
   VolumeChunk,
   VolumeChunkSource,
 } from "#src/sliceview/volume/backend.js";
-import { computeChunkGridPosition } from "#src/sliceview/volume/base.js";
 import type { TypedArray } from "#src/util/array.js";
 import { mat4, vec3 } from "#src/util/geom.js";
 import * as matrix from "#src/util/matrix.js";
@@ -131,12 +130,7 @@ class BackendVoxelAccessor {
     this.fillValue = typeof fv === "bigint" ? fv : BigInt(fv);
   }
 
-  async getValue(point: Float32Array): Promise<bigint | null> {
-    if (point.length !== 3) throw new Error("getValue: invalid point size");
-    const x = Math.round(point[0]);
-    const y = Math.round(point[1]);
-    const z = Math.round(point[2]);
-
+  async getValue(x: number, y: number, z: number): Promise<bigint | null> {
     if (
       x < this.volMin[0] ||
       x >= this.volMax[0] ||
@@ -1109,25 +1103,36 @@ export class VoxelEditController extends SharedObject {
     r -= 1;
     const rr = r * r;
 
-    const voxelsToPaint: Float32Array[] = [];
+    // This capacity should ensure we never get out of bounds
+    const maxCapacity = Math.ceil((2 * r + 1) ** 3);
+    const voxelBuffer = new Int32Array(maxCapacity * 3);
+    let voxelCount = 0;
+    const bufferEnqueue = (x: number, y: number, z: number) => {
+      // don;t need to check bounds as the capacity is assumed to be large enough
+      const base = voxelCount * 3;
+      voxelBuffer[base] = x;
+      voxelBuffer[base + 1] = y;
+      voxelBuffer[base + 2] = z;
+      voxelCount++;
+    };
 
     const shouldSkip = this.brushCache.buildSkipper(value, shape, basis);
 
     const toAwait = new Set<Promise<void>>();
-    const pushIf = (point: Float32Array) => {
-      if (shouldSkip(point[0], point[1], point[2])) {
+    const pushIf = (x: number, y: number, z: number) => {
+      if (shouldSkip(x, y, z)) {
         return;
       }
       if (filterValue == undefined) {
-        voxelsToPaint.push(point);
+        bufferEnqueue(x, y, z);
         return;
       }
       toAwait.add(
-        accessor.getValue(point).then((v) => {
+        accessor.getValue(x, y, z).then((v) => {
           if (v == null) return;
           if (v === value || (filterValue !== undefined && v !== filterValue))
             return;
-          voxelsToPaint.push(point);
+          bufferEnqueue(x, y, z);
         }),
       );
     };
@@ -1137,20 +1142,32 @@ export class VoxelEditController extends SharedObject {
         for (let dy = -r; dy <= r; ++dy) {
           for (let dx = -r; dx <= r; ++dx) {
             if (dx * dx + dy * dy + dz * dz <= rr)
-              pushIf(new Float32Array([cx + dx, cy + dy, cz + dz]));
+              pushIf(cx + dx, cy + dy, cz + dz);
           }
         }
       }
     } else {
       if (basis === undefined) throw new Error("Brush shape requires a basis.");
-      const { u, v } = basis;
+      const { u, v } = basis as { u: vec3; v: vec3 };
+      const ux = u[0],
+        uy = u[1],
+        uz = u[2];
+      const vx = v[0],
+        vy = v[1],
+        vz = v[2];
+
       for (let j = -r; j <= r; ++j) {
+        const j2 = j * j;
+        const vPartX = vx * j;
+        const vPartY = vy * j;
+        const vPartZ = vz * j;
+
         for (let i = -r; i <= r; ++i) {
-          if (i * i + j * j <= rr) {
-            const point = vec3.fromValues(cx, cy, cz);
-            vec3.scaleAndAdd(point, point, u as vec3, i);
-            vec3.scaleAndAdd(point, point, v as vec3, j);
-            pushIf(point as Float32Array);
+          if (i * i + j2 <= rr) {
+            const px = Math.round(cx + ux * i + vPartX);
+            const py = Math.round(cy + uy * i + vPartY);
+            const pz = Math.round(cz + uz * i + vPartZ);
+            pushIf(px, py, pz);
           }
         }
       }
@@ -1159,14 +1176,19 @@ export class VoxelEditController extends SharedObject {
     await Promise.all(toAwait);
     this.brushCache.update({ x: cx, y: cy, z: cz }, r, value, shape, basis);
 
-    if (voxelsToPaint.length === 0) return;
+    if (voxelCount === 0) return;
 
-    let finalVoxels = voxelsToPaint;
     if (basis && shape === BrushShape.DISK) {
-      finalVoxels = this.fillPlaneAliasingGaps(voxelsToPaint, basis, center);
+      const result = this.fillPlaneAliasingGaps(
+        voxelBuffer,
+        voxelCount,
+        basis,
+        center,
+      );
+      this.processBackendEdits(result.buffer, result.count, value, sourceIndex);
+    } else {
+      this.processBackendEdits(voxelBuffer, voxelCount, value, sourceIndex);
     }
-
-    await this.processBackendEdits(finalVoxels, value, sourceIndex);
   }
 
   private async performFloodFill(op: FloodFillOperation): Promise<void> {
@@ -1177,7 +1199,11 @@ export class VoxelEditController extends SharedObject {
     const accessor = new BackendVoxelAccessor(source);
 
     const startVoxelLod = vec3.round(vec3.create(), seed as vec3);
-    const originalValue = await accessor.getValue(startVoxelLod);
+    const originalValue = await accessor.getValue(
+      startVoxelLod[0],
+      startVoxelLod[1],
+      startVoxelLod[2],
+    );
 
     if (originalValue === null) return;
     if (filterValue !== undefined && originalValue !== filterValue) return;
@@ -1186,7 +1212,7 @@ export class VoxelEditController extends SharedObject {
     const visited = new Set<string>();
     const queue: [number, number][] = [];
     let filledCount = 0;
-    const voxelsToFill: Float32Array[] = [];
+    const voxelBuffer = new Int32Array(maxVoxels * 3 + 200); // +200 since fillBorderRegion may exceed the maxVoxelCount without failure
 
     const map2dTo3d = (u: number, v: number): vec3 => {
       const point = vec3.clone(startVoxelLod);
@@ -1196,7 +1222,7 @@ export class VoxelEditController extends SharedObject {
     };
 
     const isFillable = async (p: vec3): Promise<boolean> => {
-      const val = await accessor.getValue(p);
+      const val = await accessor.getValue(p[0], p[1], p[2]);
       if (val === null) return false;
       if (originalValue === 0n) return val === 0n;
       return val === originalValue;
@@ -1252,8 +1278,11 @@ export class VoxelEditController extends SharedObject {
         if (filledCount >= maxVoxels) return;
         const [u, v] = subQueue.shift()!;
         const currentPoint = map2dTo3d(u, v);
+        const base = filledCount * 3;
+        voxelBuffer[base] = currentPoint[0];
+        voxelBuffer[base + 1] = currentPoint[1];
+        voxelBuffer[base + 2] = currentPoint[2];
         filledCount++;
-        voxelsToFill.push(currentPoint as Float32Array);
 
         const neighbors2d: [number, number][] = [
           [u + 1, v],
@@ -1283,8 +1312,11 @@ export class VoxelEditController extends SharedObject {
         throw new Error(`Flood fill failed: too many voxels filled.`);
       const [u, v] = queue.shift()!;
       const currentPoint = map2dTo3d(u, v);
+      const base = filledCount * 3;
+      voxelBuffer[base] = currentPoint[0];
+      voxelBuffer[base + 1] = currentPoint[1];
+      voxelBuffer[base + 2] = currentPoint[2];
       filledCount++;
-      voxelsToFill.push(currentPoint as Float32Array);
 
       const requiredThickness = getCurrentThickness();
       const neighbors2d: [number, number][] = [
@@ -1309,15 +1341,26 @@ export class VoxelEditController extends SharedObject {
       }
     }
 
-    const finalVoxels = this.fillPlaneAliasingGaps(voxelsToFill, basis, seed);
-    await this.processBackendEdits(finalVoxels, fillValue, sourceIndex);
+    const result = this.fillPlaneAliasingGaps(
+      voxelBuffer,
+      filledCount,
+      basis,
+      seed,
+    );
+    this.processBackendEdits(
+      result.buffer,
+      result.count,
+      fillValue,
+      sourceIndex,
+    );
   }
 
   private fillPlaneAliasingGaps(
-    voxels: Float32Array[],
+    inputBuffer: Int32Array,
+    inputCount: number,
     basis: { u: Float32Array; v: Float32Array },
     center: Float32Array,
-  ): Float32Array[] {
+  ): { buffer: Int32Array; count: number } {
     const u = basis.u as vec3;
     const v = basis.v as vec3;
     const normal = vec3.create();
@@ -1330,79 +1373,121 @@ export class VoxelEditController extends SharedObject {
       Math.abs(normal[1]) > SKIP_THRESHOLD ||
       Math.abs(normal[2]) > SKIP_THRESHOLD
     ) {
-      return voxels;
+      return { buffer: inputBuffer, count: inputCount };
     }
 
     const d = -vec3.dot(normal, center as vec3);
-    const voxelSet = new Set<string>();
-    const output = [...voxels];
-    for (const v of voxels) {
-      voxelSet.add(
-        `${Math.round(v[0])},${Math.round(v[1])},${Math.round(v[2])}`,
-      );
-    }
-
     const DISTANCE_THRESHOLD =
       Math.abs(normal[0]) + Math.abs(normal[1]) + Math.abs(normal[2]) + 1e-5;
 
-    for (const p of voxels) {
-      const px = Math.round(p[0]);
-      const py = Math.round(p[1]);
-      const pz = Math.round(p[2]);
+    const voxelSet = new Set<string>();
+
+    let outputBuffer = inputBuffer;
+    let outputCount = inputCount;
+    if (inputCount * 6 > inputBuffer.length) {
+      const newBuf = new Int32Array(inputCount * 6);
+      newBuf.set(inputBuffer.subarray(0, inputCount * 3));
+      outputBuffer = newBuf;
+    }
+
+    for (let i = 0; i < inputCount; i++) {
+      const base = i * 3;
+      const px = outputBuffer[base];
+      const py = outputBuffer[base + 1];
+      const pz = outputBuffer[base + 2];
+      voxelSet.add(`${px},${py},${pz}`);
+    }
+
+    for (let i = 0; i < inputCount; i++) {
+      const base = i * 3;
+      const px = inputBuffer[base];
+      const py = inputBuffer[base + 1];
+      const pz = inputBuffer[base + 2];
 
       for (const [ox, oy, oz] of OFFSETS_26_CONNECTED_BACKEND) {
         const nx = px + ox;
         const ny = py + oy;
         const nz = pz + oz;
-        const key = `${nx},${ny},${nz}`;
-        if (voxelSet.has(key)) continue;
 
         const dist = Math.abs(
           normal[0] * nx + normal[1] * ny + normal[2] * nz + d,
         );
         if (dist <= DISTANCE_THRESHOLD) {
-          voxelSet.add(key);
-          output.push(new Float32Array([nx, ny, nz]));
+          const key = `${nx},${ny},${nz}`;
+          if (!voxelSet.has(key)) {
+            voxelSet.add(key);
+
+            if (outputCount * 3 + 3 > outputBuffer.length) {
+              const newBuf = new Int32Array(outputBuffer.length * 2);
+              newBuf.set(outputBuffer);
+              outputBuffer = newBuf;
+            }
+            const outBase = outputCount * 3;
+            outputBuffer[outBase] = nx;
+            outputBuffer[outBase + 1] = ny;
+            outputBuffer[outBase + 2] = nz;
+            outputCount++;
+          }
         }
       }
     }
-    return output;
+    return { buffer: outputBuffer, count: outputCount };
   }
 
-  private async processBackendEdits(
-    voxels: Float32Array[],
+  private processBackendEdits(
+    voxelBuffer: Int32Array,
+    voxelCount: number,
     value: bigint,
     lodIndex: number,
   ) {
     const source = this.sources.get(lodIndex);
     if (!source) return;
 
-    const { rank, chunkDataSize } = source.spec;
-    const tempGridPos = new Float32Array(rank);
-    const tempPosInChunk = new Uint32Array(rank);
-
+    const { chunkDataSize } = source.spec;
     const indicesByVoxKey = new Map<string, number[]>();
-    for (const voxelCoord of voxels) {
-      computeChunkGridPosition(
-        tempGridPos,
-        tempPosInChunk,
-        voxelCoord,
-        chunkDataSize,
-      );
-      const chunkKey = tempGridPos.join();
-      const voxKey = makeVoxChunkKey(chunkKey, lodIndex);
 
-      let indices = indicesByVoxKey.get(voxKey);
-      if (!indices) {
-        indices = [];
-        indicesByVoxKey.set(voxKey, indices);
+    let lastGridX = -Infinity;
+    let lastGridY = -Infinity;
+    let lastGridZ = -Infinity;
+    let currentIndicesList: number[] | undefined;
+
+    const sizeX = chunkDataSize[0];
+    const sizeY = chunkDataSize[1];
+    const sizeZ = chunkDataSize[2];
+    const strideY = sizeX;
+    const strideZ = sizeX * sizeY;
+
+    for (let i = 0; i < voxelCount; i++) {
+      const base = i * 3;
+      const vx = voxelBuffer[base];
+      const vy = voxelBuffer[base + 1];
+      const vz = voxelBuffer[base + 2];
+
+      const cx = Math.floor(vx / sizeX);
+      const cy = Math.floor(vy / sizeY);
+      const cz = Math.floor(vz / sizeZ);
+
+      if (cx !== lastGridX || cy !== lastGridY || cz !== lastGridZ) {
+        lastGridX = cx;
+        lastGridY = cy;
+        lastGridZ = cz;
+
+        const voxKey = `lod${lodIndex}#${cx},${cy},${cz}`;
+
+        currentIndicesList = indicesByVoxKey.get(voxKey);
+        if (!currentIndicesList) {
+          currentIndicesList = [];
+          indicesByVoxKey.set(voxKey, currentIndicesList);
+        }
       }
 
-      const index =
-        (tempPosInChunk[2] * chunkDataSize[1] + tempPosInChunk[1]) *
-          chunkDataSize[0] +
-        tempPosInChunk[0];
-      indices.push(index);
+      const lx = Math.floor(vx - sizeX * cx);
+      const ly = Math.floor(vy - sizeY * cy);
+      const lz = Math.floor(vz - sizeZ * cz);
+
+      const index = lz * strideZ + ly * strideY + lx;
+
+      currentIndicesList!.push(index);
     }
 
     const backendEdits = [];

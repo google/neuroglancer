@@ -231,7 +231,7 @@ export class VoxelEditingContext
   ) {
     if (!this._controller)
       throw new Error("Cannot use paintBrushWithShape without a controller");
-    const cost = radiusCanonical * (shape === BrushShape.DISK ? 0.05 : 0.5);
+    const cost = radiusCanonical * (shape === BrushShape.DISK ? 0.01 : 0.1);
     await this.withCost(cost, () =>
       this._controller!.paintBrushWithShape(
         centerCanonical,
