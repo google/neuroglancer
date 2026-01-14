@@ -100,19 +100,22 @@ function getFlatChunkData(
   }
 }
 
+interface ChunkContext {
+  key: string;
+  data: TypedArray | null;
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  minZ: number;
+  maxZ: number;
+  strideY: number;
+  strideZ: number;
+}
+
 class BackendVoxelAccessor {
-  private activeData: TypedArray | null = null;
-  private activeKey: string | null = null;
-
-  private minX = 0;
-  private maxX = 0;
-  private minY = 0;
-  private maxY = 0;
-  private minZ = 0;
-  private maxZ = 0;
-
-  private strideY = 0;
-  private strideZ = 0;
+  private chunkContexts = new Map<string, ChunkContext>();
+  private pendingLoads = new Map<string, Promise<ChunkContext>>();
 
   private readonly volMin: Float32Array;
   private readonly volMax: Float32Array;
@@ -130,17 +133,9 @@ class BackendVoxelAccessor {
 
   async getValue(point: Float32Array): Promise<bigint | null> {
     if (point.length !== 3) throw new Error("getValue: invalid point size");
-    const [x, y, z] = point.map((v) => Math.round(v));
-    if (
-      x >= this.minX &&
-      x < this.maxX &&
-      y >= this.minY &&
-      y < this.maxY &&
-      z >= this.minZ &&
-      z < this.maxZ
-    ) {
-      return this.readLocal(x, y, z);
-    }
+    const x = Math.round(point[0]);
+    const y = Math.round(point[1]);
+    const z = Math.round(point[2]);
 
     if (
       x < this.volMin[0] ||
@@ -153,30 +148,60 @@ class BackendVoxelAccessor {
       return null;
     }
 
-    await this.loadChunk(x, y, z);
-    return this.readLocal(x, y, z);
-  }
-
-  private readLocal(x: number, y: number, z: number): bigint {
-    if (!this.activeData) return this.fillValue;
-
-    const lx = x - this.minX;
-    const ly = y - this.minY;
-    const lz = z - this.minZ;
-    const index = lz * this.strideZ + ly * this.strideY + lx;
-
-    const val = this.activeData[index];
-    return typeof val === "bigint" ? val : BigInt(val);
-  }
-
-  private async loadChunk(x: number, y: number, z: number) {
     const cx = Math.floor(x / this.chunkDimension[0]);
     const cy = Math.floor(y / this.chunkDimension[1]);
     const cz = Math.floor(z / this.chunkDimension[2]);
     const key = `${cx},${cy},${cz}`;
 
-    if (this.activeKey === key) return;
+    let ctx = this.chunkContexts.get(key);
+    if (!ctx) {
+      ctx = await this.getOrLoadChunkContext(key, cx, cy, cz);
+    }
 
+    return this.readLocal(ctx, x, y, z);
+  }
+
+  private getOrLoadChunkContext(
+    key: string,
+    cx: number,
+    cy: number,
+    cz: number,
+  ): Promise<ChunkContext> {
+    let promise = this.pendingLoads.get(key);
+    if (promise) return promise;
+
+    promise = this.loadChunkContext(key, cx, cy, cz).then((ctx) => {
+      this.chunkContexts.set(key, ctx);
+      this.pendingLoads.delete(key);
+      return ctx;
+    });
+    this.pendingLoads.set(key, promise);
+    return promise;
+  }
+
+  private readLocal(
+    ctx: ChunkContext,
+    x: number,
+    y: number,
+    z: number,
+  ): bigint {
+    if (!ctx.data) return this.fillValue;
+
+    const lx = x - ctx.minX;
+    const ly = y - ctx.minY;
+    const lz = z - ctx.minZ;
+    const index = lz * ctx.strideZ + ly * ctx.strideY + lx;
+
+    const val = ctx.data[index];
+    return typeof val === "bigint" ? val : BigInt(val);
+  }
+
+  private async loadChunkContext(
+    key: string,
+    cx: number,
+    cy: number,
+    cz: number,
+  ): Promise<ChunkContext> {
     let chunk = this.source.chunks.get(key) as VolumeChunk | undefined;
     if (!chunk) {
       chunk = this.source.getChunk(
@@ -188,7 +213,7 @@ class BackendVoxelAccessor {
       try {
         await this.source.download(chunk, new AbortController().signal);
       } catch {
-        this.activeData = null;
+        return this.createContext(key, null, cx, cy, cz, chunk);
       }
     }
 
@@ -196,19 +221,133 @@ class BackendVoxelAccessor {
       this.source.computeChunkBounds(chunk);
     }
 
-    this.activeKey = key;
-    this.activeData = getFlatChunkData(chunk, this.source.spec);
+    const flatData = getFlatChunkData(chunk, this.source.spec);
+    return this.createContext(key, flatData, cx, cy, cz, chunk);
+  }
 
+  private createContext(
+    key: string,
+    data: TypedArray | null,
+    cx: number,
+    cy: number,
+    cz: number,
+    chunk: VolumeChunk,
+  ): ChunkContext {
     const size = chunk.chunkDataSize || this.chunkDimension;
-    this.minX = cx * this.chunkDimension[0];
-    this.minY = cy * this.chunkDimension[1];
-    this.minZ = cz * this.chunkDimension[2];
-    this.maxX = this.minX + size[0];
-    this.maxY = this.minY + size[1];
-    this.maxZ = this.minZ + size[2];
+    const minX = cx * this.chunkDimension[0];
+    const minY = cy * this.chunkDimension[1];
+    const minZ = cz * this.chunkDimension[2];
 
-    this.strideY = size[0];
-    this.strideZ = size[0] * size[1];
+    return {
+      key,
+      data,
+      minX,
+      maxX: minX + size[0],
+      minY,
+      maxY: minY + size[1],
+      minZ,
+      maxZ: minZ + size[2],
+      strideY: size[0],
+      strideZ: size[0] * size[1],
+    };
+  }
+}
+
+type Skipper = (x: number, y: number, z: number) => boolean;
+
+class BrushOptimizationCache {
+  private active = false;
+
+  private val: bigint = 0n;
+  private shape: BrushShape = BrushShape.SPHERE;
+  private cx = 0;
+  private cy = 0;
+  private cz = 0;
+  private r2 = 0;
+
+  private ux = 0;
+  private uy = 0;
+  private uz = 0;
+  private vx = 0;
+  private vy = 0;
+  private vz = 0;
+
+  reset() {
+    this.active = false;
+  }
+
+  buildSkipper(
+    newValue: bigint,
+    newShape: BrushShape,
+    newBasis?: { u: Float32Array; v: Float32Array },
+  ): Skipper {
+    if (!this.active || this.val !== newValue || this.shape !== newShape) {
+      return () => false;
+    }
+
+    const { cx, cy, cz, r2 } = this;
+
+    if (this.shape === BrushShape.SPHERE) {
+      return (x: number, y: number, z: number) => {
+        const dx = x - cx;
+        const dy = y - cy;
+        const dz = z - cz;
+        return dx * dx + dy * dy + dz * dz <= r2;
+      };
+    }
+
+    if (this.shape === BrushShape.DISK && newBasis) {
+      const dotU =
+        this.ux * newBasis.u[0] +
+        this.uy * newBasis.u[1] +
+        this.uz * newBasis.u[2];
+      const dotV =
+        this.vx * newBasis.v[0] +
+        this.vy * newBasis.v[1] +
+        this.vz * newBasis.v[2];
+
+      if (dotU < 0.9999 || dotV < 0.9999) {
+        return () => false;
+      }
+
+      const { ux, uy, uz, vx, vy, vz } = this;
+
+      return (x: number, y: number, z: number) => {
+        const dx = x - cx;
+        const dy = y - cy;
+        const dz = z - cz;
+        const distU = dx * ux + dy * uy + dz * uz;
+        const distV = dx * vx + dy * vy + dz * vz;
+        return distU * distU + distV * distV <= r2;
+      };
+    }
+
+    return () => false;
+  }
+
+  update(
+    center: { x: number; y: number; z: number },
+    radius: number,
+    value: bigint,
+    shape: BrushShape,
+    basis?: { u: Float32Array; v: Float32Array },
+  ) {
+    this.active = true;
+    this.cx = center.x;
+    this.cy = center.y;
+    this.cz = center.z;
+    this.r2 = radius * radius;
+    this.val = value;
+    this.shape = shape;
+
+    if (basis) {
+      this.ux = basis.u[0];
+      this.uy = basis.u[1];
+      this.uz = basis.u[2];
+      this.vx = basis.v[0];
+      this.vy = basis.v[1];
+      this.vz = basis.v[2];
+    }
   }
 }
 
@@ -244,6 +383,8 @@ export class VoxelEditController extends SharedObject {
   private downsampleQueue: string[] = [];
   private downsampleQueueSet: Set<string> = new Set();
   private isProcessingDownsampleQueue: boolean = false;
+
+  private brushCache = new BrushOptimizationCache();
 
   private morphologicalConfig = {
     growthThresholds: [
@@ -296,6 +437,7 @@ export class VoxelEditController extends SharedObject {
   }
 
   private async flushPending(): Promise<void> {
+    this.brushCache.reset();
     const edits = this.pendingEdits;
     this.pendingEdits = [];
     this.updatePendingCount();
@@ -969,12 +1111,21 @@ export class VoxelEditController extends SharedObject {
 
     const voxelsToPaint: Float32Array[] = [];
 
-    const pushIf = async (point: Float32Array) => {
-      const v = await accessor.getValue(point);
-      if (v === null) return;
-      if (v === value || (filterValue !== undefined && v !== filterValue))
+    const shouldSkip = this.brushCache.buildSkipper(value, shape, basis);
+
+    const toAwait = new Set<Promise<void>>();
+    const pushIf = (point: Float32Array) => {
+      if (shouldSkip(point[0], point[1], point[2])) {
         return;
-      voxelsToPaint.push(point);
+      }
+      toAwait.add(
+        accessor.getValue(point).then((v) => {
+          if (v == null) return;
+          if (v === value || (filterValue !== undefined && v !== filterValue))
+            return;
+          voxelsToPaint.push(point);
+        }),
+      );
     };
 
     if (shape !== BrushShape.DISK) {
@@ -982,7 +1133,7 @@ export class VoxelEditController extends SharedObject {
         for (let dy = -r; dy <= r; ++dy) {
           for (let dx = -r; dx <= r; ++dx) {
             if (dx * dx + dy * dy + dz * dz <= rr)
-              await pushIf(new Float32Array([cx + dx, cy + dy, cz + dz]));
+              pushIf(new Float32Array([cx + dx, cy + dy, cz + dz]));
           }
         }
       }
@@ -995,11 +1146,14 @@ export class VoxelEditController extends SharedObject {
             const point = vec3.fromValues(cx, cy, cz);
             vec3.scaleAndAdd(point, point, u as vec3, i);
             vec3.scaleAndAdd(point, point, v as vec3, j);
-            await pushIf(point as Float32Array);
+            pushIf(point as Float32Array);
           }
         }
       }
     }
+
+    await Promise.all(toAwait);
+    this.brushCache.update({ x: cx, y: cy, z: cz }, r, value, shape, basis);
 
     if (voxelsToPaint.length === 0) return;
 
