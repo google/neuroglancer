@@ -1,7 +1,5 @@
 ## TODOs
 
-FOR TOMORROW: the "compute load indicator"
-
 ### priority
 
 - add `ctrl + middleclick` to flood fill when the brush is active

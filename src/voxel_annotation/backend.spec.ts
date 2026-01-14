@@ -560,6 +560,7 @@ describe("VoxelEditController: Downsampling Integration", () => {
       if (id === 100) return childSource;
       if (id === 101) return parentSource;
       if (id === 102) return grandParentSource;
+      if (id === 999) return { value: 0 };
       return null;
     });
 
@@ -572,7 +573,10 @@ describe("VoxelEditController: Downsampling Integration", () => {
       resolutions.push(resConfig(2, [4, 4, 4], [2, 2, 2])); // Grandparent (4x scale)
     }
 
-    controller = new VoxelEditController(mockRpc, { resolutions });
+    controller = new VoxelEditController(mockRpc, {
+      resolutions,
+      pendingOpCount: 999,
+    });
 
     vi.spyOn(controller as any, "callChunkReload");
   };
@@ -729,6 +733,7 @@ describe("VoxelEditController: flushPending", () => {
     (mockRpc.get as any).mockImplementation((id: number) => {
       if (id === 100) return mockSource0;
       if (id === 101) return mockSource1;
+      if (id === 999) return { value: 0 };
       return null;
     });
 
@@ -737,6 +742,7 @@ describe("VoxelEditController: flushPending", () => {
         resConfig(0, [1, 1, 1], [2, 2, 2]),
         resConfig(1, [2, 2, 2], [2, 2, 2]),
       ],
+      pendingOpCount: 999,
     });
 
     vi.spyOn(controller as any, "enqueueDownsample").mockImplementation(
@@ -913,11 +919,13 @@ describe("VoxelEditController: Undo/Redo", () => {
 
     (mockRpc.get as any).mockImplementation((id: number) => {
       if (id === 100) return mockSource0;
+      if (id === 999) return { value: 0 };
       return null;
     });
 
     controller = new VoxelEditController(mockRpc, {
       resolutions: [resConfig(0, [1, 1, 1], [2, 2, 2])],
+      pendingOpCount: 999,
     });
 
     vi.spyOn(controller as any, "callChunkReload");
@@ -1143,6 +1151,8 @@ describe("VoxelEditController: Tool Operations", () => {
 
     (mockRpc.get as any).mockImplementation((id: number) => {
       if (id === 0) return mockChunkManager;
+      if (id === 100) return mockSource;
+      if (id === 999) return { value: 0 };
       return null;
     });
 
@@ -1165,14 +1175,9 @@ describe("VoxelEditController: Tool Operations", () => {
       newValues: new BigUint64Array([]),
     });
 
-    (mockRpc.get as any).mockImplementation((id: number) => {
-      if (id === 0) return mockChunkManager;
-      if (id === 100) return mockSource;
-      return null;
-    });
-
     controller = new VoxelEditController(mockRpc, {
       resolutions: [resConfig(0, [1, 1, 1], [10, 10, 10])],
+      pendingOpCount: 999,
     });
 
     vi.spyOn(controller as any, "enqueueDownsample").mockImplementation(
@@ -1186,7 +1191,7 @@ describe("VoxelEditController: Tool Operations", () => {
 
   it("paintBrushWithShape: 3D Sphere", async () => {
     const center = new Float32Array([5, 5, 5]);
-    const radius = 2;
+    const radius = 3;
     const value = 5n;
 
     await controller.performOperation({
@@ -1220,7 +1225,7 @@ describe("VoxelEditController: Tool Operations", () => {
 
   it("paintBrushWithShape: 2D Disk", async () => {
     const center = new Float32Array([5, 5, 5]);
-    const radius = 2;
+    const radius = 3;
     const value = 3n;
     const basis = {
       u: new Float32Array([1, 0, 0]),
@@ -1334,19 +1339,15 @@ describe("VoxelEditController: Tool Operations", () => {
       v: new Float32Array([0, 1, 0]),
     };
 
-    await controller.performOperation({
-      type: VoxelOperationType.FLOOD_FILL,
-      seed,
-      value: 9n,
-      maxVoxels,
-      basis,
-    });
-
-    await vi.runAllTimersAsync();
-
-    const call = (mockSource.applyEdits as any).mock.calls[0];
-    const indices = call[1];
-    expect(indices.length).toBe(5);
+    await expect(
+      controller.performOperation({
+        type: VoxelOperationType.FLOOD_FILL,
+        seed,
+        value: 9n,
+        maxVoxels,
+        basis,
+      }),
+    ).rejects.toThrow("Flood fill failed: too many voxels filled.");
   });
 
   it("floodFillPlane2D: Seed value equals fill value", async () => {
