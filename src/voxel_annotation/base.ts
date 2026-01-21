@@ -69,7 +69,22 @@ export const SEG_PICKER_TOOL_ID = "vox-seg-picker";
 // Special value used to indicate to the optimistic renderer that a voxel has been erased
 export const SEG_ERASE_SENTINEL = ~1n;
 
-export const MAX_VOXEL_EDIT_CAPACITY = 1000;
+export const VOXEL_EDIT_STAMINA = {
+  pendingEdits: (voxelCount: number) => Math.round(voxelCount * 0.0004),
+  downsamplingJobs: (count: number, downsamplingSteps: number) =>
+    Math.round(count * 10 * downsamplingSteps),
+  brush: (shape: BrushShape, radius: number, hasFiltering: boolean) => {
+    const FILTERING = hasFiltering ? 7 : 1;
+    if (shape === BrushShape.DISK) {
+      return Math.round(0.035 * Math.pow(radius, 2) * FILTERING);
+    } else {
+      return Math.round(0.012 * Math.pow(radius, 3) * FILTERING);
+    }
+  },
+  floodFill: (maxVoxels: number) => Math.round(maxVoxels * 0.005),
+  undoRedo: () => 20,
+};
+export const MAX_VOXEL_EDIT_STAMINA = 10000;
 
 export type VoxelValueGetter = (isPreview: boolean) => bigint;
 

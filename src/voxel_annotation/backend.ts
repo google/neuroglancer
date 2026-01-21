@@ -35,6 +35,7 @@ import type {
   FloodFillOperation,
 } from "#src/voxel_annotation/base.js";
 import {
+  VOXEL_EDIT_STAMINA,
   VOX_EDIT_BACKEND_RPC_ID,
   VOX_EDIT_COMMIT_VOXELS_RPC_ID,
   VOX_RELOAD_CHUNKS_RPC_ID,
@@ -360,12 +361,21 @@ export class VoxelEditController extends SharedObject {
     values?: ArrayLike<bigint>;
     size?: number[];
   }[] = [];
-  private _inFlightCount = 0;
   public pendingOpCount: SharedWatchableValue<number>;
 
   private updatePendingCount() {
-    this.pendingOpCount.value = this.pendingEdits.length + this._inFlightCount;
+    const editedVoxel = this.pendingEdits.reduce(
+      (a, { indices }) => indices.length + a,
+      0,
+    );
+    const pendingEdits = VOXEL_EDIT_STAMINA.pendingEdits(editedVoxel);
+    const downsampling = VOXEL_EDIT_STAMINA.downsamplingJobs(
+      this.downsampleQueue.length,
+      this.resolutions.size,
+    );
+    this.pendingOpCount.value = pendingEdits + downsampling;
   }
+
   private commitDebounceTimer: number | undefined;
   private readonly commitDebounceDelayMs: number = 300;
 
@@ -434,7 +444,6 @@ export class VoxelEditController extends SharedObject {
     this.brushCache.reset();
     const edits = this.pendingEdits;
     this.pendingEdits = [];
-    this.updatePendingCount();
     this.commitDebounceTimer = undefined;
     if (edits.length === 0) {
       // Even if nothing to flush, history sizes may not have changed.
@@ -537,11 +546,12 @@ export class VoxelEditController extends SharedObject {
       });
     }
 
-    const touched = new Set<string>();
-    for (const e of edits) touched.add(e.key);
-    for (const key of touched) {
-      this.enqueueDownsample(key);
+    for (const [voxKey, _] of editsByVoxKey.entries()) {
+      if (failedVoxChunkKeys.includes(voxKey)) continue;
+      this.enqueueDownsample(voxKey);
     }
+
+    this.updatePendingCount();
   }
 
   commitVoxels(
@@ -612,6 +622,7 @@ export class VoxelEditController extends SharedObject {
         const pendingKeys = new Set(this.pendingEdits.map((e) => e.key));
         const keysToReload = allModifiedKeys.filter((k) => !pendingKeys.has(k));
         if (keysToReload.length > 0) this.callChunkReload(keysToReload, true);
+        this.updatePendingCount();
       }
     } finally {
       this.isProcessingDownsampleQueue = false;

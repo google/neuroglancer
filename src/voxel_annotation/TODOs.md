@@ -4,11 +4,13 @@
 
 - optimize frontend brush (test caching etc..)
 - optimize flushPendings and the downsampling
-- ensure the operation load tracking goes until the end of the pipeline (e.g. the downsampling), currently it stops at the flushPendings
+- optimize the flood fill
 - add `ctrl + middleclick` to flood fill when the brush is active
-- rework the sphere/disk calculation to only calculate the difference between the new sphree/disk and the last one
+- `ctrl + shift` is no longer displaying the red cursor
+- preview of selective eraser is broken
 - optimize spheres using the full chunk
 - see about the list of pending edits for the preview
+- when chunk write fails, the chunk is not reloaded
 
 ### later
 

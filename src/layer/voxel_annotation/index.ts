@@ -68,11 +68,10 @@ import type {
   VoxelValueGetter,
 } from "#src/voxel_annotation/base.js";
 import {
-  FLOODFILL_MAX_POSSIBLE_VOXELS,
-  FLOODFILL_MIN_POSSIBLE_VOXELS,
+  VOXEL_EDIT_STAMINA,
   BRUSH_TOOL_ID,
   BrushShape,
-  MAX_VOXEL_EDIT_CAPACITY,
+  MAX_VOXEL_EDIT_STAMINA,
 } from "#src/voxel_annotation/base.js";
 import { VoxelEditController } from "#src/voxel_annotation/frontend.js";
 
@@ -210,7 +209,7 @@ export class VoxelEditingContext
     cost: number,
     op: () => Promise<T>,
   ): Promise<T | void> {
-    if (this.localLoadEstimate.value >= MAX_VOXEL_EDIT_CAPACITY) return;
+    if (this.localLoadEstimate.value >= MAX_VOXEL_EDIT_STAMINA) return;
     this.localLoadEstimate.value += cost;
     try {
       if (await this.checkPermission()) {
@@ -231,7 +230,11 @@ export class VoxelEditingContext
   ) {
     if (!this._controller)
       throw new Error("Cannot use paintBrushWithShape without a controller");
-    const cost = radiusCanonical * (shape === BrushShape.DISK ? 0.01 : 0.1);
+    const cost = VOXEL_EDIT_STAMINA.brush(
+      shape,
+      radiusCanonical,
+      filterValue !== undefined,
+    );
     await this.withCost(cost, () =>
       this._controller!.paintBrushWithShape(
         centerCanonical,
@@ -253,10 +256,7 @@ export class VoxelEditingContext
   ) {
     if (!this._controller)
       throw new Error("Cannot use floodFillPlane2D without a controller");
-    const cost =
-      50 +
-      (500 * (maxVoxels - FLOODFILL_MIN_POSSIBLE_VOXELS)) /
-        (FLOODFILL_MAX_POSSIBLE_VOXELS - FLOODFILL_MIN_POSSIBLE_VOXELS);
+    const cost = VOXEL_EDIT_STAMINA.floodFill(maxVoxels);
     await this.withCost(cost, () =>
       this._controller!.floodFillPlane2D(
         startPositionCanonical,
@@ -271,13 +271,17 @@ export class VoxelEditingContext
   async undo() {
     if (!this._controller)
       throw new Error("Cannot use undo without a controller");
-    await this.withCost(100, () => this._controller!.undo());
+    await this.withCost(VOXEL_EDIT_STAMINA.undoRedo(), () =>
+      this._controller!.undo(),
+    );
   }
 
   async redo() {
     if (!this._controller)
       throw new Error("Cannot use redo without a controller");
-    await this.withCost(100, () => this._controller!.redo());
+    await this.withCost(VOXEL_EDIT_STAMINA.undoRedo(), () =>
+      this._controller!.redo(),
+    );
   }
 
   get rpc() {
@@ -593,7 +597,7 @@ export function UserLayerWithVoxelEditingMixin<
       pendingCount: number,
       isBrushActive: boolean,
     ) {
-      const ratio = Math.max(0, 1.0 - pendingCount / MAX_VOXEL_EDIT_CAPACITY);
+      const ratio = Math.max(0, 1.0 - pendingCount / MAX_VOXEL_EDIT_STAMINA);
       if (ratio > 0.99) {
         return;
       }
