@@ -54,10 +54,11 @@ export function drawBrushCursor(
   layer: UserLayerWithVoxelEditing,
   panel: RenderedDataPanel,
   ctx: CanvasRenderingContext2D,
-) {
+): { radiusX: number; radiusY: number } {
   const context = getEditingContext(layer);
+  const radiusXY = { radiusX: -1, radiusY: -1 };
   if (context === undefined || !(panel instanceof SliceViewPanel)) {
-    return;
+    return radiusXY;
   }
 
   const { projectionParameters } = panel.sliceView;
@@ -65,12 +66,12 @@ export function drawBrushCursor(
   const { displayRank } = displayDimensionRenderInfo;
 
   if (displayRank < 2) {
-    return;
+    return radiusXY;
   }
 
   const chunkTransform = context.getChunkTransform();
   if (!chunkTransform) {
-    return;
+    return radiusXY;
   }
   const { chunkToLayerTransform, layerRank } = chunkTransform;
   const { globalToRenderLayerDimensions } = chunkTransform.modelTransform;
@@ -158,7 +159,11 @@ export function drawBrushCursor(
     ctx.strokeStyle = isEraser ? "rgb(97,0,0)" : "rgba(0, 0, 0, 1)";
     ctx.lineWidth = 1.5;
     ctx.stroke();
+
+    return { radiusX, radiusY };
   }
+
+  return radiusXY;
 }
 
 export type VoxelTabElement =

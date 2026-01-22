@@ -568,26 +568,22 @@ export function UserLayerWithVoxelEditingMixin<
       }
       const globalToolBinder = this.manager.root.toolBinder;
       const activation = globalToolBinder.activeTool_;
-      let isBrushActive = false;
+      let radiusY = 0;
 
       if (
         activation &&
         activation.tool.localBinder === this.toolBinder &&
         activation.tool.toJSON() === BRUSH_TOOL_ID
       ) {
-        drawBrushCursor(this, panel, ctx);
-        isBrushActive = true;
+        const radiusXY = drawBrushCursor(this, panel, ctx);
+        if (radiusXY.radiusY > 0) {
+          radiusY = radiusXY.radiusY;
+        }
       }
 
       const editContext = getEditingContext(this);
       const pending = editContext?.totalPending.value || 0;
-      this.drawStaminaBar(
-        ctx,
-        panel.mouseX,
-        panel.mouseY,
-        pending,
-        isBrushActive,
-      );
+      this.drawStaminaBar(ctx, panel.mouseX, panel.mouseY, pending, radiusY);
     }
 
     private drawStaminaBar(
@@ -595,7 +591,7 @@ export function UserLayerWithVoxelEditingMixin<
       x: number,
       y: number,
       pendingCount: number,
-      isBrushActive: boolean,
+      brushOffset: number,
     ) {
       const ratio = Math.max(0, 1.0 - pendingCount / MAX_VOXEL_EDIT_STAMINA);
       if (ratio > 0.99) {
@@ -606,8 +602,7 @@ export function UserLayerWithVoxelEditingMixin<
       const h = 5;
       const radius = h / 2;
 
-      // TODO: use the radiusY of updateBrushCursor to properly offset
-      const yOffset = 16 + (isBrushActive ? this.brushRadius.value * 2 : 0);
+      const yOffset = 16 + brushOffset;
       const xOffset = 1;
       const bx = x - w / 2 + xOffset;
       const by = y + yOffset;
