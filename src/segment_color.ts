@@ -177,8 +177,11 @@ export class SegmentStatedColorShaderManager {
 
   constructor(public prefix: string) {}
 
-  defineShader(builder: ShaderBuilder) {
-    this.hashMapShaderManager.defineShader(builder);
+  defineShader(builder: ShaderBuilder, fragment = true) {
+    const addCode = fragment
+      ? builder.addFragmentCode.bind(builder)
+      : builder.addVertexCode.bind(builder);
+    this.hashMapShaderManager.defineShader(builder, fragment);
     const s = `
 bool ${this.getFunctionName}(uint64_t x, out vec4 value) {
   uint64_t uint64Value;
@@ -193,7 +196,7 @@ bool ${this.getFunctionName}(uint64_t x, out vec4 value) {
   return false;
 }
 `;
-    builder.addFragmentCode(s);
+    addCode(s);
   }
 
   get getFunctionName() {
@@ -233,6 +236,10 @@ export class SegmentColorUserShaderManager extends RefCounted {
   protected hashMapManager = new HashMapShaderManager("SegmentToPropertyIndex");
   protected segmentStatedColorShaderManager =
     new SegmentStatedColorShaderManager("segmentStatedColor");
+
+  private gpuSegmentStatedColorHashTable:
+    | GPUHashTable<HashMapUint64>
+    | undefined;
 
   private userCode = new WatchableValue<string>("");
 
@@ -457,13 +464,14 @@ export class SegmentColorUserShaderManager extends RefCounted {
       shaderParameters: { value: shaderParameters },
     } = this;
     const { hasSegmentStatedColors, hasSegmentDefaultColor } = shaderParameters;
-    let getMappedIdColor = `vec4 getMappedIdColor(uint64_t value) {
+    let getMappedIdColor = `vec4 getMappedIdColor(uint64_t value, out bool hasStated) {
 `;
     if (hasSegmentStatedColors) {
-      this.segmentStatedColorShaderManager.defineShader(builder);
+      this.segmentStatedColorShaderManager.defineShader(builder, fragment);
       getMappedIdColor += `
   vec4 rgba;
   if (${this.segmentStatedColorShaderManager.getFunctionName}(value, rgba)) {
+    hasStated = true;
     return rgba;
   }
 `;
@@ -484,7 +492,6 @@ export class SegmentColorUserShaderManager extends RefCounted {
   }
 
   defineShader(builder: ShaderBuilder, fragment: boolean) {
-    // console.log('code', this.debugId, this.userCode.value);
     addControlsToBuilder(
       this.displayState.segmentColorShaderControlState.builderState.value,
       builder,
@@ -539,15 +546,16 @@ bool loadSegmentProperties(uint64_t id) {
       addCode(shaderCodeWithLineDirective(this.userCode.value));
       if (this.userCode.value.includes("vec3 segmentColor(")) {
         addCode(`
-vec4 segmentColor(vec4 color, bool hasProperties) {
-  return vec4(segmentColor(color.rgb, hasProperties), color.a);
+vec4 segmentColor(vec4 color, bool hasProperties, bool hasStated) {
+  return vec4(segmentColor(color.rgb, hasProperties, hasStated), color.a);
 }`);
       }
     }
     addCode(`
 vec4 segmentColorUserShader(uint64_t segmentId, float adjustment) {
   float alpha = -1.0; // negative = undefined
-  vec4 color = getMappedIdColor(segmentId);
+  bool hasStated = false;
+  vec4 color = getMappedIdColor(segmentId, hasStated);
   color.a = alpha; // TODO can mapped color include alpha?
   float saturation = uSaturation;
   if (uHasSelectedSegment && uSelectedSegment == segmentId.value) {
@@ -561,7 +569,7 @@ ${
   this.userCode.value
     ? `
   bool hasProperties = loadSegmentProperties(segmentId);
-  color = segmentColor(color, hasProperties);
+  color = segmentColor(color, hasProperties, hasStated);
 `
     : ""
 }
@@ -600,7 +608,8 @@ ${
       );
     }
     gl.uniform1f(shader.uniform("uSaturation"), displayState.saturation.value);
-    const { hasSegmentDefaultColor } = this.shaderParameters.value;
+    const { hasSegmentDefaultColor, hasSegmentStatedColors } =
+      this.shaderParameters.value;
     if (hasSegmentDefaultColor) {
       const {
         segmentDefaultColor: { value: segmentDefaultColor },
@@ -631,6 +640,35 @@ ${
       const textureUnit = shader.textureUnit(Symbol.for(identifier));
       gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + textureUnit);
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
+    }
+    if (hasSegmentStatedColors) {
+      const segmentStatedColors = displayState.useTempSegmentStatedColors2d
+        .value
+        ? displayState.tempSegmentStatedColors2d.value
+        : displayState.segmentStatedColors.value;
+      let { gpuSegmentStatedColorHashTable } = this;
+      if (
+        gpuSegmentStatedColorHashTable === undefined ||
+        gpuSegmentStatedColorHashTable.hashTable !==
+          segmentStatedColors.hashTable
+      ) {
+        gpuSegmentStatedColorHashTable?.dispose();
+        this.gpuSegmentStatedColorHashTable = gpuSegmentStatedColorHashTable =
+          GPUHashTable.get(gl, segmentStatedColors.hashTable);
+      }
+      this.segmentStatedColorShaderManager.enable(
+        gl,
+        shader,
+        gpuSegmentStatedColorHashTable,
+      );
+    }
+  }
+
+  disable(gl: GL, shader: ShaderProgram) {
+    this.hashMapManager.disable(gl, shader);
+    const {hasSegmentStatedColors} = this.shaderParameters.value
+    if (hasSegmentStatedColors) {
+      this.segmentStatedColorShaderManager.disable(gl, shader);
     }
   }
 }

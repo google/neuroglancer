@@ -415,14 +415,12 @@ uint64_t getMappedObjectId(uint64_t value) {
     shader: ShaderProgram,
     parameters: ShaderParameters,
   ) {
-    const { gl } = this;
+    const { gl, displayState } = this;
+    displayState.segmentationColorUserShader.disable(gl, shader);
     this.hashTableManager.disable(gl, shader);
     if (parameters.hasEquivalences) {
       this.equivalencesShaderManager.disable(gl, shader);
     }
-    // if (parameters.hasSegmentStatedColors) {
-    //   this.segmentStatedColorShaderManager.disable(gl, shader);
-    // }
     super.endSlice(sliceView, shader, parameters);
   }
 }

@@ -425,7 +425,7 @@ class LinkedSegmentationGroupState<
 }
 
 export const DEFAULT_FRAGMENT_SEGMENT_COLOR = `
-vec3 segmentColor(vec3 color, bool hasProperties) {
+vec3 segmentColor(vec3 color, bool hasProperties, bool hasStated) {
   return color;
 }
 `;
@@ -700,6 +700,10 @@ vColor = segmentColorUserShader(uint64_t(uID));
     for (let i = 0; i < data.length; i++) {
       this.tempColor[i] = data[i] / 255.0;
     }
+    this.offscreenSegmentationColorUserShader.disable(
+      gl,
+      shader,
+    );
     return this.tempColor;
   };
 
