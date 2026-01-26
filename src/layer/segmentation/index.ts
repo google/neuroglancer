@@ -700,10 +700,7 @@ vColor = segmentColorUserShader(uint64_t(uID));
     for (let i = 0; i < data.length; i++) {
       this.tempColor[i] = data[i] / 255.0;
     }
-    this.offscreenSegmentationColorUserShader.disable(
-      gl,
-      shader,
-    );
+    this.offscreenSegmentationColorUserShader.disable(gl, shader);
     return this.tempColor;
   };
 

@@ -352,7 +352,8 @@ export class MeshShaderManager {
     this.drawFragmentHelper(gl, shader, fragmentChunk, indexBegin, indexEnd);
   }
 
-  endLayer(gl: GL, shader: ShaderProgram) {
+  endLayer(gl: GL, shader: ShaderProgram, displayState: MeshDisplayState) {
+    displayState.segmentationColorUserShader.disable(gl, shader);
     this.vertexPositionHandler.endLayer(gl, shader);
     gl.disableVertexAttribArray(shader.attribute("aVertexNormal"));
   }
@@ -599,7 +600,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
         totalChunks - presentChunks,
       );
     }
-    meshShaderManager.endLayer(gl, shader);
+    meshShaderManager.endLayer(gl, shader, displayState);
   }
 
   isReady() {
@@ -1048,7 +1049,7 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
       presentManifestChunks,
       totalManifestChunks - presentManifestChunks,
     );
-    meshShaderManager.endLayer(gl, shader);
+    meshShaderManager.endLayer(gl, shader, displayState);
   }
 
   isReady(

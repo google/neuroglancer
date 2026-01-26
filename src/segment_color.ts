@@ -666,7 +666,7 @@ ${
 
   disable(gl: GL, shader: ShaderProgram) {
     this.hashMapManager.disable(gl, shader);
-    const {hasSegmentStatedColors} = this.shaderParameters.value
+    const { hasSegmentStatedColors } = this.shaderParameters.value;
     if (hasSegmentStatedColors) {
       this.segmentStatedColorShaderManager.disable(gl, shader);
     }

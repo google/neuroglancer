@@ -427,7 +427,11 @@ void emitDefault() {
     }
   }
 
-  endLayer(gl: GL, shader: ShaderProgram) {
+  endLayer(
+    gl: GL,
+    shader: ShaderProgram,
+    displayState: SkeletonLayerDisplayState,
+  ) {
     const { vertexAttributes } = this;
     const numAttributes = vertexAttributes.length;
     for (let i = 0; i < numAttributes; ++i) {
@@ -438,6 +442,7 @@ void emitDefault() {
       gl.bindTexture(gl.TEXTURE_2D, null);
     }
     this.vertexIdHelper.disable();
+    displayState.segmentationColorUserShader.disable(gl, shader);
   }
 }
 
@@ -689,7 +694,7 @@ export class SkeletonLayer extends RefCounted {
         );
       },
     );
-    renderHelper.endLayer(gl, edgeShader);
+    renderHelper.endLayer(gl, edgeShader, displayState);
   }
 
   isReady() {
