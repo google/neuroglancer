@@ -117,6 +117,9 @@ class BackendVoxelAccessor {
   private chunkContexts = new Map<string, ChunkContext>();
   private pendingLoads = new Map<string, Promise<ChunkContext>>();
 
+  // 64 chunks * (64^3 voxels * 8 bytes) ~= 134 MB max per LOD level if chunks are uncompressed 64^3 UINT64.
+  private readonly MAX_CACHE_SIZE = 64;
+
   private readonly volMin: Float32Array;
   private readonly volMax: Float32Array;
   private readonly chunkDimension: Uint32Array;
@@ -129,6 +132,11 @@ class BackendVoxelAccessor {
     this.chunkDimension = spec.chunkDataSize;
     const fv = spec.fillValue;
     this.fillValue = typeof fv === "bigint" ? fv : BigInt(fv);
+  }
+
+  public invalidate(key: string) {
+    this.chunkContexts.delete(key);
+    this.pendingLoads.delete(key);
   }
 
   async getValue(x: number, y: number, z: number): Promise<bigint | null> {
@@ -149,14 +157,17 @@ class BackendVoxelAccessor {
     const key = `${cx},${cy},${cz}`;
 
     let ctx = this.chunkContexts.get(key);
-    if (!ctx) {
+    if (ctx) {
+      this.chunkContexts.delete(key);
+      this.chunkContexts.set(key, ctx);
+    } else {
       ctx = await this.getOrLoadChunkContext(key, cx, cy, cz);
     }
 
     return this.readLocal(ctx, x, y, z);
   }
 
-  private getOrLoadChunkContext(
+  public getOrLoadChunkContext(
     key: string,
     cx: number,
     cy: number,
@@ -166,6 +177,13 @@ class BackendVoxelAccessor {
     if (promise) return promise;
 
     promise = this.loadChunkContext(key, cx, cy, cz).then((ctx) => {
+      if (this.chunkContexts.size >= this.MAX_CACHE_SIZE) {
+        const oldestKey = this.chunkContexts.keys().next().value;
+        if (oldestKey) {
+          this.chunkContexts.delete(oldestKey);
+        }
+      }
+
       this.chunkContexts.set(key, ctx);
       this.pendingLoads.delete(key);
       return ctx;
@@ -389,6 +407,7 @@ export class VoxelEditController extends SharedObject {
   private isProcessingDownsampleQueue: boolean = false;
 
   private brushCache = new BrushOptimizationCache();
+  private accessors = new Map<number, BackendVoxelAccessor>();
 
   private morphologicalConfig = {
     growthThresholds: [
@@ -516,6 +535,9 @@ export class VoxelEditController extends SharedObject {
           indices,
           values,
         );
+        const accessor = this.getAccessor(parsedKey.lodIndex);
+        accessor.invalidate(parsedKey.chunkKey);
+
         newAction.changes.set(voxKey, change);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -552,6 +574,17 @@ export class VoxelEditController extends SharedObject {
     }
 
     this.updatePendingCount();
+  }
+
+  private getAccessor(lodIndex: number): BackendVoxelAccessor {
+    let accessor = this.accessors.get(lodIndex);
+    if (!accessor) {
+      const source = this.sources.get(lodIndex);
+      if (!source) throw new Error(`No source for LOD ${lodIndex}`);
+      accessor = new BackendVoxelAccessor(source);
+      this.accessors.set(lodIndex, accessor);
+    }
+    return accessor;
   }
 
   commitVoxels(
@@ -641,99 +674,57 @@ export class VoxelEditController extends SharedObject {
    * @returns The key of the parent chunk that was updated, or null if the cascade should stop.
    */
   private async downsampleStep(childKey: string): Promise<string | null> {
-    // 1. Get child chunk and ensure its data is loaded.
     const childInfo = parseVoxChunkKey(childKey);
     if (childInfo === null) {
       console.error(`[Downsample] Invalid child key format: ${childKey}`);
       return null;
     }
-    const childSource = this.sources.get(childInfo.lodIndex);
-    if (!childSource) {
-      console.error(
-        `[Downsample] No source found for child LOD: ${childInfo.lodIndex}`,
-      );
+    const childAccessor = this.getAccessor(childInfo.lodIndex);
+    const childCtx = await childAccessor.getOrLoadChunkContext(
+      childInfo.chunkKey,
+      childInfo.x,
+      childInfo.y,
+      childInfo.z,
+    );
+
+    if (!childCtx.data) {
       return null;
     }
 
-    const childChunk = childSource.getChunk(
-      new Float32Array([childInfo.x, childInfo.y, childInfo.z]),
-    ) as any;
-    if (!childChunk.data) {
-      try {
-        await childSource.download(childChunk, new AbortController().signal);
-      } catch (e) {
-        console.warn(
-          `[Downsample] Failed to download source chunk ${childKey}:`,
-          e,
-        );
-        return null;
-      }
-    }
-    const childChunkData = childChunk.data as Uint32Array | BigUint64Array;
+    const childChunkData = childCtx.data as Uint32Array | BigUint64Array;
     const childRes = this.resolutions.get(childInfo.lodIndex)!;
 
-    // 2. Determine the parent chunk that corresponds to this child chunk.
     const parentInfo = this._getParentChunkInfo(childKey, childRes);
     if (parentInfo === null) {
-      // Reached the coarsest LOD, stop the cascade.
       return null;
     }
     const { parentKey, parentSource, parentRes } = parentInfo;
 
-    let dataToProcess = childChunkData;
-    const { compressedSegmentationBlockSize, dataType, chunkDataSize } =
-      childSource.spec;
-    if (compressedSegmentationBlockSize !== undefined) {
-      const numElements =
-        chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2];
-      const compressedData = childChunkData as Uint32Array;
-      const baseOffset = compressedData.length > 0 ? compressedData[0] : 0;
-      if (dataType === DataType.UINT32) {
-        const uncompressedData = new Uint32Array(numElements);
-        if (baseOffset !== 0) {
-          decodeChannelUint32(
-            uncompressedData,
-            compressedData,
-            baseOffset,
-            chunkDataSize,
-            compressedSegmentationBlockSize,
-          );
-        }
-        dataToProcess = uncompressedData;
-      } else {
-        // Assumes UINT64
-        const uncompressedData = new BigUint64Array(numElements);
-        if (baseOffset !== 0) {
-          decodeChannelUint64(
-            uncompressedData,
-            compressedData,
-            baseOffset,
-            chunkDataSize,
-            compressedSegmentationBlockSize,
-          );
-        }
-        dataToProcess = uncompressedData;
-      }
-    }
+    const childActualSize = [
+      childCtx.maxX - childCtx.minX,
+      childCtx.maxY - childCtx.minY,
+      childCtx.maxZ - childCtx.minZ,
+    ];
 
-    // 3. Calculate the update for the parent chunk based on the child chunk's data.
     const update = this._calculateParentUpdate(
-      dataToProcess,
+      childChunkData,
       childRes,
       parentRes,
       childInfo,
+      childActualSize
     );
     if (update.indices.length === 0) {
       return parentKey;
     }
 
-    // 4. Commit the update to the parent chunk and notify the frontend.
     try {
       await parentSource.applyEdits(
         parentInfo.chunkKey,
         update.indices,
         update.values,
       );
+      const parentAccessor = this.getAccessor(parentRes.lodIndex);
+      parentAccessor.invalidate(parentInfo.chunkKey);
       this.callChunkReload([parentKey]);
     } catch (e) {
       console.error(
@@ -817,12 +808,16 @@ export class VoxelEditController extends SharedObject {
     childRes: VoxelLayerResolution & { invTransform: mat4 },
     parentRes: VoxelLayerResolution & { invTransform: mat4 },
     childInfo: { x: number; y: number; z: number },
+    childActualSize: number[],
   ) {
     const indices: number[] = [];
     const values: bigint[] = [];
     const rank = childRes.chunkSize.length;
     const childChunkSize = childRes.chunkSize;
+    const [childDataW, childDataH, childDataD] = childActualSize;
     const parentChunkSize = parentRes.chunkSize;
+
+    const childDataLength = childChunkData.length;
 
     // Transform to map a point in parent-voxel-space to a point in child-voxel-space.
     const parentVoxelToChildVoxelTransform = mat4.multiply(
@@ -911,7 +906,6 @@ export class VoxelEditController extends SharedObject {
     const corners = new Array(8).fill(0).map(() => vec3.create());
     const transformedCorners = new Array(8).fill(0).map(() => vec3.create());
     const sourceVoxels: bigint[] = [];
-    const [childW, childH, childD] = childChunkSize;
     const [parentW, parentH] = parentChunkSize;
 
     // Iterate over each voxel in the affected region of the parent chunk (in local coordinates)
@@ -959,17 +953,24 @@ export class VoxelEditController extends SharedObject {
           // Collect all child voxels within this bounding box (in local coordinates)
           sourceVoxels.length = 0;
           const cStartX = Math.max(0, Math.floor(localChildMin[0]));
-          const cEndX = Math.min(childW, Math.ceil(localChildMax[0]));
+          const cEndX = Math.min(childDataW, Math.ceil(localChildMax[0]));
           const cStartY = Math.max(0, Math.floor(localChildMin[1]));
-          const cEndY = Math.min(childH, Math.ceil(localChildMax[1]));
+          const cEndY = Math.min(childDataH, Math.ceil(localChildMax[1]));
           const cStartZ = Math.max(0, Math.floor(localChildMin[2]));
-          const cEndZ = Math.min(childD, Math.ceil(localChildMax[2]));
+          const cEndZ = Math.min(childDataD, Math.ceil(localChildMax[2]));
 
           for (let cz = cStartZ; cz < cEndZ; ++cz) {
             for (let cy = cStartY; cy < cEndY; ++cy) {
               for (let cx = cStartX; cx < cEndX; ++cx) {
-                const srcIndex = cz * (childW * childH) + cy * childW + cx;
-                sourceVoxels.push(BigInt(childChunkData[srcIndex]));
+                const srcIndex =
+                  cz * (childDataW * childDataH) + cy * childDataW + cx;
+
+                if (srcIndex >= 0 && srcIndex < childDataLength) {
+                  const val = childChunkData[srcIndex];
+                  if (val !== undefined) {
+                    sourceVoxels.push(BigInt(val));
+                  }
+                }
               }
             }
           }
@@ -1102,9 +1103,7 @@ export class VoxelEditController extends SharedObject {
     const { center, radius, value, shape, basis, filterValue } = op;
     const voxelSize = 1; // Hardcoded LOD 0
     const sourceIndex = 0;
-    const source = this.sources.get(sourceIndex);
-    if (!source) throw new Error(`Brush operation requires a source.`);
-    const accessor = new BackendVoxelAccessor(source);
+    const accessor = this.getAccessor(sourceIndex);
 
     const cx = Math.round((center[0] ?? 0) / voxelSize);
     const cy = Math.round((center[1] ?? 0) / voxelSize);
@@ -1205,9 +1204,7 @@ export class VoxelEditController extends SharedObject {
   private async performFloodFill(op: FloodFillOperation): Promise<void> {
     const { seed, value: fillValue, maxVoxels, basis, filterValue } = op;
     const sourceIndex = 0;
-    const source = this.sources.get(sourceIndex);
-    if (!source) return;
-    const accessor = new BackendVoxelAccessor(source);
+    const accessor = this.getAccessor(sourceIndex);
 
     const startVoxelLod = vec3.round(vec3.create(), seed as vec3);
     const originalValue = await accessor.getValue(
