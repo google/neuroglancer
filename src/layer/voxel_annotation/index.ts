@@ -443,6 +443,7 @@ export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
   brushShape: TrackableEnum<BrushShape>;
   floodMaxVoxels: TrackableValue<number>;
   paintValue: TrackableValue<bigint>;
+  cursorInEraseMode: TrackableBoolean;
 
   editingContexts: Map<LoadedDataSubsource, VoxelEditingContext>;
 
@@ -454,6 +455,7 @@ export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
   abstract setVoxelPaintValue(value: any): bigint;
   setEraseState(erase: boolean): void;
   shouldErase(): boolean;
+  scheduleOverlayRedraw(): void;
 
   initializeVoxelEditingForSubsource(
     loadedSubsource: LoadedDataSubsource,
@@ -480,6 +482,7 @@ export function UserLayerWithVoxelEditingMixin<
     lockToSelectedValue = new TrackableBoolean(false);
     brushShape = new TrackableEnum(BrushShape, BrushShape.DISK);
     floodMaxVoxels = new TrackableValue<number>(10000, verifyFiniteFloat);
+    cursorInEraseMode = new TrackableBoolean(false, false);
 
     private _isInEraseState = false;
 
@@ -504,24 +507,21 @@ export function UserLayerWithVoxelEditingMixin<
         ),
       );
 
-      const trigger = () => {
-        for (const panel of this.manager.root.display.panels) {
-          if (panel instanceof SliceViewPanel) {
-            panel.scheduleOverlayRedraw();
-          }
-        }
-      };
-
-      this.brushRadius.changed.add(trigger);
-      this.manager.root.layerSelectedValues.mouseState.changed.add(trigger);
+      this.brushRadius.changed.add(this.scheduleOverlayRedraw);
+      this.manager.root.layerSelectedValues.mouseState.changed.add(
+        this.scheduleOverlayRedraw,
+      );
+      this.cursorInEraseMode.changed.add(this.scheduleOverlayRedraw);
 
       this.layersChanged.add(() => {
         const ctx = getEditingContext(this);
         if (ctx) {
-          this.registerDisposer(ctx.totalPending.changed.add(trigger));
+          this.registerDisposer(
+            ctx.totalPending.changed.add(this.scheduleOverlayRedraw),
+          );
         }
       });
-      trigger();
+      this.scheduleOverlayRedraw();
 
       this.tabs.add("Draw", {
         label: "Draw",
@@ -533,6 +533,14 @@ export function UserLayerWithVoxelEditingMixin<
         getter: () => new VoxToolTab(this),
       });
     }
+
+    scheduleOverlayRedraw = () => {
+      for (const panel of this.manager.root.display.panels) {
+        if (panel instanceof SliceViewPanel) {
+          panel.scheduleOverlayRedraw();
+        }
+      }
+    };
 
     private boundPanelCleanups = new Map<RenderedDataPanel, () => void>();
     private bindOverlayToPanels() {

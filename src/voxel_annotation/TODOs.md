@@ -2,15 +2,15 @@
 
 ### priority
 
-- optimize frontend brush (test caching etc..)
-- optimize flushPendings and the downsampling
-- optimize the flood fill
 - add `ctrl + middleclick` to flood fill when the brush is active
 - `ctrl + shift` is no longer displaying the red cursor, it only appears after a click
 - preview of selective eraser is broken
+- when chunk write fails, the chunk is not reloaded
+
+- optimize flushPendings and the downsampling
+- optimize the flood fill
 - optimize spheres using the full chunk
 - see about the list of pending edits for the preview
-- when chunk write fails, the chunk is not reloaded
 
 ### later
 

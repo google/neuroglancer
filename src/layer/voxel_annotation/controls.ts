@@ -147,7 +147,7 @@ export function drawBrushCursor(
     );
     ctx.restore();
 
-    const isEraser = layer.shouldErase();
+    const isEraser = layer.shouldErase() || layer.cursorInEraseMode.value;
     const color = "white";
     ctx.fillStyle = isEraser ? "red" : color;
     ctx.globalAlpha = 0.2;
