@@ -1,20 +1,5 @@
-/**
- * @license
- * Copyright 2025 Google Inc.
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { ChunkState } from "#src/chunk_manager/base.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { DATA_TYPE_ARRAY_CONSTRUCTOR, DataType } from "#src/util/data_type.js";
@@ -29,6 +14,23 @@ import {
 } from "#src/voxel_annotation/base.js";
 import type { RPC } from "#src/worker_rpc.js";
 
+const mockQueueManager = {
+  sources: new Set(),
+  adjustCapacitiesForChunk: vi.fn(),
+  updateChunkState: vi.fn(),
+  scheduleUpdate: vi.fn(),
+  moveChunkToFrontend: vi.fn(),
+  markRecentlyUsed: vi.fn(),
+  gl: {},
+};
+
+const mockChunkManager = {
+  queueManager: mockQueueManager,
+  chunkQueueManager: mockQueueManager,
+  rpc: null,
+  memoize: { get: (_k: string, fn: Function) => fn() },
+};
+
 const mockRpc = {
   get: vi.fn(),
   invoke: vi.fn(),
@@ -37,6 +39,48 @@ const mockRpc = {
   set: vi.fn(),
   delete: vi.fn(),
 } as unknown as RPC;
+
+const MOCK_SPEC = {
+  rank: 3,
+  chunkDataSize: new Uint32Array([2, 2, 2]),
+  dataType: 0,
+  lowerVoxelBound: new Float32Array([0, 0, 0]),
+  upperVoxelBound: new Float32Array([100, 100, 100]),
+  baseVoxelOffset: new Float32Array([0, 0, 0]),
+  fillValue: 0,
+};
+
+class MockBackendSource extends VolumeChunkSource {
+  public serverStorage = new Map<string, ArrayBuffer>();
+
+  async download(chunk: VolumeChunk) {
+    const key = chunk.chunkGridPosition.join(",");
+    if (this.serverStorage.has(key)) {
+      const buffer = this.serverStorage.get(key)!;
+      const Ctor = DATA_TYPE_ARRAY_CONSTRUCTOR[this.spec.dataType];
+      chunk.data = new Ctor(buffer.slice(0));
+    }
+  }
+
+  async writeChunk(chunk: VolumeChunk) {
+    const key = chunk.chunkGridPosition.join(",");
+    if (chunk.data) {
+      this.serverStorage.set(key, chunk.data.buffer.slice(0) as ArrayBuffer);
+    }
+  }
+}
+
+const createMockSource = (specOverride: any = {}) => {
+  const source = new MockBackendSource(mockRpc, {
+    spec: { ...MOCK_SPEC, ...specOverride },
+    chunkManager: 0,
+  });
+  vi.spyOn(source, "getChunk");
+  vi.spyOn(source, "applyEdits");
+  vi.spyOn(source, "download");
+  vi.spyOn(source, "writeChunk");
+  return source;
+};
 
 const resConfig = (
   lod: number,
@@ -82,36 +126,18 @@ function flattenGrid(grid: Grid3D, Ctor: any = Uint32Array) {
   return { data, size: [w, h, d] as [number, number, number] };
 }
 
-class MockBackendSource extends VolumeChunkSource {
-  public serverStorage = new Map<string, ArrayBuffer>();
-
-  async download(chunk: VolumeChunk) {
-    const key = chunk.chunkGridPosition.join(",");
-    if (this.serverStorage.has(key)) {
-      const buffer = this.serverStorage.get(key)!;
-      const Ctor = DATA_TYPE_ARRAY_CONSTRUCTOR[this.spec.dataType];
-      chunk.data = new Ctor(buffer.slice(0));
-    }
-  }
-
-  async writeChunk(chunk: VolumeChunk) {
-    const key = chunk.chunkGridPosition.join(",");
-    if (chunk.data) {
-      this.serverStorage.set(key, chunk.data.buffer.slice(0) as ArrayBuffer);
-    }
-  }
-}
-
 describe("VoxelEditController: _calculateParentUpdate", () => {
   let controller: VoxelEditController;
   let runDownsample: Function;
 
   beforeEach(() => {
     vi.resetAllMocks();
-    (mockRpc.get as any).mockImplementation((id: number) => ({
-      rpcId: id,
-      spec: { rank: 3, chunkDataSize: new Uint32Array([2, 2, 2]), dataType: 0 },
-    }));
+    (mockRpc.get as any).mockImplementation((id: number) => {
+      if (id === 0) return mockChunkManager;
+      const source = createMockSource();
+      source.rpcId = id;
+      return source;
+    });
   });
 
   const runScenario = (
@@ -149,6 +175,7 @@ describe("VoxelEditController: _calculateParentUpdate", () => {
       (controller as any).resolutions.get(0),
       (controller as any).resolutions.get(1),
       childChunkOffset,
+      childSize,
     );
 
     const [pw, ph, pd] = parentChunkSize;
@@ -429,12 +456,12 @@ describe("VoxelEditController: _getParentChunkInfo", () => {
   let controller: VoxelEditController;
 
   const setupController = (resConfigs: any[]) => {
-    (mockRpc.get as any).mockImplementation((id: number) => ({
-      rpcId: id,
-      spec: { rank: 3, chunkDataSize: new Uint32Array([2, 2, 2]), dataType: 0 },
-      applyEdits: vi.fn(),
-      getChunk: vi.fn(),
-    }));
+    (mockRpc.get as any).mockImplementation((id: number) => {
+      if (id === 0) return mockChunkManager;
+      const source = createMockSource();
+      source.rpcId = id;
+      return source;
+    });
     controller = new VoxelEditController(mockRpc, { resolutions: resConfigs });
     return controller;
   };
@@ -532,31 +559,38 @@ describe("VoxelEditController: Downsampling Integration", () => {
   let grandParentSource: any;
 
   const setupIntegration = (numLevels: number = 2) => {
-    childSource = {
-      spec: { rank: 3, chunkDataSize: new Uint32Array([2, 2, 2]), dataType: 0 },
-      getChunk: vi.fn().mockReturnValue({ data: new Uint32Array(8).fill(1) }),
-      download: vi.fn().mockResolvedValue(undefined),
-      applyEdits: vi.fn().mockResolvedValue({}),
-      invalidateChunks: vi.fn(),
-    };
+    childSource = createMockSource();
+    vi.spyOn(childSource, "getChunk").mockImplementation(
+      (pos: Float32Array) => ({
+        data: new Uint32Array(8).fill(1),
+        chunkDataSize: MOCK_SPEC.chunkDataSize,
+        chunkGridPosition: pos,
+        state: ChunkState.SYSTEM_MEMORY,
+      }),
+    );
 
-    parentSource = {
-      spec: { rank: 3, chunkDataSize: new Uint32Array([2, 2, 2]), dataType: 0 },
-      getChunk: vi.fn().mockReturnValue({ data: new Uint32Array(8).fill(0) }),
-      download: vi.fn().mockResolvedValue(undefined),
-      applyEdits: vi.fn().mockResolvedValue({}),
-      invalidateChunks: vi.fn(),
-    };
+    parentSource = createMockSource();
+    vi.spyOn(parentSource, "getChunk").mockImplementation(
+      (pos: Float32Array) => ({
+        data: new Uint32Array(8).fill(0),
+        chunkDataSize: MOCK_SPEC.chunkDataSize,
+        chunkGridPosition: pos,
+        state: ChunkState.SYSTEM_MEMORY,
+      }),
+    );
 
-    grandParentSource = {
-      spec: { rank: 3, chunkDataSize: new Uint32Array([2, 2, 2]), dataType: 0 },
-      getChunk: vi.fn().mockReturnValue({ data: new Uint32Array(8).fill(0) }),
-      download: vi.fn().mockResolvedValue(undefined),
-      applyEdits: vi.fn().mockResolvedValue({}),
-      invalidateChunks: vi.fn(),
-    };
+    grandParentSource = createMockSource();
+    vi.spyOn(grandParentSource, "getChunk").mockImplementation(
+      (pos: Float32Array) => ({
+        data: new Uint32Array(8).fill(0),
+        chunkDataSize: MOCK_SPEC.chunkDataSize,
+        chunkGridPosition: pos,
+        state: ChunkState.SYSTEM_MEMORY,
+      }),
+    );
 
     (mockRpc.get as any).mockImplementation((id: number) => {
+      if (id === 0) return mockChunkManager;
       if (id === 100) return childSource;
       if (id === 101) return parentSource;
       if (id === 102) return grandParentSource;
@@ -613,6 +647,7 @@ describe("VoxelEditController: Downsampling Integration", () => {
     parentSource.applyEdits.mockImplementation(async () => {
       parentSource.getChunk.mockReturnValue({
         data: new Uint32Array(8).fill(1),
+        chunkDataSize: MOCK_SPEC.chunkDataSize,
       });
     });
 
@@ -648,7 +683,7 @@ describe("VoxelEditController: Downsampling Integration", () => {
   it("Lazy Loading: Downloads child chunk if missing", async () => {
     setupIntegration(2);
 
-    const emptyChunk = { data: null };
+    const emptyChunk = { data: null, chunkDataSize: MOCK_SPEC.chunkDataSize };
     childSource.getChunk.mockReturnValue(emptyChunk);
 
     childSource.download.mockImplementation(async (chunk: any) => {
@@ -668,7 +703,10 @@ describe("VoxelEditController: Downsampling Integration", () => {
     setupIntegration(2);
     const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    childSource.getChunk.mockReturnValue({ data: null });
+    childSource.getChunk.mockReturnValue({
+      data: null,
+      chunkDataSize: MOCK_SPEC.chunkDataSize,
+    });
     childSource.download.mockRejectedValue(new Error("Network Error"));
 
     const key = makeVoxChunkKey("0,0,0", 0);
@@ -716,21 +754,18 @@ describe("VoxelEditController: flushPending", () => {
     vi.useFakeTimers();
     vi.clearAllMocks();
 
-    mockSource0 = {
-      spec: { rank: 3, chunkDataSize: new Uint32Array([2, 2, 2]), dataType: 0 },
-      applyEdits: vi.fn().mockResolvedValue({
-        indices: new Uint32Array([]),
-        oldValues: new BigUint64Array([]),
-        newValues: new BigUint64Array([]),
-      }),
-    };
+    mockSource0 = createMockSource();
+    vi.spyOn(mockSource0, "applyEdits").mockResolvedValue({
+      indices: new Uint32Array([]),
+      oldValues: new BigUint64Array([]),
+      newValues: new BigUint64Array([]),
+    });
 
-    mockSource1 = {
-      spec: { rank: 3, chunkDataSize: new Uint32Array([2, 2, 2]), dataType: 0 },
-      applyEdits: vi.fn().mockResolvedValue({}),
-    };
+    mockSource1 = createMockSource();
+    vi.spyOn(mockSource1, "applyEdits").mockResolvedValue({});
 
     (mockRpc.get as any).mockImplementation((id: number) => {
+      if (id === 0) return mockChunkManager;
       if (id === 100) return mockSource0;
       if (id === 101) return mockSource1;
       if (id === 999) return { value: 0 };
@@ -907,17 +942,15 @@ describe("VoxelEditController: Undo/Redo", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mockSource0 = {
-      spec: { rank: 3, chunkDataSize: new Uint32Array([2, 2, 2]), dataType: 0 },
-      applyEdits: vi.fn().mockResolvedValue({
-        indices: new Uint32Array([]),
-        oldValues: new BigUint64Array([]),
-        newValues: new BigUint64Array([]),
-      }),
-      invalidateChunks: vi.fn(),
-    };
+    mockSource0 = createMockSource();
+    vi.spyOn(mockSource0, "applyEdits").mockResolvedValue({
+      indices: new Uint32Array([]),
+      oldValues: new BigUint64Array([]),
+      newValues: new BigUint64Array([]),
+    });
 
     (mockRpc.get as any).mockImplementation((id: number) => {
+      if (id === 0) return mockChunkManager;
       if (id === 100) return mockSource0;
       if (id === 999) return { value: 0 };
       return null;
@@ -1137,25 +1170,6 @@ describe("VoxelEditController: Tool Operations", () => {
     vi.useFakeTimers();
     vi.clearAllMocks();
 
-    const mockChunkManager = {
-      queueManager: {
-        sources: new Set(),
-        adjustCapacitiesForChunk: vi.fn(),
-        updateChunkState: vi.fn(),
-        scheduleUpdate: vi.fn(),
-        moveChunkToFrontend: vi.fn(),
-        markRecentlyUsed: vi.fn(),
-        gl: {},
-      },
-    };
-
-    (mockRpc.get as any).mockImplementation((id: number) => {
-      if (id === 0) return mockChunkManager;
-      if (id === 100) return mockSource;
-      if (id === 999) return { value: 0 };
-      return null;
-    });
-
     const spec = {
       rank: 3,
       chunkDataSize: new Uint32Array([10, 10, 10]),
@@ -1165,14 +1179,18 @@ describe("VoxelEditController: Tool Operations", () => {
       baseVoxelOffset: new Float32Array([0, 0, 0]),
       fillValue: 0n,
     };
-    mockSource = new MockBackendSource(mockRpc, {
-      spec: spec,
-      chunkManager: 0,
-    });
+    mockSource = createMockSource({ ...spec });
     vi.spyOn(mockSource, "applyEdits").mockResolvedValue({
       indices: new Uint32Array([]),
       oldValues: new BigUint64Array([]),
       newValues: new BigUint64Array([]),
+    });
+
+    (mockRpc.get as any).mockImplementation((id: number) => {
+      if (id === 0) return mockChunkManager;
+      if (id === 100) return mockSource;
+      if (id === 999) return { value: 0 };
+      return null;
     });
 
     controller = new VoxelEditController(mockRpc, {

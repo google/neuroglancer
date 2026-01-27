@@ -711,7 +711,7 @@ export class VoxelEditController extends SharedObject {
       childRes,
       parentRes,
       childInfo,
-      childActualSize
+      childActualSize,
     );
     if (update.indices.length === 0) {
       return parentKey;
