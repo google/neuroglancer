@@ -30,6 +30,7 @@ import type {
   VoxelValueGetter,
 } from "#src/voxel_annotation/base.js";
 import {
+  makeVoxChunkKey,
   BrushShape,
   parseVoxChunkKey,
   VOX_EDIT_BACKEND_RPC_ID,
@@ -295,15 +296,146 @@ export class VoxelEditController extends SharedObject {
     basis: { u: Float32Array; v: Float32Array },
     filterValue?: bigint,
   ) {
+    const previewValue = fillValueGetter(true);
+    const sourcesByScale = this.host.primarySource.getSources(
+      this.getIdentitySliceViewSourceOptions(),
+    );
+    const primaryChunkSource = sourcesByScale[0][0]
+      .chunkSource as VolumeChunkSource;
+
+    const previewMultiscale = this.host.previewSource;
+    if (!previewMultiscale) return;
+    const previewChunkSource = previewMultiscale.getSources(
+      this.getIdentitySliceViewSourceOptions(),
+    )[0][0].chunkSource as InMemoryVolumeChunkSource;
+
+    const startX = Math.round(startPositionCanonical[0]);
+    const startY = Math.round(startPositionCanonical[1]);
+    const startZ = Math.round(startPositionCanonical[2]);
+
+    const tempPos = new Float32Array(3);
+
+    const getValue = (x: number, y: number, z: number): bigint | null => {
+      tempPos[0] = x;
+      tempPos[1] = y;
+      tempPos[2] = z;
+
+      const previewVal = previewChunkSource.getValueAt(
+        tempPos,
+        this.singleChannelAccess,
+      );
+      if (previewVal != null) {
+        return typeof previewVal === "bigint" ? previewVal : BigInt(previewVal);
+      }
+
+      const primaryVal = primaryChunkSource.getValueAt(
+        tempPos,
+        this.singleChannelAccess,
+      );
+      if (primaryVal != null) {
+        return typeof primaryVal === "bigint" ? primaryVal : BigInt(primaryVal);
+      }
+      return null;
+    };
+
+    const originalValue = getValue(startX, startY, startZ);
+    if (originalValue === null) return;
+    if (filterValue !== undefined && originalValue !== filterValue) return;
+    if (originalValue === previewValue) return;
+
+    const visited = new Set<string>();
+    const queue: [number, number][] = [[0, 0]];
+    visited.add("0,0");
+
+    const edits = new Map<string, { indices: number[]; value: bigint }>();
+    const { chunkDataSize } = previewChunkSource.spec;
+    const sizeX = chunkDataSize[0];
+    const sizeY = chunkDataSize[1];
+    const sizeZ = chunkDataSize[2];
+    const strideY = sizeX;
+    const strideZ = sizeX * sizeY;
+
+    let filledCount = 0;
+    const start = Date.now();
+    const MAX_TIME_MS = 50;
+    const ux = basis.u[0],
+      uy = basis.u[1],
+      uz = basis.u[2];
+    const vx = basis.v[0],
+      vy = basis.v[1],
+      vz = basis.v[2];
+
+    const affectedKeys: string[] = [];
+
+    while (queue.length > 0 && filledCount < maxVoxels) {
+      if ((filledCount & 63) === 0 && Date.now() - start > MAX_TIME_MS) break;
+
+      const [u, v] = queue.shift()!;
+      const x = Math.round(startX + ux * u + vx * v);
+      const y = Math.round(startY + uy * u + vy * v);
+      const z = Math.round(startZ + uz * u + vz * v);
+
+      const cx = Math.floor(x / sizeX);
+      const cy = Math.floor(y / sizeY);
+      const cz = Math.floor(z / sizeZ);
+      const lx = x - cx * sizeX;
+      const ly = y - cy * sizeY;
+      const lz = z - cz * sizeZ;
+
+      const key = `${cx},${cy},${cz}`;
+      let entry = edits.get(key);
+      if (!entry) {
+        entry = { indices: [], value: previewValue };
+        edits.set(key, entry);
+        affectedKeys.push(makeVoxChunkKey(key, 0));
+      }
+      const index = lz * strideZ + ly * strideY + lx;
+      entry.indices.push(index);
+      filledCount++;
+
+      const neighbors: [number, number][] = [
+        [u + 1, v],
+        [u - 1, v],
+        [u, v + 1],
+        [u, v - 1],
+      ];
+
+      for (const [nu, nv] of neighbors) {
+        const k = `${nu},${nv}`;
+        if (visited.has(k)) continue;
+        visited.add(k);
+
+        const nx = Math.round(startX + ux * nu + vx * nv);
+        const ny = Math.round(startY + uy * nu + vy * nv);
+        const nz = Math.round(startZ + uz * nu + vz * nv);
+
+        const val = getValue(nx, ny, nz);
+        if (val !== null && val === originalValue) {
+          queue.push([nu, nv]);
+        }
+      }
+    }
+
+    if (filledCount > 0) {
+      previewChunkSource.applyLocalEdits(edits);
+    }
+
     const storageValue = fillValueGetter(false);
-    await this.dispatchOperation({
-      type: VoxelOperationType.FLOOD_FILL,
-      seed: startPositionCanonical,
-      value: storageValue,
-      maxVoxels,
-      basis,
-      filterValue,
-    });
+    try {
+      await this.dispatchOperation({
+        type: VoxelOperationType.FLOOD_FILL,
+        seed: startPositionCanonical,
+        value: storageValue,
+        maxVoxels,
+        basis,
+        filterValue,
+      });
+    } catch (e) {
+      if (affectedKeys.length > 0) {
+        this.callChunkReload(affectedKeys, true);
+      }
+      throw e;
+    }
   }
 
   callChunkReload(voxChunkKeys: string[], isForPreviewChunks: boolean) {
