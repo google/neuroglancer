@@ -48,6 +48,7 @@ import {
 const BRUSH_INPUT_MAP = EventActionMap.fromObject({
   ["at:control+mousedown0"]: "paint-voxels",
   ["at:control+shift+mousedown0"]: "erase-voxels",
+  ["at:control+shift?+mousedown1"]: "flood-fill-shortcut",
 });
 
 const FLOOD_INPUT_MAP = EventActionMap.fromObject({
@@ -59,6 +60,40 @@ const CONTROLS_FOR_TOOL = new Map<string, string[]>([
   [BRUSH_TOOL_ID, ["vox-brush-size", "vox-brush-shape"]],
   [FLOODFILL_TOOL_ID, ["vox-flood-max-voxels"]],
 ]);
+
+function getFloodFillCursor(erase: boolean) {
+  const lightColor = erase ? "#FF8888" : "#FFFFFF";
+  const darkColor = erase ? "#610000" : "#000000";
+
+  const floodFillSVG = `
+<svg width="48px" height="48px" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g transform="scale(0.8) translate(2 2)">
+    <path d="M2.63596 10.2927L9.70703 3.22168L18.1923 11.707L11.1212 18.778C10.3402 19.5591 9.07387 19.5591 8.29282 18.778L2.63596 13.1212C1.85492 12.3401 1.85492 11.0738 2.63596 10.2927Z"
+        stroke="${lightColor}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M8.29297 1.80762L9.70718 3.22183"
+        stroke="${lightColor}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path fill-rule="evenodd" clip-rule="evenodd"
+        d="M19.9991 15C19.9991 15 22.9991 17.9934 22.9994 19.8865C22.9997 21.5422 21.6552 22.8865 19.9997 22.8865C18.3442 22.8865 17.012 21.5422 17 19.8865C17.0098 17.9924 19.9991 15 19.9991 15Z"
+        stroke="${lightColor}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <path d="M2.63596 10.2927L9.70703 3.22168L18.1923 11.707L11.1212 18.778C10.3402 19.5591 9.07387 19.5591 8.29282 18.778L2.63596 13.1212C1.85492 12.3401 1.85492 11.0738 2.63596 10.2927Z"
+        stroke="${darkColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M8.29297 1.80762L9.70718 3.22183"
+        stroke="${darkColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path fill-rule="evenodd" clip-rule="evenodd"
+        d="M19.9991 15C19.9991 15 22.9991 17.9934 22.9994 19.8865C22.9997 21.5422 21.6552 22.8865 19.9997 22.8865C18.3442 22.8865 17.012 21.5422 17 19.8865C17.0098 17.9924 19.9991 15 19.9991 15Z"
+        stroke="${darkColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>      
+  <g> 
+    <path d="M24.5 18.5V31.5M18.5 24.5H31.5" stroke="${lightColor}" stroke-width="3" stroke-linecap="square" />
+    <path d="M24.5 17.5V31.5M17.5 24.5H32.5" stroke="${darkColor}" stroke-width="1" stroke-linecap="square" />
+    <path d="M24.5 24.25V24.75" stroke="${lightColor}" stroke-width="1" stroke-linecap="square" />
+  </g>
+</svg>
+`.replace(/\s\s+/g, " ");
+
+  return `url('data:image/svg+xml;utf8,${encodeURIComponent(floodFillSVG)}') 24 24, crosshair`;
+}
 
 abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
   protected latestMouseState: MouseSelectionState | null = null;
@@ -228,6 +263,52 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
     }
   }
 
+  protected async performFloodFill(erasing: boolean): Promise<void> {
+    const editContext = getEditingContext(this.layer);
+    if (editContext === undefined) {
+      StatusMessage.showTemporaryMessage(
+        'Voxel editing is not available. Please select a writable volume source in the "Source" tab.',
+        5000,
+      );
+      return;
+    }
+    const seed = this.getPoint(this.mouseState);
+    const basis = this.getBasis();
+    if (!seed || !basis) {
+      StatusMessage.showTemporaryMessage(
+        "Unable to retrieve mouse position. Please try again.",
+        5000,
+      );
+      return;
+    }
+    try {
+      const value = this.layer.getVoxelPaintValue(erasing);
+      const max = Number(this.layer.floodMaxVoxels.value);
+      if (!Number.isFinite(max) || max <= 0) {
+        throw new Error("Invalid max fill voxels setting");
+      }
+
+      const filterValue =
+        this.layer.lockToSelectedValue.value && erasing
+          ? this.layer.getVoxelPaintValue(false)(false)
+          : undefined;
+
+      void editContext
+        .floodFillPlane2D(
+          new Float32Array(seed),
+          value,
+          Math.floor(max),
+          basis,
+          filterValue,
+        )
+        .catch((e: any) =>
+          StatusMessage.showTemporaryMessage(String(e?.message ?? e)),
+        );
+    } catch (e: any) {
+      StatusMessage.showTemporaryMessage(String(e?.message ?? e));
+    }
+  }
+
   abstract activationCallback(activation: ToolActivation<this>): void;
   abstract deactivationCallback(activation: ToolActivation<this>): void;
 
@@ -258,6 +339,7 @@ export class VoxelBrushTool extends BaseVoxelTool {
   private lastPoint: Int32Array | undefined;
   private mouseDisposer: (() => void) | undefined;
   private animationFrameHandle: number | null = null;
+  private cursorResetTimer: number | null = null;
 
   activate(activation: ToolActivation<this>): boolean {
     if (!super.activate(activation)) return false;
@@ -267,6 +349,10 @@ export class VoxelBrushTool extends BaseVoxelTool {
     );
 
     activation.registerDisposer(() => {
+      if (this.cursorResetTimer !== null) {
+        clearTimeout(this.cursorResetTimer);
+        this.cursorResetTimer = null;
+      }
       this.layer.cursorInEraseMode.value = false;
       this.resetCursor();
       this.layer.scheduleOverlayRedraw();
@@ -276,7 +362,32 @@ export class VoxelBrushTool extends BaseVoxelTool {
       this.mouseState.changed.add(this.layer.scheduleOverlayRedraw),
     );
     this.layer.scheduleOverlayRedraw();
+
+    activation.bindAction(
+      "flood-fill-shortcut",
+      (event: ActionEvent<MouseEvent>) => {
+        event.stopPropagation();
+        this.triggerFloodFill(event.detail.shiftKey);
+      },
+    );
     return true;
+  }
+
+  private triggerFloodFill(erasing: boolean) {
+    const wasErasing = this.layer.shouldErase();
+    this.layer.setEraseState(erasing);
+
+    if (this.cursorResetTimer !== null) clearTimeout(this.cursorResetTimer);
+    this.setCursor(getFloodFillCursor(erasing));
+
+    this.performFloodFill(erasing).finally(() => {
+      if (this.cursorResetTimer !== null) clearTimeout(this.cursorResetTimer);
+      this.cursorResetTimer = window.setTimeout(() => {
+        this.layer.setEraseState(wasErasing);
+        this.resetCursor();
+        this.cursorResetTimer = null;
+      }, 1000);
+    });
   }
 
   activationCallback(_activation: ToolActivation<this>): void {
@@ -408,46 +519,12 @@ export class VoxelBrushTool extends BaseVoxelTool {
 }
 
 export class VoxelFloodFillTool extends BaseVoxelTool {
-  private getCursor() {
-    const lightColor = this.cursorEraseMode.value ? "#FF8888" : "#FFFFFF";
-    const darkColor = this.cursorEraseMode.value ? "#610000" : "#000000";
-
-    const floodFillSVG = `
-<svg width="48px" height="48px" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <g transform="scale(0.8) translate(2 2)">
-    <path d="M2.63596 10.2927L9.70703 3.22168L18.1923 11.707L11.1212 18.778C10.3402 19.5591 9.07387 19.5591 8.29282 18.778L2.63596 13.1212C1.85492 12.3401 1.85492 11.0738 2.63596 10.2927Z"
-        stroke="${lightColor}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M8.29297 1.80762L9.70718 3.22183"
-        stroke="${lightColor}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-    <path fill-rule="evenodd" clip-rule="evenodd"
-        d="M19.9991 15C19.9991 15 22.9991 17.9934 22.9994 19.8865C22.9997 21.5422 21.6552 22.8865 19.9997 22.8865C18.3442 22.8865 17.012 21.5422 17 19.8865C17.0098 17.9924 19.9991 15 19.9991 15Z"
-        stroke="${lightColor}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-
-    <path d="M2.63596 10.2927L9.70703 3.22168L18.1923 11.707L11.1212 18.778C10.3402 19.5591 9.07387 19.5591 8.29282 18.778L2.63596 13.1212C1.85492 12.3401 1.85492 11.0738 2.63596 10.2927Z"
-        stroke="${darkColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M8.29297 1.80762L9.70718 3.22183"
-        stroke="${darkColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <path fill-rule="evenodd" clip-rule="evenodd"
-        d="M19.9991 15C19.9991 15 22.9991 17.9934 22.9994 19.8865C22.9997 21.5422 21.6552 22.8865 19.9997 22.8865C18.3442 22.8865 17.012 21.5422 17 19.8865C17.0098 17.9924 19.9991 15 19.9991 15Z"
-        stroke="${darkColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-  </g>      
-  <g> 
-    <path d="M24.5 18.5V31.5M18.5 24.5H31.5" stroke="${lightColor}" stroke-width="3" stroke-linecap="square" />
-    <path d="M24.5 17.5V31.5M17.5 24.5H32.5" stroke="${darkColor}" stroke-width="1" stroke-linecap="square" />
-    <path d="M24.5 24.25V24.75" stroke="${lightColor}" stroke-width="1" stroke-linecap="square" />
-  </g>
-</svg>
-`.replace(/\s\s+/g, " ");
-
-    return `url('data:image/svg+xml;utf8,${encodeURIComponent(floodFillSVG)}') 24 24, crosshair`;
-  }
-
   activate(activation: ToolActivation<this>) {
     if (!super.activate(activation)) return false;
-    this.setCursor(this.getCursor());
+    this.setCursor(getFloodFillCursor(this.cursorEraseMode.value));
     activation.registerDisposer(
       this.cursorEraseMode.changed.add(() => {
-        this.setCursor(this.getCursor());
+        this.setCursor(getFloodFillCursor(this.cursorEraseMode.value));
       }),
     );
     activation.registerDisposer(() => {
@@ -457,49 +534,7 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
   }
 
   activationCallback(_activation: ToolActivation<this>): void {
-    const editContext = getEditingContext(this.layer);
-    if (editContext === undefined) {
-      StatusMessage.showTemporaryMessage(
-        'Voxel editing is not available. Please select a writable volume source in the "Source" tab.',
-        5000,
-      );
-      return;
-    }
-    const seed = this.getPoint(this.mouseState);
-    const basis = this.getBasis();
-    if (!seed || !basis) {
-      StatusMessage.showTemporaryMessage(
-        "Unable to retrieve mouse position. Please try again.",
-        5000,
-      );
-      return;
-    }
-    try {
-      const value = this.layer.getVoxelPaintValue(this.layer.shouldErase());
-      const max = Number(this.layer.floodMaxVoxels.value);
-      if (!Number.isFinite(max) || max <= 0) {
-        throw new Error("Invalid max fill voxels setting");
-      }
-
-      const filterValue =
-        this.layer.lockToSelectedValue.value && this.layer.shouldErase()
-          ? this.layer.getVoxelPaintValue(false)(false)
-          : undefined;
-
-      void editContext
-        .floodFillPlane2D(
-          new Float32Array(seed),
-          value,
-          Math.floor(max),
-          basis,
-          filterValue,
-        )
-        .catch((e: any) =>
-          StatusMessage.showTemporaryMessage(String(e?.message ?? e)),
-        );
-    } catch (e: any) {
-      StatusMessage.showTemporaryMessage(String(e?.message ?? e));
-    }
+    this.performFloodFill(this.layer.shouldErase());
   }
 
   bindToolInput(activation: ToolActivation<this>) {

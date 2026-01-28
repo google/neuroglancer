@@ -2,10 +2,8 @@
 
 ### priority
 
-- add `ctrl + middleclick` to flood fill when the brush is active
-- `ctrl + shift` is no longer displaying the red cursor, it only appears after a click
-- preview of selective eraser is broken
 - when chunk write fails, the chunk is not reloaded
+- add flood fill preview
 
 - optimize flushPendings and the downsampling
 - optimize the flood fill
