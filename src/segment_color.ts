@@ -464,14 +464,14 @@ export class SegmentColorUserShaderManager extends RefCounted {
       shaderParameters: { value: shaderParameters },
     } = this;
     const { hasSegmentStatedColors, hasSegmentDefaultColor } = shaderParameters;
-    let getMappedIdColor = `vec4 getMappedIdColor(uint64_t value, out bool hasStated) {
+    let getMappedIdColor = `vec4 getMappedIdColor(uint64_t value, out bool isStated) {
 `;
     if (hasSegmentStatedColors) {
       this.segmentStatedColorShaderManager.defineShader(builder, fragment);
       getMappedIdColor += `
   vec4 rgba;
   if (${this.segmentStatedColorShaderManager.getFunctionName}(value, rgba)) {
-    hasStated = true;
+    isStated = true;
     return rgba;
   }
 `;
@@ -492,6 +492,7 @@ export class SegmentColorUserShaderManager extends RefCounted {
   }
 
   defineShader(builder: ShaderBuilder, fragment: boolean) {
+    console.log("this.userCode.value", this.debugId, this.userCode.value);
     addControlsToBuilder(
       this.displayState.segmentColorShaderControlState.builderState.value,
       builder,
@@ -546,16 +547,16 @@ bool loadSegmentProperties(uint64_t id) {
       addCode(shaderCodeWithLineDirective(this.userCode.value));
       if (this.userCode.value.includes("vec3 segmentColor(")) {
         addCode(`
-vec4 segmentColor(vec4 color, bool hasProperties, bool hasStated) {
-  return vec4(segmentColor(color.rgb, hasProperties, hasStated), color.a);
+vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
+  return vec4(segmentColor(color.rgb, hasProperties, isStated), color.a);
 }`);
       }
     }
     addCode(`
 vec4 segmentColorUserShader(uint64_t segmentId, float adjustment) {
   float alpha = -1.0; // negative = undefined
-  bool hasStated = false;
-  vec4 color = getMappedIdColor(segmentId, hasStated);
+  bool isStated = false;
+  vec4 color = getMappedIdColor(segmentId, isStated);
   color.a = alpha; // TODO can mapped color include alpha?
   float saturation = uSaturation;
   if (uHasSelectedSegment && uSelectedSegment == segmentId.value) {
@@ -569,7 +570,7 @@ ${
   this.userCode.value
     ? `
   bool hasProperties = loadSegmentProperties(segmentId);
-  color = segmentColor(color, hasProperties, hasStated);
+  color = segmentColor(color, hasProperties, isStated);
 `
     : ""
 }

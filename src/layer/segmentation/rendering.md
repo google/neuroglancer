@@ -19,12 +19,16 @@ You may find the WebGL reference card helpful: <https://www.khronos.org/files/we
 The basic user shader is in the form of:
 
 ```glsl
-vec3 segmentColor(vec3 color, bool hasProperties) {
+vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
   return color;
 }
 ```
 
-Color in this case is the color that would be displayed if you chose not to override it. The return value is the color that will be output aside from some potential post processing such as selected segment highlights.
+* `color` in this case is the color that would be displayed if you chose not to override it. The return value is the color that will be output aside from some potential post processing such as selected segment highlights.
+
+* `hasProperties` indicates that there is segment property data for the target segment.
+
+* `isStated` indicates that there is stated color for the target segment.
 
 A vec4 version of segmentColor can also be used if you want to override the opacity.
 
@@ -47,9 +51,12 @@ Numerical properties can also be accessed by creating an invlerp uicontrol.
 
 ```glsl
 #uicontrol invlerp property1(window=[1, 10])
-vec4 segmentColor(vec4 color, bool hasProperties) {
+vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
   if (!hasProperties) {
     return vec4(0.5, 0.5, 0.5, 1.0);
+  }
+  if (isStated) {
+    return color;
   }
   vec4 newColor = vec4(0.0, 0.0, 0.0, 1.0);
   newColor.rgb = colormapJet(property1());
@@ -65,9 +72,12 @@ vec4 segmentColor(vec4 color, bool hasProperties) {
 ```
 
 ```glsl
-vec4 segmentColor(vec4 color, bool hasProperties) {
+vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
   if (!hasProperties) {
     return vec4(0.5, 0.5, 0.5, 1.0);
+  }
+  if (isStated) {
+    return color;
   }
   if (prop("NAis") > 10u) {
     return vec4(1.0, 1.0, 1.0, 1.0);

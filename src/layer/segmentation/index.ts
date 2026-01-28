@@ -425,7 +425,7 @@ class LinkedSegmentationGroupState<
 }
 
 export const DEFAULT_FRAGMENT_SEGMENT_COLOR = `
-vec3 segmentColor(vec3 color, bool hasProperties, bool hasStated) {
+vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
   return color;
 }
 `;
