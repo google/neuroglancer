@@ -222,10 +222,16 @@ test("Pipeline: Zarr V3 (UINT64) Brush", async () => {
 
   const center = new Float32Array([16, 16, 16]);
   const paintVal = 123456789n;
-  await context.paintBrushWithShape([center], 2, (_) => paintVal, 0 /* DISK */, {
-    u: new Float32Array([1, 0, 0]),
-    v: new Float32Array([0, 1, 0]),
-  });
+  await context.paintBrushWithShape(
+    [center],
+    2,
+    (_) => paintVal,
+    0 /* DISK */,
+    {
+      u: new Float32Array([1, 0, 0]),
+      v: new Float32Array([0, 1, 0]),
+    },
+  );
 
   const chunkKey = `${BUCKET}/data.zarr/c/0/0/0`;
 
@@ -272,10 +278,16 @@ test("Pipeline: Zarr V2 (UINT32) with Slash Separator", async () => {
 
   const center = new Float32Array([10, 10, 10]);
   const paintVal = 42n;
-  await context.paintBrushWithShape([center], 2, (_) => paintVal, 0 /* DISK */, {
-    u: new Float32Array([1, 0, 0]),
-    v: new Float32Array([0, 1, 0]),
-  });
+  await context.paintBrushWithShape(
+    [center],
+    2,
+    (_) => paintVal,
+    0 /* DISK */,
+    {
+      u: new Float32Array([1, 0, 0]),
+      v: new Float32Array([0, 1, 0]),
+    },
+  );
 
   const chunkKey = `${BUCKET}/data.zarr/0/0/0`;
 
