@@ -76,9 +76,9 @@ export const VOXEL_EDIT_STAMINA = {
   brush: (shape: BrushShape, radius: number, hasFiltering: boolean) => {
     const FILTERING = hasFiltering ? 7 : 1;
     if (shape === BrushShape.DISK) {
-      return Math.round(0.0035 * Math.pow(radius, 2) * FILTERING);
+      return Math.round(0.00035 * Math.pow(radius, 2) * FILTERING);
     } else {
-      return Math.round(0.0012 * Math.pow(radius, 3) * FILTERING);
+      return Math.round(0.00012 * Math.pow(radius, 3) * FILTERING);
     }
   },
   floodFill: (maxVoxels: number) => Math.round(maxVoxels * 0.005),

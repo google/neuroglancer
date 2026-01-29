@@ -680,8 +680,8 @@ export class VoxelEditController extends SharedObject {
     }
 
     const pendingKeys = new Set(this.pendingEdits.map((e) => e.key));
-    const keysToReload = allModifiedKeys.filter((k) => !pendingKeys.has(k));
-    if (keysToReload.length > 0) this.callChunkReload(keysToReload, true);
+    const keysToReload = allModifiedKeys.filter((k) => !pendingKeys.has(k) && !this.downsampleChunkLocks.has(k));
+    if (keysToReload.length > 0) this.callChunkReload(keysToReload);
     this.updatePendingCount();
   }
 
@@ -770,7 +770,7 @@ export class VoxelEditController extends SharedObject {
           update.indices,
           update.values,
         );
-        this.callChunkReload([parentKey]);
+        //this.callChunkReload([parentKey]);
         const parentAccessor = this.getAccessor(parentRes.lodIndex);
         parentAccessor.invalidate(parentInfo.chunkKey);
       } catch (e) {
