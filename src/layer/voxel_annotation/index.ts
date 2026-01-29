@@ -221,7 +221,7 @@ export class VoxelEditingContext
   }
 
   async paintBrushWithShape(
-    centerCanonical: Float32Array,
+    points: Float32Array[],
     radiusCanonical: number,
     value: VoxelValueGetter,
     shape: BrushShape,
@@ -230,14 +230,15 @@ export class VoxelEditingContext
   ) {
     if (!this._controller)
       throw new Error("Cannot use paintBrushWithShape without a controller");
-    const cost = VOXEL_EDIT_STAMINA.brush(
-      shape,
-      radiusCanonical,
-      filterValue !== undefined,
-    );
+    const cost =
+      VOXEL_EDIT_STAMINA.brush(
+        shape,
+        radiusCanonical,
+        filterValue !== undefined,
+      ) * points.length;
     await this.withCost(cost, () =>
       this._controller!.paintBrushWithShape(
-        centerCanonical,
+        points,
         radiusCanonical,
         value,
         shape,

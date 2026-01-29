@@ -505,16 +505,14 @@ export class VoxelBrushTool extends BaseVoxelTool {
         ? this.layer.getVoxelPaintValue(false)(false)
         : undefined;
 
-    for (const p of points) {
-      void editContext.paintBrushWithShape(
-        p,
-        radius,
-        value,
-        shapeEnum,
-        basis,
-        filterValue,
-      );
-    }
+    void editContext.paintBrushWithShape(
+      points,
+      radius,
+      value,
+      shapeEnum,
+      basis,
+      filterValue,
+    );
   }
 }
 
