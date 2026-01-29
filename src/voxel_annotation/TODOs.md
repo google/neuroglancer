@@ -3,12 +3,11 @@
 ### priority
 
 - when chunk write fails, the chunk is not reloaded
-- add flood fill preview
 
-- optimize flushPendings and the downsampling
-- optimize the flood fill
-- optimize spheres using the full chunk
-- see about the list of pending edits for the preview
+- optimize flushPendings 
+- optimize the flood fill backend
+- optimize spheres using the full chunk, see jmbs comment
+- see about the list of pending edits for the preview, see jmbs comment
 
 ### later
 

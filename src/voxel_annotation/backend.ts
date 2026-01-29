@@ -405,6 +405,9 @@ export class VoxelEditController extends SharedObject {
   private downsampleQueue: string[] = [];
   private downsampleQueueSet: Set<string> = new Set();
   private isProcessingDownsampleQueue: boolean = false;
+  private activeDownsamples = 0;
+  private readonly MAX_CONCURRENT_DOWNSAMPLES = 16;
+  private downsampleChunkLocks = new Map<string, Promise<void>>();
 
   private brushCache = new BrushOptimizationCache();
   private accessors = new Map<number, BackendVoxelAccessor>();
@@ -642,31 +645,74 @@ export class VoxelEditController extends SharedObject {
   }
 
   private async processDownsampleQueue(): Promise<void> {
-    try {
-      while (this.downsampleQueue.length > 0) {
+    this.isProcessingDownsampleQueue = true;
+
+    const scheduleNext = () => {
+      while (
+        this.downsampleQueue.length > 0 &&
+        this.activeDownsamples < this.MAX_CONCURRENT_DOWNSAMPLES
+      ) {
         const key = this.downsampleQueue.shift() as string;
         this.downsampleQueueSet.delete(key);
-        const allModifiedKeys = new Array<string>();
-        let currentKey: string | null = key;
-        while (currentKey !== null) {
-          allModifiedKeys.push(currentKey);
-          currentKey = await this.downsampleStep(currentKey);
-        }
-        const pendingKeys = new Set(this.pendingEdits.map((e) => e.key));
-        const keysToReload = allModifiedKeys.filter((k) => !pendingKeys.has(k));
-        if (keysToReload.length > 0) this.callChunkReload(keysToReload, true);
-        this.updatePendingCount();
+        this.activeDownsamples++;
+
+        this.processDownsampleChain(key).finally(() => {
+          this.activeDownsamples--;
+          scheduleNext();
+        });
       }
-    } finally {
-      this.isProcessingDownsampleQueue = false;
-      if (
-        this.downsampleQueue.length > 0 &&
-        !this.isProcessingDownsampleQueue
-      ) {
-        this.isProcessingDownsampleQueue = true;
-        Promise.resolve().then(() => this.processDownsampleQueue());
+
+      if (this.activeDownsamples === 0 && this.downsampleQueue.length === 0) {
+        this.isProcessingDownsampleQueue = false;
       }
+    };
+
+    scheduleNext();
+  }
+
+  private async processDownsampleChain(key: string): Promise<void> {
+    const allModifiedKeys = new Array<string>();
+    let currentKey: string | null = key;
+
+    while (currentKey !== null) {
+      allModifiedKeys.push(currentKey);
+      currentKey = await this.downsampleStep(currentKey);
     }
+
+    const pendingKeys = new Set(this.pendingEdits.map((e) => e.key));
+    const keysToReload = allModifiedKeys.filter((k) => !pendingKeys.has(k));
+    if (keysToReload.length > 0) this.callChunkReload(keysToReload, true);
+    this.updatePendingCount();
+  }
+
+  private async withChunkLock<T>(
+    key: string,
+    op: () => Promise<T>,
+  ): Promise<T> {
+    const prev = this.downsampleChunkLocks.get(key) || Promise.resolve();
+
+    const current = (async () => {
+      try {
+        await prev;
+      } catch {
+        //
+      }
+      return op();
+    })();
+
+    const nextPromise = current.then(
+      () => {},
+      () => {},
+    );
+    this.downsampleChunkLocks.set(key, nextPromise);
+
+    nextPromise.then(() => {
+      if (this.downsampleChunkLocks.get(key) === nextPromise) {
+        this.downsampleChunkLocks.delete(key);
+      }
+    });
+
+    return current;
   }
 
   /**
@@ -717,29 +763,31 @@ export class VoxelEditController extends SharedObject {
       return parentKey;
     }
 
-    try {
-      await parentSource.applyEdits(
-        parentInfo.chunkKey,
-        update.indices,
-        update.values,
-      );
-      const parentAccessor = this.getAccessor(parentRes.lodIndex);
-      parentAccessor.invalidate(parentInfo.chunkKey);
-      this.callChunkReload([parentKey]);
-    } catch (e) {
-      console.error(
-        `[Downsample] Failed to apply edits to parent chunk ${parentKey}:`,
-        e,
-      );
-      this.rpc?.invoke(VOX_EDIT_FAILURE_RPC_ID, {
-        rpcId: this.rpcId,
-        voxChunkKeys: [parentKey],
-        message: `Downsampling to ${parentKey} failed.`,
-      });
-      return null; // Stop cascade on failure.
-    }
+    return this.withChunkLock(parentKey, async () => {
+      try {
+        await parentSource.applyEdits(
+          parentInfo.chunkKey,
+          update.indices,
+          update.values,
+        );
+        this.callChunkReload([parentKey]);
+        const parentAccessor = this.getAccessor(parentRes.lodIndex);
+        parentAccessor.invalidate(parentInfo.chunkKey);
+      } catch (e) {
+        console.error(
+          `[Downsample] Failed to apply edits to parent chunk ${parentKey}:`,
+          e,
+        );
+        this.rpc?.invoke(VOX_EDIT_FAILURE_RPC_ID, {
+          rpcId: this.rpcId,
+          voxChunkKeys: [parentKey],
+          message: `Downsampling to ${parentKey} failed.`,
+        });
+        return null;
+      }
 
-    return parentKey;
+      return parentKey;
+    });
   }
 
   /**
