@@ -571,9 +571,14 @@ export class VoxelEditController extends SharedObject {
       });
     }
 
-    for (const [voxKey, _] of editsByVoxKey.entries()) {
-      if (failedVoxChunkKeys.includes(voxKey)) continue;
-      this.enqueueDownsample(voxKey);
+    const hasDownsampling = this.resolutions.size > 1;
+    if (hasDownsampling) {
+      for (const [voxKey, _] of editsByVoxKey.entries()) {
+        if (failedVoxChunkKeys.includes(voxKey)) continue;
+        this.enqueueDownsample(voxKey);
+      }
+    } else {
+      this.callChunkReload(editsByVoxKey.keys().toArray(), true);
     }
 
     this.updatePendingCount();
@@ -1119,8 +1124,11 @@ export class VoxelEditController extends SharedObject {
     }
 
     if (chunksToReload.size > 0 && success) {
-      for (const key of chunksToReload) {
-        this.enqueueDownsample(key);
+      const hasDownsampling = this.resolutions.size > 1;
+      if (hasDownsampling) {
+        for (const key of chunksToReload) {
+          this.enqueueDownsample(key);
+        }
       }
       this.callChunkReload(Array.from(chunksToReload));
     }
