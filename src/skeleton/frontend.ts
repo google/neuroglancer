@@ -75,7 +75,7 @@ import type {
   ShaderProgram,
   ShaderSamplerType,
 } from "#src/webgl/shader.js";
-import { glsl_nanometersToPixels } from "#src/webgl/shader_lib.js";
+import { glsl_modelToPixels } from "#src/webgl/shader_lib.js";
 import type { ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
 import {
   addControlsToBuilder,
@@ -186,14 +186,14 @@ class RenderHelper extends RefCounted {
           builder.addUniform("highp float", "uNodeDiameter");
           builder.addVarying("vec4", "vColor");
           builder.addVertexCode(glsl_COLORMAPS);
-          builder.addVertexCode(glsl_nanometersToPixels);
+          builder.addVertexCode(glsl_modelToPixels);
           builder.addVertexCode(`
-float nanometersToPixels(float value) {
+float modelToPixels(float value) {
   vec2 lineOffset = getLineOffset();
   highp vec3 vertexA = readAttribute0(aVertexIndex.x);
   highp vec3 vertexB = readAttribute0(aVertexIndex.y);
   highp vec3 vertex = mix(vertexA, vertexB, lineOffset.x);
-  return nanometersToPixels(value, vertex, uProjection, uViewModel, 1.0 / uLineParams.x);
+  return value * modelToPixels(vertex, uProjection, uViewModel, 1.0 / uLineParams.x);
 }
 float ng_lineWidth;
 void setLineWidth(float width) {
@@ -274,12 +274,12 @@ emit(vec4(vColor.rgb, vColor.a * getLineAlpha() * ${this.getCrossSectionFadeFact
           builder.addUniform("highp float", "uLineWidth");
           builder.addVarying("vec4", "vColor");
           builder.addVertexCode(glsl_COLORMAPS);
-          builder.addVertexCode(glsl_nanometersToPixels);
+          builder.addVertexCode(glsl_modelToPixels);
           builder.addVertexCode(`
-float nanometersToPixels(float value) {
+float modelToPixels(float value) {
   highp uint vertexIndex = uint(gl_InstanceID);
   highp vec3 vertexPosition = readAttribute0(vertexIndex);
-  return nanometersToPixels(value, vertexPosition, uProjection, uViewModel, 1.0 / uCircleParams.x);
+  return value * modelToPixels(vertexPosition, uProjection, uViewModel, 1.0 / uCircleParams.x);
 }
 float ng_nodeDiameter;
 void setNodeDiameter(float size) {

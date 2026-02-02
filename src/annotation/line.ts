@@ -43,7 +43,7 @@ import {
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import {
   defineVectorArrayVertexShaderInput,
-  glsl_nanometersToPixels,
+  glsl_modelToPixels,
 } from "#src/webgl/shader_lib.js";
 import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 
@@ -92,14 +92,14 @@ class RenderHelper extends AnnotationRenderHelper {
       this.defineShader(builder);
       defineLineShader(builder);
       builder.addVarying(`highp float[${rank}]`, "vModelPosition");
-      builder.addVertexCode(glsl_nanometersToPixels);
+      builder.addVertexCode(glsl_modelToPixels);
       builder.addVertexCode(`
-float nanometersToPixels(float value) {
+float modelToPixels(float value) {
   vec2 lineOffset = getLineOffset();
   highp vec3 vertexA = projectModelVectorToSubspace(getVertexPosition0());
   highp vec3 vertexB = projectModelVectorToSubspace(getVertexPosition1());
   highp vec3 vertex = mix(vertexA, vertexB, lineOffset.x);
-  return nanometersToPixels(value, vertex, uProjection, uModelView, 1.0 / uLineParams.x);
+  return value * modelToPixels(vertex, uProjection, uModelView, 1.0 / uLineParams.x);
 }
 `);
       builder.addVertexCode(`
@@ -165,13 +165,13 @@ void setLineEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {
   vBorderColor = mix(startColor, endColor, float(getEndpointIndex()));
 }
 `);
-      builder.addVertexCode(glsl_nanometersToPixels);
+      builder.addVertexCode(glsl_modelToPixels);
       builder.addVertexCode(`
-float nanometersToPixels(float value) {
+float modelToPixels(float value) {
   highp vec3 vertexA = projectModelVectorToSubspace(getVertexPosition0());
   highp vec3 vertexB = projectModelVectorToSubspace(getVertexPosition1());
   highp vec3 vertex = mix(vertexA, vertexB, float(getEndpointIndex()));
-  return nanometersToPixels(value, vertex, uProjection, uModelView, 1.0 / uCircleParams.x);
+  return value * modelToPixels(vertex, uProjection, uModelView, 1.0 / uCircleParams.x);
 }
 `);
       builder.setVertexMain(`

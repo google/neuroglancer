@@ -465,8 +465,8 @@ highp int subtractSaturate(highp int x, highp uint y) {
 `,
 ];
 
-export const glsl_nanometersToPixels = `
-float nanometersToPixels(float nanometers, highp vec3 vertex, mat4 projection, mat4 viewModel, float projectionWidthPixels) {
+export const glsl_modelToPixels = `
+float modelToPixels(highp vec3 vertex, mat4 projection, mat4 viewModel, float projectionWidthPixels) {
   float viewDistance = 1.0;
   vec4 vertexViewOrigin = viewModel * vec4(vertex, 1.0);
   vec4 vertexViewOffset = vertexViewOrigin + vec4(viewDistance, 0.0, 0.0, 0.0);
@@ -476,7 +476,7 @@ float nanometersToPixels(float nanometers, highp vec3 vertex, mat4 projection, m
   float viewModalScale = length(viewModel[0].xyz);
   float projectionScale = projectionDistancePixels / viewDistance;
   float perspectiveScale = 1.0 / vertexClipOrigin.w;
-  return nanometers * viewModalScale * projectionScale * perspectiveScale;
+  return viewModalScale * projectionScale * perspectiveScale;
 }
 `;
 
