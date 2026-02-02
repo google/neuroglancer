@@ -223,10 +223,8 @@ setLineWidth(uLineWidth);
             builder.addVarying(`highp ${info.glslDataType}`, `vCustom${i}`);
             vertexMain += `vCustom${i} = readAttribute${i}(vertexIndex);\n`;
             builder.addVertexCode(`#define ${info.name} vCustom${i}\n`);
-            builder.addVertexCode(
-              `#define prop_${info.name}() vCustom${i}\n`,
-            );
-}
+            builder.addVertexCode(`#define prop_${info.name}() vCustom${i}\n`);
+          }
           vertexMain += `
 userMain();
 emitLine(uProjection * uViewModel, vertexA, vertexB, ng_lineWidth);
@@ -309,9 +307,7 @@ setNodeDiameter(uNodeDiameter);
             builder.addVarying(`highp ${info.glslDataType}`, `vCustom${i}`);
             vertexMain += `vCustom${i} = readAttribute${i}(vertexIndex);\n`;
             builder.addVertexCode(`#define ${info.name} vCustom${i}\n`);
-            builder.addVertexCode(
-              `#define prop_${info.name}() vCustom${i}\n`,
-            );
+            builder.addVertexCode(`#define prop_${info.name}() vCustom${i}\n`);
           }
           vertexMain += `
 userMain();
