@@ -180,6 +180,7 @@ export class PreprocessedSegmentPropertyMap {
   tags: InlineSegmentTagsProperty | undefined;
   labels: InlineSegmentStringProperty | undefined;
   numericalProperties: InlineSegmentNumericalProperty[];
+  strings: InlineSegmentStringProperty[];
 
   getSegmentInlineIndex(id: bigint): number {
     const { inlineIdToIndex } = this;
@@ -205,6 +206,9 @@ export class PreprocessedSegmentPropertyMap {
     this.numericalProperties = (inlineProperties?.properties.filter(
       (p) => p.type === "number",
     ) ?? []) as InlineSegmentNumericalProperty[];
+    this.strings = (inlineProperties?.properties.filter(
+      (p) => p.type === "string",
+    ) ?? []) as InlineSegmentStringProperty[];
   }
 
   getSegmentLabel(id: bigint): string | undefined {

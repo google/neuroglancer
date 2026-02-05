@@ -552,7 +552,8 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         const properties = new Map<string, DataType>();
         const values = new Map<string, TypedNumberArray<ArrayBuffer>>();
         if (segmentPropertyMap === undefined) {
-          return null;
+          console.log("segmentPropertyMap is undefined");
+          return {};
         }
         for (const property of segmentPropertyMap.numericalProperties) {
           properties.set(property.id, property.dataType);
@@ -640,7 +641,6 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         },
         shaderError: this.layer.displayState.shaderError, // TODO can I reuse this?
         defineShader: (builder) => {
-          console.log("define shader html");
           this.offscreenSegmentationColorUserShader.defineShader(
             builder,
             /*fragment=*/ false,

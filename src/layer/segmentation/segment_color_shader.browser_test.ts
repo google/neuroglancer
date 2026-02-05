@@ -36,39 +36,55 @@ const compareWithCPUHash = (
   }
 };
 
+expect.extend({
+  toBeCloseToFoo(received: number[] | Float32Array, expected: number[]) {
+    if (received.length !== expected.length) {
+      return {
+        pass: false,
+        message: () =>
+          `Expected array length ${expected.length} but received ${received.length}`,
+      };
+    }
+    for (let i = 0; i < received.length; ++i) {
+      if (Math.abs(received[i] - expected[i]) > 1e-6) {
+        return {
+          pass: false,
+          message: () =>
+            `Expected element ${i} to be close to ${expected[i]} but received ${received[i]}`,
+        };
+      }
+    }
+    return {
+      pass: true,
+      message: () => "Arrays are close",
+    };
+  },
+});
+
 const expectColor = (
   color: vec4,
   expected: [number, number, number, number],
 ) => {
   expect(color).toBeDefined();
   expect(color!.length).toBe(4);
-
-  console.log("color", color.join(","), "expected", expected.join(","));
-
-  for (let i = 0; i < 4; ++i) {
-    expect(color[i]).toBeCloseTo(expected[i]);
-  }
-
-  for (let i = 0; i < 4; ++i) {
-    expect(color[i]).toBeCloseTo(expected[i]);
-  }
+  expect([...color]).toEqual(expected.map((x) => expect.closeTo(x)));
 };
 
 describe("getShaderSegmentColor", () => {
-  it("only segment id, return hash", () => {
+  it("default shader, return hash", () => {
     const segmentationUserLayer = setupSegmentationLayer();
     const objectId = 1n;
     compareWithCPUHash(segmentationUserLayer, objectId);
   });
-  it("random value hash", () => {
+  it("default shader, random segment id", () => {
     const segmentationUserLayer = setupSegmentationLayer();
     const objectId = BigInt(Math.floor(Math.random() * 100000));
     compareWithCPUHash(segmentationUserLayer, objectId);
   });
-  it("return red", () => {
+  it("red shader", () => {
     const segmentationUserLayer = setupSegmentationLayer();
     segmentationUserLayer.displayState.fragmentSegmentColor.value = `
-  vec3 segmentColor(vec3 color, bool hasProperties) {
+  vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
       return vec3(1.0, 0.0, 0.0);
   }`;
     const outColor =
@@ -76,10 +92,21 @@ describe("getShaderSegmentColor", () => {
     expectColor(outColor!, [1.0, 0.0, 0.0, 0.0]);
   });
 
+  it("alpha shader", () => {
+    const segmentationUserLayer = setupSegmentationLayer();
+    segmentationUserLayer.displayState.fragmentSegmentColor.value = `
+  vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
+      return vec4(0.0, 0.0, 0.0, 0.5);
+  }`;
+    const outColor =
+      segmentationUserLayer.displayState.getShaderSegmentColor(1n);
+    expectColor(outColor!, [0.0, 0.0, 0.0, 0.5]);
+  });
+
   it("use default shader if segment properties have not been loaded and shader uses properties", () => {
     const segmentationUserLayer = setupSegmentationLayer();
     segmentationUserLayer.displayState.fragmentSegmentColor.value = `
-          vec3 segmentColor(vec3 color, bool hasProperties) {
+          vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
               if (tag("red")) {
                   return vec3(1.0, 0.0, 0.0);
               }
@@ -87,6 +114,110 @@ describe("getShaderSegmentColor", () => {
           }`;
 
     compareWithCPUHash(segmentationUserLayer, 1n);
+  });
+
+  it("colors by string properties", () => {
+    const segmentationUserLayer = setupSegmentationLayer();
+    segmentationUserLayer.displayState.segmentPropertyMap.value =
+      new PreprocessedSegmentPropertyMap(
+        new SegmentPropertyMap({
+          inlineProperties: {
+            ids: new BigUint64Array([1n, 2n]),
+            properties: [
+              {
+                id: "color",
+                type: "string",
+                values: ["red", "green"],
+              },
+            ],
+          },
+        }),
+      );
+    segmentationUserLayer.displayState.fragmentSegmentColor.value = `
+  vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
+      if (!hasProperties) {
+        return vec3(0.0, 0.0, 1.0);
+      }
+      if (stringPropertyEquals("color", "red")) {
+          return vec3(1.0, 0.0, 0.0);
+      }
+      if (stringPropertyEquals("color", "green")) {
+          return vec3(0.0, 1.0, 0.0);
+      }
+      return vec3(0.5, 0.5, 0.5);
+  }`;
+    expectColor(
+      segmentationUserLayer.displayState.getShaderSegmentColor(1n)!,
+      [1.0, 0.0, 0.0, 0.0],
+    );
+    expectColor(
+      segmentationUserLayer.displayState.getShaderSegmentColor(2n)!,
+      [0.0, 1.0, 0.0, 0.0],
+    );
+    expectColor(
+      segmentationUserLayer.displayState.getShaderSegmentColor(3n)!,
+      [0.0, 0.0, 1.0, 0.0],
+    );
+  });
+
+  it("handles invalid string property name", () => {
+    const segmentationUserLayer = setupSegmentationLayer();
+    segmentationUserLayer.displayState.segmentPropertyMap.value =
+      new PreprocessedSegmentPropertyMap(
+        new SegmentPropertyMap({
+          inlineProperties: {
+            ids: new BigUint64Array([1n]),
+            properties: [
+              {
+                id: "color",
+                type: "string",
+                values: ["red"],
+              },
+            ],
+          },
+        }),
+      );
+    segmentationUserLayer.displayState.fragmentSegmentColor.value = `
+  vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
+      if (!stringPropertyEquals("foo", "foo")) {
+          return vec3(0.0, 1.0, 0.0);
+      }
+      return vec3(0.5, 0.5, 0.5);
+  }`;
+    expectColor(
+      segmentationUserLayer.displayState.getShaderSegmentColor(1n)!,
+      [0.0, 1.0, 0.0, 0.0],
+    );
+  });
+
+  it("handles invalid string property value", () => {
+    const segmentationUserLayer = setupSegmentationLayer();
+    segmentationUserLayer.displayState.segmentPropertyMap.value =
+      new PreprocessedSegmentPropertyMap(
+        new SegmentPropertyMap({
+          inlineProperties: {
+            ids: new BigUint64Array([1n]),
+            properties: [
+              {
+                id: "color",
+                type: "string",
+                values: ["foo"],
+              },
+            ],
+          },
+        }),
+      );
+    segmentationUserLayer.displayState.fragmentSegmentColor.value = `
+  vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
+      if (!stringPropertyEquals("color", "red")) {
+          return vec3(0.0, 1.0, 0.0);
+      }
+      return vec3(0.5, 0.5, 0.5);
+  }`;
+    expectColor(
+      segmentationUserLayer.displayState.getShaderSegmentColor(1n)!,
+      [0.0, 1.0, 0.0, 0.0],
+    );
   });
 
   it("colors by tag", () => {
@@ -109,7 +240,7 @@ describe("getShaderSegmentColor", () => {
         }),
       );
     segmentationUserLayer.displayState.fragmentSegmentColor.value = `
-vec3 segmentColor(vec3 color, bool hasProperties) {
+vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
     if (!hasProperties) {
       return vec3(0.0, 1.0, 0.0);
     }

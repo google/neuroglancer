@@ -24,11 +24,11 @@ vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
 }
 ```
 
-* `color` in this case is the color that would be displayed if you chose not to override it. The return value is the color that will be output aside from some potential post processing such as selected segment highlights.
+- `color` in this case is the color that would be displayed if you chose not to override it. The return value is the color that will be output aside from some potential post processing such as selected segment highlights.
 
-* `hasProperties` indicates that there is segment property data for the target segment.
+- `hasProperties` indicates that there is segment property data for the target segment.
 
-* `isStated` indicates that there is stated color for the target segment.
+- `isStated` indicates that there is stated color for the target segment.
 
 A vec4 version of segmentColor can also be used if you want to override the opacity.
 

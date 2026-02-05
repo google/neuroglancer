@@ -258,13 +258,6 @@ export class SegmentColorUserShaderManager extends RefCounted {
     public debugId: string = "",
   ) {
     super();
-    console.log("constructing SegmentColorUserShaderManager", this.debugId);
-    this.registerDisposer(
-      this.userCode.changed.add(() => {
-        console.log("this.userCode changed", this.debugId, this.userCode.value);
-      }),
-    );
-
     this.shaderParameters = this.registerDisposer(
       new AggregateWatchableValue((refCounted) => ({
         userCode: this.userCode,
@@ -291,21 +284,28 @@ export class SegmentColorUserShaderManager extends RefCounted {
     this.usedProperties = this.registerDisposer(
       makeCachedLazyDerivedWatchableValue(
         ({ referencedProperties }, { code }, segmentPropertyMap) => {
-          console.log("updating usedProperties", this.debugId);
+          // console.log("updating usedProperties", this.debugId);
           const tagRegex = /tag\("([^()]+)"\)/g;
           const numericRegex = /prop\("([^()]+)"\)/g;
-          const tagNames = new Set(code.matchAll(tagRegex).map((m) => m[1]));
-          const numericNames = new Set([
+          const stringRegex = /stringPropertyEquals\("([^()]+)", "([^()]+)"\)/g;
+          const tagPropertyNames = new Set(
+            code.matchAll(tagRegex).map((m) => m[1]),
+          );
+          const numericPropertyNames = new Set([
             ...referencedProperties,
             ...code.matchAll(numericRegex).map((m) => m[1]),
           ]);
+          const stringPropertyNames = new Set(
+            code.matchAll(stringRegex).map((m) => m[1]),
+          );
           const shaderUsesProperties =
-            tagNames.size > 0 || numericNames.size > 0;
+            tagPropertyNames.size > 0 ||
+            numericPropertyNames.size > 0 ||
+            stringPropertyNames.size > 0;
           for (const [_, data] of this.segmentPropertyShaderData) {
             data.stale = true;
           }
           const { segmentPropertyIndexMap } = this;
-
           const {
             parseErrors: { value: parseErrors },
           } = this.displayState.segmentColorShaderControlState;
@@ -323,6 +323,7 @@ export class SegmentColorUserShaderManager extends RefCounted {
             segmentPropertyMap &&
             segmentPropertyMap.segmentPropertyMap.inlineProperties
           ) {
+            // TODO do we want to do this if we don't use properties?
             if (segmentPropertyIndexMap.size === 0) {
               console.log("initializing segmentPropertyIndexMap");
               // initialize segmentPropertyIndexMap
@@ -334,15 +335,15 @@ export class SegmentColorUserShaderManager extends RefCounted {
               }
             }
             if (shaderUsesProperties) {
-              for (const tag of tagNames) {
-                const identifier = this.tagToShaderData(
+              for (const tag of tagPropertyNames) {
+                const shaderIdentifier = this.tagPropertyToShaderData(
                   tag,
                   segmentPropertyMap,
                 );
-                if (identifier) {
+                if (shaderIdentifier) {
                   code = code.replaceAll(
                     `tag("${tag}")`,
-                    `${identifier} == 1u`,
+                    `${shaderIdentifier} == 1u`,
                   );
                 } else {
                   addErrorIfNotFound({
@@ -352,13 +353,16 @@ export class SegmentColorUserShaderManager extends RefCounted {
                   code = code.replaceAll(`tag("${tag}")`, `false`);
                 }
               }
-              for (const propName of numericNames) {
-                const identifier = this.numericToShaderData(
+              for (const propName of numericPropertyNames) {
+                const shaderIdentifier = this.numericPropertyToShaderData(
                   propName,
                   segmentPropertyMap,
                 );
-                if (identifier) {
-                  code = code.replaceAll(`prop("${propName}")`, identifier);
+                if (shaderIdentifier) {
+                  code = code.replaceAll(
+                    `prop("${propName}")`,
+                    shaderIdentifier,
+                  );
                 } else {
                   addErrorIfNotFound({
                     message: `Numeric property "${propName}" not found in segment properties.`,
@@ -366,6 +370,33 @@ export class SegmentColorUserShaderManager extends RefCounted {
                   });
                   code = code.replaceAll(`prop("${propName}")`, `0`);
                 }
+              }
+              for (const string of stringPropertyNames) {
+                const res = this.stringPropertyToShaderData(
+                  string,
+                  segmentPropertyMap,
+                );
+                if (res) {
+                  const { shaderIdentifier, stringToIndex } = res;
+                  for (const [val, idx] of Object.entries(stringToIndex)) {
+                    const codeToReplace = `stringPropertyEquals("${string}", "${val}")`;
+                    code = code.replaceAll(
+                      codeToReplace,
+                      `(${shaderIdentifier} == ${idx}u)`,
+                    );
+                  }
+                } else {
+                  addErrorIfNotFound({
+                    message: `String property "${string}" not found in segment properties.`,
+                    line: 0,
+                  });
+                }
+                // replace comparisons that have invalid string property identifiers or values with false
+                const pattern = new RegExp(
+                  String.raw`stringPropertyEquals\("${string}", "[^()]+"\)`,
+                  "g",
+                );
+                code = code.replaceAll(pattern, "false");
               }
             }
           }
@@ -379,7 +410,6 @@ export class SegmentColorUserShaderManager extends RefCounted {
             });
             code = "";
           }
-          console.log("set user code", this.debugId, code);
           this.userCode.value = code;
           // release unused textures
           for (const [id, { texture, stale }] of this
@@ -401,7 +431,7 @@ export class SegmentColorUserShaderManager extends RefCounted {
     );
 
     this.usedProperties.changed.add(() => {
-      console.log("this.usedProperties changed", this.usedProperties.value);
+      // console.log("this.usedProperties changed", this.usedProperties.value);
     });
   }
 
@@ -420,7 +450,30 @@ export class SegmentColorUserShaderManager extends RefCounted {
     }
   }
 
-  private tagToShaderData(
+  private stringPropertyToShaderData(
+    identifier: string,
+    segmentPropertyMap: PreprocessedSegmentPropertyMap,
+  ) {
+    const { strings } = segmentPropertyMap;
+    const propertyIdx = strings.findIndex((p) => p.id === identifier);
+    if (propertyIdx === -1) return; // TODO should we output an error to the user?
+    const property = strings[propertyIdx];
+    const propertyShaderIdentifier = `string${propertyIdx}`;
+    const stringToIndex = Object.fromEntries(
+      [...new Set(property.values)].map((s, i) => [s, i]),
+    );
+    this.updateShaderData(
+      propertyShaderIdentifier,
+      new Uint8Array(property.values.map((x) => stringToIndex[x])),
+      DataType.UINT8,
+    );
+    return {
+      shaderIdentifier: propertyShaderIdentifier,
+      stringToIndex,
+    };
+  }
+
+  private tagPropertyToShaderData(
     tag: string,
     segmentPropertyMap: PreprocessedSegmentPropertyMap,
   ) {
@@ -440,7 +493,7 @@ export class SegmentColorUserShaderManager extends RefCounted {
     return propertyShaderIdentifier;
   }
 
-  private numericToShaderData(
+  private numericPropertyToShaderData(
     identifier: string,
     segmentPropertyMap: PreprocessedSegmentPropertyMap,
   ) {
@@ -492,7 +545,6 @@ export class SegmentColorUserShaderManager extends RefCounted {
   }
 
   defineShader(builder: ShaderBuilder, fragment: boolean) {
-    console.log("this.userCode.value", this.debugId, this.userCode.value);
     addControlsToBuilder(
       this.displayState.segmentColorShaderControlState.builderState.value,
       builder,
