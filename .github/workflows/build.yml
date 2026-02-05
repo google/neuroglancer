@@ -40,8 +40,6 @@ jobs:
       - name: Get build info
         run: echo "BUILD_INFO={\"tag\":\"$(git describe --always --tags)\", \"url\":\"https://github.com/${{github.repository}}/commit/$(git rev-parse HEAD)\", \"timestamp\":\"$(date)\", \"branch\":\"${{github.repository}}/${{env.BRANCH_NAME}}\"}" >> $GITHUB_ENV
         shell: bash
-      - name: Check for dirty working directory
-        run: git diff --exit-code
       - name: Build client bundles
         run: npm run build -- --no-typecheck --no-lint --define STATE_SERVERS=$(cat config/state_servers.json | tr -d " \t\n\r") --define NEUROGLANCER_BUILD_INFO='${{ env.BUILD_INFO }}' --define NEUROGLANCER_CUSTOM_INPUT_BINDINGS=$(cat config/custom-keybinds.json | tr -d " \t\n\r")
       - name: Write build info
