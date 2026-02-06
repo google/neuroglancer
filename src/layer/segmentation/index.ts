@@ -546,28 +546,35 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
       ),
     );
 
-    this.segmentColorShaderControlState = new ShaderControlState(
-      this.fragmentSegmentColor,
-      makeCachedLazyDerivedWatchableValue((segmentPropertyMap) => {
-        const properties = new Map<string, DataType>();
-        const values = new Map<string, TypedNumberArray<ArrayBuffer>>();
-        if (segmentPropertyMap === undefined) {
-          console.log("segmentPropertyMap is undefined");
-          return {};
-        }
-        for (const property of segmentPropertyMap.numericalProperties) {
-          properties.set(property.id, property.dataType);
-          values.set(property.id, property.values);
-        }
-        const shaderName = (property: string) => {
-          const propertyIdx = segmentPropertyMap.numericalProperties.findIndex(
-            (p) => p.id === property,
-          );
-          return `numerical${propertyIdx}`; // TEMP extract this from the SegmentationColorUserShaderManager
-        };
+    this.segmentColorShaderControlState = this.layer.registerDisposer(
+      new ShaderControlState(
+        this.fragmentSegmentColor,
+        makeCachedLazyDerivedWatchableValue(
+          (segmentPropertyMap, isReady) => {
+            const properties = new Map<string, DataType>();
+            const values = new Map<string, TypedNumberArray<ArrayBuffer>>();
+            if (segmentPropertyMap === undefined) {
+              // dont return a non null before layer.isReady to prevent losing shader control state during loading process
+              return isReady ? {} : null;
+            }
+            for (const property of segmentPropertyMap.numericalProperties) {
+              properties.set(property.id, property.dataType);
+              values.set(property.id, property.values);
+            }
+            const shaderName = (property: string) => {
+              const propertyIdx =
+                segmentPropertyMap.numericalProperties.findIndex(
+                  (p) => p.id === property,
+                );
+              return `numerical${propertyIdx}`; // TEMP extract this from the SegmentationColorUserShaderManager
+            };
 
-        return { properties, values, shaderName };
-      }, this.segmentationGroupState.value.segmentPropertyMap),
+            return { properties, values, shaderName };
+          },
+          this.segmentationGroupState.value.segmentPropertyMap,
+          this.layer.isReadyWatchable,
+        ),
+      ),
     );
 
     // 2d/3d share GL context

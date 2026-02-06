@@ -325,7 +325,7 @@ export class SegmentColorUserShaderManager extends RefCounted {
           ) {
             // TODO do we want to do this if we don't use properties?
             if (segmentPropertyIndexMap.size === 0) {
-              console.log("initializing segmentPropertyIndexMap");
+              // console.log("initializing segmentPropertyIndexMap");
               // initialize segmentPropertyIndexMap
               const { inlineProperties } =
                 segmentPropertyMap.segmentPropertyMap;

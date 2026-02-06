@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { DisplayContext } from "#src/display_context.js";
-import { ManagedUserLayer } from "#src/layer/index.js";
-import { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+import { makeLayer } from "#src/layer/index.js";
+import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+import "#layer/segmentation";
 import {
   PreprocessedSegmentPropertyMap,
   SegmentPropertyMap,
@@ -13,9 +14,8 @@ const setupSegmentationLayer = () => {
   const target = document.createElement("div");
   const display = new DisplayContext(target);
   const viewer = new Viewer(display);
-  return new SegmentationUserLayer(
-    new ManagedUserLayer("test", viewer.layerSpecification),
-  );
+  return makeLayer(viewer.layerSpecification, "test", { type: "segmentation" })
+    .layer! as SegmentationUserLayer;
 };
 
 const compareWithCPUHash = (
