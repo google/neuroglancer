@@ -3,7 +3,8 @@ name: Build
 on: [push, pull_request]
 
 jobs:
-  build-and-deploy:
+  build-and-deploy-gae:
+    if: github.repository == 'seung-lab/neuroglancer'
     permissions:
       contents: "read"
       id-token: "write"
