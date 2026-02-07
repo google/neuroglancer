@@ -1,0 +1,77 @@
+name: Build
+
+on: [push, pull_request]
+
+jobs:
+  build-and-deploy:
+    permissions:
+      contents: "read"
+      id-token: "write"
+      deployments: "write"
+    strategy:
+      matrix:
+        os:
+          - "ubuntu-latest"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need full history to determine version number.
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+            examples/**/package-lock.json
+      - run: npm install
+      - name: Typecheck with TypeScript
+        run: npm run typecheck
+      - name: Get branch name (merge)
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: echo "BRANCH_NAME=$(echo ${GITHUB_REF#refs/heads/} | tr / -)" >> $GITHUB_ENV
+      - name: Get branch name (pull request)
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: echo "BRANCH_NAME=$(echo ${GITHUB_HEAD_REF} | tr / -)" >> $GITHUB_ENV
+      - run: echo "BRANCH_NAME_URL=$(echo ${{ env.BRANCH_NAME }} | tr / - | tr _ -)" >> $GITHUB_ENV
+      - name: Get build info
+        run: echo "BUILD_INFO={\"tag\":\"$(git describe --always --tags)\", \"url\":\"https://github.com/${{github.repository}}/commit/$(git rev-parse HEAD)\", \"timestamp\":\"$(date)\", \"branch\":\"${{github.repository}}/${{env.BRANCH_NAME}}\"}" >> $GITHUB_ENV
+        shell: bash
+      - name: Build client bundles
+        run: npm run build -- --no-typecheck --no-lint --define STATE_SERVERS=$(cat config/state_servers.json | tr -d " \t\n\r") --define NEUROGLANCER_BUILD_INFO='${{ env.BUILD_INFO }}' --define NEUROGLANCER_CUSTOM_INPUT_BINDINGS=$(cat config/custom-keybinds.json | tr -d " \t\n\r")
+      - name: Write build info
+        run: echo $BUILD_INFO > ./dist/client/version.json
+        shell: bash
+      - run: cp -r ./dist/client appengine/frontend/static/
+      - name: start deployment
+        uses: bobheadxi/deployments@v1
+        id: deployment
+        with:
+          step: start
+          token: ${{ secrets.GITHUB_TOKEN }}
+          env: ${{ env.BRANCH_NAME }}
+          desc: Setting up staging deployment for ${{ env.BRANCH_NAME }}
+      - id: "auth"
+        uses: "google-github-actions/auth@v1"
+        with:
+          workload_identity_provider: "projects/483670036293/locations/global/workloadIdentityPools/neuroglancer-github/providers/github"
+          service_account: "chris-apps-deploy@seung-lab.iam.gserviceaccount.com"
+      - id: deploy
+        uses: google-github-actions/deploy-appengine@main
+        with:
+          version: ${{ env.BRANCH_NAME_URL }}
+          deliverables: appengine/frontend/app.yaml
+          promote: false
+      - name: update deployment status
+        uses: bobheadxi/deployments@v1
+        if: always()
+        with:
+          step: finish
+          token: ${{ secrets.GITHUB_TOKEN }}
+          env: ${{ steps.deployment.outputs.env }}
+          env_url: ${{ steps.deploy.outputs.url }}
+          status: ${{ job.status }}
+          deployment_id: ${{ steps.deployment.outputs.deployment_id }}
