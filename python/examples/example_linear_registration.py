@@ -32,22 +32,22 @@ Known issues:
 """
 
 import argparse
+import json
 import logging
 import threading
 import webbrowser
-import json
-from pprint import pprint
-from copy import deepcopy, copy
-from enum import Enum
-from time import ctime, time
+from copy import copy, deepcopy
 from datetime import datetime
+from enum import Enum
+from pprint import pprint
+from time import ctime, time
 
 import neuroglancer
 import neuroglancer.cli
 import numpy as np
 import scipy.ndimage
 
-DEBUG = False # Print debug info during execution
+DEBUG = False  # Print debug info during execution
 MESSAGE_DURATION = 4  # How long to show help messages in seconds
 NUM_DEMO_DIMS = 3  # Only used if no data given, can be 2D or 3D
 NUM_NEAREST_POINTS = 4  # Number of nearest points to use in local estimation
@@ -1088,43 +1088,6 @@ def handle_args():
 
 ### Some testing code for transform fitting ###
 class TestTransforms:
-    should_plot = False
-
-    @staticmethod
-    def plot_points(
-        fixed, moving, transformed, dims="2d", filename="test_transform.png"
-    ):
-        import matplotlib.pyplot as plt
-
-        if dims == "2d":
-            fig, ax = plt.subplots()
-            ax.plot(fixed[:, 0], fixed[:, 1], "o", label="fixed")
-            ax.plot(moving[:, 0], moving[:, 1], "o", label="moving")
-            ax.plot(
-                transformed[:, 0],
-                transformed[:, 1],
-                "x",
-                label="transformed moving",
-            )
-        elif dims == "3d":
-            fig = plt.figure()
-            ax = fig.add_subplot(111, projection="3d")
-            ax.scatter(fixed[:, 0], fixed[:, 1], fixed[:, 2], label="big", marker="o")
-            ax.scatter(
-                moving[:, 0], moving[:, 1], moving[:, 2], label="little", marker="o"
-            )
-            ax.scatter(
-                transformed[:, 0],
-                transformed[:, 1],
-                transformed[:, 2],
-                label="transformed little",
-                marker="x",
-            )
-        else:
-            raise ValueError("dims must be '2d' or '3d'")
-        ax.legend()
-        fig.savefig(filename, dpi=200)
-
     def test_translation_fit(self):
         # Simple 2D translation, +4 in y, +1 in x
         fixed = np.array([[1, 4], [2, 5], [3, 6]])
@@ -1220,20 +1183,6 @@ class TestTransforms:
         similarity = rigid_or_similarity_fit(little, big, rigid=False)
         transformed_points_no_shear = transform_points(similarity, big)
         assert np.allclose(transformed_points_no_shear, little, atol=1e-2)
-
-        if self.should_plot:
-            self.plot_points(
-                little,
-                big_with_shear,
-                transformed_points,
-                filename="dipper_2d_shear.png",
-            )
-            self.plot_points(
-                little,
-                big,
-                transformed_points_no_shear,
-                filename="dipper_2d_noshear.png",
-            )
 
     def test_3d_transform_fit(self):
         little = np.array(
