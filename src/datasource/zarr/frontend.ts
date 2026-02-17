@@ -286,7 +286,11 @@ function getMultiscaleInfoForSingleArray(
   const transform = matrix.createIdentity(Float64Array, metadata.rank + 1);
   return {
     coordinateSpace: modelSpace,
-    dataType: metadata.dataType,
+    // Downcast float64 to float32 for display (analogous to nifti backend).
+    dataType:
+      metadata.dataType === DataType.FLOAT64
+        ? DataType.FLOAT32
+        : metadata.dataType,
     scales: [
       {
         url,
