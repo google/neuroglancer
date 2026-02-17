@@ -28,6 +28,8 @@ export enum DataType {
   INT32 = 5,
   UINT64 = 6,
   FLOAT32 = 7,
+  // Used for decoding only; downcast to FLOAT32 for display (e.g. zarr, nifti).
+  FLOAT64 = 8,
 }
 
 export const DATA_TYPE_SIGNED: Record<DataType, boolean | undefined> = {
@@ -39,6 +41,7 @@ export const DATA_TYPE_SIGNED: Record<DataType, boolean | undefined> = {
   [DataType.INT32]: true,
   [DataType.UINT64]: false,
   [DataType.FLOAT32]: undefined,
+  [DataType.FLOAT64]: undefined,
 };
 
 export const DATA_TYPE_BYTES: Record<DataType, number> = {
@@ -50,6 +53,7 @@ export const DATA_TYPE_BYTES: Record<DataType, number> = {
   [DataType.INT32]: 4,
   [DataType.UINT64]: 8,
   [DataType.FLOAT32]: 4,
+  [DataType.FLOAT64]: 8,
 };
 
 export const DATA_TYPE_ARRAY_CONSTRUCTOR: Record<
@@ -64,6 +68,7 @@ export const DATA_TYPE_ARRAY_CONSTRUCTOR: Record<
   [DataType.INT32]: Int32Array,
   [DataType.UINT64]: BigUint64Array,
   [DataType.FLOAT32]: Float32Array,
+  [DataType.FLOAT64]: Float64Array,
 };
 
 export function makeDataTypeArrayView<TArrayBuffer extends ArrayBufferLike>(

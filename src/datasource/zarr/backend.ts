@@ -31,6 +31,7 @@ import "#src/datasource/zarr/codec/transpose/decode.js";
 import { ChunkKeyEncoding } from "#src/datasource/zarr/metadata/index.js";
 import { WithSharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
 import { postProcessRawData } from "#src/sliceview/backend_chunk_decoders/postprocess.js";
+import { DataType } from "#src/util/data_type.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
@@ -89,11 +90,16 @@ export class ZarrVolumeChunkSource extends WithParameters(
       { signal },
     );
     if (response !== undefined) {
-      const decoded = await decodeArray(
+      let decoded = await decodeArray(
         chunkKvStore.decodeCodecs,
         new Uint8Array(await response.response.arrayBuffer()),
         signal,
       );
+      // Downcast float64 to float32 for visualization (analogous to nifti backend).
+      if (parameters.metadata.dataType === DataType.FLOAT64) {
+        const src = decoded as Float64Array;
+        decoded = Float32Array.from(src);
+      }
       await postProcessRawData(chunk, signal, decoded);
     }
   }

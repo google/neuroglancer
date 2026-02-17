@@ -148,7 +148,10 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
         return makeDefaultVolumeChunkSpecifications({
           rank,
           chunkToMultiscaleTransform: transform,
-          dataType: metadata.dataType,
+          dataType:
+            metadata.dataType === DataType.FLOAT64
+              ? DataType.FLOAT32
+              : metadata.dataType,
           upperVoxelBound: permutedDataShape,
           volumeType: this.volumeType,
           chunkDataSizes: [permutedChunkShape],
@@ -364,7 +367,9 @@ async function resolveOmeMultiscale(
 
   return {
     coordinateSpace: resolvedCoordinateSpace,
-    dataType,
+    // Downcast float64 to float32 for display (analogous to nifti backend).
+    dataType:
+      dataType === DataType.FLOAT64 ? DataType.FLOAT32 : dataType,
     scales: multiscale.scales.map((scale, i) => {
       const zarrMetadata = scaleZarrMetadata[i];
       return {
