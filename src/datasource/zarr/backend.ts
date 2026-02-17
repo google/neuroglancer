@@ -33,7 +33,6 @@ import { WithSharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
 import { postProcessRawData } from "#src/sliceview/backend_chunk_decoders/postprocess.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
-import { DataType } from "#src/util/data_type.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
 
 @registerSharedObject()
@@ -96,9 +95,8 @@ export class ZarrVolumeChunkSource extends WithParameters(
         signal,
       );
       // Downcast float64 to float32 for visualization (analogous to nifti backend).
-      if (parameters.metadata.dataType === DataType.FLOAT64) {
-        const src = decoded as Float64Array;
-        decoded = Float32Array.from(src);
+      if (decoded instanceof Float64Array) {
+        decoded = Float32Array.from(decoded);
       }
       await postProcessRawData(chunk, signal, decoded);
     }

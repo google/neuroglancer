@@ -70,16 +70,16 @@ for (const [endiannessChar, endianness] of <[string, Endianness][]>[
     endianness,
     dataType: DataType.FLOAT32,
   });
-  // Downcast float64 to float32 for visualization (analogous to nifti backend).
+  // Map float64 to float32 for visualization; backend downcasts decoded buffer.
   supportedDataTypes.set(`${endiannessChar}f8`, {
     endianness,
-    dataType: DataType.FLOAT64,
+    dataType: DataType.FLOAT32,
   });
 }
 // Native byte order float64 (e.g. "|f8" or "<f8"/">f8" on same-endian systems)
 supportedDataTypes.set("|f8", {
   endianness: Endianness.LITTLE,
-  dataType: DataType.FLOAT64,
+  dataType: DataType.FLOAT32,
 });
 
 export function parseNumpyDtype(typestr: unknown): NumpyDtype {

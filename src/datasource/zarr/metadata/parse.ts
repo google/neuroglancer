@@ -145,7 +145,6 @@ function parseFillValue(dataType: DataType, value: unknown): number | bigint {
       }
       return value;
     case DataType.FLOAT32:
-    case DataType.FLOAT64:
       if (typeof value === "number") {
         return value;
       }
