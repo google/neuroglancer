@@ -31,9 +31,9 @@ import "#src/datasource/zarr/codec/transpose/decode.js";
 import { ChunkKeyEncoding } from "#src/datasource/zarr/metadata/index.js";
 import { WithSharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
 import { postProcessRawData } from "#src/sliceview/backend_chunk_decoders/postprocess.js";
-import { DataType } from "#src/util/data_type.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
+import { DataType } from "#src/util/data_type.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
 
 @registerSharedObject()
