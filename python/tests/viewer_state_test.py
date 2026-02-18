@@ -117,108 +117,94 @@ def test_tool():
 def test_annotation():
     viewer_state.PointAnnotation(point=[1])
 
+
+def _get_dimension_names(dimensions):
+    """Helper to extract dimension names from a list of dimension dicts."""
+    return [dim["name"] for dim in dimensions]
+
+
+def _find_dimension(dimensions, name):
+    """Helper to find a dimension by name in a list of dimension dicts."""
+    return next((d for d in dimensions if d["name"] == name), None)
+
+
 def test_converts_output_dimensions_to_array_format():
     """Test that outputDimensions are converted from object to array format to preserve ordering."""
-    # Create a state with outputDimensions in object format
-    # Ensure to fill all possible coordinateSpace types
+
+    # Input state with dimensions in object (dict) format
     state_with_object_dimensions = {
-        "layers": [
-            {
-                "name": "abc",
-                "type": "image",
-                "localDimensions": [
-                   {
-                     "name": "c'",
-                     "scale": [
-                       1,
-                       ""
-                     ]
-                   }
-                 ],
-                "source": [
-                    {
-                        "url": "s3://my.zarr",
-                        "transform": {
-                            "outputDimensions": {
-                                "c^": {"labels": ["Channel:0", "Channel:1", "Channel:2"], "coordinates": [0, 1, 2]},
-                                "z": [0.0001, "m"],
-                                "y": [3.5e-07, "m"],
-                                "x": [3.5e-07, "m"],
-                            },
-                            "inputDimensions": {
-                                    "x": [1.5e-7, "m"],
-                                    "y": [3.5e-7, "m"],
-                                    "z": [0.0001, "m"],
-                                    "c^": [1, ""],
-                            }
-                        }}]}
-        ],
+        "layers": [{
+            "name": "abc",
+            "type": "image",
+            "localDimensions": [{"name": "c'", "scale": [1, ""]}],
+            "source": [{
+                "url": "s3://my.zarr",
+                "transform": {
+                    "outputDimensions": {
+                        "c^": {"labels": ["Channel:0", "Channel:1", "Channel:2"], "coordinates": [0, 1, 2]},
+                        "z": [0.0001, "m"],
+                        "y": [3.5e-07, "m"],
+                        "x": [3.5e-07, "m"],
+                    },
+                    "inputDimensions": {
+                        "x": [1.5e-7, "m"],
+                        "y": [3.5e-7, "m"],
+                        "z": [0.0001, "m"],
+                        "c^": [1, ""],
+                    }
+                }
+            }]
+        }],
         "layout": "xy",
         "dimensions": {
-            "x": [
-                3.5e-7,
-                "m"
-            ],
-            "y": [
-                3.5e-7,
-                "m"
-            ],
-            "z": [
-                0.0001,
-                "m"
-            ]
+            "x": [3.5e-7, "m"],
+            "y": [3.5e-7, "m"],
+            "z": [0.0001, "m"]
         }
     }
 
-    # Create ViewerState with outputDimensions in object format
+    # Convert to ViewerState and back to JSON
     viewer_state_obj = viewer_state.ViewerState(state_with_object_dimensions)
     converted_state = viewer_state_obj.to_json()
 
-    # Verify root-level dimensions are converted to array format
-    assert isinstance(converted_state["dimensions"], list)
-    assert len(converted_state["dimensions"]) == 3
+    # Test root-level dimensions
+    root_dims = converted_state["dimensions"]
+    assert isinstance(root_dims, list)
+    assert len(root_dims) == 3
+    assert _get_dimension_names(root_dims) == ["x", "y", "z"]
 
-    # Verify dimension ordering is preserved
-    dim_names = [dim["name"] for dim in converted_state["dimensions"]]
-    assert dim_names == ["x", "y", "z"]
+    # Get layer transform for convenience
+    transform = converted_state["layers"][0]["source"][0]["transform"]
 
-    # Verify layer outputDimensions are also converted
-    layer = converted_state["layers"][0]
-    assert isinstance(layer["source"][0]["transform"]["outputDimensions"], list)
-    assert len(layer["source"][0]["transform"]["outputDimensions"]) == 4
+    # Test outputDimensions
+    output_dims = transform["outputDimensions"]
+    assert isinstance(output_dims, list)
+    assert len(output_dims) == 4
+    assert _get_dimension_names(output_dims) == ["c^", "z", "y", "x"]
 
-    # Find the coordinate array dimension
-    channel_dim = next((d for d in layer["source"][0]["transform"]["outputDimensions"] if d["name"] == "c^"), None)
+    # Verify coordinate array dimension properties
+    channel_dim = _find_dimension(output_dims, "c^")
     assert channel_dim is not None
-    assert "coordinates" in channel_dim
-    assert "labels" in channel_dim
     assert channel_dim["coordinates"] == [0, 1, 2]
+    assert channel_dim["labels"] == ["Channel:0", "Channel:1", "Channel:2"]
 
-    # Verify layer dimension ordering is preserved
-    layer_dim_names = [dim["name"] for dim in layer["source"][0]["transform"]["outputDimensions"]]
-    assert layer_dim_names == ["c^", "z", "y", "x"]
+    # Test inputDimensions
+    input_dims = transform["inputDimensions"]
+    assert isinstance(input_dims, list)
+    assert len(input_dims) == 4
+    assert _get_dimension_names(input_dims) == ["x", "y", "z", "c^"]
 
-    # Verify layer inputDimensions are also converted
-    assert isinstance(layer["source"][0]["transform"]["inputDimensions"], list)
-    assert len(layer["source"][0]["transform"]["inputDimensions"]) == 4
+    # Verify different scales for same dimension name in input vs output
+    output_x = _find_dimension(output_dims, "x")
+    input_x = _find_dimension(input_dims, "x")
+    assert output_x is not None
+    assert output_x["scale"] == [3.5e-7, "m"]
+    assert input_x is not None
+    assert input_x["scale"] == [1.5e-7, "m"]
 
-    # Verify layer input dimension ordering is preserved
-    input_dim_names = [dim["name"] for dim in layer["source"][0]["transform"]["inputDimensions"]]
-    assert input_dim_names == ["x", "y", "z", "c^"]
-
-    # x in outputDimensions scale should be a different scale than x in inputDimensions
-    output_x_dim = next((d for d in layer["source"][0]["transform"]["outputDimensions"] if d["name"] == "x"), None)
-    input_x_dim = next((d for d in layer["source"][0]["transform"]["inputDimensions"] if d["name"] == "x"), None)
-    assert output_x_dim is not None
-    assert input_x_dim is not None
-    output_x_dim_scale = output_x_dim["scale"]
-    input_x_dim_scale = input_x_dim["scale"]
-    assert(output_x_dim_scale == [3.5e-7, "m"])
-    assert(input_x_dim_scale == [1.5e-7, "m"])
-
-    # Verify localDimensions are also converted
-    assert isinstance(layer["localDimensions"], list)
-    assert len(layer["localDimensions"]) == 1
-    local_dim = layer["localDimensions"][0]
-    assert local_dim["name"] == "c'"
-    assert local_dim["scale"] == [1, ""]
+    # Test localDimensions
+    local_dims = converted_state["layers"][0]["localDimensions"]
+    assert isinstance(local_dims, list)
+    assert len(local_dims) == 1
+    assert local_dims[0]["name"] == "c'"
+    assert local_dims[0]["scale"] == [1, ""]
