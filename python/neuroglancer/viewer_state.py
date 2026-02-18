@@ -1866,6 +1866,7 @@ class DataSelectionState(SidePanelLocation):
 
     layers = wrapped_property("layers", LayerSelectedValues)
 
+
 def convert_legacy_coordinate_spaces_in_viewer_state(json_data):
     """Converts legacy coordinate space formats in a viewer state JSON to the current format.
 
@@ -1890,15 +1891,11 @@ def convert_legacy_coordinate_spaces_in_viewer_state(json_data):
             # Patch to convert outputDimensions and inputDimensions in layer source transforms
             output_dims = transform.get("outputDimensions", None)
             if output_dims is not None and not isinstance(output_dims, list):
-                transform["outputDimensions"] = CoordinateSpace(
-                    output_dims
-                ).to_json()
+                transform["outputDimensions"] = CoordinateSpace(output_dims).to_json()
 
             input_dims = transform.get("inputDimensions", None)
             if input_dims is not None and not isinstance(input_dims, list):
-                transform["inputDimensions"] = CoordinateSpace(
-                    input_dims
-                ).to_json()
+                transform["inputDimensions"] = CoordinateSpace(input_dims).to_json()
 
         # Patch to convert localDimensions on the layer itself
         local_dims = layer.get("localDimensions", None)

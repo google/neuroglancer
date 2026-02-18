@@ -133,34 +133,37 @@ def test_converts_output_dimensions_to_array_format():
 
     # Input state with dimensions in object (dict) format
     state_with_object_dimensions = {
-        "layers": [{
-            "name": "abc",
-            "type": "image",
-            "localDimensions": [{"name": "c'", "scale": [1, ""]}],
-            "source": [{
-                "url": "s3://my.zarr",
-                "transform": {
-                    "outputDimensions": {
-                        "c^": {"labels": ["Channel:0", "Channel:1", "Channel:2"], "coordinates": [0, 1, 2]},
-                        "z": [0.0001, "m"],
-                        "y": [3.5e-07, "m"],
-                        "x": [3.5e-07, "m"],
-                    },
-                    "inputDimensions": {
-                        "x": [1.5e-7, "m"],
-                        "y": [3.5e-7, "m"],
-                        "z": [0.0001, "m"],
-                        "c^": [1, ""],
+        "layers": [
+            {
+                "name": "abc",
+                "type": "image",
+                "localDimensions": [{"name": "c'", "scale": [1, ""]}],
+                "source": [
+                    {
+                        "url": "s3://my.zarr",
+                        "transform": {
+                            "outputDimensions": {
+                                "c^": {
+                                    "labels": ["Channel:0", "Channel:1", "Channel:2"],
+                                    "coordinates": [0, 1, 2],
+                                },
+                                "z": [0.0001, "m"],
+                                "y": [3.5e-07, "m"],
+                                "x": [3.5e-07, "m"],
+                            },
+                            "inputDimensions": {
+                                "x": [1.5e-7, "m"],
+                                "y": [3.5e-7, "m"],
+                                "z": [0.0001, "m"],
+                                "c^": [1, ""],
+                            },
+                        },
                     }
-                }
-            }]
-        }],
+                ],
+            }
+        ],
         "layout": "xy",
-        "dimensions": {
-            "x": [3.5e-7, "m"],
-            "y": [3.5e-7, "m"],
-            "z": [0.0001, "m"]
-        }
+        "dimensions": {"x": [3.5e-7, "m"], "y": [3.5e-7, "m"], "z": [0.0001, "m"]},
     }
 
     # Convert to ViewerState and back to JSON
