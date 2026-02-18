@@ -1866,6 +1866,46 @@ class DataSelectionState(SidePanelLocation):
 
     layers = wrapped_property("layers", LayerSelectedValues)
 
+def convert_legacy_coordinate_spaces_in_viewer_state(json_data):
+    """Converts legacy coordinate space formats in a viewer state JSON to the current format.
+
+    This is a patch to maintain backwards compatibility with older viewer state JSON that used dicts to represent coordinate spaces instead of arrays.
+
+    It converts the "dimensions" property on the viewer state, as well as any "outputDimensions" or "inputDimensions" properties in layer source transforms and "localDimesions" on layers from dicts to arrays if they are not already arrays.
+
+    If any other CoordinateSpace properties are added in the future, they should also be patched here to maintain backwards compatibility.
+    """
+    # Patch to convert dimensions on the viewer state
+    if "dimensions" in json_data and not isinstance(json_data["dimensions"], list):
+        json_data["dimensions"] = CoordinateSpace(json_data["dimensions"]).to_json()
+
+    for layer in json_data.get("layers", []):
+        for source in layer.get("source", []):
+            if not isinstance(source, dict):
+                continue
+            transform = source.get("transform", None)
+            if not transform:
+                continue
+
+            # Patch to convert outputDimensions and inputDimensions in layer source transforms
+            output_dims = transform.get("outputDimensions", None)
+            if output_dims is not None and not isinstance(output_dims, list):
+                transform["outputDimensions"] = CoordinateSpace(
+                    output_dims
+                ).to_json()
+
+            input_dims = transform.get("inputDimensions", None)
+            if input_dims is not None and not isinstance(input_dims, list):
+                transform["inputDimensions"] = CoordinateSpace(
+                    input_dims
+                ).to_json()
+
+        # Patch to convert localDimensions on the layer itself
+        local_dims = layer.get("localDimensions", None)
+        if local_dims is not None and not isinstance(local_dims, list):
+            layer["localDimensions"] = CoordinateSpace(local_dims).to_json()
+    return json_data
+
 
 @export
 class ViewerState(JsonObjectWrapper):
@@ -1966,9 +2006,8 @@ class ViewerState(JsonObjectWrapper):
     selection = wrapped_property("selection", DataSelectionState)
 
     def __init__(self, json_data=None, _readonly=False, **kwargs):
-        if isinstance(json_data, dict) and "dimensions" in json_data:
-            # Patch to convert old viewer state JSON dimensions that was dict to array
-            json_data["dimensions"] = CoordinateSpace(json_data["dimensions"]).to_json()
+        if not _readonly and json_data is not None:
+            json_data = convert_legacy_coordinate_spaces_in_viewer_state(json_data)
         super().__init__(json_data, _readonly=_readonly, **kwargs)
 
     @staticmethod
