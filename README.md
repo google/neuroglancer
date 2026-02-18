@@ -40,7 +40,7 @@ Neuroglancer itself is purely a client-side program, but it depends on data bein
 
 - [Neuroglancer precomputed format](src/datasource/precomputed)
 - [N5](src/datasource/n5)
-- [Zarr v2/v3](src/datasource/zarr)
+- [Zarr v2/v3 and OME-Zarr 0.4/0.5](src/datasource/zarr)
 - [Python in-memory volumes](python/README.md) (with automatic mesh generation)
 - BOSS <https://bossdb.org/>
 - DVID <https://github.com/janelia-flyem/dvid>
@@ -75,7 +75,6 @@ or within Neuroglancer, press `h` or click on the button labeled `?` in the uppe
   Neuroglancer requires WebGL (2.0) and the `EXT_color_buffer_float` extension.
 
   To troubleshoot, check the developer console, which is accessed by the keyboard shortcut `control-shift-i` in Firefox and Chrome. If there is a message regarding failure to initialize WebGL, you can take the following steps:
-
   - Chrome
 
     Check `chrome://gpu` to see if your GPU is blacklisted. There may be a flag you can enable to make it work.
@@ -83,7 +82,6 @@ or within Neuroglancer, press `h` or click on the button labeled `?` in the uppe
   - Firefox
 
     Check `about:support`. There may be webgl-related properties in `about:config` that you can change to make it work. Possible settings:
-
     - `webgl.disable-fail-if-major-performance-caveat = true`
     - `webgl.force-enabled = true`
     - `webgl.msaa-force = true`
@@ -93,7 +91,6 @@ or within Neuroglancer, press `h` or click on the button labeled `?` in the uppe
   As a security measure, browsers will in many prevent a webpage from accessing the true error code associated with a failed HTTP request. It is therefore often necessary to check the developer tools to see the true cause of any HTTP request error.
 
   There are several likely causes:
-
   - [Cross-origin resource sharing (CORS)](https://en.wikipedia.org/wiki/Cross-origin_resource_sharing)
 
     Neuroglancer relies on cross-origin requests to retrieve data from third-party servers. As a security measure, if an appropriate `Access-Control-Allow-Origin` response header is not sent by the server, browsers prevent webpages from accessing any information about the response from a cross-origin request. In order to make the data accessible to Neuroglancer, you may need to change the cross-origin request sharing (CORS) configuration of the HTTP server.

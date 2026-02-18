@@ -30,6 +30,7 @@ import type { CoordinateTransformSpecification } from "#src/coordinate_transform
 import { makeCoordinateSpace } from "#src/coordinate_transform.js";
 import type { DataSourceSpecification } from "#src/datasource/index.js";
 import { localAnnotationsUrl, LocalDataSource } from "#src/datasource/local.js";
+import { buildShaderPropertyList } from "#src/layer/annotation/shader_ui_property_list.js";
 import type { LayerManager, ManagedUserLayer } from "#src/layer/index.js";
 import {
   LayerReference,
@@ -48,7 +49,10 @@ import {
   TrackableBoolean,
   TrackableBooleanCheckbox,
 } from "#src/trackable_boolean.js";
-import { makeCachedLazyDerivedWatchableValue } from "#src/trackable_value.js";
+import {
+  makeCachedLazyDerivedWatchableValue,
+  observeWatchable,
+} from "#src/trackable_value.js";
 import type {
   AnnotationLayerView,
   MergedAnnotationStates,
@@ -731,8 +735,37 @@ export class AnnotationUserLayer extends Base {
     return x;
   }
 
+  observeLayerColor(callback: () => void) {
+    const disposer = super.observeLayerColor(callback);
+    const subDisposer = observeWatchable(
+      callback,
+      this.annotationDisplayState.color,
+    );
+    const shaderDisposer = observeWatchable(
+      callback,
+      this.annotationDisplayState.shader,
+    );
+    return () => {
+      disposer();
+      subDisposer();
+      shaderDisposer();
+    };
+  }
+
+  get automaticLayerBarColors() {
+    const shaderHasDefaultColor =
+      this.annotationDisplayState.shader.value.includes("defaultColor");
+    if (shaderHasDefaultColor && this.annotationDisplayState.color.value) {
+      const [r, g, b] = this.annotationDisplayState.color.value;
+      return [`rgb(${r * 255}, ${g * 255}, ${b * 255})`];
+    }
+
+    return undefined;
+  }
+
   static type = "annotation";
   static typeAbbreviation = "ann";
+  static supportsLayerBarColorSyncOption = true;
 }
 
 function makeShaderCodeWidget(layer: AnnotationUserLayer) {
@@ -765,32 +798,7 @@ class RenderingOptionsTab extends Tab {
         layer.annotationDisplayState.annotationProperties,
         (properties, parent) => {
           if (properties === undefined || properties.length === 0) return;
-          const propertyList = document.createElement("div");
-          parent.appendChild(propertyList);
-          propertyList.classList.add(
-            "neuroglancer-annotation-shader-property-list",
-          );
-          for (const property of properties) {
-            const div = document.createElement("div");
-            div.classList.add("neuroglancer-annotation-shader-property");
-            const typeElement = document.createElement("span");
-            typeElement.classList.add(
-              "neuroglancer-annotation-shader-property-type",
-            );
-            typeElement.textContent = property.type;
-            const nameElement = document.createElement("span");
-            nameElement.classList.add(
-              "neuroglancer-annotation-shader-property-identifier",
-            );
-            nameElement.textContent = `prop_${property.identifier}`;
-            div.appendChild(typeElement);
-            div.appendChild(nameElement);
-            const { description } = property;
-            if (description !== undefined) {
-              div.title = description;
-            }
-            propertyList.appendChild(div);
-          }
+          buildShaderPropertyList(properties, parent);
         },
       ),
     ).element;

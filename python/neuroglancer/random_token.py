@@ -16,6 +16,6 @@ import binascii
 import os
 
 
-def make_random_token():
+def make_random_token() -> str:
     """Return a 20-byte (40 character) random hex string."""
     return binascii.hexlify(os.urandom(20)).decode()

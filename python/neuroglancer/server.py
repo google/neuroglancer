@@ -68,7 +68,7 @@ global_static_content_source = None
 
 global_server_args = dict(bind_address="127.0.0.1", bind_port=0)
 
-debug = False
+debug: bool = False
 
 _IS_GOOGLE_COLAB = "google.colab" in sys.modules
 
@@ -538,8 +538,6 @@ def set_dev_server_content_source():
             "dev-server-python",
             "--",
             "--port=0",
-            "--no-lint",
-            "--no-typecheck",
         ],
         cwd=root_dir,
         stdin=subprocess.PIPE,

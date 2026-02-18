@@ -362,7 +362,7 @@ export class MultiscaleVolumeInfo {
       if (scales.length === 0) {
         throw new Error("Expected at least one scale.");
       }
-      const baseScale = scales[0];
+      let baseScale = scales[0];
       const numChannels = (this.numChannels = baseScale.numChannels);
       const dataType = (this.dataType = baseScale.dataType);
       for (
@@ -384,6 +384,12 @@ export class MultiscaleVolumeInfo {
           );
         }
       }
+      scales.sort((a, b) => {
+        const av = a.voxelSize;
+        const bv = b.voxelSize;
+        return av[0] - bv[0] || av[1] - bv[1] || av[2] - bv[2];
+      });
+      baseScale = scales[0];
       this.box = {
         lowerBounds: new Float64Array(3),
         upperBounds: new Float64Array(baseScale.upperVoxelBound),

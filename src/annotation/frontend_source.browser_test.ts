@@ -54,6 +54,10 @@ class UpdateTester {
     expect(direct.typeToIds).toEqual(incremental.typeToIds);
     expect(direct.typeToOffset).toEqual(incremental.typeToOffset);
     expect(direct.typeToIdMaps).toEqual(incremental.typeToIdMaps);
+    expect(direct.typeToInstanceCounts).toEqual(
+      incremental.typeToInstanceCounts,
+    );
+    expect(direct.typeToSize).toEqual(incremental.typeToSize);
   }
   update(annotation: Annotation) {
     const index = this.annotations.findIndex((x) => x.id === annotation.id);

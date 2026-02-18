@@ -26,6 +26,7 @@ import {
   makeIdentityTransformedBoundingBox,
 } from "#src/coordinate_transform.js";
 import type {
+  ChannelMetadata,
   DataSource,
   GetKvStoreBasedDataSourceOptions,
   KvStoreBasedDataSourceProvider,
@@ -57,6 +58,7 @@ import { WithSharedKvStoreContext } from "#src/kvstore/chunk_source_frontend.js"
 import type { CompletionResult } from "#src/kvstore/context.js";
 import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
 import {
+  joinBaseUrlAndPath,
   kvstoreEnsureDirectoryPipelineUrl,
   parseUrlSuffix,
   pipelineUrlJoin,
@@ -387,13 +389,13 @@ async function getMetadata(
     const [zarray, zattrs] = await Promise.all([
       getJsonResource(
         sharedKvStoreContext,
-        `${url}.zarray`,
+        joinBaseUrlAndPath(url, ".zarray"),
         "zarr v2 array metadata",
         options,
       ),
       getJsonResource(
         sharedKvStoreContext,
-        `${url}.zattrs`,
+        joinBaseUrlAndPath(url, ".zattrs"),
         "zarr v2 attributes",
         options,
       ),
@@ -423,7 +425,7 @@ async function getMetadata(
   if (options.zarrVersion === 3) {
     const zarrJson = await getJsonResource(
       sharedKvStoreContext,
-      `${url}zarr.json`,
+      joinBaseUrlAndPath(url, "zarr.json"),
       "zarr v3 metadata",
       options,
     );
@@ -498,6 +500,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
     return options.registry.chunkManager.memoize.getAsync(
       {
         type: "zarr:MultiscaleVolumeChunkSource",
+        zarrVersion: this.zarrVersion,
         kvStoreUrl,
         dimensionSeparator,
       },
@@ -509,23 +512,25 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
           zarrVersion: this.zarrVersion,
           explicitDimensionSeparator: dimensionSeparator,
         });
+        let channelMetadata: ChannelMetadata | undefined;
         if (metadata === undefined) {
           throw new Error("No zarr metadata found");
         }
         let multiscaleInfo: ZarrMultiscaleInfo;
         if (metadata.nodeType === "group") {
           // May be an OME-zarr multiscale dataset.
-          const multiscale = parseOmeMetadata(
+          const omeMetadata = parseOmeMetadata(
             kvStoreUrl,
             metadata.userAttributes,
             metadata.zarrVersion,
           );
-          if (multiscale === undefined) {
+          if (omeMetadata === undefined) {
             throw new Error("Neither array nor OME multiscale metadata found");
           }
+          channelMetadata = omeMetadata.channels;
           multiscaleInfo = await resolveOmeMultiscale(
             sharedKvStoreContext,
-            multiscale,
+            omeMetadata.multiscale,
             {
               ...progressOptions,
               zarrVersion: metadata.zarrVersion,
@@ -545,6 +550,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
         return {
           canonicalUrl: `${kvStoreUrl}|zarr${metadata.zarrVersion}:`,
           modelTransform: makeIdentityTransform(volume.modelSpace),
+          channelMetadata,
           subsources: [
             {
               id: "default",

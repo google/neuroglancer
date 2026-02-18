@@ -172,7 +172,7 @@ highp vec3 vertexA = readAttribute0(aVertexIndex.x);
 highp vec3 vertexB = readAttribute0(aVertexIndex.y);
 emitLine(uProjection, vertexA, vertexB, uLineWidth);
 highp uint lineEndpointIndex = getLineEndpointIndex();
-highp uint vertexIndex = aVertexIndex.x * lineEndpointIndex + aVertexIndex.y * (1u - lineEndpointIndex);
+highp uint vertexIndex = aVertexIndex.x * (1u - lineEndpointIndex) + aVertexIndex.y * lineEndpointIndex;
 `;
 
           builder.addFragmentCode(`
@@ -194,6 +194,9 @@ void emitDefault() {
             builder.addVarying(`highp ${info.glslDataType}`, `vCustom${i}`);
             vertexMain += `vCustom${i} = readAttribute${i}(vertexIndex);\n`;
             builder.addFragmentCode(`#define ${info.name} vCustom${i}\n`);
+            builder.addFragmentCode(
+              `#define prop_${info.name}() vCustom${i}\n`,
+            );
           }
           builder.setVertexMain(vertexMain);
           addControlsToBuilder(shaderBuilderState, builder);
@@ -260,6 +263,9 @@ void emitDefault() {
             builder.addVarying(`highp ${info.glslDataType}`, `vCustom${i}`);
             vertexMain += `vCustom${i} = readAttribute${i}(vertexIndex);\n`;
             builder.addFragmentCode(`#define ${info.name} vCustom${i}\n`);
+            builder.addFragmentCode(
+              `#define prop_${info.name}() vCustom${i}\n`,
+            );
           }
           builder.setVertexMain(vertexMain);
           addControlsToBuilder(shaderBuilderState, builder);

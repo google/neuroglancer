@@ -2,7 +2,7 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["import", "typescript", "oxc", "unicorn", "promise", "vitest"],
   "env": {
-    "browser": true
+    "browser": true,
   },
   "settings": {},
   "rules": {
@@ -24,28 +24,34 @@
       {
         "argsIgnorePattern": "^_",
         "varsIgnorePattern": "^_",
-        "ignoreRestSiblings": true
-      }
+        "ignoreRestSiblings": true,
+      },
     ],
     "no-new-array": "off",
     "no-document-cookie": "off",
-    "@typescript-eslint/consistent-type-imports": "error"
+    "no-constant-condition": "off",
+    "@typescript-eslint/consistent-type-imports": "error",
+    "no-unused-expressions": "off",
+    "eslint-plugin-jest/no-standalone-expect": "off",
+    "eslint-plugin-jest/expect-expect": "off",
+    "eslint-plugin-jest/valid-expect": "off",
+    "eslint-plugin-jest/no-conditional-expect": "off",
+    "eslint-plugin-jest/valid-describe-callback": "off",
+    "@typescript-eslint/no-unsafe-declaration-merging": "off",
   },
   "overrides": [
     {
       "files": ["*.test.ts", "*.spec.ts"],
       "rules": {
-        "@typescript-eslint/no-explicit-any": "off"
-      }
-    }
+        "@typescript-eslint/no-explicit-any": "off",
+      },
+    },
   ],
   "ignorePatterns": [
     "**/node_modules",
     "**/dist",
     "**/python",
-    "templates/neuroglancer/sliceview",
     "src/third_party/jpgjs/jpg.js",
-    "**/templates",
     "**/build",
     "**/.tox",
     "**/.nox",
@@ -56,6 +62,6 @@
     "**/typings",
     "src/mesh/draco/stub.js",
     "**/tsconfig.tsbuildinfo",
-    "examples"
-  ]
+    "examples",
+  ],
 }

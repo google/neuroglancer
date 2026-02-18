@@ -32,13 +32,13 @@ from .server import (
 from .url_state import parse_url, to_json_dump, to_url  # noqa: F401
 from .viewer import UnsynchronizedViewer, Viewer  # noqa: F401
 from .viewer_config_state import (
-    LayerSelectedValues,  # noqa: F401
-    LayerSelectionState,  # noqa: F401
     PrefetchState,  # noqa: F401
     ScaleBarOptions,  # noqa: F401
-    SegmentIdMapEntry,  # noqa: F401
 )
 from .viewer_state import (
+    SegmentIdMapEntry,  # noqa: F401
+    LayerSelectedValues,  # noqa: F401
+    LayerSelectionState,  # noqa: F401
     CoordinateSpace,  # noqa: F401
     DimensionScale,  # noqa: F401
     CoordinateArray,  # noqa: F401
@@ -47,6 +47,7 @@ from .viewer_state import (
     PlaceLineTool,  # noqa: F401
     PlaceBoundingBoxTool,  # noqa: F401
     PlaceEllipsoidTool,  # noqa: F401
+    PlacePolylineTool,  # noqa: F401
     BlendTool,  # noqa: F401
     OpacityTool,  # noqa: F401
     VolumeRenderingTool,  # noqa: F401
@@ -98,6 +99,7 @@ from .viewer_state import (
     Annotation,  # noqa: F401
     PointAnnotation,  # noqa: F401
     LineAnnotation,  # noqa: F401
+    PolyLineAnnotation,  # noqa: F401
     AxisAlignedBoundingBoxAnnotation,  # noqa: F401
     EllipsoidAnnotation,  # noqa: F401
     AnnotationPropertySpec,  # noqa: F401

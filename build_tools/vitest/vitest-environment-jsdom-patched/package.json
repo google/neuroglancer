@@ -1,0 +1,9 @@
+{
+  "name": "vitest-environment-jsdom-patched",
+  "private": true,
+  "type": "module",
+  "main": "index.ts",
+  "peerDependencies": {
+    "vitest": ">=3"
+  }
+}

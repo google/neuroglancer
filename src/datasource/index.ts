@@ -35,6 +35,7 @@ import {
   extractQueryAndFragment,
   finalPipelineUrlComponent,
   parsePipelineUrlComponent,
+  parseUrlSuffix,
   splitPipelineUrl,
 } from "#src/kvstore/url.js";
 import type { MeshSource, MultiscaleMeshSource } from "#src/mesh/frontend.js";
@@ -54,6 +55,7 @@ import {
   getPrefixMatchesWithDescriptions,
 } from "#src/util/completion.js";
 import { RefCounted } from "#src/util/disposable.js";
+import type { vec3 } from "#src/util/geom.js";
 import { type ProgressOptions } from "#src/util/progress_listener.js";
 import type { Trackable } from "#src/util/trackable.js";
 
@@ -173,12 +175,27 @@ export interface DataSubsourceEntry {
   default: boolean;
 }
 
+export interface ChannelMetadata {
+  name?: string;
+  channels: SingleChannelMetadata[];
+}
+
+export interface SingleChannelMetadata {
+  color?: vec3;
+  label?: string;
+  active?: boolean;
+  window?: [number, number];
+  range?: [number, number];
+  coefficient?: number;
+}
+
 export interface DataSource {
   subsources: DataSubsourceEntry[];
   modelTransform: CoordinateSpaceTransform;
   canChangeModelSpaceRank?: boolean;
   state?: Trackable;
   canonicalUrl?: string;
+  channelMetadata?: ChannelMetadata;
 }
 
 export interface DataSourceRedirect {
@@ -591,7 +608,9 @@ export class DataSourceRegistry extends RefCounted {
     for (let i = parts.length - 1; i >= 0; --i) {
       let { suffix } = parts[i];
       if (!suffix) continue;
-      suffix = suffix.replace(/^\/+/, "").replace(/\/+$/, "");
+      const { authorityAndPath } = parseUrlSuffix(suffix);
+      if (!authorityAndPath) continue;
+      suffix = authorityAndPath.replace(/^\/+/, "").replace(/\/+$/, "");
       if (!suffix) continue;
       return suggestLayerNameBasedOnSeparator(suffix);
     }

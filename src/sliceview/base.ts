@@ -727,6 +727,9 @@ export function* filterVisibleSources(
   };
   let scaleIndex = sources.length - 1;
   let prevVoxelSize: vec3 | undefined;
+  if (DEBUG_VISIBLE_SOURCES) {
+    console.log(`Filtering ${sources.length} visible sources`);
+  }
   while (true) {
     const transformedSource = sources[scaleIndex];
     if (
@@ -736,14 +739,27 @@ export function* filterVisibleSources(
         prevVoxelSize,
       )
     ) {
+      if (DEBUG_VISIBLE_SOURCES) {
+        console.log(
+          `  Stopping at ${scaleIndex} because can't improve on prev voxel size: effectiveVoxelSize=${transformedSource.effectiveVoxelSize} prevVoxelSize=${prevVoxelSize}`,
+        );
+      }
       break;
     }
     yield transformedSource;
 
-    if (
-      scaleIndex === 0 ||
-      !canImproveOnVoxelSize(transformedSource.effectiveVoxelSize)
-    ) {
+    if (scaleIndex === 0) {
+      if (DEBUG_VISIBLE_SOURCES) {
+        console.log(`  Stopping because scaleIndex=0`);
+      }
+      break;
+    }
+    if (!canImproveOnVoxelSize(transformedSource.effectiveVoxelSize)) {
+      if (DEBUG_VISIBLE_SOURCES) {
+        console.log(
+          `Stopping at at ${scaleIndex} because can't improve on voxel size ${transformedSource.effectiveVoxelSize}`,
+        );
+      }
       break;
     }
     prevVoxelSize = transformedSource.effectiveVoxelSize;

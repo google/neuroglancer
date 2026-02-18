@@ -40,13 +40,39 @@ def mypy(session):
         "--no-default-groups",
         "--group",
         "mypy",
+        "--group",
+        "dev",
         "--extra",
         "webdriver",
+        "--extra",
+        "osteoid",
         "--group",
         "test",
         env={"UV_PROJECT_ENVIRONMENT": session.virtualenv.location},
     )
     session.run("mypy", ".", *session.posargs)
+
+
+@nox.session
+def ty(session):
+    session.run_install(
+        "uv",
+        "sync",
+        "--no-install-workspace",
+        "--no-default-groups",
+        "--group",
+        "ty",
+        "--group",
+        "dev",
+        "--extra",
+        "webdriver",
+        "--group",
+        "--extra",
+        "osteoid",
+        "test",
+        env={"UV_PROJECT_ENVIRONMENT": session.virtualenv.location},
+    )
+    session.run("ty", "check", *session.posargs)
 
 
 @nox.session
@@ -57,6 +83,8 @@ def docs(session: nox.Session):
         "--no-default-groups",
         "--group",
         "docs",
+        "--extra",
+        "osteoid",
         "--no-install-workspace",
         env={"UV_PROJECT_ENVIRONMENT": session.virtualenv.location},
     )
@@ -155,10 +183,10 @@ def cibuildwheel(session: nox.Session):
         env={
             "CIBW_BUILD_FRONTEND": "build[uv]",
             "CIBW_ARCHS_MACOS": "x86_64 arm64",
-            "CIBW_SKIP": "pp* *_i686 *-win32 *-musllinux*",
+            "CIBW_SKIP": "pp* *_i686 *-win32 *-musllinux* cp314* cp315*",
             "CIBW_TEST_GROUPS": "test",
             "CIBW_TEST_COMMAND": "python -m pytest {project}/python/tests -vv -s --skip-browser-tests",
-            "CIBW_MANYLINUX_X86_64_IMAGE": "manylinux2014",
+            "CIBW_MANYLINUX_X86_64_IMAGE": "manylinux_2_28",
             # Assume the client bundle was already built. The github actions workflow builds
             # the client with specific defines to include the build stamp, and that would be
             # lost if setup.py rebuilds the client.
