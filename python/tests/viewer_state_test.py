@@ -13,8 +13,10 @@
 # limitations under the License.
 
 
+from neuroglancer.trackable_state import State
 import numpy as np
 import pytest
+from copy import deepcopy
 from neuroglancer import viewer_state
 
 
@@ -150,7 +152,7 @@ def test_converts_output_dimensions_to_array_format():
         },
     }
 
-    full_source_as_array = [source_info, "test_string_for_simple_source"]
+    full_source_as_array = [deepcopy(source_info), "test_string_for_simple_source"]
 
     # Input state with dimensions in legacy object (dict) format
     state_with_object_dimensions_base = {
@@ -167,7 +169,7 @@ def test_converts_output_dimensions_to_array_format():
 
     # Both a single source as an object and multiple sources as an array should be converted correctly
     for source in [source_info, full_source_as_array]:
-        state_with_object_dimensions = dict(state_with_object_dimensions_base)
+        state_with_object_dimensions = dict(deepcopy(state_with_object_dimensions_base))
         state_with_object_dimensions["layers"][0]["source"] = source
 
         # Init ViewerState and get json to change object dimensions to array format
@@ -236,7 +238,7 @@ def test_viewer_state_to_json_does_not_mutate_readonly_legacy_dimensions():
         }
     }
     state = viewer_state.ViewerState(json_data, _readonly=True)
-    original_dimensions = json_data["dimensions"]
+    original_dimensions = deepcopy(json_data["dimensions"])
     new_state_json = state.to_json()
 
     # The original json_data and new state should still contain the legacy dict-style dimensions.
