@@ -13,10 +13,10 @@
 # limitations under the License.
 
 
-from neuroglancer.trackable_state import State
+from copy import deepcopy
+
 import numpy as np
 import pytest
-from copy import deepcopy
 from neuroglancer import viewer_state
 
 
