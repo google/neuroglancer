@@ -1880,9 +1880,20 @@ def convert_legacy_coordinate_spaces_in_viewer_state(json_data):
     if "dimensions" in json_data and not isinstance(json_data["dimensions"], list):
         json_data["dimensions"] = CoordinateSpace(json_data["dimensions"]).to_json()
 
-    for layer in json_data.get("layers", []):
-        for source in layer.get("source", []):
-            if not isinstance(source, dict):
+    layers = json_data.get("layers", [])
+    if isinstance(layers, collections.abc.Mapping):
+        layers = layers.values()
+    for layer in layers:
+        sources = layer.get("source", [])
+        # Neuroglancer allows source to be a single object instead of a list if there is only one source, so we need to handle both cases
+        # A single string is also allowed, but we can skip that case since it doesn't have any transforms that need to be patched
+        if isinstance(sources, str):
+            continue
+        if isinstance(sources, collections.abc.Mapping):
+            sources = [sources]
+
+        for source in sources:
+            if not isinstance(source, collections.abc.Mapping):
                 continue
             transform = source.get("transform", None)
             if not transform:
@@ -1890,17 +1901,24 @@ def convert_legacy_coordinate_spaces_in_viewer_state(json_data):
 
             # Patch to convert outputDimensions and inputDimensions in layer source transforms
             output_dims = transform.get("outputDimensions", None)
-            if output_dims is not None and not isinstance(output_dims, list):
+            if output_dims is not None and not isinstance(
+                output_dims, collections.abc.Sequence
+            ):
                 transform["outputDimensions"] = CoordinateSpace(output_dims).to_json()
 
             input_dims = transform.get("inputDimensions", None)
-            if input_dims is not None and not isinstance(input_dims, list):
+            if input_dims is not None and not isinstance(
+                input_dims, collections.abc.Sequence
+            ):
                 transform["inputDimensions"] = CoordinateSpace(input_dims).to_json()
 
         # Patch to convert localDimensions on the layer itself
         local_dims = layer.get("localDimensions", None)
-        if local_dims is not None and not isinstance(local_dims, list):
+        if local_dims is not None and not isinstance(
+            local_dims, collections.abc.Sequence
+        ):
             layer["localDimensions"] = CoordinateSpace(local_dims).to_json()
+
     return json_data
 
 
