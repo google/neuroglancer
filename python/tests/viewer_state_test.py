@@ -213,6 +213,7 @@ def test_converts_output_dimensions_to_array_format():
     viewer_state_converted = viewer_state.ViewerState(converted_state)
     assert viewer_state_converted.dimensions.names == ("x", "y", "z")
 
+
 def test_viewer_state_to_json_does_not_mutate_readonly_legacy_dimensions():
     # Legacy dimensions are represented as a dict mapping names to [scale, unit].
     json_data = {
