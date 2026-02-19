@@ -176,7 +176,7 @@ def test_converts_output_dimensions_to_array_format():
 
     transform = converted_state["layers"][0]["source"][0]["transform"]
 
-    # Verify layer outputDimesions are converted and preserve ordering (c^, z, y, x)
+    # Verify layer outputDimensions are converted and preserve ordering (c^, z, y, x)
     output_dims = transform["outputDimensions"]
     assert isinstance(output_dims, list)
     assert len(output_dims) == 4
