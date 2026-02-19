@@ -223,7 +223,7 @@ def test_viewer_state_to_json_does_not_mutate_readonly_legacy_dimensions():
         }
     }
     state = viewer_state.ViewerState(json_data, _readonly=True)
-    original_dimensions = dict(json_data["dimensions"])
+    original_dimensions = json_data["dimensions"]
     new_state_json = state.to_json()
 
     # The original json_data and new state should still contain the legacy dict-style dimensions.
