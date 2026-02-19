@@ -357,11 +357,11 @@ function handleCoordinateArray(
   }
 }
 
-export function coordinateSpaceToJson(coordinateSpace: CoordinateSpace): any {
+export function coordinateSpaceToJson(coordinateSpace: CoordinateSpace) {
   const { rank } = coordinateSpace;
   if (rank === 0) return undefined;
   const { names, units, scales, coordinateArrays } = coordinateSpace;
-  const json: any = [];
+  const json = [];
   for (let i = 0; i < rank; ++i) {
     const name = names[i];
     const coordinateArray = coordinateArrays[i];
