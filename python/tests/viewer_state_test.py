@@ -118,20 +118,18 @@ def test_annotation():
     viewer_state.PointAnnotation(point=[1])
 
 
-def _get_dimension_names(dimensions):
-    """Helper to extract dimension names from a list of dimension dicts."""
-    return [dim["name"] for dim in dimensions]
-
-
-def _find_dimension(dimensions, name):
-    """Helper to find a dimension by name in a list of dimension dicts."""
-    return next((d for d in dimensions if d["name"] == name), None)
-
-
 def test_converts_output_dimensions_to_array_format():
     """Test that outputDimensions are converted from object to array format to preserve ordering."""
 
-    # Input state with dimensions in object (dict) format
+    def _get_dimension_names(dimensions):
+        """Helper to extract dimension names from a list of dimension dicts."""
+        return [dim["name"] for dim in dimensions]
+
+    def _find_dimension(dimensions, name):
+        """Helper to find a dimension by name in a list of dimension dicts."""
+        return next((d for d in dimensions if d["name"] == name), None)
+
+    # Input state with dimensions in legacy object (dict) format
     state_with_object_dimensions = {
         "layers": [
             {
@@ -166,20 +164,19 @@ def test_converts_output_dimensions_to_array_format():
         "dimensions": {"x": [3.5e-7, "m"], "y": [3.5e-7, "m"], "z": [0.0001, "m"]},
     }
 
-    # Convert to ViewerState and back to JSON
+    # Init ViewerState and get json to change object dimensions to array format
     viewer_state_obj = viewer_state.ViewerState(state_with_object_dimensions)
     converted_state = viewer_state_obj.to_json()
 
-    # Test root-level dimensions
+    # Verify root-level dimensions are converted to array
     root_dims = converted_state["dimensions"]
     assert isinstance(root_dims, list)
     assert len(root_dims) == 3
     assert _get_dimension_names(root_dims) == ["x", "y", "z"]
 
-    # Get layer transform for convenience
     transform = converted_state["layers"][0]["source"][0]["transform"]
 
-    # Test outputDimensions
+    # Verify layer outputDimesions are converted and preserve ordering (c^, z, y, x)
     output_dims = transform["outputDimensions"]
     assert isinstance(output_dims, list)
     assert len(output_dims) == 4
@@ -191,7 +188,7 @@ def test_converts_output_dimensions_to_array_format():
     assert channel_dim["coordinates"] == [0, 1, 2]
     assert channel_dim["labels"] == ["Channel:0", "Channel:1", "Channel:2"]
 
-    # Test inputDimensions
+    # Verify layer inputDimensions are converted and preserve ordering (x, y, z, c^)
     input_dims = transform["inputDimensions"]
     assert isinstance(input_dims, list)
     assert len(input_dims) == 4
@@ -205,7 +202,7 @@ def test_converts_output_dimensions_to_array_format():
     assert input_x is not None
     assert input_x["scale"] == [1.5e-7, "m"]
 
-    # Test localDimensions
+    # Verify layer localDimensions are converted
     local_dims = converted_state["layers"][0]["localDimensions"]
     assert isinstance(local_dims, list)
     assert len(local_dims) == 1

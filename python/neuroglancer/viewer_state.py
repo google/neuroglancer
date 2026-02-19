@@ -2003,7 +2003,7 @@ class ViewerState(JsonObjectWrapper):
     selection = wrapped_property("selection", DataSelectionState)
 
     def __init__(self, json_data=None, _readonly=False, **kwargs):
-        if not _readonly and json_data is not None:
+        if isinstance(json_data, dict) and not _readonly:
             json_data = convert_legacy_coordinate_spaces_in_viewer_state(json_data)
         super().__init__(json_data, _readonly=_readonly, **kwargs)
 
