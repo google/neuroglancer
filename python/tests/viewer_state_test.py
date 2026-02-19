@@ -208,3 +208,21 @@ def test_converts_output_dimensions_to_array_format():
     assert len(local_dims) == 1
     assert local_dims[0]["name"] == "c'"
     assert local_dims[0]["scale"] == [1, ""]
+
+def test_viewer_state_to_json_does_not_mutate_readonly_legacy_dimensions():
+    # Legacy dimensions are represented as a dict mapping names to [scale, unit].
+    json_data = {
+        "dimensions": {
+            "x": [4e-9, "m"],
+            "y": [5e-9, "m"],
+            "z": [6e-9, "m"],
+        }
+    }
+    state = viewer_state.ViewerState(json_data, _readonly=True)
+    original_dimensions = dict(json_data["dimensions"])
+    new_state_json = state.to_json()
+
+    # The original json_data and new state should still contain the legacy dict-style dimensions.
+    assert isinstance(json_data["dimensions"], dict)
+    assert json_data["dimensions"] == original_dimensions
+    assert new_state_json["dimensions"] == original_dimensions
