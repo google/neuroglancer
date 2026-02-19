@@ -131,11 +131,12 @@ def test_converts_output_dimensions_to_array_format():
 
     # Input state with dimensions in legacy object (dict) format
     state_with_object_dimensions = {
+        "dimensions": {"x": [3.5e-7, "m"], "y": [3.5e-7, "m"], "z": [0.0001, "m"]},
         "layers": [
             {
                 "name": "abc",
                 "type": "image",
-                "localDimensions": [{"name": "c'", "scale": [1, ""]}],
+                "localDimensions": {"c'": [1, ""]},
                 "source": [
                     {
                         "url": "s3://my.zarr",
@@ -161,7 +162,6 @@ def test_converts_output_dimensions_to_array_format():
             }
         ],
         "layout": "xy",
-        "dimensions": {"x": [3.5e-7, "m"], "y": [3.5e-7, "m"], "z": [0.0001, "m"]},
     }
 
     # Init ViewerState and get json to change object dimensions to array format
@@ -208,6 +208,10 @@ def test_converts_output_dimensions_to_array_format():
     assert len(local_dims) == 1
     assert local_dims[0]["name"] == "c'"
     assert local_dims[0]["scale"] == [1, ""]
+
+    # Initialize a new ViewerState with the converted json to ensure it can be parsed back correctly
+    viewer_state_converted = viewer_state.ViewerState(converted_state)
+    assert viewer_state_converted.dimensions.names == ("x", "y", "z")
 
 def test_viewer_state_to_json_does_not_mutate_readonly_legacy_dimensions():
     # Legacy dimensions are represented as a dict mapping names to [scale, unit].
