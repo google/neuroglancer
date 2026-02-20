@@ -180,21 +180,11 @@ export class PositionPlot extends RefCounted {
         return;
       }
       if (this.showAllBounds?.value === false) {
-        let minLowerBound = Infinity;
-        let maxUpperBound = -Infinity;
-
-        for (const {
-          lower,
-          upper,
-        } of normalizedDimensionBounds.normalizedBounds) {
-          if (lower < minLowerBound) minLowerBound = lower;
-          if (upper > maxUpperBound) maxUpperBound = upper;
-        }
-
+        const { normalizedBounds } = normalizedDimensionBounds;
         normalizedDimensionBounds.normalizedBounds = [
           {
-            lower: isFinite(minLowerBound) ? minLowerBound : 0,
-            upper: isFinite(maxUpperBound) ? maxUpperBound : 1,
+            lower: Math.min(...normalizedBounds.map((b) => b.lower)),
+            upper: Math.max(...normalizedBounds.map((b) => b.upper)),
           },
         ];
       }
