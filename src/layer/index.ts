@@ -1446,6 +1446,9 @@ export class TrackableDataSelectionState
     pin.value = true;
     this.capture();
   }
+  unpin() {
+    this.pin.value = false;
+  }
   capture(canRetain = false) {
     const newValue = capturePersistentViewerSelectionState(
       this.layerSelectedValues,
