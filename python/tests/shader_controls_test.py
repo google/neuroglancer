@@ -184,3 +184,67 @@ void main() {
             "color": 0,
         }
     expect_color([0, 0, 0, 255])
+
+
+def test_interpolation(webdriver):
+    data = np.array([[0, 50], [50, 100]], dtype=np.uint32)
+
+    with webdriver.viewer.txn() as s:
+        s.dimensions = neuroglancer.CoordinateSpace(
+            names=["x", "y"], units="nm", scales=[0.5, 0.5]
+        )
+        s.position = [1.0, 1.0]  # Center of the 2x2 grid
+        s.layers.append(
+            name="image",
+            layer=neuroglancer.ImageLayer(
+                source=neuroglancer.LocalVolume(
+                    dimensions=s.dimensions,
+                    data=data,
+                ),
+            ),
+            visible=True,
+            shader="""
+#uicontrol invlerp normalized
+void main() {
+    emitGrayscale(normalized());
+}
+""",
+            shader_controls={
+                "normalized": {
+                    "range": [0, 100],
+                },
+            },
+        )
+        s.layout = "xy"
+        s.cross_section_scale = 1e-6
+        s.show_axis_lines = False
+
+    webdriver.sync()
+    screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
+    # Repeat 0 for top left 5x5, 127 for top right 5x5, 127 for bottom left 5x5, and 255 for bottom right 5x5
+    expected_pixels = np.block(
+        [
+            [np.zeros((5, 5), dtype=np.uint8), np.full((5, 5), 127, dtype=np.uint8)],
+            [
+                np.full((5, 5), 127, dtype=np.uint8),
+                np.full((5, 5), 255, dtype=np.uint8),
+            ],
+        ]
+    )
+    # Grayscale so can just check the red channel
+    np.testing.assert_array_equal(screenshot.image_pixels[:, :, 0], expected_pixels)
+
+    # Now test with interpolated normalized(true)
+    with webdriver.viewer.txn() as s:
+        s.layers["image"].shader = """
+#uicontrol invlerp normalized
+void main() {
+    emitGrayscale(normalized(true));
+}
+"""
+
+    webdriver.sync()
+    screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
+    # 0 + 50 + 50 + 100 / 4 = 50 -> 127.5 rounded down to 127
+    expected_pixels = np.tile([127, 127, 127, 255], (10, 10, 1)).astype(np.uint8)
+    np.testing.assert_array_equal(screenshot.image_pixels, expected_pixels)
