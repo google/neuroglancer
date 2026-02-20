@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { buildShaderPropertyList } from "#src/layer/annotation/index.js";
+import { buildShaderPropertyList } from "#src/layer/annotation/shader_ui_property_list.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import { SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID } from "#src/layer/segmentation/json_keys.js";
 import { LAYER_CONTROLS } from "#src/layer/segmentation/layer_controls.js";

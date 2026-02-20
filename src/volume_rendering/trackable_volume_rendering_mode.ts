@@ -15,7 +15,7 @@
  */
 
 import { TrackableEnum } from "#src/util/trackable_enum.js";
-import type { VolumeRenderingRenderLayer } from "src/volume_rendering/volume_render_layer";
+import type { VolumeRenderingRenderLayer } from "#src/volume_rendering/volume_render_layer.js";
 
 export enum VolumeRenderingModes {
   OFF = 0,

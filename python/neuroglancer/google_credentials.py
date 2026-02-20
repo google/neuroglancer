@@ -13,7 +13,6 @@
 # limitations under the License.
 
 
-import logging
 import threading
 
 from . import credentials_provider
@@ -26,10 +25,6 @@ class GoogleOAuth2FlowCredentialsProvider(credentials_provider.CredentialsProvid
         self.scopes = scopes
         self.client_id = client_id
         self.client_secret = client_secret
-
-        # Make sure logging is initialized.  Does nothing if logging has already
-        # been initialized.
-        logging.basicConfig()
 
     def get_new(self):
         def func():
@@ -54,11 +49,6 @@ class GoogleApplicationDefaultCredentialsProvider(
 ):
     def __init__(self):
         super().__init__()
-
-        # Make sure logging is initialized.  Does nothing if logging has already
-        # been initialized.
-        logging.basicConfig()
-
         self._lock = threading.Lock()
         self._credentials = None
 

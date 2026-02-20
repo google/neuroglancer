@@ -20,10 +20,7 @@ import type { ViteUserConfig } from "vitest/config";
 import { defineWorkspace, mergeConfig } from "vitest/config";
 import { getFakeGcsServerBin } from "./build_tools/vitest/build_fake_gcs_server.js";
 import { startFakeNgauthServer } from "./build_tools/vitest/fake_ngauth_server.js";
-import {
-  PYTHON_TEST_TOOLS_PATH,
-  syncPythonTools,
-} from "./build_tools/vitest/python_tools.js";
+import { syncPythonTools } from "./build_tools/vitest/python_tools.js";
 import { startTestDataServer } from "./build_tools/vitest/test_data_server.js";
 
 const fakeNgauthServer = await startFakeNgauthServer();
@@ -41,7 +38,6 @@ const commonDefines: Record<string, string> = {
 const browserDefines = { ...commonDefines };
 const nodeDefines = {
   FAKE_GCS_SERVER_BIN: JSON.stringify(fakeGcsServerBin),
-  PYTHON_TEST_TOOLS_PATH: JSON.stringify(PYTHON_TEST_TOOLS_PATH),
   ...commonDefines,
 };
 
@@ -49,7 +45,7 @@ function defaultNodeProject(): ViteUserConfig {
   return {
     define: { ...nodeDefines },
     test: {
-      environment: "jsdom",
+      environment: "jsdom-patched",
       setupFiles: [
         "./build_tools/vitest/polyfill-browser-globals-in-node.ts",
         "@vitest/web-worker",

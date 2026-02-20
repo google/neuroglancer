@@ -47,8 +47,8 @@
 }
 
 .neuroglancer-display-dimensions-input-wrapper:has(
-    input[style*="display: none"]
-  ) {
+  input[style*="display: none"]
+) {
   display: none;
 }
 
