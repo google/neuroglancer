@@ -18,6 +18,7 @@
 // cannot be cleared.
 export function clearCookies(): void {
   for (const cookie of document.cookie.split(";")) {
+    if (cookie === "") continue;
     document.cookie = cookie
       .replace(/^ +/, "")
       .replace(/=.*/, `=;expires=${new Date(0).toUTCString()};path=/`);

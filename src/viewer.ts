@@ -115,6 +115,7 @@ import { vec3 } from "#src/util/geom.js";
 import {
   parseFixedLengthArray,
   verifyFinitePositiveFloat,
+  verifyNonnegativeInt,
   verifyObject,
   verifyOptionalObjectProperty,
   verifyString,
@@ -183,20 +184,29 @@ export const VIEWER_UI_CONFIG_OPTIONS = [
   "showTopBar",
   "showUIControls",
   "showPanelBorders",
+  "pickRadius",
 ] as const;
 
-export type ViewerUIOptions = {
-  [Key in (typeof VIEWER_UI_CONFIG_OPTIONS)[number]]: boolean;
+export type ViewerUIConfiguration = {
+  [Key in (typeof VIEWER_UI_CONFIG_OPTIONS)[number]]: Key extends "pickRadius"
+    ? TrackableValue<number>
+    : TrackableBoolean;
 };
 
-export type ViewerUIConfiguration = {
-  [Key in (typeof VIEWER_UI_CONFIG_OPTIONS)[number]]: TrackableBoolean;
+export type ViewerUIOptions = {
+  [Key in keyof ViewerUIConfiguration]: ViewerUIConfiguration[Key]["value"];
 };
 
 export function makeViewerUIConfiguration(): ViewerUIConfiguration {
-  return Object.fromEntries(
-    VIEWER_UI_CONFIG_OPTIONS.map((key) => [key, new TrackableBoolean(true)]),
-  ) as ViewerUIConfiguration;
+  const config = {} as ViewerUIConfiguration;
+  for (const key of VIEWER_UI_CONFIG_OPTIONS) {
+    if (key === "pickRadius") {
+      (config as any)[key] = new TrackableValue(5, verifyNonnegativeInt);
+    } else {
+      (config as any)[key] = new TrackableBoolean(true);
+    }
+  }
+  return config;
 }
 
 function setViewerUiConfiguration(
@@ -477,7 +487,9 @@ export class Viewer extends RefCounted implements ViewerState {
 
   uiConfiguration: ViewerUIConfiguration;
 
-  private makeUiControlVisibilityState(key: keyof ViewerUIOptions) {
+  private makeUiControlVisibilityState(
+    key: (typeof VIEWER_UI_CONTROL_CONFIG_OPTIONS)[number],
+  ) {
     const showUIControls = this.uiConfiguration.showUIControls;
     const showTopBar = this.uiConfiguration.showTopBar;
     const option = this.uiConfiguration[key];

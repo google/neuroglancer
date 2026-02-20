@@ -1,4 +1,3 @@
-import logging
 import os
 import threading
 from configparser import ConfigParser
@@ -10,11 +9,6 @@ from .futures import run_on_new_thread
 class BossCredentialsProvider(credentials_provider.CredentialsProvider):
     def __init__(self):
         super().__init__()
-
-        # Make sure logging is initialized.  Does nothing if logging has already
-        # been initialized.
-        logging.basicConfig()
-
         self._lock = threading.Lock()
         self._credentials = None
 

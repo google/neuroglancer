@@ -48,7 +48,12 @@ import { isWithinSelectionPanel } from "#src/ui/selection_details.js";
 import type { Uint64Map } from "#src/uint64_map.js";
 import { wrapSigned32BitIntegerToUint64 } from "#src/util/bigint.js";
 import { setClipboard } from "#src/util/clipboard.js";
-import { useWhiteBackground } from "#src/util/color.js";
+import {
+  packColor,
+  parseRGBColorSpecification,
+  serializeColor,
+  useWhiteBackground,
+} from "#src/util/color.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { measureElementClone } from "#src/util/dom.js";
 import type { vec3 } from "#src/util/geom.js";
@@ -60,6 +65,11 @@ import { makeCopyButton } from "#src/widget/copy_button.js";
 import { makeEyeButton } from "#src/widget/eye_button.js";
 import { makeFilterButton } from "#src/widget/filter_button.js";
 import { makeStarButton } from "#src/widget/star_button.js";
+
+declare const NEUROGLANCER_SEGMENT_LIST_COLOR_WIDGET: boolean | undefined;
+const SEGMENT_LIST_COLOR_WIDGET_ENABLED =
+  typeof NEUROGLANCER_SEGMENT_LIST_COLOR_WIDGET !== "undefined" &&
+  NEUROGLANCER_SEGMENT_LIST_COLOR_WIDGET === true;
 
 export class Uint64MapEntry {
   constructor(
@@ -293,6 +303,8 @@ export function bindSegmentListWidth(
 const segmentWidgetTemplate = (() => {
   const template = document.createElement("div");
   template.classList.add("neuroglancer-segment-list-entry");
+  template.title =
+    "Right click to move to segment, alt+click to set color, alt+shift+click to unset color";
   const stickyContainer = document.createElement("div");
   stickyContainer.classList.add("neuroglancer-segment-list-entry-sticky");
   template.appendChild(stickyContainer);
@@ -337,6 +349,18 @@ const segmentWidgetTemplate = (() => {
   filterElement.classList.add("neuroglancer-segment-list-entry-filter");
   const filterIndex = template.childElementCount;
   template.appendChild(filterElement);
+  const colorInputIndex = template.childElementCount;
+  const colorInputElement = document.createElement("input");
+  colorInputElement.type = "color";
+  colorInputElement.classList.add(
+    "neuroglancer-segment-list-entry-color-input",
+  );
+  colorInputElement.classList.toggle(
+    "hidden",
+    !SEGMENT_LIST_COLOR_WIDGET_ENABLED,
+  );
+  colorInputElement.title = "Set segment color (right click to unset)";
+  template.appendChild(colorInputElement);
   return {
     template,
     copyContainerIndex,
@@ -347,6 +371,7 @@ const segmentWidgetTemplate = (() => {
     labelIndex,
     filterIndex,
     starIndex,
+    colorInputIndex,
     unmappedIdIndex: -1,
     unmappedCopyIndex: -1,
   };
@@ -478,26 +503,64 @@ function makeRegisterSegmentWidgetEventHandlers(
     event.stopPropagation();
   };
 
-  const onMousedown = (event: MouseEvent) => {
-    if (
-      event.button !== 2 ||
-      event.ctrlKey ||
-      event.altKey ||
-      event.metaKey ||
-      event.shiftKey
-    ) {
-      return;
-    }
+  const onMousedown = (event: MouseEvent, template: SegmentWidgetTemplate) => {
     const entryElement = event.currentTarget as HTMLElement;
     const idString = entryElement.dataset.id!;
     const id = BigInt(idString);
-    displayState.moveToSegment(id);
+    if (event.button === 0 && event.altKey) {
+      if (event.shiftKey) {
+        displayState.segmentStatedColors.value.delete(id);
+      } else {
+        const colorInputElement = entryElement.children[
+          template.colorInputIndex
+        ] as HTMLInputElement;
+        const color = getBaseObjectColor(displayState, id) as vec3;
+        setColorInputColor(
+          colorInputElement,
+          color,
+          displayState.segmentStatedColors.value.has(id),
+        );
+        colorInputElement.showPicker();
+      }
+    } else if (
+      event.button === 2 &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      !event.shiftKey
+    ) {
+      displayState.moveToSegment(id);
+    }
+  };
+
+  const colorHandler = (event: Event) => {
+    const colorInputElement = event.currentTarget as HTMLInputElement;
+    const entryElement = getEntryElement(event);
+    const idString = entryElement.dataset.id!;
+    const id = BigInt(idString);
+    const color = BigInt(
+      packColor(parseRGBColorSpecification(colorInputElement.value)),
+    );
+    displayState.segmentStatedColors.value.delete(id);
+    displayState.segmentStatedColors.value.set(id, color);
+  };
+
+  const onColorInputMousedown = (event: MouseEvent) => {
+    if (event.button === 2) {
+      event.stopPropagation();
+      const entryElement = getEntryElement(event);
+      const idString = entryElement.dataset.id!;
+      const id = BigInt(idString);
+      displayState.segmentStatedColors.value.delete(id);
+    }
   };
 
   return (element: HTMLElement, template: SegmentWidgetTemplate) => {
     const { children } = element;
     const stickyChildren = children[0].children;
-    element.addEventListener("mousedown", onMousedown);
+    element.addEventListener("mousedown", (event: MouseEvent) =>
+      onMousedown(event, template),
+    );
     const copyContainer = stickyChildren[
       template.copyContainerIndex
     ] as HTMLElement;
@@ -528,6 +591,14 @@ function makeRegisterSegmentWidgetEventHandlers(
       const { selectedSegments } = displayState.segmentationGroupState.value;
       selectedSegments.set(id, !selectedSegments.has(id));
     });
+    const colorInputElement = children[
+      template.colorInputIndex
+    ] as HTMLInputElement;
+    colorInputElement.addEventListener("input", colorHandler);
+    colorInputElement.addEventListener("change", colorHandler);
+    if (SEGMENT_LIST_COLOR_WIDGET_ENABLED) {
+      colorInputElement.addEventListener("mousedown", onColorInputMousedown);
+    }
   };
 }
 
@@ -653,14 +724,24 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
     const idContainer = stickyChildren[
       template.idContainerIndex
     ] as HTMLElement;
+    let color = getBaseObjectColor(this.displayState, mapped) as vec3;
     setSegmentIdElementStyle(
       idContainer.children[template.idIndex] as HTMLElement,
-      getBaseObjectColor(this.displayState, mapped) as vec3,
+      color,
+      !SEGMENT_LIST_COLOR_WIDGET_ENABLED &&
+        !!this.displayState?.segmentStatedColors.value.has(mapped),
     );
+    children[template.colorInputIndex] as HTMLInputElement;
+    if (SEGMENT_LIST_COLOR_WIDGET_ENABLED) {
+      setColorInputColor(
+        children[template.colorInputIndex] as HTMLInputElement,
+        color,
+        !!this.displayState?.segmentStatedColors.value.has(mapped),
+      );
+    }
     const { unmappedIdIndex } = template;
     if (unmappedIdIndex !== -1) {
       let unmappedIdString: string | undefined;
-      let color: vec3;
       if (
         displayState!.baseSegmentColoring.value &&
         (unmappedIdString = container.dataset.unmappedId) !== undefined
@@ -678,9 +759,23 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
   }
 }
 
-function setSegmentIdElementStyle(element: HTMLElement, color: vec3) {
+function setSegmentIdElementStyle(
+  element: HTMLElement,
+  color: vec3,
+  stated = false,
+) {
   element.style.backgroundColor = getCssColor(color);
   element.style.color = useWhiteBackground(color) ? "white" : "black";
+  element.classList.toggle("stated-color", stated);
+}
+
+function setColorInputColor(
+  element: HTMLInputElement,
+  color: vec3,
+  stated: boolean,
+) {
+  element.value = serializeColor(color.subarray(0, 3) as vec3);
+  element.classList.toggle("stated-color", stated);
 }
 
 export class SegmentWidgetWithExtraColumnsFactory extends SegmentWidgetFactory<SegmentWidgetWithExtraColumnsTemplate> {
@@ -867,6 +962,9 @@ export function registerCallbackWhenSegmentationDisplayStateChanged(
     displayState.baseSegmentColoring.changed.add(callback),
   );
   context.registerDisposer(displayState.hoverHighlight.changed.add(callback));
+  context.registerDisposer(
+    displayState.segmentStatedColors.changed.add(callback),
+  );
 }
 
 export function registerRedrawWhenSegmentationDisplayStateChanged(

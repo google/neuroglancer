@@ -132,7 +132,7 @@ function getSourceSnapshot(
   const rank = source.chunkSource.spec.rank;
   let spec: any = VolumeChunkSource.encodeSpec(source.chunkSource.spec);
   spec = { ...spec, dataType: DataType[spec.dataType] };
-  const parameters = (source.chunkSource as any).parameters;
+  const parameters = { ...(source.chunkSource as any).parameters };
   delete parameters.metadata;
   if (parameters.url) {
     parameters.url = redactUrl(parameters.url as string);
@@ -140,7 +140,7 @@ function getSourceSnapshot(
   const result: any = {
     ...getKeys(source, ["lowerClipBound", "upperClipBound"]),
     chunkSource: {
-      parameters: (source.chunkSource as any).parameters,
+      parameters,
       spec,
     },
   };
