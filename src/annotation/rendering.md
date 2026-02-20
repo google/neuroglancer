@@ -165,6 +165,31 @@ void setEndpointMarkerBorderWidth(float startWidth, float endWidth);
 
 Sets separate border widths for the endpoint markers.
 
+#### Polyline annotations
+
+Polyline annotations are rendered as line segments with circles marking the endpoints. Unlike line annotations, there can be multiple segments.
+
+Polyline annotations follow the same API as line annotations. The default behaviour is that setting a parameter for line annotations will also set the same parameter for polyline annotations. To set a parameter for only the polyline, use the `setPoly` prefix. For example:
+
+```glsl
+setLineWidth(2.0);
+setPolyLineWidth(4.0);
+
+setEndpointMarkerSize(1.0, 2.0);
+setPolyEndpointMarkerSize(3.0, 1.0);
+```
+
+All of the names spefically for polylines are as follows for reference, and they have the exact same behaviour as the line annotations (including allowing a reduced set of parameters):
+
+```glsl
+void setPolyLineColor(vec4 startColor, vec4 endColor);
+void setPolyLineWidth(float width);
+void setPolyEndpointMarkerColor(vec4 startColor, vec4 endColor);
+void setPolyEndpointMarkerBorderColor(vec4 startColor, vec4 endColor);
+void setPolyEndpointMarkerSize(float startSize, float endSize);
+void setPolyEndpointMarkerBorderWidth(float startSize, float endSize);
+```
+
 #### Bounding box annotations
 
 ```glsl

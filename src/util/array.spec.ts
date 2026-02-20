@@ -23,6 +23,7 @@ import {
   tile2dArray,
   transposeArray2d,
   findClosestMatchInSortedArray,
+  findFirstInSortedArray,
 } from "#src/util/array.js";
 
 describe("partitionArray", () => {
@@ -226,5 +227,81 @@ describe("findClosestMatchInSortedArray", () => {
     expect(findClosestMatchInSortedArray([0, 1, 2, 3], 1.6, compare)).toEqual(
       2,
     );
+  });
+});
+
+describe("findFirst", () => {
+  it("returns -1 for an empty array", () => {
+    expect(findFirstInSortedArray([], (x) => x === 5)).toEqual(-1);
+  });
+
+  describe("ascending direction (default)", () => {
+    it("finds the first item >= 3", () => {
+      const arr = [1, 2, 3, 3, 4, 5];
+      expect(findFirstInSortedArray(arr, (x) => x >= 3)).toEqual(2);
+    });
+
+    it("finds the first item > 4", () => {
+      const arr = [1, 2, 3, 4, 5];
+      expect(findFirstInSortedArray(arr, (x) => x > 4)).toEqual(4);
+    });
+
+    it("returns -1 if no item matches", () => {
+      const arr = [1, 2, 3];
+      expect(findFirstInSortedArray(arr, (x) => x > 10)).toEqual(-1);
+    });
+
+    it("returns 0 if first item matches", () => {
+      const arr = [5, 6, 7];
+      expect(findFirstInSortedArray(arr, (x) => x >= 5)).toEqual(0);
+    });
+
+    it("respects custom bounds", () => {
+      const arr = [0, 1, 2, 3, 4, 0, 5, 6, 7];
+      expect(findFirstInSortedArray(arr, (x) => x >= 4, "asc", 5, 8)).toEqual(
+        6,
+      );
+    });
+  });
+
+  describe("descending direction", () => {
+    it("finds the first item < 4 from the right", () => {
+      const arr = [1, 2, 3, 4, 5];
+      expect(findFirstInSortedArray(arr, (x) => x < 4, "desc")).toEqual(2);
+    });
+
+    it("finds the first item <= 3 from the right", () => {
+      const arr = [1, 2, 3, 3, 4, 5];
+      expect(findFirstInSortedArray(arr, (x) => x <= 3, "desc")).toEqual(3);
+    });
+
+    it("returns -1 if no match", () => {
+      const arr = [5, 6, 7];
+      expect(findFirstInSortedArray(arr, (x) => x < 5, "desc")).toEqual(-1);
+    });
+
+    it("respects custom bounds", () => {
+      const arr = [1, 2, 3, 4, 5, 6];
+      expect(findFirstInSortedArray(arr, (x) => x <= 4, "desc", 1, 3)).toEqual(
+        2,
+      );
+    });
+  });
+
+  describe("complex predicates", () => {
+    it("works with object arrays", () => {
+      const arr = [{ v: 1 }, { v: 2 }, { v: 3 }];
+      expect(findFirstInSortedArray(arr, (x) => x.v >= 2)).toEqual(1);
+    });
+
+    it("handles multiple matches, returns first in 'asc'", () => {
+      const arr = [1, 2, 2, 2, 3];
+      expect(findFirstInSortedArray(arr, (x) => x === 2, "asc")).toEqual(1);
+    });
+
+    it("handles multiple matches, returns last in 'desc'", () => {
+      const arr = [1, 2, 2, 2, 3];
+      expect(findFirstInSortedArray(arr, (x) => x === 2, "desc")).toEqual(3);
+    });
   });
 });

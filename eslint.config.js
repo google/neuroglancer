@@ -1,7 +1,6 @@
 // @ts-check
 
 import eslint from "@eslint/js";
-// @ts-expect-error missing .d.ts file
 import importPlugin from "eslint-plugin-import";
 import tseslint from "typescript-eslint";
 

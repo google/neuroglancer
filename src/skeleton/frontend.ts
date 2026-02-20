@@ -194,6 +194,9 @@ void emitDefault() {
             builder.addVarying(`highp ${info.glslDataType}`, `vCustom${i}`);
             vertexMain += `vCustom${i} = readAttribute${i}(vertexIndex);\n`;
             builder.addFragmentCode(`#define ${info.name} vCustom${i}\n`);
+            builder.addFragmentCode(
+              `#define prop_${info.name}() vCustom${i}\n`,
+            );
           }
           builder.setVertexMain(vertexMain);
           addControlsToBuilder(shaderBuilderState, builder);
@@ -260,6 +263,9 @@ void emitDefault() {
             builder.addVarying(`highp ${info.glslDataType}`, `vCustom${i}`);
             vertexMain += `vCustom${i} = readAttribute${i}(vertexIndex);\n`;
             builder.addFragmentCode(`#define ${info.name} vCustom${i}\n`);
+            builder.addFragmentCode(
+              `#define prop_${info.name}() vCustom${i}\n`,
+            );
           }
           builder.setVertexMain(vertexMain);
           addControlsToBuilder(shaderBuilderState, builder);

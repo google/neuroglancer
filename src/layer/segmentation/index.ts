@@ -746,6 +746,15 @@ export class SegmentationUserLayer extends Base {
     ),
   );
 
+  readonly getSkeletonLayer = () => {
+    for (const layer of this.renderLayers) {
+      if (layer instanceof PerspectiveViewSkeletonLayer) {
+        return layer.base;
+      }
+    }
+    return undefined;
+  };
+
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>) {
     const updatedSegmentPropertyMaps: SegmentPropertyMap[] = [];
     const isGroupRoot =

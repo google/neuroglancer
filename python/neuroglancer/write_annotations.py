@@ -50,7 +50,7 @@ class Annotation(NamedTuple):
 _PROPERTY_DTYPES: dict[str, tuple[tuple[str] | tuple[str, tuple[int, ...]], int]] = {
     "uint8": (("|u1",), 1),
     "uint16": (("<u2",), 2),
-    "uint32": (("<u4",), 3),
+    "uint32": (("<u4",), 4),
     "int8": (("|i1",), 1),
     "int16": (("<i2",), 2),
     "int32": (("<i4",), 4),
@@ -59,11 +59,16 @@ _PROPERTY_DTYPES: dict[str, tuple[tuple[str] | tuple[str, tuple[int, ...]], int]
     "rgba": (("|u1", (4,)), 1),
 }
 
-AnnotationType = Literal["point", "line", "axis_aligned_bounding_box", "ellipsoid"]
+AnnotationType = Literal[
+    "point", "line", "polyline", "axis_aligned_bounding_box", "ellipsoid"
+]
 
 
 def _get_dtype_for_geometry(annotation_type: AnnotationType, rank: int):
     geometry_size = rank if annotation_type == "point" else 2 * rank
+    if annotation_type == "polyline":
+        num_points = [("num_points", "<u4")]
+        return [num_points]
     return [("geometry", "<f4", geometry_size)]
 
 
@@ -128,12 +133,14 @@ class AnnotationWriter:
         self.relationships = list(relationships)
         self.annotation_type = annotation_type
         self.properties = list(properties)
-        self.properties.sort(key=lambda p: -_PROPERTY_DTYPES[p.type][1])
+        self.properties_sorted = sorted(
+            self.properties, key=lambda p: -_PROPERTY_DTYPES[p.type][1]
+        )
         self.annotations = []
         self.rank = coordinate_space.rank
-        self.dtype = _get_dtype_for_geometry(
+        self._dtype = _get_dtype_for_geometry(
             annotation_type, coordinate_space.rank
-        ) + _get_dtype_for_properties(self.properties)
+        ) + _get_dtype_for_properties(self.properties_sorted)
         self.lower_bound = np.full(
             shape=(self.rank,), fill_value=float("inf"), dtype=np.float32
         )
@@ -141,6 +148,25 @@ class AnnotationWriter:
             shape=(self.rank,), fill_value=float("-inf"), dtype=np.float32
         )
         self.related_annotations = [{} for _ in self.relationships]
+
+    def get_dtype(self, annotation_size=None) -> np.dtype:
+        """
+        Prepares the dtype for the annotations.
+
+        Usually this is fixed, but for polylines we need to know the number of points
+        in the polyline to create the correct dtype.
+
+        Args:
+            annotation_size: The number of points in the polyline. Optional.
+        """
+        if self.annotation_type == "polyline" and annotation_size is not None:
+            geometry = ("geometry", "<f4", annotation_size)
+            num_points = ("num_points", "<u4")
+            return np.dtype(
+                [num_points, geometry]
+                + _get_dtype_for_properties(self.properties_sorted)
+            )
+        return self._dtype
 
     def add_point(self, point: Sequence[float], id: int | None = None, **kwargs):
         if self.annotation_type != "point":
@@ -182,6 +208,37 @@ class AnnotationWriter:
             )
         self._add_two_point_obj(point_a, point_b, id, **kwargs)
 
+    def add_ellipsoid(
+        self,
+        center: Sequence[float],
+        radii: Sequence[float],
+        id: int | None = None,
+        **kwargs,
+    ):
+        if self.annotation_type != "ellipsoid":
+            raise ValueError(
+                f"Expected annotation type ellipsoid, but received: {self.annotation_type}"
+            )
+        self._add_two_point_obj(center, radii, id, **kwargs)
+
+    def add_polyline(
+        self,
+        points: Sequence[Sequence[float]],
+        id: int | None = None,
+        **kwargs,
+    ):
+        if self.annotation_type != "polyline":
+            raise ValueError(
+                f"Expected annotation type polyline, but received: {self.annotation_type}"
+            )
+        if len(points) < 2:
+            raise ValueError("Expected at least two points for a polyline")
+        as_array = np.asarray(points)
+        self.lower_bound = np.minimum(self.lower_bound, as_array.min(axis=0))
+        self.upper_bound = np.maximum(self.upper_bound, as_array.max(axis=0))
+        geometry = np.concatenate(points)
+        self._add_obj(cast(Sequence[float], geometry), id, **kwargs)
+
     def _add_two_point_obj(
         self,
         point_a: Sequence[float],
@@ -205,10 +262,13 @@ class AnnotationWriter:
         self._add_obj(cast(Sequence[float], coords), id, **kwargs)
 
     def _add_obj(self, coords: Sequence[float], id: int | None, **kwargs):
-        encoded = np.zeros(shape=(), dtype=self.dtype)
+        # We need to save the number of points
+        encoded = np.zeros(shape=(), dtype=self.get_dtype(len(coords)))
+        if self.annotation_type == "polyline":
+            encoded[()]["num_points"] = len(coords) // self.rank  # type: ignore[call-overload]
         encoded[()]["geometry"] = coords  # type: ignore[call-overload]
 
-        for i, p in enumerate(self.properties):
+        for i, p in enumerate(self.properties_sorted):
             default_value = p.default
             if p.id in kwargs:
                 default_value = kwargs.pop(p.id)

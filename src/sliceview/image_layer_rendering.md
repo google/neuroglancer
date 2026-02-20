@@ -2,7 +2,7 @@
 
 The rendering of image layers is fully customizable by specifying GLSL fragment
 shader code for computing an RGBA output value for each pixel of the viewport
-based on the the single- or multi-channel values associated with the
+based on the single- or multi-channel values associated with the
 corresponding voxel.
 
 The fragment shader code can be entered interactively from the side panel for an image layer, or
@@ -195,11 +195,11 @@ The following parameters are supported:
 
 ### Retrieving voxel channel value
 
-The raw value for a given channel is obtained by calling the `getDataValue` or `getInterpolated` function:
+The raw value for a given channel is obtained by calling the `getDataValue` or `getInterpolatedDataValue` function:
 
 ```glsl
 T getDataValue(int channelIndex...);
-T getInterpolated(int channelIndex...);
+T getInterpolatedDataValue(int channelIndex...);
 ```
 
 The type `T` is `{u,}int{8,16,32}_t`, `uint64_t`, or `float` depending on the data source. The
@@ -208,7 +208,7 @@ backward compatibility, if there are no channel dimensions, a single unused `cha
 may still be specified.
 
 The `getDataValue` function returns the nearest value without interpolation, while the
-`getInterpolated` function uses trilinear interpolation.
+`getInterpolatedDataValue` function uses trilinear interpolation.
 
 Note that only `float` is a builtin GLSL type. The remaining types are defined as simple structs in order to avoid ambiguity regarding the nature of the value:
 
@@ -305,7 +305,25 @@ If a discontinuous color mapping is applied to a volume that is stored or retrie
 
 ### Examples
 
-The default shader, that displays the first channel as a grayscale intensity:
+The default shader, which displays the first channel as a grayscale intensity using the `invlerp` ui control for easier editing of contrast limits and channels:
+
+```glsl
+#uicontrol invlerp normalized
+void main () {
+  emitGrayscale(normalized());
+}
+```
+
+Trilinear interpolation on the data with an `invlerp` ui control, displaying the first channel as a grayscale intensity:
+
+```glsl
+#uicontrol invlerp normalized
+void main () {
+  emitGrayscale(normalized(getInterpolatedDataValue()));
+}
+```
+
+Display the first channel as a grayscale intensity using `toNormalized` to map the full data range to [0,1]:
 
 ```glsl
 void main () {

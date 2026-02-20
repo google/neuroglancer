@@ -42,14 +42,17 @@ export enum ChunkState {
 export const numChunkStates = 8;
 
 export enum ChunkPriorityTier {
+  // oxlint-disable-next-line @typescript-eslint/no-duplicate-enum-values
   FIRST_TIER = 0,
   // eslint-disable-next-line @typescript-eslint/no-duplicate-enum-values
   FIRST_ORDERED_TIER = 0,
   // eslint-disable-next-line @typescript-eslint/no-duplicate-enum-values
   VISIBLE = 0,
+  // oxlint-disable-next-line @typescript-eslint/no-duplicate-enum-values
   PREFETCH = 1,
   // eslint-disable-next-line @typescript-eslint/no-duplicate-enum-values
   LAST_ORDERED_TIER = 1,
+  // oxlint-disable-next-line @typescript-eslint/no-duplicate-enum-values
   RECENT = 2,
   // eslint-disable-next-line @typescript-eslint/no-duplicate-enum-values
   LAST_TIER = 2,
