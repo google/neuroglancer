@@ -187,7 +187,7 @@ void main() {
 
 
 def test_interpolation(webdriver):
-    data = np.array([[0, 50], [50, 100]], dtype=np.uint32)
+    data = np.array([[0, 22], [50, 100]], dtype=np.uint32)
 
     with webdriver.viewer.txn() as s:
         s.dimensions = neuroglancer.CoordinateSpace(
@@ -211,7 +211,7 @@ void main() {
 """,
             shader_controls={
                 "normalized": {
-                    "range": [0, 100],
+                    "range": [0, 255],
                 },
             },
         )
@@ -221,13 +221,13 @@ void main() {
 
     webdriver.sync()
     screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
-    # Repeat 0 for top left 5x5, 127 for top right 5x5, 127 for bottom left 5x5, and 255 for bottom right 5x5
+    # Repeat 0 for top left 5x5, 50 for top right 5x5, 22 for bottom left 5x5, and 100 for bottom right 5x5
     expected_pixels = np.block(
         [
-            [np.zeros((5, 5), dtype=np.uint8), np.full((5, 5), 127, dtype=np.uint8)],
+            [np.zeros((5, 5), dtype=np.uint8), np.full((5, 5), 50, dtype=np.uint8)],
             [
-                np.full((5, 5), 127, dtype=np.uint8),
-                np.full((5, 5), 255, dtype=np.uint8),
+                np.full((5, 5), 22, dtype=np.uint8),
+                np.full((5, 5), 100, dtype=np.uint8),
             ],
         ]
     )
@@ -245,6 +245,6 @@ void main() {
 
     webdriver.sync()
     screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
-    # 0 + 50 + 50 + 100 / 4 = 50 -> 127.5 rounded down to 127
-    expected_pixels = np.tile([127, 127, 127, 255], (10, 10, 1)).astype(np.uint8)
+    # Interpolates as (0 + 22 + 50 + 100) / 4 = 43
+    expected_pixels = np.tile([43, 43, 43, 255], (10, 10, 1)).astype(np.uint8)
     np.testing.assert_array_equal(screenshot.image_pixels, expected_pixels)
