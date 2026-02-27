@@ -595,7 +595,7 @@ export class SegmentationUserLayer extends Base {
 
   segmentQueryFocusTime = new WatchableValue<number>(Number.NEGATIVE_INFINITY);
 
-  selectSegment = (id: bigint, pin: boolean | "toggle") => {
+  selectSegment = (id: bigint, pin: boolean | "toggle" | "force-unpin") => {
     this.manager.root.selectionState.captureSingleLayerState(
       this,
       (state) => {

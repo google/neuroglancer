@@ -966,6 +966,11 @@ export class AnnotationLayerView extends Tab {
       this.layer.selectAnnotation(state, annotation.id, true);
     });
 
+    element.addEventListener("action:unpin-selected-position", (event) => {
+      event.stopPropagation();
+      this.layer.selectAnnotation(state, annotation.id, "force-unpin");
+    });
+
     element.addEventListener("action:move-to-annotation", (event) => {
       event.stopPropagation();
       event.preventDefault();
@@ -2420,7 +2425,7 @@ export function UserLayerWithAnnotationsMixin<
     selectAnnotation(
       annotationLayer: Borrowed<AnnotationLayerState>,
       id: string,
-      pin: boolean | "toggle",
+      pin: boolean | "toggle" | "force-unpin",
     ) {
       this.manager.root.selectionState.captureSingleLayerState(
         this,
