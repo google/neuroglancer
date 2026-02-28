@@ -68,7 +68,7 @@
     "eslint-plugin-oxlint": "^1.26.0",
     "express": "^5.1.0",
     "fzstd": "^0.1.1",
-    "glob": "^11.0.3",
+    "glob": "^12.0.0",
     "http-server": "^14.1.1",
     "jsdom": "^27.1.0",
     "msw": "<2.8.0",
@@ -94,7 +94,7 @@
     "msgpackr": "^1.11.5",
     "nifti-reader-js": "^0.8.0",
     "numcodecs": "^0.3.2",
-    "valibot": "^1.1.0"
+    "valibot": "^1.2.0"
   },
   "overrides": {
     "@puppeteer/browsers": ">=2",
