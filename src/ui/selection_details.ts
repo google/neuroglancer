@@ -78,8 +78,9 @@ export class SelectionDetailsPanel extends SidePanel {
           // Note: \ufe0e forces text display, as otherwise the pin icon may as an emoji with
           // color.
           text: "📌\ufe0e",
-          enableTitle: "Pin selection",
-          disableTitle: "Unpin selection",
+          enableTitle: "Pin selection\nctrl+rightclick to select and pin",
+          disableTitle:
+            "Unpin selection\nctrl+shift+rightclick to select on hover",
         }),
       ).element,
     );
