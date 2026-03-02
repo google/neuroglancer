@@ -174,6 +174,7 @@ export const VIEWER_TOP_ROW_CONFIG_OPTIONS = [
   "showLayerSidePanelButton",
   "showLocation",
   "showAnnotationToolStatus",
+  "showCopyUrlButton",
 ] as const;
 
 export const VIEWER_UI_CONTROL_CONFIG_OPTIONS = [
@@ -893,6 +894,12 @@ export class Viewer extends RefCounted implements ViewerState {
           setClipboard(url.href);
         },
       });
+      this.registerDisposer(
+        new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showCopyUrlButton,
+          button,
+        ),
+      );
       topRow.appendChild(button);
     }
     {
