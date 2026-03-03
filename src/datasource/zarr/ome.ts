@@ -69,7 +69,6 @@ const SUPPORTED_OME_MULTISCALE_VERSIONS = new Set([
   "0.5",
   "0.6.dev1",
   "0.6",
-  "0.6-dev2",
 ]);
 
 const OME_UNITS = new Map<string, { unit: string; scale: number }>([
