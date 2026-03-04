@@ -21,7 +21,7 @@ from neuroglancer import viewer_state
 
 
 def test_coordinate_space_from_json():
-    # Test that CoordinateSpace can be initialized from both object and array representations and that properties are consistent
+    """Test that CoordinateSpace can be initialized from both object and array representations and that properties are consistent."""
     object_representation = {
         "x": [4e-9, "m"],
         "y": [5e-9, "m"],
@@ -64,7 +64,7 @@ def test_coordinate_space_from_json():
 
 
 def test_coordinate_space_from_split():
-    # Test that CoordinateSpace can be initialized from split lists of names, scales, and units and that to_json produces the correct array representation
+    """Test that CoordinateSpace can be initialized from split lists of names, scales, and units and that to_json produces the correct array representation."""
     x = viewer_state.CoordinateSpace(
         names=["x", "y", "z", "t"], scales=[4, 5, 6, 2], units=["nm", "nm", "nm", "s"]
     )
@@ -74,6 +74,43 @@ def test_coordinate_space_from_split():
         {"name": "z", "scale": [6e-9, "m"]},
         {"name": "t", "scale": [2, "s"]},
     ]
+
+
+def test_coordinate_space_supports_validation():
+    """Test that CoordinateSpace.supports_validation enables dict/list conversion in wrapped_property setters."""
+    state = viewer_state.ViewerState()
+
+    # Test 1: Setting dimensions with dict format
+    # without the proper validator, this would raise TypeError
+    dict_format = {
+        "x": [4e-9, "m"],
+        "y": [5e-9, "m"],
+        "z": [6e-9, "m"],
+    }
+    state.dimensions = dict_format
+    assert isinstance(state.dimensions, viewer_state.CoordinateSpace)
+    assert state.dimensions.names == ("x", "y", "z")
+    np.testing.assert_array_equal(state.dimensions.scales, [4e-9, 5e-9, 6e-9])
+
+    # Test 2: Setting dimensions with list format
+    list_format = [
+        {"name": "a", "scale": [1, "m"]},
+        {"name": "b", "scale": [2, "m"]},
+    ]
+    state.dimensions = list_format
+
+    assert isinstance(state.dimensions, viewer_state.CoordinateSpace)
+    assert state.dimensions.names == ("a", "b")
+    np.testing.assert_array_equal(state.dimensions.scales, [1, 2])
+
+    # Test 3: Setting dimensions with CoordinateSpace instance
+    coord_space = viewer_state.CoordinateSpace(
+        names=["x", "y"], scales=[3, 4], units="nm"
+    )
+    state.dimensions = coord_space
+    assert isinstance(state.dimensions, viewer_state.CoordinateSpace)
+    assert state.dimensions.names == ("x", "y")
+    np.testing.assert_array_equal(state.dimensions.scales, [3e-9, 4e-9])
 
 
 def test_layers():
