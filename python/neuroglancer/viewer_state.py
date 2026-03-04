@@ -1867,61 +1867,6 @@ class DataSelectionState(SidePanelLocation):
     layers = wrapped_property("layers", LayerSelectedValues)
 
 
-def convert_legacy_coordinate_spaces_in_viewer_state(json_data):
-    """Converts legacy coordinate space formats in a viewer state JSON to the current format.
-
-    This is a patch to maintain backwards compatibility with older viewer state JSON that used dicts to represent coordinate spaces instead of arrays.
-
-    It converts the "dimensions" property on the viewer state, as well as any "outputDimensions" or "inputDimensions" properties in layer source transforms and "localDimesions" on layers from dicts to arrays if they are not already arrays.
-
-    If any other CoordinateSpace properties are added in the future, they should also be patched here to maintain backwards compatibility.
-    """
-    # Patch to convert dimensions on the viewer state
-    if "dimensions" in json_data and not isinstance(json_data["dimensions"], list):
-        json_data["dimensions"] = CoordinateSpace(json_data["dimensions"]).to_json()
-
-    layers = json_data.get("layers", [])
-    if isinstance(layers, collections.abc.Mapping):
-        layers = layers.values()
-    for layer in layers:
-        sources = layer.get("source", [])
-        # Neuroglancer allows source to be a single object instead of a list if there is only one source, so we need to handle both cases
-        # A single string is also allowed, but we can skip that case since it doesn't have any transforms that need to be patched
-        if isinstance(sources, str):
-            continue
-        if isinstance(sources, collections.abc.Mapping):
-            sources = [sources]
-
-        for source in sources:
-            if not isinstance(source, collections.abc.Mapping):
-                continue
-            transform = source.get("transform", None)
-            if not transform:
-                continue
-
-            # Patch to convert outputDimensions and inputDimensions in layer source transforms
-            output_dims = transform.get("outputDimensions", None)
-            if output_dims is not None and not isinstance(
-                output_dims, collections.abc.Sequence
-            ):
-                transform["outputDimensions"] = CoordinateSpace(output_dims).to_json()
-
-            input_dims = transform.get("inputDimensions", None)
-            if input_dims is not None and not isinstance(
-                input_dims, collections.abc.Sequence
-            ):
-                transform["inputDimensions"] = CoordinateSpace(input_dims).to_json()
-
-        # Patch to convert localDimensions on the layer itself
-        local_dims = layer.get("localDimensions", None)
-        if local_dims is not None and not isinstance(
-            local_dims, collections.abc.Sequence
-        ):
-            layer["localDimensions"] = CoordinateSpace(local_dims).to_json()
-
-    return json_data
-
-
 @export
 class ViewerState(JsonObjectWrapper):
     """Complete Neuroglancer viewer state.
@@ -2019,11 +1964,6 @@ class ViewerState(JsonObjectWrapper):
         "toolPalettes", typed_map(key_type=str, value_type=ToolPalette)
     )
     selection = wrapped_property("selection", DataSelectionState)
-
-    def __init__(self, json_data=None, _readonly=False, **kwargs):
-        if isinstance(json_data, dict) and not _readonly:
-            json_data = convert_legacy_coordinate_spaces_in_viewer_state(json_data)
-        super().__init__(json_data, _readonly=_readonly, **kwargs)
 
     @staticmethod
     def interpolate(a, b, t):

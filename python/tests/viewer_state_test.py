@@ -21,39 +21,50 @@ from neuroglancer import viewer_state
 
 
 def test_coordinate_space_from_json():
-    x = viewer_state.CoordinateSpace(
-        {
-            "x": [4e-9, "m"],
-            "y": [5e-9, "m"],
-            "z": [6e-9, "m"],
-            "t": [2, "s"],
-        }
-    )
-    assert x.names == ("x", "y", "z", "t")
-    np.testing.assert_array_equal(x.scales, [4e-9, 5e-9, 6e-9, 2])
-    assert x.units == ("m", "m", "m", "s")
-    assert x.rank == 4
-    assert x[0] == viewer_state.DimensionScale(4e-9, "m")
-    assert x[0:2] == [
-        viewer_state.DimensionScale(4e-9, "m"),
-        viewer_state.DimensionScale(5e-9, "m"),
-    ]
-    assert x["x"] == viewer_state.DimensionScale(4e-9, "m")
-    assert x[1] == viewer_state.DimensionScale(5e-9, "m")
-    assert x["y"] == viewer_state.DimensionScale(5e-9, "m")
-    assert x[2] == viewer_state.DimensionScale(6e-9, "m")
-    assert x["z"] == viewer_state.DimensionScale(6e-9, "m")
-    assert x[3] == viewer_state.DimensionScale(2, "s")
-    assert x["t"] == viewer_state.DimensionScale(2, "s")
-    assert x.to_json() == [
+    # Test that CoordinateSpace can be initialized from both object and array representations and that properties are consistent
+    object_representation = {
+        "x": [4e-9, "m"],
+        "y": [5e-9, "m"],
+        "z": [6e-9, "m"],
+        "t": [2, "s"],
+    }
+    object_representation_copy = deepcopy(object_representation)
+    array_representation = [
         {"name": "x", "scale": [4e-9, "m"]},
         {"name": "y", "scale": [5e-9, "m"]},
         {"name": "z", "scale": [6e-9, "m"]},
         {"name": "t", "scale": [2, "s"]},
     ]
+    array_representation_copy = deepcopy(array_representation)
+    coord_spaces = [
+        viewer_state.CoordinateSpace(object_representation),
+        viewer_state.CoordinateSpace(array_representation),
+    ]
+    for x in coord_spaces:
+        assert x.names == ("x", "y", "z", "t")
+        np.testing.assert_array_equal(x.scales, [4e-9, 5e-9, 6e-9, 2])
+        assert x.units == ("m", "m", "m", "s")
+        assert x.rank == 4
+        assert x[0] == viewer_state.DimensionScale(4e-9, "m")
+        assert x[0:2] == [
+            viewer_state.DimensionScale(4e-9, "m"),
+            viewer_state.DimensionScale(5e-9, "m"),
+        ]
+        assert x["x"] == viewer_state.DimensionScale(4e-9, "m")
+        assert x[1] == viewer_state.DimensionScale(5e-9, "m")
+        assert x["y"] == viewer_state.DimensionScale(5e-9, "m")
+        assert x[2] == viewer_state.DimensionScale(6e-9, "m")
+        assert x["z"] == viewer_state.DimensionScale(6e-9, "m")
+        assert x[3] == viewer_state.DimensionScale(2, "s")
+        assert x["t"] == viewer_state.DimensionScale(2, "s")
+        assert x.to_json() == array_representation
+    # Test that the input json was not mutated by to_json
+    assert object_representation == object_representation_copy
+    assert array_representation == array_representation_copy
 
 
 def test_coordinate_space_from_split():
+    # Test that CoordinateSpace can be initialized from split lists of names, scales, and units and that to_json produces the correct array representation
     x = viewer_state.CoordinateSpace(
         names=["x", "y", "z", "t"], scales=[4, 5, 6, 2], units=["nm", "nm", "nm", "s"]
     )
@@ -118,151 +129,3 @@ def test_tool():
 
 def test_annotation():
     viewer_state.PointAnnotation(point=[1])
-
-
-def test_converts_output_dimensions_to_array_format():
-    """Test that outputDimensions are converted from object to array format to preserve ordering."""
-
-    def _get_dimension_names(dimensions):
-        """Helper to extract dimension names from a list of dimension dicts."""
-        return [dim["name"] for dim in dimensions]
-
-    def _find_dimension(dimensions, name):
-        """Helper to find a dimension by name in a list of dimension dicts."""
-        return next((d for d in dimensions if d["name"] == name), None)
-
-    source_info = {
-        "url": "s3://my.zarr",
-        "transform": {
-            "outputDimensions": {
-                "c^": {
-                    "labels": ["Channel:0", "Channel:1", "Channel:2"],
-                    "coordinates": [0, 1, 2],
-                },
-                "z": [0.0001, "m"],
-                "y": [3.5e-07, "m"],
-                "x": [3.5e-07, "m"],
-            },
-            "inputDimensions": {
-                "x": [1.5e-7, "m"],
-                "y": [3.5e-7, "m"],
-                "z": [0.0001, "m"],
-                "c^": [1, ""],
-            },
-        },
-    }
-
-    full_source_as_array = [deepcopy(source_info), "test_string_for_simple_source"]
-
-    # Input state with dimensions in legacy object (dict) format
-    state_with_object_dimensions_base = {
-        "dimensions": {"x": [3.5e-7, "m"], "y": [3.5e-7, "m"], "z": [0.0001, "m"]},
-        "layers": [
-            {
-                "name": "abc",
-                "type": "image",
-                "localDimensions": {"c'": [1, ""]},
-            }
-        ],
-        "layout": "xy",
-    }
-
-    # Both a single source as an object and multiple sources as an array should be converted correctly
-    for source in [source_info, full_source_as_array]:
-        state_with_object_dimensions = dict(deepcopy(state_with_object_dimensions_base))
-        state_with_object_dimensions["layers"][0]["source"] = source
-
-        # Init ViewerState and get json to change object dimensions to array format
-        viewer_state_obj = viewer_state.ViewerState(state_with_object_dimensions)
-        converted_state = viewer_state_obj.to_json()
-
-        # Verify root-level dimensions are converted to array
-        root_dims = converted_state["dimensions"]
-        assert isinstance(root_dims, list)
-        assert len(root_dims) == 3
-        assert _get_dimension_names(root_dims) == ["x", "y", "z"]
-
-        if isinstance(source, list):
-            transform = converted_state["layers"][0]["source"][0]["transform"]
-            second_source = converted_state["layers"][0]["source"][1]
-            assert isinstance(second_source, str)
-            assert second_source == "test_string_for_simple_source"
-        else:
-            transform = converted_state["layers"][0]["source"]["transform"]
-
-        # Verify layer outputDimensions are converted and preserve ordering (c^, z, y, x)
-        output_dims = transform["outputDimensions"]
-        assert isinstance(output_dims, list)
-        assert len(output_dims) == 4
-        assert _get_dimension_names(output_dims) == ["c^", "z", "y", "x"]
-
-        # Verify coordinate array dimension properties
-        channel_dim = _find_dimension(output_dims, "c^")
-        assert channel_dim is not None
-        assert channel_dim["coordinates"] == [0, 1, 2]
-        assert channel_dim["labels"] == ["Channel:0", "Channel:1", "Channel:2"]
-
-        # Verify layer inputDimensions are converted and preserve ordering (x, y, z, c^)
-        input_dims = transform["inputDimensions"]
-        assert isinstance(input_dims, list)
-        assert len(input_dims) == 4
-        assert _get_dimension_names(input_dims) == ["x", "y", "z", "c^"]
-
-        # Verify different scales for same dimension name in input vs output
-        output_x = _find_dimension(output_dims, "x")
-        input_x = _find_dimension(input_dims, "x")
-        assert output_x is not None
-        assert output_x["scale"] == [3.5e-7, "m"]
-        assert input_x is not None
-        assert input_x["scale"] == [1.5e-7, "m"]
-
-        # Verify layer localDimensions are converted
-        local_dims = converted_state["layers"][0]["localDimensions"]
-        assert isinstance(local_dims, list)
-        assert len(local_dims) == 1
-        assert local_dims[0]["name"] == "c'"
-        assert local_dims[0]["scale"] == [1, ""]
-
-        # Initialize a new ViewerState with the converted json to ensure it can be parsed back correctly
-        viewer_state_converted = viewer_state.ViewerState(converted_state)
-        assert viewer_state_converted.dimensions.names == ("x", "y", "z")
-
-
-def test_viewer_state_to_json_does_not_mutate_readonly_legacy_dimensions():
-    # Legacy dimensions are represented as a dict mapping names to [scale, unit].
-    json_data = {
-        "dimensions": {
-            "x": [4e-9, "m"],
-            "y": [5e-9, "m"],
-            "z": [6e-9, "m"],
-        }
-    }
-    state = viewer_state.ViewerState(json_data, _readonly=True)
-    original_dimensions = deepcopy(json_data["dimensions"])
-    new_state_json = state.to_json()
-
-    # The original json_data and new state should still contain the legacy dict-style dimensions.
-    assert isinstance(json_data["dimensions"], dict)
-    assert json_data["dimensions"] == original_dimensions
-    assert new_state_json["dimensions"] == original_dimensions
-
-
-def test_convert_state_with_legacy_dimensions_and_layer_mapping():
-    # Test that a state with legacy dimensions and layer mapping can be converted to json without mutating the original dimensions.
-    json_data = {
-        "layers": {
-            "abc": {
-                "type": "image",
-                "localDimensions": {"c'": [1, ""]},
-            }
-        },
-    }
-    state = viewer_state.ViewerState(json_data)
-    converted_state = state.to_json()
-
-    # Verify layer localDimensions are converted
-    local_dims = converted_state["layers"]["abc"]["localDimensions"]
-    assert isinstance(local_dims, list)
-    assert len(local_dims) == 1
-    assert local_dims[0]["name"] == "c'"
-    assert local_dims[0]["scale"] == [1, ""]
