@@ -336,12 +336,10 @@ class CoordinateSpace:
     def supports_validation(value):
         """Validator function for CoordinateSpace in wrapped_property contexts.
 
-        This allows CoordinateSpace to accept:
+        This allows CoordinateSpace to validate:
         - CoordinateSpace instances (returns as-is)
         - dict format: {"x": [scale, "unit"], "y": [scale, "unit"], ...}
         - list format: [{"name": "x", "scale": [scale, "unit"]}, ...]
-
-        Without mutation of the input JSON.
         """
         if isinstance(value, CoordinateSpace):
             return value
