@@ -76,5 +76,21 @@
       "version": "0.4",
       "@type": "ngff:Image"
     }
-  ]
+  ],
+  "omero": {
+    "channels": [
+      {
+        "label": "channelA",
+        "color": "0000FF",
+        "active": true,
+        "window": { "min": 0, "max": 65535, "start": 0, "end": 1000 }
+      },
+      {
+        "label": "channelB",
+        "color": "00FF00",
+        "active": false,
+        "window": { "min": 0, "max": 65535, "start": 100, "end": 5000 }
+      }
+    ]
+  }
 }
