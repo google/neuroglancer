@@ -340,6 +340,15 @@ export class ImageUserLayer extends Base {
         ),
     );
   }
+
+  private volumeRenderingDepthSamplesTargetToJSON() {
+    const isVolumeRenderingActive =
+      this.volumeRenderingMode.value !== VolumeRenderingModes.OFF;
+    return isVolumeRenderingActive
+      ? this.volumeRenderingDepthSamplesTarget.value
+      : this.volumeRenderingDepthSamplesTarget.toJSON();
+  }
+
   toJSON() {
     const x = super.toJSON();
     x[OPACITY_JSON_KEY] = this.opacity.toJSON();
@@ -353,7 +362,7 @@ export class ImageUserLayer extends Base {
     x[VOLUME_RENDERING_JSON_KEY] = this.volumeRenderingMode.toJSON();
     x[VOLUME_RENDERING_GAIN_JSON_KEY] = this.volumeRenderingGain.toJSON();
     x[VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY] =
-      this.volumeRenderingDepthSamplesTarget.toJSON();
+      this.volumeRenderingDepthSamplesTargetToJSON();
     return x;
   }
 
