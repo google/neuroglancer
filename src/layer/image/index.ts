@@ -34,7 +34,6 @@ import {
   UserLayer,
 } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
-import { Overlay } from "#src/overlay.js";
 import { getChannelSpace } from "#src/render_coordinate_transform.js";
 import {
   RenderScaleHistogram,
@@ -544,13 +543,13 @@ class RenderingOptionsTab extends Tab {
     element.appendChild(
       makeShaderCodeWidgetTopRow(
         this.layer,
-        this.codeWidget,
-        ShaderCodeOverlay,
+        this.codeWidget.element,
+        makeShaderCodeWidget,
         {
           title: "Documentation on image layer rendering",
           href: "https://github.com/google/neuroglancer/blob/master/src/sliceview/image_layer_rendering.md",
+          type: "Image",
         },
-        "neuroglancer-image-dropdown-top-row",
       ),
     );
     element.appendChild(
@@ -573,17 +572,6 @@ class RenderingOptionsTab extends Tab {
         ),
       ).element,
     );
-  }
-}
-
-class ShaderCodeOverlay extends Overlay {
-  codeWidget: ShaderCodeWidget;
-  constructor(public layer: ImageUserLayer) {
-    super();
-    this.codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
-    this.content.classList.add("neuroglancer-image-layer-shader-overlay");
-    this.content.appendChild(this.codeWidget.element);
-    this.codeWidget.textEditor.refresh();
   }
 }
 
