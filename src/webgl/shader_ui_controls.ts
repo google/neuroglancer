@@ -111,6 +111,13 @@ export interface ShaderCheckboxControl {
   default: boolean;
 }
 
+export interface ShaderDropdownControl {
+  type: "dropdown";
+  valueType: "uint";
+  options: string[];
+  default: number;
+}
+
 export interface ShaderTransferFunctionControl {
   type: "transferFunction";
   dataType: DataType;
@@ -123,6 +130,7 @@ export type ShaderUiControl =
   | ShaderImageInvlerpControl
   | ShaderPropertyInvlerpControl
   | ShaderCheckboxControl
+  | ShaderDropdownControl
   | ShaderTransferFunctionControl;
 
 export interface ShaderControlParseError {
@@ -371,6 +379,63 @@ function parseCheckboxDirective(
       valueType,
       default: defaultValue,
     } as ShaderCheckboxControl,
+    errors: undefined,
+  };
+}
+
+function parseDropdownDirective(
+  valueType: string,
+  parameters: DirectiveParameters,
+): DirectiveParseResult {
+  const errors: string[] = [];
+  if (valueType !== "uint") {
+    errors.push("type must be uint");
+  }
+  let options: string[] | undefined;
+  let defaultValue = 0;
+  for (const [key, value] of parameters) {
+    if (key === "options") {
+      if (
+        !Array.isArray(value) ||
+        value.length === 0 ||
+        !value.every((v) => typeof v === "string")
+      ) {
+        errors.push(
+          "Expected options argument to be a non-empty array of strings",
+        );
+      } else {
+        options = value as string[];
+      }
+    } else if (key === "default") {
+      if (!Number.isInteger(value) || (value as number) < 0) {
+        errors.push("Expected default argument to be a non-negative integer");
+      } else {
+        defaultValue = value as number;
+      }
+    } else {
+      errors.push(`Invalid parameter: ${key}`);
+    }
+  }
+  if (!parameters.has("options")) {
+    errors.push("options must be specified");
+  }
+  if (options !== undefined && defaultValue >= options.length) {
+    errors.push(
+      `default index ${defaultValue} is out of range [0, ${
+        options.length - 1
+      }]`,
+    );
+  }
+  if (errors.length > 0) {
+    return { errors };
+  }
+  return {
+    control: {
+      type: "dropdown",
+      valueType: "uint",
+      options: options!,
+      default: defaultValue,
+    } as ShaderDropdownControl,
     errors: undefined,
   };
 }
@@ -686,6 +751,7 @@ const controlParsers = new Map<
   ["color", parseColorDirective],
   ["invlerp", parseInvlerpDirective],
   ["checkbox", parseCheckboxDirective],
+  ["dropdown", parseDropdownDirective],
   ["transferFunction", parseTransferFunctionDirective],
 ]);
 
@@ -1259,6 +1325,21 @@ function getControlTrackable(control: ShaderUiControl): {
         trackable: new TrackableBoolean(control.default),
         getBuilderValue: (value) => ({ value }),
       };
+    case "dropdown": {
+      const { options } = control;
+      return {
+        trackable: new TrackableValue<number>(control.default, (x) => {
+          const v = verifyInt(x);
+          if (v < 0 || v >= options.length) {
+            throw new Error(
+              `${v} is outside valid range [0, ${options.length - 1}]`,
+            );
+          }
+          return v;
+        }),
+        getBuilderValue: () => null,
+      };
+    }
     case "transferFunction":
       return {
         trackable: new TrackableTransferFunctionParameters(
@@ -1648,6 +1729,9 @@ function setControlInShader(
     }
     case "checkbox":
       // Value is hard-coded in shader.
+      break;
+    case "dropdown":
+      gl.uniform1ui(uniform, value);
       break;
     case "transferFunction":
       enableTransferFunctionShader(
