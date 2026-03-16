@@ -121,7 +121,10 @@ export function parseDimensionUnit(obj: unknown): {
   }
   const unitInfo = UNITS.get(derivedUnit);
   if (unitInfo === undefined) {
-    throw new Error(`Unsupported unit: ${JSON.stringify(derivedUnit)}`);
+    console.warn(
+      `Unsupported Zarr unit: ${JSON.stringify(derivedUnit)}, treating as unitless`,
+    );
+    return { unit: "", scale: scale };
   }
   return { unit: unitInfo.unit, scale: scale * unitInfo.scale };
 }

@@ -181,7 +181,10 @@ function parseOmeAxis(axis: unknown): Axis {
     (unit) => {
       const x = OME_UNITS.get(unit);
       if (x === undefined) {
-        throw new Error(`Unsupported unit: ${JSON.stringify(unit)}`);
+        console.warn(
+          `Unsupported OME-Zarr unit: ${JSON.stringify(unit)}, treating as unitless`,
+        );
+        return { unit: "", scale: 1 };
       }
       return x;
     },
