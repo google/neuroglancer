@@ -39,9 +39,9 @@ import {
 import { channelInvlerpLayerControl } from "#src/widget/layer_control_channel_invlerp.js";
 import { checkboxLayerControl } from "#src/widget/layer_control_checkbox.js";
 import { colorLayerControl } from "#src/widget/layer_control_color.js";
-import { dropdownLayerControl } from "#src/widget/layer_control_dropdown.js";
 import { propertyInvlerpLayerControl } from "#src/widget/layer_control_property_invlerp.js";
 import { rangeLayerControl } from "#src/widget/layer_control_range.js";
+import { selectLayerControl } from "#src/widget/layer_control_select.js";
 import { Tab } from "#src/widget/tab_view.js";
 import { transferFunctionLayerControl } from "#src/widget/transfer_function.js";
 
@@ -74,8 +74,8 @@ function getShaderLayerControlFactory<LayerType extends UserLayer>(
       return colorLayerControl(() => controlState.trackable);
     case "checkbox":
       return checkboxLayerControl(() => controlState.trackable);
-    case "dropdown":
-      return dropdownLayerControl(() => ({
+    case "select":
+      return selectLayerControl(() => ({
         value: controlState.trackable,
         options: control.options,
       }));
