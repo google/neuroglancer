@@ -604,7 +604,7 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensional
       gl,
       shader,
       this.displayState.shaderControlState,
-      parameters.parseResult.controls,
+      parameters.parseResult,
     );
 
     const { pickIDs } = renderContext;

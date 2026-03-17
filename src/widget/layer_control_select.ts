@@ -2,9 +2,9 @@ import type { UserLayer } from "#src/layer/index.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import type { LayerControlFactory } from "#src/widget/layer_control.js";
 
-export function dropdownLayerControl<LayerType extends UserLayer>(
+export function selectLayerControl<LayerType extends UserLayer>(
   getter: (layer: LayerType) => {
-    value: WatchableValueInterface<number>;
+    value: WatchableValueInterface<string>;
     options: string[];
   },
 ): LayerControlFactory<LayerType, HTMLSelectElement> {
@@ -12,20 +12,20 @@ export function dropdownLayerControl<LayerType extends UserLayer>(
     makeControl: (layer, context) => {
       const { value, options } = getter(layer);
       const select = document.createElement("select");
-      for (const [i, label] of options.entries()) {
+      for (const label of options) {
         const opt = document.createElement("option");
-        opt.value = String(i);
+        opt.value = label;
         opt.textContent = label;
         select.appendChild(opt);
       }
-      select.value = String(value.value);
+      select.value = value.value;
       context.registerDisposer(
         value.changed.add(() => {
-          select.value = String(value.value);
+          select.value = value.value;
         }),
       );
       select.addEventListener("change", () => {
-        value.value = parseInt(select.value, 10);
+        value.value = select.value;
       });
       return { control: select, controlElement: select };
     },
