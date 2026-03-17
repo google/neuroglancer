@@ -3,7 +3,7 @@
   "channelMetadata": {
     "channels": [
       {
-        "active": true,
+        "active": undefined,
         "coefficient": undefined,
         "color": Float32Array [
           0,
@@ -21,7 +21,7 @@
         ],
       },
       {
-        "active": false,
+        "active": undefined,
         "coefficient": undefined,
         "color": Float32Array [
           0,
