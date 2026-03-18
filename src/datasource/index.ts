@@ -56,6 +56,7 @@ import {
 } from "#src/util/completion.js";
 import { RefCounted } from "#src/util/disposable.js";
 import type { vec3 } from "#src/util/geom.js";
+import type { MessageList } from "#src/util/message_list.js";
 import { type ProgressOptions } from "#src/util/progress_listener.js";
 import type { Trackable } from "#src/util/trackable.js";
 
@@ -103,6 +104,7 @@ export interface GetDataSourceOptionsBase extends Partial<ProgressOptions> {
   transform: CoordinateTransformSpecification | undefined;
   globalCoordinateSpace: WatchableValueInterface<CoordinateSpace>;
   state?: any;
+  messages?: MessageList;
 }
 
 export interface GetDataSourceOptions extends GetDataSourceOptionsBase {
@@ -196,6 +198,7 @@ export interface DataSource {
   state?: Trackable;
   canonicalUrl?: string;
   channelMetadata?: ChannelMetadata;
+  warnings?: readonly string[];
 }
 
 export interface DataSourceRedirect {
@@ -270,6 +273,7 @@ export interface GetKvStoreBasedDataSourceOptions
   kvStoreUrl: string;
   url: UrlWithParsedScheme;
   state?: any;
+  messages?: MessageList;
 }
 
 const schemePattern = /^(?:([a-zA-Z][a-zA-Z0-9-+_]*):\/\/)?(.*)$/;
@@ -363,6 +367,7 @@ export class DataSourceRegistry extends RefCounted {
         signal: options.signal,
         progressListener: options.progressListener,
         state: options.state,
+        messages: options.messages,
       });
     }
   }

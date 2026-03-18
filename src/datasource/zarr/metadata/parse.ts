@@ -37,6 +37,8 @@ import {
   verifyOptionalObjectProperty,
   verifyString,
 } from "#src/util/json.js";
+import type { MessageList } from "#src/util/message_list.js";
+import { MessageSeverity } from "#src/util/message_list.js";
 import { parseNumpyDtype } from "#src/util/numpy_dtype.js";
 import { allSiPrefixes } from "#src/util/si_units.js";
 
@@ -95,7 +97,10 @@ for (const unit of ["meter", "second"]) {
   }
 }
 
-export function parseDimensionUnit(obj: unknown): {
+export function parseDimensionUnit(
+  obj: unknown,
+  messages?: MessageList,
+): {
   scale: number;
   unit: string;
 } {
@@ -121,9 +126,10 @@ export function parseDimensionUnit(obj: unknown): {
   }
   const unitInfo = UNITS.get(derivedUnit);
   if (unitInfo === undefined) {
-    console.warn(
-      `Unsupported Zarr unit: ${JSON.stringify(derivedUnit)}, treating as unitless`,
-    );
+    messages?.addMessage({
+      severity: MessageSeverity.warning,
+      message: `Unsupported Zarr unit: ${JSON.stringify(derivedUnit)}, treating as unitless`,
+    });
     return { unit: "", scale: scale };
   }
   return { unit: unitInfo.unit, scale: scale * unitInfo.scale };

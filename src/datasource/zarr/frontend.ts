@@ -84,6 +84,7 @@ import {
   verifyOptionalObjectProperty,
 } from "#src/util/json.js";
 import * as matrix from "#src/util/matrix.js";
+import { MessageList, MessageSeverity } from "#src/util/message_list.js";
 import type { ProgressOptions } from "#src/util/progress_listener.js";
 import { ProgressSpan } from "#src/util/progress_listener.js";
 
@@ -263,12 +264,15 @@ function getNormalizedDimensionNames(
 function getMultiscaleInfoForSingleArray(
   url: string,
   metadata: ArrayMetadata,
+  messages?: MessageList,
 ): ZarrMultiscaleInfo {
   const names = getNormalizedDimensionNames(
     metadata.dimensionNames,
     metadata.zarrVersion,
   );
-  const unitsAndScales = metadata.dimensionUnits.map(parseDimensionUnit);
+  const unitsAndScales = metadata.dimensionUnits.map((u) =>
+    parseDimensionUnit(u, messages),
+  );
   const modelSpace = makeCoordinateSpace({
     names,
     scales: Float64Array.from(Array.from(unitsAndScales, (x) => x.scale)),
@@ -487,7 +491,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
       this.zarrVersion === undefined ? "" : ` v${this.zarrVersion}`;
     return `Zarr${versionStr} data source`;
   }
-  get(options: GetKvStoreBasedDataSourceOptions): Promise<DataSource> {
+  async get(options: GetKvStoreBasedDataSourceOptions): Promise<DataSource> {
     let { kvStoreUrl, additionalPath, fragment } = resolveUrl(options);
     kvStoreUrl = kvstoreEnsureDirectoryPipelineUrl(
       pipelineUrlJoin(kvStoreUrl, additionalPath),
@@ -499,7 +503,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
       "dimension_separator",
       parseDimensionSeparator,
     );
-    return options.registry.chunkManager.memoize.getAsync(
+    const result = await options.registry.chunkManager.memoize.getAsync(
       {
         type: "zarr:MultiscaleVolumeChunkSource",
         zarrVersion: this.zarrVersion,
@@ -508,6 +512,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
       },
       options,
       async (progressOptions) => {
+        const localMessages = new MessageList();
         const { sharedKvStoreContext } = options.registry;
         const metadata = await getMetadata(sharedKvStoreContext, kvStoreUrl, {
           ...progressOptions,
@@ -525,6 +530,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
             kvStoreUrl,
             metadata.userAttributes,
             metadata.zarrVersion,
+            localMessages,
           );
           if (omeMetadata === undefined) {
             throw new Error("Neither array nor OME multiscale metadata found");
@@ -543,6 +549,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
           multiscaleInfo = getMultiscaleInfoForSingleArray(
             kvStoreUrl,
             metadata,
+            localMessages,
           );
         }
         const volume = new MultiscaleVolumeChunkSource(
@@ -556,10 +563,12 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
           outputSpace: volume.modelSpace,
           transform: multiscaleInfo.baseTransform,
         };
+        const warnings = Array.from(localMessages, (m) => m.message);
         return {
           canonicalUrl: `${kvStoreUrl}|zarr${metadata.zarrVersion}:`,
           modelTransform,
           channelMetadata,
+          warnings: warnings.length > 0 ? warnings : undefined,
           subsources: [
             {
               id: "default",
@@ -581,6 +590,15 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
         };
       },
     );
+    if (options.messages !== undefined && result.warnings !== undefined) {
+      for (const warning of result.warnings) {
+        options.messages.addMessage({
+          severity: MessageSeverity.warning,
+          message: warning,
+        });
+      }
+    }
+    return result;
   }
   async completeUrl(
     options: GetKvStoreBasedDataSourceOptions,

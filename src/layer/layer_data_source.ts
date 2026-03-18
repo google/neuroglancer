@@ -402,6 +402,7 @@ export class LayerDataSource extends RefCounted {
     this.spec_ = spec;
     const registry = layer.manager.dataSourceProviderRegistry;
     const abortController = new AbortController();
+    const dataSourceMessages = new MessageList();
     registry
       .get({
         url: spec.url,
@@ -410,10 +411,12 @@ export class LayerDataSource extends RefCounted {
         transform: spec.transform,
         state: spec.state,
         progressListener: this.progressListener,
+        messages: dataSourceMessages,
       })
       .then((source: DataSourceWithRedirectInfo) => {
         if (refCounted.wasDisposed) return;
         this.messages.clearMessages();
+        refCounted.registerDisposer(this.messages.addChild(dataSourceMessages));
         const loaded = refCounted.registerDisposer(
           new LoadedLayerDataSource(this, source, spec),
         );
@@ -451,6 +454,7 @@ export class LayerDataSource extends RefCounted {
         if (refCounted.wasDisposed) return;
         this.loadState_ = { error };
         this.messages.clearMessages();
+        refCounted.registerDisposer(this.messages.addChild(dataSourceMessages));
         this.messages.addMessage({
           severity: MessageSeverity.error,
           message: formatErrorMessage(error),
