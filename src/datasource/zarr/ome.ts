@@ -97,6 +97,8 @@ for (const unit of ["meter", "second"]) {
   }
 }
 
+const KNOWN_AXIS_TYPES = new Set(["space", "time", "channel"]);
+
 interface Axis {
   name: string;
   unit: string;
@@ -177,10 +179,12 @@ function parseOmeAxis(axis: unknown, messages?: MessageList): Axis {
   verifyObject(axis);
   const name = verifyObjectProperty(axis, "name", verifyString);
   const type = verifyOptionalObjectProperty(axis, "type", verifyString);
+  let originalUnit: string | undefined;
   const parsedUnit = verifyOptionalObjectProperty(
     axis,
     "unit",
     (unit) => {
+      originalUnit = unit;
       const x = OME_UNITS.get(unit);
       if (x === undefined) {
         messages?.addMessage({
@@ -193,6 +197,25 @@ function parseOmeAxis(axis: unknown, messages?: MessageList): Axis {
     },
     { unit: "", scale: 1 },
   );
+  if (type !== undefined && !KNOWN_AXIS_TYPES.has(type)) {
+    messages?.addMessage({
+      severity: MessageSeverity.warning,
+      message: `Unknown OME-Zarr axis type: ${JSON.stringify(type)}`,
+    });
+  }
+  if (parsedUnit.unit !== "") {
+    if (type === "space" && parsedUnit.unit !== "m") {
+      messages?.addMessage({
+        severity: MessageSeverity.warning,
+        message: `OME-Zarr axis ${JSON.stringify(name)} has type "space" but unit ${JSON.stringify(originalUnit)} is a time unit`,
+      });
+    } else if (type === "time" && parsedUnit.unit !== "s") {
+      messages?.addMessage({
+        severity: MessageSeverity.warning,
+        message: `OME-Zarr axis ${JSON.stringify(name)} has type "time" but unit ${JSON.stringify(originalUnit)} is a space unit`,
+      });
+    }
+  }
   return { name, unit: parsedUnit.unit, scale: parsedUnit.scale, type };
 }
 
