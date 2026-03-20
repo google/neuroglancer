@@ -42,6 +42,8 @@ import {
 } from "#src/util/json.js";
 import { clampToInterval } from "#src/util/lerp.js";
 import * as matrix from "#src/util/matrix.js";
+import type { MessageList } from "#src/util/message_list.js";
+import { MessageSeverity } from "#src/util/message_list.js";
 import { allSiPrefixes } from "#src/util/si_units.js";
 
 export interface OmeMultiscaleScale {
@@ -94,6 +96,8 @@ for (const unit of ["meter", "second"]) {
     });
   }
 }
+
+const KNOWN_AXIS_TYPES = new Set(["space", "time", "channel"]);
 
 interface Axis {
   name: string;
@@ -171,27 +175,52 @@ function parseOmeroMetadata(omero: unknown): ChannelMetadata {
   return { name, channels };
 }
 
-function parseOmeAxis(axis: unknown): Axis {
+function parseOmeAxis(axis: unknown, messages?: MessageList): Axis {
   verifyObject(axis);
   const name = verifyObjectProperty(axis, "name", verifyString);
   const type = verifyOptionalObjectProperty(axis, "type", verifyString);
+  let originalUnit: string | undefined;
   const parsedUnit = verifyOptionalObjectProperty(
     axis,
     "unit",
     (unit) => {
+      originalUnit = unit;
       const x = OME_UNITS.get(unit);
       if (x === undefined) {
-        throw new Error(`Unsupported unit: ${JSON.stringify(unit)}`);
+        messages?.addMessage({
+          severity: MessageSeverity.warning,
+          message: `Unsupported OME-Zarr unit: ${JSON.stringify(unit)}, treating as unitless`,
+        });
+        return { unit: "", scale: 1 };
       }
       return x;
     },
     { unit: "", scale: 1 },
   );
+  if (type !== undefined && !KNOWN_AXIS_TYPES.has(type)) {
+    messages?.addMessage({
+      severity: MessageSeverity.warning,
+      message: `Unknown OME-Zarr axis type: ${JSON.stringify(type)}`,
+    });
+  }
+  if (parsedUnit.unit !== "") {
+    if (type === "space" && parsedUnit.unit !== "m") {
+      messages?.addMessage({
+        severity: MessageSeverity.warning,
+        message: `OME-Zarr axis ${JSON.stringify(name)} has type "space" but unit ${JSON.stringify(originalUnit)} is a time unit`,
+      });
+    } else if (type === "time" && parsedUnit.unit !== "s") {
+      messages?.addMessage({
+        severity: MessageSeverity.warning,
+        message: `OME-Zarr axis ${JSON.stringify(name)} has type "time" but unit ${JSON.stringify(originalUnit)} is a space unit`,
+      });
+    }
+  }
   return { name, unit: parsedUnit.unit, scale: parsedUnit.scale, type };
 }
 
-function parseOmeAxes(axes: unknown): CoordinateSpace {
-  const parsedAxes = parseArray(axes, parseOmeAxis);
+function parseOmeAxes(axes: unknown, messages?: MessageList): CoordinateSpace {
+  const parsedAxes = parseArray(axes, (axis) => parseOmeAxis(axis, messages));
   return makeCoordinateSpace({
     names: parsedAxes.map((axis) => {
       const { name, type } = axis;
@@ -205,10 +234,13 @@ function parseOmeAxes(axes: unknown): CoordinateSpace {
   });
 }
 
-function parseOmeCoordinateSystem(coordinateSystem: unknown): CoordinateSpace {
+function parseOmeCoordinateSystem(
+  coordinateSystem: unknown,
+  messages?: MessageList,
+): CoordinateSpace {
   verifyObject(coordinateSystem);
   const axes = verifyObjectProperty(coordinateSystem, "axes", (x) =>
-    parseArray(x, parseOmeAxis),
+    parseArray(x, (axis) => parseOmeAxis(axis, messages)),
   );
   return makeCoordinateSpace({
     names: axes.map((axis) => {
@@ -560,6 +592,7 @@ function parseMultiscaleScale(
 function parseOmeMultiscale(
   url: string,
   multiscale: unknown,
+  messages?: MessageList,
 ): OmeMultiscaleMetadata {
   verifyObject(multiscale);
 
@@ -579,9 +612,8 @@ function parseOmeMultiscale(
     coordinateSystemsRaw.length > 0
   ) {
     // OME-ZARR 0.6+: Use the last (intrinsic) coordinate system
-    const coordinateSystems = parseArray(
-      coordinateSystemsRaw,
-      parseOmeCoordinateSystem,
+    const coordinateSystems = parseArray(coordinateSystemsRaw, (cs) =>
+      parseOmeCoordinateSystem(cs, messages),
     );
     coordinateSpace = coordinateSystems[coordinateSystems.length - 1];
 
@@ -596,7 +628,9 @@ function parseOmeMultiscale(
     );
   } else {
     // OME-ZARR 0.4/0.5: Use axes directly
-    coordinateSpace = verifyObjectProperty(multiscale, "axes", parseOmeAxes);
+    coordinateSpace = verifyObjectProperty(multiscale, "axes", (axes) =>
+      parseOmeAxes(axes, messages),
+    );
   }
 
   const rank = coordinateSpace.rank;
@@ -704,6 +738,7 @@ export function parseOmeMetadata(
   url: string,
   attrs: any,
   zarrVersion: number,
+  messages?: MessageList,
 ): OmeMetadata | undefined {
   const ome = attrs.ome;
   const multiscales = ome == undefined ? attrs.multiscales : ome.multiscales; // >0.4
@@ -740,7 +775,7 @@ export function parseOmeMetadata(
       );
       continue;
     }
-    const multiScaleInfo = parseOmeMultiscale(url, multiscale);
+    const multiScaleInfo = parseOmeMultiscale(url, multiscale, messages);
     const channelMetadata = omero ? parseOmeroMetadata(omero) : undefined;
     return { multiscale: multiScaleInfo, channels: channelMetadata };
   }
