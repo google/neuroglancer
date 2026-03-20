@@ -560,6 +560,7 @@ function parseMultiscaleScale(
 function parseOmeMultiscale(
   url: string,
   multiscale: unknown,
+  version: string,
 ): OmeMultiscaleMetadata {
   verifyObject(multiscale);
 
@@ -679,25 +680,46 @@ function parseOmeMultiscale(
       }
       t[rank * (rank + 1) + i] -= offset;
     }
-
-    // At each scale, we provide an affine transform matrix
-    // to get applied on top of the base transformation matrix
-    // This matrix should apply the per path scaling for moving between
-    // LODs as well as the per-lod offset in translations (for voxel center)
-    // In theory, if the transform at that path describes a different rotation
-    // shear etc, to the base transform that would be captured here as well
-    // though the common case is just scaling + translation differences
-    scale.transform = makeAffineRelativeToBaseTransform(
-      scale.transform,
-      inverseBaseTransformUnscaled,
-      rank,
-    );
   }
-  return {
-    coordinateSpace,
-    scales,
-    baseInfo: { baseScales, baseTransform: baseTransformScaled },
-  };
+
+  const useNewBehavior =
+    version !== "0.4" && version !== "0.5-dev" && version !== "0.5";
+
+  if (useNewBehavior) {
+    // Current behavior (>= 0.6): per-scale transforms relative to base,
+    // baseTransformScaled surfaced as model transform
+    for (const scale of scales) {
+      scale.transform = makeAffineRelativeToBaseTransform(
+        scale.transform,
+        inverseBaseTransformUnscaled,
+        rank,
+      );
+    }
+    return {
+      coordinateSpace,
+      scales,
+      baseInfo: { baseScales, baseTransform: baseTransformScaled },
+    };
+  } else {
+    // Old behavior (< 0.6): identity base transform, translations
+    // baked into per-scale transforms via simple diagonal division.
+    for (const scale of scales) {
+      const t = scale.transform;
+      for (let i = 0; i < rank; ++i) {
+        for (let j = 0; j <= rank; ++j) {
+          t[j * (rank + 1) + i] /= baseScales[i];
+        }
+      }
+    }
+    return {
+      coordinateSpace,
+      scales,
+      baseInfo: {
+        baseScales,
+        baseTransform: matrix.createIdentity(Float64Array, rank + 1),
+      },
+    };
+  }
 }
 
 export function parseOmeMetadata(
@@ -732,7 +754,7 @@ export function parseOmeMetadata(
       );
       continue;
     }
-    if (version === "0.5" && zarrVersion !== 3) {
+    if (version !== "0.4" && version !== "0.5-dev" && zarrVersion !== 3) {
       errors.push(
         `OME multiscale metadata version ${JSON.stringify(
           version,
@@ -740,7 +762,7 @@ export function parseOmeMetadata(
       );
       continue;
     }
-    const multiScaleInfo = parseOmeMultiscale(url, multiscale);
+    const multiScaleInfo = parseOmeMultiscale(url, multiscale, version);
     const channelMetadata = omero ? parseOmeroMetadata(omero) : undefined;
     return { multiscale: multiScaleInfo, channels: channelMetadata };
   }
