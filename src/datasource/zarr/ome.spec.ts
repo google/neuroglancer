@@ -669,3 +669,264 @@ describe("OME-Zarr 0.6 sequence transformation validation", () => {
     );
   });
 });
+
+describe("OME-Zarr version-gated transform behavior (issue #905)", () => {
+  it("should produce identity baseTransform for v0.4 with scale+translation", () => {
+    // v0.4 uses the old behavior: identity base transform, translations baked into per-scale transforms
+    const attrs = {
+      multiscales: [
+        {
+          version: "0.4",
+          axes: [
+            { type: "space", name: "z", unit: "micrometer" },
+            { type: "space", name: "y", unit: "micrometer" },
+            { type: "space", name: "x", unit: "micrometer" },
+          ],
+          datasets: [
+            {
+              path: "0",
+              coordinateTransformations: [
+                { type: "scale", scale: [2, 2, 2] },
+                { type: "translation", translation: [100, 200, 300] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const metadata = parseOmeMetadata("test://", attrs, 2);
+    expect(metadata).not.toBeUndefined();
+
+    // baseTransform should be identity for v0.4
+    expect(metadata!.multiscale.baseInfo.baseTransform).toStrictEqual(
+      createIdentity(Float64Array, 4),
+    );
+
+    // The per-scale transform should have the translation baked in,
+    // divided by the base scales (which are [2, 2, 2])
+    const t = metadata!.multiscale.scales[0].transform;
+    // Diagonal should be 1 (2/2 = 1 for each axis)
+    expect(t[0]).toBeCloseTo(1); // z scale / baseScale_z
+    expect(t[5]).toBeCloseTo(1); // y scale / baseScale_y
+    expect(t[10]).toBeCloseTo(1); // x scale / baseScale_x
+
+    // Translation column: (translation - halfVoxelOffset) / baseScale
+    // Half voxel offset for scale [2,2,2] is [1,1,1] (scale * 0.5)
+    // So translation column = (100-1)/2, (200-1)/2, (300-1)/2
+    expect(t[12]).toBeCloseTo((100 - 1) / 2);
+    expect(t[13]).toBeCloseTo((200 - 1) / 2);
+    expect(t[14]).toBeCloseTo((300 - 1) / 2);
+  });
+
+  it("should handle v0.4 with multiple scales correctly", () => {
+    const attrs = {
+      multiscales: [
+        {
+          version: "0.4",
+          axes: [
+            { type: "space", name: "y", unit: "micrometer" },
+            { type: "space", name: "x", unit: "micrometer" },
+          ],
+          datasets: [
+            {
+              path: "0",
+              coordinateTransformations: [
+                { type: "scale", scale: [1, 1] },
+                { type: "translation", translation: [10, 20] },
+              ],
+            },
+            {
+              path: "1",
+              coordinateTransformations: [
+                { type: "scale", scale: [2, 2] },
+                { type: "translation", translation: [10, 20] },
+              ],
+            },
+            {
+              path: "2",
+              coordinateTransformations: [
+                { type: "scale", scale: [4, 4] },
+                { type: "translation", translation: [10, 20] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const metadata = parseOmeMetadata("test://", attrs, 2);
+    expect(metadata).not.toBeUndefined();
+
+    // baseTransform should be identity for v0.4
+    expect(metadata!.multiscale.baseInfo.baseTransform).toStrictEqual(
+      createIdentity(Float64Array, 3),
+    );
+
+    // Base scales extracted from first scale level: [1, 1]
+    const baseScales = metadata!.multiscale.baseInfo.baseScales;
+    expect(baseScales[0]).toBeCloseTo(1);
+    expect(baseScales[1]).toBeCloseTo(1);
+
+    const scaleTransforms = metadata!.multiscale.scales;
+    expect(scaleTransforms).toHaveLength(3);
+
+    // First level: scale [1,1], translation [10,20]
+    // Half voxel offset: [0.5, 0.5]
+    // translation column = (10-0.5)/1, (20-0.5)/1 = 9.5, 19.5
+    const t0 = scaleTransforms[0].transform;
+    expect(t0[0]).toBeCloseTo(1); // scale_y / baseScale_y
+    expect(t0[4]).toBeCloseTo(1); // scale_x / baseScale_x
+    expect(t0[6]).toBeCloseTo(9.5);
+    expect(t0[7]).toBeCloseTo(19.5);
+
+    // Second level: scale [2,2], translation [10,20]
+    // Half voxel offset: [1, 1]
+    // translation column = (10-1)/1, (20-1)/1 = 9, 19
+    const t1 = scaleTransforms[1].transform;
+    expect(t1[0]).toBeCloseTo(2); // scale_y / baseScale_y
+    expect(t1[4]).toBeCloseTo(2); // scale_x / baseScale_x
+    expect(t1[6]).toBeCloseTo(9);
+    expect(t1[7]).toBeCloseTo(19);
+
+    // Third level: scale [4,4], translation [10,20]
+    // Half voxel offset: [2, 2]
+    // translation column = (10-2)/1, (20-2)/1 = 8, 18
+    const t2 = scaleTransforms[2].transform;
+    expect(t2[0]).toBeCloseTo(4); // scale_y / baseScale_y
+    expect(t2[4]).toBeCloseTo(4); // scale_x / baseScale_x
+    expect(t2[6]).toBeCloseTo(8);
+    expect(t2[7]).toBeCloseTo(18);
+  });
+
+  it("should surface baseTransform for v0.6 with scale+translation", () => {
+    // v0.6 uses the new behavior: surfaced baseTransformScaled as model transform
+    const attrs = {
+      ome: {
+        version: "0.6",
+        multiscales: [
+          {
+            name: "multiscales",
+            coordinateSystems: [regularCoordinateSystem],
+            datasets: [
+              {
+                path: "array",
+                coordinateTransformations: [
+                  {
+                    type: "sequence",
+                    output: "physical",
+                    transformations: [
+                      { type: "scale", scale: [2, 2, 2] },
+                      { type: "translation", translation: [100, 200, 300] },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const metadata = parseOmeMetadata("test://", attrs, 3);
+    expect(metadata).not.toBeUndefined();
+
+    // baseTransform should NOT be identity for v0.6 — it should contain
+    // the translation (divided by base scales)
+    const bt = metadata!.multiscale.baseInfo.baseTransform;
+    expect(bt).not.toStrictEqual(createIdentity(Float64Array, 4));
+
+    // The translation column of the base transform should contain
+    // the base translation divided by base scales (before half voxel shift)
+    // Base scales are [2, 2, 2]
+    // baseTransformScaled is computed before half-voxel shift
+    // translation / baseScale = [100/2, 200/2, 300/2] = [50, 100, 150]
+    expect(bt[12]).toBeCloseTo(50);
+    expect(bt[13]).toBeCloseTo(100);
+    expect(bt[14]).toBeCloseTo(150);
+  });
+
+  it("should preserve tile positions for multi-tile v0.4 datasets", () => {
+    // Simulate two tiles at different spatial locations, both using v0.4
+    // This is the scenario that broke when #876 changed the default behavior
+    const makeTileAttrs = (tx: number, ty: number) => ({
+      multiscales: [
+        {
+          version: "0.4",
+          axes: [
+            { type: "space", name: "y", unit: "micrometer" },
+            { type: "space", name: "x", unit: "micrometer" },
+          ],
+          datasets: [
+            {
+              path: "0",
+              coordinateTransformations: [
+                { type: "scale", scale: [1, 1] },
+                { type: "translation", translation: [ty, tx] },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    const tile1 = parseOmeMetadata("test://tile1/", makeTileAttrs(0, 0), 2);
+    const tile2 = parseOmeMetadata(
+      "test://tile2/",
+      makeTileAttrs(1000, 2000),
+      2,
+    );
+
+    expect(tile1).not.toBeUndefined();
+    expect(tile2).not.toBeUndefined();
+
+    // Both tiles should have identity base transforms (old behavior)
+    expect(tile1!.multiscale.baseInfo.baseTransform).toStrictEqual(
+      createIdentity(Float64Array, 3),
+    );
+    expect(tile2!.multiscale.baseInfo.baseTransform).toStrictEqual(
+      createIdentity(Float64Array, 3),
+    );
+
+    // Translations should be baked into per-scale transforms
+    const t1 = tile1!.multiscale.scales[0].transform;
+    const t2 = tile2!.multiscale.scales[0].transform;
+
+    // Tile1 at origin: half voxel offset = [0.5, 0.5]
+    // translation column = (0-0.5)/1, (0-0.5)/1 = -0.5, -0.5
+    expect(t1[6]).toBeCloseTo(-0.5);
+    expect(t1[7]).toBeCloseTo(-0.5);
+
+    // Tile2 at (2000, 1000): half voxel offset = [0.5, 0.5]
+    // translation column = (2000-0.5)/1, (1000-0.5)/1 = 1999.5, 999.5
+    expect(t2[6]).toBeCloseTo(1999.5);
+    expect(t2[7]).toBeCloseTo(999.5);
+  });
+
+  it("should produce identity baseTransform for v0.5-dev", () => {
+    const attrs = {
+      multiscales: [
+        {
+          version: "0.5-dev",
+          axes: [
+            { type: "space", name: "y", unit: "micrometer" },
+            { type: "space", name: "x", unit: "micrometer" },
+          ],
+          datasets: [
+            {
+              path: "0",
+              coordinateTransformations: [
+                { type: "scale", scale: [2, 2] },
+                { type: "translation", translation: [50, 100] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const metadata = parseOmeMetadata("test://", attrs, 2);
+    expect(metadata).not.toBeUndefined();
+
+    // v0.5-dev should use old behavior (identity base transform)
+    expect(metadata!.multiscale.baseInfo.baseTransform).toStrictEqual(
+      createIdentity(Float64Array, 3),
+    );
+  });
+});
