@@ -106,7 +106,7 @@ In order to maintain a responsive UI and data display even during rapid navigati
 - do not support any form of _shared_ memory or standard synchronization mechanism (although they do support relatively efficient _transfers_ of typed arrays between threads);
 - require that all manipulation of the DOM and the WebGL context happens on the main UI thread.
 
-The "frontend" UI thread handles user actions and rendering, while the "backend" WebWorker thread handle all queuing, downloading, and preprocessing of data needed for rendering.
+The "frontend" UI thread handles user actions and rendering, while the "backend" WebWorker thread handles all queuing, downloading, and preprocessing of data needed for rendering.
 
 # Documentation Index
 
