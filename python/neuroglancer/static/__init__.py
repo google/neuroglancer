@@ -79,16 +79,7 @@ class FileSource(StaticContentSource):
         self.file_open = file_open or open
 
     def get_content(self, name):
-        normalized_name = posixpath.normpath(name)
-        if normalized_name.startswith("../") or normalized_name == "..":
-            raise ValueError(f"Invalid static resource name: {name!r}")
-
-        full_path = os.path.abspath(os.path.join(self.file_path, normalized_name))
-        base_path = os.path.abspath(self.file_path)
-
-        if os.path.commonpath([base_path, full_path]) != base_path:
-            raise ValueError(f"Invalid static resource name: {name!r}")
-
+        full_path = os.path.join(self.file_path, name)
         try:
             with self.file_open(full_path, "rb") as f:
                 return f.read()
