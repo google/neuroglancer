@@ -88,7 +88,7 @@ or within Neuroglancer, press `h` or click on the button labeled `?` in the uppe
 
 - Failure to access a data source.
 
-  As a security measure, browsers will in many prevent a webpage from accessing the true error code associated with a failed HTTP request. It is therefore often necessary to check the developer tools to see the true cause of any HTTP request error.
+  As a security measure, browsers will in many cases prevent a webpage from accessing the true error code associated with a failed HTTP request. It is therefore often necessary to check the developer tools to see the true cause of any HTTP request error.
 
   There are several likely causes:
   - [Cross-origin resource sharing (CORS)](https://en.wikipedia.org/wiki/Cross-origin_resource_sharing)
