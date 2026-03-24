@@ -106,7 +106,7 @@ In order to maintain a responsive UI and data display even during rapid navigati
 - do not support any form of _shared_ memory or standard synchronization mechanism (although they do support relatively efficient _transfers_ of typed arrays between threads);
 - require that all manipulation of the DOM and the WebGL context happens on the main UI thread.
 
-The "frontend" UI thread handles user actions and rendering, while the "backend" WebWorker thread handle all queuing, downloading, and preprocessing of data needed for rendering.
+The "frontend" UI thread handles user actions and rendering, while the "backend" WebWorker thread handles all queuing, downloading, and preprocessing of data needed for rendering.
 
 # Documentation Index
 
@@ -167,8 +167,8 @@ There is a Google Group/mailing list for discussion related to Neuroglancer:
   as a useful example for converting other datasets.
 - [BigArrays.jl](https://github.com/seung-lab/BigArrays.jl) - Julia interface of neuroglancer precomputed data format.
 - [cloudvolume](https://github.com/seung-lab/cloud-volume) - Python interface of neuroglancer precomputed data format.
-- [multiresolution-mesh-creator](https://github.com/janelia-cosem/multiresolution-mesh-creator) - Python tool for creating [multi-resolution meshes](https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/meshes.md#multi-resolution-mesh-format) from single resolution - or multiscale - meshes.
-- [Igneous](https://github.com/seung-lab/igneous) - Python pipeline for scalable meshing, skeletonizing, downsampling, and managment of large 3d images focusing on Neuroglancer Precomputed format.
+- [multiresolution-mesh-creator](https://github.com/janelia-cosem/multiresolution-mesh-creator) - Python tool for creating [multi-resolution meshes](https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/meshes.md#multi-resolution-mesh-format) from single resolution or multiscale meshes.
+- [Igneous](https://github.com/seung-lab/igneous) - Python pipeline for scalable meshing, skeletonizing, downsampling, and management of large 3d images focusing on Neuroglancer Precomputed format.
 
 # Contributing
 
