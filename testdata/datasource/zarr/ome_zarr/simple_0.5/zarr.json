@@ -48,8 +48,8 @@
                 },
                 {
                   "translation": [
-                    2,
-                    15
+                    2.0,
+                    15.0
                   ],
                   "type": "translation"
                 }
@@ -67,8 +67,8 @@
                 },
                 {
                   "translation": [
-                    6,
-                    45
+                    6.0,
+                    45.0
                   ],
                   "type": "translation"
                 }
@@ -76,9 +76,39 @@
             }
           ],
           "name": "image",
+          "type": "itkwasm_gaussian",
+          "metadata": {
+            "description": "Smoothed with a discrete gaussian filter to generate a scale space, ideal for intensity images. ITK-Wasm implementation is extremely portable and SIMD accelerated.",
+            "method": "itkwasm_downsample.downsample",
+            "version": "1.8.1"
+          },
           "@type": "ngff:Image"
         }
-      ]
+      ],
+      "omero": {
+        "channels": [
+          {
+            "color": "0000FF",
+            "window": {
+              "min": 0,
+              "max": 65535,
+              "start": 0,
+              "end": 1000
+            },
+            "label": "channelA"
+          },
+          {
+            "color": "00FF00",
+            "window": {
+              "min": 0,
+              "max": 65535,
+              "start": 100,
+              "end": 5000
+            },
+            "label": "channelB"
+          }
+        ]
+      }
     }
   },
   "zarr_format": 3,
@@ -86,6 +116,21 @@
     "kind": "inline",
     "must_understand": false,
     "metadata": {
+      "scale0": {
+        "attributes": {
+          "_ARRAY_DIMENSIONS": [
+            "y",
+            "x"
+          ]
+        },
+        "zarr_format": 3,
+        "consolidated_metadata": {
+          "kind": "inline",
+          "must_understand": false,
+          "metadata": {}
+        },
+        "node_type": "group"
+      },
       "scale1": {
         "attributes": {
           "_ARRAY_DIMENSIONS": [
@@ -100,6 +145,60 @@
           "metadata": {}
         },
         "node_type": "group"
+      },
+      "scale2": {
+        "attributes": {
+          "_ARRAY_DIMENSIONS": [
+            "y",
+            "x"
+          ]
+        },
+        "zarr_format": 3,
+        "consolidated_metadata": {
+          "kind": "inline",
+          "must_understand": false,
+          "metadata": {}
+        },
+        "node_type": "group"
+      },
+      "scale0/image": {
+        "shape": [
+          10,
+          10
+        ],
+        "data_type": "uint16",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              10,
+              10
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": 0,
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          }
+        ],
+        "attributes": {},
+        "dimension_names": [
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
       },
       "scale1/image": {
         "shape": [
@@ -140,21 +239,6 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "scale2": {
-        "attributes": {
-          "_ARRAY_DIMENSIONS": [
-            "y",
-            "x"
-          ]
-        },
-        "zarr_format": 3,
-        "consolidated_metadata": {
-          "kind": "inline",
-          "must_understand": false,
-          "metadata": {}
-        },
-        "node_type": "group"
-      },
       "scale2/image": {
         "shape": [
           2,
@@ -167,60 +251,6 @@
             "chunk_shape": [
               2,
               2
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": 0,
-        "codecs": [
-          {
-            "name": "bytes",
-            "configuration": {
-              "endian": "little"
-            }
-          }
-        ],
-        "attributes": {},
-        "dimension_names": [
-          "y",
-          "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "scale0": {
-        "attributes": {
-          "_ARRAY_DIMENSIONS": [
-            "y",
-            "x"
-          ]
-        },
-        "zarr_format": 3,
-        "consolidated_metadata": {
-          "kind": "inline",
-          "must_understand": false,
-          "metadata": {}
-        },
-        "node_type": "group"
-      },
-      "scale0/image": {
-        "shape": [
-          10,
-          10
-        ],
-        "data_type": "uint16",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              10,
-              10
             ]
           }
         },
