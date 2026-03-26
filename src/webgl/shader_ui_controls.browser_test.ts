@@ -150,6 +150,31 @@ void main() {
     });
   });
 
+  it("reports only the invalid options error for empty dropdown options", () => {
+    const code = `
+#uicontrol uint choice dropdown(options=[])
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    expect(parseShaderUiControls(code)).toEqual({
+      source: code,
+      code: newCode,
+      errors: [
+        {
+          line: 1,
+          message:
+            "Expected options argument to be a non-empty array of strings",
+        },
+      ],
+      controls: new Map(),
+    });
+  });
+
   it("handles color control", () => {
     const code = `
 #uicontrol vec3 color color(default="red")
@@ -1008,5 +1033,109 @@ void main() {
       window: undefined,
       controlPoints: undefined,
     });
+  });
+});
+
+describe("parseShaderUiControls dropdown", () => {
+  it("handles basic dropdown control", () => {
+    const code = `
+#uicontrol uint myMode dropdown(options=["one", "two", "three"])
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    expect(parseShaderUiControls(code)).toEqual({
+      source: code,
+      code: newCode,
+      errors: [],
+      controls: new Map([
+        [
+          "myMode",
+          {
+            type: "dropdown",
+            valueType: "uint",
+            options: ["one", "two", "three"],
+            default: 0,
+          },
+        ],
+      ]),
+    });
+  });
+
+  it("handles explicit default index", () => {
+    const code = `
+#uicontrol uint myMode dropdown(options=["a", "b", "c"], default=2)
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    expect(parseShaderUiControls(code)).toEqual({
+      source: code,
+      code: newCode,
+      errors: [],
+      controls: new Map([
+        [
+          "myMode",
+          {
+            type: "dropdown",
+            valueType: "uint",
+            options: ["a", "b", "c"],
+            default: 2,
+          },
+        ],
+      ]),
+    });
+  });
+
+  it("errors on wrong type", () => {
+    const code = `
+#uicontrol float myMode dropdown(options=["x", "y"])
+void main() {
+}
+`;
+    const result = parseShaderUiControls(code);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors[0].message).toContain("type must be uint");
+  });
+
+  it("errors when options is missing", () => {
+    const code = `
+#uicontrol uint myMode dropdown()
+void main() {
+}
+`;
+    const result = parseShaderUiControls(code);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors[0].message).toContain("options must be specified");
+  });
+
+  it("errors when options is an empty array", () => {
+    const code = `
+#uicontrol uint myMode dropdown(options=[])
+void main() {
+}
+`;
+    const result = parseShaderUiControls(code);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors[0].message).toContain("non-empty array of strings");
+  });
+
+  it("errors when default is out of range", () => {
+    const code = `
+#uicontrol uint myMode dropdown(options=["x", "y"], default=5)
+void main() {
+}
+`;
+    const result = parseShaderUiControls(code);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors[0].message).toContain("out of range");
   });
 });
