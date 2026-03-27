@@ -218,6 +218,11 @@ const annotationPropertyTypeRenderHandlers: {
     1,
     WebGL2RenderingContext.BYTE,
   ),
+  bool: makeIntegerPropertyRenderHandler(
+    "highp uint",
+    1,
+    WebGL2RenderingContext.UNSIGNED_BYTE,
+  ),
 };
 
 class AnnotationRenderHelperBase extends RefCounted {
