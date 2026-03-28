@@ -21,19 +21,6 @@
 
 .neuroglancer-single-mesh-dropdown .neuroglancer-shader-code-widget {
   height: 6em;
-  width: 60ch;
-  border: 1px solid transparent;
-}
-
-.neuroglancer-single-mesh-dropdown-top-row {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-}
-
-.neuroglancer-single-mesh-shader-overlay .neuroglancer-shader-code-widget {
-  width: 80vw;
-  height: 80vh;
 }
 
 .neuroglancer-single-mesh-attribute-widget {
@@ -41,11 +28,6 @@
   overflow-y: auto;
   display: grid;
   grid-template-columns: [type] auto [name] auto [range] auto;
-}
-
-.neuroglancer-single-mesh-layer-shader-overlay
-  .neuroglancer-single-mesh-attribute-widget {
-  max-height: 20vh;
 }
 
 .neuroglancer-single-mesh-attribute {
