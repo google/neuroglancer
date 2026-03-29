@@ -2073,21 +2073,6 @@ function initializeLayerFromSpecNoRestoreState(
   return spec;
 }
 
-function waitForLayerReady(managedLayer: ManagedUserLayer): Promise<void> {
-  return new Promise<void>((resolve) => {
-    if (managedLayer.isReady()) {
-      resolve();
-      return;
-    }
-    const remover = managedLayer.readyStateChanged.add(() => {
-      if (managedLayer.isReady()) {
-        remover();
-        resolve();
-      }
-    });
-  });
-}
-
 function completeUserLayerInitialization(
   managedLayer: Borrowed<ManagedUserLayer>,
   spec: any,
@@ -2201,7 +2186,7 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
     this.layerManager.clear();
   }
 
-  async restoreState(x: any) {
+  restoreState(x: any) {
     this.layerManager.clear();
     let layerSpecs: any[];
     if (!Array.isArray(x)) {
@@ -2216,6 +2201,7 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
     } else {
       layerSpecs = x;
     }
+    const layersToRestore: { managedLayer: ManagedUserLayer; spec: any }[] = [];
     for (const layerSpec of layerSpecs) {
       verifyObject(layerSpec);
       const name = this.layerManager.getUniqueLayerName(
@@ -2225,20 +2211,22 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
       try {
         initializeLayerFromSpecNoRestoreState(managedLayer, layerSpec);
         this.layerManager.addManagedLayer(managedLayer);
-        try {
-          completeUserLayerInitialization(managedLayer, layerSpec);
-          await waitForLayerReady(managedLayer);
-        } catch (e) {
-          const msg = new StatusMessage();
-          msg.setErrorMessage(
-            `Error creating layer ${JSON.stringify(name)}: ` +
-              (e instanceof Error)
-              ? e.message
-              : "" + e,
-          );
-        }
+        layersToRestore.push({ managedLayer, spec: layerSpec });
       } catch (e) {
         managedLayer.dispose();
+        const msg = new StatusMessage();
+        msg.setErrorMessage(
+          `Error creating layer ${JSON.stringify(name)}: ` +
+            (e instanceof Error)
+            ? e.message
+            : "" + e,
+        );
+      }
+    }
+    for (const { managedLayer, spec } of layersToRestore) {
+      try {
+        completeUserLayerInitialization(managedLayer, spec);
+      } catch (e) {
         const msg = new StatusMessage();
         msg.setErrorMessage(
           `Error creating layer ${JSON.stringify(name)}: ` +
