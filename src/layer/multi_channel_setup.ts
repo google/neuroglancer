@@ -399,12 +399,11 @@ export function createImageLayerAsMultiChannel(
       const thisSpec = { ...spec, localPosition };
       const newLayer = makeLayer(managedLayer.manager, name, thisSpec);
       const parentIndex =
-        managedLayer.manager.rootLayers.managedLayers.indexOf(managedLayer);
-      if (parentIndex !== -1) {
-        managedLayer.manager.add(newLayer, parentIndex + i);
-      } else {
-        managedLayer.manager.add(newLayer);
-      }
+        managedLayer.manager.layerManager.managedLayers.indexOf(managedLayer);
+      managedLayer.manager.add(
+        newLayer,
+        parentIndex !== -1 ? parentIndex + i : undefined,
+      );
       addedLayer = newLayer;
     }
     setupLayerPostCreation(
