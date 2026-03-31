@@ -116,8 +116,11 @@ repository, using the standard PR review process to manage discussion.
 
 **The "Two-Approvals" Policy**
   Standard PRs can be merged by any Maintainer once they have received at least
-  two approvals from Reviewers or Maintainers.
-
+  two approvals from Reviewers or Maintainers. 
+  Presently the number of reviewers is small (n=3, and so a PR written by a Maintainer may be merged with one approval from another Maintainer.
+  The tech-lead may merge PRs that are considered "hot-fixes" or cosmetic changes with no approvals.
+  Over time, as the number of Reviewers grows, the policy will be updated.
+  
 **PR Review Escalation**
   If a PR has not received feedback from a Reviewer or Maintainer for more than
   a week, an escalation process notifies the community of Reviewers and
