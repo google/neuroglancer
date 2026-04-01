@@ -367,7 +367,7 @@ void emitRGBA(vec4 rgba) {
             glsl_handleMaxProjectionUpdate = `
   float newIntensity = getIntensity();
   bool intensityChanged = newIntensity > savedIntensity;
-  savedIntensity = intensityChanged ? newIntensity : savedIntensity; 
+  savedIntensity = intensityChanged ? newIntensity : savedIntensity;
   savedDepth = intensityChanged ? depthAtRayPosition : savedDepth;
   outputColor = intensityChanged ? newColor : outputColor;
   emit(outputColor, savedDepth, savedIntensity, uPickId);
