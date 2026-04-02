@@ -107,6 +107,7 @@ from .viewer_state import (
     LocalAnnotationLayer,  # noqa: F401
     ManagedLayer,  # noqa: F401
     Layers,  # noqa: F401
+    LinkedDisplayDimensions,  # noqa: F401
     LinkedPosition,  # noqa: F401
     LinkedZoomFactor,  # noqa: F401
     LinkedDepthRange,  # noqa: F401
