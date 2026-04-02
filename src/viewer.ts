@@ -27,6 +27,7 @@ import {
   makeCoordinateSpace,
   TrackableCoordinateSpace,
 } from "#src/coordinate_transform.js";
+
 import { getDefaultCredentialsManager } from "#src/credentials_provider/default_manager.js";
 import type { CredentialsManager } from "#src/credentials_provider/index.js";
 import { SharedCredentialsManager } from "#src/credentials_provider/shared.js";
@@ -100,11 +101,13 @@ import {
   MultiToolPaletteManager,
   MultiToolPaletteState,
 } from "#src/ui/tool_palette.js";
+import { encodeStateAsFragment } from "#src/ui/url_hash_binding.js";
 import {
   ViewerSettingsPanel,
   ViewerSettingsPanelState,
 } from "#src/ui/viewer_settings.js";
 import { AutomaticallyFocusedElement } from "#src/util/automatic_focus.js";
+import { setClipboard } from "#src/util/clipboard.js";
 import { TrackableRGB } from "#src/util/color.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -137,6 +140,7 @@ import type {
 import { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 import { AnnotationToolStatusWidget } from "#src/widget/annotation_tool_status.js";
 import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
+import { makeCopyUrlButton } from "#src/widget/copy_button.js";
 import { makeIcon } from "#src/widget/icon.js";
 import {
   MousePositionWidget,
@@ -171,6 +175,7 @@ export const VIEWER_TOP_ROW_CONFIG_OPTIONS = [
   "showLayerSidePanelButton",
   "showLocation",
   "showAnnotationToolStatus",
+  "showCopyUrlButton",
 ] as const;
 
 export const VIEWER_UI_CONTROL_CONFIG_OPTIONS = [
@@ -891,7 +896,24 @@ export class Viewer extends RefCounted implements ViewerState {
       );
       topRow.appendChild(button);
     }
-
+    {
+      const button = makeCopyUrlButton({
+        title: "Copy view URL to clipboard",
+        onClick: () => {
+          const stateString = encodeStateAsFragment(this.state.toJSON());
+          const url = new URL(window.location.href);
+          url.hash = "#!" + stateString;
+          setClipboard(url.href);
+        },
+      });
+      this.registerDisposer(
+        new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showCopyUrlButton,
+          button,
+        ),
+      );
+      topRow.appendChild(button);
+    }
     {
       const { helpPanelState } = this;
       const button = this.registerDisposer(
