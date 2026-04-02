@@ -18,15 +18,15 @@ import type { ChunkManager } from "#src/chunk_manager/backend.js";
 import type {
   CodecArrayInfo,
   CodecChainSpec,
+  Codec,
 } from "#src/datasource/zarr/codec/index.js";
 import { CodecKind } from "#src/datasource/zarr/codec/index.js";
-import type { KvStoreWithPath, ReadableKvStore } from "#src/kvstore/index.js";
+import type {
+  KvStore,
+  KvStoreWithPath,
+  ReadableKvStore,
+} from "#src/kvstore/index.js";
 import type { RefCounted } from "#src/util/disposable.js";
-
-export interface Codec {
-  name: string;
-  kind: CodecKind;
-}
 
 export interface ArrayToArrayCodec<Configuration = unknown> extends Codec {
   kind: CodecKind.arrayToArray;
@@ -145,14 +145,14 @@ export function applySharding(
   codecs: CodecChainSpec,
   baseKvStore: KvStoreWithPath,
 ): {
-  kvStore: ReadableKvStore<unknown>;
+  kvStore: KvStore<unknown>;
   getChunkKey: (
     chunkGridPosition: ArrayLike<number>,
     baseKey: string,
   ) => unknown;
   decodeCodecs: CodecChainSpec;
 } {
-  let kvStore: ReadableKvStore<unknown> = baseKvStore.store;
+  let kvStore: KvStore<unknown> = baseKvStore.store;
   let curCodecs = codecs;
   while (true) {
     const { shardingInfo } = curCodecs;
