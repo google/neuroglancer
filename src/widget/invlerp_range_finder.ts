@@ -15,6 +15,8 @@
  */
 
 import type { DisplayContext } from "#src/display_context.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import type { TypedNumberArray } from "#src/util/array.js";
 import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { computePercentilesFromEmpiricalHistogram } from "#src/util/empirical_cdf.js";
@@ -53,6 +55,7 @@ interface ParentInvlerpWidget {
   element: HTMLDivElement;
   histogramSpecifications: HistogramSpecifications;
   histogramIndex: number;
+  values?: WatchableValueInterface<TypedNumberArray<ArrayBuffer> | undefined>;
 }
 
 export class AutoRangeFinder extends RefCounted {
@@ -86,24 +89,38 @@ export class AutoRangeFinder extends RefCounted {
   }
 
   autoComputeRange(minPercentile: number, maxPercentile: number) {
-    if (!this.autoRangeData.autoComputeInProgress) {
-      const { autoRangeData } = this;
-      const { dataType, display } = this.parent;
+    const { values } = this.parent;
+    if (values?.value) {
+      const valuesWithoutNaN = values.value.filter((x) => !Number.isNaN(x));
+      const valuesSorted = valuesWithoutNaN.slice().sort((a, b) => a - b);
+      const n = valuesSorted.length;
+      const minIndex = Math.floor(minPercentile * (n - 1));
+      const maxIndex = Math.ceil(maxPercentile * (n - 1));
+      const min = valuesSorted[minIndex];
+      const max = valuesSorted[maxIndex];
+      const range: DataTypeInterval = [min, max];
+      this.setTrackableValue(range, range);
+      this.parent.display.scheduleRedraw();
+    } else {
+      if (!this.autoRangeData.autoComputeInProgress) {
+        const { autoRangeData } = this;
+        const { dataType, display } = this.parent;
 
-      // Reset the auto-compute state
-      autoRangeData.inputPercentileBounds = [minPercentile, maxPercentile];
-      this.resetAutoRangeData(autoRangeData);
-      autoRangeData.invertedInitialRange = this.wasInputInverted();
-      display.force3DHistogramForAutoRange = true;
+        // Reset the auto-compute state
+        autoRangeData.inputPercentileBounds = [minPercentile, maxPercentile];
+        this.resetAutoRangeData(autoRangeData);
+        autoRangeData.invertedInitialRange = this.wasInputInverted();
+        display.force3DHistogramForAutoRange = true;
 
-      // Create a large range to search over
-      // It's easier to contract the range than to expand it
-      const maxRange =
-        dataType === DataType.FLOAT32
-          ? ([-65536, 65536] as [number, number])
-          : defaultDataTypeRange[dataType];
-      this.setTrackableValue(maxRange, maxRange);
-      display.scheduleRedraw();
+        // Create a large range to search over
+        // It's easier to contract the range than to expand it
+        const maxRange =
+          dataType === DataType.FLOAT32
+            ? ([-65536, 65536] as [number, number])
+            : defaultDataTypeRange[dataType];
+        this.setTrackableValue(maxRange, maxRange);
+        display.scheduleRedraw();
+      }
     }
   }
 

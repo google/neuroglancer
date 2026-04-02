@@ -119,7 +119,10 @@ export class HashSetShaderManager {
     this.readTable = prefix + "_readTable";
   }
 
-  defineShader(builder: ShaderBuilder) {
+  defineShader(builder: ShaderBuilder, fragment = true) {
+    const addCode = fragment
+      ? builder.addFragmentCode.bind(builder)
+      : builder.addVertexCode.bind(builder);
     const { hashSeedsName, samplerName, numAlternatives, hashKeyMask } = this;
     builder.addUniform("highp uint", hashSeedsName, numAlternatives);
     builder.addUniform("highp uint", hashKeyMask);
@@ -128,15 +131,23 @@ export class HashSetShaderManager {
       samplerName,
       this.textureUnitSymbol,
     );
-    builder.addFragmentCode(glsl_hashCombine);
-    builder.addFragmentCode(glsl_uint64);
-    builder.addFragmentCode(glsl_equalUint64);
+    // TODO, should this be available in vertex shader as an option?
+    // nah I don't need it since we only need texture for sliceview (fragment)
+
+    // const vertex = true;
+    // const adder = vertex ? builder.addVertexCode.bind(builder) : builder.addFragmentCode.bind(builder);
+    // adder(glsl_hashCombine);
+
+    addCode(glsl_hashCombine);
+    addCode(glsl_uint64);
+    addCode(glsl_equalUint64);
     this.accessHelper.defineShader(builder);
-    builder.addFragmentCode(
+    // TODO, can we use DataType.Float32 here for float segment properties?
+    addCode(
       this.accessHelper.getAccessor(
         this.readTable,
         this.samplerName,
-        DataType.UINT64,
+        DataType.UINT64, // TODO maybe play with this?
         1,
       ),
     );
@@ -159,7 +170,7 @@ bool ${this.hasFunctionName}(uint64_t x) {
   return false;
 }
 `;
-    builder.addFragmentCode(s);
+    addCode(s);
   }
 
   get hasFunctionName() {
@@ -193,8 +204,11 @@ bool ${this.hasFunctionName}(uint64_t x) {
 }
 
 export class HashMapShaderManager extends HashSetShaderManager {
-  defineShader(builder: ShaderBuilder) {
-    super.defineShader(builder);
+  defineShader(builder: ShaderBuilder, fragment = true) {
+    const addCode = fragment
+      ? builder.addFragmentCode.bind(builder)
+      : builder.addVertexCode.bind(builder);
+    super.defineShader(builder, fragment);
     const { numAlternatives, hashSeedsName, hashKeyMask } = this;
     let s = `
 bool ${this.getFunctionName}(uint64_t x, out uint64_t value) {
@@ -215,7 +229,7 @@ bool ${this.getFunctionName}(uint64_t x, out uint64_t value) {
   return false;
 }
 `;
-    builder.addFragmentCode(s);
+    addCode(s);
   }
 
   get getFunctionName() {
