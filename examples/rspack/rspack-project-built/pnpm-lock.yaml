@@ -485,8 +485,8 @@ packages:
     resolution: {integrity: sha512-6DnInpx7SJ2AK3+CTUE/ZM0vWTUboZCegxhC2xiIydHR9jNuTAASBrfEpHhiGOZw/nX51bHt6YQl8jsGo4y/0w==}
     engines: {node: '>= 0.6'}
 
-  core-js@3.40.0:
-    resolution: {integrity: sha512-7vsMc/Lty6AGnn7uFpYT56QesI5D2Y/UkgKounk87OP9Z2H9Z8kj6jzcSGAxFmUtDOS0ntK6lbQz+Nsa0Jj6mQ==}
+  core-js@3.46.0:
+    resolution: {integrity: sha512-vDMm9B0xnqqZ8uSBpZ8sNtRtOdmfShrvT6h2TuQGLs0Is+cR0DYbj/KWP6ALVNbWPpqA/qPLoOuppJN07humpA==}
 
   core-util-is@1.0.2:
     resolution: {integrity: sha512-3lqz5YjWTYnW6dlDa5TLaTCcShfar1e40rmcJVwCBJC6mWlFuj0eCHIElmG1g5kyuJ/GD+8Wn4FFCcz4gJPfaQ==}
@@ -1121,10 +1121,10 @@ packages:
 
   neuroglancer@file:../../../dist/package:
     resolution: {directory: ../../../dist/package, type: directory}
-    engines: {node: '>=22'}
+    engines: {node: '>=22.18'}
 
-  nifti-reader-js@0.6.8:
-    resolution: {integrity: sha512-yIKNVzYFiUcSHazoR+sd6Ka7sUmZTabaVqJRFxbdlAKR1hnPBuNP71g3AyApo37nJ3k41c632QPij5q7gF1YPQ==}
+  nifti-reader-js@0.8.0:
+    resolution: {integrity: sha512-iO1iIhQDfKniy+l/86HfOPte7So+SxBmBiMSiUB2VXU7z4hSewMTlE3h0fCgfzfXvMUa+ilzLTJ2ZHmtFw6EWw==}
 
   node-forge@1.3.1:
     resolution: {integrity: sha512-dPEtOeMvF9VMcYV/1Wb8CPoVAXtp6MKMlcbAt4ddqmGqUJ6fQZFXkNZNkNlfevtNkGtaSoXf/vNNNSvgrdXwtA==}
@@ -2191,7 +2191,7 @@ snapshots:
 
   cookie@0.7.1: {}
 
-  core-js@3.40.0: {}
+  core-js@3.46.0: {}
 
   core-util-is@1.0.2: {}
 
@@ -2812,13 +2812,13 @@ snapshots:
   neuroglancer@file:../../../dist/package:
     dependencies:
       codemirror: 5.65.18
-      core-js: 3.40.0
+      core-js: 3.46.0
       crc-32: 1.2.2
       gl-matrix: 3.1.0
       ikonate: https://codeload.github.com/mikolajdobrucki/ikonate/tar.gz/a86b4107c6ec717e7877f880a930d1ccf0b59d89
       lodash-es: 4.17.21
       msgpackr: 1.11.5
-      nifti-reader-js: 0.6.8
+      nifti-reader-js: 0.8.0
       numcodecs: 0.3.2
       valibot: 1.1.0
     transitivePeerDependencies:
@@ -2826,7 +2826,7 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  nifti-reader-js@0.6.8:
+  nifti-reader-js@0.8.0:
     dependencies:
       fflate: 0.8.2
 

@@ -20,6 +20,14 @@ import type {
   SingleChannelMetadata,
   ChannelMetadata,
 } from "#src/datasource/index.js";
+import {
+  joinBaseUrlAndPath,
+  kvstoreEnsureDirectoryPipelineUrl,
+} from "#src/kvstore/url.js";
+import {
+  makeAffineRelativeToBaseTransform,
+  extractScalesFromAffineMatrix,
+} from "#src/util/affine.js";
 import { parseRGBColorSpecification } from "#src/util/color.js";
 import {
   parseArray,
@@ -44,6 +52,10 @@ export interface OmeMultiscaleScale {
 export interface OmeMultiscaleMetadata {
   scales: OmeMultiscaleScale[];
   coordinateSpace: CoordinateSpace;
+  baseInfo: {
+    baseScales: Float64Array;
+    baseTransform: Float64Array;
+  };
 }
 
 export interface OmeMetadata {
@@ -51,7 +63,13 @@ export interface OmeMetadata {
   channels: ChannelMetadata | undefined;
 }
 
-const SUPPORTED_OME_MULTISCALE_VERSIONS = new Set(["0.4", "0.5-dev", "0.5"]);
+const SUPPORTED_OME_MULTISCALE_VERSIONS = new Set([
+  "0.4",
+  "0.5-dev",
+  "0.5",
+  "0.6.dev1",
+  "0.6",
+]);
 
 const OME_UNITS = new Map<string, { unit: string; scale: number }>([
   ["angstrom", { unit: "m", scale: 1e-10 }],
@@ -187,6 +205,24 @@ function parseOmeAxes(axes: unknown): CoordinateSpace {
   });
 }
 
+function parseOmeCoordinateSystem(coordinateSystem: unknown): CoordinateSpace {
+  verifyObject(coordinateSystem);
+  const axes = verifyObjectProperty(coordinateSystem, "axes", (x) =>
+    parseArray(x, parseOmeAxis),
+  );
+  return makeCoordinateSpace({
+    names: axes.map((axis) => {
+      const { name, type } = axis;
+      if (type === "channel") {
+        return `${name}'`;
+      }
+      return name;
+    }),
+    scales: Float64Array.from(axes, (axis) => axis.scale),
+    units: axes.map((axis) => axis.unit),
+  });
+}
+
 function parseScaleTransform(rank: number, obj: unknown) {
   const scales = verifyObjectProperty(obj, "scale", (values) =>
     parseFixedLengthArray(
@@ -210,10 +246,124 @@ function parseTranslationTransform(rank: number, obj: unknown) {
   return matrix.createHomogeneousTranslationMatrix(Float64Array, translation);
 }
 
+function parseAffineTransform(rank: number, obj: unknown) {
+  const affineMatrix = verifyObjectProperty(obj, "affine", (values) => {
+    const parsed = parseArray(values, (row) =>
+      parseFixedLengthArray(new Float64Array(rank + 1), row, verifyFiniteFloat),
+    );
+    if (parsed.length !== rank) {
+      throw new Error(
+        `Expected affine matrix to have ${rank} rows, but received: ${parsed.length}`,
+      );
+    }
+    return parsed;
+  });
+  // Convert to homogeneous matrix format (rank+1 x rank+1)
+  const transform = matrix.createIdentity(Float64Array, rank + 1);
+  for (let i = 0; i < rank; ++i) {
+    for (let j = 0; j <= rank; ++j) {
+      transform[j * (rank + 1) + i] = affineMatrix[i][j];
+    }
+  }
+  return transform;
+}
+
+function parseRotationTransform(rank: number, obj: unknown) {
+  const rotationMatrix = verifyObjectProperty(obj, "rotation", (values) => {
+    const parsed = parseArray(values, (row) =>
+      parseFixedLengthArray(new Float64Array(rank), row, verifyFiniteFloat),
+    );
+    if (parsed.length !== rank) {
+      throw new Error(
+        `Expected rotation matrix to have ${rank} rows, but received: ${parsed.length}`,
+      );
+    }
+    return parsed;
+  });
+  // Convert to homogeneous matrix format (rank+1 x rank+1)
+  const transform = matrix.createIdentity(Float64Array, rank + 1);
+  for (let i = 0; i < rank; ++i) {
+    for (let j = 0; j < rank; ++j) {
+      transform[j * (rank + 1) + i] = rotationMatrix[i][j];
+    }
+  }
+  return transform;
+}
+
+function parseMapAxisTransform(rank: number, obj: unknown) {
+  const mapAxis = verifyObjectProperty(obj, "mapAxis", (values) =>
+    parseFixedLengthArray(new Float64Array(rank), values, (x) => {
+      const val = verifyFiniteFloat(x);
+      if (!Number.isInteger(val) || val < 0 || val >= rank) {
+        throw new Error(
+          `Invalid mapAxis index: ${val}. Must be integer between 0 and ${
+            rank - 1
+          }`,
+        );
+      }
+      return val;
+    }),
+  );
+
+  // Verify permutation
+  const seen = new Set<number>();
+  for (const val of mapAxis) {
+    if (seen.has(val)) {
+      throw new Error(`Duplicate axis index in mapAxis: ${val}`);
+    }
+    seen.add(val);
+  }
+
+  const transform = new Float64Array((rank + 1) * (rank + 1));
+  // Set the bottom right value of the matrix to 1
+  transform[transform.length - 1] = 1;
+
+  // The value at position `i` in the array indicates which input axis becomes the `i`-th output axis.
+  // Output[i] = Input[mapAxis[i]]
+  // So Row i has a 1 at Column mapAxis[i]
+  for (let i = 0; i < rank; ++i) {
+    transform[mapAxis[i] * (rank + 1) + i] = 1;
+  }
+  return transform;
+}
+
+function parseSequenceTransform(rank: number, obj: unknown) {
+  verifyObject(obj);
+
+  const transformations = verifyObjectProperty(
+    obj,
+    "transformations",
+    (x) => x,
+  );
+
+  // Validate that inner transformations don't contain nested sequences
+  if (Array.isArray(transformations)) {
+    parseArray(transformations, (innerTransform) => {
+      verifyObject(innerTransform);
+      const innerType = verifyObjectProperty(
+        innerTransform,
+        "type",
+        verifyString,
+      );
+      if (innerType === "sequence") {
+        throw new Error(
+          "A sequence transformation MUST NOT be part of another sequence transformation",
+        );
+      }
+    });
+  }
+
+  return parseOmeCoordinateTransforms(rank, transformations);
+}
+
 const coordinateTransformParsers = new Map([
-  ["scale", parseScaleTransform],
   ["identity", parseIdentityTransform],
+  ["scale", parseScaleTransform],
   ["translation", parseTranslationTransform],
+  ["rotation", parseRotationTransform],
+  ["mapAxis", parseMapAxisTransform],
+  ["affine", parseAffineTransform],
+  ["sequence", parseSequenceTransform],
 ]);
 
 function parseOmeCoordinateTransform(
@@ -232,7 +382,7 @@ function parseOmeCoordinateTransform(
       `Unsupported coordinate transform type: ${JSON.stringify(transformType)}`,
     );
   }
-  return parser(rank, transformJson);
+  return parser(rank, transformJson) as Float64Array<ArrayBuffer>;
 }
 
 function parseOmeCoordinateTransforms(
@@ -258,39 +408,213 @@ function parseOmeCoordinateTransforms(
   return transform;
 }
 
+function validateCoordinateTransformations(
+  transformations: unknown,
+  expectedInput: string,
+  expectedOutput: string,
+  path: string,
+) {
+  if (!Array.isArray(transformations)) return;
+
+  // For a single transformation or the outermost sequence
+  if (transformations.length === 1) {
+    const transform = transformations[0];
+    verifyObject(transform);
+
+    const input = verifyOptionalObjectProperty(
+      transform,
+      "input",
+      verifyString,
+    );
+    const output = verifyOptionalObjectProperty(
+      transform,
+      "output",
+      verifyString,
+    );
+    const type = verifyObjectProperty(transform, "type", verifyString);
+
+    // Validate input matches expected (array path)
+    // Empty string or undefined means the field is not specified
+    if (input !== undefined && input !== "" && input !== expectedInput) {
+      throw new Error(
+        `Invalid coordinate transformation for dataset at path "${path}": ` +
+          `input is "${input}" but expected "${expectedInput}"`,
+      );
+    }
+
+    // Validate output matches expected (intrinsic coordinate system)
+    // Empty string or undefined means the field is not specified
+    if (output !== undefined && output !== "" && output !== expectedOutput) {
+      throw new Error(
+        `Invalid coordinate transformation for dataset at path "${path}": ` +
+          `output is "${output}" but expected "${expectedOutput}"`,
+      );
+    }
+
+    // For sequence transforms, validate inner transforms
+    if (type === "sequence") {
+      const innerTransforms = verifyObjectProperty(
+        transform,
+        "transformations",
+        (x) => x,
+      );
+      if (Array.isArray(innerTransforms)) {
+        // Validate the chain of inner transforms
+        for (let i = 0; i < innerTransforms.length; i++) {
+          const innerTransform = innerTransforms[i];
+          verifyObject(innerTransform);
+
+          const innerInput = verifyOptionalObjectProperty(
+            innerTransform,
+            "input",
+            verifyString,
+          );
+          const innerOutput = verifyOptionalObjectProperty(
+            innerTransform,
+            "output",
+            verifyString,
+          );
+
+          // First transform in sequence should have input matching the sequence's input
+          if (
+            i === 0 &&
+            innerInput !== undefined &&
+            innerInput !== expectedInput
+          ) {
+            throw new Error(
+              `Invalid sequence transformation for dataset at path "${path}": ` +
+                `first inner transform has input "${innerInput}" but expected "${expectedInput}"`,
+            );
+          }
+
+          // Last transform in sequence should have output matching the sequence's output
+          if (
+            i === innerTransforms.length - 1 &&
+            innerOutput !== undefined &&
+            innerOutput !== expectedOutput
+          ) {
+            throw new Error(
+              `Invalid sequence transformation for dataset at path "${path}": ` +
+                `last inner transform has output "${innerOutput}" but expected "${expectedOutput}"`,
+            );
+          }
+
+          // Validate chaining between consecutive transforms
+          if (i > 0) {
+            const prevTransform = innerTransforms[i - 1];
+            verifyObject(prevTransform);
+            const prevOutput = verifyOptionalObjectProperty(
+              prevTransform,
+              "output",
+              verifyString,
+            );
+
+            if (
+              prevOutput !== undefined &&
+              innerInput !== undefined &&
+              prevOutput !== innerInput
+            ) {
+              throw new Error(
+                `Invalid sequence transformation for dataset at path "${path}": ` +
+                  `transform ${i - 1} has output "${prevOutput}" but transform ${i} has input "${innerInput}". ` +
+                  `Transforms in a sequence must have matching input/output for consecutive transforms.`,
+              );
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 function parseMultiscaleScale(
   rank: number,
   url: string,
   obj: unknown,
+  intrinsicCoordinateSystemName: string | undefined,
 ): OmeMultiscaleScale {
   const path = verifyObjectProperty(obj, "path", verifyString);
-  const transform = verifyObjectProperty(
+  const transformations = verifyObjectProperty(
     obj,
     "coordinateTransformations",
-    (x) => parseOmeCoordinateTransforms(rank, x),
+    (x) => x,
   );
-  const scaleUrl = `${url}${path}/`;
+
+  // Validate transformations before parsing (only for 0.6+ with coordinate systems)
+  if (intrinsicCoordinateSystemName !== undefined) {
+    validateCoordinateTransformations(
+      transformations,
+      path,
+      intrinsicCoordinateSystemName,
+      path,
+    );
+  }
+
+  const transform = parseOmeCoordinateTransforms(rank, transformations);
+  const scaleUrl = kvstoreEnsureDirectoryPipelineUrl(
+    joinBaseUrlAndPath(url, path),
+  );
   return { url: scaleUrl, transform };
 }
 
 function parseOmeMultiscale(
   url: string,
   multiscale: unknown,
+  version: string,
 ): OmeMultiscaleMetadata {
-  const coordinateSpace = verifyObjectProperty(
+  verifyObject(multiscale);
+
+  // Check if using 0.6+ format with coordinateSystems
+  let coordinateSpace: CoordinateSpace;
+  let intrinsicCoordinateSystemName: string | undefined;
+
+  const coordinateSystemsRaw = verifyOptionalObjectProperty(
     multiscale,
-    "axes",
-    parseOmeAxes,
+    "coordinateSystems",
+    (x) => x,
   );
+
+  if (
+    coordinateSystemsRaw !== undefined &&
+    Array.isArray(coordinateSystemsRaw) &&
+    coordinateSystemsRaw.length > 0
+  ) {
+    // OME-ZARR 0.6+: Use the last (intrinsic) coordinate system
+    const coordinateSystems = parseArray(
+      coordinateSystemsRaw,
+      parseOmeCoordinateSystem,
+    );
+    coordinateSpace = coordinateSystems[coordinateSystems.length - 1];
+
+    // Extract the name of the intrinsic coordinate system from the raw object
+    const intrinsicCoordinateSystemRaw =
+      coordinateSystemsRaw[coordinateSystemsRaw.length - 1];
+    verifyObject(intrinsicCoordinateSystemRaw);
+    intrinsicCoordinateSystemName = verifyObjectProperty(
+      intrinsicCoordinateSystemRaw,
+      "name",
+      verifyString,
+    );
+  } else {
+    // OME-ZARR 0.4/0.5: Use axes directly
+    coordinateSpace = verifyObjectProperty(multiscale, "axes", parseOmeAxes);
+  }
+
   const rank = coordinateSpace.rank;
-  const transform = verifyObjectProperty(
+  const transform = verifyOptionalObjectProperty(
     multiscale,
     "coordinateTransformations",
     (x) => parseOmeCoordinateTransforms(rank, x),
+    matrix.createIdentity(Float64Array, rank + 1),
   );
   const scales = verifyObjectProperty(multiscale, "datasets", (obj) =>
     parseArray(obj, (x) => {
-      const scale = parseMultiscaleScale(rank, url, x);
+      const scale = parseMultiscaleScale(
+        rank,
+        url,
+        x,
+        intrinsicCoordinateSystemName,
+      );
       scale.transform = matrix.multiply(
         new Float64Array((rank + 1) ** 2) as Float64Array<ArrayBuffer>,
         rank + 1,
@@ -310,20 +634,44 @@ function parseOmeMultiscale(
   }
 
   const baseTransform = scales[0].transform;
-  // Extract the scale factor from `baseTransform`.
-  //
-  // TODO(jbms): If coordinate transformations other than `scale` and `translation` are supported,
-  // this will need to be modified.
-  const baseScales = new Float64Array(rank);
+  const baseScales = extractScalesFromAffineMatrix(baseTransform, rank);
   for (let i = 0; i < rank; ++i) {
-    const scale = (baseScales[i] = baseTransform[i * (rank + 1) + i]);
-    coordinateSpace.scales[i] *= scale;
+    coordinateSpace.scales[i] *= baseScales[i];
+  }
+
+  // The unscaled inverse of the base transform is used in the per-scale
+  // calculation of the affine transform to apply on top of the base transform.
+  const inverseBaseTransformUnscaled = new Float64Array(baseTransform.length);
+  matrix.inverse(
+    inverseBaseTransformUnscaled,
+    rank + 1,
+    baseTransform,
+    rank + 1,
+    rank + 1,
+  );
+
+  // The base transform with scaling removed is used
+  // to provide a default transform in the layer source tab
+  // and for the bounding box transformation
+  const baseTransformScaled = new Float64Array(baseTransform.length);
+  matrix.copy(
+    baseTransformScaled,
+    rank + 1,
+    baseTransform,
+    rank + 1,
+    rank + 1,
+    rank + 1,
+  );
+  for (let i = 0; i < rank; ++i) {
+    for (let j = 0; j <= rank; ++j) {
+      baseTransformScaled[j * (rank + 1) + i] /= baseScales[i];
+    }
   }
 
   for (const scale of scales) {
     const t = scale.transform;
     // In OME's coordinate space, the origin of a voxel is its center, while in Neuroglancer it is
-    // the "lower" (in coordinates) corner.  Translate by the physical size of half a voxel in the
+    // the "lower" (in coordinates) corner. Translate by the physical size of half a voxel in the
     // current scale.
     for (let i = 0; i < rank; ++i) {
       let offset = 0;
@@ -332,15 +680,46 @@ function parseOmeMultiscale(
       }
       t[rank * (rank + 1) + i] -= offset;
     }
+  }
 
-    // Make the scale relative to the base scale.
-    for (let i = 0; i < rank; ++i) {
-      for (let j = 0; j <= rank; ++j) {
-        t[j * (rank + 1) + i] /= baseScales[i];
+  const useNewBehavior =
+    version !== "0.4" && version !== "0.5-dev" && version !== "0.5";
+
+  if (useNewBehavior) {
+    // Current behavior (>= 0.6): per-scale transforms relative to base,
+    // baseTransformScaled surfaced as model transform
+    for (const scale of scales) {
+      scale.transform = makeAffineRelativeToBaseTransform(
+        scale.transform,
+        inverseBaseTransformUnscaled,
+        rank,
+      );
+    }
+    return {
+      coordinateSpace,
+      scales,
+      baseInfo: { baseScales, baseTransform: baseTransformScaled },
+    };
+  } else {
+    // Old behavior (< 0.6): identity base transform, translations
+    // baked into per-scale transforms via simple diagonal division.
+    for (const scale of scales) {
+      const t = scale.transform;
+      for (let i = 0; i < rank; ++i) {
+        for (let j = 0; j <= rank; ++j) {
+          t[j * (rank + 1) + i] /= baseScales[i];
+        }
       }
     }
+    return {
+      coordinateSpace,
+      scales,
+      baseInfo: {
+        baseScales,
+        baseTransform: matrix.createIdentity(Float64Array, rank + 1),
+      },
+    };
   }
-  return { coordinateSpace, scales };
 }
 
 export function parseOmeMetadata(
@@ -375,7 +754,7 @@ export function parseOmeMetadata(
       );
       continue;
     }
-    if (version === "0.5" && zarrVersion !== 3) {
+    if (version !== "0.4" && version !== "0.5-dev" && zarrVersion !== 3) {
       errors.push(
         `OME multiscale metadata version ${JSON.stringify(
           version,
@@ -383,7 +762,7 @@ export function parseOmeMetadata(
       );
       continue;
     }
-    const multiScaleInfo = parseOmeMultiscale(url, multiscale);
+    const multiScaleInfo = parseOmeMultiscale(url, multiscale, version);
     const channelMetadata = omero ? parseOmeroMetadata(omero) : undefined;
     return { multiscale: multiScaleInfo, channels: channelMetadata };
   }

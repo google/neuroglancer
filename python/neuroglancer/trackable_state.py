@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+import collections.abc
 import contextlib
 import copy
 import threading
@@ -83,13 +84,17 @@ class TrackableState(ChangeNotifier, typing.Generic[State]):
       trackable-state
     """
 
-    def __init__(self, wrapper_type, transform_state=None):
+    def __init__(
+        self,
+        wrapper_type: type[State],
+        transform_state: typing.Callable[[State], typing.Any] | None = None,
+    ):
         super().__init__()
-        self._raw_state = {}
+        self._raw_state: typing.Any = {}
         self._lock = threading.RLock()
         self._generation = make_random_token()
-        self._wrapped_state = None
-        self._wrapper_type = wrapper_type
+        self._wrapped_state: State | None = None
+        self._wrapper_type: type[State] = wrapper_type
         if transform_state is None:
 
             def transform_state_function(new_state):
@@ -98,7 +103,7 @@ class TrackableState(ChangeNotifier, typing.Generic[State]):
                 return new_state
 
             transform_state = transform_state_function
-        self._transform_state = transform_state
+        self._transform_state: typing.Callable[[State], typing.Any] = transform_state
 
     def set_state(
         self,
@@ -162,13 +167,15 @@ class TrackableState(ChangeNotifier, typing.Generic[State]):
         with self._lock:
             wrapped_state = self._wrapped_state
             if wrapped_state is None:
-                wrapped_state = self._wrapped_state = self._wrapper_type(
+                wrapped_state = self._wrapped_state = self._wrapper_type(  # type: ignore[call-arg]
                     self._raw_state, _readonly=True
                 )
             return wrapped_state
 
     @contextlib.contextmanager
-    def txn(self, overwrite: bool = False, lock: bool = True):
+    def txn(
+        self, overwrite: bool = False, lock: bool = True
+    ) -> collections.abc.Iterator[State]:
         """Context manager for a state modification transaction."""
         if lock:
             self._lock.acquire()
@@ -184,7 +191,12 @@ class TrackableState(ChangeNotifier, typing.Generic[State]):
             if lock:
                 self._lock.release()
 
-    def retry_txn(self, func, retries: int = 10, lock: bool = False):
+    def retry_txn(
+        self,
+        func: typing.Callable[[State], State],
+        retries: int = 10,
+        lock: bool = False,
+    ):
         for retry in range(retries):
             try:
                 with self.txn(lock=lock) as s:

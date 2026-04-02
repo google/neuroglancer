@@ -30,7 +30,6 @@ export class GLBuffer implements Disposable {
     public gl: WebGL2RenderingContext,
     public bufferType: BufferType = WebGL2RenderingContext.ARRAY_BUFFER,
   ) {
-    this.gl = gl;
     // This should never return null.
     this.buffer = gl.createBuffer();
   }

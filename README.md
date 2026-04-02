@@ -75,7 +75,6 @@ or within Neuroglancer, press `h` or click on the button labeled `?` in the uppe
   Neuroglancer requires WebGL (2.0) and the `EXT_color_buffer_float` extension.
 
   To troubleshoot, check the developer console, which is accessed by the keyboard shortcut `control-shift-i` in Firefox and Chrome. If there is a message regarding failure to initialize WebGL, you can take the following steps:
-
   - Chrome
 
     Check `chrome://gpu` to see if your GPU is blacklisted. There may be a flag you can enable to make it work.
@@ -83,17 +82,15 @@ or within Neuroglancer, press `h` or click on the button labeled `?` in the uppe
   - Firefox
 
     Check `about:support`. There may be webgl-related properties in `about:config` that you can change to make it work. Possible settings:
-
     - `webgl.disable-fail-if-major-performance-caveat = true`
     - `webgl.force-enabled = true`
     - `webgl.msaa-force = true`
 
 - Failure to access a data source.
 
-  As a security measure, browsers will in many prevent a webpage from accessing the true error code associated with a failed HTTP request. It is therefore often necessary to check the developer tools to see the true cause of any HTTP request error.
+  As a security measure, browsers will in many cases prevent a webpage from accessing the true error code associated with a failed HTTP request. It is therefore often necessary to check the developer tools to see the true cause of any HTTP request error.
 
   There are several likely causes:
-
   - [Cross-origin resource sharing (CORS)](https://en.wikipedia.org/wiki/Cross-origin_resource_sharing)
 
     Neuroglancer relies on cross-origin requests to retrieve data from third-party servers. As a security measure, if an appropriate `Access-Control-Allow-Origin` response header is not sent by the server, browsers prevent webpages from accessing any information about the response from a cross-origin request. In order to make the data accessible to Neuroglancer, you may need to change the cross-origin request sharing (CORS) configuration of the HTTP server.
@@ -109,7 +106,7 @@ In order to maintain a responsive UI and data display even during rapid navigati
 - do not support any form of _shared_ memory or standard synchronization mechanism (although they do support relatively efficient _transfers_ of typed arrays between threads);
 - require that all manipulation of the DOM and the WebGL context happens on the main UI thread.
 
-The "frontend" UI thread handles user actions and rendering, while the "backend" WebWorker thread handle all queuing, downloading, and preprocessing of data needed for rendering.
+The "frontend" UI thread handles user actions and rendering, while the "backend" WebWorker thread handles all queuing, downloading, and preprocessing of data needed for rendering.
 
 # Documentation Index
 
@@ -170,8 +167,8 @@ There is a Google Group/mailing list for discussion related to Neuroglancer:
   as a useful example for converting other datasets.
 - [BigArrays.jl](https://github.com/seung-lab/BigArrays.jl) - Julia interface of neuroglancer precomputed data format.
 - [cloudvolume](https://github.com/seung-lab/cloud-volume) - Python interface of neuroglancer precomputed data format.
-- [multiresolution-mesh-creator](https://github.com/janelia-cosem/multiresolution-mesh-creator) - Python tool for creating [multi-resolution meshes](https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/meshes.md#multi-resolution-mesh-format) from single resolution - or multiscale - meshes.
-- [Igneous](https://github.com/seung-lab/igneous) - Python pipeline for scalable meshing, skeletonizing, downsampling, and managment of large 3d images focusing on Neuroglancer Precomputed format.
+- [multiresolution-mesh-creator](https://github.com/janelia-cosem/multiresolution-mesh-creator) - Python tool for creating [multi-resolution meshes](https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/meshes.md#multi-resolution-mesh-format) from single resolution or multiscale meshes.
+- [Igneous](https://github.com/seung-lab/igneous) - Python pipeline for scalable meshing, skeletonizing, downsampling, and management of large 3d images focusing on Neuroglancer Precomputed format.
 
 # Contributing
 

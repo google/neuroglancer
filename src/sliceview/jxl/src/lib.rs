@@ -25,8 +25,8 @@ pub fn free(ptr: *mut u8, size: usize) {
 }
 
 #[no_mangle]
-pub fn width(ptr: *mut u8, input_size: usize, output_size: usize) -> i32 {
-    if ptr.is_null() || input_size == 0 || output_size == 0 {
+pub fn height_and_width(ptr: *mut u8, input_size: usize) -> i64 {
+    if ptr.is_null() || input_size == 0 {
         return -1;
     }
 
@@ -34,50 +34,12 @@ pub fn width(ptr: *mut u8, input_size: usize, output_size: usize) -> i32 {
         slice::from_raw_parts(ptr, input_size)
     };
 
-    let image = match JxlImage::builder().read(data) {
-        Ok(image) => image,
-        Err(_image) => return -2,
-    };
-
-    for keyframe_idx in 0..image.num_loaded_keyframes() {
-        let frame = match image.render_frame(keyframe_idx) {
-            Ok(frame) => frame,
-            Err(_frame) => return -3,
-        };
-
-        let stream = frame.stream();
-        return stream.width() as i32;
+    match JxlImage::builder().read(data) {
+        Ok(image) => (
+            ((image.image_header().size.height as i64) << 31) | (((image.image_header().size.width as i64) & 0x7fffffff))
+        ) as i64,
+        Err(_) => -2,
     }
-
-    -4 as i32
-}
-
-#[no_mangle]
-pub fn height(ptr: *mut u8, input_size: usize, output_size: usize) -> i32 {
-    if ptr.is_null() || input_size == 0 || output_size == 0 {
-        return -1;
-    }
-
-    let data: &[u8] = unsafe {
-        slice::from_raw_parts(ptr, input_size)
-    };
-
-    let image = match JxlImage::builder().read(data) {
-        Ok(image) => image,
-        Err(_image) => return -2,
-    };
-
-    for keyframe_idx in 0..image.num_loaded_keyframes() {
-        let frame = match image.render_frame(keyframe_idx) {
-            Ok(frame) => frame,
-            Err(_frame) => return -3,
-        };
-
-        let stream = frame.stream();
-        return stream.height() as i32;
-    }
-
-    -4 as i32
 }
 
 #[no_mangle]
@@ -114,19 +76,19 @@ pub fn decode(ptr: *mut u8, input_size: usize, output_size: usize) -> *const u8 
         match image.pixel_format() {
             PixelFormat::Gray => {
                 for pixel in fb.buf() {
-                    let value = (pixel * 255.0).clamp(0.0, 255.0) as u8;
+                    let value = (pixel * 255.0).clamp(0.0, 255.0).round() as u8;
                     output_buffer.push(value);
                 }
             },
             PixelFormat::Rgb => {
                 for pixel in fb.buf() {
-                    let value = (pixel * 255.0).clamp(0.0, 255.0) as u8;
+                    let value = (pixel * 255.0).clamp(0.0, 255.0).round() as u8;
                     output_buffer.push(value);
                 }
             }
             PixelFormat::Rgba => {
                 for pixel in fb.buf() {
-                    let value = (pixel * 255.0).clamp(0.0, 255.0) as u8;
+                    let value = (pixel * 255.0).clamp(0.0, 255.0).round() as u8;
                     output_buffer.push(value);
                     output_buffer.push(255);  // Alpha channel set to fully opaque
                 }

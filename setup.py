@@ -227,8 +227,6 @@ class BundleClientCommand(
                 "build-python",
                 "--",
                 f"--mode={self.client_bundle_type}",
-                "--no-typecheck",
-                "--no-lint",
                 f"--output={output_dir}",
             ],
             cwd=root_dir,

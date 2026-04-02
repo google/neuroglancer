@@ -36,10 +36,8 @@ import type {
   RenderedDataViewerState,
 } from "#src/rendered_data_panel.js";
 import {
-  clearOutOfBoundsPickData,
-  pickDiameter,
-  pickOffsetSequence,
-  pickRadius,
+  getPickDiameter,
+  getPickOffsetSequence,
   RenderedDataPanel,
 } from "#src/rendered_data_panel.js";
 import {
@@ -687,8 +685,9 @@ export class PerspectivePanel extends RenderedDataPanel {
     return depthArray;
   }
 
-  issuePickRequest(glWindowX: number, glWindowY: number) {
+  issuePickRequest(glWindowX: number, glWindowY: number, pickRadius: number) {
     const { offscreenFramebuffer } = this;
+    const pickDiameter = getPickDiameter(pickRadius);
     offscreenFramebuffer.readPixelFloat32IntoBuffer(
       OffscreenTextures.Z,
       glWindowX - pickRadius,
@@ -712,18 +711,12 @@ export class PerspectivePanel extends RenderedDataPanel {
     glWindowY: number,
     data: Float32Array,
     pickingData: FramePickingData,
+    pickRadius: number,
   ) {
     const { mouseState } = this.viewer;
     mouseState.pickedRenderLayer = null;
-    clearOutOfBoundsPickData(
-      data,
-      0,
-      4,
-      glWindowX,
-      glWindowY,
-      pickingData.viewportWidth,
-      pickingData.viewportHeight,
-    );
+    const pickDiameter = getPickDiameter(pickRadius);
+    const pickOffsetSequence = getPickOffsetSequence(pickRadius);
     const numOffsets = pickOffsetSequence.length;
     for (let i = 0; i < numOffsets; ++i) {
       const offset = pickOffsetSequence[i];

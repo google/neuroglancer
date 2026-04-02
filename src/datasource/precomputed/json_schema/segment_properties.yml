@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=http://json-schema.org/draft-07/schema#
 $schema: http://json-schema.org/draft-07/schema#
 $id: PrecomputedSegmentProperties
 title: "Precomputed segment properties"
@@ -18,81 +19,83 @@ properties:
         items:
           type: string
       properties:
-        type: object
+        type: array
         title: "Supported inline properties."
-        properties:
-          id:
-            type: string
-            title: String identifier to display in the UI.
-            description: |-
-              Ignored if `.type` is ``"label"`` or ``"description"``.
-          type:
-            enum:
-              - "label"
-              - "description"
-              - "string"
-              - "tags"
-              - "number"
-            title: Property type.
-            description: |-
-              At most one property may have type ``"label"`` (which is displayed in
-              the UI next to the segment ID), at most one property may have type
-              ``"description"``, and at most one property may have type ``"tags"``.
-          description:
-            type: string
-            title: Description of the property to display to the user.
-            description: |-
-              Must not be present if `.type` is ``"tags"``.
-          tags:
-            type: array
-            items:
+        items:
+          type: object
+          properties:
+            id:
               type: string
-            title: List of valid tag values.
-            description: |-
-              Must be specified if, and only if, `.type` is ``"tags"``. The
-              specified tags must all be distinct, must not contain spaces, and do
-              not include the initial ``"#"`` character. Tags are matched
-              case-insensitively.
-          tag_descriptions:
-            type: array
-            items:
+              title: String identifier to display in the UI.
+              description: |-
+                Ignored if `.type` is ``"label"`` or ``"description"``.
+            type:
+              enum:
+                - "label"
+                - "description"
+                - "string"
+                - "tags"
+                - "number"
+              title: Property type.
+              description: |-
+                At most one property may have type ``"label"`` (which is displayed in
+                the UI next to the segment ID), at most one property may have type
+                ``"description"``, and at most one property may have type ``"tags"``.
+            description:
               type: string
-            title: |-
-              Longer description for each of the tags.
-            description: |-
-              May be present if `.type` is ``"tags"``, otherwise must not be
-              specified. The length must match the length of `.tags`.
-          data_type:
-            title: |-
-              Data type for numerical properties.
-            description: |-
-              Must be present if, and only if, `.type` is ``"number"``.
-            enum:
-              - uint8
-              - int8
-              - uint16
-              - int16
-              - uint32
-              - int32
-              - float32
-          values:
-            title: |-
-              Property value for each ID in `.ids`.
-            type: array
-            description: |-
-              - If `.type` is equal to ``"label"``, ``"description"``, or
-                ``"string"``, each element must be a string.
+              title: Description of the property to display to the user.
+              description: |-
+                Must not be present if `.type` is ``"tags"``.
+            tags:
+              type: array
+              items:
+                type: string
+              title: List of valid tag values.
+              description: |-
+                Must be specified if, and only if, `.type` is ``"tags"``. The
+                specified tags must all be distinct, must not contain spaces, and do
+                not include the initial ``"#"`` character. Tags are matched
+                case-insensitively.
+            tag_descriptions:
+              type: array
+              items:
+                type: string
+              title: |-
+                Longer description for each of the tags.
+              description: |-
+                May be present if `.type` is ``"tags"``, otherwise must not be
+                specified. The length must match the length of `.tags`.
+            data_type:
+              title: |-
+                Data type for numerical properties.
+              description: |-
+                Must be present if, and only if, `.type` is ``"number"``.
+              enum:
+                - uint8
+                - int8
+                - uint16
+                - int16
+                - uint32
+                - int32
+                - float32
+            values:
+              title: |-
+                Property value for each ID in `.ids`.
+              type: array
+              description: |-
+                - If `.type` is equal to ``"label"``, ``"description"``, or
+                  ``"string"``, each element must be a string.
 
-              - If `.type` is equal to ``"number"``, each element must be a
-                number that will be converted to the specified `.data_type`.
+                - If `.type` is equal to ``"number"``, each element must be a
+                  number that will be converted to the specified `.data_type`.
 
-              - If `.type` is equal to ``"tags"``, each element must be an array
-                of integers (in increasing order), where each number specifies a
-                0-based index into the ``"tags"`` array.
-        required:
-          - id
-          - type
-          - values
+                - If `.type` is equal to ``"tags"``, each element must be an array
+                  of integers (in increasing order), where each number specifies a
+                  0-based index into the ``"tags"`` array.
+          required:
+            - id
+            - type
+            - values
     required:
       - ids
       - properties

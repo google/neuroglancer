@@ -24,10 +24,8 @@ import type {
   RenderedDataViewerState,
 } from "#src/rendered_data_panel.js";
 import {
-  clearOutOfBoundsPickData,
-  pickDiameter,
-  pickOffsetSequence,
-  pickRadius,
+  getPickDiameter,
+  getPickOffsetSequence,
   RenderedDataPanel,
 } from "#src/rendered_data_panel.js";
 import type { SliceView } from "#src/sliceview/frontend.js";
@@ -449,8 +447,9 @@ export class SliceViewPanel extends RenderedDataPanel {
     this.sliceView.projectionParameters.setViewport(this.renderViewport);
   }
 
-  issuePickRequest(glWindowX: number, glWindowY: number) {
+  issuePickRequest(glWindowX: number, glWindowY: number, pickRadius: number) {
     const { offscreenFramebuffer } = this;
+    const pickDiameter = getPickDiameter(pickRadius);
     offscreenFramebuffer.readPixelFloat32IntoBuffer(
       OffscreenTextures.PICK,
       glWindowX - pickRadius,
@@ -466,18 +465,12 @@ export class SliceViewPanel extends RenderedDataPanel {
     glWindowY: number,
     data: Float32Array,
     pickingData: FramePickingData,
+    pickRadius: number,
   ) {
     const { mouseState } = this.viewer;
     mouseState.pickedRenderLayer = null;
-    clearOutOfBoundsPickData(
-      data,
-      0,
-      4,
-      glWindowX,
-      glWindowY,
-      pickingData.viewportWidth,
-      pickingData.viewportHeight,
-    );
+    const pickDiameter = getPickDiameter(pickRadius);
+    const pickOffsetSequence = getPickOffsetSequence(pickRadius);
     const { viewportWidth, viewportHeight } = pickingData;
     const numOffsets = pickOffsetSequence.length;
     const { value: voxelCoordinates } = this.navigationState.position;

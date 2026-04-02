@@ -20,8 +20,8 @@ if __name__ == "__main__":
                 print("Setting visibility to true")
 
     viewer.actions.add("toggle-visibility", toggle_visibility)
-    with viewer.config_state.txn() as s:
-        s.input_event_bindings.viewer["keys"] = "toggle-visibility"
+    with viewer.config_state.txn() as cs:
+        cs.input_event_bindings.viewer["keys"] = "toggle-visibility"
 
     with viewer.txn() as s:
         s.dimensions = neuroglancer.CoordinateSpace(

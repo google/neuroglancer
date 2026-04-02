@@ -14,6 +14,7 @@
 """Facilities for converting JSON <-> Python objects"""
 
 import collections
+import collections.abc
 import copy
 import inspect
 import numbers

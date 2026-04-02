@@ -110,16 +110,13 @@ export async function decompressJxl(
   let imagePtr = null;
 
   try {
-    const width = (m.exports.width as Function)(
+    const height_and_width = (m.exports.height_and_width as Function)(
       jxlImagePtr,
       buffer.byteLength,
-      nbytes,
     );
-    const height = (m.exports.height as Function)(
-      jxlImagePtr,
-      buffer.byteLength,
-      nbytes,
-    );
+
+    const width = Number(height_and_width & 0x7fffffffn);
+    const height = Number(height_and_width >> 31n);
 
     if (width <= 0 || height <= 0) {
       throw new Error(

@@ -44,9 +44,7 @@ SKELETON_PATH_REGEX = r"^/neuroglancer/skeleton/(?P<key>[^/]+)/(?P<object_id>[0-
 
 MESH_PATH_REGEX = r"^/neuroglancer/mesh/(?P<key>[^/]+)/(?P<object_id>[0-9]+)$"
 
-STATIC_PATH_REGEX = (
-    r"^/v/(?P<viewer_token>[^/]+)/(?P<path>(?:[@a-zA-Z0-9_\-][@a-zA-Z0-9_\-./]*)?)$"
-)
+STATIC_PATH_REGEX = r"^/v/(?P<viewer_token>[^/]+)/(?P<path>(?:[a-zA-Z0-9_@\-][a-zA-Z0-9_@\-.]*(?:/[a-zA-Z0-9_@\-][a-zA-Z0-9_@\-.]*)*)?)$"
 
 ACTION_PATH_REGEX = r"^/action/(?P<viewer_token>[^/]+)$"
 
@@ -68,7 +66,7 @@ global_static_content_source = None
 
 global_server_args = dict(bind_address="127.0.0.1", bind_port=0)
 
-debug = False
+debug: bool = False
 
 _IS_GOOGLE_COLAB = "google.colab" in sys.modules
 
@@ -538,8 +536,6 @@ def set_dev_server_content_source():
             "dev-server-python",
             "--",
             "--port=0",
-            "--no-lint",
-            "--no-typecheck",
         ],
         cwd=root_dir,
         stdin=subprocess.PIPE,
