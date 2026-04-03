@@ -4,6 +4,30 @@
       "zarr_format": 2
     },
     ".zattrs": {
+      "omero": {
+        "channels": [
+          {
+            "color": "0000FF",
+            "window": {
+              "min": 0,
+              "max": 65535,
+              "start": 0,
+              "end": 1000
+            },
+            "label": "channelA"
+          },
+          {
+            "color": "00FF00",
+            "window": {
+              "min": 0,
+              "max": 65535,
+              "start": 100,
+              "end": 5000
+            },
+            "label": "channelB"
+          }
+        ]
+      },
       "multiscales": [
         {
           "axes": [
@@ -50,8 +74,8 @@
                 },
                 {
                   "translation": [
-                    2,
-                    15
+                    2.0,
+                    15.0
                   ],
                   "type": "translation"
                 }
@@ -69,8 +93,8 @@
                 },
                 {
                   "translation": [
-                    6,
-                    45
+                    6.0,
+                    45.0
                   ],
                   "type": "translation"
                 }
@@ -79,47 +103,15 @@
           ],
           "name": "image",
           "version": "0.4",
+          "type": "itkwasm_gaussian",
+          "metadata": {
+            "description": "Smoothed with a discrete gaussian filter to generate a scale space, ideal for intensity images. ITK-Wasm implementation is extremely portable and SIMD accelerated.",
+            "method": "itkwasm_downsample.downsample",
+            "version": "1.8.1"
+          },
           "@type": "ngff:Image"
         }
       ]
-    },
-    "scale2/.zattrs": {
-      "_ARRAY_DIMENSIONS": [
-        "y",
-        "x"
-      ]
-    },
-    "scale2/.zgroup": {
-      "zarr_format": 2,
-      "consolidated_metadata": {
-        "metadata": {},
-        "must_understand": false,
-        "kind": "inline"
-      }
-    },
-    "scale2/image/.zattrs": {},
-    "scale2/image/.zarray": {
-      "shape": [
-        2,
-        2
-      ],
-      "chunks": [
-        2,
-        2
-      ],
-      "fill_value": null,
-      "order": "C",
-      "filters": null,
-      "dimension_separator": "/",
-      "compressor": {
-        "id": "blosc",
-        "cname": "lz4",
-        "clevel": 5,
-        "shuffle": -1,
-        "blocksize": 0
-      },
-      "zarr_format": 2,
-      "dtype": "<u2"
     },
     "scale0/.zattrs": {
       "_ARRAY_DIMENSIONS": [
@@ -128,6 +120,34 @@
       ]
     },
     "scale0/.zgroup": {
+      "zarr_format": 2,
+      "consolidated_metadata": {
+        "metadata": {},
+        "must_understand": false,
+        "kind": "inline"
+      }
+    },
+    "scale1/.zattrs": {
+      "_ARRAY_DIMENSIONS": [
+        "y",
+        "x"
+      ]
+    },
+    "scale1/.zgroup": {
+      "zarr_format": 2,
+      "consolidated_metadata": {
+        "metadata": {},
+        "must_understand": false,
+        "kind": "inline"
+      }
+    },
+    "scale2/.zattrs": {
+      "_ARRAY_DIMENSIONS": [
+        "y",
+        "x"
+      ]
+    },
+    "scale2/.zgroup": {
       "zarr_format": 2,
       "consolidated_metadata": {
         "metadata": {},
@@ -145,6 +165,7 @@
         10,
         10
       ],
+      "dtype": "<u2",
       "fill_value": null,
       "order": "C",
       "filters": null,
@@ -156,22 +177,7 @@
         "shuffle": -1,
         "blocksize": 0
       },
-      "zarr_format": 2,
-      "dtype": "<u2"
-    },
-    "scale1/.zattrs": {
-      "_ARRAY_DIMENSIONS": [
-        "y",
-        "x"
-      ]
-    },
-    "scale1/.zgroup": {
-      "zarr_format": 2,
-      "consolidated_metadata": {
-        "metadata": {},
-        "must_understand": false,
-        "kind": "inline"
-      }
+      "zarr_format": 2
     },
     "scale1/image/.zattrs": {},
     "scale1/image/.zarray": {
@@ -183,6 +189,7 @@
         5,
         5
       ],
+      "dtype": "<u2",
       "fill_value": null,
       "order": "C",
       "filters": null,
@@ -194,8 +201,31 @@
         "shuffle": -1,
         "blocksize": 0
       },
-      "zarr_format": 2,
-      "dtype": "<u2"
+      "zarr_format": 2
+    },
+    "scale2/image/.zattrs": {},
+    "scale2/image/.zarray": {
+      "shape": [
+        2,
+        2
+      ],
+      "chunks": [
+        2,
+        2
+      ],
+      "dtype": "<u2",
+      "fill_value": null,
+      "order": "C",
+      "filters": null,
+      "dimension_separator": "/",
+      "compressor": {
+        "id": "blosc",
+        "cname": "lz4",
+        "clevel": 5,
+        "shuffle": -1,
+        "blocksize": 0
+      },
+      "zarr_format": 2
     }
   },
   "zarr_consolidated_format": 1

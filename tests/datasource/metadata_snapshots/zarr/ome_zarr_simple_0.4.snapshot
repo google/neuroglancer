@@ -1,5 +1,46 @@
 {
   "canonicalUrl": "http://localhost:*/datasource/zarr/ome_zarr/simple_0.4/|zarr2:",
+  "channelMetadata": {
+    "channels": [
+      {
+        "active": undefined,
+        "coefficient": undefined,
+        "color": Float32Array [
+          0,
+          0,
+          1,
+        ],
+        "label": "channelA",
+        "range": [
+          0,
+          1000,
+        ],
+        "window": [
+          0,
+          65535,
+        ],
+      },
+      {
+        "active": undefined,
+        "coefficient": undefined,
+        "color": Float32Array [
+          0,
+          1,
+          0,
+        ],
+        "label": "channelB",
+        "range": [
+          100,
+          5000,
+        ],
+        "window": [
+          0,
+          65535,
+        ],
+      },
+    ],
+    "name": undefined,
+  },
   "modelTransform": {
     "inputSpace": {
       "bounds": {
