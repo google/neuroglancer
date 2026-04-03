@@ -14,22 +14,21 @@
  * limitations under the License.
  */
 
-export type ShaderStringLiteralIdMap = Map<string, number>;
-
-export interface ShaderSourcePreprocessingData {
-  stringLiteralIds: ShaderStringLiteralIdMap;
-}
+export type ShaderStringLiteralIdMap = ReadonlyMap<string, number>;
 
 export interface ShaderStringPreprocessingResult {
   code: string;
   stringLiteralIds: ShaderStringLiteralIdMap;
 }
 
+// Matches double-quoted string literals without terminating on escaped quotes.
+const doubleQuotedStringPattern = /"(?:\\.|[^\\"])*"/g;
+
 export function preprocessStrings(
   userShader: string,
 ): ShaderStringPreprocessingResult {
   const stringLiteralIds = new Map<string, number>();
-  const code = userShader.replace(/"(?:\\.|[^\\"])*"/g, (token) => {
+  const code = userShader.replace(doubleQuotedStringPattern, (token) => {
     const value = JSON.parse(token) as string;
     let index = stringLiteralIds.get(value);
     if (index === undefined) {
