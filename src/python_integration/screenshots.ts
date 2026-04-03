@@ -138,7 +138,10 @@ export class ScreenshotHandler extends RefCounted {
         }
         const actionState = {
           viewerState: JSON.parse(
-            JSON.stringify(getCachedJson(this.viewer.state).value),
+            JSON.stringify(
+              getCachedJson(this.viewer.state).value,
+              bigintToStringJsonReplacer,
+            ),
           ),
           selectedValues: JSON.parse(
             JSON.stringify(
