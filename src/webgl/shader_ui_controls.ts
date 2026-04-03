@@ -69,7 +69,7 @@ import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import {
   preprocessStrings,
   type ShaderStringLiteralIdMap,
-} from "#src/webgl/shader_source_preprocessing.js";
+} from "#src/webgl/shader_source_string_preprocessing.js";
 import type { TransferFunctionParameters } from "#src/widget/transfer_function.js";
 import {
   defineTransferFunctionShader,

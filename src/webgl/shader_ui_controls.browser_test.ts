@@ -19,7 +19,7 @@ import { constantWatchableValue } from "#src/trackable_value.js";
 import { DataType } from "#src/util/data_type.js";
 import { vec3, vec4 } from "#src/util/geom.js";
 import { defaultDataTypeRange } from "#src/util/lerp.js";
-import { preprocessStrings } from "#src/webgl/shader_source_preprocessing.js";
+import { preprocessStrings } from "#src/webgl/shader_source_string_preprocessing.js";
 import { fragmentShaderTest } from "#src/webgl/shader_testing.js";
 import {
   addControlsToBuilder,
