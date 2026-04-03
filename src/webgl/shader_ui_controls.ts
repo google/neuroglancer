@@ -68,7 +68,7 @@ import {
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import {
   preprocessStrings,
-  type ShaderSourcePreprocessingData,
+  type ShaderStringLiteralIdMap,
 } from "#src/webgl/shader_source_preprocessing.js";
 import type { TransferFunctionParameters } from "#src/widget/transfer_function.js";
 import {
@@ -149,7 +149,7 @@ export interface ShaderControlsParseResult {
   // Source code with comments stripped and UI controls replaced by appropriate text.
   code: string;
   controls: Controls;
-  preprocessing: ShaderSourcePreprocessingData;
+  preprocessing: { stringLiteralIds: ShaderStringLiteralIdMap };
   errors: ShaderControlParseError[];
 }
 
@@ -1729,7 +1729,7 @@ function setControlInShader(
   name: string,
   control: ShaderUiControl,
   value: any,
-  stringLiteralIds?: Map<string, number>,
+  stringLiteralIds?: ReadonlyMap<string, number>,
 ) {
   const uName = uniformName(name);
   const uniform = shader.uniform(uName);
