@@ -438,8 +438,11 @@ function parseSelectDirective(
   if (!parameters.has("options")) {
     errors.push("options must be specified");
   }
-  let resolvedDefaultValue: string | undefined;
-  if (options !== undefined && defaultValue !== undefined) {
+  if (options === undefined) {
+    return { errors };
+  }
+  let resolvedDefaultValue = options[0];
+  if (defaultValue !== undefined) {
     if (!options.includes(defaultValue)) {
       errors.push(
         `default value ${JSON.stringify(defaultValue)} must match one of the options`,
@@ -447,8 +450,6 @@ function parseSelectDirective(
     } else {
       resolvedDefaultValue = defaultValue;
     }
-  } else if (options !== undefined) {
-    resolvedDefaultValue = options[0];
   }
   if (errors.length > 0) {
     return { errors };
@@ -457,8 +458,8 @@ function parseSelectDirective(
     control: {
       type: "select",
       valueType: "uint",
-      options: options!,
-      default: resolvedDefaultValue!,
+      options,
+      default: resolvedDefaultValue,
     } as ShaderSelectControl,
     errors: undefined,
   };
