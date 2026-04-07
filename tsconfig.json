@@ -25,6 +25,7 @@
     "typeRoots": [],
     "module": "ESNext",
     "noEmit": true,
+    "strictBindCallApply": true,
   },
   "exclude": [
     "build",
