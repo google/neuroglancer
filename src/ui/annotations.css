@@ -262,6 +262,8 @@ div.neuroglancer-annotation-details-description {
   font-family: monospace;
   font-size: medium;
   flex: 1;
+  text-overflow: ellipsis;
+  overflow: hidden;
 }
 
 input.neuroglancer-segment-list-entry-id {
