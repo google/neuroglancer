@@ -1008,7 +1008,7 @@ class AnnotationUIProperty extends RefCounted {
     this.isTypeDropdownExpanded = true;
 
     document.body.appendChild(dropdown);
-    this.positionDropdown(dropdown, anchorElement);
+    positionDropdown(dropdown, anchorElement);
     this.registerEventListener(
       document,
       "pointerdown",
@@ -1070,15 +1070,6 @@ class AnnotationUIProperty extends RefCounted {
       dropdown.appendChild(option);
     });
     this.typeChangeDropdown = dropdown;
-  }
-
-  private positionDropdown(
-    dropdown: HTMLDivElement,
-    anchorElement: HTMLElement,
-  ) {
-    const rect = anchorElement.getBoundingClientRect();
-    dropdown.style.left = `${rect.left}px`;
-    dropdown.style.top = `${rect.bottom}px`;
   }
 
   private handleTypeChange(
@@ -1452,21 +1443,7 @@ export class AnnotationSchemaView extends Tab {
     );
     const handleAddPropertyClick = () => {
       document.body.appendChild(dropdown);
-      const rect = addButton.getBoundingClientRect();
-      const dropdownHeight = dropdown.offsetHeight;
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const spaceAbove = rect.top;
-
-      if (spaceBelow >= dropdownHeight || spaceBelow > spaceAbove) {
-        // Enough space - position below
-        dropdown.style.top = `${rect.bottom + window.scrollY}px`;
-      } else {
-        // Not enough space - position above
-        dropdown.style.top = `${rect.top + window.scrollY - dropdownHeight - 10}px`;
-      }
-
-      dropdown.style.left = `${rect.left}px`;
-
+      positionDropdown(dropdown, addButton);
       document.addEventListener(
         "pointerdown",
         this.clickOutsideDropdownHandler,
@@ -1771,4 +1748,24 @@ export class AnnotationSchemaTab extends Tab {
     element.classList.add("neuroglancer-annotations-schema-tab");
     element.appendChild(this.schemaView.element);
   }
+}
+
+function positionDropdown(
+  dropdown: HTMLDivElement,
+  anchorElement: HTMLElement,
+) {
+  const rect = anchorElement.getBoundingClientRect();
+  const dropdownHeight = dropdown.offsetHeight;
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const spaceAbove = rect.top;
+
+  if (spaceBelow >= dropdownHeight || spaceBelow > spaceAbove) {
+    // Enough space - position below
+    dropdown.style.top = `${rect.bottom + window.scrollY}px`;
+  } else {
+    // Not enough space - position above
+    dropdown.style.top = `${rect.top + window.scrollY - dropdownHeight - 10}px`;
+  }
+
+  dropdown.style.left = `${rect.left}px`;
 }
