@@ -448,7 +448,7 @@ export class ImageUserLayer extends Base {
           this.manager.root.display.gl,
           shader,
           this.shaderControlState,
-          shaderResult.parameters.parseResult.controls,
+          shaderResult.parameters.parseResult,
         );
       },
     };

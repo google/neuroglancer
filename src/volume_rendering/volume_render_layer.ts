@@ -908,7 +908,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
                 gl,
                 shader,
                 this.shaderControlState,
-                shaderResult.parameters.parseResult.controls,
+                shaderResult.parameters.parseResult,
               );
               this.bindDepthBufferTexture(renderContext, shader);
               chunkFormat.beginDrawing(gl, shader);
@@ -1078,7 +1078,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
                 gl,
                 shader,
                 this.shaderControlState,
-                shaderResult.parameters.parseResult.controls,
+                shaderResult.parameters.parseResult,
               );
               this.bindDepthBufferTexture(renderContext, shader);
               this.setShaderUniforms(shader, shaderSetupUniforms);
