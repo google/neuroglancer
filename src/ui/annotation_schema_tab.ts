@@ -367,7 +367,7 @@ class AnnotationUIProperty extends RefCounted {
         "You can convert to a higher precision, but not back to lower precision.";
       this.registerEventListener(typeCell, "click", (e: MouseEvent) => {
         e.stopPropagation();
-        this.showTypeChangeDropdown(typeCell, type, identifier);
+        this.showTypeChangeDropdown(typeCell, type, identifier, enumLabels);
       });
     }
 
@@ -984,6 +984,7 @@ class AnnotationUIProperty extends RefCounted {
     anchorElement: HTMLElement,
     currentType: AnnotationPropertyType,
     identifier: string,
+    enumLabels?: string[],
   ) {
     if (this.isTypeDropdownExpanded) return;
     // Check if any other dropdowns are open and close them
@@ -1001,7 +1002,7 @@ class AnnotationUIProperty extends RefCounted {
     }
 
     if (!this.typeChangeDropdown) {
-      this.createDropdownElement(availableOptions, identifier);
+      this.createDropdownElement(availableOptions, identifier, enumLabels);
     }
     const dropdown = this.typeChangeDropdown!;
     this.isTypeDropdownExpanded = true;
@@ -1037,6 +1038,7 @@ class AnnotationUIProperty extends RefCounted {
   private createDropdownElement(
     availableOptions: AnnotationPropertyType[],
     identifier: string,
+    enumLabels?: string[],
   ) {
     const dropdown = document.createElement("div");
     dropdown.className = "neuroglancer-annotation-schema-dropdown";
@@ -1050,7 +1052,10 @@ class AnnotationUIProperty extends RefCounted {
       const option = document.createElement("div");
       option.className = "neuroglancer-annotation-schema-dropdown-option";
 
-      const iconWrapper = this.parentView.createIconWrapper(newType);
+      const iconWrapper = this.parentView.createIconWrapper(
+        newType,
+        enumLabels,
+      );
       const label = document.createElement("span");
       label.textContent = this.getDisplayNameForType(newType);
 
@@ -1072,7 +1077,6 @@ class AnnotationUIProperty extends RefCounted {
     anchorElement: HTMLElement,
   ) {
     const rect = anchorElement.getBoundingClientRect();
-    dropdown.style.position = "absolute";
     dropdown.style.left = `${rect.left}px`;
     dropdown.style.top = `${rect.bottom}px`;
   }
