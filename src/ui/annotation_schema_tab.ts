@@ -27,6 +27,7 @@ import svg_edit from "ikonate/icons/edit.svg?raw";
 import svg_numbers from "ikonate/icons/hash.svg?raw";
 import svg_check from "ikonate/icons/ok-circle.svg?raw";
 import svg_format_size from "ikonate/icons/text.svg?raw";
+import svg_upload from "ikonate/icons/upload.svg?raw";
 import "#src/ui/annotation_schema_tab.css";
 import type { AnnotationDisplayState } from "#src/annotation/annotation_layer_state.js";
 import type {
@@ -1118,6 +1119,8 @@ export class AnnotationSchemaView extends Tab {
   public readonly: WatchableValueInterface<boolean>;
   public textWidthCanvas: HTMLCanvasElement | null = null;
   private addPropertyDropdown: HTMLDivElement = document.createElement("div");
+  private fileInput: HTMLInputElement | null = null;
+  private pendingFileResolve: ((file: File | null) => void) | null = null;
 
   constructor(
     public layer: Borrowed<UserLayerWithAnnotations>,
@@ -1143,6 +1146,37 @@ export class AnnotationSchemaView extends Tab {
         this.updateOnReadonlyChange();
       }),
     );
+  }
+
+  private createFileInput(): HTMLInputElement {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.style.display = "none";
+
+    input.addEventListener("change", () => {
+      const resolve = this.pendingFileResolve;
+      this.pendingFileResolve = null;
+      resolve?.(input.files?.[0] ?? null);
+    });
+
+    document.body.appendChild(input);
+    return input;
+  }
+
+  private selectFile(accept = ".json"): Promise<File | null> {
+    if (this.fileInput === null) {
+      this.fileInput = this.createFileInput();
+    }
+
+    // Resolve any abandoned prior request defensively.
+    this.pendingFileResolve?.(null);
+    this.fileInput.accept = accept;
+    this.fileInput.value = "";
+
+    return new Promise((resolve) => {
+      this.pendingFileResolve = resolve;
+      this.fileInput?.click();
+    });
   }
 
   private updateOnReadonlyChange = () => {
@@ -1183,6 +1217,13 @@ export class AnnotationSchemaView extends Tab {
       onClick: () => this.downloadSchema(),
     });
     schemaActionButtons.appendChild(downloadButton);
+
+    const uploadButton = makeIcon({
+      title: "Upload schema",
+      svg: svg_upload,
+      onClick: () => this.uploadSchema(),
+    });
+    schemaActionButtons.appendChild(uploadButton);
 
     const copyButton = makeCopyButton({
       title: "Copy schema to clipboard",
@@ -1657,6 +1698,24 @@ export class AnnotationSchemaView extends Tab {
     saveBlobToFile(blob, `${layerName}_annotation_schema.json`);
   }
 
+  private async uploadSchema() {
+    const file = await this.selectFile(".json");
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const parsedSchema = parseAnnotationPropertySpecs(JSON.parse(text));
+      this.applySchema(parsedSchema);
+      StatusMessage.showTemporaryMessage("Annotation schema uploaded", 2000);
+    } catch (e) {
+      console.error(e);
+      StatusMessage.showTemporaryMessage(
+        "Failed to upload annotation schema",
+        2000,
+      );
+    }
+  }
+
   private copySchemaToClipboard() {
     const success = setClipboard(this.jsonSchema);
     const copyMessage = success ? "copied" : "failed to copy";
@@ -1666,20 +1725,24 @@ export class AnnotationSchemaView extends Tab {
     );
   }
 
+  private applySchema(parsedSchema: AnnotationPropertySpec[]) {
+    const states = this.annotationStates.states;
+    states.forEach((state) => {
+      const source = state.source as LocalAnnotationSource;
+      source.removeAllProperties();
+      for (const property of parsedSchema) {
+        console.debug("Adding property", property);
+        source.addProperty(property);
+      }
+    });
+    this.annotationStates.changed.dispatch();
+  }
+
   private pasteSchemaFromClipboard() {
     navigator.clipboard.readText().then((text) => {
       try {
         const parsedSchema = parseAnnotationPropertySpecs(JSON.parse(text));
-        const states = this.annotationStates.states;
-        states.forEach((state) => {
-          const source = state.source as LocalAnnotationSource;
-          source.removeAllProperties();
-          for (const property of parsedSchema) {
-            console.debug("Adding property", property);
-            source.addProperty(property);
-          }
-        });
-        this.annotationStates.changed.dispatch();
+        this.applySchema(parsedSchema);
         StatusMessage.showTemporaryMessage(
           "Annotation schema pasted from clipboard",
           /*duration=*/ 2000,
