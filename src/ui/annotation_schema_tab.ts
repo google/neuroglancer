@@ -1426,14 +1426,6 @@ export class AnnotationSchemaView extends Tab {
         option.appendChild(iconWrapper);
         option.appendChild(text);
 
-        option.addEventListener(
-          "mouseover",
-          () => (option.style.backgroundColor = "#333"),
-        );
-        option.addEventListener(
-          "mouseout",
-          () => (option.style.backgroundColor = ""),
-        );
         option.addEventListener("click", () => {
           const name = this.ensureUniquePropertyIdentifier(
             type.replace(/\s+/g, "_"),

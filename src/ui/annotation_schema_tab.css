@@ -247,6 +247,10 @@
   font-size: 13px;
 }
 
+.neuroglancer-annotation-schema-dropdown-option:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .neuroglancer-annotation-schema-enum-entry {
   display: flex;
   align-items: flex-start;
