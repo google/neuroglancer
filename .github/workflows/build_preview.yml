@@ -8,7 +8,7 @@ jobs:
     strategy:
       matrix:
         node-version:
-          - "22.x"
+          - "24.x"
     runs-on: ubuntu-latest
 
     steps:
