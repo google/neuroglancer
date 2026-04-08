@@ -991,7 +991,7 @@ class AnnotationUIProperty extends RefCounted {
     const parent = this.parentView;
     for (const property of parent.annotationUIProperties.values()) {
       if (property.isTypeDropdownExpanded) {
-        property.closeDropdown();
+        property.closeTypeDropdown();
       }
     }
     const availableOptions: AnnotationPropertyType[] = [];
@@ -1016,7 +1016,7 @@ class AnnotationUIProperty extends RefCounted {
     );
   }
 
-  private closeDropdown() {
+  private closeTypeDropdown() {
     if (this.typeChangeDropdown && this.isTypeDropdownExpanded) {
       this.typeChangeDropdown.remove();
       this.isTypeDropdownExpanded = false;
@@ -1032,7 +1032,7 @@ class AnnotationUIProperty extends RefCounted {
     if (target instanceof Node && this.typeChangeDropdown?.contains(target)) {
       return;
     }
-    this.closeDropdown();
+    this.closeTypeDropdown();
   };
 
   private createDropdownElement(
@@ -1065,7 +1065,7 @@ class AnnotationUIProperty extends RefCounted {
       this.registerEventListener(option, "click", (e: MouseEvent) => {
         e.stopPropagation();
         this.handleTypeChange(newType, identifier);
-        this.closeDropdown();
+        this.closeTypeDropdown();
       });
       dropdown.appendChild(option);
     });
@@ -1438,7 +1438,7 @@ export class AnnotationSchemaView extends Tab {
             ...this.setupInitialEnumsIfNeeded(type, isEnum),
           } as AnnotationPropertySpec;
           this.addProperty(newProperty);
-          this.closeDropdown();
+          this.closeAddPropertyDropdown();
         });
 
         dropdown.appendChild(option);
@@ -1490,10 +1490,10 @@ export class AnnotationSchemaView extends Tab {
     if (target instanceof Node && this.addPropertyDropdown?.contains(target)) {
       return;
     }
-    this.closeDropdown();
+    this.closeAddPropertyDropdown();
   };
 
-  private closeDropdown() {
+  private closeAddPropertyDropdown() {
     this.addPropertyDropdown.remove();
     document.removeEventListener(
       "pointerdown",
@@ -1755,7 +1755,7 @@ export class AnnotationSchemaView extends Tab {
   }
 
   dispose(): void {
-    this.closeDropdown();
+    this.closeAddPropertyDropdown();
   }
 }
 
