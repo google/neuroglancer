@@ -270,9 +270,8 @@ div.neuroglancer-annotation-details-description {
 
 .neuroglancer-annotation-property-value {
   font-family: monospace;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
+  text-overflow: ellipsis;
+  overflow: hidden;
 }
 
 .neuroglancer-annotation-property-id .neuroglancer-annotation-property-value {
