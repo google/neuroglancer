@@ -1652,12 +1652,9 @@ export class LocalAnnotationSource extends AnnotationSource {
 
     const convertValue = (value: any) => {
       if (oldType === "rgb" && newType === "rgba") {
-        const rgba = new Uint8Array(4);
-        rgba[0] = value[0];
-        rgba[1] = value[1];
-        rgba[2] = value[2];
-        rgba[3] = 255;
-        return rgba;
+        // rgba colors are stored as packed uint32s
+        // packed color format is AAGGBBRR
+        return (0xff000000 | value) >>> 0;
       }
       return value;
     };
