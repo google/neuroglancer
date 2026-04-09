@@ -1128,7 +1128,7 @@ export class AnnotationSchemaView extends Tab {
   ) {
     super();
     this.readonly = new WatchableValue(
-      this.annotationStates.states.every((state) => state.source.readonly),
+      this.annotationStates.states.some((state) => state.source.readonly),
     );
     this.element.classList.add("neuroglancer-annotation-schema-view");
     this.schemaTable.className = "neuroglancer-annotation-schema-grid";
@@ -1759,9 +1759,9 @@ export class AnnotationSchemaView extends Tab {
 
   private extractSchema() {
     const schema: Readonly<AnnotationPropertySpec>[] = [];
-    let readonly = true;
+    let readonly = false;
     for (const state of this.annotationStates.states) {
-      if (!state.source.readonly) readonly = false;
+      if (state.source.readonly) readonly = true;
       if (state.chunkTransform.value.error !== undefined) continue;
       const properties = state.source.properties.value;
       for (const property of properties) {
