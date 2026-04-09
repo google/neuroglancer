@@ -26,6 +26,7 @@ import type {
 import { WatchableValue } from "#src/trackable_value.js";
 import { arraysEqual } from "#src/util/array.js";
 import {
+  extendPackedRGB,
   packColor,
   parseRGBAColorSpecification,
   parseRGBColorSpecification,
@@ -1651,12 +1652,8 @@ export class LocalAnnotationSource extends AnnotationSource {
     }
 
     const convertValue = (value: any) => {
-      if (oldType === "rgb" && newType === "rgba") {
-        // rgba colors are stored as packed uint32s
-        // packed color format is AAGGBBRR
-        return (0xff000000 | value) >>> 0;
-      }
-      return value;
+      const isColor = oldType === "rgb" && newType === "rgba";
+      return isColor ? extendPackedRGB(value) : value;
     };
 
     const { identifier } = oldProperty;
