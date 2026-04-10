@@ -1668,6 +1668,7 @@ export class AnnotationSchemaView extends Tab {
       s.updateProperty(oldProperty, newPropertyValues);
     });
     this.annotationStates.changed.dispatch();
+    this.layer.layersChanged.dispatch();
   }
 
   private get jsonSchema() {
