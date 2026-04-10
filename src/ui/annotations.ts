@@ -2008,14 +2008,22 @@ export function UserLayerWithAnnotationsMixin<
         annotationLayer.source.getReference(state.annotationId),
       );
       let newAnnotation = reference.value;
+      // Throttle updates to avoid excessive annotation source changes
+      // (e.g. rapid color picker or number button use).
       const throttledUpdate = context.registerCancellable(
         throttle(() => {
           if (!newAnnotation) return;
+          // While committing, suppress selection details updates.
+          // This is as the user input has already applied the updates
+          // so rebuilding the selection details is unnecessary and causes
+          // side effects. E.g. the color picker closes immediately
+          // and scroll jumps to the top.
           this.allowDependentAnnotationViewUpdate.value = false;
           try {
             annotationLayer.source.update(reference, newAnnotation);
             annotationLayer.source.commit(reference);
           } finally {
+            // Flag to block the view updates resets after commit
             this.allowDependentAnnotationViewUpdate.value = true;
           }
         }, 500),
