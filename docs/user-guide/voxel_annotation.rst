@@ -16,12 +16,18 @@ To enable voxel editing, you must first have a writable volume source.
 2.  Locate a volume source and click the **Write** checkbox next to it.
 
 .. note::
-  Only one source can be writable at a time within a layer. Voxel annotation is currently supported only for 3D volumes.
+  Only one source can be writable at a time within a layer.
+
+**Known limitations**:
+
+- Only 3D volumes are supported (2D volumes are not).
+- Float32 data type is not supported.
+- Multi-resolution datasets must have a strict many-to-one hierarchy (i.e. each child chunk can have at most one parent). Unaligned hierarchies are not supported.
 
 The first time you attempt a drawing operation (like a brush stroke) after enabling writing, a confirmation dialog will appear. Note that this initial operation will be canceled; you can resume drawing once you have confirmed.
 
 .. note::
-  For the segmentation layer, it is recommended to deactivate the Highlight on hover option under the Render tab.
+  For the segmentation layer, it is recommended to deactivate the **Highlight on hover** option under the **Render** tab. When enabled, painted voxels become highlighted as the mouse moves over them, which can be visually distracting during annotation.
 
 Supported Storage and Formats
 -----------------------------
@@ -31,6 +37,9 @@ Voxel editing is currently supported for the following configurations:
 **Storage**:
 
 - Amazon S3 or any S3 compatible storage.
+
+.. note::
+  Write operations require that the S3 bucket's CORS policy allows ``PUT`` and ``DELETE`` methods. See :ref:`s3-kvstore` for a reference CORS policy.
 
 **Data Format**:
 
@@ -81,10 +90,10 @@ Settings:
 
 .. _voxel-seg-picker-tool:
 
-Seg Picker
-~~~~~~~~~~
+Value Picker
+~~~~~~~~~~~~
 
-The Seg Picker tool allows you to adopt the voxel value at the current mouse
+The Value Picker tool allows you to adopt the voxel value at the current mouse
 position as your active Paint Value.
 
 Common Controls
@@ -97,7 +106,7 @@ The **Draw** tab provides several common controls:
     painting performance when erasing.
 -   **Undo / Redo**: Revert or re-apply recent changes.
 -   **Paint Value**: Manually specify the segment ID or intensity value to paint.
--   **New Random Value**: Generates a new random segment ID.
+-   **New Random Value**: Generates a new random segment ID or intensity value.
 
 Stamina System
 --------------
