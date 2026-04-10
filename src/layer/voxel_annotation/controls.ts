@@ -30,7 +30,7 @@ import {
   FLOODFILL_MIN_POSSIBLE_VOXELS,
   FLOODFILL_TOOL_ID,
   getBasisFromNormal,
-  SEG_PICKER_TOOL_ID,
+  VALUE_PICKER_TOOL_ID,
 } from "#src/voxel_annotation/base.js";
 import type { LayerControlDefinition } from "#src/widget/layer_control.js";
 import { registerLayerControl } from "#src/widget/layer_control.js";
@@ -307,7 +307,7 @@ export const VOXEL_TAB_LAYOUT: VoxelTabElement[] = [
     tools: [
       { toolId: BRUSH_TOOL_ID, label: "Brush" },
       { toolId: FLOODFILL_TOOL_ID, label: "Flood Fill" },
-      { toolId: SEG_PICKER_TOOL_ID, label: "Seg Picker" },
+      { toolId: VALUE_PICKER_TOOL_ID, label: "Value Picker" },
     ],
   },
   ...COMMON_CONTROLS,

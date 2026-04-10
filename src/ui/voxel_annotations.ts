@@ -42,7 +42,7 @@ import {
   BRUSH_TOOL_ID,
   FLOODFILL_TOOL_ID,
   getBasisFromNormal,
-  SEG_PICKER_TOOL_ID,
+  VALUE_PICKER_TOOL_ID,
 } from "#src/voxel_annotation/base.js";
 
 const BRUSH_INPUT_MAP = EventActionMap.fromObject({
@@ -602,7 +602,7 @@ export class AdoptVoxelValueTool extends LayerTool<UserLayerWithVoxelEditing> {
   }
 
   toJSON() {
-    return SEG_PICKER_TOOL_ID;
+    return VALUE_PICKER_TOOL_ID;
   }
 
   get description() {
@@ -705,7 +705,7 @@ export function registerVoxelTools(LayerCtor: any) {
   );
   registerTool(
     LayerCtor,
-    SEG_PICKER_TOOL_ID,
+    VALUE_PICKER_TOOL_ID,
     (layer: UserLayerWithVoxelEditing) => new AdoptVoxelValueTool(layer),
   );
 }

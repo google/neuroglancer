@@ -88,7 +88,7 @@ Settings:
 .. note::
   The flood fill will automatically fill small gaps in the connected region, proportionally to the number of voxels in the region. This feature may sometimes leave unpainted voxels in tight corners of the region.
 
-.. _voxel-seg-picker-tool:
+.. _voxel-value-picker-tool:
 
 Value Picker
 ~~~~~~~~~~~~
@@ -116,7 +116,7 @@ When you perform many edits quickly, a stamina bar will appear below your cursor
 About multi-resolution datasets
 -------------------------------
 
-Any multi-resolution dataset that has many-to-1 mapping (i.e. one child cannot have multiple parents) can be used for voxel annotation.
+Any multi-resolution dataset that has many-to-1 chunk mapping (i.e. one child chunk cannot have multiple parents) can be used for voxel annotation.
 
 Although voxel annotation supports multi-resolution, any drawing operation will be performed on the highest resolution level, no matter what the current view is. Once an operation is completed, a downsampling pipeline will be triggered to update the lower resolution levels.
 
