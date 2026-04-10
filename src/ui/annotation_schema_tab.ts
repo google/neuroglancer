@@ -1113,6 +1113,7 @@ export class AnnotationSchemaView extends Tab {
   private schemaTableAddButtonField = document.createElement("div");
   private schemaViewTextElement = document.createElement("p");
   private schemaPasteButton: HTMLElement;
+  private schemaUploadButton: HTMLElement;
   private schema: Readonly<AnnotationPropertySpec[]> = [];
   private defaultValueHeaderCell: HTMLDivElement | null = null;
   public annotationUIProperties: Map<string, AnnotationUIProperty> = new Map();
@@ -1193,10 +1194,10 @@ export class AnnotationSchemaView extends Tab {
   }
 
   private updateElementVisibility() {
-    this.schemaPasteButton.style.display = this.readonly.value ? "none" : "";
-    this.schemaTableAddButtonField.style.display = this.readonly.value
-      ? "none"
-      : "";
+    const displayValue = this.readonly.value ? "none" : "";
+    this.schemaPasteButton.style.display = displayValue;
+    this.schemaUploadButton.style.display = displayValue;
+    this.schemaTableAddButtonField.style.display = displayValue;
   }
 
   private makeUI() {
@@ -1218,12 +1219,12 @@ export class AnnotationSchemaView extends Tab {
     });
     schemaActionButtons.appendChild(downloadButton);
 
-    const uploadButton = makeIcon({
+    this.schemaUploadButton = makeIcon({
       title: "Upload schema",
       svg: svg_upload,
       onClick: () => this.uploadSchema(),
     });
-    schemaActionButtons.appendChild(uploadButton);
+    schemaActionButtons.appendChild(this.schemaUploadButton);
 
     const copyButton = makeCopyButton({
       title: "Copy schema to clipboard",
