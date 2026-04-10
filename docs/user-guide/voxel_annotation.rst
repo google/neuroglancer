@@ -22,7 +22,7 @@ To enable voxel editing, you must first have a writable volume source.
 
 - Only 3D volumes are supported (2D volumes are not).
 - Float32 data type is not supported.
-- Multi-resolution datasets must have a strict many-to-one hierarchy (i.e. each child chunk can have at most one parent). Unaligned hierarchies are not supported.
+- Multi-resolution datasets must have a strict many-to-one hierarchy. See `About multi-resolution datasets`_ for more details.
 
 The first time you attempt a drawing operation (like a brush stroke) after enabling writing, a confirmation dialog will appear. Note that this initial operation will be canceled; you can resume drawing once you have confirmed.
 
