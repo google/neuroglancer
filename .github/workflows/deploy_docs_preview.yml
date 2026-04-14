@@ -10,7 +10,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       statuses: write
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # Only deploy previews built from the base repository, not from forks.
+    # Without this check, a fork PR's build artifact could be deployed using
+    # the FIREBASE_HOSTING_SERVICE_ACCOUNT_KEY secret (workflow_run runs in
+    # the base repo context even when triggered by a fork's build workflow).
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository }}
     steps:
       - name: "Create commit status"
         uses: actions/github-script@v7
