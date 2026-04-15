@@ -664,7 +664,7 @@ function parseOmeMultiscale(
   );
   for (let i = 0; i < rank; ++i) {
     for (let j = 0; j <= rank; ++j) {
-      baseTransformScaled[j * (rank + 1) + i] /= baseScales[i];
+      baseTransformScaled[i * (rank + 1) + j] /= baseScales[i];
     }
   }
 
