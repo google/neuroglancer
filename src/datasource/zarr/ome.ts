@@ -662,10 +662,20 @@ function parseOmeMultiscale(
     rank + 1,
     rank + 1,
   );
+  // The scaleTransformSubmatrix in getRenderLayerTransform
+  // in render_coordinate_transform.ts
+  // applies a column-wise scaling, and here we apply the inverse
+  // so that the scale is not baked into the base transform
+  // For each scale factor i, divide column i by that scale factor
+  // excluding the last element of the column (since it is 0)
+  // Loop from columns 0 to rank-1 to exclude the column
+  // representing the translation component and separately
+  // divide the translation element i by scale factor i
   for (let i = 0; i < rank; ++i) {
-    for (let j = 0; j <= rank; ++j) {
+    for (let j = 0; j < rank; ++j) {
       baseTransformScaled[i * (rank + 1) + j] /= baseScales[i];
     }
+    baseTransformScaled[rank * (rank + 1) + i] /= baseScales[i];
   }
 
   for (const scale of scales) {

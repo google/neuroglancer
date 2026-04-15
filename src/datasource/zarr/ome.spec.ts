@@ -139,18 +139,20 @@ describe("OME-Zarr 0.6 coordinate transformations", () => {
     expect(scales[0]).toBeCloseTo(expectedScales[0] * 1e-6);
     expect(scales[1]).toBeCloseTo(expectedScales[1] * 1e-6);
     expect(scales[2]).toBeCloseTo(expectedScales[2] * 1e-6);
+    // Each scale factor should be applied along the column, and separately
+    // to the translation
     expect(metadata!.multiscale.baseInfo.baseTransform).toStrictEqual(
       new Float64Array([
         1 / expectedScales[0],
-        0.1 / expectedScales[1],
-        0.3 / expectedScales[2],
-        0,
-        0.4 / expectedScales[0],
-        0.8 / expectedScales[1],
-        0.2 / expectedScales[2],
-        0,
         0.1 / expectedScales[0],
+        0.3 / expectedScales[0],
+        0,
         0.4 / expectedScales[1],
+        0.8 / expectedScales[1],
+        0.2 / expectedScales[1],
+        0,
+        0.1 / expectedScales[2],
+        0.4 / expectedScales[2],
         0.9 / expectedScales[2],
         0,
         4.5 / expectedScales[0],
@@ -180,35 +182,60 @@ describe("OME-Zarr 0.6 coordinate transformations", () => {
       ],
     });
     const metadata = parseOmeMetadata("test://", attrs, 3);
-    // The combined transform as an affine would be after the scale, then translation
+    // After scale + translation, the affine is (row-major):
     // [2, 0, 0, 20], [0, 3, 0, 30], [0, 0, 4, 40], [0, 0, 0, 1]
-    // then apply rotation
+    // After applying rotation R = [[0,1,0],[0,0,1],[1,0,0]]:
     // [0, 3, 0, 30], [0, 0, 4, 40], [2, 0, 0, 20], [0, 0, 0, 1]
-    // We back the scale out of that final matrix and compare to affine
+    // baseScales = column norms = [2, 3, 4].
+    // baseTransformScaled = combined affine with each column c divided by baseScales[c].
+    // Linear part becomes a pure rotation matrix.
+    // Translation: rotation applies to [20,30,40] giving [30,40,20], then row i divided
+    // by baseScales[i]: [30/2, 40/3, 20/4] = [15, 40/3, 5].
     const expectedScales = [2, 3, 4];
     const scales = metadata!.multiscale.coordinateSpace.scales;
     expect(scales[0]).toBeCloseTo(expectedScales[0] * 1e-6);
     expect(scales[1]).toBeCloseTo(expectedScales[1] * 1e-6);
     expect(scales[2]).toBeCloseTo(expectedScales[2] * 1e-6);
     expect(metadata!.multiscale.baseInfo.baseTransform).toStrictEqual(
-      new Float64Array([
-        0,
-        0,
-        2 / expectedScales[2],
-        0,
-        3 / expectedScales[0],
-        0,
-        0,
-        0,
-        0,
-        4 / expectedScales[1],
-        0,
-        0,
-        30 / expectedScales[0],
-        40 / expectedScales[1],
-        20 / expectedScales[2],
-        1,
-      ]),
+      new Float64Array([0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 15, 40 / 3, 5, 1]),
+    );
+  });
+
+  it("should respect transforms order in a sequence", () => {
+    const attrs = makeOmeAttrsWithTransform({
+      type: "sequence",
+      output: "physical",
+      input: "array",
+      transformations: [
+        { type: "scale", scale: [2, 3, 4] },
+        {
+          type: "rotation",
+          rotation: [
+            [0, 1, 0],
+            [0, 0, 1],
+            [1, 0, 0],
+          ],
+        },
+        { type: "translation", translation: [20, 30, 40] },
+      ],
+    });
+    const metadata = parseOmeMetadata("test://", attrs, 3);
+    // After scale + rotation, the affine is (row-major):
+    // [0, 3, 0, 0], [0, 0, 4, 0], [2, 0, 0, 0], [0, 0, 0, 1]
+    // After applying translation, the affine is (row-major):
+    // [0, 3, 0, 20], [0, 0, 4, 30], [2, 0, 0, 40], [0, 0, 0, 1]
+    // baseScales = column norms = [2, 3, 4].
+    // baseTransformScaled = combined affine with each column c divided by baseScales[c].
+    // Linear part becomes a pure rotation matrix.
+    // Translation: [20, 30, 40] then element i divided
+    // by baseScales[i]: [20/2, 30/3, 40/4] = [10, 10, 10].
+    const expectedScales = [2, 3, 4];
+    const scales = metadata!.multiscale.coordinateSpace.scales;
+    expect(scales[0]).toBeCloseTo(expectedScales[0] * 1e-6);
+    expect(scales[1]).toBeCloseTo(expectedScales[1] * 1e-6);
+    expect(scales[2]).toBeCloseTo(expectedScales[2] * 1e-6);
+    expect(metadata!.multiscale.baseInfo.baseTransform).toStrictEqual(
+      new Float64Array([0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 10, 10, 10, 1]),
     );
   });
 
@@ -929,4 +956,84 @@ describe("OME-Zarr version-gated transform behavior (issue #905)", () => {
       createIdentity(Float64Array, 3),
     );
   });
+});
+
+it("should handle anisotropic scales with rotations for 0.6 (issue #952)", () => {
+  const attrs = {
+    ome: {
+      version: "0.6",
+      multiscales: [
+        {
+          coordinateSystems: [
+            {
+              name: "world",
+              axes: [
+                { name: "z", type: "space", unit: "micrometer" },
+                { name: "y", type: "space", unit: "micrometer" },
+                { name: "x", type: "space", unit: "micrometer" },
+              ],
+            },
+            {
+              name: "physical",
+              axes: [
+                { name: "z", type: "space", unit: "micrometer" },
+                { name: "y", type: "space", unit: "micrometer" },
+                { name: "x", type: "space", unit: "micrometer" },
+              ],
+            },
+          ],
+          datasets: [
+            {
+              path: "array",
+              coordinateTransformations: [
+                {
+                  type: "sequence",
+                  input: "array",
+                  output: "physical",
+                  transformations: [
+                    { type: "scale", scale: [2.0, 0.5, 0.25] },
+                    { type: "translation", translation: [0, 0, 0] },
+                  ],
+                },
+              ],
+            },
+          ],
+          coordinateTransformations: [
+            {
+              type: "affine",
+              input: "physical",
+              output: "world",
+              affine: [
+                [-0.7071, -0.7071, 0, 0],
+                [0.7071, -0.7071, 0, 0],
+                [0, 0, 1, 0],
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  };
+  const metadata = parseOmeMetadata("test://", attrs, 3);
+  expect(metadata).not.toBeUndefined();
+  const scales = metadata!.multiscale.coordinateSpace.scales;
+  expect(scales[0]).toBeCloseTo(2 * 1e-6);
+  expect(scales[1]).toBeCloseTo(0.5 * 1e-6);
+  expect(scales[2]).toBeCloseTo(0.25 * 1e-6);
+
+  const baseTransform = metadata!.multiscale.baseInfo.baseTransform;
+  // Column 1 - [-0.7071, 0.7071, 0, 0]
+  expect(baseTransform[0]).toBeCloseTo(-0.7071);
+  expect(baseTransform[1]).toBeCloseTo(0.7071);
+  expect(baseTransform[2]).toEqual(0);
+  expect(baseTransform[3]).toEqual(0);
+  // Column 2 - [0.7071, -0.7071, 0, 0]
+  expect(baseTransform[4]).toBeCloseTo(-0.7071);
+  expect(baseTransform[5]).toBeCloseTo(-0.7071);
+  expect(baseTransform[6]).toEqual(0);
+  expect(baseTransform[7]).toEqual(0);
+  // Column 3 - [0, 0, 1, 0]
+  expect(baseTransform.slice(8, 12)).toEqual(new Float64Array([0, 0, 1, 0]));
+  // Column 4 - [0, 0, 0, 1]
+  expect(baseTransform.slice(12)).toEqual(new Float64Array([0, 0, 0, 1]));
 });
