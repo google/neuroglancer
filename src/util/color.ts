@@ -83,6 +83,7 @@ export function parseRGBColorSpecification(x: any) {
  * Returns an integer formed by concatenating the channels of the input color vector.
  * Each channel is clamped to the range [0.0, 1.0] before being converted to 8 bits.
  * An RGB color is packed into 24 bits, and a RGBA into 32 bits.
+ * Packed colors are stored in (AA)GGBBRR order.
  */
 export function packColor(x: vec3 | vec4): number {
   const size = x[3] === undefined ? 3 : 4;
@@ -94,6 +95,13 @@ export function packColor(x: vec3 | vec4): number {
       Math.min(255, Math.max(0, Math.round(x[size - 1 - i] * 255)));
   }
   return result;
+}
+
+/**
+ * Extend a packed RGB color to a packed RGBA color with full opacity.
+ */
+export function extendPackedRGB(value: number): number {
+  return (0xff000000 | value) >>> 0;
 }
 
 export function unpackRGB(value: number) {
