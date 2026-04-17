@@ -13,7 +13,9 @@
 # limitations under the License.
 """Tests the zarr datasource."""
 
+import json
 import pathlib
+import shutil
 
 import neuroglancer
 import numpy as np
@@ -353,9 +355,9 @@ def test_ome_zarr_0_6_scale(static_file_server, webdriver):
         "m",
         "m",
     ], f"Expected units ['m', 'm', 'm'], got {actual_units}"
-    assert np.allclose(
-        expected_scales, actual_scales
-    ), f"Scale values do not match, got {actual_scales}, expected {expected_scales}"
+    assert np.allclose(expected_scales, actual_scales), (
+        f"Scale values do not match, got {actual_scales}, expected {expected_scales}"
+    )
 
     _verify_data_at_point(model_space["volume"], TEST_VOXEL, EXPECTED_VALUE)
 
@@ -380,9 +382,9 @@ def test_ome_zarr_0_6_translation(static_file_server, webdriver):
     domain = model_space["volume"].domain
     expected_origin = (10, 20, 30)
     actual_origin = domain.origin
-    assert (
-        actual_origin == expected_origin
-    ), f"Domain origin mismatch: expected {expected_origin}, got {actual_origin}"
+    assert actual_origin == expected_origin, (
+        f"Domain origin mismatch: expected {expected_origin}, got {actual_origin}"
+    )
 
     translated_voxel = (TEST_VOXEL[0] + 10, TEST_VOXEL[1] + 20, TEST_VOXEL[2] + 30)
     _verify_data_at_point(model_space["volume"], translated_voxel, EXPECTED_VALUE)
@@ -421,9 +423,9 @@ def _check_sequence_result(model_space):
     expected_scales = [4e-6, 3e-6, 2e-6]
     actual_scales = model_space["scales"]
     for i, (expected, actual) in enumerate(zip(expected_scales, actual_scales)):
-        assert (
-            abs(actual - expected) < 1e-9
-        ), f"Scale mismatch on axis {i}: expected {expected}, got {actual}"
+        assert abs(actual - expected) < 1e-9, (
+            f"Scale mismatch on axis {i}: expected {expected}, got {actual}"
+        )
 
     # In voxel space with scale factored out:
     # - The translation/scale = [32/4, 21/3, 10/2] = [8, 7, 5] voxels
@@ -433,9 +435,9 @@ def _check_sequence_result(model_space):
     domain = model_space["volume"].domain
     expected_origin = (5, 7, 8)
     actual_origin = domain.origin
-    assert (
-        actual_origin == expected_origin
-    ), f"Domain origin mismatch: expected {expected_origin}, got {actual_origin}"
+    assert actual_origin == expected_origin, (
+        f"Domain origin mismatch: expected {expected_origin}, got {actual_origin}"
+    )
 
     new_test_voxel = np.array(TEST_VOXEL) + np.array(expected_origin)
     _verify_data_at_point(model_space["volume"], new_test_voxel, EXPECTED_VALUE)
@@ -507,6 +509,108 @@ def test_ome_zarr_0_6_rotation(static_file_server, webdriver):
     _verify_data_at_point(vol, rotated_voxel, EXPECTED_VALUE)
 
 
+def test_ome_zarr_0_6_anisotropic_rotation_equivalence(static_file_server, webdriver):
+    """Verify that the anisotropic scale+rotation transform from ome.spec.ts (issue #952)
+    produces identical visual output whether applied directly in neuroglancer via
+    CoordinateSpaceTransform or embedded in OME-Zarr 0.6 metadata.
+
+    Transform:
+      - Dataset (array → physical): sequence of scale [2.0, 0.5, 0.25] µm and
+        zero translation, for (z, y, x) axes.
+      - Multiscale (physical → world): affine rotation (≈ 135° in z-y plane):
+          [[-0.7071, -0.7071, 0, 0],
+           [ 0.7071, -0.7071, 0, 0],
+           [ 0,       0,      1, 0]]
+    """
+    cos45 = 0.7071
+
+    identity_dir = OME_ZARR_0_6_ROOT / "basic" / "identity.zarr"
+    identity_url = static_file_server(identity_dir)
+
+    metadata_zarr_dir = OME_ZARR_0_6_ROOT / "simple" / "anisotropic_rotation.zarr"
+    metadata_url = static_file_server(metadata_zarr_dir)
+
+    world_dims = neuroglancer.CoordinateSpace(
+        names=["z", "y", "x"], units=["m", "m", "m"], scales=[1e-6, 1e-6, 1e-6]
+    )
+
+    # Center of identity.zarr (shape [27, 226, 186] - c [13.5, 113, 93]) after transform
+    center_position = np.array(
+        [
+            -cos45 * 2.0 * 13.5 - cos45 * 0.5 * 113,  # Xt = Sx * R1 * Xo + Sy * R2 * Yo
+            cos45 * 2.0 * 13.5 - cos45 * 0.5 * 113,  # Yt = Sx * R1 * Xo + Sy * R1 * Yo
+            0.25 * 93,  # Zt = Sz * 93
+        ],
+        dtype=np.float32,
+    )
+
+    two_panel_layout = neuroglancer.row_layout(
+        [
+            neuroglancer.LayerGroupViewer(
+                type="viewer", layout="xy", layers=["volume"]
+            ),
+            neuroglancer.LayerGroupViewer(
+                type="viewer", layout="xz", layers=["volume"]
+            ),
+        ]
+    )
+
+    # Screenshot 1: identity.zarr with the transform applied directly in neuroglancer.
+    local_dims = neuroglancer.CoordinateSpace(
+        names=["z", "y", "x"], units=["m", "m", "m"], scales=[2e-6, 0.5e-6, 0.25e-6]
+    )
+    with webdriver.viewer.txn() as s:
+        s.layers.append(
+            name="volume",
+            layer=neuroglancer.ImageLayer(
+                source=[
+                    neuroglancer.LayerDataSource(
+                        f"zarr3://{identity_url}",
+                        transform=neuroglancer.CoordinateSpaceTransform(
+                            output_dimensions=world_dims,
+                            input_dimensions=local_dims,
+                            matrix=np.array(
+                                [
+                                    [-cos45, -cos45, 0.0, 0.0],
+                                    [cos45, -cos45, 0.0, 0.0],
+                                    [0.0, 0.0, 1, 0.0],
+                                ]
+                            ),
+                        ),
+                    )
+                ]
+            ),
+        )
+        s.dimensions = world_dims
+        s.cross_section_scale = 300e-3
+        s.position = center_position
+        s.layout = two_panel_layout
+        s.show_axis_lines = False
+    webdriver.sync()
+
+    screenshot1 = webdriver.viewer.screenshot(size=[400, 200]).screenshot
+
+    # Screenshot 2: new zarr with the same transform embedded in its OME-Zarr 0.6 metadata.
+    # Viewer position, scale, layout, and dimensions are preserved from screenshot 1.
+    with webdriver.viewer.txn() as s:
+        s.layers.clear()
+        s.layers.append(
+            name="volume",
+            layer=neuroglancer.ImageLayer(source=f"zarr3://{metadata_url}"),
+        )
+    webdriver.sync()
+    screenshot2 = webdriver.viewer.screenshot(size=[400, 200]).screenshot
+
+    np.testing.assert_array_equal(
+        screenshot1.image_pixels,
+        screenshot2.image_pixels,
+        err_msg=(
+            "Screenshots should be identical: applying anisotropic scale+rotation "
+            "transform in neuroglancer vs embedding it in OME-Zarr 0.6 metadata"
+        ),
+    )
+
+
 # Helper functions
 def get_layer_model_space(webdriver, layer_name):
     """Helper to retrieve the modelSpace from the backend volume object."""
@@ -534,12 +638,12 @@ def get_layer_model_space(webdriver, layer_name):
 
 def _assert_renders(webdriver, layer_name: str):
     model_space = get_layer_model_space(webdriver, layer_name)
-    assert (
-        model_space is not None
-    ), f"Layer '{layer_name}' did not render (modelSpace missing)."
-    assert isinstance(
-        model_space, dict
-    ), f"Layer '{layer_name}' failed to render: {model_space}"
+    assert model_space is not None, (
+        f"Layer '{layer_name}' did not render (modelSpace missing)."
+    )
+    assert isinstance(model_space, dict), (
+        f"Layer '{layer_name}' failed to render: {model_space}"
+    )
     return model_space
 
 
@@ -562,6 +666,6 @@ def _verify_data_at_point(vol, voxel_point, expected_value):
         assert False, f"Voxel {voxel_point} is out of bounds"
 
     value = data[idx]
-    assert (
-        value == expected_value
-    ), f"Expected value {expected_value} at voxel {voxel_point}, got {value}"
+    assert value == expected_value, (
+        f"Expected value {expected_value} at voxel {voxel_point}, got {value}"
+    )
