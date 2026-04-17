@@ -18,7 +18,7 @@ import { describe, it, expect } from "vitest";
 import { parseOmeMetadata } from "#src/datasource/zarr/ome.js";
 import { createIdentity } from "#src/util/matrix.js";
 
-const regularCoordinateSystem = {
+const intrinsicCoordinateSystem = {
   name: "physical",
   axes: [
     { type: "space", name: "z", unit: "micrometer" },
@@ -34,13 +34,46 @@ function makeOmeAttrsWithTransform(transform: any) {
       multiscales: [
         {
           name: "multiscales",
-          coordinateSystems: [regularCoordinateSystem],
+          coordinateSystems: [intrinsicCoordinateSystem],
           datasets: [
             {
               path: "array",
               coordinateTransformations: [transform],
             },
           ],
+        },
+      ],
+    },
+  };
+}
+
+const worldCoordinateSystem = {
+  name: "world",
+  axes: [
+    { type: "space", name: "z", unit: "micrometer" },
+    { type: "space", name: "y", unit: "micrometer" },
+    { type: "space", name: "x", unit: "micrometer" },
+  ],
+};
+
+function makeOmeAttrsWithTwoTransforms(
+  arrayToInstrinsicTransform: any,
+  instrinsicToWorldTransform: any,
+) {
+  return {
+    ome: {
+      version: "0.6",
+      multiscales: [
+        {
+          name: "multiscales",
+          coordinateSystems: [worldCoordinateSystem, intrinsicCoordinateSystem],
+          datasets: [
+            {
+              path: "array",
+              coordinateTransformations: [arrayToInstrinsicTransform],
+            },
+          ],
+          coordinateTransformations: [instrinsicToWorldTransform],
         },
       ],
     },
@@ -202,23 +235,30 @@ describe("OME-Zarr 0.6 coordinate transformations", () => {
   });
 
   it("should respect transforms order in a sequence", () => {
-    const attrs = makeOmeAttrsWithTransform({
-      type: "sequence",
-      output: "physical",
-      input: "array",
-      transformations: [
-        { type: "scale", scale: [2, 3, 4] },
-        {
-          type: "rotation",
-          rotation: [
-            [0, 1, 0],
-            [0, 0, 1],
-            [1, 0, 0],
-          ],
-        },
-        { type: "translation", translation: [20, 30, 40] },
-      ],
-    });
+    const attrs = makeOmeAttrsWithTwoTransforms(
+      {
+        type: "scale",
+        output: "physical",
+        input: "array",
+        scale: [2, 3, 4],
+      },
+      {
+        type: "sequence",
+        output: "world",
+        input: "physical",
+        transformations: [
+          {
+            type: "rotation",
+            rotation: [
+              [0, 1, 0],
+              [0, 0, 1],
+              [1, 0, 0],
+            ],
+          },
+          { type: "translation", translation: [20, 30, 40] },
+        ],
+      },
+    );
     const metadata = parseOmeMetadata("test://", attrs, 3);
     // After scale + rotation, the affine is (row-major):
     // [0, 3, 0, 0], [0, 0, 4, 0], [2, 0, 0, 0], [0, 0, 0, 1]
@@ -251,7 +291,7 @@ describe("OME-Zarr 0.6 coordinate transformations", () => {
                 name: "first_system",
                 axes: [{ type: "space", name: "x", unit: "micrometer" }],
               },
-              regularCoordinateSystem,
+              intrinsicCoordinateSystem,
             ],
             datasets: [
               {
@@ -431,7 +471,7 @@ describe("OME-Zarr 0.6 sequence transformation validation", () => {
         multiscales: [
           {
             name: "multiscales",
-            coordinateSystems: [regularCoordinateSystem],
+            coordinateSystems: [intrinsicCoordinateSystem],
             datasets: [
               {
                 path: "array",
@@ -464,7 +504,7 @@ describe("OME-Zarr 0.6 sequence transformation validation", () => {
         multiscales: [
           {
             name: "multiscales",
-            coordinateSystems: [regularCoordinateSystem],
+            coordinateSystems: [intrinsicCoordinateSystem],
             datasets: [
               {
                 path: "s0",
@@ -494,7 +534,7 @@ describe("OME-Zarr 0.6 sequence transformation validation", () => {
         multiscales: [
           {
             name: "multiscales",
-            coordinateSystems: [regularCoordinateSystem],
+            coordinateSystems: [intrinsicCoordinateSystem],
             datasets: [
               {
                 path: "array",
@@ -526,7 +566,7 @@ describe("OME-Zarr 0.6 sequence transformation validation", () => {
         multiscales: [
           {
             name: "multiscales",
-            coordinateSystems: [regularCoordinateSystem],
+            coordinateSystems: [intrinsicCoordinateSystem],
             datasets: [
               {
                 path: "array",
@@ -558,7 +598,7 @@ describe("OME-Zarr 0.6 sequence transformation validation", () => {
         multiscales: [
           {
             name: "multiscales",
-            coordinateSystems: [regularCoordinateSystem],
+            coordinateSystems: [intrinsicCoordinateSystem],
             datasets: [
               {
                 path: "array",
@@ -604,7 +644,7 @@ describe("OME-Zarr 0.6 sequence transformation validation", () => {
                   { type: "space", name: "x", unit: "micrometer" },
                 ],
               },
-              regularCoordinateSystem,
+              intrinsicCoordinateSystem,
             ],
             datasets: [
               {
@@ -657,7 +697,7 @@ describe("OME-Zarr 0.6 sequence transformation validation", () => {
                   { type: "space", name: "x", unit: "micrometer" },
                 ],
               },
-              regularCoordinateSystem,
+              intrinsicCoordinateSystem,
             ],
             datasets: [
               {
@@ -832,7 +872,7 @@ describe("OME-Zarr version-gated transform behavior (issue #905)", () => {
         multiscales: [
           {
             name: "multiscales",
-            coordinateSystems: [regularCoordinateSystem],
+            coordinateSystems: [intrinsicCoordinateSystem],
             datasets: [
               {
                 path: "array",
