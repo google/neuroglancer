@@ -513,9 +513,9 @@ def test_ome_zarr_0_6_anisotropic_rotation_equivalence(static_file_server, webdr
     CoordinateSpaceTransform or embedded in OME-Zarr 0.6 metadata.
 
     Transform:
-      - Dataset (array → physical): sequence of scale [2.0, 0.5, 0.25] µm and
+      - Dataset (array -> physical): sequence of scale [2.0, 0.5, 0.25] um and
         zero translation, for (z, y, x) axes.
-      - Multiscale (physical → world): affine rotation (≈ 135° in z-y plane):
+      - Multiscale (physical -> world): affine rotation (135deg around z-axis):
           [[-0.7071, -0.7071, 0, 0],
            [ 0.7071, -0.7071, 0, 0],
            [ 0,       0,      1, 0]]
@@ -586,10 +586,9 @@ def test_ome_zarr_0_6_anisotropic_rotation_equivalence(static_file_server, webdr
         s.show_axis_lines = False
     webdriver.sync()
 
-    screenshot1 = webdriver.viewer.screenshot(size=[400, 200]).screenshot
+    screenshot1 = webdriver.viewer.screenshot(size=[200, 100]).screenshot
 
-    # Screenshot 2: new zarr with the same transform embedded in its OME-Zarr 0.6 metadata.
-    # Viewer position, scale, layout, and dimensions are preserved from screenshot 1.
+    # Screenshot 2: same zarr with the transform embedded in its OME-Zarr 0.6 metadata.
     with webdriver.viewer.txn() as s:
         s.layers.clear()
         s.layers.append(
@@ -597,7 +596,7 @@ def test_ome_zarr_0_6_anisotropic_rotation_equivalence(static_file_server, webdr
             layer=neuroglancer.ImageLayer(source=f"zarr3://{metadata_url}"),
         )
     webdriver.sync()
-    screenshot2 = webdriver.viewer.screenshot(size=[400, 200]).screenshot
+    screenshot2 = webdriver.viewer.screenshot(size=[200, 100]).screenshot
 
     np.testing.assert_array_equal(
         screenshot1.image_pixels,
