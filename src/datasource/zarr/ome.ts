@@ -729,7 +729,7 @@ export function parseOmeMetadata(
 ): OmeMetadata | undefined {
   const ome = attrs.ome;
   const multiscales = ome == undefined ? attrs.multiscales : ome.multiscales; // >0.4
-  const omero = attrs.omero;
+  const omero = ome == undefined ? attrs.omero : ome.omero; // >0.4
 
   if (!Array.isArray(multiscales)) return undefined;
   const errors: string[] = [];
