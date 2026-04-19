@@ -417,14 +417,13 @@ export function createImageLayerAsMultiChannel(
       ignoreInputMetadata,
     );
   }
-  // Propagate new channel layers to all layer group subsets that contain the
-  // original managed layer.  The initial manager.add() above only adds to
-  // one manager (the layer's own manager and, if it is a subset, its owner).
-  // Other subsets referencing the original layer must be updated individually.
+  // Propagate new channel layers to all layer group subsets that contain the original managed layer
+  // The initial manager.add() above only adds to the layer's own manager and its owner
+  // Update other subsets referencing the original layer
   if (newChannelLayers.length > 0) {
     const root = managedLayer.manager.root;
     for (const subset of root.subsets) {
-      // Skip the subset that is the current manager (already handled above).
+      // Skip the subset that is the current manager
       if (subset === managedLayer.manager) continue;
       const subsetIndex =
         subset.layerManager.managedLayers.indexOf(managedLayer);
@@ -437,8 +436,6 @@ export function createImageLayerAsMultiChannel(
       }
     }
   }
-  // Use the root manager for the multiChannelSetupFinished signal since the
-  // layer's own manager may be a LayerSubsetSpecification without `display`.
   const root = managedLayer.manager.root;
   if (isTopLevelLayerListManager(root)) {
     root.display.multiChannelSetupFinished.dispatch();
