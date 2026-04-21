@@ -28,6 +28,7 @@ export function getCredentialsWithStatus<Token>(
 ): Promise<Token> {
   const { requestDescription = "login" } = options;
   const status = new StatusMessage(/*delay=*/ true);
+  status.setPreventFocusChangeOnMouseDown(true);
   let abortController: AbortController | undefined;
   return new Promise<Token>((resolve, reject) => {
     const disposeAbortCallback = scopedAbortCallback(signal, (reason) => {
