@@ -185,6 +185,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: false
+          version: "0.11.6"
       - name: Get uv cache dir
         id: uv-cache
         run: |
