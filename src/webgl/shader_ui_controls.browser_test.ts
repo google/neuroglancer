@@ -15,10 +15,17 @@
  */
 
 import { expect, describe, it } from "vitest";
+import { constantWatchableValue } from "#src/trackable_value.js";
 import { DataType } from "#src/util/data_type.js";
 import { vec3, vec4 } from "#src/util/geom.js";
 import { defaultDataTypeRange } from "#src/util/lerp.js";
+import { preprocessStrings } from "#src/webgl/shader_source_string_preprocessing.js";
+import { fragmentShaderTest } from "#src/webgl/shader_testing.js";
 import {
+  addControlsToBuilder,
+  getFallbackBuilderState,
+  setControlsInShader,
+  ShaderControlState,
   TrackableTransferFunctionParameters,
   parseShaderUiControls,
   parseTransferFunctionParameters,
@@ -29,6 +36,8 @@ import {
   ControlPoint,
   SortedControlPoints,
 } from "#src/widget/transfer_function.js";
+
+const emptyParsePreprocessing = { stringLiteralIds: new Map<string, number>() };
 
 describe("stripComments", () => {
   it("handles code without comments", () => {
@@ -76,6 +85,43 @@ void main() {
   });
 });
 
+describe("preprocessStrings", () => {
+  it("replaces unique string literals with stable uint ids starting at 1", () => {
+    const code = `
+void main() {
+  if (mode == "beta") {
+    emitRGB(vec3(1.0));
+  }
+  if (mode == "alpha") {
+    emitRGB(vec3(0.0));
+  }
+  if (mode == "beta") {
+    emitRGB(vec3(0.5));
+  }
+}
+`;
+    expect(preprocessStrings(code)).toEqual({
+      code: `
+void main() {
+  if (mode == 1u) {
+    emitRGB(vec3(1.0));
+  }
+  if (mode == 2u) {
+    emitRGB(vec3(0.0));
+  }
+  if (mode == 1u) {
+    emitRGB(vec3(0.5));
+  }
+}
+`,
+      stringLiteralIds: new Map([
+        ["beta", 1],
+        ["alpha", 2],
+      ]),
+    });
+  });
+});
+
 describe("parseShaderUiControls", () => {
   it("handles no controls", () => {
     const code = `
@@ -86,6 +132,7 @@ void main() {
     expect(parseShaderUiControls(code)).toEqual({
       source: code,
       code,
+      preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map(),
     });
@@ -107,6 +154,7 @@ void main() {
     expect(parseShaderUiControls(code)).toEqual({
       source: code,
       code: newCode,
+      preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
         [
@@ -142,11 +190,37 @@ void main() {
     expect(parseShaderUiControls(code)).toEqual({
       source: code,
       code: newCode,
+      preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
         ["myCheckbox", { type: "checkbox", valueType: "bool", default: false }],
         ["myCheckbox2", { type: "checkbox", valueType: "bool", default: true }],
       ]),
+    });
+  });
+
+  it("reports only the invalid options error for empty select options", () => {
+    const code = `
+#uicontrol uint choice select(options=[])
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    expect(parseShaderUiControls(code)).toEqual({
+      source: code,
+      code: newCode,
+      preprocessing: emptyParsePreprocessing,
+      errors: [
+        {
+          line: 1,
+          message: "Expected options argument to contain at least one option",
+        },
+      ],
+      controls: new Map(),
     });
   });
 
@@ -166,6 +240,7 @@ void main() {
     expect(parseShaderUiControls(code)).toEqual({
       source: code,
       code: newCode,
+      preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
         [
@@ -199,6 +274,7 @@ void main() {
     ).toEqual({
       source: code,
       code: newCode,
+      preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
         [
@@ -236,6 +312,7 @@ void main() {
     ).toEqual({
       source: code,
       code: newCode,
+      preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
         [
@@ -273,6 +350,7 @@ void main() {
     ).toEqual({
       source: code,
       code: newCode,
+      preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
         [
@@ -310,6 +388,7 @@ void main() {
     ).toEqual({
       source: code,
       code: newCode,
+      preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
         [
@@ -347,6 +426,7 @@ void main() {
     ).toEqual({
       source: code,
       code: newCode,
+      preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
         [
@@ -384,6 +464,7 @@ void main() {
     ).toEqual({
       source: code,
       code: newCode,
+      preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
         [
@@ -425,6 +506,7 @@ void main() {
     ).toEqual({
       source: code,
       code: newCode,
+      preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
         [
@@ -467,6 +549,7 @@ void main() {
     ).toEqual({
       source: code,
       code: newCode,
+      preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
         [
@@ -509,6 +592,7 @@ void main() {
     ).toEqual({
       source: code,
       code: newCode,
+      preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
         [
@@ -551,6 +635,7 @@ void main() {
     ).toEqual({
       source: code,
       code: newCode,
+      preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
         [
@@ -589,6 +674,7 @@ void main() {
     ).toEqual({
       source: code,
       code: newCode,
+      preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
         [
@@ -626,6 +712,7 @@ void main() {
     ).toEqual({
       source: code,
       code: newCode,
+      preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
         [
@@ -663,6 +750,7 @@ void main() {
     ).toEqual({
       source: code,
       code: newCode,
+      preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
         [
@@ -700,6 +788,7 @@ void main() {
     ).toEqual({
       source: code,
       code: newCode,
+      preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
         [
@@ -740,6 +829,7 @@ void main() {
     ).toEqual({
       source: code,
       code: newCode,
+      preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
         [
@@ -780,6 +870,7 @@ void main() {
     ).toEqual({
       source: code,
       code: newCode,
+      preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
         [
@@ -828,6 +919,7 @@ void main() {
     ).toEqual({
       source: code,
       code: newCode,
+      preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
         [
@@ -874,6 +966,7 @@ void main() {
     ).toEqual({
       source: code,
       code: newCode,
+      preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
         [
@@ -1007,6 +1100,242 @@ void main() {
       defaultColor: undefined,
       window: undefined,
       controlPoints: undefined,
+    });
+  });
+});
+
+describe("parseShaderUiControls select", () => {
+  it("handles basic select control", () => {
+    const code = `
+#uicontrol uint myMode select(options=["one", "two", "three"])
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    expect(parseShaderUiControls(code)).toEqual({
+      source: code,
+      code: newCode,
+      preprocessing: emptyParsePreprocessing,
+      errors: [],
+      controls: new Map([
+        [
+          "myMode",
+          {
+            type: "select",
+            valueType: "uint",
+            options: ["one", "two", "three"],
+            default: "one",
+          },
+        ],
+      ]),
+    });
+  });
+
+  it("handles explicit default option", () => {
+    const code = `
+#uicontrol uint myMode select(options=["a", "b", "c"], default="c")
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    expect(parseShaderUiControls(code)).toEqual({
+      source: code,
+      code: newCode,
+      preprocessing: emptyParsePreprocessing,
+      errors: [],
+      controls: new Map([
+        [
+          "myMode",
+          {
+            type: "select",
+            valueType: "uint",
+            options: ["a", "b", "c"],
+            default: "c",
+          },
+        ],
+      ]),
+    });
+  });
+
+  it("errors on wrong type", () => {
+    const code = `
+#uicontrol int myMode select(options=["x", "y"])
+void main() {
+}
+`;
+    const result = parseShaderUiControls(code);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors[0].message).toContain("type must be uint");
+  });
+
+  it("errors when options is missing", () => {
+    const code = `
+#uicontrol uint myMode select()
+void main() {
+}
+`;
+    const result = parseShaderUiControls(code);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors[0].message).toContain("options must be specified");
+  });
+
+  it("errors when options is an empty array", () => {
+    const code = `
+#uicontrol uint myMode select(options=[])
+void main() {
+}
+`;
+    const result = parseShaderUiControls(code);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors[0].message).toContain("contain at least one option");
+  });
+
+  it("errors when options is not an array of strings", () => {
+    const code = `
+#uicontrol uint myMode select(options="bad")
+void main() {
+}
+`;
+    const result = parseShaderUiControls(code);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors[0].message).toContain("array of strings");
+  });
+
+  it("errors when default is not one of the options", () => {
+    const code = `
+#uicontrol uint myMode select(options=["x", "y"], default="z")
+void main() {
+}
+`;
+    const result = parseShaderUiControls(code);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors[0].message).toContain(
+      'default value "z" must match one of the options',
+    );
+  });
+
+  it("errors when default is not a string", () => {
+    const code = `
+#uicontrol uint myMode select(options=["x", "y"], default=1)
+void main() {
+}
+`;
+    const result = parseShaderUiControls(code);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors[0].message).toContain(
+      "Expected default argument to be a string",
+    );
+  });
+
+  it("maps select values to preprocessed shader string ids", () => {
+    const code = `
+#uicontrol uint myMode select(options=["alpha", "beta"])
+void main() {
+  outputValue = myMode == "beta" ? 1u : 0u;
+}
+`;
+    fragmentShaderTest({}, { outputValue: "uint" }, (tester) => {
+      const shaderControlState = new ShaderControlState(
+        constantWatchableValue(code),
+      );
+      try {
+        const parseResult = shaderControlState.parseResult.value;
+        addControlsToBuilder(
+          getFallbackBuilderState(parseResult),
+          tester.builder,
+        );
+        tester.builder.setFragmentMainFunction(parseResult.code);
+        tester.build();
+        tester.shader.bind();
+        shaderControlState.restoreState({ myMode: "beta" });
+        setControlsInShader(
+          tester.gl,
+          tester.shader,
+          shaderControlState,
+          parseResult,
+        );
+        tester.execute();
+        expect(tester.values.outputValue).toEqual(1);
+      } finally {
+        shaderControlState.dispose();
+      }
+    });
+  });
+
+  it("uses the second select option as the default with preprocessed strings", () => {
+    const code = `
+#uicontrol uint myMode select(options=["alpha", "beta"], default="beta")
+void main() {
+  outputValue = myMode == "beta" ? 1u : 0u;
+}
+`;
+    fragmentShaderTest({}, { outputValue: "uint" }, (tester) => {
+      const shaderControlState = new ShaderControlState(
+        constantWatchableValue(code),
+      );
+      try {
+        const parseResult = shaderControlState.parseResult.value;
+        addControlsToBuilder(
+          getFallbackBuilderState(parseResult),
+          tester.builder,
+        );
+        tester.builder.setFragmentMainFunction(parseResult.code);
+        tester.build();
+        tester.shader.bind();
+        setControlsInShader(
+          tester.gl,
+          tester.shader,
+          shaderControlState,
+          parseResult,
+        );
+        tester.execute();
+        expect(tester.values.outputValue).toEqual(1);
+      } finally {
+        shaderControlState.dispose();
+      }
+    });
+  });
+
+  it("sets a select uniform to 0 when the shader has no mapped string", () => {
+    const code = `
+#uicontrol uint myMode select(options=["alpha", "beta"])
+void main() {
+  outputValue = myMode == 0u ? 1u : 0u;
+}
+`;
+    fragmentShaderTest({}, { outputValue: "uint" }, (tester) => {
+      const shaderControlState = new ShaderControlState(
+        constantWatchableValue(code),
+      );
+      try {
+        const parseResult = shaderControlState.parseResult.value;
+        addControlsToBuilder(
+          getFallbackBuilderState(parseResult),
+          tester.builder,
+        );
+        tester.builder.setFragmentMainFunction(parseResult.code);
+        tester.build();
+        tester.shader.bind();
+        shaderControlState.restoreState({ myMode: "beta" });
+        setControlsInShader(
+          tester.gl,
+          tester.shader,
+          shaderControlState,
+          parseResult,
+        );
+        tester.execute();
+        expect(tester.values.outputValue).toEqual(1);
+      } finally {
+        shaderControlState.dispose();
+      }
     });
   });
 });
