@@ -641,9 +641,9 @@ function parseOmeMultiscale(
 
   // The unscaled inverse of the base transform is used in the per-scale
   // calculation of the affine transform to apply on top of the base transform.
-  const inverseBaseTransformUnscaled = new Float64Array(baseTransform.length);
+  const inverseBaseTransformWithScale = new Float64Array(baseTransform.length);
   matrix.inverse(
-    inverseBaseTransformUnscaled,
+    inverseBaseTransformWithScale,
     rank + 1,
     baseTransform,
     rank + 1,
@@ -653,9 +653,9 @@ function parseOmeMultiscale(
   // The base transform with scaling removed is used
   // to provide a default transform in the layer source tab
   // and for the bounding box transformation
-  const baseTransformScaled = new Float64Array(baseTransform.length);
+  const baseTransformWithoutScale = new Float64Array(baseTransform.length);
   matrix.copy(
-    baseTransformScaled,
+    baseTransformWithoutScale,
     rank + 1,
     baseTransform,
     rank + 1,
@@ -673,9 +673,9 @@ function parseOmeMultiscale(
   // divide the translation element i by scale factor i
   for (let i = 0; i < rank; ++i) {
     for (let j = 0; j < rank; ++j) {
-      baseTransformScaled[i * (rank + 1) + j] /= baseScales[i];
+      baseTransformWithoutScale[i * (rank + 1) + j] /= baseScales[i];
     }
-    baseTransformScaled[rank * (rank + 1) + i] /= baseScales[i];
+    baseTransformWithoutScale[rank * (rank + 1) + i] /= baseScales[i];
   }
 
   for (const scale of scales) {
@@ -701,14 +701,14 @@ function parseOmeMultiscale(
     for (const scale of scales) {
       scale.transform = makeAffineRelativeToBaseTransform(
         scale.transform,
-        inverseBaseTransformUnscaled,
+        inverseBaseTransformWithScale,
         rank,
       );
     }
     return {
       coordinateSpace,
       scales,
-      baseInfo: { baseScales, baseTransform: baseTransformScaled },
+      baseInfo: { baseScales, baseTransform: baseTransformWithoutScale },
     };
   } else {
     // Old behavior (< 0.6): identity base transform, translations
