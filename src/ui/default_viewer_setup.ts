@@ -32,7 +32,6 @@ import { UrlHashBinding } from "#src/ui/url_hash_binding.js";
 import type {
   ActionIdentifier,
   EventAction,
-  EventActionMap,
   EventIdentifier,
 } from "#src/util/event_action_map.js";
 import {
@@ -65,7 +64,10 @@ export const hasCustomBindings =
   typeof NEUROGLANCER_CUSTOM_INPUT_BINDINGS !== "undefined" &&
   Object.keys(NEUROGLANCER_CUSTOM_INPUT_BINDINGS).length > 0;
 
-function setCustomInputEventBindings(viewer: Viewer, bindings: CustomBindings) {
+export function setCustomInputEventBindings(
+  viewer: Viewer,
+  bindings: CustomBindings,
+) {
   const bindNonLayerSpecificTool = (
     key: string,
     customBinding: CustomToolBinding,
@@ -120,13 +122,6 @@ function setCustomInputEventBindings(viewer: Viewer, bindings: CustomBindings) {
     return action;
   };
 
-  const deleteKey = (map: EventActionMap, key: string) => {
-    map.delete(key);
-    for (const pMap of map.parents) {
-      deleteKey(pMap, key);
-    }
-  };
-
   for (const [key, val] of Object.entries(bindings)) {
     const bindings = Array.isArray(val) ? val : [val];
     for (const { action, context = "global" } of bindings) {
@@ -136,7 +131,7 @@ function setCustomInputEventBindings(viewer: Viewer, bindings: CustomBindings) {
       }
       if (typeof action === "boolean") {
         if (action === false) {
-          deleteKey(actionMap, key);
+          actionMap.suppress(key);
         }
       } else if (typeof action === "string" || "action" in action) {
         actionMap.set(key, action);
