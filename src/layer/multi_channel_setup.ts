@@ -379,6 +379,7 @@ export function createImageLayerAsMultiChannel(
       "Input omera metadata is not set up correctly. Colors are either missing or all close to black, and all ranges are the same or missing. Using default values for display purposes.",
     );
   }
+  const newChannelLayers: ManagedUserLayer[] = [];
   for (let i = 0; i < totalLocalChannels; i++) {
     const channelMetadata = getLayerChannelMetadata(managedLayer, i);
     const { localPosition, chanName } = getAdjustedLocalPositionAndName(i);
@@ -405,6 +406,7 @@ export function createImageLayerAsMultiChannel(
         parentIndex !== -1 ? parentIndex + i : undefined,
       );
       addedLayer = newLayer;
+      newChannelLayers.push(newLayer);
     }
     setupLayerPostCreation(
       addedLayer,
@@ -415,8 +417,28 @@ export function createImageLayerAsMultiChannel(
       ignoreInputMetadata,
     );
   }
-  if (isTopLevelLayerListManager(managedLayer.manager)) {
-    managedLayer.manager.display.multiChannelSetupFinished.dispatch();
+  // Propagate new channel layers to all layer group subsets that contain the original managed layer
+  // The initial manager.add() above only adds to the layer's own manager and its owner
+  // Update other subsets referencing the original layer
+  if (newChannelLayers.length > 0) {
+    const root = managedLayer.manager.root;
+    for (const subset of root.subsets) {
+      // Skip the subset that is the current manager
+      if (subset === managedLayer.manager) continue;
+      const subsetIndex =
+        subset.layerManager.managedLayers.indexOf(managedLayer);
+      if (subsetIndex === -1) continue;
+      for (let j = 0; j < newChannelLayers.length; j++) {
+        subset.layerManager.addManagedLayer(
+          newChannelLayers[j].addRef(),
+          subsetIndex + 1 + j,
+        );
+      }
+    }
+  }
+  const root = managedLayer.manager.root;
+  if (isTopLevelLayerListManager(root)) {
+    root.display.multiChannelSetupFinished.dispatch();
   }
   postCreationSetupFunctions.forEach((fn) => fn());
   reverseGlobalDimOrderIfNeeded(managedLayer);
