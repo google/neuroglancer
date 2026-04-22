@@ -633,49 +633,10 @@ function parseOmeMultiscale(
     throw new Error("At least one scale must be specified");
   }
 
-  const baseTransform = scales[0].transform;
+  const baseTransform = scales[0].transform.slice();
   const baseScales = extractScalesFromAffineMatrix(baseTransform, rank);
   for (let i = 0; i < rank; ++i) {
     coordinateSpace.scales[i] *= baseScales[i];
-  }
-
-  // The unscaled inverse of the base transform is used in the per-scale
-  // calculation of the affine transform to apply on top of the base transform.
-  const inverseBaseTransformWithScale = new Float64Array(baseTransform.length);
-  matrix.inverse(
-    inverseBaseTransformWithScale,
-    rank + 1,
-    baseTransform,
-    rank + 1,
-    rank + 1,
-  );
-
-  // The base transform with scaling removed is used
-  // to provide a default transform in the layer source tab
-  // and for the bounding box transformation
-  const baseTransformWithoutScale = new Float64Array(baseTransform.length);
-  matrix.copy(
-    baseTransformWithoutScale,
-    rank + 1,
-    baseTransform,
-    rank + 1,
-    rank + 1,
-    rank + 1,
-  );
-  // The scaleTransformSubmatrix in getRenderLayerTransform
-  // in render_coordinate_transform.ts
-  // applies a column-wise scaling, and here we apply the inverse
-  // so that the scale is not baked into the base transform
-  // For each scale factor i, divide column i by that scale factor
-  // excluding the last element of the column (since it is 0)
-  // Loop from columns 0 to rank-1 to exclude the column
-  // representing the translation component and separately
-  // divide the translation element i by scale factor i
-  for (let i = 0; i < rank; ++i) {
-    for (let j = 0; j < rank; ++j) {
-      baseTransformWithoutScale[i * (rank + 1) + j] /= baseScales[i];
-    }
-    baseTransformWithoutScale[rank * (rank + 1) + i] /= baseScales[i];
   }
 
   for (const scale of scales) {
@@ -698,6 +659,38 @@ function parseOmeMultiscale(
   if (useNewBehavior) {
     // Current behavior (>= 0.6): per-scale transforms relative to base,
     // baseTransformScaled surfaced as model transform
+    // The inverse of the base transform is used in the per-scale
+    // calculation of the affine transform to apply on top of the base transform.
+    const inverseBaseTransformWithScale = new Float64Array(
+      baseTransform.length,
+    );
+    matrix.inverse(
+      inverseBaseTransformWithScale,
+      rank + 1,
+      baseTransform,
+      rank + 1,
+      rank + 1,
+    );
+
+    // The base transform with scaling removed is used
+    // to provide a default transform in the layer source tab
+    // and for the bounding box transformation
+    // The scaleTransformSubmatrix in getRenderLayerTransform
+    // in render_coordinate_transform.ts
+    // applies a column-wise scaling, and here we apply the inverse
+    // so that the scale is not baked into the base transform
+    // For each scale factor i, divide column i by that scale factor
+    // excluding the last element of the column (since it is 0)
+    // Loop from columns 0 to rank-1 to exclude the column
+    // representing the translation component and separately
+    // divide the translation element i by scale factor i
+    const baseTransformWithoutScale = baseTransform.slice();
+    for (let i = 0; i < rank; ++i) {
+      for (let j = 0; j < rank; ++j) {
+        baseTransformWithoutScale[i * (rank + 1) + j] /= baseScales[i];
+      }
+      baseTransformWithoutScale[rank * (rank + 1) + i] /= baseScales[i];
+    }
     for (const scale of scales) {
       scale.transform = makeAffineRelativeToBaseTransform(
         scale.transform,
