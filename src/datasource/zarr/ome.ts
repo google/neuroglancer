@@ -639,34 +639,6 @@ function parseOmeMultiscale(
     coordinateSpace.scales[i] *= baseScales[i];
   }
 
-  const useOldBehavior =
-    version === "0.4" || version === "0.5-dev" || version === "0.5";
-
-  if (useOldBehavior) {
-    // Old behavior (< 0.6): identity base transform, translations
-    // baked into per-scale transforms via simple diagonal division.
-    applyHalfVoxelOffset(scales, rank);
-    for (const scale of scales) {
-      const t = scale.transform;
-      for (let i = 0; i < rank; ++i) {
-        for (let j = 0; j <= rank; ++j) {
-          t[j * (rank + 1) + i] /= baseScales[i];
-        }
-      }
-    }
-    return {
-      coordinateSpace,
-      scales,
-      baseInfo: {
-        baseScales,
-        baseTransform: matrix.createIdentity(Float64Array, rank + 1),
-      },
-    };
-  }
-
-  // Current behavior (>= 0.6): per-scale transforms relative to base,
-  // baseTransformScaled surfaced as model transform
-
   // The unscaled inverse of the base transform is used in the per-scale
   // calculation of the affine transform to apply on top of the base transform.
   const inverseBaseTransformWithScale = new Float64Array(baseTransform.length);
@@ -720,33 +692,43 @@ function parseOmeMultiscale(
     }
   }
 
-  for (const scale of scales) {
-    scale.transform = makeAffineRelativeToBaseTransform(
-      scale.transform,
-      inverseBaseTransformWithScale,
-      rank,
-    );
-  }
-  return {
-    coordinateSpace,
-    scales,
-    baseInfo: { baseScales, baseTransform: baseTransformWithoutScale },
-  };
-}
+  const useNewBehavior =
+    version !== "0.4" && version !== "0.5-dev" && version !== "0.5";
 
-function applyHalfVoxelOffset(scales: OmeMultiscaleScale[], rank: number) {
-  for (const scale of scales) {
-    const t = scale.transform;
-    // In OME's coordinate space, the origin of a voxel is its center, while in Neuroglancer it is
-    // the "lower" (in coordinates) corner. Translate by the physical size of half a voxel in the
-    // current scale.
-    for (let i = 0; i < rank; ++i) {
-      let offset = 0;
-      for (let j = 0; j < rank; ++j) {
-        offset += t[j * (rank + 1) + i] * 0.5;
-      }
-      t[rank * (rank + 1) + i] -= offset;
+  if (useNewBehavior) {
+    // Current behavior (>= 0.6): per-scale transforms relative to base,
+    // baseTransformScaled surfaced as model transform
+    for (const scale of scales) {
+      scale.transform = makeAffineRelativeToBaseTransform(
+        scale.transform,
+        inverseBaseTransformWithScale,
+        rank,
+      );
     }
+    return {
+      coordinateSpace,
+      scales,
+      baseInfo: { baseScales, baseTransform: baseTransformWithoutScale },
+    };
+  } else {
+    // Old behavior (< 0.6): identity base transform, translations
+    // baked into per-scale transforms via simple diagonal division.
+    for (const scale of scales) {
+      const t = scale.transform;
+      for (let i = 0; i < rank; ++i) {
+        for (let j = 0; j <= rank; ++j) {
+          t[j * (rank + 1) + i] /= baseScales[i];
+        }
+      }
+    }
+    return {
+      coordinateSpace,
+      scales,
+      baseInfo: {
+        baseScales,
+        baseTransform: matrix.createIdentity(Float64Array, rank + 1),
+      },
+    };
   }
 }
 
