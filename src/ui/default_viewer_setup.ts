@@ -78,7 +78,14 @@ export function setCustomInputEventBindings(
     if (desiredLayerConstructor === undefined) {
       throw new Error(`Invalid layer type: ${layerType}`);
     }
-    const toolKey = key.charAt(key.length - 1).toUpperCase();
+    const keyMatch = key.match(/^key([a-z])$/);
+    if (keyMatch === null) {
+      console.warn(
+        `Ignoring custom tool binding for ${JSON.stringify(key)}: expected identifier of the form "key{key}".`,
+      );
+      return undefined;
+    }
+    const toolKey = keyMatch[1].toUpperCase();
     let previousTool: Tool<object> | undefined;
     let previousLayer: UserLayer | undefined;
     if (typeof toolJson === "string") {
@@ -122,7 +129,7 @@ export function setCustomInputEventBindings(
     return action;
   };
 
-  for (const [key, val] of Object.entries(bindings)) {
+  for (const [identifier, val] of Object.entries(bindings)) {
     const bindings = Array.isArray(val) ? val : [val];
     for (const { action, context = "global" } of bindings) {
       const actionMap = viewer.inputEventBindings[context];
@@ -130,14 +137,19 @@ export function setCustomInputEventBindings(
         throw new Error(`invalid action map context: ${context}`);
       }
       if (typeof action === "boolean") {
+        // only used to disable existing bindings
         if (action === false) {
-          actionMap.suppress(key);
+          actionMap.suppress(identifier);
         }
       } else if (typeof action === "string" || "action" in action) {
-        actionMap.set(key, action);
+        // if action is a string or EventAction
+        actionMap.set(identifier, action);
       } else {
-        const toolAction = bindNonLayerSpecificTool(key, action);
-        actionMap.set(key, toolAction);
+        // otherwise, assume it's a CustomToolBinding
+        const toolAction = bindNonLayerSpecificTool(identifier, action);
+        if (toolAction !== undefined) {
+          actionMap.set(identifier, toolAction);
+        }
       }
     }
   }
