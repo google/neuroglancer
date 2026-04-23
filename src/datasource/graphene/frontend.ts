@@ -747,15 +747,23 @@ async function getVolumeDataSource(
 ): Promise<DataSource> {
   const info = parseGrapheneMultiscaleVolumeInfo(metadata, url);
   if (info.ocdbtDataUrl) {
-    const listResult = await sharedKvStoreContext.kvStoreContext.list(
-      info.ocdbtDataUrl,
-      { responseKeys: "suffix", ...options },
-    );
-    const knownScaleKeys = new Set(info.scales.map((s) => s.key));
-    for (const dir of listResult.directories) {
-      if (knownScaleKeys.has(dir)) {
-        info.ocdbtScales.add(dir);
+    try {
+      const listResult = await sharedKvStoreContext.kvStoreContext.list(
+        info.ocdbtDataUrl,
+        { responseKeys: "suffix", ...options },
+      );
+      const knownScaleKeys = new Set(info.scales.map((s) => s.key));
+      for (const dir of listResult.directories) {
+        if (knownScaleKeys.has(dir)) {
+          info.ocdbtScales.add(dir);
+        }
       }
+    } catch (e) {
+      throw new Error(
+        `Failed to list OCDBT scales at ${info.ocdbtDataUrl}; the graphene ` +
+          `layer cannot render without knowing which scales are OCDBT-backed`,
+        { cause: e },
+      );
     }
   }
   const volume = new GrapheneMultiscaleVolumeChunkSource(
