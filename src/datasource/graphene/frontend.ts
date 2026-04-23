@@ -282,8 +282,7 @@ const N_BITS_FOR_LAYER_ID_DEFAULT = 8;
 class GraphInfo {
   chunkSize: vec3;
   nBitsForLayerId: number;
-  ocdbtSeg: boolean;
-  ocdbtPath: string | undefined;
+  ocdbtKvstoreSpec: { driver?: string; base?: unknown } | undefined;
   constructor(obj: any) {
     verifyObject(obj);
     this.chunkSize = verifyObjectProperty(obj, "chunk_size", (x) =>
@@ -295,16 +294,13 @@ class GraphInfo {
       verifyPositiveInt,
       N_BITS_FOR_LAYER_ID_DEFAULT,
     );
-    this.ocdbtSeg = verifyOptionalObjectProperty(
+    this.ocdbtKvstoreSpec = verifyOptionalObjectProperty(
       obj,
-      "ocdbt_seg",
-      verifyBoolean,
-      false,
-    );
-    this.ocdbtPath = verifyOptionalObjectProperty(
-      obj,
-      "ocdbt_path",
-      verifyOptionalString,
+      "ocdbt_kvstore_spec",
+      (x) => {
+        verifyObject(x);
+        return x as { driver?: string; base?: unknown };
+      },
       undefined,
     );
   }
@@ -327,12 +323,15 @@ function parseGrapheneMultiscaleVolumeInfo(
   const app = verifyObjectProperty(obj, "app", (x) => new AppInfo(url, x));
   const graph = verifyObjectProperty(obj, "graph", (x) => new GraphInfo(x));
   let ocdbtDataUrl: string | undefined;
-  if (graph.ocdbtSeg && graph.ocdbtPath) {
-    let ocdbtBase = dataUrl;
-    if (!ocdbtBase.endsWith("/")) ocdbtBase += "/";
-    ocdbtBase += graph.ocdbtPath;
-    if (!ocdbtBase.endsWith("/")) ocdbtBase += "/";
-    ocdbtDataUrl = `${ocdbtBase}|ocdbt:`;
+  if (graph.ocdbtKvstoreSpec) {
+    const spec = graph.ocdbtKvstoreSpec;
+    if (spec.driver !== "ocdbt" || !spec.base) {
+      throw new Error(
+        "graph.ocdbt_kvstore_spec must have driver=ocdbt and a base",
+      );
+    }
+    const kvstackUrl = `kvstack:${encodeURIComponent(JSON.stringify(spec.base))}`;
+    ocdbtDataUrl = `${kvstackUrl}|ocdbt:`;
   }
   return {
     ...volumeInfo,
@@ -376,7 +375,8 @@ class GrapheneMultiscaleVolumeChunkSource extends PrecomputedMultiscaleVolumeChu
         .filter((x) => x.key !== "placeholder")
         .filter(
           (x) =>
-            !this.info.graph.ocdbtSeg || this.info.ocdbtScales.has(x.key),
+            this.info.graph.ocdbtKvstoreSpec === undefined ||
+            this.info.ocdbtScales.has(x.key),
         )
         .map((scaleInfo) => {
           const { resolution } = scaleInfo;
@@ -442,7 +442,10 @@ class GrapheneMultiscaleVolumeChunkSource extends PrecomputedMultiscaleVolumeChu
   invalidateVolumeSources() {
     // Invalidate OCDBT metadata caches first so that when volume chunks
     // are re-queued and start downloading, they read fresh metadata.
-    if (this.info.graph.ocdbtSeg && this.chunkedGraphChunkSource?.rpc) {
+    if (
+      this.info.graph.ocdbtKvstoreSpec &&
+      this.chunkedGraphChunkSource?.rpc
+    ) {
       this.chunkedGraphChunkSource.rpc.invoke(
         GRAPHENE_INVALIDATE_OCDBT_RPC_ID,
         {
@@ -1815,7 +1818,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
         const newValues = new Uint64Set();
         newValues.add(splitRoots);
         this.state.replaceSegments(oldValues, newValues);
-        if (this.graph.info.graph.ocdbtSeg) {
+        if (this.graph.info.graph.ocdbtKvstoreSpec) {
           this.chunkSource.invalidateVolumeSources();
         }
         return true;
@@ -2819,8 +2822,11 @@ class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
       const isRoot = rootId === segmentId;
       // Supervoxel splits require selecting the same supervoxel on both
       // sides of the cut (the split happens within one supervoxel), so
-      // skip the duplicate-selection guard when ocdbtSeg is active.
-      if (!isRoot && !graphConnection.graph.info.graph.ocdbtSeg) {
+      // skip the duplicate-selection guard when an OCDBT kvstore is active.
+      if (
+        !isRoot &&
+        graphConnection.graph.info.graph.ocdbtKvstoreSpec === undefined
+      ) {
         for (const segment of segments) {
           if (segment === segmentId) {
             StatusMessage.showTemporaryMessage(
