@@ -647,5 +647,5 @@ registerRPC(GRAPHENE_MESH_NEW_SEGMENT_RPC_ID, function (x) {
 
 registerRPC(GRAPHENE_INVALIDATE_OCDBT_RPC_ID, function (x) {
   const source = this.get(x.layerId) as GrapheneChunkedGraphChunkSource;
-  invalidateOcdbtCaches(source.sharedKvStoreContext, x.baseUrl);
+  invalidateOcdbtCaches(source.sharedKvStoreContext);
 });

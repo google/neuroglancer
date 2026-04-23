@@ -78,6 +78,13 @@ export class SimpleAsyncCache<Key, Value> extends ChunkSourceBase {
     }
   }
 
+  invalidateAll() {
+    for (const chunk of this.chunks.values()) {
+      chunk.freeSystemMemory();
+      this.chunkManager.queueManager.updateChunkState(chunk, ChunkState.QUEUED);
+    }
+  }
+
   get(key: Key, options: Partial<ProgressOptions>): Promise<Value> {
     const encodedKey = this.encodeKeyFunction(key);
     let chunk = this.chunks.get(encodedKey);

@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import { ChunkState } from "#src/chunk_manager/base.js";
 import { SimpleAsyncCache } from "#src/chunk_manager/generic_file_source.js";
 import type { SharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
 import type { BtreeNode } from "#src/kvstore/ocdbt/btree.js";
@@ -90,11 +89,18 @@ export function getManifest(
   return cache.get(dataFile, options);
 }
 
+// Clears every OCDBT metadata cache so the next read resolves a fresh root
+// from the updated manifest. Stub factories below intentionally throw: the
+// real factories (in `getManifest` / `getBtreeNode` / `getRoot`) are
+// already registered by the time invalidation runs, so `memoize.get` returns
+// the existing cache instance without ever calling these stubs.
+//
+// Scope is the whole shared context: if multiple OCDBT databases are open
+// they are all flushed. Metadata is small and fast to re-fetch so this is
+// acceptable.
 export function invalidateOcdbtCaches(
   sharedKvStoreContext: SharedKvStoreContextCounterpart,
-  _baseUrl: string,
 ) {
-  // Invalidate the cached manifest for this OCDBT database
   const manifestCache = sharedKvStoreContext.chunkManager.memoize.get(
     "ocdbt:manifest",
     () => {
@@ -110,16 +116,7 @@ export function invalidateOcdbtCaches(
       return cache;
     },
   );
-  for (const chunk of manifestCache.chunks.values()) {
-    chunk.freeSystemMemory();
-    manifestCache.chunkManager.queueManager.updateChunkState(
-      chunk,
-      ChunkState.QUEUED,
-    );
-  }
-  // Also invalidate all btree nodes since they may reference stale data
-  // after server-side mutations. This is broader than strictly necessary
-  // but btree nodes are small and fast to re-fetch.
+  manifestCache.invalidateAll();
   const btreeCache = sharedKvStoreContext.chunkManager.memoize.get(
     "ocdbt:btree",
     () =>
@@ -129,15 +126,7 @@ export function invalidateOcdbtCaches(
         decodeBtreeNode,
       ),
   );
-  for (const chunk of btreeCache.chunks.values()) {
-    chunk.freeSystemMemory();
-    btreeCache.chunkManager.queueManager.updateChunkState(
-      chunk,
-      ChunkState.QUEUED,
-    );
-  }
-  // Invalidate the cached BtreeGenerationReference so the next read
-  // resolves a fresh root from the updated manifest.
+  btreeCache.invalidateAll();
   const versionCache = sharedKvStoreContext.chunkManager.memoize.get(
     "ocdbt:version",
     () => {
@@ -158,13 +147,7 @@ export function invalidateOcdbtCaches(
       return cache;
     },
   );
-  for (const chunk of versionCache.chunks.values()) {
-    chunk.freeSystemMemory();
-    versionCache.chunkManager.queueManager.updateChunkState(
-      chunk,
-      ChunkState.QUEUED,
-    );
-  }
+  versionCache.invalidateAll();
 }
 
 export async function getResolvedManifest(
