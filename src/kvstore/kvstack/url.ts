@@ -53,7 +53,7 @@ export function parseKvStackUrl(parsedUrl: UrlWithParsedScheme): {
 
 export function formatKvStackUrl(spec: KvStackSpec, key: string = ""): string {
   const json = encodeURIComponent(JSON.stringify(spec));
-  return key === "" ? `kvstack:${json}` : `kvstack:${json}/${key}`;
+  return key === "" ? `kvstack:${json}` : `kvstack:${json}/${encodeURIComponent(key)}`;
 }
 
 function validateKvStackSpec(spec: unknown): asserts spec is KvStackSpec {
@@ -64,17 +64,26 @@ function validateKvStackSpec(spec: unknown): asserts spec is KvStackSpec {
   ) {
     throw new Error("kvstack spec must have a 'layers' array");
   }
-  for (const layer of (spec as KvStackSpec).layers) {
+  const { layers } = spec as KvStackSpec;
+  if (layers.length === 0) {
+    throw new Error("kvstack spec must have at least one layer");
+  }
+  for (const layer of layers) {
     if (typeof layer !== "object" || layer === null) {
       throw new Error("kvstack layer must be an object");
     }
-    if (typeof layer.base !== "string") {
-      throw new Error("kvstack layer must have a 'base' string");
+    if (typeof layer.base !== "string" || layer.base === "") {
+      throw new Error("kvstack layer must have a non-empty 'base' string");
     }
     const hasExact = typeof layer.exact === "string";
     const hasPrefix = typeof layer.prefix === "string";
     if (hasExact && hasPrefix) {
       throw new Error("kvstack layer cannot have both 'exact' and 'prefix'");
+    }
+    if (hasPrefix && layer.prefix === "") {
+      throw new Error(
+        "kvstack layer 'prefix' must be non-empty; use a 'base' layer for catch-all routing",
+      );
     }
   }
 }
