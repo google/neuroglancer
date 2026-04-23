@@ -50,6 +50,7 @@ import {
   CHUNKED_GRAPH_RENDER_LAYER_UPDATE_SOURCES_RPC_ID,
   ChunkedGraphSourceParameters,
   getGrapheneFragmentKey,
+  GRAPHENE_INVALIDATE_OCDBT_RPC_ID,
   GRAPHENE_MESH_NEW_SEGMENT_RPC_ID,
   isBaseSegmentId,
   makeChunkedGraphChunkSpecification,
@@ -74,6 +75,7 @@ import {
   getSegmentPropertyMap,
   parseMultiscaleVolumeInfo,
   PrecomputedMultiscaleVolumeChunkSource,
+  PrecomputedVolumeChunkSource,
 } from "#src/datasource/precomputed/frontend.js";
 import { WithSharedKvStoreContext } from "#src/kvstore/chunk_source_frontend.js";
 import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
@@ -133,6 +135,9 @@ import {
 } from "#src/sliceview/frontend.js";
 import type { SliceViewRenderLayer } from "#src/sliceview/renderlayer.js";
 import { SliceViewPanelRenderLayer } from "#src/sliceview/renderlayer.js";
+import type { VolumeSourceOptions } from "#src/sliceview/volume/base.js";
+import { makeDefaultVolumeChunkSpecifications } from "#src/sliceview/volume/base.js";
+import type { VolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import { StatusMessage } from "#src/status.js";
 import {
   TrackableBoolean,
@@ -165,6 +170,7 @@ import {
   registerTool,
 } from "#src/ui/tool.js";
 import { Uint64Set } from "#src/uint64_set.js";
+import { transposeNestedArrays } from "#src/util/array.js";
 import { packColor } from "#src/util/color.js";
 import type { Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -276,6 +282,8 @@ const N_BITS_FOR_LAYER_ID_DEFAULT = 8;
 class GraphInfo {
   chunkSize: vec3;
   nBitsForLayerId: number;
+  ocdbtSeg: boolean;
+  ocdbtPath: string | undefined;
   constructor(obj: any) {
     verifyObject(obj);
     this.chunkSize = verifyObjectProperty(obj, "chunk_size", (x) =>
@@ -287,11 +295,25 @@ class GraphInfo {
       verifyPositiveInt,
       N_BITS_FOR_LAYER_ID_DEFAULT,
     );
+    this.ocdbtSeg = verifyOptionalObjectProperty(
+      obj,
+      "ocdbt_seg",
+      verifyBoolean,
+      false,
+    );
+    this.ocdbtPath = verifyOptionalObjectProperty(
+      obj,
+      "ocdbt_path",
+      verifyOptionalString,
+      undefined,
+    );
   }
 }
 
 interface GrapheneMultiscaleVolumeInfo extends MultiscaleVolumeInfo {
   dataUrl: string;
+  ocdbtDataUrl: string | undefined;
+  ocdbtScales: Set<string>;
   app: AppInfo;
   graph: GraphInfo;
 }
@@ -304,20 +326,134 @@ function parseGrapheneMultiscaleVolumeInfo(
   const dataUrl = verifyObjectProperty(obj, "data_dir", verifyString);
   const app = verifyObjectProperty(obj, "app", (x) => new AppInfo(url, x));
   const graph = verifyObjectProperty(obj, "graph", (x) => new GraphInfo(x));
+  let ocdbtDataUrl: string | undefined;
+  if (graph.ocdbtSeg && graph.ocdbtPath) {
+    let ocdbtBase = dataUrl;
+    if (!ocdbtBase.endsWith("/")) ocdbtBase += "/";
+    ocdbtBase += graph.ocdbtPath;
+    if (!ocdbtBase.endsWith("/")) ocdbtBase += "/";
+    ocdbtDataUrl = `${ocdbtBase}|ocdbt:`;
+  }
   return {
     ...volumeInfo,
     app,
     graph,
     dataUrl,
+    ocdbtDataUrl,
+    ocdbtScales: new Set<string>(),
   };
 }
 
 class GrapheneMultiscaleVolumeChunkSource extends PrecomputedMultiscaleVolumeChunkSource {
+  private volumeChunkSources: { invalidateCache(): void }[] = [];
+  private chunkedGraphChunkSource: GrapheneChunkedGraphChunkSource | undefined;
+
   constructor(
     sharedKvStoreContext: SharedKvStoreContext,
     public info: GrapheneMultiscaleVolumeInfo,
   ) {
     super(sharedKvStoreContext, info.dataUrl, info);
+  }
+
+  resolveScaleUrl(scaleKey: string): string {
+    const { ocdbtDataUrl, ocdbtScales } = this.info;
+    const baseUrl =
+      ocdbtDataUrl && ocdbtScales.has(scaleKey) ? ocdbtDataUrl : this.url;
+    return kvstoreEnsureDirectoryPipelineUrl(
+      this.sharedKvStoreContext.kvStoreContext.resolveRelativePath(
+        baseUrl,
+        scaleKey,
+      ),
+    );
+  }
+
+  getSources(volumeSourceOptions: VolumeSourceOptions) {
+    const modelResolution = this.info.scales[0].resolution;
+    const { rank } = this;
+    const sources = transposeNestedArrays(
+      this.info.scales
+        .filter((x) => !x.hidden)
+        .filter((x) => x.key !== "placeholder")
+        .filter(
+          (x) =>
+            !this.info.graph.ocdbtSeg || this.info.ocdbtScales.has(x.key),
+        )
+        .map((scaleInfo) => {
+          const { resolution } = scaleInfo;
+          const stride = rank + 1;
+          const chunkToMultiscaleTransform = new Float32Array(stride * stride);
+          chunkToMultiscaleTransform[chunkToMultiscaleTransform.length - 1] = 1;
+          const { lowerBounds: baseLowerBound, upperBounds: baseUpperBound } =
+            this.info.modelSpace.boundingBoxes[0].box;
+          const lowerClipBound = new Float32Array(rank);
+          const upperClipBound = new Float32Array(rank);
+          for (let i = 0; i < 3; ++i) {
+            const relativeScale = resolution[i] / modelResolution[i];
+            chunkToMultiscaleTransform[stride * i + i] = relativeScale;
+            const voxelOffsetValue = scaleInfo.voxelOffset[i];
+            chunkToMultiscaleTransform[stride * rank + i] =
+              voxelOffsetValue * relativeScale;
+            lowerClipBound[i] =
+              baseLowerBound[i] / relativeScale - voxelOffsetValue;
+            upperClipBound[i] =
+              baseUpperBound[i] / relativeScale - voxelOffsetValue;
+          }
+          if (rank === 4) {
+            chunkToMultiscaleTransform[stride * 3 + 3] = 1;
+            lowerClipBound[3] = baseLowerBound[3];
+            upperClipBound[3] = baseUpperBound[3];
+          }
+          return makeDefaultVolumeChunkSpecifications({
+            rank,
+            dataType: this.dataType,
+            chunkToMultiscaleTransform,
+            upperVoxelBound: scaleInfo.size,
+            volumeType: this.volumeType,
+            chunkDataSizes: scaleInfo.chunkSizes,
+            baseVoxelOffset: scaleInfo.voxelOffset,
+            compressedSegmentationBlockSize:
+              scaleInfo.compressedSegmentationBlockSize,
+            volumeSourceOptions,
+          }).map(
+            (spec): SliceViewSingleResolutionSource<VolumeChunkSource> => ({
+              chunkSource: this.chunkManager.getChunkSource(
+                PrecomputedVolumeChunkSource,
+                {
+                  sharedKvStoreContext: this.sharedKvStoreContext,
+                  spec,
+                  parameters: {
+                    url: this.resolveScaleUrl(scaleInfo.key),
+                    encoding: scaleInfo.encoding,
+                    sharding: scaleInfo.sharding,
+                  },
+                },
+              ),
+              chunkToMultiscaleTransform,
+              lowerClipBound,
+              upperClipBound,
+            }),
+          );
+        }),
+    );
+    this.volumeChunkSources = sources.flat().map((s) => s.chunkSource);
+    return sources;
+  }
+
+  invalidateVolumeSources() {
+    // Invalidate OCDBT metadata caches first so that when volume chunks
+    // are re-queued and start downloading, they read fresh metadata.
+    if (this.info.graph.ocdbtSeg && this.chunkedGraphChunkSource?.rpc) {
+      this.chunkedGraphChunkSource.rpc.invoke(
+        GRAPHENE_INVALIDATE_OCDBT_RPC_ID,
+        {
+          layerId: this.chunkedGraphChunkSource.rpcId,
+          baseUrl: this.info.ocdbtDataUrl,
+        },
+      );
+    }
+    for (const source of this.volumeChunkSources) {
+      source.invalidateCache();
+    }
   }
 
   getChunkedGraphSource() {
@@ -347,15 +483,17 @@ class GrapheneMultiscaleVolumeChunkSource extends PrecomputedMultiscaleVolumeChu
       lowerClipBound[i] = baseLowerBound[i];
       upperClipBound[i] = baseUpperBound[i];
     }
+    const chunkSource = this.chunkManager.getChunkSource(
+      GrapheneChunkedGraphChunkSource,
+      {
+        spec,
+        sharedKvStoreContext: this.sharedKvStoreContext,
+        parameters: { url: `${this.info.app!.segmentationUrl}/node` },
+      },
+    );
+    this.chunkedGraphChunkSource = chunkSource;
     return {
-      chunkSource: this.chunkManager.getChunkSource(
-        GrapheneChunkedGraphChunkSource,
-        {
-          spec,
-          sharedKvStoreContext: this.sharedKvStoreContext,
-          parameters: { url: `${this.info.app!.segmentationUrl}/node` },
-        },
-      ),
+      chunkSource,
       chunkToMultiscaleTransform,
       lowerClipBound,
       upperClipBound,
@@ -608,6 +746,18 @@ async function getVolumeDataSource(
   stateJson: any,
 ): Promise<DataSource> {
   const info = parseGrapheneMultiscaleVolumeInfo(metadata, url);
+  if (info.ocdbtDataUrl) {
+    const listResult = await sharedKvStoreContext.kvStoreContext.list(
+      info.ocdbtDataUrl,
+      { responseKeys: "suffix", ...options },
+    );
+    const knownScaleKeys = new Set(info.scales.map((s) => s.key));
+    for (const dir of listResult.directories) {
+      if (knownScaleKeys.has(dir)) {
+        info.ocdbtScales.add(dir);
+      }
+    }
+  }
   const volume = new GrapheneMultiscaleVolumeChunkSource(
     sharedKvStoreContext,
     info,
@@ -1665,6 +1815,9 @@ class GraphConnection extends SegmentationGraphSourceConnection {
         const newValues = new Uint64Set();
         newValues.add(splitRoots);
         this.state.replaceSegments(oldValues, newValues);
+        if (this.graph.info.graph.ocdbtSeg) {
+          this.chunkSource.invalidateVolumeSources();
+        }
         return true;
       }
     }
@@ -2664,7 +2817,10 @@ class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
         return;
       }
       const isRoot = rootId === segmentId;
-      if (!isRoot) {
+      // Supervoxel splits require selecting the same supervoxel on both
+      // sides of the cut (the split happens within one supervoxel), so
+      // skip the duplicate-selection guard when ocdbtSeg is active.
+      if (!isRoot && !graphConnection.graph.info.graph.ocdbtSeg) {
         for (const segment of segments) {
           if (segment === segmentId) {
             StatusMessage.showTemporaryMessage(
