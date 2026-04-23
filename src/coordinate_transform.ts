@@ -1288,7 +1288,7 @@ export class WatchableCoordinateSpaceTransform
       const specDim = newDim - defaultSourceRank + specSourceRank;
       newInputScales[newDim] = specInputOrOutputSpace.scales[specDim];
       newInputUnits[newDim] = specInputOrOutputSpace.units[specDim];
-      newInputNames[newDim] = `${newDim}`;
+      newInputNames[newDim] = specInputOrOutputSpace.names[specDim];
     }
 
     const newTransform = new Float64Array((newRank + 1) ** 2);
