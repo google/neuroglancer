@@ -30,13 +30,14 @@ import {
   getGrapheneFragmentKey,
   GRAPHENE_MESH_NEW_SEGMENT_RPC_ID,
   ChunkedGraphSourceParameters,
-  MeshSourceParameters,
+  MeshSourceParametersWithFocus,
   CHUNKED_GRAPH_LAYER_RPC_ID,
   CHUNKED_GRAPH_RENDER_LAYER_UPDATE_SOURCES_RPC_ID,
   RENDER_RATIO_LIMIT,
   isBaseSegmentId,
   parseGrapheneError,
   getHttpSource,
+  startLayerForBBox,
 } from "#src/datasource/graphene/base.js";
 import { decodeManifestChunk } from "#src/datasource/precomputed/backend.js";
 import { WithSharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
@@ -102,7 +103,7 @@ function downloadFragmentWithSharding(
 function downloadFragment(
   fragmentKvStore: KvStoreWithPath,
   fragmentId: string,
-  parameters: MeshSourceParameters,
+  parameters: MeshSourceParametersWithFocus,
   signal: AbortSignal,
 ): Promise<ReadResponse> {
   if (parameters.sharding) {
@@ -127,7 +128,7 @@ async function decodeDracoFragmentChunk(
 @registerSharedObject()
 export class GrapheneMeshSource extends WithParameters(
   WithSharedKvStoreContextCounterpart(MeshSource),
-  MeshSourceParameters,
+  MeshSourceParametersWithFocus,
 ) {
   manifestRequestCount = new Map<string, number>();
   newSegments = new Uint64Set();
@@ -140,6 +141,13 @@ export class GrapheneMeshSource extends WithParameters(
     this.parameters.fragmentUrl,
   );
 
+  focusBoundingBox: SharedWatchableValue<Float32Array | undefined>;
+
+  constructor(rpc: RPC, options: MeshSourceParametersWithFocus) {
+    super(rpc, options);
+    this.focusBoundingBox = rpc.get(options.focusBoundingBox);
+  }
+
   addNewSegment(segment: bigint) {
     const { newSegments } = this;
     newSegments.add(segment);
@@ -150,12 +158,41 @@ export class GrapheneMeshSource extends WithParameters(
   }
 
   async download(chunk: ManifestChunk, signal: AbortSignal) {
+    const {
+      focusBoundingBox: { value: focusBoundingBox },
+    } = this;
+    const { chunkSize, nBitsForLayerId } = this.parameters;
+
+    const unregister = this.registerDisposer(
+      this.focusBoundingBox.changed.add(() => {
+        chunk.downloadAbortController?.abort("retry");
+        unregister();
+        if (chunk.newRequestedState !== ChunkState.NEW) {
+          // re-download manifest
+          this.chunkManager.queueManager.updateChunkState(
+            chunk,
+            ChunkState.QUEUED,
+          );
+        }
+      }),
+    );
+
     const { parameters, newSegments, manifestRequestCount } = this;
-    if (isBaseSegmentId(chunk.objectId, parameters.nBitsForLayerId)) {
+    if (isBaseSegmentId(chunk.objectId, nBitsForLayerId)) {
       return decodeManifestChunk(chunk, { fragments: [] });
     }
+
     const { fetchOkImpl, baseUrl } = this.manifestHttpSource;
-    const manifestPath = `/manifest/${chunk.objectId}:${parameters.lod}?verify=1&prepend_seg_ids=1`;
+    let manifestPath = `/manifest/${chunk.objectId}:${parameters.lod}?verify=1&prepend_seg_ids=1`;
+    if (focusBoundingBox) {
+      const rank = focusBoundingBox.length / 2;
+      const startLayer = startLayerForBBox(focusBoundingBox, chunkSize);
+      const boundsStr = Array.from(
+        new Array(rank),
+        (_, i) => `${focusBoundingBox[i]}-${focusBoundingBox[i + rank]}`,
+      ).join("_");
+      manifestPath += `&bounds=${boundsStr}&start_layer=${startLayer}`;
+    }
     const response = await (
       await fetchOkImpl(baseUrl + manifestPath, { signal })
     ).json();
