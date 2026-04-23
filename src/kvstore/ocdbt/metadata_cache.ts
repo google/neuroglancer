@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { ChunkState } from "#src/chunk_manager/base.js";
 import { SimpleAsyncCache } from "#src/chunk_manager/generic_file_source.js";
 import type { SharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
 import type { BtreeNode } from "#src/kvstore/ocdbt/btree.js";
@@ -27,7 +28,12 @@ import type {
   ManifestWithVersionTree,
 } from "#src/kvstore/ocdbt/manifest.js";
 import { decodeManifest } from "#src/kvstore/ocdbt/manifest.js";
-import type { VersionTreeNode } from "#src/kvstore/ocdbt/version_tree.js";
+import type { VersionSpecifier } from "#src/kvstore/ocdbt/version_specifier.js";
+import { formatVersion } from "#src/kvstore/ocdbt/version_specifier.js";
+import type {
+  BtreeGenerationReference,
+  VersionTreeNode,
+} from "#src/kvstore/ocdbt/version_tree.js";
 import { decodeVersionTreeNode } from "#src/kvstore/ocdbt/version_tree.js";
 import { pipelineUrlJoin } from "#src/kvstore/url.js";
 import type { ProgressOptions } from "#src/util/progress_listener.js";
@@ -82,6 +88,83 @@ export function getManifest(
     },
   );
   return cache.get(dataFile, options);
+}
+
+export function invalidateOcdbtCaches(
+  sharedKvStoreContext: SharedKvStoreContextCounterpart,
+  _baseUrl: string,
+) {
+  // Invalidate the cached manifest for this OCDBT database
+  const manifestCache = sharedKvStoreContext.chunkManager.memoize.get(
+    "ocdbt:manifest",
+    () => {
+      const cache = new SimpleAsyncCache<DataFileId, Manifest>(
+        sharedKvStoreContext.chunkManager.addRef(),
+        {
+          get: async () => {
+            throw new Error("unreachable");
+          },
+        },
+      );
+      cache.registerDisposer(sharedKvStoreContext.addRef());
+      return cache;
+    },
+  );
+  for (const chunk of manifestCache.chunks.values()) {
+    chunk.freeSystemMemory();
+    manifestCache.chunkManager.queueManager.updateChunkState(
+      chunk,
+      ChunkState.QUEUED,
+    );
+  }
+  // Also invalidate all btree nodes since they may reference stale data
+  // after server-side mutations. This is broader than strictly necessary
+  // but btree nodes are small and fast to re-fetch.
+  const btreeCache = sharedKvStoreContext.chunkManager.memoize.get(
+    "ocdbt:btree",
+    () =>
+      makeIndirectDataReferenceCache(
+        sharedKvStoreContext,
+        "b+tree node",
+        decodeBtreeNode,
+      ),
+  );
+  for (const chunk of btreeCache.chunks.values()) {
+    chunk.freeSystemMemory();
+    btreeCache.chunkManager.queueManager.updateChunkState(
+      chunk,
+      ChunkState.QUEUED,
+    );
+  }
+  // Invalidate the cached BtreeGenerationReference so the next read
+  // resolves a fresh root from the updated manifest.
+  const versionCache = sharedKvStoreContext.chunkManager.memoize.get(
+    "ocdbt:version",
+    () => {
+      const cache = new SimpleAsyncCache<
+        { url: string; version: VersionSpecifier | undefined },
+        BtreeGenerationReference
+      >(sharedKvStoreContext.chunkManager.addRef(), {
+        get: async () => {
+          throw new Error("unreachable");
+        },
+        encodeKey: ({ url, version }) =>
+          JSON.stringify([
+            url,
+            version !== undefined ? formatVersion(version) : undefined,
+          ]),
+      });
+      cache.registerDisposer(sharedKvStoreContext.addRef());
+      return cache;
+    },
+  );
+  for (const chunk of versionCache.chunks.values()) {
+    chunk.freeSystemMemory();
+    versionCache.chunkManager.queueManager.updateChunkState(
+      chunk,
+      ChunkState.QUEUED,
+    );
+  }
 }
 
 export async function getResolvedManifest(
