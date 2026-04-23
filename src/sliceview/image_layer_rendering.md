@@ -155,6 +155,14 @@ annotation layers). The one-parameter overload simply computes the inverse linea
 the specified value within the range specified by the control. The zero-parameter overload returns
 the inverse linear interpolation of the data value for configured channel/property.
 
+The `invlerp` control can sample from the data using either the nearest neighbor value via `getDataValue` or trilinear interpolation via `getInterpolatedDataValue`. To specify which sampling method to use, when calling the named control, you can optionally specify a boolean argument `interpolate`, which defaults to `false`. For example, if the control is defined as:
+
+```glsl
+#uicontrol invlerp normalized(window=[0, 100], channel=2)
+```
+
+then `normalized()` is equivalent to `normalized(false)` and returns the inverse linear interpolation of the nearest neighbor value for channel 2, while `normalized(true)` returns the inverse linear interpolation of the trilinearly interpolated value for channel 2.
+
 ### `transferFunction` controls
 
 The `transferFunction` control type allows the user to specify a function which maps
@@ -190,6 +198,14 @@ The following parameters are supported:
 
 - `defaultColor`: Optional. The default color for new control points added via the UI control.
   Defaults to `#ffffff`, and must be specified as a hex string if provided `#rrggbb`.
+
+Like the `invlerp` control, the `transferFunction` control can sample from the data using either the nearest neighbor value via `getDataValue` or trilinear interpolation via `getInterpolatedDataValue`. To specify which sampling method to use, when calling the named control, you can optionally specify a boolean argument `interpolate`, which defaults to `false`. For example, if the control is defined as:
+
+```glsl
+#uicontrol transferFunction colormap(window=[0, 100], channel=2)
+```
+
+then `colormap()` is equivalent to `colormap(false)` and returns the inverse linear interpolation of the nearest neighbor value for channel 2, while `colormap(true)` returns the inverse linear interpolation of the trilinearly interpolated value for channel 2.
 
 ## API
 
