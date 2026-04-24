@@ -442,10 +442,7 @@ class GrapheneMultiscaleVolumeChunkSource extends PrecomputedMultiscaleVolumeChu
   invalidateVolumeSources() {
     // Invalidate OCDBT metadata caches first so that when volume chunks
     // are re-queued and start downloading, they read fresh metadata.
-    if (
-      this.info.graph.ocdbtKvstoreSpec &&
-      this.chunkedGraphChunkSource?.rpc
-    ) {
+    if (this.info.graph.ocdbtKvstoreSpec && this.chunkedGraphChunkSource?.rpc) {
       this.chunkedGraphChunkSource.rpc.invoke(
         GRAPHENE_INVALIDATE_OCDBT_RPC_ID,
         { layerId: this.chunkedGraphChunkSource.rpcId },

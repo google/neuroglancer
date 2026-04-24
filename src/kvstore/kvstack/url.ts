@@ -53,7 +53,9 @@ export function parseKvStackUrl(parsedUrl: UrlWithParsedScheme): {
 
 export function formatKvStackUrl(spec: KvStackSpec, key: string = ""): string {
   const json = encodeURIComponent(JSON.stringify(spec));
-  return key === "" ? `kvstack:${json}` : `kvstack:${json}/${encodeURIComponent(key)}`;
+  return key === ""
+    ? `kvstack:${json}`
+    : `kvstack:${json}/${encodeURIComponent(key)}`;
 }
 
 function validateKvStackSpec(spec: unknown): asserts spec is KvStackSpec {
