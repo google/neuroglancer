@@ -461,7 +461,7 @@ export class ImageUserLayer extends Base {
 function makeShaderCodeWidget(layer: ImageUserLayer) {
   return new ShaderCodeWidget({
     shaderError: layer.shaderError,
-    fragmentMain: layer.fragmentMain,
+    fragment: layer.fragmentMain,
     shaderControlState: layer.shaderControlState,
   });
 }

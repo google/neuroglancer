@@ -42,6 +42,7 @@ import {
   parameterizedEmitterDependentShaderGetter,
   shaderCodeWithLineDirective,
 } from "#src/webgl/dynamic_shader.js";
+import { copyHistogramToCPU } from "#src/webgl/empirical_cdf.js";
 import {
   defineInvlerpShaderFunction,
   enableLerpShaderFunction,
@@ -438,7 +439,7 @@ float getMaxSubspaceClipCoefficient(float modelPointA[${this.rank}],  float mode
 }
 
 `);
-        addControlsToBuilder(parameters, builder);
+        addControlsToBuilder(parameters, builder, /*fragment=*/ false);
         builder.addVertexCode(`
 const bool PROJECTION_VIEW = ${!this.targetIsSliceView};
 bool ng_discardValue;
@@ -769,21 +770,12 @@ gl_PointSize = 1.0;
         }
         gl.drawArrays(WebGL2RenderingContext.POINTS, 0, context.count);
         if (DEBUG_HISTOGRAMS) {
-          const tempBuffer = new Float32Array(256 * 4);
-          gl.readPixels(
-            0,
-            0,
-            256,
-            1,
-            WebGL2RenderingContext.RGBA,
-            WebGL2RenderingContext.FLOAT,
-            tempBuffer,
+          const histogram = copyHistogramToCPU(gl);
+          console.log(
+            "histogram property:",
+            propertyIdentifier,
+            histogram.join(" "),
           );
-          const tempBuffer2 = new Float32Array(256);
-          for (let j = 0; j < 256; ++j) {
-            tempBuffer2[j] = tempBuffer[j * 4];
-          }
-          console.log("histogram", tempBuffer2.join(" "));
         }
         binder.disable();
         break;
