@@ -17,8 +17,8 @@
 import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import { makeCoordinateSpace } from "#src/coordinate_transform.js";
 import type {
-  SingleChannelMetadata,
   ChannelMetadata,
+  SingleChannelMetadata,
 } from "#src/datasource/index.js";
 import {
   joinBaseUrlAndPath,
@@ -125,7 +125,7 @@ function parseOmeroChannel(omeroChannel: unknown): SingleChannelMetadata {
   if (colorString && /^[0-9a-f]{6}$/i.test(colorString)) {
     colorString = `#${colorString}`;
   }
-  const color = parseRGBColorSpecification(colorString);
+  const color = colorString !== undefined ? parseRGBColorSpecification(colorString) : undefined;
   const inverted = getProp("inverted", verifyBoolean);
   const label = getProp("label", verifyString);
 
@@ -732,7 +732,7 @@ export function parseOmeMetadata(
 ): OmeMetadata | undefined {
   const ome = attrs.ome;
   const multiscales = ome == undefined ? attrs.multiscales : ome.multiscales; // >0.4
-  const omero = attrs.omero;
+  const omero = ome == undefined ? attrs.omero : ome.omero; // >0.4
 
   if (!Array.isArray(multiscales)) return undefined;
   const errors: string[] = [];
