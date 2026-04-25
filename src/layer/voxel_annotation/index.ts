@@ -122,7 +122,7 @@ export class VoxelEditingContext
 
     if (!writingEnabled) return;
 
-    // NOTE: each of the following 3 checks may be removed if support for the checked contraint is added
+    // The following checks are in place due to limitations in the implementation, and could be removed if support for the checked constraint is added.
     if (primarySource.rank !== 3) {
       throw new Error(
         `Voxel annotation only supports rank 3 volumes (got ${primarySource.rank}).`,
