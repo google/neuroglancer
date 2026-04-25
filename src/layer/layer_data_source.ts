@@ -36,6 +36,7 @@ import { makeEmptyDataSourceSpecification } from "#src/datasource/index.js";
 import type { UserLayer } from "#src/layer/index.js";
 import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
 import type { RenderLayer } from "#src/renderlayer.js";
+import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { arraysEqual } from "#src/util/array.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
@@ -63,6 +64,11 @@ export function parseDataSubsourceSpecificationFromJson(
   verifyObject(json);
   return {
     enabled: verifyOptionalObjectProperty(json, "enabled", verifyBoolean),
+    writingEnabled: verifyOptionalObjectProperty(
+      json,
+      "writingEnabled",
+      verifyBoolean,
+    ),
   };
 }
 
@@ -108,7 +114,8 @@ export function layerDataSourceSpecificationFromJson(
 }
 
 function dataSubsourceSpecificationToJson(spec: DataSubsourceSpecification) {
-  return spec.enabled;
+  const { enabled, writingEnabled } = spec;
+  return { enabled, writingEnabled };
 }
 
 export function layerDataSourceSpecificationToJson(
@@ -146,6 +153,7 @@ export class LoadedDataSubsource {
   subsourceToModelSubspaceTransform: Float32Array;
   modelSubspaceDimensionIndices: number[];
   enabled: boolean;
+  writingEnabled: TrackableBoolean;
   activated: RefCounted | undefined = undefined;
   guardValues: any[] = [];
   messages = new MessageList();
@@ -178,6 +186,13 @@ export class LoadedDataSubsource {
       ),
     } = subsourceEntry;
     this.enabled = enabled;
+    this.writingEnabled = new TrackableBoolean(
+      subsourceSpec?.writingEnabled ?? false,
+      false,
+    );
+    this.writingEnabled.changed.add(
+      loadedDataSource.layer.dataSourcesChanged.dispatch,
+    );
     this.subsourceToModelSubspaceTransform = subsourceToModelSubspaceTransform;
     this.modelSubspaceDimensionIndices = modelSubspaceDimensionIndices;
     this.isActiveChanged.add(
@@ -451,6 +466,7 @@ export class LayerDataSource extends RefCounted {
         if (refCounted.wasDisposed) return;
         this.loadState_ = { error };
         this.messages.clearMessages();
+
         this.messages.addMessage({
           severity: MessageSeverity.error,
           message: formatErrorMessage(error),
@@ -491,6 +507,9 @@ export class LayerDataSource extends RefCounted {
                 loadedSubsource.enabled !== defaultEnabledValue
                   ? loadedSubsource.enabled
                   : undefined,
+              writingEnabled: loadedSubsource.writingEnabled.value
+                ? true
+                : undefined,
             },
           ];
         }),
