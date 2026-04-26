@@ -77,15 +77,15 @@ export function drawBrushCursor(
   const { globalToRenderLayerDimensions } = chunkTransform.modelTransform;
   const stride = layerRank + 1;
 
-  const n_world =
+  const nWorld =
     projectionParameters.value.viewportNormalInCanonicalCoordinates;
-  const n_chunk = context.transformGlobalToVoxelNormal(n_world);
+  const nChunk = context.transformGlobalToVoxelNormal(nWorld);
 
-  const { u: u_chunk, v: v_chunk } = getBasisFromNormal(n_chunk);
+  const { u: uChunk, v: vChunk } = getBasisFromNormal(nChunk);
 
   const radius = layer.brushRadius.value - 0.5;
-  vec3.scale(u_chunk, u_chunk, radius);
-  vec3.scale(v_chunk, v_chunk, radius);
+  vec3.scale(uChunk, uChunk, radius);
+  vec3.scale(vChunk, vChunk, radius);
 
   const chunkToCam3 = mat3.create();
 
@@ -105,19 +105,19 @@ export function drawBrushCursor(
     }
   }
 
-  const u_cam = vec3.create();
-  const v_cam = vec3.create();
-  vec3.transformMat3(u_cam, u_chunk, chunkToCam3);
-  vec3.transformMat3(v_cam, v_chunk, chunkToCam3);
+  const uCam = vec3.create();
+  const vCam = vec3.create();
+  vec3.transformMat3(uCam, uChunk, chunkToCam3);
+  vec3.transformMat3(vCam, vChunk, chunkToCam3);
 
-  const u_scr_x = u_cam[0];
-  const u_scr_y = u_cam[1];
-  const v_scr_x = v_cam[0];
-  const v_scr_y = v_cam[1];
+  const uScrX = uCam[0];
+  const uScrY = uCam[1];
+  const vScrX = vCam[0];
+  const vScrY = vCam[1];
 
-  const Q11 = u_scr_x * u_scr_x + v_scr_x * v_scr_x;
-  const Q12 = u_scr_x * u_scr_y + v_scr_x * v_scr_y;
-  const Q22 = u_scr_y * u_scr_y + v_scr_y * v_scr_y;
+  const Q11 = uScrX * uScrX + vScrX * vScrX;
+  const Q12 = uScrX * uScrY + vScrX * vScrY;
+  const Q22 = uScrY * uScrY + vScrY * vScrY;
 
   const trace = Q11 + Q22;
   const det = Q11 * Q22 - Q12 * Q12;

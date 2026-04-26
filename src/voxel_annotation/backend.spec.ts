@@ -792,17 +792,15 @@ describe("VoxelEditController: flushPending", () => {
   it("Batching: Aggregates multiple edits to the same chunk into one write", async () => {
     const key = makeVoxChunkKey("0,0,0", 0);
 
-    await controller.commitVoxels([
+    controller.commitVoxels([
       { key, indices: [1], value: 50n },
       { key, indices: [2], value: 60n },
     ]);
 
     const otherKey = makeVoxChunkKey("1,0,0", 0);
-    await controller.commitVoxels([
-      { key: otherKey, indices: [5], value: 99n },
-    ]);
+    controller.commitVoxels([{ key: otherKey, indices: [5], value: 99n }]);
 
-    await controller.commitVoxels([
+    controller.commitVoxels([
       { key, indices: [1], value: 42n },
       { key, indices: [3], value: 70n },
     ]);
@@ -828,7 +826,7 @@ describe("VoxelEditController: flushPending", () => {
     });
     expect((controller as any).redoStack.length).toBe(1);
 
-    await controller.commitVoxels([{ key, indices: [1], value: 50n }]);
+    controller.commitVoxels([{ key, indices: [1], value: 50n }]);
     await vi.runAllTimersAsync();
 
     expect((controller as any).undoStack.length).toBe(1);
@@ -859,7 +857,7 @@ describe("VoxelEditController: flushPending", () => {
       });
     });
 
-    await controller.commitVoxels([
+    controller.commitVoxels([
       { key: validKey, indices: [1], value: 50n },
       { key: failKey, indices: [1], value: 50n },
     ]);
@@ -901,7 +899,7 @@ describe("VoxelEditController: flushPending", () => {
 
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    await controller.commitVoxels([
+    controller.commitVoxels([
       { key: validKey, indices: [1], value: 50n },
       { key: badKey, indices: [1], value: 50n },
     ]);
@@ -928,7 +926,7 @@ describe("VoxelEditController: flushPending", () => {
     const key = makeVoxChunkKey("0,0,0", 0);
     const enqueueSpy = vi.spyOn(controller as any, "enqueueDownsample");
 
-    await controller.commitVoxels([{ key, indices: [1], value: 50n }]);
+    controller.commitVoxels([{ key, indices: [1], value: 50n }]);
     await vi.runAllTimersAsync();
 
     expect(enqueueSpy).toHaveBeenCalledWith(key);
