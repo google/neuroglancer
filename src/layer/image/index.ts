@@ -197,7 +197,7 @@ export class ImageUserLayer extends Base {
     };
   }
 
-  _createVoxelRenderLayer(
+  _createVoxelOverlayRenderLayer(
     source: MultiscaleVolumeChunkSource,
     transform: WatchableValueInterface<RenderLayerTransformOrError>,
   ): ImageRenderLayer {

@@ -138,7 +138,7 @@ export class VoxelEditingContext
       primarySource,
     );
 
-    this.optimisticRenderLayer = this.hostLayer._createVoxelRenderLayer(
+    this.optimisticRenderLayer = this.hostLayer._createVoxelOverlayRenderLayer(
       this.previewSource,
       primaryRenderLayer.transform,
     );
@@ -448,7 +448,7 @@ export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
 
   editingContexts: Map<LoadedDataSubsource, VoxelEditingContext>;
 
-  abstract _createVoxelRenderLayer(
+  abstract _createVoxelOverlayRenderLayer(
     source: MultiscaleVolumeChunkSource,
     transform: WatchableValueInterface<RenderLayerTransformOrError>,
   ): ImageRenderLayer | SegmentationRenderLayer;
@@ -730,7 +730,7 @@ export function UserLayerWithVoxelEditingMixin<
       return truncated;
     }
 
-    abstract _createVoxelRenderLayer(
+    abstract _createVoxelOverlayRenderLayer(
       source: MultiscaleVolumeChunkSource,
       transform: WatchableValueInterface<RenderLayerTransformOrError>,
     ): ImageRenderLayer | SegmentationRenderLayer;

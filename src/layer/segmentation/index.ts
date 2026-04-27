@@ -617,7 +617,7 @@ export class SegmentationUserLayer extends Base {
     );
   };
 
-  _createVoxelRenderLayer(
+  _createVoxelOverlayRenderLayer(
     source: MultiscaleVolumeChunkSource,
     transform: WatchableValueInterface<RenderLayerTransformOrError>,
   ): SegmentationRenderLayer {
