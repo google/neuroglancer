@@ -1862,6 +1862,7 @@ export function UserLayerWithAnnotationsMixin<
       state.annotationPartIndex = mouseState.pickedOffset;
       state.annotationSourceIndex = annotationLayer.sourceIndex;
       state.annotationSubsource = annotationLayer.subsourceId;
+      state.annotationSubsubsourceId = annotationLayer.subsubsourceId;
     }
 
     displayAnnotationState(

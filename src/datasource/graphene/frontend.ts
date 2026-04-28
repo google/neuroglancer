@@ -3022,7 +3022,9 @@ class FindPathTool extends LayerTool<SegmentationUserLayer> {
     annotationElements.classList.add("find-path-annotations");
     body.appendChild(annotationElements);
     const bindings = getDefaultAnnotationListBindings();
-    this.registerDisposer(new MouseEventBinder(annotationElements, bindings));
+    activation.registerDisposer(
+      new MouseEventBinder(annotationElements, bindings),
+    );
     const updateAnnotationElements = () => {
       removeChildren(annotationElements);
       const maxColumnWidths = [0, 0, 0];
@@ -3044,7 +3046,7 @@ class FindPathTool extends LayerTool<SegmentationUserLayer> {
           localDimensionIndices,
         );
         for (const [column, width] of elementColumnWidths.entries()) {
-          maxColumnWidths[column] = width;
+          maxColumnWidths[column] = Math.max(maxColumnWidths[column], width);
         }
         annotationElements.appendChild(element);
       }
@@ -3055,7 +3057,9 @@ class FindPathTool extends LayerTool<SegmentationUserLayer> {
         );
       }
     };
-    findPathState.changed.add(updateAnnotationElements);
+    activation.registerDisposer(
+      findPathState.changed.add(updateAnnotationElements),
+    );
     updateAnnotationElements();
     activation.bindInputEventMap(FIND_PATH_INPUT_EVENT_MAP);
     activation.bindAction("submit", (event) => {
