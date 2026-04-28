@@ -408,7 +408,7 @@ export function createImageLayerAsMultiChannel(
   // Propagate new channel layers to all layer group subsets that contain the original managed layer
   // The initial manager.add() above only adds to the layer's own manager and its owner
   // Update other subsets referencing the original layer
-  const { root } = managedLayer.manager.root;
+  const { root } = managedLayer.manager;
   if (newChannelLayers.length > 0) {
     for (const subset of root.subsets) {
       // Skip the subset that is the current manager
