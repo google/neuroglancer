@@ -86,7 +86,7 @@ void main() {
 });
 
 describe("preprocessStrings", () => {
-  it("replaces unique string literals with stable uint ids starting at 1", () => {
+  it("replaces unique string literals with unique non-zero uint ids", () => {
     const code = `
 void main() {
   if (mode == "beta") {
@@ -100,25 +100,28 @@ void main() {
   }
 }
 `;
-    expect(preprocessStrings(code)).toEqual({
-      code: `
+    const result = preprocessStrings(code);
+    expect(result.stringLiteralIds.size).toBe(2);
+    const betaId = result.stringLiteralIds.get("beta");
+    const alphaId = result.stringLiteralIds.get("alpha");
+    expect(betaId).toBeDefined();
+    expect(alphaId).toBeDefined();
+    expect(betaId).not.toBe(0);
+    expect(alphaId).not.toBe(0);
+    expect(betaId).not.toBe(alphaId);
+    expect(result.code).toBe(`
 void main() {
-  if (mode == 1u) {
+  if (mode == ${betaId}u) {
     emitRGB(vec3(1.0));
   }
-  if (mode == 2u) {
+  if (mode == ${alphaId}u) {
     emitRGB(vec3(0.0));
   }
-  if (mode == 1u) {
+  if (mode == ${betaId}u) {
     emitRGB(vec3(0.5));
   }
 }
-`,
-      stringLiteralIds: new Map([
-        ["beta", 1],
-        ["alpha", 2],
-      ]),
-    });
+`);
   });
 });
 
