@@ -701,15 +701,11 @@ export function UserLayerWithVoxelEditingMixin<
       const editContext = this.editingContexts.values().next().value;
       if (!editContext) throw new Error("No voxel editing context available");
       const dataType = editContext.primarySource.dataType;
-      let value: bigint;
-
       if (dataType === DataType.FLOAT32) {
-        const floatValue = parseFloat(String(x));
-        value = BigInt(Math.round(floatValue));
-      } else {
-        value = BigInt(x);
+        throw new Error("Voxel annotation does not support Float32 datasets.");
       }
 
+      const value = BigInt(x);
       const info =
         DATA_TYPE_BIT_INFO[dataType as keyof typeof DATA_TYPE_BIT_INFO];
       if (!info) {
