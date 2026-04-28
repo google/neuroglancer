@@ -66,6 +66,8 @@ export const BRUSH_TOOL_ID = "vox-brush";
 export const FLOODFILL_TOOL_ID = "vox-flood-fill";
 export const VALUE_PICKER_TOOL_ID = "vox-value-picker";
 
+export const VOXEL_EMPTY_VALUE = 0n;
+
 // Special value used to indicate to the optimistic renderer that a voxel has been erased
 export const SEG_ERASE_SENTINEL = ~1n;
 

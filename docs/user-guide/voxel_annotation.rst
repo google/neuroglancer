@@ -23,6 +23,7 @@ To enable voxel editing, you must first have a writable volume source.
 - Only 3D volumes are supported (2D volumes are not).
 - Float32 data type is not supported.
 - Multi-resolution datasets must have a strict many-to-one hierarchy. See `About multi-resolution datasets`_ for more details.
+- On image layers, the value ``0`` (``VOXEL_EMPTY_VALUE``) cannot be used as a paint value, as it is reserved to represent empty (unedited) voxels in the overlay and is rendered as transparent.
 
 The first time you attempt a drawing operation (like a brush stroke) after enabling writing, a confirmation dialog will appear. Note that this initial operation will be canceled; you can resume drawing once you have confirmed.
 

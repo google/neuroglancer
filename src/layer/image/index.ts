@@ -79,6 +79,7 @@ import {
   VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE,
   VolumeRenderingRenderLayer,
 } from "#src/volume_rendering/volume_render_layer.js";
+import { VOXEL_EMPTY_VALUE } from "#src/voxel_annotation/base.js";
 import type { ParameterizedShaderGetterResult } from "#src/webgl/dynamic_shader.js";
 import { makeWatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import type { ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
@@ -208,7 +209,9 @@ ${originalShader}
 #undef main
 
 void main() {
-  if (toRaw(getDataValue()) == 0n) {
+  // VOXEL_EMPTY_VALUE is transparent in the overlay so the underlying data
+  // shows through. This means it cannot be used as a paint value on image layers.
+  if (toRaw(getDataValue()) == ${VOXEL_EMPTY_VALUE}n) {
     emitTransparent();
     return;
   }

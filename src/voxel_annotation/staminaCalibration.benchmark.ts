@@ -22,6 +22,7 @@ import { vec3 } from "#src/util/geom.js";
 import { VoxelEditController } from "#src/voxel_annotation/backend.js";
 import {
   BrushShape,
+  VOXEL_EMPTY_VALUE,
   VoxelOperationType,
   makeVoxChunkKey,
 } from "#src/voxel_annotation/base.js";
@@ -77,7 +78,7 @@ const spec = {
   lowerVoxelBound: new Float32Array([0, 0, 0]),
   upperVoxelBound: new Float32Array([10000, 10000, 10000]),
   baseVoxelOffset: new Float32Array([0, 0, 0]),
-  fillValue: 0n,
+  fillValue: VOXEL_EMPTY_VALUE,
 };
 
 const mockChunkQueueManager = { sources: new Set() };
@@ -86,16 +87,13 @@ const mockChunkManager = {
   memoize: { get: (_k: string, f: Function) => f() },
 };
 
-// Forward-declare so the rpcHandler closure can reference it before assignment.
-let mockSource0: RealisticInMemorySource;
+const rpcObjects = new Map<number, unknown>([
+  [0, mockChunkManager],
+  [999, { value: 0 }],
+]);
 
 const rpcHandler = {
-  get: (id: number) => {
-    if (id === 0) return mockChunkManager;
-    if (id === 100) return mockSource0;
-    if (id === 999) return { value: 0 };
-    return null;
-  },
+  get: (id: number) => rpcObjects.get(id) ?? null,
   invoke: () => {},
   newId: () => 0,
   register: () => {},
@@ -103,10 +101,11 @@ const rpcHandler = {
   promiseInvoke: async () => {},
 } as any;
 
-mockSource0 = new RealisticInMemorySource(rpcHandler, {
+const mockSource0 = new RealisticInMemorySource(rpcHandler, {
   spec,
   chunkManager: 0,
 });
+rpcObjects.set(100, mockSource0);
 
 const controller = new VoxelEditController(rpcHandler, {
   resolutions: [createResConfig(0, CHUNK_SIZE)],
@@ -116,7 +115,9 @@ const controller = new VoxelEditController(rpcHandler, {
 vi.spyOn(controller as any, "enqueueDownsample").mockImplementation(() => {});
 
 // Pre-populate the downsample chunk with worst-case data once.
-const _initChunk = mockSource0.getChunk(new Float32Array([0, 0, 0])) as VolumeChunk;
+const _initChunk = mockSource0.getChunk(
+  new Float32Array([0, 0, 0]),
+) as VolumeChunk;
 await mockSource0.download(_initChunk);
 const _initData = _initChunk.data as BigUint64Array;
 for (let i = 0; i < _initData.length; i++) {
@@ -236,7 +237,7 @@ describe("FloodFill", () => {
       const chunk = mockSource0.getChunk(
         new Float32Array([0, 0, 0]),
       ) as VolumeChunk;
-      (chunk.data as BigUint64Array).fill(0n);
+      (chunk.data as BigUint64Array).fill(VOXEL_EMPTY_VALUE);
 
       try {
         await (controller as any).performFloodFill({

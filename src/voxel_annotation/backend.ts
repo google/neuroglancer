@@ -35,6 +35,7 @@ import type {
   FloodFillOperation,
 } from "#src/voxel_annotation/base.js";
 import {
+  VOXEL_EMPTY_VALUE,
   VOXEL_EDIT_STAMINA,
   VOX_EDIT_BACKEND_RPC_ID,
   VOX_EDIT_COMMIT_VOXELS_RPC_ID,
@@ -1045,13 +1046,13 @@ export class VoxelEditController extends SharedObject {
   }
 
   private _calculateMode(values: (bigint | number)[]): bigint {
-    if (values.length === 0) return 0n;
+    if (values.length === 0) return VOXEL_EMPTY_VALUE;
     const counts = new Map<bigint, number>();
     let maxCount = 0;
     let mode = 0n;
     for (const v of values) {
       const bigV = BigInt(v);
-      if (bigV === 0n) continue;
+      if (bigV === VOXEL_EMPTY_VALUE) continue;
       const c = (counts.get(bigV) ?? 0) + 1;
       counts.set(bigV, c);
       if (c > maxCount) {
@@ -1290,7 +1291,7 @@ export class VoxelEditController extends SharedObject {
     const isFillable = async (p: vec3): Promise<boolean> => {
       const val = await accessor.getValue(p[0], p[1], p[2]);
       if (val === null) return false;
-      if (originalValue === 0n) return val === 0n;
+      if (originalValue === VOXEL_EMPTY_VALUE) return val === VOXEL_EMPTY_VALUE;
       return val === originalValue;
     };
 

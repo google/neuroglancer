@@ -7,6 +7,7 @@ import { mat4 } from "#src/util/geom.js";
 import { VoxelEditController } from "#src/voxel_annotation/backend.js";
 import {
   makeVoxChunkKey,
+  VOXEL_EMPTY_VALUE,
   VOX_EDIT_FAILURE_RPC_ID,
   VOX_EDIT_HISTORY_UPDATE_RPC_ID,
   VoxelOperationType,
@@ -852,7 +853,7 @@ describe("VoxelEditController: flushPending", () => {
       }
       return Promise.resolve({
         indices: new Uint32Array([1]),
-        oldValues: new BigUint64Array([0n]),
+        oldValues: new BigUint64Array([VOXEL_EMPTY_VALUE]),
         newValues: new BigUint64Array([50n]),
       });
     });
@@ -1175,7 +1176,7 @@ describe("VoxelEditController: Tool Operations", () => {
       lowerVoxelBound: new Float32Array([0, 0, 0]),
       upperVoxelBound: new Float32Array([100, 100, 100]),
       baseVoxelOffset: new Float32Array([0, 0, 0]),
-      fillValue: 0n,
+      fillValue: VOXEL_EMPTY_VALUE,
     };
     mockSource = createMockSource({ ...spec });
     vi.spyOn(mockSource, "applyEdits").mockResolvedValue({

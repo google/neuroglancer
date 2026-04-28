@@ -136,6 +136,7 @@ import {
 import { Signal } from "#src/util/signal.js";
 import {
   SEG_ERASE_SENTINEL,
+  VOXEL_EMPTY_VALUE,
   type VoxelValueGetter,
 } from "#src/voxel_annotation/base.js";
 import { makeWatchableShaderError } from "#src/webgl/dynamic_shader.js";
@@ -632,7 +633,7 @@ export class SegmentationUserLayer extends Base {
 
   getVoxelPaintValue(erase: boolean): VoxelValueGetter {
     return (isPreview) => {
-      if (erase) return isPreview ? SEG_ERASE_SENTINEL : 0n;
+      if (erase) return isPreview ? SEG_ERASE_SENTINEL : VOXEL_EMPTY_VALUE;
       return this.paintValue.value;
     };
   }
