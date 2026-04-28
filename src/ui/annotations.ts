@@ -658,13 +658,6 @@ export class AnnotationLayerView extends Tab {
     for (const [column, width] of elementColumnWidths.entries()) {
       this.setColumnWidth(column, width);
     }
-    element.addEventListener("mouseenter", () => {
-      this.displayState.hoverState.value = {
-        id: annotation.id,
-        partIndex: 0,
-        annotationLayerState: state,
-      };
-    });
     const selectionState = this.selectedAnnotationState.value;
     if (
       selectionState !== undefined &&
@@ -2447,6 +2440,11 @@ export function makeAnnotationListElement(
     deleteButton.style.gridRow = `span ${numRows}`;
   }
   element.addEventListener("mouseenter", () => {
+    layer.annotationDisplayState.hoverState.value = {
+      id: annotation.id,
+      partIndex: 0,
+      annotationLayerState: state,
+    };
     layer.selectAnnotation(state, annotation.id, false);
   });
   element.addEventListener("action:select-position", (event) => {

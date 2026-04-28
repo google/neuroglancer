@@ -3021,6 +3021,9 @@ class FindPathTool extends LayerTool<SegmentationUserLayer> {
     const annotationElements = document.createElement("div");
     annotationElements.classList.add("find-path-annotations");
     body.appendChild(annotationElements);
+    annotationElements.addEventListener("mouseleave", () => {
+      this.layer.annotationDisplayState.hoverState.value = undefined;
+    });
     const bindings = getDefaultAnnotationListBindings();
     activation.registerDisposer(
       new MouseEventBinder(annotationElements, bindings),
