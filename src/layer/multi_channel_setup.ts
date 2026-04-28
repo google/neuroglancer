@@ -20,7 +20,6 @@ import {
   permuteCoordinateSpace,
 } from "#src/coordinate_transform.js";
 import type { SingleChannelMetadata } from "#src/datasource/index.js";
-import type { DisplayContext } from "#src/display_context.js";
 import type { ImageUserLayer } from "#src/layer/image/index.js";
 import {
   type LayerListSpecification,
@@ -33,17 +32,6 @@ import type { Borrowed } from "#src/util/disposable.js";
 import type { vec3 } from "#src/util/geom.js";
 import { dataTypeIntervalEqual, defaultDataTypeRange } from "#src/util/lerp.js";
 import type { ShaderImageInvlerpControl } from "#src/webgl/shader_ui_controls.js";
-
-function isTopLevelLayerListManager(
-  x: LayerListSpecification,
-): x is LayerListSpecification & { display: DisplayContext } {
-  const display = (x as any).display as DisplayContext | undefined;
-
-  return (
-    !!display &&
-    typeof (display as any).multiChannelSetupFinished?.dispatch === "function"
-  );
-}
 
 function changeLayerName(managedLayer: ManagedUserLayer, newName: string) {
   newName = managedLayer.manager.root.layerManager.getUniqueLayerName(newName);
@@ -420,8 +408,8 @@ export function createImageLayerAsMultiChannel(
   // Propagate new channel layers to all layer group subsets that contain the original managed layer
   // The initial manager.add() above only adds to the layer's own manager and its owner
   // Update other subsets referencing the original layer
+  const { root } = managedLayer.manager.root;
   if (newChannelLayers.length > 0) {
-    const root = managedLayer.manager.root;
     for (const subset of root.subsets) {
       // Skip the subset that is the current manager
       if (subset === managedLayer.manager) continue;
@@ -436,10 +424,7 @@ export function createImageLayerAsMultiChannel(
       }
     }
   }
-  const root = managedLayer.manager.root;
-  if (isTopLevelLayerListManager(root)) {
-    root.display.multiChannelSetupFinished.dispatch();
-  }
+  root.display.multiChannelSetupFinished.dispatch();
   postCreationSetupFunctions.forEach((fn) => fn());
   reverseGlobalDimOrderIfNeeded(managedLayer);
 }
