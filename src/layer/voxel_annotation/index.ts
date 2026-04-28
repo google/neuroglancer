@@ -69,6 +69,7 @@ import type {
 } from "#src/voxel_annotation/base.js";
 import {
   VOXEL_EDIT_STAMINA,
+  VOXEL_EMPTY_VALUE,
   BRUSH_TOOL_ID,
   BrushShape,
   MAX_VOXEL_EDIT_STAMINA,
@@ -692,7 +693,8 @@ export function UserLayerWithVoxelEditingMixin<
     }
 
     getVoxelPaintValue(erase: boolean): VoxelValueGetter {
-      return (_isPreview: boolean) => (erase ? 0n : this.paintValue.value);
+      return (_isPreview: boolean) =>
+        erase ? VOXEL_EMPTY_VALUE : this.paintValue.value;
     }
 
     setVoxelPaintValue(x: any) {
