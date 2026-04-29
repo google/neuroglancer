@@ -45,7 +45,7 @@
     "@iodigital/vite-plugin-msw": "^2.0.0",
     "@playwright/browser-chromium": "^1.56.1",
     "@playwright/test": "^1.56.1",
-    "@rspack/cli": "^1.6.1",
+    "@rspack/cli": "^2.0.1",
     "@rspack/core": "^1.6.1",
     "@types/codemirror": "5.60.17",
     "@types/gl-matrix": "^2.4.5",
