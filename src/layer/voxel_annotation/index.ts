@@ -527,7 +527,7 @@ export function UserLayerWithVoxelEditingMixin<
 
       this.tabs.add("Draw", {
         label: "Draw",
-        order: 20,
+        order: 5,
         hidden: makeDerivedWatchableValue(
           (editable) => !editable,
           this.hasSubsourcesWithWritingEnabled,
