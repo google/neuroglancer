@@ -118,6 +118,12 @@ export class ZarrVolumeChunkSource extends WithParameters(
     }
     let dataToWrite = chunk.data;
 
+    // For segmentation layers (uint32/uint64), neuroglancer automatically
+    // transcodes chunks into its own compressed segmentation format for GPU
+    // efficiency (see makeDefaultVolumeChunkSpecifications in
+    // sliceview/volume/base.ts). chunk.data is therefore stored in that
+    // compressed format in memory. Before writing back to the zarr store we
+    // must decompress it so the on-disk data stays as raw integers.
     const { compressedSegmentationBlockSize } = this.spec;
     if (compressedSegmentationBlockSize !== undefined) {
       const compressedData = chunk.data as Uint32Array;
