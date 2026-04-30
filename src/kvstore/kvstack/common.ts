@@ -32,10 +32,42 @@ import type {
   KvStoreProviderRegistry,
   SharedKvStoreContextBase,
 } from "#src/kvstore/register.js";
+import { HttpError, pickDelay } from "#src/util/http_request.js";
 
 interface ResolvedLayer {
   matcher: KvStackLayer;
   resolved: KvStoreWithPath;
+}
+
+// fetchOk already retries 429/503/504; only retry the transient error
+// classes it surfaces unwrapped (network errors → status 0, plus 502).
+const RETRY_STATUSES = new Set([0, 502]);
+const RETRY_MAX_ATTEMPTS = 4;
+
+function isRetryable(e: unknown): boolean {
+  return e instanceof HttpError && RETRY_STATUSES.has(e.status);
+}
+
+function describeMatcher(matcher: KvStackLayer): string {
+  if (matcher.exact !== undefined)
+    return `exact ${JSON.stringify(matcher.exact)}`;
+  if (matcher.prefix !== undefined)
+    return `prefix ${JSON.stringify(matcher.prefix)}`;
+  return "base";
+}
+
+async function delayWithAbort(ms: number, signal: AbortSignal | undefined) {
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        reject(signal.reason);
+      },
+      { once: true },
+    );
+  });
 }
 
 // Key range-routed kvstore stack. Composes multiple backing kvstores into one
@@ -108,7 +140,10 @@ export class KvStackKvStore implements KvStore {
     const match = this.findLayer(key);
     if (match === undefined) return Promise.resolve(undefined);
     const { layer, subKey } = match;
-    return layer.resolved.store.stat(layer.resolved.path + subKey, options);
+    const fullPath = layer.resolved.path + subKey;
+    return this.runWithRetry(layer, key, options.signal, () =>
+      layer.resolved.store.stat(fullPath, options),
+    );
   }
 
   read(
@@ -118,7 +153,34 @@ export class KvStackKvStore implements KvStore {
     const match = this.findLayer(key);
     if (match === undefined) return Promise.resolve(undefined);
     const { layer, subKey } = match;
-    return layer.resolved.store.read(layer.resolved.path + subKey, options);
+    const fullPath = layer.resolved.path + subKey;
+    return this.runWithRetry(layer, key, options.signal, () =>
+      layer.resolved.store.read(fullPath, options),
+    );
+  }
+
+  private async runWithRetry<T>(
+    layer: ResolvedLayer,
+    key: string,
+    signal: AbortSignal | undefined,
+    op: () => Promise<T>,
+  ): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < RETRY_MAX_ATTEMPTS; ++attempt) {
+      signal?.throwIfAborted();
+      try {
+        return await op();
+      } catch (e) {
+        lastError = e;
+        if (!isRetryable(e) || attempt + 1 === RETRY_MAX_ATTEMPTS) break;
+        await delayWithAbort(pickDelay(attempt), signal);
+      }
+    }
+    throw new Error(
+      `kvstack read failed for key ${JSON.stringify(key)} ` +
+        `(layer ${describeMatcher(layer.matcher)}, backing ${layer.matcher.base})`,
+      { cause: lastError },
+    );
   }
 
   getUrl(key: string): string {
