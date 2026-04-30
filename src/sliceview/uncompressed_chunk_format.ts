@@ -26,7 +26,7 @@ import type {
   ChunkFormatHandler,
   VolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
-import { registerChunkFormatHandler } from "#src/sliceview/volume/frontend.js";
+import { registerChunkFormatHandler } from "#src/sliceview/volume/registry.js";
 import type {
   TypedArray,
   TypedNumberArrayConstructor,

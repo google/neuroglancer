@@ -34,7 +34,10 @@ import {
   UserLayer,
 } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
+import { registerVoxelLayerControls } from "#src/layer/voxel_annotation/controls.js";
+import { UserLayerWithVoxelEditingMixin } from "#src/layer/voxel_annotation/index.js";
 import { Overlay } from "#src/overlay.js";
+import type { RenderLayerTransformOrError } from "#src/render_coordinate_transform.js";
 import { getChannelSpace } from "#src/render_coordinate_transform.js";
 import {
   RenderScaleHistogram,
@@ -48,21 +51,25 @@ import {
   ImageRenderLayer,
 } from "#src/sliceview/volume/image_renderlayer.js";
 import { trackableAlphaValue } from "#src/trackable_alpha.js";
-import { trackableBlendModeValue } from "#src/trackable_blend.js";
+import { BLEND_MODES, trackableBlendModeValue } from "#src/trackable_blend.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import { trackableFiniteFloat } from "#src/trackable_finite_float.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   makeCachedDerivedWatchableValue,
   makeCachedLazyDerivedWatchableValue,
+  makeDerivedWatchableValue,
   registerNested,
+  TrackableValue,
   WatchableValue,
 } from "#src/trackable_value.js";
 import { UserLayerWithAnnotationsMixin } from "#src/ui/annotations.js";
+import { registerVoxelTools } from "#src/ui/voxel_annotations.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { makeValueOrError } from "#src/util/error.js";
-import { verifyOptionalObjectProperty } from "#src/util/json.js";
+import { verifyFloat01, verifyOptionalObjectProperty } from "#src/util/json.js";
+import { TrackableEnum } from "#src/util/trackable_enum.js";
 import {
   trackableShaderModeValue,
   VolumeRenderingModes,
@@ -72,6 +79,7 @@ import {
   VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE,
   VolumeRenderingRenderLayer,
 } from "#src/volume_rendering/volume_render_layer.js";
+import { VOXEL_EMPTY_VALUE } from "#src/voxel_annotation/base.js";
 import type { ParameterizedShaderGetterResult } from "#src/webgl/dynamic_shader.js";
 import { makeWatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import type { ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
@@ -119,7 +127,9 @@ export interface ImageLayerSelectionState extends UserLayerSelectionState {
   value: any;
 }
 
-const Base = UserLayerWithAnnotationsMixin(UserLayer);
+const Base = UserLayerWithVoxelEditingMixin(
+  UserLayerWithAnnotationsMixin(UserLayer),
+);
 const [
   volumeRenderingDepthSamplesOriginLogScale,
   volumeRenderingDepthSamplesMaxLogScale,
@@ -188,6 +198,50 @@ export class ImageUserLayer extends Base {
     };
   }
 
+  _createVoxelOverlayRenderLayer(
+    source: MultiscaleVolumeChunkSource,
+    transform: WatchableValueInterface<RenderLayerTransformOrError>,
+  ): ImageRenderLayer {
+    const wrappedFragmentMain = makeDerivedWatchableValue(
+      (originalShader: string) => `
+#define main userMain
+${originalShader}
+#undef main
+
+void main() {
+  // VOXEL_EMPTY_VALUE is transparent in the overlay so the underlying data
+  // shows through. This means it cannot be used as a paint value on image layers.
+  if (toRaw(getDataValue()) == ${VOXEL_EMPTY_VALUE}n) {
+    emitTransparent();
+    return;
+  }
+  userMain();
+}
+`,
+      this.fragmentMain,
+    );
+    this.registerDisposer(wrappedFragmentMain);
+
+    const shaderControlState = new ShaderControlState(
+      wrappedFragmentMain,
+      this.shaderControlState.dataContext,
+      this.channelCoordinateSpaceCombiner,
+    );
+    this.registerDisposer(shaderControlState);
+
+    return new ImageRenderLayer(source, {
+      opacity: new TrackableValue(1.0, verifyFloat01),
+      blendMode: new TrackableEnum(BLEND_MODES, BLEND_MODES.ADDITIVE),
+      shaderControlState: shaderControlState,
+      shaderError: this.shaderError,
+      transform: transform,
+      renderScaleTarget: this.sliceViewRenderScaleTarget,
+      renderScaleHistogram: this.sliceViewRenderScaleHistogram,
+      localPosition: this.localPosition,
+      channelCoordinateSpace: this.channelCoordinateSpace,
+    });
+  }
+
   addCoordinateSpace(
     coordinateSpace: WatchableValueInterface<CoordinateSpace>,
   ) {
@@ -246,21 +300,20 @@ export class ImageUserLayer extends Base {
       }
       dataType = volume.dataType;
       loadedSubsource.activate((context) => {
-        loadedSubsource.addRenderLayer(
-          new ImageRenderLayer(volume, {
-            opacity: this.opacity,
-            blendMode: this.blendMode,
-            shaderControlState: this.shaderControlState,
-            shaderError: this.shaderError,
-            transform: loadedSubsource.getRenderLayerTransform(
-              this.channelCoordinateSpace,
-            ),
-            renderScaleTarget: this.sliceViewRenderScaleTarget,
-            renderScaleHistogram: this.sliceViewRenderScaleHistogram,
-            localPosition: this.localPosition,
-            channelCoordinateSpace: this.channelCoordinateSpace,
-          }),
-        );
+        const imageRenderLayer = new ImageRenderLayer(volume, {
+          opacity: this.opacity,
+          blendMode: this.blendMode,
+          shaderControlState: this.shaderControlState,
+          shaderError: this.shaderError,
+          transform: loadedSubsource.getRenderLayerTransform(
+            this.channelCoordinateSpace,
+          ),
+          renderScaleTarget: this.sliceViewRenderScaleTarget,
+          renderScaleHistogram: this.sliceViewRenderScaleHistogram,
+          localPosition: this.localPosition,
+          channelCoordinateSpace: this.channelCoordinateSpace,
+        });
+        loadedSubsource.addRenderLayer(imageRenderLayer);
         const volumeRenderLayer = context.registerDisposer(
           new VolumeRenderingRenderLayer({
             gain: this.volumeRenderingGain,
@@ -290,6 +343,18 @@ export class ImageUserLayer extends Base {
           }, this.volumeRenderingMode),
         );
         this.shaderError.changed.dispatch();
+        context.registerDisposer(
+          registerNested((context, writingEnabled) => {
+            this.initializeVoxelEditingForSubsource(
+              loadedSubsource,
+              imageRenderLayer,
+              writingEnabled,
+            );
+            context.registerDisposer(() => {
+              this.deinitializeVoxelEditingForSubsource(loadedSubsource);
+            });
+          }, loadedSubsource.writingEnabled),
+        );
       });
     }
     this.dataType.value = dataType;
@@ -588,6 +653,8 @@ class ShaderCodeOverlay extends Overlay {
 }
 
 registerLayerType(ImageUserLayer);
+registerVoxelTools(ImageUserLayer);
+registerVoxelLayerControls(ImageUserLayer);
 registerVolumeLayerType(VolumeType.IMAGE, ImageUserLayer);
 // Use ImageUserLayer as a fallback layer type if there is a `volume` subsource.
 registerLayerTypeDetector((subsource) => {

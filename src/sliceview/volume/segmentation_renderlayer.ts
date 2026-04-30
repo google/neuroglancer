@@ -35,6 +35,7 @@ import type {
   SliceView,
   SliceViewSingleResolutionSource,
 } from "#src/sliceview/frontend.js";
+import type { SliceViewRenderContext } from "#src/sliceview/renderlayer.js";
 import type {
   MultiscaleVolumeChunkSource,
   VolumeChunkSource,
@@ -43,6 +44,7 @@ import type { RenderLayerBaseOptions } from "#src/sliceview/volume/renderlayer.j
 import { SliceViewVolumeRenderLayer } from "#src/sliceview/volume/renderlayer.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
+  WatchableValue,
   AggregateWatchableValue,
   makeCachedDerivedWatchableValue,
 } from "#src/trackable_value.js";
@@ -85,6 +87,7 @@ interface ShaderParameters {
   hideSegmentZero: boolean;
   hasSegmentDefaultColor: boolean;
   hasHighlightColor: boolean;
+  isForOptimisticPreview: boolean;
 }
 
 const HAS_SELECTED_SEGMENT_FLAG = 1;
@@ -108,11 +111,14 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
   private temporaryEquivalencesHashMap;
   private gpuEquivalencesHashTable;
   private gpuTemporaryEquivalencesHashTable;
+  private voxelPreviewLayer: SegmentationRenderLayer | undefined;
+  public isForOptimisticPreview: WatchableValue<boolean>;
 
   constructor(
     multiscaleSource: MultiscaleVolumeChunkSource,
     public displayState: SliceViewSegmentationDisplayState,
   ) {
+    const isForOptimisticPreview = new WatchableValue(false);
     super(multiscaleSource, {
       shaderParameters: new AggregateWatchableValue((refCounted) => ({
         hasEquivalences: refCounted.registerDisposer(
@@ -163,12 +169,14 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
         hideSegmentZero: displayState.hideSegmentZero,
         baseSegmentColoring: displayState.baseSegmentColoring,
         baseSegmentHighlighting: displayState.baseSegmentHighlighting,
+        isForOptimisticPreview: isForOptimisticPreview,
       })),
       transform: displayState.transform,
       renderScaleHistogram: displayState.renderScaleHistogram,
       renderScaleTarget: displayState.renderScaleTarget,
       localPosition: displayState.localPosition,
     });
+    this.isForOptimisticPreview = isForOptimisticPreview;
     this.segmentationGroupState = displayState.segmentationGroupState.value;
     this.gpuHashTable = this.registerDisposer(
       GPUHashTable.get(
@@ -267,10 +275,20 @@ uint64_t getMappedObjectId(uint64_t value) {
   float alpha = uSelectedAlpha;
   float saturation = uSaturation;
 `;
+    if (parameters.isForOptimisticPreview)
+      fragmentMain += `
+  if (baseValue.value[0] == 0xfffffffeu && baseValue.value[1] == 0xffffffffu) {
+    emit(vec4(0, 0, 0, 0));
+    return;
+  }
+  if (value.value[0] == 0u && value.value[1] == 0u) {
+    discard;
+  }
+      `;
     if (parameters.hideSegmentZero) {
       fragmentMain += `
   if (value.value[0] == 0u && value.value[1] == 0u) {
-    emit(vec4(vec4(0, 0, 0, 0)));
+    emit(vec4(vec4(0, 0, 0, 0))); 
     return;
   }
 `;
@@ -456,5 +474,16 @@ uint64_t getMappedObjectId(uint64_t value) {
       this.segmentStatedColorShaderManager.disable(gl, shader);
     }
     super.endSlice(sliceView, shader, parameters);
+  }
+  setVoxelPreviewLayer(layer: SegmentationRenderLayer | undefined) {
+    this.voxelPreviewLayer = layer;
+    if (layer) layer.isForOptimisticPreview.value = true;
+  }
+
+  draw(renderContext: SliceViewRenderContext) {
+    if (this.voxelPreviewLayer) {
+      this.voxelPreviewLayer.draw(renderContext);
+    }
+    super.draw(renderContext);
   }
 }
