@@ -115,6 +115,9 @@ export function layerDataSourceSpecificationFromJson(
 
 function dataSubsourceSpecificationToJson(spec: DataSubsourceSpecification) {
   const { enabled, writingEnabled } = spec;
+  if (writingEnabled === undefined) {
+    return enabled;
+  }
   return { enabled, writingEnabled };
 }
 
