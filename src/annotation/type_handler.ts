@@ -629,7 +629,7 @@ if (ng_discardValue) {
       gl,
       shader,
       this.shaderControlState,
-      parameters.parseResult.controls,
+      parameters.parseResult,
     );
     gl.uniform3fv(shader.uniform("uSubspaceMatrix"), context.subspaceMatrix);
     gl.uniform1fv(shader.uniform("uModelClipBounds"), context.modelClipBounds);

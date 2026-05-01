@@ -143,7 +143,7 @@ export class ImageRenderLayer extends SliceViewVolumeRenderLayer<ShaderControlsB
       gl,
       shader,
       this.shaderControlState,
-      parameters.parseResult.controls,
+      parameters.parseResult,
     );
   }
 
