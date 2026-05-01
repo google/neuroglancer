@@ -102,6 +102,19 @@ export class ViewerSettingsPanel extends SidePanel {
       "Concurrent chunk requests",
       viewer.chunkQueueManager.capacities.download.itemLimit,
     );
+    // addLimitWidget("Url update rate limit function", viewer.urlHashRateLimit);
+    {
+      const label = document.createElement("div");
+      label.textContent = "Url update rate limit function";
+      label.classList.add("neuroglancer-settings-limit-widget");
+      scroll.appendChild(label);
+      const titleWidget = this.registerDisposer(
+        new TextInputWidget(viewer.urlHashRateLimit),
+      );
+      titleWidget.element.placeholder = "Url update rate limit function";
+      titleWidget.element.classList.add("neuroglancer-settings-title");
+      scroll.appendChild(titleWidget.element);
+    }
 
     const addCheckbox = (
       label: string,
@@ -115,6 +128,7 @@ export class ViewerSettingsPanel extends SidePanel {
       labelElement.appendChild(checkbox.element);
       scroll.appendChild(labelElement);
     };
+    addCheckbox("Save state before refresh", viewer.saveStateSession);
     addCheckbox("Show axis lines", viewer.showAxisLines);
     addCheckbox("Show scale bar", viewer.showScaleBar);
     addCheckbox("Show cross sections in 3-d", viewer.showPerspectiveSliceViews);
