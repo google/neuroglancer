@@ -916,20 +916,12 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
       levels,
       this.spatialSkeletonGridResolutionTarget3d.value,
     );
-    const resolved3dIndex = this.setSpatialSkeletonGridLevel("3d", target3dIndex);
+    this.setSpatialSkeletonGridLevel("3d", target3dIndex);
     const target2dIndex = findClosestSpatialSkeletonGridLevelBySpacing(
       levels,
       this.spatialSkeletonGridResolutionTarget2d.value,
     );
     this.setSpatialSkeletonGridLevel("2d", target2dIndex);
-    const spacing3d = getSpatialSkeletonGridSpacing(
-      levels[Math.min(resolved3dIndex, levels.length - 1)].size,
-    );
-    this.spatialSkeletonGridResolutionTarget3d.value = spacing3d;
-    const resolved2dIndex = Math.min(Math.max(target2dIndex, 0), levels.length - 1);
-    this.spatialSkeletonGridResolutionTarget2d.value = getSpatialSkeletonGridSpacing(
-      levels[resolved2dIndex].size,
-    );
   }
 
   private setSpatialSkeletonGridLevel(kind: "2d" | "3d", index: number) {
