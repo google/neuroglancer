@@ -1860,10 +1860,11 @@ function updateSpatialSkeletonGridRenderScaleHistogram(
       localPosition,
       tsource,
       (positionInChunks) => {
-        const key = `${positionInChunks.join()}${lodSuffix}`;
-        if (seenKeys.has(key)) return;
-        seenKeys.add(key);
-        const chunk = source.chunks.get(key) as
+        const chunkKey = `${positionInChunks.join()}${lodSuffix}`;
+        const seenKey = `${gridIndex}:${chunkKey}`;
+        if (seenKeys.has(seenKey)) return;
+        seenKeys.add(seenKey);
+        const chunk = source.chunks.get(chunkKey) as
           | SpatiallyIndexedSkeletonChunk
           | undefined;
         if (chunk?.state === ChunkState.GPU_MEMORY) {
@@ -1877,8 +1878,9 @@ function updateSpatialSkeletonGridRenderScaleHistogram(
     const total = presentCount + missingCount;
     if (total > 0) {
       histogram.add(spacing, spacing, presentCount, missingCount);
-    } else {
-      // Keep all grid rows visible in the histogram even when currently empty.
+    } else if (!histogram.spatialScales.has(spacing)) {
+      // Keep the row visible in the histogram when no chunks are in view,
+      // but only if no earlier panel already populated it this frame.
       histogram.add(spacing, spacing, 0, 1, true);
     }
   }
