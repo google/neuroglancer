@@ -1703,7 +1703,8 @@ export class MultiscaleSliceViewSpatiallyIndexedSkeletonLayer extends SliceViewR
     const spatialDisplayState = displayState as SegmentationDisplayState &
       SpatialSkeletonDisplayState;
     const anyDisplayState = displayState as any;
-    const renderScaleTarget = anyDisplayState.renderScaleTarget as WatchableValueInterface<number>;
+    const renderScaleTarget =
+      anyDisplayState.renderScaleTarget as WatchableValueInterface<number>;
     const gridLevel2d = spatialDisplayState.spatialSkeletonGridLevel2d;
     super(chunkManager, multiscaleSource, {
       transform: anyDisplayState.transform,
@@ -1758,14 +1759,7 @@ export class MultiscaleSliceViewSpatiallyIndexedSkeletonLayer extends SliceViewR
     );
   }
 
-  draw(_renderContext: SliceViewRenderContext) {
-    const displayState = this.displayState as SegmentationDisplayState &
-      SpatialSkeletonDisplayState;
-    const lodValue = displayState.spatialSkeletonLod2d?.value;
-    if ((displayState as any).objectAlpha?.value <= 0.0 || lodValue === undefined) {
-      return;
-    }
-  }
+  draw(_renderContext: SliceViewRenderContext) {}
 }
 
 type SpatiallyIndexedSkeletonSourceEntry =
@@ -1878,7 +1872,6 @@ type VisibleSpatialChunksBySource = Map<
   string,
   readonly SpatiallyIndexedSkeletonChunk[]
 >;
-
 
 interface SpatialSkeletonDisplayState {
   spatialSkeletonGridLevel2d?: WatchableValueInterface<number>;
@@ -2328,9 +2321,7 @@ export class SpatiallyIndexedSkeletonLayer
       spatialDisplayState.spatialSkeletonGridLevel3d ??
       new WatchableValue(0);
     this.lod =
-      options.lod ??
-      spatialDisplayState.skeletonLod ??
-      new WatchableValue(0);
+      options.lod ?? spatialDisplayState.skeletonLod ?? new WatchableValue(0);
     this.selectedNodeId = options.selectedNodeId;
     this.pendingNodePositionVersion = options.pendingNodePositionVersion;
     this.getPendingNodePositionOverride = options.getPendingNodePosition;
@@ -3116,7 +3107,8 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
     );
     const spatialDisplayState = base.displayState as SkeletonLayerDisplayState &
       SpatialSkeletonDisplayState;
-    const histogram3d = spatialDisplayState.spatialSkeletonGridRenderScaleHistogram3d;
+    const histogram3d =
+      spatialDisplayState.spatialSkeletonGridRenderScaleHistogram3d;
     if (histogram3d !== undefined) {
       this.registerDisposer(histogram3d.visibility.add(this.visibility));
     }
@@ -3412,14 +3404,7 @@ export class SliceViewSpatiallyIndexedSkeletonLayer extends SliceViewRenderLayer
     return undefined;
   }
 
-  draw(_renderContext: SliceViewRenderContext) {
-    const displayState = this.base.displayState as SkeletonLayerDisplayState &
-      SpatialSkeletonDisplayState;
-    const lodValue = displayState.spatialSkeletonLod2d?.value;
-    if ((displayState as any).objectAlpha?.value <= 0.0 || lodValue === undefined) {
-      return;
-    }
-  }
+  draw(_renderContext: SliceViewRenderContext) {}
 }
 
 export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelRenderLayer {
@@ -3443,8 +3428,9 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
     this.registerDisposer(
       renderOptions.lineWidth.changed.add(this.redrawNeeded.dispatch),
     );
-    const spatialDisplayState2d = base.displayState as SkeletonLayerDisplayState &
-      SpatialSkeletonDisplayState;
+    const spatialDisplayState2d =
+      base.displayState as SkeletonLayerDisplayState &
+        SpatialSkeletonDisplayState;
     const gridLevel2d = spatialDisplayState2d.spatialSkeletonGridLevel2d;
     if (gridLevel2d?.changed) {
       this.registerDisposer(
@@ -3455,7 +3441,8 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
     if (lod2d?.changed) {
       this.registerDisposer(lod2d.changed.add(this.redrawNeeded.dispatch));
     }
-    const histogram2d = spatialDisplayState2d.spatialSkeletonGridRenderScaleHistogram2d;
+    const histogram2d =
+      spatialDisplayState2d.spatialSkeletonGridRenderScaleHistogram2d;
     if (histogram2d !== undefined) {
       this.registerDisposer(histogram2d.visibility.add(this.visibility));
     }
