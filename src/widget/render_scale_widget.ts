@@ -418,6 +418,47 @@ export class SpatialSkeletonGridRenderScaleWidget extends RenderScaleWidget {
     this.logScaleBinSize = this.histogram.logScaleBinSize;
     super.updateView();
   }
+
+  protected getLegendChunkCounts(
+    totalPresent: number,
+    totalNotPresent: number,
+  ) {
+    // When hovering, the base class already filtered to the hovered row.
+    if (this.hoverTarget.value !== undefined) {
+      return {
+        presentCount: totalPresent,
+        totalCount: totalPresent + totalNotPresent,
+      };
+    }
+    // When not hovering, show counts only for the row closest to the target spacing.
+    const { histogram, target } = this;
+    const { value: histogramData, spatialScales } = histogram;
+    let closestScale: number | undefined;
+    let closestLogDist = Infinity;
+    const logTarget = Math.log2(target.value);
+    for (const scale of spatialScales.keys()) {
+      const dist = Math.abs(Math.log2(scale) - logTarget);
+      if (dist < closestLogDist) {
+        closestLogDist = dist;
+        closestScale = scale;
+      }
+    }
+    if (closestScale === undefined) {
+      return {
+        presentCount: totalPresent,
+        totalCount: totalPresent + totalNotPresent,
+      };
+    }
+    const row = spatialScales.get(closestScale)!;
+    const base = 2 * row * numRenderScaleHistogramBins;
+    let present = 0;
+    let notPresent = 0;
+    for (let bin = 0; bin < numRenderScaleHistogramBins; ++bin) {
+      present += histogramData[base + bin];
+      notPresent += histogramData[base + bin + numRenderScaleHistogramBins];
+    }
+    return { presentCount: present, totalCount: present + notPresent };
+  }
 }
 
 const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
