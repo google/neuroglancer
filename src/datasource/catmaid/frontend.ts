@@ -35,13 +35,17 @@ import type {
   CatmaidSpatialSkeletonEditApi,
   CatmaidToken,
 } from "#src/datasource/catmaid/api.js";
-import { CatmaidClient, credentialsKey } from "#src/datasource/catmaid/api.js";
+import {
+  CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES,
+  CatmaidClient,
+  credentialsKey,
+} from "#src/datasource/catmaid/api.js";
 import {
   CatmaidSkeletonSourceParameters,
   CatmaidCompleteSkeletonSourceParameters,
   CatmaidDataSourceParameters,
 } from "#src/datasource/catmaid/base.js";
-import { CatmaidSpatialSkeletonEditController } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
+import { CatmaidSpatialSkeletonEditCommandSource } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
 import type {
   DataSource,
   DataSourceProvider,
@@ -52,6 +56,7 @@ import {
   normalizeInlineSegmentPropertyMap,
 } from "#src/segmentation_display_state/property_map.js";
 import type {
+  EditableSpatiallyIndexedSkeletonSource,
   SpatialSkeletonBounds,
   SpatiallyIndexedSkeletonMetadata,
   SpatiallyIndexedSkeletonNode,
@@ -76,10 +81,20 @@ export class CatmaidSpatiallyIndexedSkeletonSource
     WithCredentialsProvider<CatmaidToken>()(SpatiallyIndexedSkeletonSource),
     CatmaidSkeletonSourceParameters,
   )
-  implements CatmaidSpatialSkeletonEditApi
+  implements
+    CatmaidSpatialSkeletonEditApi,
+    EditableSpatiallyIndexedSkeletonSource
 {
-  readonly spatialSkeletonEditController =
-    new CatmaidSpatialSkeletonEditController();
+  readonly spatialSkeletonEditCapabilities = {
+    nodeFeatures: {
+      description: true,
+      trueEnd: true,
+      radius: true,
+      confidenceValues: CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES,
+    },
+  };
+  readonly spatialSkeletonEditCommandSource =
+    new CatmaidSpatialSkeletonEditCommandSource();
   private client_?: CatmaidClient;
 
   private get client() {
@@ -189,12 +204,11 @@ export class CatmaidSpatiallyIndexedSkeletonSource
     return this.client.updateDescription(nodeId, description);
   }
 
-  setTrueEnd(nodeId: number): Promise<CatmaidNodeSourceStateResult> {
-    return this.client.setTrueEnd(nodeId);
-  }
-
-  removeTrueEnd(nodeId: number): Promise<CatmaidNodeSourceStateResult> {
-    return this.client.removeTrueEnd(nodeId);
+  toggleTrueEnd(
+    nodeId: number,
+    nextIsTrueEnd: boolean,
+  ): Promise<CatmaidNodeSourceStateResult> {
+    return this.client.toggleTrueEnd(nodeId, nextIsTrueEnd);
   }
 
   updateRadius(
@@ -431,11 +445,7 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
     }));
 
     // The model-space coordinates we emit are in nanometers, converted to meters for Neuroglancer.
-    const coordinateScaleFactors = Float64Array.from([
-      1e-9,
-      1e-9,
-      1e-9,
-    ]);
+    const coordinateScaleFactors = Float64Array.from([1e-9, 1e-9, 1e-9]);
 
     // Bounds and chunk sizes are represented in project-space nanometers.
     const lowerBounds = Float64Array.from(projectLowerBounds);

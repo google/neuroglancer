@@ -16,6 +16,15 @@
 
 export type SpatialSkeletonVector = ArrayLike<number>;
 
+// Provider-specific node state that crosses the worker boundary must remain structured-cloneable.
+export type SpatialSkeletonSourceState =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly SpatialSkeletonSourceState[]
+  | { readonly [key: string]: SpatialSkeletonSourceState };
+
 export interface SpatialSkeletonBounds {
   lowerBounds: SpatialSkeletonVector;
   upperBounds: SpatialSkeletonVector;
@@ -32,7 +41,7 @@ export interface SpatiallyIndexedSkeletonNodeBase {
   segmentId: number;
   position: SpatialSkeletonVector;
   parentNodeId?: number;
-  sourceState?: unknown;
+  sourceState?: SpatialSkeletonSourceState;
 }
 
 export interface SpatiallyIndexedSkeletonNode
@@ -48,8 +57,23 @@ export interface SpatiallyIndexedSkeletonMetadata
   spatial: readonly SpatialSkeletonSpatialIndexLevel[];
 }
 
+export interface SpatialSkeletonNodeFeatureCapabilities {
+  description?: boolean;
+  trueEnd?: boolean;
+  radius?: boolean;
+  confidenceValues?: readonly number[];
+}
+
+export interface SpatialSkeletonEditCapabilities {
+  nodeFeatures?: SpatialSkeletonNodeFeatureCapabilities;
+}
+
+export type SpatialSkeletonEditResult = object;
+export type SpatialSkeletonEditOperation = (
+  ...args: never[]
+) => Promise<SpatialSkeletonEditResult>;
+
 export interface SpatiallyIndexedSkeletonSource {
-  readonly spatialSkeletonEditController?: unknown;
   listSkeletons(): Promise<number[]>;
   getSkeleton(
     skeletonId: number,
@@ -63,4 +87,20 @@ export interface SpatiallyIndexedSkeletonSource {
       signal?: AbortSignal;
     },
   ): Promise<SpatiallyIndexedSkeletonNodeBase[]>;
+}
+
+export interface EditableSpatiallyIndexedSkeletonSource
+  extends SpatiallyIndexedSkeletonSource {
+  readonly spatialSkeletonEditCapabilities?: SpatialSkeletonEditCapabilities;
+  addNode: SpatialSkeletonEditOperation;
+  deleteNode: SpatialSkeletonEditOperation;
+  moveNode: SpatialSkeletonEditOperation;
+  splitSkeleton: SpatialSkeletonEditOperation;
+  mergeSkeletons: SpatialSkeletonEditOperation;
+  toggleTrueEnd: SpatialSkeletonEditOperation;
+  insertNode?: SpatialSkeletonEditOperation;
+  rerootSkeleton?: SpatialSkeletonEditOperation;
+  updateDescription?: SpatialSkeletonEditOperation;
+  updateRadius?: SpatialSkeletonEditOperation;
+  updateConfidence?: SpatialSkeletonEditOperation;
 }

@@ -67,7 +67,10 @@ import {
   SegmentationLayerSharedObject,
 } from "#src/segmentation_display_state/frontend.js";
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type {
+  SpatiallyIndexedSkeletonNode,
+  SpatialSkeletonSourceState,
+} from "#src/skeleton/api.js";
 import type { VertexAttributeInfo } from "#src/skeleton/base.js";
 import {
   SKELETON_LAYER_RPC_ID,
@@ -247,7 +250,7 @@ interface SkeletonChunkData {
   numVertices: number;
   vertexAttributeOffsets: Uint32Array;
   nodeIds?: Int32Array;
-  nodeSourceStates?: unknown[];
+  nodeSourceStates?: Array<SpatialSkeletonSourceState | undefined>;
 }
 
 type SpatiallyIndexedSkeletonPickData =
@@ -1540,7 +1543,7 @@ export class SpatiallyIndexedSkeletonChunk
   vertexAttributeOffsets: Uint32Array;
   vertexAttributeTextures: (WebGLTexture | null)[] = [];
   nodeIds: Int32Array = new Int32Array(0);
-  nodeSourceStates: unknown[] = [];
+  nodeSourceStates: Array<SpatialSkeletonSourceState | undefined> = [];
   lod: number | undefined;
 
   constructor(

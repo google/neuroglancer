@@ -22,73 +22,59 @@ import {
   getSkeletonRootNode,
 } from "#src/skeleton/navigation.js";
 import {
-  getSpatialSkeletonEditController,
+  getEditableSpatiallyIndexedSkeletonSource,
   SpatialSkeletonState,
 } from "#src/skeleton/spatial_skeleton_manager.js";
 
-function makeRequiredEditControllerFactories() {
-  const createCommand = () => ({
-    label: "test command",
-    execute: vi.fn(),
-    undo: vi.fn(),
-    redo: vi.fn(),
-  });
+function makeEditableSourceMethods() {
   return {
-    createAddNodeCommand: createCommand,
-    createInsertNodeCommand: createCommand,
-    createMoveNodeCommand: createCommand,
-    createDeleteNodeCommand: createCommand,
-    createSplitCommand: createCommand,
-    createMergeCommand: createCommand,
+    addNode: vi.fn(),
+    deleteNode: vi.fn(),
+    moveNode: vi.fn(),
+    splitSkeleton: vi.fn(),
+    mergeSkeletons: vi.fn(),
+    toggleTrueEnd: vi.fn(),
   };
 }
 
 describe("skeleton/spatial_skeleton_manager", () => {
-  it("returns a source edit controller when all required factories are present", () => {
-    const controller = {
-      supports: () => true,
-      ...makeRequiredEditControllerFactories(),
-    };
+  it("returns an editable source when mandatory edit actions are present", () => {
     const source = {
-      spatialSkeletonEditController: controller,
+      ...makeEditableSourceMethods(),
       listSkeletons: async () => [],
       getSkeleton: async () => [],
       fetchNodes: async () => [],
       getSpatialIndexMetadata: async () => null,
     };
 
-    expect(getSpatialSkeletonEditController({ source })).toBe(controller);
+    expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
   });
 
-  it("does not treat a partial controller as editable", () => {
+  it("does not treat a source missing mandatory edit actions as editable", () => {
     const source = {
-      spatialSkeletonEditController: {
-        supports: () => true,
-        createMoveNodeCommand: vi.fn(),
-      },
+      ...makeEditableSourceMethods(),
+      toggleTrueEnd: undefined,
       listSkeletons: async () => [],
       getSkeleton: async () => [],
       fetchNodes: async () => [],
       getSpatialIndexMetadata: async () => null,
     };
 
-    expect(getSpatialSkeletonEditController({ source })).toBeUndefined();
+    expect(
+      getEditableSpatiallyIndexedSkeletonSource({ source }),
+    ).toBeUndefined();
   });
 
-  it("does not require optional edit factories for controller validation", () => {
-    const controller = {
-      supports: () => false,
-      ...makeRequiredEditControllerFactories(),
-    };
+  it("does not require optional edit actions for editable source validation", () => {
     const source = {
-      spatialSkeletonEditController: controller,
+      ...makeEditableSourceMethods(),
       listSkeletons: async () => [],
       getSkeleton: async () => [],
       fetchNodes: async () => [],
       getSpatialIndexMetadata: async () => null,
     };
 
-    expect(getSpatialSkeletonEditController({ source })).toBe(controller);
+    expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
   });
 
   it("clears the full skeleton cache before notifying node data listeners", () => {

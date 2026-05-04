@@ -37,6 +37,10 @@ import {
 } from "#src/segmentation_display_state/base.js";
 import { SpatialSkeletonActions } from "#src/skeleton/actions.js";
 import { setSpatialSkeletonModesToLinesAndPoints } from "#src/skeleton/edit_mode_rendering.js";
+import type {
+  SpatialSkeletonSourceState,
+  SpatialSkeletonVector,
+} from "#src/skeleton/api.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/frontend.js";
 import {
   PerspectiveViewSpatiallyIndexedSkeletonLayer,
@@ -185,7 +189,7 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
         nodeId: number;
         segmentId?: number;
         position?: Float32Array;
-        sourceState?: unknown;
+        sourceState?: SpatialSkeletonSourceState;
       }
     | undefined {
     if (!this.mouseState.updateUnconditionally() || !this.mouseState.active) {
@@ -384,8 +388,8 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     | {
         nodeId: number;
         segmentId?: number;
-        position?: Float32Array;
-        sourceState?: unknown;
+        position?: SpatialSkeletonVector;
+        sourceState?: SpatialSkeletonSourceState;
         visible: boolean;
       }
     | undefined {
@@ -1062,7 +1066,7 @@ class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
       nodeId: number;
       segmentId?: number;
       position?: ArrayLike<number>;
-      sourceState?: unknown;
+      sourceState?: SpatialSkeletonSourceState;
     };
     let anchorSelection: MergeAnchorSelection | undefined;
     let statusOverride: string | undefined;

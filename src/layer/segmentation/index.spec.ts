@@ -44,20 +44,14 @@ function makeEditableSpatialSkeletonSource(
     undo: vi.fn(),
     redo: vi.fn(),
   });
+  const supports = (action: string) =>
+    action !== SpatialSkeletonActions.reroot ||
+    options.rerootSkeleton !== undefined;
   return {
-    spatialSkeletonEditController: {
-      supports: (action: string) =>
-        action !== SpatialSkeletonActions.reroot ||
-        options.rerootSkeleton !== undefined,
-      createAddNodeCommand: createCommand,
-      createInsertNodeCommand: createCommand,
-      createMoveNodeCommand: createCommand,
-      createDeleteNodeCommand: createCommand,
-      createSplitCommand: createCommand,
-      createMergeCommand: createCommand,
-      ...(options.rerootSkeleton === undefined
-        ? {}
-        : { createRerootCommand: createCommand }),
+    spatialSkeletonEditCommandSource: {
+      supports,
+      createCommand: (action: string) =>
+        supports(action) ? createCommand() : undefined,
     },
     listSkeletons: async () => [],
     getSkeleton: async () => [],
@@ -68,8 +62,7 @@ function makeEditableSpatialSkeletonSource(
     moveNode: async () => ({}),
     deleteNode: async () => ({}),
     updateDescription: async () => ({}),
-    setTrueEnd: async () => ({}),
-    removeTrueEnd: async () => ({}),
+    toggleTrueEnd: async () => ({}),
     updateRadius: async () => ({}),
     updateConfidence: async () => ({}),
     getSkeletonRootNode: async () => ({

@@ -16,31 +16,76 @@
 
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
-import type {
-  SpatialSkeletonAddNodeCommandOptions,
-  SpatialSkeletonEditController,
-  SpatialSkeletonInsertNodeCommandOptions,
-  SpatialSkeletonMergeEndpoint,
-  SpatialSkeletonMoveNodeCommandOptions,
-  SpatialSkeletonNodeDescriptionCommandOptions,
-  SpatialSkeletonNodePropertiesCommandOptions,
-  SpatialSkeletonNodeTrueEndCommandOptions,
-} from "#src/skeleton/edit_controller.js";
+import {
+  SpatialSkeletonActions,
+  type SpatialSkeletonAction,
+} from "#src/skeleton/actions.js";
 import type { SpatialSkeletonCommand } from "#src/skeleton/command_history.js";
-import { getSpatialSkeletonEditController } from "#src/skeleton/spatial_skeleton_manager.js";
+import { getEditableSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial_skeleton_manager.js";
 import { StatusMessage } from "#src/status.js";
 
-function getController(
+export type SpatialSkeletonCommandPayload = object;
+
+export interface SpatialSkeletonEditCommandSource {
+  supports(action: SpatialSkeletonAction): boolean;
+  createCommand(
+    action: SpatialSkeletonAction,
+    layer: SegmentationUserLayer,
+    payload: SpatialSkeletonCommandPayload,
+  ): SpatialSkeletonCommand | undefined;
+}
+
+type SpatialSkeletonEditCommandSourceCandidate = {
+  supports?: (action: SpatialSkeletonAction) => boolean;
+  createCommand?: (
+    action: SpatialSkeletonAction,
+    layer: SegmentationUserLayer,
+    payload: SpatialSkeletonCommandPayload,
+  ) => SpatialSkeletonCommand | undefined;
+};
+
+export function isSpatialSkeletonEditCommandSource(
+  value: object | undefined,
+): value is SpatialSkeletonEditCommandSource {
+  return (
+    value !== undefined &&
+    typeof (value as SpatialSkeletonEditCommandSourceCandidate).supports ===
+      "function" &&
+    typeof (value as SpatialSkeletonEditCommandSourceCandidate)
+      .createCommand ===
+      "function"
+  );
+}
+
+interface SpatialSkeletonSourceAccess {
+  source: object;
+}
+
+export function getSpatialSkeletonEditCommandSource(
+  value: SpatialSkeletonSourceAccess | undefined,
+): SpatialSkeletonEditCommandSource | undefined {
+  const source = getEditableSpatiallyIndexedSkeletonSource(value);
+  if (source === undefined) return undefined;
+  const editCommandSource = (
+    source as { spatialSkeletonEditCommandSource?: object }
+  ).spatialSkeletonEditCommandSource;
+  return isSpatialSkeletonEditCommandSource(editCommandSource)
+    ? editCommandSource
+    : undefined;
+}
+
+function getEditSource(
   layer: SegmentationUserLayer,
-): SpatialSkeletonEditController {
-  const skeletonLayer = layer.getSpatiallyIndexedSkeletonLayer();
-  const controller = getSpatialSkeletonEditController(skeletonLayer);
-  if (controller === undefined) {
+): SpatialSkeletonEditCommandSource {
+  const source = getSpatialSkeletonEditCommandSource(
+    layer.getSpatiallyIndexedSkeletonLayer(),
+  );
+  if (source === undefined) {
     throw new Error(
       "Unable to resolve editable skeleton source for the active layer.",
     );
   }
-  return controller;
+  return source;
 }
 
 function requireCommand(
@@ -68,61 +113,87 @@ function executeCommandWithPendingMessage<T>(
   return promise.finally(() => status.dispose());
 }
 
+function createSpatialSkeletonCommand(
+  layer: SegmentationUserLayer,
+  action: SpatialSkeletonAction,
+  payload: SpatialSkeletonCommandPayload,
+  unsupportedMessage: string,
+) {
+  return requireCommand(
+    getEditSource(layer).createCommand(action, layer, payload),
+    unsupportedMessage,
+  );
+}
+
 export function executeSpatialSkeletonAddNode(
   layer: SegmentationUserLayer,
-  options: SpatialSkeletonAddNodeCommandOptions,
+  options: SpatialSkeletonCommandPayload,
 ) {
+  const command = createSpatialSkeletonCommand(
+    layer,
+    SpatialSkeletonActions.addNodes,
+    options,
+    "The active skeleton source does not support node creation.",
+  );
   return executeCommandWithPendingMessage(
-    executeCommand(
-      layer,
-      getController(layer).createAddNodeCommand(layer, options),
-    ),
+    executeCommand(layer, command),
     "Creating node...",
   );
 }
 
 export function executeSpatialSkeletonInsertNode(
   layer: SegmentationUserLayer,
-  options: SpatialSkeletonInsertNodeCommandOptions,
+  options: SpatialSkeletonCommandPayload,
 ) {
+  const command = createSpatialSkeletonCommand(
+    layer,
+    SpatialSkeletonActions.insertNodes,
+    options,
+    "The active skeleton source does not support node insertion.",
+  );
   return executeCommandWithPendingMessage(
-    executeCommand(
-      layer,
-      getController(layer).createInsertNodeCommand(layer, options),
-    ),
+    executeCommand(layer, command),
     "Inserting node...",
   );
 }
 
 export function executeSpatialSkeletonMoveNode(
   layer: SegmentationUserLayer,
-  options: SpatialSkeletonMoveNodeCommandOptions,
+  options: SpatialSkeletonCommandPayload,
 ) {
-  return executeCommand(
+  const command = createSpatialSkeletonCommand(
     layer,
-    getController(layer).createMoveNodeCommand(layer, options),
+    SpatialSkeletonActions.moveNodes,
+    options,
+    "The active skeleton source does not support node movement.",
   );
+  return executeCommand(layer, command);
 }
 
 export function executeSpatialSkeletonDeleteNode(
   layer: SegmentationUserLayer,
   node: SpatiallyIndexedSkeletonNode,
 ) {
+  const command = createSpatialSkeletonCommand(
+    layer,
+    SpatialSkeletonActions.deleteNodes,
+    node,
+    "The active skeleton source does not support node deletion.",
+  );
   return executeCommandWithPendingMessage(
-    executeCommand(
-      layer,
-      getController(layer).createDeleteNodeCommand(layer, node),
-    ),
+    executeCommand(layer, command),
     "Deleting node...",
   );
 }
 
 export function executeSpatialSkeletonNodeDescriptionUpdate(
   layer: SegmentationUserLayer,
-  options: SpatialSkeletonNodeDescriptionCommandOptions,
+  options: SpatialSkeletonCommandPayload,
 ) {
-  const command = requireCommand(
-    getController(layer).createNodeDescriptionCommand?.(layer, options),
+  const command = createSpatialSkeletonCommand(
+    layer,
+    SpatialSkeletonActions.editNodeDescription,
+    options,
     "The active skeleton source does not support node description editing.",
   );
   return executeCommand(layer, command);
@@ -130,10 +201,12 @@ export function executeSpatialSkeletonNodeDescriptionUpdate(
 
 export function executeSpatialSkeletonNodeTrueEndUpdate(
   layer: SegmentationUserLayer,
-  options: SpatialSkeletonNodeTrueEndCommandOptions,
+  options: SpatialSkeletonCommandPayload,
 ) {
-  const command = requireCommand(
-    getController(layer).createNodeTrueEndCommand?.(layer, options),
+  const command = createSpatialSkeletonCommand(
+    layer,
+    SpatialSkeletonActions.editNodeTrueEnd,
+    options,
     "The active skeleton source does not support node true-end editing.",
   );
   return executeCommand(layer, command);
@@ -141,10 +214,12 @@ export function executeSpatialSkeletonNodeTrueEndUpdate(
 
 export function executeSpatialSkeletonNodePropertiesUpdate(
   layer: SegmentationUserLayer,
-  options: SpatialSkeletonNodePropertiesCommandOptions,
+  options: SpatialSkeletonCommandPayload,
 ) {
-  const command = requireCommand(
-    getController(layer).createNodePropertiesCommand?.(layer, options),
+  const command = createSpatialSkeletonCommand(
+    layer,
+    SpatialSkeletonActions.editNodeProperties,
+    options,
     "The active skeleton source does not support node property editing.",
   );
   return executeCommand(layer, command);
@@ -152,13 +227,12 @@ export function executeSpatialSkeletonNodePropertiesUpdate(
 
 export function executeSpatialSkeletonReroot(
   layer: SegmentationUserLayer,
-  node: Pick<
-    SpatiallyIndexedSkeletonNode,
-    "nodeId" | "segmentId" | "parentNodeId"
-  >,
+  node: SpatialSkeletonCommandPayload,
 ) {
-  const command = requireCommand(
-    getController(layer).createRerootCommand?.(layer, node),
+  const command = createSpatialSkeletonCommand(
+    layer,
+    SpatialSkeletonActions.reroot,
+    node,
     "The active skeleton source does not support skeleton rerooting.",
   );
   return executeCommand(layer, command);
@@ -166,27 +240,33 @@ export function executeSpatialSkeletonReroot(
 
 export function executeSpatialSkeletonSplit(
   layer: SegmentationUserLayer,
-  node: Pick<SpatiallyIndexedSkeletonNode, "nodeId" | "segmentId">,
+  node: SpatialSkeletonCommandPayload,
 ) {
+  const command = createSpatialSkeletonCommand(
+    layer,
+    SpatialSkeletonActions.splitSkeletons,
+    node,
+    "The active skeleton source does not support skeleton splitting.",
+  );
   return executeCommandWithPendingMessage(
-    executeCommand(
-      layer,
-      getController(layer).createSplitCommand(layer, node),
-    ),
+    executeCommand(layer, command),
     "Splitting skeleton...",
   );
 }
 
 export function executeSpatialSkeletonMerge(
   layer: SegmentationUserLayer,
-  firstNode: SpatialSkeletonMergeEndpoint,
-  secondNode: SpatialSkeletonMergeEndpoint,
+  firstNode: SpatialSkeletonCommandPayload,
+  secondNode: SpatialSkeletonCommandPayload,
 ) {
+  const command = createSpatialSkeletonCommand(
+    layer,
+    SpatialSkeletonActions.mergeSkeletons,
+    { firstNode, secondNode },
+    "The active skeleton source does not support skeleton merging.",
+  );
   return executeCommandWithPendingMessage(
-    executeCommand(
-      layer,
-      getController(layer).createMergeCommand(layer, firstNode, secondNode),
-    ),
+    executeCommand(layer, command),
     "Merging skeletons...",
   );
 }

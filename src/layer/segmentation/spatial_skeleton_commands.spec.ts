@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { CatmaidSpatialSkeletonEditController } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
+import { CatmaidSpatialSkeletonEditCommandSource } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
 import { buildCatmaidNeighborhoodEditContext } from "#src/datasource/catmaid/edit_state.js";
 import { makeCatmaidNodeSourceState } from "#src/datasource/catmaid/api.js";
 import {
@@ -19,6 +19,7 @@ import {
   getSpatiallyIndexedSkeletonDirectChildren,
   getSpatiallyIndexedSkeletonNodeParent,
 } from "#src/skeleton/edit_state.js";
+import { SpatialSkeletonActions } from "#src/skeleton/actions.js";
 import { SpatialSkeletonCommandHistory } from "#src/skeleton/command_history.js";
 import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { StatusMessage } from "#src/status.js";
@@ -61,7 +62,8 @@ function setSegmentNodes(
 
 function makeEditableSkeletonSource(overrides: Record<string, unknown> = {}) {
   return {
-    spatialSkeletonEditController: new CatmaidSpatialSkeletonEditController(),
+    spatialSkeletonEditCommandSource:
+      new CatmaidSpatialSkeletonEditCommandSource(),
     listSkeletons: vi.fn(),
     getSkeleton: vi.fn(),
     fetchNodes: vi.fn(),
@@ -73,8 +75,7 @@ function makeEditableSkeletonSource(overrides: Record<string, unknown> = {}) {
     deleteNode: vi.fn(),
     rerootSkeleton: vi.fn(),
     updateDescription: vi.fn(),
-    setTrueEnd: vi.fn(),
-    removeTrueEnd: vi.fn(),
+    toggleTrueEnd: vi.fn(),
     updateRadius: vi.fn(),
     updateConfidence: vi.fn(),
     mergeSkeletons: vi.fn(),
@@ -104,7 +105,7 @@ describe("spatial_skeleton_commands", () => {
     vi.restoreAllMocks();
   });
 
-  it("executes opaque source-created commands through a valid edit controller", async () => {
+  it("executes opaque source-created commands through a valid edit source", async () => {
     const execute = vi.fn();
     const undo = vi.fn();
     const redo = vi.fn();
@@ -114,7 +115,6 @@ describe("spatial_skeleton_commands", () => {
       undo,
       redo,
     };
-    const createMoveNodeCommand = vi.fn(() => command);
     const createCommand = vi.fn(() => command);
     const layer = {
       spatialSkeletonState: {
@@ -122,19 +122,20 @@ describe("spatial_skeleton_commands", () => {
       },
       getSpatiallyIndexedSkeletonLayer: () => ({
         source: {
-          spatialSkeletonEditController: {
+          spatialSkeletonEditCommandSource: {
             supports: () => true,
-            createAddNodeCommand: createCommand,
-            createInsertNodeCommand: createCommand,
-            createMoveNodeCommand,
-            createDeleteNodeCommand: createCommand,
-            createSplitCommand: createCommand,
-            createMergeCommand: createCommand,
+            createCommand,
           },
           listSkeletons: vi.fn(),
           getSkeleton: vi.fn(),
           fetchNodes: vi.fn(),
           getSpatialIndexMetadata: vi.fn(),
+          addNode: vi.fn(),
+          deleteNode: vi.fn(),
+          moveNode: vi.fn(),
+          splitSkeleton: vi.fn(),
+          mergeSkeletons: vi.fn(),
+          toggleTrueEnd: vi.fn(),
         },
       }),
     };
@@ -152,42 +153,89 @@ describe("spatial_skeleton_commands", () => {
     await undoSpatialSkeletonCommand(layer as any);
     await redoSpatialSkeletonCommand(layer as any);
 
-    expect(createMoveNodeCommand).toHaveBeenCalledWith(layer, {
-      node,
-      nextPositionInModelSpace,
-    });
+    expect(createCommand).toHaveBeenCalledWith(
+      SpatialSkeletonActions.moveNodes,
+      layer,
+      {
+        node,
+        nextPositionInModelSpace,
+      },
+    );
     expect(execute).toHaveBeenCalledTimes(1);
     expect(undo).toHaveBeenCalledTimes(1);
     expect(redo).toHaveBeenCalledTimes(1);
   });
 
-  it("reports unsupported optional command factories clearly", () => {
-    const command = {
-      label: "required command",
-      execute: vi.fn(),
-      undo: vi.fn(),
-      redo: vi.fn(),
-    };
-    const createCommand = vi.fn(() => command);
+  it("does not treat a source missing createCommand as an edit command source", () => {
     const layer = {
       spatialSkeletonState: {
         commandHistory: new SpatialSkeletonCommandHistory(),
       },
       getSpatiallyIndexedSkeletonLayer: () => ({
         source: {
-          spatialSkeletonEditController: {
+          spatialSkeletonEditCommandSource: {
             supports: () => true,
-            createAddNodeCommand: createCommand,
-            createInsertNodeCommand: createCommand,
-            createMoveNodeCommand: createCommand,
-            createDeleteNodeCommand: createCommand,
-            createSplitCommand: createCommand,
-            createMergeCommand: createCommand,
           },
           listSkeletons: vi.fn(),
           getSkeleton: vi.fn(),
           fetchNodes: vi.fn(),
           getSpatialIndexMetadata: vi.fn(),
+          addNode: vi.fn(),
+          deleteNode: vi.fn(),
+          moveNode: vi.fn(),
+          splitSkeleton: vi.fn(),
+          mergeSkeletons: vi.fn(),
+          toggleTrueEnd: vi.fn(),
+        },
+      }),
+    };
+
+    expect(() =>
+      executeSpatialSkeletonNodeDescriptionUpdate(layer as any, {
+        node: {
+          nodeId: 17,
+          segmentId: 23,
+          position: new Float32Array([1, 2, 3]),
+        },
+        nextDescription: "next",
+      }),
+    ).toThrow(
+      "Unable to resolve editable skeleton source for the active layer.",
+    );
+  });
+
+  it("reports unsupported command creation clearly", () => {
+    const command = {
+      label: "required command",
+      execute: vi.fn(),
+      undo: vi.fn(),
+      redo: vi.fn(),
+    };
+    const createCommand = vi.fn((action: string) =>
+      action === SpatialSkeletonActions.editNodeDescription
+        ? undefined
+        : command,
+    );
+    const layer = {
+      spatialSkeletonState: {
+        commandHistory: new SpatialSkeletonCommandHistory(),
+      },
+      getSpatiallyIndexedSkeletonLayer: () => ({
+        source: {
+          spatialSkeletonEditCommandSource: {
+            supports: () => true,
+            createCommand,
+          },
+          listSkeletons: vi.fn(),
+          getSkeleton: vi.fn(),
+          fetchNodes: vi.fn(),
+          getSpatialIndexMetadata: vi.fn(),
+          addNode: vi.fn(),
+          deleteNode: vi.fn(),
+          moveNode: vi.fn(),
+          splitSkeleton: vi.fn(),
+          mergeSkeletons: vi.fn(),
+          toggleTrueEnd: vi.fn(),
         },
       }),
     };
@@ -205,6 +253,61 @@ describe("spatial_skeleton_commands", () => {
     ).toThrow(
       "The active skeleton source does not support node description editing.",
     );
+  });
+
+  it("derives CATMAID command support from registered handlers", () => {
+    const commandSource = new CatmaidSpatialSkeletonEditCommandSource();
+
+    expect(commandSource.supports(SpatialSkeletonActions.moveNodes)).toBe(true);
+    expect(commandSource.supports(SpatialSkeletonActions.inspect)).toBe(false);
+    expect(
+      commandSource.createCommand(
+        SpatialSkeletonActions.inspect,
+        {} as any,
+        {},
+      ),
+    ).toBeUndefined();
+  });
+
+  it("creates CATMAID commands from valid opaque payloads", () => {
+    const commandSource = new CatmaidSpatialSkeletonEditCommandSource();
+    const layer = {
+      spatialSkeletonState: {
+        commandHistory: new SpatialSkeletonCommandHistory(),
+      },
+    };
+    const node: SpatiallyIndexedSkeletonNode = {
+      nodeId: 17,
+      segmentId: 23,
+      position: new Float32Array([1, 2, 3]),
+    };
+
+    const command = commandSource.createCommand(
+      SpatialSkeletonActions.moveNodes,
+      layer as any,
+      {
+        node,
+        nextPositionInModelSpace: new Float32Array([7, 8, 9]),
+      },
+    );
+
+    expect(command?.label).toBe("Move node");
+  });
+
+  it("reports invalid CATMAID command payloads clearly", () => {
+    const commandSource = new CatmaidSpatialSkeletonEditCommandSource();
+    const layer = {
+      spatialSkeletonState: {
+        commandHistory: new SpatialSkeletonCommandHistory(),
+      },
+    };
+
+    expect(() =>
+      commandSource.createCommand(SpatialSkeletonActions.moveNodes, layer as any, {
+        node: {},
+        nextPositionInModelSpace: new Float32Array([7, 8, 9]),
+      }),
+    ).toThrow("CATMAID move-node command received an invalid payload.");
   });
 
   it("commits move-node commands using model-space positions", async () => {

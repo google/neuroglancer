@@ -32,6 +32,7 @@ import {
   clearOutOfBoundsPickData,
   getPickDiameter,
 } from "#src/rendered_data_panel_picking.js";
+import type { SpatialSkeletonSourceState } from "#src/skeleton/api.js";
 import { StatusMessage } from "#src/status.js";
 import type { TrackableValue } from "#src/trackable_value.js";
 import { AutomaticallyFocusedElement } from "#src/util/automatic_focus.js";
@@ -65,7 +66,7 @@ interface SpatialSkeletonSelectableLayer {
     options?: {
       segmentId?: number;
       position?: ArrayLike<number>;
-      sourceState?: unknown;
+      sourceState?: SpatialSkeletonSourceState;
     },
   ) => void;
   clearSpatialSkeletonNodeSelection: (

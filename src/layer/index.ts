@@ -63,6 +63,7 @@ import type {
   RenderLayerRole,
   VisibilityTrackedRenderLayer,
 } from "#src/renderlayer.js";
+import type { SpatialSkeletonSourceState } from "#src/skeleton/api.js";
 import type { VolumeType } from "#src/sliceview/volume/base.js";
 import { StatusMessage } from "#src/status.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
@@ -1148,7 +1149,7 @@ export interface PickedSpatialSkeletonState {
   nodeId?: number;
   segmentId?: number;
   position?: Float32Array;
-  sourceState?: unknown;
+  sourceState?: SpatialSkeletonSourceState;
 }
 
 export interface PickState {

@@ -19,6 +19,7 @@ import { fetchOkWithCredentials } from "#src/credentials_provider/http_request.j
 import type { CredentialsProvider } from "#src/credentials_provider/index.js";
 import type {
   SpatialSkeletonBounds,
+  SpatialSkeletonSourceState,
   SpatialSkeletonVector,
   SpatiallyIndexedSkeletonMetadata,
   SpatiallyIndexedSkeletonNode,
@@ -50,9 +51,7 @@ const CATMAID_STATE_MATCHING_ERROR_TYPE = "StateMatchingError";
 
 type CatmaidStatePayload = object;
 
-export interface CatmaidNodeSourceState {
-  revisionToken: string;
-}
+export type CatmaidNodeSourceState = { readonly revisionToken: string };
 
 export interface CatmaidEditNodeContext {
   nodeId: number;
@@ -74,7 +73,7 @@ export interface CatmaidEditContext {
 
 export interface CatmaidSkeletonNodeSourceStateUpdate {
   nodeId: number;
-  sourceState: unknown;
+  sourceState: SpatialSkeletonSourceState;
 }
 
 export interface CatmaidSkeletonEditResult {
@@ -84,15 +83,15 @@ export interface CatmaidSkeletonEditResult {
 export interface CatmaidAddNodeResult extends CatmaidSkeletonEditResult {
   nodeId: number;
   segmentId: number;
-  sourceState?: unknown;
-  parentSourceState?: unknown;
+  sourceState?: SpatialSkeletonSourceState;
+  parentSourceState?: SpatialSkeletonSourceState;
 }
 
 export type CatmaidInsertNodeResult = CatmaidAddNodeResult;
 
 export interface CatmaidNodeSourceStateResult
   extends CatmaidSkeletonEditResult {
-  sourceState?: unknown;
+  sourceState?: SpatialSkeletonSourceState;
 }
 
 export interface CatmaidDescriptionUpdateResult
@@ -127,6 +126,30 @@ export interface CatmaidSpatialSkeletonEditApi {
     parentId?: number,
     editContext?: CatmaidEditContext,
   ): Promise<CatmaidAddNodeResult>;
+  deleteNode(
+    nodeId: number,
+    options: CatmaidDeleteNodeOptions,
+  ): Promise<CatmaidDeleteNodeResult>;
+  moveNode(
+    nodeId: number,
+    x: number,
+    y: number,
+    z: number,
+    editContext?: CatmaidEditContext,
+  ): Promise<CatmaidNodeSourceStateResult>;
+  splitSkeleton(
+    nodeId: number,
+    editContext?: CatmaidEditContext,
+  ): Promise<CatmaidSplitResult>;
+  mergeSkeletons(
+    fromNodeId: number,
+    toNodeId: number,
+    editContext?: CatmaidEditContext,
+  ): Promise<CatmaidMergeResult>;
+  toggleTrueEnd(
+    nodeId: number,
+    nextIsTrueEnd: boolean,
+  ): Promise<CatmaidNodeSourceStateResult>;
   insertNode(
     skeletonId: number,
     x: number,
@@ -136,21 +159,7 @@ export interface CatmaidSpatialSkeletonEditApi {
     childNodeIds: readonly number[],
     editContext?: CatmaidEditContext,
   ): Promise<CatmaidInsertNodeResult>;
-  moveNode(
-    nodeId: number,
-    x: number,
-    y: number,
-    z: number,
-    editContext?: CatmaidEditContext,
-  ): Promise<CatmaidNodeSourceStateResult>;
-  deleteNode(
-    nodeId: number,
-    options: {
-      childNodeIds?: readonly number[];
-      editContext?: CatmaidEditContext;
-    },
-  ): Promise<CatmaidDeleteNodeResult>;
-  rerootSkeleton?(
+  rerootSkeleton(
     nodeId: number,
     editContext?: CatmaidEditContext,
   ): Promise<CatmaidRerootResult>;
@@ -158,8 +167,6 @@ export interface CatmaidSpatialSkeletonEditApi {
     nodeId: number,
     description: string,
   ): Promise<CatmaidDescriptionUpdateResult>;
-  setTrueEnd(nodeId: number): Promise<CatmaidNodeSourceStateResult>;
-  removeTrueEnd(nodeId: number): Promise<CatmaidNodeSourceStateResult>;
   updateRadius(
     nodeId: number,
     radius: number,
@@ -170,15 +177,6 @@ export interface CatmaidSpatialSkeletonEditApi {
     confidence: number,
     editContext?: CatmaidEditContext,
   ): Promise<CatmaidNodeSourceStateResult>;
-  mergeSkeletons(
-    fromNodeId: number,
-    toNodeId: number,
-    editContext?: CatmaidEditContext,
-  ): Promise<CatmaidMergeResult>;
-  splitSkeleton(
-    nodeId: number,
-    editContext?: CatmaidEditContext,
-  ): Promise<CatmaidSplitResult>;
 }
 
 interface CatmaidDeleteNodeOptions {
@@ -1742,18 +1740,31 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     };
   }
 
-  async setTrueEnd(nodeId: number): Promise<CatmaidNodeSourceStateResult> {
+  private async addTrueEndLabel(
+    nodeId: number,
+  ): Promise<CatmaidNodeSourceStateResult> {
     const response = await this.addNodeLabel(nodeId, CATMAID_TRUE_END_LABEL);
     return getCatmaidSingleNodeRevisionResult(
       normalizeCatmaidRevisionToken((response as any)?.edition_time),
     );
   }
 
-  async removeTrueEnd(nodeId: number): Promise<CatmaidNodeSourceStateResult> {
+  private async removeTrueEndLabel(
+    nodeId: number,
+  ): Promise<CatmaidNodeSourceStateResult> {
     const response = await this.removeNodeLabel(nodeId, CATMAID_TRUE_END_LABEL);
     return getCatmaidSingleNodeRevisionResult(
       normalizeCatmaidRevisionToken((response as any)?.edition_time),
     );
+  }
+
+  toggleTrueEnd(
+    nodeId: number,
+    nextIsTrueEnd: boolean,
+  ): Promise<CatmaidNodeSourceStateResult> {
+    return nextIsTrueEnd
+      ? this.addTrueEndLabel(nodeId)
+      : this.removeTrueEndLabel(nodeId);
   }
 
   async updateRadius(

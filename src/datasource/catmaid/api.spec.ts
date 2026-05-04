@@ -755,10 +755,10 @@ describe("CatmaidClient skeleton editing methods", () => {
       .mockResolvedValueOnce({ edition_time: "2026-03-29T13:11:00Z" });
     (client as any).fetch = fetchMock;
 
-    await expect(client.setTrueEnd(11)).resolves.toEqual({
+    await expect(client.toggleTrueEnd(11, true)).resolves.toEqual({
       sourceState: testSourceState("2026-03-29T13:10:00Z"),
     });
-    await expect(client.removeTrueEnd(11)).resolves.toEqual({
+    await expect(client.toggleTrueEnd(11, false)).resolves.toEqual({
       sourceState: testSourceState("2026-03-29T13:11:00Z"),
     });
 

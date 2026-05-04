@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import type { SpatialSkeletonSourceState } from "#src/skeleton/api.js";
 import type { TypedNumberArray } from "#src/util/array.js";
 
 export interface SkeletonChunkData {
@@ -22,7 +23,7 @@ export interface SkeletonChunkData {
   indices: Uint32Array | null;
   lod?: number;
   nodeIds?: Int32Array;
-  nodeSourceStates?: unknown[];
+  nodeSourceStates?: Array<SpatialSkeletonSourceState | undefined>;
 }
 
 /**

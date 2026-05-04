@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { makeCatmaidNodeSourceState } from "#src/datasource/catmaid/api.js";
-import { CatmaidSpatialSkeletonEditController } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
+import { CatmaidSpatialSkeletonEditCommandSource } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
 import {
   executeSpatialSkeletonAddNode,
   executeSpatialSkeletonMerge,
@@ -44,7 +44,8 @@ function makeVisibleSegmentsState(initialVisibleSegments: bigint[] = []) {
 
 function makeEditableSkeletonSource(overrides: Record<string, unknown> = {}) {
   return {
-    spatialSkeletonEditController: new CatmaidSpatialSkeletonEditController(),
+    spatialSkeletonEditCommandSource:
+      new CatmaidSpatialSkeletonEditCommandSource(),
     listSkeletons: vi.fn(),
     getSkeleton: vi.fn(),
     fetchNodes: vi.fn(),
@@ -56,8 +57,7 @@ function makeEditableSkeletonSource(overrides: Record<string, unknown> = {}) {
     deleteNode: vi.fn(),
     rerootSkeleton: vi.fn(),
     updateDescription: vi.fn(),
-    setTrueEnd: vi.fn(),
-    removeTrueEnd: vi.fn(),
+    toggleTrueEnd: vi.fn(),
     updateRadius: vi.fn(),
     updateConfidence: vi.fn(),
     mergeSkeletons: vi.fn(),
