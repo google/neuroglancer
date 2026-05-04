@@ -932,18 +932,6 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
     );
   }
 
-  applySpatialSkeletonGridResolutionTarget2dFromSpec(value: any) {
-    if (value !== undefined) {
-      this.spatialSkeletonGridResolutionTarget2d.restoreState(value);
-    }
-  }
-
-  applySpatialSkeletonGridResolutionTarget3dFromSpec(value: any) {
-    if (value !== undefined) {
-      this.spatialSkeletonGridResolutionTarget3d.restoreState(value);
-    }
-  }
-
   private setSpatialSkeletonGridLevel(kind: "2d" | "3d", index: number) {
     const levels = this.spatialSkeletonGridLevels.value;
     if (levels.length === 0) return 0;
@@ -2100,12 +2088,8 @@ export class SegmentationUserLayer extends Base {
       (value) =>
         this.displayState.spatialSkeletonNodeFilter.restoreState(value),
     );
-    this.displayState.applySpatialSkeletonGridResolutionTarget2dFromSpec(
-      specification[json_keys.SKELETON_CROSS_SECTION_RENDER_SCALE_JSON_KEY],
-    );
-    this.displayState.applySpatialSkeletonGridResolutionTarget3dFromSpec(
-      specification[json_keys.SKELETON_PERSPECTIVE_RENDER_SCALE_JSON_KEY],
-    );
+    this.displayState.spatialSkeletonGridResolutionTarget2d.restoreState(specification[json_keys.SKELETON_CROSS_SECTION_RENDER_SCALE_JSON_KEY]);
+    this.displayState.spatialSkeletonGridResolutionTarget3d.restoreState(specification[json_keys.SKELETON_PERSPECTIVE_RENDER_SCALE_JSON_KEY]);
     this.displayState.baseSegmentColoring.restoreState(
       specification[json_keys.BASE_SEGMENT_COLORING_JSON_KEY],
     );
