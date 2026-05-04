@@ -35,6 +35,7 @@ import type {
   PerspectiveViewRenderContext,
 } from "#src/perspective_view/render_layer.js";
 import { PerspectiveViewRenderLayer } from "#src/perspective_view/render_layer.js";
+import type { ProjectionParameters } from "#src/projection_parameters.js";
 import type {
   ChunkTransformParameters,
   RenderLayerTransform,
@@ -398,7 +399,7 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
     );
     gl.uniform1f(
       shader.uniform("uHiddenAlpha"),
-      this.base.displayState.hiddenObjectAlpha?.value ?? 0,
+      this.base.displayState.hiddenObjectAlpha.value,
     );
     gl.uniform1ui(
       shader.uniform("uSkipVisibleSegments"),
@@ -2263,10 +2264,6 @@ export class SpatiallyIndexedSkeletonLayer
     return Math.abs(chunk.lod - targetLod) < 1e-6;
   }
 
-  get visibility() {
-    return this.displayState.objectAlpha;
-  }
-
   sources: SpatiallyIndexedSkeletonSourceEntry[];
   sources2d: SpatiallyIndexedSkeletonSourceEntry[];
   source: SpatiallyIndexedSkeletonSource;
@@ -2375,53 +2372,6 @@ export class SpatiallyIndexedSkeletonLayer
     this.selectedNodeAttributeIndex =
       selectedNodeIndex >= 0 ? selectedNodeIndex : undefined;
     const requestRedraw = () => this.redrawNeeded.dispatch();
-    const redrawWatchables = new Set<object>();
-    const registerNumericRedrawWatchable = (
-      watchable: WatchableValueInterface<number> | undefined,
-    ) => {
-      if (watchable === undefined) return;
-      const key = watchable as object;
-      if (redrawWatchables.has(key)) return;
-      redrawWatchables.add(key);
-      this.registerDisposer(watchable.changed.add(requestRedraw));
-    };
-    this.registerDisposer(
-      registerNested((context, segmentationGroup) => {
-        context.registerDisposer(
-          segmentationGroup.visibleSegments.changed.add(() => requestRedraw()),
-        );
-        context.registerDisposer(
-          segmentationGroup.temporaryVisibleSegments.changed.add(() =>
-            requestRedraw(),
-          ),
-        );
-        context.registerDisposer(
-          segmentationGroup.useTemporaryVisibleSegments.changed.add(() =>
-            requestRedraw(),
-          ),
-        );
-      }, this.displayState.segmentationGroupState),
-    );
-    this.registerDisposer(
-      registerNested((context, colorGroupState) => {
-        context.registerDisposer(
-          colorGroupState.segmentColorHash.changed.add(() => requestRedraw()),
-        );
-        context.registerDisposer(
-          colorGroupState.segmentDefaultColor.changed.add(() =>
-            requestRedraw(),
-          ),
-        );
-        context.registerDisposer(
-          colorGroupState.segmentStatedColors.changed.add(() =>
-            requestRedraw(),
-          ),
-        );
-      }, this.displayState.segmentationColorGroupState),
-    );
-    this.registerDisposer(
-      displayState.objectAlpha.changed.add(() => requestRedraw()),
-    );
     const selectedNodeWatchable = this.selectedNodeId;
     if (selectedNodeWatchable?.changed) {
       this.registerDisposer(selectedNodeWatchable.changed.add(requestRedraw));
@@ -2429,9 +2379,7 @@ export class SpatiallyIndexedSkeletonLayer
     const pendingNodePositionVersion = options.pendingNodePositionVersion;
     if (pendingNodePositionVersion?.changed) {
       this.registerDisposer(
-        pendingNodePositionVersion.changed.add(() => {
-          this.redrawNeeded.dispatch();
-        }),
+        pendingNodePositionVersion.changed.add(requestRedraw),
       );
     }
     const inspectionState = this.inspectionState;
@@ -2442,17 +2390,13 @@ export class SpatiallyIndexedSkeletonLayer
         }),
       );
     }
-    registerNumericRedrawWatchable(this.gridLevel);
-    registerNumericRedrawWatchable(spatialDisplayState.spatialSkeletonGridLevel2d);
-    registerNumericRedrawWatchable(spatialDisplayState.spatialSkeletonGridLevel3d);
-    registerNumericRedrawWatchable(this.lod);
-    registerNumericRedrawWatchable(spatialDisplayState.spatialSkeletonLod2d);
-    registerNumericRedrawWatchable(spatialDisplayState.skeletonLod);
-    if (displayState.hiddenObjectAlpha) {
-      this.registerDisposer(
-        displayState.hiddenObjectAlpha.changed.add(() => requestRedraw()),
-      );
-    }
+    // TODO (SKM): there should be maybe be a redraw on lod changing
+    // these were removed because there were too many of them
+    // a separate PR is working on a cleaner display state
+    // at that point we can likely add something back here
+    // for now it should be fine, because the chunks update
+    // as a result of the lod changing, which triggers a draw
+    // will check the pattern in slice view
 
     // Create backend for perspective view chunk management
     const sharedObject = this.registerDisposer(
@@ -2705,10 +2649,13 @@ export class SpatiallyIndexedSkeletonLayer
 
   private areVisibleChunksReady(
     transformedSources: readonly TransformedSource[][],
-    projectionParameters: any,
+    projectionParameters: ProjectionParameters,
     lod: number | undefined,
   ) {
-    if (this.displayState.objectAlpha.value <= 0.0) {
+    if (
+      this.displayState.objectAlpha.value <= 0.0 &&
+      this.displayState.hiddenObjectAlpha.value <= 0.0
+    ) {
       return true;
     }
     if (lod === undefined || transformedSources.length === 0) {
@@ -3075,7 +3022,10 @@ export class SpatiallyIndexedSkeletonLayer
   ) {
     const lineWidth = renderOptions.lineWidth.value;
     const { displayState } = this;
-    if (displayState.objectAlpha.value <= 0.0) {
+    if (
+      displayState.objectAlpha.value <= 0.0 &&
+      displayState.hiddenObjectAlpha.value <= 0.0
+    ) {
       return;
     }
     const modelMatrix = update3dRenderLayerAttachment(
@@ -3123,16 +3073,13 @@ export class SpatiallyIndexedSkeletonLayer
   }
 
   isReady(
-    transformedSources?: readonly TransformedSource[][],
-    projectionParameters?: any,
-    lod?: number | undefined,
+    transformedSources: readonly TransformedSource[][],
+    projectionParameters: ProjectionParameters,
+    lod?: number,
   ) {
-    if (
-      transformedSources === undefined ||
-      projectionParameters === undefined
-    ) {
-      return this.displayState.objectAlpha.value <= 0.0;
-    }
+    // TODO (SKM) I don't think this is getting
+    // called as expected, for example, I think
+    // the screenshot should call this but it doesn't seem to
     return this.areVisibleChunksReady(
       transformedSources,
       projectionParameters,
@@ -3242,7 +3189,12 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
   }
 
   get isTransparent() {
-    return this.base.displayState.objectAlpha.value < 1.0;
+    const { objectAlpha, hiddenObjectAlpha } = this.base.displayState;
+    const opaque =
+      (objectAlpha.value == 1.0 &&
+        (hiddenObjectAlpha.value == 1.0 || hiddenObjectAlpha.value == 0.0)) ||
+      (objectAlpha.value == 0.0 && hiddenObjectAlpha.value == 1.0);
+    return !opaque;
   }
 
   getValueAt(position: Float32Array) {
