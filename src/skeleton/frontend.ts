@@ -1809,6 +1809,14 @@ function getSpatialSkeletonGridSpacing(
   return Math.max(Math.min(chunkSize[0], chunkSize[1], chunkSize[2]), 1e-6);
 }
 
+// Tracks chunk keys already counted for a given histogram within a single frame,
+// preventing the same chunk from being counted multiple times when it falls within
+// the visible frustum of more than one slice panel in the same frame.
+const seenChunkKeysPerFrame = new WeakMap<
+  RenderScaleHistogram,
+  { frameNumber: number; keys: Set<string> }
+>();
+
 function updateSpatialSkeletonGridRenderScaleHistogram(
   histogram: RenderScaleHistogram,
   frameNumber: number,
@@ -1829,6 +1837,12 @@ function updateSpatialSkeletonGridRenderScaleHistogram(
   if (scales.length === 0) {
     return;
   }
+  let seen = seenChunkKeysPerFrame.get(histogram);
+  if (seen === undefined || seen.frameNumber !== frameNumber) {
+    seen = { frameNumber, keys: new Set() };
+    seenChunkKeysPerFrame.set(histogram, seen);
+  }
+  const seenKeys = seen.keys;
   for (const tsource of scales) {
     const gridIndex = (tsource.source as any).parameters?.gridIndex as
       | number
@@ -1847,6 +1861,8 @@ function updateSpatialSkeletonGridRenderScaleHistogram(
       tsource,
       (positionInChunks) => {
         const key = `${positionInChunks.join()}${lodSuffix}`;
+        if (seenKeys.has(key)) return;
+        seenKeys.add(key);
         const chunk = source.chunks.get(key) as
           | SpatiallyIndexedSkeletonChunk
           | undefined;
