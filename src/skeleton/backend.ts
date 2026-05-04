@@ -43,7 +43,6 @@ import {
   SKELETON_LAYER_RPC_ID,
   SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_RPC_ID,
   SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_UPDATE_SOURCES_RPC_ID,
-  SPATIALLY_INDEXED_SKELETON_SLICEVIEW_RENDER_LAYER_RPC_ID,
 } from "#src/skeleton/base.js";
 import {
   freeSkeletonChunkSystemMemory,
@@ -61,11 +60,9 @@ import {
   SCALE_PRIORITY_MULTIPLIER,
   SliceViewChunk,
   SliceViewChunkSourceBackend,
-  SliceViewRenderLayerBackend,
 } from "#src/sliceview/backend.js";
 import {
   forEachVisibleVolumetricChunk,
-  type SliceViewBase,
   type SliceViewChunkSpecification,
   type SliceViewProjectionParameters,
   type TransformedSource,
@@ -368,6 +365,8 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
   renderScaleTarget: SharedWatchableValue<number>;
   skeletonLod: SharedWatchableValue<number>;
   skeletonGridLevel: SharedWatchableValue<number>;
+  skeletonLod2d: SharedWatchableValue<number>;
+  skeletonGridLevel2d: SharedWatchableValue<number>;
   private pendingLodCleanup = false;
 
   constructor(rpc: RPC, options: any) {
@@ -376,6 +375,8 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
     this.localPosition = rpc.get(options.localPosition);
     this.skeletonLod = rpc.get(options.skeletonLod);
     this.skeletonGridLevel = rpc.get(options.skeletonGridLevel);
+    this.skeletonLod2d = rpc.get(options.skeletonLod2d);
+    this.skeletonGridLevel2d = rpc.get(options.skeletonGridLevel2d);
     const scheduleUpdateChunkPriorities = () =>
       this.chunkManager.scheduleUpdateChunkPriorities();
     this.registerDisposer(
@@ -386,6 +387,9 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
     );
     this.registerDisposer(
       this.skeletonGridLevel.changed.add(scheduleUpdateChunkPriorities),
+    );
+    this.registerDisposer(
+      this.skeletonGridLevel2d.changed.add(scheduleUpdateChunkPriorities),
     );
 
     // Debounce LOD changes to avoid making requests for every slider value
@@ -398,6 +402,18 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
       this.skeletonLod.changed.add(() => {
         this.pendingLodCleanup = true;
         debouncedLodUpdate();
+      }),
+    );
+
+    const debouncedLodUpdate2d = debounce(() => {
+      scheduleUpdateChunkPriorities();
+    }, SPATIALLY_INDEXED_SKELETON_LOD_DEBOUNCE_MS);
+    this.registerDisposer(() => debouncedLodUpdate2d.cancel());
+
+    this.registerDisposer(
+      this.skeletonLod2d.changed.add(() => {
+        this.pendingLodCleanup = true;
+        debouncedLodUpdate2d();
       }),
     );
     this.registerDisposer(
@@ -514,7 +530,10 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
         }
       }
       const renderScaleTarget = this.renderScaleTarget.value;
-      const skeletonGridLevel = this.skeletonGridLevel.value;
+      const is2dView = pixelSize !== undefined;
+      const skeletonGridLevel = (
+        is2dView ? this.skeletonGridLevel2d : this.skeletonGridLevel
+      ).value;
 
       const selectScales = (
         scales: TransformedSource<
@@ -606,7 +625,7 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
         return selected;
       };
 
-      const lodValue = this.skeletonLod.value;
+      const lodValue = (is2dView ? this.skeletonLod2d : this.skeletonLod).value;
       for (const scales of transformedSources) {
         const selectedScales = selectScales(scales);
         for (const { tsource, scaleIndex } of selectedScales) {
@@ -651,89 +670,5 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
         }
       }
     }
-  }
-}
-
-@registerSharedObject(SPATIALLY_INDEXED_SKELETON_SLICEVIEW_RENDER_LAYER_RPC_ID)
-export class SpatiallyIndexedSkeletonSliceViewRenderLayerBackend extends SliceViewRenderLayerBackend {
-  skeletonGridLevel: SharedWatchableValue<number>;
-  skeletonLod: SharedWatchableValue<number>;
-  private chunkManager_: ChunkManager;
-  private pendingLodCleanup = false;
-  private trackedSources = new Set<SpatiallyIndexedSkeletonSourceBackend>();
-
-  constructor(rpc: RPC, options: any) {
-    super(rpc, options);
-    this.skeletonGridLevel = rpc.get(options.skeletonGridLevel);
-    this.skeletonLod = rpc.get(options.skeletonLod);
-    const chunkManager = rpc.get(options.chunkManager);
-    this.chunkManager_ = chunkManager;
-    const scheduleUpdateChunkPriorities = () =>
-      chunkManager.scheduleUpdateChunkPriorities();
-    this.registerDisposer(
-      this.skeletonGridLevel.changed.add(scheduleUpdateChunkPriorities),
-    );
-    // Debounce LOD changes to avoid making requests for every slider value.
-    const debouncedLodUpdate = debounce(() => {
-      scheduleUpdateChunkPriorities();
-    }, SPATIALLY_INDEXED_SKELETON_LOD_DEBOUNCE_MS);
-    this.registerDisposer(() => debouncedLodUpdate.cancel());
-
-    this.registerDisposer(
-      this.skeletonLod.changed.add(() => {
-        this.pendingLodCleanup = true;
-        debouncedLodUpdate();
-      }),
-    );
-    this.registerDisposer(
-      chunkManager.recomputeChunkPrioritiesLate.add(() => {
-        if (!this.pendingLodCleanup) return;
-        cancelStaleSpatiallyIndexedSkeletonDownloads(
-          chunkManager,
-          this.trackedSources,
-          chunkManager.recomputeChunkPriorities.count,
-        );
-        this.pendingLodCleanup = false;
-      }),
-    );
-  }
-
-  prepareChunkSourceForRequest(source: SpatiallyIndexedSkeletonSourceBackend) {
-    this.trackedSources.add(source);
-    source.currentLod = this.skeletonLod.value;
-    source.currentRequestGeneration =
-      this.chunkManager_.recomputeChunkPriorities.count;
-    source.currentRequestOwner =
-      SpatiallyIndexedSkeletonChunkRequestOwner.VIEW_2D;
-  }
-
-  filterVisibleSources(
-    sliceView: SliceViewBase,
-    sources: readonly TransformedSource[],
-  ): Iterable<TransformedSource> {
-    const lodValue = this.skeletonLod.value;
-    for (const tsource of sources) {
-      const source = tsource.source as SpatiallyIndexedSkeletonSourceBackend;
-      this.trackedSources.add(source);
-      source.currentLod = lodValue;
-      source.currentRequestGeneration =
-        this.chunkManager_.recomputeChunkPriorities.count;
-      source.currentRequestOwner =
-        SpatiallyIndexedSkeletonChunkRequestOwner.VIEW_2D;
-    }
-
-    if (
-      sources.length > 0 &&
-      sources.every(
-        (source) => getSpatiallyIndexedSkeletonGridIndex(source) !== undefined,
-      )
-    ) {
-      return selectSpatiallyIndexedSkeletonEntriesByGrid(
-        sources,
-        this.skeletonGridLevel.value,
-        getSpatiallyIndexedSkeletonGridIndex,
-      );
-    }
-    return super.filterVisibleSources(sliceView, sources);
   }
 }

@@ -129,11 +129,9 @@ import {
   SliceViewPanelSkeletonLayer,
   PerspectiveViewSpatiallyIndexedSkeletonLayer,
   SliceViewPanelSpatiallyIndexedSkeletonLayer,
-  SliceViewSpatiallyIndexedSkeletonLayer,
   SpatiallyIndexedSkeletonLayer,
   SpatiallyIndexedSkeletonSource,
   MultiscaleSpatiallyIndexedSkeletonSource,
-  MultiscaleSliceViewSpatiallyIndexedSkeletonLayer,
 } from "#src/skeleton/frontend.js";
 import {
   classifySpatialSkeletonDisplayNodeType as getSpatialSkeletonDisplayNodeType,
@@ -1698,8 +1696,7 @@ export class SegmentationUserLayer extends Base {
           !layers.some(
             (layer) =>
               (layer instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer ||
-                layer instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer ||
-                layer instanceof SliceViewSpatiallyIndexedSkeletonLayer) &&
+                layer instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer) &&
               getSpatiallyIndexedSkeletonSource(layer.base) !== undefined,
           ),
         { changed: this.layersChanged, value: this.renderLayers },
@@ -1799,30 +1796,18 @@ export class SegmentationUserLayer extends Base {
       if (layer instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer) {
         return layer.base;
       }
-      if (layer instanceof SliceViewSpatiallyIndexedSkeletonLayer) {
-        return layer.base;
-      }
     }
     return undefined;
   };
 
   getSpatialSkeletonChunkStats(kind: "2d" | "3d") {
+    // 2D chunks are now handled by the same backend as 3D, so only report
+    // under "3d" to avoid double-counting in updateSpatialSkeletonChunkLoadState.
+    if (kind === "2d") return { presentCount: 0, totalCount: 0 };
     let needed = 0;
     let available = 0;
     for (const layer of this.renderLayers) {
-      if (
-        kind === "3d" &&
-        layer instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer
-      ) {
-        needed += layer.layerChunkProgressInfo.numVisibleChunksNeeded;
-        available += layer.layerChunkProgressInfo.numVisibleChunksAvailable;
-        continue;
-      }
-      if (
-        kind === "2d" &&
-        (layer instanceof SliceViewSpatiallyIndexedSkeletonLayer ||
-          layer instanceof MultiscaleSliceViewSpatiallyIndexedSkeletonLayer)
-      ) {
+      if (layer instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer) {
         needed += layer.layerChunkProgressInfo.numVisibleChunksNeeded;
         available += layer.layerChunkProgressInfo.numVisibleChunksAvailable;
       }
@@ -1857,8 +1842,7 @@ export class SegmentationUserLayer extends Base {
     for (const layer of this.renderLayers) {
       if (
         layer instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer ||
-        layer instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer ||
-        layer instanceof SliceViewSpatiallyIndexedSkeletonLayer
+        layer instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer
       ) {
         hasSpatialSkeletonLayer = true;
         break;
@@ -1876,8 +1860,7 @@ export class SegmentationUserLayer extends Base {
     for (const layer of this.renderLayers) {
       if (
         layer instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer ||
-        layer instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer ||
-        layer instanceof SliceViewSpatiallyIndexedSkeletonLayer
+        layer instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer
       ) {
         return layer.base.source;
       }
@@ -2091,13 +2074,6 @@ export class SegmentationUserLayer extends Base {
               ),
             );
           } else if (mesh instanceof MultiscaleSpatiallyIndexedSkeletonSource) {
-            const base = new MultiscaleSliceViewSpatiallyIndexedSkeletonLayer(
-              this.manager.chunkManager,
-              mesh,
-              displayState,
-            );
-            loadedSubsource.addRenderLayer(base);
-
             const perspectiveSources = mesh.getPerspectiveSources();
             const slicePanelSources = mesh.getSliceViewPanelSources();
             const sharedSpatialSkeletonSources =
@@ -2114,6 +2090,8 @@ export class SegmentationUserLayer extends Base {
                 {
                   gridLevel: displayState.spatialSkeletonGridLevel3d,
                   lod: displayState.skeletonLod,
+                  gridLevel2d: displayState.spatialSkeletonGridLevel2d,
+                  lod2d: displayState.spatialSkeletonLod2d,
                   sources2d: slicePanelSources,
                   selectedNodeId: this.selectedSpatialSkeletonNodeId,
                   pendingNodePositionVersion:
@@ -2150,6 +2128,8 @@ export class SegmentationUserLayer extends Base {
               {
                 gridLevel: displayState.spatialSkeletonGridLevel3d,
                 lod: displayState.skeletonLod,
+                gridLevel2d: displayState.spatialSkeletonGridLevel2d,
+                lod2d: displayState.spatialSkeletonLod2d,
                 selectedNodeId: this.selectedSpatialSkeletonNodeId,
                 pendingNodePositionVersion:
                   this.spatialSkeletonState.pendingNodePositionVersion,
@@ -2162,9 +2142,6 @@ export class SegmentationUserLayer extends Base {
             );
             loadedSubsource.addRenderLayer(
               new PerspectiveViewSpatiallyIndexedSkeletonLayer(base.addRef()),
-            );
-            loadedSubsource.addRenderLayer(
-              new SliceViewSpatiallyIndexedSkeletonLayer(base.addRef()),
             );
             loadedSubsource.addRenderLayer(
               new SliceViewPanelSpatiallyIndexedSkeletonLayer(

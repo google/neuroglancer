@@ -25,8 +25,6 @@ const { SegmentationUserLayer } = await import(
 const {
   PerspectiveViewSpatiallyIndexedSkeletonLayer,
   SliceViewPanelSpatiallyIndexedSkeletonLayer,
-  SliceViewSpatiallyIndexedSkeletonLayer,
-  MultiscaleSliceViewSpatiallyIndexedSkeletonLayer,
 } = await import("#src/skeleton/frontend.js");
 
 const { SegmentSelectionState } = await import(
@@ -81,30 +79,14 @@ function makeSpatialSkeletonLayerWithSource(source: unknown) {
 
 describe("layer/segmentation spatial skeleton chunk stats", () => {
   it("tracks combined chunk load state from the loading render layers only", () => {
+    // After the 2D/3D backend unification, only PerspectiveViewSpatiallyIndexedSkeletonLayer
+    // contributes to the chunk stats (it handles both 2D and 3D views via the shared backend).
     const perspectiveLayer = Object.assign(
       Object.create(PerspectiveViewSpatiallyIndexedSkeletonLayer.prototype),
       {
         layerChunkProgressInfo: {
-          numVisibleChunksNeeded: 5,
-          numVisibleChunksAvailable: 3,
-        },
-      },
-    );
-    const sliceLayer = Object.assign(
-      Object.create(SliceViewSpatiallyIndexedSkeletonLayer.prototype),
-      {
-        layerChunkProgressInfo: {
-          numVisibleChunksNeeded: 4,
-          numVisibleChunksAvailable: 2,
-        },
-      },
-    );
-    const multiscaleSliceLayer = Object.assign(
-      Object.create(MultiscaleSliceViewSpatiallyIndexedSkeletonLayer.prototype),
-      {
-        layerChunkProgressInfo: {
-          numVisibleChunksNeeded: 6,
-          numVisibleChunksAvailable: 5,
+          numVisibleChunksNeeded: 9,
+          numVisibleChunksAvailable: 7,
         },
       },
     );
@@ -121,12 +103,7 @@ describe("layer/segmentation spatial skeleton chunk stats", () => {
     const layer = Object.assign(
       Object.create(SegmentationUserLayer.prototype),
       {
-        renderLayers: [
-          perspectiveLayer,
-          sliceLayer,
-          multiscaleSliceLayer,
-          slicePanelLayer,
-        ],
+        renderLayers: [perspectiveLayer, slicePanelLayer],
         spatialSkeletonVisibleChunksNeeded: new WatchableValue(0),
         spatialSkeletonVisibleChunksAvailable: new WatchableValue(0),
         spatialSkeletonVisibleChunksLoaded: new WatchableValue(false),
@@ -146,8 +123,8 @@ describe("layer/segmentation spatial skeleton chunk stats", () => {
 
     layer.updateSpatialSkeletonChunkLoadState();
 
-    expect(layer.spatialSkeletonVisibleChunksNeeded.value).toBe(15);
-    expect(layer.spatialSkeletonVisibleChunksAvailable.value).toBe(10);
+    expect(layer.spatialSkeletonVisibleChunksNeeded.value).toBe(9);
+    expect(layer.spatialSkeletonVisibleChunksAvailable.value).toBe(7);
     expect(layer.spatialSkeletonVisibleChunksLoaded.value).toBe(false);
   });
 });

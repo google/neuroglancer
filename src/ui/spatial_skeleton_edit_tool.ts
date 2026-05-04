@@ -41,7 +41,6 @@ import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/frontend.js";
 import {
   PerspectiveViewSpatiallyIndexedSkeletonLayer,
   SliceViewPanelSpatiallyIndexedSkeletonLayer,
-  SliceViewSpatiallyIndexedSkeletonLayer,
 } from "#src/skeleton/frontend.js";
 import { StatusMessage } from "#src/status.js";
 import type { SpatialSkeletonToolPointInfo } from "#src/ui/spatial_skeleton_tool_messages.js";
@@ -172,9 +171,6 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
       return pickedLayer.base;
     }
     if (pickedLayer instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer) {
-      return pickedLayer.base;
-    }
-    if (pickedLayer instanceof SliceViewSpatiallyIndexedSkeletonLayer) {
       return pickedLayer.base;
     }
     return this.layer.getSpatiallyIndexedSkeletonLayer();
