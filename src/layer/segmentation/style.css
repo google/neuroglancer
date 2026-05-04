@@ -521,7 +521,9 @@
   min-width: 0;
 }
 
-.neuroglancer-spatial-skeleton-tree-entry:not([data-selected="true"]):hover
+.neuroglancer-spatial-skeleton-tree-entry:not(
+    [data-selected="true"]
+  )[data-list-hovered="true"]
   .neuroglancer-spatial-skeleton-tree-row:not([data-node-type="root"]) {
   background: #121212;
 }
@@ -576,15 +578,16 @@
   align-items: center;
   gap: 0.1em;
   width: var(--neuroglancer-skeleton-actions-width);
-  opacity: 0;
+  visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.12s ease-in-out;
   justify-content: flex-start;
 }
 
-.neuroglancer-spatial-skeleton-tree-entry:hover
+.neuroglancer-spatial-skeleton-tree-entry[data-list-hovered="true"]
+  .neuroglancer-spatial-skeleton-node-actions,
+.neuroglancer-spatial-skeleton-tree-entry:focus-within
   .neuroglancer-spatial-skeleton-node-actions {
-  opacity: 1;
+  visibility: visible;
   pointer-events: auto;
 }
 

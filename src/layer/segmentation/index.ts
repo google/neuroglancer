@@ -31,6 +31,7 @@ import {
 import type {
   LayerActionContext,
   ManagedUserLayer,
+  MouseSelectionState,
   UserLayerSelectionState,
 } from "#src/layer/index.js";
 import {
@@ -2565,6 +2566,33 @@ export class SegmentationUserLayer extends Base {
       state.value = undefined;
     }
   }
+
+  captureSelectionState(
+    state: this["selectionState"],
+    mouseState: MouseSelectionState,
+  ) {
+    super.captureSelectionState(state, mouseState);
+    const pickedSpatialSkeleton = mouseState.pickedSpatialSkeleton;
+    if (pickedSpatialSkeleton === undefined) return;
+    const pickedRenderLayer = mouseState.pickedRenderLayer;
+    if (
+      pickedRenderLayer !== null &&
+      !this.renderLayers.includes(pickedRenderLayer)
+    ) {
+      return;
+    }
+    const nodeId = normalizeOptionalPositiveSafeInteger(
+      pickedSpatialSkeleton.nodeId,
+    );
+    state.nodeId = nodeId === undefined ? undefined : nodeId.toString();
+    const segmentId = normalizeOptionalPositiveSafeInteger(
+      pickedSpatialSkeleton.segmentId,
+    );
+    if (segmentId !== undefined) {
+      state.value = BigInt(segmentId);
+    }
+  }
+
   selectionStateToJson(state: this["selectionState"], forPython: boolean): any {
     const json = super.selectionStateToJson(state, forPython);
     const { value } = state;

@@ -4,6 +4,7 @@ import { CatmaidSpatialSkeletonEditController } from "#src/datasource/catmaid/sp
 import { buildCatmaidNeighborhoodEditContext } from "#src/datasource/catmaid/edit_state.js";
 import { makeCatmaidNodeSourceState } from "#src/datasource/catmaid/api.js";
 import {
+  executeSpatialSkeletonAddNode,
   executeSpatialSkeletonDeleteNode,
   executeSpatialSkeletonMerge,
   executeSpatialSkeletonMoveNode,
@@ -273,6 +274,144 @@ describe("spatial_skeleton_commands", () => {
       invalidateFullSkeletonCache: false,
     });
     expect(skeletonLayer.invalidateSourceCaches).not.toHaveBeenCalled();
+  });
+
+  it("moves to the parent node when undoing an add-node command", async () => {
+    suppressStatusMessages();
+
+    const segmentId = 23;
+    const parentNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 1,
+      segmentId,
+      position: new Float32Array([4, 5, 6]),
+      isTrueEnd: false,
+      sourceState: testSourceState("parent-before-add"),
+    };
+    const addNode = vi.fn().mockResolvedValue({
+      nodeId: 2,
+      segmentId,
+      sourceState: testSourceState("added-after-add"),
+      parentSourceState: testSourceState("parent-after-add"),
+    });
+    const deleteNode = vi.fn().mockResolvedValue({
+      nodeSourceStateUpdates: [
+        {
+          nodeId: parentNode.nodeId,
+          sourceState: testSourceState("parent-after-undo"),
+        },
+      ],
+    });
+    const skeletonSource = makeEditableSkeletonSource({
+      addNode,
+      deleteNode,
+    });
+    const spatialSkeletonState = new SpatialSkeletonState();
+    spatialSkeletonState.upsertCachedNode(parentNode, {
+      allowUncachedSegment: true,
+    });
+    const skeletonLayer = {
+      source: skeletonSource,
+      getNode: vi.fn((nodeId: number) =>
+        spatialSkeletonState.getCachedNode(nodeId),
+      ),
+      retainOverlaySegment: vi.fn(),
+      invalidateSourceCaches: vi.fn(),
+    };
+    const layer = {
+      displayState: {
+        segmentationGroupState: {
+          value: {
+            visibleSegments: new Set<bigint>([BigInt(segmentId)]),
+            selectedSegments: new Set<bigint>(),
+            segmentEquivalences: {},
+            temporaryVisibleSegments: new Set<bigint>(),
+            temporarySegmentEquivalences: {},
+            useTemporaryVisibleSegments: { value: false },
+            useTemporarySegmentEquivalences: { value: false },
+          },
+        },
+      },
+      manager: {
+        root: {
+          selectionState: {
+            pin: {
+              value: true,
+            },
+          },
+        },
+      },
+      spatialSkeletonState,
+      getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
+      async getSpatialSkeletonDeleteOperationContext(
+        node: SpatiallyIndexedSkeletonNode,
+      ) {
+        const segmentNodes =
+          spatialSkeletonState.getCachedSegmentNodes(node.segmentId) ?? [];
+        const currentNode = findSpatiallyIndexedSkeletonNode(
+          segmentNodes,
+          node.nodeId,
+        );
+        if (currentNode === undefined) {
+          throw new Error(`Unable to resolve cached node ${node.nodeId}.`);
+        }
+        const childNodes = getSpatiallyIndexedSkeletonDirectChildren(
+          segmentNodes,
+          currentNode.nodeId,
+        );
+        return {
+          node: currentNode,
+          parentNode: getSpatiallyIndexedSkeletonNodeParent(
+            segmentNodes,
+            currentNode,
+          ),
+          childNodes,
+        };
+      },
+      selectSegment: vi.fn(),
+      selectAndMoveToSpatialSkeletonNode: vi.fn(),
+      selectSpatialSkeletonNode: vi.fn(),
+      clearSpatialSkeletonNodeSelection: vi.fn(),
+      moveViewToSpatialSkeletonNodePosition: vi.fn(),
+      markSpatialSkeletonNodeDataChanged: vi.fn(),
+    };
+
+    await executeSpatialSkeletonAddNode(layer as any, {
+      skeletonId: segmentId,
+      parentNodeId: parentNode.nodeId,
+      positionInModelSpace: new Float32Array([7, 8, 9]),
+    });
+
+    layer.selectAndMoveToSpatialSkeletonNode.mockClear();
+    layer.selectSpatialSkeletonNode.mockClear();
+    layer.moveViewToSpatialSkeletonNodePosition.mockClear();
+
+    await undoSpatialSkeletonCommand(layer as any);
+
+    expect(deleteNode).toHaveBeenCalledWith(2, {
+      childNodeIds: [],
+      editContext: {
+        node: {
+          nodeId: 2,
+          parentNodeId: parentNode.nodeId,
+          revisionToken: "added-after-add",
+        },
+        parent: {
+          nodeId: parentNode.nodeId,
+          revisionToken: "parent-after-add",
+        },
+        children: [],
+      },
+    });
+    expect(spatialSkeletonState.getCachedNode(2)).toBeUndefined();
+    expect(layer.selectAndMoveToSpatialSkeletonNode).toHaveBeenCalledWith(
+      {
+        ...parentNode,
+        sourceState: testSourceState("parent-after-add"),
+      },
+      true,
+    );
+    expect(layer.selectSpatialSkeletonNode).not.toHaveBeenCalled();
+    expect(layer.moveViewToSpatialSkeletonNodePosition).not.toHaveBeenCalled();
   });
 
   it("restores internal-node delete undo as an insertion in the local cache", async () => {

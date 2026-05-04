@@ -354,6 +354,73 @@ describe("layer/segmentation spatial skeleton selection serialization", () => {
     expect(selectionState.value.layers[0].state.value).toBeUndefined();
   });
 
+  it("captures spatial skeleton node ids from unpinned hover selection", () => {
+    const renderLayer = {};
+    const layer = Object.create(SegmentationUserLayer.prototype);
+    Object.defineProperty(layer, "localCoordinateSpace", {
+      value: { value: { rank: 0 } },
+      configurable: true,
+    });
+    Object.defineProperty(layer, "localPosition", {
+      value: { value: new Float32Array(0) },
+      configurable: true,
+    });
+    Object.defineProperty(layer, "renderLayers", {
+      value: [renderLayer],
+      configurable: true,
+    });
+    Object.defineProperty(layer, "getValueAt", {
+      value: vi.fn(() => 7n),
+      configurable: true,
+    });
+    const state = {} as any;
+    layer.initializeSelectionState(state);
+
+    layer.captureSelectionState(state, {
+      active: true,
+      position: new Float32Array(0),
+      pickedRenderLayer: renderLayer,
+      pickedSpatialSkeleton: { nodeId: 31, segmentId: 9 },
+    } as any);
+
+    expect(state.nodeId).toBe("31");
+    expect(state.value).toBe(9n);
+  });
+
+  it("ignores spatial skeleton node ids from other render layers", () => {
+    const renderLayer = {};
+    const otherRenderLayer = {};
+    const layer = Object.create(SegmentationUserLayer.prototype);
+    Object.defineProperty(layer, "localCoordinateSpace", {
+      value: { value: { rank: 0 } },
+      configurable: true,
+    });
+    Object.defineProperty(layer, "localPosition", {
+      value: { value: new Float32Array(0) },
+      configurable: true,
+    });
+    Object.defineProperty(layer, "renderLayers", {
+      value: [renderLayer],
+      configurable: true,
+    });
+    Object.defineProperty(layer, "getValueAt", {
+      value: vi.fn(() => 7n),
+      configurable: true,
+    });
+    const state = {} as any;
+    layer.initializeSelectionState(state);
+
+    layer.captureSelectionState(state, {
+      active: true,
+      position: new Float32Array(0),
+      pickedRenderLayer: otherRenderLayer,
+      pickedSpatialSkeleton: { nodeId: 31, segmentId: 9 },
+    } as any);
+
+    expect(state.nodeId).toBeUndefined();
+    expect(state.value).toBe(7n);
+  });
+
   it("renders only segment and node ids for non-inspected spatial index node selections", () => {
     const state = {
       nodeId: "22242672",

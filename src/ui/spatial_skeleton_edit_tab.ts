@@ -37,7 +37,10 @@ import {
   undoSpatialSkeletonCommand,
 } from "#src/layer/segmentation/spatial_skeleton_commands.js";
 import { showSpatialSkeletonActionError } from "#src/layer/segmentation/spatial_skeleton_errors.js";
-import { getSegmentEquivalences } from "#src/segmentation_display_state/base.js";
+import {
+  getSegmentEquivalences,
+  getVisibleSegments,
+} from "#src/segmentation_display_state/base.js";
 import { getBaseObjectColor } from "#src/segmentation_display_state/frontend.js";
 import {
   SpatialSkeletonActions,
@@ -307,6 +310,7 @@ export class SpatialSkeletonEditTab extends Tab {
     let pendingScrollToSelectedNode = false;
     let loadedNodeSummarySuffix = "";
     let hoveredViewerNodeId: number | undefined;
+    let hoveredListNodeId: number | undefined;
     const pendingDeleteNodes = new Set<number>();
     const pendingRerootNodes = new Set<number>();
     const pendingTrueEndNodes = new Set<number>();
@@ -521,6 +525,21 @@ export class SpatialSkeletonEditTab extends Tab {
       return getSegmentIdFromLayerSelectionValue(layerSelectionState);
     };
 
+    const addVisibleSegmentIds = (segmentIds: Set<number>) => {
+      const visibleSegments = getVisibleSegments(
+        layer.displayState.segmentationGroupState.value,
+      );
+      for (const segmentId of visibleSegments.keys()) {
+        const normalizedSegmentId = Number(segmentId);
+        if (
+          Number.isSafeInteger(normalizedSegmentId) &&
+          normalizedSegmentId > 0
+        ) {
+          segmentIds.add(normalizedSegmentId);
+        }
+      }
+    };
+
     const scrollListItemIntoView = (index: number) => {
       if (nodesList.getItemElement(index) !== undefined) {
         nodesList.scrollItemIntoView(index);
@@ -541,8 +560,10 @@ export class SpatialSkeletonEditTab extends Tab {
         const { nodeId } = item.row.node;
         const isSelected = nodeId === selectedNodeId;
         const isHovered = nodeId === hoveredViewerNodeId;
+        const isListHovered = nodeId === hoveredListNodeId;
         entry.dataset.selected = String(isSelected);
         entry.dataset.viewerHovered = String(isHovered);
+        entry.dataset.listHovered = String(isListHovered);
       });
       if (options.scrollSelectedIntoView) {
         pendingScrollToSelectedNode = false;
@@ -560,6 +581,12 @@ export class SpatialSkeletonEditTab extends Tab {
       const nextHoveredNodeId = getHoveredNodeIdFromViewer();
       if (hoveredViewerNodeId === nextHoveredNodeId) return;
       hoveredViewerNodeId = nextHoveredNodeId;
+      applyRowInteractionState();
+    };
+
+    const updateHoveredListNode = (nextHoveredNodeId: number | undefined) => {
+      if (hoveredListNodeId === nextHoveredNodeId) return;
+      hoveredListNodeId = nextHoveredNodeId;
       applyRowInteractionState();
     };
 
@@ -1122,6 +1149,13 @@ export class SpatialSkeletonEditTab extends Tab {
         node.nodeId === layer.selectedSpatialSkeletonNodeId.value,
       );
       entry.dataset.viewerHovered = String(node.nodeId === hoveredViewerNodeId);
+      entry.dataset.listHovered = String(node.nodeId === hoveredListNodeId);
+      entry.addEventListener("mouseenter", () => {
+        updateHoveredListNode(node.nodeId);
+      });
+      entry.addEventListener("mouseleave", () => {
+        updateHoveredListNode(undefined);
+      });
 
       const row = document.createElement("div");
       row.className = "neuroglancer-spatial-skeleton-tree-row";
@@ -1434,16 +1468,6 @@ export class SpatialSkeletonEditTab extends Tab {
           ? a.nodeId - b.nodeId
           : a.segmentId - b.segmentId,
       );
-      const selectedId = layer.selectedSpatialSkeletonNodeId.value;
-      if (
-        allNodes.length > 0 &&
-        (selectedId === undefined ||
-          !allNodes.some((node) => node.nodeId === selectedId))
-      ) {
-        layer.selectSpatialSkeletonNode(allNodes[0].nodeId, false, {
-          segmentId: allNodes[0].segmentId,
-        });
-      }
       updateDisplay(summarySuffix);
     };
 
@@ -1477,6 +1501,7 @@ export class SpatialSkeletonEditTab extends Tab {
 
       const segmentId = activeSegmentId;
       const cachedSegmentIds = new Set<number>([segmentId]);
+      addVisibleSegmentIds(cachedSegmentIds);
       for (const retainedSegmentId of skeletonLayer.getRetainedOverlaySegmentIds()) {
         cachedSegmentIds.add(retainedSegmentId);
       }

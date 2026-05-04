@@ -1333,7 +1333,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     return undefined;
   }
 
-  getMeshSource() {
+  getMeshSource(): MeshSource | undefined {
     const { layer } = this;
     for (const dataSource of layer.dataSources) {
       const { loadState } = dataSource;
@@ -1351,7 +1351,9 @@ class GraphConnection extends SegmentationGraphSourceConnection {
           (subsource) => subsource.id === "mesh",
         )[0];
         if (meshSubsource) {
-          return meshSubsource.subsource.mesh;
+          // `DataSubsource.mesh` is widened for spatial skeleton support, but Graphene
+          // segment updates still target mesh sources.
+          return meshSubsource.subsource.mesh as MeshSource | undefined;
         }
       }
     }
@@ -1359,9 +1361,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
   }
 
   meshAddNewSegments(segments: bigint[]) {
-    // `DataSubsource.mesh` is widened for spatial skeleton support, but Graphene
-    // segment updates still target mesh sources.
-    const meshSource = this.getMeshSource() as MeshSource | undefined;
+    const meshSource = this.getMeshSource();
     if (meshSource) {
       for (const segment of segments) {
         meshSource.rpc!.invoke(GRAPHENE_MESH_NEW_SEGMENT_RPC_ID, {
