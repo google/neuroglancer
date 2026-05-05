@@ -185,6 +185,9 @@ import {
 import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 import type { RPC } from "#src/worker_rpc.js";
 
+const DEBUG_SPATIAL_SKELETON_OVERLAY = true;
+const DEBUG_EXCLUDED_SEGMENTS = true;
+
 const tempMat2 = mat4.create();
 const DEFAULT_FRAGMENT_MAIN = `void main() {
   emitDefault();
@@ -325,6 +328,22 @@ class RenderHelper extends RefCounted {
   }
 
   private defineDynamicSegmentAppearance(builder: ShaderBuilder) {
+    // Show overlay as red, excluded as blue
+    // if overlay debug is on and excluded debug, assume intention
+    // is to look for places that the overlay should cover
+    // the excluded, but does not
+    const excludedSegmentAlpha = DEBUG_EXCLUDED_SEGMENTS ? "1.0" : "0.0";
+    let colorExpression = `return ${this.segmentColorShaderManager.prefix}(segmentId);`;
+    let alphaExpression = `return isVisible ? uVisibleAlpha : uHiddenAlpha;`;
+    if (DEBUG_EXCLUDED_SEGMENTS) {
+      colorExpression = `
+        if (${this.excludedSegmentsShaderManager.hasFunctionName}(segmentId)) {
+          return vec3(0.0, 0.0, 1.0);
+        }
+        ${colorExpression}
+      `;
+      if (!DEBUG_SPATIAL_SKELETON_OVERLAY) alphaExpression = `return 0.0;`;
+    }
     this.visibleSegmentsShaderManager.defineShader(builder);
     this.excludedSegmentsShaderManager.defineShader(builder);
     this.segmentColorShaderManager.defineShader(builder);
@@ -350,17 +369,17 @@ vec3 getSegmentLookupColor(uint64_t segmentId) {
   if (uUseSegmentDefaultColor != 0u) {
     return uSegmentDefaultColor;
   }
-  return ${this.segmentColorShaderManager.prefix}(segmentId);
+  ${colorExpression}
 }
 float getSegmentLookupAlpha(uint64_t segmentId) {
   if (${this.excludedSegmentsShaderManager.hasFunctionName}(segmentId)) {
-    return 0.0;
+    return ${excludedSegmentAlpha};
   }
   bool isVisible = ${this.visibleSegmentsShaderManager.hasFunctionName}(segmentId);
   if (uSkipVisibleSegments != 0u && isVisible) {
     return 0.0;
   }
-  return isVisible ? uVisibleAlpha : uHiddenAlpha;
+  ${alphaExpression}
 }
 vec4 getSegmentAppearance(highp uint segmentValue) {
   uint64_t segmentId = getSegmentAppearanceId(segmentValue);
@@ -426,6 +445,12 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
         segmentDefaultColor[1],
         segmentDefaultColor[2],
       );
+    }
+    if (DEBUG_SPATIAL_SKELETON_OVERLAY && excludedSegments === undefined) {
+      // Use a red color for everything in the overlay
+      // or if there is only a regular skeleton layer
+      gl.uniform1ui(shader.uniform("uUseSegmentDefaultColor"), 1);
+      gl.uniform3f(shader.uniform("uSegmentDefaultColor"), 1.0, 0.0, 0.0);
     }
 
     const segmentStatedColors = colorGroupState.segmentStatedColors;
