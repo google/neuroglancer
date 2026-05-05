@@ -398,24 +398,12 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
     }, SPATIALLY_INDEXED_SKELETON_LOD_DEBOUNCE_MS);
     this.registerDisposer(() => debouncedLodUpdate.cancel());
 
-    this.registerDisposer(
-      this.skeletonLod.changed.add(() => {
-        this.pendingLodCleanup = true;
-        debouncedLodUpdate();
-      }),
-    );
-
-    const debouncedLodUpdate2d = debounce(() => {
-      scheduleUpdateChunkPriorities();
-    }, SPATIALLY_INDEXED_SKELETON_LOD_DEBOUNCE_MS);
-    this.registerDisposer(() => debouncedLodUpdate2d.cancel());
-
-    this.registerDisposer(
-      this.skeletonLod2d.changed.add(() => {
-        this.pendingLodCleanup = true;
-        debouncedLodUpdate2d();
-      }),
-    );
+    const onLodChanged = () => {
+      this.pendingLodCleanup = true;
+      debouncedLodUpdate();
+    };
+    this.registerDisposer(this.skeletonLod.changed.add(onLodChanged));
+    this.registerDisposer(this.skeletonLod2d.changed.add(onLodChanged));
     this.registerDisposer(
       this.chunkManager.recomputeChunkPriorities.add(() =>
         this.recomputeChunkPriorities(),
