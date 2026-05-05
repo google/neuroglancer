@@ -33,7 +33,13 @@ function makeEditableSourceMethods() {
     moveNode: vi.fn(),
     splitSkeleton: vi.fn(),
     mergeSkeletons: vi.fn(),
-    toggleTrueEnd: vi.fn(),
+  };
+}
+
+function makeEditCommandSource() {
+  return {
+    supports: vi.fn(),
+    createCommand: vi.fn(),
   };
 }
 
@@ -41,6 +47,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
   it("returns an editable source when mandatory edit actions are present", () => {
     const source = {
       ...makeEditableSourceMethods(),
+      spatialSkeletonEditCommandSource: makeEditCommandSource(),
       listSkeletons: async () => [],
       getSkeleton: async () => [],
       fetchNodes: async () => [],
@@ -53,7 +60,22 @@ describe("skeleton/spatial_skeleton_manager", () => {
   it("does not treat a source missing mandatory edit actions as editable", () => {
     const source = {
       ...makeEditableSourceMethods(),
-      toggleTrueEnd: undefined,
+      mergeSkeletons: undefined,
+      spatialSkeletonEditCommandSource: makeEditCommandSource(),
+      listSkeletons: async () => [],
+      getSkeleton: async () => [],
+      fetchNodes: async () => [],
+      getSpatialIndexMetadata: async () => null,
+    };
+
+    expect(
+      getEditableSpatiallyIndexedSkeletonSource({ source }),
+    ).toBeUndefined();
+  });
+
+  it("does not treat a source without an edit command source as editable", () => {
+    const source = {
+      ...makeEditableSourceMethods(),
       listSkeletons: async () => [],
       getSkeleton: async () => [],
       fetchNodes: async () => [],
@@ -68,6 +90,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
   it("does not require optional edit actions for editable source validation", () => {
     const source = {
       ...makeEditableSourceMethods(),
+      spatialSkeletonEditCommandSource: makeEditCommandSource(),
       listSkeletons: async () => [],
       getSkeleton: async () => [],
       fetchNodes: async () => [],
@@ -81,6 +104,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const source = {
       ...makeEditableSourceMethods(),
       spatialSkeletonReadOnly: true,
+      spatialSkeletonEditCommandSource: makeEditCommandSource(),
       listSkeletons: async () => [],
       getSkeleton: async () => [],
       fetchNodes: async () => [],

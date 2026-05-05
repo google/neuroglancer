@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import type { SpatialSkeletonEditCommandSource } from "#src/skeleton/edit_command_source.js";
+
 export type SpatialSkeletonVector = ArrayLike<number>;
 
 // Provider-specific node state that crosses the worker boundary must remain structured-cloneable.
@@ -37,7 +39,7 @@ export interface SpatialSkeletonGridCellIndex {
 export interface SpatialSkeletonSpatialIndexLevel {
   chunkSize: SpatialSkeletonVector;
   gridShape: readonly number[];
-  limit?: number;
+  limit: number;
 }
 
 export interface SpatiallyIndexedSkeletonNodeBase {
@@ -96,13 +98,14 @@ export interface SpatiallyIndexedSkeletonSource {
 
 export interface EditableSpatiallyIndexedSkeletonSource
   extends SpatiallyIndexedSkeletonSource {
+  readonly spatialSkeletonEditCommandSource: SpatialSkeletonEditCommandSource;
   readonly spatialSkeletonEditCapabilities?: SpatialSkeletonEditCapabilities;
   addNode: SpatialSkeletonEditOperation;
   deleteNode: SpatialSkeletonEditOperation;
   moveNode: SpatialSkeletonEditOperation;
   splitSkeleton: SpatialSkeletonEditOperation;
   mergeSkeletons: SpatialSkeletonEditOperation;
-  toggleTrueEnd: SpatialSkeletonEditOperation;
+  toggleTrueEnd?: SpatialSkeletonEditOperation;
   insertNode?: SpatialSkeletonEditOperation;
   rerootSkeleton?: SpatialSkeletonEditOperation;
   updateDescription?: SpatialSkeletonEditOperation;

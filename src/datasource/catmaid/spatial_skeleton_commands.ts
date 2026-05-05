@@ -40,7 +40,6 @@ import type {
   SpatialSkeletonSourceState,
   SpatialSkeletonVector,
 } from "#src/skeleton/api.js";
-import type { SpatialSkeletonEditCommandSource } from "#src/layer/segmentation/spatial_skeleton_commands.js";
 import {
   SpatialSkeletonActions,
   type SpatialSkeletonAction,
@@ -49,6 +48,7 @@ import type {
   SpatialSkeletonCommand,
   SpatialSkeletonCommandContext,
 } from "#src/skeleton/command_history.js";
+import type { SpatialSkeletonEditCommandSource } from "#src/skeleton/edit_command_source.js";
 import {
   findSpatiallyIndexedSkeletonNode,
   getSpatiallyIndexedSkeletonDirectChildren,

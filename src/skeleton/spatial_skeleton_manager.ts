@@ -21,6 +21,7 @@ import type {
   SpatiallyIndexedSkeletonSource,
 } from "#src/skeleton/api.js";
 import { SpatialSkeletonCommandHistory } from "#src/skeleton/command_history.js";
+import { isSpatialSkeletonEditCommandSource } from "#src/skeleton/edit_command_source.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/frontend.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -40,6 +41,15 @@ function hasFunction<T extends string>(
   );
 }
 
+function getProperty<T extends string>(
+  value: unknown,
+  property: T,
+): unknown {
+  return typeof value === "object" && value !== null
+    ? (value as Record<T, unknown>)[property]
+    : undefined;
+}
+
 export function isSpatiallyIndexedSkeletonSource(
   value: unknown,
 ): value is SpatiallyIndexedSkeletonSource {
@@ -57,12 +67,14 @@ export function isEditableSpatiallyIndexedSkeletonSource(
   return (
     isSpatiallyIndexedSkeletonSource(value) &&
     value.spatialSkeletonReadOnly !== true &&
+    isSpatialSkeletonEditCommandSource(
+      getProperty(value, "spatialSkeletonEditCommandSource"),
+    ) &&
     hasFunction(value, "addNode") &&
     hasFunction(value, "deleteNode") &&
     hasFunction(value, "moveNode") &&
     hasFunction(value, "splitSkeleton") &&
-    hasFunction(value, "mergeSkeletons") &&
-    hasFunction(value, "toggleTrueEnd")
+    hasFunction(value, "mergeSkeletons")
   );
 }
 

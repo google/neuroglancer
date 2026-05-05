@@ -68,6 +68,9 @@ describe("CatmaidClient skeleton editing methods", () => {
       dimension: { x: 10, y: 20, z: 30 },
       resolution: { x: 2, y: 3, z: 4 },
       translation: { x: 5, y: 6, z: 7 },
+      metadata: {
+        spatial: [{ chunk_size: [15, 15, 15], limit: 1 }],
+      },
     });
 
     await expect(client.getSpatialIndexMetadata()).resolves.toBeNull();
@@ -79,7 +82,7 @@ describe("CatmaidClient skeleton editing methods", () => {
         {
           chunkSize: [15, 15, 15],
           gridShape: [2, 4, 8],
-          limit: 0,
+          limit: 1,
         },
       ],
     });
@@ -87,6 +90,21 @@ describe("CatmaidClient skeleton editing methods", () => {
     expect((client as any).listStacks).toHaveBeenCalledTimes(2);
     expect((client as any).getStackInfo).toHaveBeenCalledTimes(1);
     warnSpy.mockRestore();
+  });
+
+  it("rejects CATMAID stack metadata without spatial skeleton levels", async () => {
+    const client = new CatmaidClient("https://example.invalid", 1);
+    (client as any).listStacks = vi.fn().mockResolvedValue([{ id: 7 }]);
+    (client as any).getStackInfo = vi.fn().mockResolvedValue({
+      dimension: { x: 10, y: 20, z: 30 },
+      resolution: { x: 2, y: 3, z: 4 },
+      translation: { x: 5, y: 6, z: 7 },
+      metadata: {},
+    });
+
+    await expect(client.getSpatialIndexMetadata()).rejects.toThrow(
+      /metadata\.spatial/i,
+    );
   });
 
   it("reads spatial skeleton spatial index levels from stack metadata", async () => {

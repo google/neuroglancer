@@ -20,42 +20,13 @@ import {
   SpatialSkeletonActions,
   type SpatialSkeletonAction,
 } from "#src/skeleton/actions.js";
+import type {
+  SpatialSkeletonCommandPayload,
+  SpatialSkeletonEditCommandSource,
+} from "#src/skeleton/edit_command_source.js";
 import type { SpatialSkeletonCommand } from "#src/skeleton/command_history.js";
 import { getEditableSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial_skeleton_manager.js";
 import { StatusMessage } from "#src/status.js";
-
-export type SpatialSkeletonCommandPayload = object;
-
-export interface SpatialSkeletonEditCommandSource {
-  supports(action: SpatialSkeletonAction): boolean;
-  createCommand(
-    action: SpatialSkeletonAction,
-    layer: SegmentationUserLayer,
-    payload: SpatialSkeletonCommandPayload,
-  ): SpatialSkeletonCommand | undefined;
-}
-
-type SpatialSkeletonEditCommandSourceCandidate = {
-  supports?: (action: SpatialSkeletonAction) => boolean;
-  createCommand?: (
-    action: SpatialSkeletonAction,
-    layer: SegmentationUserLayer,
-    payload: SpatialSkeletonCommandPayload,
-  ) => SpatialSkeletonCommand | undefined;
-};
-
-export function isSpatialSkeletonEditCommandSource(
-  value: object | undefined,
-): value is SpatialSkeletonEditCommandSource {
-  return (
-    value !== undefined &&
-    typeof (value as SpatialSkeletonEditCommandSourceCandidate).supports ===
-      "function" &&
-    typeof (value as SpatialSkeletonEditCommandSourceCandidate)
-      .createCommand ===
-      "function"
-  );
-}
 
 interface SpatialSkeletonSourceAccess {
   source: object;
@@ -66,12 +37,7 @@ export function getSpatialSkeletonEditCommandSource(
 ): SpatialSkeletonEditCommandSource | undefined {
   const source = getEditableSpatiallyIndexedSkeletonSource(value);
   if (source === undefined) return undefined;
-  const editCommandSource = (
-    source as { spatialSkeletonEditCommandSource?: object }
-  ).spatialSkeletonEditCommandSource;
-  return isSpatialSkeletonEditCommandSource(editCommandSource)
-    ? editCommandSource
-    : undefined;
+  return source.spatialSkeletonEditCommandSource;
 }
 
 function getEditSource(

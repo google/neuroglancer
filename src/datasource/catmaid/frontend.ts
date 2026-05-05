@@ -111,9 +111,7 @@ export class CatmaidSpatiallyIndexedSkeletonSource
   }
 
   get spatialSkeletonEditCommandSource() {
-    return this.spatialSkeletonReadOnly
-      ? undefined
-      : this.editableSpatialSkeletonEditCommandSource;
+    return this.editableSpatialSkeletonEditCommandSource;
   }
 
   private ensureSpatialSkeletonEditable() {
@@ -155,8 +153,6 @@ export class CatmaidSpatiallyIndexedSkeletonSource
   fetchNodes(
     cellIndex: SpatialSkeletonGridCellIndex,
     options: {
-      cacheProvider?: string;
-      lod?: number;
       signal?: AbortSignal;
     } = {},
   ): Promise<SpatiallyIndexedSkeletonNodeBase[]> {
@@ -166,8 +162,11 @@ export class CatmaidSpatiallyIndexedSkeletonSource
     );
     return this.client.fetchNodesInBoundingBox(
       bounds,
-      options.lod ?? this.parameters.catmaidLod ?? 0,
-      options,
+      this.parameters.catmaidLod ?? 0,
+      {
+        cacheProvider: this.parameters.catmaidParameters.cacheProvider,
+        signal: options.signal,
+      },
     );
   }
 
