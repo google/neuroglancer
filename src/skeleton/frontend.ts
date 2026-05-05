@@ -907,18 +907,10 @@ void emitDefault() {
     this.vertexIdHelper.enable();
   }
 
-  setColor(gl: GL, shader: ShaderProgram, color: Float32Array | number[]) {
+  setColor(gl: GL, shader: ShaderProgram, color: Float32Array) {
     const a =
-      (color as Float32Array).length >= 4
-        ? (color as Float32Array)[3]
-        : this.base.displayState.objectAlpha.value;
-    gl.uniform4f(
-      shader.uniform("uColor"),
-      (color as Float32Array)[0],
-      (color as Float32Array)[1],
-      (color as Float32Array)[2],
-      a,
-    );
+      color.length >= 4 ? color[3] : this.base.displayState.objectAlpha.value;
+    gl.uniform4f(shader.uniform("uColor"), color[0], color[1], color[2], a);
   }
 
   setPickID(gl: GL, shader: ShaderProgram, pickID: number) {
@@ -3230,7 +3222,6 @@ export class SpatiallyIndexedSkeletonLayer
       nodeShaderParameters.parseResult.controls,
     );
     const baseColor = new Float32Array([1, 1, 1, 1]);
-    edgeShader.bind();
     renderHelper.setColor(gl, edgeShader, baseColor);
     renderHelper.enableDynamicSegmentAppearance(
       gl,
