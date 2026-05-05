@@ -19,14 +19,37 @@ CATMAID documentation to set up a CATMAID server. At minimum you will need:
 
 The project stack dimensions and resolution are used to inform the bounding box
 of the data in neuroglancer as their product. Skeletons in CATMAID are in 1 nm
-units. Optionally, you can also configure stack metadata, which is intended to be used alongside the CATMAID multiple-LOD cache
-grid for faster fetches of spatially indexed skeletons. The stack metadata can specify the key ``spatial_skeleton_chunk_sizes`` to define the chunk sizes at each LOD level in neuroglancer in nm. These chunk sizes are not required to be the same as the CATMAID LOD cache grid chunk sizes, and chunks are not required to have an exact match in the cache. Neuroglancer will always request to CATMAID to provide nodes from a cache if present. In addition, neuroglancer will request chunks at:
+units.
 
-.. math::
+The linked CATMAID stack must define spatial skeleton metadata. Neuroglancer
+uses this metadata to build the spatially indexed skeleton source required for
+editing. Add a ``spatial`` array to the stack metadata, with one entry for each
+spatial index level:
 
-   \mathrm{lod}\!\left(\frac{k}{n - 1}\right)
+.. code-block:: json
 
-in CATMAID, where :math:`k` is the LOD index level in neuroglancer, and :math:`n` is the number of LOD levels.
+   {
+     "spatial": [
+       {
+         "chunk_size": [11168145, 11168145, 11168145],
+         "limit": 500
+       },
+       {
+         "chunk_size": [3939000, 3939000, 3939000],
+         "limit": 7000
+       }
+     ],
+     "cache_provider": "cached_msgpack_grid",
+     "read_only": false
+   }
+
+``chunk_size`` is specified in CATMAID project-space nanometers. ``limit`` is
+the maximum node count expected for that spatial level and is required.
+``cache_provider`` is optional and, when present, is passed to CATMAID node-list
+requests. ``read_only`` is optional and disables editing when set to ``true``.
+
+If ``spatial`` is absent or empty, Neuroglancer rejects the CATMAID datasource
+because it cannot construct the spatially indexed skeleton source.
 
 After setting this up, enter ``catmaid:<your-catmaid-server-url>/<your-catmaid-project-id>`` as a data source in neuroglancer.
 
@@ -43,12 +66,13 @@ In the **Render** tab you can adjust:
 
 - **Opacity (3d)** — controls the opacity of fully loaded, visible skeletons.
 - **Hidden Opacity (3d)** — controls the opacity of hidden skeletons, which represent
-  LOD-influenced spatial indicators of nodes in space.
+  spatially indexed indicators of nodes in space.
 
 When you make a skeleton visible, a full fetch is triggered and you are guaranteed
 to see all nodes and details of that skeleton. Otherwise you see whatever is
-provided by the LOD spatial information. The selected LOD is controllable via the
-**Resoltion (skeleton grid 2D)** and **Resolution (skeleton grid 3D)** resolution settings.
+provided by the spatial index level selected for the current view. The selected
+grid size is controlled via the **Resolution (skeleton grid 2D)** and
+**Resolution (skeleton grid 3D)** settings.
 
 The **Seg** tab works as normal for a segmentation layer, allowing you to set the
 visibility of segments/skeletons by their ID or by label if one has been assigned.
@@ -60,7 +84,9 @@ Skeleton Tab
 
 The **Skeleton** tab is used for editing and viewing information about skeletons.
 It is only available for CATMAID sources with an active spatially indexed skeleton
-subsource, and only visible skeletons appear here.
+subsource, and only visible skeletons appear here. If the CATMAID stack metadata
+sets ``read_only`` to ``true``, inspection remains available but edit actions are
+disabled.
 
 You can find a node by ID or by description, and filter nodes to show only:
 
