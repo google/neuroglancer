@@ -41,7 +41,6 @@ import type {
   RenderLayerTransform,
 } from "#src/render_coordinate_transform.js";
 import { getChunkTransformParameters } from "#src/render_coordinate_transform.js";
-import { RENDERED_VIEW_ADD_LAYER_RPC_ID } from "#src/render_layer_common.js";
 import type { RenderScaleHistogram } from "#src/render_scale_statistics.js";
 import type {
   RenderLayer,
@@ -3080,16 +3079,6 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
   ) {
     super.attach(attachment);
 
-    // Manually add layer to backend
-    const backend = this.backend;
-    if (backend && backend.rpc) {
-      backend.rpc.invoke(RENDERED_VIEW_ADD_LAYER_RPC_ID, {
-        layer: backend.rpcId,
-        view: attachment.view.rpcId,
-      });
-    }
-
-    // Capture references to avoid losing 'this' context in callback
     const baseLayer = this.base;
     const redrawNeeded = this.redrawNeeded;
 
@@ -3473,14 +3462,6 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
     >,
   ) {
     super.attach(attachment);
-
-    const backend = this.backend;
-    if (backend && backend.rpc) {
-      backend.rpc.invoke(RENDERED_VIEW_ADD_LAYER_RPC_ID, {
-        layer: backend.rpcId,
-        view: attachment.view.rpcId,
-      });
-    }
 
     const baseLayer = this.base;
     const redrawNeeded = this.redrawNeeded;
