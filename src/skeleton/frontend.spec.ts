@@ -2,10 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { resolveSpatiallyIndexedSkeletonSegmentPick } from "#src/skeleton/picking.js";
 import { spatiallyIndexedSkeletonTextureAttributeSpecs } from "#src/skeleton/spatial_attribute_layout.js";
-import { WatchableValue } from "#src/trackable_value.js";
 import { Uint64Set } from "#src/uint64_set.js";
 import { DataType } from "#src/util/data_type.js";
-import { getObjectId } from "#src/util/object_id.js";
 
 if (!("WebGL2RenderingContext" in globalThis)) {
   Object.defineProperty(globalThis, "WebGL2RenderingContext", {
@@ -128,89 +126,3 @@ describe("SpatiallyIndexedSkeletonLayer browse exclusions", () => {
   });
 });
 
-describe("SpatiallyIndexedSkeletonLayer chunk stats", () => {
-  it("dedupes 2d chunk stats across rendered views for the selected grid source", () => {
-    const coarseSource = { parameters: { gridIndex: 0 } };
-    const fineSource = { parameters: { gridIndex: 1 } };
-    const coarseSourceId = getObjectId(coarseSource);
-    const fineSourceId = getObjectId(fineSource);
-    const layer = Object.assign(
-      Object.create(SpatiallyIndexedSkeletonLayer.prototype),
-      {
-        displayState: {
-          spatialSkeletonGridLevel2d: { value: 1 },
-          spatialSkeletonGridLevel3d: { value: 0 },
-          spatialSkeletonGridChunkStats2d: new WatchableValue({
-            presentCount: 0,
-            totalCount: 0,
-          }),
-          spatialSkeletonGridChunkStats3d: new WatchableValue({
-            presentCount: 0,
-            totalCount: 0,
-          }),
-        },
-        sources: [],
-        sources2d: [
-          {
-            chunkSource: coarseSource,
-            chunkToMultiscaleTransform: {},
-          },
-          {
-            chunkSource: fineSource,
-            chunkToMultiscaleTransform: {},
-          },
-        ],
-        visibleChunkKeysByRenderedView: new Map(),
-      },
-    );
-
-    (layer as any).setVisibleChunkKeysForRenderedView(
-      "2d",
-      11,
-      new Map([
-        [
-          coarseSourceId,
-          {
-            presentChunkKeys: new Set(["ignored"]),
-            totalChunkKeys: new Set(["ignored"]),
-          },
-        ],
-        [
-          fineSourceId,
-          {
-            presentChunkKeys: new Set(["a"]),
-            totalChunkKeys: new Set(["a", "b"]),
-          },
-        ],
-      ]),
-    );
-    expect(layer.displayState.spatialSkeletonGridChunkStats2d.value).toEqual({
-      presentCount: 1,
-      totalCount: 2,
-    });
-
-    (layer as any).setVisibleChunkKeysForRenderedView(
-      "2d",
-      22,
-      new Map([
-        [
-          fineSourceId,
-          {
-            presentChunkKeys: new Set(["c"]),
-            totalChunkKeys: new Set(["b", "c"]),
-          },
-        ],
-      ]),
-    );
-    expect(layer.displayState.spatialSkeletonGridChunkStats2d.value).toEqual({
-      presentCount: 2,
-      totalCount: 3,
-    });
-
-    (layer as any).clearVisibleChunkKeysForRenderedView("2d", 11);
-    expect(layer.displayState.spatialSkeletonGridChunkStats2d.value).toEqual({
-      presentCount: 1,
-      totalCount: 2,
-    });
-  });
-});

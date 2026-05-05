@@ -107,16 +107,6 @@ describe("layer/segmentation spatial skeleton chunk stats", () => {
         spatialSkeletonVisibleChunksNeeded: new WatchableValue(0),
         spatialSkeletonVisibleChunksAvailable: new WatchableValue(0),
         spatialSkeletonVisibleChunksLoaded: new WatchableValue(false),
-        displayState: {
-          spatialSkeletonGridChunkStats2d: new WatchableValue({
-            presentCount: 0,
-            totalCount: 0,
-          }),
-          spatialSkeletonGridChunkStats3d: new WatchableValue({
-            presentCount: 0,
-            totalCount: 0,
-          }),
-        },
         updateSpatialSkeletonSourceState: vi.fn(),
       },
     );
