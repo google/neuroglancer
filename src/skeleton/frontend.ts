@@ -26,7 +26,6 @@ import type {
   LayerView,
   MouseSelectionState,
   PickState,
-  UserLayer,
   VisibleLayerInfo,
 } from "#src/layer/index.js";
 import type { PerspectivePanel } from "#src/perspective_view/panel.js";
@@ -349,7 +348,6 @@ class RenderHelper extends RefCounted {
     builder.addUniform("highp float", "uVisibleAlpha");
     builder.addUniform("highp float", "uHiddenAlpha");
     builder.addUniform("highp vec3", "uSegmentDefaultColor");
-    builder.addUniform("highp uint", "uSkipVisibleSegments");
     builder.addUniform("highp uint", "uUseSegmentDefaultColor");
     builder.addUniform("highp uint", "uUseSegmentStatedColors");
     builder.addFragmentCode(`
@@ -374,9 +372,6 @@ float getSegmentLookupAlpha(uint64_t segmentId) {
     return ${excludedSegmentAlpha};
   }
   bool isVisible = ${this.visibleSegmentsShaderManager.hasFunctionName}(segmentId);
-  if (uSkipVisibleSegments != 0u && isVisible) {
-    return 0.0;
-  }
   ${alphaExpression}
 }
 vec4 getSegmentAppearance(highp uint segmentValue) {
@@ -389,7 +384,6 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
   enableDynamicSegmentAppearance(
     gl: GL,
     shader: ShaderProgram,
-    skipVisibleSegments: boolean,
     excludedSegments?: Uint64Set,
   ) {
     if (!this.dynamicSegmentAppearance) return;
@@ -420,10 +414,6 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
       shader.uniform("uHiddenAlpha"),
       this.base.displayState.hiddenObjectAlpha.value,
     );
-    gl.uniform1ui(
-      shader.uniform("uSkipVisibleSegments"),
-      skipVisibleSegments ? 1 : 0,
-    );
 
     const colorGroupState =
       this.base.displayState.segmentationColorGroupState.value;
@@ -446,7 +436,6 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
     }
     if (DEBUG_SPATIAL_SKELETON_OVERLAY && excludedSegments === undefined) {
       // Use a red color for everything in the overlay
-      // or if there is only a regular skeleton layer
       gl.uniform1ui(shader.uniform("uUseSegmentDefaultColor"), 1);
       gl.uniform3f(shader.uniform("uSegmentDefaultColor"), 1.0, 0.0, 0.0);
     }
@@ -1944,11 +1933,6 @@ export class SpatiallyIndexedSkeletonLayer
     segmentTextureFormat,
     selectedNodeTextureFormat,
   ];
-  private regularSkeletonLayerWatchable = new WatchableValue(false);
-  private regularSkeletonLayerUserLayer: UserLayer | undefined;
-  private removeRegularSkeletonLayerUserLayerListener:
-    | (() => boolean)
-    | undefined;
   private visibleChunksByView = new Map<
     SpatiallyIndexedSkeletonView,
     VisibleSpatialChunksBySource
@@ -2242,44 +2226,6 @@ export class SpatiallyIndexedSkeletonLayer
     return this.overlayChunk;
   }
 
-  private computeHasRegularSkeletonLayer(userLayer: UserLayer) {
-    for (const renderLayer of userLayer.renderLayers) {
-      if (
-        renderLayer instanceof PerspectiveViewSkeletonLayer ||
-        renderLayer instanceof SliceViewPanelSkeletonLayer
-      ) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  private updateHasRegularSkeletonLayerWatchable(
-    userLayer: UserLayer | undefined,
-  ) {
-    if (this.regularSkeletonLayerUserLayer !== userLayer) {
-      this.removeRegularSkeletonLayerUserLayerListener?.();
-      this.removeRegularSkeletonLayerUserLayerListener = undefined;
-      this.regularSkeletonLayerUserLayer = userLayer;
-      if (userLayer !== undefined) {
-        const update = () => {
-          const nextValue = this.computeHasRegularSkeletonLayer(userLayer);
-          if (this.regularSkeletonLayerWatchable.value !== nextValue) {
-            this.regularSkeletonLayerWatchable.value = nextValue;
-            this.redrawNeeded.dispatch();
-          }
-        };
-        update();
-        this.removeRegularSkeletonLayerUserLayerListener =
-          userLayer.layersChanged.add(update);
-      } else if (this.regularSkeletonLayerWatchable.value) {
-        this.regularSkeletonLayerWatchable.value = false;
-        this.redrawNeeded.dispatch();
-      }
-    }
-    return this.regularSkeletonLayerWatchable.value;
-  }
-
   private lodMatches(
     chunk: SpatiallyIndexedSkeletonChunk,
     targetLod: number | undefined,
@@ -2306,9 +2252,6 @@ export class SpatiallyIndexedSkeletonLayer
   ) {
     super();
     this.registerDisposer(() => {
-      this.removeRegularSkeletonLayerUserLayerListener?.();
-      this.removeRegularSkeletonLayerUserLayerListener = undefined;
-      this.regularSkeletonLayerUserLayer = undefined;
       this.disposeOverlayChunk();
     });
     let sources3d: SpatiallyIndexedSkeletonSourceEntry[];
@@ -2784,7 +2727,6 @@ export class SpatiallyIndexedSkeletonLayer
     modelMatrix: mat4,
     lineWidth: number,
     pointDiameter: number,
-    hasRegularSkeletonLayer: boolean,
     selectedSources: readonly SpatiallyIndexedSkeletonSourceEntry[],
     targetLod: number | undefined,
     view: SpatiallyIndexedSkeletonView,
@@ -2820,7 +2762,6 @@ export class SpatiallyIndexedSkeletonLayer
     renderHelper.enableDynamicSegmentAppearance(
       gl,
       edgeShader,
-      hasRegularSkeletonLayer,
       excludedSegments,
     );
     if (renderContext.emitPickID) {
@@ -2842,7 +2783,6 @@ export class SpatiallyIndexedSkeletonLayer
     renderHelper.enableDynamicSegmentAppearance(
       gl,
       nodeShader,
-      hasRegularSkeletonLayer,
       excludedSegments,
     );
     if (renderContext.emitPickID) {
@@ -2913,7 +2853,6 @@ export class SpatiallyIndexedSkeletonLayer
     modelMatrix: mat4,
     lineWidth: number,
     pointDiameter: number,
-    hasRegularSkeletonLayer: boolean,
   ) {
     const overlayChunk = this.resolveSourceBackedOverlayChunk();
     if (overlayChunk === undefined) {
@@ -2946,11 +2885,7 @@ export class SpatiallyIndexedSkeletonLayer
     );
     gl.uniform1f(edgeShader.uniform("uLineWidth"), lineWidth);
     renderHelper.setColor(gl, edgeShader, kOneVec4);
-    renderHelper.enableDynamicSegmentAppearance(
-      gl,
-      edgeShader,
-      hasRegularSkeletonLayer,
-    );
+    renderHelper.enableDynamicSegmentAppearance(gl, edgeShader);
     if (renderContext.emitPickID) {
       const edgePickId =
         overlayChunk.numIndices > 0 &&
@@ -2985,11 +2920,7 @@ export class SpatiallyIndexedSkeletonLayer
       nodeShaderParameters.parseResult.controls,
     );
     renderHelper.setColor(gl, nodeShader, kOneVec4);
-    renderHelper.enableDynamicSegmentAppearance(
-      gl,
-      nodeShader,
-      hasRegularSkeletonLayer,
-    );
+    renderHelper.enableDynamicSegmentAppearance(gl, nodeShader);
     if (renderContext.emitPickID) {
       const nodePickId =
         overlayChunk.numVertices > 0 &&
@@ -3058,9 +2989,6 @@ export class SpatiallyIndexedSkeletonLayer
     );
     if (modelMatrix === undefined) return;
 
-    const hasRegularSkeletonLayer = this.updateHasRegularSkeletonLayerWatchable(
-      layer.userLayer,
-    );
     const lineWidth = renderOptions.lineWidth.value;
     const targetLod = drawOptions?.lod;
     const view = drawOptions?.view ?? "3d";
@@ -3080,7 +3008,6 @@ export class SpatiallyIndexedSkeletonLayer
       modelMatrix,
       lineWidth,
       pointDiameter,
-      hasRegularSkeletonLayer,
       selectedSources,
       targetLod,
       view,
@@ -3092,7 +3019,6 @@ export class SpatiallyIndexedSkeletonLayer
       modelMatrix,
       lineWidth,
       pointDiameter,
-      hasRegularSkeletonLayer,
     );
   }
 
