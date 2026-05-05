@@ -57,10 +57,7 @@ import {
   getVisibleSegments,
   getObjectKey,
 } from "#src/segmentation_display_state/base.js";
-import type {
-  SegmentationDisplayState3D,
-  SegmentationDisplayState,
-} from "#src/segmentation_display_state/frontend.js";
+import type { SegmentationDisplayState3D } from "#src/segmentation_display_state/frontend.js";
 import {
   forEachVisibleSegmentToDraw,
   registerRedrawWhenSegmentationDisplayState3DChanged,
@@ -86,14 +83,12 @@ import { SkeletonRenderMode } from "#src/skeleton/render_mode.js";
 import {
   getSpatiallyIndexedSkeletonGridIndex,
   getSpatiallyIndexedSkeletonSourceView,
-  selectSpatiallyIndexedSkeletonEntriesByGrid,
   selectSpatiallyIndexedSkeletonEntriesForView,
   type SpatiallyIndexedSkeletonView,
 } from "#src/skeleton/source_selection.js";
 import { spatiallyIndexedSkeletonTextureAttributeSpecs } from "#src/skeleton/spatial_attribute_layout.js";
 import {
   forEachVisibleVolumetricChunk,
-  type SliceViewBase,
   type SliceViewChunkSpecification,
   type TransformedSource,
 } from "#src/sliceview/base.js";
@@ -109,13 +104,9 @@ import {
 import type { SliceViewPanel } from "#src/sliceview/panel.js";
 import type {
   SliceViewPanelRenderContext,
-  SliceViewRenderContext,
   SliceViewPanelReadyRenderContext,
 } from "#src/sliceview/renderlayer.js";
-import {
-  SliceViewPanelRenderLayer,
-  SliceViewRenderLayer,
-} from "#src/sliceview/renderlayer.js";
+import { SliceViewPanelRenderLayer } from "#src/sliceview/renderlayer.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   makeCachedLazyDerivedWatchableValue,
@@ -2273,6 +2264,12 @@ export class SpatiallyIndexedSkeletonLayer
       new WatchableValue(0);
     this.lod =
       options.lod ?? spatialDisplayState.skeletonLod ?? new WatchableValue(0);
+    this.gridLevel2d =
+      options.gridLevel2d ??
+      spatialDisplayState.spatialSkeletonGridLevel2d ??
+      this.gridLevel;
+    this.lod2d =
+      options.lod2d ?? spatialDisplayState.spatialSkeletonLod2d ?? this.lod;
     this.selectedNodeId = options.selectedNodeId;
     this.pendingNodePositionVersion = options.pendingNodePositionVersion;
     this.getPendingNodePositionOverride = options.getPendingNodePosition;
@@ -3476,12 +3473,6 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
     >,
   ) {
     super.attach(attachment);
-    attachment.registerDisposer(() =>
-      this.base.clearVisibleChunkKeysForRenderedView(
-        "2d",
-        attachment.view.rpcId,
-      ),
-    );
 
     const backend = this.backend;
     if (backend && backend.rpc) {
@@ -3549,7 +3540,6 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
       this.transformedSources,
       renderContext.sliceView.projectionParameters.value,
       lodValue,
-      attachment.view.rpcId,
     );
     const levels = displayState.spatialSkeletonGridLevels?.value;
     const histogram = displayState.spatialSkeletonGridRenderScaleHistogram2d;
