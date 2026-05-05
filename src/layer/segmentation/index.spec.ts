@@ -164,7 +164,7 @@ describe("layer/segmentation spatial skeleton chunk stats", () => {
 });
 
 describe("layer/segmentation spatial skeleton action gating", () => {
-  it("does not require max lod for skeleton actions", () => {
+  it("does not require a specific grid level for skeleton actions", () => {
     const layer = Object.assign(
       Object.create(SegmentationUserLayer.prototype),
       {

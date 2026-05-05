@@ -20,7 +20,6 @@ import * as json_keys from "#src/layer/segmentation/json_keys.js";
 import { appendSpatialSkeletonSerializationState } from "#src/layer/segmentation/spatial_skeleton_serialization.js";
 import { trackableAlphaValue } from "#src/trackable_alpha.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
-import { trackableFiniteFloat } from "#src/trackable_finite_float.js";
 import { TrackableValue } from "#src/trackable_value.js";
 import {
   verifyFiniteNonNegativeFloat,
@@ -30,7 +29,6 @@ import {
 function makeTrackables() {
   return {
     hiddenObjectAlpha: trackableAlphaValue(0.5),
-    skeletonLod: trackableFiniteFloat(0),
     spatialSkeletonGridResolutionTarget2d: new TrackableValue<number>(
       1,
       verifyFiniteNonNegativeFloat,
@@ -62,9 +60,6 @@ describe("appendSpatialSkeletonSerializationState", () => {
     const trackables = makeTrackables();
     trackables.hiddenObjectAlpha.restoreState(
       legacySpec[json_keys.HIDDEN_OPACITY_3D_JSON_KEY],
-    );
-    trackables.skeletonLod.restoreState(
-      legacySpec[json_keys.SKELETON_LOD_JSON_KEY],
     );
     trackables.spatialSkeletonGridResolutionTarget2d.restoreState(
       legacySpec[json_keys.SPATIAL_SKELETON_GRID_RESOLUTION_TARGET_2D_JSON_KEY],
@@ -100,7 +95,7 @@ describe("appendSpatialSkeletonSerializationState", () => {
 
   it("emits non-default values for non-spatial layers", () => {
     const trackables = makeTrackables();
-    trackables.skeletonLod.value = 0.35;
+    trackables.hiddenObjectAlpha.value = 0.35;
 
     const serialized: Record<string, unknown> = {};
     appendSpatialSkeletonSerializationState(
@@ -109,7 +104,7 @@ describe("appendSpatialSkeletonSerializationState", () => {
       /* includeDefaults= */ false,
     );
     expect(serialized).toEqual({
-      [json_keys.SKELETON_LOD_JSON_KEY]: 0.35,
+      [json_keys.HIDDEN_OPACITY_3D_JSON_KEY]: 0.35,
     });
   });
 
@@ -124,7 +119,6 @@ describe("appendSpatialSkeletonSerializationState", () => {
     );
     expect(serialized).toEqual({
       [json_keys.HIDDEN_OPACITY_3D_JSON_KEY]: 0.5,
-      [json_keys.SKELETON_LOD_JSON_KEY]: 0,
       [json_keys.SPATIAL_SKELETON_GRID_RESOLUTION_TARGET_2D_JSON_KEY]: 1,
       [json_keys.SPATIAL_SKELETON_GRID_RESOLUTION_TARGET_3D_JSON_KEY]: 1,
       [json_keys.SPATIAL_SKELETON_GRID_RESOLUTION_RELATIVE_2D_JSON_KEY]: false,

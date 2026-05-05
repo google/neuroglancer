@@ -18,6 +18,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   CatmaidClient,
+  getCatmaidSpatialSkeletonGridCellBounds,
   makeCatmaidNodeSourceState,
 } from "#src/datasource/catmaid/api.js";
 
@@ -319,7 +320,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     (client as any).fetch = fetchMock;
 
     await expect(
-      client.fetchNodes({
+      client.fetchNodesInBoundingBox({
         lowerBounds: [0, 0, 0],
         upperBounds: [10, 10, 10],
       }),
@@ -343,13 +344,22 @@ describe("CatmaidClient skeleton editing methods", () => {
     expect(getFetchPath(fetchMock)).toMatch(/^node\/list\?/);
   });
 
+  it("converts spatial skeleton grid cell indices to CATMAID bounds", () => {
+    expect(
+      getCatmaidSpatialSkeletonGridCellBounds([2, 3, 4], [10, 20, 30]),
+    ).toEqual({
+      lowerBounds: [20, 60, 120],
+      upperBounds: [30, 80, 150],
+    });
+  });
+
   it("rejects CATMAID node-list bounds with fewer than three coordinates", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi.fn();
     (client as any).fetch = fetchMock;
 
     await expect(
-      client.fetchNodes({
+      client.fetchNodesInBoundingBox({
         lowerBounds: [0, 0],
         upperBounds: [10, 10],
       }),

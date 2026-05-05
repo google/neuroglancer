@@ -572,6 +572,28 @@ function normalizeBoundingBoxForNodeList(bounds: SpatialSkeletonBounds) {
   return { left, top, z1, right, bottom, z2 };
 }
 
+export function getCatmaidSpatialSkeletonGridCellBounds(
+  cellIndex: SpatialSkeletonVector,
+  chunkSize: SpatialSkeletonVector,
+): SpatialSkeletonBounds {
+  const [cellX, cellY, cellZ] = requireCatmaidRank3Vector(
+    cellIndex,
+    "spatial skeleton grid cell index",
+  );
+  const [sizeX, sizeY, sizeZ] = requireCatmaidRank3Vector(
+    chunkSize,
+    "spatial skeleton grid cell size",
+  );
+  return {
+    lowerBounds: [cellX * sizeX, cellY * sizeY, cellZ * sizeZ],
+    upperBounds: [
+      (cellX + 1) * sizeX,
+      (cellY + 1) * sizeY,
+      (cellZ + 1) * sizeZ,
+    ],
+  };
+}
+
 function appendNodeUpdateRows(
   body: URLSearchParams,
   key: string,
@@ -1303,7 +1325,7 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     }));
   }
 
-  async fetchNodes(
+  async fetchNodesInBoundingBox(
     bounds: SpatialSkeletonBounds,
     lod: number = 0,
     options: {

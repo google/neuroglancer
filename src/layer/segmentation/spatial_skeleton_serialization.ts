@@ -23,7 +23,6 @@ export interface JsonSerializableTrackable<T = unknown> {
 
 export interface SpatialSkeletonSerializationTrackables {
   hiddenObjectAlpha: JsonSerializableTrackable<number>;
-  skeletonLod: JsonSerializableTrackable<number>;
   spatialSkeletonGridResolutionTarget2d: JsonSerializableTrackable<number>;
   spatialSkeletonGridResolutionTarget3d: JsonSerializableTrackable<number>;
   spatialSkeletonGridResolutionRelative2d: JsonSerializableTrackable<boolean>;
@@ -63,12 +62,6 @@ export function appendSpatialSkeletonSerializationState(
     target,
     json_keys.HIDDEN_OPACITY_3D_JSON_KEY,
     trackables.hiddenObjectAlpha,
-    includeDefaults,
-  );
-  setSerializedTrackable(
-    target,
-    json_keys.SKELETON_LOD_JSON_KEY,
-    trackables.skeletonLod,
     includeDefaults,
   );
   setSerializedTrackable(

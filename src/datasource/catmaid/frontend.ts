@@ -39,6 +39,7 @@ import {
   CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES,
   CatmaidClient,
   credentialsKey,
+  getCatmaidSpatialSkeletonGridCellBounds,
 } from "#src/datasource/catmaid/api.js";
 import {
   CatmaidSkeletonSourceParameters,
@@ -57,7 +58,7 @@ import {
 } from "#src/segmentation_display_state/property_map.js";
 import type {
   EditableSpatiallyIndexedSkeletonSource,
-  SpatialSkeletonBounds,
+  SpatialSkeletonGridCellIndex,
   SpatiallyIndexedSkeletonMetadata,
   SpatiallyIndexedSkeletonNode,
   SpatiallyIndexedSkeletonNodeBase,
@@ -128,14 +129,22 @@ export class CatmaidSpatiallyIndexedSkeletonSource
   }
 
   fetchNodes(
-    bounds: SpatialSkeletonBounds,
-    lod?: number,
-    options?: {
+    cellIndex: SpatialSkeletonGridCellIndex,
+    options: {
       cacheProvider?: string;
+      lod?: number;
       signal?: AbortSignal;
-    },
+    } = {},
   ): Promise<SpatiallyIndexedSkeletonNodeBase[]> {
-    return this.client.fetchNodes(bounds, lod, options);
+    const bounds = getCatmaidSpatialSkeletonGridCellBounds(
+      cellIndex.cell,
+      this.spec.chunkDataSize,
+    );
+    return this.client.fetchNodesInBoundingBox(
+      bounds,
+      options.lod ?? this.parameters.catmaidLod ?? 0,
+      options,
+    );
   }
 
   getSkeletonRootNode(skeletonId: number) {
@@ -299,6 +308,7 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
     // Sorted by minimum dimension (Descending: Large/Coarse -> Small/Fine)
     const sortedGridSizes = this.sortedGridCellSizes;
 
+    const lastGridIndex = sortedGridSizes.length - 1;
     for (const [gridIndex, gridCellSize] of sortedGridSizes.entries()) {
       const chunkDataSize = Uint32Array.from([
         gridCellSize.x,
@@ -338,6 +348,8 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
       parameters.catmaidParameters.projectId = this.projectId;
       parameters.catmaidParameters.cacheProvider = this.cacheProvider;
       parameters.gridIndex = gridIndex;
+      parameters.catmaidLod =
+        lastGridIndex <= 0 ? 0 : gridIndex / lastGridIndex;
       parameters.metadata = {
         transform: mat4.create(),
         vertexAttributes: new Map([

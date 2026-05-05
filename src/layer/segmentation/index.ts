@@ -153,7 +153,6 @@ import { SegmentationRenderLayer } from "#src/sliceview/volume/segmentation_rend
 import { StatusMessage } from "#src/status.js";
 import { trackableAlphaValue } from "#src/trackable_alpha.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
-import { trackableFiniteFloat } from "#src/trackable_finite_float.js";
 import type {
   TrackableValueInterface,
   WatchableValueInterface,
@@ -580,7 +579,7 @@ class LinkedSegmentationGroupState<
 }
 
 type SpatialSkeletonGridSize = { x: number; y: number; z: number };
-type SpatialSkeletonGridLevel = { size: SpatialSkeletonGridSize; lod: number };
+type SpatialSkeletonGridLevel = { size: SpatialSkeletonGridSize };
 
 function getSpatialSkeletonGridSpacing(size: SpatialSkeletonGridSize) {
   return Math.min(size.x, size.y, size.z);
@@ -589,28 +588,7 @@ function getSpatialSkeletonGridSpacing(size: SpatialSkeletonGridSize) {
 function buildSpatialSkeletonGridLevels(
   gridSizes: SpatialSkeletonGridSize[],
 ): SpatialSkeletonGridLevel[] {
-  if (gridSizes.length === 0) return [];
-  const lastIndex = gridSizes.length - 1;
-  return gridSizes.map((size, index) => ({
-    size,
-    lod: lastIndex === 0 ? 0 : index / lastIndex,
-  }));
-}
-
-function findClosestSpatialSkeletonGridLevel(
-  levels: SpatialSkeletonGridLevel[],
-  lod: number,
-): number {
-  let bestIndex = 0;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (let i = 0; i < levels.length; ++i) {
-    const distance = Math.abs(levels[i].lod - lod);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      bestIndex = i;
-    }
-  }
-  return bestIndex;
+  return gridSizes.map((size) => ({ size }));
 }
 
 function findClosestSpatialSkeletonGridLevelBySpacing(
@@ -904,7 +882,6 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   );
   objectAlpha = trackableAlphaValue(1.0);
   hiddenObjectAlpha = trackableAlphaValue(0.5);
-  skeletonLod = trackableFiniteFloat(0.0);
   spatialSkeletonGridLevel2d = new TrackableValue<number>(
     0,
     verifyNonnegativeInt,
@@ -942,7 +919,6 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   });
   spatialSkeletonGridRenderScaleHistogram2d = new RenderScaleHistogram();
   spatialSkeletonGridRenderScaleHistogram3d = new RenderScaleHistogram();
-  spatialSkeletonLod2d = new WatchableValue<number>(0);
   spatialSkeletonNodeQuery = new TrackableValue<string>("", verifyString);
   spatialSkeletonNodeFilter = new TrackableEnum(
     SpatialSkeletonNodeFilterType,
@@ -1016,7 +992,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         )
       : this.spatialSkeletonGridLevel3dExplicit
         ? this.spatialSkeletonGridLevel3d.value
-        : findClosestSpatialSkeletonGridLevel(levels, this.skeletonLod.value);
+        : this.spatialSkeletonGridLevel3d.value;
     const resolved3dIndex = this.setSpatialSkeletonGridLevel(
       "3d",
       target3dIndex,
@@ -1201,20 +1177,12 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
       this.suppressSpatialSkeletonGridLevel2d = true;
       this.spatialSkeletonGridLevel2d.value = clampedIndex;
       this.suppressSpatialSkeletonGridLevel2d = false;
-      const nextLod = levels[clampedIndex].lod;
-      if (this.spatialSkeletonLod2d.value !== nextLod) {
-        this.spatialSkeletonLod2d.value = nextLod;
-      }
       return clampedIndex;
     }
     if (markExplicit) this.spatialSkeletonGridLevel3dExplicit = true;
     this.suppressSpatialSkeletonGridLevel3d = true;
     this.spatialSkeletonGridLevel3d.value = clampedIndex;
     this.suppressSpatialSkeletonGridLevel3d = false;
-    const nextLod = levels[clampedIndex].lod;
-    if (this.skeletonLod.value !== nextLod) {
-      this.skeletonLod.value = nextLod;
-    }
     return clampedIndex;
   }
 
@@ -1611,9 +1579,6 @@ export class SegmentationUserLayer extends Base {
       this.specificationChanged.dispatch,
     );
     this.displayState.hiddenObjectAlpha.changed.add(
-      this.specificationChanged.dispatch,
-    );
-    this.displayState.skeletonLod.changed.add(
       this.specificationChanged.dispatch,
     );
     this.displayState.spatialSkeletonNodeQuery.changed.add(
@@ -2099,7 +2064,6 @@ export class SegmentationUserLayer extends Base {
                 displayState,
                 {
                   gridLevel: displayState.spatialSkeletonGridLevel3d,
-                  lod: displayState.skeletonLod,
                   sources2d: slicePanelSources,
                   selectedNodeId: this.selectedSpatialSkeletonNodeId,
                   pendingNodePositionVersion:
@@ -2135,7 +2099,6 @@ export class SegmentationUserLayer extends Base {
               displayState,
               {
                 gridLevel: displayState.spatialSkeletonGridLevel3d,
-                lod: displayState.skeletonLod,
                 selectedNodeId: this.selectedSpatialSkeletonNodeId,
                 pendingNodePositionVersion:
                   this.spatialSkeletonState.pendingNodePositionVersion,
@@ -2346,9 +2309,6 @@ export class SegmentationUserLayer extends Base {
     this.displayState.hiddenObjectAlpha.restoreState(
       specification[json_keys.HIDDEN_OPACITY_3D_JSON_KEY],
     );
-    this.displayState.skeletonLod.restoreState(
-      specification[json_keys.SKELETON_LOD_JSON_KEY],
-    );
     this.displayState.spatialSkeletonNodeQuery.restoreState(
       specification[json_keys.SPATIAL_SKELETON_NODE_QUERY_JSON_KEY],
     );
@@ -2455,7 +2415,6 @@ export class SegmentationUserLayer extends Base {
       x,
       {
         hiddenObjectAlpha: this.displayState.hiddenObjectAlpha,
-        skeletonLod: this.displayState.skeletonLod,
         spatialSkeletonGridResolutionTarget2d:
           this.displayState.spatialSkeletonGridResolutionTarget2d,
         spatialSkeletonGridResolutionTarget3d:

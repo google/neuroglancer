@@ -17,7 +17,10 @@
 import { WithParameters } from "#src/chunk_manager/backend.js";
 import { WithSharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
 import type { CatmaidToken } from "#src/datasource/catmaid/api.js";
-import { CatmaidClient } from "#src/datasource/catmaid/api.js";
+import {
+  CatmaidClient,
+  getCatmaidSpatialSkeletonGridCellBounds,
+} from "#src/datasource/catmaid/api.js";
 import {
   CatmaidSkeletonSourceParameters,
   CatmaidCompleteSkeletonSourceParameters,
@@ -31,7 +34,6 @@ import {
   SpatiallyIndexedSkeletonSourceBackend,
   SkeletonSource,
 } from "#src/skeleton/backend.js";
-import { vec3 } from "#src/util/geom.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
 
 @registerSharedObject()
@@ -64,28 +66,13 @@ export class CatmaidSpatiallyIndexedSkeletonSourceBackend extends WithParameters
   async download(chunk: SpatiallyIndexedSkeletonChunk, signal: AbortSignal) {
     const { chunkGridPosition } = chunk;
     const { chunkDataSize } = this.spec;
-
-    const localMin = vec3.multiply(
-      vec3.create(),
-      chunkGridPosition as unknown as vec3,
-      chunkDataSize as unknown as vec3,
+    const bounds = getCatmaidSpatialSkeletonGridCellBounds(
+      chunkGridPosition,
+      chunkDataSize,
     );
-    const localMax = vec3.add(
-      vec3.create(),
-      localMin,
-      chunkDataSize as unknown as vec3,
-    );
-
-    const bounds = {
-      lowerBounds: localMin,
-      upperBounds: localMax,
-    };
-
-    // Use LOD stored on the chunk to support per-view LODs on shared sources.
-    const lodValue = chunk.lod ?? this.currentLod;
-    // Get cache provider from parameters (passed from frontend)
+    const lodValue = this.parameters.catmaidLod ?? 0;
     const cacheProvider = this.parameters.catmaidParameters.cacheProvider;
-    const nodes = await this.client.fetchNodes(bounds, lodValue, {
+    const nodes = await this.client.fetchNodesInBoundingBox(bounds, lodValue, {
       cacheProvider,
       signal,
     });

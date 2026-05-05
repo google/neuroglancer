@@ -2,7 +2,6 @@ export const SELECTED_ALPHA_JSON_KEY = "selectedAlpha";
 export const NOT_SELECTED_ALPHA_JSON_KEY = "notSelectedAlpha";
 export const OBJECT_ALPHA_JSON_KEY = "objectAlpha";
 export const HIDDEN_OPACITY_3D_JSON_KEY = "hiddenObjectAlpha";
-export const SKELETON_LOD_JSON_KEY = "skeletonLod";
 export const SPATIAL_SKELETON_GRID_LEVEL_2D_JSON_KEY =
   "spatialSkeletonGridLevel2d";
 export const SPATIAL_SKELETON_GRID_LEVEL_3D_JSON_KEY =
