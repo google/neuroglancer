@@ -325,13 +325,12 @@ class RenderHelper extends RefCounted {
   }
 
   private defineDynamicSegmentAppearance(builder: ShaderBuilder) {
-    // Show overlay as red, excluded as blue
-    // if overlay debug is on and excluded debug, assume intention
-    // is to look for places that the overlay should cover
-    // the excluded, but does not
-    const excludedSegmentAlpha = DEBUG_EXCLUDED_SEGMENTS ? "1.0" : "0.0";
+    // Regular path no debugging alpha and color
     let colorExpression = `return ${this.segmentColorShaderManager.prefix}(segmentId);`;
     let alphaExpression = `return isVisible ? uVisibleAlpha : uHiddenAlpha;`;
+    let excludedSegmentAlpha = "0.0";
+
+    // Override usual alpha and color calculations to enable some debug modes
     if (DEBUG_EXCLUDED_SEGMENTS) {
       colorExpression = `
         if (${this.excludedSegmentsShaderManager.hasFunctionName}(segmentId)) {
@@ -340,7 +339,9 @@ class RenderHelper extends RefCounted {
         ${colorExpression}
       `;
       if (!DEBUG_SPATIAL_SKELETON_OVERLAY) alphaExpression = `return 0.0;`;
+      excludedSegmentAlpha = "1.0";
     }
+
     this.visibleSegmentsShaderManager.defineShader(builder);
     this.excludedSegmentsShaderManager.defineShader(builder);
     this.segmentColorShaderManager.defineShader(builder);
