@@ -30,6 +30,10 @@ export interface SpatialSkeletonBounds {
   upperBounds: SpatialSkeletonVector;
 }
 
+export interface SpatialSkeletonGridCellIndex {
+  cell: SpatialSkeletonVector;
+}
+
 export interface SpatialSkeletonSpatialIndexLevel {
   chunkSize: SpatialSkeletonVector;
   gridShape: readonly number[];
@@ -81,8 +85,7 @@ export interface SpatiallyIndexedSkeletonSource {
   ): Promise<SpatiallyIndexedSkeletonNode[]>;
   getSpatialIndexMetadata(): Promise<SpatiallyIndexedSkeletonMetadata | null>;
   fetchNodes(
-    bounds: SpatialSkeletonBounds,
-    lod?: number,
+    cellIndex: SpatialSkeletonGridCellIndex,
     options?: {
       signal?: AbortSignal;
     },
