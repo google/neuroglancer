@@ -185,8 +185,8 @@ import {
 import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 import type { RPC } from "#src/worker_rpc.js";
 
-const DEBUG_SPATIAL_SKELETON_OVERLAY = true;
-const DEBUG_EXCLUDED_SEGMENTS = true;
+const DEBUG_SPATIAL_SKELETON_OVERLAY = false;
+const DEBUG_EXCLUDED_SEGMENTS = false;
 
 const tempMat2 = mat4.create();
 const DEFAULT_FRAGMENT_MAIN = `void main() {
@@ -3065,7 +3065,6 @@ export class SpatiallyIndexedSkeletonLayer
     view: SpatiallyIndexedSkeletonView,
   ) {
     const { gl } = this;
-    const excludedSegments = this.getBrowsePassExcludedSegments();
     const edgeShaderResult = renderHelper.edgeShaderGetter(
       renderContext.emitter,
     );
@@ -3079,6 +3078,7 @@ export class SpatiallyIndexedSkeletonLayer
     if (edgeShader === null || nodeShader === null) {
       return;
     }
+    const excludedSegments = this.getBrowsePassExcludedSegments();
     const { shaderControlState } = this.displayState.skeletonRenderingOptions;
     edgeShader.bind();
     renderHelper.beginLayer(gl, edgeShader, renderContext, modelMatrix);
