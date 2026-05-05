@@ -132,7 +132,7 @@ import { DATA_TYPE_SIGNED, DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import type { ValueOrError } from "#src/util/error.js";
 import { makeValueOrError, valueOrThrow } from "#src/util/error.js";
-import { mat4 } from "#src/util/geom.js";
+import { kOneVec4, mat4, vec4 } from "#src/util/geom.js";
 import { verifyFinitePositiveFloat } from "#src/util/json.js";
 import * as matrix from "#src/util/matrix.js";
 import { getObjectId } from "#src/util/object_id.js";
@@ -907,10 +907,8 @@ void emitDefault() {
     this.vertexIdHelper.enable();
   }
 
-  setColor(gl: GL, shader: ShaderProgram, color: Float32Array) {
-    const a =
-      color.length >= 4 ? color[3] : this.base.displayState.objectAlpha.value;
-    gl.uniform4f(shader.uniform("uColor"), color[0], color[1], color[2], a);
+  setColor(gl: GL, shader: ShaderProgram, color: vec4) {
+    gl.uniform4fv(shader.uniform("uColor"), color);
   }
 
   setPickID(gl: GL, shader: ShaderProgram, pickID: number) {
@@ -1254,9 +1252,9 @@ export class SkeletonLayer extends RefCounted {
         }
         if (color !== undefined) {
           edgeShader.bind();
-          renderHelper.setColor(gl, edgeShader, color as Float32Array);
+          renderHelper.setColor(gl, edgeShader, color);
           nodeShader.bind();
-          renderHelper.setColor(gl, nodeShader, color as Float32Array);
+          renderHelper.setColor(gl, nodeShader, color);
         }
         if (pickIndex !== undefined) {
           edgeShader.bind();
@@ -3082,6 +3080,18 @@ export class SpatiallyIndexedSkeletonLayer
       edgeShaderParameters.parseResult.controls,
     );
     gl.uniform1f(edgeShader.uniform("uLineWidth"), lineWidth);
+    renderHelper.setColor(gl, edgeShader, kOneVec4);
+    renderHelper.enableDynamicSegmentAppearance(
+      gl,
+      edgeShader,
+      hasRegularSkeletonLayer,
+      excludedSegments,
+    );
+    if (renderContext.emitPickID) {
+      renderHelper.setPickID(gl, edgeShader, 0);
+      renderHelper.setEdgePickInstanceStride(gl, edgeShader, 0);
+    }
+
     nodeShader.bind();
     renderHelper.beginLayer(gl, nodeShader, renderContext, modelMatrix);
     gl.uniform1f(nodeShader.uniform("uNodeDiameter"), pointDiameter);
@@ -3092,17 +3102,7 @@ export class SpatiallyIndexedSkeletonLayer
       shaderControlState,
       nodeShaderParameters.parseResult.controls,
     );
-    const baseColor = new Float32Array([1, 1, 1, 1]);
-    edgeShader.bind();
-    renderHelper.setColor(gl, edgeShader, baseColor);
-    renderHelper.enableDynamicSegmentAppearance(
-      gl,
-      edgeShader,
-      hasRegularSkeletonLayer,
-      excludedSegments,
-    );
-    nodeShader.bind();
-    renderHelper.setColor(gl, nodeShader, baseColor);
+    renderHelper.setColor(gl, nodeShader, kOneVec4);
     renderHelper.enableDynamicSegmentAppearance(
       gl,
       nodeShader,
@@ -3110,10 +3110,6 @@ export class SpatiallyIndexedSkeletonLayer
       excludedSegments,
     );
     if (renderContext.emitPickID) {
-      edgeShader.bind();
-      renderHelper.setPickID(gl, edgeShader, 0);
-      renderHelper.setEdgePickInstanceStride(gl, edgeShader, 0);
-      nodeShader.bind();
       renderHelper.setPickID(gl, nodeShader, 0);
       renderHelper.setNodePickInstanceStride(gl, nodeShader, 0);
     }
@@ -3211,6 +3207,13 @@ export class SpatiallyIndexedSkeletonLayer
       edgeShaderParameters.parseResult.controls,
     );
     gl.uniform1f(edgeShader.uniform("uLineWidth"), lineWidth);
+    renderHelper.setColor(gl, edgeShader, kOneVec4);
+    renderHelper.enableDynamicSegmentAppearance(
+      gl,
+      edgeShader,
+      hasRegularSkeletonLayer,
+    );
+
     nodeShader.bind();
     renderHelper.beginLayer(gl, nodeShader, renderContext, modelMatrix);
     gl.uniform1f(nodeShader.uniform("uNodeDiameter"), pointDiameter);
@@ -3221,15 +3224,7 @@ export class SpatiallyIndexedSkeletonLayer
       shaderControlState,
       nodeShaderParameters.parseResult.controls,
     );
-    const baseColor = new Float32Array([1, 1, 1, 1]);
-    renderHelper.setColor(gl, edgeShader, baseColor);
-    renderHelper.enableDynamicSegmentAppearance(
-      gl,
-      edgeShader,
-      hasRegularSkeletonLayer,
-    );
-    nodeShader.bind();
-    renderHelper.setColor(gl, nodeShader, baseColor);
+    renderHelper.setColor(gl, nodeShader, kOneVec4);
     renderHelper.enableDynamicSegmentAppearance(
       gl,
       nodeShader,
