@@ -240,6 +240,35 @@ describe("layer/segmentation spatial skeleton action gating", () => {
       "The active spatial skeleton source does not support skeleton rerooting.",
     );
   });
+
+  it("reports read-only spatial skeleton sources explicitly", () => {
+    const layer = Object.assign(
+      Object.create(SegmentationUserLayer.prototype),
+      {
+        getSpatiallyIndexedSkeletonLayer: () =>
+          makeSpatialSkeletonLayerWithSource({
+            ...makeEditableSpatialSkeletonSource({
+              rerootSkeleton: async () => {},
+            }),
+            spatialSkeletonReadOnly: true,
+          }),
+        spatialSkeletonVisibleChunksLoaded: new WatchableValue(true),
+        spatialSkeletonVisibleChunksNeeded: new WatchableValue(0),
+        spatialSkeletonVisibleChunksAvailable: new WatchableValue(0),
+      },
+    );
+
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason(
+        SpatialSkeletonActions.addNodes,
+      ),
+    ).toBe("The active spatial skeleton source is read-only.");
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason(
+        SpatialSkeletonActions.inspect,
+      ),
+    ).toBeUndefined();
+  });
 });
 
 describe("layer/segmentation spatial skeleton selection serialization", () => {

@@ -20,6 +20,7 @@ export class CatmaidDataSourceParameters {
   url!: string;
   projectId!: number;
   cacheProvider?: string;
+  spatialSkeletonsReadOnly?: boolean;
 }
 
 export class CatmaidSkeletonSourceParameters extends SkeletonSourceParameters {

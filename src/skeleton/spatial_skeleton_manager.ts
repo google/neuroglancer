@@ -56,6 +56,7 @@ export function isEditableSpatiallyIndexedSkeletonSource(
 ): value is EditableSpatiallyIndexedSkeletonSource {
   return (
     isSpatiallyIndexedSkeletonSource(value) &&
+    value.spatialSkeletonReadOnly !== true &&
     hasFunction(value, "addNode") &&
     hasFunction(value, "deleteNode") &&
     hasFunction(value, "moveNode") &&
@@ -72,6 +73,14 @@ export function getSpatiallyIndexedSkeletonSource(
   return isSpatiallyIndexedSkeletonSource(value.source)
     ? value.source
     : undefined;
+}
+
+export function isSpatiallyIndexedSkeletonSourceReadOnly(
+  value: SpatialSkeletonSourceAccess | undefined,
+): boolean {
+  return (
+    getSpatiallyIndexedSkeletonSource(value)?.spatialSkeletonReadOnly === true
+  );
 }
 
 export function getEditableSpatiallyIndexedSkeletonSource(

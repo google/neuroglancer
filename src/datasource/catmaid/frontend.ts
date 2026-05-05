@@ -58,6 +58,7 @@ import {
 } from "#src/segmentation_display_state/property_map.js";
 import type {
   EditableSpatiallyIndexedSkeletonSource,
+  SpatialSkeletonEditCapabilities,
   SpatialSkeletonGridCellIndex,
   SpatiallyIndexedSkeletonMetadata,
   SpatiallyIndexedSkeletonNode,
@@ -77,6 +78,15 @@ import type { Borrowed } from "#src/util/disposable.js";
 import { mat4, vec3 } from "#src/util/geom.js";
 import "#src/datasource/catmaid/register_credentials_provider.js";
 
+const CATMAID_SPATIAL_SKELETON_EDIT_CAPABILITIES = {
+  nodeFeatures: {
+    description: true,
+    trueEnd: true,
+    radius: true,
+    confidenceValues: CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES,
+  },
+} satisfies SpatialSkeletonEditCapabilities;
+
 export class CatmaidSpatiallyIndexedSkeletonSource
   extends WithParameters(
     WithCredentialsProvider<CatmaidToken>()(SpatiallyIndexedSkeletonSource),
@@ -86,17 +96,31 @@ export class CatmaidSpatiallyIndexedSkeletonSource
     CatmaidSpatialSkeletonEditApi,
     EditableSpatiallyIndexedSkeletonSource
 {
-  readonly spatialSkeletonEditCapabilities = {
-    nodeFeatures: {
-      description: true,
-      trueEnd: true,
-      radius: true,
-      confidenceValues: CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES,
-    },
-  };
-  readonly spatialSkeletonEditCommandSource =
+  private readonly editableSpatialSkeletonEditCommandSource =
     new CatmaidSpatialSkeletonEditCommandSource();
   private client_?: CatmaidClient;
+
+  get spatialSkeletonReadOnly() {
+    return this.parameters.catmaidParameters.spatialSkeletonsReadOnly === true;
+  }
+
+  get spatialSkeletonEditCapabilities() {
+    return this.spatialSkeletonReadOnly
+      ? undefined
+      : CATMAID_SPATIAL_SKELETON_EDIT_CAPABILITIES;
+  }
+
+  get spatialSkeletonEditCommandSource() {
+    return this.spatialSkeletonReadOnly
+      ? undefined
+      : this.editableSpatialSkeletonEditCommandSource;
+  }
+
+  private ensureSpatialSkeletonEditable() {
+    if (this.spatialSkeletonReadOnly) {
+      throw new Error("CATMAID spatial skeleton source is read-only.");
+    }
+  }
 
   private get client() {
     let client = this.client_;
@@ -159,6 +183,7 @@ export class CatmaidSpatiallyIndexedSkeletonSource
     parentId?: number,
     editContext?: CatmaidEditContext,
   ): Promise<CatmaidAddNodeResult> {
+    this.ensureSpatialSkeletonEditable();
     return this.client.addNode(skeletonId, x, y, z, parentId, editContext);
   }
 
@@ -171,6 +196,7 @@ export class CatmaidSpatiallyIndexedSkeletonSource
     childNodeIds: readonly number[],
     editContext?: CatmaidEditContext,
   ): Promise<CatmaidInsertNodeResult> {
+    this.ensureSpatialSkeletonEditable();
     return this.client.insertNode(
       skeletonId,
       x,
@@ -189,6 +215,7 @@ export class CatmaidSpatiallyIndexedSkeletonSource
     z: number,
     editContext?: CatmaidEditContext,
   ): Promise<CatmaidNodeSourceStateResult> {
+    this.ensureSpatialSkeletonEditable();
     return this.client.moveNode(nodeId, x, y, z, editContext);
   }
 
@@ -199,10 +226,12 @@ export class CatmaidSpatiallyIndexedSkeletonSource
       editContext?: CatmaidEditContext;
     },
   ): Promise<CatmaidDeleteNodeResult> {
+    this.ensureSpatialSkeletonEditable();
     return this.client.deleteNode(nodeId, options);
   }
 
   rerootSkeleton(nodeId: number, editContext?: CatmaidEditContext) {
+    this.ensureSpatialSkeletonEditable();
     return this.client.rerootSkeleton(nodeId, editContext);
   }
 
@@ -210,6 +239,7 @@ export class CatmaidSpatiallyIndexedSkeletonSource
     nodeId: number,
     description: string,
   ): Promise<CatmaidDescriptionUpdateResult> {
+    this.ensureSpatialSkeletonEditable();
     return this.client.updateDescription(nodeId, description);
   }
 
@@ -217,6 +247,7 @@ export class CatmaidSpatiallyIndexedSkeletonSource
     nodeId: number,
     nextIsTrueEnd: boolean,
   ): Promise<CatmaidNodeSourceStateResult> {
+    this.ensureSpatialSkeletonEditable();
     return this.client.toggleTrueEnd(nodeId, nextIsTrueEnd);
   }
 
@@ -225,6 +256,7 @@ export class CatmaidSpatiallyIndexedSkeletonSource
     radius: number,
     editContext?: CatmaidEditContext,
   ): Promise<CatmaidNodeSourceStateResult> {
+    this.ensureSpatialSkeletonEditable();
     return this.client.updateRadius(nodeId, radius, editContext);
   }
 
@@ -233,6 +265,7 @@ export class CatmaidSpatiallyIndexedSkeletonSource
     confidence: number,
     editContext?: CatmaidEditContext,
   ): Promise<CatmaidNodeSourceStateResult> {
+    this.ensureSpatialSkeletonEditable();
     return this.client.updateConfidence(nodeId, confidence, editContext);
   }
 
@@ -241,6 +274,7 @@ export class CatmaidSpatiallyIndexedSkeletonSource
     toNodeId: number,
     editContext?: CatmaidEditContext,
   ): Promise<CatmaidMergeResult> {
+    this.ensureSpatialSkeletonEditable();
     return this.client.mergeSkeletons(fromNodeId, toNodeId, editContext);
   }
 
@@ -248,6 +282,7 @@ export class CatmaidSpatiallyIndexedSkeletonSource
     nodeId: number,
     editContext?: CatmaidEditContext,
   ): Promise<CatmaidSplitResult> {
+    this.ensureSpatialSkeletonEditable();
     return this.client.splitSkeleton(nodeId, editContext);
   }
 }
@@ -278,6 +313,7 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
     private upperBoundsInNanometers: Float32Array,
     gridCellSizes: Array<{ x: number; y: number; z: number }>,
     private cacheProvider?: string,
+    private spatialSkeletonsReadOnly = false,
   ) {
     super(chunkManager);
     this.sortedGridCellSizes = [...gridCellSizes].sort(
@@ -347,6 +383,8 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
       parameters.catmaidParameters.url = this.baseUrl;
       parameters.catmaidParameters.projectId = this.projectId;
       parameters.catmaidParameters.cacheProvider = this.cacheProvider;
+      parameters.catmaidParameters.spatialSkeletonsReadOnly =
+        this.spatialSkeletonsReadOnly;
       parameters.gridIndex = gridIndex;
       parameters.catmaidLod =
         lastGridIndex <= 0 ? 0 : gridIndex / lastGridIndex;
@@ -449,6 +487,7 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
       lowerBounds: projectLowerBounds,
       upperBounds: projectUpperBounds,
       spatial,
+      readOnly,
     } = spatialIndexMetadata;
     const gridCellSizes = spatial.map(({ chunkSize }) => ({
       x: Number(chunkSize[0]),
@@ -499,6 +538,7 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
         upperCoordinateBound,
         gridCellSizes,
         cacheProvider,
+        readOnly,
       );
     // Create complete skeleton source (non-chunked)
     const completeSkeletonParameters =

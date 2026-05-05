@@ -74,10 +74,12 @@ describe("CatmaidClient skeleton editing methods", () => {
     await expect(client.getSpatialIndexMetadata()).resolves.toEqual({
       lowerBounds: [5, 6, 7],
       upperBounds: [25, 66, 127],
+      readOnly: false,
       spatial: [
         {
           chunkSize: [15, 15, 15],
           gridShape: [2, 4, 8],
+          limit: 0,
         },
       ],
     });
@@ -87,7 +89,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     warnSpy.mockRestore();
   });
 
-  it("reads spatial skeleton chunk sizes from stack metadata", async () => {
+  it("reads spatial skeleton spatial index levels from stack metadata", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     (client as any).listStacks = vi.fn().mockResolvedValue([{ id: 7 }]);
     (client as any).getStackInfo = vi.fn().mockResolvedValue({
@@ -95,10 +97,29 @@ describe("CatmaidClient skeleton editing methods", () => {
       resolution: { x: 2, y: 3, z: 4 },
       translation: { x: 5, y: 6, z: 7 },
       metadata: {
-        spatial_skeleton_chunk_sizes: [
-          [120, 120, 120],
-          [60, 60, 60],
-          [30, 30, 30],
+        cache_provider: "cached_msgpack_grid",
+        read_only: true,
+        spatial: [
+          {
+            chunk_size: [11168145, 11168145, 11168145],
+            limit: 500,
+          },
+          {
+            chunk_size: [6632497, 6632497, 6632497],
+            limit: 500,
+          },
+          {
+            chunk_size: [3939000, 3939000, 3939000],
+            limit: 7000,
+          },
+          {
+            chunk_size: [2339000, 2339000, 2339000],
+            limit: 27500,
+          },
+          {
+            chunk_size: [1500000, 1500000, 1500000],
+            limit: 70000,
+          },
         ],
       },
     });
@@ -106,21 +127,38 @@ describe("CatmaidClient skeleton editing methods", () => {
     await expect(client.getSpatialIndexMetadata()).resolves.toEqual({
       lowerBounds: [5, 6, 7],
       upperBounds: [25, 66, 127],
+      readOnly: true,
       spatial: [
         {
-          chunkSize: [120, 120, 120],
+          chunkSize: [11168145, 11168145, 11168145],
           gridShape: [1, 1, 1],
+          limit: 500,
         },
         {
-          chunkSize: [60, 60, 60],
-          gridShape: [1, 1, 2],
+          chunkSize: [6632497, 6632497, 6632497],
+          gridShape: [1, 1, 1],
+          limit: 500,
         },
         {
-          chunkSize: [30, 30, 30],
-          gridShape: [1, 2, 4],
+          chunkSize: [3939000, 3939000, 3939000],
+          gridShape: [1, 1, 1],
+          limit: 7000,
+        },
+        {
+          chunkSize: [2339000, 2339000, 2339000],
+          gridShape: [1, 1, 1],
+          limit: 27500,
+        },
+        {
+          chunkSize: [1500000, 1500000, 1500000],
+          gridShape: [1, 1, 1],
+          limit: 70000,
         },
       ],
     });
+    await expect(client.getCacheProvider()).resolves.toBe(
+      "cached_msgpack_grid",
+    );
   });
 
   it("parses live compact-detail history rows and label maps", async () => {

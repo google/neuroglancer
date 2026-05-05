@@ -59,6 +59,7 @@ export interface SpatiallyIndexedSkeletonNode
 export interface SpatiallyIndexedSkeletonMetadata
   extends SpatialSkeletonBounds {
   spatial: readonly SpatialSkeletonSpatialIndexLevel[];
+  readOnly: boolean;
 }
 
 export interface SpatialSkeletonNodeFeatureCapabilities {
@@ -78,6 +79,7 @@ export type SpatialSkeletonEditOperation = (
 ) => Promise<SpatialSkeletonEditResult>;
 
 export interface SpatiallyIndexedSkeletonSource {
+  readonly spatialSkeletonReadOnly?: boolean;
   listSkeletons(): Promise<number[]>;
   getSkeleton(
     skeletonId: number,

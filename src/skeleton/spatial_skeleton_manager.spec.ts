@@ -77,6 +77,21 @@ describe("skeleton/spatial_skeleton_manager", () => {
     expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
   });
 
+  it("does not treat a read-only source with edit methods as editable", () => {
+    const source = {
+      ...makeEditableSourceMethods(),
+      spatialSkeletonReadOnly: true,
+      listSkeletons: async () => [],
+      getSkeleton: async () => [],
+      fetchNodes: async () => [],
+      getSpatialIndexMetadata: async () => null,
+    };
+
+    expect(
+      getEditableSpatiallyIndexedSkeletonSource({ source }),
+    ).toBeUndefined();
+  });
+
   it("clears the full skeleton cache before notifying node data listeners", () => {
     const state = new SpatialSkeletonState();
     const cachedSegmentId = 11;

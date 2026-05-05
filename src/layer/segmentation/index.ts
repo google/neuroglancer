@@ -144,6 +144,7 @@ import {
 import {
   getEditableSpatiallyIndexedSkeletonSource,
   getSpatiallyIndexedSkeletonSource,
+  isSpatiallyIndexedSkeletonSourceReadOnly,
   SpatialSkeletonState,
 } from "#src/skeleton/spatial_skeleton_manager.js";
 import { DataType, VolumeType } from "#src/sliceview/volume/base.js";
@@ -1600,9 +1601,19 @@ export class SegmentationUserLayer extends Base {
   private getMissingSpatialSkeletonSupportReason(
     requiredActions: SpatialSkeletonAction | readonly SpatialSkeletonAction[],
   ) {
+    const skeletonLayer = this.getSpatiallyIndexedSkeletonLayer();
     const requirements = Array.isArray(requiredActions)
       ? requiredActions
       : [requiredActions];
+    if (
+      skeletonLayer !== undefined &&
+      requirements.some(
+        (action) => action !== SpatialSkeletonActions.inspect,
+      ) &&
+      isSpatiallyIndexedSkeletonSourceReadOnly(skeletonLayer)
+    ) {
+      return "The active spatial skeleton source is read-only.";
+    }
     const missingRequirements = requirements.filter(
       (action) => !this.supportsSpatialSkeletonAction(action),
     );
