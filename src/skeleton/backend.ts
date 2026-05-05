@@ -631,8 +631,9 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
             basePriority + SCALE_PRIORITY_MULTIPLIER * scaleIndex;
           source.currentLod = lodValue;
           source.currentRequestGeneration = currentGeneration;
-          source.currentRequestOwner =
-            SpatiallyIndexedSkeletonChunkRequestOwner.VIEW_3D;
+          source.currentRequestOwner = is2dView
+            ? SpatiallyIndexedSkeletonChunkRequestOwner.VIEW_2D
+            : SpatiallyIndexedSkeletonChunkRequestOwner.VIEW_3D;
           forEachVisibleVolumetricChunk(
             projectionParameters,
             this.localPosition.value,
