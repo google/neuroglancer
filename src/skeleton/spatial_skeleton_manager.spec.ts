@@ -107,6 +107,36 @@ describe("skeleton/spatial_skeleton_manager", () => {
     expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
   });
 
+  it("validates optional confidence configuration for editable sources", () => {
+    const source = {
+      ...makeEditableSourceCommands(),
+      editNodeConfidenceCommand: makeCommandFactory(
+        SpatialSkeletonActions.editNodeConfidence,
+      ),
+      spatialSkeletonConfidenceConfiguration: {
+        values: [0, 50, 100],
+      },
+      readOnly: false,
+      listSkeletons: async () => [],
+      getSkeleton: async () => [],
+      fetchNodes: async () => [],
+      getSpatialIndexMetadata: async () => null,
+    };
+
+    expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
+
+    expect(
+      getEditableSpatiallyIndexedSkeletonSource({
+        source: {
+          ...source,
+          spatialSkeletonConfidenceConfiguration: {
+            values: [0, Number.NaN, 100],
+          },
+        },
+      }),
+    ).toBeUndefined();
+  });
+
   it("does not treat a read-only source with edit commands as editable", () => {
     const source = {
       ...makeEditableSourceCommands(),
@@ -575,7 +605,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     expect(state.mergeAnchorNodeId.value).toBeUndefined();
   });
 
-  it("stores provided confidence when setting properties", () => {
+  it("stores provided radius and confidence independently", () => {
     const state = new SpatialSkeletonState();
     (state as any).replaceCachedSegmentNodes(11, [
       {
@@ -588,9 +618,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
       },
     ]);
 
-    expect(state.setNodeProperties(1, { radius: 6, confidence: 63 })).toBe(
-      true,
-    );
+    expect(state.setNodeRadius(1, 6)).toBe(true);
+    expect(state.setNodeConfidence(1, 63)).toBe(true);
     expect(state.getCachedNode(1)).toMatchObject({
       radius: 6,
       confidence: 63,

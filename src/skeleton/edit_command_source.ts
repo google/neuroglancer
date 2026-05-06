@@ -74,9 +74,13 @@ export type SpatialSkeletonEditNodeTrueEndCommandFactory =
   SpatialSkeletonEditCommandFactory<
     typeof SpatialSkeletonActions.editNodeTrueEnd
   >;
-export type SpatialSkeletonEditNodePropertiesCommandFactory =
+export type SpatialSkeletonEditNodeRadiusCommandFactory =
   SpatialSkeletonEditCommandFactory<
-    typeof SpatialSkeletonActions.editNodeProperties
+    typeof SpatialSkeletonActions.editNodeRadius
+  >;
+export type SpatialSkeletonEditNodeConfidenceCommandFactory =
+  SpatialSkeletonEditCommandFactory<
+    typeof SpatialSkeletonActions.editNodeConfidence
   >;
 export type SpatialSkeletonMergeSkeletonsCommandFactory =
   SpatialSkeletonEditCommandFactory<

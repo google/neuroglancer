@@ -85,7 +85,6 @@ function makeEditableSkeletonSource(overrides: Record<string, unknown> = {}) {
   }
   const client = makeCatmaidClient(clientOverrides);
   const commands = new CatmaidSpatialSkeletonEditCommands({
-    ensureEditable: vi.fn(),
     getClient: () => client as any,
   });
   return {
@@ -97,7 +96,8 @@ function makeEditableSkeletonSource(overrides: Record<string, unknown> = {}) {
     rerootCommand: commands.rerootCommand,
     editNodeDescriptionCommand: commands.editNodeDescriptionCommand,
     editNodeTrueEndCommand: commands.editNodeTrueEndCommand,
-    editNodePropertiesCommand: commands.editNodePropertiesCommand,
+    editNodeRadiusCommand: commands.editNodeRadiusCommand,
+    editNodeConfidenceCommand: commands.editNodeConfidenceCommand,
     mergeSkeletonsCommand: commands.mergeSkeletonsCommand,
     splitSkeletonsCommand: commands.splitSkeletonsCommand,
     listSkeletons: vi.fn(),

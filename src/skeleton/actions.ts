@@ -23,7 +23,8 @@ export const SpatialSkeletonActions = {
   reroot: "rerootSkeletons",
   editNodeDescription: "editNodeDescription",
   editNodeTrueEnd: "editNodeTrueEnd",
-  editNodeProperties: "editNodeProperties",
+  editNodeRadius: "editNodeRadius",
+  editNodeConfidence: "editNodeConfidence",
   mergeSkeletons: "mergeSkeletons",
   splitSkeletons: "splitSkeletons",
 } as const;
@@ -57,8 +58,10 @@ export function getSpatialSkeletonActionSupportLabel(
       return "node description editing";
     case SpatialSkeletonActions.editNodeTrueEnd:
       return "node true-end editing";
-    case SpatialSkeletonActions.editNodeProperties:
-      return "node property editing";
+    case SpatialSkeletonActions.editNodeRadius:
+      return "node radius editing";
+    case SpatialSkeletonActions.editNodeConfidence:
+      return "node confidence editing";
     case SpatialSkeletonActions.mergeSkeletons:
       return "skeleton merging";
     case SpatialSkeletonActions.splitSkeletons:

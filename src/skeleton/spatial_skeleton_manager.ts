@@ -16,6 +16,7 @@
 
 import type {
   EditableSpatiallyIndexedSkeletonSource,
+  SpatialSkeletonConfidenceConfiguration,
   SpatiallyIndexedSkeletonNode,
   SpatialSkeletonSourceState,
   SpatiallyIndexedSkeletonSource,
@@ -71,6 +72,34 @@ function hasOptionalCommandFactory<T extends string>(
   return (
     commandFactory === undefined ||
     isSpatialSkeletonEditCommandFactory(commandFactory, action)
+  );
+}
+
+function isFiniteNumberArray(value: unknown): value is readonly number[] {
+  return (
+    Array.isArray(value) &&
+    value.every((entry) => typeof entry === "number" && Number.isFinite(entry))
+  );
+}
+
+function isSpatialSkeletonConfidenceConfiguration(
+  value: unknown,
+): value is SpatialSkeletonConfidenceConfiguration {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    isFiniteNumberArray(getProperty(value, "values"))
+  );
+}
+
+function hasOptionalConfidenceConfiguration(value: unknown) {
+  const configuration = getProperty(
+    value,
+    "spatialSkeletonConfidenceConfiguration",
+  );
+  return (
+    configuration === undefined ||
+    isSpatialSkeletonConfidenceConfiguration(configuration)
   );
 }
 
@@ -139,9 +168,15 @@ export function isEditableSpatiallyIndexedSkeletonSource(
     ) &&
     hasOptionalCommandFactory(
       value,
-      "editNodePropertiesCommand",
-      SpatialSkeletonActions.editNodeProperties,
-    )
+      "editNodeRadiusCommand",
+      SpatialSkeletonActions.editNodeRadius,
+    ) &&
+    hasOptionalCommandFactory(
+      value,
+      "editNodeConfidenceCommand",
+      SpatialSkeletonActions.editNodeConfidence,
+    ) &&
+    hasOptionalConfidenceConfiguration(value)
   );
 }
 
@@ -260,27 +295,35 @@ export class SpatialSkeletonState extends RefCounted {
   >();
   private cachedNodesById = new Map<number, SpatiallyIndexedSkeletonNode>();
 
-  setNodeProperties(
-    nodeId: number,
-    properties: { radius: number; confidence: number },
-  ) {
+  setNodeRadius(nodeId: number, radius: number) {
     const normalizedNodeId = this.normalizeNodeId(nodeId);
-    const radius = Number(properties.radius);
-    const confidence = Number(properties.confidence);
-    if (
-      normalizedNodeId === undefined ||
-      !Number.isFinite(radius) ||
-      !Number.isFinite(confidence)
-    ) {
+    radius = Number(radius);
+    if (normalizedNodeId === undefined || !Number.isFinite(radius)) {
       return false;
     }
     return this.updateCachedNode(normalizedNodeId, (node) => {
-      if (node.radius === radius && node.confidence === confidence) {
+      if (node.radius === radius) {
         return node;
       }
       return {
         ...node,
         radius,
+      };
+    });
+  }
+
+  setNodeConfidence(nodeId: number, confidence: number) {
+    const normalizedNodeId = this.normalizeNodeId(nodeId);
+    confidence = Number(confidence);
+    if (normalizedNodeId === undefined || !Number.isFinite(confidence)) {
+      return false;
+    }
+    return this.updateCachedNode(normalizedNodeId, (node) => {
+      if (node.confidence === confidence) {
+        return node;
+      }
+      return {
+        ...node,
         confidence,
       };
     });

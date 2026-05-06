@@ -70,8 +70,10 @@ export function getSpatialSkeletonEditCommandFactory(
       return source.editNodeDescriptionCommand;
     case SpatialSkeletonActions.editNodeTrueEnd:
       return source.editNodeTrueEndCommand;
-    case SpatialSkeletonActions.editNodeProperties:
-      return source.editNodePropertiesCommand;
+    case SpatialSkeletonActions.editNodeRadius:
+      return source.editNodeRadiusCommand;
+    case SpatialSkeletonActions.editNodeConfidence:
+      return source.editNodeConfidenceCommand;
     case SpatialSkeletonActions.mergeSkeletons:
       return source.mergeSkeletonsCommand;
     case SpatialSkeletonActions.splitSkeletons:
@@ -200,15 +202,28 @@ export function executeSpatialSkeletonNodeTrueEndUpdate(
   return executeCommand(layer, command);
 }
 
-export function executeSpatialSkeletonNodePropertiesUpdate(
+export function executeSpatialSkeletonNodeRadiusUpdate(
   layer: SegmentationUserLayer,
   options: SpatialSkeletonCommandPayload,
 ) {
   const command = createSpatialSkeletonCommand(
     layer,
-    SpatialSkeletonActions.editNodeProperties,
+    SpatialSkeletonActions.editNodeRadius,
     options,
-    "The active skeleton source does not support node property editing.",
+    "The active skeleton source does not support node radius editing.",
+  );
+  return executeCommand(layer, command);
+}
+
+export function executeSpatialSkeletonNodeConfidenceUpdate(
+  layer: SegmentationUserLayer,
+  options: SpatialSkeletonCommandPayload,
+) {
+  const command = createSpatialSkeletonCommand(
+    layer,
+    SpatialSkeletonActions.editNodeConfidence,
+    options,
+    "The active skeleton source does not support node confidence editing.",
   );
   return executeCommand(layer, command);
 }

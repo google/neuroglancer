@@ -8,7 +8,9 @@ import {
   executeSpatialSkeletonDeleteNode,
   executeSpatialSkeletonMerge,
   executeSpatialSkeletonMoveNode,
+  executeSpatialSkeletonNodeConfidenceUpdate,
   executeSpatialSkeletonNodeDescriptionUpdate,
+  executeSpatialSkeletonNodeRadiusUpdate,
   executeSpatialSkeletonSplit,
   redoSpatialSkeletonCommand,
   undoSpatialSkeletonCommand,
@@ -93,7 +95,6 @@ function makeCatmaidClient(overrides: Record<string, unknown> = {}) {
 
 function makeCatmaidEditCommands(client = makeCatmaidClient()) {
   return new CatmaidSpatialSkeletonEditCommands({
-    ensureEditable: vi.fn(),
     getClient: () => client as any,
   });
 }
@@ -118,7 +119,8 @@ function makeEditableSkeletonSource(overrides: Record<string, unknown> = {}) {
     rerootCommand: commands.rerootCommand,
     editNodeDescriptionCommand: commands.editNodeDescriptionCommand,
     editNodeTrueEndCommand: commands.editNodeTrueEndCommand,
-    editNodePropertiesCommand: commands.editNodePropertiesCommand,
+    editNodeRadiusCommand: commands.editNodeRadiusCommand,
+    editNodeConfidenceCommand: commands.editNodeConfidenceCommand,
     mergeSkeletonsCommand: commands.mergeSkeletonsCommand,
     splitSkeletonsCommand: commands.splitSkeletonsCommand,
     listSkeletons: vi.fn(),
@@ -266,6 +268,12 @@ describe("spatial_skeleton_commands", () => {
     expect(commandSource.moveNodesCommand.action).toBe(
       SpatialSkeletonActions.moveNodes,
     );
+    expect(commandSource.editNodeRadiusCommand.action).toBe(
+      SpatialSkeletonActions.editNodeRadius,
+    );
+    expect(commandSource.editNodeConfidenceCommand.action).toBe(
+      SpatialSkeletonActions.editNodeConfidence,
+    );
     expect((commandSource as any).inspectCommand).toBeUndefined();
   });
 
@@ -304,6 +312,103 @@ describe("spatial_skeleton_commands", () => {
         nextPositionInModelSpace: new Float32Array([7, 8, 9]),
       }),
     ).toThrow("CATMAID move-node command received an invalid payload.");
+  });
+
+  it("commits radius and confidence commands independently", async () => {
+    suppressStatusMessages();
+
+    const node: SpatiallyIndexedSkeletonNode = {
+      nodeId: 17,
+      segmentId: 23,
+      position: new Float32Array([1, 2, 3]),
+      radius: 4,
+      confidence: 50,
+      sourceState: testSourceState("before"),
+    };
+    let cachedNode = node;
+    const updateRadius = vi.fn().mockResolvedValue({
+      sourceState: testSourceState("after-radius"),
+    });
+    const updateConfidence = vi.fn().mockResolvedValue({
+      sourceState: testSourceState("after-confidence"),
+    });
+    const skeletonLayer = {
+      source: makeEditableSkeletonSource({ updateRadius, updateConfidence }),
+      getNode: vi.fn((nodeId: number) =>
+        nodeId === cachedNode.nodeId ? cachedNode : undefined,
+      ),
+      invalidateSourceCaches: vi.fn(),
+    };
+    const commandHistory = new SpatialSkeletonCommandHistory();
+    const setNodeRadius = vi.fn((nodeId: number, radius: number) => {
+      if (nodeId === cachedNode.nodeId) {
+        cachedNode = { ...cachedNode, radius };
+      }
+    });
+    const setNodeConfidence = vi.fn((nodeId: number, confidence: number) => {
+      if (nodeId === cachedNode.nodeId) {
+        cachedNode = { ...cachedNode, confidence };
+      }
+    });
+    const setCachedNodeSourceState = vi.fn(
+      (nodeId: number, sourceState: unknown) => {
+        if (nodeId === cachedNode.nodeId) {
+          cachedNode = { ...cachedNode, sourceState: sourceState as any };
+        }
+      },
+    );
+    const markSpatialSkeletonNodeDataChanged = vi.fn();
+    const layer = {
+      spatialSkeletonState: {
+        commandHistory,
+        getCachedNode: vi.fn((nodeId: number) =>
+          nodeId === cachedNode.nodeId ? cachedNode : undefined,
+        ),
+        getCachedSegmentNodes: vi.fn((segmentId: number) =>
+          segmentId === cachedNode.segmentId ? [cachedNode] : undefined,
+        ),
+        setNodeRadius,
+        setNodeConfidence,
+        setCachedNodeSourceState,
+      },
+      getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
+      markSpatialSkeletonNodeDataChanged,
+    };
+
+    await executeSpatialSkeletonNodeRadiusUpdate(layer as any, {
+      node: cachedNode,
+      nextRadius: 6,
+    });
+    await executeSpatialSkeletonNodeConfidenceUpdate(layer as any, {
+      node: cachedNode,
+      nextConfidence: 75,
+    });
+
+    expect(updateRadius).toHaveBeenCalledWith(
+      17,
+      6,
+      expect.objectContaining({
+        node: expect.objectContaining({ nodeId: 17 }),
+      }),
+    );
+    expect(updateConfidence).toHaveBeenCalledWith(
+      17,
+      75,
+      expect.objectContaining({
+        node: expect.objectContaining({ nodeId: 17 }),
+      }),
+    );
+    expect(setNodeRadius).toHaveBeenCalledWith(17, 6);
+    expect(setNodeConfidence).toHaveBeenCalledWith(17, 75);
+    expect(setCachedNodeSourceState).toHaveBeenCalledWith(
+      17,
+      testSourceState("after-radius"),
+    );
+    expect(setCachedNodeSourceState).toHaveBeenCalledWith(
+      17,
+      testSourceState("after-confidence"),
+    );
+    expect(markSpatialSkeletonNodeDataChanged).toHaveBeenCalledTimes(2);
   });
 
   it("commits move-node commands using model-space positions", async () => {

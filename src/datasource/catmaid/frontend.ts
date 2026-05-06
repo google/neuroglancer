@@ -46,7 +46,7 @@ import {
   normalizeInlineSegmentPropertyMap,
 } from "#src/segmentation_display_state/property_map.js";
 import type {
-  SpatialSkeletonEditCapabilities,
+  SpatialSkeletonConfidenceConfiguration,
   SpatialSkeletonGridCellIndex,
   SpatiallyIndexedSkeletonMetadata,
   SpatiallyIndexedSkeletonNode,
@@ -66,14 +66,9 @@ import type { Borrowed } from "#src/util/disposable.js";
 import { mat4, vec3 } from "#src/util/geom.js";
 import "#src/datasource/catmaid/register_credentials_provider.js";
 
-const CATMAID_SPATIAL_SKELETON_EDIT_CAPABILITIES = {
-  nodeFeatures: {
-    description: true,
-    trueEnd: true,
-    radius: true,
-    confidenceValues: CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES,
-  },
-} satisfies SpatialSkeletonEditCapabilities;
+const CATMAID_SPATIAL_SKELETON_CONFIDENCE_CONFIGURATION = {
+  values: CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES,
+} satisfies SpatialSkeletonConfidenceConfiguration;
 
 export class CatmaidSpatiallyIndexedSkeletonSource extends WithParameters(
   WithCredentialsProvider<CatmaidToken>()(SpatiallyIndexedSkeletonSource),
@@ -81,7 +76,6 @@ export class CatmaidSpatiallyIndexedSkeletonSource extends WithParameters(
 ) {
   private readonly spatialSkeletonEditCommands =
     new CatmaidSpatialSkeletonEditCommands({
-      ensureEditable: () => this.ensureSpatialSkeletonEditable(),
       getClient: () => this.client,
     });
   private client_?: CatmaidClient;
@@ -90,34 +84,58 @@ export class CatmaidSpatiallyIndexedSkeletonSource extends WithParameters(
     return this.parameters.catmaidParameters.readOnly !== false;
   }
 
-  get spatialSkeletonEditCapabilities() {
+  get spatialSkeletonConfidenceConfiguration() {
     return this.readOnly
       ? undefined
-      : CATMAID_SPATIAL_SKELETON_EDIT_CAPABILITIES;
+      : CATMAID_SPATIAL_SKELETON_CONFIDENCE_CONFIGURATION;
   }
 
-  readonly addNodesCommand = this.spatialSkeletonEditCommands.addNodesCommand;
-  readonly insertNodesCommand =
-    this.spatialSkeletonEditCommands.insertNodesCommand;
-  readonly moveNodesCommand = this.spatialSkeletonEditCommands.moveNodesCommand;
-  readonly deleteNodesCommand =
-    this.spatialSkeletonEditCommands.deleteNodesCommand;
-  readonly rerootCommand = this.spatialSkeletonEditCommands.rerootCommand;
-  readonly editNodeDescriptionCommand =
-    this.spatialSkeletonEditCommands.editNodeDescriptionCommand;
-  readonly editNodeTrueEndCommand =
-    this.spatialSkeletonEditCommands.editNodeTrueEndCommand;
-  readonly editNodePropertiesCommand =
-    this.spatialSkeletonEditCommands.editNodePropertiesCommand;
-  readonly mergeSkeletonsCommand =
-    this.spatialSkeletonEditCommands.mergeSkeletonsCommand;
-  readonly splitSkeletonsCommand =
-    this.spatialSkeletonEditCommands.splitSkeletonsCommand;
+  private get editableSpatialSkeletonEditCommands() {
+    return this.readOnly ? undefined : this.spatialSkeletonEditCommands;
+  }
 
-  private ensureSpatialSkeletonEditable() {
-    if (this.readOnly) {
-      throw new Error("CATMAID spatial skeleton source is read-only.");
-    }
+  get addNodesCommand() {
+    return this.editableSpatialSkeletonEditCommands?.addNodesCommand;
+  }
+
+  get insertNodesCommand() {
+    return this.editableSpatialSkeletonEditCommands?.insertNodesCommand;
+  }
+
+  get moveNodesCommand() {
+    return this.editableSpatialSkeletonEditCommands?.moveNodesCommand;
+  }
+
+  get deleteNodesCommand() {
+    return this.editableSpatialSkeletonEditCommands?.deleteNodesCommand;
+  }
+
+  get rerootCommand() {
+    return this.editableSpatialSkeletonEditCommands?.rerootCommand;
+  }
+
+  get editNodeDescriptionCommand() {
+    return this.editableSpatialSkeletonEditCommands?.editNodeDescriptionCommand;
+  }
+
+  get editNodeTrueEndCommand() {
+    return this.editableSpatialSkeletonEditCommands?.editNodeTrueEndCommand;
+  }
+
+  get editNodeRadiusCommand() {
+    return this.editableSpatialSkeletonEditCommands?.editNodeRadiusCommand;
+  }
+
+  get editNodeConfidenceCommand() {
+    return this.editableSpatialSkeletonEditCommands?.editNodeConfidenceCommand;
+  }
+
+  get mergeSkeletonsCommand() {
+    return this.editableSpatialSkeletonEditCommands?.mergeSkeletonsCommand;
+  }
+
+  get splitSkeletonsCommand() {
+    return this.editableSpatialSkeletonEditCommands?.splitSkeletonsCommand;
   }
 
   private get client() {

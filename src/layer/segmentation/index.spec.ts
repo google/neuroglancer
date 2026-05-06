@@ -35,6 +35,7 @@ const { SegmentSelectionState } = await import(
 
 function makeEditableSpatialSkeletonSource(
   options: {
+    confidenceConfiguration?: boolean;
     rerootCommand?: boolean;
   } = {},
 ) {
@@ -58,8 +59,9 @@ function makeEditableSpatialSkeletonSource(
       SpatialSkeletonActions.editNodeDescription,
     ),
     editNodeTrueEndCommand: makeCommand(SpatialSkeletonActions.editNodeTrueEnd),
-    editNodePropertiesCommand: makeCommand(
-      SpatialSkeletonActions.editNodeProperties,
+    editNodeRadiusCommand: makeCommand(SpatialSkeletonActions.editNodeRadius),
+    editNodeConfidenceCommand: makeCommand(
+      SpatialSkeletonActions.editNodeConfidence,
     ),
     mergeSkeletonsCommand: makeCommand(SpatialSkeletonActions.mergeSkeletons),
     splitSkeletonsCommand: makeCommand(SpatialSkeletonActions.splitSkeletons),
@@ -71,6 +73,13 @@ function makeEditableSpatialSkeletonSource(
       nodeId: 1,
       position: [0, 0, 0],
     }),
+    ...(options.confidenceConfiguration !== true
+      ? {}
+      : {
+          spatialSkeletonConfidenceConfiguration: {
+            values: [0, 50, 100],
+          },
+        }),
     ...(options.rerootCommand !== true
       ? {}
       : {
@@ -234,6 +243,40 @@ describe("layer/segmentation spatial skeleton action gating", () => {
     ).toBe(
       "The active spatial skeleton source does not support skeleton rerooting.",
     );
+  });
+
+  it("requires confidence configuration for confidence edit support", () => {
+    const layer = Object.assign(
+      Object.create(SegmentationUserLayer.prototype),
+      {
+        getSpatiallyIndexedSkeletonLayer: () =>
+          makeSpatialSkeletonLayerWithSource(makeEditableSpatialSkeletonSource()),
+        spatialSkeletonVisibleChunksLoaded: new WatchableValue(true),
+        spatialSkeletonVisibleChunksNeeded: new WatchableValue(0),
+        spatialSkeletonVisibleChunksAvailable: new WatchableValue(0),
+      },
+    );
+
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason(
+        SpatialSkeletonActions.editNodeConfidence,
+      ),
+    ).toBe(
+      "The active spatial skeleton source does not support node confidence editing.",
+    );
+
+    layer.getSpatiallyIndexedSkeletonLayer = () =>
+      makeSpatialSkeletonLayerWithSource(
+        makeEditableSpatialSkeletonSource({
+          confidenceConfiguration: true,
+        }),
+      );
+
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason(
+        SpatialSkeletonActions.editNodeConfidence,
+      ),
+    ).toBeUndefined();
   });
 
   it("reports read-only spatial skeleton sources explicitly", () => {

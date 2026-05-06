@@ -100,9 +100,14 @@ interface CatmaidSpatialSkeletonNodeTrueEndCommandOptions {
   nextIsTrueEnd: boolean;
 }
 
-interface CatmaidSpatialSkeletonNodePropertiesCommandOptions {
+interface CatmaidSpatialSkeletonNodeRadiusCommandOptions {
   node: SpatiallyIndexedSkeletonNode;
-  next: { radius: number; confidence: number };
+  nextRadius: number;
+}
+
+interface CatmaidSpatialSkeletonNodeConfidenceCommandOptions {
+  node: SpatiallyIndexedSkeletonNode;
+  nextConfidence: number;
 }
 
 interface CatmaidSpatialSkeletonMergeEndpoint {
@@ -117,7 +122,6 @@ interface CatmaidSpatialSkeletonMergeCommandPayload {
 }
 
 export interface CatmaidSpatialSkeletonEditCommandContext {
-  ensureEditable(): void;
   getClient(): CatmaidClient;
 }
 
@@ -335,25 +339,39 @@ function requireCatmaidNodeTrueEndCommandOptions(payload: object) {
   );
 }
 
-function requireCatmaidNodePropertiesCommandOptions(payload: object) {
+function requireCatmaidNodeRadiusCommandOptions(payload: object) {
   return requireCatmaidCommandPayload(
     payload,
-    "node-properties",
+    "node-radius",
     (
       candidate,
-    ): candidate is CatmaidSpatialSkeletonNodePropertiesCommandOptions => {
+    ): candidate is CatmaidSpatialSkeletonNodeRadiusCommandOptions => {
       const options = candidate as {
         node?: object;
-        next?: object;
+        nextRadius?: number;
       };
-      const next = options.next as
-        | { radius?: number; confidence?: number }
-        | undefined;
       return (
         isSpatiallyIndexedSkeletonNodePayload(options.node) &&
-        next !== undefined &&
-        isFiniteNumber(next.radius) &&
-        isFiniteNumber(next.confidence)
+        isFiniteNumber(options.nextRadius)
+      );
+    },
+  );
+}
+
+function requireCatmaidNodeConfidenceCommandOptions(payload: object) {
+  return requireCatmaidCommandPayload(
+    payload,
+    "node-confidence",
+    (
+      candidate,
+    ): candidate is CatmaidSpatialSkeletonNodeConfidenceCommandOptions => {
+      const options = candidate as {
+        node?: object;
+        nextConfidence?: number;
+      };
+      return (
+        isSpatiallyIndexedSkeletonNodePayload(options.node) &&
+        isFiniteNumber(options.nextConfidence)
       );
     },
   );
@@ -1491,75 +1509,118 @@ class NodeTrueEndCommand implements SpatialSkeletonCommand {
   }
 }
 
-class NodePropertiesCommand implements SpatialSkeletonCommand {
-  readonly label = "Edit node properties";
+class NodeRadiusCommand implements SpatialSkeletonCommand {
+  readonly label = "Edit node radius";
 
   constructor(
     private layer: SegmentationUserLayer,
     private stableNodeId: number,
     private stableSegmentId: number | undefined,
-    private before: { radius: number; confidence: number },
-    private after: { radius: number; confidence: number },
+    private beforeRadius: number,
+    private afterRadius: number,
     private editOperations: CatmaidSpatialSkeletonEditOperations,
   ) {}
 
-  private async applyProperties(
-    next: { radius: number; confidence: number },
-    statusPrefix: string,
-  ) {
+  private async applyRadius(nextRadius: number, statusPrefix: string) {
     const { node } = await getResolvedNodeForEdit(
       this.layer,
       this.stableNodeId,
       this.stableSegmentId,
     );
-    let currentNode = cloneNodeSnapshot(node);
-    if (currentNode.radius !== next.radius) {
-      const radiusResult = await this.editOperations.commitRadius({
-        node: currentNode,
-        radius: next.radius,
-      });
-      currentNode = {
-        ...currentNode,
-        radius: next.radius,
-        sourceState: radiusResult.sourceState ?? currentNode.sourceState,
-      };
+    if (node.radius === nextRadius) {
+      return;
     }
-    if (currentNode.confidence !== next.confidence) {
-      const confidenceResult = await this.editOperations.commitConfidence({
-        node: currentNode,
-        confidence: next.confidence,
-      });
-      currentNode = {
-        ...currentNode,
-        confidence: next.confidence,
-        sourceState: confidenceResult.sourceState ?? currentNode.sourceState,
-      };
-    }
-    this.layer.spatialSkeletonState.setNodeProperties(node.nodeId, next);
-    if (currentNode.sourceState !== undefined) {
+    const radiusResult = await this.editOperations.commitRadius({
+      node,
+      radius: nextRadius,
+    });
+    this.layer.spatialSkeletonState.setNodeRadius(node.nodeId, nextRadius);
+    if (radiusResult.sourceState !== undefined) {
       this.layer.spatialSkeletonState.setCachedNodeSourceState(
         node.nodeId,
-        currentNode.sourceState,
+        radiusResult.sourceState,
       );
     }
     this.layer.markSpatialSkeletonNodeDataChanged({
       invalidateFullSkeletonCache: false,
     });
     StatusMessage.showTemporaryMessage(
-      `${statusPrefix} node ${node.nodeId} properties.`,
+      `${statusPrefix} node ${node.nodeId} radius.`,
     );
   }
 
   execute() {
-    return this.applyProperties(this.after, "Updated");
+    return this.applyRadius(this.afterRadius, "Updated");
   }
 
   undo() {
-    return this.applyProperties(this.before, "Undid property update for");
+    return this.applyRadius(this.beforeRadius, "Undid radius update for");
   }
 
   redo() {
-    return this.applyProperties(this.after, "Redid property update for");
+    return this.applyRadius(this.afterRadius, "Redid radius update for");
+  }
+}
+
+class NodeConfidenceCommand implements SpatialSkeletonCommand {
+  readonly label = "Edit node confidence";
+
+  constructor(
+    private layer: SegmentationUserLayer,
+    private stableNodeId: number,
+    private stableSegmentId: number | undefined,
+    private beforeConfidence: number,
+    private afterConfidence: number,
+    private editOperations: CatmaidSpatialSkeletonEditOperations,
+  ) {}
+
+  private async applyConfidence(nextConfidence: number, statusPrefix: string) {
+    const { node } = await getResolvedNodeForEdit(
+      this.layer,
+      this.stableNodeId,
+      this.stableSegmentId,
+    );
+    if (node.confidence === nextConfidence) {
+      return;
+    }
+    const confidenceResult = await this.editOperations.commitConfidence({
+      node,
+      confidence: nextConfidence,
+    });
+    this.layer.spatialSkeletonState.setNodeConfidence(
+      node.nodeId,
+      nextConfidence,
+    );
+    if (confidenceResult.sourceState !== undefined) {
+      this.layer.spatialSkeletonState.setCachedNodeSourceState(
+        node.nodeId,
+        confidenceResult.sourceState,
+      );
+    }
+    this.layer.markSpatialSkeletonNodeDataChanged({
+      invalidateFullSkeletonCache: false,
+    });
+    StatusMessage.showTemporaryMessage(
+      `${statusPrefix} node ${node.nodeId} confidence.`,
+    );
+  }
+
+  execute() {
+    return this.applyConfidence(this.afterConfidence, "Updated");
+  }
+
+  undo() {
+    return this.applyConfidence(
+      this.beforeConfidence,
+      "Undid confidence update for",
+    );
+  }
+
+  redo() {
+    return this.applyConfidence(
+      this.afterConfidence,
+      "Redid confidence update for",
+    );
   }
 }
 
@@ -2084,12 +2145,21 @@ export class CatmaidSpatialSkeletonEditCommands {
       ),
   );
 
-  readonly editNodePropertiesCommand = makeCatmaidCommandFactory(
-    SpatialSkeletonActions.editNodeProperties,
+  readonly editNodeRadiusCommand = makeCatmaidCommandFactory(
+    SpatialSkeletonActions.editNodeRadius,
     (layer, payload) =>
-      this.createNodePropertiesCommand(
+      this.createNodeRadiusCommand(
         layer,
-        requireCatmaidNodePropertiesCommandOptions(payload),
+        requireCatmaidNodeRadiusCommandOptions(payload),
+      ),
+  );
+
+  readonly editNodeConfidenceCommand = makeCatmaidCommandFactory(
+    SpatialSkeletonActions.editNodeConfidence,
+    (layer, payload) =>
+      this.createNodeConfidenceCommand(
+        layer,
+        requireCatmaidNodeConfidenceCommandOptions(payload),
       ),
   );
 
@@ -2118,14 +2188,9 @@ export class CatmaidSpatialSkeletonEditCommands {
     return this.editContext.getClient();
   }
 
-  private ensureEditable() {
-    this.editContext.ensureEditable();
-  }
-
   private commitAddNode(
     request: CatmaidSpatialSkeletonAddNodeRequest,
   ): Promise<CatmaidSpatialSkeletonAddNodeResult> {
-    this.ensureEditable();
     const [x, y, z] = getCatmaidEditPosition(
       request.position,
       "add-node position",
@@ -2145,7 +2210,6 @@ export class CatmaidSpatialSkeletonEditCommands {
   private commitInsertNode(
     request: CatmaidSpatialSkeletonInsertNodeRequest,
   ): Promise<CatmaidSpatialSkeletonInsertNodeResult> {
-    this.ensureEditable();
     const [x, y, z] = getCatmaidEditPosition(
       request.position,
       "insert-node position",
@@ -2164,7 +2228,6 @@ export class CatmaidSpatialSkeletonEditCommands {
   private commitMoveNode(
     request: CatmaidSpatialSkeletonMoveNodeRequest,
   ): Promise<CatmaidSpatialSkeletonNodeSourceStateResult> {
-    this.ensureEditable();
     const [x, y, z] = getCatmaidEditPosition(
       request.position,
       "move-node position",
@@ -2181,7 +2244,6 @@ export class CatmaidSpatialSkeletonEditCommands {
   private commitDeleteNode(
     request: CatmaidSpatialSkeletonDeleteNodeRequest,
   ): Promise<CatmaidSpatialSkeletonDeleteNodeResult> {
-    this.ensureEditable();
     return this.client.deleteNode(request.node.nodeId, {
       childNodeIds: request.childNodes.map((child) => child.nodeId),
       editContext: buildCatmaidNeighborhoodEditContext(
@@ -2194,7 +2256,6 @@ export class CatmaidSpatialSkeletonEditCommands {
   private commitReroot(
     request: CatmaidSpatialSkeletonRerootRequest,
   ): Promise<CatmaidSpatialSkeletonRerootResult> {
-    this.ensureEditable();
     return this.client.rerootSkeleton(
       request.node.nodeId,
       buildCatmaidRerootEditContext(request.node, request.segmentNodes),
@@ -2204,7 +2265,6 @@ export class CatmaidSpatialSkeletonEditCommands {
   private commitDescription(
     request: CatmaidSpatialSkeletonDescriptionUpdateRequest,
   ): Promise<CatmaidSpatialSkeletonDescriptionUpdateResult> {
-    this.ensureEditable();
     return this.client.updateDescription(
       request.node.nodeId,
       request.description,
@@ -2217,14 +2277,12 @@ export class CatmaidSpatialSkeletonEditCommands {
   private commitTrueEnd(
     request: CatmaidSpatialSkeletonTrueEndUpdateRequest,
   ): Promise<CatmaidSpatialSkeletonNodeSourceStateResult> {
-    this.ensureEditable();
     return this.client.toggleTrueEnd(request.node.nodeId, request.isTrueEnd);
   }
 
   private commitRadius(
     request: CatmaidSpatialSkeletonRadiusUpdateRequest,
   ): Promise<CatmaidSpatialSkeletonNodeSourceStateResult> {
-    this.ensureEditable();
     return this.client.updateRadius(
       request.node.nodeId,
       request.radius,
@@ -2235,7 +2293,6 @@ export class CatmaidSpatialSkeletonEditCommands {
   private commitConfidence(
     request: CatmaidSpatialSkeletonConfidenceUpdateRequest,
   ): Promise<CatmaidSpatialSkeletonNodeSourceStateResult> {
-    this.ensureEditable();
     return this.client.updateConfidence(
       request.node.nodeId,
       request.confidence,
@@ -2246,7 +2303,6 @@ export class CatmaidSpatialSkeletonEditCommands {
   private commitMerge(
     request: CatmaidSpatialSkeletonMergeRequest,
   ): Promise<CatmaidSpatialSkeletonMergeResult> {
-    this.ensureEditable();
     return this.client.mergeSkeletons(
       request.fromNode.nodeId,
       request.toNode.nodeId,
@@ -2257,7 +2313,6 @@ export class CatmaidSpatialSkeletonEditCommands {
   private commitSplit(
     request: CatmaidSpatialSkeletonSplitRequest,
   ): Promise<CatmaidSpatialSkeletonSplitResult> {
-    this.ensureEditable();
     return this.client.splitSkeleton(
       request.node.nodeId,
       buildCatmaidNeighborhoodEditContext(request.node, request.segmentNodes),
@@ -2382,20 +2437,32 @@ export class CatmaidSpatialSkeletonEditCommands {
     );
   }
 
-  private createNodePropertiesCommand(
+  private createNodeRadiusCommand(
     layer: SegmentationUserLayer,
-    options: CatmaidSpatialSkeletonNodePropertiesCommandOptions,
+    options: CatmaidSpatialSkeletonNodeRadiusCommandOptions,
   ) {
     const commandMappings = layer.spatialSkeletonState.commandHistory.mappings;
-    return new NodePropertiesCommand(
+    return new NodeRadiusCommand(
       layer,
       commandMappings.getStableOrCurrentNodeId(options.node.nodeId)!,
       commandMappings.getStableOrCurrentSegmentId(options.node.segmentId),
-      {
-        radius: options.node.radius ?? 0,
-        confidence: options.node.confidence ?? 0,
-      },
-      options.next,
+      options.node.radius ?? 0,
+      options.nextRadius,
+      this.editOperations,
+    );
+  }
+
+  private createNodeConfidenceCommand(
+    layer: SegmentationUserLayer,
+    options: CatmaidSpatialSkeletonNodeConfidenceCommandOptions,
+  ) {
+    const commandMappings = layer.spatialSkeletonState.commandHistory.mappings;
+    return new NodeConfidenceCommand(
+      layer,
+      commandMappings.getStableOrCurrentNodeId(options.node.nodeId)!,
+      commandMappings.getStableOrCurrentSegmentId(options.node.segmentId),
+      options.node.confidence ?? 0,
+      options.nextConfidence,
       this.editOperations,
     );
   }

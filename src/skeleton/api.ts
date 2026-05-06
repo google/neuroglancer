@@ -18,7 +18,8 @@ import type {
   SpatialSkeletonAddNodesCommandFactory,
   SpatialSkeletonDeleteNodesCommandFactory,
   SpatialSkeletonEditNodeDescriptionCommandFactory,
-  SpatialSkeletonEditNodePropertiesCommandFactory,
+  SpatialSkeletonEditNodeConfidenceCommandFactory,
+  SpatialSkeletonEditNodeRadiusCommandFactory,
   SpatialSkeletonEditNodeTrueEndCommandFactory,
   SpatialSkeletonInsertNodesCommandFactory,
   SpatialSkeletonMergeSkeletonsCommandFactory,
@@ -75,15 +76,8 @@ export interface SpatiallyIndexedSkeletonMetadata
   readOnly: boolean;
 }
 
-export interface SpatialSkeletonNodeFeatureCapabilities {
-  description?: boolean;
-  trueEnd?: boolean;
-  radius?: boolean;
-  confidenceValues?: readonly number[];
-}
-
-export interface SpatialSkeletonEditCapabilities {
-  nodeFeatures?: SpatialSkeletonNodeFeatureCapabilities;
+export interface SpatialSkeletonConfidenceConfiguration {
+  values: readonly number[];
 }
 
 export interface SpatiallyIndexedSkeletonSource {
@@ -105,7 +99,6 @@ export interface SpatiallyIndexedSkeletonSource {
 export interface EditableSpatiallyIndexedSkeletonSource
   extends SpatiallyIndexedSkeletonSource {
   readonly readOnly: false;
-  readonly spatialSkeletonEditCapabilities?: SpatialSkeletonEditCapabilities;
   readonly addNodesCommand: SpatialSkeletonAddNodesCommandFactory;
   readonly deleteNodesCommand: SpatialSkeletonDeleteNodesCommandFactory;
   readonly moveNodesCommand: SpatialSkeletonMoveNodesCommandFactory;
@@ -115,5 +108,7 @@ export interface EditableSpatiallyIndexedSkeletonSource
   readonly rerootCommand?: SpatialSkeletonRerootCommandFactory;
   readonly editNodeDescriptionCommand?: SpatialSkeletonEditNodeDescriptionCommandFactory;
   readonly editNodeTrueEndCommand?: SpatialSkeletonEditNodeTrueEndCommandFactory;
-  readonly editNodePropertiesCommand?: SpatialSkeletonEditNodePropertiesCommandFactory;
+  readonly editNodeRadiusCommand?: SpatialSkeletonEditNodeRadiusCommandFactory;
+  readonly editNodeConfidenceCommand?: SpatialSkeletonEditNodeConfidenceCommandFactory;
+  readonly spatialSkeletonConfidenceConfiguration?: SpatialSkeletonConfidenceConfiguration;
 }
