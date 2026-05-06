@@ -22,8 +22,6 @@ export const SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_RPC_ID =
   "skeleton/SpatiallyIndexedSkeletonRenderLayer";
 export const SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_UPDATE_SOURCES_RPC_ID =
   "skeleton/SpatiallyIndexedSkeletonRenderLayer.updateSources";
-export const SPATIALLY_INDEXED_SKELETON_SLICEVIEW_RENDER_LAYER_RPC_ID =
-  "skeleton/SpatiallyIndexedSkeletonSliceViewRenderLayer";
 
 export interface VertexAttributeInfo {
   dataType: DataType;
