@@ -48,6 +48,7 @@ function makeEditableSpatialSkeletonSource(
     action !== SpatialSkeletonActions.reroot ||
     options.rerootSkeleton !== undefined;
   return {
+    readOnly: false,
     spatialSkeletonEditCommandSource: {
       supports,
       createCommand: (action: string) =>
@@ -250,7 +251,7 @@ describe("layer/segmentation spatial skeleton action gating", () => {
             ...makeEditableSpatialSkeletonSource({
               rerootSkeleton: async () => {},
             }),
-            spatialSkeletonReadOnly: true,
+            readOnly: true,
           }),
         spatialSkeletonVisibleChunksLoaded: new WatchableValue(true),
         spatialSkeletonVisibleChunksNeeded: new WatchableValue(0),

@@ -62,6 +62,7 @@ function setSegmentNodes(
 
 function makeEditableSkeletonSource(overrides: Record<string, unknown> = {}) {
   return {
+    readOnly: false,
     spatialSkeletonEditCommandSource:
       new CatmaidSpatialSkeletonEditCommandSource(),
     listSkeletons: vi.fn(),
@@ -122,6 +123,7 @@ describe("spatial_skeleton_commands", () => {
       },
       getSpatiallyIndexedSkeletonLayer: () => ({
         source: {
+          readOnly: false,
           spatialSkeletonEditCommandSource: {
             supports: () => true,
             createCommand,
@@ -173,6 +175,7 @@ describe("spatial_skeleton_commands", () => {
       },
       getSpatiallyIndexedSkeletonLayer: () => ({
         source: {
+          readOnly: false,
           spatialSkeletonEditCommandSource: {
             supports: () => true,
           },
@@ -222,6 +225,7 @@ describe("spatial_skeleton_commands", () => {
       },
       getSpatiallyIndexedSkeletonLayer: () => ({
         source: {
+          readOnly: false,
           spatialSkeletonEditCommandSource: {
             supports: () => true,
             createCommand,
@@ -303,10 +307,14 @@ describe("spatial_skeleton_commands", () => {
     };
 
     expect(() =>
-      commandSource.createCommand(SpatialSkeletonActions.moveNodes, layer as any, {
-        node: {},
-        nextPositionInModelSpace: new Float32Array([7, 8, 9]),
-      }),
+      commandSource.createCommand(
+        SpatialSkeletonActions.moveNodes,
+        layer as any,
+        {
+          node: {},
+          nextPositionInModelSpace: new Float32Array([7, 8, 9]),
+        },
+      ),
     ).toThrow("CATMAID move-node command received an invalid payload.");
   });
 
@@ -377,6 +385,85 @@ describe("spatial_skeleton_commands", () => {
       invalidateFullSkeletonCache: false,
     });
     expect(skeletonLayer.invalidateSourceCaches).not.toHaveBeenCalled();
+  });
+
+  it("preserves CATMAID true-end labels when editing node descriptions", async () => {
+    suppressStatusMessages();
+
+    let cachedNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 17,
+      segmentId: 23,
+      position: new Float32Array([1, 2, 3]),
+      description: "before",
+      isTrueEnd: true,
+      sourceState: testSourceState("before"),
+    };
+    const updateDescription = vi.fn().mockResolvedValue({
+      description: "after",
+      sourceState: testSourceState("after"),
+    });
+    const toggleTrueEnd = vi.fn();
+    const skeletonLayer = {
+      source: makeEditableSkeletonSource({ updateDescription, toggleTrueEnd }),
+      getNode: vi.fn((nodeId: number) =>
+        nodeId === cachedNode.nodeId ? cachedNode : undefined,
+      ),
+      invalidateSourceCaches: vi.fn(),
+    };
+    const commandHistory = new SpatialSkeletonCommandHistory();
+    const updateCachedNode = vi.fn(
+      (
+        nodeId: number,
+        updater: (
+          candidate: SpatiallyIndexedSkeletonNode,
+        ) => SpatiallyIndexedSkeletonNode,
+      ) => {
+        if (nodeId === cachedNode.nodeId) {
+          cachedNode = updater(cachedNode);
+        }
+      },
+    );
+    const setCachedNodeSourceState = vi.fn(
+      (nodeId: number, sourceState: unknown) => {
+        if (nodeId === cachedNode.nodeId) {
+          cachedNode = { ...cachedNode, sourceState: sourceState as any };
+        }
+      },
+    );
+    const markSpatialSkeletonNodeDataChanged = vi.fn();
+    const layer = {
+      spatialSkeletonState: {
+        commandHistory,
+        getCachedNode: vi.fn((nodeId: number) =>
+          nodeId === cachedNode.nodeId ? cachedNode : undefined,
+        ),
+        getCachedSegmentNodes: vi.fn((segmentId: number) =>
+          segmentId === cachedNode.segmentId ? [cachedNode] : undefined,
+        ),
+        updateCachedNode,
+        setCachedNodeSourceState,
+      },
+      getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
+      markSpatialSkeletonNodeDataChanged,
+    };
+
+    await executeSpatialSkeletonNodeDescriptionUpdate(layer as any, {
+      node: cachedNode,
+      nextDescription: "after",
+    });
+
+    expect(updateDescription).toHaveBeenCalledWith(17, "after", {
+      isTrueEnd: true,
+    });
+    expect(toggleTrueEnd).not.toHaveBeenCalled();
+    expect(cachedNode).toMatchObject({
+      description: "after",
+      isTrueEnd: true,
+      sourceState: testSourceState("after"),
+    });
+    expect(markSpatialSkeletonNodeDataChanged).toHaveBeenCalledWith({
+      invalidateFullSkeletonCache: false,
+    });
   });
 
   it("moves to the parent node when undoing an add-node command", async () => {

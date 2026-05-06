@@ -26,6 +26,7 @@ import type { CredentialsProvider } from "#src/credentials_provider/index.js";
 import type {
   CatmaidAddNodeResult,
   CatmaidDeleteNodeResult,
+  CatmaidDescriptionUpdateOptions,
   CatmaidDescriptionUpdateResult,
   CatmaidEditContext,
   CatmaidInsertNodeResult,
@@ -100,12 +101,12 @@ export class CatmaidSpatiallyIndexedSkeletonSource
     new CatmaidSpatialSkeletonEditCommandSource();
   private client_?: CatmaidClient;
 
-  get spatialSkeletonReadOnly() {
-    return this.parameters.catmaidParameters.spatialSkeletonsReadOnly === true;
+  get readOnly() {
+    return this.parameters.catmaidParameters.readOnly !== false;
   }
 
   get spatialSkeletonEditCapabilities() {
-    return this.spatialSkeletonReadOnly
+    return this.readOnly
       ? undefined
       : CATMAID_SPATIAL_SKELETON_EDIT_CAPABILITIES;
   }
@@ -115,7 +116,7 @@ export class CatmaidSpatiallyIndexedSkeletonSource
   }
 
   private ensureSpatialSkeletonEditable() {
-    if (this.spatialSkeletonReadOnly) {
+    if (this.readOnly) {
       throw new Error("CATMAID spatial skeleton source is read-only.");
     }
   }
@@ -237,9 +238,10 @@ export class CatmaidSpatiallyIndexedSkeletonSource
   updateDescription(
     nodeId: number,
     description: string,
+    options?: CatmaidDescriptionUpdateOptions,
   ): Promise<CatmaidDescriptionUpdateResult> {
     this.ensureSpatialSkeletonEditable();
-    return this.client.updateDescription(nodeId, description);
+    return this.client.updateDescription(nodeId, description, options);
   }
 
   toggleTrueEnd(
@@ -312,7 +314,7 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
     private upperBoundsInNanometers: Float32Array,
     gridCellSizes: Array<{ x: number; y: number; z: number }>,
     private cacheProvider?: string,
-    private spatialSkeletonsReadOnly = false,
+    private readOnly = true,
   ) {
     super(chunkManager);
     this.sortedGridCellSizes = [...gridCellSizes].sort(
@@ -382,8 +384,7 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
       parameters.catmaidParameters.url = this.baseUrl;
       parameters.catmaidParameters.projectId = this.projectId;
       parameters.catmaidParameters.cacheProvider = this.cacheProvider;
-      parameters.catmaidParameters.spatialSkeletonsReadOnly =
-        this.spatialSkeletonsReadOnly;
+      parameters.catmaidParameters.readOnly = this.readOnly;
       parameters.gridIndex = gridIndex;
       parameters.catmaidLod =
         lastGridIndex <= 0 ? 0 : gridIndex / lastGridIndex;

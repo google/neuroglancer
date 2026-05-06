@@ -81,7 +81,7 @@ export type SpatialSkeletonEditOperation = (
 ) => Promise<SpatialSkeletonEditResult>;
 
 export interface SpatiallyIndexedSkeletonSource {
-  readonly spatialSkeletonReadOnly?: boolean;
+  readonly readOnly: boolean;
   listSkeletons(): Promise<number[]>;
   getSkeleton(
     skeletonId: number,

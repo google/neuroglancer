@@ -77,7 +77,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     await expect(client.getSpatialIndexMetadata()).resolves.toEqual({
       lowerBounds: [5, 6, 7],
       upperBounds: [25, 66, 127],
-      readOnly: false,
+      readOnly: true,
       spatial: [
         {
           chunkSize: [15, 15, 15],
@@ -90,6 +90,24 @@ describe("CatmaidClient skeleton editing methods", () => {
     expect((client as any).listStacks).toHaveBeenCalledTimes(2);
     expect((client as any).getStackInfo).toHaveBeenCalledTimes(1);
     warnSpy.mockRestore();
+  });
+
+  it("honors explicit writable CATMAID spatial skeleton metadata", async () => {
+    const client = new CatmaidClient("https://example.invalid", 1);
+    (client as any).listStacks = vi.fn().mockResolvedValue([{ id: 7 }]);
+    (client as any).getStackInfo = vi.fn().mockResolvedValue({
+      dimension: { x: 10, y: 20, z: 30 },
+      resolution: { x: 2, y: 3, z: 4 },
+      translation: { x: 5, y: 6, z: 7 },
+      metadata: {
+        read_only: false,
+        spatial: [{ chunk_size: [15, 15, 15], limit: 1 }],
+      },
+    });
+
+    await expect(client.getSpatialIndexMetadata()).resolves.toMatchObject({
+      readOnly: false,
+    });
   });
 
   it("rejects CATMAID stack metadata without spatial skeleton levels", async () => {
@@ -810,6 +828,27 @@ describe("CatmaidClient skeleton editing methods", () => {
     const requestBody = getFetchBody(fetchMock);
     expect(requestBody.get("state")).toBeNull();
     expect(requestBody.get("tags")).toBe("updated description");
+    expect(requestBody.get("delete_existing")).toBe("true");
+  });
+
+  it("preserves true-end labels while replacing description labels", async () => {
+    const client = new CatmaidClient("https://example.invalid", 1);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ edition_time: "2026-03-29T13:05:00Z" });
+    (client as any).fetch = fetchMock;
+
+    await expect(
+      client.updateDescription(11, "updated description\nends", {
+        isTrueEnd: true,
+      }),
+    ).resolves.toEqual({
+      description: "updated description",
+      sourceState: testSourceState("2026-03-29T13:05:00Z"),
+    });
+
+    const requestBody = getFetchBody(fetchMock);
+    expect(requestBody.get("tags")).toBe("updated description,ends");
     expect(requestBody.get("delete_existing")).toBe("true");
   });
 

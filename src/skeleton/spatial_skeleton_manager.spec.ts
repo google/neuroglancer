@@ -47,6 +47,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
   it("returns an editable source when mandatory edit actions are present", () => {
     const source = {
       ...makeEditableSourceMethods(),
+      readOnly: false,
       spatialSkeletonEditCommandSource: makeEditCommandSource(),
       listSkeletons: async () => [],
       getSkeleton: async () => [],
@@ -61,6 +62,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const source = {
       ...makeEditableSourceMethods(),
       mergeSkeletons: undefined,
+      readOnly: false,
       spatialSkeletonEditCommandSource: makeEditCommandSource(),
       listSkeletons: async () => [],
       getSkeleton: async () => [],
@@ -76,6 +78,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
   it("does not treat a source without an edit command source as editable", () => {
     const source = {
       ...makeEditableSourceMethods(),
+      readOnly: false,
       listSkeletons: async () => [],
       getSkeleton: async () => [],
       fetchNodes: async () => [],
@@ -90,6 +93,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
   it("does not require optional edit actions for editable source validation", () => {
     const source = {
       ...makeEditableSourceMethods(),
+      readOnly: false,
       spatialSkeletonEditCommandSource: makeEditCommandSource(),
       listSkeletons: async () => [],
       getSkeleton: async () => [],
@@ -103,7 +107,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
   it("does not treat a read-only source with edit methods as editable", () => {
     const source = {
       ...makeEditableSourceMethods(),
-      spatialSkeletonReadOnly: true,
+      readOnly: true,
       spatialSkeletonEditCommandSource: makeEditCommandSource(),
       listSkeletons: async () => [],
       getSkeleton: async () => [],
@@ -317,6 +321,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     );
     const skeletonLayer = {
       source: {
+        readOnly: false,
         listSkeletons: async () => [],
         getSkeleton,
         fetchNodes: async () => [],
@@ -369,6 +374,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const pending = state.getFullSegmentNodes(
       {
         source: {
+          readOnly: false,
           listSkeletons: async () => [],
           getSkeleton,
           fetchNodes: async () => [],
@@ -404,6 +410,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const pending = state.getFullSegmentNodes(
       {
         source: {
+          readOnly: false,
           listSkeletons: async () => [],
           getSkeleton,
           fetchNodes: async () => [],
@@ -439,6 +446,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const pending = state.getFullSegmentNodes(
       {
         source: {
+          readOnly: false,
           listSkeletons: async () => [],
           getSkeleton,
           fetchNodes: async () => [],
@@ -469,6 +477,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     ]);
     const skeletonLayer = {
       source: {
+        readOnly: false,
         listSkeletons: async () => [],
         getSkeleton,
         fetchNodes: async () => [],
@@ -521,6 +530,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       state.getFullSegmentNodes(
         {
           source: {
+            readOnly: false,
             listSkeletons: async () => [],
             getSkeleton,
             fetchNodes: async () => [],

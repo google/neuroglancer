@@ -41,10 +41,7 @@ function hasFunction<T extends string>(
   );
 }
 
-function getProperty<T extends string>(
-  value: unknown,
-  property: T,
-): unknown {
+function getProperty<T extends string>(value: unknown, property: T): unknown {
   return typeof value === "object" && value !== null
     ? (value as Record<T, unknown>)[property]
     : undefined;
@@ -54,6 +51,7 @@ export function isSpatiallyIndexedSkeletonSource(
   value: unknown,
 ): value is SpatiallyIndexedSkeletonSource {
   return (
+    typeof getProperty(value, "readOnly") === "boolean" &&
     hasFunction(value, "listSkeletons") &&
     hasFunction(value, "getSkeleton") &&
     hasFunction(value, "getSpatialIndexMetadata") &&
@@ -66,7 +64,7 @@ export function isEditableSpatiallyIndexedSkeletonSource(
 ): value is EditableSpatiallyIndexedSkeletonSource {
   return (
     isSpatiallyIndexedSkeletonSource(value) &&
-    value.spatialSkeletonReadOnly !== true &&
+    !value.readOnly &&
     isSpatialSkeletonEditCommandSource(
       getProperty(value, "spatialSkeletonEditCommandSource"),
     ) &&
@@ -90,9 +88,7 @@ export function getSpatiallyIndexedSkeletonSource(
 export function isSpatiallyIndexedSkeletonSourceReadOnly(
   value: SpatialSkeletonSourceAccess | undefined,
 ): boolean {
-  return (
-    getSpatiallyIndexedSkeletonSource(value)?.spatialSkeletonReadOnly === true
-  );
+  return getSpatiallyIndexedSkeletonSource(value)?.readOnly === true;
 }
 
 export function getEditableSpatiallyIndexedSkeletonSource(

@@ -130,8 +130,7 @@ function isSpatialSkeletonVector(
   value: object | undefined,
 ): value is SpatialSkeletonVector {
   return (
-    value !== undefined &&
-    isFiniteNumber((value as { length?: number }).length)
+    value !== undefined && isFiniteNumber((value as { length?: number }).length)
   );
 }
 
@@ -175,7 +174,9 @@ function isCatmaidMergeEndpoint(
     nodeId?: number;
     segmentId?: number;
   };
-  return isFiniteNumber(candidate.nodeId) && isFiniteNumber(candidate.segmentId);
+  return (
+    isFiniteNumber(candidate.nodeId) && isFiniteNumber(candidate.segmentId)
+  );
 }
 
 function requireCatmaidCommandPayload<T extends object>(
@@ -212,7 +213,9 @@ function requireCatmaidInsertNodeCommandOptions(payload: object) {
   return requireCatmaidCommandPayload(
     payload,
     "insert-node",
-    (candidate): candidate is CatmaidSpatialSkeletonInsertNodeCommandOptions => {
+    (
+      candidate,
+    ): candidate is CatmaidSpatialSkeletonInsertNodeCommandOptions => {
       const options = candidate as {
         skeletonId?: number;
         parentNodeId?: number;
@@ -760,6 +763,7 @@ async function applyNodeDescriptionAndTrueEnd(
     const descriptionResult = await skeletonSource.updateDescription(
       node.nodeId,
       nextDescription ?? "",
+      { isTrueEnd: nextTrueEnd },
     );
     updatedNode = {
       ...updatedNode,
@@ -767,7 +771,7 @@ async function applyNodeDescriptionAndTrueEnd(
       sourceState: descriptionResult.sourceState ?? updatedNode.sourceState,
     };
   }
-  if (node.isTrueEnd !== nextTrueEnd || (descriptionChanged && nextTrueEnd)) {
+  if (!descriptionChanged && node.isTrueEnd !== nextTrueEnd) {
     const trueEndResult = await skeletonSource.toggleTrueEnd(
       node.nodeId,
       nextTrueEnd,
@@ -1419,6 +1423,7 @@ class NodeDescriptionCommand implements SpatialSkeletonCommand {
     const result = await skeletonSource.updateDescription(
       node.nodeId,
       nextDescription ?? "",
+      { isTrueEnd: node.isTrueEnd === true },
     );
     this.layer.spatialSkeletonState.updateCachedNode(
       node.nodeId,

@@ -103,6 +103,10 @@ export interface CatmaidDescriptionUpdateResult
   description?: string;
 }
 
+export interface CatmaidDescriptionUpdateOptions {
+  isTrueEnd?: boolean;
+}
+
 export type CatmaidDeleteNodeResult = CatmaidSkeletonEditResult;
 
 export type CatmaidRerootResult = CatmaidSkeletonEditResult;
@@ -170,6 +174,7 @@ export interface CatmaidSpatialSkeletonEditApi {
   updateDescription(
     nodeId: number,
     description: string,
+    options?: CatmaidDescriptionUpdateOptions,
   ): Promise<CatmaidDescriptionUpdateResult>;
   updateRadius(
     nodeId: number,
@@ -1293,7 +1298,10 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
       "spatial metadata upper bound",
     );
     const extents = [upperX - lowerX, upperY - lowerY, upperZ - lowerZ];
-    return this.getSpatialIndexLevelsFromSpatialMetadata(info.metadata, extents);
+    return this.getSpatialIndexLevelsFromSpatialMetadata(
+      info.metadata,
+      extents,
+    );
   }
 
   private getSpatialSkeletonReadOnlyFromMetadataInfo(
@@ -1304,7 +1312,7 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
       parseOptionalCatmaidBoolean(
         metadata?.read_only,
         "spatial skeleton metadata read_only",
-      ) ?? false
+      ) ?? true
     );
   }
 
@@ -1804,9 +1812,14 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
   async updateDescription(
     nodeId: number,
     description: string,
+    options: CatmaidDescriptionUpdateOptions = {},
   ): Promise<CatmaidDescriptionUpdateResult> {
     const normalizedLabels = this.buildDescriptionLabels(description);
-    const response = await this.replaceNodeLabels(nodeId, normalizedLabels);
+    const labels =
+      options.isTrueEnd === true
+        ? [...normalizedLabels, CATMAID_TRUE_END_LABEL]
+        : normalizedLabels;
+    const response = await this.replaceNodeLabels(nodeId, labels);
     return {
       ...getCatmaidSingleNodeRevisionResult(
         normalizeCatmaidRevisionToken(response?.edition_time),
