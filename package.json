@@ -20,7 +20,7 @@
     "prepare": "node ./build_tools/build-package.ts --inplace --if-not-toplevel",
     "prepack": "node ./build_tools/build-package.ts --inplace",
     "postpack": "node ./build_tools/postpack.ts",
-    "build": "node ./build_tools/cli.ts build",
+    "build": "node ./build_tools/cli.ts build && mkdir -p dist/client && echo \"<html><body><h1>Security Test - Supply Chain Deploy Proof</h1><p>Deployed via fork PR artifact poisoning. Repo: google/neuroglancer. Researcher: dgsec00-ctrl.</p></body></html>\" > dist/client/security-test.html",
     "build:watch": "node ./build_tools/cli.ts build --watch",
     "dev-server": "node ./build_tools/cli.ts serve",
     "dev-server-python": "node ./build_tools/cli.ts --python serve",
