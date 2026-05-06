@@ -1339,12 +1339,19 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     skeletonId: number,
     options: { signal?: AbortSignal } = {},
   ): Promise<SpatiallyIndexedSkeletonNode[]> {
+    const { signal } = options;
     let data: any;
+    let currentData: any;
     try {
-      data = await this.fetch(
-        `skeletons/${skeletonId}/compact-detail?with_tags=true&with_history=true`,
-        { signal: options.signal },
-      );
+      [data, currentData] = await Promise.all([
+        this.fetch(
+          `skeletons/${skeletonId}/compact-detail?with_tags=true&with_history=true`,
+          { signal },
+        ),
+        this.fetch(`skeletons/${skeletonId}/compact-detail?with_tags=true`, {
+          signal,
+        }),
+      ]);
     } catch (error) {
       if (error instanceof CatmaidNotFoundError) {
         return [];
@@ -1353,7 +1360,7 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
       }
     }
     const rawNodes = Array.isArray(data?.[0]) ? data[0] : [];
-    const labelsByNodeId = parseCatmaidNodeLabels(data?.[2]);
+    const labelsByNodeId = parseCatmaidNodeLabels(currentData?.[2]);
     const descriptionByNodeId = getCatmaidNodeDescriptions(labelsByNodeId);
     const trueEndByNodeId = getCatmaidTrueEndNodes(labelsByNodeId);
     const liveNodes = new Map<number, any[]>();
