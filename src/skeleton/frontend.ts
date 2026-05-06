@@ -137,6 +137,10 @@ import { NullarySignal } from "#src/util/signal.js";
 import type { Trackable } from "#src/util/trackable.js";
 import { CompoundTrackable } from "#src/util/trackable.js";
 import { TrackableEnum } from "#src/util/trackable_enum.js";
+import {
+  drawBoxEdges,
+  glsl_getBoxEdgeVertexPosition,
+} from "#src/webgl/bounding_box.js";
 import { GLBuffer } from "#src/webgl/buffer.js";
 import {
   defineCircleShader,
@@ -988,7 +992,7 @@ void emitDefault() {
   }
 }
 
-// Draws the spatial bounds of each chunk as a cyan wireframe box, for debugging.
+// Draws the spatial bounds of each chunk as a cyan box overlay, for debugging.
 // One shader is compiled per emitter so the emitter can inject the correct
 // output-buffer declarations and `emit(color, pickID)` function.
 class ChunkWireframeHelper extends RefCounted {
@@ -1012,33 +1016,34 @@ class ChunkWireframeHelper extends RefCounted {
       const builder = new ShaderBuilder(this.gl);
       builder.require(emitter);
       builder.addUniform("highp mat4", "uChunkToClip");
-      builder.addUniform("highp vec3", "uChunkMin");
-      builder.addUniform("highp vec3", "uChunkSize");
-      // 12 edges of a unit cube encoded as pairs of corner indices (0–7).
-      // Corner i has bit-decoded coords: x=(i>>0)&1, y=(i>>1)&1, z=(i>>2)&1.
-      builder.addVertexCode(`
-const int kEdgeTable[24] = int[24](
-  0,1, 2,3, 4,5, 6,7,
-  0,2, 1,3, 4,6, 5,7,
-  0,4, 1,5, 2,6, 3,7
-);
-`);
+      builder.addUniform("highp vec3", "uTranslation");
+      builder.addUniform("highp vec3", "uChunkDataSize");
+      builder.addVertexCode(glsl_getBoxEdgeVertexPosition);
       builder.setVertexMain(`
-int edgeIdx = gl_VertexID / 2;
-int endpointIdx = gl_VertexID % 2;
-int corner = kEdgeTable[edgeIdx * 2 + endpointIdx];
-vec3 unitPos = vec3(
-  float((corner >> 0) & 1),
-  float((corner >> 1) & 1),
-  float((corner >> 2) & 1)
-);
-gl_Position = uChunkToClip * vec4(uChunkMin + unitPos * uChunkSize, 1.0);
+vec3 boxVertex = getBoxEdgeVertexPosition(gl_VertexID);
+gl_Position = uChunkToClip * vec4(uTranslation + boxVertex * uChunkDataSize, 1.0);
 `);
       builder.setFragmentMain(`emit(vec4(0.0, 1.0, 1.0, 1.0), 0u);`);
       shader = builder.build();
       this.shaderCache.set(emitter, shader);
     }
     return shader;
+  }
+
+  setChunkUniforms(
+    gl: GL,
+    shader: ShaderProgram,
+    chunkLayout: ChunkLayout,
+    chunkGridPosition: Float32Array,
+  ) {
+    const { size } = chunkLayout;
+    gl.uniform3f(
+      shader.uniform("uTranslation"),
+      chunkGridPosition[0] * size[0],
+      chunkGridPosition[1] * size[1],
+      chunkGridPosition[2] * size[2],
+    );
+    gl.uniform3fv(shader.uniform("uChunkDataSize"), size);
   }
 
   static get(gl: GL) {
@@ -3309,7 +3314,6 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
     )
       return;
 
-    // Build source → chunkLayout lookup from the current transformed sources.
     const chunkLayoutBySource = new Map<object, ChunkLayout>();
     for (const scales of this.transformedSources) {
       for (const tsource of scales) {
@@ -3325,25 +3329,20 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
     shader.bind();
     const { viewProjectionMat } = renderContext.projectionParameters;
 
+    mat4.multiply(tempMat4, viewProjectionMat, modelMatrix);
+    gl.uniformMatrix4fv(shader.uniform("uChunkToClip"), false, tempMat4);
+
     for (const chunk of visibleChunks) {
       const chunkLayout = chunkLayoutBySource.get(chunk.source);
       if (chunkLayout === undefined) continue;
 
-      // Compose: clip ← view-projection ← model ← chunk-layout-transform
-      mat4.multiply(tempMat4, viewProjectionMat, modelMatrix);
-      mat4.multiply(tempMat4, tempMat4, chunkLayout.transform);
-      gl.uniformMatrix4fv(shader.uniform("uChunkToClip"), false, tempMat4);
-
-      const { size } = chunkLayout;
-      const gridPosition = chunk.chunkGridPosition;
-      gl.uniform3f(
-        shader.uniform("uChunkMin"),
-        gridPosition[0] * size[0],
-        gridPosition[1] * size[1],
-        gridPosition[2] * size[2],
+      wireframeHelper.setChunkUniforms(
+        gl,
+        shader,
+        chunkLayout,
+        chunk.chunkGridPosition,
       );
-      gl.uniform3f(shader.uniform("uChunkSize"), size[0], size[1], size[2]);
-      gl.drawArrays(WebGL2RenderingContext.LINES, 0, 24);
+      drawBoxEdges(gl, 1, 1);
     }
   }
 
