@@ -129,7 +129,7 @@ import { DATA_TYPE_SIGNED, DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import type { ValueOrError } from "#src/util/error.js";
 import { makeValueOrError, valueOrThrow } from "#src/util/error.js";
-import { kOneVec4, mat4, type vec4 } from "#src/util/geom.js";
+import { kOneVec4, mat4, type vec4, type vec3 } from "#src/util/geom.js";
 import { verifyFinitePositiveFloat } from "#src/util/json.js";
 import * as matrix from "#src/util/matrix.js";
 import { getObjectId } from "#src/util/object_id.js";
@@ -157,10 +157,11 @@ import {
   initializeLineShader,
 } from "#src/webgl/lines.js";
 import type {
-  ShaderBuilder,
+  ShaderModule,
   ShaderProgram,
   ShaderSamplerType,
 } from "#src/webgl/shader.js";
+import { ShaderBuilder } from "#src/webgl/shader.js";
 import {
   dataTypeShaderDefinition,
   getShaderType,
@@ -184,8 +185,12 @@ import type { RPC } from "#src/worker_rpc.js";
 
 const DEBUG_SPATIAL_SKELETON_OVERLAY = false;
 const DEBUG_EXCLUDED_SEGMENTS = false;
+const DEBUG_CHUNK_WIREFRAME = true;
+const DEBUG_CHUNK_COLORS = true;
+const tempChunkColorMap = new Map<vec3, Float32Array>();
 
 const tempMat2 = mat4.create();
+const tempWireframeMat = mat4.create();
 const DEFAULT_FRAGMENT_MAIN = `void main() {
   emitDefault();
 }
@@ -430,9 +435,7 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
       gl.uniform1ui(shader.uniform("uUseSegmentDefaultColor"), 1);
       gl.uniform3fv(
         shader.uniform("uSegmentDefaultColor"),
-        segmentDefaultColor[0],
-        segmentDefaultColor[1],
-        segmentDefaultColor[2],
+        segmentDefaultColor,
       );
     }
     if (DEBUG_SPATIAL_SKELETON_OVERLAY && excludedSegments === undefined) {
@@ -983,6 +986,67 @@ void emitDefault() {
       }
     }
     this.vertexIdHelper.disable();
+  }
+}
+
+// Draws the spatial bounds of each chunk as a cyan wireframe box, for debugging.
+// One shader is compiled per emitter so the emitter can inject the correct
+// output-buffer declarations and `emit(color, pickID)` function.
+class ChunkWireframeHelper extends RefCounted {
+  private shaderCache = new Map<ShaderModule, ShaderProgram>();
+
+  constructor(private gl: GL) {
+    super();
+  }
+
+  disposed() {
+    for (const shader of this.shaderCache.values()) {
+      shader.dispose();
+    }
+    this.shaderCache.clear();
+    super.disposed();
+  }
+
+  getShader(emitter: ShaderModule): ShaderProgram {
+    let shader = this.shaderCache.get(emitter);
+    if (shader === undefined) {
+      const builder = new ShaderBuilder(this.gl);
+      builder.require(emitter);
+      builder.addUniform("highp mat4", "uChunkToClip");
+      builder.addUniform("highp vec3", "uChunkMin");
+      builder.addUniform("highp vec3", "uChunkSize");
+      // 12 edges of a unit cube encoded as pairs of corner indices (0–7).
+      // Corner i has bit-decoded coords: x=(i>>0)&1, y=(i>>1)&1, z=(i>>2)&1.
+      builder.addVertexCode(`
+const int kEdgeTable[24] = int[24](
+  0,1, 2,3, 4,5, 6,7,
+  0,2, 1,3, 4,6, 5,7,
+  0,4, 1,5, 2,6, 3,7
+);
+`);
+      builder.setVertexMain(`
+int edgeIdx = gl_VertexID / 2;
+int endpointIdx = gl_VertexID % 2;
+int corner = kEdgeTable[edgeIdx * 2 + endpointIdx];
+vec3 unitPos = vec3(
+  float((corner >> 0) & 1),
+  float((corner >> 1) & 1),
+  float((corner >> 2) & 1)
+);
+gl_Position = uChunkToClip * vec4(uChunkMin + unitPos * uChunkSize, 1.0);
+`);
+      builder.setFragmentMain(`emit(vec4(0.0, 1.0, 1.0, 1.0), 0u);`);
+      shader = builder.build();
+      this.shaderCache.set(emitter, shader);
+    }
+    return shader;
+  }
+
+  static get(gl: GL) {
+    return gl.memoize.get(
+      "skeleton/ChunkWireframeHelper",
+      () => new ChunkWireframeHelper(gl),
+    );
   }
 }
 
@@ -2765,6 +2829,24 @@ export class SpatiallyIndexedSkeletonLayer
         renderHelper.setPickID(gl, nodeShader, nodePickId);
         renderHelper.setNodePickInstanceStride(gl, nodeShader, nodePickStride);
       }
+      // Render each chunk with different node/edge colors for debugging
+      if (DEBUG_CHUNK_COLORS) {
+        let randomColor = tempChunkColorMap.get(chunk.chunkGridPosition);
+        if (randomColor === undefined) {
+          randomColor = new Float32Array([
+            Math.random(),
+            Math.random(),
+            Math.random(),
+          ]);
+          tempChunkColorMap.set(chunk.chunkGridPosition, randomColor);
+        }
+        nodeShader.bind();
+        gl.uniform1ui(nodeShader.uniform("uUseSegmentDefaultColor"), 1);
+        gl.uniform3fv(nodeShader.uniform("uSegmentDefaultColor"), randomColor);
+        edgeShader.bind();
+        gl.uniform1ui(edgeShader.uniform("uUseSegmentDefaultColor"), 1);
+        gl.uniform3fv(edgeShader.uniform("uSegmentDefaultColor"), randomColor);
+      }
       renderHelper.drawSkeletons(
         gl,
         edgeShader,
@@ -3214,6 +3296,70 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
       attachment,
       visibleChunks,
     );
+    if (
+      DEBUG_CHUNK_WIREFRAME &&
+      renderContext.emitColor &&
+      visibleChunks.length > 0
+    ) {
+      this.drawChunkBoundsWireframe(renderContext, attachment, visibleChunks);
+    }
+  }
+
+  private drawChunkBoundsWireframe(
+    renderContext: PerspectiveViewRenderContext,
+    attachment: VisibleLayerInfo<
+      PerspectivePanel,
+      ThreeDimensionalRenderLayerAttachmentState
+    >,
+    visibleChunks: SpatiallyIndexedSkeletonChunk[],
+  ) {
+    const modelMatrix = update3dRenderLayerAttachment(
+      this.base.displayState.transform.value,
+      renderContext.projectionParameters.displayDimensionRenderInfo,
+      attachment,
+    );
+    if (modelMatrix === undefined) return;
+
+    // Build source → chunkLayout lookup from the current transformed sources.
+    const chunkLayoutBySource = new Map<object, ChunkLayout>();
+    for (const scales of this.transformedSources) {
+      for (const tsource of scales) {
+        if (!chunkLayoutBySource.has(tsource.source)) {
+          chunkLayoutBySource.set(tsource.source, tsource.chunkLayout);
+        }
+      }
+    }
+
+    const wireframeHelper = ChunkWireframeHelper.get(this.base.gl);
+    const shader = wireframeHelper.getShader(renderContext.emitter);
+    shader.bind();
+    const { viewProjectionMat } = renderContext.projectionParameters;
+    const gl = this.base.gl;
+
+    for (const chunk of visibleChunks) {
+      const chunkLayout = chunkLayoutBySource.get(chunk.source);
+      if (chunkLayout === undefined) continue;
+
+      // Compose: clip ← view-projection ← model ← chunk-layout-transform
+      mat4.multiply(tempWireframeMat, viewProjectionMat, modelMatrix);
+      mat4.multiply(tempWireframeMat, tempWireframeMat, chunkLayout.transform);
+      gl.uniformMatrix4fv(
+        shader.uniform("uChunkToClip"),
+        false,
+        tempWireframeMat,
+      );
+
+      const { size } = chunkLayout;
+      const gp = chunk.chunkGridPosition;
+      gl.uniform3f(
+        shader.uniform("uChunkMin"),
+        gp[0] * size[0],
+        gp[1] * size[1],
+        gp[2] * size[2],
+      );
+      gl.uniform3f(shader.uniform("uChunkSize"), size[0], size[1], size[2]);
+      gl.drawArrays(WebGL2RenderingContext.LINES, 0, 24);
+    }
   }
 
   isReady(
