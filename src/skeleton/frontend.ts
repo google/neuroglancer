@@ -428,7 +428,7 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
       gl.uniform1ui(shader.uniform("uUseSegmentDefaultColor"), 0);
     } else {
       gl.uniform1ui(shader.uniform("uUseSegmentDefaultColor"), 1);
-      gl.uniform3f(
+      gl.uniform3fv(
         shader.uniform("uSegmentDefaultColor"),
         segmentDefaultColor[0],
         segmentDefaultColor[1],
@@ -2894,7 +2894,7 @@ export class SpatiallyIndexedSkeletonLayer
   draw(
     renderContext: SliceViewPanelRenderContext | PerspectiveViewRenderContext,
     layer: RenderLayer,
-    renderHelper: RenderHelper,
+    overlayRenderHelper: RenderHelper,
     browseRenderHelper: RenderHelper,
     renderOptions: ViewSpecificSkeletonRenderingOptions,
     attachment: VisibleLayerInfo<
@@ -2935,7 +2935,7 @@ export class SpatiallyIndexedSkeletonLayer
     this.drawInspectionOverlayPass(
       renderContext,
       layer,
-      renderHelper,
+      overlayRenderHelper,
       modelMatrix,
       lineWidth,
       pointDiameter,
