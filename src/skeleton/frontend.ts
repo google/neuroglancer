@@ -189,8 +189,6 @@ import type { RPC } from "#src/worker_rpc.js";
 
 const DEBUG_SPATIAL_SKELETON_OVERLAY = false;
 const DEBUG_EXCLUDED_SEGMENTS = false;
-const DEBUG_CHUNK_WIREFRAME_3D = true;
-const DEBUG_CHUNK_COLORS = true;
 const tempChunkColorMap = new Map<vec3, Float32Array>();
 
 const tempMat4 = mat4.create();
@@ -2834,7 +2832,7 @@ export class SpatiallyIndexedSkeletonLayer
         renderHelper.setNodePickInstanceStride(gl, nodeShader, nodePickStride);
       }
       // Render each chunk with different node/edge colors for debugging
-      if (DEBUG_CHUNK_COLORS) {
+      if (renderContext.wireFrame) {
         let randomColor = tempChunkColorMap.get(chunk.chunkGridPosition);
         if (randomColor === undefined) {
           randomColor = new Float32Array([
@@ -3297,7 +3295,7 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
       modelMatrix,
       visibleChunks,
     );
-    if (DEBUG_CHUNK_WIREFRAME_3D) {
+    if (renderContext.wireFrame) {
       this.drawChunkBoundsWireframe(renderContext, visibleChunks, modelMatrix);
     }
   }
