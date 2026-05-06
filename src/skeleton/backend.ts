@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import { debounce } from "lodash-es";
+import type { ChunkManager } from "#src/chunk_manager/backend.js";
 import {
   Chunk,
   ChunkRenderLayerBackend,
@@ -42,7 +44,6 @@ import {
   SKELETON_LAYER_RPC_ID,
   SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_RPC_ID,
   SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_UPDATE_SOURCES_RPC_ID,
-  SPATIALLY_INDEXED_SKELETON_SLICEVIEW_RENDER_LAYER_RPC_ID,
 } from "#src/skeleton/base.js";
 import {
   freeSkeletonChunkSystemMemory,
@@ -60,11 +61,9 @@ import {
   SCALE_PRIORITY_MULTIPLIER,
   SliceViewChunk,
   SliceViewChunkSourceBackend,
-  SliceViewRenderLayerBackend,
 } from "#src/sliceview/backend.js";
 import {
   forEachVisibleVolumetricChunk,
-  type SliceViewBase,
   type SliceViewChunkSpecification,
   type SliceViewProjectionParameters,
   type TransformedSource,
@@ -86,6 +85,7 @@ export interface SpatiallyIndexedSkeletonChunkSpecification
 }
 
 const SKELETON_CHUNK_PRIORITY = 60;
+const SPATIALLY_INDEXED_SKELETON_LOD_DEBOUNCE_MS = 300;
 const tempCenter = vec3.create();
 const tempChunkSize = vec3.create();
 const tempCenterDataPosition = vec3.create();
@@ -101,6 +101,59 @@ export function getSpatiallyIndexedSkeletonChunkPriority(
     sum += delta * delta;
   }
   return -Math.sqrt(sum);
+}
+
+export enum SpatiallyIndexedSkeletonChunkRequestOwner {
+  NONE = 0,
+  VIEW_2D = 1 << 0,
+  VIEW_3D = 1 << 1,
+}
+
+export function markSpatiallyIndexedSkeletonChunkRequested(
+  chunk: SpatiallyIndexedSkeletonChunk,
+  currentGeneration: number,
+  owner: SpatiallyIndexedSkeletonChunkRequestOwner,
+) {
+  if (
+    owner === SpatiallyIndexedSkeletonChunkRequestOwner.NONE ||
+    currentGeneration < 0
+  ) {
+    return;
+  }
+  if (chunk.requestGeneration !== currentGeneration) {
+    chunk.requestGeneration = currentGeneration;
+    chunk.requestOwners = owner;
+    return;
+  }
+  chunk.requestOwners |= owner;
+}
+
+export function cancelStaleSpatiallyIndexedSkeletonDownloads(
+  chunkManager: ChunkManager,
+  sources: Iterable<SpatiallyIndexedSkeletonSourceBackend>,
+  currentGeneration: number,
+) {
+  const queueManager = chunkManager.queueManager;
+  for (const source of sources) {
+    for (const chunk of source.chunks.values()) {
+      const typedChunk = chunk as SpatiallyIndexedSkeletonChunk;
+      if (typedChunk.state !== ChunkState.DOWNLOADING) continue;
+      if (
+        typedChunk.requestGeneration === currentGeneration &&
+        typedChunk.requestOwners !==
+          SpatiallyIndexedSkeletonChunkRequestOwner.NONE
+      ) {
+        continue;
+      }
+      const controller = typedChunk.downloadAbortController;
+      if (controller === undefined) continue;
+      typedChunk.downloadAbortController = undefined;
+      controller.abort(
+        new DOMException("stale spatial skeleton LOD download", "AbortError"),
+      );
+      queueManager.updateChunkState(typedChunk, ChunkState.QUEUED);
+    }
+  }
 }
 
 registerRPC(
@@ -244,6 +297,9 @@ export class SpatiallyIndexedSkeletonChunk
   vertexPositions: Float32Array | null = null;
   vertexAttributes: TypedNumberArray[] | null = null;
   indices: Uint32Array | null = null;
+  lod: number = 0;
+  requestGeneration = -1;
+  requestOwners = SpatiallyIndexedSkeletonChunkRequestOwner.NONE;
   nodeIds: Int32Array | undefined;
   nodeSourceStates: Array<SpatialSkeletonSourceState | undefined> | undefined;
 
@@ -269,17 +325,27 @@ export class SpatiallyIndexedSkeletonSourceBackend extends SliceViewChunkSourceB
   SpatiallyIndexedSkeletonChunk
 > {
   chunkConstructor = SpatiallyIndexedSkeletonChunk;
+  currentLod: number = 0;
+  currentRequestGeneration = -1;
+  currentRequestOwner = SpatiallyIndexedSkeletonChunkRequestOwner.NONE;
 
   getChunk(chunkGridPosition: Float32Array) {
-    const key = chunkGridPosition.join();
+    const lodValue = this.currentLod;
+    const key = `${chunkGridPosition.join()}:${lodValue}`;
     let chunk = this.chunks.get(key);
     if (chunk === undefined) {
       chunk = this.getNewChunk_(
         this.chunkConstructor,
       ) as SpatiallyIndexedSkeletonChunk;
       chunk.initializeVolumeChunk(key, chunkGridPosition);
+      chunk.lod = lodValue;
       this.addChunk(chunk);
     }
+    markSpatiallyIndexedSkeletonChunkRequested(
+      chunk,
+      this.currentRequestGeneration,
+      this.currentRequestOwner,
+    );
     return chunk;
   }
 }
@@ -298,13 +364,20 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
 ) {
   localPosition: SharedWatchableValue<Float32Array>;
   renderScaleTarget: SharedWatchableValue<number>;
+  skeletonLod: SharedWatchableValue<number>;
   skeletonGridLevel: SharedWatchableValue<number>;
+  skeletonLod2d: SharedWatchableValue<number>;
+  skeletonGridLevel2d: SharedWatchableValue<number>;
+  private pendingLodCleanup = false;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.renderScaleTarget = rpc.get(options.renderScaleTarget);
     this.localPosition = rpc.get(options.localPosition);
+    this.skeletonLod = rpc.get(options.skeletonLod);
     this.skeletonGridLevel = rpc.get(options.skeletonGridLevel);
+    this.skeletonLod2d = rpc.get(options.skeletonLod2d);
+    this.skeletonGridLevel2d = rpc.get(options.skeletonGridLevel2d);
     const scheduleUpdateChunkPriorities = () =>
       this.chunkManager.scheduleUpdateChunkPriorities();
     this.registerDisposer(
@@ -317,9 +390,50 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
       this.skeletonGridLevel.changed.add(scheduleUpdateChunkPriorities),
     );
     this.registerDisposer(
+      this.skeletonGridLevel2d.changed.add(scheduleUpdateChunkPriorities),
+    );
+
+    // Debounce LOD changes to avoid making requests for every slider value
+    const debouncedLodUpdate = debounce(() => {
+      scheduleUpdateChunkPriorities();
+    }, SPATIALLY_INDEXED_SKELETON_LOD_DEBOUNCE_MS);
+    this.registerDisposer(() => debouncedLodUpdate.cancel());
+
+    const onLodChanged = () => {
+      this.pendingLodCleanup = true;
+      debouncedLodUpdate();
+    };
+    this.registerDisposer(this.skeletonLod.changed.add(onLodChanged));
+    this.registerDisposer(this.skeletonLod2d.changed.add(onLodChanged));
+    this.registerDisposer(
       this.chunkManager.recomputeChunkPriorities.add(() =>
         this.recomputeChunkPriorities(),
       ),
+    );
+    this.registerDisposer(
+      this.chunkManager.recomputeChunkPrioritiesLate.add(() => {
+        if (!this.pendingLodCleanup) return;
+        const sources = new Set<SpatiallyIndexedSkeletonSourceBackend>();
+        for (const attachment of this.attachments.values()) {
+          const attachmentState = attachment.state as
+            | SpatiallyIndexedSkeletonRenderLayerAttachmentState
+            | undefined;
+          if (attachmentState === undefined) continue;
+          for (const scales of attachmentState.transformedSources) {
+            for (const tsource of scales) {
+              sources.add(
+                tsource.source as SpatiallyIndexedSkeletonSourceBackend,
+              );
+            }
+          }
+        }
+        cancelStaleSpatiallyIndexedSkeletonDownloads(
+          this.chunkManager,
+          sources,
+          this.chunkManager.recomputeChunkPriorities.count,
+        );
+        this.pendingLodCleanup = false;
+      }),
     );
   }
 
@@ -348,6 +462,7 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
 
   private recomputeChunkPriorities() {
     this.chunkManager.registerLayer(this);
+    const currentGeneration = this.chunkManager.recomputeChunkPriorities.count;
     for (const attachment of this.attachments.values()) {
       const { view } = attachment;
       const visibility = view.visibility.value;
@@ -404,7 +519,10 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
         }
       }
       const renderScaleTarget = this.renderScaleTarget.value;
-      const skeletonGridLevel = this.skeletonGridLevel.value;
+      const is2dView = pixelSize !== undefined;
+      const skeletonGridLevel = (
+        is2dView ? this.skeletonGridLevel2d : this.skeletonGridLevel
+      ).value;
 
       const selectScales = (
         scales: TransformedSource<
@@ -496,6 +614,7 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
         return selected;
       };
 
+      const lodValue = (is2dView ? this.skeletonLod2d : this.skeletonLod).value;
       for (const scales of transformedSources) {
         const selectedScales = selectScales(scales);
         for (const { tsource, scaleIndex } of selectedScales) {
@@ -511,6 +630,11 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
           }
           const sourceBasePriority =
             basePriority + SCALE_PRIORITY_MULTIPLIER * scaleIndex;
+          source.currentLod = lodValue;
+          source.currentRequestGeneration = currentGeneration;
+          source.currentRequestOwner = is2dView
+            ? SpatiallyIndexedSkeletonChunkRequestOwner.VIEW_2D
+            : SpatiallyIndexedSkeletonChunkRequestOwner.VIEW_3D;
           forEachVisibleVolumetricChunk(
             projectionParameters,
             this.localPosition.value,
@@ -536,40 +660,5 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
         }
       }
     }
-  }
-}
-
-@registerSharedObject(SPATIALLY_INDEXED_SKELETON_SLICEVIEW_RENDER_LAYER_RPC_ID)
-export class SpatiallyIndexedSkeletonSliceViewRenderLayerBackend extends SliceViewRenderLayerBackend {
-  skeletonGridLevel: SharedWatchableValue<number>;
-
-  constructor(rpc: RPC, options: any) {
-    super(rpc, options);
-    this.skeletonGridLevel = rpc.get(options.skeletonGridLevel);
-    const chunkManager = rpc.get(options.chunkManager);
-    const scheduleUpdateChunkPriorities = () =>
-      chunkManager.scheduleUpdateChunkPriorities();
-    this.registerDisposer(
-      this.skeletonGridLevel.changed.add(scheduleUpdateChunkPriorities),
-    );
-  }
-
-  filterVisibleSources(
-    sliceView: SliceViewBase,
-    sources: readonly TransformedSource[],
-  ): Iterable<TransformedSource> {
-    if (
-      sources.length > 0 &&
-      sources.every(
-        (source) => getSpatiallyIndexedSkeletonGridIndex(source) !== undefined,
-      )
-    ) {
-      return selectSpatiallyIndexedSkeletonEntriesByGrid(
-        sources,
-        this.skeletonGridLevel.value,
-        getSpatiallyIndexedSkeletonGridIndex,
-      );
-    }
-    return super.filterVisibleSources(sliceView, sources);
   }
 }
