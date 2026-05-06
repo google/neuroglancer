@@ -21,34 +21,38 @@ import {
   getFlatListNodeIds,
   getSkeletonRootNode,
 } from "#src/skeleton/navigation.js";
+import { SpatialSkeletonActions } from "#src/skeleton/actions.js";
 import {
   getEditableSpatiallyIndexedSkeletonSource,
   SpatialSkeletonState,
 } from "#src/skeleton/spatial_skeleton_manager.js";
 
-function makeEditableSourceMethods() {
+function makeCommandFactory(action: string) {
   return {
-    addNode: vi.fn(),
-    deleteNode: vi.fn(),
-    moveNode: vi.fn(),
-    splitSkeleton: vi.fn(),
-    mergeSkeletons: vi.fn(),
+    action,
+    createCommand: vi.fn(),
   };
 }
 
-function makeEditCommandSource() {
+function makeEditableSourceCommands() {
   return {
-    supports: vi.fn(),
-    createCommand: vi.fn(),
+    addNodesCommand: makeCommandFactory(SpatialSkeletonActions.addNodes),
+    deleteNodesCommand: makeCommandFactory(SpatialSkeletonActions.deleteNodes),
+    moveNodesCommand: makeCommandFactory(SpatialSkeletonActions.moveNodes),
+    splitSkeletonsCommand: makeCommandFactory(
+      SpatialSkeletonActions.splitSkeletons,
+    ),
+    mergeSkeletonsCommand: makeCommandFactory(
+      SpatialSkeletonActions.mergeSkeletons,
+    ),
   };
 }
 
 describe("skeleton/spatial_skeleton_manager", () => {
   it("returns an editable source when mandatory edit actions are present", () => {
     const source = {
-      ...makeEditableSourceMethods(),
+      ...makeEditableSourceCommands(),
       readOnly: false,
-      spatialSkeletonEditCommandSource: makeEditCommandSource(),
       listSkeletons: async () => [],
       getSkeleton: async () => [],
       fetchNodes: async () => [],
@@ -60,10 +64,9 @@ describe("skeleton/spatial_skeleton_manager", () => {
 
   it("does not treat a source missing mandatory edit actions as editable", () => {
     const source = {
-      ...makeEditableSourceMethods(),
-      mergeSkeletons: undefined,
+      ...makeEditableSourceCommands(),
+      mergeSkeletonsCommand: undefined,
       readOnly: false,
-      spatialSkeletonEditCommandSource: makeEditCommandSource(),
       listSkeletons: async () => [],
       getSkeleton: async () => [],
       fetchNodes: async () => [],
@@ -75,9 +78,10 @@ describe("skeleton/spatial_skeleton_manager", () => {
     ).toBeUndefined();
   });
 
-  it("does not treat a source without an edit command source as editable", () => {
+  it("does not treat a command factory for the wrong action as editable", () => {
     const source = {
-      ...makeEditableSourceMethods(),
+      ...makeEditableSourceCommands(),
+      moveNodesCommand: makeCommandFactory(SpatialSkeletonActions.addNodes),
       readOnly: false,
       listSkeletons: async () => [],
       getSkeleton: async () => [],
@@ -92,9 +96,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
 
   it("does not require optional edit actions for editable source validation", () => {
     const source = {
-      ...makeEditableSourceMethods(),
+      ...makeEditableSourceCommands(),
       readOnly: false,
-      spatialSkeletonEditCommandSource: makeEditCommandSource(),
       listSkeletons: async () => [],
       getSkeleton: async () => [],
       fetchNodes: async () => [],
@@ -104,11 +107,10 @@ describe("skeleton/spatial_skeleton_manager", () => {
     expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
   });
 
-  it("does not treat a read-only source with edit methods as editable", () => {
+  it("does not treat a read-only source with edit commands as editable", () => {
     const source = {
-      ...makeEditableSourceMethods(),
+      ...makeEditableSourceCommands(),
       readOnly: true,
-      spatialSkeletonEditCommandSource: makeEditCommandSource(),
       listSkeletons: async () => [],
       getSkeleton: async () => [],
       fetchNodes: async () => [],

@@ -20,8 +20,12 @@ import type {
   SpatialSkeletonSourceState,
   SpatiallyIndexedSkeletonSource,
 } from "#src/skeleton/api.js";
+import {
+  SpatialSkeletonActions,
+  type SpatialSkeletonAction,
+} from "#src/skeleton/actions.js";
 import { SpatialSkeletonCommandHistory } from "#src/skeleton/command_history.js";
-import { isSpatialSkeletonEditCommandSource } from "#src/skeleton/edit_command_source.js";
+import { isSpatialSkeletonEditCommandFactory } from "#src/skeleton/edit_command_source.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/frontend.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -47,6 +51,29 @@ function getProperty<T extends string>(value: unknown, property: T): unknown {
     : undefined;
 }
 
+function hasCommandFactory<T extends string>(
+  value: unknown,
+  property: T,
+  action: SpatialSkeletonAction,
+) {
+  return isSpatialSkeletonEditCommandFactory(
+    getProperty(value, property),
+    action,
+  );
+}
+
+function hasOptionalCommandFactory<T extends string>(
+  value: unknown,
+  property: T,
+  action: SpatialSkeletonAction,
+) {
+  const commandFactory = getProperty(value, property);
+  return (
+    commandFactory === undefined ||
+    isSpatialSkeletonEditCommandFactory(commandFactory, action)
+  );
+}
+
 export function isSpatiallyIndexedSkeletonSource(
   value: unknown,
 ): value is SpatiallyIndexedSkeletonSource {
@@ -65,14 +92,56 @@ export function isEditableSpatiallyIndexedSkeletonSource(
   return (
     isSpatiallyIndexedSkeletonSource(value) &&
     !value.readOnly &&
-    isSpatialSkeletonEditCommandSource(
-      getProperty(value, "spatialSkeletonEditCommandSource"),
+    hasCommandFactory(
+      value,
+      "addNodesCommand",
+      SpatialSkeletonActions.addNodes,
     ) &&
-    hasFunction(value, "addNode") &&
-    hasFunction(value, "deleteNode") &&
-    hasFunction(value, "moveNode") &&
-    hasFunction(value, "splitSkeleton") &&
-    hasFunction(value, "mergeSkeletons")
+    hasCommandFactory(
+      value,
+      "deleteNodesCommand",
+      SpatialSkeletonActions.deleteNodes,
+    ) &&
+    hasCommandFactory(
+      value,
+      "moveNodesCommand",
+      SpatialSkeletonActions.moveNodes,
+    ) &&
+    hasCommandFactory(
+      value,
+      "splitSkeletonsCommand",
+      SpatialSkeletonActions.splitSkeletons,
+    ) &&
+    hasCommandFactory(
+      value,
+      "mergeSkeletonsCommand",
+      SpatialSkeletonActions.mergeSkeletons,
+    ) &&
+    hasOptionalCommandFactory(
+      value,
+      "insertNodesCommand",
+      SpatialSkeletonActions.insertNodes,
+    ) &&
+    hasOptionalCommandFactory(
+      value,
+      "rerootCommand",
+      SpatialSkeletonActions.reroot,
+    ) &&
+    hasOptionalCommandFactory(
+      value,
+      "editNodeDescriptionCommand",
+      SpatialSkeletonActions.editNodeDescription,
+    ) &&
+    hasOptionalCommandFactory(
+      value,
+      "editNodeTrueEndCommand",
+      SpatialSkeletonActions.editNodeTrueEnd,
+    ) &&
+    hasOptionalCommandFactory(
+      value,
+      "editNodePropertiesCommand",
+      SpatialSkeletonActions.editNodeProperties,
+    )
   );
 }
 

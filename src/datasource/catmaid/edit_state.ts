@@ -81,6 +81,16 @@ export function buildCatmaidRerootEditContext(
   };
 }
 
+export function buildCatmaidInsertEditContext(
+  parentNode: SpatiallyIndexedSkeletonNode,
+  childNodes: readonly SpatiallyIndexedSkeletonNode[],
+): CatmaidEditContext {
+  return {
+    node: buildCatmaidNodeEditContext(parentNode).node,
+    children: childNodes.map(toCatmaidEditParentContext),
+  };
+}
+
 export function buildCatmaidMultiNodeEditContext(
   ...nodes: SpatiallyIndexedSkeletonNode[]
 ): CatmaidEditContext {

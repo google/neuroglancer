@@ -14,7 +14,18 @@
  * limitations under the License.
  */
 
-import type { SpatialSkeletonEditCommandSource } from "#src/skeleton/edit_command_source.js";
+import type {
+  SpatialSkeletonAddNodesCommandFactory,
+  SpatialSkeletonDeleteNodesCommandFactory,
+  SpatialSkeletonEditNodeDescriptionCommandFactory,
+  SpatialSkeletonEditNodePropertiesCommandFactory,
+  SpatialSkeletonEditNodeTrueEndCommandFactory,
+  SpatialSkeletonInsertNodesCommandFactory,
+  SpatialSkeletonMergeSkeletonsCommandFactory,
+  SpatialSkeletonMoveNodesCommandFactory,
+  SpatialSkeletonRerootCommandFactory,
+  SpatialSkeletonSplitSkeletonsCommandFactory,
+} from "#src/skeleton/edit_command_source.js";
 
 export type SpatialSkeletonVector = ArrayLike<number>;
 
@@ -75,11 +86,6 @@ export interface SpatialSkeletonEditCapabilities {
   nodeFeatures?: SpatialSkeletonNodeFeatureCapabilities;
 }
 
-export type SpatialSkeletonEditResult = object;
-export type SpatialSkeletonEditOperation = (
-  ...args: never[]
-) => Promise<SpatialSkeletonEditResult>;
-
 export interface SpatiallyIndexedSkeletonSource {
   readonly readOnly: boolean;
   listSkeletons(): Promise<number[]>;
@@ -98,17 +104,16 @@ export interface SpatiallyIndexedSkeletonSource {
 
 export interface EditableSpatiallyIndexedSkeletonSource
   extends SpatiallyIndexedSkeletonSource {
-  readonly spatialSkeletonEditCommandSource: SpatialSkeletonEditCommandSource;
+  readonly readOnly: false;
   readonly spatialSkeletonEditCapabilities?: SpatialSkeletonEditCapabilities;
-  addNode: SpatialSkeletonEditOperation;
-  deleteNode: SpatialSkeletonEditOperation;
-  moveNode: SpatialSkeletonEditOperation;
-  splitSkeleton: SpatialSkeletonEditOperation;
-  mergeSkeletons: SpatialSkeletonEditOperation;
-  toggleTrueEnd?: SpatialSkeletonEditOperation;
-  insertNode?: SpatialSkeletonEditOperation;
-  rerootSkeleton?: SpatialSkeletonEditOperation;
-  updateDescription?: SpatialSkeletonEditOperation;
-  updateRadius?: SpatialSkeletonEditOperation;
-  updateConfidence?: SpatialSkeletonEditOperation;
+  readonly addNodesCommand: SpatialSkeletonAddNodesCommandFactory;
+  readonly deleteNodesCommand: SpatialSkeletonDeleteNodesCommandFactory;
+  readonly moveNodesCommand: SpatialSkeletonMoveNodesCommandFactory;
+  readonly splitSkeletonsCommand: SpatialSkeletonSplitSkeletonsCommandFactory;
+  readonly mergeSkeletonsCommand: SpatialSkeletonMergeSkeletonsCommandFactory;
+  readonly insertNodesCommand?: SpatialSkeletonInsertNodesCommandFactory;
+  readonly rerootCommand?: SpatialSkeletonRerootCommandFactory;
+  readonly editNodeDescriptionCommand?: SpatialSkeletonEditNodeDescriptionCommandFactory;
+  readonly editNodeTrueEndCommand?: SpatialSkeletonEditNodeTrueEndCommandFactory;
+  readonly editNodePropertiesCommand?: SpatialSkeletonEditNodePropertiesCommandFactory;
 }

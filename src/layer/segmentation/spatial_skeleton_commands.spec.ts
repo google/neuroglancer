@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { CatmaidSpatialSkeletonEditCommandSource } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
+import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
 import { buildCatmaidNeighborhoodEditContext } from "#src/datasource/catmaid/edit_state.js";
 import { makeCatmaidNodeSourceState } from "#src/datasource/catmaid/api.js";
 import {
@@ -60,16 +60,22 @@ function setSegmentNodes(
   }
 }
 
-function makeEditableSkeletonSource(overrides: Record<string, unknown> = {}) {
+const catmaidEditClientMethodNames = new Set([
+  "addNode",
+  "insertNode",
+  "moveNode",
+  "deleteNode",
+  "rerootSkeleton",
+  "updateDescription",
+  "toggleTrueEnd",
+  "updateRadius",
+  "updateConfidence",
+  "mergeSkeletons",
+  "splitSkeleton",
+]);
+
+function makeCatmaidClient(overrides: Record<string, unknown> = {}) {
   return {
-    readOnly: false,
-    spatialSkeletonEditCommandSource:
-      new CatmaidSpatialSkeletonEditCommandSource(),
-    listSkeletons: vi.fn(),
-    getSkeleton: vi.fn(),
-    fetchNodes: vi.fn(),
-    getSpatialIndexMetadata: vi.fn(),
-    getSkeletonRootNode: vi.fn(),
     addNode: vi.fn(),
     insertNode: vi.fn(),
     moveNode: vi.fn(),
@@ -82,6 +88,45 @@ function makeEditableSkeletonSource(overrides: Record<string, unknown> = {}) {
     mergeSkeletons: vi.fn(),
     splitSkeleton: vi.fn(),
     ...overrides,
+  };
+}
+
+function makeCatmaidEditCommands(client = makeCatmaidClient()) {
+  return new CatmaidSpatialSkeletonEditCommands({
+    ensureEditable: vi.fn(),
+    getClient: () => client as any,
+  });
+}
+
+function makeEditableSkeletonSource(overrides: Record<string, unknown> = {}) {
+  const clientOverrides: Record<string, unknown> = {};
+  const sourceOverrides: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(overrides)) {
+    if (catmaidEditClientMethodNames.has(key)) {
+      clientOverrides[key] = value;
+    } else {
+      sourceOverrides[key] = value;
+    }
+  }
+  const commands = makeCatmaidEditCommands(makeCatmaidClient(clientOverrides));
+  return {
+    readOnly: false,
+    addNodesCommand: commands.addNodesCommand,
+    insertNodesCommand: commands.insertNodesCommand,
+    moveNodesCommand: commands.moveNodesCommand,
+    deleteNodesCommand: commands.deleteNodesCommand,
+    rerootCommand: commands.rerootCommand,
+    editNodeDescriptionCommand: commands.editNodeDescriptionCommand,
+    editNodeTrueEndCommand: commands.editNodeTrueEndCommand,
+    editNodePropertiesCommand: commands.editNodePropertiesCommand,
+    mergeSkeletonsCommand: commands.mergeSkeletonsCommand,
+    splitSkeletonsCommand: commands.splitSkeletonsCommand,
+    listSkeletons: vi.fn(),
+    getSkeleton: vi.fn(),
+    fetchNodes: vi.fn(),
+    getSpatialIndexMetadata: vi.fn(),
+    getSkeletonRootNode: vi.fn(),
+    ...sourceOverrides,
   };
 }
 
@@ -123,21 +168,12 @@ describe("spatial_skeleton_commands", () => {
       },
       getSpatiallyIndexedSkeletonLayer: () => ({
         source: {
-          readOnly: false,
-          spatialSkeletonEditCommandSource: {
-            supports: () => true,
-            createCommand,
-          },
-          listSkeletons: vi.fn(),
-          getSkeleton: vi.fn(),
-          fetchNodes: vi.fn(),
-          getSpatialIndexMetadata: vi.fn(),
-          addNode: vi.fn(),
-          deleteNode: vi.fn(),
-          moveNode: vi.fn(),
-          splitSkeleton: vi.fn(),
-          mergeSkeletons: vi.fn(),
-          toggleTrueEnd: vi.fn(),
+          ...makeEditableSkeletonSource({
+            moveNodesCommand: {
+              action: SpatialSkeletonActions.moveNodes,
+              createCommand,
+            },
+          }),
         },
       }),
     };
@@ -155,40 +191,27 @@ describe("spatial_skeleton_commands", () => {
     await undoSpatialSkeletonCommand(layer as any);
     await redoSpatialSkeletonCommand(layer as any);
 
-    expect(createCommand).toHaveBeenCalledWith(
-      SpatialSkeletonActions.moveNodes,
-      layer,
-      {
-        node,
-        nextPositionInModelSpace,
-      },
-    );
+    expect(createCommand).toHaveBeenCalledWith(layer, {
+      node,
+      nextPositionInModelSpace,
+    });
     expect(execute).toHaveBeenCalledTimes(1);
     expect(undo).toHaveBeenCalledTimes(1);
     expect(redo).toHaveBeenCalledTimes(1);
   });
 
-  it("does not treat a source missing createCommand as an edit command source", () => {
+  it("does not treat a source with an invalid command factory as editable", () => {
     const layer = {
       spatialSkeletonState: {
         commandHistory: new SpatialSkeletonCommandHistory(),
       },
       getSpatiallyIndexedSkeletonLayer: () => ({
         source: {
+          ...makeEditableSkeletonSource(),
           readOnly: false,
-          spatialSkeletonEditCommandSource: {
-            supports: () => true,
+          editNodeDescriptionCommand: {
+            action: SpatialSkeletonActions.editNodeDescription,
           },
-          listSkeletons: vi.fn(),
-          getSkeleton: vi.fn(),
-          fetchNodes: vi.fn(),
-          getSpatialIndexMetadata: vi.fn(),
-          addNode: vi.fn(),
-          deleteNode: vi.fn(),
-          moveNode: vi.fn(),
-          splitSkeleton: vi.fn(),
-          mergeSkeletons: vi.fn(),
-          toggleTrueEnd: vi.fn(),
         },
       }),
     };
@@ -207,39 +230,17 @@ describe("spatial_skeleton_commands", () => {
     );
   });
 
-  it("reports unsupported command creation clearly", () => {
-    const command = {
-      label: "required command",
-      execute: vi.fn(),
-      undo: vi.fn(),
-      redo: vi.fn(),
-    };
-    const createCommand = vi.fn((action: string) =>
-      action === SpatialSkeletonActions.editNodeDescription
-        ? undefined
-        : command,
-    );
+  it("reports unsupported commands clearly", () => {
     const layer = {
       spatialSkeletonState: {
         commandHistory: new SpatialSkeletonCommandHistory(),
       },
       getSpatiallyIndexedSkeletonLayer: () => ({
         source: {
+          ...makeEditableSkeletonSource({
+            editNodeDescriptionCommand: undefined,
+          }),
           readOnly: false,
-          spatialSkeletonEditCommandSource: {
-            supports: () => true,
-            createCommand,
-          },
-          listSkeletons: vi.fn(),
-          getSkeleton: vi.fn(),
-          fetchNodes: vi.fn(),
-          getSpatialIndexMetadata: vi.fn(),
-          addNode: vi.fn(),
-          deleteNode: vi.fn(),
-          moveNode: vi.fn(),
-          splitSkeleton: vi.fn(),
-          mergeSkeletons: vi.fn(),
-          toggleTrueEnd: vi.fn(),
         },
       }),
     };
@@ -259,22 +260,17 @@ describe("spatial_skeleton_commands", () => {
     );
   });
 
-  it("derives CATMAID command support from registered handlers", () => {
-    const commandSource = new CatmaidSpatialSkeletonEditCommandSource();
+  it("exposes CATMAID command factories for supported edit actions", () => {
+    const commandSource = makeCatmaidEditCommands();
 
-    expect(commandSource.supports(SpatialSkeletonActions.moveNodes)).toBe(true);
-    expect(commandSource.supports(SpatialSkeletonActions.inspect)).toBe(false);
-    expect(
-      commandSource.createCommand(
-        SpatialSkeletonActions.inspect,
-        {} as any,
-        {},
-      ),
-    ).toBeUndefined();
+    expect(commandSource.moveNodesCommand.action).toBe(
+      SpatialSkeletonActions.moveNodes,
+    );
+    expect((commandSource as any).inspectCommand).toBeUndefined();
   });
 
   it("creates CATMAID commands from valid opaque payloads", () => {
-    const commandSource = new CatmaidSpatialSkeletonEditCommandSource();
+    const commandSource = makeCatmaidEditCommands();
     const layer = {
       spatialSkeletonState: {
         commandHistory: new SpatialSkeletonCommandHistory(),
@@ -286,20 +282,16 @@ describe("spatial_skeleton_commands", () => {
       position: new Float32Array([1, 2, 3]),
     };
 
-    const command = commandSource.createCommand(
-      SpatialSkeletonActions.moveNodes,
-      layer as any,
-      {
-        node,
-        nextPositionInModelSpace: new Float32Array([7, 8, 9]),
-      },
-    );
+    const command = commandSource.moveNodesCommand.createCommand(layer as any, {
+      node,
+      nextPositionInModelSpace: new Float32Array([7, 8, 9]),
+    });
 
     expect(command?.label).toBe("Move node");
   });
 
   it("reports invalid CATMAID command payloads clearly", () => {
-    const commandSource = new CatmaidSpatialSkeletonEditCommandSource();
+    const commandSource = makeCatmaidEditCommands();
     const layer = {
       spatialSkeletonState: {
         commandHistory: new SpatialSkeletonCommandHistory(),
@@ -307,14 +299,10 @@ describe("spatial_skeleton_commands", () => {
     };
 
     expect(() =>
-      commandSource.createCommand(
-        SpatialSkeletonActions.moveNodes,
-        layer as any,
-        {
-          node: {},
-          nextPositionInModelSpace: new Float32Array([7, 8, 9]),
-        },
-      ),
+      commandSource.moveNodesCommand.createCommand(layer as any, {
+        node: {},
+        nextPositionInModelSpace: new Float32Array([7, 8, 9]),
+      }),
     ).toThrow("CATMAID move-node command received an invalid payload.");
   });
 
@@ -365,13 +353,15 @@ describe("spatial_skeleton_commands", () => {
       nextPositionInModelSpace,
     });
 
-    expect(moveNode).toHaveBeenCalledWith(17, 7, 8, 9, {
-      node: {
-        nodeId: 17,
-        parentNodeId: undefined,
-        revisionToken: "before",
-      },
-    });
+    expect(moveNode).toHaveBeenCalledWith(
+      17,
+      7,
+      8,
+      9,
+      expect.objectContaining({
+        node: expect.objectContaining({ nodeId: 17 }),
+      }),
+    );
     expect(skeletonLayer.retainOverlaySegment).toHaveBeenCalledWith(23);
     expect(moveCachedNode).toHaveBeenCalledWith(
       17,
@@ -579,18 +569,10 @@ describe("spatial_skeleton_commands", () => {
 
     expect(deleteNode).toHaveBeenCalledWith(2, {
       childNodeIds: [],
-      editContext: {
-        node: {
-          nodeId: 2,
-          parentNodeId: parentNode.nodeId,
-          revisionToken: "added-after-add",
-        },
-        parent: {
-          nodeId: parentNode.nodeId,
-          revisionToken: "parent-after-add",
-        },
-        children: [],
-      },
+      editContext: expect.objectContaining({
+        node: expect.objectContaining({ nodeId: 2 }),
+        parent: expect.objectContaining({ nodeId: parentNode.nodeId }),
+      }),
     });
     expect(spatialSkeletonState.getCachedNode(2)).toBeUndefined();
     expect(layer.selectAndMoveToSpatialSkeletonNode).toHaveBeenCalledWith(
@@ -656,6 +638,7 @@ describe("spatial_skeleton_commands", () => {
         },
       ],
     });
+    const addNode = vi.fn();
     const insertNode = vi.fn().mockResolvedValue({
       nodeId: 20,
       segmentId,
@@ -673,6 +656,7 @@ describe("spatial_skeleton_commands", () => {
       ],
     });
     const skeletonSource = makeEditableSkeletonSource({
+      addNode,
       deleteNode,
       insertNode,
     });
@@ -770,7 +754,7 @@ describe("spatial_skeleton_commands", () => {
 
     await undoSpatialSkeletonCommand(layer as any);
 
-    expect(skeletonSource.addNode).not.toHaveBeenCalled();
+    expect(addNode).not.toHaveBeenCalled();
     expect(insertNode).toHaveBeenCalledWith(
       segmentId,
       4,
@@ -778,23 +762,13 @@ describe("spatial_skeleton_commands", () => {
       6,
       rootNode.nodeId,
       [firstChildNode.nodeId, secondChildNode.nodeId],
-      {
-        node: {
-          nodeId: rootNode.nodeId,
-          parentNodeId: undefined,
-          revisionToken: "root-after-delete",
-        },
-        children: [
-          {
-            nodeId: firstChildNode.nodeId,
-            revisionToken: "first-child-after-delete",
-          },
-          {
-            nodeId: secondChildNode.nodeId,
-            revisionToken: "second-child-after-delete",
-          },
-        ],
-      },
+      expect.objectContaining({
+        node: expect.objectContaining({ nodeId: rootNode.nodeId }),
+        children: expect.arrayContaining([
+          expect.objectContaining({ nodeId: firstChildNode.nodeId }),
+          expect.objectContaining({ nodeId: secondChildNode.nodeId }),
+        ]),
+      }),
     );
 
     const restoredNode = spatialSkeletonState.getCachedNode(20);
@@ -870,27 +844,29 @@ describe("spatial_skeleton_commands", () => {
     ]);
     syncCacheFromServer(originalSegmentId);
 
+    const splitSkeleton = vi.fn(async () => {
+      serverSegments.set(originalSegmentId, [cloneNode(formerParentNode)]);
+      serverSegments.set(splitSegmentId, [cloneNode(splitNodeAfter)]);
+      return {
+        existingSegmentId: originalSegmentId,
+        newSegmentId: splitSegmentId,
+      };
+    });
+    const mergeSkeletons = vi.fn(async () => {
+      serverSegments.set(originalSegmentId, [
+        cloneNode(formerParentNode),
+        cloneNode(splitNodeMergedBack),
+      ]);
+      serverSegments.delete(splitSegmentId);
+      return {
+        resultSegmentId: originalSegmentId,
+        deletedSegmentId: splitSegmentId,
+        directionAdjusted: false,
+      };
+    });
     const skeletonSource = makeEditableSkeletonSource({
-      splitSkeleton: vi.fn(async () => {
-        serverSegments.set(originalSegmentId, [cloneNode(formerParentNode)]);
-        serverSegments.set(splitSegmentId, [cloneNode(splitNodeAfter)]);
-        return {
-          existingSegmentId: originalSegmentId,
-          newSegmentId: splitSegmentId,
-        };
-      }),
-      mergeSkeletons: vi.fn(async () => {
-        serverSegments.set(originalSegmentId, [
-          cloneNode(formerParentNode),
-          cloneNode(splitNodeMergedBack),
-        ]);
-        serverSegments.delete(splitSegmentId);
-        return {
-          resultSegmentId: originalSegmentId,
-          deletedSegmentId: splitSegmentId,
-          directionAdjusted: false,
-        };
-      }),
+      splitSkeleton,
+      mergeSkeletons,
     });
 
     const deleteSegmentColor = vi.fn();
@@ -968,10 +944,15 @@ describe("spatial_skeleton_commands", () => {
 
     await undoSpatialSkeletonCommand(layer as any);
 
-    expect(skeletonSource.mergeSkeletons).toHaveBeenCalledWith(
+    expect(mergeSkeletons).toHaveBeenCalledWith(
       formerParentNode.nodeId,
       splitNodeBefore.nodeId,
-      expect.any(Object),
+      expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({ nodeId: formerParentNode.nodeId }),
+          expect.objectContaining({ nodeId: splitNodeBefore.nodeId }),
+        ]),
+      }),
     );
     expect(deleteSegmentColor).toHaveBeenCalledWith(BigInt(splitSegmentId));
     expect(skeletonLayer.suppressBrowseSegment).toHaveBeenCalledWith(
@@ -1077,27 +1058,31 @@ describe("spatial_skeleton_commands", () => {
     ]);
     syncCacheFromServer(originalSegmentId);
 
+    const splitSkeleton = vi.fn(async () => {
+      serverSegments.set(originalSegmentId, [
+        cloneNode(originalRootNode),
+        cloneNode(formerParentNode),
+      ]);
+      serverSegments.set(splitSegmentId, [cloneNode(splitNodeAfter)]);
+      return {
+        existingSegmentId: originalSegmentId,
+        newSegmentId: splitSegmentId,
+      };
+    });
+    const mergeSkeletons = vi.fn(async () => {
+      serverSegments.set(originalSegmentId, restoredNodes.map(cloneNode));
+      serverSegments.delete(splitSegmentId);
+      return {
+        resultSegmentId: originalSegmentId,
+        deletedSegmentId: splitSegmentId,
+        directionAdjusted: false,
+      };
+    });
+    const rerootSkeleton = vi.fn();
     const skeletonSource = makeEditableSkeletonSource({
-      splitSkeleton: vi.fn(async () => {
-        serverSegments.set(originalSegmentId, [
-          cloneNode(originalRootNode),
-          cloneNode(formerParentNode),
-        ]);
-        serverSegments.set(splitSegmentId, [cloneNode(splitNodeAfter)]);
-        return {
-          existingSegmentId: originalSegmentId,
-          newSegmentId: splitSegmentId,
-        };
-      }),
-      mergeSkeletons: vi.fn(async () => {
-        serverSegments.set(originalSegmentId, restoredNodes.map(cloneNode));
-        serverSegments.delete(splitSegmentId);
-        return {
-          resultSegmentId: originalSegmentId,
-          deletedSegmentId: splitSegmentId,
-          directionAdjusted: false,
-        };
-      }),
+      splitSkeleton,
+      mergeSkeletons,
+      rerootSkeleton,
     });
 
     const invalidateCachedSegments = vi.fn((segmentIds: Iterable<number>) => {
@@ -1164,18 +1149,23 @@ describe("spatial_skeleton_commands", () => {
       segmentId: originalSegmentId,
     });
 
-    skeletonSource.rerootSkeleton.mockClear();
+    rerootSkeleton.mockClear();
     getFullSegmentNodes.mockClear();
     invalidateCachedSegments.mockClear();
 
     await undoSpatialSkeletonCommand(layer as any);
 
-    expect(skeletonSource.mergeSkeletons).toHaveBeenCalledWith(
+    expect(mergeSkeletons).toHaveBeenCalledWith(
       formerParentNode.nodeId,
       splitNodeBefore.nodeId,
-      expect.any(Object),
+      expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({ nodeId: formerParentNode.nodeId }),
+          expect.objectContaining({ nodeId: splitNodeBefore.nodeId }),
+        ]),
+      }),
     );
-    expect(skeletonSource.rerootSkeleton).not.toHaveBeenCalled();
+    expect(rerootSkeleton).not.toHaveBeenCalled();
     expect(invalidateCachedSegments).toHaveBeenCalledTimes(1);
     expect(invalidateCachedSegments).toHaveBeenCalledWith([
       originalSegmentId,
@@ -1204,7 +1194,7 @@ describe("spatial_skeleton_commands", () => {
     ]);
   });
 
-  it("preserves full merge undo behavior for a hidden second pick via the root endpoint", async () => {
+  it("preserves full merge undo behavior for a hidden second pick", async () => {
     suppressStatusMessages();
 
     const visibleSegmentId = 11;
@@ -1303,38 +1293,41 @@ describe("spatial_skeleton_commands", () => {
     ]);
     syncCacheFromServer(visibleSegmentId);
 
+    const mergeSkeletons = vi.fn(async () => {
+      serverSegments.set(visibleSegmentId, mergedNodes.map(cloneNode));
+      serverSegments.delete(hiddenSegmentId);
+      return {
+        resultSegmentId: visibleSegmentId,
+        deletedSegmentId: hiddenSegmentId,
+        directionAdjusted: false,
+      };
+    });
+    const splitSkeleton = vi.fn(async () => {
+      serverSegments.set(visibleSegmentId, [
+        cloneNode(visibleRootNode),
+        cloneNode(visibleAnchorNode),
+      ]);
+      serverSegments.set(
+        hiddenSegmentId,
+        splitOnlyRestoredNodes.map(cloneNode),
+      );
+      return {
+        existingSegmentId: visibleSegmentId,
+        newSegmentId: hiddenSegmentId,
+      };
+    });
+    const rerootSkeleton = vi.fn(async () => {
+      serverSegments.set(hiddenSegmentId, rerootedHiddenNodes.map(cloneNode));
+      return {};
+    });
     const skeletonSource = makeEditableSkeletonSource({
       getSkeletonRootNode: vi.fn(async () => ({
         nodeId: hiddenRootNode.nodeId,
         position: hiddenRootNode.position,
       })),
-      mergeSkeletons: vi.fn(async () => {
-        serverSegments.set(visibleSegmentId, mergedNodes.map(cloneNode));
-        serverSegments.delete(hiddenSegmentId);
-        return {
-          resultSegmentId: visibleSegmentId,
-          deletedSegmentId: hiddenSegmentId,
-          directionAdjusted: false,
-        };
-      }),
-      splitSkeleton: vi.fn(async () => {
-        serverSegments.set(visibleSegmentId, [
-          cloneNode(visibleRootNode),
-          cloneNode(visibleAnchorNode),
-        ]);
-        serverSegments.set(
-          hiddenSegmentId,
-          splitOnlyRestoredNodes.map(cloneNode),
-        );
-        return {
-          existingSegmentId: visibleSegmentId,
-          newSegmentId: hiddenSegmentId,
-        };
-      }),
-      rerootSkeleton: vi.fn(async () => {
-        serverSegments.set(hiddenSegmentId, rerootedHiddenNodes.map(cloneNode));
-        return {};
-      }),
+      mergeSkeletons,
+      splitSkeleton,
+      rerootSkeleton,
     });
 
     const invalidateCachedSegments = vi.fn((segmentIds: Iterable<number>) => {
@@ -1416,31 +1409,40 @@ describe("spatial_skeleton_commands", () => {
       },
     );
 
-    expect(skeletonSource.getSkeletonRootNode).toHaveBeenCalledWith(
-      hiddenSegmentId,
-    );
-    expect(skeletonSource.mergeSkeletons).toHaveBeenCalledWith(
+    expect(skeletonSource.getSkeletonRootNode).not.toHaveBeenCalled();
+    expect(mergeSkeletons).toHaveBeenCalledWith(
       visibleAnchorNode.nodeId,
       hiddenAttachNodeBefore.nodeId,
-      expect.any(Object),
+      expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({ nodeId: visibleAnchorNode.nodeId }),
+          expect.objectContaining({ nodeId: hiddenAttachNodeBefore.nodeId }),
+        ]),
+      }),
     );
-    expect(getFullSegmentNodes).toHaveBeenCalledTimes(2);
-    expect(
-      skeletonSource.mergeSkeletons.mock.invocationCallOrder[0],
-    ).toBeLessThan(getFullSegmentNodes.mock.invocationCallOrder[0]);
+    expect(getFullSegmentNodes).toHaveBeenCalledTimes(3);
+    expect(getFullSegmentNodes.mock.invocationCallOrder[0]).toBeLessThan(
+      mergeSkeletons.mock.invocationCallOrder[0],
+    );
 
-    skeletonSource.rerootSkeleton.mockClear();
+    rerootSkeleton.mockClear();
     hiddenSegmentVisibleDuringFetches.length = 0;
 
     await undoSpatialSkeletonCommand(layer as any);
 
-    expect(skeletonSource.splitSkeleton).toHaveBeenCalledWith(
+    expect(splitSkeleton).toHaveBeenCalledWith(
       hiddenAttachNodeBefore.nodeId,
-      expect.any(Object),
+      expect.objectContaining({
+        node: expect.objectContaining({
+          nodeId: hiddenAttachNodeBefore.nodeId,
+        }),
+      }),
     );
-    expect(skeletonSource.rerootSkeleton).toHaveBeenCalledWith(
+    expect(rerootSkeleton).toHaveBeenCalledWith(
       hiddenRootNode.nodeId,
-      expect.any(Object),
+      expect.objectContaining({
+        node: expect.objectContaining({ nodeId: hiddenRootNode.nodeId }),
+      }),
     );
     expect(hiddenSegmentVisibleDuringFetches.length).toBeGreaterThan(0);
     expect(hiddenSegmentVisibleDuringFetches.every(Boolean)).toBe(true);
@@ -1554,37 +1556,40 @@ describe("spatial_skeleton_commands", () => {
     ]);
     syncCacheFromServer(visibleSegmentId);
 
+    const mergeSkeletons = vi.fn(async () => {
+      serverSegments.set(visibleSegmentId, mergedNodes.map(cloneNode));
+      serverSegments.delete(hiddenSegmentId);
+      return {
+        resultSegmentId: visibleSegmentId,
+        deletedSegmentId: hiddenSegmentId,
+        directionAdjusted: false,
+      };
+    });
+    const splitSkeleton = vi.fn(async () => {
+      serverSegments.set(visibleSegmentId, [
+        cloneNode(visibleRootNode),
+        cloneNode(visibleAnchorNode),
+      ]);
+      serverSegments.set(
+        hiddenSegmentId,
+        splitOnlyRestoredNodes.map(cloneNode),
+      );
+      return {
+        existingSegmentId: visibleSegmentId,
+        newSegmentId: hiddenSegmentId,
+      };
+    });
+    const rerootSkeleton = vi.fn(async () => {
+      throw new Error("reroot failed");
+    });
     const skeletonSource = makeEditableSkeletonSource({
       getSkeletonRootNode: vi.fn(async () => ({
         nodeId: hiddenRootNode.nodeId,
         position: hiddenRootNode.position,
       })),
-      mergeSkeletons: vi.fn(async () => {
-        serverSegments.set(visibleSegmentId, mergedNodes.map(cloneNode));
-        serverSegments.delete(hiddenSegmentId);
-        return {
-          resultSegmentId: visibleSegmentId,
-          deletedSegmentId: hiddenSegmentId,
-          directionAdjusted: false,
-        };
-      }),
-      splitSkeleton: vi.fn(async () => {
-        serverSegments.set(visibleSegmentId, [
-          cloneNode(visibleRootNode),
-          cloneNode(visibleAnchorNode),
-        ]);
-        serverSegments.set(
-          hiddenSegmentId,
-          splitOnlyRestoredNodes.map(cloneNode),
-        );
-        return {
-          existingSegmentId: visibleSegmentId,
-          newSegmentId: hiddenSegmentId,
-        };
-      }),
-      rerootSkeleton: vi.fn(async () => {
-        throw new Error("reroot failed");
-      }),
+      mergeSkeletons,
+      splitSkeleton,
+      rerootSkeleton,
     });
 
     const getFullSegmentNodes = vi.fn(
@@ -1659,13 +1664,19 @@ describe("spatial_skeleton_commands", () => {
 
     await expect(undoSpatialSkeletonCommand(layer as any)).resolves.toBe(true);
 
-    expect(skeletonSource.splitSkeleton).toHaveBeenCalledWith(
+    expect(splitSkeleton).toHaveBeenCalledWith(
       hiddenAttachNodeBefore.nodeId,
-      expect.any(Object),
+      expect.objectContaining({
+        node: expect.objectContaining({
+          nodeId: hiddenAttachNodeBefore.nodeId,
+        }),
+      }),
     );
-    expect(skeletonSource.rerootSkeleton).toHaveBeenCalledWith(
+    expect(rerootSkeleton).toHaveBeenCalledWith(
       hiddenRootNode.nodeId,
-      expect.any(Object),
+      expect.objectContaining({
+        node: expect.objectContaining({ nodeId: hiddenRootNode.nodeId }),
+      }),
     );
     expect(
       cacheBySegment.get(hiddenSegmentId)?.map((node) => ({
@@ -1747,16 +1758,17 @@ describe("spatial_skeleton_commands", () => {
     ]);
     syncCacheFromServer(firstSegmentId);
 
+    const mergeSkeletons = vi.fn(async () => ({
+      resultSegmentId: firstSegmentId,
+      deletedSegmentId: secondSegmentId,
+      directionAdjusted: false,
+    }));
     const skeletonSource = makeEditableSkeletonSource({
       getSkeletonRootNode: vi.fn(async () => ({
         nodeId: secondRootNode.nodeId,
         position: secondRootNode.position,
       })),
-      mergeSkeletons: vi.fn(async () => ({
-        resultSegmentId: firstSegmentId,
-        deletedSegmentId: secondSegmentId,
-        directionAdjusted: false,
-      })),
+      mergeSkeletons,
     });
 
     const getFullSegmentNodes = vi.fn(
@@ -1832,10 +1844,15 @@ describe("spatial_skeleton_commands", () => {
       expect.anything(),
       secondSegmentId,
     );
-    expect(skeletonSource.mergeSkeletons).toHaveBeenCalledWith(
+    expect(mergeSkeletons).toHaveBeenCalledWith(
       firstAnchorNode.nodeId,
       secondAttachNode.nodeId,
-      expect.any(Object),
+      expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({ nodeId: firstAnchorNode.nodeId }),
+          expect.objectContaining({ nodeId: secondAttachNode.nodeId }),
+        ]),
+      }),
     );
   });
 

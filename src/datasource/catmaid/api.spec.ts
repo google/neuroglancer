@@ -197,6 +197,27 @@ describe("CatmaidClient skeleton editing methods", () => {
     );
   });
 
+  it("accepts zero CATMAID spatial skeleton metadata limits", async () => {
+    const client = new CatmaidClient("https://example.invalid", 1);
+    (client as any).listStacks = vi.fn().mockResolvedValue([{ id: 7 }]);
+    (client as any).getStackInfo = vi.fn().mockResolvedValue({
+      dimension: { x: 10, y: 20, z: 30 },
+      resolution: { x: 2, y: 3, z: 4 },
+      translation: { x: 5, y: 6, z: 7 },
+      metadata: {
+        spatial: [{ chunk_size: [15, 15, 15], limit: 0 }],
+      },
+    });
+
+    await expect(client.getSpatialIndexMetadata()).resolves.toMatchObject({
+      spatial: [
+        {
+          limit: 0,
+        },
+      ],
+    });
+  });
+
   it("parses live compact-detail history rows and label maps", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi.fn().mockResolvedValue([

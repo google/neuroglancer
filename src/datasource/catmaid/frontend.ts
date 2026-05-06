@@ -23,19 +23,7 @@ import {
 } from "#src/coordinate_transform.js";
 import { WithCredentialsProvider } from "#src/credentials_provider/chunk_source_frontend.js";
 import type { CredentialsProvider } from "#src/credentials_provider/index.js";
-import type {
-  CatmaidAddNodeResult,
-  CatmaidDeleteNodeResult,
-  CatmaidDescriptionUpdateOptions,
-  CatmaidDescriptionUpdateResult,
-  CatmaidEditContext,
-  CatmaidInsertNodeResult,
-  CatmaidMergeResult,
-  CatmaidNodeSourceStateResult,
-  CatmaidSplitResult,
-  CatmaidSpatialSkeletonEditApi,
-  CatmaidToken,
-} from "#src/datasource/catmaid/api.js";
+import type { CatmaidToken } from "#src/datasource/catmaid/api.js";
 import {
   CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES,
   CatmaidClient,
@@ -47,7 +35,7 @@ import {
   CatmaidCompleteSkeletonSourceParameters,
   CatmaidDataSourceParameters,
 } from "#src/datasource/catmaid/base.js";
-import { CatmaidSpatialSkeletonEditCommandSource } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
+import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
 import type {
   DataSource,
   DataSourceProvider,
@@ -58,7 +46,6 @@ import {
   normalizeInlineSegmentPropertyMap,
 } from "#src/segmentation_display_state/property_map.js";
 import type {
-  EditableSpatiallyIndexedSkeletonSource,
   SpatialSkeletonEditCapabilities,
   SpatialSkeletonGridCellIndex,
   SpatiallyIndexedSkeletonMetadata,
@@ -88,17 +75,15 @@ const CATMAID_SPATIAL_SKELETON_EDIT_CAPABILITIES = {
   },
 } satisfies SpatialSkeletonEditCapabilities;
 
-export class CatmaidSpatiallyIndexedSkeletonSource
-  extends WithParameters(
-    WithCredentialsProvider<CatmaidToken>()(SpatiallyIndexedSkeletonSource),
-    CatmaidSkeletonSourceParameters,
-  )
-  implements
-    CatmaidSpatialSkeletonEditApi,
-    EditableSpatiallyIndexedSkeletonSource
-{
-  private readonly editableSpatialSkeletonEditCommandSource =
-    new CatmaidSpatialSkeletonEditCommandSource();
+export class CatmaidSpatiallyIndexedSkeletonSource extends WithParameters(
+  WithCredentialsProvider<CatmaidToken>()(SpatiallyIndexedSkeletonSource),
+  CatmaidSkeletonSourceParameters,
+) {
+  private readonly spatialSkeletonEditCommands =
+    new CatmaidSpatialSkeletonEditCommands({
+      ensureEditable: () => this.ensureSpatialSkeletonEditable(),
+      getClient: () => this.client,
+    });
   private client_?: CatmaidClient;
 
   get readOnly() {
@@ -111,9 +96,23 @@ export class CatmaidSpatiallyIndexedSkeletonSource
       : CATMAID_SPATIAL_SKELETON_EDIT_CAPABILITIES;
   }
 
-  get spatialSkeletonEditCommandSource() {
-    return this.editableSpatialSkeletonEditCommandSource;
-  }
+  readonly addNodesCommand = this.spatialSkeletonEditCommands.addNodesCommand;
+  readonly insertNodesCommand =
+    this.spatialSkeletonEditCommands.insertNodesCommand;
+  readonly moveNodesCommand = this.spatialSkeletonEditCommands.moveNodesCommand;
+  readonly deleteNodesCommand =
+    this.spatialSkeletonEditCommands.deleteNodesCommand;
+  readonly rerootCommand = this.spatialSkeletonEditCommands.rerootCommand;
+  readonly editNodeDescriptionCommand =
+    this.spatialSkeletonEditCommands.editNodeDescriptionCommand;
+  readonly editNodeTrueEndCommand =
+    this.spatialSkeletonEditCommands.editNodeTrueEndCommand;
+  readonly editNodePropertiesCommand =
+    this.spatialSkeletonEditCommands.editNodePropertiesCommand;
+  readonly mergeSkeletonsCommand =
+    this.spatialSkeletonEditCommands.mergeSkeletonsCommand;
+  readonly splitSkeletonsCommand =
+    this.spatialSkeletonEditCommands.splitSkeletonsCommand;
 
   private ensureSpatialSkeletonEditable() {
     if (this.readOnly) {
@@ -173,118 +172,6 @@ export class CatmaidSpatiallyIndexedSkeletonSource
 
   getSkeletonRootNode(skeletonId: number) {
     return this.client.getSkeletonRootNode(skeletonId);
-  }
-
-  addNode(
-    skeletonId: number,
-    x: number,
-    y: number,
-    z: number,
-    parentId?: number,
-    editContext?: CatmaidEditContext,
-  ): Promise<CatmaidAddNodeResult> {
-    this.ensureSpatialSkeletonEditable();
-    return this.client.addNode(skeletonId, x, y, z, parentId, editContext);
-  }
-
-  insertNode(
-    skeletonId: number,
-    x: number,
-    y: number,
-    z: number,
-    parentId: number,
-    childNodeIds: readonly number[],
-    editContext?: CatmaidEditContext,
-  ): Promise<CatmaidInsertNodeResult> {
-    this.ensureSpatialSkeletonEditable();
-    return this.client.insertNode(
-      skeletonId,
-      x,
-      y,
-      z,
-      parentId,
-      childNodeIds,
-      editContext,
-    );
-  }
-
-  moveNode(
-    nodeId: number,
-    x: number,
-    y: number,
-    z: number,
-    editContext?: CatmaidEditContext,
-  ): Promise<CatmaidNodeSourceStateResult> {
-    this.ensureSpatialSkeletonEditable();
-    return this.client.moveNode(nodeId, x, y, z, editContext);
-  }
-
-  deleteNode(
-    nodeId: number,
-    options: {
-      childNodeIds?: readonly number[];
-      editContext?: CatmaidEditContext;
-    },
-  ): Promise<CatmaidDeleteNodeResult> {
-    this.ensureSpatialSkeletonEditable();
-    return this.client.deleteNode(nodeId, options);
-  }
-
-  rerootSkeleton(nodeId: number, editContext?: CatmaidEditContext) {
-    this.ensureSpatialSkeletonEditable();
-    return this.client.rerootSkeleton(nodeId, editContext);
-  }
-
-  updateDescription(
-    nodeId: number,
-    description: string,
-    options?: CatmaidDescriptionUpdateOptions,
-  ): Promise<CatmaidDescriptionUpdateResult> {
-    this.ensureSpatialSkeletonEditable();
-    return this.client.updateDescription(nodeId, description, options);
-  }
-
-  toggleTrueEnd(
-    nodeId: number,
-    nextIsTrueEnd: boolean,
-  ): Promise<CatmaidNodeSourceStateResult> {
-    this.ensureSpatialSkeletonEditable();
-    return this.client.toggleTrueEnd(nodeId, nextIsTrueEnd);
-  }
-
-  updateRadius(
-    nodeId: number,
-    radius: number,
-    editContext?: CatmaidEditContext,
-  ): Promise<CatmaidNodeSourceStateResult> {
-    this.ensureSpatialSkeletonEditable();
-    return this.client.updateRadius(nodeId, radius, editContext);
-  }
-
-  updateConfidence(
-    nodeId: number,
-    confidence: number,
-    editContext?: CatmaidEditContext,
-  ): Promise<CatmaidNodeSourceStateResult> {
-    this.ensureSpatialSkeletonEditable();
-    return this.client.updateConfidence(nodeId, confidence, editContext);
-  }
-
-  mergeSkeletons(
-    fromNodeId: number,
-    toNodeId: number,
-    editContext?: CatmaidEditContext,
-  ): Promise<CatmaidMergeResult> {
-    this.ensureSpatialSkeletonEditable();
-    return this.client.mergeSkeletons(fromNodeId, toNodeId, editContext);
-  }
-
-  splitSkeleton(
-    nodeId: number,
-    editContext?: CatmaidEditContext,
-  ): Promise<CatmaidSplitResult> {
-    this.ensureSpatialSkeletonEditable();
-    return this.client.splitSkeleton(nodeId, editContext);
   }
 }
 

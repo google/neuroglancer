@@ -35,7 +35,7 @@ const { SegmentSelectionState } = await import(
 
 function makeEditableSpatialSkeletonSource(
   options: {
-    rerootSkeleton?: (() => Promise<void>) | undefined;
+    rerootCommand?: boolean;
   } = {},
 ) {
   const createCommand = () => ({
@@ -44,44 +44,38 @@ function makeEditableSpatialSkeletonSource(
     undo: vi.fn(),
     redo: vi.fn(),
   });
-  const supports = (action: string) =>
-    action !== SpatialSkeletonActions.reroot ||
-    options.rerootSkeleton !== undefined;
+  const makeCommand = (action: string) => ({
+    action,
+    createCommand,
+  });
   return {
     readOnly: false,
-    spatialSkeletonEditCommandSource: {
-      supports,
-      createCommand: (action: string) =>
-        supports(action) ? createCommand() : undefined,
-    },
+    addNodesCommand: makeCommand(SpatialSkeletonActions.addNodes),
+    insertNodesCommand: makeCommand(SpatialSkeletonActions.insertNodes),
+    moveNodesCommand: makeCommand(SpatialSkeletonActions.moveNodes),
+    deleteNodesCommand: makeCommand(SpatialSkeletonActions.deleteNodes),
+    editNodeDescriptionCommand: makeCommand(
+      SpatialSkeletonActions.editNodeDescription,
+    ),
+    editNodeTrueEndCommand: makeCommand(SpatialSkeletonActions.editNodeTrueEnd),
+    editNodePropertiesCommand: makeCommand(
+      SpatialSkeletonActions.editNodeProperties,
+    ),
+    mergeSkeletonsCommand: makeCommand(SpatialSkeletonActions.mergeSkeletons),
+    splitSkeletonsCommand: makeCommand(SpatialSkeletonActions.splitSkeletons),
     listSkeletons: async () => [],
     getSkeleton: async () => [],
     fetchNodes: async () => [],
     getSpatialIndexMetadata: async () => null,
-    addNode: async () => ({ nodeId: 1, segmentId: 1 }),
-    insertNode: async () => ({ nodeId: 1, segmentId: 1 }),
-    moveNode: async () => ({}),
-    deleteNode: async () => ({}),
-    updateDescription: async () => ({}),
-    toggleTrueEnd: async () => ({}),
-    updateRadius: async () => ({}),
-    updateConfidence: async () => ({}),
     getSkeletonRootNode: async () => ({
       nodeId: 1,
       position: [0, 0, 0],
     }),
-    mergeSkeletons: async () => ({
-      resultSegmentId: 1,
-      deletedSegmentId: 2,
-      directionAdjusted: false,
-    }),
-    splitSkeleton: async () => ({
-      existingSegmentId: 1,
-      newSegmentId: 2,
-    }),
-    ...(options.rerootSkeleton === undefined
+    ...(options.rerootCommand !== true
       ? {}
-      : { rerootSkeleton: options.rerootSkeleton }),
+      : {
+          rerootCommand: makeCommand(SpatialSkeletonActions.reroot),
+        }),
   };
 }
 
@@ -162,7 +156,7 @@ describe("layer/segmentation spatial skeleton action gating", () => {
         getSpatiallyIndexedSkeletonLayer: () =>
           makeSpatialSkeletonLayerWithSource(
             makeEditableSpatialSkeletonSource({
-              rerootSkeleton: async () => {},
+              rerootCommand: true,
             }),
           ),
         spatialSkeletonVisibleChunksLoaded: new WatchableValue(true),
@@ -249,7 +243,7 @@ describe("layer/segmentation spatial skeleton action gating", () => {
         getSpatiallyIndexedSkeletonLayer: () =>
           makeSpatialSkeletonLayerWithSource({
             ...makeEditableSpatialSkeletonSource({
-              rerootSkeleton: async () => {},
+              rerootCommand: true,
             }),
             readOnly: true,
           }),

@@ -15,14 +15,17 @@
  */
 
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type {
+  EditableSpatiallyIndexedSkeletonSource,
+  SpatiallyIndexedSkeletonNode,
+} from "#src/skeleton/api.js";
 import {
   SpatialSkeletonActions,
   type SpatialSkeletonAction,
 } from "#src/skeleton/actions.js";
 import type {
   SpatialSkeletonCommandPayload,
-  SpatialSkeletonEditCommandSource,
+  SpatialSkeletonEditCommandFactory,
 } from "#src/skeleton/edit_command_source.js";
 import type { SpatialSkeletonCommand } from "#src/skeleton/command_history.js";
 import { getEditableSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial_skeleton_manager.js";
@@ -32,18 +35,10 @@ interface SpatialSkeletonSourceAccess {
   source: object;
 }
 
-export function getSpatialSkeletonEditCommandSource(
-  value: SpatialSkeletonSourceAccess | undefined,
-): SpatialSkeletonEditCommandSource | undefined {
-  const source = getEditableSpatiallyIndexedSkeletonSource(value);
-  if (source === undefined) return undefined;
-  return source.spatialSkeletonEditCommandSource;
-}
-
 function getEditSource(
   layer: SegmentationUserLayer,
-): SpatialSkeletonEditCommandSource {
-  const source = getSpatialSkeletonEditCommandSource(
+): EditableSpatiallyIndexedSkeletonSource {
+  const source = getEditableSpatiallyIndexedSkeletonSource(
     layer.getSpatiallyIndexedSkeletonLayer(),
   );
   if (source === undefined) {
@@ -54,14 +49,36 @@ function getEditSource(
   return source;
 }
 
-function requireCommand(
-  command: SpatialSkeletonCommand | undefined,
-  message: string,
-) {
-  if (command === undefined) {
-    throw new Error(message);
+export function getSpatialSkeletonEditCommandFactory(
+  value: SpatialSkeletonSourceAccess | undefined,
+  action: SpatialSkeletonAction,
+): SpatialSkeletonEditCommandFactory | undefined {
+  const source = getEditableSpatiallyIndexedSkeletonSource(value);
+  if (source === undefined) return undefined;
+  switch (action) {
+    case SpatialSkeletonActions.addNodes:
+      return source.addNodesCommand;
+    case SpatialSkeletonActions.insertNodes:
+      return source.insertNodesCommand;
+    case SpatialSkeletonActions.moveNodes:
+      return source.moveNodesCommand;
+    case SpatialSkeletonActions.deleteNodes:
+      return source.deleteNodesCommand;
+    case SpatialSkeletonActions.reroot:
+      return source.rerootCommand;
+    case SpatialSkeletonActions.editNodeDescription:
+      return source.editNodeDescriptionCommand;
+    case SpatialSkeletonActions.editNodeTrueEnd:
+      return source.editNodeTrueEndCommand;
+    case SpatialSkeletonActions.editNodeProperties:
+      return source.editNodePropertiesCommand;
+    case SpatialSkeletonActions.mergeSkeletons:
+      return source.mergeSkeletonsCommand;
+    case SpatialSkeletonActions.splitSkeletons:
+      return source.splitSkeletonsCommand;
+    case SpatialSkeletonActions.inspect:
+      return undefined;
   }
-  return command;
 }
 
 function executeCommand(
@@ -85,10 +102,15 @@ function createSpatialSkeletonCommand(
   payload: SpatialSkeletonCommandPayload,
   unsupportedMessage: string,
 ) {
-  return requireCommand(
-    getEditSource(layer).createCommand(action, layer, payload),
-    unsupportedMessage,
+  const source = getEditSource(layer);
+  const commandFactory = getSpatialSkeletonEditCommandFactory(
+    { source },
+    action,
   );
+  if (commandFactory === undefined) {
+    throw new Error(unsupportedMessage);
+  }
+  return commandFactory.createCommand(layer, payload);
 }
 
 export function executeSpatialSkeletonAddNode(

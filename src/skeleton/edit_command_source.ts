@@ -15,39 +15,74 @@
  */
 
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
-import type { SpatialSkeletonAction } from "#src/skeleton/actions.js";
+import {
+  SpatialSkeletonActions,
+  type SpatialSkeletonAction,
+} from "#src/skeleton/actions.js";
 import type { SpatialSkeletonCommand } from "#src/skeleton/command_history.js";
 
 export type SpatialSkeletonCommandPayload = object;
 
-export interface SpatialSkeletonEditCommandSource {
-  supports(action: SpatialSkeletonAction): boolean;
+export interface SpatialSkeletonEditCommandFactory<
+  TAction extends SpatialSkeletonAction = SpatialSkeletonAction,
+> {
+  readonly action: TAction;
   createCommand(
-    action: SpatialSkeletonAction,
     layer: SegmentationUserLayer,
     payload: SpatialSkeletonCommandPayload,
-  ): SpatialSkeletonCommand | undefined;
+  ): SpatialSkeletonCommand;
 }
 
-type SpatialSkeletonEditCommandSourceCandidate = {
-  supports?: (action: SpatialSkeletonAction) => boolean;
+type SpatialSkeletonEditCommandFactoryCandidate = {
+  action?: unknown;
   createCommand?: (
-    action: SpatialSkeletonAction,
     layer: SegmentationUserLayer,
     payload: SpatialSkeletonCommandPayload,
-  ) => SpatialSkeletonCommand | undefined;
+  ) => SpatialSkeletonCommand;
 };
 
-export function isSpatialSkeletonEditCommandSource(
+export function isSpatialSkeletonEditCommandFactory<
+  TAction extends SpatialSkeletonAction,
+>(
   value: unknown,
-): value is SpatialSkeletonEditCommandSource {
+  action: TAction,
+): value is SpatialSkeletonEditCommandFactory<TAction> {
   return (
     typeof value === "object" &&
     value !== null &&
-    typeof (value as SpatialSkeletonEditCommandSourceCandidate).supports ===
-      "function" &&
-    typeof (value as SpatialSkeletonEditCommandSourceCandidate)
-      .createCommand ===
-      "function"
+    (value as SpatialSkeletonEditCommandFactoryCandidate).action === action &&
+    typeof (value as SpatialSkeletonEditCommandFactoryCandidate)
+      .createCommand === "function"
   );
 }
+
+export type SpatialSkeletonAddNodesCommandFactory =
+  SpatialSkeletonEditCommandFactory<typeof SpatialSkeletonActions.addNodes>;
+export type SpatialSkeletonInsertNodesCommandFactory =
+  SpatialSkeletonEditCommandFactory<typeof SpatialSkeletonActions.insertNodes>;
+export type SpatialSkeletonMoveNodesCommandFactory =
+  SpatialSkeletonEditCommandFactory<typeof SpatialSkeletonActions.moveNodes>;
+export type SpatialSkeletonDeleteNodesCommandFactory =
+  SpatialSkeletonEditCommandFactory<typeof SpatialSkeletonActions.deleteNodes>;
+export type SpatialSkeletonRerootCommandFactory =
+  SpatialSkeletonEditCommandFactory<typeof SpatialSkeletonActions.reroot>;
+export type SpatialSkeletonEditNodeDescriptionCommandFactory =
+  SpatialSkeletonEditCommandFactory<
+    typeof SpatialSkeletonActions.editNodeDescription
+  >;
+export type SpatialSkeletonEditNodeTrueEndCommandFactory =
+  SpatialSkeletonEditCommandFactory<
+    typeof SpatialSkeletonActions.editNodeTrueEnd
+  >;
+export type SpatialSkeletonEditNodePropertiesCommandFactory =
+  SpatialSkeletonEditCommandFactory<
+    typeof SpatialSkeletonActions.editNodeProperties
+  >;
+export type SpatialSkeletonMergeSkeletonsCommandFactory =
+  SpatialSkeletonEditCommandFactory<
+    typeof SpatialSkeletonActions.mergeSkeletons
+  >;
+export type SpatialSkeletonSplitSkeletonsCommandFactory =
+  SpatialSkeletonEditCommandFactory<
+    typeof SpatialSkeletonActions.splitSkeletons
+  >;

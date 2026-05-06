@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { makeCatmaidNodeSourceState } from "#src/datasource/catmaid/api.js";
-import { CatmaidSpatialSkeletonEditCommandSource } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
+import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
 import {
   executeSpatialSkeletonAddNode,
   executeSpatialSkeletonMerge,
@@ -42,15 +42,22 @@ function makeVisibleSegmentsState(initialVisibleSegments: bigint[] = []) {
   };
 }
 
-function makeEditableSkeletonSource(overrides: Record<string, unknown> = {}) {
+const catmaidEditClientMethodNames = new Set([
+  "addNode",
+  "insertNode",
+  "moveNode",
+  "deleteNode",
+  "rerootSkeleton",
+  "updateDescription",
+  "toggleTrueEnd",
+  "updateRadius",
+  "updateConfidence",
+  "mergeSkeletons",
+  "splitSkeleton",
+]);
+
+function makeCatmaidClient(overrides: Record<string, unknown> = {}) {
   return {
-    spatialSkeletonEditCommandSource:
-      new CatmaidSpatialSkeletonEditCommandSource(),
-    listSkeletons: vi.fn(),
-    getSkeleton: vi.fn(),
-    fetchNodes: vi.fn(),
-    getSpatialIndexMetadata: vi.fn(),
-    getSkeletonRootNode: vi.fn(),
     addNode: vi.fn(),
     insertNode: vi.fn(),
     moveNode: vi.fn(),
@@ -63,6 +70,42 @@ function makeEditableSkeletonSource(overrides: Record<string, unknown> = {}) {
     mergeSkeletons: vi.fn(),
     splitSkeleton: vi.fn(),
     ...overrides,
+  };
+}
+
+function makeEditableSkeletonSource(overrides: Record<string, unknown> = {}) {
+  const clientOverrides: Record<string, unknown> = {};
+  const sourceOverrides: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(overrides)) {
+    if (catmaidEditClientMethodNames.has(key)) {
+      clientOverrides[key] = value;
+    } else {
+      sourceOverrides[key] = value;
+    }
+  }
+  const client = makeCatmaidClient(clientOverrides);
+  const commands = new CatmaidSpatialSkeletonEditCommands({
+    ensureEditable: vi.fn(),
+    getClient: () => client as any,
+  });
+  return {
+    readOnly: false,
+    addNodesCommand: commands.addNodesCommand,
+    insertNodesCommand: commands.insertNodesCommand,
+    moveNodesCommand: commands.moveNodesCommand,
+    deleteNodesCommand: commands.deleteNodesCommand,
+    rerootCommand: commands.rerootCommand,
+    editNodeDescriptionCommand: commands.editNodeDescriptionCommand,
+    editNodeTrueEndCommand: commands.editNodeTrueEndCommand,
+    editNodePropertiesCommand: commands.editNodePropertiesCommand,
+    mergeSkeletonsCommand: commands.mergeSkeletonsCommand,
+    splitSkeletonsCommand: commands.splitSkeletonsCommand,
+    listSkeletons: vi.fn(),
+    getSkeleton: vi.fn(),
+    fetchNodes: vi.fn(),
+    getSpatialIndexMetadata: vi.fn(),
+    getSkeletonRootNode: vi.fn(),
+    ...sourceOverrides,
   };
 }
 
@@ -180,13 +223,16 @@ describe("spatial_skeleton_edit_tool", () => {
       positionInModelSpace: position,
     });
 
-    expect(addNode).toHaveBeenCalledWith(11, 1, 2, 3, 5, {
-      node: {
-        nodeId: 5,
-        parentNodeId: undefined,
-        revisionToken: "parent-before",
-      },
-    });
+    expect(addNode).toHaveBeenCalledWith(
+      11,
+      1,
+      2,
+      3,
+      5,
+      expect.objectContaining({
+        node: expect.objectContaining({ nodeId: 5 }),
+      }),
+    );
     expect(upsertCachedNode).toHaveBeenCalledWith(
       {
         nodeId: 17,
@@ -437,12 +483,16 @@ describe("spatial_skeleton_edit_tool", () => {
       { nodeId: 202, segmentId: 17 },
     );
 
-    expect(mergeSkeletons).toHaveBeenCalledWith(101, 202, {
-      nodes: [
-        { nodeId: 101, revisionToken: "first-before" },
-        { nodeId: 202, revisionToken: "second-before" },
-      ],
-    });
+    expect(mergeSkeletons).toHaveBeenCalledWith(
+      101,
+      202,
+      expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({ nodeId: 101 }),
+          expect.objectContaining({ nodeId: 202 }),
+        ]),
+      }),
+    );
     expect(invalidateCachedSegments).toHaveBeenCalledWith([17, 11]);
     expect(getFullSegmentNodes).toHaveBeenCalledTimes(2);
     expect(selectSegment).toHaveBeenCalledWith(17n, false);

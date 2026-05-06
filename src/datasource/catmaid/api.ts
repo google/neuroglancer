@@ -579,10 +579,11 @@ function requireCatmaidPositiveRank3Vector(
   return values;
 }
 
-function requireCatmaidPositiveInt(value: unknown, label: string): number {
+
+function requireCatmaidNonNegativeInt(value: unknown, label: string): number {
   const numberValue = Number(value);
-  if (!Number.isInteger(numberValue) || numberValue <= 0) {
-    throw new Error(`CATMAID ${label} must be a positive integer.`);
+  if (!Number.isInteger(numberValue) || numberValue < 0) {
+    throw new Error(`CATMAID ${label} must be a non-negative integer.`);
   }
   return numberValue;
 }
@@ -1271,7 +1272,7 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
         level?.chunk_size,
         `spatial skeleton metadata spatial[${index}].chunk_size`,
       );
-      const limit = requireCatmaidPositiveInt(
+      const limit = requireCatmaidNonNegativeInt(
         level?.limit,
         `spatial skeleton metadata spatial[${index}].limit`,
       );

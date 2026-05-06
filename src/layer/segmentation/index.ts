@@ -56,7 +56,6 @@ import {
   executeSpatialSkeletonNodePropertiesUpdate,
   executeSpatialSkeletonReroot,
   executeSpatialSkeletonNodeTrueEndUpdate,
-  getSpatialSkeletonEditCommandSource,
 } from "#src/layer/segmentation/spatial_skeleton_commands.js";
 import { showSpatialSkeletonActionError } from "#src/layer/segmentation/spatial_skeleton_errors.js";
 import {
@@ -1592,10 +1591,26 @@ export class SegmentationUserLayer extends Base {
     if (action === SpatialSkeletonActions.inspect) {
       return getSpatiallyIndexedSkeletonSource(skeletonLayer) !== undefined;
     }
-    return (
-      getSpatialSkeletonEditCommandSource(skeletonLayer)?.supports(action) ??
-      false
-    );
+    const source = getEditableSpatiallyIndexedSkeletonSource(skeletonLayer);
+    if (source === undefined) return false;
+    switch (action) {
+      case SpatialSkeletonActions.addNodes:
+      case SpatialSkeletonActions.deleteNodes:
+      case SpatialSkeletonActions.moveNodes:
+      case SpatialSkeletonActions.splitSkeletons:
+      case SpatialSkeletonActions.mergeSkeletons:
+        return true;
+      case SpatialSkeletonActions.insertNodes:
+        return source.insertNodesCommand !== undefined;
+      case SpatialSkeletonActions.reroot:
+        return source.rerootCommand !== undefined;
+      case SpatialSkeletonActions.editNodeDescription:
+        return source.editNodeDescriptionCommand !== undefined;
+      case SpatialSkeletonActions.editNodeTrueEnd:
+        return source.editNodeTrueEndCommand !== undefined;
+      case SpatialSkeletonActions.editNodeProperties:
+        return source.editNodePropertiesCommand !== undefined;
+    }
   }
 
   private getMissingSpatialSkeletonSupportReason(
@@ -1672,7 +1687,9 @@ export class SegmentationUserLayer extends Base {
         "No active spatial skeleton layer found for delete action.",
       );
     }
-    if (getSpatialSkeletonEditCommandSource(skeletonLayer) === undefined) {
+    if (
+      getEditableSpatiallyIndexedSkeletonSource(skeletonLayer) === undefined
+    ) {
       throw new Error(
         "Unable to resolve editable skeleton source for the active layer.",
       );
@@ -2502,10 +2519,9 @@ export class SegmentationUserLayer extends Base {
     summaryRow.classList.add("neuroglancer-spatial-skeleton-selection-summary");
     container.appendChild(summaryRow);
 
-    const editCommandSource =
-      getSpatialSkeletonEditCommandSource(skeletonLayer);
+    const editSource = getEditableSpatiallyIndexedSkeletonSource(skeletonLayer);
     const rerootDisabledReason =
-      editCommandSource === undefined
+      editSource?.rerootCommand === undefined
         ? "Unable to resolve a reroot-capable skeleton source for the active layer."
         : segmentNodes === undefined
           ? "Load the active skeleton in the Skeleton tab before rerooting from Selection."
@@ -2553,7 +2569,7 @@ export class SegmentationUserLayer extends Base {
       })();
     });
     const deleteDisabledReason =
-      editCommandSource === undefined
+      editSource === undefined
         ? "Unable to resolve editable skeleton source for the active layer."
         : segmentNodes === undefined
           ? "Load the active skeleton in the Skeleton tab before deleting from Selection."
@@ -2575,7 +2591,7 @@ export class SegmentationUserLayer extends Base {
     deleteButton.addEventListener("click", () => {
       if (
         deleteButton.disabled ||
-        editCommandSource === undefined ||
+        editSource === undefined ||
         completeNodeInfo === undefined ||
         deletePending
       ) {
@@ -2656,7 +2672,7 @@ export class SegmentationUserLayer extends Base {
     const isLeaf =
       segmentNodes !== undefined && directChildNodeIds.length === 0;
     const leafTypeEditingDisabledReason = () =>
-      editCommandSource === undefined
+      editSource === undefined
         ? "Unable to resolve editable skeleton source for the active layer."
         : cachedNodeInfo === undefined || segmentNodes === undefined
           ? "Load the active skeleton in the Skeleton tab before changing leaf type."
@@ -2852,7 +2868,7 @@ export class SegmentationUserLayer extends Base {
       appendValue("Confidence level", confidenceControl);
       let savePending = false;
       const getPropertyEditingDisabledReason = () =>
-        editCommandSource === undefined
+        editSource === undefined
           ? "Unable to resolve editable skeleton source for the active layer."
           : this.getSpatialSkeletonActionsDisabledReason(
               SpatialSkeletonActions.editNodeProperties,
@@ -3001,7 +3017,7 @@ export class SegmentationUserLayer extends Base {
     const descriptionText =
       cachedNodeInfo?.description ?? completeNodeInfo?.description ?? "";
     const descriptionEditingDisabledReason =
-      editCommandSource === undefined
+      editSource === undefined
         ? "Unable to resolve editable skeleton source for the active layer."
         : cachedNodeInfo === undefined
           ? "Load the active skeleton in the Skeleton tab before editing description."
@@ -3017,7 +3033,7 @@ export class SegmentationUserLayer extends Base {
       descriptionElement.placeholder = "Description";
       descriptionElement.value = descriptionText;
       descriptionElement.addEventListener("change", () => {
-        if (editCommandSource === undefined || cachedNodeInfo === undefined) {
+        if (editSource === undefined || cachedNodeInfo === undefined) {
           return;
         }
         const nextDescription = descriptionElement.value;
@@ -3091,7 +3107,7 @@ export class SegmentationUserLayer extends Base {
       const { rank, globalToRenderLayerDimensions } = transform;
       const { globalPosition } = this.manager.root;
       const globalLayerPosition = new Float32Array(rank);
-      const renderToGlobalLayerDimensions = [];
+      const renderToGlobalLayerDimensions: number[] = [];
       for (let i = 0; i < rank; i++) {
         renderToGlobalLayerDimensions[globalToRenderLayerDimensions[i]] = i;
       }
