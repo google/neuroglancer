@@ -185,12 +185,11 @@ import type { RPC } from "#src/worker_rpc.js";
 
 const DEBUG_SPATIAL_SKELETON_OVERLAY = false;
 const DEBUG_EXCLUDED_SEGMENTS = false;
-const DEBUG_CHUNK_WIREFRAME = true;
+const DEBUG_CHUNK_WIREFRAME_3D = true;
 const DEBUG_CHUNK_COLORS = true;
 const tempChunkColorMap = new Map<vec3, Float32Array>();
 
-const tempMat2 = mat4.create();
-const tempWireframeMat = mat4.create();
+const tempMat4 = mat4.create();
 const DEFAULT_FRAGMENT_MAIN = `void main() {
   emitDefault();
 }
@@ -893,7 +892,7 @@ void emitDefault() {
     modelMatrix: mat4,
   ) {
     const { viewProjectionMat } = renderContext.projectionParameters;
-    const mat = mat4.multiply(tempMat2, viewProjectionMat, modelMatrix);
+    const mat = mat4.multiply(tempMat4, viewProjectionMat, modelMatrix);
     gl.uniformMatrix4fv(shader.uniform("uProjection"), false, mat);
     this.vertexIdHelper.enable();
   }
@@ -2979,10 +2978,7 @@ export class SpatiallyIndexedSkeletonLayer
     overlayRenderHelper: RenderHelper,
     browseRenderHelper: RenderHelper,
     renderOptions: ViewSpecificSkeletonRenderingOptions,
-    attachment: VisibleLayerInfo<
-      LayerView,
-      ThreeDimensionalRenderLayerAttachmentState
-    >,
+    modelMatrix: mat4,
     visibleChunks: SpatiallyIndexedSkeletonChunk[],
   ) {
     const { displayState } = this;
@@ -2992,12 +2988,6 @@ export class SpatiallyIndexedSkeletonLayer
     ) {
       return;
     }
-    const modelMatrix = update3dRenderLayerAttachment(
-      displayState.transform.value,
-      renderContext.projectionParameters.displayDimensionRenderInfo,
-      attachment,
-    );
-    if (modelMatrix === undefined) return;
 
     const lineWidth = renderOptions.lineWidth.value;
     const pointDiameter = getSkeletonNodeDiameter(
@@ -3287,38 +3277,37 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
         levels,
       );
     }
+    const modelMatrix = update3dRenderLayerAttachment(
+      displayState.transform.value,
+      renderContext.projectionParameters.displayDimensionRenderInfo,
+      attachment,
+    );
+    if (modelMatrix === undefined) return;
     this.base.draw(
       renderContext,
       this,
       this.renderHelper,
       this.browseRenderHelper,
       this.renderOptions,
-      attachment,
+      modelMatrix,
       visibleChunks,
     );
-    if (
-      DEBUG_CHUNK_WIREFRAME &&
-      renderContext.emitColor &&
-      visibleChunks.length > 0
-    ) {
-      this.drawChunkBoundsWireframe(renderContext, attachment, visibleChunks);
+    if (DEBUG_CHUNK_WIREFRAME_3D) {
+      this.drawChunkBoundsWireframe(renderContext, visibleChunks, modelMatrix);
     }
   }
 
   private drawChunkBoundsWireframe(
     renderContext: PerspectiveViewRenderContext,
-    attachment: VisibleLayerInfo<
-      PerspectivePanel,
-      ThreeDimensionalRenderLayerAttachmentState
-    >,
     visibleChunks: SpatiallyIndexedSkeletonChunk[],
+    modelMatrix?: mat4,
   ) {
-    const modelMatrix = update3dRenderLayerAttachment(
-      this.base.displayState.transform.value,
-      renderContext.projectionParameters.displayDimensionRenderInfo,
-      attachment,
-    );
-    if (modelMatrix === undefined) return;
+    if (
+      visibleChunks.length === 0 ||
+      !renderContext.emitColor ||
+      modelMatrix === undefined
+    )
+      return;
 
     // Build source → chunkLayout lookup from the current transformed sources.
     const chunkLayoutBySource = new Map<object, ChunkLayout>();
@@ -3330,32 +3319,28 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
       }
     }
 
-    const wireframeHelper = ChunkWireframeHelper.get(this.base.gl);
+    const { gl } = this.base;
+    const wireframeHelper = ChunkWireframeHelper.get(gl);
     const shader = wireframeHelper.getShader(renderContext.emitter);
     shader.bind();
     const { viewProjectionMat } = renderContext.projectionParameters;
-    const gl = this.base.gl;
 
     for (const chunk of visibleChunks) {
       const chunkLayout = chunkLayoutBySource.get(chunk.source);
       if (chunkLayout === undefined) continue;
 
       // Compose: clip ← view-projection ← model ← chunk-layout-transform
-      mat4.multiply(tempWireframeMat, viewProjectionMat, modelMatrix);
-      mat4.multiply(tempWireframeMat, tempWireframeMat, chunkLayout.transform);
-      gl.uniformMatrix4fv(
-        shader.uniform("uChunkToClip"),
-        false,
-        tempWireframeMat,
-      );
+      mat4.multiply(tempMat4, viewProjectionMat, modelMatrix);
+      mat4.multiply(tempMat4, tempMat4, chunkLayout.transform);
+      gl.uniformMatrix4fv(shader.uniform("uChunkToClip"), false, tempMat4);
 
       const { size } = chunkLayout;
-      const gp = chunk.chunkGridPosition;
+      const gridPosition = chunk.chunkGridPosition;
       gl.uniform3f(
         shader.uniform("uChunkMin"),
-        gp[0] * size[0],
-        gp[1] * size[1],
-        gp[2] * size[2],
+        gridPosition[0] * size[0],
+        gridPosition[1] * size[1],
+        gridPosition[2] * size[2],
       );
       gl.uniform3f(shader.uniform("uChunkSize"), size[0], size[1], size[2]);
       gl.drawArrays(WebGL2RenderingContext.LINES, 0, 24);
@@ -3648,13 +3633,19 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
         levels,
       );
     }
+    const modelMatrix = update3dRenderLayerAttachment(
+      displayState.transform.value,
+      renderContext.projectionParameters.displayDimensionRenderInfo,
+      attachment,
+    );
+    if (modelMatrix === undefined) return;
     this.base.draw(
       renderContext,
       this,
       this.renderHelper,
       this.browseRenderHelper,
       this.renderOptions,
-      attachment,
+      modelMatrix,
       visibleChunks,
     );
   }
