@@ -38,7 +38,7 @@ import { SPATIALLY_INDEXED_SKELETON_CONFIDENCE_VALUES } from "#src/skeleton/api.
 import { getDefaultSpatiallyIndexedSkeletonChunkSize } from "#src/skeleton/spatial_chunk_sizing.js";
 import { HttpError } from "#src/util/http_request.js";
 
-const DEBUG_DISABLE_ACROSS_CHUNK_NODES = true;
+const DEBUG_DISABLE_ACROSS_CHUNK_NODES = false;
 
 interface CatmaidStackInfo {
   dimension: { x: number; y: number; z: number };
