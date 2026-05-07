@@ -430,9 +430,7 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
       gl.uniform1ui(shader.uniform("uUseSegmentDefaultColor"), 1);
       gl.uniform3fv(
         shader.uniform("uSegmentDefaultColor"),
-        segmentDefaultColor[0],
-        segmentDefaultColor[1],
-        segmentDefaultColor[2],
+        segmentDefaultColor,
       );
     }
     if (DEBUG_SPATIAL_SKELETON_OVERLAY && excludedSegments === undefined) {
