@@ -1917,11 +1917,13 @@ export class SpatiallyIndexedSkeletonLayer
   >;
   rpc: RPC | undefined;
 
-  private overlayAttributeTextureFormats = [
-    vertexPositionTextureFormat,
-    segmentTextureFormat,
-    selectedNodeTextureFormat,
-  ];
+  private overlayAttributeTextureFormats_?: TextureFormat[];
+  private get overlayAttributeTextureFormats(): TextureFormat[] {
+    return (this.overlayAttributeTextureFormats_ ??= this.vertexAttributes.map(
+      ({ dataType, numComponents }) =>
+        computeTextureFormat(new TextureFormat(), dataType, numComponents),
+    ));
+  }
   gridLevel: WatchableValueInterface<number>;
   lod: WatchableValueInterface<number>;
   gridLevel2d: WatchableValueInterface<number>;
