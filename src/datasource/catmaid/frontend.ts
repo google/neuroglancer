@@ -57,7 +57,6 @@ import {
   SkeletonSource,
   MultiscaleSpatiallyIndexedSkeletonSource,
 } from "#src/skeleton/frontend.js";
-import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
 import { makeSliceViewChunkSpecification } from "#src/sliceview/base.js";
 import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
 import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
@@ -232,7 +231,7 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
   }
 
   getPerspectiveSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] {
-    const sources = this.getSources({} as any);
+    const sources = this.getSources();
     return sources.length > 0 ? sources[0] : [];
   }
 
@@ -240,10 +239,7 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
     return this.getPerspectiveSources();
   }
 
-  getSources(
-    _options: SliceViewSourceOptions,
-  ): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[][] {
-    void _options;
+  getSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[][] {
     const sources: SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] =
       [];
 
