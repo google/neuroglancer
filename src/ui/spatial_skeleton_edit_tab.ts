@@ -28,15 +28,15 @@ import svg_redo from "ikonate/icons/redo.svg?raw";
 import svg_retweet from "ikonate/icons/retweet.svg?raw";
 import svg_share_android from "ikonate/icons/share-android.svg?raw";
 import svg_undo from "ikonate/icons/undo.svg?raw";
-import { getSegmentIdFromLayerSelectionValue } from "#src/layer/segmentation/selection.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+import { getSegmentIdFromLayerSelectionValue } from "#src/layer/segmentation/selection.js";
 import {
   executeSpatialSkeletonDeleteNode,
   executeSpatialSkeletonNodeTrueEndUpdate,
   redoSpatialSkeletonCommand,
+  showSpatialSkeletonActionError,
   undoSpatialSkeletonCommand,
 } from "#src/layer/segmentation/spatial_skeleton_commands.js";
-import { showSpatialSkeletonActionError } from "#src/layer/segmentation/spatial_skeleton_errors.js";
 import {
   getSegmentEquivalences,
   getVisibleSegments,
@@ -46,11 +46,7 @@ import {
   SpatialSkeletonActions,
   type SpatialSkeletonAction,
 } from "#src/skeleton/actions.js";
-import type {
-  SpatiallyIndexedSkeletonNavigationTarget,
-  SpatiallyIndexedSkeletonNode,
-  SpatiallyIndexedSkeletonOpenLeaf,
-} from "#src/skeleton/api.js";
+import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
 import {
   buildSpatiallyIndexedSkeletonNavigationGraph,
   getBranchEnd as getBranchEndFromGraph,
@@ -60,6 +56,8 @@ import {
   getOpenLeaves as getOpenLeavesFromGraph,
   getParentNode as getParentNodeFromGraph,
   getSkeletonRootNode as getSkeletonRootNodeFromGraph,
+  type SpatiallyIndexedSkeletonNavigationTarget,
+  type SpatiallyIndexedSkeletonOpenLeaf,
   type SpatiallyIndexedSkeletonNavigationGraph,
 } from "#src/skeleton/navigation.js";
 import {
@@ -664,12 +662,9 @@ export class SpatialSkeletonEditTab extends Tab {
       },
     };
 
-    const navigateToNodeTarget = (target: {
-      nodeId: number;
-      x: number;
-      y: number;
-      z: number;
-    }) => {
+    const navigateToNodeTarget = (
+      target: SpatiallyIndexedSkeletonNavigationTarget,
+    ) => {
       const existingNode = allNodes.find(
         (node) => node.nodeId === target.nodeId,
       );
@@ -678,7 +673,7 @@ export class SpatialSkeletonEditTab extends Tab {
         return;
       }
       pendingScrollToSelectedNode = true;
-      const position = [target.x, target.y, target.z];
+      const position = target.position;
       layer.selectSpatialSkeletonNode(target.nodeId, true, { position });
       moveViewToNodePosition(position);
       updateDisplay();
@@ -1227,7 +1222,7 @@ export class SpatialSkeletonEditTab extends Tab {
         row.setAttribute("aria-disabled", "true");
       }
 
-      const nodeIsTrueEnd = node.isTrueEnd;
+      const nodeIsTrueEnd = node.isTrueEnd ?? false;
       const iconFilterType = getSpatialSkeletonNodeIconFilterType({
         nodeIsTrueEnd,
         nodeType: type,

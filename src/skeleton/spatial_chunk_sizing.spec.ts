@@ -6,47 +6,56 @@ describe("skeleton/spatial_chunk_sizing", () => {
   it("derives an isotropic chunk size that stays within the default chunk budget", () => {
     expect(
       getDefaultSpatiallyIndexedSkeletonChunkSize({
-        min: { x: 5, y: 6, z: 7 },
-        max: { x: 25, y: 66, z: 127 },
+        lowerBounds: [5, 6, 7],
+        upperBounds: [25, 66, 127],
       }),
-    ).toEqual({ x: 15, y: 15, z: 15 });
+    ).toEqual([15, 15, 15]);
   });
 
   it("handles elongated bounds while keeping the chunk size isotropic", () => {
     expect(
       getDefaultSpatiallyIndexedSkeletonChunkSize({
-        min: { x: 0, y: 0, z: 0 },
-        max: { x: 1000, y: 10, z: 10 },
+        lowerBounds: [0, 0, 0],
+        upperBounds: [1000, 10, 10],
       }),
-    ).toEqual({ x: 16, y: 16, z: 16 });
+    ).toEqual([16, 16, 16]);
   });
 
   it("returns the minimum chunk size for tiny bounds", () => {
     expect(
       getDefaultSpatiallyIndexedSkeletonChunkSize({
-        min: { x: 0, y: 0, z: 0 },
-        max: { x: 2, y: 2, z: 2 },
+        lowerBounds: [0, 0, 0],
+        upperBounds: [2, 2, 2],
       }),
-    ).toEqual({ x: 1, y: 1, z: 1 });
+    ).toEqual([1, 1, 1]);
+  });
+
+  it("returns a chunk-size array with the same rank as the bounds", () => {
+    expect(
+      getDefaultSpatiallyIndexedSkeletonChunkSize({
+        lowerBounds: [0, 0, 0, 0],
+        upperBounds: [16, 32, 48, 2],
+      }),
+    ).toEqual([8, 8, 8, 8]);
   });
 
   it("supports overriding the chunk budget", () => {
     expect(
       getDefaultSpatiallyIndexedSkeletonChunkSize(
         {
-          min: { x: 0, y: 0, z: 0 },
-          max: { x: 100, y: 100, z: 100 },
+          lowerBounds: [0, 0, 0],
+          upperBounds: [100, 100, 100],
         },
         { maxChunks: 8 },
       ),
-    ).toEqual({ x: 50, y: 50, z: 50 });
+    ).toEqual([50, 50, 50]);
   });
 
   it("rejects NaN bounds", () => {
     expect(() =>
       getDefaultSpatiallyIndexedSkeletonChunkSize({
-        min: { x: Number.NaN, y: 0, z: 0 },
-        max: { x: 10, y: 10, z: 10 },
+        lowerBounds: [Number.NaN, 0, 0],
+        upperBounds: [10, 10, 10],
       }),
     ).toThrow(/bounds must be finite/i);
   });
@@ -54,18 +63,27 @@ describe("skeleton/spatial_chunk_sizing", () => {
   it("rejects infinite bounds", () => {
     expect(() =>
       getDefaultSpatiallyIndexedSkeletonChunkSize({
-        min: { x: 0, y: 0, z: 0 },
-        max: { x: Number.POSITIVE_INFINITY, y: 10, z: 10 },
+        lowerBounds: [0, 0, 0],
+        upperBounds: [Number.POSITIVE_INFINITY, 10, 10],
       }),
     ).toThrow(/bounds must be finite/i);
+  });
+
+  it("rejects mismatched lower/upper bound ranks", () => {
+    expect(() =>
+      getDefaultSpatiallyIndexedSkeletonChunkSize({
+        lowerBounds: [0, 0],
+        upperBounds: [10, 10, 10],
+      }),
+    ).toThrow(/matching ranks/i);
   });
 
   it("rejects NaN minChunkSize", () => {
     expect(() =>
       getDefaultSpatiallyIndexedSkeletonChunkSize(
         {
-          min: { x: 0, y: 0, z: 0 },
-          max: { x: 10, y: 10, z: 10 },
+          lowerBounds: [0, 0, 0],
+          upperBounds: [10, 10, 10],
         },
         { minChunkSize: Number.NaN },
       ),
@@ -76,8 +94,8 @@ describe("skeleton/spatial_chunk_sizing", () => {
     expect(() =>
       getDefaultSpatiallyIndexedSkeletonChunkSize(
         {
-          min: { x: 0, y: 0, z: 0 },
-          max: { x: 10, y: 10, z: 10 },
+          lowerBounds: [0, 0, 0],
+          upperBounds: [10, 10, 10],
         },
         { maxChunks: Number.POSITIVE_INFINITY },
       ),

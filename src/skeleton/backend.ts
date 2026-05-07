@@ -39,6 +39,7 @@ import {
   getObjectKey,
 } from "#src/segmentation_display_state/base.js";
 import type { SharedWatchableValue } from "#src/shared_watchable_value.js";
+import type { SpatialSkeletonSourceState } from "#src/skeleton/api.js";
 import {
   SKELETON_LAYER_RPC_ID,
   SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_RPC_ID,
@@ -300,7 +301,7 @@ export class SpatiallyIndexedSkeletonChunk
   requestGeneration = -1;
   requestOwners = SpatiallyIndexedSkeletonChunkRequestOwner.NONE;
   nodeIds: Int32Array | undefined;
-  nodeRevisionTokens: Array<string | undefined> | undefined;
+  nodeSourceStates: Array<SpatialSkeletonSourceState | undefined> | undefined;
 
   freeSystemMemory() {
     freeSkeletonChunkSystemMemory(this);

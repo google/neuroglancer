@@ -20,11 +20,13 @@ export class CatmaidDataSourceParameters {
   url!: string;
   projectId!: number;
   cacheProvider?: string;
+  readonly = true;
 }
 
 export class CatmaidSkeletonSourceParameters extends SkeletonSourceParameters {
   catmaidParameters!: CatmaidDataSourceParameters;
   gridIndex?: number;
+  catmaidLod?: number;
   static RPC_ID = "catmaid/SkeletonSource";
 }
 

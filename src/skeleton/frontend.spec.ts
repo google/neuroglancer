@@ -68,7 +68,7 @@ describe("resolveSpatiallyIndexedSkeletonSegmentPick", () => {
 });
 
 describe("SpatiallyIndexedSkeletonLayer browse node picks", () => {
-  it("resolves browse node picks with node id and revision token", () => {
+  it("resolves browse node picks with node id and source state", () => {
     const positions = new Float32Array([1, 2, 3, 4, 5, 6]);
     const segmentIds = new Uint32Array([11, 17]);
     const vertexBytes = new Uint8Array(
@@ -82,7 +82,10 @@ describe("SpatiallyIndexedSkeletonLayer browse node picks", () => {
       numVertices: 2,
       indices: new Uint32Array([0, 1]),
       nodeIds: new Int32Array([101, 202]),
-      nodeRevisionTokens: ["2026-03-29T11:50:00Z", "2026-03-29T11:51:00Z"],
+      nodeSourceStates: [
+        { revisionToken: "2026-03-29T11:50:00Z" },
+        { revisionToken: "2026-03-29T11:51:00Z" },
+      ],
     };
     const layer = Object.create(SpatiallyIndexedSkeletonLayer.prototype);
 
@@ -90,7 +93,7 @@ describe("SpatiallyIndexedSkeletonLayer browse node picks", () => {
       nodeId: 202,
       segmentId: 17,
       position: new Float32Array([4, 5, 6]),
-      revisionToken: "2026-03-29T11:51:00Z",
+      sourceState: { revisionToken: "2026-03-29T11:51:00Z" },
     });
   });
 });
@@ -125,4 +128,3 @@ describe("SpatiallyIndexedSkeletonLayer browse exclusions", () => {
     expect([...excludedSegments]).toEqual([29n]);
   });
 });
-

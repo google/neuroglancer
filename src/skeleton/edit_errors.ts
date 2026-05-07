@@ -14,24 +14,36 @@
  * limitations under the License.
  */
 
-import { CatmaidStateValidationError } from "#src/datasource/catmaid/api.js";
-import { StatusMessage } from "#src/status.js";
+export class SpatialSkeletonEditConflictError extends Error {
+  constructor(detail?: string) {
+    super(
+      detail ??
+        "The skeleton edit could not be applied because the source state is out of date.",
+    );
+    this.name = "SpatialSkeletonEditConflictError";
+  }
+}
 
 function formatError(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
 export function isSpatialSkeletonOutdatedStateError(error: unknown) {
-  return error instanceof CatmaidStateValidationError;
+  return error instanceof SpatialSkeletonEditConflictError;
 }
 
-export function showSpatialSkeletonActionError(action: string, error: unknown) {
+export function getSpatialSkeletonActionErrorMessage(
+  action: string,
+  error: unknown,
+) {
   if (isSpatialSkeletonOutdatedStateError(error)) {
-    return StatusMessage.showErrorMessage(
-      `Failed to ${action} due to outdated state. Refresh the page to sync.`,
-    );
+    return {
+      message: `Failed to ${action} due to outdated state. Refresh the page to sync.`,
+      requiresDismissal: true,
+    };
   }
-  return StatusMessage.showTemporaryMessage(
-    `Failed to ${action}: ${formatError(error)}`,
-  );
+  return {
+    message: `Failed to ${action}: ${formatError(error)}`,
+    requiresDismissal: false,
+  };
 }

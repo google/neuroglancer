@@ -33,41 +33,56 @@ const { SegmentSelectionState } = await import(
 
 function makeEditableSpatialSkeletonSource(
   options: {
-    rerootSkeleton?: (() => Promise<void>) | undefined;
+    confidenceConfiguration?: boolean;
+    rerootCommand?: boolean;
   } = {},
 ) {
+  const createCommand = () => ({
+    label: "test command",
+    execute: vi.fn(),
+    undo: vi.fn(),
+    redo: vi.fn(),
+  });
+  const makeCommand = (action: string) => ({
+    action,
+    createCommand,
+  });
   return {
+    readonly: false,
+    addNodesCommand: makeCommand(SpatialSkeletonActions.addNodes),
+    insertNodesCommand: makeCommand(SpatialSkeletonActions.insertNodes),
+    moveNodesCommand: makeCommand(SpatialSkeletonActions.moveNodes),
+    deleteNodesCommand: makeCommand(SpatialSkeletonActions.deleteNodes),
+    editNodeDescriptionCommand: makeCommand(
+      SpatialSkeletonActions.editNodeDescription,
+    ),
+    editNodeTrueEndCommand: makeCommand(SpatialSkeletonActions.editNodeTrueEnd),
+    editNodeRadiusCommand: makeCommand(SpatialSkeletonActions.editNodeRadius),
+    editNodeConfidenceCommand: makeCommand(
+      SpatialSkeletonActions.editNodeConfidence,
+    ),
+    mergeSkeletonsCommand: makeCommand(SpatialSkeletonActions.mergeSkeletons),
+    splitSkeletonsCommand: makeCommand(SpatialSkeletonActions.splitSkeletons),
     listSkeletons: async () => [],
     getSkeleton: async () => [],
     fetchNodes: async () => [],
     getSpatialIndexMetadata: async () => null,
-    addNode: async () => ({ treenodeId: 1, skeletonId: 1 }),
-    insertNode: async () => ({ treenodeId: 1, skeletonId: 1 }),
-    moveNode: async () => ({}),
-    deleteNode: async () => ({}),
-    updateDescription: async () => ({}),
-    setTrueEnd: async () => ({}),
-    removeTrueEnd: async () => ({}),
-    updateRadius: async () => ({}),
-    updateConfidence: async () => ({}),
     getSkeletonRootNode: async () => ({
       nodeId: 1,
-      x: 0,
-      y: 0,
-      z: 0,
+      position: [0, 0, 0],
     }),
-    mergeSkeletons: async () => ({
-      resultSkeletonId: 1,
-      deletedSkeletonId: 2,
-      stableAnnotationSwap: false,
-    }),
-    splitSkeleton: async () => ({
-      existingSkeletonId: 1,
-      newSkeletonId: 2,
-    }),
-    ...(options.rerootSkeleton === undefined
+    ...(options.confidenceConfiguration !== true
       ? {}
-      : { rerootSkeleton: options.rerootSkeleton }),
+      : {
+          spatialSkeletonConfidenceConfiguration: {
+            values: [0, 50, 100],
+          },
+        }),
+    ...(options.rerootCommand !== true
+      ? {}
+      : {
+          rerootCommand: makeCommand(SpatialSkeletonActions.reroot),
+        }),
   };
 }
 
@@ -120,14 +135,14 @@ describe("layer/segmentation spatial skeleton chunk stats", () => {
 });
 
 describe("layer/segmentation spatial skeleton action gating", () => {
-  it("does not require max lod for skeleton actions", () => {
+  it("does not require a specific grid level for skeleton actions", () => {
     const layer = Object.assign(
       Object.create(SegmentationUserLayer.prototype),
       {
         getSpatiallyIndexedSkeletonLayer: () =>
           makeSpatialSkeletonLayerWithSource(
             makeEditableSpatialSkeletonSource({
-              rerootSkeleton: async () => {},
+              rerootCommand: true,
             }),
           ),
         spatialSkeletonVisibleChunksLoaded: new WatchableValue(true),
@@ -205,6 +220,71 @@ describe("layer/segmentation spatial skeleton action gating", () => {
     ).toBe(
       "The active spatial skeleton source does not support skeleton rerooting.",
     );
+  });
+
+  it("requires confidence configuration for confidence edit support", () => {
+    const layer = Object.assign(
+      Object.create(SegmentationUserLayer.prototype),
+      {
+        getSpatiallyIndexedSkeletonLayer: () =>
+          makeSpatialSkeletonLayerWithSource(
+            makeEditableSpatialSkeletonSource(),
+          ),
+        spatialSkeletonVisibleChunksLoaded: new WatchableValue(true),
+        spatialSkeletonVisibleChunksNeeded: new WatchableValue(0),
+        spatialSkeletonVisibleChunksAvailable: new WatchableValue(0),
+      },
+    );
+
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason(
+        SpatialSkeletonActions.editNodeConfidence,
+      ),
+    ).toBe(
+      "The active spatial skeleton source does not support node confidence editing.",
+    );
+
+    layer.getSpatiallyIndexedSkeletonLayer = () =>
+      makeSpatialSkeletonLayerWithSource(
+        makeEditableSpatialSkeletonSource({
+          confidenceConfiguration: true,
+        }),
+      );
+
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason(
+        SpatialSkeletonActions.editNodeConfidence,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("reports read-only spatial skeleton sources explicitly", () => {
+    const layer = Object.assign(
+      Object.create(SegmentationUserLayer.prototype),
+      {
+        getSpatiallyIndexedSkeletonLayer: () =>
+          makeSpatialSkeletonLayerWithSource({
+            ...makeEditableSpatialSkeletonSource({
+              rerootCommand: true,
+            }),
+            readonly: true,
+          }),
+        spatialSkeletonVisibleChunksLoaded: new WatchableValue(true),
+        spatialSkeletonVisibleChunksNeeded: new WatchableValue(0),
+        spatialSkeletonVisibleChunksAvailable: new WatchableValue(0),
+      },
+    );
+
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason(
+        SpatialSkeletonActions.addNodes,
+      ),
+    ).toBe("The active spatial skeleton source is read-only.");
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason(
+        SpatialSkeletonActions.inspect,
+      ),
+    ).toBeUndefined();
   });
 });
 

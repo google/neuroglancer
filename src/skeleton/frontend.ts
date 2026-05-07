@@ -63,7 +63,10 @@ import {
   SegmentationLayerSharedObject,
 } from "#src/segmentation_display_state/frontend.js";
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type {
+  SpatiallyIndexedSkeletonNode,
+  SpatialSkeletonSourceState,
+} from "#src/skeleton/api.js";
 import type { VertexAttributeInfo } from "#src/skeleton/base.js";
 import {
   SKELETON_LAYER_RPC_ID,
@@ -120,7 +123,7 @@ import { DATA_TYPE_SIGNED, DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import type { ValueOrError } from "#src/util/error.js";
 import { makeValueOrError, valueOrThrow } from "#src/util/error.js";
-import { kOneVec4, mat4, type vec4, type vec3 } from "#src/util/geom.js";
+import { kOneVec4, mat4, type vec4 } from "#src/util/geom.js";
 import { verifyFinitePositiveFloat } from "#src/util/json.js";
 import * as matrix from "#src/util/matrix.js";
 import { getObjectId } from "#src/util/object_id.js";
@@ -245,8 +248,9 @@ interface SkeletonChunkData {
   indices: Uint32Array;
   numVertices: number;
   vertexAttributeOffsets: Uint32Array;
+  lod?: number;
   nodeIds?: Int32Array;
-  nodeRevisionTokens?: Array<string | undefined>;
+  nodeSourceStates?: Array<SpatialSkeletonSourceState | undefined>;
 }
 
 type SpatiallyIndexedSkeletonPickData =
@@ -1602,7 +1606,7 @@ export class SpatiallyIndexedSkeletonChunk
   vertexAttributeOffsets: Uint32Array;
   vertexAttributeTextures: (WebGLTexture | null)[] = [];
   nodeIds: Int32Array = new Int32Array(0);
-  nodeRevisionTokens: Array<string | undefined> = [];
+  nodeSourceStates: Array<SpatialSkeletonSourceState | undefined> = [];
   lod: number | undefined;
 
   constructor(
@@ -1628,11 +1632,9 @@ export class SpatiallyIndexedSkeletonChunk
     } else {
       this.nodeIds = new Int32Array(0);
     }
-    const nodeRevisionTokens = (chunkData as any).nodeRevisionTokens;
-    this.nodeRevisionTokens = Array.isArray(nodeRevisionTokens)
-      ? nodeRevisionTokens.map((value) =>
-          typeof value === "string" ? value : undefined,
-        )
+    const nodeSourceStates = (chunkData as any).nodeSourceStates;
+    this.nodeSourceStates = Array.isArray(nodeSourceStates)
+      ? nodeSourceStates
       : [];
   }
 
@@ -2346,14 +2348,6 @@ export class SpatiallyIndexedSkeletonLayer
         }),
       );
     }
-    // TODO (SKM): there should be maybe be a redraw on lod changing
-    // these were removed because there were too many of them
-    // a separate PR is working on a cleaner display state
-    // at that point we can likely add something back here
-    // for now it should be fine, because the chunks update
-    // as a result of the lod changing, which triggers a draw
-    // will check the pattern in slice view
-
     // Create backend for perspective view chunk management
     const sharedObject = this.registerDisposer(
       new ChunkRenderLayerFrontend(this.layerChunkProgressInfo),
@@ -2517,7 +2511,7 @@ export class SpatiallyIndexedSkeletonLayer
       nodeId,
       segmentId,
       position: data.positions.subarray(baseOffset, baseOffset + 3),
-      revisionToken: chunk.nodeRevisionTokens[pickedOffset],
+      sourceState: chunk.nodeSourceStates[pickedOffset],
     };
   }
 
@@ -2632,7 +2626,7 @@ export class SpatiallyIndexedSkeletonLayer
       lod?: number;
     } = {},
   ): SpatiallyIndexedSkeletonNode | undefined {
-    void options;
+    void options.lod;
     if (!Number.isSafeInteger(nodeId) || nodeId <= 0) return undefined;
     return this.getCachedNodeSnapshot(nodeId);
   }
@@ -3175,7 +3169,7 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
             nodeId: pickedNode.nodeId,
             segmentId: pickedNode.segmentId,
             position: new Float32Array(pickedNode.position),
-            revisionToken: pickedNode.revisionToken,
+            sourceState: pickedNode.sourceState,
           };
         }
         return;
@@ -3441,7 +3435,7 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
             nodeId: pickedNode.nodeId,
             segmentId: pickedNode.segmentId,
             position: new Float32Array(pickedNode.position),
-            revisionToken: pickedNode.revisionToken,
+            sourceState: pickedNode.sourceState,
           };
         }
         return;

@@ -14,19 +14,15 @@
  * limitations under the License.
  */
 
+import type {
+  SpatialSkeletonBounds,
+  SpatialSkeletonVector,
+} from "#src/skeleton/api.js";
+
 const DEFAULT_SPATIALLY_INDEXED_SKELETON_MAX_CHUNKS = 64;
 const DEFAULT_SPATIALLY_INDEXED_SKELETON_MIN_CHUNK_SIZE = 1;
 
-export interface SpatiallyIndexedSkeletonBounds {
-  min: { x: number; y: number; z: number };
-  max: { x: number; y: number; z: number };
-}
-
-export interface SpatiallyIndexedSkeletonChunkSize {
-  x: number;
-  y: number;
-  z: number;
-}
+export type SpatiallyIndexedSkeletonChunkSize = number[];
 
 export interface DefaultSpatiallyIndexedSkeletonChunkSizeOptions {
   maxChunks?: number;
@@ -47,22 +43,28 @@ function validateFiniteOptions(
   }
 }
 
-function validateFiniteBounds(bounds: SpatiallyIndexedSkeletonBounds) {
-  const values = [
-    ["min.x", bounds.min.x],
-    ["min.y", bounds.min.y],
-    ["min.z", bounds.min.z],
-    ["max.x", bounds.max.x],
-    ["max.y", bounds.max.y],
-    ["max.z", bounds.max.z],
-  ] as const;
-  for (const [name, value] of values) {
+function validateFiniteVector(vector: SpatialSkeletonVector, label: string) {
+  for (let i = 0; i < vector.length; ++i) {
+    const value = Number(vector[i]);
     if (!Number.isFinite(value)) {
       throw new Error(
-        `Spatially indexed skeleton bounds must be finite, but ${name} is ${value}.`,
+        `Spatially indexed skeleton bounds must be finite, but ${label}[${i}] is ${value}.`,
       );
     }
   }
+}
+
+function validateFiniteBounds(bounds: SpatialSkeletonBounds) {
+  if (bounds.lowerBounds.length !== bounds.upperBounds.length) {
+    throw new Error(
+      "Spatially indexed skeleton lower and upper bounds must have matching ranks.",
+    );
+  }
+  if (bounds.lowerBounds.length === 0) {
+    throw new Error("Spatially indexed skeleton bounds must have rank > 0.");
+  }
+  validateFiniteVector(bounds.lowerBounds, "lowerBounds");
+  validateFiniteVector(bounds.upperBounds, "upperBounds");
 }
 
 function getChunkCoverageForChunkSize(
@@ -76,7 +78,7 @@ function getChunkCoverageForChunkSize(
 }
 
 export function getDefaultSpatiallyIndexedSkeletonChunkSize(
-  bounds: SpatiallyIndexedSkeletonBounds,
+  bounds: SpatialSkeletonBounds,
   options: DefaultSpatiallyIndexedSkeletonChunkSizeOptions = {},
 ): SpatiallyIndexedSkeletonChunkSize {
   validateFiniteOptions(options);
@@ -93,15 +95,13 @@ export function getDefaultSpatiallyIndexedSkeletonChunkSize(
       options.maxChunks ?? DEFAULT_SPATIALLY_INDEXED_SKELETON_MAX_CHUNKS,
     ),
   );
-  const extents = [
-    Math.max(0, bounds.max.x - bounds.min.x),
-    Math.max(0, bounds.max.y - bounds.min.y),
-    Math.max(0, bounds.max.z - bounds.min.z),
-  ] as const;
+  const extents = Array.from(bounds.lowerBounds, (lowerBound, index) =>
+    Math.max(0, Number(bounds.upperBounds[index]) - Number(lowerBound)),
+  );
   const maxExtent = Math.max(...extents);
 
   if (!(maxExtent > 0)) {
-    return { x: minChunkSize, y: minChunkSize, z: minChunkSize };
+    return extents.map(() => minChunkSize);
   }
 
   // Choose the smallest isotropic chunk size that keeps the full bounding box
@@ -117,5 +117,5 @@ export function getDefaultSpatiallyIndexedSkeletonChunkSize(
     }
   }
 
-  return { x: low, y: low, z: low };
+  return extents.map(() => low);
 }

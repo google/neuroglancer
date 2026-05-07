@@ -85,10 +85,13 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
       ),
     title:
       "Select the grid size level for spatially indexed skeletons in 2D views",
-    ...renderScaleLayerControl((layer) => ({
-      histogram: layer.displayState.spatialSkeletonGridRenderScaleHistogram2d,
-      target: layer.displayState.spatialSkeletonGridResolutionTarget2d,
-    }), SpatialSkeletonGridRenderScaleWidget),
+    ...renderScaleLayerControl(
+      (layer) => ({
+        histogram: layer.displayState.spatialSkeletonGridRenderScaleHistogram2d,
+        target: layer.displayState.spatialSkeletonGridResolutionTarget2d,
+      }),
+      SpatialSkeletonGridRenderScaleWidget,
+    ),
   },
   {
     label: "Resolution (skeleton grid 3D)",
@@ -104,10 +107,13 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
       ),
     title:
       "Select the grid size level for spatially indexed skeletons in 3D views",
-    ...renderScaleLayerControl((layer) => ({
-      histogram: layer.displayState.spatialSkeletonGridRenderScaleHistogram3d,
-      target: layer.displayState.spatialSkeletonGridResolutionTarget3d,
-    }), SpatialSkeletonGridRenderScaleWidget),
+    ...renderScaleLayerControl(
+      (layer) => ({
+        histogram: layer.displayState.spatialSkeletonGridRenderScaleHistogram3d,
+        target: layer.displayState.spatialSkeletonGridResolutionTarget3d,
+      }),
+      SpatialSkeletonGridRenderScaleWidget,
+    ),
   },
   {
     label: "Opacity (3d)",

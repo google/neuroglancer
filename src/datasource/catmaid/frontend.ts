@@ -24,12 +24,18 @@ import {
 import { WithCredentialsProvider } from "#src/credentials_provider/chunk_source_frontend.js";
 import type { CredentialsProvider } from "#src/credentials_provider/index.js";
 import type { CatmaidToken } from "#src/datasource/catmaid/api.js";
-import { CatmaidClient, credentialsKey } from "#src/datasource/catmaid/api.js";
+import {
+  CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES,
+  CatmaidClient,
+  credentialsKey,
+  getCatmaidSpatialSkeletonGridCellBounds,
+} from "#src/datasource/catmaid/api.js";
 import {
   CatmaidSkeletonSourceParameters,
   CatmaidCompleteSkeletonSourceParameters,
   CatmaidDataSourceParameters,
 } from "#src/datasource/catmaid/base.js";
+import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
 import type {
   DataSource,
   DataSourceProvider,
@@ -40,18 +46,11 @@ import {
   normalizeInlineSegmentPropertyMap,
 } from "#src/segmentation_display_state/property_map.js";
 import type {
-  EditableSpatiallyIndexedSkeletonSource,
-  SpatiallyIndexedSkeletonAddNodeResult,
-  SpatiallyIndexedSkeletonDeleteNodeResult,
-  SpatiallyIndexedSkeletonDescriptionUpdateResult,
-  SpatiallyIndexedSkeletonEditContext,
-  SpatiallyIndexedSkeletonInsertNodeResult,
-  SpatiallyIndexedSkeletonMergeResult,
+  SpatialSkeletonConfidenceConfiguration,
+  SpatialSkeletonGridCellIndex,
   SpatiallyIndexedSkeletonMetadata,
   SpatiallyIndexedSkeletonNode,
-  SpatiallyIndexedSkeletonNodeRevisionResult,
   SpatiallyIndexedSkeletonNodeBase,
-  SpatiallyIndexedSkeletonSplitResult,
 } from "#src/skeleton/api.js";
 import {
   SpatiallyIndexedSkeletonSource,
@@ -67,14 +66,77 @@ import type { Borrowed } from "#src/util/disposable.js";
 import { mat4, vec3 } from "#src/util/geom.js";
 import "#src/datasource/catmaid/register_credentials_provider.js";
 
-export class CatmaidSpatiallyIndexedSkeletonSource
-  extends WithParameters(
-    WithCredentialsProvider<CatmaidToken>()(SpatiallyIndexedSkeletonSource),
-    CatmaidSkeletonSourceParameters,
-  )
-  implements EditableSpatiallyIndexedSkeletonSource
-{
+const CATMAID_SPATIAL_SKELETON_CONFIDENCE_CONFIGURATION = {
+  values: CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES,
+} satisfies SpatialSkeletonConfidenceConfiguration;
+
+export class CatmaidSpatiallyIndexedSkeletonSource extends WithParameters(
+  WithCredentialsProvider<CatmaidToken>()(SpatiallyIndexedSkeletonSource),
+  CatmaidSkeletonSourceParameters,
+) {
+  private readonly spatialSkeletonEditCommands =
+    new CatmaidSpatialSkeletonEditCommands({
+      getClient: () => this.client,
+    });
   private client_?: CatmaidClient;
+
+  get readonly() {
+    return this.parameters.catmaidParameters.readonly !== false;
+  }
+
+  get spatialSkeletonConfidenceConfiguration() {
+    return this.readonly
+      ? undefined
+      : CATMAID_SPATIAL_SKELETON_CONFIDENCE_CONFIGURATION;
+  }
+
+  private get editableSpatialSkeletonEditCommands() {
+    return this.readonly ? undefined : this.spatialSkeletonEditCommands;
+  }
+
+  get addNodesCommand() {
+    return this.editableSpatialSkeletonEditCommands?.addNodesCommand;
+  }
+
+  get insertNodesCommand() {
+    return this.editableSpatialSkeletonEditCommands?.insertNodesCommand;
+  }
+
+  get moveNodesCommand() {
+    return this.editableSpatialSkeletonEditCommands?.moveNodesCommand;
+  }
+
+  get deleteNodesCommand() {
+    return this.editableSpatialSkeletonEditCommands?.deleteNodesCommand;
+  }
+
+  get rerootCommand() {
+    return this.editableSpatialSkeletonEditCommands?.rerootCommand;
+  }
+
+  get editNodeDescriptionCommand() {
+    return this.editableSpatialSkeletonEditCommands?.editNodeDescriptionCommand;
+  }
+
+  get editNodeTrueEndCommand() {
+    return this.editableSpatialSkeletonEditCommands?.editNodeTrueEndCommand;
+  }
+
+  get editNodeRadiusCommand() {
+    return this.editableSpatialSkeletonEditCommands?.editNodeRadiusCommand;
+  }
+
+  get editNodeConfidenceCommand() {
+    return this.editableSpatialSkeletonEditCommands?.editNodeConfidenceCommand;
+  }
+
+  get mergeSkeletonsCommand() {
+    return this.editableSpatialSkeletonEditCommands?.mergeSkeletonsCommand;
+  }
+
+  get splitSkeletonsCommand() {
+    return this.editableSpatialSkeletonEditCommands?.splitSkeletonsCommand;
+  }
 
   private get client() {
     let client = this.client_;
@@ -107,129 +169,27 @@ export class CatmaidSpatiallyIndexedSkeletonSource
   }
 
   fetchNodes(
-    boundingBox: {
-      min: { x: number; y: number; z: number };
-      max: { x: number; y: number; z: number };
-    },
-    lod?: number,
-    options?: {
-      cacheProvider?: string;
+    cellIndex: SpatialSkeletonGridCellIndex,
+    options: {
       signal?: AbortSignal;
-    },
+    } = {},
   ): Promise<SpatiallyIndexedSkeletonNodeBase[]> {
-    return this.client.fetchNodes(boundingBox, lod, options);
+    const bounds = getCatmaidSpatialSkeletonGridCellBounds(
+      cellIndex.cell,
+      this.spec.chunkDataSize,
+    );
+    return this.client.fetchNodesInBoundingBox(
+      bounds,
+      this.parameters.catmaidLod ?? 0,
+      {
+        cacheProvider: this.parameters.catmaidParameters.cacheProvider,
+        signal: options.signal,
+      },
+    );
   }
 
   getSkeletonRootNode(skeletonId: number) {
     return this.client.getSkeletonRootNode(skeletonId);
-  }
-
-  addNode(
-    skeletonId: number,
-    x: number,
-    y: number,
-    z: number,
-    parentId?: number,
-    editContext?: SpatiallyIndexedSkeletonEditContext,
-  ): Promise<SpatiallyIndexedSkeletonAddNodeResult> {
-    return this.client.addNode(skeletonId, x, y, z, parentId, editContext);
-  }
-
-  insertNode(
-    skeletonId: number,
-    x: number,
-    y: number,
-    z: number,
-    parentId: number,
-    childNodeIds: readonly number[],
-    editContext?: SpatiallyIndexedSkeletonEditContext,
-  ): Promise<SpatiallyIndexedSkeletonInsertNodeResult> {
-    return this.client.insertNode(
-      skeletonId,
-      x,
-      y,
-      z,
-      parentId,
-      childNodeIds,
-      editContext,
-    );
-  }
-
-  moveNode(
-    nodeId: number,
-    x: number,
-    y: number,
-    z: number,
-    editContext?: SpatiallyIndexedSkeletonEditContext,
-  ): Promise<SpatiallyIndexedSkeletonNodeRevisionResult> {
-    return this.client.moveNode(nodeId, x, y, z, editContext);
-  }
-
-  deleteNode(
-    nodeId: number,
-    options: {
-      childNodeIds?: readonly number[];
-      editContext?: SpatiallyIndexedSkeletonEditContext;
-    },
-  ): Promise<SpatiallyIndexedSkeletonDeleteNodeResult> {
-    return this.client.deleteNode(nodeId, options);
-  }
-
-  rerootSkeleton(
-    nodeId: number,
-    editContext?: SpatiallyIndexedSkeletonEditContext,
-  ) {
-    return this.client.rerootSkeleton(nodeId, editContext);
-  }
-
-  updateDescription(
-    nodeId: number,
-    description: string,
-  ): Promise<SpatiallyIndexedSkeletonDescriptionUpdateResult> {
-    return this.client.updateDescription(nodeId, description);
-  }
-
-  setTrueEnd(
-    nodeId: number,
-  ): Promise<SpatiallyIndexedSkeletonNodeRevisionResult> {
-    return this.client.setTrueEnd(nodeId);
-  }
-
-  removeTrueEnd(
-    nodeId: number,
-  ): Promise<SpatiallyIndexedSkeletonNodeRevisionResult> {
-    return this.client.removeTrueEnd(nodeId);
-  }
-
-  updateRadius(
-    nodeId: number,
-    radius: number,
-    editContext?: SpatiallyIndexedSkeletonEditContext,
-  ): Promise<SpatiallyIndexedSkeletonNodeRevisionResult> {
-    return this.client.updateRadius(nodeId, radius, editContext);
-  }
-
-  updateConfidence(
-    nodeId: number,
-    confidence: number,
-    editContext?: SpatiallyIndexedSkeletonEditContext,
-  ): Promise<SpatiallyIndexedSkeletonNodeRevisionResult> {
-    return this.client.updateConfidence(nodeId, confidence, editContext);
-  }
-
-  mergeSkeletons(
-    fromNodeId: number,
-    toNodeId: number,
-    editContext?: SpatiallyIndexedSkeletonEditContext,
-  ): Promise<SpatiallyIndexedSkeletonMergeResult> {
-    return this.client.mergeSkeletons(fromNodeId, toNodeId, editContext);
-  }
-
-  splitSkeleton(
-    nodeId: number,
-    editContext?: SpatiallyIndexedSkeletonEditContext,
-  ): Promise<SpatiallyIndexedSkeletonSplitResult> {
-    return this.client.splitSkeleton(nodeId, editContext);
   }
 }
 
@@ -259,6 +219,7 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
     private upperBoundsInNanometers: Float32Array,
     gridCellSizes: Array<{ x: number; y: number; z: number }>,
     private cacheProvider?: string,
+    private sourceReadonly = true,
   ) {
     super(chunkManager);
     this.sortedGridCellSizes = [...gridCellSizes].sort(
@@ -289,6 +250,7 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
     // Sorted by minimum dimension (Descending: Large/Coarse -> Small/Fine)
     const sortedGridSizes = this.sortedGridCellSizes;
 
+    const lastGridIndex = sortedGridSizes.length - 1;
     for (const [gridIndex, gridCellSize] of sortedGridSizes.entries()) {
       const chunkDataSize = Uint32Array.from([
         gridCellSize.x,
@@ -327,7 +289,10 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
       parameters.catmaidParameters.url = this.baseUrl;
       parameters.catmaidParameters.projectId = this.projectId;
       parameters.catmaidParameters.cacheProvider = this.cacheProvider;
+      parameters.catmaidParameters.readonly = this.sourceReadonly;
       parameters.gridIndex = gridIndex;
+      parameters.catmaidLod =
+        lastGridIndex <= 0 ? 0 : gridIndex / lastGridIndex;
       parameters.metadata = {
         transform: mat4.create(),
         vertexAttributes: new Map([
@@ -423,26 +388,24 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
       throw new Error("Failed to fetch CATMAID spatial index metadata");
     }
 
-    const { bounds: projectBounds, gridCellSizes } = spatialIndexMetadata;
+    const {
+      lowerBounds: projectLowerBounds,
+      upperBounds: projectUpperBounds,
+      spatial,
+      readonly: sourceReadonly,
+    } = spatialIndexMetadata;
+    const gridCellSizes = spatial.map(({ chunkSize }) => ({
+      x: Number(chunkSize[0]),
+      y: Number(chunkSize[1]),
+      z: Number(chunkSize[2]),
+    }));
 
     // The model-space coordinates we emit are in nanometers, converted to meters for Neuroglancer.
-    const coordinateScaleFactors = Float64Array.from([
-      1e-9,
-      1e-9,
-      1e-9,
-    ]);
+    const coordinateScaleFactors = Float64Array.from([1e-9, 1e-9, 1e-9]);
 
     // Bounds and chunk sizes are represented in project-space nanometers.
-    const lowerBounds = Float64Array.from([
-      projectBounds.min.x,
-      projectBounds.min.y,
-      projectBounds.min.z,
-    ]);
-    const upperBounds = Float64Array.from([
-      projectBounds.max.x,
-      projectBounds.max.y,
-      projectBounds.max.z,
-    ]);
+    const lowerBounds = Float64Array.from(projectLowerBounds);
+    const upperBounds = Float64Array.from(projectUpperBounds);
 
     const modelSpace = makeCoordinateSpace({
       names: ["x", "y", "z"],
@@ -480,6 +443,7 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
         upperCoordinateBound,
         gridCellSizes,
         cacheProvider,
+        sourceReadonly,
       );
     // Create complete skeleton source (non-chunked)
     const completeSkeletonParameters =

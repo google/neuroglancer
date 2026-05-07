@@ -26,8 +26,8 @@ import {
   executeSpatialSkeletonMerge,
   executeSpatialSkeletonMoveNode,
   executeSpatialSkeletonSplit,
+  showSpatialSkeletonActionError,
 } from "#src/layer/segmentation/spatial_skeleton_commands.js";
-import { showSpatialSkeletonActionError } from "#src/layer/segmentation/spatial_skeleton_errors.js";
 import { getChunkPositionFromCombinedGlobalLocalPositions } from "#src/render_coordinate_transform.js";
 import { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import {
@@ -36,6 +36,10 @@ import {
   removeSegmentFromVisibleSets,
 } from "#src/segmentation_display_state/base.js";
 import { SpatialSkeletonActions } from "#src/skeleton/actions.js";
+import type {
+  SpatialSkeletonSourceState,
+  SpatialSkeletonVector,
+} from "#src/skeleton/api.js";
 import { setSpatialSkeletonModesToLinesAndPoints } from "#src/skeleton/edit_mode_rendering.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/frontend.js";
 import {
@@ -181,7 +185,7 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
         nodeId: number;
         segmentId?: number;
         position?: Float32Array;
-        revisionToken?: string;
+        sourceState?: SpatialSkeletonSourceState;
       }
     | undefined {
     if (!this.mouseState.updateUnconditionally() || !this.mouseState.active) {
@@ -198,7 +202,7 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     }
     const segmentIdRaw = pickedSpatialSkeleton?.segmentId;
     const position = pickedSpatialSkeleton?.position;
-    const revisionToken = pickedSpatialSkeleton?.revisionToken;
+    const sourceState = pickedSpatialSkeleton?.sourceState;
     return {
       nodeId: nodeIdRaw,
       segmentId:
@@ -209,8 +213,7 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
         position instanceof Float32Array
           ? new Float32Array(position)
           : undefined,
-      revisionToken:
-        typeof revisionToken === "string" ? revisionToken : undefined,
+      sourceState,
     };
   }
 
@@ -371,7 +374,7 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
       nodeId: nodeHit.nodeId,
       segmentId: nodeHit.segmentId ?? resolvedNodeInfo?.segmentId,
       position: nodeHit.position ?? resolvedNodeInfo?.position,
-      revisionToken: nodeHit.revisionToken ?? resolvedNodeInfo?.revisionToken,
+      sourceState: nodeHit.sourceState ?? resolvedNodeInfo?.sourceState,
     };
   }
 
@@ -381,8 +384,8 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     | {
         nodeId: number;
         segmentId?: number;
-        position?: Float32Array;
-        revisionToken?: string;
+        position?: SpatialSkeletonVector;
+        sourceState?: SpatialSkeletonSourceState;
         visible: boolean;
       }
     | undefined {
@@ -398,7 +401,7 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
       nodeId: nodeHit.nodeId,
       segmentId,
       position: nodeHit.position ?? resolvedNodeInfo?.position,
-      revisionToken: nodeHit.revisionToken ?? resolvedNodeInfo?.revisionToken,
+      sourceState: nodeHit.sourceState ?? resolvedNodeInfo?.sourceState,
       visible:
         segmentId !== undefined &&
         this.isSpatialSkeletonSegmentVisible(segmentId),
@@ -1059,7 +1062,7 @@ class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
       nodeId: number;
       segmentId?: number;
       position?: ArrayLike<number>;
-      revisionToken?: string;
+      sourceState?: SpatialSkeletonSourceState;
     };
     let anchorSelection: MergeAnchorSelection | undefined;
     let statusOverride: string | undefined;
@@ -1079,7 +1082,7 @@ class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
         nodeId,
         segmentId: cachedNode?.segmentId,
         position: cachedNode?.position,
-        revisionToken: cachedNode?.revisionToken,
+        sourceState: cachedNode?.sourceState,
       };
       anchorSelection = anchorNode;
       return anchorNode;
@@ -1180,7 +1183,7 @@ class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
             nodeId: pickedNode.nodeId,
             segmentId: pickedNode.segmentId,
             position: pickedNode.position,
-            revisionToken: pickedNode.revisionToken,
+            sourceState: pickedNode.sourceState,
           };
           this.layer.setSpatialSkeletonMergeAnchor(pickedNode.nodeId);
           this.layer.selectSpatialSkeletonNode(
@@ -1203,7 +1206,7 @@ class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
             nodeId: pickedNode.nodeId,
             segmentId: pickedNode.segmentId,
             position: pickedNode.position,
-            revisionToken: pickedNode.revisionToken,
+            sourceState: pickedNode.sourceState,
           };
           this.layer.setSpatialSkeletonMergeAnchor(pickedNode.nodeId);
           this.layer.selectSpatialSkeletonNode(
@@ -1219,7 +1222,7 @@ class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
           nodeId: pickedNode.nodeId,
           segmentId: pickedNode.segmentId,
           position: pickedNode.position,
-          revisionToken: pickedNode.revisionToken,
+          sourceState: pickedNode.sourceState,
         };
         if (
           firstNode.segmentId === undefined ||
@@ -1246,12 +1249,12 @@ class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
               {
                 nodeId: firstNode.nodeId,
                 segmentId: firstNode.segmentId!,
-                revisionToken: firstNode.revisionToken,
+                sourceState: firstNode.sourceState,
               },
               {
                 nodeId: secondNode.nodeId,
                 segmentId: secondNode.segmentId!,
-                revisionToken: secondNode.revisionToken,
+                sourceState: secondNode.sourceState,
               },
             );
           } catch (error) {
