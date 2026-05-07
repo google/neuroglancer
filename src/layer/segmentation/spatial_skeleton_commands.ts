@@ -15,19 +15,19 @@
  */
 
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
-import type {
-  EditableSpatiallyIndexedSkeletonSource,
-  SpatiallyIndexedSkeletonNode,
-} from "#src/skeleton/api.js";
 import {
   SpatialSkeletonActions,
   type SpatialSkeletonAction,
 } from "#src/skeleton/actions.js";
 import type {
+  EditableSpatiallyIndexedSkeletonSource,
+  SpatiallyIndexedSkeletonNode,
+} from "#src/skeleton/api.js";
+import type { SpatialSkeletonCommand } from "#src/skeleton/command_history.js";
+import type {
   SpatialSkeletonCommandPayload,
   SpatialSkeletonEditCommandFactory,
 } from "#src/skeleton/edit_command_source.js";
-import type { SpatialSkeletonCommand } from "#src/skeleton/command_history.js";
 import { getSpatialSkeletonActionErrorMessage } from "#src/skeleton/edit_errors.js";
 import { getEditableSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial_skeleton_manager.js";
 import { StatusMessage } from "#src/status.js";

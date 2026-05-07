@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
-import { buildCatmaidNeighborhoodEditContext } from "#src/datasource/catmaid/edit_state.js";
 import { makeCatmaidNodeSourceState } from "#src/datasource/catmaid/api.js";
+import { buildCatmaidNeighborhoodEditContext } from "#src/datasource/catmaid/edit_state.js";
+import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
 import {
   executeSpatialSkeletonAddNode,
   executeSpatialSkeletonDeleteNode,
@@ -15,14 +15,14 @@ import {
   redoSpatialSkeletonCommand,
   undoSpatialSkeletonCommand,
 } from "#src/layer/segmentation/spatial_skeleton_commands.js";
+import { SpatialSkeletonActions } from "#src/skeleton/actions.js";
 import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import { SpatialSkeletonCommandHistory } from "#src/skeleton/command_history.js";
 import {
   findSpatiallyIndexedSkeletonNode,
   getSpatiallyIndexedSkeletonDirectChildren,
   getSpatiallyIndexedSkeletonNodeParent,
 } from "#src/skeleton/edit_state.js";
-import { SpatialSkeletonActions } from "#src/skeleton/actions.js";
-import { SpatialSkeletonCommandHistory } from "#src/skeleton/command_history.js";
 import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { StatusMessage } from "#src/status.js";
 

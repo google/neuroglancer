@@ -16,12 +16,12 @@
 
 import { describe, expect, it, vi } from "vitest";
 
+import { SpatialSkeletonActions } from "#src/skeleton/actions.js";
 import {
   buildSpatiallyIndexedSkeletonNavigationGraph,
   getFlatListNodeIds,
   getSkeletonRootNode,
 } from "#src/skeleton/navigation.js";
-import { SpatialSkeletonActions } from "#src/skeleton/actions.js";
 import {
   getEditableSpatiallyIndexedSkeletonSource,
   isSpatiallyIndexedSkeletonSourceReadOnly,

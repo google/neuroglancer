@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import type { CatmaidClient } from "#src/datasource/catmaid/api.js";
 import {
   buildCatmaidInsertEditContext,
@@ -23,15 +22,6 @@ import {
   buildCatmaidNodeEditContext,
   buildCatmaidRerootEditContext,
 } from "#src/datasource/catmaid/edit_state.js";
-import {
-  addSegmentToVisibleSets,
-  removeSegmentFromVisibleSets,
-} from "#src/segmentation_display_state/base.js";
-import type {
-  SpatiallyIndexedSkeletonNode,
-  SpatialSkeletonSourceState,
-  SpatialSkeletonVector,
-} from "#src/skeleton/api.js";
 import type {
   CatmaidSpatialSkeletonAddNodeRequest,
   CatmaidSpatialSkeletonAddNodeResult,
@@ -54,10 +44,20 @@ import type {
   CatmaidSpatialSkeletonSplitResult,
   CatmaidSpatialSkeletonTrueEndUpdateRequest,
 } from "#src/datasource/catmaid/spatial_skeleton_edit_api.js";
+import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+import {
+  addSegmentToVisibleSets,
+  removeSegmentFromVisibleSets,
+} from "#src/segmentation_display_state/base.js";
 import {
   SpatialSkeletonActions,
   type SpatialSkeletonAction,
 } from "#src/skeleton/actions.js";
+import type {
+  SpatiallyIndexedSkeletonNode,
+  SpatialSkeletonSourceState,
+  SpatialSkeletonVector,
+} from "#src/skeleton/api.js";
 import type {
   SpatialSkeletonCommand,
   SpatialSkeletonCommandContext,

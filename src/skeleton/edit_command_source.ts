@@ -15,9 +15,9 @@
  */
 
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
-import {
+import type {
   SpatialSkeletonActions,
-  type SpatialSkeletonAction,
+  SpatialSkeletonAction,
 } from "#src/skeleton/actions.js";
 import type { SpatialSkeletonCommand } from "#src/skeleton/command_history.js";
 

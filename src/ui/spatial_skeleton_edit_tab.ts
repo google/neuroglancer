@@ -28,8 +28,8 @@ import svg_redo from "ikonate/icons/redo.svg?raw";
 import svg_retweet from "ikonate/icons/retweet.svg?raw";
 import svg_share_android from "ikonate/icons/share-android.svg?raw";
 import svg_undo from "ikonate/icons/undo.svg?raw";
-import { getSegmentIdFromLayerSelectionValue } from "#src/layer/segmentation/selection.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+import { getSegmentIdFromLayerSelectionValue } from "#src/layer/segmentation/selection.js";
 import {
   executeSpatialSkeletonDeleteNode,
   executeSpatialSkeletonNodeTrueEndUpdate,
@@ -46,9 +46,7 @@ import {
   SpatialSkeletonActions,
   type SpatialSkeletonAction,
 } from "#src/skeleton/actions.js";
-import type {
-  SpatiallyIndexedSkeletonNode,
-} from "#src/skeleton/api.js";
+import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
 import {
   buildSpatiallyIndexedSkeletonNavigationGraph,
   getBranchEnd as getBranchEndFromGraph,

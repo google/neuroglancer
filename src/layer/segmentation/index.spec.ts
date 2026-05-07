@@ -227,7 +227,9 @@ describe("layer/segmentation spatial skeleton action gating", () => {
       Object.create(SegmentationUserLayer.prototype),
       {
         getSpatiallyIndexedSkeletonLayer: () =>
-          makeSpatialSkeletonLayerWithSource(makeEditableSpatialSkeletonSource()),
+          makeSpatialSkeletonLayerWithSource(
+            makeEditableSpatialSkeletonSource(),
+          ),
         spatialSkeletonVisibleChunksLoaded: new WatchableValue(true),
         spatialSkeletonVisibleChunksNeeded: new WatchableValue(0),
         spatialSkeletonVisibleChunksAvailable: new WatchableValue(0),
