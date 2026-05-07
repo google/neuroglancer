@@ -95,6 +95,7 @@ import { spatiallyIndexedSkeletonTextureAttributeSpecs } from "#src/skeleton/spa
 import {
   forEachVisibleVolumetricChunk,
   type SliceViewChunkSpecification,
+  type SliceViewSourceOptions,
   type TransformedSource,
 } from "#src/sliceview/base.js";
 import type { ChunkLayout } from "#src/sliceview/chunk_layout.js";
@@ -1623,20 +1624,9 @@ export class SpatiallyIndexedSkeletonChunk
     this.numVertices = chunkData.numVertices;
     this.numIndices = indices.length;
     this.vertexAttributeOffsets = chunkData.vertexAttributeOffsets;
-    this.lod = (chunkData as any).lod;
-    const nodeIdsData = (chunkData as any).nodeIds;
-    if (nodeIdsData instanceof Int32Array) {
-      this.nodeIds = nodeIdsData;
-    } else if (ArrayBuffer.isView(nodeIdsData)) {
-      this.nodeIds = new Int32Array(
-        nodeIdsData.buffer,
-        nodeIdsData.byteOffset,
-        nodeIdsData.byteLength / Int32Array.BYTES_PER_ELEMENT,
-      );
-    } else {
-      this.nodeIds = new Int32Array(0);
-    }
-    const nodeSourceStates = (chunkData as any).nodeSourceStates;
+    this.lod = chunkData.lod;
+    this.nodeIds = chunkData.nodeIds ?? new Int32Array(0);
+    const nodeSourceStates = chunkData.nodeSourceStates;
     this.nodeSourceStates = Array.isArray(nodeSourceStates)
       ? nodeSourceStates
       : [];
@@ -1710,9 +1700,17 @@ export class SpatiallyIndexedSkeletonSource extends SliceViewChunkSource<
   }
 }
 
+// Options are provided by the SliceView framework for scale selection,
+// but spatial skeleton sources expose all grid levels unconditionally.
+export const SPATIAL_SKELETON_SOURCE_OPTIONS: SliceViewSourceOptions = {
+  displayRank: 0,
+  multiscaleToViewTransform: new Float32Array(0),
+  modelChannelDimensionIndices: [],
+};
+
 export abstract class MultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleSliceViewChunkSource<SpatiallyIndexedSkeletonSource> {
   getPerspectiveSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] {
-    const sources = this.getSources({ view: "3d" } as any);
+    const sources = this.getSources(SPATIAL_SKELETON_SOURCE_OPTIONS);
     const flattened: SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] =
       [];
     for (const scale of sources) {
@@ -1876,15 +1874,11 @@ function updateSpatialSkeletonGridRenderScaleHistogram(
   }
   const seenKeys = seen.keys;
   for (const tsource of scales) {
-    const gridIndex = (tsource.source as any).parameters?.gridIndex as
-      | number
-      | undefined;
+    const gridIndex = getSpatiallyIndexedSkeletonGridIndex(tsource.source);
     if (gridIndex === undefined) {
       continue;
     }
-    const source = tsource.source as unknown as {
-      chunks: Map<string, SpatiallyIndexedSkeletonChunk>;
-    };
+    const source = tsource.source as SpatiallyIndexedSkeletonSource;
     let presentCount = 0;
     let missingCount = 0;
     forEachVisibleVolumetricChunk(
@@ -1896,9 +1890,7 @@ function updateSpatialSkeletonGridRenderScaleHistogram(
         const seenKey = `${gridIndex}:${chunkKey}`;
         if (seenKeys.has(seenKey)) return;
         seenKeys.add(seenKey);
-        const chunk = source.chunks.get(chunkKey) as
-          | SpatiallyIndexedSkeletonChunk
-          | undefined;
+        const chunk = source.chunks.get(chunkKey);
         if (chunk?.state === ChunkState.GPU_MEMORY) {
           presentCount++;
         } else {
@@ -2282,14 +2274,12 @@ export class SpatiallyIndexedSkeletonLayer
       options.gridLevel ??
       displayState.spatialSkeletonGridLevel3d ??
       new WatchableValue(0);
-    this.lod =
-      options.lod ?? displayState.skeletonLod ?? new WatchableValue(0);
+    this.lod = options.lod ?? displayState.skeletonLod ?? new WatchableValue(0);
     this.gridLevel2d =
       options.gridLevel2d ??
       displayState.spatialSkeletonGridLevel2d ??
       this.gridLevel;
-    this.lod2d =
-      options.lod2d ?? displayState.spatialSkeletonLod2d ?? this.lod;
+    this.lod2d = options.lod2d ?? displayState.spatialSkeletonLod2d ?? this.lod;
     this.selectedNodeId = options.selectedNodeId;
     this.pendingNodePositionVersion = options.pendingNodePositionVersion;
     this.getPendingNodePositionOverride = options.getPendingNodePosition;
@@ -2552,11 +2542,8 @@ export class SpatiallyIndexedSkeletonLayer
             const chunkKey = `${positionInChunks.join()}${lodSuffix}`;
             if (seenChunkKeys!.has(chunkKey)) return;
             seenChunkKeys!.add(chunkKey);
-            const chunkSource =
-              tsource.source as SpatiallyIndexedSkeletonSource;
-            const chunk = chunkSource.chunks.get(chunkKey) as
-              | SpatiallyIndexedSkeletonChunk
-              | undefined;
+            const chunkSource = tsource.source as SpatiallyIndexedSkeletonSource;
+            const chunk = chunkSource.chunks.get(chunkKey);
             if (chunk?.state !== ChunkState.GPU_MEMORY) return;
             result.push(chunk);
           },
@@ -3194,7 +3181,7 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
       this.base,
       mouseState,
       pickedOffset,
-      data as SpatiallyIndexedSkeletonPickData | undefined,
+      data,
     );
   }
 
@@ -3377,7 +3364,7 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
       this.base,
       mouseState,
       pickedOffset,
-      data as SpatiallyIndexedSkeletonPickData | undefined,
+      data,
     );
   }
 
