@@ -176,11 +176,12 @@ export class KvStackKvStore implements KvStore {
         await delayWithAbort(pickDelay(attempt), signal);
       }
     }
-    throw new Error(
+    console.error(
       `kvstack read failed for key ${JSON.stringify(key)} ` +
         `(layer ${describeMatcher(layer.matcher)}, backing ${layer.matcher.base})`,
-      { cause: lastError },
+      lastError,
     );
+    throw lastError;
   }
 
   getUrl(key: string): string {

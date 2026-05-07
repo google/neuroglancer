@@ -124,6 +124,7 @@ import {
   SegmentationGraphSourceConnection,
 } from "#src/segmentation_graph/source.js";
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
+import { readSingleChannelValueUint64 } from "#src/sliceview/compressed_segmentation/decode_common.js";
 import type {
   FrontendTransformedSource,
   SliceViewSingleResolutionSource,
@@ -344,7 +345,7 @@ function parseGrapheneMultiscaleVolumeInfo(
 }
 
 class GrapheneMultiscaleVolumeChunkSource extends PrecomputedMultiscaleVolumeChunkSource {
-  private volumeChunkSources: { invalidateCache(): void }[] = [];
+  private volumeChunkSources: VolumeChunkSource[] = [];
   private chunkedGraphChunkSource: GrapheneChunkedGraphChunkSource | undefined;
 
   constructor(
@@ -439,18 +440,102 @@ class GrapheneMultiscaleVolumeChunkSource extends PrecomputedMultiscaleVolumeChu
     return sources;
   }
 
-  invalidateVolumeSources() {
-    // Invalidate OCDBT metadata caches first so that when volume chunks
-    // are re-queued and start downloading, they read fresh metadata.
+  // Invalidate just the OCDBT metadata caches (manifest / btree / version)
+  // on the backend without re-queueing volume chunks. Used before a
+  // targeted base-chunk read to ensure that read goes to the network
+  // instead of trusting potentially-stale cached metadata.
+  invalidateOcdbtMetadata() {
     if (this.info.graph.ocdbtKvstoreSpec && this.chunkedGraphChunkSource?.rpc) {
       this.chunkedGraphChunkSource.rpc.invoke(
         GRAPHENE_INVALIDATE_OCDBT_RPC_ID,
         { layerId: this.chunkedGraphChunkSource.rpcId },
       );
     }
+  }
+
+  invalidateVolumeSources() {
+    // Invalidate OCDBT metadata caches first so that when volume chunks
+    // are re-queued and start downloading, they read fresh metadata.
+    this.invalidateOcdbtMetadata();
     for (const source of this.volumeChunkSources) {
       source.invalidateCache();
     }
+  }
+
+  // Read uint64 supervoxel IDs at the given layer-voxel positions directly
+  // from the base-scale OCDBT data. Positions sharing a base chunk are
+  // fetched in one request. Out-of-bounds positions yield `undefined`.
+  // Caller must invalidate OCDBT metadata first if it needs guaranteed-
+  // fresh reads (see `invalidateOcdbtMetadata`).
+  async readBaseSupervoxelsAt(
+    positions: Float32Array[],
+    signal?: AbortSignal,
+  ): Promise<(bigint | undefined)[]> {
+    const baseScale = this.info.scales[0];
+    const blockSize = baseScale.compressedSegmentationBlockSize;
+    if (blockSize === undefined) {
+      throw new Error(
+        "readBaseSupervoxelsAt: base scale is not compressed_segmentation",
+      );
+    }
+    const chunkDataSize = baseScale.chunkSizes[0];
+    const { voxelOffset, size: scaleSize } = baseScale;
+    const scaleUrl = this.resolveScaleUrl(baseScale.key);
+    const kvStoreContext = this.sharedKvStoreContext.kvStoreContext;
+
+    type Member = { posIdx: number; within: [number, number, number] };
+    const groups = new Map<string, Member[]>();
+    const result = new Array<bigint | undefined>(positions.length).fill(
+      undefined,
+    );
+    for (let i = 0; i < positions.length; ++i) {
+      const pos = positions[i];
+      const within: [number, number, number] = [0, 0, 0];
+      const origin: [number, number, number] = [0, 0, 0];
+      let oob = false;
+      for (let d = 0; d < 3; ++d) {
+        const v = Math.floor(pos[d] - voxelOffset[d]);
+        if (v < 0 || v >= scaleSize[d]) {
+          oob = true;
+          break;
+        }
+        const cIdx = Math.floor(v / chunkDataSize[d]);
+        origin[d] = voxelOffset[d] + cIdx * chunkDataSize[d];
+        within[d] = v - cIdx * chunkDataSize[d];
+      }
+      if (oob) continue;
+      const url =
+        `${scaleUrl}${origin[0]}-${origin[0] + chunkDataSize[0]}_` +
+        `${origin[1]}-${origin[1] + chunkDataSize[1]}_` +
+        `${origin[2]}-${origin[2] + chunkDataSize[2]}`;
+      let members = groups.get(url);
+      if (members === undefined) {
+        members = [];
+        groups.set(url, members);
+      }
+      members.push({ posIdx: i, within });
+    }
+
+    await Promise.all(
+      Array.from(groups.entries()).map(async ([url, members]) => {
+        const response = await kvStoreContext.read(url, {
+          throwIfMissing: true,
+          signal,
+        });
+        if (response === undefined) return;
+        const data = new Uint32Array(await response.response.arrayBuffer());
+        for (const { posIdx, within } of members) {
+          result[posIdx] = readSingleChannelValueUint64(
+            data,
+            0,
+            chunkDataSize,
+            blockSize,
+            within,
+          );
+        }
+      }),
+    );
+    return result;
   }
 
   getChunkedGraphSource() {
@@ -756,11 +841,11 @@ async function getVolumeDataSource(
         }
       }
     } catch (e) {
-      throw new Error(
-        `Failed to list OCDBT scales at ${info.ocdbtDataUrl}; the graphene ` +
-          `layer cannot render without knowing which scales are OCDBT-backed`,
-        { cause: e },
+      console.error(
+        `Failed to list OCDBT scales at ${info.ocdbtDataUrl}`,
+        e,
       );
+      throw e;
     }
   }
   const volume = new GrapheneMultiscaleVolumeChunkSource(
@@ -1795,6 +1880,40 @@ class GraphConnection extends SegmentationGraphSourceConnection {
       );
       return false;
     } else {
+      // For OCDBT-backed layers, refresh 2D-picked supervoxel IDs from the
+      // base scale just before submitting. The user may have picked from a
+      // coarser stale rendering (eventually-consistent downsamples); the
+      // server cares about the supervoxel at the position now. 3D-picked
+      // selections (rooted IDs, isBaseSegmentId === false) are resolved
+      // server-side from position and pass through unchanged.
+      if (this.graph.info.graph.ocdbtKvstoreSpec) {
+        const { nBitsForLayerId } = this.graph.info.graph;
+        const all = [...sinks, ...sources];
+        const indices: number[] = [];
+        for (let i = 0; i < all.length; ++i) {
+          if (isBaseSegmentId(all[i].segmentId, nBitsForLayerId)) {
+            indices.push(i);
+          }
+        }
+        if (indices.length > 0) {
+          this.chunkSource.invalidateOcdbtMetadata();
+          try {
+            const fresh = await this.chunkSource.readBaseSupervoxelsAt(
+              indices.map((i) => all[i].position),
+            );
+            for (let j = 0; j < indices.length; ++j) {
+              const v = fresh[j];
+              if (v !== undefined) all[indices[j]].segmentId = v;
+            }
+          } catch (e) {
+            console.error(
+              "Failed to refresh base supervoxel IDs for multicut; " +
+                "submitting with originally-picked IDs",
+              e,
+            );
+          }
+        }
+      }
       const splitRoots = await this.graph.graphServer.splitSegments(
         [...sinks].map((x) => selectionInNanometers(x, annotationToNanometers)),
         [...sources].map((x) =>
