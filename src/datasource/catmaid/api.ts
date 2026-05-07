@@ -38,8 +38,6 @@ import { SPATIALLY_INDEXED_SKELETON_CONFIDENCE_VALUES } from "#src/skeleton/api.
 import { getDefaultSpatiallyIndexedSkeletonChunkSize } from "#src/skeleton/spatial_chunk_sizing.js";
 import { HttpError } from "#src/util/http_request.js";
 
-const DEBUG_DISABLE_ACROSS_CHUNK_NODES = false;
-
 interface CatmaidStackInfo {
   dimension: { x: number; y: number; z: number };
   resolution: { x: number; y: number; z: number };
@@ -1207,19 +1205,6 @@ export class CatmaidClient implements EditableSpatiallyIndexedSkeletonSource {
           }
         }
       }
-    }
-
-    if (DEBUG_DISABLE_ACROSS_CHUNK_NODES) {
-      // Ensure nodes don't fall outside the bounding box
-      return nodes.filter(
-        (x) =>
-          x.position[0] >= boundingBox.min.x &&
-          x.position[0] <= boundingBox.max.x &&
-          x.position[1] >= boundingBox.min.y &&
-          x.position[1] <= boundingBox.max.y &&
-          x.position[2] >= boundingBox.min.z &&
-          x.position[2] <= boundingBox.max.z,
-      );
     }
 
     return nodes;
