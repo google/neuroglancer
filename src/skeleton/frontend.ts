@@ -983,7 +983,7 @@ void emitDefault() {
   }
 }
 
-// Draws the spatial bounds of each chunk as a cyan box overlay, for debugging.
+// Draws the spatial bounds of each chunk as a box overlay, for debugging.
 // One shader is compiled per emitter so the emitter can inject the correct
 // output-buffer declarations and `emit(color, pickID)` function.
 class ChunkWireframeHelper extends RefCounted {
@@ -1014,7 +1014,7 @@ class ChunkWireframeHelper extends RefCounted {
 vec3 boxVertex = getBoxEdgeVertexPosition(gl_VertexID);
 gl_Position = uChunkToClip * vec4(uTranslation + boxVertex * uChunkDataSize, 1.0);
 `);
-      builder.setFragmentMain(`emit(vec4(0.0, 1.0, 1.0, 1.0), 0u);`);
+      builder.setFragmentMain(`emit(vec4(1.0, 1.0, 1.0, 1.0), 0u);`);
       shader = builder.build();
       this.shaderCache.set(emitter, shader);
     }
@@ -2154,7 +2154,8 @@ export class SpatiallyIndexedSkeletonLayer
     // Pass 2: cache miss — collect node sets and rebuild geometry.
     const segmentNodeSets: (readonly SpatiallyIndexedSkeletonNode[])[] = [];
     for (const segmentId of loadedSegmentIds) {
-      const segmentNodes = this.inspectionState.getCachedSegmentNodes(segmentId);
+      const segmentNodes =
+        this.inspectionState.getCachedSegmentNodes(segmentId);
       if (segmentNodes !== undefined) {
         segmentNodeSets.push(segmentNodes);
       }
@@ -3306,7 +3307,6 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
     );
   }
 }
-
 
 export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelRenderLayer {
   private renderHelper: RenderHelper;
