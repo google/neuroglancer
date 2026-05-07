@@ -1941,6 +1941,7 @@ export class SpatiallyIndexedSkeletonLayer
   private inspectionState: SpatiallyIndexedSkeletonInspectionState | undefined;
   private overlayChunk: SpatiallyIndexedSkeletonOverlayChunk | undefined;
   private overlayChunkKey: string | undefined;
+  private overlayRebuildFrame = -1;
   private pendingOverlaySegmentLoads = new Set<number>();
   private browseExcludedSegments = new Uint64Set();
   private browseExcludedSegmentsKey: string | undefined;
