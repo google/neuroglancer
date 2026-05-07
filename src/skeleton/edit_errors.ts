@@ -23,3 +23,27 @@ export class SpatialSkeletonEditConflictError extends Error {
     this.name = "SpatialSkeletonEditConflictError";
   }
 }
+
+function formatError(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+export function isSpatialSkeletonOutdatedStateError(error: unknown) {
+  return error instanceof SpatialSkeletonEditConflictError;
+}
+
+export function getSpatialSkeletonActionErrorMessage(
+  action: string,
+  error: unknown,
+) {
+  if (isSpatialSkeletonOutdatedStateError(error)) {
+    return {
+      message: `Failed to ${action} due to outdated state. Refresh the page to sync.`,
+      requiresDismissal: true,
+    };
+  }
+  return {
+    message: `Failed to ${action}: ${formatError(error)}`,
+    requiresDismissal: false,
+  };
+}

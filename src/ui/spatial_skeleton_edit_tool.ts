@@ -26,8 +26,8 @@ import {
   executeSpatialSkeletonMerge,
   executeSpatialSkeletonMoveNode,
   executeSpatialSkeletonSplit,
+  showSpatialSkeletonActionError,
 } from "#src/layer/segmentation/spatial_skeleton_commands.js";
-import { showSpatialSkeletonActionError } from "#src/layer/segmentation/spatial_skeleton_errors.js";
 import { getChunkPositionFromCombinedGlobalLocalPositions } from "#src/render_coordinate_transform.js";
 import { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import {

@@ -34,9 +34,9 @@ import {
   executeSpatialSkeletonDeleteNode,
   executeSpatialSkeletonNodeTrueEndUpdate,
   redoSpatialSkeletonCommand,
+  showSpatialSkeletonActionError,
   undoSpatialSkeletonCommand,
 } from "#src/layer/segmentation/spatial_skeleton_commands.js";
-import { showSpatialSkeletonActionError } from "#src/layer/segmentation/spatial_skeleton_errors.js";
 import {
   getSegmentEquivalences,
   getVisibleSegments,

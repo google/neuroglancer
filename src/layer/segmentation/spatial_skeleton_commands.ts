@@ -28,6 +28,7 @@ import type {
   SpatialSkeletonEditCommandFactory,
 } from "#src/skeleton/edit_command_source.js";
 import type { SpatialSkeletonCommand } from "#src/skeleton/command_history.js";
+import { getSpatialSkeletonActionErrorMessage } from "#src/skeleton/edit_errors.js";
 import { getEditableSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial_skeleton_manager.js";
 import { StatusMessage } from "#src/status.js";
 
@@ -96,6 +97,16 @@ function executeCommandWithPendingMessage<T>(
 ) {
   const status = StatusMessage.showMessage(message);
   return promise.finally(() => status.dispose());
+}
+
+export function showSpatialSkeletonActionError(action: string, error: unknown) {
+  const { message, requiresDismissal } = getSpatialSkeletonActionErrorMessage(
+    action,
+    error,
+  );
+  return requiresDismissal
+    ? StatusMessage.showErrorMessage(message)
+    : StatusMessage.showTemporaryMessage(message);
 }
 
 function createSpatialSkeletonCommand(
