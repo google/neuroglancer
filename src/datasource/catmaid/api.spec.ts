@@ -110,7 +110,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     });
   });
 
-  it("rejects CATMAID stack metadata without spatial skeleton levels", async () => {
+  it("uses default CATMAID spatial skeleton metadata when spatial levels are missing", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     (client as any).listStacks = vi.fn().mockResolvedValue([{ id: 7 }]);
     (client as any).getStackInfo = vi.fn().mockResolvedValue({
@@ -120,9 +120,41 @@ describe("CatmaidClient skeleton editing methods", () => {
       metadata: {},
     });
 
-    await expect(client.getSpatialIndexMetadata()).rejects.toThrow(
-      /metadata\.spatial/i,
-    );
+    await expect(client.getSpatialIndexMetadata()).resolves.toEqual({
+      lowerBounds: [5, 6, 7],
+      upperBounds: [25, 66, 127],
+      readonly: true,
+      spatial: [
+        {
+          chunkSize: [15, 15, 15],
+          gridShape: [2, 4, 8],
+          limit: 0,
+        },
+      ],
+    });
+  });
+
+  it("uses default CATMAID spatial skeleton metadata when spatial levels are empty", async () => {
+    const client = new CatmaidClient("https://example.invalid", 1);
+    (client as any).listStacks = vi.fn().mockResolvedValue([{ id: 7 }]);
+    (client as any).getStackInfo = vi.fn().mockResolvedValue({
+      dimension: { x: 10, y: 20, z: 30 },
+      resolution: { x: 2, y: 3, z: 4 },
+      translation: { x: 5, y: 6, z: 7 },
+      metadata: {
+        spatial: [],
+      },
+    });
+
+    await expect(client.getSpatialIndexMetadata()).resolves.toMatchObject({
+      spatial: [
+        {
+          chunkSize: [15, 15, 15],
+          gridShape: [2, 4, 8],
+          limit: 0,
+        },
+      ],
+    });
   });
 
   it("reads spatial skeleton spatial index levels from stack metadata", async () => {
@@ -287,9 +319,7 @@ describe("CatmaidClient skeleton editing methods", () => {
             [22107955, "2026-03-29 10:16:00.000000+00:00"],
             [22107955, "2026-03-29 10:15:30.000000+00:00"],
           ],
-          "stale description": [
-            [22107955, "2026-03-29 10:15:45.000000+00:00"],
-          ],
+          "stale description": [[22107955, "2026-03-29 10:15:45.000000+00:00"]],
           ends: [[22107959, "2026-03-29 10:17:00.000000+00:00"]],
         },
         [],

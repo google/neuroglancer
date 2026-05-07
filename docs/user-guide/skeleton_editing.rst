@@ -21,10 +21,10 @@ The project stack dimensions and resolution are used to inform the bounding box
 of the data in neuroglancer as their product. Skeletons in CATMAID are in 1 nm
 units.
 
-The linked CATMAID stack must define spatial skeleton metadata. Neuroglancer
-uses this metadata to build the spatially indexed skeleton source required for
-editing. Add a ``spatial`` array to the stack metadata, with one entry for each
-spatial index level:
+The linked CATMAID stack may define spatial skeleton metadata. When present,
+Neuroglancer uses this metadata to build the spatially indexed skeleton source
+required for editing. Add a ``spatial`` array to the stack metadata, with one
+entry for each spatial index level:
 
 .. code-block:: json
 
@@ -49,8 +49,9 @@ the maximum node count expected for that spatial level and is required.
 requests. If ``read_only`` is not set to ``false``, Neuroglancer treats the
 source as read-only: skeletons can be inspected, but edit actions are disabled.
 
-If ``spatial`` is absent or empty, Neuroglancer rejects the CATMAID datasource
-because it cannot construct the spatially indexed skeleton source.
+If ``spatial`` is absent or empty, Neuroglancer derives a default chunk size
+from the CATMAID project-space bounds and uses ``limit: 0`` for the generated
+spatial level.
 
 After setting this up, enter ``catmaid:<your-catmaid-server-url>/<your-catmaid-project-id>`` as a data source in neuroglancer.
 

@@ -28,6 +28,7 @@ import type {
 } from "#src/skeleton/api.js";
 import { SpatialSkeletonEditConflictError } from "#src/skeleton/edit_errors.js";
 import type { SpatiallyIndexedSkeletonNavigationTarget } from "#src/skeleton/navigation.js";
+import { getDefaultSpatiallyIndexedSkeletonChunkSize } from "#src/skeleton/spatial_chunk_sizing.js";
 import { HttpError } from "#src/util/http_request.js";
 
 interface CatmaidStackInfo {
@@ -541,6 +542,30 @@ function getCatmaidProjectSpaceBounds(
   };
 }
 
+function getCatmaidSpatialSkeletonGridShape(
+  chunkSize: readonly [number, number, number],
+  extents: readonly [number, number, number],
+): number[] {
+  return chunkSize.map((size, dim) =>
+    Math.max(1, Math.ceil(extents[dim] / size)),
+  );
+}
+
+function getDefaultCatmaidSpatialIndexLevel(
+  bounds: SpatialSkeletonBounds,
+  extents: readonly [number, number, number],
+): SpatialSkeletonSpatialIndexLevel {
+  const chunkSize = requireCatmaidPositiveRank3Vector(
+    getDefaultSpatiallyIndexedSkeletonChunkSize(bounds),
+    "default spatial skeleton chunk_size",
+  );
+  return {
+    chunkSize,
+    gridShape: getCatmaidSpatialSkeletonGridShape(chunkSize, extents),
+    limit: 0,
+  };
+}
+
 function requireCatmaidRank3Vector(
   vector: SpatialSkeletonVector,
   label: string,
@@ -578,7 +603,6 @@ function requireCatmaidPositiveRank3Vector(
   }
   return values;
 }
-
 
 function requireCatmaidNonNegativeInt(value: unknown, label: string): number {
   const numberValue = Number(value);
@@ -1254,18 +1278,20 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
 
   private getSpatialIndexLevelsFromSpatialMetadata(
     metadata: CatmaidStackInfo["metadata"],
-    extents: readonly number[],
+    bounds: SpatialSkeletonBounds,
+    extents: readonly [number, number, number],
   ): SpatialSkeletonSpatialIndexLevel[] {
     const spatial = metadata?.spatial;
-    if (spatial === undefined) {
+    if (spatial == null) {
+      return [getDefaultCatmaidSpatialIndexLevel(bounds, extents)];
+    }
+    if (!Array.isArray(spatial)) {
       throw new Error(
-        "CATMAID stack metadata must define spatial skeleton metadata at metadata.spatial.",
+        "CATMAID stack metadata.spatial must be a spatial skeleton metadata array.",
       );
     }
-    if (!Array.isArray(spatial) || spatial.length === 0) {
-      throw new Error(
-        "CATMAID stack metadata.spatial must be a non-empty spatial skeleton metadata array.",
-      );
+    if (spatial.length === 0) {
+      return [getDefaultCatmaidSpatialIndexLevel(bounds, extents)];
     }
     return spatial.map((level, index) => {
       const chunkSize = requireCatmaidPositiveRank3Vector(
@@ -1278,9 +1304,7 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
       );
       return {
         chunkSize,
-        gridShape: chunkSize.map((size, dim) =>
-          Math.max(1, Math.ceil(extents[dim] / size)),
-        ),
+        gridShape: getCatmaidSpatialSkeletonGridShape(chunkSize, extents),
         limit,
       };
     });
@@ -1298,9 +1322,14 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
       bounds.upperBounds,
       "spatial metadata upper bound",
     );
-    const extents = [upperX - lowerX, upperY - lowerY, upperZ - lowerZ];
+    const extents = [
+      upperX - lowerX,
+      upperY - lowerY,
+      upperZ - lowerZ,
+    ] as const;
     return this.getSpatialIndexLevelsFromSpatialMetadata(
       info.metadata,
+      bounds,
       extents,
     );
   }
