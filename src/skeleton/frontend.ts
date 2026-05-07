@@ -2118,9 +2118,15 @@ export class SpatiallyIndexedSkeletonLayer
     return this.browseExcludedSegments;
   }
 
-  private resolveSourceBackedOverlayChunk():
-    | SpatiallyIndexedSkeletonOverlayChunk
-    | undefined {
+    const frameNumber =
+      this.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber;
+    if (
+      this.overlayRebuildFrame === frameNumber &&
+      this.overlayChunk !== undefined
+    ) {
+      return this.overlayChunk;
+    }
+    this.overlayRebuildFrame = frameNumber;
     if (this.inspectionState === undefined) {
       this.disposeOverlayChunk();
       return undefined;
