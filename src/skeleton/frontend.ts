@@ -2977,6 +2977,104 @@ export class SpatiallyIndexedSkeletonLayer
   }
 }
 
+function transformSpatiallyIndexedSkeletonPickedValue(
+  pickState: PickState,
+): bigint | undefined {
+  const pickedSegmentId = pickState.pickedSpatialSkeleton?.segmentId;
+  if (
+    typeof pickedSegmentId === "number" &&
+    Number.isSafeInteger(pickedSegmentId)
+  ) {
+    return BigInt(pickedSegmentId);
+  }
+  return undefined;
+}
+
+function updateSpatiallyIndexedSkeletonMouseState(
+  base: SpatiallyIndexedSkeletonLayer,
+  mouseState: MouseSelectionState,
+  pickedOffset: number,
+  data: SpatiallyIndexedSkeletonPickData | undefined,
+): void {
+  if (data === undefined) return;
+  if (data.kind === "node") {
+    if (
+      pickedOffset < 0 ||
+      pickedOffset >= data.nodeIds.length ||
+      pickedOffset >= data.segmentIds.length
+    ) {
+      return;
+    }
+    const segmentId = data.segmentIds[pickedOffset];
+    if (!Number.isSafeInteger(segmentId) || segmentId <= 0) {
+      return;
+    }
+    mouseState.pickedSpatialSkeleton = { segmentId };
+    if (
+      !getVisibleSegments(base.displayState.segmentationGroupState.value).has(
+        BigInt(segmentId),
+      )
+    ) {
+      return;
+    }
+    const nodeId = data.nodeIds[pickedOffset];
+    if (!Number.isSafeInteger(nodeId) || nodeId <= 0) return;
+    const nodePosition = data.nodePositions.subarray(
+      pickedOffset * 3,
+      pickedOffset * 3 + 3,
+    );
+    mouseState.pickedSpatialSkeleton = {
+      nodeId,
+      segmentId,
+      position: new Float32Array(nodePosition),
+    };
+    const transform = base.displayState.transform.value;
+    if (transform.error === undefined) {
+      setMouseStatePositionFromSpatialSkeletonNode(
+        mouseState,
+        nodePosition,
+        transform,
+      );
+    }
+    return;
+  }
+  if (data.kind === "edge") {
+    if (pickedOffset < 0 || pickedOffset >= data.segmentIds.length) {
+      return;
+    }
+    const segmentId = data.segmentIds[pickedOffset];
+    if (Number.isSafeInteger(segmentId) && segmentId > 0) {
+      mouseState.pickedSpatialSkeleton = { segmentId };
+    }
+    return;
+  }
+  if (data.kind === "segment-node" || data.kind === "segment-edge") {
+    if (data.kind === "segment-node") {
+      const pickedNode = base.resolveNodePickFromChunk(
+        data.chunk,
+        pickedOffset,
+      );
+      if (pickedNode !== undefined) {
+        mouseState.pickedSpatialSkeleton = {
+          nodeId: pickedNode.nodeId,
+          segmentId: pickedNode.segmentId,
+          position: new Float32Array(pickedNode.position),
+          sourceState: pickedNode.sourceState,
+        };
+      }
+      return;
+    }
+    const segmentId = base.resolveSegmentPickFromChunk(
+      data.chunk,
+      pickedOffset,
+      "edge",
+    );
+    if (segmentId !== undefined) {
+      mouseState.pickedSpatialSkeleton = { segmentId };
+    }
+  }
+}
+
 export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveViewRenderLayer {
   private renderHelper: RenderHelper;
   private browseRenderHelper: RenderHelper;
@@ -3083,14 +3181,7 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
   }
 
   transformPickedValue(pickState: PickState) {
-    const pickedSegmentId = pickState.pickedSpatialSkeleton?.segmentId;
-    if (
-      typeof pickedSegmentId === "number" &&
-      Number.isSafeInteger(pickedSegmentId)
-    ) {
-      return BigInt(pickedSegmentId);
-    }
-    return undefined;
+    return transformSpatiallyIndexedSkeletonPickedValue(pickState);
   }
 
   updateMouseState(
@@ -3099,84 +3190,12 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
     pickedOffset: number,
     data: any,
   ) {
-    const pickData = data as SpatiallyIndexedSkeletonPickData | undefined;
-    if (pickData === undefined) return;
-    if (pickData.kind === "node") {
-      if (
-        pickedOffset < 0 ||
-        pickedOffset >= pickData.nodeIds.length ||
-        pickedOffset >= pickData.segmentIds.length
-      ) {
-        return;
-      }
-      const segmentId = pickData.segmentIds[pickedOffset];
-      if (!Number.isSafeInteger(segmentId) || segmentId <= 0) {
-        return;
-      }
-      mouseState.pickedSpatialSkeleton = { segmentId };
-      if (
-        !getVisibleSegments(
-          this.base.displayState.segmentationGroupState.value,
-        ).has(BigInt(segmentId))
-      ) {
-        return;
-      }
-      const nodeId = pickData.nodeIds[pickedOffset];
-      if (!Number.isSafeInteger(nodeId) || nodeId <= 0) return;
-      const nodePosition = pickData.nodePositions.subarray(
-        pickedOffset * 3,
-        pickedOffset * 3 + 3,
-      );
-      mouseState.pickedSpatialSkeleton = {
-        nodeId,
-        segmentId,
-        position: new Float32Array(nodePosition),
-      };
-      const transform = this.base.displayState.transform.value;
-      if (transform.error === undefined) {
-        setMouseStatePositionFromSpatialSkeletonNode(
-          mouseState,
-          nodePosition,
-          transform,
-        );
-      }
-      return;
-    }
-    if (pickData.kind === "edge") {
-      if (pickedOffset < 0 || pickedOffset >= pickData.segmentIds.length) {
-        return;
-      }
-      const segmentId = pickData.segmentIds[pickedOffset];
-      if (Number.isSafeInteger(segmentId) && segmentId > 0) {
-        mouseState.pickedSpatialSkeleton = { segmentId };
-      }
-      return;
-    }
-    if (pickData.kind === "segment-node" || pickData.kind === "segment-edge") {
-      if (pickData.kind === "segment-node") {
-        const pickedNode = this.base.resolveNodePickFromChunk(
-          pickData.chunk,
-          pickedOffset,
-        );
-        if (pickedNode !== undefined) {
-          mouseState.pickedSpatialSkeleton = {
-            nodeId: pickedNode.nodeId,
-            segmentId: pickedNode.segmentId,
-            position: new Float32Array(pickedNode.position),
-            sourceState: pickedNode.sourceState,
-          };
-        }
-        return;
-      }
-      const segmentId = this.base.resolveSegmentPickFromChunk(
-        pickData.chunk,
-        pickedOffset,
-        "edge",
-      );
-      if (segmentId !== undefined) {
-        mouseState.pickedSpatialSkeleton = { segmentId };
-      }
-    }
+    updateSpatiallyIndexedSkeletonMouseState(
+      this.base,
+      mouseState,
+      pickedOffset,
+      data as SpatiallyIndexedSkeletonPickData | undefined,
+    );
   }
 
   draw(
@@ -3349,14 +3368,7 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
   }
 
   transformPickedValue(pickState: PickState) {
-    const pickedSegmentId = pickState.pickedSpatialSkeleton?.segmentId;
-    if (
-      typeof pickedSegmentId === "number" &&
-      Number.isSafeInteger(pickedSegmentId)
-    ) {
-      return BigInt(pickedSegmentId);
-    }
-    return undefined;
+    return transformSpatiallyIndexedSkeletonPickedValue(pickState);
   }
 
   updateMouseState(
@@ -3365,84 +3377,12 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
     pickedOffset: number,
     data: any,
   ) {
-    const pickData = data as SpatiallyIndexedSkeletonPickData | undefined;
-    if (pickData === undefined) return;
-    if (pickData.kind === "node") {
-      if (
-        pickedOffset < 0 ||
-        pickedOffset >= pickData.nodeIds.length ||
-        pickedOffset >= pickData.segmentIds.length
-      ) {
-        return;
-      }
-      const segmentId = pickData.segmentIds[pickedOffset];
-      if (!Number.isSafeInteger(segmentId) || segmentId <= 0) {
-        return;
-      }
-      mouseState.pickedSpatialSkeleton = { segmentId };
-      if (
-        !getVisibleSegments(
-          this.base.displayState.segmentationGroupState.value,
-        ).has(BigInt(segmentId))
-      ) {
-        return;
-      }
-      const nodeId = pickData.nodeIds[pickedOffset];
-      if (!Number.isSafeInteger(nodeId) || nodeId <= 0) return;
-      const nodePosition = pickData.nodePositions.subarray(
-        pickedOffset * 3,
-        pickedOffset * 3 + 3,
-      );
-      mouseState.pickedSpatialSkeleton = {
-        nodeId,
-        segmentId,
-        position: new Float32Array(nodePosition),
-      };
-      const transform = this.base.displayState.transform.value;
-      if (transform.error === undefined) {
-        setMouseStatePositionFromSpatialSkeletonNode(
-          mouseState,
-          nodePosition,
-          transform,
-        );
-      }
-      return;
-    }
-    if (pickData.kind === "edge") {
-      if (pickedOffset < 0 || pickedOffset >= pickData.segmentIds.length) {
-        return;
-      }
-      const segmentId = pickData.segmentIds[pickedOffset];
-      if (Number.isSafeInteger(segmentId) && segmentId > 0) {
-        mouseState.pickedSpatialSkeleton = { segmentId };
-      }
-      return;
-    }
-    if (pickData.kind === "segment-node" || pickData.kind === "segment-edge") {
-      if (pickData.kind === "segment-node") {
-        const pickedNode = this.base.resolveNodePickFromChunk(
-          pickData.chunk,
-          pickedOffset,
-        );
-        if (pickedNode !== undefined) {
-          mouseState.pickedSpatialSkeleton = {
-            nodeId: pickedNode.nodeId,
-            segmentId: pickedNode.segmentId,
-            position: new Float32Array(pickedNode.position),
-            sourceState: pickedNode.sourceState,
-          };
-        }
-        return;
-      }
-      const segmentId = this.base.resolveSegmentPickFromChunk(
-        pickData.chunk,
-        pickedOffset,
-        "edge",
-      );
-      if (segmentId !== undefined) {
-        mouseState.pickedSpatialSkeleton = { segmentId };
-      }
-    }
+    updateSpatiallyIndexedSkeletonMouseState(
+      this.base,
+      mouseState,
+      pickedOffset,
+      data as SpatiallyIndexedSkeletonPickData | undefined,
+    );
   }
 
   attach(
