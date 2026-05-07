@@ -21,6 +21,7 @@ import {
   ChunkRenderLayerFrontend,
   ChunkSource,
 } from "#src/chunk_manager/frontend.js";
+import { hashCombine } from "#src/gpu_hash/hash_function.js";
 import { GPUHashTable, HashSetShaderManager } from "#src/gpu_hash/shader.js";
 import type {
   LayerView,
@@ -125,6 +126,7 @@ import {
 } from "#src/trackable_value.js";
 import { Uint64Set } from "#src/uint64_set.js";
 import { gatherUpdate } from "#src/util/array.js";
+import { hsvToRgb } from "#src/util/colorspace.js";
 import { DATA_TYPE_SIGNED, DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import type { ValueOrError } from "#src/util/error.js";
@@ -189,7 +191,7 @@ import type { RPC } from "#src/worker_rpc.js";
 
 const DEBUG_SPATIAL_SKELETON_OVERLAY = false;
 const DEBUG_EXCLUDED_SEGMENTS = false;
-const DEBUG_SPATIAL_SKELETON_CHUNKS = false;
+const DEBUG_SPATIAL_SKELETON_CHUNKS = true;
 // Used for debugging chunks via a different color for each chunk
 const tempChunkKeyToColorMap = new Map<string, Float32Array>();
 
@@ -2838,11 +2840,15 @@ export class SpatiallyIndexedSkeletonLayer
         const chunkKey = `${chunk.chunkGridPosition[0]},${chunk.chunkGridPosition[1]},${chunk.chunkGridPosition[2]}`;
         let randomColor = tempChunkKeyToColorMap.get(chunkKey);
         if (randomColor === undefined) {
-          randomColor = new Float32Array([
-            Math.random(),
-            Math.random(),
-            Math.random(),
-          ]);
+          // Use same strategy as segment color hashing to be consistent
+          // in colors across neuroglancer sessions
+          randomColor = new Float32Array([0, 0, 0]);
+          let h = hashCombine(0, chunk.chunkGridPosition[0]);
+          h = hashCombine(h, chunk.chunkGridPosition[1]);
+          h = hashCombine(h, chunk.chunkGridPosition[2]);
+          const c0 = (h & 0xff) / 255;
+          const c1 = ((h >> 8) & 0xff) / 255;
+          hsvToRgb(randomColor, c0, 0.5 + 0.5 * c1, 1.0);
           tempChunkKeyToColorMap.set(chunkKey, randomColor);
         }
         nodeShader.bind();
