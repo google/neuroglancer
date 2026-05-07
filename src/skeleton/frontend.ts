@@ -1543,7 +1543,29 @@ const selectedNodeAttribute: VertexAttributeRenderInfo = {
   glslDataType: "float",
 };
 
-export class SkeletonChunk extends Chunk implements SkeletonChunkInterface {
+function uploadSkeletonChunkToGPU(gl: GL, chunk: SkeletonChunkBase) {
+  chunk.vertexAttributeTextures = uploadVertexAttributesToGPU(
+    gl,
+    chunk.vertexAttributes,
+    chunk.vertexAttributeOffsets,
+    chunk.source.attributeTextureFormats,
+  );
+  chunk.indexBuffer = GLBuffer.fromData(
+    gl,
+    chunk.indices,
+    WebGL2RenderingContext.ARRAY_BUFFER,
+    WebGL2RenderingContext.STATIC_DRAW,
+  );
+}
+
+function freeSkeletonChunkGPUMemory(gl: GL, chunk: SkeletonChunkBase) {
+  chunk.indexBuffer.dispose();
+  const { vertexAttributeTextures } = chunk;
+  for (let i = 0, length = vertexAttributeTextures.length; i < length; ++i) {
+    gl.deleteTexture(vertexAttributeTextures[i]);
+  }
+  vertexAttributeTextures.length = 0;
+}
   declare source: SkeletonSource;
   vertexAttributes: Uint8Array;
   indices: Uint32Array;
