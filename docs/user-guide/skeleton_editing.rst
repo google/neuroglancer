@@ -46,7 +46,8 @@ spatial index level:
 ``chunk_size`` is specified in CATMAID project-space nanometers. ``limit`` is
 the maximum node count expected for that spatial level and is required.
 ``cache_provider`` is optional and, when present, is passed to CATMAID node-list
-requests. ``read_only`` is optional and disables editing when set to ``true``.
+requests. If ``read_only`` is not set to ``false``, Neuroglancer treats the
+source as read-only: skeletons can be inspected, but edit actions are disabled.
 
 If ``spatial`` is absent or empty, Neuroglancer rejects the CATMAID datasource
 because it cannot construct the spatially indexed skeleton source.
@@ -85,8 +86,8 @@ Skeleton Tab
 The **Skeleton** tab is used for editing and viewing information about skeletons.
 It is only available for CATMAID sources with an active spatially indexed skeleton
 subsource, and only visible skeletons appear here. If the CATMAID stack metadata
-sets ``read_only`` to ``true``, inspection remains available but edit actions are
-disabled.
+does not set ``read_only`` to ``false``, inspection remains available but edit
+actions are disabled.
 
 You can find a node by ID or by description, and filter nodes to show only:
 

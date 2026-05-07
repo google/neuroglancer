@@ -73,7 +73,7 @@ export interface SpatiallyIndexedSkeletonNode
 export interface SpatiallyIndexedSkeletonMetadata
   extends SpatialSkeletonBounds {
   spatial: readonly SpatialSkeletonSpatialIndexLevel[];
-  readOnly: boolean;
+  readonly readonly: boolean;
 }
 
 export interface SpatialSkeletonConfidenceConfiguration {
@@ -81,7 +81,7 @@ export interface SpatialSkeletonConfidenceConfiguration {
 }
 
 export interface SpatiallyIndexedSkeletonSource {
-  readonly readOnly: boolean;
+  readonly readonly: boolean;
   listSkeletons(): Promise<number[]>;
   getSkeleton(
     skeletonId: number,
@@ -98,7 +98,7 @@ export interface SpatiallyIndexedSkeletonSource {
 
 export interface EditableSpatiallyIndexedSkeletonSource
   extends SpatiallyIndexedSkeletonSource {
-  readonly readOnly: false;
+  readonly readonly: false;
   readonly addNodesCommand: SpatialSkeletonAddNodesCommandFactory;
   readonly deleteNodesCommand: SpatialSkeletonDeleteNodesCommandFactory;
   readonly moveNodesCommand: SpatialSkeletonMoveNodesCommandFactory;

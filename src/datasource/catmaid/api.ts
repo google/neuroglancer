@@ -1305,7 +1305,7 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     );
   }
 
-  private getSpatialSkeletonReadOnlyFromMetadataInfo(
+  private getSpatialSkeletonReadonlyFromMetadataInfo(
     info: CatmaidStackInfo,
   ): boolean {
     const metadata = info.metadata;
@@ -1326,7 +1326,7 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     return {
       ...bounds,
       spatial: this.getSpatialIndexLevelsFromMetadataInfo(info, bounds),
-      readOnly: this.getSpatialSkeletonReadOnlyFromMetadataInfo(info),
+      readonly: this.getSpatialSkeletonReadonlyFromMetadataInfo(info),
     };
   }
 

@@ -88,7 +88,7 @@ function makeEditableSkeletonSource(overrides: Record<string, unknown> = {}) {
     getClient: () => client as any,
   });
   return {
-    readOnly: false,
+    readonly: false,
     addNodesCommand: commands.addNodesCommand,
     insertNodesCommand: commands.insertNodesCommand,
     moveNodesCommand: commands.moveNodesCommand,

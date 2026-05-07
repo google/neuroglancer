@@ -111,7 +111,7 @@ function makeEditableSkeletonSource(overrides: Record<string, unknown> = {}) {
   }
   const commands = makeCatmaidEditCommands(makeCatmaidClient(clientOverrides));
   return {
-    readOnly: false,
+    readonly: false,
     addNodesCommand: commands.addNodesCommand,
     insertNodesCommand: commands.insertNodesCommand,
     moveNodesCommand: commands.moveNodesCommand,
@@ -210,7 +210,7 @@ describe("spatial_skeleton_commands", () => {
       getSpatiallyIndexedSkeletonLayer: () => ({
         source: {
           ...makeEditableSkeletonSource(),
-          readOnly: false,
+          readonly: false,
           editNodeDescriptionCommand: {
             action: SpatialSkeletonActions.editNodeDescription,
           },
@@ -242,7 +242,7 @@ describe("spatial_skeleton_commands", () => {
           ...makeEditableSkeletonSource({
             editNodeDescriptionCommand: undefined,
           }),
-          readOnly: false,
+          readonly: false,
         },
       }),
     };

@@ -80,18 +80,18 @@ export class CatmaidSpatiallyIndexedSkeletonSource extends WithParameters(
     });
   private client_?: CatmaidClient;
 
-  get readOnly() {
-    return this.parameters.catmaidParameters.readOnly !== false;
+  get readonly() {
+    return this.parameters.catmaidParameters.readonly !== false;
   }
 
   get spatialSkeletonConfidenceConfiguration() {
-    return this.readOnly
+    return this.readonly
       ? undefined
       : CATMAID_SPATIAL_SKELETON_CONFIDENCE_CONFIGURATION;
   }
 
   private get editableSpatialSkeletonEditCommands() {
-    return this.readOnly ? undefined : this.spatialSkeletonEditCommands;
+    return this.readonly ? undefined : this.spatialSkeletonEditCommands;
   }
 
   get addNodesCommand() {
@@ -219,7 +219,7 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
     private upperBoundsInNanometers: Float32Array,
     gridCellSizes: Array<{ x: number; y: number; z: number }>,
     private cacheProvider?: string,
-    private readOnly = true,
+    private sourceReadonly = true,
   ) {
     super(chunkManager);
     this.sortedGridCellSizes = [...gridCellSizes].sort(
@@ -289,7 +289,7 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
       parameters.catmaidParameters.url = this.baseUrl;
       parameters.catmaidParameters.projectId = this.projectId;
       parameters.catmaidParameters.cacheProvider = this.cacheProvider;
-      parameters.catmaidParameters.readOnly = this.readOnly;
+      parameters.catmaidParameters.readonly = this.sourceReadonly;
       parameters.gridIndex = gridIndex;
       parameters.catmaidLod =
         lastGridIndex <= 0 ? 0 : gridIndex / lastGridIndex;
@@ -392,7 +392,7 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
       lowerBounds: projectLowerBounds,
       upperBounds: projectUpperBounds,
       spatial,
-      readOnly,
+      readonly: sourceReadonly,
     } = spatialIndexMetadata;
     const gridCellSizes = spatial.map(({ chunkSize }) => ({
       x: Number(chunkSize[0]),
@@ -443,7 +443,7 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
         upperCoordinateBound,
         gridCellSizes,
         cacheProvider,
-        readOnly,
+        sourceReadonly,
       );
     // Create complete skeleton source (non-chunked)
     const completeSkeletonParameters =

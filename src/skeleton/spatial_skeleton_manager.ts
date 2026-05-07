@@ -107,7 +107,7 @@ export function isSpatiallyIndexedSkeletonSource(
   value: unknown,
 ): value is SpatiallyIndexedSkeletonSource {
   return (
-    typeof getProperty(value, "readOnly") === "boolean" &&
+    typeof getProperty(value, "readonly") === "boolean" &&
     hasFunction(value, "listSkeletons") &&
     hasFunction(value, "getSkeleton") &&
     hasFunction(value, "getSpatialIndexMetadata") &&
@@ -120,7 +120,7 @@ export function isEditableSpatiallyIndexedSkeletonSource(
 ): value is EditableSpatiallyIndexedSkeletonSource {
   return (
     isSpatiallyIndexedSkeletonSource(value) &&
-    !value.readOnly &&
+    !value.readonly &&
     hasCommandFactory(
       value,
       "addNodesCommand",
@@ -192,7 +192,7 @@ export function getSpatiallyIndexedSkeletonSource(
 export function isSpatiallyIndexedSkeletonSourceReadOnly(
   value: SpatialSkeletonSourceAccess | undefined,
 ): boolean {
-  return getSpatiallyIndexedSkeletonSource(value)?.readOnly === true;
+  return getSpatiallyIndexedSkeletonSource(value)?.readonly ?? true;
 }
 
 export function getEditableSpatiallyIndexedSkeletonSource(

@@ -77,7 +77,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     await expect(client.getSpatialIndexMetadata()).resolves.toEqual({
       lowerBounds: [5, 6, 7],
       upperBounds: [25, 66, 127],
-      readOnly: true,
+      readonly: true,
       spatial: [
         {
           chunkSize: [15, 15, 15],
@@ -106,7 +106,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     });
 
     await expect(client.getSpatialIndexMetadata()).resolves.toMatchObject({
-      readOnly: false,
+      readonly: false,
     });
   });
 
@@ -163,7 +163,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     await expect(client.getSpatialIndexMetadata()).resolves.toEqual({
       lowerBounds: [5, 6, 7],
       upperBounds: [25, 66, 127],
-      readOnly: true,
+      readonly: true,
       spatial: [
         {
           chunkSize: [11168145, 11168145, 11168145],

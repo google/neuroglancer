@@ -48,7 +48,7 @@ function makeEditableSpatialSkeletonSource(
     createCommand,
   });
   return {
-    readOnly: false,
+    readonly: false,
     addNodesCommand: makeCommand(SpatialSkeletonActions.addNodes),
     insertNodesCommand: makeCommand(SpatialSkeletonActions.insertNodes),
     moveNodesCommand: makeCommand(SpatialSkeletonActions.moveNodes),
@@ -265,7 +265,7 @@ describe("layer/segmentation spatial skeleton action gating", () => {
             ...makeEditableSpatialSkeletonSource({
               rerootCommand: true,
             }),
-            readOnly: true,
+            readonly: true,
           }),
         spatialSkeletonVisibleChunksLoaded: new WatchableValue(true),
         spatialSkeletonVisibleChunksNeeded: new WatchableValue(0),
