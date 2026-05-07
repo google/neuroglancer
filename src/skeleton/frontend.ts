@@ -189,7 +189,9 @@ import type { RPC } from "#src/worker_rpc.js";
 
 const DEBUG_SPATIAL_SKELETON_OVERLAY = false;
 const DEBUG_EXCLUDED_SEGMENTS = false;
-const tempChunkColorMap = new Map<vec3, Float32Array>();
+const DEBUG_SPATIAL_SKELETON_CHUNKS = false;
+// Used for debugging chunks via a different color for each chunk
+const tempChunkKeyToColorMap = new Map<string, Float32Array>();
 
 const tempMat4 = mat4.create();
 const DEFAULT_FRAGMENT_MAIN = `void main() {
@@ -2832,15 +2834,16 @@ export class SpatiallyIndexedSkeletonLayer
         renderHelper.setNodePickInstanceStride(gl, nodeShader, nodePickStride);
       }
       // Render each chunk with different node/edge colors for debugging
-      if (renderContext.wireFrame) {
-        let randomColor = tempChunkColorMap.get(chunk.chunkGridPosition);
+      if (DEBUG_SPATIAL_SKELETON_CHUNKS) {
+        const chunkKey = `${chunk.chunkGridPosition[0]},${chunk.chunkGridPosition[1]},${chunk.chunkGridPosition[2]}`;
+        let randomColor = tempChunkKeyToColorMap.get(chunkKey);
         if (randomColor === undefined) {
           randomColor = new Float32Array([
             Math.random(),
             Math.random(),
             Math.random(),
           ]);
-          tempChunkColorMap.set(chunk.chunkGridPosition, randomColor);
+          tempChunkKeyToColorMap.set(chunkKey, randomColor);
         }
         nodeShader.bind();
         gl.uniform1ui(nodeShader.uniform("uUseSegmentDefaultColor"), 1);
