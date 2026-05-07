@@ -74,7 +74,10 @@ import {
   SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_UPDATE_SOURCES_RPC_ID,
 } from "#src/skeleton/base.js";
 import { uploadVertexAttributesToGPU } from "#src/skeleton/gpu_upload_utils.js";
-import { buildSpatiallyIndexedSkeletonOverlayGeometry } from "#src/skeleton/overlay_geometry.js";
+import {
+  buildSpatiallyIndexedSkeletonOverlayGeometry,
+  type SpatiallyIndexedSkeletonOverlayGeometry,
+} from "#src/skeleton/overlay_geometry.js";
 import {
   DEFAULT_MAX_RETAINED_OVERLAY_SEGMENTS,
   mergeSpatiallyIndexedSkeletonOverlaySegmentIds,
@@ -212,18 +215,8 @@ const vertexPositionTextureFormat = computeTextureFormat(
   DataType.FLOAT32,
   3,
 );
-const segmentTextureFormat = computeTextureFormat(
-  new TextureFormat(),
-  DataType.UINT32,
-  1,
-);
-const selectedNodeTextureFormat = computeTextureFormat(
-  new TextureFormat(),
-  DataType.FLOAT32,
-  1,
-);
 
-interface SkeletonLayerInterface {
+interface SkeletonShaderContext {
   vertexAttributes: VertexAttributeRenderInfo[];
   segmentColorAttributeIndex?: number;
   dynamicSegmentAppearance?: boolean;
@@ -232,7 +225,7 @@ interface SkeletonLayerInterface {
   displayState: SkeletonLayerDisplayState;
 }
 
-interface SkeletonChunkInterface {
+interface SkeletonGPUGeometry {
   vertexAttributeTextures: (WebGLTexture | null)[];
   indexBuffer: GLBuffer;
   numIndices: number;
@@ -243,7 +236,7 @@ interface SkeletonChunkInterface {
   pickEdgeSegmentIds?: Uint32Array;
 }
 
-interface SkeletonChunkData {
+interface PackedSkeletonGeometry {
   vertexAttributes: Uint8Array;
   indices: Uint32Array;
   numVertices: number;
@@ -473,7 +466,7 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
   }
 
   constructor(
-    public base: SkeletonLayerInterface,
+    public base: SkeletonShaderContext,
     public targetIsSliceView: boolean,
   ) {
     super();
@@ -916,7 +909,7 @@ void emitDefault() {
     gl: GL,
     edgeShader: ShaderProgram,
     nodeShader: ShaderProgram | null,
-    skeletonChunk: SkeletonChunkInterface,
+    skeletonChunk: SkeletonGPUGeometry,
     projectionParameters: { width: number; height: number },
   ) {
     // Bind vertex attribute textures to be used across edge and node shaders
@@ -1543,6 +1536,13 @@ const selectedNodeAttribute: VertexAttributeRenderInfo = {
   glslDataType: "float",
 };
 
+interface SkeletonChunkBase extends SkeletonGPUGeometry {
+  vertexAttributes: Uint8Array;
+  vertexAttributeOffsets: Uint32Array;
+  indices: Uint32Array;
+  source: { attributeTextureFormats: TextureFormat[] };
+}
+
 function uploadSkeletonChunkToGPU(gl: GL, chunk: SkeletonChunkBase) {
   chunk.vertexAttributeTextures = uploadVertexAttributesToGPU(
     gl,
@@ -1566,6 +1566,8 @@ function freeSkeletonChunkGPUMemory(gl: GL, chunk: SkeletonChunkBase) {
   }
   vertexAttributeTextures.length = 0;
 }
+
+export class SkeletonChunk extends Chunk implements SkeletonChunkBase {
   declare source: SkeletonSource;
   vertexAttributes: Uint8Array;
   indices: Uint32Array;
@@ -1575,7 +1577,7 @@ function freeSkeletonChunkGPUMemory(gl: GL, chunk: SkeletonChunkBase) {
   vertexAttributeOffsets: Uint32Array;
   vertexAttributeTextures: (WebGLTexture | null)[] = [];
 
-  constructor(source: SkeletonSource, x: any) {
+  constructor(source: SkeletonSource, x: PackedSkeletonGeometry) {
     super(source);
     this.vertexAttributes = x.vertexAttributes;
     const indices = (this.indices = x.indices);
@@ -1586,38 +1588,18 @@ function freeSkeletonChunkGPUMemory(gl: GL, chunk: SkeletonChunkBase) {
 
   copyToGPU(gl: GL) {
     super.copyToGPU(gl);
-    const { attributeTextureFormats } = this.source;
-    const { vertexAttributes, vertexAttributeOffsets } = this;
-
-    this.vertexAttributeTextures = uploadVertexAttributesToGPU(
-      gl,
-      vertexAttributes,
-      vertexAttributeOffsets,
-      attributeTextureFormats,
-    );
-
-    this.indexBuffer = GLBuffer.fromData(
-      gl,
-      this.indices,
-      WebGL2RenderingContext.ARRAY_BUFFER,
-      WebGL2RenderingContext.STATIC_DRAW,
-    );
+    uploadSkeletonChunkToGPU(gl, this);
   }
 
   freeGPUMemory(gl: GL) {
     super.freeGPUMemory(gl);
-    const { vertexAttributeTextures } = this;
-    for (const texture of vertexAttributeTextures) {
-      gl.deleteTexture(texture);
-    }
-    vertexAttributeTextures.length = 0;
-    this.indexBuffer.dispose();
+    freeSkeletonChunkGPUMemory(gl, this);
   }
 }
 
 export class SpatiallyIndexedSkeletonChunk
   extends SliceViewChunk
-  implements SkeletonChunkInterface
+  implements SkeletonChunkBase
 {
   declare source: SpatiallyIndexedSkeletonSource;
   vertexAttributes: Uint8Array;
@@ -1633,7 +1615,7 @@ export class SpatiallyIndexedSkeletonChunk
 
   constructor(
     source: SpatiallyIndexedSkeletonSource,
-    chunkData: SkeletonChunkData,
+    chunkData: PackedSkeletonGeometry,
   ) {
     super(source, chunkData);
     this.vertexAttributes = chunkData.vertexAttributes;
@@ -1661,36 +1643,13 @@ export class SpatiallyIndexedSkeletonChunk
   }
 
   copyToGPU(gl: GL) {
-    const wasGpuResident = this.state === ChunkState.GPU_MEMORY;
     super.copyToGPU(gl);
-    if (wasGpuResident) return;
-    const { attributeTextureFormats } = this.source;
-    this.vertexAttributeTextures = uploadVertexAttributesToGPU(
-      gl,
-      this.vertexAttributes,
-      this.vertexAttributeOffsets,
-      attributeTextureFormats,
-    );
-    this.indexBuffer = GLBuffer.fromData(
-      gl,
-      this.indices,
-      WebGL2RenderingContext.ARRAY_BUFFER,
-      WebGL2RenderingContext.STATIC_DRAW,
-    );
-    this.source.bumpLookupGeneration();
+    uploadSkeletonChunkToGPU(gl, this);
   }
 
   freeGPUMemory(gl: GL) {
-    const wasGpuResident = this.state === ChunkState.GPU_MEMORY;
     super.freeGPUMemory(gl);
-    if (!wasGpuResident) return;
-    this.indexBuffer.dispose();
-    const { vertexAttributeTextures } = this;
-    for (let i = 0, length = vertexAttributeTextures.length; i < length; ++i) {
-      gl.deleteTexture(vertexAttributeTextures[i]);
-    }
-    vertexAttributeTextures.length = 0;
-    this.source.bumpLookupGeneration();
+    freeSkeletonChunkGPUMemory(gl, this);
   }
 }
 
@@ -1709,7 +1668,6 @@ export class SpatiallyIndexedSkeletonSource extends SliceViewChunkSource<
   SpatiallyIndexedSkeletonChunk
 > {
   vertexAttributes: VertexAttributeRenderInfo[];
-  lookupGeneration = 0;
   private attributeTextureFormats_?: TextureFormat[];
   private chunkListeners = new Set<SpatiallyIndexedSkeletonChunkListener>();
 
@@ -1735,10 +1693,6 @@ export class SpatiallyIndexedSkeletonSource extends SliceViewChunkSource<
     return { ...base, chunkLayout: spec.chunkLayout.toObject() };
   }
 
-  bumpLookupGeneration() {
-    ++this.lookupGeneration;
-  }
-
   addChunkListener(listener: SpatiallyIndexedSkeletonChunkListener) {
     this.chunkListeners.add(listener);
     return () => this.chunkListeners.delete(listener);
@@ -1751,7 +1705,7 @@ export class SpatiallyIndexedSkeletonSource extends SliceViewChunkSource<
     }
   }
 
-  getChunk(chunkData: SkeletonChunkData) {
+  getChunk(chunkData: PackedSkeletonGeometry) {
     return new SpatiallyIndexedSkeletonChunk(this, chunkData);
   }
 }
@@ -1810,8 +1764,66 @@ interface SpatiallyIndexedSkeletonInspectionState {
   evictInactiveSegmentNodes(activeSegmentIds: Iterable<number>): void;
 }
 
-interface SpatiallyIndexedSkeletonOverlayChunk extends SkeletonChunkInterface {
-  dispose(gl: GL): void;
+class SkeletonOverlayChunk implements SkeletonGPUGeometry {
+  readonly vertexAttributeTextures: (WebGLTexture | null)[];
+  readonly indexBuffer: GLBuffer;
+  readonly numIndices: number;
+  readonly numVertices: number;
+  readonly pickNodeIds: Int32Array;
+  readonly pickNodePositions: Float32Array;
+  readonly pickSegmentIds: Uint32Array;
+  readonly pickEdgeSegmentIds: Uint32Array;
+
+  constructor(
+    gl: GL,
+    geometry: SpatiallyIndexedSkeletonOverlayGeometry,
+    formats: TextureFormat[],
+  ) {
+    const positionBytes = new Uint8Array(geometry.positions.buffer);
+    const segmentBytes = new Uint8Array(geometry.segmentIds.buffer);
+    const selectedBytes = new Uint8Array(geometry.selected.buffer);
+    const vertexBytes = new Uint8Array(
+      positionBytes.byteLength +
+        segmentBytes.byteLength +
+        selectedBytes.byteLength,
+    );
+    vertexBytes.set(positionBytes, 0);
+    vertexBytes.set(segmentBytes, positionBytes.byteLength);
+    vertexBytes.set(
+      selectedBytes,
+      positionBytes.byteLength + segmentBytes.byteLength,
+    );
+    const vertexOffsets = new Uint32Array([
+      0,
+      positionBytes.byteLength,
+      positionBytes.byteLength + segmentBytes.byteLength,
+    ]);
+    this.vertexAttributeTextures = uploadVertexAttributesToGPU(
+      gl,
+      vertexBytes,
+      vertexOffsets,
+      formats,
+    );
+    this.indexBuffer = GLBuffer.fromData(
+      gl,
+      geometry.indices,
+      WebGL2RenderingContext.ARRAY_BUFFER,
+      WebGL2RenderingContext.STATIC_DRAW,
+    );
+    this.numIndices = geometry.indices.length;
+    this.numVertices = geometry.numVertices;
+    this.pickNodeIds = geometry.nodeIds;
+    this.pickNodePositions = geometry.nodePositions;
+    this.pickSegmentIds = geometry.pickSegmentIds;
+    this.pickEdgeSegmentIds = geometry.pickEdgeSegmentIds;
+  }
+
+  dispose(gl: GL) {
+    for (const texture of this.vertexAttributeTextures) {
+      if (texture) gl.deleteTexture(texture);
+    }
+    this.indexBuffer.dispose();
+  }
 }
 
 function getSpatialSkeletonGridSpacing(
@@ -1906,7 +1918,8 @@ function updateSpatialSkeletonGridRenderScaleHistogram(
   }
 }
 
-interface SpatialSkeletonDisplayState {
+export interface SpatiallyIndexedSkeletonLayerDisplayState
+  extends SkeletonLayerDisplayState {
   spatialSkeletonGridLevel2d?: WatchableValueInterface<number>;
   spatialSkeletonGridLevel3d?: WatchableValueInterface<number>;
   skeletonLod?: WatchableValueInterface<number>;
@@ -1920,7 +1933,7 @@ interface SpatialSkeletonDisplayState {
 
 export class SpatiallyIndexedSkeletonLayer
   extends RefCounted
-  implements SkeletonLayerInterface
+  implements SkeletonShaderContext
 {
   layerChunkProgressInfo = new LayerChunkProgressInfo();
   redrawNeeded = new NullarySignal();
@@ -1928,7 +1941,7 @@ export class SpatiallyIndexedSkeletonLayer
   vertexAttributes: VertexAttributeRenderInfo[];
   segmentColorAttributeIndex: number | undefined;
   selectedNodeAttributeIndex: number | undefined;
-  readonly chunkGeometryRenderLayerInterface: SkeletonLayerInterface;
+  readonly browsePassLayerView: SkeletonShaderContext;
   fallbackShaderParameters = new WatchableValue(
     getFallbackBuilderState(parseShaderUiControls(DEFAULT_FRAGMENT_MAIN)),
   );
@@ -1963,7 +1976,7 @@ export class SpatiallyIndexedSkeletonLayer
     | ((nodeId: number) => SpatiallyIndexedSkeletonNode | undefined)
     | undefined;
   private inspectionState: SpatiallyIndexedSkeletonInspectionState | undefined;
-  private overlayChunk: SpatiallyIndexedSkeletonOverlayChunk | undefined;
+  private overlayChunk: SkeletonOverlayChunk | undefined;
   private overlayChunkKey: string | undefined;
   private overlayRebuildFrame = -1;
   private pendingOverlaySegmentLoads = new Set<number>();
@@ -2143,6 +2156,7 @@ export class SpatiallyIndexedSkeletonLayer
     return this.browseExcludedSegments;
   }
 
+  private resolveSourceBackedOverlayChunk(): SkeletonOverlayChunk | undefined {
     const frameNumber =
       this.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber;
     if (
@@ -2201,53 +2215,11 @@ export class SpatiallyIndexedSkeletonLayer
         getPendingNodePosition: this.getPendingNodePositionOverride,
       },
     );
-    const positionBytes = new Uint8Array(geometry.positions.buffer);
-    const segmentBytes = new Uint8Array(geometry.segmentIds.buffer);
-    const selectedBytes = new Uint8Array(geometry.selected.buffer);
-    const vertexBytes = new Uint8Array(
-      positionBytes.byteLength +
-        segmentBytes.byteLength +
-        selectedBytes.byteLength,
-    );
-    vertexBytes.set(positionBytes, 0);
-    vertexBytes.set(segmentBytes, positionBytes.byteLength);
-    vertexBytes.set(
-      selectedBytes,
-      positionBytes.byteLength + segmentBytes.byteLength,
-    );
-    const vertexOffsets = new Uint32Array([
-      0,
-      positionBytes.byteLength,
-      positionBytes.byteLength + segmentBytes.byteLength,
-    ]);
-    const vertexAttributeTextures = uploadVertexAttributesToGPU(
+    this.overlayChunk = new SkeletonOverlayChunk(
       this.gl,
-      vertexBytes,
-      vertexOffsets,
+      geometry,
       this.overlayAttributeTextureFormats,
     );
-    const indexBuffer = GLBuffer.fromData(
-      this.gl,
-      geometry.indices,
-      WebGL2RenderingContext.ARRAY_BUFFER,
-      WebGL2RenderingContext.STATIC_DRAW,
-    );
-    this.overlayChunk = {
-      vertexAttributeTextures,
-      indexBuffer,
-      numIndices: geometry.indices.length,
-      numVertices: geometry.numVertices,
-      pickNodeIds: geometry.nodeIds,
-      pickNodePositions: geometry.nodePositions,
-      pickSegmentIds: geometry.pickSegmentIds,
-      pickEdgeSegmentIds: geometry.pickEdgeSegmentIds,
-      dispose: (gl: GL) => {
-        for (const texture of vertexAttributeTextures) {
-          if (texture) gl.deleteTexture(texture);
-        }
-        indexBuffer.dispose();
-      },
-    };
     this.overlayChunkKey = overlayChunkKey;
     return this.overlayChunk;
   }
@@ -2261,7 +2233,7 @@ export class SpatiallyIndexedSkeletonLayer
     sources:
       | SpatiallyIndexedSkeletonSourceEntry[]
       | SpatiallyIndexedSkeletonSource,
-    public displayState: SkeletonLayerDisplayState & {
+    public displayState: SpatiallyIndexedSkeletonLayerDisplayState & {
       localPosition: WatchableValueInterface<Float32Array>;
     },
     options: SpatiallyIndexedSkeletonLayerOptions = {},
@@ -2306,20 +2278,18 @@ export class SpatiallyIndexedSkeletonLayer
         this.displayState.transform,
       ),
     );
-    const spatialDisplayState = displayState as SkeletonLayerDisplayState &
-      SpatialSkeletonDisplayState;
     this.gridLevel =
       options.gridLevel ??
-      spatialDisplayState.spatialSkeletonGridLevel3d ??
+      displayState.spatialSkeletonGridLevel3d ??
       new WatchableValue(0);
     this.lod =
-      options.lod ?? spatialDisplayState.skeletonLod ?? new WatchableValue(0);
+      options.lod ?? displayState.skeletonLod ?? new WatchableValue(0);
     this.gridLevel2d =
       options.gridLevel2d ??
-      spatialDisplayState.spatialSkeletonGridLevel2d ??
+      displayState.spatialSkeletonGridLevel2d ??
       this.gridLevel;
     this.lod2d =
-      options.lod2d ?? spatialDisplayState.spatialSkeletonLod2d ?? this.lod;
+      options.lod2d ?? displayState.spatialSkeletonLod2d ?? this.lod;
     this.selectedNodeId = options.selectedNodeId;
     this.pendingNodePositionVersion = options.pendingNodePositionVersion;
     this.getPendingNodePositionOverride = options.getPendingNodePosition;
@@ -2348,6 +2318,7 @@ export class SpatiallyIndexedSkeletonLayer
     ];
     // Browse pass uses uniform-based dynamic segment color (not per-vertex attribute),
     // so segmentColorAttributeIndex is intentionally undefined here.
+    this.browsePassLayerView = {
       vertexAttributes: this.source.vertexAttributes,
       segmentColorAttributeIndex: undefined,
       dynamicSegmentAppearance: this.dynamicSegmentAppearance,
@@ -3118,7 +3089,7 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
     this.backend = base.backend;
     this.renderHelper = this.registerDisposer(new RenderHelper(base, false));
     this.browseRenderHelper = this.registerDisposer(
-      new RenderHelper(base.chunkGeometryRenderLayerInterface, false),
+      new RenderHelper(base.browsePassLayerView, false),
     );
     this.renderOptions = base.displayState.skeletonRenderingOptions.params3d;
 
@@ -3132,10 +3103,8 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
     this.registerDisposer(
       renderOptions.lineWidth.changed.add(this.redrawNeeded.dispatch),
     );
-    const spatialDisplayState = base.displayState as SkeletonLayerDisplayState &
-      SpatialSkeletonDisplayState;
     const histogram3d =
-      spatialDisplayState.spatialSkeletonGridRenderScaleHistogram3d;
+      base.displayState.spatialSkeletonGridRenderScaleHistogram3d;
     if (histogram3d !== undefined) {
       this.registerDisposer(histogram3d.visibility.add(this.visibility));
     }
@@ -3239,8 +3208,7 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
     if (!renderContext.emitColor && renderContext.alreadyEmittedPickID) {
       return;
     }
-    const displayState = this.base.displayState as SkeletonLayerDisplayState &
-      SpatialSkeletonDisplayState;
+    const { displayState } = this.base;
     const lodValue = displayState.skeletonLod?.value;
     const visibleChunks = this.base.getVisibleChunksInCurrentViewAndLod(
       "3d",
@@ -3335,8 +3303,7 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
       ThreeDimensionalRenderLayerAttachmentState
     >,
   ) {
-    const displayState = this.base.displayState as SkeletonLayerDisplayState &
-      SpatialSkeletonDisplayState;
+    const { displayState } = this.base;
     const lodValue = displayState.skeletonLod?.value;
     return this.base.isReady(
       this.transformedSources,
@@ -3357,7 +3324,7 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
     this.backend = base.backend;
     this.renderHelper = this.registerDisposer(new RenderHelper(base, true));
     this.browseRenderHelper = this.registerDisposer(
-      new RenderHelper(base.chunkGeometryRenderLayerInterface, true),
+      new RenderHelper(base.browsePassLayerView, true),
     );
     this.renderOptions = base.displayState.skeletonRenderingOptions.params2d;
     this.layerChunkProgressInfo = base.layerChunkProgressInfo;
@@ -3369,21 +3336,19 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
     this.registerDisposer(
       renderOptions.lineWidth.changed.add(this.redrawNeeded.dispatch),
     );
-    const spatialDisplayState2d =
-      base.displayState as SkeletonLayerDisplayState &
-        SpatialSkeletonDisplayState;
-    const gridLevel2d = spatialDisplayState2d.spatialSkeletonGridLevel2d;
+    const { displayState: displayState2d } = base;
+    const gridLevel2d = displayState2d.spatialSkeletonGridLevel2d;
     if (gridLevel2d?.changed) {
       this.registerDisposer(
         gridLevel2d.changed.add(this.redrawNeeded.dispatch),
       );
     }
-    const lod2d = spatialDisplayState2d.spatialSkeletonLod2d;
+    const lod2d = displayState2d.spatialSkeletonLod2d;
     if (lod2d?.changed) {
       this.registerDisposer(lod2d.changed.add(this.redrawNeeded.dispatch));
     }
     const histogram2d =
-      spatialDisplayState2d.spatialSkeletonGridRenderScaleHistogram2d;
+      displayState2d.spatialSkeletonGridRenderScaleHistogram2d;
     if (histogram2d !== undefined) {
       this.registerDisposer(histogram2d.visibility.add(this.visibility));
     }
@@ -3474,8 +3439,7 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
       ThreeDimensionalRenderLayerAttachmentState
     >,
   ) {
-    const displayState = this.base.displayState as SkeletonLayerDisplayState &
-      SpatialSkeletonDisplayState;
+    const { displayState } = this.base;
     const lodValue = displayState.spatialSkeletonLod2d?.value;
     const visibleChunks = this.base.getVisibleChunksInCurrentViewAndLod(
       "2d",
@@ -3523,8 +3487,7 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
       ThreeDimensionalRenderLayerAttachmentState
     >,
   ) {
-    const displayState = this.base.displayState as SkeletonLayerDisplayState &
-      SpatialSkeletonDisplayState;
+    const { displayState } = this.base;
     const lodValue = displayState.spatialSkeletonLod2d?.value;
     return this.base.isReady(
       this.transformedSources,
@@ -3569,7 +3532,7 @@ export class SkeletonSource extends ChunkSource {
   }
 
   declare chunks: Map<string, SkeletonChunk>;
-  getChunk(x: any) {
+  getChunk(x: PackedSkeletonGeometry) {
     return new SkeletonChunk(this, x);
   }
 
