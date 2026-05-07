@@ -2346,15 +2346,15 @@ export class SpatiallyIndexedSkeletonLayer
       ...this.source.vertexAttributes,
       selectedNodeAttribute,
     ];
-    this.chunkGeometryRenderLayerInterface = {
+    // Browse pass uses uniform-based dynamic segment color (not per-vertex attribute),
+    // so segmentColorAttributeIndex is intentionally undefined here.
       vertexAttributes: this.source.vertexAttributes,
-      segmentColorAttributeIndex: this.segmentColorAttributeIndex,
+      segmentColorAttributeIndex: undefined,
       dynamicSegmentAppearance: this.dynamicSegmentAppearance,
       gl: this.gl,
       fallbackShaderParameters: this.fallbackShaderParameters,
       displayState: this.displayState,
     };
-    this.segmentColorAttributeIndex = undefined;
     const selectedNodeIndex = this.vertexAttributes.findIndex(
       (x) => x.name === selectedNodeAttribute.name,
     );
