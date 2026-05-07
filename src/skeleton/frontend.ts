@@ -2206,17 +2206,15 @@ export class SpatiallyIndexedSkeletonLayer
       return undefined;
     }
     this.inspectionState.evictInactiveSegmentNodes(overlaySegmentIds);
-    const segmentNodeSets: SpatiallyIndexedSkeletonNode[][] = [];
+
+    // Pass 1: cheap scan to determine which segments are loaded and check cache.
     const loadedSegmentIds: number[] = [];
     for (const segmentId of overlaySegmentIds) {
-      const segmentNodes =
-        this.inspectionState.getCachedSegmentNodes(segmentId);
-      if (segmentNodes === undefined) {
+      if (this.inspectionState.getCachedSegmentNodes(segmentId) !== undefined) {
+        loadedSegmentIds.push(segmentId);
+      } else {
         this.requestOverlaySegmentLoad(segmentId);
-        continue;
       }
-      loadedSegmentIds.push(segmentId);
-      segmentNodeSets.push(segmentNodes.map((node) => node));
     }
     if (loadedSegmentIds.length === 0) {
       this.disposeOverlayChunk();
@@ -2228,6 +2226,15 @@ export class SpatiallyIndexedSkeletonLayer
       this.overlayChunkKey === overlayChunkKey
     ) {
       return this.overlayChunk;
+    }
+
+    // Pass 2: cache miss — collect node sets and rebuild geometry.
+    const segmentNodeSets: (readonly SpatiallyIndexedSkeletonNode[])[] = [];
+    for (const segmentId of loadedSegmentIds) {
+      const segmentNodes = this.inspectionState.getCachedSegmentNodes(segmentId);
+      if (segmentNodes !== undefined) {
+        segmentNodeSets.push(segmentNodes);
+      }
     }
     this.disposeOverlayChunk();
     const geometry = buildSpatiallyIndexedSkeletonOverlayGeometry(
