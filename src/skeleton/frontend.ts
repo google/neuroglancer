@@ -123,7 +123,7 @@ import {
 import { Uint64Set } from "#src/uint64_set.js";
 import { gatherUpdate } from "#src/util/array.js";
 import { hsvToRgb } from "#src/util/colorspace.js";
-import { DATA_TYPE_SIGNED, DataType } from "#src/util/data_type.js";
+import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import type { ValueOrError } from "#src/util/error.js";
 import { makeValueOrError, valueOrThrow } from "#src/util/error.js";
@@ -650,25 +650,10 @@ void emitDefault() {
               continue;
             }
             const info = vertexAttributes[i];
-            builder.addVarying(
-              `highp ${getVertexAttributeVaryingType(info)}`,
-              `vCustom${i}`,
-              getVertexAttributeInterpolationMode(info.dataType),
-            );
-            vertexMain += `vCustom${i} = ${getVertexAttributeReadExpression(i, "vertexIndex", info)};\n`;
-            if (info.dataType !== DataType.FLOAT32) {
-              builder.addFragmentCode(dataTypeShaderDefinition[info.dataType]);
-            }
-            const fragmentExpression = getVertexAttributeFragmentExpression(
-              `vCustom${i}`,
-              info,
-            );
-            builder.addFragmentCode(
-              `#define ${info.name} ${fragmentExpression}\n`,
-            );
-            builder.addFragmentCode(
-              `#define prop_${info.name}() ${fragmentExpression}\n`,
-            );
+            builder.addVarying(`highp ${info.glslDataType}`, `vCustom${i}`);
+            vertexMain += `vCustom${i} = readAttribute${i}(vertexIndex);\n`;
+            builder.addFragmentCode(`#define ${info.name} vCustom${i}\n`);
+            builder.addFragmentCode(`#define prop_${info.name}() vCustom${i}\n`);
           }
           builder.setVertexMain(vertexMain);
           addControlsToBuilder(shaderBuilderState, builder);
@@ -857,25 +842,10 @@ void emitDefault() {
               continue;
             }
             const info = vertexAttributes[i];
-            builder.addVarying(
-              `highp ${getVertexAttributeVaryingType(info)}`,
-              `vCustom${i}`,
-              getVertexAttributeInterpolationMode(info.dataType),
-            );
-            vertexMain += `vCustom${i} = ${getVertexAttributeReadExpression(i, "vertexIndex", info)};\n`;
-            if (info.dataType !== DataType.FLOAT32) {
-              builder.addFragmentCode(dataTypeShaderDefinition[info.dataType]);
-            }
-            const fragmentExpression = getVertexAttributeFragmentExpression(
-              `vCustom${i}`,
-              info,
-            );
-            builder.addFragmentCode(
-              `#define ${info.name} ${fragmentExpression}\n`,
-            );
-            builder.addFragmentCode(
-              `#define prop_${info.name}() ${fragmentExpression}\n`,
-            );
+            builder.addVarying(`highp ${info.glslDataType}`, `vCustom${i}`);
+            vertexMain += `vCustom${i} = readAttribute${i}(vertexIndex);\n`;
+            builder.addFragmentCode(`#define ${info.name} vCustom${i}\n`);
+            builder.addFragmentCode(`#define prop_${info.name}() vCustom${i}\n`);
           }
           builder.setVertexMain(vertexMain);
           addControlsToBuilder(shaderBuilderState, builder);
@@ -1514,58 +1484,6 @@ function getWebglDataType(dataType: DataType) {
   }
 }
 
-function getVertexAttributeInterpolationMode(dataType: DataType) {
-  return dataType === DataType.FLOAT32 ? "" : "flat";
-}
-
-// Custom integer wrapper types like `uint32_t` are defined in fragment code,
-// which is emitted after varying declarations. Keep varyings on raw GLSL
-// scalar/vector types and wrap them back into helper structs in fragment code.
-function getVertexAttributeVaryingType(info: VertexAttributeInfo) {
-  const { dataType, numComponents } = info;
-  if (dataType === DataType.FLOAT32) {
-    return getShaderType(dataType, numComponents);
-  }
-  if (dataType === DataType.UINT64) {
-    if (numComponents === 1) return "uvec2";
-    if (numComponents === 2) return "uvec4";
-  }
-  const vectorTypePrefix = DATA_TYPE_SIGNED[dataType] ? "ivec" : "uvec";
-  if (numComponents === 1) {
-    return DATA_TYPE_SIGNED[dataType] ? "int" : "uint";
-  }
-  if (numComponents >= 2 && numComponents <= 4) {
-    return `${vectorTypePrefix}${numComponents}`;
-  }
-  throw new Error(
-    `No varying type for ${DataType[dataType]}[${numComponents}].`,
-  );
-}
-
-function getVertexAttributeReadExpression(
-  attributeIndex: number,
-  indexExpression: string,
-  info: VertexAttributeInfo,
-) {
-  const readExpression = `readAttribute${attributeIndex}(${indexExpression})`;
-  if (info.dataType === DataType.FLOAT32) {
-    return readExpression;
-  }
-  if (info.dataType === DataType.UINT64) {
-    return `${readExpression}.value`;
-  }
-  return `toRaw(${readExpression})`;
-}
-
-function getVertexAttributeFragmentExpression(
-  varyingName: string,
-  info: VertexAttributeRenderInfo,
-) {
-  if (info.dataType === DataType.FLOAT32) {
-    return varyingName;
-  }
-  return `${info.glslDataType}(${varyingName})`;
-}
 
 const vertexPositionAttribute: VertexAttributeRenderInfo = {
   dataType: DataType.FLOAT32,
