@@ -1,4 +1,4 @@
-import { SkeletonRenderMode } from "#src/skeleton/render_mode.js";
+import { SkeletonRenderMode } from "#src/skeleton/frontend.js";
 
 export interface SkeletonModeLayerLike {
   displayState: {
