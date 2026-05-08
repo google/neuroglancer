@@ -623,37 +623,33 @@ void emitDefault() {
           builder.addFragmentCode(glsl_COLORMAPS);
           const { vertexAttributes } = this;
           const numAttributes = vertexAttributes.length;
+          // TODO (SKM): segmentAttribute is UINT32 but segments can be UINT64.
+          // Change segmentAttribute.dataType to DataType.UINT64, update vSegmentValue
+          // from `highp uint` (flat) to `highp uvec2` (flat), update
+          // getSegmentAppearanceId to take uvec2 directly, and getSegmentAppearance
+          // signature accordingly. Also pull segmentAttribute and selectedNodeAttribute
+          // out of vertexAttributes entirely (they are internal, not user-defined).
+          if (
+            skeletonParams.dynamicSegmentAppearance &&
+            this.segmentAttributeIndex !== undefined
+          ) {
+            const segInfo = vertexAttributes[this.segmentAttributeIndex];
+            builder.addFragmentCode(dataTypeShaderDefinition[segInfo.dataType]);
+            builder.addFragmentCode(
+              `#define ${segInfo.name} ${segInfo.glslDataType}(vSegmentValue)\n`,
+            );
+            builder.addFragmentCode(
+              `#define prop_${segInfo.name}() ${segInfo.glslDataType}(vSegmentValue)\n`,
+            );
+          }
           for (let i = 1; i < numAttributes; ++i) {
-            const info = vertexAttributes[i];
-            // TODO (SKM): this was widened to support uint32 and other types
-            // for the segment attribute
-            // however, the segments are actually able to be uint64
-            // so this needs to be updated to support that.
-            // When doing so, pull the segment attribute entirely out of this loop
-            // (varying declaration, vertexMain assignment, and fragment #defines)
-            // and handle it explicitly alongside the existing vSegmentValue code,
-            // so the loop becomes a clean generic-attributes-only pass with no
-            // special cases.
-            // More broadly, segmentAttribute and selectedNodeAttribute are internal
-            // system attributes, not user-defined ones, so they should not live in
-            // vertexAttributes at all. vertexAttributes should contain only
-            // user-defined (data-source) attributes; internal attributes should be
-            // declared and assigned explicitly outside the loop as first-class
-            // shader variables, making their exposure to user shader code (via
-            // #define) a deliberate decision rather than a side effect of the loop.
             if (
-              skeletonParams.dynamicSegmentAppearance &&
-              i === this.segmentAttributeIndex
+              i === this.segmentAttributeIndex ||
+              i === this.selectedNodeAttributeIndex
             ) {
-              builder.addFragmentCode(dataTypeShaderDefinition[info.dataType]);
-              builder.addFragmentCode(
-                `#define ${info.name} ${info.glslDataType}(vSegmentValue)\n`,
-              );
-              builder.addFragmentCode(
-                `#define prop_${info.name}() ${info.glslDataType}(vSegmentValue)\n`,
-              );
               continue;
             }
+            const info = vertexAttributes[i];
             builder.addVarying(
               `highp ${getVertexAttributeVaryingType(info)}`,
               `vCustom${i}`,
@@ -727,14 +723,10 @@ void emitDefault() {
           const selectedOutlineMaxWidth = this.targetIsSliceView
             ? SELECTED_NODE_OUTLINE_MAX_WIDTH_2D
             : SELECTED_NODE_OUTLINE_MAX_WIDTH_3D;
-          const selectedNodeAttributeReadExpression =
-            this.selectedNodeAttributeIndex === undefined
-              ? "0.0"
-              : `readAttribute${this.selectedNodeAttributeIndex}(vertexIndex)`;
           const selectedOutlineWidthExpression =
             this.selectedNodeAttributeIndex === undefined
               ? "0.0"
-              : `((${selectedNodeAttributeReadExpression} > 0.5) ? clamp(0.25 * uNodeDiameter, ${selectedOutlineMinWidth}, ${selectedOutlineMaxWidth}) : 0.0)`;
+              : `((vSelectedNode > 0.5) ? clamp(0.25 * uNodeDiameter, ${selectedOutlineMinWidth}, ${selectedOutlineMaxWidth}) : 0.0)`;
           let vertexMain = `
 highp uint vertexIndex = uint(gl_InstanceID);
 highp uint pickOffset = vertexIndex * uPickInstanceStride;
@@ -752,6 +744,10 @@ emitCircle(
           ) {
             vertexMain += `vSegmentValue = toRaw(readAttribute${this.segmentAttributeIndex}(vertexIndex));\n`;
           }
+          if (this.selectedNodeAttributeIndex !== undefined) {
+            builder.addVarying("highp float", "vSelectedNode", "flat");
+            vertexMain += `vSelectedNode = readAttribute${this.selectedNodeAttributeIndex}(vertexIndex);\n`;
+          }
 
           const segmentColorExpression = this.getSegmentColorExpression();
           if (
@@ -762,7 +758,7 @@ emitCircle(
             const selectedNodeExpression =
               this.selectedNodeAttributeIndex === undefined
                 ? undefined
-                : `vCustom${this.selectedNodeAttributeIndex}`;
+                : "vSelectedNode";
             const borderColorExpression =
               selectedNodeExpression === undefined
                 ? "renderColor"
@@ -814,7 +810,7 @@ void emitDefault() {
             const selectedNodeExpression =
               this.selectedNodeAttributeIndex === undefined
                 ? undefined
-                : `vCustom${this.selectedNodeAttributeIndex}`;
+                : "vSelectedNode";
             const borderColorExpression =
               selectedNodeExpression === undefined
                 ? "renderColor"
@@ -840,21 +836,27 @@ void emitDefault() {
           builder.addFragmentCode(glsl_COLORMAPS);
           const { vertexAttributes } = this;
           const numAttributes = vertexAttributes.length;
+          if (
+            skeletonParams.dynamicSegmentAppearance &&
+            this.segmentAttributeIndex !== undefined
+          ) {
+            const segInfo = vertexAttributes[this.segmentAttributeIndex];
+            builder.addFragmentCode(dataTypeShaderDefinition[segInfo.dataType]);
+            builder.addFragmentCode(
+              `#define ${segInfo.name} ${segInfo.glslDataType}(vSegmentValue)\n`,
+            );
+            builder.addFragmentCode(
+              `#define prop_${segInfo.name}() ${segInfo.glslDataType}(vSegmentValue)\n`,
+            );
+          }
           for (let i = 1; i < numAttributes; ++i) {
-            const info = vertexAttributes[i];
             if (
-              skeletonParams.dynamicSegmentAppearance &&
-              i === this.segmentAttributeIndex
+              i === this.segmentAttributeIndex ||
+              i === this.selectedNodeAttributeIndex
             ) {
-              builder.addFragmentCode(dataTypeShaderDefinition[info.dataType]);
-              builder.addFragmentCode(
-                `#define ${info.name} ${info.glslDataType}(vSegmentValue)\n`,
-              );
-              builder.addFragmentCode(
-                `#define prop_${info.name}() ${info.glslDataType}(vSegmentValue)\n`,
-              );
               continue;
             }
+            const info = vertexAttributes[i];
             builder.addVarying(
               `highp ${getVertexAttributeVaryingType(info)}`,
               `vCustom${i}`,
