@@ -55,6 +55,8 @@ const CATMAID_NO_MATCHING_NODE_PROVIDER_ERROR =
 const CATMAID_STATE_MATCHING_ERROR_TYPE = "StateMatchingError";
 
 type CatmaidStatePayload = object;
+type CatmaidFetchPriority = "high" | "low" | "auto";
+type CatmaidRequestInit = RequestInit & { priority?: CatmaidFetchPriority };
 
 export type CatmaidNodeSourceState = { readonly revisionToken: string };
 
@@ -1117,7 +1119,7 @@ function parseCatmaidDeleteRevisionUpdates(
 function fetchWithCatmaidCredentials(
   credentialsProvider: CredentialsProvider<CatmaidToken>,
   input: string,
-  init: RequestInit,
+  init: CatmaidRequestInit,
 ): Promise<Response> {
   return fetchOkWithCredentials(
     credentialsProvider,
@@ -1174,7 +1176,7 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
 
   private async fetch(
     endpoint: string,
-    options: RequestInit = {},
+    options: CatmaidRequestInit = {},
     expectMsgpack: boolean = false,
   ): Promise<any> {
     // Ensure baseUrl doesn't have trailing slash and endpoint doesn't have leading slash
@@ -1455,7 +1457,7 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     try {
       data = await this.fetch(
         `node/list?${params.toString()}`,
-        { signal },
+        { signal, priority: "low" },
         true,
       );
     } catch (error) {
