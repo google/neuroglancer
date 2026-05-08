@@ -66,6 +66,9 @@ import type { SpatialSkeletonEditCommandFactory } from "#src/skeleton/edit_comma
 import {
   findSpatiallyIndexedSkeletonNode,
   getSpatiallyIndexedSkeletonDirectChildren,
+  getSpatiallyIndexedSkeletonNodeParent,
+  getSpatiallyIndexedSkeletonPathToRoot,
+  getSpatiallyIndexedSkeletonSubtreeNodes,
 } from "#src/skeleton/edit_state.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/frontend.js";
 import { getEditableSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial_skeleton_manager.js";
@@ -113,6 +116,7 @@ interface CatmaidSpatialSkeletonNodeConfidenceCommandOptions {
 interface CatmaidSpatialSkeletonMergeEndpoint {
   nodeId: number;
   segmentId: number;
+  position?: SpatialSkeletonVector;
   sourceState?: SpatialSkeletonSourceState;
 }
 
@@ -216,9 +220,13 @@ function isCatmaidMergeEndpoint(
   const candidate = value as {
     nodeId?: number;
     segmentId?: number;
+    position?: object;
   };
   return (
-    isFiniteNumber(candidate.nodeId) && isFiniteNumber(candidate.segmentId)
+    isFiniteNumber(candidate.nodeId) &&
+    isFiniteNumber(candidate.segmentId) &&
+    (candidate.position === undefined ||
+      isSpatialSkeletonVector(candidate.position))
   );
 }
 
@@ -558,6 +566,93 @@ interface ResolvedSpatialSkeletonEditNodeContext {
   skeletonLayer: SpatiallyIndexedSkeletonLayer;
 }
 
+type CatmaidSkeletonRootNodeSource = Pick<CatmaidClient, "getSkeletonRootNode">;
+
+function collectUniqueNodePositions(
+  ...nodeSets: readonly (readonly (
+    | SpatiallyIndexedSkeletonNode
+    | undefined
+  )[])[]
+) {
+  const positions: ArrayLike<number>[] = [];
+  const seenNodeIds = new Set<number>();
+  for (const nodeSet of nodeSets) {
+    for (const node of nodeSet) {
+      if (node === undefined || seenNodeIds.has(node.nodeId)) {
+        continue;
+      }
+      seenNodeIds.add(node.nodeId);
+      positions.push(node.position);
+    }
+  }
+  return positions;
+}
+
+function getSplitAffectedNodes(resolvedNode: ResolvedSpatialSkeletonEditNode) {
+  const subtreeNodes = getSpatiallyIndexedSkeletonSubtreeNodes(
+    resolvedNode.segmentNodes,
+    resolvedNode.node.nodeId,
+  );
+  if (subtreeNodes.length === 0) {
+    return resolvedNode.segmentNodes;
+  }
+  return [
+    ...subtreeNodes,
+    getSpatiallyIndexedSkeletonNodeParent(
+      resolvedNode.segmentNodes,
+      resolvedNode.node,
+    ),
+  ];
+}
+
+function getSegmentNodesBySegmentId(
+  segmentId: number | undefined,
+  ...resolvedNodes: readonly ResolvedSpatialSkeletonEditNode[]
+) {
+  if (segmentId === undefined) {
+    return undefined;
+  }
+  for (const resolvedNode of resolvedNodes) {
+    if (resolvedNode.node.segmentId === segmentId) {
+      return resolvedNode.segmentNodes;
+    }
+  }
+  return undefined;
+}
+
+function getMergeAffectedPositions(
+  deletedSegmentId: number | undefined,
+  firstNode: ResolvedSpatialSkeletonEditNode,
+  secondNode: ResolvedSpatialSkeletonEditNode,
+) {
+  const deletedSegmentNodes = getSegmentNodesBySegmentId(
+    deletedSegmentId,
+    firstNode,
+    secondNode,
+  );
+  if (deletedSegmentNodes === undefined) {
+    return collectUniqueNodePositions(
+      firstNode.segmentNodes,
+      secondNode.segmentNodes,
+    );
+  }
+  return collectUniqueNodePositions(deletedSegmentNodes, [
+    firstNode.node,
+    secondNode.node,
+  ]);
+}
+
+function getCatmaidSkeletonRootNodeSource(
+  skeletonLayer: SpatiallyIndexedSkeletonLayer,
+): CatmaidSkeletonRootNodeSource | undefined {
+  const skeletonSource = getEditableSpatiallyIndexedSkeletonSource(
+    skeletonLayer,
+  ) as Partial<CatmaidSkeletonRootNodeSource> | undefined;
+  return typeof skeletonSource?.getSkeletonRootNode === "function"
+    ? (skeletonSource as CatmaidSkeletonRootNodeSource)
+    : undefined;
+}
+
 function getResolvedNodeContextForEdit(
   layer: SegmentationUserLayer,
   stableNodeId: number,
@@ -621,7 +716,9 @@ async function getResolvedNodeForEdit(
 async function refreshTopologySegments(
   layer: SegmentationUserLayer,
   segmentIds: readonly number[],
+  affectedPositions: Iterable<ArrayLike<number>>,
 ) {
+  const preRefreshPositions = [...affectedPositions];
   const normalizedSegmentIds = [
     ...new Set(
       segmentIds.filter((value) => Number.isSafeInteger(Math.round(value))),
@@ -631,11 +728,11 @@ async function refreshTopologySegments(
     return;
   }
   const { skeletonLayer } = getEditableSkeletonSourceForLayer(layer);
+  skeletonLayer.invalidateSourceCellsForPositions(preRefreshPositions);
   layer.spatialSkeletonState.invalidateCachedSegments(normalizedSegmentIds);
   layer.markSpatialSkeletonNodeDataChanged({
     invalidateFullSkeletonCache: false,
   });
-  skeletonLayer.invalidateSourceCaches();
   await Promise.allSettled(
     normalizedSegmentIds.map((segmentId) =>
       layer.spatialSkeletonState.getFullSegmentNodes(skeletonLayer, segmentId),
@@ -752,6 +849,21 @@ function applyDeleteNodeToCache(
   layer.markSpatialSkeletonNodeDataChanged({
     invalidateFullSkeletonCache: false,
   });
+}
+
+function invalidateDeletedNodeSourceCells(
+  skeletonLayer: SpatiallyIndexedSkeletonLayer,
+  deleteContext: {
+    node: SpatiallyIndexedSkeletonNode;
+    parentNode: SpatiallyIndexedSkeletonNode | undefined;
+    childNodes: readonly SpatiallyIndexedSkeletonNode[];
+  },
+) {
+  skeletonLayer.invalidateSourceCellsForPositions([
+    deleteContext.node.position,
+    deleteContext.parentNode?.position,
+    ...deleteContext.childNodes.map((child) => child.position),
+  ]);
 }
 
 async function applyNodeDescriptionAndTrueEnd(
@@ -1099,7 +1211,7 @@ class InsertNodeCommand implements SpatialSkeletonCommand {
       { moveView: false },
       result.nodeSourceStateUpdates,
     );
-    resolvedNode.skeletonLayer.invalidateSourceCaches();
+    invalidateDeletedNodeSourceCells(resolvedNode.skeletonLayer, deleteContext);
     StatusMessage.showTemporaryMessage(
       `${statusPrefix} inserted node ${resolvedNode.node.nodeId}.`,
     );
@@ -1237,7 +1349,7 @@ class DeleteNodeCommand implements SpatialSkeletonCommand {
       { moveView: options.moveView },
       result.nodeSourceStateUpdates,
     );
-    resolvedNode.skeletonLayer.invalidateSourceCaches();
+    invalidateDeletedNodeSourceCells(resolvedNode.skeletonLayer, deleteContext);
     StatusMessage.showTemporaryMessage(
       `${options.statusPrefix} node ${resolvedNode.node.nodeId}.`,
     );
@@ -1713,7 +1825,11 @@ class SplitCommand implements SpatialSkeletonCommand {
         segmentNodes: resolvedNode.segmentNodes,
       });
     } catch (error) {
-      await refreshTopologySegments(this.layer, [resolvedNode.node.segmentId]);
+      await refreshTopologySegments(
+        this.layer,
+        [resolvedNode.node.segmentId],
+        collectUniqueNodePositions(resolvedNode.segmentNodes),
+      );
       throw error;
     }
     const newSkeletonId = result.newSegmentId;
@@ -1748,10 +1864,11 @@ class SplitCommand implements SpatialSkeletonCommand {
         segmentId: newSkeletonId,
       },
     );
-    await refreshTopologySegments(this.layer, [
-      existingSkeletonId,
-      newSkeletonId,
-    ]);
+    await refreshTopologySegments(
+      this.layer,
+      [existingSkeletonId, newSkeletonId],
+      collectUniqueNodePositions(getSplitAffectedNodes(resolvedNode)),
+    );
     StatusMessage.showTemporaryMessage(
       `${statusPrefix} skeleton ${existingSkeletonId}. New skeleton: ${newSkeletonId}.`,
     );
@@ -1778,10 +1895,14 @@ class SplitCommand implements SpatialSkeletonCommand {
         toNode: splitNode.node,
       });
     } catch (error) {
-      await refreshTopologySegments(this.layer, [
-        splitNode.node.segmentId,
-        formerParent.node.segmentId,
-      ]);
+      await refreshTopologySegments(
+        this.layer,
+        [splitNode.node.segmentId, formerParent.node.segmentId],
+        collectUniqueNodePositions(
+          splitNode.segmentNodes,
+          formerParent.segmentNodes,
+        ),
+      );
       throw error;
     }
     const resultSkeletonId =
@@ -1818,10 +1939,15 @@ class SplitCommand implements SpatialSkeletonCommand {
         segmentId: resultSkeletonId,
       },
     );
-    await refreshTopologySegments(this.layer, [
-      resultSkeletonId,
-      deletedSkeletonId,
-    ]);
+    await refreshTopologySegments(
+      this.layer,
+      [resultSkeletonId, deletedSkeletonId],
+      getMergeAffectedPositions(
+        result.deletedSegmentId,
+        splitNode,
+        formerParent,
+      ),
+    );
     StatusMessage.showTemporaryMessage(
       `${statusPrefix} split at node ${splitNode.node.nodeId}.`,
     );
@@ -1853,8 +1979,84 @@ class MergeCommand implements SpatialSkeletonCommand {
     private stableFirstSegmentId: number | undefined,
     private stableSecondNodeId: number,
     private stableSecondSegmentId: number | undefined,
+    private secondNodeSourceState: SpatialSkeletonSourceState | undefined,
+    private secondNodePositionInModelSpace: Float32Array | undefined,
     private editOperations: CatmaidSpatialSkeletonEditOperations,
   ) {}
+
+  private async resolveSecondNodeForMerge() {
+    const secondNodeContext = getResolvedNodeContextForEdit(
+      this.layer,
+      this.stableSecondNodeId,
+      this.stableSecondSegmentId,
+    );
+    const secondSegmentNodes =
+      this.layer.spatialSkeletonState.getCachedSegmentNodes(
+        secondNodeContext.segmentId,
+      );
+    const secondSourceState =
+      secondNodeContext.cachedNode?.sourceState ?? this.secondNodeSourceState;
+    if (secondSegmentNodes !== undefined || secondSourceState === undefined) {
+      return getResolvedNodeForEdit(
+        this.layer,
+        this.stableSecondNodeId,
+        this.stableSecondSegmentId,
+      );
+    }
+
+    const rootNodeSource = getCatmaidSkeletonRootNodeSource(
+      secondNodeContext.skeletonLayer,
+    );
+    if (rootNodeSource === undefined) {
+      return getResolvedNodeForEdit(
+        this.layer,
+        this.stableSecondNodeId,
+        this.stableSecondSegmentId,
+      );
+    }
+
+    const rootTarget = await rootNodeSource.getSkeletonRootNode(
+      secondNodeContext.segmentId,
+    );
+    const cachedPosition = secondNodeContext.cachedNode?.position;
+    const endpointPosition =
+      cachedPosition === undefined
+        ? (this.secondNodePositionInModelSpace ?? new Float32Array(3))
+        : toCatmaidPositionInModelSpace(
+            cachedPosition,
+            "merge second-node position",
+          );
+    const node: SpatiallyIndexedSkeletonNode = {
+      nodeId: secondNodeContext.currentNodeId,
+      segmentId: secondNodeContext.segmentId,
+      position: new Float32Array(endpointPosition),
+      parentNodeId: secondNodeContext.cachedNode?.parentNodeId,
+      isTrueEnd: secondNodeContext.cachedNode?.isTrueEnd ?? false,
+      sourceState: secondSourceState,
+    };
+    const segmentNodes: SpatiallyIndexedSkeletonNode[] = [];
+    if (rootTarget.nodeId === node.nodeId) {
+      node.parentNodeId = undefined;
+      segmentNodes.push(node);
+    } else {
+      segmentNodes.push({
+        nodeId: rootTarget.nodeId,
+        segmentId: secondNodeContext.segmentId,
+        position: toCatmaidPositionInModelSpace(
+          rootTarget.position,
+          "merge second-segment root position",
+        ),
+        parentNodeId: undefined,
+        isTrueEnd: false,
+      });
+      segmentNodes.push(node);
+    }
+    return {
+      skeletonLayer: secondNodeContext.skeletonLayer,
+      segmentNodes,
+      node,
+    };
+  }
 
   private async merge(statusPrefix: string) {
     const firstNode = await getResolvedNodeForEdit(
@@ -1862,11 +2064,7 @@ class MergeCommand implements SpatialSkeletonCommand {
       this.stableFirstNodeId,
       this.stableFirstSegmentId,
     );
-    const secondNode = await getResolvedNodeForEdit(
-      this.layer,
-      this.stableSecondNodeId,
-      this.stableSecondSegmentId,
-    );
+    const secondNode = await this.resolveSecondNodeForMerge();
     let result: CatmaidSpatialSkeletonMergeResult;
     try {
       result = await this.editOperations.commitMerge({
@@ -1874,10 +2072,14 @@ class MergeCommand implements SpatialSkeletonCommand {
         toNode: secondNode.node,
       });
     } catch (error) {
-      await refreshTopologySegments(this.layer, [
-        firstNode.node.segmentId,
-        secondNode.node.segmentId,
-      ]);
+      await refreshTopologySegments(
+        this.layer,
+        [firstNode.node.segmentId, secondNode.node.segmentId],
+        collectUniqueNodePositions(
+          firstNode.segmentNodes,
+          secondNode.segmentNodes,
+        ),
+      );
       throw error;
     }
     const winningNode =
@@ -1935,10 +2137,11 @@ class MergeCommand implements SpatialSkeletonCommand {
       firstNode.skeletonLayer.suppressBrowseSegment(deletedSkeletonId);
     }
     this.layer.clearSpatialSkeletonMergeAnchor();
-    await refreshTopologySegments(this.layer, [
-      resultSkeletonId,
-      deletedSkeletonId,
-    ]);
+    await refreshTopologySegments(
+      this.layer,
+      [resultSkeletonId, deletedSkeletonId],
+      getMergeAffectedPositions(result.deletedSegmentId, firstNode, secondNode),
+    );
     const swapSuffix = result.directionAdjusted
       ? " Merge direction was adjusted by the active source."
       : "";
@@ -1966,7 +2169,11 @@ class MergeCommand implements SpatialSkeletonCommand {
         segmentNodes: attachedNode.segmentNodes,
       });
     } catch (error) {
-      await refreshTopologySegments(this.layer, [attachedNode.node.segmentId]);
+      await refreshTopologySegments(
+        this.layer,
+        [attachedNode.node.segmentId],
+        collectUniqueNodePositions(attachedNode.segmentNodes),
+      );
       throw error;
     }
     const restoredSegmentId =
@@ -1984,36 +2191,49 @@ class MergeCommand implements SpatialSkeletonCommand {
       splitResult.existingSegmentId ?? attachedNode.node.segmentId;
     ensureVisibleSegment(this.layer, survivingSegmentId);
     ensureVisibleSegment(this.layer, restoredSegmentId);
-    await refreshTopologySegments(this.layer, [
-      survivingSegmentId,
-      restoredSegmentId,
-    ]);
+    const attachedSplitAffectedPositions = collectUniqueNodePositions(
+      getSplitAffectedNodes(attachedNode),
+    );
+    await refreshTopologySegments(
+      this.layer,
+      [survivingSegmentId, restoredSegmentId],
+      attachedSplitAffectedPositions,
+    );
     let rerootWarning: string | undefined;
     if (
       this.stableAttachedRootNodeId !== undefined &&
       this.stableAttachedRootNodeId !== this.stableAttachedNodeId
     ) {
+      let rerootAffectedPositions = attachedSplitAffectedPositions;
       try {
         const restoredRoot = await getResolvedNodeForEdit(
           this.layer,
           this.stableAttachedRootNodeId,
           this.stableDeletedSegmentId,
         );
+        rerootAffectedPositions = collectUniqueNodePositions(
+          getSpatiallyIndexedSkeletonPathToRoot(
+            restoredRoot.segmentNodes,
+            restoredRoot.node,
+          ),
+        );
         if (restoredRoot.node.parentNodeId !== undefined) {
           await this.editOperations.commitReroot({
             node: restoredRoot.node,
             segmentNodes: restoredRoot.segmentNodes,
           });
-          await refreshTopologySegments(this.layer, [
-            survivingSegmentId,
-            restoredSegmentId,
-          ]);
+          await refreshTopologySegments(
+            this.layer,
+            [survivingSegmentId, restoredSegmentId],
+            rerootAffectedPositions,
+          );
         }
       } catch (error) {
-        await refreshTopologySegments(this.layer, [
-          survivingSegmentId,
-          restoredSegmentId,
-        ]);
+        await refreshTopologySegments(
+          this.layer,
+          [survivingSegmentId, restoredSegmentId],
+          rerootAffectedPositions,
+        );
         rerootWarning =
           `Undo split the merged skeletons, but failed to reroot the restored skeleton. ` +
           `Only the split completed. ${formatErrorMessage(error)}`;
@@ -2532,6 +2752,13 @@ export class CatmaidSpatialSkeletonEditCommands {
       commandMappings.getStableOrCurrentSegmentId(firstNode.segmentId),
       commandMappings.getStableOrCurrentNodeId(secondNode.nodeId)!,
       commandMappings.getStableOrCurrentSegmentId(secondNode.segmentId),
+      secondNode.sourceState,
+      secondNode.position === undefined
+        ? undefined
+        : toCatmaidPositionInModelSpace(
+            secondNode.position,
+            "merge second-node position",
+          ),
       this.editOperations,
     );
   }

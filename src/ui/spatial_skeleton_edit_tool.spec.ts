@@ -178,7 +178,6 @@ describe("spatial_skeleton_edit_tool", () => {
         nodeId === parentNode.nodeId ? parentNode : undefined,
       ),
       retainOverlaySegment: vi.fn(),
-      invalidateSourceCaches: vi.fn(),
     };
     const commandHistory = new SpatialSkeletonCommandHistory();
     const visibleSegmentsState = makeVisibleSegmentsState();
@@ -262,7 +261,6 @@ describe("spatial_skeleton_edit_tool", () => {
       invalidateFullSkeletonCache: false,
     });
     expect(getFullSegmentNodes).not.toHaveBeenCalled();
-    expect(skeletonLayer.invalidateSourceCaches).not.toHaveBeenCalled();
   });
 
   it("seeds root add-node commits locally without overlay retention or refetching chunks", async () => {
@@ -283,7 +281,6 @@ describe("spatial_skeleton_edit_tool", () => {
       source: makeEditableSkeletonSource({ addNode }),
       getNode: vi.fn(),
       retainOverlaySegment: vi.fn(),
-      invalidateSourceCaches: vi.fn(),
     };
     const commandHistory = new SpatialSkeletonCommandHistory();
     const visibleSegmentsState = makeVisibleSegmentsState();
@@ -351,7 +348,6 @@ describe("spatial_skeleton_edit_tool", () => {
       invalidateFullSkeletonCache: false,
     });
     expect(getFullSegmentNodes).not.toHaveBeenCalled();
-    expect(skeletonLayer.invalidateSourceCaches).not.toHaveBeenCalled();
   });
 
   it("blocks appending a child to a selected true-end node", () => {
@@ -431,7 +427,7 @@ describe("spatial_skeleton_edit_tool", () => {
         return undefined;
       }),
       suppressBrowseSegment: vi.fn(),
-      invalidateSourceCaches: vi.fn(),
+      invalidateSourceCellsForPositions: vi.fn(),
     };
     const commandHistory = new SpatialSkeletonCommandHistory();
     const visibleSegmentsState = makeVisibleSegmentsState([11n, 17n]);
@@ -506,7 +502,9 @@ describe("spatial_skeleton_edit_tool", () => {
     });
     expect(visibleSegmentsState.visibleSegments.has(17n)).toBe(true);
     expect(visibleSegmentsState.visibleSegments.has(11n)).toBe(false);
-    expect(skeletonLayer.invalidateSourceCaches).toHaveBeenCalledTimes(1);
+    expect(
+      skeletonLayer.invalidateSourceCellsForPositions,
+    ).toHaveBeenCalledWith([firstNode.position, secondNode.position]);
     expect(clearSpatialSkeletonMergeAnchor).toHaveBeenCalledTimes(1);
   });
 

@@ -1249,11 +1249,13 @@ class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
               {
                 nodeId: firstNode.nodeId,
                 segmentId: firstNode.segmentId!,
+                position: firstNode.position,
                 sourceState: firstNode.sourceState,
               },
               {
                 nodeId: secondNode.nodeId,
                 segmentId: secondNode.segmentId!,
+                position: secondNode.position,
                 sourceState: secondNode.sourceState,
               },
             );

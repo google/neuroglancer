@@ -638,8 +638,8 @@ function normalizeBoundingBoxForNodeList(bounds: SpatialSkeletonBounds) {
   const top = Math.floor(minY);
   const z1 = Math.floor(minZ);
 
-  // CATMAID treats right/bottom as inclusive and z2 as exclusive for grid-cell index filtering.
-  // Use ceil and ensure a positive extent on each axis.
+  // CATMAID node-list bounds are half-open: [left,right) x [top,bottom) x [z1,z2).
+  // Use ceil for exclusive upper bounds and ensure a positive extent on each axis.
   const right = Math.max(left + 1, Math.ceil(maxX));
   const bottom = Math.max(top + 1, Math.ceil(maxY));
   const z2 = Math.max(z1 + 1, Math.ceil(maxZ));

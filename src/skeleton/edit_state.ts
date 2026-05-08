@@ -16,6 +16,53 @@ export function getSpatiallyIndexedSkeletonDirectChildren(
     .sort((a, b) => a.nodeId - b.nodeId);
 }
 
+export function getSpatiallyIndexedSkeletonSubtreeNodes(
+  segmentNodes: readonly SpatiallyIndexedSkeletonNode[],
+  rootNodeId: number,
+) {
+  const childrenByParent = new Map<number, SpatiallyIndexedSkeletonNode[]>();
+  let rootNode: SpatiallyIndexedSkeletonNode | undefined;
+  for (const node of segmentNodes) {
+    if (node.nodeId === rootNodeId) {
+      rootNode = node;
+    }
+    const parentNodeId = node.parentNodeId;
+    if (parentNodeId === undefined) {
+      continue;
+    }
+    let children = childrenByParent.get(parentNodeId);
+    if (children === undefined) {
+      children = [];
+      childrenByParent.set(parentNodeId, children);
+    }
+    children.push(node);
+  }
+  if (rootNode === undefined) {
+    return [];
+  }
+
+  const subtreeNodes: SpatiallyIndexedSkeletonNode[] = [];
+  const visitedNodeIds = new Set<number>();
+  const stack = [rootNode];
+  while (stack.length !== 0) {
+    const node = stack.pop()!;
+    if (visitedNodeIds.has(node.nodeId)) {
+      continue;
+    }
+    visitedNodeIds.add(node.nodeId);
+    subtreeNodes.push(node);
+
+    const children = childrenByParent.get(node.nodeId);
+    if (children === undefined) {
+      continue;
+    }
+    for (let i = children.length - 1; i >= 0; --i) {
+      stack.push(children[i]);
+    }
+  }
+  return subtreeNodes;
+}
+
 export function getSpatiallyIndexedSkeletonNodeParent(
   segmentNodes: readonly SpatiallyIndexedSkeletonNode[],
   node: SpatiallyIndexedSkeletonNode,
