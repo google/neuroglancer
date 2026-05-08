@@ -6,6 +6,10 @@ import {
   executeSpatialSkeletonAddNode,
   executeSpatialSkeletonMerge,
 } from "#src/layer/segmentation/spatial_skeleton_commands.js";
+import {
+  SpatialSkeletonActions,
+  type SpatialSkeletonAction,
+} from "#src/skeleton/actions.js";
 import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
 import { SpatialSkeletonCommandHistory } from "#src/skeleton/command_history.js";
 import { setSpatialSkeletonModesToLinesAndPoints } from "#src/skeleton/edit_mode_rendering.js";
@@ -29,6 +33,8 @@ if (!("WebGL2RenderingContext" in globalThis)) {
 const { SpatialSkeletonEditModeTool } = await import(
   "#src/ui/spatial_skeleton_edit_tool.js"
 );
+const { SpatialSkeletonMergeModeTool, SpatialSkeletonSplitModeTool } =
+  await import("#src/ui/spatial_skeleton_edit_tool.js");
 
 function makeVisibleSegmentsState(initialVisibleSegments: bigint[] = []) {
   return {
@@ -123,6 +129,122 @@ function suppressStatusMessages() {
   vi.spyOn(StatusMessage, "showMessage").mockImplementation(
     (_message: string) => fakeStatusMessage,
   );
+}
+
+function makeChangedSignal() {
+  return {
+    add: vi.fn((_listener: () => void) => () => {}),
+  };
+}
+
+function makeManualChangedSignal() {
+  const listeners: Array<() => void> = [];
+  return {
+    add: vi.fn((listener: () => void) => {
+      listeners.push(listener);
+      return () => {
+        const index = listeners.indexOf(listener);
+        if (index !== -1) {
+          listeners.splice(index, 1);
+        }
+      };
+    }),
+    dispatch() {
+      for (const listener of listeners.slice()) {
+        listener();
+      }
+    },
+  };
+}
+
+function makeModeWatchable(value = false) {
+  return { value };
+}
+
+function makeSkeletonRenderingOptions() {
+  return {
+    skeletonRenderingOptions: {
+      params2d: { mode: { value: SkeletonRenderMode.LINES } },
+      params3d: { mode: { value: SkeletonRenderMode.LINES } },
+    },
+  };
+}
+
+function makeToolActivation() {
+  const disposers: unknown[] = [];
+  const actions = new Map<string, (event: any) => void>();
+  const activation = {
+    inputEventMapBinder: vi.fn(),
+    bindInputEventMap(inputEventMap: unknown) {
+      this.inputEventMapBinder(inputEventMap, this);
+    },
+    bindAction: vi.fn((action: string, handler: (event: any) => void) => {
+      actions.set(action, handler);
+    }),
+    registerDisposer(disposer: unknown) {
+      disposers.push(disposer);
+      return disposer;
+    },
+    cancel: vi.fn(),
+  };
+  const dispose = () => {
+    for (const disposer of disposers.reverse()) {
+      if (typeof disposer === "function") {
+        disposer();
+      } else {
+        (disposer as { dispose?: () => void }).dispose?.();
+      }
+    }
+  };
+  return { activation, actions, dispose };
+}
+
+function makeCommandFactory(
+  action: SpatialSkeletonAction,
+  execute = vi.fn(async () => {}),
+) {
+  return {
+    action,
+    createCommand: vi.fn(() => ({
+      label: action,
+      execute,
+      undo: vi.fn(async () => {}),
+    })),
+  };
+}
+
+function makeCommandSkeletonSource(overrides: Record<string, unknown> = {}) {
+  return {
+    readonly: false,
+    addNodesCommand: makeCommandFactory(SpatialSkeletonActions.addNodes),
+    insertNodesCommand: makeCommandFactory(SpatialSkeletonActions.insertNodes),
+    moveNodesCommand: makeCommandFactory(SpatialSkeletonActions.moveNodes),
+    deleteNodesCommand: makeCommandFactory(SpatialSkeletonActions.deleteNodes),
+    rerootCommand: makeCommandFactory(SpatialSkeletonActions.reroot),
+    editNodeDescriptionCommand: makeCommandFactory(
+      SpatialSkeletonActions.editNodeDescription,
+    ),
+    editNodeTrueEndCommand: makeCommandFactory(
+      SpatialSkeletonActions.editNodeTrueEnd,
+    ),
+    editNodeRadiusCommand: makeCommandFactory(
+      SpatialSkeletonActions.editNodeRadius,
+    ),
+    editNodeConfidenceCommand: makeCommandFactory(
+      SpatialSkeletonActions.editNodeConfidence,
+    ),
+    mergeSkeletonsCommand: makeCommandFactory(
+      SpatialSkeletonActions.mergeSkeletons,
+    ),
+    splitSkeletonsCommand: makeCommandFactory(
+      SpatialSkeletonActions.splitSkeletons,
+    ),
+    listSkeletons: vi.fn(),
+    getSkeleton: vi.fn(),
+    fetchNodes: vi.fn(),
+    getSpatialIndexMetadata: vi.fn(),
+    ...overrides,
+  };
 }
 
 describe("spatial_skeleton_edit_tool", () => {
@@ -561,5 +683,282 @@ describe("spatial_skeleton_edit_tool", () => {
     );
     expect(clearSpatialSkeletonMergeAnchor).toHaveBeenCalledTimes(1);
     expect(unpin).not.toHaveBeenCalled();
+  });
+
+  it("uses an existing selected node as the merge anchor when merge mode activates", () => {
+    suppressStatusMessages();
+    const selectedNode = {
+      nodeId: 101,
+      segmentId: 11,
+      position: new Float32Array([1, 2, 3]),
+      sourceState: testSourceState("selected-before"),
+    };
+    const mergeAnchorNodeId = {
+      value: undefined as number | undefined,
+      changed: makeChangedSignal(),
+    };
+    const selectSpatialSkeletonNode = vi.fn();
+    const setSpatialSkeletonMergeAnchor = vi.fn((nodeId: number) => {
+      mergeAnchorNodeId.value = nodeId;
+      return true;
+    });
+    const clearSpatialSkeletonMergeAnchor = vi.fn(() => {
+      mergeAnchorNodeId.value = undefined;
+      return true;
+    });
+    const clearSpatialSkeletonNodeSelection = vi.fn();
+    const skeletonLayer = {
+      getNode: vi.fn((nodeId: number) =>
+        nodeId === selectedNode.nodeId ? selectedNode : undefined,
+      ),
+    };
+    const layer = {
+      displayState: {
+        ...makeSkeletonRenderingOptions(),
+        segmentationGroupState: {
+          value: makeVisibleSegmentsState([11n]),
+        },
+      },
+      spatialSkeletonMergeMode: makeModeWatchable(),
+      selectedSpatialSkeletonNodeId: {
+        value: selectedNode.nodeId,
+        changed: makeChangedSignal(),
+      },
+      selectedSpatialSkeletonNodeInfo: { value: selectedNode },
+      spatialSkeletonState: {
+        mergeAnchorNodeId,
+        getCachedNode: vi.fn(),
+      },
+      manager: {
+        root: {
+          layerSelectedValues: {
+            mouseState: {
+              pickedRenderLayer: undefined,
+              updateUnconditionally: vi.fn(() => true),
+              active: true,
+            },
+          },
+          selectionState: {
+            value: undefined,
+          },
+        },
+      },
+      getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
+      getSpatialSkeletonActionsDisabledReason: vi.fn(() => undefined),
+      selectSpatialSkeletonNode,
+      setSpatialSkeletonMergeAnchor,
+      clearSpatialSkeletonMergeAnchor,
+      clearSpatialSkeletonNodeSelection,
+      layersChanged: makeChangedSignal(),
+    };
+    const { activation, dispose } = makeToolActivation();
+    const tool = Object.assign(
+      Object.create(SpatialSkeletonMergeModeTool.prototype),
+      { layer },
+    );
+
+    try {
+      SpatialSkeletonMergeModeTool.prototype.activate.call(
+        tool,
+        activation as any,
+      );
+
+      expect(selectSpatialSkeletonNode).toHaveBeenCalledWith(
+        selectedNode.nodeId,
+        true,
+        selectedNode,
+      );
+      expect(setSpatialSkeletonMergeAnchor).toHaveBeenCalledWith(
+        selectedNode.nodeId,
+      );
+      expect(clearSpatialSkeletonNodeSelection).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it("clears the merge anchor when a pick clears the selected node", () => {
+    suppressStatusMessages();
+    const selectedNode = {
+      nodeId: 101,
+      segmentId: 11,
+      position: new Float32Array([1, 2, 3]),
+      sourceState: testSourceState("selected-before"),
+    };
+    const selectedNodeChanged = makeManualChangedSignal();
+    const mergeAnchorNodeId = {
+      value: undefined as number | undefined,
+      changed: makeChangedSignal(),
+    };
+    const selectSegment = vi.fn();
+    const setSpatialSkeletonMergeAnchor = vi.fn((nodeId: number) => {
+      mergeAnchorNodeId.value = nodeId;
+      return true;
+    });
+    const clearSpatialSkeletonMergeAnchor = vi.fn(() => {
+      mergeAnchorNodeId.value = undefined;
+      return true;
+    });
+    const skeletonLayer = {
+      getNode: vi.fn((nodeId: number) =>
+        nodeId === selectedNode.nodeId ? selectedNode : undefined,
+      ),
+    };
+    const mouseState = {
+      pickedRenderLayer: undefined,
+      pickedSpatialSkeleton: { segmentId: 17 },
+      updateUnconditionally: vi.fn(() => true),
+      active: true,
+    };
+    const layer = {
+      displayState: {
+        ...makeSkeletonRenderingOptions(),
+        segmentationGroupState: {
+          value: makeVisibleSegmentsState([11n, 17n]),
+        },
+      },
+      spatialSkeletonMergeMode: makeModeWatchable(),
+      selectedSpatialSkeletonNodeId: {
+        value: selectedNode.nodeId as number | undefined,
+        changed: selectedNodeChanged,
+      },
+      selectedSpatialSkeletonNodeInfo: { value: selectedNode },
+      spatialSkeletonState: {
+        mergeAnchorNodeId,
+        getCachedNode: vi.fn(),
+      },
+      manager: {
+        root: {
+          layerSelectedValues: {
+            mouseState,
+          },
+          selectionState: {
+            value: undefined,
+          },
+        },
+      },
+      getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
+      getSpatialSkeletonActionsDisabledReason: vi.fn(() => undefined),
+      selectSegment,
+      selectSpatialSkeletonNode: vi.fn(),
+      setSpatialSkeletonMergeAnchor,
+      clearSpatialSkeletonMergeAnchor,
+      clearSpatialSkeletonNodeSelection: vi.fn(),
+      layersChanged: makeChangedSignal(),
+    };
+    const { activation, actions, dispose } = makeToolActivation();
+    const tool = Object.assign(
+      Object.create(SpatialSkeletonMergeModeTool.prototype),
+      { layer },
+    );
+
+    try {
+      SpatialSkeletonMergeModeTool.prototype.activate.call(
+        tool,
+        activation as any,
+      );
+      clearSpatialSkeletonMergeAnchor.mockClear();
+
+      actions.get("spatial-skeleton-pick-node")?.({
+        detail: {
+          button: 2,
+          ctrlKey: true,
+          shiftKey: false,
+          altKey: false,
+          metaKey: false,
+        },
+      });
+      layer.selectedSpatialSkeletonNodeId.value = undefined;
+      selectedNodeChanged.dispatch();
+
+      expect(selectSegment).toHaveBeenCalledWith(17n, true);
+      expect(clearSpatialSkeletonMergeAnchor).toHaveBeenCalledTimes(1);
+      expect(mergeAnchorNodeId.value).toBeUndefined();
+    } finally {
+      dispose();
+    }
+  });
+
+  it("splits the existing selected node immediately when split mode activates", () => {
+    suppressStatusMessages();
+    const selectedNode = {
+      nodeId: 77,
+      segmentId: 11,
+      position: new Float32Array([7, 8, 9]),
+      sourceState: testSourceState("selected-before"),
+    };
+    const splitExecute = vi.fn(async () => {});
+    const splitSkeletonsCommand = makeCommandFactory(
+      SpatialSkeletonActions.splitSkeletons,
+      splitExecute,
+    );
+    const skeletonLayer = {
+      source: makeCommandSkeletonSource({ splitSkeletonsCommand }),
+      getNode: vi.fn((nodeId: number) =>
+        nodeId === selectedNode.nodeId ? selectedNode : undefined,
+      ),
+    };
+    const selectSegment = vi.fn();
+    const selectSpatialSkeletonNode = vi.fn();
+    const layer = {
+      displayState: {
+        ...makeSkeletonRenderingOptions(),
+        segmentationGroupState: {
+          value: makeVisibleSegmentsState([11n]),
+        },
+      },
+      spatialSkeletonSplitMode: makeModeWatchable(),
+      selectedSpatialSkeletonNodeId: { value: selectedNode.nodeId },
+      selectedSpatialSkeletonNodeInfo: { value: selectedNode },
+      spatialSkeletonState: {
+        commandHistory: new SpatialSkeletonCommandHistory(),
+        getCachedNode: vi.fn(),
+      },
+      manager: {
+        root: {
+          layerSelectedValues: {
+            mouseState: {
+              pickedRenderLayer: undefined,
+              updateUnconditionally: vi.fn(() => true),
+              active: true,
+            },
+          },
+          selectionState: {
+            value: undefined,
+          },
+        },
+      },
+      getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
+      getSpatialSkeletonActionsDisabledReason: vi.fn(() => undefined),
+      selectSegment,
+      selectSpatialSkeletonNode,
+      layersChanged: makeChangedSignal(),
+    };
+    const { activation, dispose } = makeToolActivation();
+    const tool = Object.assign(
+      Object.create(SpatialSkeletonSplitModeTool.prototype),
+      { layer },
+    );
+
+    try {
+      SpatialSkeletonSplitModeTool.prototype.activate.call(
+        tool,
+        activation as any,
+      );
+
+      expect(selectSegment).toHaveBeenCalledWith(11n, true);
+      expect(selectSpatialSkeletonNode).toHaveBeenCalledWith(
+        selectedNode.nodeId,
+        true,
+        selectedNode,
+      );
+      expect(splitSkeletonsCommand.createCommand).toHaveBeenCalledWith(layer, {
+        nodeId: selectedNode.nodeId,
+        segmentId: selectedNode.segmentId,
+      });
+      expect(splitExecute).toHaveBeenCalledTimes(1);
+    } finally {
+      dispose();
+    }
   });
 });
