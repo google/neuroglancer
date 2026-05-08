@@ -74,10 +74,6 @@ import {
   SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_UPDATE_SOURCES_RPC_ID,
 } from "#src/skeleton/base.js";
 import {
-  uploadAttributeBuffersToGPU,
-  uploadVertexAttributesToGPU,
-} from "#src/skeleton/gpu_upload_utils.js";
-import {
   buildSpatiallyIndexedSkeletonOverlayGeometry,
   type SpatiallyIndexedSkeletonOverlayGeometry,
 } from "#src/skeleton/overlay_geometry.js";
@@ -183,6 +179,7 @@ import {
   computeTextureFormat,
   getSamplerPrefixForDataType,
   OneDimensionalTextureAccessHelper,
+  setOneDimensionalTextureData,
   TextureFormat,
   updateOneDimensionalTextureElement,
 } from "#src/webgl/texture_access.js";
@@ -225,11 +222,11 @@ const vertexPositionTextureFormat = computeTextureFormat(
 
 interface SkeletonShaderContext {
   vertexAttributes: VertexAttributeRenderInfo[];
-  segmentColorAttributeIndex?: number;
-  dynamicSegmentAppearance?: boolean;
   gl: GL;
   fallbackShaderParameters: WatchableValue<ShaderControlsBuilderState>;
   displayState: SkeletonLayerDisplayState;
+  segmentColorAttributeIndex?: number;
+  dynamicSegmentAppearance?: boolean;
 }
 
 interface SkeletonGPUGeometry {
@@ -1550,13 +1547,32 @@ interface SkeletonChunkBase extends SkeletonGPUGeometry {
   source: { attributeTextureFormats: TextureFormat[] };
 }
 
+// Used by both SkeletonChunk and SpatiallyIndexedSkeletonChunk.
 function uploadSkeletonChunkToGPU(gl: GL, chunk: SkeletonChunkBase) {
-  chunk.vertexAttributeTextures = uploadVertexAttributesToGPU(
-    gl,
-    chunk.vertexAttributes,
-    chunk.vertexAttributeOffsets,
-    chunk.source.attributeTextureFormats,
-  );
+  const { attributeTextureFormats } = chunk.source;
+  const { vertexAttributes, vertexAttributeOffsets } = chunk;
+  const vertexAttributeTextures: (WebGLTexture | null)[] =
+    (chunk.vertexAttributeTextures = []);
+  for (
+    let i = 0, numAttributes = vertexAttributeOffsets.length;
+    i < numAttributes;
+    ++i
+  ) {
+    const texture = gl.createTexture();
+    gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
+    setOneDimensionalTextureData(
+      gl,
+      attributeTextureFormats[i],
+      vertexAttributes.subarray(
+        vertexAttributeOffsets[i],
+        i + 1 !== numAttributes
+          ? vertexAttributeOffsets[i + 1]
+          : vertexAttributes.length,
+      ),
+    );
+    vertexAttributeTextures[i] = texture;
+  }
+  gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
   chunk.indexBuffer = GLBuffer.fromData(
     gl,
     chunk.indices,
@@ -1785,17 +1801,32 @@ class SkeletonOverlayChunk implements SkeletonGPUGeometry {
     geometry: SpatiallyIndexedSkeletonOverlayGeometry,
     formats: TextureFormat[],
   ) {
-    // Upload each attribute directly from its source array — no intermediate
-    // combined packing buffer needed since each attribute becomes its own texture.
-    this.vertexAttributeTextures = uploadAttributeBuffersToGPU(
-      gl,
-      [
-        new Uint8Array(geometry.positions.buffer, geometry.positions.byteOffset, geometry.positions.byteLength),
-        new Uint8Array(geometry.segmentIds.buffer, geometry.segmentIds.byteOffset, geometry.segmentIds.byteLength),
-        new Uint8Array(geometry.selected.buffer, geometry.selected.byteOffset, geometry.selected.byteLength),
-      ],
-      formats,
-    );
+    const attributeBuffers = [
+      new Uint8Array(
+        geometry.positions.buffer,
+        geometry.positions.byteOffset,
+        geometry.positions.byteLength,
+      ),
+      new Uint8Array(
+        geometry.segmentIds.buffer,
+        geometry.segmentIds.byteOffset,
+        geometry.segmentIds.byteLength,
+      ),
+      new Uint8Array(
+        geometry.selected.buffer,
+        geometry.selected.byteOffset,
+        geometry.selected.byteLength,
+      ),
+    ];
+    const overlayTextures: (WebGLTexture | null)[] = [];
+    for (let i = 0; i < attributeBuffers.length; i++) {
+      const texture = gl.createTexture();
+      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
+      setOneDimensionalTextureData(gl, formats[i], attributeBuffers[i]);
+      overlayTextures[i] = texture;
+    }
+    gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
+    this.vertexAttributeTextures = overlayTextures;
     this.indexBuffer = GLBuffer.fromData(
       gl,
       geometry.indices,
@@ -2602,7 +2633,8 @@ export class SpatiallyIndexedSkeletonLayer
             const chunkKey = `${positionInChunks.join()}${lodSuffix}`;
             if (seenChunkKeys!.has(chunkKey)) return;
             seenChunkKeys!.add(chunkKey);
-            const chunkSource = tsource.source as SpatiallyIndexedSkeletonSource;
+            const chunkSource =
+              tsource.source as SpatiallyIndexedSkeletonSource;
             const chunk = chunkSource.chunks.get(chunkKey);
             if (chunk?.state !== ChunkState.GPU_MEMORY) return;
             result.push(chunk);
