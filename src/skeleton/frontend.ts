@@ -299,11 +299,10 @@ class RenderHelper extends RefCounted {
   );
   private readonly clearedTextureUnits = new Set<number>();
   private emptySegmentSet = new Uint64Set();
-  private gpuVisibleSegmentsHashTable: GPUHashTable<HashSetUint64> | undefined;
-  private gpuExcludedSegmentsHashTable: GPUHashTable<HashSetUint64> | undefined;
-  private gpuSegmentStatedColorHashTable:
-    | GPUHashTable<HashMapUint64>
-    | undefined;
+  private gpuVisibleSegmentsHashTable: GPUHashTable<HashSetUint64>;
+  private gpuTemporaryVisibleSegmentsHashTable: GPUHashTable<HashSetUint64>;
+  private gpuEmptySegmentsHashTable: GPUHashTable<HashSetUint64>;
+  private gpuSegmentStatedColorHashTable: GPUHashTable<HashMapUint64>;
   get vertexAttributes(): VertexAttributeRenderInfo[] {
     return this.base.vertexAttributes;
   }
@@ -399,34 +398,22 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
     gl: GL,
     shader: ShaderProgram,
     skeletonParams: SkeletonShaderParameters,
-    excludedSegments?: Uint64Set,
+    excludedGPUTable?: GPUHashTable<HashSetUint64>,
   ) {
     if (!skeletonParams.dynamicSegmentAppearance) return;
     const segmentationGroupState =
       this.base.displayState.segmentationGroupState.value;
-    const visibleSegments = segmentationGroupState.useTemporaryVisibleSegments
-      .value
-      ? segmentationGroupState.temporaryVisibleSegments
-      : segmentationGroupState.visibleSegments;
-    const visibleHT = visibleSegments.hashTable;
-    if (this.gpuVisibleSegmentsHashTable?.hashTable !== visibleHT) {
-      this.gpuVisibleSegmentsHashTable?.dispose();
-      this.gpuVisibleSegmentsHashTable = GPUHashTable.get(gl, visibleHT);
-    }
     this.visibleSegmentsShaderManager.enable(
       gl,
       shader,
-      this.gpuVisibleSegmentsHashTable,
+      segmentationGroupState.useTemporaryVisibleSegments.value
+        ? this.gpuTemporaryVisibleSegmentsHashTable
+        : this.gpuVisibleSegmentsHashTable,
     );
-    const excludedHT = (excludedSegments ?? this.emptySegmentSet).hashTable;
-    if (this.gpuExcludedSegmentsHashTable?.hashTable !== excludedHT) {
-      this.gpuExcludedSegmentsHashTable?.dispose();
-      this.gpuExcludedSegmentsHashTable = GPUHashTable.get(gl, excludedHT);
-    }
     this.excludedSegmentsShaderManager.enable(
       gl,
       shader,
-      this.gpuExcludedSegmentsHashTable,
+      excludedGPUTable ?? this.gpuEmptySegmentsHashTable,
     );
     gl.uniform1f(
       shader.uniform("uVisibleAlpha"),
@@ -453,17 +440,12 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
           segmentDefaultColor,
         );
       }
-      if (DEBUG_SPATIAL_SKELETON_OVERLAY && excludedSegments === undefined) {
+      if (DEBUG_SPATIAL_SKELETON_OVERLAY && excludedGPUTable === undefined) {
         gl.uniform3f(shader.uniform("uSegmentDefaultColor"), 1.0, 0.0, 0.0);
       }
     }
 
     if (skeletonParams?.hasSegmentStatedColors) {
-      const statedHT = colorGroupState.segmentStatedColors.hashTable;
-      if (this.gpuSegmentStatedColorHashTable?.hashTable !== statedHT) {
-        this.gpuSegmentStatedColorHashTable?.dispose();
-        this.gpuSegmentStatedColorHashTable = GPUHashTable.get(gl, statedHT);
-      }
       this.segmentStatedColorShaderManager.enable(
         gl,
         shader,
@@ -508,6 +490,28 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
     );
     this.selectedNodeAttributeIndex =
       selectedNodeAttrIndex >= 0 ? selectedNodeAttrIndex : undefined;
+    const segmentationGroupState =
+      base.displayState.segmentationGroupState.value;
+    this.gpuVisibleSegmentsHashTable = this.registerDisposer(
+      GPUHashTable.get(
+        this.gl,
+        segmentationGroupState.visibleSegments.hashTable,
+      ),
+    );
+    this.gpuTemporaryVisibleSegmentsHashTable = this.registerDisposer(
+      GPUHashTable.get(
+        this.gl,
+        segmentationGroupState.temporaryVisibleSegments.hashTable,
+      ),
+    );
+    this.gpuEmptySegmentsHashTable = this.registerDisposer(
+      GPUHashTable.get(this.gl, this.emptySegmentSet.hashTable),
+    );
+    const colorGroupState =
+      base.displayState.segmentationColorGroupState.value;
+    this.gpuSegmentStatedColorHashTable = this.registerDisposer(
+      GPUHashTable.get(this.gl, colorGroupState.segmentStatedColors.hashTable),
+    );
     this.edgeShaderGetter = parameterizedEmitterDependentShaderGetter(
       this,
       this.gl,
@@ -995,9 +999,6 @@ void emitDefault() {
   }
 
   disposed() {
-    this.gpuVisibleSegmentsHashTable?.dispose();
-    this.gpuExcludedSegmentsHashTable?.dispose();
-    this.gpuSegmentStatedColorHashTable?.dispose();
     super.disposed();
   }
 }
@@ -2075,6 +2076,7 @@ export class SpatiallyIndexedSkeletonLayer
   private overlayRebuildFrame = -1;
   private pendingOverlaySegmentLoads = new Set<number>();
   private browseExcludedSegments = new Uint64Set();
+  private gpuBrowseExcludedSegmentsHashTable: GPUHashTable<HashSetUint64>;
   private browseExcludedSegmentsKey: string | undefined;
   private suppressedBrowseSegmentIds = new Set<number>();
   private retainedOverlaySegmentIds: number[] = [];
@@ -2528,6 +2530,9 @@ export class SpatiallyIndexedSkeletonLayer
       skeletonGridLevel2d: skeletonGridLevel2dWatchable.rpcId,
     });
     this.backend = sharedObject;
+    this.gpuBrowseExcludedSegmentsHashTable = this.registerDisposer(
+      GPUHashTable.get(this.gl, this.browseExcludedSegments.hashTable),
+    );
   }
 
   get gl() {
@@ -2811,7 +2816,7 @@ export class SpatiallyIndexedSkeletonLayer
     modelMatrix: mat4,
     lineWidth: number,
     pointDiameter: number,
-    excludedSegments?: Uint64Set,
+    excludedGPUTable?: GPUHashTable<HashSetUint64>,
   ):
     | {
         gl: GL;
@@ -2853,7 +2858,7 @@ export class SpatiallyIndexedSkeletonLayer
       gl,
       edgeShader,
       skeletonParams,
-      excludedSegments,
+      excludedGPUTable,
     );
 
     nodeShader.bind();
@@ -2871,7 +2876,7 @@ export class SpatiallyIndexedSkeletonLayer
       gl,
       nodeShader,
       skeletonParams,
-      excludedSegments,
+      excludedGPUTable,
     );
 
     return { gl, edgeShader, nodeShader, skeletonParams };
@@ -2907,14 +2912,17 @@ export class SpatiallyIndexedSkeletonLayer
     visibleChunks: SpatiallyIndexedSkeletonChunk[],
   ) {
     if (visibleChunks.length === 0) return;
-    const excludedSegments = this.getBrowsePassExcludedSegments();
+    const hasExcludedSegments =
+      this.getBrowsePassExcludedSegments() !== undefined;
     const passState = this.beginSkeletonRenderPass(
       renderContext,
       renderHelper,
       modelMatrix,
       lineWidth,
       pointDiameter,
-      excludedSegments,
+      hasExcludedSegments
+        ? this.gpuBrowseExcludedSegmentsHashTable
+        : undefined,
     );
     if (passState === undefined) return;
     const { gl, edgeShader, nodeShader, skeletonParams } = passState;
