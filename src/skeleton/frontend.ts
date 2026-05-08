@@ -297,7 +297,7 @@ class RenderHelper extends RefCounted {
   private segmentStatedColorShaderManager = new SegmentStatedColorShaderManager(
     "segmentStatedColor",
   );
-  private readonly endLayerSeenTextureUnits = new Set<number>();
+  private readonly clearedTextureUnits = new Set<number>();
   private emptySegmentSet = new Uint64Set();
   private gpuVisibleSegmentsHashTable: GPUHashTable<HashSetUint64> | undefined;
   private gpuExcludedSegmentsHashTable: GPUHashTable<HashSetUint64> | undefined;
@@ -395,13 +395,13 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
 `);
   }
 
-  enableDynamicSegmentAppearance(
+  maybeEnableDynamicSegmentAppearance(
     gl: GL,
     shader: ShaderProgram,
-    skeletonParams: SkeletonShaderParameters | undefined,
+    skeletonParams: SkeletonShaderParameters,
     excludedSegments?: Uint64Set,
   ) {
-    if (!skeletonParams?.dynamicSegmentAppearance) return;
+    if (!skeletonParams.dynamicSegmentAppearance) return;
     const segmentationGroupState =
       this.base.displayState.segmentationGroupState.value;
     const visibleSegments = segmentationGroupState.useTemporaryVisibleSegments
@@ -472,7 +472,7 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
     }
   }
 
-  disableDynamicSegmentAppearance(
+  maybeDisableDynamicSegmentAppearance(
     gl: GL,
     shader: ShaderProgram,
     skeletonParams: SkeletonShaderParameters | undefined,
@@ -916,11 +916,7 @@ void emitDefault() {
     gl.uniform1ui(shader.uniform("uPickID"), pickID);
   }
 
-  setEdgePickInstanceStride(gl: GL, shader: ShaderProgram, stride: number) {
-    gl.uniform1ui(shader.uniform("uPickInstanceStride"), stride);
-  }
-
-  setNodePickInstanceStride(gl: GL, shader: ShaderProgram, stride: number) {
+  setPickInstanceStride(gl: GL, shader: ShaderProgram, stride: number) {
     gl.uniform1ui(shader.uniform("uPickInstanceStride"), stride);
   }
 
@@ -928,7 +924,7 @@ void emitDefault() {
     gl: GL,
     edgeShader: ShaderProgram,
     nodeShader: ShaderProgram | null,
-    skeletonChunk: SkeletonGPUGeometry,
+    skeletonGpuGeometry: SkeletonGPUGeometry,
     projectionParameters: { width: number; height: number },
   ) {
     // Bind vertex attribute textures to be used across edge and node shaders
@@ -936,7 +932,7 @@ void emitDefault() {
     // so we only bind once. However, if this ever changes, we
     // instead must bind for the edge shader, draw, then bind for node shader
     const { vertexAttributes } = this;
-    const { vertexAttributeTextures } = skeletonChunk;
+    const { vertexAttributeTextures } = skeletonGpuGeometry;
     const numAttributes = vertexAttributes.length;
     for (let i = 0; i < numAttributes; ++i) {
       const textureUnit =
@@ -953,7 +949,7 @@ void emitDefault() {
     {
       edgeShader.bind();
       const aVertexIndex = edgeShader.attribute("aVertexIndex");
-      skeletonChunk.indexBuffer.bindToVertexAttribI(
+      skeletonGpuGeometry.indexBuffer.bindToVertexAttribI(
         aVertexIndex,
         2,
         WebGL2RenderingContext.UNSIGNED_INT,
@@ -964,7 +960,7 @@ void emitDefault() {
         projectionParameters,
         this.targetIsSliceView ? 1.0 : 0.0,
       );
-      drawLines(gl, 1, skeletonChunk.numIndices / 2);
+      drawLines(gl, 1, skeletonGpuGeometry.numIndices / 2);
       gl.vertexAttribDivisor(aVertexIndex, 0);
       gl.disableVertexAttribArray(aVertexIndex);
     }
@@ -975,14 +971,13 @@ void emitDefault() {
       initializeCircleShader(nodeShader, projectionParameters, {
         featherWidthInPixels: this.targetIsSliceView ? 1.0 : 0.0,
       });
-      drawCircles(nodeShader.gl, 2, skeletonChunk.numVertices);
+      drawCircles(nodeShader.gl, 2, skeletonGpuGeometry.numVertices);
     }
   }
 
   endLayer(gl: GL, ...shaders: Array<ShaderProgram | null>) {
-    const { vertexAttributes } = this;
+    const { vertexAttributes, clearedTextureUnits } = this;
     const numAttributes = vertexAttributes.length;
-    const clearedTextureUnits = this.endLayerSeenTextureUnits;
     clearedTextureUnits.clear();
     for (const shader of shaders) {
       if (shader === null) continue;
@@ -1295,7 +1290,7 @@ export class SkeletonLayer extends RefCounted implements SkeletonShaderContext {
 
     edgeShader.bind();
     renderHelper.beginLayer(gl, edgeShader, renderContext, modelMatrix);
-    renderHelper.setEdgePickInstanceStride(gl, edgeShader, 0);
+    renderHelper.setPickInstanceStride(gl, edgeShader, 0);
     setControlsInShader(
       gl,
       edgeShader,
@@ -1307,7 +1302,7 @@ export class SkeletonLayer extends RefCounted implements SkeletonShaderContext {
     nodeShader.bind();
     renderHelper.beginLayer(gl, nodeShader, renderContext, modelMatrix);
     gl.uniform1f(nodeShader.uniform("uNodeDiameter"), pointDiameter);
-    renderHelper.setNodePickInstanceStride(gl, nodeShader, 0);
+    renderHelper.setPickInstanceStride(gl, nodeShader, 0);
     setControlsInShader(
       gl,
       nodeShader,
@@ -2846,7 +2841,7 @@ export class SpatiallyIndexedSkeletonLayer
     edgeShader.bind();
     renderHelper.beginLayer(gl, edgeShader, renderContext, modelMatrix);
     gl.uniform1f(edgeShader.uniform("uLineWidth"), lineWidth);
-    renderHelper.setEdgePickInstanceStride(gl, edgeShader, 0);
+    renderHelper.setPickInstanceStride(gl, edgeShader, 0);
     setControlsInShader(
       gl,
       edgeShader,
@@ -2854,7 +2849,7 @@ export class SpatiallyIndexedSkeletonLayer
       edgeShaderParameters.parseResult.controls,
     );
     renderHelper.setColor(gl, edgeShader, kOneVec4);
-    renderHelper.enableDynamicSegmentAppearance(
+    renderHelper.maybeEnableDynamicSegmentAppearance(
       gl,
       edgeShader,
       skeletonParams,
@@ -2864,7 +2859,7 @@ export class SpatiallyIndexedSkeletonLayer
     nodeShader.bind();
     renderHelper.beginLayer(gl, nodeShader, renderContext, modelMatrix);
     gl.uniform1f(nodeShader.uniform("uNodeDiameter"), pointDiameter);
-    renderHelper.setNodePickInstanceStride(gl, nodeShader, 0);
+    renderHelper.setPickInstanceStride(gl, nodeShader, 0);
     setControlsInShader(
       gl,
       nodeShader,
@@ -2872,7 +2867,7 @@ export class SpatiallyIndexedSkeletonLayer
       nodeShaderParameters.parseResult.controls,
     );
     renderHelper.setColor(gl, nodeShader, kOneVec4);
-    renderHelper.enableDynamicSegmentAppearance(
+    renderHelper.maybeEnableDynamicSegmentAppearance(
       gl,
       nodeShader,
       skeletonParams,
@@ -2889,12 +2884,12 @@ export class SpatiallyIndexedSkeletonLayer
     nodeShader: ShaderProgram,
     skeletonParams: SkeletonShaderParameters,
   ) {
-    renderHelper.disableDynamicSegmentAppearance(
+    renderHelper.maybeDisableDynamicSegmentAppearance(
       gl,
       edgeShader,
       skeletonParams,
     );
-    renderHelper.disableDynamicSegmentAppearance(
+    renderHelper.maybeDisableDynamicSegmentAppearance(
       gl,
       nodeShader,
       skeletonParams,
@@ -2956,10 +2951,10 @@ export class SpatiallyIndexedSkeletonLayer
         }
         edgeShader.bind();
         renderHelper.setPickID(gl, edgeShader, edgePickId);
-        renderHelper.setEdgePickInstanceStride(gl, edgeShader, edgePickStride);
+        renderHelper.setPickInstanceStride(gl, edgeShader, edgePickStride);
         nodeShader.bind();
         renderHelper.setPickID(gl, nodeShader, nodePickId);
-        renderHelper.setNodePickInstanceStride(gl, nodeShader, nodePickStride);
+        renderHelper.setPickInstanceStride(gl, nodeShader, nodePickStride);
       }
       // Render each chunk with different node/edge colors for debugging
       if (DEBUG_SPATIAL_SKELETON_CHUNKS) {
@@ -3044,7 +3039,7 @@ export class SpatiallyIndexedSkeletonLayer
           : 0;
       edgeShader.bind();
       renderHelper.setPickID(gl, edgeShader, edgePickId);
-      renderHelper.setEdgePickInstanceStride(
+      renderHelper.setPickInstanceStride(
         gl,
         edgeShader,
         edgePickId === 0 ? 0 : 1,
@@ -3069,7 +3064,7 @@ export class SpatiallyIndexedSkeletonLayer
           : 0;
       nodeShader.bind();
       renderHelper.setPickID(gl, nodeShader, nodePickId);
-      renderHelper.setNodePickInstanceStride(
+      renderHelper.setPickInstanceStride(
         gl,
         nodeShader,
         nodePickId === 0 ? 0 : 1,
