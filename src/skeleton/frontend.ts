@@ -490,8 +490,11 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
     );
     this.selectedNodeAttributeIndex =
       selectedNodeAttrIndex >= 0 ? selectedNodeAttrIndex : undefined;
+
     const segmentationGroupState =
       base.displayState.segmentationGroupState.value;
+    const colorGroupState = base.displayState.segmentationColorGroupState.value;
+
     this.gpuVisibleSegmentsHashTable = this.registerDisposer(
       GPUHashTable.get(
         this.gl,
@@ -507,11 +510,10 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
     this.gpuEmptySegmentsHashTable = this.registerDisposer(
       GPUHashTable.get(this.gl, this.emptySegmentSet.hashTable),
     );
-    const colorGroupState =
-      base.displayState.segmentationColorGroupState.value;
     this.gpuSegmentStatedColorHashTable = this.registerDisposer(
       GPUHashTable.get(this.gl, colorGroupState.segmentStatedColors.hashTable),
     );
+
     this.edgeShaderGetter = parameterizedEmitterDependentShaderGetter(
       this,
       this.gl,
@@ -589,6 +591,8 @@ void emitDefault() {
           } else if (this.segmentColorAttributeIndex === undefined) {
             // Preserve legacy skeleton behavior where `uColor` is already
             // premultiplied by `objectAlpha` in `getObjectColor`.
+            // in this path, whole skeletons are drawn at one time
+            // as opposed to multiple skeletons
             builder.addFragmentCode(`
 vec4 segmentColor() {
   return ${segmentColorExpression};
@@ -621,6 +625,15 @@ void emitDefault() {
           const numAttributes = vertexAttributes.length;
           for (let i = 1; i < numAttributes; ++i) {
             const info = vertexAttributes[i];
+            // TODO (SKM): this was widened to support uint32 and other types
+            // for the segment attribute
+            // however, the segments are actually able to be uint64
+            // so this needs to be updated to support that.
+            // When doing so, pull the segment attribute entirely out of this loop
+            // (varying declaration, vertexMain assignment, and fragment #defines)
+            // and handle it explicitly alongside the existing vSegmentValue code,
+            // so the loop becomes a clean generic-attributes-only pass with no
+            // special cases.
             if (
               skeletonParams.dynamicSegmentAppearance &&
               i === this.segmentAttributeIndex
@@ -2920,9 +2933,7 @@ export class SpatiallyIndexedSkeletonLayer
       modelMatrix,
       lineWidth,
       pointDiameter,
-      hasExcludedSegments
-        ? this.gpuBrowseExcludedSegmentsHashTable
-        : undefined,
+      hasExcludedSegments ? this.gpuBrowseExcludedSegmentsHashTable : undefined,
     );
     if (passState === undefined) return;
     const { gl, edgeShader, nodeShader, skeletonParams } = passState;
