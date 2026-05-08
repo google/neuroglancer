@@ -38,6 +38,26 @@ function getOneDimensionalTextureRowCapacity(gl: GL, numElements: number) {
  * @param attributeTextureFormats - Texture format specifications for each attribute
  * @returns Array of WebGL textures, one per attribute
  */
+/**
+ * Uploads separate per-attribute byte views to GPU as 1D textures.
+ * Avoids the intermediate packed buffer required by uploadVertexAttributesToGPU.
+ */
+export function uploadAttributeBuffersToGPU(
+  gl: GL,
+  attributeBuffers: readonly Uint8Array[],
+  attributeTextureFormats: TextureFormat[],
+): (WebGLTexture | null)[] {
+  const textures: (WebGLTexture | null)[] = [];
+  for (let i = 0; i < attributeBuffers.length; i++) {
+    const texture = gl.createTexture();
+    gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
+    setOneDimensionalTextureData(gl, attributeTextureFormats[i], attributeBuffers[i]);
+    textures[i] = texture;
+  }
+  gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
+  return textures;
+}
+
 export function uploadVertexAttributesToGPU(
   gl: GL,
   vertexAttributes: Uint8Array,

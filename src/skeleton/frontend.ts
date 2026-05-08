@@ -73,7 +73,11 @@ import {
   SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_RPC_ID,
   SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_UPDATE_SOURCES_RPC_ID,
 } from "#src/skeleton/base.js";
-import { uploadVertexAttributesToGPU } from "#src/skeleton/gpu_upload_utils.js";
+import {
+  updateOneDimensionalTextureElement,
+  uploadAttributeBuffersToGPU,
+  uploadVertexAttributesToGPU,
+} from "#src/skeleton/gpu_upload_utils.js";
 import {
   buildSpatiallyIndexedSkeletonOverlayGeometry,
   type SpatiallyIndexedSkeletonOverlayGeometry,
@@ -192,6 +196,8 @@ const DEBUG_SPATIAL_SKELETON_CHUNKS = true;
 const tempChunkKeyToColorMap = new Map<string, Float32Array>();
 
 const tempMat4 = mat4.create();
+const OVERLAY_SELECTED_FLOAT_ZERO = new Float32Array([0]);
+const OVERLAY_SELECTED_FLOAT_ONE = new Float32Array([1]);
 const DEFAULT_FRAGMENT_MAIN = `void main() {
   emitDefault();
 }
@@ -1771,35 +1777,23 @@ class SkeletonOverlayChunk implements SkeletonGPUGeometry {
   readonly pickNodePositions: Float32Array;
   readonly pickSegmentIds: Uint32Array;
   readonly pickEdgeSegmentIds: Uint32Array;
+  private readonly nodeIdToVertexIndex: Map<number, number>;
+  private readonly selectedFormat: TextureFormat;
 
   constructor(
     gl: GL,
     geometry: SpatiallyIndexedSkeletonOverlayGeometry,
     formats: TextureFormat[],
   ) {
-    const positionBytes = new Uint8Array(geometry.positions.buffer);
-    const segmentBytes = new Uint8Array(geometry.segmentIds.buffer);
-    const selectedBytes = new Uint8Array(geometry.selected.buffer);
-    const vertexBytes = new Uint8Array(
-      positionBytes.byteLength +
-        segmentBytes.byteLength +
-        selectedBytes.byteLength,
-    );
-    vertexBytes.set(positionBytes, 0);
-    vertexBytes.set(segmentBytes, positionBytes.byteLength);
-    vertexBytes.set(
-      selectedBytes,
-      positionBytes.byteLength + segmentBytes.byteLength,
-    );
-    const vertexOffsets = new Uint32Array([
-      0,
-      positionBytes.byteLength,
-      positionBytes.byteLength + segmentBytes.byteLength,
-    ]);
-    this.vertexAttributeTextures = uploadVertexAttributesToGPU(
+    // Upload each attribute directly from its source array — no intermediate
+    // combined packing buffer needed since each attribute becomes its own texture.
+    this.vertexAttributeTextures = uploadAttributeBuffersToGPU(
       gl,
-      vertexBytes,
-      vertexOffsets,
+      [
+        new Uint8Array(geometry.positions.buffer, geometry.positions.byteOffset, geometry.positions.byteLength),
+        new Uint8Array(geometry.segmentIds.buffer, geometry.segmentIds.byteOffset, geometry.segmentIds.byteLength),
+        new Uint8Array(geometry.selected.buffer, geometry.selected.byteOffset, geometry.selected.byteLength),
+      ],
       formats,
     );
     this.indexBuffer = GLBuffer.fromData(
@@ -1811,9 +1805,56 @@ class SkeletonOverlayChunk implements SkeletonGPUGeometry {
     this.numIndices = geometry.indices.length;
     this.numVertices = geometry.numVertices;
     this.pickNodeIds = geometry.nodeIds;
-    this.pickNodePositions = geometry.nodePositions;
+    // positions and nodePositions were identical — reuse positions for picking.
+    this.pickNodePositions = geometry.positions;
     this.pickSegmentIds = geometry.pickSegmentIds;
     this.pickEdgeSegmentIds = geometry.pickEdgeSegmentIds;
+    const nodeIdToVertexIndex = new Map<number, number>();
+    const { nodeIds } = geometry;
+    for (let i = 0; i < nodeIds.length; i++) {
+      const nodeId = nodeIds[i];
+      if (nodeId > 0) nodeIdToVertexIndex.set(nodeId, i);
+    }
+    this.nodeIdToVertexIndex = nodeIdToVertexIndex;
+    this.selectedFormat = formats[2];
+  }
+
+  // Updates the selected-node highlight in-place without a full GPU rebuild.
+  // Clears oldNodeId's texel and sets newNodeId's texel.
+  updateSelectedNode(
+    gl: GL,
+    oldNodeId: number | undefined,
+    newNodeId: number | undefined,
+  ) {
+    if (oldNodeId === newNodeId) return;
+    const texture = this.vertexAttributeTextures[2];
+    if (texture === null) return;
+    if (oldNodeId !== undefined) {
+      const idx = this.nodeIdToVertexIndex.get(oldNodeId);
+      if (idx !== undefined) {
+        updateOneDimensionalTextureElement(
+          gl,
+          texture,
+          this.selectedFormat,
+          this.numVertices,
+          idx,
+          OVERLAY_SELECTED_FLOAT_ZERO,
+        );
+      }
+    }
+    if (newNodeId !== undefined) {
+      const idx = this.nodeIdToVertexIndex.get(newNodeId);
+      if (idx !== undefined) {
+        updateOneDimensionalTextureElement(
+          gl,
+          texture,
+          this.selectedFormat,
+          this.numVertices,
+          idx,
+          OVERLAY_SELECTED_FLOAT_ONE,
+        );
+      }
+    }
   }
 
   dispose(gl: GL) {
@@ -1970,6 +2011,8 @@ export class SpatiallyIndexedSkeletonLayer
   private inspectionState: SpatiallyIndexedSkeletonInspectionState | undefined;
   private overlayChunk: SkeletonOverlayChunk | undefined;
   private overlayChunkKey: string | undefined;
+  private overlayGeometryKey: string | undefined;
+  private cachedSelectedNodeId: number | undefined;
   private overlayRebuildFrame = -1;
   private pendingOverlaySegmentLoads = new Set<number>();
   private browseExcludedSegments = new Uint64Set();
@@ -1992,6 +2035,8 @@ export class SpatiallyIndexedSkeletonLayer
     this.overlayChunk?.dispose(this.gl);
     this.overlayChunk = undefined;
     this.overlayChunkKey = undefined;
+    this.overlayGeometryKey = undefined;
+    this.cachedSelectedNodeId = undefined;
   }
 
   private requestOverlaySegmentLoad(segmentId: number) {
@@ -2012,10 +2057,9 @@ export class SpatiallyIndexedSkeletonLayer
       });
   }
 
-  private getOverlayChunkKey(segmentIds: readonly number[]) {
+  private getOverlayGeometryKey(segmentIds: readonly number[]) {
     return [
       segmentIds.join(","),
-      `selected:${this.selectedNodeId?.value ?? ""}`,
       `pending:${this.pendingNodePositionVersion?.value ?? ""}`,
       `data:${this.inspectionState?.nodeDataVersion.value ?? ""}`,
     ].join("|");
@@ -2151,10 +2195,10 @@ export class SpatiallyIndexedSkeletonLayer
   private resolveSourceBackedOverlayChunk(): SkeletonOverlayChunk | undefined {
     const frameNumber =
       this.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber;
-    if (
-      this.overlayRebuildFrame === frameNumber &&
-      this.overlayChunk !== undefined
-    ) {
+    // Cache result for the entire frame — both slice and perspective draw calls
+    // share the same chunk, and "no overlay" is also cached to avoid per-frame
+    // allocation when the inspection overlay is inactive.
+    if (this.overlayRebuildFrame === frameNumber) {
       return this.overlayChunk;
     }
     this.overlayRebuildFrame = frameNumber;
@@ -2182,15 +2226,29 @@ export class SpatiallyIndexedSkeletonLayer
       this.disposeOverlayChunk();
       return undefined;
     }
-    const overlayChunkKey = this.getOverlayChunkKey(loadedSegmentIds);
-    if (
-      this.overlayChunk !== undefined &&
-      this.overlayChunkKey === overlayChunkKey
-    ) {
-      return this.overlayChunk;
+
+    const overlayGeometryKey = this.getOverlayGeometryKey(loadedSegmentIds);
+    const selectedNodeId = this.selectedNodeId?.value;
+    const overlayChunkKey = `${overlayGeometryKey}|selected:${selectedNodeId ?? ""}`;
+
+    if (this.overlayChunk !== undefined) {
+      if (this.overlayGeometryKey === overlayGeometryKey) {
+        // Geometry unchanged — update only the selected-node highlight in-place
+        // rather than reallocating all GPU textures.
+        if (this.overlayChunkKey !== overlayChunkKey) {
+          this.overlayChunk.updateSelectedNode(
+            this.gl,
+            this.cachedSelectedNodeId,
+            selectedNodeId,
+          );
+          this.overlayChunkKey = overlayChunkKey;
+          this.cachedSelectedNodeId = selectedNodeId;
+        }
+        return this.overlayChunk;
+      }
     }
 
-    // Pass 2: cache miss — collect node sets and rebuild geometry.
+    // Pass 2: geometry cache miss — collect node sets and rebuild.
     const segmentNodeSets: (readonly SpatiallyIndexedSkeletonNode[])[] = [];
     for (const segmentId of loadedSegmentIds) {
       const segmentNodes =
@@ -2203,7 +2261,7 @@ export class SpatiallyIndexedSkeletonLayer
     const geometry = buildSpatiallyIndexedSkeletonOverlayGeometry(
       segmentNodeSets,
       {
-        selectedNodeId: this.selectedNodeId?.value,
+        selectedNodeId,
         getPendingNodePosition: this.getPendingNodePositionOverride,
       },
     );
@@ -2213,6 +2271,8 @@ export class SpatiallyIndexedSkeletonLayer
       this.overlayAttributeTextureFormats,
     );
     this.overlayChunkKey = overlayChunkKey;
+    this.overlayGeometryKey = overlayGeometryKey;
+    this.cachedSelectedNodeId = selectedNodeId;
     return this.overlayChunk;
   }
 
