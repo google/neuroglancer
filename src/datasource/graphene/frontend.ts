@@ -841,10 +841,7 @@ async function getVolumeDataSource(
         }
       }
     } catch (e) {
-      console.error(
-        `Failed to list OCDBT scales at ${info.ocdbtDataUrl}`,
-        e,
-      );
+      console.error(`Failed to list OCDBT scales at ${info.ocdbtDataUrl}`, e);
       throw e;
     }
   }
