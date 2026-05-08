@@ -74,7 +74,6 @@ import {
   SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_UPDATE_SOURCES_RPC_ID,
 } from "#src/skeleton/base.js";
 import {
-  updateOneDimensionalTextureElement,
   uploadAttributeBuffersToGPU,
   uploadVertexAttributesToGPU,
 } from "#src/skeleton/gpu_upload_utils.js";
@@ -185,6 +184,7 @@ import {
   getSamplerPrefixForDataType,
   OneDimensionalTextureAccessHelper,
   TextureFormat,
+  updateOneDimensionalTextureElement,
 } from "#src/webgl/texture_access.js";
 import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 import type { RPC } from "#src/worker_rpc.js";
