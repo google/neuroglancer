@@ -84,7 +84,6 @@ import {
   retainSpatiallyIndexedSkeletonOverlaySegment,
 } from "#src/skeleton/overlay_segment_retention.js";
 import { resolveSpatiallyIndexedSkeletonSegmentPick } from "#src/skeleton/picking.js";
-import { SkeletonRenderMode } from "#src/skeleton/render_mode.js";
 import {
   getSpatiallyIndexedSkeletonGridIndex,
   getSpatiallyIndexedSkeletonSourceView,
@@ -653,7 +652,9 @@ void emitDefault() {
             builder.addVarying(`highp ${info.glslDataType}`, `vCustom${i}`);
             vertexMain += `vCustom${i} = readAttribute${i}(vertexIndex);\n`;
             builder.addFragmentCode(`#define ${info.name} vCustom${i}\n`);
-            builder.addFragmentCode(`#define prop_${info.name}() vCustom${i}\n`);
+            builder.addFragmentCode(
+              `#define prop_${info.name}() vCustom${i}\n`,
+            );
           }
           builder.setVertexMain(vertexMain);
           addControlsToBuilder(shaderBuilderState, builder);
@@ -845,7 +846,9 @@ void emitDefault() {
             builder.addVarying(`highp ${info.glslDataType}`, `vCustom${i}`);
             vertexMain += `vCustom${i} = readAttribute${i}(vertexIndex);\n`;
             builder.addFragmentCode(`#define ${info.name} vCustom${i}\n`);
-            builder.addFragmentCode(`#define prop_${info.name}() vCustom${i}\n`);
+            builder.addFragmentCode(
+              `#define prop_${info.name}() vCustom${i}\n`,
+            );
           }
           builder.setVertexMain(vertexMain);
           addControlsToBuilder(shaderBuilderState, builder);
@@ -989,10 +992,6 @@ void emitDefault() {
     }
     this.vertexIdHelper.disable();
   }
-
-  disposed() {
-    super.disposed();
-  }
 }
 
 // Draws the spatial bounds of each chunk as a box overlay, for debugging.
@@ -1057,7 +1056,10 @@ gl_Position = uChunkToClip * vec4(uTranslation + boxVertex * uChunkDataSize, 1.0
   }
 }
 
-export { SkeletonRenderMode } from "#src/skeleton/render_mode.js";
+export enum SkeletonRenderMode {
+  LINES = 0,
+  LINES_AND_POINTS = 1,
+}
 
 export class TrackableSkeletonRenderMode extends TrackableEnum<SkeletonRenderMode> {
   constructor(
@@ -1116,6 +1118,7 @@ export interface ViewSpecificSkeletonRenderingOptions {
   lineWidth: TrackableSkeletonLineWidth;
 }
 
+// TODO (SKM): think this could likely extend compound trackable instead
 export class SkeletonRenderingOptions implements Trackable {
   private compound = new CompoundTrackable();
   get changed() {
@@ -1484,7 +1487,6 @@ function getWebglDataType(dataType: DataType) {
   }
 }
 
-
 const vertexPositionAttribute: VertexAttributeRenderInfo = {
   dataType: DataType.FLOAT32,
   numComponents: 3,
@@ -1601,7 +1603,7 @@ export class SpatiallyIndexedSkeletonChunk
   numVertices: number;
   vertexAttributeOffsets: Uint32Array;
   vertexAttributeTextures: (WebGLTexture | null)[] = [];
-  nodeIds: Int32Array = new Int32Array(0);
+  nodeIds: Int32Array;
   nodeSourceStates: Array<SpatialSkeletonSourceState | undefined> = [];
   lod: number | undefined;
 
@@ -1693,6 +1695,7 @@ export class SpatiallyIndexedSkeletonSource extends SliceViewChunkSource<
 
 // Options are provided by the SliceView framework for scale selection,
 // but spatial skeleton sources expose all grid levels unconditionally.
+// TODO (SKM): validate if this is an ok deviation from the SliceView
 export const SPATIAL_SKELETON_SOURCE_OPTIONS: SliceViewSourceOptions = {
   displayRank: 0,
   multiscaleToViewTransform: new Float32Array(0),
@@ -1726,6 +1729,7 @@ export abstract class MultiscaleSpatiallyIndexedSkeletonSource extends Multiscal
 type SpatiallyIndexedSkeletonSourceEntry =
   SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>;
 
+// TODO (SKM): is all of this really optional?
 interface SpatiallyIndexedSkeletonLayerOptions {
   gridLevel?: WatchableValueInterface<number>;
   lod?: WatchableValueInterface<number>;
