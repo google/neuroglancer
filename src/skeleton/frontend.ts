@@ -634,6 +634,13 @@ void emitDefault() {
             // and handle it explicitly alongside the existing vSegmentValue code,
             // so the loop becomes a clean generic-attributes-only pass with no
             // special cases.
+            // More broadly, segmentAttribute and selectedNodeAttribute are internal
+            // system attributes, not user-defined ones, so they should not live in
+            // vertexAttributes at all. vertexAttributes should contain only
+            // user-defined (data-source) attributes; internal attributes should be
+            // declared and assigned explicitly outside the loop as first-class
+            // shader variables, making their exposure to user shader code (via
+            // #define) a deliberate decision rather than a side effect of the loop.
             if (
               skeletonParams.dynamicSegmentAppearance &&
               i === this.segmentAttributeIndex
