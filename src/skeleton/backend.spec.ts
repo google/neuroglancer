@@ -3,10 +3,16 @@ import { describe, expect, it, vi } from "vitest";
 import { ChunkState } from "#src/chunk_manager/base.js";
 import {
   cancelStaleSpatiallyIndexedSkeletonDownloads,
+  getSpatiallyIndexedSkeleton3dRenderPriority,
   getSpatiallyIndexedSkeletonChunkPriority,
   markSpatiallyIndexedSkeletonChunkRequested,
+  SPATIALLY_INDEXED_SKELETON_3D_PRIORITY_BOOST,
   SpatiallyIndexedSkeletonChunkRequestOwner,
 } from "#src/skeleton/backend.js";
+import {
+  BASE_PRIORITY,
+  SCALE_PRIORITY_MULTIPLIER,
+} from "#src/sliceview/backend.js";
 
 describe("skeleton/backend chunk priority", () => {
   it("uses the standard chunk-origin distance rule for 3d chunks", () => {
@@ -33,6 +39,66 @@ describe("skeleton/backend chunk priority", () => {
       ),
     ).toBeGreaterThan(
       getSpatiallyIndexedSkeletonChunkPriority(
+        localCenter,
+        chunkSize,
+        farChunk,
+      ),
+    );
+  });
+
+  it("uses a boost tied to the shared volumetric base priority", () => {
+    expect(SPATIALLY_INDEXED_SKELETON_3D_PRIORITY_BOOST).toBe(-BASE_PRIORITY);
+  });
+
+  it("boosts 3d spatial skeleton chunks above equivalent volume-rendering chunks", () => {
+    const basePriority = BASE_PRIORITY;
+    const scaleIndex = 2;
+    const localCenter = Float32Array.of(10, 20, 30);
+    const chunkSize = Float32Array.of(4, 4, 8);
+    const positionInChunks = Float32Array.of(2, 5, 4);
+    const distancePriority = getSpatiallyIndexedSkeletonChunkPriority(
+      localCenter,
+      chunkSize,
+      positionInChunks,
+    );
+    const equivalentVolumeRenderingPriority =
+      basePriority + SCALE_PRIORITY_MULTIPLIER * scaleIndex + distancePriority;
+    const skeletonPriority = getSpatiallyIndexedSkeleton3dRenderPriority(
+      basePriority,
+      scaleIndex,
+      localCenter,
+      chunkSize,
+      positionInChunks,
+    );
+
+    expect(skeletonPriority).toBeGreaterThan(
+      equivalentVolumeRenderingPriority,
+    );
+    expect(
+      skeletonPriority - equivalentVolumeRenderingPriority,
+    ).toBeCloseTo(SPATIALLY_INDEXED_SKELETON_3D_PRIORITY_BOOST);
+  });
+
+  it("keeps 3d spatial skeleton chunks ordered by distance after applying the boost", () => {
+    const basePriority = BASE_PRIORITY;
+    const scaleIndex = 1;
+    const localCenter = Float32Array.of(10, 20, 30);
+    const chunkSize = Float32Array.of(4, 4, 8);
+    const nearChunk = Float32Array.of(2, 5, 4);
+    const farChunk = Float32Array.of(5, 1, 0);
+
+    expect(
+      getSpatiallyIndexedSkeleton3dRenderPriority(
+        basePriority,
+        scaleIndex,
+        localCenter,
+        chunkSize,
+        nearChunk,
+      ),
+    ).toBeGreaterThan(
+      getSpatiallyIndexedSkeleton3dRenderPriority(
+        basePriority,
+        scaleIndex,
         localCenter,
         chunkSize,
         farChunk,
