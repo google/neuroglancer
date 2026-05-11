@@ -305,11 +305,75 @@ class RenderHelper extends RefCounted {
     return this.base.vertexAttributes;
   }
 
-  defineCommonShader(builder: ShaderBuilder) {
+  private defineCommonShader(
+    builder: ShaderBuilder,
+    shaderBuilderState: ShaderControlsBuilderState,
+    skeletonParams: SkeletonShaderParameters,
+  ): void {
+    if (shaderBuilderState.parseResult.errors.length !== 0) {
+      throw new Error("Invalid UI control specification");
+    }
     defineVertexId(builder);
     builder.addUniform("highp vec4", "uColor");
     builder.addUniform("highp mat4", "uProjection");
     builder.addUniform("highp uint", "uPickID");
+    builder.addVarying("highp uint", "vPickID", "flat");
+    builder.addUniform("highp uint", "uPickInstanceStride");
+    this.defineAttributeAccess(builder);
+    if (skeletonParams.dynamicSegmentAppearance) {
+      this.defineDynamicSegmentAppearance(builder, skeletonParams);
+    }
+    if (skeletonParams.dynamicSegmentAppearance) {
+      builder.addVarying("highp uint", "vSegmentValue", "flat");
+    }
+  }
+
+  // TODO (SKM): segmentAttribute is UINT32 but segments can be UINT64.
+  // Change segmentAttribute.dataType to DataType.UINT64, update vSegmentValue
+  // from `highp uint` (flat) to `highp uvec2` (flat), update
+  // getSegmentAppearanceId to take uvec2 directly, and getSegmentAppearance
+  // signature accordingly. Also pull segmentAttribute and selectedNodeAttribute
+  // out of vertexAttributes entirely (they are internal, not user-defined).
+  private finalizeShaderBuilder(
+    builder: ShaderBuilder,
+    shaderBuilderState: ShaderControlsBuilderState,
+    skeletonParams: SkeletonShaderParameters,
+    vertexMain: string,
+  ): void {
+    builder.addFragmentCode(glsl_COLORMAPS);
+    const { vertexAttributes } = this;
+    const numAttributes = vertexAttributes.length;
+    if (
+      skeletonParams.dynamicSegmentAppearance &&
+      this.segmentAttributeIndex !== undefined
+    ) {
+      const segInfo = vertexAttributes[this.segmentAttributeIndex];
+      builder.addFragmentCode(dataTypeShaderDefinition[segInfo.dataType]);
+      builder.addFragmentCode(
+        `#define ${segInfo.name} ${segInfo.glslDataType}(vSegmentValue)\n`,
+      );
+      builder.addFragmentCode(
+        `#define prop_${segInfo.name}() ${segInfo.glslDataType}(vSegmentValue)\n`,
+      );
+    }
+    for (let i = 1; i < numAttributes; ++i) {
+      if (
+        i === this.segmentAttributeIndex ||
+        i === this.selectedNodeAttributeIndex
+      ) {
+        continue;
+      }
+      const info = vertexAttributes[i];
+      builder.addVarying(`highp ${info.glslDataType}`, `vCustom${i}`);
+      vertexMain += `vCustom${i} = readAttribute${i}(vertexIndex);\n`;
+      builder.addFragmentCode(`#define ${info.name} vCustom${i}\n`);
+      builder.addFragmentCode(`#define prop_${info.name}() vCustom${i}\n`);
+    }
+    builder.setVertexMain(vertexMain);
+    addControlsToBuilder(shaderBuilderState, builder);
+    builder.setFragmentMainFunction(
+      shaderCodeWithLineDirective(shaderBuilderState.parseResult.code),
+    );
   }
 
   private getSegmentColorExpression() {
@@ -531,7 +595,7 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
           shaderBuilderState: ShaderControlsBuilderState,
           skeletonParams: SkeletonShaderParameters,
         ) => {
-          this.defineShaderBase(builder, shaderBuilderState, skeletonParams);
+          this.defineCommonShader(builder, shaderBuilderState, skeletonParams);
           defineLineShader(builder);
           builder.addAttribute("highp uvec2", "aVertexIndex");
           builder.addUniform("highp float", "uLineWidth");
@@ -635,7 +699,7 @@ void emitDefault() {
           shaderBuilderState: ShaderControlsBuilderState,
           skeletonParams: SkeletonShaderParameters,
         ) => {
-          this.defineShaderBase(builder, shaderBuilderState, skeletonParams);
+          this.defineCommonShader(builder, shaderBuilderState, skeletonParams);
           defineCircleShader(
             builder,
             /*crossSectionFade=*/ this.targetIsSliceView,
@@ -801,74 +865,6 @@ void emitDefault() {
       return "(clamp(1.0 - 2.0 * abs(0.5 - gl_FragCoord.z), 0.0, 1.0))";
     }
     return "(1.0)";
-  }
-
-  private defineShaderBase(
-    builder: ShaderBuilder,
-    shaderBuilderState: ShaderControlsBuilderState,
-    skeletonParams: SkeletonShaderParameters,
-  ): void {
-    if (shaderBuilderState.parseResult.errors.length !== 0) {
-      throw new Error("Invalid UI control specification");
-    }
-    this.defineCommonShader(builder);
-    this.defineAttributeAccess(builder);
-    if (skeletonParams.dynamicSegmentAppearance) {
-      this.defineDynamicSegmentAppearance(builder, skeletonParams);
-    }
-    builder.addUniform("highp uint", "uPickInstanceStride");
-    builder.addVarying("highp uint", "vPickID", "flat");
-    if (skeletonParams.dynamicSegmentAppearance) {
-      builder.addVarying("highp uint", "vSegmentValue", "flat");
-    }
-  }
-
-  // TODO (SKM): segmentAttribute is UINT32 but segments can be UINT64.
-  // Change segmentAttribute.dataType to DataType.UINT64, update vSegmentValue
-  // from `highp uint` (flat) to `highp uvec2` (flat), update
-  // getSegmentAppearanceId to take uvec2 directly, and getSegmentAppearance
-  // signature accordingly. Also pull segmentAttribute and selectedNodeAttribute
-  // out of vertexAttributes entirely (they are internal, not user-defined).
-  private finalizeShaderBuilder(
-    builder: ShaderBuilder,
-    shaderBuilderState: ShaderControlsBuilderState,
-    skeletonParams: SkeletonShaderParameters,
-    vertexMain: string,
-  ): void {
-    builder.addFragmentCode(glsl_COLORMAPS);
-    const { vertexAttributes } = this;
-    const numAttributes = vertexAttributes.length;
-    if (
-      skeletonParams.dynamicSegmentAppearance &&
-      this.segmentAttributeIndex !== undefined
-    ) {
-      const segInfo = vertexAttributes[this.segmentAttributeIndex];
-      builder.addFragmentCode(dataTypeShaderDefinition[segInfo.dataType]);
-      builder.addFragmentCode(
-        `#define ${segInfo.name} ${segInfo.glslDataType}(vSegmentValue)\n`,
-      );
-      builder.addFragmentCode(
-        `#define prop_${segInfo.name}() ${segInfo.glslDataType}(vSegmentValue)\n`,
-      );
-    }
-    for (let i = 1; i < numAttributes; ++i) {
-      if (
-        i === this.segmentAttributeIndex ||
-        i === this.selectedNodeAttributeIndex
-      ) {
-        continue;
-      }
-      const info = vertexAttributes[i];
-      builder.addVarying(`highp ${info.glslDataType}`, `vCustom${i}`);
-      vertexMain += `vCustom${i} = readAttribute${i}(vertexIndex);\n`;
-      builder.addFragmentCode(`#define ${info.name} vCustom${i}\n`);
-      builder.addFragmentCode(`#define prop_${info.name}() vCustom${i}\n`);
-    }
-    builder.setVertexMain(vertexMain);
-    addControlsToBuilder(shaderBuilderState, builder);
-    builder.setFragmentMainFunction(
-      shaderCodeWithLineDirective(shaderBuilderState.parseResult.code),
-    );
   }
 
   beginLayer(
@@ -3208,11 +3204,17 @@ function updateSpatiallyIndexedSkeletonMouseState(
 
 function attachSpatiallyIndexedSkeletonLayer(
   base: SpatiallyIndexedSkeletonLayer,
-  self: { transformedSources: TransformedSource[][]; redrawNeeded: NullarySignal },
-  attachment: VisibleLayerInfo<LayerView, ThreeDimensionalRenderLayerAttachmentState>,
+  renderLayer: {
+    transformedSources: TransformedSource[][];
+    redrawNeeded: NullarySignal;
+  },
+  attachment: VisibleLayerInfo<
+    LayerView,
+    ThreeDimensionalRenderLayerAttachmentState
+  >,
   view: "2d" | "3d",
 ): void {
-  const { redrawNeeded } = self;
+  const { redrawNeeded } = renderLayer;
   attachment.registerDisposer(
     registerNested(
       (context, transform, displayDimensionRenderInfo) => {
@@ -3227,7 +3229,7 @@ function attachSpatiallyIndexedSkeletonLayer(
             })),
           ],
           attachment.messages,
-          self,
+          renderLayer,
         );
         for (const scales of transformedSources) {
           for (const tsource of scales) {
@@ -3235,7 +3237,7 @@ function attachSpatiallyIndexedSkeletonLayer(
           }
         }
         attachment.view.flushBackendProjectionParameters();
-        self.transformedSources = transformedSources;
+        renderLayer.transformedSources = transformedSources;
         base.rpc!.invoke(
           SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_UPDATE_SOURCES_RPC_ID,
           {
