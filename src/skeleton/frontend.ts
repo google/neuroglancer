@@ -703,21 +703,27 @@ void emitDefault() {
           if (skeletonParams.dynamicSegmentAppearance) {
             builder.addVarying("highp uint", "vSegmentValue", "flat");
           }
-          const selectedOutlineMinWidth = this.targetIsSliceView
-            ? SELECTED_NODE_OUTLINE_MIN_WIDTH_2D
-            : SELECTED_NODE_OUTLINE_MIN_WIDTH_3D;
-          const selectedOutlineMaxWidth = this.targetIsSliceView
-            ? SELECTED_NODE_OUTLINE_MAX_WIDTH_2D
-            : SELECTED_NODE_OUTLINE_MAX_WIDTH_3D;
-          const selectedOutlineWidthExpression =
-            this.selectedNodeAttributeIndex === undefined
-              ? "0.0"
-              : `((vSelectedNode > 0.5) ? clamp(0.25 * uNodeDiameter, ${selectedOutlineMinWidth}, ${selectedOutlineMaxWidth}) : 0.0)`;
+          let selectedOutlineWidthExpression = "0.0";
+          if (this.selectedNodeAttributeIndex !== undefined) {
+            builder.addVarying("highp float", "vSelectedNode", "flat");
+            const selectedOutlineMinWidth = this.targetIsSliceView
+              ? SELECTED_NODE_OUTLINE_MIN_WIDTH_2D
+              : SELECTED_NODE_OUTLINE_MIN_WIDTH_3D;
+            const selectedOutlineMaxWidth = this.targetIsSliceView
+              ? SELECTED_NODE_OUTLINE_MAX_WIDTH_2D
+              : SELECTED_NODE_OUTLINE_MAX_WIDTH_3D;
+            selectedOutlineWidthExpression = `((vSelectedNode > 0.5) ? clamp(0.25 * uNodeDiameter, ${selectedOutlineMinWidth}, ${selectedOutlineMaxWidth}) : 0.0)`;
+          }
           let vertexMain = `
 highp uint vertexIndex = uint(gl_InstanceID);
 highp uint pickOffset = vertexIndex * uPickInstanceStride;
 vPickID = uPickID + pickOffset;
 highp vec3 vertexPosition = readAttribute0(vertexIndex);
+`;
+          if (this.selectedNodeAttributeIndex !== undefined) {
+            vertexMain += `vSelectedNode = readAttribute${this.selectedNodeAttributeIndex}(vertexIndex);\n`;
+          }
+          vertexMain += `
 emitCircle(
   uProjection * vec4(vertexPosition, 1.0),
   uNodeDiameter,
@@ -729,10 +735,6 @@ emitCircle(
             this.segmentAttributeIndex !== undefined
           ) {
             vertexMain += `vSegmentValue = toRaw(readAttribute${this.segmentAttributeIndex}(vertexIndex));\n`;
-          }
-          if (this.selectedNodeAttributeIndex !== undefined) {
-            builder.addVarying("highp float", "vSelectedNode", "flat");
-            vertexMain += `vSelectedNode = readAttribute${this.selectedNodeAttributeIndex}(vertexIndex);\n`;
           }
 
           const segmentColorExpression = this.getSegmentColorExpression();
