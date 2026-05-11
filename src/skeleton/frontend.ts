@@ -705,9 +705,6 @@ void emitDefault() {
             /*crossSectionFade=*/ this.targetIsSliceView,
           );
           builder.addUniform("highp float", "uNodeDiameter");
-          if (skeletonParams.dynamicSegmentAppearance) {
-            builder.addVarying("highp uint", "vSegmentValue", "flat");
-          }
           let selectedOutlineWidthExpression = "0.0";
           if (this.selectedNodeAttributeIndex !== undefined) {
             builder.addVarying("highp float", "vSelectedNode", "flat");
