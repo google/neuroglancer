@@ -85,7 +85,7 @@ export interface SpatiallyIndexedSkeletonChunkSpecification
 }
 
 const SKELETON_CHUNK_PRIORITY = 60;
-export const SPATIALLY_INDEXED_SKELETON_3D_PRIORITY_BOOST = -BASE_PRIORITY;
+export const SPATIALLY_INDEXED_SKELETON_PRIORITY_BOOST = -BASE_PRIORITY;
 const SPATIALLY_INDEXED_SKELETON_LOD_DEBOUNCE_MS = 300;
 const tempCenter = vec3.create();
 const tempChunkSize = vec3.create();
@@ -104,7 +104,7 @@ export function getSpatiallyIndexedSkeletonChunkPriority(
   return -Math.sqrt(sum);
 }
 
-export function getSpatiallyIndexedSkeleton3dRenderPriority(
+export function getSpatiallyIndexedSkeletonRenderPriority(
   basePriority: number,
   scaleIndex: number,
   localCenter: Float32Array,
@@ -113,7 +113,7 @@ export function getSpatiallyIndexedSkeleton3dRenderPriority(
 ) {
   return (
     basePriority +
-    SPATIALLY_INDEXED_SKELETON_3D_PRIORITY_BOOST +
+    SPATIALLY_INDEXED_SKELETON_PRIORITY_BOOST +
     SCALE_PRIORITY_MULTIPLIER * scaleIndex +
     getSpatiallyIndexedSkeletonChunkPriority(
       localCenter,
@@ -666,7 +666,7 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
               chunkManager.requestChunk(
                 chunk,
                 priorityTier,
-                getSpatiallyIndexedSkeleton3dRenderPriority(
+                getSpatiallyIndexedSkeletonRenderPriority(
                   basePriority,
                   scaleIndex,
                   localCenter,
