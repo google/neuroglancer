@@ -32,6 +32,7 @@ import {
   clearOutOfBoundsPickData,
   getPickDiameter,
 } from "#src/rendered_data_panel_picking.js";
+import type { SpatialSkeletonSourceState } from "#src/skeleton/api.js";
 import { StatusMessage } from "#src/status.js";
 import type { TrackableValue } from "#src/trackable_value.js";
 import { AutomaticallyFocusedElement } from "#src/util/automatic_focus.js";
@@ -65,7 +66,7 @@ interface SpatialSkeletonSelectableLayer {
     options?: {
       segmentId?: number;
       position?: ArrayLike<number>;
-      revisionToken?: string;
+      sourceState?: SpatialSkeletonSourceState;
     },
   ) => void;
   clearSpatialSkeletonNodeSelection: (
@@ -539,7 +540,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
             ? pickedSegmentId
             : undefined,
         position: pickedSpatialSkeleton?.position ?? mouseState.position,
-        revisionToken: pickedSpatialSkeleton?.revisionToken,
+        sourceState: pickedSpatialSkeleton?.sourceState,
       };
     };
 
@@ -570,7 +571,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
           {
             segmentId: pickedSelection.segmentId,
             position: pickedSelection.position,
-            revisionToken: pickedSelection.revisionToken,
+            sourceState: pickedSelection.sourceState,
           },
         );
         return;

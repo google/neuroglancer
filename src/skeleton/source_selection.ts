@@ -23,13 +23,6 @@ interface SpatiallyIndexedSkeletonParameterHolder {
   };
 }
 
-type SpatiallyIndexedSkeletonParameterAccess =
-  | SpatiallyIndexedSkeletonParameterHolder
-  | {
-      source?: unknown;
-      chunkSource?: unknown;
-    };
-
 function isSpatiallyIndexedSkeletonParameterHolder(
   value: unknown,
 ): value is SpatiallyIndexedSkeletonParameterHolder {
@@ -37,8 +30,8 @@ function isSpatiallyIndexedSkeletonParameterHolder(
 }
 
 function getSpatiallyIndexedSkeletonParameterHolder(
-  value: SpatiallyIndexedSkeletonParameterAccess,
-) {
+  value: unknown,
+): SpatiallyIndexedSkeletonParameterHolder | undefined {
   if (!isSpatiallyIndexedSkeletonParameterHolder(value)) {
     return undefined;
   }
@@ -55,17 +48,17 @@ function getSpatiallyIndexedSkeletonParameterHolder(
   return value;
 }
 
-export function getSpatiallyIndexedSkeletonGridIndex(
-  value: SpatiallyIndexedSkeletonParameterAccess,
-) {
+export function getSpatiallyIndexedSkeletonGridIndex<T extends object>(
+  value: T,
+): number | undefined {
   const gridIndex =
     getSpatiallyIndexedSkeletonParameterHolder(value)?.parameters?.gridIndex;
   return typeof gridIndex === "number" ? gridIndex : undefined;
 }
 
-export function getSpatiallyIndexedSkeletonSourceView(
-  value: SpatiallyIndexedSkeletonParameterAccess,
-) {
+export function getSpatiallyIndexedSkeletonSourceView<T extends object>(
+  value: T,
+): string | undefined {
   const sourceView =
     getSpatiallyIndexedSkeletonParameterHolder(value)?.parameters?.view;
   return typeof sourceView === "string" ? sourceView : undefined;

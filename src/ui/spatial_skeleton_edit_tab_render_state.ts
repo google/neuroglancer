@@ -99,7 +99,7 @@ export function buildSpatialSkeletonSegmentRenderState(
         matchesSpatialSkeletonNodeFilter(options.nodeFilterType, {
           isLeaf: children.length === 0,
           nodeHasDescription: hasNonEmptyNodeDescription(description),
-          nodeIsTrueEnd: node.isTrueEnd,
+          nodeIsTrueEnd: node.isTrueEnd ?? false,
           nodeType,
         })) &&
       nodeMatchesFilter(node, options.filterText, description);
@@ -141,7 +141,7 @@ export function buildSpatialSkeletonSegmentRenderState(
     const parentInTree =
       node.parentNodeId !== undefined && nodeById.has(node.parentNodeId);
     const type = classifyNodeType(node, children.length, parentInTree);
-    if (type === "regular" && !node.isTrueEnd) {
+    if (type === "regular" && !(node.isTrueEnd ?? false)) {
       continue;
     }
     rows.push({ node, type, isLeaf: children.length === 0 });

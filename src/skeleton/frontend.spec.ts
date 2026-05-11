@@ -19,9 +19,8 @@ if (!("WebGL2RenderingContext" in globalThis)) {
   });
 }
 
-const { SpatiallyIndexedSkeletonLayer } = await import(
-  "#src/skeleton/frontend.js"
-);
+const { SpatiallyIndexedSkeletonLayer, getSpatialSkeletonCellKeyPrefix } =
+  await import("#src/skeleton/frontend.js");
 
 describe("resolveSpatiallyIndexedSkeletonSegmentPick", () => {
   it("returns the node segment id for direct node picks", () => {
@@ -68,7 +67,7 @@ describe("resolveSpatiallyIndexedSkeletonSegmentPick", () => {
 });
 
 describe("SpatiallyIndexedSkeletonLayer browse node picks", () => {
-  it("resolves browse node picks with node id and revision token", () => {
+  it("resolves browse node picks with node id and source state", () => {
     const positions = new Float32Array([1, 2, 3, 4, 5, 6]);
     const segmentIds = new Uint32Array([11, 17]);
     const vertexBytes = new Uint8Array(
@@ -82,7 +81,10 @@ describe("SpatiallyIndexedSkeletonLayer browse node picks", () => {
       numVertices: 2,
       indices: new Uint32Array([0, 1]),
       nodeIds: new Int32Array([101, 202]),
-      nodeRevisionTokens: ["2026-03-29T11:50:00Z", "2026-03-29T11:51:00Z"],
+      nodeSourceStates: [
+        { revisionToken: "2026-03-29T11:50:00Z" },
+        { revisionToken: "2026-03-29T11:51:00Z" },
+      ],
     };
     const layer = Object.create(SpatiallyIndexedSkeletonLayer.prototype);
 
@@ -90,7 +92,7 @@ describe("SpatiallyIndexedSkeletonLayer browse node picks", () => {
       nodeId: 202,
       segmentId: 17,
       position: new Float32Array([4, 5, 6]),
-      revisionToken: "2026-03-29T11:51:00Z",
+      sourceState: { revisionToken: "2026-03-29T11:51:00Z" },
     });
   });
 });
@@ -101,6 +103,68 @@ describe("spatiallyIndexedSkeletonTextureAttributeSpecs", () => {
       { name: "position", dataType: DataType.FLOAT32, numComponents: 3 },
       { name: "segment", dataType: DataType.UINT32, numComponents: 1 },
     ]);
+  });
+});
+
+describe("SpatiallyIndexedSkeletonLayer targeted source invalidation", () => {
+  it("computes absolute half-open cell prefixes without lower-bound offsets", () => {
+    expect(
+      getSpatialSkeletonCellKeyPrefix(
+        new Float32Array([100, 200, 300]),
+        new Float32Array([100, 100, 100]),
+      ),
+    ).toBe("1,2,3:");
+    expect(
+      getSpatialSkeletonCellKeyPrefix(
+        new Float32Array([99.999, 199.999, 299.999]),
+        new Float32Array([100, 100, 100]),
+      ),
+    ).toBe("0,1,2:");
+  });
+
+  it("dedupes cell prefixes per unique source entry", () => {
+    const invalidateCacheKeyPrefixes = vi.fn();
+    const source = {
+      spec: {
+        chunkDataSize: new Float32Array([100, 100, 100]),
+        lowerChunkBound: new Float32Array([10, 20, 30]),
+      },
+      invalidateCacheKeyPrefixes,
+    };
+    const source2d = {
+      spec: {
+        chunkDataSize: new Float32Array([50, 50, 50]),
+      },
+      invalidateCacheKeyPrefixes: vi.fn(),
+    };
+    const redrawNeeded = { dispatch: vi.fn() };
+    const layer = {
+      sources: [{ chunkSource: source }, { chunkSource: source }],
+      sources2d: [{ chunkSource: source2d }],
+      redrawNeeded,
+    };
+
+    const invalidated =
+      SpatiallyIndexedSkeletonLayer.prototype.invalidateSourceCellsForPositions.call(
+        layer,
+        [
+          new Float32Array([100, 200, 300]),
+          new Float32Array([199.999, 200, 300]),
+          new Float32Array([100, 200, 300]),
+        ],
+      );
+
+    expect(invalidated).toBe(true);
+    expect(invalidateCacheKeyPrefixes).toHaveBeenCalledTimes(1);
+    expect([...invalidateCacheKeyPrefixes.mock.calls[0][0]]).toEqual([
+      "1,2,3:",
+    ]);
+    expect(source2d.invalidateCacheKeyPrefixes).toHaveBeenCalledTimes(1);
+    expect([...source2d.invalidateCacheKeyPrefixes.mock.calls[0][0]]).toEqual([
+      "2,4,6:",
+      "3,4,6:",
+    ]);
+    expect(redrawNeeded.dispatch).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -125,4 +189,3 @@ describe("SpatiallyIndexedSkeletonLayer browse exclusions", () => {
     expect([...excludedSegments]).toEqual([29n]);
   });
 });
-

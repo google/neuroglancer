@@ -23,6 +23,7 @@ import {
   CHUNK_LAYER_STATISTICS_RPC_ID,
   CHUNK_MANAGER_RPC_ID,
   CHUNK_QUEUE_MANAGER_RPC_ID,
+  CHUNK_SOURCE_INVALIDATE_KEY_PREFIXES_RPC_ID,
   CHUNK_SOURCE_INVALIDATE_RPC_ID,
   ChunkDownloadStatistics,
   ChunkMemoryStatistics,
@@ -59,6 +60,10 @@ import {
 } from "#src/worker_rpc.js";
 
 const DEBUG_CHUNK_UPDATES = false;
+
+function keyMatchesAnyPrefix(key: string, keyPrefixes: readonly string[]) {
+  return keyPrefixes.some((keyPrefix) => key.startsWith(keyPrefix));
+}
 
 export interface ChunkStateListener {
   (chunk: Chunk, oldState: ChunkState): void;
@@ -1126,6 +1131,38 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     this.rpc!.invoke("Chunk.update", { source: source.rpcId });
     this.scheduleUpdate();
   }
+
+  invalidateSourceCacheKeyPrefixes(
+    source: ChunkSource,
+    keyPrefixes: readonly string[],
+  ) {
+    let invalidated = false;
+    for (const chunk of source.chunks.values()) {
+      const key = chunk.key;
+      if (key === null || !keyMatchesAnyPrefix(key, keyPrefixes)) {
+        continue;
+      }
+      switch (chunk.state) {
+        case ChunkState.DOWNLOADING:
+          cancelChunkDownload(chunk);
+          break;
+        case ChunkState.SYSTEM_MEMORY_WORKER:
+          chunk.freeSystemMemory();
+          break;
+      }
+      // Note: After calling this, chunk may no longer be valid.
+      this.updateChunkState(chunk, ChunkState.QUEUED);
+      invalidated = true;
+    }
+    if (!invalidated) {
+      return;
+    }
+    this.rpc!.invoke("Chunk.update", {
+      source: source.rpcId,
+      keyPrefixes: [...keyPrefixes],
+    });
+    this.scheduleUpdate();
+  }
 }
 
 export class ChunkRenderLayerBackend
@@ -1376,6 +1413,20 @@ export function withChunkManager<
 registerRPC(CHUNK_SOURCE_INVALIDATE_RPC_ID, function (x) {
   const source = <ChunkSource>this.get(x.id);
   source.chunkManager.queueManager.invalidateSourceCache(source);
+});
+
+registerRPC(CHUNK_SOURCE_INVALIDATE_KEY_PREFIXES_RPC_ID, function (x) {
+  const source = <ChunkSource>this.get(x.id);
+  const keyPrefixes = Array.isArray(x.keyPrefixes)
+    ? x.keyPrefixes.filter(
+        (keyPrefix: unknown): keyPrefix is string =>
+          typeof keyPrefix === "string" && keyPrefix.length !== 0,
+      )
+    : [];
+  source.chunkManager.queueManager.invalidateSourceCacheKeyPrefixes(
+    source,
+    keyPrefixes,
+  );
 });
 
 registerPromiseRPC(

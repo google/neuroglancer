@@ -16,49 +16,173 @@
 
 import { describe, expect, it, vi } from "vitest";
 
+import { SpatialSkeletonActions } from "#src/skeleton/actions.js";
 import {
   buildSpatiallyIndexedSkeletonNavigationGraph,
   getFlatListNodeIds,
   getSkeletonRootNode,
 } from "#src/skeleton/navigation.js";
 import {
-  isEditableSpatiallyIndexedSkeletonSource,
+  getEditableSpatiallyIndexedSkeletonSource,
+  isSpatiallyIndexedSkeletonSourceReadOnly,
   SpatialSkeletonState,
 } from "#src/skeleton/spatial_skeleton_manager.js";
 
+function makeCommandFactory(action: string) {
+  return {
+    action,
+    createCommand: vi.fn(),
+  };
+}
+
+function makeEditableSourceCommands() {
+  return {
+    addNodesCommand: makeCommandFactory(SpatialSkeletonActions.addNodes),
+    deleteNodesCommand: makeCommandFactory(SpatialSkeletonActions.deleteNodes),
+    moveNodesCommand: makeCommandFactory(SpatialSkeletonActions.moveNodes),
+    splitSkeletonsCommand: makeCommandFactory(
+      SpatialSkeletonActions.splitSkeletons,
+    ),
+    mergeSkeletonsCommand: makeCommandFactory(
+      SpatialSkeletonActions.mergeSkeletons,
+    ),
+  };
+}
+
 describe("skeleton/spatial_skeleton_manager", () => {
-  it("does not require reroot support for editable sources", () => {
-    const editableSource = {
+  it("returns an editable source when mandatory edit actions are present", () => {
+    const source = {
+      ...makeEditableSourceCommands(),
+      readonly: false,
       listSkeletons: async () => [],
       getSkeleton: async () => [],
       fetchNodes: async () => [],
       getSpatialIndexMetadata: async () => null,
-      getSkeletonRootNode: async () => ({ nodeId: 1, x: 1, y: 2, z: 3 }),
-      addNode: async () => ({ treenodeId: 1, skeletonId: 1 }),
-      insertNode: async () => ({ treenodeId: 1, skeletonId: 1 }),
-      moveNode: async () => {},
-      deleteNode: async () => {},
-      updateDescription: async () => {},
-      setTrueEnd: async () => {},
-      removeTrueEnd: async () => {},
-      updateRadius: async () => {},
-      updateConfidence: async () => {},
-      mergeSkeletons: async () => ({
-        resultSkeletonId: 1,
-        deletedSkeletonId: 2,
-        stableAnnotationSwap: false,
-      }),
-      splitSkeleton: async () => ({
-        existingSkeletonId: 1,
-        newSkeletonId: 2,
-      }),
     };
 
-    expect(isEditableSpatiallyIndexedSkeletonSource(editableSource)).toBe(true);
+    expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
+  });
+
+  it("does not treat a source missing mandatory edit actions as editable", () => {
+    const source = {
+      ...makeEditableSourceCommands(),
+      mergeSkeletonsCommand: undefined,
+      readonly: false,
+      listSkeletons: async () => [],
+      getSkeleton: async () => [],
+      fetchNodes: async () => [],
+      getSpatialIndexMetadata: async () => null,
+    };
+
     expect(
-      isEditableSpatiallyIndexedSkeletonSource({
-        ...editableSource,
-        rerootSkeleton: async () => {},
+      getEditableSpatiallyIndexedSkeletonSource({ source }),
+    ).toBeUndefined();
+  });
+
+  it("does not treat a command factory for the wrong action as editable", () => {
+    const source = {
+      ...makeEditableSourceCommands(),
+      moveNodesCommand: makeCommandFactory(SpatialSkeletonActions.addNodes),
+      readonly: false,
+      listSkeletons: async () => [],
+      getSkeleton: async () => [],
+      fetchNodes: async () => [],
+      getSpatialIndexMetadata: async () => null,
+    };
+
+    expect(
+      getEditableSpatiallyIndexedSkeletonSource({ source }),
+    ).toBeUndefined();
+  });
+
+  it("does not require optional edit actions for editable source validation", () => {
+    const source = {
+      ...makeEditableSourceCommands(),
+      readonly: false,
+      listSkeletons: async () => [],
+      getSkeleton: async () => [],
+      fetchNodes: async () => [],
+      getSpatialIndexMetadata: async () => null,
+    };
+
+    expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
+  });
+
+  it("validates optional confidence configuration for editable sources", () => {
+    const source = {
+      ...makeEditableSourceCommands(),
+      editNodeConfidenceCommand: makeCommandFactory(
+        SpatialSkeletonActions.editNodeConfidence,
+      ),
+      spatialSkeletonConfidenceConfiguration: {
+        values: [0, 50, 100],
+      },
+      readonly: false,
+      listSkeletons: async () => [],
+      getSkeleton: async () => [],
+      fetchNodes: async () => [],
+      getSpatialIndexMetadata: async () => null,
+    };
+
+    expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
+
+    expect(
+      getEditableSpatiallyIndexedSkeletonSource({
+        source: {
+          ...source,
+          spatialSkeletonConfidenceConfiguration: {
+            values: [0, Number.NaN, 100],
+          },
+        },
+      }),
+    ).toBeUndefined();
+  });
+
+  it("does not treat a read-only source with edit commands as editable", () => {
+    const source = {
+      ...makeEditableSourceCommands(),
+      readonly: true,
+      listSkeletons: async () => [],
+      getSkeleton: async () => [],
+      fetchNodes: async () => [],
+      getSpatialIndexMetadata: async () => null,
+    };
+
+    expect(
+      getEditableSpatiallyIndexedSkeletonSource({ source }),
+    ).toBeUndefined();
+  });
+
+  it("treats missing or invalid spatial skeleton sources as read-only", () => {
+    expect(isSpatiallyIndexedSkeletonSourceReadOnly(undefined)).toBe(true);
+    expect(
+      isSpatiallyIndexedSkeletonSourceReadOnly({ source: undefined }),
+    ).toBe(true);
+    expect(
+      isSpatiallyIndexedSkeletonSourceReadOnly({
+        source: {
+          readonly: false,
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it("reads spatial skeleton source read-only state", () => {
+    const source = {
+      readonly: false,
+      listSkeletons: async () => [],
+      getSkeleton: async () => [],
+      fetchNodes: async () => [],
+      getSpatialIndexMetadata: async () => null,
+    };
+
+    expect(isSpatiallyIndexedSkeletonSourceReadOnly({ source })).toBe(false);
+    expect(
+      isSpatiallyIndexedSkeletonSourceReadOnly({
+        source: {
+          ...source,
+          readonly: true,
+        },
       }),
     ).toBe(true);
   });
@@ -264,6 +388,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     );
     const skeletonLayer = {
       source: {
+        readonly: false,
         listSkeletons: async () => [],
         getSkeleton,
         fetchNodes: async () => [],
@@ -316,6 +441,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const pending = state.getFullSegmentNodes(
       {
         source: {
+          readonly: false,
           listSkeletons: async () => [],
           getSkeleton,
           fetchNodes: async () => [],
@@ -351,6 +477,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const pending = state.getFullSegmentNodes(
       {
         source: {
+          readonly: false,
           listSkeletons: async () => [],
           getSkeleton,
           fetchNodes: async () => [],
@@ -386,6 +513,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const pending = state.getFullSegmentNodes(
       {
         source: {
+          readonly: false,
           listSkeletons: async () => [],
           getSkeleton,
           fetchNodes: async () => [],
@@ -416,6 +544,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     ]);
     const skeletonLayer = {
       source: {
+        readonly: false,
         listSkeletons: async () => [],
         getSkeleton,
         fetchNodes: async () => [],
@@ -451,7 +580,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     });
   });
 
-  it("caches inspected revision metadata from full skeleton inspection", async () => {
+  it("caches inspected source state from full skeleton inspection", async () => {
     const state = new SpatialSkeletonState();
     const getSkeleton = vi.fn(async () => [
       {
@@ -460,7 +589,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
         position: new Float32Array([1, 2, 3]),
         segmentId: 11,
         isTrueEnd: false,
-        revisionToken: "2026-03-29T12:30:00Z",
+        sourceState: { revisionToken: "2026-03-29T12:30:00Z" },
       },
     ]);
 
@@ -468,6 +597,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       state.getFullSegmentNodes(
         {
           source: {
+            readonly: false,
             listSkeletons: async () => [],
             getSkeleton,
             fetchNodes: async () => [],
@@ -484,7 +614,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
         parentNodeId: undefined,
         description: undefined,
         isTrueEnd: false,
-        revisionToken: "2026-03-29T12:30:00Z",
+        sourceState: { revisionToken: "2026-03-29T12:30:00Z" },
       },
     ]);
 
@@ -496,7 +626,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       parentNodeId: undefined,
       description: undefined,
       isTrueEnd: false,
-      revisionToken: "2026-03-29T12:30:00Z",
+      sourceState: { revisionToken: "2026-03-29T12:30:00Z" },
     });
   });
 
@@ -510,7 +640,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     expect(state.mergeAnchorNodeId.value).toBeUndefined();
   });
 
-  it("stores provided confidence when setting properties", () => {
+  it("stores provided radius and confidence independently", () => {
     const state = new SpatialSkeletonState();
     (state as any).replaceCachedSegmentNodes(11, [
       {
@@ -523,9 +653,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
       },
     ]);
 
-    expect(state.setNodeProperties(1, { radius: 6, confidence: 63 })).toBe(
-      true,
-    );
+    expect(state.setNodeRadius(1, 6)).toBe(true);
+    expect(state.setNodeConfidence(1, 63)).toBe(true);
     expect(state.getCachedNode(1)).toMatchObject({
       radius: 6,
       confidence: 63,

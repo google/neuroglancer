@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import type { SpatialSkeletonSourceState } from "#src/skeleton/api.js";
 import type { TypedNumberArray } from "#src/util/array.js";
 
 export interface SkeletonChunkData {
@@ -22,7 +23,7 @@ export interface SkeletonChunkData {
   indices: Uint32Array | null;
   lod?: number;
   nodeIds?: Int32Array;
-  nodeRevisionTokens?: Array<string | undefined>;
+  nodeSourceStates?: Array<SpatialSkeletonSourceState | undefined>;
 }
 
 /**
@@ -97,8 +98,8 @@ export function serializeSkeletonChunkData(
     msg.nodeIds = data.nodeIds;
     transfers.push(data.nodeIds.buffer);
   }
-  if (data.nodeRevisionTokens) {
-    msg.nodeRevisionTokens = data.nodeRevisionTokens;
+  if (data.nodeSourceStates) {
+    msg.nodeSourceStates = data.nodeSourceStates;
   }
 }
 
@@ -108,5 +109,5 @@ export function serializeSkeletonChunkData(
 export function freeSkeletonChunkSystemMemory(data: SkeletonChunkData): void {
   data.vertexPositions = data.indices = data.vertexAttributes = null;
   data.nodeIds = undefined;
-  data.nodeRevisionTokens = undefined;
+  data.nodeSourceStates = undefined;
 }

@@ -14,13 +14,19 @@
  * limitations under the License.
  */
 
+import {
+  SpatialSkeletonActions,
+  type SpatialSkeletonAction,
+} from "#src/skeleton/actions.js";
 import type {
   EditableSpatiallyIndexedSkeletonSource,
+  SpatialSkeletonConfidenceConfiguration,
   SpatiallyIndexedSkeletonNode,
-  SpatiallyIndexedSkeletonNodeRevisionUpdate,
+  SpatialSkeletonSourceState,
   SpatiallyIndexedSkeletonSource,
 } from "#src/skeleton/api.js";
 import { SpatialSkeletonCommandHistory } from "#src/skeleton/command_history.js";
+import { isSpatialSkeletonEditCommandFactory } from "#src/skeleton/edit_command_source.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/frontend.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -40,10 +46,68 @@ function hasFunction<T extends string>(
   );
 }
 
+function getProperty<T extends string>(value: unknown, property: T): unknown {
+  return typeof value === "object" && value !== null
+    ? (value as Record<T, unknown>)[property]
+    : undefined;
+}
+
+function hasCommandFactory<T extends string>(
+  value: unknown,
+  property: T,
+  action: SpatialSkeletonAction,
+) {
+  return isSpatialSkeletonEditCommandFactory(
+    getProperty(value, property),
+    action,
+  );
+}
+
+function hasOptionalCommandFactory<T extends string>(
+  value: unknown,
+  property: T,
+  action: SpatialSkeletonAction,
+) {
+  const commandFactory = getProperty(value, property);
+  return (
+    commandFactory === undefined ||
+    isSpatialSkeletonEditCommandFactory(commandFactory, action)
+  );
+}
+
+function isFiniteNumberArray(value: unknown): value is readonly number[] {
+  return (
+    Array.isArray(value) &&
+    value.every((entry) => typeof entry === "number" && Number.isFinite(entry))
+  );
+}
+
+function isSpatialSkeletonConfidenceConfiguration(
+  value: unknown,
+): value is SpatialSkeletonConfidenceConfiguration {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    isFiniteNumberArray(getProperty(value, "values"))
+  );
+}
+
+function hasOptionalConfidenceConfiguration(value: unknown) {
+  const configuration = getProperty(
+    value,
+    "spatialSkeletonConfidenceConfiguration",
+  );
+  return (
+    configuration === undefined ||
+    isSpatialSkeletonConfidenceConfiguration(configuration)
+  );
+}
+
 export function isSpatiallyIndexedSkeletonSource(
   value: unknown,
 ): value is SpatiallyIndexedSkeletonSource {
   return (
+    typeof getProperty(value, "readonly") === "boolean" &&
     hasFunction(value, "listSkeletons") &&
     hasFunction(value, "getSkeleton") &&
     hasFunction(value, "getSpatialIndexMetadata") &&
@@ -56,18 +120,63 @@ export function isEditableSpatiallyIndexedSkeletonSource(
 ): value is EditableSpatiallyIndexedSkeletonSource {
   return (
     isSpatiallyIndexedSkeletonSource(value) &&
-    hasFunction(value, "addNode") &&
-    hasFunction(value, "insertNode") &&
-    hasFunction(value, "moveNode") &&
-    hasFunction(value, "deleteNode") &&
-    hasFunction(value, "updateDescription") &&
-    hasFunction(value, "setTrueEnd") &&
-    hasFunction(value, "removeTrueEnd") &&
-    hasFunction(value, "updateRadius") &&
-    hasFunction(value, "updateConfidence") &&
-    hasFunction(value, "getSkeletonRootNode") &&
-    hasFunction(value, "mergeSkeletons") &&
-    hasFunction(value, "splitSkeleton")
+    !value.readonly &&
+    hasCommandFactory(
+      value,
+      "addNodesCommand",
+      SpatialSkeletonActions.addNodes,
+    ) &&
+    hasCommandFactory(
+      value,
+      "deleteNodesCommand",
+      SpatialSkeletonActions.deleteNodes,
+    ) &&
+    hasCommandFactory(
+      value,
+      "moveNodesCommand",
+      SpatialSkeletonActions.moveNodes,
+    ) &&
+    hasCommandFactory(
+      value,
+      "splitSkeletonsCommand",
+      SpatialSkeletonActions.splitSkeletons,
+    ) &&
+    hasCommandFactory(
+      value,
+      "mergeSkeletonsCommand",
+      SpatialSkeletonActions.mergeSkeletons,
+    ) &&
+    hasOptionalCommandFactory(
+      value,
+      "insertNodesCommand",
+      SpatialSkeletonActions.insertNodes,
+    ) &&
+    hasOptionalCommandFactory(
+      value,
+      "rerootCommand",
+      SpatialSkeletonActions.reroot,
+    ) &&
+    hasOptionalCommandFactory(
+      value,
+      "editNodeDescriptionCommand",
+      SpatialSkeletonActions.editNodeDescription,
+    ) &&
+    hasOptionalCommandFactory(
+      value,
+      "editNodeTrueEndCommand",
+      SpatialSkeletonActions.editNodeTrueEnd,
+    ) &&
+    hasOptionalCommandFactory(
+      value,
+      "editNodeRadiusCommand",
+      SpatialSkeletonActions.editNodeRadius,
+    ) &&
+    hasOptionalCommandFactory(
+      value,
+      "editNodeConfidenceCommand",
+      SpatialSkeletonActions.editNodeConfidence,
+    ) &&
+    hasOptionalConfidenceConfiguration(value)
   );
 }
 
@@ -78,6 +187,12 @@ export function getSpatiallyIndexedSkeletonSource(
   return isSpatiallyIndexedSkeletonSource(value.source)
     ? value.source
     : undefined;
+}
+
+export function isSpatiallyIndexedSkeletonSourceReadOnly(
+  value: SpatialSkeletonSourceAccess | undefined,
+): boolean {
+  return getSpatiallyIndexedSkeletonSource(value)?.readonly ?? true;
 }
 
 export function getEditableSpatiallyIndexedSkeletonSource(
@@ -124,7 +239,7 @@ export function normalizeSpatiallyIndexedSkeletonNode(
       typeof node.description === "string" && node.description.length > 0
         ? node.description
         : undefined,
-    isTrueEnd: node.isTrueEnd,
+    isTrueEnd: node.isTrueEnd ?? false,
     ...((node.radius !== undefined && Number.isFinite(Number(node.radius))) ||
     (node.confidence !== undefined && Number.isFinite(Number(node.confidence)))
       ? {
@@ -137,9 +252,9 @@ export function normalizeSpatiallyIndexedSkeletonNode(
             : {}),
         }
       : {}),
-    ...(node.revisionToken === undefined
+    ...(node.sourceState === undefined
       ? {}
-      : { revisionToken: node.revisionToken }),
+      : { sourceState: node.sourceState }),
   };
 }
 
@@ -180,27 +295,35 @@ export class SpatialSkeletonState extends RefCounted {
   >();
   private cachedNodesById = new Map<number, SpatiallyIndexedSkeletonNode>();
 
-  setNodeProperties(
-    nodeId: number,
-    properties: { radius: number; confidence: number },
-  ) {
+  setNodeRadius(nodeId: number, radius: number) {
     const normalizedNodeId = this.normalizeNodeId(nodeId);
-    const radius = Number(properties.radius);
-    const confidence = Number(properties.confidence);
-    if (
-      normalizedNodeId === undefined ||
-      !Number.isFinite(radius) ||
-      !Number.isFinite(confidence)
-    ) {
+    radius = Number(radius);
+    if (normalizedNodeId === undefined || !Number.isFinite(radius)) {
       return false;
     }
     return this.updateCachedNode(normalizedNodeId, (node) => {
-      if (node.radius === radius && node.confidence === confidence) {
+      if (node.radius === radius) {
         return node;
       }
       return {
         ...node,
         radius,
+      };
+    });
+  }
+
+  setNodeConfidence(nodeId: number, confidence: number) {
+    const normalizedNodeId = this.normalizeNodeId(nodeId);
+    confidence = Number(confidence);
+    if (normalizedNodeId === undefined || !Number.isFinite(confidence)) {
+      return false;
+    }
+    return this.updateCachedNode(normalizedNodeId, (node) => {
+      if (node.confidence === confidence) {
+        return node;
+      }
+      return {
+        ...node,
         confidence,
       };
     });
@@ -376,28 +499,34 @@ export class SpatialSkeletonState extends RefCounted {
     return true;
   }
 
-  setCachedNodeRevision(nodeId: number, revisionToken: string | undefined) {
-    if (revisionToken === undefined) {
+  setCachedNodeSourceState(
+    nodeId: number,
+    sourceState: SpatialSkeletonSourceState | undefined,
+  ) {
+    if (sourceState === undefined) {
       return false;
     }
     return this.updateCachedNode(nodeId, (node) => {
-      if (node.revisionToken === revisionToken) {
+      if (node.sourceState === sourceState) {
         return node;
       }
       return {
         ...node,
-        revisionToken,
+        sourceState,
       };
     });
   }
 
-  setCachedNodeRevisions(
-    revisionUpdates: readonly SpatiallyIndexedSkeletonNodeRevisionUpdate[],
+  setCachedNodeSourceStates(
+    sourceStateUpdates: readonly {
+      nodeId: number;
+      sourceState: SpatialSkeletonSourceState;
+    }[],
   ) {
     let changed = false;
-    for (const update of revisionUpdates) {
+    for (const update of sourceStateUpdates) {
       changed =
-        this.setCachedNodeRevision(update.nodeId, update.revisionToken) ||
+        this.setCachedNodeSourceState(update.nodeId, update.sourceState) ||
         changed;
     }
     return changed;
