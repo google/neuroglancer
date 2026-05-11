@@ -55,6 +55,8 @@ const CATMAID_NO_MATCHING_NODE_PROVIDER_ERROR =
 const CATMAID_STATE_MATCHING_ERROR_TYPE = "StateMatchingError";
 
 type CatmaidStatePayload = object;
+type CatmaidFetchPriority = "high" | "low" | "auto";
+type CatmaidRequestInit = RequestInit & { priority?: CatmaidFetchPriority };
 
 export type CatmaidNodeSourceState = { readonly revisionToken: string };
 
@@ -638,8 +640,8 @@ function normalizeBoundingBoxForNodeList(bounds: SpatialSkeletonBounds) {
   const top = Math.floor(minY);
   const z1 = Math.floor(minZ);
 
-  // CATMAID treats right/bottom as inclusive and z2 as exclusive for grid-cell index filtering.
-  // Use ceil and ensure a positive extent on each axis.
+  // CATMAID node-list bounds are half-open: [left,right) x [top,bottom) x [z1,z2).
+  // Use ceil for exclusive upper bounds and ensure a positive extent on each axis.
   const right = Math.max(left + 1, Math.ceil(maxX));
   const bottom = Math.max(top + 1, Math.ceil(maxY));
   const z2 = Math.max(z1 + 1, Math.ceil(maxZ));
@@ -1117,7 +1119,7 @@ function parseCatmaidDeleteRevisionUpdates(
 function fetchWithCatmaidCredentials(
   credentialsProvider: CredentialsProvider<CatmaidToken>,
   input: string,
-  init: RequestInit,
+  init: CatmaidRequestInit,
 ): Promise<Response> {
   return fetchOkWithCredentials(
     credentialsProvider,
@@ -1174,7 +1176,7 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
 
   private async fetch(
     endpoint: string,
-    options: RequestInit = {},
+    options: CatmaidRequestInit = {},
     expectMsgpack: boolean = false,
   ): Promise<any> {
     // Ensure baseUrl doesn't have trailing slash and endpoint doesn't have leading slash
@@ -1455,7 +1457,7 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     try {
       data = await this.fetch(
         `node/list?${params.toString()}`,
-        { signal },
+        { signal, priority: "low" },
         true,
       );
     } catch (error) {

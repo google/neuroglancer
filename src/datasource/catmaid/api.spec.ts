@@ -56,6 +56,16 @@ function getFetchBody(fetchMock: FetchMock, callIndex = 0) {
   return body;
 }
 
+function getFetchInit(fetchMock: FetchMock, callIndex = 0) {
+  const [, requestInit] = getFetchCall(fetchMock, callIndex);
+  if (requestInit === undefined || typeof requestInit !== "object") {
+    throw new Error(
+      `Expected fetch call ${callIndex + 1} to include request options.`,
+    );
+  }
+  return requestInit as RequestInit & { priority?: unknown };
+}
+
 describe("CatmaidClient skeleton editing methods", () => {
   it("does not cache transient metadata discovery failures as null", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
@@ -529,6 +539,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     ]);
 
     expect(getFetchPath(fetchMock)).toMatch(/^node\/list\?/);
+    expect(getFetchInit(fetchMock).priority).toBe("low");
   });
 
   it("converts spatial skeleton grid cell indices to CATMAID bounds", () => {

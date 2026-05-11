@@ -22,6 +22,7 @@ import {
   CHUNK_LAYER_STATISTICS_RPC_ID,
   CHUNK_MANAGER_RPC_ID,
   CHUNK_QUEUE_MANAGER_RPC_ID,
+  CHUNK_SOURCE_INVALIDATE_KEY_PREFIXES_RPC_ID,
   CHUNK_SOURCE_INVALIDATE_RPC_ID,
   ChunkState,
   REQUEST_CHUNK_STATISTICS_RPC_ID,
@@ -44,6 +45,10 @@ import {
 } from "#src/worker_rpc.js";
 
 const DEBUG_CHUNK_UPDATES = false;
+
+function keyMatchesAnyPrefix(key: string, keyPrefixes: readonly string[]) {
+  return keyPrefixes.some((keyPrefix) => key.startsWith(keyPrefix));
+}
 
 export class Chunk {
   state = ChunkState.SYSTEM_MEMORY;
@@ -242,6 +247,15 @@ export class ChunkQueueManager extends SharedObject {
     }
     if (update.promise !== undefined) {
       this.handleFetch_(source, update);
+    } else if (update.keyPrefixes !== undefined) {
+      const keyPrefixes = update.keyPrefixes as string[];
+      const chunkKeysToDelete = [...source.chunks.keys()].filter((chunkKey) =>
+        keyMatchesAnyPrefix(chunkKey, keyPrefixes),
+      );
+      for (const chunkKey of chunkKeysToDelete) {
+        source.deleteChunk(chunkKey);
+      }
+      visibleChunksChanged = chunkKeysToDelete.length !== 0;
     } else if (update.id === undefined) {
       // Invalidate source.
       for (const chunkKey of source.chunks.keys()) {
@@ -479,6 +493,23 @@ export class ChunkSource extends SharedObject {
    */
   invalidateCache(): void {
     this.rpc!.invoke(CHUNK_SOURCE_INVALIDATE_RPC_ID, { id: this.rpcId });
+  }
+
+  /**
+   * Invalidates cached chunks whose backend keys match any of the specified prefixes.
+   * Operates asynchronously.
+   */
+  invalidateCacheKeyPrefixes(keyPrefixes: Iterable<string>): void {
+    const normalizedKeyPrefixes = [...new Set(keyPrefixes)].filter(
+      (keyPrefix) => keyPrefix.length !== 0,
+    );
+    if (normalizedKeyPrefixes.length === 0) {
+      return;
+    }
+    this.rpc!.invoke(CHUNK_SOURCE_INVALIDATE_KEY_PREFIXES_RPC_ID, {
+      id: this.rpcId,
+      keyPrefixes: normalizedKeyPrefixes,
+    });
   }
 
   static encodeOptions(_options: object): { [key: string]: any } {

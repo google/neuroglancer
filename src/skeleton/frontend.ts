@@ -1676,6 +1676,26 @@ export const SPATIAL_SKELETON_SOURCE_OPTIONS: SliceViewSourceOptions = {
   modelChannelDimensionIndices: [],
 };
 
+export function getSpatialSkeletonCellKeyPrefix(
+  position: ArrayLike<number>,
+  chunkDataSize: ArrayLike<number>,
+) {
+  const cell = new Array<number>(3);
+  for (let i = 0; i < 3; ++i) {
+    const coordinate = Number(position[i]);
+    const chunkSize = Number(chunkDataSize[i]);
+    if (
+      !Number.isFinite(coordinate) ||
+      !Number.isFinite(chunkSize) ||
+      chunkSize <= 0
+    ) {
+      return undefined;
+    }
+    cell[i] = Math.floor(coordinate / chunkSize);
+  }
+  return `${cell[0]},${cell[1]},${cell[2]}:`;
+}
+
 export abstract class MultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleSliceViewChunkSource<SpatiallyIndexedSkeletonSource> {
   getPerspectiveSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] {
     const sources = this.getSources(SPATIAL_SKELETON_SOURCE_OPTIONS);
@@ -1999,16 +2019,6 @@ export class SpatiallyIndexedSkeletonLayer
   private suppressedBrowseSegmentIds = new Set<number>();
   private retainedOverlaySegmentIds: number[] = [];
   private maxRetainedOverlaySegments: number;
-
-  private *iterateUniqueChunkSources() {
-    const seenSourceIds = new Set<string>();
-    for (const sourceEntry of [...this.sources, ...this.sources2d]) {
-      const sourceId = getObjectId(sourceEntry.chunkSource);
-      if (seenSourceIds.has(sourceId)) continue;
-      seenSourceIds.add(sourceId);
-      yield sourceEntry.chunkSource;
-    }
-  }
 
   private disposeOverlayChunk() {
     this.overlayChunk?.dispose(this.gl);
@@ -2492,10 +2502,39 @@ export class SpatiallyIndexedSkeletonLayer
     };
   }
 
-  invalidateSourceCaches() {
+  invalidateSourceCellsForPositions(
+    positions: Iterable<ArrayLike<number> | undefined>,
+  ) {
+    const positionList = [...positions].filter(
+      (position): position is ArrayLike<number> => position !== undefined,
+    );
+    if (positionList.length === 0) {
+      return false;
+    }
     let invalidated = false;
-    for (const chunkSource of this.iterateUniqueChunkSources()) {
-      chunkSource.invalidateCache();
+    const seenSourceIds = new Set<string>();
+    for (const sourceEntry of [...this.sources, ...this.sources2d]) {
+      const chunkSource = sourceEntry.chunkSource;
+      const sourceId = getObjectId(chunkSource);
+      if (seenSourceIds.has(sourceId)) continue;
+      seenSourceIds.add(sourceId);
+      const keyPrefixes = new Set<string>();
+      const { chunkDataSize } = chunkSource.spec;
+      for (const position of positionList) {
+        // Spatial skeleton node positions are already source/model coordinates;
+        // render-layer transforms do not apply to CATMAID grid-cell keys.
+        const keyPrefix = getSpatialSkeletonCellKeyPrefix(
+          position,
+          chunkDataSize,
+        );
+        if (keyPrefix !== undefined) {
+          keyPrefixes.add(keyPrefix);
+        }
+      }
+      if (keyPrefixes.size === 0) {
+        continue;
+      }
+      chunkSource.invalidateCacheKeyPrefixes(keyPrefixes);
       invalidated = true;
     }
     if (!invalidated) {
