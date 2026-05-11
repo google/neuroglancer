@@ -148,6 +148,41 @@ function suppressStatusMessages() {
   );
 }
 
+function makeDisplayState(visibleSegmentIds: readonly number[]) {
+  return {
+    segmentationGroupState: {
+      value: {
+        visibleSegments: new Set(
+          visibleSegmentIds.map((segmentId) => BigInt(segmentId)),
+        ),
+        selectedSegments: new Set<bigint>(),
+        segmentEquivalences: {},
+        temporaryVisibleSegments: new Set<bigint>(),
+        temporarySegmentEquivalences: {},
+        useTemporaryVisibleSegments: { value: false },
+        useTemporarySegmentEquivalences: { value: false },
+      },
+    },
+    segmentStatedColors: {
+      value: {
+        delete: vi.fn(),
+      },
+    },
+  };
+}
+
+function makePinnedManager() {
+  return {
+    root: {
+      selectionState: {
+        pin: {
+          value: true,
+        },
+      },
+    },
+  };
+}
+
 describe("spatial_skeleton_commands", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -337,7 +372,7 @@ describe("spatial_skeleton_commands", () => {
       getNode: vi.fn((nodeId: number) =>
         nodeId === cachedNode.nodeId ? cachedNode : undefined,
       ),
-      invalidateSourceCaches: vi.fn(),
+      invalidateSourceCellsForPositions: vi.fn(),
     };
     const commandHistory = new SpatialSkeletonCommandHistory();
     const setNodeRadius = vi.fn((nodeId: number, radius: number) => {
@@ -431,7 +466,7 @@ describe("spatial_skeleton_commands", () => {
         nodeId === node.nodeId ? node : undefined,
       ),
       retainOverlaySegment: vi.fn(),
-      invalidateSourceCaches: vi.fn(),
+      invalidateSourceCellsForPositions: vi.fn(),
     };
     const commandHistory = new SpatialSkeletonCommandHistory();
     const moveCachedNode = vi.fn();
@@ -479,7 +514,9 @@ describe("spatial_skeleton_commands", () => {
     expect(markSpatialSkeletonNodeDataChanged).toHaveBeenCalledWith({
       invalidateFullSkeletonCache: false,
     });
-    expect(skeletonLayer.invalidateSourceCaches).not.toHaveBeenCalled();
+    expect(
+      skeletonLayer.invalidateSourceCellsForPositions,
+    ).not.toHaveBeenCalled();
   });
 
   it("preserves CATMAID true-end labels when editing node descriptions", async () => {
@@ -503,7 +540,7 @@ describe("spatial_skeleton_commands", () => {
       getNode: vi.fn((nodeId: number) =>
         nodeId === cachedNode.nodeId ? cachedNode : undefined,
       ),
-      invalidateSourceCaches: vi.fn(),
+      invalidateSourceCellsForPositions: vi.fn(),
     };
     const commandHistory = new SpatialSkeletonCommandHistory();
     const updateCachedNode = vi.fn(
@@ -600,7 +637,7 @@ describe("spatial_skeleton_commands", () => {
         spatialSkeletonState.getCachedNode(nodeId),
       ),
       retainOverlaySegment: vi.fn(),
-      invalidateSourceCaches: vi.fn(),
+      invalidateSourceCellsForPositions: vi.fn(),
     };
     const layer = {
       displayState: {
@@ -768,7 +805,7 @@ describe("spatial_skeleton_commands", () => {
     const skeletonLayer = {
       source: skeletonSource,
       getNode: vi.fn(),
-      invalidateSourceCaches: vi.fn(),
+      invalidateSourceCellsForPositions: vi.fn(),
       retainOverlaySegment: vi.fn(),
     };
     const spatialSkeletonState = new SpatialSkeletonState();
@@ -851,6 +888,14 @@ describe("spatial_skeleton_commands", () => {
       spatialSkeletonState.getCachedNode(deletedNode.nodeId),
     ).toBeUndefined();
     expect(
+      skeletonLayer.invalidateSourceCellsForPositions,
+    ).toHaveBeenCalledWith([
+      deletedNode.position,
+      rootNode.position,
+      firstChildNode.position,
+      secondChildNode.position,
+    ]);
+    expect(
       spatialSkeletonState.getCachedNode(firstChildNode.nodeId)?.parentNodeId,
     ).toBe(rootNode.nodeId);
     expect(
@@ -895,6 +940,190 @@ describe("spatial_skeleton_commands", () => {
     expect(restoredEditContext.children?.map((child) => child.nodeId)).toEqual([
       firstChildNode.nodeId,
       secondChildNode.nodeId,
+    ]);
+  });
+
+  it("invalidates only the split subtree and former parent when splitting and redoing", async () => {
+    suppressStatusMessages();
+
+    const originalSegmentId = 11;
+    const splitSegmentId = 17;
+    const rootNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 1,
+      segmentId: originalSegmentId,
+      position: new Float32Array([1, 0, 0]),
+      isTrueEnd: false,
+      sourceState: testSourceState("root-before"),
+    };
+    const formerParentNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 2,
+      segmentId: originalSegmentId,
+      parentNodeId: rootNode.nodeId,
+      position: new Float32Array([2, 0, 0]),
+      isTrueEnd: false,
+      sourceState: testSourceState("parent-before"),
+    };
+    const parentSideSiblingNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 3,
+      segmentId: originalSegmentId,
+      parentNodeId: formerParentNode.nodeId,
+      position: new Float32Array([3, 0, 0]),
+      isTrueEnd: false,
+      sourceState: testSourceState("sibling-before"),
+    };
+    const splitNodeBefore: SpatiallyIndexedSkeletonNode = {
+      nodeId: 4,
+      segmentId: originalSegmentId,
+      parentNodeId: formerParentNode.nodeId,
+      position: new Float32Array([4, 0, 0]),
+      isTrueEnd: false,
+      sourceState: testSourceState("split-before"),
+    };
+    const splitChildNodeBefore: SpatiallyIndexedSkeletonNode = {
+      nodeId: 5,
+      segmentId: originalSegmentId,
+      parentNodeId: splitNodeBefore.nodeId,
+      position: new Float32Array([5, 0, 0]),
+      isTrueEnd: false,
+      sourceState: testSourceState("split-child-before"),
+    };
+    const splitGrandchildNodeBefore: SpatiallyIndexedSkeletonNode = {
+      nodeId: 6,
+      segmentId: originalSegmentId,
+      parentNodeId: splitChildNodeBefore.nodeId,
+      position: new Float32Array([6, 0, 0]),
+      isTrueEnd: false,
+      sourceState: testSourceState("split-grandchild-before"),
+    };
+    const originalNodes = [
+      rootNode,
+      formerParentNode,
+      parentSideSiblingNode,
+      splitNodeBefore,
+      splitChildNodeBefore,
+      splitGrandchildNodeBefore,
+    ];
+    const existingSideNodes = [
+      rootNode,
+      formerParentNode,
+      parentSideSiblingNode,
+    ];
+    const splitSideNodes = [
+      {
+        ...splitNodeBefore,
+        segmentId: splitSegmentId,
+        parentNodeId: undefined,
+        sourceState: testSourceState("split-after"),
+      },
+      {
+        ...splitChildNodeBefore,
+        segmentId: splitSegmentId,
+        sourceState: testSourceState("split-child-after"),
+      },
+      {
+        ...splitGrandchildNodeBefore,
+        segmentId: splitSegmentId,
+        sourceState: testSourceState("split-grandchild-after"),
+      },
+    ];
+
+    const serverSegments = new Map<number, SpatiallyIndexedSkeletonNode[]>();
+    const cacheBySegment = new Map<number, SpatiallyIndexedSkeletonNode[]>();
+    const cacheByNode = new Map<number, SpatiallyIndexedSkeletonNode>();
+
+    const syncCacheFromServer = (segmentId: number) => {
+      setSegmentNodes(
+        cacheBySegment,
+        cacheByNode,
+        segmentId,
+        serverSegments.get(segmentId) ?? [],
+      );
+      return cacheBySegment.get(segmentId) ?? [];
+    };
+
+    serverSegments.set(originalSegmentId, originalNodes.map(cloneNode));
+    syncCacheFromServer(originalSegmentId);
+
+    const splitSkeleton = vi.fn(async () => {
+      serverSegments.set(originalSegmentId, existingSideNodes.map(cloneNode));
+      serverSegments.set(splitSegmentId, splitSideNodes.map(cloneNode));
+      return {
+        existingSegmentId: originalSegmentId,
+        newSegmentId: splitSegmentId,
+      };
+    });
+    const mergeSkeletons = vi.fn(async () => {
+      serverSegments.set(originalSegmentId, originalNodes.map(cloneNode));
+      serverSegments.delete(splitSegmentId);
+      return {
+        resultSegmentId: originalSegmentId,
+        deletedSegmentId: splitSegmentId,
+        directionAdjusted: false,
+      };
+    });
+    const skeletonSource = makeEditableSkeletonSource({
+      splitSkeleton,
+      mergeSkeletons,
+    });
+    const invalidateCachedSegments = vi.fn((segmentIds: Iterable<number>) => {
+      for (const segmentId of segmentIds) {
+        setSegmentNodes(cacheBySegment, cacheByNode, segmentId, []);
+      }
+    });
+    const getFullSegmentNodes = vi.fn(
+      async (_skeletonLayer: unknown, segmentId: number) =>
+        syncCacheFromServer(segmentId),
+    );
+    const skeletonLayer = {
+      source: skeletonSource,
+      getNode: vi.fn((nodeId: number) => cacheByNode.get(nodeId)),
+      invalidateSourceCellsForPositions: vi.fn(),
+      suppressBrowseSegment: vi.fn(),
+    };
+    const layer = {
+      displayState: makeDisplayState([originalSegmentId]),
+      manager: makePinnedManager(),
+      spatialSkeletonState: {
+        commandHistory: new SpatialSkeletonCommandHistory(),
+        getCachedNode: (nodeId: number) => cacheByNode.get(nodeId),
+        getCachedSegmentNodes: (segmentId: number) =>
+          cacheBySegment.get(segmentId),
+        getFullSegmentNodes,
+        invalidateCachedSegments,
+      },
+      getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
+      getCachedSpatialSkeletonSegmentNodesForEdit: (segmentId: number) =>
+        cacheBySegment.get(segmentId) ?? [],
+      selectSegment: vi.fn(),
+      selectSpatialSkeletonNode: vi.fn(),
+      markSpatialSkeletonNodeDataChanged: vi.fn(),
+    };
+
+    await executeSpatialSkeletonSplit(layer as any, {
+      nodeId: splitNodeBefore.nodeId,
+      segmentId: originalSegmentId,
+    });
+
+    expect(
+      skeletonLayer.invalidateSourceCellsForPositions,
+    ).toHaveBeenCalledWith([
+      splitNodeBefore.position,
+      splitChildNodeBefore.position,
+      splitGrandchildNodeBefore.position,
+      formerParentNode.position,
+    ]);
+    await undoSpatialSkeletonCommand(layer as any);
+    skeletonLayer.invalidateSourceCellsForPositions.mockClear();
+
+    await redoSpatialSkeletonCommand(layer as any);
+
+    expect(
+      skeletonLayer.invalidateSourceCellsForPositions,
+    ).toHaveBeenCalledWith([
+      splitNodeBefore.position,
+      splitChildNodeBefore.position,
+      splitGrandchildNodeBefore.position,
+      formerParentNode.position,
     ]);
   });
 
@@ -987,7 +1216,7 @@ describe("spatial_skeleton_commands", () => {
     const skeletonLayer = {
       source: skeletonSource,
       getNode: vi.fn((nodeId: number) => cacheByNode.get(nodeId)),
-      invalidateSourceCaches: vi.fn(),
+      invalidateSourceCellsForPositions: vi.fn(),
       suppressBrowseSegment: vi.fn(),
     };
     const layer = {
@@ -1043,7 +1272,7 @@ describe("spatial_skeleton_commands", () => {
     deleteSegmentColor.mockClear();
     layer.selectSpatialSkeletonNode.mockClear();
     layer.markSpatialSkeletonNodeDataChanged.mockClear();
-    skeletonLayer.invalidateSourceCaches.mockClear();
+    skeletonLayer.invalidateSourceCellsForPositions.mockClear();
     invalidateCachedSegments.mockClear();
     getFullSegmentNodes.mockClear();
 
@@ -1071,6 +1300,12 @@ describe("spatial_skeleton_commands", () => {
     expect(invalidateCachedSegments).toHaveBeenCalledWith([
       originalSegmentId,
       splitSegmentId,
+    ]);
+    expect(
+      skeletonLayer.invalidateSourceCellsForPositions,
+    ).toHaveBeenCalledWith([
+      splitNodeAfter.position,
+      formerParentNode.position,
     ]);
     expect(getFullSegmentNodes).toHaveBeenCalledTimes(2);
     expect(
@@ -1202,7 +1437,7 @@ describe("spatial_skeleton_commands", () => {
     const skeletonLayer = {
       source: skeletonSource,
       getNode: vi.fn((nodeId: number) => cacheByNode.get(nodeId)),
-      invalidateSourceCaches: vi.fn(),
+      invalidateSourceCellsForPositions: vi.fn(),
       suppressBrowseSegment: vi.fn(),
     };
     const layer = {
@@ -1455,7 +1690,7 @@ describe("spatial_skeleton_commands", () => {
     const skeletonLayer = {
       source: skeletonSource,
       getNode: vi.fn((nodeId: number) => cacheByNode.get(nodeId)),
-      invalidateSourceCaches: vi.fn(),
+      invalidateSourceCellsForPositions: vi.fn(),
       suppressBrowseSegment: vi.fn(),
     };
     const layer = {
@@ -1506,15 +1741,19 @@ describe("spatial_skeleton_commands", () => {
       {
         nodeId: visibleAnchorNode.nodeId,
         segmentId: visibleSegmentId,
+        position: visibleAnchorNode.position,
       },
       {
         nodeId: hiddenAttachNodeBefore.nodeId,
         segmentId: hiddenSegmentId,
+        position: hiddenAttachNodeBefore.position,
         sourceState: hiddenAttachNodeBefore.sourceState,
       },
     );
 
-    expect(skeletonSource.getSkeletonRootNode).not.toHaveBeenCalled();
+    expect(skeletonSource.getSkeletonRootNode).toHaveBeenCalledWith(
+      hiddenSegmentId,
+    );
     expect(mergeSkeletons).toHaveBeenCalledWith(
       visibleAnchorNode.nodeId,
       hiddenAttachNodeBefore.nodeId,
@@ -1525,11 +1764,19 @@ describe("spatial_skeleton_commands", () => {
         ]),
       }),
     );
-    expect(getFullSegmentNodes).toHaveBeenCalledTimes(3);
-    expect(getFullSegmentNodes.mock.invocationCallOrder[0]).toBeLessThan(
-      mergeSkeletons.mock.invocationCallOrder[0],
+    expect(getFullSegmentNodes).toHaveBeenCalledTimes(2);
+    expect(mergeSkeletons.mock.invocationCallOrder[0]).toBeLessThan(
+      getFullSegmentNodes.mock.invocationCallOrder[0],
     );
+    expect(
+      skeletonLayer.invalidateSourceCellsForPositions,
+    ).toHaveBeenCalledWith([
+      hiddenRootNode.position,
+      hiddenAttachNodeBefore.position,
+      visibleAnchorNode.position,
+    ]);
 
+    skeletonLayer.invalidateSourceCellsForPositions.mockClear();
     rerootSkeleton.mockClear();
     hiddenSegmentVisibleDuringFetches.length = 0;
 
@@ -1552,6 +1799,22 @@ describe("spatial_skeleton_commands", () => {
     expect(hiddenSegmentVisibleDuringFetches.length).toBeGreaterThan(0);
     expect(hiddenSegmentVisibleDuringFetches.every(Boolean)).toBe(true);
     expect(
+      skeletonLayer.invalidateSourceCellsForPositions,
+    ).toHaveBeenNthCalledWith(1, [
+      hiddenAttachNodeBefore.position,
+      hiddenRootNode.position,
+      visibleAnchorNode.position,
+    ]);
+    expect(
+      skeletonLayer.invalidateSourceCellsForPositions,
+    ).toHaveBeenNthCalledWith(2, [
+      hiddenRootNode.position,
+      hiddenAttachNodeBefore.position,
+    ]);
+    expect(
+      skeletonLayer.invalidateSourceCellsForPositions,
+    ).toHaveBeenCalledTimes(2);
+    expect(
       cacheBySegment.get(hiddenSegmentId)?.map((node) => ({
         nodeId: node.nodeId,
         parentNodeId: node.parentNodeId,
@@ -1565,6 +1828,19 @@ describe("spatial_skeleton_commands", () => {
         nodeId: hiddenAttachNodeBefore.nodeId,
         parentNodeId: hiddenRootNode.nodeId,
       },
+    ]);
+
+    skeletonLayer.invalidateSourceCellsForPositions.mockClear();
+
+    await redoSpatialSkeletonCommand(layer as any);
+
+    expect(mergeSkeletons).toHaveBeenCalledTimes(2);
+    expect(
+      skeletonLayer.invalidateSourceCellsForPositions,
+    ).toHaveBeenCalledWith([
+      hiddenRootNode.position,
+      hiddenAttachNodeBefore.position,
+      visibleAnchorNode.position,
     ]);
   });
 
@@ -1701,6 +1977,12 @@ describe("spatial_skeleton_commands", () => {
       async (_skeletonLayer: unknown, segmentId: number) =>
         syncCacheFromServer(segmentId),
     );
+    const skeletonLayer = {
+      source: skeletonSource,
+      getNode: vi.fn((nodeId: number) => cacheByNode.get(nodeId)),
+      invalidateSourceCellsForPositions: vi.fn(),
+      suppressBrowseSegment: vi.fn(),
+    };
     const layer = {
       displayState: {
         segmentationGroupState: {
@@ -1741,12 +2023,7 @@ describe("spatial_skeleton_commands", () => {
           }
         }),
       },
-      getSpatiallyIndexedSkeletonLayer: () => ({
-        source: skeletonSource,
-        getNode: vi.fn((nodeId: number) => cacheByNode.get(nodeId)),
-        invalidateSourceCaches: vi.fn(),
-        suppressBrowseSegment: vi.fn(),
-      }),
+      getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
       selectSegment: vi.fn(),
       selectSpatialSkeletonNode: vi.fn(),
       markSpatialSkeletonNodeDataChanged: vi.fn(),
@@ -1758,14 +2035,17 @@ describe("spatial_skeleton_commands", () => {
       {
         nodeId: visibleAnchorNode.nodeId,
         segmentId: visibleSegmentId,
+        position: visibleAnchorNode.position,
       },
       {
         nodeId: hiddenAttachNodeBefore.nodeId,
         segmentId: hiddenSegmentId,
+        position: hiddenAttachNodeBefore.position,
         sourceState: hiddenAttachNodeBefore.sourceState,
       },
     );
     statusSpy.mockClear();
+    skeletonLayer.invalidateSourceCellsForPositions.mockClear();
 
     await expect(undoSpatialSkeletonCommand(layer as any)).resolves.toBe(true);
 
@@ -1798,12 +2078,28 @@ describe("spatial_skeleton_commands", () => {
         parentNodeId: hiddenAttachNodeBefore.nodeId,
       },
     ]);
+    expect(
+      skeletonLayer.invalidateSourceCellsForPositions,
+    ).toHaveBeenNthCalledWith(1, [
+      hiddenAttachNodeBefore.position,
+      hiddenRootNode.position,
+      visibleAnchorNode.position,
+    ]);
+    expect(
+      skeletonLayer.invalidateSourceCellsForPositions,
+    ).toHaveBeenNthCalledWith(2, [
+      hiddenRootNode.position,
+      hiddenAttachNodeBefore.position,
+    ]);
+    expect(
+      skeletonLayer.invalidateSourceCellsForPositions,
+    ).toHaveBeenCalledTimes(2);
     expect(statusSpy).toHaveBeenCalledWith(
       expect.stringContaining("Only the split completed."),
     );
   });
 
-  it("falls back to full resolution for an uncached second node without revision metadata", async () => {
+  it("falls back to broad merge invalidation when the source omits the deleted segment id", async () => {
     suppressStatusMessages();
 
     const firstSegmentId = 11;
@@ -1865,7 +2161,7 @@ describe("spatial_skeleton_commands", () => {
 
     const mergeSkeletons = vi.fn(async () => ({
       resultSegmentId: firstSegmentId,
-      deletedSegmentId: secondSegmentId,
+      deletedSegmentId: undefined,
       directionAdjusted: false,
     }));
     const skeletonSource = makeEditableSkeletonSource({
@@ -1880,6 +2176,12 @@ describe("spatial_skeleton_commands", () => {
       async (_skeletonLayer: unknown, segmentId: number) =>
         syncCacheFromServer(segmentId),
     );
+    const skeletonLayer = {
+      source: skeletonSource,
+      getNode: vi.fn((nodeId: number) => cacheByNode.get(nodeId)),
+      invalidateSourceCellsForPositions: vi.fn(),
+      suppressBrowseSegment: vi.fn(),
+    };
     const layer = {
       displayState: {
         segmentationGroupState: {
@@ -1920,12 +2222,7 @@ describe("spatial_skeleton_commands", () => {
           }
         }),
       },
-      getSpatiallyIndexedSkeletonLayer: () => ({
-        source: skeletonSource,
-        getNode: vi.fn((nodeId: number) => cacheByNode.get(nodeId)),
-        invalidateSourceCaches: vi.fn(),
-        suppressBrowseSegment: vi.fn(),
-      }),
+      getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
       selectSegment: vi.fn(),
       selectSpatialSkeletonNode: vi.fn(),
       markSpatialSkeletonNodeDataChanged: vi.fn(),
@@ -1959,6 +2256,133 @@ describe("spatial_skeleton_commands", () => {
         ]),
       }),
     );
+    expect(
+      skeletonLayer.invalidateSourceCellsForPositions,
+    ).toHaveBeenCalledWith([
+      firstRootNode.position,
+      firstAnchorNode.position,
+      secondRootNode.position,
+      secondAttachNode.position,
+    ]);
+  });
+
+  it("uses the returned deleted segment id to choose the merge invalidation side", async () => {
+    suppressStatusMessages();
+
+    const firstSegmentId = 11;
+    const secondSegmentId = 17;
+    const firstRootNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 101,
+      segmentId: firstSegmentId,
+      position: new Float32Array([1, 2, 3]),
+      isTrueEnd: false,
+      sourceState: testSourceState("first-root-before"),
+    };
+    const firstAnchorNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 102,
+      segmentId: firstSegmentId,
+      parentNodeId: firstRootNode.nodeId,
+      position: new Float32Array([4, 5, 6]),
+      isTrueEnd: false,
+      sourceState: testSourceState("first-anchor-before"),
+    };
+    const secondRootNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 201,
+      segmentId: secondSegmentId,
+      position: new Float32Array([7, 8, 9]),
+      isTrueEnd: false,
+      sourceState: testSourceState("second-root-before"),
+    };
+    const secondAnchorNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 202,
+      segmentId: secondSegmentId,
+      parentNodeId: secondRootNode.nodeId,
+      position: new Float32Array([10, 11, 12]),
+      isTrueEnd: false,
+      sourceState: testSourceState("second-anchor-before"),
+    };
+
+    const serverSegments = new Map<number, SpatiallyIndexedSkeletonNode[]>();
+    const cacheBySegment = new Map<number, SpatiallyIndexedSkeletonNode[]>();
+    const cacheByNode = new Map<number, SpatiallyIndexedSkeletonNode>();
+    const syncCacheFromServer = (segmentId: number) => {
+      setSegmentNodes(
+        cacheBySegment,
+        cacheByNode,
+        segmentId,
+        serverSegments.get(segmentId) ?? [],
+      );
+      return cacheBySegment.get(segmentId) ?? [];
+    };
+
+    serverSegments.set(firstSegmentId, [
+      cloneNode(firstRootNode),
+      cloneNode(firstAnchorNode),
+    ]);
+    serverSegments.set(secondSegmentId, [
+      cloneNode(secondRootNode),
+      cloneNode(secondAnchorNode),
+    ]);
+    syncCacheFromServer(firstSegmentId);
+    syncCacheFromServer(secondSegmentId);
+
+    const mergeSkeletons = vi.fn(async () => ({
+      resultSegmentId: secondSegmentId,
+      deletedSegmentId: firstSegmentId,
+      directionAdjusted: true,
+    }));
+    const skeletonSource = makeEditableSkeletonSource({ mergeSkeletons });
+    const getFullSegmentNodes = vi.fn(
+      async (_skeletonLayer: unknown, segmentId: number) =>
+        syncCacheFromServer(segmentId),
+    );
+    const skeletonLayer = {
+      source: skeletonSource,
+      getNode: vi.fn((nodeId: number) => cacheByNode.get(nodeId)),
+      invalidateSourceCellsForPositions: vi.fn(),
+      suppressBrowseSegment: vi.fn(),
+    };
+    const layer = {
+      displayState: makeDisplayState([firstSegmentId, secondSegmentId]),
+      manager: makePinnedManager(),
+      spatialSkeletonState: {
+        commandHistory: new SpatialSkeletonCommandHistory(),
+        getCachedNode: (nodeId: number) => cacheByNode.get(nodeId),
+        getCachedSegmentNodes: (segmentId: number) =>
+          cacheBySegment.get(segmentId),
+        getFullSegmentNodes,
+        invalidateCachedSegments: vi.fn((segmentIds: Iterable<number>) => {
+          for (const segmentId of segmentIds) {
+            setSegmentNodes(cacheBySegment, cacheByNode, segmentId, []);
+          }
+        }),
+      },
+      getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
+      selectSegment: vi.fn(),
+      selectSpatialSkeletonNode: vi.fn(),
+      markSpatialSkeletonNodeDataChanged: vi.fn(),
+      clearSpatialSkeletonMergeAnchor: vi.fn(),
+    };
+
+    await executeSpatialSkeletonMerge(
+      layer as any,
+      {
+        nodeId: firstAnchorNode.nodeId,
+        segmentId: firstSegmentId,
+      },
+      {
+        nodeId: secondAnchorNode.nodeId,
+        segmentId: secondSegmentId,
+      },
+    );
+
+    expect(
+      skeletonLayer.invalidateSourceCellsForPositions,
+    ).toHaveBeenCalledWith([
+      firstRootNode.position,
+      firstAnchorNode.position,
+      secondAnchorNode.position,
+    ]);
   });
 
   it("shows and clears a pending status while a merge is in flight", async () => {
@@ -2011,7 +2435,7 @@ describe("spatial_skeleton_commands", () => {
         return undefined;
       }),
       suppressBrowseSegment: vi.fn(),
-      invalidateSourceCaches: vi.fn(),
+      invalidateSourceCellsForPositions: vi.fn(),
     };
     const layer = {
       displayState: {

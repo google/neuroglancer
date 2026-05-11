@@ -19,9 +19,8 @@ if (!("WebGL2RenderingContext" in globalThis)) {
   });
 }
 
-const { SpatiallyIndexedSkeletonLayer } = await import(
-  "#src/skeleton/frontend.js"
-);
+const { SpatiallyIndexedSkeletonLayer, getSpatialSkeletonCellKeyPrefix } =
+  await import("#src/skeleton/frontend.js");
 
 describe("resolveSpatiallyIndexedSkeletonSegmentPick", () => {
   it("returns the node segment id for direct node picks", () => {
@@ -104,6 +103,68 @@ describe("spatiallyIndexedSkeletonTextureAttributeSpecs", () => {
       { name: "position", dataType: DataType.FLOAT32, numComponents: 3 },
       { name: "segment", dataType: DataType.UINT32, numComponents: 1 },
     ]);
+  });
+});
+
+describe("SpatiallyIndexedSkeletonLayer targeted source invalidation", () => {
+  it("computes absolute half-open cell prefixes without lower-bound offsets", () => {
+    expect(
+      getSpatialSkeletonCellKeyPrefix(
+        new Float32Array([100, 200, 300]),
+        new Float32Array([100, 100, 100]),
+      ),
+    ).toBe("1,2,3:");
+    expect(
+      getSpatialSkeletonCellKeyPrefix(
+        new Float32Array([99.999, 199.999, 299.999]),
+        new Float32Array([100, 100, 100]),
+      ),
+    ).toBe("0,1,2:");
+  });
+
+  it("dedupes cell prefixes per unique source entry", () => {
+    const invalidateCacheKeyPrefixes = vi.fn();
+    const source = {
+      spec: {
+        chunkDataSize: new Float32Array([100, 100, 100]),
+        lowerChunkBound: new Float32Array([10, 20, 30]),
+      },
+      invalidateCacheKeyPrefixes,
+    };
+    const source2d = {
+      spec: {
+        chunkDataSize: new Float32Array([50, 50, 50]),
+      },
+      invalidateCacheKeyPrefixes: vi.fn(),
+    };
+    const redrawNeeded = { dispatch: vi.fn() };
+    const layer = {
+      sources: [{ chunkSource: source }, { chunkSource: source }],
+      sources2d: [{ chunkSource: source2d }],
+      redrawNeeded,
+    };
+
+    const invalidated =
+      SpatiallyIndexedSkeletonLayer.prototype.invalidateSourceCellsForPositions.call(
+        layer,
+        [
+          new Float32Array([100, 200, 300]),
+          new Float32Array([199.999, 200, 300]),
+          new Float32Array([100, 200, 300]),
+        ],
+      );
+
+    expect(invalidated).toBe(true);
+    expect(invalidateCacheKeyPrefixes).toHaveBeenCalledTimes(1);
+    expect([...invalidateCacheKeyPrefixes.mock.calls[0][0]]).toEqual([
+      "1,2,3:",
+    ]);
+    expect(source2d.invalidateCacheKeyPrefixes).toHaveBeenCalledTimes(1);
+    expect([...source2d.invalidateCacheKeyPrefixes.mock.calls[0][0]]).toEqual([
+      "2,4,6:",
+      "3,4,6:",
+    ]);
+    expect(redrawNeeded.dispatch).toHaveBeenCalledTimes(1);
   });
 });
 
