@@ -74,7 +74,6 @@ import {
   SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_RPC_ID,
   SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_UPDATE_SOURCES_RPC_ID,
 } from "#src/skeleton/base.js";
-import { resolveSpatiallyIndexedSkeletonSegmentPick } from "#src/skeleton/picking.js";
 import {
   buildSpatiallyIndexedSkeletonOverlayGeometry,
   type SpatiallyIndexedSkeletonOverlayGeometry,
@@ -1967,6 +1966,40 @@ export interface SpatiallyIndexedSkeletonLayerDisplayState
   >;
   spatialSkeletonGridRenderScaleHistogram2d?: RenderScaleHistogram;
   spatialSkeletonGridRenderScaleHistogram3d?: RenderScaleHistogram;
+}
+
+export function resolveSpatiallyIndexedSkeletonSegmentPick(
+  chunk: { indices: Uint32Array; numVertices: number },
+  segmentIds: Uint32Array,
+  pickedOffset: number,
+  kind: "node" | "edge",
+) {
+  if (pickedOffset < 0) return undefined;
+  if (kind === "node") {
+    if (
+      pickedOffset >= segmentIds.length ||
+      pickedOffset >= chunk.numVertices
+    ) {
+      return undefined;
+    }
+    const segmentId = segmentIds[pickedOffset];
+    return Number.isSafeInteger(segmentId) && segmentId > 0
+      ? segmentId
+      : undefined;
+  }
+  const indexOffset = pickedOffset * 2;
+  if (indexOffset + 1 >= chunk.indices.length) {
+    return undefined;
+  }
+  const vertexA = chunk.indices[indexOffset];
+  const vertexB = chunk.indices[indexOffset + 1];
+  let segmentId = segmentIds[vertexA];
+  if (!Number.isSafeInteger(segmentId) || segmentId <= 0) {
+    segmentId = segmentIds[vertexB];
+  }
+  return Number.isSafeInteger(segmentId) && segmentId > 0
+    ? segmentId
+    : undefined;
 }
 
 export class SpatiallyIndexedSkeletonLayer

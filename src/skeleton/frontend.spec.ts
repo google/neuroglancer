@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { resolveSpatiallyIndexedSkeletonSegmentPick } from "#src/skeleton/picking.js";
 import { spatiallyIndexedSkeletonTextureAttributeSpecs } from "#src/skeleton/spatial_attribute_layout.js";
 import { Uint64Set } from "#src/uint64_set.js";
 import { DataType } from "#src/util/data_type.js";
@@ -19,8 +18,11 @@ if (!("WebGL2RenderingContext" in globalThis)) {
   });
 }
 
-const { SpatiallyIndexedSkeletonLayer, getSpatialSkeletonCellKeyPrefix } =
-  await import("#src/skeleton/frontend.js");
+const {
+  SpatiallyIndexedSkeletonLayer,
+  getSpatialSkeletonCellKeyPrefix,
+  resolveSpatiallyIndexedSkeletonSegmentPick,
+} = await import("#src/skeleton/frontend.js");
 
 describe("resolveSpatiallyIndexedSkeletonSegmentPick", () => {
   it("returns the node segment id for direct node picks", () => {
