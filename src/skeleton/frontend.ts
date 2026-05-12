@@ -74,16 +74,16 @@ import {
   SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_RPC_ID,
   SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_UPDATE_SOURCES_RPC_ID,
 } from "#src/skeleton/base.js";
+import { resolveSpatiallyIndexedSkeletonSegmentPick } from "#src/skeleton/picking.js";
 import {
   buildSpatiallyIndexedSkeletonOverlayGeometry,
   type SpatiallyIndexedSkeletonOverlayGeometry,
-} from "#src/skeleton/overlay_geometry.js";
+} from "#src/skeleton/segment_overlay.js";
 import {
   DEFAULT_MAX_RETAINED_OVERLAY_SEGMENTS,
   mergeSpatiallyIndexedSkeletonOverlaySegmentIds,
   retainSpatiallyIndexedSkeletonOverlaySegment,
-} from "#src/skeleton/overlay_segment_retention.js";
-import { resolveSpatiallyIndexedSkeletonSegmentPick } from "#src/skeleton/picking.js";
+} from "#src/skeleton/segment_overlay.js";
 import {
   getSpatiallyIndexedSkeletonGridIndex,
   getSpatiallyIndexedSkeletonSourceView,

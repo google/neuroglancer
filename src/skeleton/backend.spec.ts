@@ -77,9 +77,9 @@ describe("skeleton/backend chunk priority", () => {
       expect(skeletonPriority).toBeGreaterThan(
         equivalentVolumeRenderingPriority,
       );
-      expect(
-        skeletonPriority - equivalentVolumeRenderingPriority,
-      ).toBeCloseTo(SPATIALLY_INDEXED_SKELETON_PRIORITY_BOOST);
+      expect(skeletonPriority - equivalentVolumeRenderingPriority).toBeCloseTo(
+        SPATIALLY_INDEXED_SKELETON_PRIORITY_BOOST,
+      );
     }
   });
 

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { ChunkState } from "#src/chunk_manager/base.js";
 import { ChunkQueueManager } from "#src/chunk_manager/backend.js";
+import { ChunkState } from "#src/chunk_manager/base.js";
 
 describe("ChunkQueueManager targeted source invalidation", () => {
   it("invalidates only chunks whose keys match requested cell prefixes", () => {
