@@ -91,7 +91,6 @@ import {
   emptyToUndefined,
   parseArray,
   parseFixedLengthArray,
-  parseUint64,
   verifyBoolean,
   verifyFiniteFloat,
   verifyInt,
@@ -157,20 +156,6 @@ export class LayerActionContext {
   }
 }
 
-function parsePositiveUint64String(value: unknown) {
-  if (typeof value !== "string") {
-    throw new Error(
-      `Expected string-encoded positive uint64 value, but received: ${JSON.stringify(value)}.`,
-    );
-  }
-  const parsedValue = parseUint64(value);
-  if (parsedValue <= 0n) {
-    throw new Error(
-      `Expected positive uint64 value, but received: ${JSON.stringify(value)}.`,
-    );
-  }
-  return parsedValue.toString();
-}
 
 export interface UserLayerTab {
   id: string;
@@ -297,11 +282,7 @@ export class UserLayer extends RefCounted {
         verifyString,
       );
     }
-    state.nodeId = verifyOptionalObjectProperty(
-      json,
-      "nodeId",
-      parsePositiveUint64String,
-    );
+    state.nodeId = verifyOptionalObjectProperty(json, "nodeId", verifyString);
 
     state.value = json.value;
   }
