@@ -85,6 +85,7 @@ export interface SpatiallyIndexedSkeletonChunkSpecification
 }
 
 const SKELETON_CHUNK_PRIORITY = 60;
+export const SPATIALLY_INDEXED_SKELETON_PRIORITY_BOOST = -BASE_PRIORITY;
 const SPATIALLY_INDEXED_SKELETON_LOD_DEBOUNCE_MS = 300;
 const tempCenter = vec3.create();
 const tempChunkSize = vec3.create();
@@ -101,6 +102,25 @@ export function getSpatiallyIndexedSkeletonChunkPriority(
     sum += delta * delta;
   }
   return -Math.sqrt(sum);
+}
+
+export function getSpatiallyIndexedSkeletonRenderPriority(
+  basePriority: number,
+  scaleIndex: number,
+  localCenter: Float32Array,
+  chunkSize: Float32Array,
+  positionInChunks: Float32Array,
+) {
+  return (
+    basePriority +
+    SPATIALLY_INDEXED_SKELETON_PRIORITY_BOOST +
+    SCALE_PRIORITY_MULTIPLIER * scaleIndex +
+    getSpatiallyIndexedSkeletonChunkPriority(
+      localCenter,
+      chunkSize,
+      positionInChunks,
+    )
+  );
 }
 
 export enum SpatiallyIndexedSkeletonChunkRequestOwner {
@@ -628,8 +648,6 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
             chunkSize[i] = 0;
             localCenter[i] = 0;
           }
-          const sourceBasePriority =
-            basePriority + SCALE_PRIORITY_MULTIPLIER * scaleIndex;
           source.currentLod = lodValue;
           source.currentRequestGeneration = currentGeneration;
           source.currentRequestOwner = is2dView
@@ -645,15 +663,16 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
               if (chunk.state === ChunkState.GPU_MEMORY) {
                 ++this.numVisibleChunksAvailable;
               }
-              const priority = getSpatiallyIndexedSkeletonChunkPriority(
-                localCenter,
-                chunkSize,
-                tsource.curPositionInChunks,
-              );
               chunkManager.requestChunk(
                 chunk,
                 priorityTier,
-                sourceBasePriority + priority,
+                getSpatiallyIndexedSkeletonRenderPriority(
+                  basePriority,
+                  scaleIndex,
+                  localCenter,
+                  chunkSize,
+                  tsource.curPositionInChunks,
+                ),
               );
             },
           );
