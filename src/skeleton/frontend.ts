@@ -1035,6 +1035,15 @@ export enum SkeletonRenderMode {
   LINES_AND_POINTS = 1,
 }
 
+export function setSpatialSkeletonModesToLinesAndPoints(
+  layer: SkeletonShaderContext,
+) {
+  layer.displayState.skeletonRenderingOptions.params2d.mode.value =
+    SkeletonRenderMode.LINES_AND_POINTS;
+  layer.displayState.skeletonRenderingOptions.params3d.mode.value =
+    SkeletonRenderMode.LINES_AND_POINTS;
+}
+
 export class TrackableSkeletonRenderMode extends TrackableEnum<SkeletonRenderMode> {
   constructor(
     value: SkeletonRenderMode,

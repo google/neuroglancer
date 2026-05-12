@@ -12,8 +12,6 @@ import {
 } from "#src/skeleton/actions.js";
 import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
 import { SpatialSkeletonCommandHistory } from "#src/skeleton/command_history.js";
-import { setSpatialSkeletonModesToLinesAndPoints } from "#src/skeleton/edit_mode_rendering.js";
-import { SkeletonRenderMode } from "#src/skeleton/render_mode.js";
 import { StatusMessage } from "#src/status.js";
 
 if (!("WebGL2RenderingContext" in globalThis)) {
@@ -30,6 +28,8 @@ if (!("WebGL2RenderingContext" in globalThis)) {
   });
 }
 
+const { setSpatialSkeletonModesToLinesAndPoints, SkeletonRenderMode } =
+  await import("#src/skeleton/frontend.js");
 const { SpatialSkeletonEditModeTool } = await import(
   "#src/ui/spatial_skeleton_edit_tool.js"
 );
