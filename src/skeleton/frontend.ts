@@ -1033,9 +1033,9 @@ export enum SkeletonRenderMode {
   LINES_AND_POINTS = 1,
 }
 
-export function setSpatialSkeletonModesToLinesAndPoints(
-  layer: SkeletonShaderContext,
-) {
+export function setSpatialSkeletonModesToLinesAndPoints(layer: {
+  displayState: { skeletonRenderingOptions: SkeletonRenderingOptions };
+}) {
   layer.displayState.skeletonRenderingOptions.params2d.mode.value =
     SkeletonRenderMode.LINES_AND_POINTS;
   layer.displayState.skeletonRenderingOptions.params3d.mode.value =
