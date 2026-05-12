@@ -645,12 +645,12 @@ def _linked_segmentation_color_group_value(x):
 
 
 @export
-class SpatialSkeletonNodeFilterType(enum.IntEnum):
-    NONE = 0
-    LEAF = 1
-    VIRTUAL_END = 2
-    TRUE_END = 3
-    HAS_DESCRIPTION = 4
+class SpatialSkeletonNodeFilterType(enum.StrEnum):
+    NONE = "none"
+    LEAF = "leaf"
+    VIRTUAL_END = "virtual_end"
+    TRUE_END = "true_end"
+    HAS_DESCRIPTION = "has_description"
 
 
 @export
@@ -990,7 +990,7 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
         "spatialSkeletonNodeQuery", optional(str, "")
     )
     spatial_skeleton_node_filter = spatialSkeletonNodeFilter = wrapped_property(
-        "spatialSkeletonNodeFilter", optional(int, 0)
+        "spatialSkeletonNodeFilter", optional(SpatialSkeletonNodeFilterType)
     )
     hidden_object_alpha = hiddenObjectAlpha = wrapped_property(
         "hiddenObjectAlpha", optional(float, 0.5)
