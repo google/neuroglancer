@@ -22,9 +22,11 @@ import {
 import {
   classifySpatialSkeletonDisplayNodeType as classifyNodeType,
   matchesSpatialSkeletonNodeFilter,
+  SpatialSkeletonDisplayNodeType,
   SpatialSkeletonNodeFilterType,
-  type SpatialSkeletonDisplayNodeType as SkeletonNodeType,
 } from "#src/skeleton/node_types.js";
+
+type SkeletonNodeType = SpatialSkeletonDisplayNodeType;
 
 function nodeMatchesFilter(
   node: SpatiallyIndexedSkeletonNode,
@@ -141,7 +143,7 @@ export function buildSpatialSkeletonSegmentRenderState(
     const parentInTree =
       node.parentNodeId !== undefined && nodeById.has(node.parentNodeId);
     const type = classifyNodeType(node, children.length, parentInTree);
-    if (type === "regular" && !(node.isTrueEnd ?? false)) {
+    if (type === SpatialSkeletonDisplayNodeType.REGULAR && !(node.isTrueEnd ?? false)) {
       continue;
     }
     rows.push({ node, type, isLeaf: children.length === 0 });

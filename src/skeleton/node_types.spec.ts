@@ -22,6 +22,7 @@ import {
   getSpatialSkeletonNodeFilterLabel,
   getSpatialSkeletonNodeIconFilterType,
   matchesSpatialSkeletonNodeFilter,
+  SpatialSkeletonDisplayNodeType,
   SpatialSkeletonNodeFilterType,
 } from "#src/skeleton/node_types.js";
 
@@ -68,25 +69,25 @@ describe("skeleton node types", () => {
       isLeaf: true,
       nodeHasDescription: false,
       nodeIsTrueEnd: false,
-      nodeType: "root" as const,
+      nodeType: SpatialSkeletonDisplayNodeType.ROOT,
     };
     const virtualEnd = {
       isLeaf: true,
       nodeHasDescription: false,
       nodeIsTrueEnd: false,
-      nodeType: "virtualEnd" as const,
+      nodeType: SpatialSkeletonDisplayNodeType.VIRTUAL_END,
     };
     const trueEnd = {
       isLeaf: true,
       nodeHasDescription: false,
       nodeIsTrueEnd: true,
-      nodeType: "virtualEnd" as const,
+      nodeType: SpatialSkeletonDisplayNodeType.VIRTUAL_END,
     };
     const describedNode = {
       isLeaf: false,
       nodeHasDescription: true,
       nodeIsTrueEnd: false,
-      nodeType: "regular" as const,
+      nodeType: SpatialSkeletonDisplayNodeType.REGULAR,
     };
 
     expect(
@@ -137,19 +138,19 @@ describe("skeleton node types", () => {
     expect(
       getSpatialSkeletonNodeIconFilterType({
         nodeIsTrueEnd: false,
-        nodeType: "virtualEnd",
+        nodeType: SpatialSkeletonDisplayNodeType.VIRTUAL_END,
       }),
     ).toBe(SpatialSkeletonNodeFilterType.VIRTUAL_END);
     expect(
       getSpatialSkeletonNodeIconFilterType({
         nodeIsTrueEnd: true,
-        nodeType: "regular",
+        nodeType: SpatialSkeletonDisplayNodeType.REGULAR,
       }),
     ).toBe(SpatialSkeletonNodeFilterType.TRUE_END);
     expect(
       getSpatialSkeletonNodeIconFilterType({
         nodeIsTrueEnd: false,
-        nodeType: "root",
+        nodeType: SpatialSkeletonDisplayNodeType.ROOT,
       }),
     ).toBeUndefined();
     expect(
