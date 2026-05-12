@@ -77,20 +77,18 @@ import {
 import {
   buildSpatiallyIndexedSkeletonOverlayGeometry,
   type SpatiallyIndexedSkeletonOverlayGeometry,
-} from "#src/skeleton/overlay_geometry.js";
+} from "#src/skeleton/segment_overlay.js";
 import {
   DEFAULT_MAX_RETAINED_OVERLAY_SEGMENTS,
   mergeSpatiallyIndexedSkeletonOverlaySegmentIds,
   retainSpatiallyIndexedSkeletonOverlaySegment,
-} from "#src/skeleton/overlay_segment_retention.js";
-import { resolveSpatiallyIndexedSkeletonSegmentPick } from "#src/skeleton/picking.js";
+} from "#src/skeleton/segment_overlay.js";
 import {
   getSpatiallyIndexedSkeletonGridIndex,
   getSpatiallyIndexedSkeletonSourceView,
   selectSpatiallyIndexedSkeletonEntriesForView,
   type SpatiallyIndexedSkeletonView,
 } from "#src/skeleton/source_selection.js";
-import { spatiallyIndexedSkeletonTextureAttributeSpecs } from "#src/skeleton/spatial_attribute_layout.js";
 import {
   forEachVisibleVolumetricChunk,
   type SliceViewChunkSpecification,
@@ -1035,6 +1033,15 @@ export enum SkeletonRenderMode {
   LINES_AND_POINTS = 1,
 }
 
+export function setSpatialSkeletonModesToLinesAndPoints(layer: {
+  displayState: { skeletonRenderingOptions: SkeletonRenderingOptions };
+}) {
+  layer.displayState.skeletonRenderingOptions.params2d.mode.value =
+    SkeletonRenderMode.LINES_AND_POINTS;
+  layer.displayState.skeletonRenderingOptions.params3d.mode.value =
+    SkeletonRenderMode.LINES_AND_POINTS;
+}
+
 export class TrackableSkeletonRenderMode extends TrackableEnum<SkeletonRenderMode> {
   constructor(
     value: SkeletonRenderMode,
@@ -1618,6 +1625,11 @@ type SpatiallyIndexedSkeletonChunkListener = (
   chunk: SpatiallyIndexedSkeletonChunk,
 ) => void;
 
+const spatiallyIndexedSkeletonTextureAttributeSpecs = Object.freeze([
+  { name: "position", dataType: DataType.FLOAT32, numComponents: 3 },
+  { name: "segment", dataType: DataType.UINT32, numComponents: 1 },
+]);
+
 export class SpatiallyIndexedSkeletonSource extends SliceViewChunkSource<
   SpatiallyIndexedSkeletonChunkSpecification,
   SpatiallyIndexedSkeletonChunk
@@ -1958,6 +1970,40 @@ export interface SpatiallyIndexedSkeletonLayerDisplayState
   >;
   spatialSkeletonGridRenderScaleHistogram2d?: RenderScaleHistogram;
   spatialSkeletonGridRenderScaleHistogram3d?: RenderScaleHistogram;
+}
+
+export function resolveSpatiallyIndexedSkeletonSegmentPick(
+  chunk: { indices: Uint32Array; numVertices: number },
+  segmentIds: Uint32Array,
+  pickedOffset: number,
+  kind: "node" | "edge",
+) {
+  if (pickedOffset < 0) return undefined;
+  if (kind === "node") {
+    if (
+      pickedOffset >= segmentIds.length ||
+      pickedOffset >= chunk.numVertices
+    ) {
+      return undefined;
+    }
+    const segmentId = segmentIds[pickedOffset];
+    return Number.isSafeInteger(segmentId) && segmentId > 0
+      ? segmentId
+      : undefined;
+  }
+  const indexOffset = pickedOffset * 2;
+  if (indexOffset + 1 >= chunk.indices.length) {
+    return undefined;
+  }
+  const vertexA = chunk.indices[indexOffset];
+  const vertexB = chunk.indices[indexOffset + 1];
+  let segmentId = segmentIds[vertexA];
+  if (!Number.isSafeInteger(segmentId) || segmentId <= 0) {
+    segmentId = segmentIds[vertexB];
+  }
+  return Number.isSafeInteger(segmentId) && segmentId > 0
+    ? segmentId
+    : undefined;
 }
 
 export class SpatiallyIndexedSkeletonLayer

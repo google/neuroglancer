@@ -40,8 +40,10 @@ import type {
   SpatialSkeletonSourceState,
   SpatialSkeletonVector,
 } from "#src/skeleton/api.js";
-import { setSpatialSkeletonModesToLinesAndPoints } from "#src/skeleton/edit_mode_rendering.js";
-import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/frontend.js";
+import {
+  type SpatiallyIndexedSkeletonLayer,
+  setSpatialSkeletonModesToLinesAndPoints,
+} from "#src/skeleton/frontend.js";
 import {
   PerspectiveViewSpatiallyIndexedSkeletonLayer,
   SliceViewPanelSpatiallyIndexedSkeletonLayer,

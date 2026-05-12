@@ -58,19 +58,19 @@ import type {
   SpatialSkeletonSourceState,
   SpatialSkeletonVector,
 } from "#src/skeleton/api.js";
+import type { SpatialSkeletonEditCommandFactory } from "#src/skeleton/command_factories.js";
 import type {
   SpatialSkeletonCommand,
   SpatialSkeletonCommandContext,
 } from "#src/skeleton/command_history.js";
-import type { SpatialSkeletonEditCommandFactory } from "#src/skeleton/edit_command_source.js";
+import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/frontend.js";
 import {
   findSpatiallyIndexedSkeletonNode,
   getSpatiallyIndexedSkeletonDirectChildren,
   getSpatiallyIndexedSkeletonNodeParent,
   getSpatiallyIndexedSkeletonPathToRoot,
   getSpatiallyIndexedSkeletonSubtreeNodes,
-} from "#src/skeleton/edit_state.js";
-import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/frontend.js";
+} from "#src/skeleton/node_traversal.js";
 import { getEditableSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial_skeleton_manager.js";
 import { StatusMessage } from "#src/status.js";
 import { formatErrorMessage } from "#src/util/error.js";

@@ -27,7 +27,7 @@ import type {
   SpatiallyIndexedSkeletonNodeBase,
 } from "#src/skeleton/api.js";
 import { SpatialSkeletonEditConflictError } from "#src/skeleton/edit_errors.js";
-import type { SpatiallyIndexedSkeletonNavigationTarget } from "#src/skeleton/navigation.js";
+import type { SpatiallyIndexedSkeletonNavigationTarget } from "#src/skeleton/navigation_graph.js";
 import { getDefaultSpatiallyIndexedSkeletonChunkSize } from "#src/skeleton/spatial_chunk_sizing.js";
 import { HttpError } from "#src/util/http_request.js";
 

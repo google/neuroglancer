@@ -50,7 +50,7 @@ import {
   getVertexAttributeBytes,
   serializeSkeletonChunkData,
   type SkeletonChunkData,
-} from "#src/skeleton/skeleton_chunk_serialization.js";
+} from "#src/skeleton/chunk_serialization.js";
 import {
   getSpatiallyIndexedSkeletonGridIndex,
   selectSpatiallyIndexedSkeletonEntriesByGrid,

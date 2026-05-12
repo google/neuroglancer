@@ -117,11 +117,6 @@ import type {
   SpatialSkeletonSourceState,
 } from "#src/skeleton/api.js";
 import {
-  findSpatiallyIndexedSkeletonNode,
-  getSpatiallyIndexedSkeletonDirectChildren,
-  getSpatiallyIndexedSkeletonNodeParent,
-} from "#src/skeleton/edit_state.js";
-import {
   PerspectiveViewSkeletonLayer,
   SkeletonLayer,
   SkeletonRenderingOptions,
@@ -132,6 +127,11 @@ import {
   SpatiallyIndexedSkeletonSource,
   MultiscaleSpatiallyIndexedSkeletonSource,
 } from "#src/skeleton/frontend.js";
+import {
+  findSpatiallyIndexedSkeletonNode,
+  getSpatiallyIndexedSkeletonDirectChildren,
+  getSpatiallyIndexedSkeletonNodeParent,
+} from "#src/skeleton/node_traversal.js";
 import {
   classifySpatialSkeletonDisplayNodeType as getSpatialSkeletonDisplayNodeType,
   getSpatialSkeletonNodeFilterLabel,

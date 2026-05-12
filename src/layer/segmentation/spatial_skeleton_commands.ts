@@ -23,11 +23,11 @@ import type {
   EditableSpatiallyIndexedSkeletonSource,
   SpatiallyIndexedSkeletonNode,
 } from "#src/skeleton/api.js";
-import type { SpatialSkeletonCommand } from "#src/skeleton/command_history.js";
 import type {
   SpatialSkeletonCommandPayload,
   SpatialSkeletonEditCommandFactory,
-} from "#src/skeleton/edit_command_source.js";
+} from "#src/skeleton/command_factories.js";
+import type { SpatialSkeletonCommand } from "#src/skeleton/command_history.js";
 import { getSpatialSkeletonActionErrorMessage } from "#src/skeleton/edit_errors.js";
 import { getEditableSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial_skeleton_manager.js";
 import { StatusMessage } from "#src/status.js";
