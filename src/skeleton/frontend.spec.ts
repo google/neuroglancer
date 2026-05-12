@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { spatiallyIndexedSkeletonTextureAttributeSpecs } from "#src/skeleton/spatial_attribute_layout.js";
 import { Uint64Set } from "#src/uint64_set.js";
-import { DataType } from "#src/util/data_type.js";
 
 if (!("WebGL2RenderingContext" in globalThis)) {
   Object.defineProperty(globalThis, "WebGL2RenderingContext", {
@@ -96,15 +94,6 @@ describe("SpatiallyIndexedSkeletonLayer browse node picks", () => {
       position: new Float32Array([4, 5, 6]),
       sourceState: { revisionToken: "2026-03-29T11:51:00Z" },
     });
-  });
-});
-
-describe("spatiallyIndexedSkeletonTextureAttributeSpecs", () => {
-  it("keeps the browse path upload layout to position plus segment", () => {
-    expect(spatiallyIndexedSkeletonTextureAttributeSpecs).toEqual([
-      { name: "position", dataType: DataType.FLOAT32, numComponents: 3 },
-      { name: "segment", dataType: DataType.UINT32, numComponents: 1 },
-    ]);
   });
 });
 

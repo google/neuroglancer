@@ -89,7 +89,6 @@ import {
   selectSpatiallyIndexedSkeletonEntriesForView,
   type SpatiallyIndexedSkeletonView,
 } from "#src/skeleton/source_selection.js";
-import { spatiallyIndexedSkeletonTextureAttributeSpecs } from "#src/skeleton/spatial_attribute_layout.js";
 import {
   forEachVisibleVolumetricChunk,
   type SliceViewChunkSpecification,
@@ -1625,6 +1624,11 @@ type SpatiallyIndexedSkeletonChunkListener = (
   key: string,
   chunk: SpatiallyIndexedSkeletonChunk,
 ) => void;
+
+const spatiallyIndexedSkeletonTextureAttributeSpecs = Object.freeze([
+  { name: "position", dataType: DataType.FLOAT32, numComponents: 3 },
+  { name: "segment", dataType: DataType.UINT32, numComponents: 1 },
+]);
 
 export class SpatiallyIndexedSkeletonSource extends SliceViewChunkSource<
   SpatiallyIndexedSkeletonChunkSpecification,
