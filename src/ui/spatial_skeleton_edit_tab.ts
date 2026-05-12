@@ -64,7 +64,7 @@ import {
   getSpatialSkeletonNodeFilterLabel,
   getSpatialSkeletonNodeIconFilterType,
   SpatialSkeletonNodeFilterType,
-  type SpatialSkeletonDisplayNodeType as SkeletonNodeType,
+  type SpatialSkeletonDisplayNodeType,
 } from "#src/skeleton/node_types.js";
 import { StatusMessage } from "#src/status.js";
 import { observeWatchable, registerNested } from "#src/trackable_value.js";
@@ -141,14 +141,14 @@ interface SpatiallyIndexedSkeletonNavigationApi {
   ): Promise<SpatiallyIndexedSkeletonNavigationTarget | undefined>;
 }
 
-const NODE_TYPE_ICONS: Record<SkeletonNodeType, string> = {
+const NODE_TYPE_ICONS: Record<SpatialSkeletonDisplayNodeType, string> = {
   root: svg_origin,
   branchStart: svg_share_android,
   regular: svg_minus,
   virtualEnd: svg_circle,
 };
 
-const NODE_TYPE_LABELS: Record<SkeletonNodeType, string> = {
+const NODE_TYPE_LABELS: Record<SpatialSkeletonDisplayNodeType, string> = {
   root: "root",
   branchStart: "branch start",
   regular: "regular",
