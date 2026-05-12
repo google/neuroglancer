@@ -72,7 +72,7 @@ import {
   buildSpatialSkeletonSegmentRenderState,
   type SpatialSkeletonSegmentRenderRow,
   type SpatialSkeletonSegmentRenderState,
-} from "#src/ui/spatial_skeleton_edit_tab_render_state.js";
+} from "#src/ui/spatial_skeleton_edit_tab_render.js";
 import {
   SPATIAL_SKELETON_EDIT_MODE_TOOL_ID,
   SPATIAL_SKELETON_MERGE_MODE_TOOL_ID,
