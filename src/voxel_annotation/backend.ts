@@ -1159,14 +1159,11 @@ export class VoxelEditController extends SharedObject {
   }
 
   private async performBrush(op: BrushOperation): Promise<void> {
-    const { center, radius, value, shape, basis, filterValue } = op;
+    const { centers, radius, value, shape, basis, filterValue } = op;
     const voxelSize = 1; // Hardcoded LOD 0
     const sourceIndex = 0;
     const accessor = this.getAccessor(sourceIndex);
 
-    const cx = Math.round((center[0] ?? 0) / voxelSize);
-    const cy = Math.round((center[1] ?? 0) / voxelSize);
-    const cz = Math.round((center[2] ?? 0) / voxelSize);
     let r = Math.round(radius / voxelSize);
     if (r <= 0) throw new Error(`Brush radius must be positive.`);
     r -= 1;
@@ -1175,88 +1172,101 @@ export class VoxelEditController extends SharedObject {
     // This capacity should ensure we never get out of bounds
     const maxCapacity = Math.ceil((2 * r + 1) ** 3);
     const voxelBuffer = new Int32Array(maxCapacity * 3);
-    let voxelCount = 0;
-    const bufferEnqueue = (x: number, y: number, z: number) => {
-      // don;t need to check bounds as the capacity is assumed to be large enough
-      const base = voxelCount * 3;
-      voxelBuffer[base] = x;
-      voxelBuffer[base + 1] = y;
-      voxelBuffer[base + 2] = z;
-      voxelCount++;
-    };
 
-    const shouldSkip = this.brushCache.buildSkipper(value, shape, basis);
+    for (const center of centers) {
+      const cx = Math.round((center[0] ?? 0) / voxelSize);
+      const cy = Math.round((center[1] ?? 0) / voxelSize);
+      const cz = Math.round((center[2] ?? 0) / voxelSize);
 
-    const toAwait = new Set<Promise<void>>();
-    const pushIf = (x: number, y: number, z: number) => {
-      if (shouldSkip(x, y, z)) {
-        return;
-      }
-      if (filterValue == undefined) {
-        bufferEnqueue(x, y, z);
-        return;
-      }
-      toAwait.add(
-        accessor.getValue(x, y, z).then((v) => {
-          if (v == null) return;
-          if (v === value || (filterValue !== undefined && v !== filterValue))
-            return;
+      let voxelCount = 0;
+      const bufferEnqueue = (x: number, y: number, z: number) => {
+        // don;t need to check bounds as the capacity is assumed to be large enough
+        const base = voxelCount * 3;
+        voxelBuffer[base] = x;
+        voxelBuffer[base + 1] = y;
+        voxelBuffer[base + 2] = z;
+        voxelCount++;
+      };
+
+      const shouldSkip = this.brushCache.buildSkipper(value, shape, basis);
+
+      const toAwait = new Set<Promise<void>>();
+      const pushIf = (x: number, y: number, z: number) => {
+        if (shouldSkip(x, y, z)) {
+          return;
+        }
+        if (filterValue == undefined) {
           bufferEnqueue(x, y, z);
-        }),
-      );
-    };
+          return;
+        }
+        toAwait.add(
+          accessor.getValue(x, y, z).then((v) => {
+            if (v == null) return;
+            if (v === value || (filterValue !== undefined && v !== filterValue))
+              return;
+            bufferEnqueue(x, y, z);
+          }),
+        );
+      };
 
-    if (shape !== BrushShape.DISK) {
-      for (let dz = -r; dz <= r; ++dz) {
-        for (let dy = -r; dy <= r; ++dy) {
-          for (let dx = -r; dx <= r; ++dx) {
-            if (dx * dx + dy * dy + dz * dz <= rr)
-              pushIf(cx + dx, cy + dy, cz + dz);
+      if (shape !== BrushShape.DISK) {
+        for (let dz = -r; dz <= r; ++dz) {
+          for (let dy = -r; dy <= r; ++dy) {
+            for (let dx = -r; dx <= r; ++dx) {
+              if (dx * dx + dy * dy + dz * dz <= rr)
+                pushIf(cx + dx, cy + dy, cz + dz);
+            }
+          }
+        }
+      } else {
+        if (basis === undefined)
+          throw new Error("Brush shape requires a basis.");
+        const { u, v } = basis as { u: vec3; v: vec3 };
+        const ux = u[0],
+          uy = u[1],
+          uz = u[2];
+        const vx = v[0],
+          vy = v[1],
+          vz = v[2];
+
+        for (let j = -r; j <= r; ++j) {
+          const j2 = j * j;
+          const vPartX = vx * j;
+          const vPartY = vy * j;
+          const vPartZ = vz * j;
+
+          for (let i = -r; i <= r; ++i) {
+            if (i * i + j2 <= rr) {
+              const px = Math.round(cx + ux * i + vPartX);
+              const py = Math.round(cy + uy * i + vPartY);
+              const pz = Math.round(cz + uz * i + vPartZ);
+              pushIf(px, py, pz);
+            }
           }
         }
       }
-    } else {
-      if (basis === undefined) throw new Error("Brush shape requires a basis.");
-      const { u, v } = basis as { u: vec3; v: vec3 };
-      const ux = u[0],
-        uy = u[1],
-        uz = u[2];
-      const vx = v[0],
-        vy = v[1],
-        vz = v[2];
 
-      for (let j = -r; j <= r; ++j) {
-        const j2 = j * j;
-        const vPartX = vx * j;
-        const vPartY = vy * j;
-        const vPartZ = vz * j;
+      await Promise.all(toAwait);
+      this.brushCache.update({ x: cx, y: cy, z: cz }, r, value, shape, basis);
 
-        for (let i = -r; i <= r; ++i) {
-          if (i * i + j2 <= rr) {
-            const px = Math.round(cx + ux * i + vPartX);
-            const py = Math.round(cy + uy * i + vPartY);
-            const pz = Math.round(cz + uz * i + vPartZ);
-            pushIf(px, py, pz);
-          }
-        }
+      if (voxelCount === 0) continue;
+
+      if (basis && shape === BrushShape.DISK) {
+        const result = this.fillPlaneAliasingGaps(
+          voxelBuffer,
+          voxelCount,
+          basis,
+          center,
+        );
+        this.processBackendEdits(
+          result.buffer,
+          result.count,
+          value,
+          sourceIndex,
+        );
+      } else {
+        this.processBackendEdits(voxelBuffer, voxelCount, value, sourceIndex);
       }
-    }
-
-    await Promise.all(toAwait);
-    this.brushCache.update({ x: cx, y: cy, z: cz }, r, value, shape, basis);
-
-    if (voxelCount === 0) return;
-
-    if (basis && shape === BrushShape.DISK) {
-      const result = this.fillPlaneAliasingGaps(
-        voxelBuffer,
-        voxelCount,
-        basis,
-        center,
-      );
-      this.processBackendEdits(result.buffer, result.count, value, sourceIndex);
-    } else {
-      this.processBackendEdits(voxelBuffer, voxelCount, value, sourceIndex);
     }
   }
 

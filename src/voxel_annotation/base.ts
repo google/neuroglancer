@@ -43,7 +43,7 @@ export interface VoxelOperationBase {
 
 export interface BrushOperation extends VoxelOperationBase {
   type: VoxelOperationType.BRUSH;
-  center: Float32Array;
+  centers: Float32Array[];
   radius: number;
   value: bigint;
   shape: BrushShape;

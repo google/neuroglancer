@@ -42,9 +42,11 @@ import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
 import { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 import {
   BRUSH_TOOL_ID,
+  type BrushShape,
   FLOODFILL_TOOL_ID,
   getBasisFromNormal,
   VALUE_PICKER_TOOL_ID,
+  type VoxelValueGetter,
 } from "#src/voxel_annotation/base.js";
 
 const BRUSH_INPUT_MAP = EventActionMap.fromObject({
@@ -320,6 +322,16 @@ export class VoxelBrushTool extends BaseVoxelTool {
   private mouseDisposer: (() => void) | undefined;
   private animationFrameHandle: number | null = null;
   private cursorResetTimer: number | null = null;
+  private accumulatedCenters: Float32Array[] = [];
+  private activeStroke:
+    | {
+        radius: number;
+        shape: BrushShape;
+        basis: { u: Float32Array; v: Float32Array };
+        value: VoxelValueGetter;
+        filterValue: bigint | undefined;
+      }
+    | undefined = undefined;
 
   activate(activation: ToolActivation<this>): boolean {
     if (!super.activate(activation)) return false;
@@ -432,6 +444,17 @@ export class VoxelBrushTool extends BaseVoxelTool {
   private startDrawing(mouseState: MouseSelectionState) {
     if (this.isDrawing) return;
     this.isDrawing = true;
+    this.accumulatedCenters = [];
+    this.activeStroke = {
+      radius: this.layer.brushRadius.value,
+      shape: this.layer.brushShape.value,
+      basis: this.getBasis()!,
+      value: this.layer.getVoxelPaintValue(this.layer.shouldErase()),
+      filterValue:
+        this.layer.lockToSelectedValue.value && this.layer.shouldErase()
+          ? this.layer.getVoxelPaintValue(false)(false)
+          : undefined,
+    };
 
     const start = this.getPoint(mouseState);
     if (!start) {
@@ -465,33 +488,43 @@ export class VoxelBrushTool extends BaseVoxelTool {
       this.mouseDisposer();
       this.mouseDisposer = undefined;
     }
+
+    const centers = this.accumulatedCenters;
+    this.accumulatedCenters = [];
+    if (centers.length === 0) return;
+
+    const editContext = getEditingContext(this.layer);
+    if (editContext === undefined) return;
+    const stroke = this.activeStroke!;
+
+    void editContext.dispatchBrushStroke(
+      centers,
+      stroke.radius,
+      stroke.value,
+      stroke.shape,
+      stroke.basis,
+      stroke.filterValue,
+    );
   }
 
   private paintPoints(points: Float32Array[]) {
-    const radius = Math.max(1, Math.floor(this.layer.brushRadius.value ?? 3));
     const editContext = getEditingContext(this.layer);
     if (editContext === undefined) {
       throw new Error("editContext is undefined");
     }
-    const shapeEnum = this.layer.brushShape.value;
-    const basis = this.getBasis();
-    if (!basis) {
-      throw new Error("basis is undefined");
+    const stroke = this.activeStroke!;
+
+    for (const p of points) {
+      this.accumulatedCenters.push(p);
     }
 
-    const value = this.layer.getVoxelPaintValue(this.layer.shouldErase());
-    const filterValue =
-      this.layer.lockToSelectedValue.value && this.layer.shouldErase()
-        ? this.layer.getVoxelPaintValue(false)(false)
-        : undefined;
-
-    void editContext.paintBrushWithShape(
+    void editContext.applyBrushPreview(
       points,
-      radius,
-      value,
-      shapeEnum,
-      basis,
-      filterValue,
+      stroke.radius,
+      stroke.value,
+      stroke.shape,
+      stroke.basis,
+      stroke.filterValue,
     );
   }
 }

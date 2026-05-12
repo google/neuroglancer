@@ -137,7 +137,7 @@ export class VoxelEditController extends SharedObject {
     } as const;
   }
 
-  async paintBrushWithShape(
+  async applyBrushPreview(
     points: Float32Array[],
     radiusCanonical: number,
     valueGetter: VoxelValueGetter,
@@ -172,7 +172,6 @@ export class VoxelEditController extends SharedObject {
 
     const edits = new Map<string, { indices: number[]; value: bigint }>();
     const previewValue = valueGetter(true);
-    const storageValue = valueGetter(false);
 
     let previewSource: InMemoryVolumeChunkSource | undefined;
     let sizeX = 0,
@@ -203,8 +202,6 @@ export class VoxelEditController extends SharedObject {
       );
       baseSource = sourcesByScale[0][0].chunkSource as VolumeChunkSource;
     }
-
-    const backendOps: Promise<void>[] = [];
 
     for (const centerCanonical of points) {
       let voxelCount = 0;
@@ -291,25 +288,32 @@ export class VoxelEditController extends SharedObject {
           entry.indices.push(index);
         }
       }
-
-      backendOps.push(
-        this.dispatchOperation({
-          type: VoxelOperationType.BRUSH,
-          center: centerCanonical,
-          radius: radiusCanonical,
-          value: storageValue,
-          shape,
-          basis,
-          filterValue,
-        }),
-      );
     }
 
     if (edits.size > 0 && previewSource) {
       previewSource.applyLocalEdits(edits);
     }
+  }
 
-    await Promise.all(backendOps);
+  async dispatchBrushStroke(
+    centers: Float32Array[],
+    radiusCanonical: number,
+    valueGetter: VoxelValueGetter,
+    shape: BrushShape,
+    basis: { u: Float32Array; v: Float32Array },
+    filterValue?: bigint,
+  ) {
+    if (centers.length === 0) return;
+    const storageValue = valueGetter(false);
+    await this.dispatchOperation({
+      type: VoxelOperationType.BRUSH,
+      centers,
+      radius: radiusCanonical,
+      value: storageValue,
+      shape,
+      basis,
+      filterValue,
+    });
   }
 
   async floodFillPlane2D(

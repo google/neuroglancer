@@ -192,7 +192,7 @@ const runStroke = async (
 
     await (controller as any).performBrush({
       type: VoxelOperationType.BRUSH,
-      center,
+      centers: [center],
       radius,
       value: 1n,
       shape,

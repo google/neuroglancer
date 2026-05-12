@@ -1213,7 +1213,7 @@ describe("VoxelEditController: Tool Operations", () => {
 
     await controller.performOperation({
       type: VoxelOperationType.BRUSH,
-      center,
+      centers: [center],
       radius,
       value,
       shape: BrushShape.SPHERE,
@@ -1251,7 +1251,7 @@ describe("VoxelEditController: Tool Operations", () => {
 
     await controller.performOperation({
       type: VoxelOperationType.BRUSH,
-      center,
+      centers: [center],
       radius,
       value,
       shape: BrushShape.DISK,

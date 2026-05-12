@@ -221,7 +221,7 @@ export class VoxelEditingContext
     }
   }
 
-  async paintBrushWithShape(
+  async applyBrushPreview(
     points: Float32Array[],
     radiusCanonical: number,
     value: VoxelValueGetter,
@@ -230,16 +230,37 @@ export class VoxelEditingContext
     filterValue?: bigint,
   ) {
     if (!this._controller)
-      throw new Error("Cannot use paintBrushWithShape without a controller");
+      throw new Error("Cannot use applyBrushPreview without a controller");
+    if (!(await this.checkPermission())) return;
+    await this._controller.applyBrushPreview(
+      points,
+      radiusCanonical,
+      value,
+      shape,
+      basis,
+      filterValue,
+    );
+  }
+
+  async dispatchBrushStroke(
+    centers: Float32Array[],
+    radiusCanonical: number,
+    value: VoxelValueGetter,
+    shape: BrushShape,
+    basis: { u: Float32Array; v: Float32Array },
+    filterValue?: bigint,
+  ) {
+    if (!this._controller)
+      throw new Error("Cannot use dispatchBrushStroke without a controller");
     const cost =
       VOXEL_EDIT_STAMINA.brush(
         shape,
         radiusCanonical,
         filterValue !== undefined,
-      ) * points.length;
+      ) * centers.length;
     await this.withCost(cost, () =>
-      this._controller!.paintBrushWithShape(
-        points,
+      this._controller!.dispatchBrushStroke(
+        centers,
         radiusCanonical,
         value,
         shape,
