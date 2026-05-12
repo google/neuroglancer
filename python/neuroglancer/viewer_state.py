@@ -995,11 +995,11 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
     hidden_object_alpha = hiddenObjectAlpha = wrapped_property(
         "hiddenObjectAlpha", optional(float, 0.5)
     )
-    skeleton_cross_section_render_scale = skeletonCrossSectionRenderScale = wrapped_property(
-        "skeletonCrossSectionRenderScale", optional(float, 1)
+    skeleton_cross_section_render_scale = skeletonCrossSectionRenderScale = (
+        wrapped_property("skeletonCrossSectionRenderScale", optional(float, 1))
     )
-    skeleton_perspective_render_scale = skeletonPerspectiveRenderScale = wrapped_property(
-        "skeletonPerspectiveRenderScale", optional(float, 1)
+    skeleton_perspective_render_scale = skeletonPerspectiveRenderScale = (
+        wrapped_property("skeletonPerspectiveRenderScale", optional(float, 1))
     )
     segment_colors = segmentColors = wrapped_property(
         "segmentColors", typed_map(key_type=np.uint64, value_type=str)
@@ -1872,12 +1872,7 @@ class LayerSelectionState(JsonObjectWrapper):
     annotation_subsource = annotationSubsource = wrapped_property(
         "annotationSubsource", optional(str)
     )
-    spatial_skeleton_node_id = spatialSkeletonNodeId = wrapped_property(
-        "spatialSkeletonNodeId", optional(int)
-    )
-    spatial_skeleton_segment_id = spatialSkeletonSegmentId = wrapped_property(
-        "spatialSkeletonSegmentId", optional(int)
-    )
+    node_id = nodeId = wrapped_property("nodeId", optional(str))
 
 
 if typing.TYPE_CHECKING or _BUILDING_DOCS:
