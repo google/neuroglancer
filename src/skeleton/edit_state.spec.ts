@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
-import { getSpatiallyIndexedSkeletonSubtreeNodes } from "#src/skeleton/edit_state.js";
+import { getSpatiallyIndexedSkeletonSubtreeNodes } from "#src/skeleton/node_traversal.js";
 
 function makeNode(
   nodeId: number,

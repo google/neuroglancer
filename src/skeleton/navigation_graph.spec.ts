@@ -27,7 +27,7 @@ import {
   getOpenLeaves,
   getParentNode,
   getSkeletonRootNode,
-} from "#src/skeleton/navigation.js";
+} from "#src/skeleton/navigation_graph.js";
 
 function makeNode(
   nodeId: number,

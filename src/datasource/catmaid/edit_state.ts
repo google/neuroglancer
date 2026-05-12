@@ -9,7 +9,7 @@ import {
   getSpatiallyIndexedSkeletonDirectChildren,
   getSpatiallyIndexedSkeletonNodeParent,
   getSpatiallyIndexedSkeletonPathToRoot,
-} from "#src/skeleton/edit_state.js";
+} from "#src/skeleton/node_traversal.js";
 
 function requireRevisionToken(
   node: SpatiallyIndexedSkeletonNode,

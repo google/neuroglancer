@@ -21,7 +21,7 @@ import {
   buildSpatiallyIndexedSkeletonNavigationGraph,
   getFlatListNodeIds,
   getSkeletonRootNode,
-} from "#src/skeleton/navigation.js";
+} from "#src/skeleton/navigation_graph.js";
 import {
   getEditableSpatiallyIndexedSkeletonSource,
   isSpatiallyIndexedSkeletonSourceReadOnly,

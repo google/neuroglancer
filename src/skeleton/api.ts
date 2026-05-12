@@ -26,7 +26,7 @@ import type {
   SpatialSkeletonMoveNodesCommandFactory,
   SpatialSkeletonRerootCommandFactory,
   SpatialSkeletonSplitSkeletonsCommandFactory,
-} from "#src/skeleton/edit_command_source.js";
+} from "#src/skeleton/command_factories.js";
 
 export type SpatialSkeletonVector = ArrayLike<number>;
 

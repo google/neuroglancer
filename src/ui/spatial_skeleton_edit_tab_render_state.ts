@@ -18,7 +18,7 @@ import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
 import {
   getFlatListNodeIds,
   type SpatiallyIndexedSkeletonNavigationGraph,
-} from "#src/skeleton/navigation.js";
+} from "#src/skeleton/navigation_graph.js";
 import {
   classifySpatialSkeletonDisplayNodeType as classifyNodeType,
   matchesSpatialSkeletonNodeFilter,

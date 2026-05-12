@@ -59,7 +59,7 @@ import {
   type SpatiallyIndexedSkeletonNavigationTarget,
   type SpatiallyIndexedSkeletonOpenLeaf,
   type SpatiallyIndexedSkeletonNavigationGraph,
-} from "#src/skeleton/navigation.js";
+} from "#src/skeleton/navigation_graph.js";
 import {
   getSpatialSkeletonNodeFilterLabel,
   getSpatialSkeletonNodeIconFilterType,
