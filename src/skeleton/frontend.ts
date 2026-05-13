@@ -2450,7 +2450,8 @@ export class SpatiallyIndexedSkeletonLayer
             hasSegmentStatedColors:
               colorGroupState.segmentStatedColors.size !== 0,
             hasSegmentDefaultColor:
-              colorGroupState.segmentDefaultColor.value !== undefined,
+              colorGroupState.segmentDefaultColor.value !== undefined ||
+              DEBUG_SPATIAL_SKELETON_CHUNKS,
             spatialChunkCulling: false,
           };
         };
