@@ -227,6 +227,7 @@ interface SkeletonShaderParameters {
   dynamicSegmentAppearance: boolean;
   hasSegmentStatedColors: boolean;
   hasSegmentDefaultColor: boolean;
+  hoverHighlight: boolean;
   spatialChunkCulling: boolean;
 }
 
@@ -326,9 +327,6 @@ class RenderHelper extends RefCounted {
     this.defineAttributeAccess(builder);
     if (skeletonParams.dynamicSegmentAppearance) {
       this.defineDynamicSegmentAppearance(builder, skeletonParams);
-    }
-    if (skeletonParams.dynamicSegmentAppearance) {
-      builder.addVarying("highp uint", "vSegmentValue", "flat");
     }
     if (skeletonParams.spatialChunkCulling) {
       builder.addUniform("highp vec3", "uChunkOrigin");
@@ -441,9 +439,14 @@ void spatialChunkCull() {
     }
     builder.addUniform("highp float", "uVisibleAlpha");
     builder.addUniform("highp float", "uHiddenAlpha");
+    builder.addUniform("highp float", "uSaturation");
     if (params.hasSegmentDefaultColor) {
       builder.addUniform("highp vec3", "uSegmentDefaultColor");
     }
+    if (params.hoverHighlight) {
+      builder.addUniform("highp uvec2", "uHoveredSegmentId");
+    }
+    builder.addVarying("highp uint", "vSegmentValue", "flat");
 
     const statedColorFragment = params.hasSegmentStatedColors
       ? `
@@ -457,13 +460,28 @@ void spatialChunkCull() {
       ? "  return uSegmentDefaultColor;"
       : `  ${colorExpression}`;
 
+    const hoverAdjustFragment = params.hoverHighlight
+      ? `
+  if (segmentId.value.x == uHoveredSegmentId.x &&
+      segmentId.value.y == uHoveredSegmentId.y) {
+    if (saturation > 0.5) { saturation -= 0.5; }
+    else { saturation += 0.5; }
+  }`
+      : "";
+
     builder.addFragmentCode(`
 uint64_t getSegmentAppearanceId(highp uint segmentValue) {
   return uint64_t(uvec2(segmentValue, 0u));
 }
-vec3 getSegmentLookupColor(uint64_t segmentId) {
+vec3 getSegmentBaseColor(uint64_t segmentId) {
 ${statedColorFragment}
 ${defaultColorFragment}
+}
+vec3 getSegmentLookupColor(uint64_t segmentId) {
+  vec3 baseColor = getSegmentBaseColor(segmentId);
+  float saturation = uSaturation;
+${hoverAdjustFragment}
+  return mix(vec3(1.0, 1.0, 1.0), baseColor, saturation);
 }
 float getSegmentLookupAlpha(uint64_t segmentId) {
   if (${this.excludedSegmentsShaderManager.hasFunctionName}(segmentId)) {
@@ -535,6 +553,19 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
         gl,
         shader,
         this.gpuSegmentStatedColorHashTable,
+      );
+    }
+
+    const { saturation, segmentSelectionState } = this.base.displayState;
+    gl.uniform1f(shader.uniform("uSaturation"), saturation.value);
+    if (skeletonParams.hoverHighlight) {
+      const seg = segmentSelectionState.hasSelectedSegment
+        ? segmentSelectionState.selectedSegment
+        : 0n;
+      gl.uniform2ui(
+        shader.uniform("uHoveredSegmentId"),
+        Number(seg & 0xffff_ffffn),
+        Number((seg >> 32n) & 0xffff_ffffn),
       );
     }
   }
@@ -647,6 +678,9 @@ highp uint vertexIndex = aVertexIndex.x * (1u - lineEndpointIndex) + aVertexInde
               ? "uColor.a"
               : `${segmentColorExpression}.a`;
           if (skeletonParams.dynamicSegmentAppearance) {
+            // Dynamic path (spatial skeletons): per-segment color, visibility,
+            // saturation and hover highlight all resolved in the shader via
+            // getSegmentAppearance(). uColor is unused in this path.
             builder.addFragmentCode(`
 vec4 segmentColor() {
   return getSegmentAppearance(vSegmentValue);
@@ -665,10 +699,9 @@ void emitDefault() {
 }
 `);
           } else if (this.segmentColorAttributeIndex === undefined) {
-            // Preserve legacy skeleton behavior where `uColor` is already
-            // premultiplied by `objectAlpha` in `getObjectColor`.
-            // in this path, whole skeletons are drawn at one time
-            // as opposed to multiple skeletons
+            // Legacy path (non-spatial skeletons): one skeleton drawn per call;
+            // uColor is set per-skeleton by the CPU via getObjectColor(), which
+            // already incorporates saturation and hover highlighting.
             builder.addFragmentCode(`
 vec4 segmentColor() {
   return ${segmentColorExpression};
@@ -681,6 +714,8 @@ void emitDefault() {
 }
 `);
           } else {
+            // Per-vertex color attribute path: color comes from a per-vertex
+            // attribute; alpha is taken from uColor.
             builder.addFragmentCode(`
 vec4 segmentColor() {
   return ${segmentColorExpression};
@@ -772,6 +807,9 @@ emitCircle(
             skeletonParams.dynamicSegmentAppearance &&
             this.segmentAttributeIndex !== undefined
           ) {
+            // Dynamic path (spatial skeletons): per-segment color, visibility,
+            // saturation and hover highlight all resolved in the shader via
+            // getSegmentAppearance(). uColor is unused in this path.
             const segmentExpression = `vSegmentValue`;
             const selectedNodeExpression =
               this.selectedNodeAttributeIndex === undefined
@@ -802,7 +840,9 @@ void emitDefault() {
 }
 `);
           } else if (this.segmentColorAttributeIndex === undefined) {
-            // Preserve legacy skeleton behavior for non-spatial skeletons.
+            // Legacy path (non-spatial skeletons): one skeleton drawn per call;
+            // uColor is set per-skeleton by the CPU via getObjectColor(), which
+            // already incorporates saturation and hover highlighting.
             builder.addFragmentCode(`
 vec4 segmentColor() {
   return ${segmentColorExpression};
@@ -819,6 +859,8 @@ void emitDefault() {
 }
 `);
           } else {
+            // Per-vertex color attribute path: color comes from a per-vertex
+            // attribute; alpha is taken from the attribute's alpha component.
             const selectedNodeExpression =
               this.selectedNodeAttributeIndex === undefined
                 ? undefined
@@ -1199,6 +1241,7 @@ export class SkeletonLayer extends RefCounted implements SkeletonShaderContext {
       dynamicSegmentAppearance: false,
       hasSegmentStatedColors: false,
       hasSegmentDefaultColor: false,
+      hoverHighlight: false,
       spatialChunkCulling: false,
     });
   fallbackShaderParameters = new WatchableValue(
@@ -2440,29 +2483,41 @@ export class SpatiallyIndexedSkeletonLayer
         dynamicSegmentAppearance: true,
         hasSegmentStatedColors: false,
         hasSegmentDefaultColor: false,
+        hoverHighlight: false,
         spatialChunkCulling: false,
       });
+    const updateSkeletonShaderParameters = () => {
+      const colorGroupState =
+        this.displayState.segmentationColorGroupState.value;
+      this.skeletonShaderParameters.value = {
+        dynamicSegmentAppearance: true,
+        hasSegmentStatedColors: colorGroupState.segmentStatedColors.size !== 0,
+        hasSegmentDefaultColor:
+          colorGroupState.segmentDefaultColor.value !== undefined ||
+          DEBUG_SPATIAL_SKELETON_CHUNKS,
+        hoverHighlight: this.displayState.hoverHighlight.value,
+        spatialChunkCulling: false,
+      };
+    };
     this.registerDisposer(
       registerNested((context, colorGroupState) => {
-        const update = () => {
-          this.skeletonShaderParameters.value = {
-            dynamicSegmentAppearance: true,
-            hasSegmentStatedColors:
-              colorGroupState.segmentStatedColors.size !== 0,
-            hasSegmentDefaultColor:
-              colorGroupState.segmentDefaultColor.value !== undefined ||
-              DEBUG_SPATIAL_SKELETON_CHUNKS,
-            spatialChunkCulling: false,
-          };
-        };
         context.registerDisposer(
-          colorGroupState.segmentStatedColors.changed.add(update),
+          colorGroupState.segmentStatedColors.changed.add(
+            updateSkeletonShaderParameters,
+          ),
         );
         context.registerDisposer(
-          colorGroupState.segmentDefaultColor.changed.add(update),
+          colorGroupState.segmentDefaultColor.changed.add(
+            updateSkeletonShaderParameters,
+          ),
         );
-        update();
+        updateSkeletonShaderParameters();
       }, this.displayState.segmentationColorGroupState),
+    );
+    this.registerDisposer(
+      this.displayState.hoverHighlight.changed.add(
+        updateSkeletonShaderParameters,
+      ),
     );
     this.browsePassSkeletonShaderParameters = this.registerDisposer(
       makeCachedLazyDerivedWatchableValue(
