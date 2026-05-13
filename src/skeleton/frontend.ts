@@ -2807,6 +2807,8 @@ export class SpatiallyIndexedSkeletonLayer
   }
 
   private areVisibleChunksReady(
+    view: SpatiallyIndexedSkeletonView,
+    gridLevel: number | undefined,
     transformedSources: readonly TransformedSource[][],
     projectionParameters: ProjectionParameters,
     lod: number | undefined,
@@ -2824,12 +2826,18 @@ export class SpatiallyIndexedSkeletonLayer
     if (transformedSources.length === 0) {
       return false;
     }
+    const selectedSourceIds = new Set(
+      this.selectSourcesForViewAndGrid(view, gridLevel).map((s) =>
+        getObjectId(s.chunkSource),
+      ),
+    );
     const lodSuffix = `:${lod}`;
     const seenChunkKeysBySource = new Map<string, Set<string>>();
     let ready = true;
     for (const scales of transformedSources) {
       for (const tsource of scales) {
         const sourceId = getObjectId(tsource.source);
+        if (!selectedSourceIds.has(sourceId)) continue;
         let seenChunkKeys = seenChunkKeysBySource.get(sourceId);
         if (seenChunkKeys === undefined) {
           seenChunkKeys = new Set<string>();
@@ -3252,14 +3260,15 @@ export class SpatiallyIndexedSkeletonLayer
   }
 
   isReady(
+    view: SpatiallyIndexedSkeletonView,
+    gridLevel: number | undefined,
     transformedSources: readonly TransformedSource[][],
     projectionParameters: ProjectionParameters,
     lod?: number,
   ) {
-    // TODO (SKM) I don't think this is getting
-    // called as expected, for example, I think
-    // the screenshot should call this but it doesn't seem to
     return this.areVisibleChunksReady(
+      view,
+      gridLevel,
       transformedSources,
       projectionParameters,
       lod,
@@ -3591,11 +3600,12 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
     >,
   ) {
     const { displayState } = this.base;
-    const lodValue = displayState.skeletonLod?.value;
     return this.base.isReady(
+      "3d",
+      displayState.spatialSkeletonGridLevel3d?.value,
       this.transformedSources,
       renderContext.projectionParameters,
-      lodValue,
+      displayState.skeletonLod?.value,
     );
   }
 }
@@ -3734,11 +3744,12 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
     >,
   ) {
     const { displayState } = this.base;
-    const lodValue = displayState.spatialSkeletonLod2d?.value;
     return this.base.isReady(
+      "2d",
+      displayState.spatialSkeletonGridLevel2d?.value,
       this.transformedSources,
       renderContext.projectionParameters,
-      lodValue,
+      displayState.spatialSkeletonLod2d?.value,
     );
   }
 }
