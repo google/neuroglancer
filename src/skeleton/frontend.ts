@@ -2974,6 +2974,14 @@ export class SpatiallyIndexedSkeletonLayer
     const chunkOrigin = vec3.create();
     const chunkBound = vec3.create();
     for (const { chunk, chunkLayout } of visibleChunks) {
+      if (skeletonParams.spatialChunkCulling) {
+        vec3.mul(chunkOrigin, chunk.chunkGridPosition, chunkLayout.size);
+        vec3.add(chunkBound, chunkOrigin, chunkLayout.size);
+        edgeShader.bind();
+        renderHelper.setChunkBounds(gl, edgeShader, chunkOrigin, chunkBound);
+        nodeShader.bind();
+        renderHelper.setChunkBounds(gl, nodeShader, chunkOrigin, chunkBound);
+      }
       if (renderContext.emitPickID) {
         let edgePickId = 0;
         let edgePickStride = 0;
@@ -3006,17 +3014,9 @@ export class SpatiallyIndexedSkeletonLayer
         edgeShader.bind();
         renderHelper.setPickID(gl, edgeShader, edgePickId);
         renderHelper.setPickInstanceStride(gl, edgeShader, edgePickStride);
-        if (skeletonParams.spatialChunkCulling) {
-          vec3.mul(chunkOrigin, chunk.chunkGridPosition, chunkLayout.size);
-          vec3.add(chunkBound, chunkOrigin, chunkLayout.size);
-          renderHelper.setChunkBounds(gl, edgeShader, chunkOrigin, chunkBound);
-        }
         nodeShader.bind();
         renderHelper.setPickID(gl, nodeShader, nodePickId);
         renderHelper.setPickInstanceStride(gl, nodeShader, nodePickStride);
-        if (skeletonParams.spatialChunkCulling) {
-          renderHelper.setChunkBounds(gl, nodeShader, chunkOrigin, chunkBound);
-        }
       }
       // Render each chunk with different node/edge colors for debugging
       if (DEBUG_SPATIAL_SKELETON_CHUNKS) {
