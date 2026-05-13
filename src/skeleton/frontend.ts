@@ -781,7 +781,6 @@ emitCircle(
               selectedNodeExpression === undefined
                 ? "renderColor"
                 : `((${selectedNodeExpression} > 0.5) ? vec4(${SELECTED_NODE_OUTLINE_COLOR_RGB}, renderColor.a) : renderColor)`;
-            // TODO (SKM) interaction between default and emitRGBA looks odd
             builder.addFragmentCode(`
 vec4 segmentColor() {
   return getSegmentAppearance(${segmentExpression});
@@ -799,13 +798,7 @@ void emitRGB(vec3 color) {
   emitRGBA(vec4(color, 1.0));
 }
 void emitDefault() {
-  vec4 baseColor = segmentColor();
-  highp float alpha = baseColor.a;
-  if (alpha <= 0.0) discard;
-  vec4 renderColor = vec4(baseColor.rgb, alpha);
-  vec4 borderColor = ${borderColorExpression};
-  vec4 circleColor = getCircleColor(renderColor, borderColor);
-  emit(vec4(circleColor.rgb * circleColor.a, circleColor.a), vPickID);
+  emitRGBA(vec4(segmentColor().rgb, 1.0));
 }
 `);
           } else if (this.segmentColorAttributeIndex === undefined) {
