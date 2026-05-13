@@ -2817,7 +2817,11 @@ export class SpatiallyIndexedSkeletonLayer
     ) {
       return true;
     }
-    if (lod === undefined || transformedSources.length === 0) {
+    if (lod === undefined) {
+      // No LOD configured — draw() renders nothing in this case, so nothing to wait for.
+      return true;
+    }
+    if (transformedSources.length === 0) {
       return false;
     }
     const lodSuffix = `:${lod}`;
