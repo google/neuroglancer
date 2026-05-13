@@ -144,7 +144,7 @@ export function buildSpatiallyIndexedSkeletonOverlayGeometry(
   };
 }
 
-export const DEFAULT_MAX_RETAINED_OVERLAY_SEGMENTS = 4;
+export const DEFAULT_MAX_RETAINED_OVERLAY_SEGMENTS = 16;
 
 function normalizeSegmentId(segmentId: number) {
   const normalizedSegmentId = Math.round(Number(segmentId));
