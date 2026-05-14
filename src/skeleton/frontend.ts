@@ -2759,6 +2759,53 @@ export class SpatiallyIndexedSkeletonLayer
     };
   }
 
+  // Iterates every chunk slot in view for the given view/gridLevel/lod.
+  // Callback receives (chunkKey, chunkSource, chunkLayout); return false to stop early.
+  private forEachVisibleChunkSlot(
+    view: SpatiallyIndexedSkeletonView,
+    gridLevel: number | undefined,
+    transformedSources: readonly TransformedSource[][],
+    projectionParameters: ProjectionParameters,
+    lod: number,
+    callback: (
+      chunkKey: string,
+      chunkSource: SpatiallyIndexedSkeletonSource,
+      chunkLayout: ChunkLayout,
+    ) => boolean | void,
+  ) {
+    const selectedSourceIds = new Set(
+      this.selectSourcesForViewAndGrid(view, gridLevel).map((s) =>
+        getObjectId(s.chunkSource),
+      ),
+    );
+    const lodSuffix = `:${lod}`;
+    let shouldContinue = true;
+    for (const scales of transformedSources) {
+      for (const tsource of scales) {
+        if (!shouldContinue) return;
+        if (!selectedSourceIds.has(getObjectId(tsource.source))) continue;
+        forEachVisibleVolumetricChunk(
+          projectionParameters,
+          this.localPosition.value,
+          tsource,
+          (positionInChunks) => {
+            if (!shouldContinue) return;
+            const chunkKey = `${positionInChunks.join()}${lodSuffix}`;
+            if (
+              callback(
+                chunkKey,
+                tsource.source as SpatiallyIndexedSkeletonSource,
+                tsource.chunkLayout,
+              ) === false
+            ) {
+              shouldContinue = false;
+            }
+          },
+        );
+      }
+    }
+  }
+
   getVisibleChunksInCurrentViewAndLod(
     view: SpatiallyIndexedSkeletonView,
     gridLevel: number | undefined,
@@ -2769,44 +2816,26 @@ export class SpatiallyIndexedSkeletonLayer
     if (lod === undefined) {
       return [];
     }
-    const selectedSourceIds = new Set(
-      this.selectSourcesForViewAndGrid(view, gridLevel).map((s) =>
-        getObjectId(s.chunkSource),
-      ),
-    );
-    const lodSuffix = `:${lod}`;
     const result: VisibleChunk[] = [];
-    const seenChunkKeysBySource = new Map<string, Set<string>>();
-    for (const scales of transformedSources) {
-      for (const tsource of scales) {
-        const sourceId = getObjectId(tsource.source);
-        if (!selectedSourceIds.has(sourceId)) continue;
-        let seenChunkKeys = seenChunkKeysBySource.get(sourceId);
-        if (seenChunkKeys === undefined) {
-          seenChunkKeys = new Set<string>();
-          seenChunkKeysBySource.set(sourceId, seenChunkKeys);
+    this.forEachVisibleChunkSlot(
+      view,
+      gridLevel,
+      transformedSources,
+      projectionParameters,
+      lod,
+      (chunkKey, chunkSource, chunkLayout) => {
+        const chunk = chunkSource.chunks.get(chunkKey);
+        if (chunk?.state === ChunkState.GPU_MEMORY) {
+          result.push({ chunk, chunkLayout });
         }
-        forEachVisibleVolumetricChunk(
-          projectionParameters,
-          this.localPosition.value,
-          tsource,
-          (positionInChunks) => {
-            const chunkKey = `${positionInChunks.join()}${lodSuffix}`;
-            if (seenChunkKeys!.has(chunkKey)) return;
-            seenChunkKeys!.add(chunkKey);
-            const chunkSource =
-              tsource.source as SpatiallyIndexedSkeletonSource;
-            const chunk = chunkSource.chunks.get(chunkKey);
-            if (chunk?.state !== ChunkState.GPU_MEMORY) return;
-            result.push({ chunk, chunkLayout: tsource.chunkLayout });
-          },
-        );
-      }
-    }
+      },
+    );
     return result;
   }
 
   private areVisibleChunksReady(
+    view: SpatiallyIndexedSkeletonView,
+    gridLevel: number | undefined,
     transformedSources: readonly TransformedSource[][],
     projectionParameters: ProjectionParameters,
     lod: number | undefined,
@@ -2817,49 +2846,30 @@ export class SpatiallyIndexedSkeletonLayer
     ) {
       return true;
     }
-    if (lod === undefined || transformedSources.length === 0) {
+    if (lod === undefined) {
+      // No LOD configured — draw() renders nothing in this case, so nothing to wait for.
+      return true;
+    }
+    if (transformedSources.length === 0) {
       return false;
     }
-    const lodSuffix = `:${lod}`;
-    const seenChunkKeysBySource = new Map<string, Set<string>>();
     let ready = true;
-    for (const scales of transformedSources) {
-      for (const tsource of scales) {
-        const sourceId = getObjectId(tsource.source);
-        let seenChunkKeys = seenChunkKeysBySource.get(sourceId);
-        if (seenChunkKeys === undefined) {
-          seenChunkKeys = new Set<string>();
-          seenChunkKeysBySource.set(sourceId, seenChunkKeys);
-        }
-        forEachVisibleVolumetricChunk(
-          projectionParameters,
-          this.localPosition.value,
-          tsource,
-          (positionInChunks) => {
-            if (!ready) {
-              return;
-            }
-            const chunkKey = `${positionInChunks.join()}${lodSuffix}`;
-            if (seenChunkKeys!.has(chunkKey)) {
-              return;
-            }
-            seenChunkKeys!.add(chunkKey);
-            const chunkSource =
-              tsource.source as SpatiallyIndexedSkeletonSource;
-            const chunk = chunkSource.chunks.get(chunkKey) as
-              | SpatiallyIndexedSkeletonChunk
-              | undefined;
-            if (chunk?.state !== ChunkState.GPU_MEMORY) {
-              ready = false;
-            }
-          },
-        );
-        if (!ready) {
+    this.forEachVisibleChunkSlot(
+      view,
+      gridLevel,
+      transformedSources,
+      projectionParameters,
+      lod,
+      (chunkKey, chunkSource, _) => {
+        const chunk = chunkSource.chunks.get(chunkKey);
+        if (chunk?.state !== ChunkState.GPU_MEMORY) {
+          ready = false;
           return false;
         }
-      }
-    }
-    return true;
+        return true;
+      },
+    );
+    return ready;
   }
 
   getNode(
@@ -3248,14 +3258,15 @@ export class SpatiallyIndexedSkeletonLayer
   }
 
   isReady(
+    view: SpatiallyIndexedSkeletonView,
+    gridLevel: number | undefined,
     transformedSources: readonly TransformedSource[][],
     projectionParameters: ProjectionParameters,
     lod?: number,
   ) {
-    // TODO (SKM) I don't think this is getting
-    // called as expected, for example, I think
-    // the screenshot should call this but it doesn't seem to
     return this.areVisibleChunksReady(
+      view,
+      gridLevel,
       transformedSources,
       projectionParameters,
       lod,
@@ -3587,11 +3598,12 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
     >,
   ) {
     const { displayState } = this.base;
-    const lodValue = displayState.skeletonLod?.value;
     return this.base.isReady(
+      "3d",
+      displayState.spatialSkeletonGridLevel3d?.value,
       this.transformedSources,
       renderContext.projectionParameters,
-      lodValue,
+      displayState.skeletonLod?.value,
     );
   }
 }
@@ -3730,11 +3742,12 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
     >,
   ) {
     const { displayState } = this.base;
-    const lodValue = displayState.spatialSkeletonLod2d?.value;
     return this.base.isReady(
+      "2d",
+      displayState.spatialSkeletonGridLevel2d?.value,
       this.transformedSources,
       renderContext.projectionParameters,
-      lodValue,
+      displayState.spatialSkeletonLod2d?.value,
     );
   }
 }
