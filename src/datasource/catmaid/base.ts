@@ -14,7 +14,15 @@
  * limitations under the License.
  */
 
-import { SkeletonSourceParameters } from "#src/datasource/precomputed/base.js";
+import type { CredentialsProvider } from "#src/credentials_provider/index.js";
+import type { CatmaidToken } from "#src/datasource/catmaid/api.js";
+import { CatmaidClient } from "#src/datasource/catmaid/api.js";
+import {
+  SkeletonSourceParameters,
+  type SkeletonMetadata,
+} from "#src/datasource/precomputed/base.js";
+import { DataType } from "#src/util/data_type.js";
+import { mat4 } from "#src/util/geom.js";
 
 export class CatmaidDataSourceParameters {
   url!: string;
@@ -33,4 +41,25 @@ export class CatmaidSkeletonSourceParameters extends SkeletonSourceParameters {
 export class CatmaidCompleteSkeletonSourceParameters extends SkeletonSourceParameters {
   catmaidParameters!: CatmaidDataSourceParameters;
   static RPC_ID = "catmaid/CompleteSkeletonSource";
+}
+
+export function makeCatmaidClient(
+  parameters: CatmaidDataSourceParameters,
+  credentialsProvider?: CredentialsProvider<CatmaidToken>,
+) {
+  return new CatmaidClient(
+    parameters.url,
+    parameters.projectId,
+    credentialsProvider,
+  );
+}
+
+export function makeCatmaidSkeletonMetadata(): SkeletonMetadata {
+  return {
+    transform: mat4.create(),
+    vertexAttributes: new Map([
+      ["segment", { dataType: DataType.UINT32, numComponents: 1 }],
+    ]),
+    sharding: undefined,
+  };
 }

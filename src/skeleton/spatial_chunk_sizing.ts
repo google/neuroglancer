@@ -23,10 +23,40 @@ const DEFAULT_SPATIALLY_INDEXED_SKELETON_MAX_CHUNKS = 64;
 const DEFAULT_SPATIALLY_INDEXED_SKELETON_MIN_CHUNK_SIZE = 1;
 
 export type SpatiallyIndexedSkeletonChunkSize = number[];
+export type SpatialSkeletonGridSize = { x: number; y: number; z: number };
+export type SpatialSkeletonGridLevel = {
+  size: SpatialSkeletonGridSize;
+  lod: number;
+};
 
 export interface DefaultSpatiallyIndexedSkeletonChunkSizeOptions {
   maxChunks?: number;
   minChunkSize?: number;
+}
+
+export function getSpatialSkeletonGridSpacing(size: SpatialSkeletonGridSize) {
+  return Math.min(size.x, size.y, size.z);
+}
+
+export function sortSpatialSkeletonGridSizes(
+  gridSizes: readonly SpatialSkeletonGridSize[],
+): SpatialSkeletonGridSize[] {
+  return [...gridSizes].sort(
+    (a, b) =>
+      getSpatialSkeletonGridSpacing(b) - getSpatialSkeletonGridSpacing(a),
+  );
+}
+
+export function buildSpatialSkeletonGridLevels(
+  gridSizes: readonly SpatialSkeletonGridSize[],
+): SpatialSkeletonGridLevel[] {
+  const sortedSizes = sortSpatialSkeletonGridSizes(gridSizes);
+  if (sortedSizes.length === 0) return [];
+  const lastIndex = sortedSizes.length - 1;
+  return sortedSizes.map((size, index) => ({
+    size,
+    lod: lastIndex === 0 ? 0 : index / lastIndex,
+  }));
 }
 
 function validateFiniteOptions(

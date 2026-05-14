@@ -16,14 +16,15 @@
 
 import { WithParameters } from "#src/chunk_manager/backend.js";
 import { WithSharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
-import type { CatmaidToken } from "#src/datasource/catmaid/api.js";
-import {
+import type {
   CatmaidClient,
-  getCatmaidSpatialSkeletonGridCellBounds,
+  CatmaidToken,
 } from "#src/datasource/catmaid/api.js";
+import { getCatmaidSpatialSkeletonGridCellBounds } from "#src/datasource/catmaid/api.js";
 import {
   CatmaidSkeletonSourceParameters,
   CatmaidCompleteSkeletonSourceParameters,
+  makeCatmaidClient,
 } from "#src/datasource/catmaid/base.js";
 import { packCatmaidSkeletonNodes } from "#src/datasource/catmaid/skeleton_packing.js";
 import type {
@@ -46,17 +47,10 @@ export class CatmaidSpatiallyIndexedSkeletonSourceBackend extends WithParameters
   private clientInstance: CatmaidClient | undefined;
 
   get client(): CatmaidClient {
-    let client = this.clientInstance;
-    if (client === undefined) {
-      const { catmaidParameters } = this.parameters;
-      client = new CatmaidClient(
-        catmaidParameters.url,
-        catmaidParameters.projectId,
-        this.credentialsProvider,
-      );
-      this.clientInstance = client;
-    }
-    return client;
+    return (this.clientInstance ??= makeCatmaidClient(
+      this.parameters.catmaidParameters,
+      this.credentialsProvider,
+    ));
   }
 
   constructor(...args: any[]) {
@@ -72,7 +66,7 @@ export class CatmaidSpatiallyIndexedSkeletonSourceBackend extends WithParameters
     );
     const lodValue = this.parameters.catmaidLod ?? 0;
     const cacheProvider = this.parameters.catmaidParameters.cacheProvider;
-    const nodes = await this.client.fetchNodesInBoundingBox(bounds, lodValue, {
+    const nodes = await this.client.fetchNodes(bounds, lodValue, {
       cacheProvider,
       signal,
     });
@@ -96,17 +90,10 @@ export class CatmaidSkeletonSourceBackend extends WithParameters(
   private clientInstance: CatmaidClient | undefined;
 
   get client(): CatmaidClient {
-    let client = this.clientInstance;
-    if (client === undefined) {
-      const { catmaidParameters } = this.parameters;
-      client = new CatmaidClient(
-        catmaidParameters.url,
-        catmaidParameters.projectId,
-        this.credentialsProvider,
-      );
-      this.clientInstance = client;
-    }
-    return client;
+    return (this.clientInstance ??= makeCatmaidClient(
+      this.parameters.catmaidParameters,
+      this.credentialsProvider,
+    ));
   }
 
   constructor(...args: any[]) {
