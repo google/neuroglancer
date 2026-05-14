@@ -22,11 +22,14 @@ import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spat
 import {
   executeSpatialSkeletonAddNode,
   executeSpatialSkeletonDeleteNode,
+  executeSpatialSkeletonInsertNode,
   executeSpatialSkeletonMerge,
   executeSpatialSkeletonMoveNode,
   executeSpatialSkeletonNodeConfidenceUpdate,
   executeSpatialSkeletonNodeDescriptionUpdate,
   executeSpatialSkeletonNodeRadiusUpdate,
+  executeSpatialSkeletonNodeTrueEndUpdate,
+  executeSpatialSkeletonReroot,
   executeSpatialSkeletonSplit,
   redoSpatialSkeletonCommand,
   undoSpatialSkeletonCommand,
@@ -311,6 +314,165 @@ describe("spatial_skeleton_commands", () => {
     ).toThrow(
       "The active skeleton source does not support node description editing.",
     );
+  });
+
+  it("routes public wrappers through shared execution metadata", async () => {
+    const showMessage = vi.spyOn(StatusMessage, "showMessage").mockReturnValue({
+      dispose: vi.fn(),
+    } as unknown as StatusMessage);
+    const makeCommandFactory = (action: string) => ({
+      action,
+      createCommand: vi.fn(() => ({
+        label: action,
+        execute: vi.fn(async () => {}),
+        undo: vi.fn(async () => {}),
+      })),
+    });
+    const source = {
+      readonly: false,
+      addNodesCommand: makeCommandFactory(SpatialSkeletonActions.addNodes),
+      insertNodesCommand: makeCommandFactory(
+        SpatialSkeletonActions.insertNodes,
+      ),
+      moveNodesCommand: makeCommandFactory(SpatialSkeletonActions.moveNodes),
+      deleteNodesCommand: makeCommandFactory(
+        SpatialSkeletonActions.deleteNodes,
+      ),
+      rerootCommand: makeCommandFactory(SpatialSkeletonActions.reroot),
+      editNodeDescriptionCommand: makeCommandFactory(
+        SpatialSkeletonActions.editNodeDescription,
+      ),
+      editNodeTrueEndCommand: makeCommandFactory(
+        SpatialSkeletonActions.editNodeTrueEnd,
+      ),
+      editNodeRadiusCommand: makeCommandFactory(
+        SpatialSkeletonActions.editNodeRadius,
+      ),
+      editNodeConfidenceCommand: makeCommandFactory(
+        SpatialSkeletonActions.editNodeConfidence,
+      ),
+      mergeSkeletonsCommand: makeCommandFactory(
+        SpatialSkeletonActions.mergeSkeletons,
+      ),
+      splitSkeletonsCommand: makeCommandFactory(
+        SpatialSkeletonActions.splitSkeletons,
+      ),
+      listSkeletons: vi.fn(),
+      getSkeleton: vi.fn(),
+      fetchNodes: vi.fn(),
+      getSpatialIndexMetadata: vi.fn(),
+    };
+    const layer = {
+      spatialSkeletonState: {
+        commandHistory: new SpatialSkeletonCommandHistory(),
+      },
+      getSpatiallyIndexedSkeletonLayer: () => ({ source }),
+    };
+    const node: SpatiallyIndexedSkeletonNode = {
+      nodeId: 17,
+      segmentId: 23,
+      position: new Float32Array([1, 2, 3]),
+    };
+    const firstNode = { nodeId: 17, segmentId: 23 };
+    const secondNode = { nodeId: 29, segmentId: 31 };
+    const cases = [
+      {
+        commandFactory: source.addNodesCommand,
+        execute: () =>
+          executeSpatialSkeletonAddNode(layer as any, {
+            skeletonId: 23,
+            positionInModelSpace: new Float32Array([4, 5, 6]),
+          }),
+        pendingMessage: "Creating node...",
+      },
+      {
+        commandFactory: source.insertNodesCommand,
+        execute: () =>
+          executeSpatialSkeletonInsertNode(layer as any, {
+            skeletonId: 23,
+            parentNodeId: 17,
+            childNodeIds: [29],
+            positionInModelSpace: new Float32Array([4, 5, 6]),
+          }),
+        pendingMessage: "Inserting node...",
+      },
+      {
+        commandFactory: source.moveNodesCommand,
+        execute: () =>
+          executeSpatialSkeletonMoveNode(layer as any, {
+            node,
+            nextPositionInModelSpace: new Float32Array([7, 8, 9]),
+          }),
+      },
+      {
+        commandFactory: source.deleteNodesCommand,
+        execute: () => executeSpatialSkeletonDeleteNode(layer as any, node),
+        pendingMessage: "Deleting node...",
+      },
+      {
+        commandFactory: source.editNodeDescriptionCommand,
+        execute: () =>
+          executeSpatialSkeletonNodeDescriptionUpdate(layer as any, {
+            node,
+            nextDescription: "next",
+          }),
+      },
+      {
+        commandFactory: source.editNodeTrueEndCommand,
+        execute: () =>
+          executeSpatialSkeletonNodeTrueEndUpdate(layer as any, {
+            node,
+            nextIsTrueEnd: true,
+          }),
+      },
+      {
+        commandFactory: source.editNodeRadiusCommand,
+        execute: () =>
+          executeSpatialSkeletonNodeRadiusUpdate(layer as any, {
+            node,
+            nextRadius: 42,
+          }),
+      },
+      {
+        commandFactory: source.editNodeConfidenceCommand,
+        execute: () =>
+          executeSpatialSkeletonNodeConfidenceUpdate(layer as any, {
+            node,
+            nextConfidence: 5,
+          }),
+      },
+      {
+        commandFactory: source.rerootCommand,
+        execute: () => executeSpatialSkeletonReroot(layer as any, node),
+      },
+      {
+        commandFactory: source.splitSkeletonsCommand,
+        execute: () => executeSpatialSkeletonSplit(layer as any, node),
+        pendingMessage: "Splitting skeleton...",
+      },
+      {
+        commandFactory: source.mergeSkeletonsCommand,
+        execute: () =>
+          executeSpatialSkeletonMerge(layer as any, firstNode, secondNode),
+        pendingMessage: "Merging skeletons...",
+      },
+    ];
+
+    for (const testCase of cases) {
+      const dispose = vi.fn();
+      showMessage.mockReturnValue({ dispose } as unknown as StatusMessage);
+      showMessage.mockClear();
+
+      await testCase.execute();
+
+      expect(testCase.commandFactory.createCommand).toHaveBeenCalledTimes(1);
+      if (testCase.pendingMessage === undefined) {
+        expect(showMessage).not.toHaveBeenCalled();
+      } else {
+        expect(showMessage).toHaveBeenCalledWith(testCase.pendingMessage);
+        expect(dispose).toHaveBeenCalledTimes(1);
+      }
+    }
   });
 
   it("exposes CATMAID command factories for supported edit actions", () => {

@@ -15,9 +15,9 @@
  */
 
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
-import type {
+import {
   SpatialSkeletonActions,
-  SpatialSkeletonAction,
+  type SpatialSkeletonAction,
 } from "#src/skeleton/actions.js";
 import type { SpatialSkeletonCommand } from "#src/skeleton/command_history.js";
 
@@ -54,6 +54,115 @@ export function isSpatialSkeletonEditCommandFactory<
     typeof (value as SpatialSkeletonEditCommandFactoryCandidate)
       .createCommand === "function"
   );
+}
+
+export type SpatialSkeletonEditCommandProperty =
+  | "addNodesCommand"
+  | "insertNodesCommand"
+  | "moveNodesCommand"
+  | "deleteNodesCommand"
+  | "rerootCommand"
+  | "editNodeDescriptionCommand"
+  | "editNodeTrueEndCommand"
+  | "editNodeRadiusCommand"
+  | "editNodeConfidenceCommand"
+  | "mergeSkeletonsCommand"
+  | "splitSkeletonsCommand";
+
+export interface SpatialSkeletonEditCommandMetadata {
+  readonly action: SpatialSkeletonAction;
+  readonly commandProperty: SpatialSkeletonEditCommandProperty;
+  readonly required: boolean;
+  readonly requiresConfidenceConfiguration?: boolean;
+}
+
+export const SPATIAL_SKELETON_EDIT_COMMAND_METADATA = [
+  {
+    action: SpatialSkeletonActions.addNodes,
+    commandProperty: "addNodesCommand",
+    required: true,
+  },
+  {
+    action: SpatialSkeletonActions.insertNodes,
+    commandProperty: "insertNodesCommand",
+    required: false,
+  },
+  {
+    action: SpatialSkeletonActions.moveNodes,
+    commandProperty: "moveNodesCommand",
+    required: true,
+  },
+  {
+    action: SpatialSkeletonActions.deleteNodes,
+    commandProperty: "deleteNodesCommand",
+    required: true,
+  },
+  {
+    action: SpatialSkeletonActions.reroot,
+    commandProperty: "rerootCommand",
+    required: false,
+  },
+  {
+    action: SpatialSkeletonActions.editNodeDescription,
+    commandProperty: "editNodeDescriptionCommand",
+    required: false,
+  },
+  {
+    action: SpatialSkeletonActions.editNodeTrueEnd,
+    commandProperty: "editNodeTrueEndCommand",
+    required: false,
+  },
+  {
+    action: SpatialSkeletonActions.editNodeRadius,
+    commandProperty: "editNodeRadiusCommand",
+    required: false,
+  },
+  {
+    action: SpatialSkeletonActions.editNodeConfidence,
+    commandProperty: "editNodeConfidenceCommand",
+    required: false,
+    requiresConfidenceConfiguration: true,
+  },
+  {
+    action: SpatialSkeletonActions.mergeSkeletons,
+    commandProperty: "mergeSkeletonsCommand",
+    required: true,
+  },
+  {
+    action: SpatialSkeletonActions.splitSkeletons,
+    commandProperty: "splitSkeletonsCommand",
+    required: true,
+  },
+] as const satisfies readonly SpatialSkeletonEditCommandMetadata[];
+
+const spatialSkeletonEditCommandMetadataByAction = new Map<
+  SpatialSkeletonAction,
+  SpatialSkeletonEditCommandMetadata
+>(
+  SPATIAL_SKELETON_EDIT_COMMAND_METADATA.map((metadata) => [
+    metadata.action,
+    metadata,
+  ]),
+);
+
+export function getSpatialSkeletonEditCommandMetadata(
+  action: SpatialSkeletonAction,
+): SpatialSkeletonEditCommandMetadata | undefined {
+  return spatialSkeletonEditCommandMetadataByAction.get(action);
+}
+
+export function getSpatialSkeletonEditCommandFactoryFromSource(
+  source: object,
+  action: SpatialSkeletonAction,
+): SpatialSkeletonEditCommandFactory | undefined {
+  const metadata = getSpatialSkeletonEditCommandMetadata(action);
+  if (metadata === undefined) return undefined;
+  const commandFactory = (
+    source as Record<SpatialSkeletonEditCommandProperty, unknown>
+  )[metadata.commandProperty];
+  return isSpatialSkeletonEditCommandFactory(commandFactory, metadata.action)
+    ? commandFactory
+    : undefined;
 }
 
 export type SpatialSkeletonAddNodesCommandFactory =

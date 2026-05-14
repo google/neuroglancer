@@ -140,6 +140,7 @@ import {
   SpatialSkeletonNodeFilterType,
 } from "#src/skeleton/node_types.js";
 import {
+  editableSpatiallyIndexedSkeletonSourceSupportsAction,
   getEditableSpatiallyIndexedSkeletonSource,
   getSpatiallyIndexedSkeletonSource,
   isSpatiallyIndexedSkeletonSourceReadOnly,
@@ -1593,29 +1594,7 @@ export class SegmentationUserLayer extends Base {
     }
     const source = getEditableSpatiallyIndexedSkeletonSource(skeletonLayer);
     if (source === undefined) return false;
-    switch (action) {
-      case SpatialSkeletonActions.addNodes:
-      case SpatialSkeletonActions.deleteNodes:
-      case SpatialSkeletonActions.moveNodes:
-      case SpatialSkeletonActions.splitSkeletons:
-      case SpatialSkeletonActions.mergeSkeletons:
-        return true;
-      case SpatialSkeletonActions.insertNodes:
-        return source.insertNodesCommand !== undefined;
-      case SpatialSkeletonActions.reroot:
-        return source.rerootCommand !== undefined;
-      case SpatialSkeletonActions.editNodeDescription:
-        return source.editNodeDescriptionCommand !== undefined;
-      case SpatialSkeletonActions.editNodeTrueEnd:
-        return source.editNodeTrueEndCommand !== undefined;
-      case SpatialSkeletonActions.editNodeRadius:
-        return source.editNodeRadiusCommand !== undefined;
-      case SpatialSkeletonActions.editNodeConfidence:
-        return (
-          source.editNodeConfidenceCommand !== undefined &&
-          source.spatialSkeletonConfidenceConfiguration !== undefined
-        );
-    }
+    return editableSpatiallyIndexedSkeletonSourceSupportsAction(source, action);
   }
 
   private getMissingSpatialSkeletonSupportReason(
