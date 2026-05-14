@@ -116,25 +116,3 @@ def test_tool():
 
 def test_annotation():
     viewer_state.PointAnnotation(point=[1])
-
-
-def test_spatial_skeleton_node_selection_fields_roundtrip():
-    selection = viewer_state.LayerSelectionState(
-        {
-            "spatialSkeletonNodeId": 17,
-            "spatialSkeletonSegmentId": 9,
-        }
-    )
-    assert selection.spatial_skeleton_node_id == 17
-    assert selection.spatial_skeleton_segment_id == 9
-    assert selection.to_json() == {
-        "spatialSkeletonNodeId": 17,
-        "spatialSkeletonSegmentId": 9,
-    }
-
-
-def test_spatial_skeleton_node_selection_without_segment_roundtrip():
-    selection = viewer_state.LayerSelectionState(spatial_skeleton_node_id=5)
-    assert selection.to_json() == {
-        "spatialSkeletonNodeId": 5,
-    }

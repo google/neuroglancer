@@ -16,11 +16,12 @@
 
 import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
 
-export type SpatialSkeletonDisplayNodeType =
-  | "root"
-  | "branchStart"
-  | "regular"
-  | "virtualEnd";
+export enum SpatialSkeletonDisplayNodeType {
+  ROOT = "root",
+  BRANCH_START = "branchStart",
+  REGULAR = "regular",
+  VIRTUAL_END = "virtualEnd",
+}
 
 export enum SpatialSkeletonNodeFilterType {
   NONE,
@@ -36,18 +37,18 @@ export function classifySpatialSkeletonDisplayNodeType(
   parentInTree = true,
 ): SpatialSkeletonDisplayNodeType {
   if (node.parentNodeId === undefined || !parentInTree) {
-    return "root";
+    return SpatialSkeletonDisplayNodeType.ROOT;
   }
   if (childCount === undefined) {
-    return "regular";
+    return SpatialSkeletonDisplayNodeType.REGULAR;
   }
   if (childCount > 1) {
-    return "branchStart";
+    return SpatialSkeletonDisplayNodeType.BRANCH_START;
   }
   if (childCount === 0) {
-    return "virtualEnd";
+    return SpatialSkeletonDisplayNodeType.VIRTUAL_END;
   }
-  return "regular";
+  return SpatialSkeletonDisplayNodeType.REGULAR;
 }
 
 export function getSpatialSkeletonNodeFilterLabel(
@@ -97,7 +98,7 @@ export function getSpatialSkeletonNodeIconFilterType(options: {
   if (options.nodeIsTrueEnd) {
     return SpatialSkeletonNodeFilterType.TRUE_END;
   }
-  if (options.nodeType === "virtualEnd") {
+  if (options.nodeType === SpatialSkeletonDisplayNodeType.VIRTUAL_END) {
     return SpatialSkeletonNodeFilterType.VIRTUAL_END;
   }
   return undefined;

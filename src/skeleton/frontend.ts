@@ -124,7 +124,7 @@ import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import type { ValueOrError } from "#src/util/error.js";
 import { makeValueOrError, valueOrThrow } from "#src/util/error.js";
-import { kOneVec4, mat4, type vec4 } from "#src/util/geom.js";
+import { kOneVec4, mat4, vec3, type vec4 } from "#src/util/geom.js";
 import { verifyFinitePositiveFloat } from "#src/util/json.js";
 import * as matrix from "#src/util/matrix.js";
 import { getObjectId } from "#src/util/object_id.js";
@@ -218,10 +218,17 @@ const vertexPositionTextureFormat = computeTextureFormat(
   3,
 );
 
+interface VisibleChunk {
+  chunk: SpatiallyIndexedSkeletonChunk;
+  chunkLayout: ChunkLayout;
+}
+
 interface SkeletonShaderParameters {
   dynamicSegmentAppearance: boolean;
   hasSegmentStatedColors: boolean;
   hasSegmentDefaultColor: boolean;
+  hoverHighlight: boolean;
+  spatialChunkCulling: boolean;
 }
 
 interface SkeletonShaderContext {
@@ -321,8 +328,16 @@ class RenderHelper extends RefCounted {
     if (skeletonParams.dynamicSegmentAppearance) {
       this.defineDynamicSegmentAppearance(builder, skeletonParams);
     }
-    if (skeletonParams.dynamicSegmentAppearance) {
-      builder.addVarying("highp uint", "vSegmentValue", "flat");
+    if (skeletonParams.spatialChunkCulling) {
+      builder.addUniform("highp vec3", "uChunkOrigin");
+      builder.addUniform("highp vec3", "uChunkBound");
+      builder.addVarying("highp vec3", "vCullPos");
+      builder.addFragmentCode(`
+void spatialChunkCull() {
+  if (any(lessThan(vCullPos, uChunkOrigin)) ||
+      any(greaterThanEqual(vCullPos, uChunkBound))) discard;
+}
+`);
     }
   }
 
@@ -369,8 +384,16 @@ class RenderHelper extends RefCounted {
     }
     builder.setVertexMain(vertexMain);
     addControlsToBuilder(shaderBuilderState, builder);
-    builder.setFragmentMainFunction(
-      shaderCodeWithLineDirective(shaderBuilderState.parseResult.code),
+    builder.addFragmentCode(`void userMain();\n`);
+    builder.addFragmentCode(
+      "#define main userMain\n" +
+        shaderCodeWithLineDirective(shaderBuilderState.parseResult.code) +
+        "\n#undef main\n",
+    );
+    builder.setFragmentMain(
+      skeletonParams.spatialChunkCulling
+        ? "spatialChunkCull();\nuserMain();"
+        : "userMain();",
     );
   }
 
@@ -416,9 +439,14 @@ class RenderHelper extends RefCounted {
     }
     builder.addUniform("highp float", "uVisibleAlpha");
     builder.addUniform("highp float", "uHiddenAlpha");
+    builder.addUniform("highp float", "uSaturation");
     if (params.hasSegmentDefaultColor) {
       builder.addUniform("highp vec3", "uSegmentDefaultColor");
     }
+    if (params.hoverHighlight) {
+      builder.addUniform("highp uvec2", "uHoveredSegmentId");
+    }
+    builder.addVarying("highp uint", "vSegmentValue", "flat");
 
     const statedColorFragment = params.hasSegmentStatedColors
       ? `
@@ -432,13 +460,28 @@ class RenderHelper extends RefCounted {
       ? "  return uSegmentDefaultColor;"
       : `  ${colorExpression}`;
 
+    const hoverAdjustFragment = params.hoverHighlight
+      ? `
+  if (segmentId.value.x == uHoveredSegmentId.x &&
+      segmentId.value.y == uHoveredSegmentId.y) {
+    if (saturation > 0.5) { saturation -= 0.5; }
+    else { saturation += 0.5; }
+  }`
+      : "";
+
     builder.addFragmentCode(`
 uint64_t getSegmentAppearanceId(highp uint segmentValue) {
   return uint64_t(uvec2(segmentValue, 0u));
 }
-vec3 getSegmentLookupColor(uint64_t segmentId) {
+vec3 getSegmentBaseColor(uint64_t segmentId) {
 ${statedColorFragment}
 ${defaultColorFragment}
+}
+vec3 getSegmentLookupColor(uint64_t segmentId) {
+  vec3 baseColor = getSegmentBaseColor(segmentId);
+  float saturation = uSaturation;
+${hoverAdjustFragment}
+  return mix(vec3(1.0, 1.0, 1.0), baseColor, saturation);
 }
 float getSegmentLookupAlpha(uint64_t segmentId) {
   if (${this.excludedSegmentsShaderManager.hasFunctionName}(segmentId)) {
@@ -510,6 +553,19 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
         gl,
         shader,
         this.gpuSegmentStatedColorHashTable,
+      );
+    }
+
+    const { saturation, segmentSelectionState } = this.base.displayState;
+    gl.uniform1f(shader.uniform("uSaturation"), saturation.value);
+    if (skeletonParams.hoverHighlight) {
+      const seg = segmentSelectionState.hasSelectedSegment
+        ? segmentSelectionState.selectedSegment
+        : 0n;
+      gl.uniform2ui(
+        shader.uniform("uHoveredSegmentId"),
+        Number(seg & 0xffff_ffffn),
+        Number((seg >> 32n) & 0xffff_ffffn),
       );
     }
   }
@@ -606,6 +662,9 @@ emitLine(uProjection, vertexA, vertexB, uLineWidth);
 highp uint lineEndpointIndex = getLineEndpointIndex();
 highp uint vertexIndex = aVertexIndex.x * (1u - lineEndpointIndex) + aVertexIndex.y * lineEndpointIndex;
 `;
+          if (skeletonParams.spatialChunkCulling) {
+            vertexMain += `vCullPos = mix(vertexA, vertexB, float(lineEndpointIndex));\n`;
+          }
           if (
             skeletonParams.dynamicSegmentAppearance &&
             this.segmentAttributeIndex !== undefined
@@ -619,6 +678,9 @@ highp uint vertexIndex = aVertexIndex.x * (1u - lineEndpointIndex) + aVertexInde
               ? "uColor.a"
               : `${segmentColorExpression}.a`;
           if (skeletonParams.dynamicSegmentAppearance) {
+            // Dynamic path (spatial skeletons): per-segment color, visibility,
+            // saturation and hover highlight all resolved in the shader via
+            // getSegmentAppearance(). uColor is unused in this path.
             builder.addFragmentCode(`
 vec4 segmentColor() {
   return getSegmentAppearance(vSegmentValue);
@@ -637,10 +699,9 @@ void emitDefault() {
 }
 `);
           } else if (this.segmentColorAttributeIndex === undefined) {
-            // Preserve legacy skeleton behavior where `uColor` is already
-            // premultiplied by `objectAlpha` in `getObjectColor`.
-            // in this path, whole skeletons are drawn at one time
-            // as opposed to multiple skeletons
+            // Legacy path (non-spatial skeletons): one skeleton drawn per call;
+            // uColor is set per-skeleton by the CPU via getObjectColor(), which
+            // already incorporates saturation and hover highlighting.
             builder.addFragmentCode(`
 vec4 segmentColor() {
   return ${segmentColorExpression};
@@ -653,6 +714,8 @@ void emitDefault() {
 }
 `);
           } else {
+            // Per-vertex color attribute path: color comes from a per-vertex
+            // attribute; alpha is taken from uColor.
             builder.addFragmentCode(`
 vec4 segmentColor() {
   return ${segmentColorExpression};
@@ -720,8 +783,17 @@ highp uint pickOffset = vertexIndex * uPickInstanceStride;
 vPickID = uPickID + pickOffset;
 highp vec3 vertexPosition = readAttribute0(vertexIndex);
 `;
+          if (skeletonParams.spatialChunkCulling) {
+            vertexMain += `vCullPos = vertexPosition;\n`;
+          }
           if (this.selectedNodeAttributeIndex !== undefined) {
             vertexMain += `vSelectedNode = readAttribute${this.selectedNodeAttributeIndex}(vertexIndex);\n`;
+          }
+          if (
+            skeletonParams.dynamicSegmentAppearance &&
+            this.segmentAttributeIndex !== undefined
+          ) {
+            vertexMain += `vSegmentValue = toRaw(readAttribute${this.segmentAttributeIndex}(vertexIndex));\n`;
           }
           vertexMain += `
 emitCircle(
@@ -730,18 +802,14 @@ emitCircle(
   ${selectedOutlineWidthExpression}
 );
 `;
-          if (
-            skeletonParams.dynamicSegmentAppearance &&
-            this.segmentAttributeIndex !== undefined
-          ) {
-            vertexMain += `vSegmentValue = toRaw(readAttribute${this.segmentAttributeIndex}(vertexIndex));\n`;
-          }
-
           const segmentColorExpression = this.getSegmentColorExpression();
           if (
             skeletonParams.dynamicSegmentAppearance &&
             this.segmentAttributeIndex !== undefined
           ) {
+            // Dynamic path (spatial skeletons): per-segment color, visibility,
+            // saturation and hover highlight all resolved in the shader via
+            // getSegmentAppearance(). uColor is unused in this path.
             const segmentExpression = `vSegmentValue`;
             const selectedNodeExpression =
               this.selectedNodeAttributeIndex === undefined
@@ -768,17 +836,13 @@ void emitRGB(vec3 color) {
   emitRGBA(vec4(color, 1.0));
 }
 void emitDefault() {
-  vec4 baseColor = segmentColor();
-  highp float alpha = baseColor.a;
-  if (alpha <= 0.0) discard;
-  vec4 renderColor = vec4(baseColor.rgb, alpha);
-  vec4 borderColor = ${borderColorExpression};
-  vec4 circleColor = getCircleColor(renderColor, borderColor);
-  emit(vec4(circleColor.rgb * circleColor.a, circleColor.a), vPickID);
+  emitRGBA(vec4(segmentColor().rgb, 1.0));
 }
 `);
           } else if (this.segmentColorAttributeIndex === undefined) {
-            // Preserve legacy skeleton behavior for non-spatial skeletons.
+            // Legacy path (non-spatial skeletons): one skeleton drawn per call;
+            // uColor is set per-skeleton by the CPU via getObjectColor(), which
+            // already incorporates saturation and hover highlighting.
             builder.addFragmentCode(`
 vec4 segmentColor() {
   return ${segmentColorExpression};
@@ -795,6 +859,8 @@ void emitDefault() {
 }
 `);
           } else {
+            // Per-vertex color attribute path: color comes from a per-vertex
+            // attribute; alpha is taken from the attribute's alpha component.
             const selectedNodeExpression =
               this.selectedNodeAttributeIndex === undefined
                 ? undefined
@@ -889,6 +955,16 @@ void emitDefault() {
 
   setPickInstanceStride(gl: GL, shader: ShaderProgram, stride: number) {
     gl.uniform1ui(shader.uniform("uPickInstanceStride"), stride);
+  }
+
+  setChunkBounds(
+    gl: GL,
+    shader: ShaderProgram,
+    origin: Float32Array,
+    upperBound: Float32Array,
+  ) {
+    gl.uniform3fv(shader.uniform("uChunkOrigin"), origin);
+    gl.uniform3fv(shader.uniform("uChunkBound"), upperBound);
   }
 
   drawSkeletons(
@@ -1165,6 +1241,8 @@ export class SkeletonLayer extends RefCounted implements SkeletonShaderContext {
       dynamicSegmentAppearance: false,
       hasSegmentStatedColors: false,
       hasSegmentDefaultColor: false,
+      hoverHighlight: false,
+      spatialChunkCulling: false,
     });
   fallbackShaderParameters = new WatchableValue(
     getFallbackBuilderState(parseShaderUiControls(DEFAULT_FRAGMENT_MAIN)),
@@ -2017,6 +2095,7 @@ export class SpatiallyIndexedSkeletonLayer
   selectedNodeAttributeIndex: number | undefined;
   readonly browsePassLayerView: SkeletonShaderContext;
   readonly skeletonShaderParameters: WatchableValue<SkeletonShaderParameters>;
+  readonly browsePassSkeletonShaderParameters: WatchableValueInterface<SkeletonShaderParameters>;
   fallbackShaderParameters = new WatchableValue(
     getFallbackBuilderState(parseShaderUiControls(DEFAULT_FRAGMENT_MAIN)),
   );
@@ -2404,27 +2483,49 @@ export class SpatiallyIndexedSkeletonLayer
         dynamicSegmentAppearance: true,
         hasSegmentStatedColors: false,
         hasSegmentDefaultColor: false,
+        hoverHighlight: false,
+        spatialChunkCulling: false,
       });
+    const updateSkeletonShaderParameters = () => {
+      const colorGroupState =
+        this.displayState.segmentationColorGroupState.value;
+      this.skeletonShaderParameters.value = {
+        dynamicSegmentAppearance: true,
+        hasSegmentStatedColors: colorGroupState.segmentStatedColors.size !== 0,
+        hasSegmentDefaultColor:
+          colorGroupState.segmentDefaultColor.value !== undefined ||
+          DEBUG_SPATIAL_SKELETON_CHUNKS,
+        hoverHighlight: this.displayState.hoverHighlight.value,
+        spatialChunkCulling: false,
+      };
+    };
     this.registerDisposer(
       registerNested((context, colorGroupState) => {
-        const update = () => {
-          this.skeletonShaderParameters.value = {
-            dynamicSegmentAppearance: true,
-            hasSegmentStatedColors:
-              colorGroupState.segmentStatedColors.size !== 0,
-            hasSegmentDefaultColor:
-              colorGroupState.segmentDefaultColor.value !== undefined,
-          };
-        };
         context.registerDisposer(
-          colorGroupState.segmentStatedColors.changed.add(update),
+          colorGroupState.segmentStatedColors.changed.add(
+            updateSkeletonShaderParameters,
+          ),
         );
         context.registerDisposer(
-          colorGroupState.segmentDefaultColor.changed.add(update),
+          colorGroupState.segmentDefaultColor.changed.add(
+            updateSkeletonShaderParameters,
+          ),
         );
-        update();
+        updateSkeletonShaderParameters();
       }, this.displayState.segmentationColorGroupState),
     );
+    this.registerDisposer(
+      this.displayState.hoverHighlight.changed.add(
+        updateSkeletonShaderParameters,
+      ),
+    );
+    this.browsePassSkeletonShaderParameters = this.registerDisposer(
+      makeCachedLazyDerivedWatchableValue(
+        (params) => ({ ...params, spatialChunkCulling: true }),
+        this.skeletonShaderParameters,
+      ),
+    );
+
     // Browse pass uses uniform-based dynamic segment color (not per-vertex attribute),
     // so segmentColorAttributeIndex is intentionally undefined here.
     this.browsePassLayerView = {
@@ -2433,7 +2534,7 @@ export class SpatiallyIndexedSkeletonLayer
       gl: this.gl,
       fallbackShaderParameters: this.fallbackShaderParameters,
       displayState: this.displayState,
-      skeletonShaderParameters: this.skeletonShaderParameters,
+      skeletonShaderParameters: this.browsePassSkeletonShaderParameters,
     };
     const selectedNodeIndex = this.vertexAttributes.findIndex(
       (x) => x.name === selectedNodeAttribute.name,
@@ -2658,54 +2759,83 @@ export class SpatiallyIndexedSkeletonLayer
     };
   }
 
-  getVisibleChunksInCurrentViewAndLod(
+  // Iterates every chunk slot in view for the given view/gridLevel/lod.
+  // Callback receives (chunkKey, chunkSource, chunkLayout); return false to stop early.
+  private forEachVisibleChunkSlot(
     view: SpatiallyIndexedSkeletonView,
     gridLevel: number | undefined,
     transformedSources: readonly TransformedSource[][],
-    projectionParameters: any,
-    lod: number | undefined,
-  ): SpatiallyIndexedSkeletonChunk[] {
-    if (lod === undefined) {
-      return [];
-    }
+    projectionParameters: ProjectionParameters,
+    lod: number,
+    callback: (
+      chunkKey: string,
+      chunkSource: SpatiallyIndexedSkeletonSource,
+      chunkLayout: ChunkLayout,
+    ) => boolean | void,
+  ) {
     const selectedSourceIds = new Set(
       this.selectSourcesForViewAndGrid(view, gridLevel).map((s) =>
         getObjectId(s.chunkSource),
       ),
     );
     const lodSuffix = `:${lod}`;
-    const result: SpatiallyIndexedSkeletonChunk[] = [];
-    const seenChunkKeysBySource = new Map<string, Set<string>>();
+    let shouldContinue = true;
     for (const scales of transformedSources) {
       for (const tsource of scales) {
-        const sourceId = getObjectId(tsource.source);
-        if (!selectedSourceIds.has(sourceId)) continue;
-        let seenChunkKeys = seenChunkKeysBySource.get(sourceId);
-        if (seenChunkKeys === undefined) {
-          seenChunkKeys = new Set<string>();
-          seenChunkKeysBySource.set(sourceId, seenChunkKeys);
-        }
+        if (!shouldContinue) return;
+        if (!selectedSourceIds.has(getObjectId(tsource.source))) continue;
         forEachVisibleVolumetricChunk(
           projectionParameters,
           this.localPosition.value,
           tsource,
           (positionInChunks) => {
+            if (!shouldContinue) return;
             const chunkKey = `${positionInChunks.join()}${lodSuffix}`;
-            if (seenChunkKeys!.has(chunkKey)) return;
-            seenChunkKeys!.add(chunkKey);
-            const chunkSource =
-              tsource.source as SpatiallyIndexedSkeletonSource;
-            const chunk = chunkSource.chunks.get(chunkKey);
-            if (chunk?.state !== ChunkState.GPU_MEMORY) return;
-            result.push(chunk);
+            if (
+              callback(
+                chunkKey,
+                tsource.source as SpatiallyIndexedSkeletonSource,
+                tsource.chunkLayout,
+              ) === false
+            ) {
+              shouldContinue = false;
+            }
           },
         );
       }
     }
+  }
+
+  getVisibleChunksInCurrentViewAndLod(
+    view: SpatiallyIndexedSkeletonView,
+    gridLevel: number | undefined,
+    transformedSources: readonly TransformedSource[][],
+    projectionParameters: any,
+    lod: number | undefined,
+  ): VisibleChunk[] {
+    if (lod === undefined) {
+      return [];
+    }
+    const result: VisibleChunk[] = [];
+    this.forEachVisibleChunkSlot(
+      view,
+      gridLevel,
+      transformedSources,
+      projectionParameters,
+      lod,
+      (chunkKey, chunkSource, chunkLayout) => {
+        const chunk = chunkSource.chunks.get(chunkKey);
+        if (chunk?.state === ChunkState.GPU_MEMORY) {
+          result.push({ chunk, chunkLayout });
+        }
+      },
+    );
     return result;
   }
 
   private areVisibleChunksReady(
+    view: SpatiallyIndexedSkeletonView,
+    gridLevel: number | undefined,
     transformedSources: readonly TransformedSource[][],
     projectionParameters: ProjectionParameters,
     lod: number | undefined,
@@ -2716,49 +2846,30 @@ export class SpatiallyIndexedSkeletonLayer
     ) {
       return true;
     }
-    if (lod === undefined || transformedSources.length === 0) {
+    if (lod === undefined) {
+      // No LOD configured — draw() renders nothing in this case, so nothing to wait for.
+      return true;
+    }
+    if (transformedSources.length === 0) {
       return false;
     }
-    const lodSuffix = `:${lod}`;
-    const seenChunkKeysBySource = new Map<string, Set<string>>();
     let ready = true;
-    for (const scales of transformedSources) {
-      for (const tsource of scales) {
-        const sourceId = getObjectId(tsource.source);
-        let seenChunkKeys = seenChunkKeysBySource.get(sourceId);
-        if (seenChunkKeys === undefined) {
-          seenChunkKeys = new Set<string>();
-          seenChunkKeysBySource.set(sourceId, seenChunkKeys);
-        }
-        forEachVisibleVolumetricChunk(
-          projectionParameters,
-          this.localPosition.value,
-          tsource,
-          (positionInChunks) => {
-            if (!ready) {
-              return;
-            }
-            const chunkKey = `${positionInChunks.join()}${lodSuffix}`;
-            if (seenChunkKeys!.has(chunkKey)) {
-              return;
-            }
-            seenChunkKeys!.add(chunkKey);
-            const chunkSource =
-              tsource.source as SpatiallyIndexedSkeletonSource;
-            const chunk = chunkSource.chunks.get(chunkKey) as
-              | SpatiallyIndexedSkeletonChunk
-              | undefined;
-            if (chunk?.state !== ChunkState.GPU_MEMORY) {
-              ready = false;
-            }
-          },
-        );
-        if (!ready) {
+    this.forEachVisibleChunkSlot(
+      view,
+      gridLevel,
+      transformedSources,
+      projectionParameters,
+      lod,
+      (chunkKey, chunkSource, _) => {
+        const chunk = chunkSource.chunks.get(chunkKey);
+        if (chunk?.state !== ChunkState.GPU_MEMORY) {
+          ready = false;
           return false;
         }
-      }
-    }
-    return true;
+        return true;
+      },
+    );
+    return ready;
   }
 
   getNode(
@@ -2910,7 +3021,7 @@ export class SpatiallyIndexedSkeletonLayer
     modelMatrix: mat4,
     lineWidth: number,
     pointDiameter: number,
-    visibleChunks: SpatiallyIndexedSkeletonChunk[],
+    visibleChunks: VisibleChunk[],
   ) {
     if (visibleChunks.length === 0) return;
     const hasExcludedSegments =
@@ -2926,7 +3037,17 @@ export class SpatiallyIndexedSkeletonLayer
     if (passState === undefined) return;
     const { gl, edgeShader, nodeShader, skeletonParams } = passState;
 
-    for (const chunk of visibleChunks) {
+    const chunkOrigin = vec3.create();
+    const chunkBound = vec3.create();
+    for (const { chunk, chunkLayout } of visibleChunks) {
+      if (skeletonParams.spatialChunkCulling) {
+        vec3.mul(chunkOrigin, chunk.chunkGridPosition, chunkLayout.size);
+        vec3.add(chunkBound, chunkOrigin, chunkLayout.size);
+        edgeShader.bind();
+        renderHelper.setChunkBounds(gl, edgeShader, chunkOrigin, chunkBound);
+        nodeShader.bind();
+        renderHelper.setChunkBounds(gl, nodeShader, chunkOrigin, chunkBound);
+      }
       if (renderContext.emitPickID) {
         let edgePickId = 0;
         let edgePickStride = 0;
@@ -3101,7 +3222,7 @@ export class SpatiallyIndexedSkeletonLayer
     browseRenderHelper: RenderHelper,
     renderOptions: ViewSpecificSkeletonRenderingOptions,
     modelMatrix: mat4,
-    visibleChunks: SpatiallyIndexedSkeletonChunk[],
+    visibleChunks: VisibleChunk[],
   ) {
     const { displayState } = this;
     if (
@@ -3137,14 +3258,15 @@ export class SpatiallyIndexedSkeletonLayer
   }
 
   isReady(
+    view: SpatiallyIndexedSkeletonView,
+    gridLevel: number | undefined,
     transformedSources: readonly TransformedSource[][],
     projectionParameters: ProjectionParameters,
     lod?: number,
   ) {
-    // TODO (SKM) I don't think this is getting
-    // called as expected, for example, I think
-    // the screenshot should call this but it doesn't seem to
     return this.areVisibleChunksReady(
+      view,
+      gridLevel,
       transformedSources,
       projectionParameters,
       lod,
@@ -3438,7 +3560,7 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
 
   private drawChunkBoundsWireframe(
     renderContext: PerspectiveViewRenderContext,
-    visibleChunks: SpatiallyIndexedSkeletonChunk[],
+    visibleChunks: VisibleChunk[],
     modelMatrix?: mat4,
   ) {
     if (
@@ -3447,15 +3569,6 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
       modelMatrix === undefined
     )
       return;
-
-    const chunkLayoutBySource = new Map<object, ChunkLayout>();
-    for (const scales of this.transformedSources) {
-      for (const tsource of scales) {
-        if (!chunkLayoutBySource.has(tsource.source)) {
-          chunkLayoutBySource.set(tsource.source, tsource.chunkLayout);
-        }
-      }
-    }
 
     const { gl } = this.base;
     const wireframeHelper = ChunkWireframeHelper.get(gl);
@@ -3466,10 +3579,7 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
     mat4.multiply(tempMat4, viewProjectionMat, modelMatrix);
     gl.uniformMatrix4fv(shader.uniform("uChunkToClip"), false, tempMat4);
 
-    for (const chunk of visibleChunks) {
-      const chunkLayout = chunkLayoutBySource.get(chunk.source);
-      if (chunkLayout === undefined) continue;
-
+    for (const { chunk, chunkLayout } of visibleChunks) {
       wireframeHelper.setChunkUniforms(
         gl,
         shader,
@@ -3488,11 +3598,12 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
     >,
   ) {
     const { displayState } = this.base;
-    const lodValue = displayState.skeletonLod?.value;
     return this.base.isReady(
+      "3d",
+      displayState.spatialSkeletonGridLevel3d?.value,
       this.transformedSources,
       renderContext.projectionParameters,
-      lodValue,
+      displayState.skeletonLod?.value,
     );
   }
 }
@@ -3631,11 +3742,12 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
     >,
   ) {
     const { displayState } = this.base;
-    const lodValue = displayState.spatialSkeletonLod2d?.value;
     return this.base.isReady(
+      "2d",
+      displayState.spatialSkeletonGridLevel2d?.value,
       this.transformedSources,
       renderContext.projectionParameters,
-      lodValue,
+      displayState.spatialSkeletonLod2d?.value,
     );
   }
 }

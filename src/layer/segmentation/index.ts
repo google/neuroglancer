@@ -136,8 +136,8 @@ import {
   classifySpatialSkeletonDisplayNodeType as getSpatialSkeletonDisplayNodeType,
   getSpatialSkeletonNodeFilterLabel,
   getSpatialSkeletonNodeIconFilterType,
+  SpatialSkeletonDisplayNodeType,
   SpatialSkeletonNodeFilterType,
-  type SpatialSkeletonDisplayNodeType,
 } from "#src/skeleton/node_types.js";
 import {
   getEditableSpatiallyIndexedSkeletonSource,
@@ -211,10 +211,10 @@ const SPATIAL_SKELETON_NODE_TYPE_ICONS: Record<
   SpatialSkeletonDisplayNodeType,
   string
 > = {
-  root: svg_origin,
-  branchStart: svg_share_android,
-  regular: svg_minus,
-  virtualEnd: svg_circle,
+  [SpatialSkeletonDisplayNodeType.ROOT]: svg_origin,
+  [SpatialSkeletonDisplayNodeType.BRANCH_START]: svg_share_android,
+  [SpatialSkeletonDisplayNodeType.REGULAR]: svg_minus,
+  [SpatialSkeletonDisplayNodeType.VIRTUAL_END]: svg_circle,
 };
 
 function getSpatialSkeletonNodeTypeLabel(
@@ -223,11 +223,11 @@ function getSpatialSkeletonNodeTypeLabel(
 ) {
   if (nodeHasTrueEnd) return "True end";
   switch (nodeType) {
-    case "root":
+    case SpatialSkeletonDisplayNodeType.ROOT:
       return "Root";
-    case "branchStart":
+    case SpatialSkeletonDisplayNodeType.BRANCH_START:
       return "Branch point";
-    case "virtualEnd":
+    case SpatialSkeletonDisplayNodeType.VIRTUAL_END:
       return "Leaf";
     default:
       return "Node";
