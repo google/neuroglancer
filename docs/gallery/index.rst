@@ -1,3 +1,5 @@
+:hide-toc:
+
 .. _gallery:
 
 .. role:: raw-html(raw)
