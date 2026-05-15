@@ -1916,6 +1916,13 @@ class ViewerState(JsonObjectWrapper):
         "showAxisLines", optional(bool, True)
     )
     wire_frame = wireFrame = wrapped_property("wireFrame", optional(bool, False))
+    ssao = wrapped_property("ssao", optional(bool, False))
+    ssao_intensity = ssaoIntensity = wrapped_property(
+        "ssaoIntensity", optional(float, 1.8)
+    )
+    ssao_radius = ssaoRadius = wrapped_property(
+        "ssaoRadius", optional(float, 0.05)
+    )
     enable_adaptive_downsampling = enableAdaptiveDownsampling = wrapped_property(
         "enableAdaptiveDownsampling", optional(bool, True)
     )

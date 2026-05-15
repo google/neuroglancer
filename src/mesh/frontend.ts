@@ -36,6 +36,7 @@ import {
   validateOctree,
 } from "#src/mesh/multiscale.js";
 import type { PerspectivePanel } from "#src/perspective_view/panel.js";
+import { perspectivePanelEmitWithNormals } from "#src/perspective_view/panel.js";
 import type {
   PerspectiveViewReadyRenderContext,
   PerspectiveViewRenderContext,
@@ -294,6 +295,13 @@ export class MeshShaderManager {
     mat3.invert(tempMat3, tempMat3);
     mat3.transpose(tempMat3, tempMat3);
     gl.uniformMatrix3fv(shader.uniform("uNormalMatrix"), false, tempMat3);
+    if (renderContext.emitNormals) {
+      // World→view normal transform; world-space normals (produced by
+      // uNormalMatrix) get rotated into view space for the SSAO output.
+      mat3FromMat4(tempMat3, projectionParameters.invViewMatrix);
+      mat3.transpose(tempMat3, tempMat3);
+      gl.uniformMatrix3fv(shader.uniform("uViewNormalMatrix"), false, tempMat3);
+    }
   }
 
   drawFragmentHelper(
@@ -358,7 +366,8 @@ export class MeshShaderManager {
     return parameterizedEmitterDependentShaderGetter(layer, layer.gl, {
       memoizeKey: `mesh/MeshShaderManager/${this.fragmentRelativeVertices}/${this.vertexPositionFormat}`,
       parameters: silhouetteRenderingEnabled,
-      defineShader: (builder, silhouetteRenderingEnabled) => {
+      defineShader: (builder, silhouetteRenderingEnabled, _, emitter) => {
+        const emitNormals = emitter === perspectivePanelEmitWithNormals;
         this.vertexPositionHandler.defineShader(builder);
         builder.addAttribute("highp vec2", "aVertexNormal");
         builder.addVarying("highp vec4", "vColor");
@@ -367,6 +376,10 @@ export class MeshShaderManager {
         builder.addUniform("highp mat3", "uNormalMatrix");
         builder.addUniform("highp mat4", "uModelViewProjection");
         builder.addUniform("highp uint", "uPickID");
+        if (emitNormals) {
+          builder.addVarying("highp vec3", "vViewNormal");
+          builder.addUniform("highp mat3", "uViewNormalMatrix");
+        }
         if (silhouetteRenderingEnabled) {
           builder.addUniform("highp float", "uSilhouettePower");
         }
@@ -395,13 +408,22 @@ float absCosAngle = abs(dot(normal, uLightDirection.xyz));
 float lightingFactor = absCosAngle + uLightDirection.w;
 vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
 `;
+        if (emitNormals) {
+          vertexMain += `
+vViewNormal = normalize(uViewNormalMatrix * normal);
+`;
+        }
         if (silhouetteRenderingEnabled) {
           vertexMain += `
 vColor *= pow(1.0 - absCosAngle, uSilhouettePower);
 `;
         }
         builder.setVertexMain(vertexMain);
-        builder.setFragmentMain("emit(vColor, uPickID);");
+        builder.setFragmentMain(
+          emitNormals
+            ? "emit(vColor, uPickID, vViewNormal);"
+            : "emit(vColor, uPickID);",
+        );
       },
     });
   }
@@ -516,6 +538,15 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
         ++presentChunks;
         if (renderContext.emitColor) {
           meshShaderManager.setColor(gl, shader, color!);
+          if (renderContext.emitNormals) {
+            const isHighlighted =
+              displayState.hoverHighlight.value &&
+              displayState.segmentSelectionState.isSelected(objectId);
+            gl.uniform1f(
+              shader.uniform("uHighlighted"),
+              isHighlighted ? 1.0 : 0.0,
+            );
+          }
         }
         if (renderContext.emitPickID) {
           meshShaderManager.setPickID(gl, shader, pickIndex!);
@@ -896,6 +927,15 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
         }
         if (renderContext.emitColor) {
           meshShaderManager.setColor(gl, shader, color!);
+          if (renderContext.emitNormals) {
+            const isHighlighted =
+              displayState.hoverHighlight.value &&
+              displayState.segmentSelectionState.isSelected(objectId);
+            gl.uniform1f(
+              shader.uniform("uHighlighted"),
+              isHighlighted ? 1.0 : 0.0,
+            );
+          }
         }
         if (renderContext.emitPickID) {
           meshShaderManager.setPickID(gl, shader, pickIndex!);

@@ -46,6 +46,12 @@ import {
 } from "#src/renderlayer.js";
 import type { SliceView } from "#src/sliceview/frontend.js";
 import { SliceViewRenderHelper } from "#src/sliceview/frontend.js";
+import { SSAOManager } from "#src/ssao/ssao_manager.js";
+import {
+  SSAO_INTENSITY_RANGE,
+  SSAO_RADIUS_RANGE,
+} from "#src/ssao/trackable_ssao_params.js";
+import { StatusMessage } from "#src/status.js";
 import type { TrackableBoolean } from "#src/trackable_boolean.js";
 import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
 import type {
@@ -94,6 +100,9 @@ export interface PerspectiveViewerState extends RenderedDataViewerState {
   crossSectionBackgroundColor: TrackableRGB;
   perspectiveViewBackgroundColor: TrackableRGB;
   hideCrossSectionBackground3D: TrackableBoolean;
+  ssao: WatchableValueInterface<boolean>;
+  ssaoIntensity: WatchableValueInterface<number>;
+  ssaoRadius: WatchableValueInterface<number>;
   rpc: RPC;
 }
 
@@ -101,7 +110,8 @@ export enum OffscreenTextures {
   COLOR = 0,
   Z = 1,
   PICK = 2,
-  NUM_TEXTURES = 3,
+  NORMAL = 3,
+  NUM_TEXTURES = 4,
 }
 
 enum TransparentRenderingState {
@@ -117,6 +127,40 @@ void emit(vec4 color, highp uint pickId) {
   out_z = vec4(zValue, zValue, zValue, 1.0);
   float pickIdFloat = float(pickId);
   out_pickId = vec4(pickIdFloat, pickIdFloat, pickIdFloat, 1.0);
+}
+// Provided so layers can call the 3-arg form unconditionally; the normal
+// is unused when SSAO is off (no NORMAL attachment to write to).
+void emit(vec4 color, highp uint pickId, vec3 viewNormal) {
+  emit(color, pickId);
+}
+`;
+
+// SSAO-aware emit ABI. 3-arg form: opaque surfaces that should receive AO,
+// viewNormal in view space (right-handed, -Z forward), need not be unit.
+// 2-arg form: anything else; writes the zero-RGB sentinel that the GTAO and
+// composite shaders short-circuit on. Alpha is always 1 so the sentinel
+// survives the annotation blend mode. The OIT emitter accepts the 3-arg
+// signature for source compatibility but discards the normal.
+export const glsl_perspectivePanelEmitWithNormals = `
+void emit(vec4 color, highp uint pickId, vec3 viewNormal) {
+  out_color = color;
+  float zValue = 1.0 - gl_FragCoord.z;
+  out_z = vec4(zValue, zValue, zValue, 1.0);
+  float pickIdFloat = float(pickId);
+  out_pickId = vec4(pickIdFloat, pickIdFloat, pickIdFloat, 1.0);
+  // Highlighted objects collapse to the zero sentinel so SSAO leaves them alone.
+  vec3 packedNormal = (1.0 - uHighlighted) * (normalize(viewNormal) * 0.5 + 0.5);
+  out_normal = vec4(packedNormal, 1.0);
+}
+void emit(vec4 color, highp uint pickId) {
+  out_color = color;
+  float zValue = 1.0 - gl_FragCoord.z;
+  out_z = vec4(zValue, zValue, zValue, 1.0);
+  float pickIdFloat = float(pickId);
+  out_pickId = vec4(pickIdFloat, pickIdFloat, pickIdFloat, 1.0);
+  // Zero-RGB sentinel; alpha=1 so the source overwrites dst under
+  // blend(SRC_ALPHA, ONE_MINUS_SRC_ALPHA).
+  out_normal = vec4(0.0, 0.0, 0.0, 1.0);
 }
 `;
 
@@ -146,6 +190,10 @@ void emit(vec4 color, highp uint pickId) {
   vec4 accum = color * weight;
   emitAccumAndRevealage(accum, color.a, pickId);
 }
+// Transparent surfaces don't contribute to opaque AO; viewNormal is discarded.
+void emit(vec4 color, highp uint pickId, vec3 viewNormal) {
+  emit(color, pickId);
+}
 `,
 ];
 
@@ -154,6 +202,18 @@ export function perspectivePanelEmit(builder: ShaderBuilder) {
   builder.addOutputBuffer("highp vec4", "out_z", OffscreenTextures.Z);
   builder.addOutputBuffer("highp vec4", "out_pickId", OffscreenTextures.PICK);
   builder.addFragmentCode(glsl_perspectivePanelEmit);
+}
+
+export function perspectivePanelEmitWithNormals(builder: ShaderBuilder) {
+  builder.addOutputBuffer("vec4", "out_color", OffscreenTextures.COLOR);
+  builder.addOutputBuffer("highp vec4", "out_z", OffscreenTextures.Z);
+  builder.addOutputBuffer("highp vec4", "out_pickId", OffscreenTextures.PICK);
+  builder.addOutputBuffer("highp vec4", "out_normal", OffscreenTextures.NORMAL);
+  // Referenced by glsl_perspectivePanelEmitWithNormals; declared here so any
+  // shader using this emitter (mesh, annotation, etc.) gets it without having
+  // to know the emit body's internal dependencies.
+  builder.addUniform("highp float", "uHighlighted");
+  builder.addFragmentCode(glsl_perspectivePanelEmitWithNormals);
 }
 
 export function perspectivePanelEmitOIT(builder: ShaderBuilder) {
@@ -181,6 +241,16 @@ void emit(vec4 color, float depth, float intensity, highp uint pickId) {
 const tempVec3 = vec3.create();
 const tempVec4 = vec4.create();
 const tempMat4 = mat4.create();
+
+// Opaque drawBuffers when SSAO is off but the FB has the NORMAL attachment;
+// non-SSAO emit shaders don't declare an output for ATT3, so any
+// gl.drawBuffers in this panel must omit it (or pass NONE) unless an
+// SSAO-aware shader is active.
+const kOpaqueDrawBuffersNoNormal = [
+  WebGL2RenderingContext.COLOR_ATTACHMENT0,
+  WebGL2RenderingContext.COLOR_ATTACHMENT1,
+  WebGL2RenderingContext.COLOR_ATTACHMENT2,
+];
 
 // Copy the OIT values to the main color buffer
 function defineTransparencyCopyShader(builder: ShaderBuilder) {
@@ -277,6 +347,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     VisibleRenderLayerTracker<PerspectivePanel, PerspectiveViewRenderLayer>
   >;
   private hasVolumeRendering = false;
+  private ssaoVolumeWarned = false;
 
   get rpc() {
     return this.sharedObject.rpc!;
@@ -321,9 +392,17 @@ export class PerspectivePanel extends RenderedDataPanel {
   );
 
   private axesLineHelper = this.registerDisposer(AxesLineHelper.get(this.gl));
-  protected offscreenFramebuffer = this.registerDisposer(
-    new FramebufferConfiguration(this.gl, {
-      colorBuffers: [
+  // The NORMAL color attachment is added the first time SSAO is enabled, and
+  // stays for the lifetime of the panel (no thrashing on toggle).
+  private hasNormalAttachment = false;
+  private offscreenFramebuffer_:
+    | FramebufferConfiguration<TextureBuffer>
+    | undefined;
+
+  // Lazy: allocates on first access; rebuilt by enableNormalAttachment.
+  protected get offscreenFramebuffer() {
+    if (this.offscreenFramebuffer_ === undefined) {
+      const colorBuffers: TextureBuffer[] = [
         new TextureBuffer(
           this.gl,
           WebGL2RenderingContext.RGBA8,
@@ -342,10 +421,45 @@ export class PerspectivePanel extends RenderedDataPanel {
           WebGL2RenderingContext.RED,
           WebGL2RenderingContext.FLOAT,
         ),
-      ],
-      depthBuffer: new DepthStencilRenderbuffer(this.gl),
-    }),
-  );
+      ];
+      if (this.hasNormalAttachment) {
+        // Packed normals + sentinel alpha live in [0, 1]; 8 bits/channel is
+        // plenty after the *2-1 decode in the GTAO shader.
+        colorBuffers.push(
+          new TextureBuffer(
+            this.gl,
+            WebGL2RenderingContext.RGBA8,
+            WebGL2RenderingContext.RGBA,
+            WebGL2RenderingContext.UNSIGNED_BYTE,
+          ),
+        );
+      }
+      this.offscreenFramebuffer_ = this.registerDisposer(
+        new FramebufferConfiguration(this.gl, {
+          colorBuffers,
+          depthBuffer: new DepthStencilRenderbuffer(this.gl),
+        }),
+      );
+    }
+    return this.offscreenFramebuffer_;
+  }
+
+  // Both rebuilt together: transparentConfiguration holds an addRef on
+  // offscreenFramebuffer's depth buffer, so replacing only one would unshare them.
+  private enableNormalAttachment() {
+    if (this.hasNormalAttachment) return;
+    this.hasNormalAttachment = true;
+    if (this.offscreenFramebuffer_ !== undefined) {
+      this.unregisterDisposer(this.offscreenFramebuffer_);
+      this.offscreenFramebuffer_.dispose();
+      this.offscreenFramebuffer_ = undefined;
+    }
+    if (this.transparentConfiguration_ !== undefined) {
+      this.unregisterDisposer(this.transparentConfiguration_);
+      this.transparentConfiguration_.dispose();
+      this.transparentConfiguration_ = undefined;
+    }
+  }
 
   protected transparentConfiguration_:
     | FramebufferConfiguration<TextureBuffer>
@@ -385,6 +499,8 @@ export class PerspectivePanel extends RenderedDataPanel {
   protected maxProjectionToPickCopyHelper = this.registerDisposer(
     OffscreenCopyHelper.get(this.gl, defineMaxProjectionToPickCopyShader, 3),
   );
+
+  private ssaoManager = this.registerDisposer(new SSAOManager(this.gl));
 
   private sharedObject: PerspectiveViewState;
 
@@ -584,6 +700,13 @@ export class PerspectivePanel extends RenderedDataPanel {
     );
     this.registerDisposer(
       viewer.wireFrame.changed.add(() => this.scheduleRedraw()),
+    );
+    this.registerDisposer(viewer.ssao.changed.add(() => this.scheduleRedraw()));
+    this.registerDisposer(
+      viewer.ssaoIntensity.changed.add(() => this.scheduleRedraw()),
+    );
+    this.registerDisposer(
+      viewer.ssaoRadius.changed.add(() => this.scheduleRedraw()),
     );
     this.registerDisposer(
       viewer.hideCrossSectionBackground3D.changed.add(() =>
@@ -895,11 +1018,22 @@ export class PerspectivePanel extends RenderedDataPanel {
     }
 
     const gl = this.gl;
+    // ssaoActive (set below after the opaque walk) may be false when
+    // ssaoRequested is true, if volume rendering is present.
+    const ssaoRequested = this.viewer.ssao.value;
+    if (ssaoRequested && !this.hasNormalAttachment) {
+      this.enableNormalAttachment();
+    }
+    const { offscreenFramebuffer } = this;
+    const needsNormalMask = !ssaoRequested && this.hasNormalAttachment;
     const disablePicking = () => {
-      gl.drawBuffers(this.offscreenFramebuffer.singleAttachmentList);
+      gl.drawBuffers(offscreenFramebuffer.singleAttachmentList);
     };
     const bindFramebuffer = () => {
-      this.offscreenFramebuffer.bind(width, height);
+      offscreenFramebuffer.bind(width, height);
+      if (needsNormalMask) {
+        gl.drawBuffers(kOpaqueDrawBuffersNoNormal);
+      }
     };
     bindFramebuffer();
     gl.disable(gl.SCISSOR_TEST);
@@ -973,6 +1107,14 @@ export class PerspectivePanel extends RenderedDataPanel {
       kZeroVec4,
     );
 
+    if (ssaoRequested) {
+      gl.clearBufferfv(
+        WebGL2RenderingContext.COLOR,
+        OffscreenTextures.NORMAL,
+        kZeroVec4,
+      );
+    }
+
     gl.enable(gl.DEPTH_TEST);
     const projectionParameters = this.projectionParameters.value;
 
@@ -995,9 +1137,12 @@ export class PerspectivePanel extends RenderedDataPanel {
       ambientLighting: ambient,
       directionalLighting: directional,
       pickIDs: pickingData.pickIDs,
-      emitter: perspectivePanelEmit,
+      emitter: ssaoRequested
+        ? perspectivePanelEmitWithNormals
+        : perspectivePanelEmit,
       emitColor: true,
       emitPickID: true,
+      emitNormals: ssaoRequested,
       alreadyEmittedPickID: false,
       bindFramebuffer,
       frameNumber: this.context.frameNumber,
@@ -1041,7 +1186,46 @@ export class PerspectivePanel extends RenderedDataPanel {
       }
     }
     this.hasVolumeRendering = hasVolumeRendering;
+    // Mixed mesh + volume scenes are not yet supported; the opaque pass and
+    // NORMAL writes already happened from the with-normals emitter (minor
+    // waste, not a correctness issue). Notify once per panel lifetime via
+    // both the console and a dismissable status banner.
+    if (ssaoRequested && hasVolumeRendering && !this.ssaoVolumeWarned) {
+      const message =
+        "SSAO is not supported with volume rendering and has been disabled for this view.";
+      console.warn(`Neuroglancer: ${message}`);
+      StatusMessage.showTemporaryMessage(message, /*closeAfter=*/ 8000);
+      this.ssaoVolumeWarned = true;
+    }
+    const ssaoActive = ssaoRequested && !hasVolumeRendering;
     this.drawSliceViews(renderContext);
+
+    if (ssaoActive) {
+      const depthTexture =
+        offscreenFramebuffer.colorBuffers[OffscreenTextures.Z].texture;
+      const normalTexture =
+        offscreenFramebuffer.colorBuffers[OffscreenTextures.NORMAL].texture;
+      offscreenFramebuffer.unbind();
+
+      // Clamp to the slider range; URL state could otherwise supply a
+      // negative or absurd value and produce NaNs or inverted sampling.
+      const ssaoRadius = Math.min(
+        SSAO_RADIUS_RANGE.max,
+        Math.max(SSAO_RADIUS_RANGE.min, this.viewer.ssaoRadius.value),
+      );
+      const radius = ssaoRadius * this.navigationState.zoomFactor.value;
+
+      this.ssaoManager.render(
+        width,
+        height,
+        depthTexture,
+        normalTexture,
+        projectionParameters.projectionMat,
+        radius,
+      );
+
+      bindFramebuffer();
+    }
 
     if (hasAnnotation) {
       // Render annotations with blending enabled.
@@ -1071,7 +1255,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       gl.disable(WebGL2RenderingContext.BLEND);
     }
 
-    if (this.viewer.showAxisLines.value) {
+    if (!ssaoActive && this.viewer.showAxisLines.value) {
       this.drawAxisLines();
     }
 
@@ -1186,7 +1370,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       for (const [renderLayer, attachment] of visibleLayers) {
         if (renderLayer.isVolumeRendering) {
           renderContext.depthBufferTexture =
-            this.offscreenFramebuffer.colorBuffers[OffscreenTextures.Z].texture;
+            offscreenFramebuffer.colorBuffers[OffscreenTextures.Z].texture;
 
           const isVolumeProjectionLayer = isProjectionLayer(
             renderLayer as VolumeRenderingRenderLayer,
@@ -1314,7 +1498,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
         WebGL2RenderingContext.SRC_ALPHA,
       );
-      this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
+      offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
       this.transparencyCopyHelper.draw(
         transparentConfiguration.colorBuffers[0].texture,
         transparentConfiguration.colorBuffers[1].texture,
@@ -1393,42 +1577,91 @@ export class PerspectivePanel extends RenderedDataPanel {
     gl.disable(WebGL2RenderingContext.STENCIL_TEST);
 
     if (
+      !ssaoActive &&
       this.viewer.showScaleBar.value &&
       this.viewer.orthographicProjection.value
     ) {
-      // Only modify color buffer.
-      gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
-
-      gl.disable(WebGL2RenderingContext.DEPTH_TEST);
-      gl.enable(WebGL2RenderingContext.BLEND);
-      gl.blendFunc(
-        WebGL2RenderingContext.SRC_ALPHA,
-        WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
-      );
-      const { scaleBars } = this;
-      const options = this.viewer.scaleBarOptions.value;
-      scaleBars.draw(
-        this.renderViewport,
-        this.navigationState.displayDimensionRenderInfo.value,
-        this.navigationState.relativeDisplayScales.value,
-        this.navigationState.zoomFactor.value /
-          this.renderViewport.logicalHeight,
-        options,
-      );
-      gl.disable(WebGL2RenderingContext.BLEND);
+      this.drawScaleBarOverlay(/*toScreen=*/ false);
     }
-    this.offscreenFramebuffer.unbind();
+    offscreenFramebuffer.unbind();
 
     // Draw the texture over the whole viewport.
     this.setGLClippedViewport();
-    this.offscreenCopyHelper.draw(
-      this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture,
-    );
+    this.compositeAndOverlay(ssaoActive, offscreenFramebuffer);
     return true;
   }
 
+  // Final compositing of the offscreen color buffer to the canvas, plus the
+  // post-composite overlays (axis lines, scale bar) used in the SSAO path.
+  // The non-SSAO path renders those overlays into the offscreen FB before the
+  // copy and arrives here just to blit.
+  private compositeAndOverlay(
+    ssaoActive: boolean,
+    offscreenFramebuffer: FramebufferConfiguration<TextureBuffer>,
+  ) {
+    const gl = this.gl;
+    if (!ssaoActive) {
+      this.offscreenCopyHelper.draw(
+        offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture,
+      );
+      return;
+    }
+    // Clamp to the slider range; pow(ao, intensity) with a negative or
+    // absurd exponent would otherwise NaN or wash out the composite.
+    const intensity = Math.min(
+      SSAO_INTENSITY_RANGE.max,
+      Math.max(SSAO_INTENSITY_RANGE.min, this.viewer.ssaoIntensity.value),
+    );
+    this.ssaoManager.drawComposite(
+      offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture,
+      offscreenFramebuffer.colorBuffers[OffscreenTextures.NORMAL].texture,
+      intensity,
+    );
+    if (this.viewer.showAxisLines.value) {
+      gl.disable(WebGL2RenderingContext.DEPTH_TEST);
+      this.drawAxisLines(/*toScreen=*/ true);
+    }
+    if (
+      this.viewer.showScaleBar.value &&
+      this.viewer.orthographicProjection.value
+    ) {
+      this.drawScaleBarOverlay(/*toScreen=*/ true);
+    }
+  }
+
+  private drawScaleBarOverlay(toScreen: boolean) {
+    const gl = this.gl;
+    if (!toScreen) {
+      // Restrict writes to the color buffer so the scale bar doesn't pollute
+      // Z / PICK / NORMAL when drawn into the offscreen FB.
+      gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
+    }
+    gl.disable(WebGL2RenderingContext.DEPTH_TEST);
+    gl.enable(WebGL2RenderingContext.BLEND);
+    gl.blendFunc(
+      WebGL2RenderingContext.SRC_ALPHA,
+      WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
+    );
+    const { scaleBars } = this;
+    const options = this.viewer.scaleBarOptions.value;
+    scaleBars.draw(
+      this.renderViewport,
+      this.navigationState.displayDimensionRenderInfo.value,
+      this.navigationState.relativeDisplayScales.value,
+      this.navigationState.zoomFactor.value / this.renderViewport.logicalHeight,
+      options,
+    );
+    gl.disable(WebGL2RenderingContext.BLEND);
+  }
+
   protected drawSliceViews(renderContext: PerspectiveViewRenderContext) {
-    const { sliceViewRenderHelper } = this;
+    const { sliceViewRenderHelper, gl } = this;
+    // SliceViewRenderHelper's shader uses perspectivePanelEmit (3 outputs);
+    // mask ATT3 if the FB has a NORMAL attachment from SSAO so drawBuffers
+    // matches the shader output count.
+    if (this.hasNormalAttachment) {
+      gl.drawBuffers(kOpaqueDrawBuffersNoNormal);
+    }
     const {
       lightDirection,
       ambientLighting,
@@ -1481,7 +1714,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     }
   }
 
-  protected drawAxisLines() {
+  protected drawAxisLines(toScreen = false) {
     const {
       zoomFactor: { value: zoom },
     } = this.viewer.navigationState;
@@ -1495,7 +1728,9 @@ export class PerspectivePanel extends RenderedDataPanel {
       4;
     const axisLength = zoom * axisRatio;
     const { gl } = this;
-    gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
+    if (!toScreen) {
+      gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
+    }
     this.axesLineHelper.draw(
       computeAxisLineMatrix(projectionParameters, axisLength),
       /*blend=*/ false,
