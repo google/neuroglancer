@@ -210,6 +210,9 @@ export class AccordionTab extends Tab {
     header.appendChild(chevron);
 
     container.dataset.expanded = String(option.defaultExpanded ?? false);
+    // Adding a child element automatically sets the hidden attribute to false
+    // so this hides empty sections
+    container.dataset.hidden = "true";
 
     if (option.isDefaultKey) {
       this.defaultKey = option.jsonKey;
@@ -256,10 +259,13 @@ export class AccordionTab extends Tab {
     return section;
   }
 
+  // Hidden can be used here to keep the section hidden on adding a child
+  // but the usual behaviour is to show the section after adding a child
+  // because then we know the section is not empty
   appendChild(content: HTMLElement, jsonKey?: string, hidden?: boolean): void {
     const section = this.getSectionWithFallback(jsonKey);
     section.body.appendChild(content);
-    if (!hidden) section.container.style.display = "";
+    section.container.dataset.hidden = hidden ? "true" : "false";
   }
 
   /**
