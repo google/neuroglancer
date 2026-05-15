@@ -17,6 +17,7 @@
 import { mat3, mat4, quat, vec3, vec4 } from "gl-matrix";
 import type { TypedNumberArray } from "#src/util/array.js";
 import { findMatchingIndices } from "#src/util/array.js";
+import { nearlyEqual } from "#src/util/number.js";
 
 export { mat2, mat3, mat4, quat, vec2, vec3, vec4 } from "gl-matrix";
 
@@ -490,9 +491,6 @@ export function calculateOrientedSliceScales(
   units: readonly string[],
   tolerance: number = 1e-6,
 ): OrientedSliceScales | null {
-  function nearlyEqualScales(a: number, b: number): boolean {
-    return Math.abs(a - b) / Math.max(a, b) < tolerance;
-  }
   function extractContributingScales(
     matrixRow: 0 | 1 | 2,
   ): { scale: number; unit: string } | null {
@@ -506,7 +504,7 @@ export function calculateOrientedSliceScales(
           contributingUnit = units[i];
         } else if (
           contributingUnit !== units[i] ||
-          !nearlyEqualScales(contributingScale, scales[i])
+          !nearlyEqual(contributingScale, scales[i], tolerance)
         )
           return null;
       }

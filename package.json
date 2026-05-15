@@ -54,6 +54,7 @@
     "@types/lodash-es": "^4.17.12",
     "@types/node": "^24.10.0",
     "@types/yargs": "^17.0.34",
+    "@types/yauzl": "^2.10.3",
     "@typescript/native-preview": "^7.0.0-dev.20251106.1",
     "@vitest/browser": "<4",
     "@vitest/ui": "<4",

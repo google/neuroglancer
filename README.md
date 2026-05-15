@@ -1,6 +1,7 @@
 ## Neuroglancer: Web-based volumetric data visualization
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![NPM](https://img.shields.io/npm/v/neuroglancer)](https://www.npmjs.com/package/neuroglancer)
 [![PyPI](https://img.shields.io/pypi/v/neuroglancer)](https://pypi.org/project/neuroglancer)
 ![Build](https://github.com/google/neuroglancer/actions/workflows/build.yml/badge.svg)
 [![DOI](https://zenodo.org/badge/59798355.svg)](https://zenodo.org/badge/latestdoi/59798355)
@@ -167,7 +168,7 @@ There is a Google Group/mailing list for discussion related to Neuroglancer:
   as a useful example for converting other datasets.
 - [BigArrays.jl](https://github.com/seung-lab/BigArrays.jl) - Julia interface of neuroglancer precomputed data format.
 - [cloudvolume](https://github.com/seung-lab/cloud-volume) - Python interface of neuroglancer precomputed data format.
-- [multiresolution-mesh-creator](https://github.com/janelia-cosem/multiresolution-mesh-creator) - Python tool for creating [multi-resolution meshes](https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/meshes.md#multi-resolution-mesh-format) from single resolution or multiscale meshes.
+- [mesh-n-bone](https://github.com/janelia-cellmap/mesh-n-bone) - Python tool for creating [multi-resolution meshes](https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/meshes.md#multi-resolution-mesh-format) from segmentation volumes or meshes.
 - [Igneous](https://github.com/seung-lab/igneous) - Python pipeline for scalable meshing, skeletonizing, downsampling, and management of large 3d images focusing on Neuroglancer Precomputed format.
 
 # Contributing

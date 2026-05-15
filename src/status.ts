@@ -28,17 +28,9 @@ export const DEFAULT_STATUS_DELAY = 200;
 
 export type Delay = boolean | number;
 
-function setupStatusContainer(container: HTMLElement) {
-  container.addEventListener("mousedown", (event) => {
-    // Prevent focus changes due to clicking on status message.
-    event.preventDefault();
-  });
-}
-
 function getStatusContainer() {
   if (statusContainer === undefined) {
     statusContainer = document.createElement("ul");
-    setupStatusContainer(statusContainer);
     statusContainer.id = "neuroglancer-status-container";
     const el: HTMLElement | null = document.getElementById(
       "neuroglancer-container",
@@ -55,7 +47,6 @@ function getStatusContainer() {
 function getModalStatusContainer() {
   if (modalStatusContainer === undefined) {
     modalStatusContainer = document.createElement("ul");
-    setupStatusContainer(modalStatusContainer);
     modalStatusContainer.id = "neuroglancer-status-container-modal";
     const el: HTMLElement | null = document.getElementById(
       "neuroglancer-container",
@@ -79,9 +70,17 @@ export class StatusMessage {
   private modalElementWrapper: HTMLElement | undefined;
   private timer: number | null;
   private visibility = true;
+  private preventFocusChangeOnMouseDown = false;
+  private handleMouseDown = (event: MouseEvent) => {
+    if (this.preventFocusChangeOnMouseDown) {
+      // Prevent focus changes due to clicking on status message.
+      event.preventDefault();
+    }
+  };
   constructor(delay: Delay = false, modal = false) {
     const element = document.createElement("li");
     this.element = element;
+    element.addEventListener("mousedown", this.handleMouseDown);
     if (delay === true) {
       delay = DEFAULT_STATUS_DELAY;
     }
@@ -122,10 +121,14 @@ export class StatusMessage {
       this.setVisible(true);
     }
   }
+  setPreventFocusChangeOnMouseDown(value: boolean) {
+    this.preventFocusChangeOnMouseDown = value;
+  }
   setModal(value: boolean) {
     if (value) {
       if (this.modalElementWrapper === undefined) {
         const modalElementWrapper = document.createElement("div");
+        modalElementWrapper.addEventListener("mousedown", this.handleMouseDown);
         const dismissModalElement = makeCloseButton({
           title: "Dismiss",
           onClick: () => {
