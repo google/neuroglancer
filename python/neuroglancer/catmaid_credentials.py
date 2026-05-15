@@ -32,9 +32,7 @@ class CatmaidAnonymousCredentialsProvider(credentials_provider.CredentialsProvid
             with urllib.request.urlopen(token_url) as response:
                 data = json.loads(response.read().decode())
             if not isinstance(data, dict) or not isinstance(data.get("token"), str):
-                raise RuntimeError(
-                    f"Unexpected response from {token_url}: {data!r}"
-                )
+                raise RuntimeError(f"Unexpected response from {token_url}: {data!r}")
             return {"token": data["token"]}
 
         return run_on_new_thread(func)

@@ -143,7 +143,10 @@ export function buildSpatialSkeletonSegmentRenderState(
     const parentInTree =
       node.parentNodeId !== undefined && nodeById.has(node.parentNodeId);
     const type = classifyNodeType(node, children.length, parentInTree);
-    if (type === SpatialSkeletonDisplayNodeType.REGULAR && !(node.isTrueEnd ?? false)) {
+    if (
+      type === SpatialSkeletonDisplayNodeType.REGULAR &&
+      !(node.isTrueEnd ?? false)
+    ) {
       continue;
     }
     rows.push({ node, type, isLeaf: children.length === 0 });

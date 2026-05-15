@@ -42,7 +42,6 @@ import { makeDeleteButton } from "#src/widget/delete_button.js";
 import { makeIcon } from "#src/widget/icon.js";
 import { PositionWidget } from "#src/widget/position_widget.js";
 
-
 class LayerWidget extends RefCounted {
   element = document.createElement("div");
   layerNumberElement = document.createElement("div");

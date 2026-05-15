@@ -156,7 +156,6 @@ export class LayerActionContext {
   }
 }
 
-
 export interface UserLayerTab {
   id: string;
   label: string;

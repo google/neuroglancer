@@ -140,18 +140,18 @@ import {
   SpatialSkeletonNodeFilterType,
 } from "#src/skeleton/node_types.js";
 import {
+  buildSpatialSkeletonGridLevels,
+  getSpatialSkeletonGridSpacing,
+  type SpatialSkeletonGridLevel,
+  type SpatialSkeletonGridSize,
+} from "#src/skeleton/spatial_chunk_sizing.js";
+import {
   editableSpatiallyIndexedSkeletonSourceSupportsAction,
   getEditableSpatiallyIndexedSkeletonSource,
   getSpatiallyIndexedSkeletonSource,
   isSpatiallyIndexedSkeletonSourceReadOnly,
   SpatialSkeletonState,
 } from "#src/skeleton/spatial_skeleton_manager.js";
-import {
-  buildSpatialSkeletonGridLevels,
-  getSpatialSkeletonGridSpacing,
-  type SpatialSkeletonGridLevel,
-  type SpatialSkeletonGridSize,
-} from "#src/skeleton/spatial_chunk_sizing.js";
 import { DataType, VolumeType } from "#src/sliceview/volume/base.js";
 import { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import { SegmentationRenderLayer } from "#src/sliceview/volume/segmentation_renderlayer.js";

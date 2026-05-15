@@ -49,7 +49,9 @@ default_credentials_manager.register(
 
 default_credentials_manager.register(
     "CATMAID",
-    lambda parameters: catmaid_credentials.CatmaidAnonymousCredentialsProvider(parameters),
+    lambda parameters: catmaid_credentials.CatmaidAnonymousCredentialsProvider(
+        parameters
+    ),
 )
 
 
