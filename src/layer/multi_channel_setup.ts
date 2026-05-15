@@ -20,7 +20,6 @@ import {
   permuteCoordinateSpace,
 } from "#src/coordinate_transform.js";
 import type { SingleChannelMetadata } from "#src/datasource/index.js";
-import type { DisplayContext } from "#src/display_context.js";
 import type { ImageUserLayer } from "#src/layer/image/index.js";
 import {
   type LayerListSpecification,
@@ -33,17 +32,6 @@ import type { Borrowed } from "#src/util/disposable.js";
 import type { vec3 } from "#src/util/geom.js";
 import { dataTypeIntervalEqual, defaultDataTypeRange } from "#src/util/lerp.js";
 import type { ShaderImageInvlerpControl } from "#src/webgl/shader_ui_controls.js";
-
-function isTopLevelLayerListManager(
-  x: LayerListSpecification,
-): x is LayerListSpecification & { display: DisplayContext } {
-  const display = (x as any).display as DisplayContext | undefined;
-
-  return (
-    !!display &&
-    typeof (display as any).multiChannelSetupFinished?.dispatch === "function"
-  );
-}
 
 function changeLayerName(managedLayer: ManagedUserLayer, newName: string) {
   newName = managedLayer.manager.root.layerManager.getUniqueLayerName(newName);
@@ -379,6 +367,7 @@ export function createImageLayerAsMultiChannel(
       "Input omera metadata is not set up correctly. Colors are either missing or all close to black, and all ranges are the same or missing. Using default values for display purposes.",
     );
   }
+  const newChannelLayers: ManagedUserLayer[] = [];
   for (let i = 0; i < totalLocalChannels; i++) {
     const channelMetadata = getLayerChannelMetadata(managedLayer, i);
     const { localPosition, chanName } = getAdjustedLocalPositionAndName(i);
@@ -405,6 +394,7 @@ export function createImageLayerAsMultiChannel(
         parentIndex !== -1 ? parentIndex + i : undefined,
       );
       addedLayer = newLayer;
+      newChannelLayers.push(newLayer);
     }
     setupLayerPostCreation(
       addedLayer,
@@ -415,9 +405,26 @@ export function createImageLayerAsMultiChannel(
       ignoreInputMetadata,
     );
   }
-  if (isTopLevelLayerListManager(managedLayer.manager)) {
-    managedLayer.manager.display.multiChannelSetupFinished.dispatch();
+  // Propagate new channel layers to all layer group subsets that contain the original managed layer
+  // The initial manager.add() above only adds to the layer's own manager and its owner
+  // Update other subsets referencing the original layer
+  const { root } = managedLayer.manager;
+  if (newChannelLayers.length > 0) {
+    for (const subset of root.subsets) {
+      // Skip the subset that is the current manager
+      if (subset === managedLayer.manager) continue;
+      const subsetIndex =
+        subset.layerManager.managedLayers.indexOf(managedLayer);
+      if (subsetIndex === -1) continue;
+      for (let j = 0; j < newChannelLayers.length; j++) {
+        subset.layerManager.addManagedLayer(
+          newChannelLayers[j].addRef(),
+          subsetIndex + 1 + j,
+        );
+      }
+    }
   }
+  root.display.multiChannelSetupFinished.dispatch();
   postCreationSetupFunctions.forEach((fn) => fn());
   reverseGlobalDimOrderIfNeeded(managedLayer);
 }
