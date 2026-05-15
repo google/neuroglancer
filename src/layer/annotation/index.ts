@@ -714,7 +714,7 @@ export class AnnotationUserLayer extends Base {
     tab.appendChild(
       renderScaleControls.element,
       SPACING_SECTION_JSON_KEY,
-      true /* hidden */,
+      !hasChunkedSource.value,
     );
     {
       const checkbox = tab.registerDisposer(

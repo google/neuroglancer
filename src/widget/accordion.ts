@@ -259,13 +259,18 @@ export class AccordionTab extends Tab {
     return section;
   }
 
-  // Hidden can be used here to keep the section hidden on adding a child
-  // but the usual behaviour is to show the section after adding a child
-  // because then we know the section is not empty
-  appendChild(content: HTMLElement, jsonKey?: string, hidden?: boolean): void {
+  // Usually adding a child automatically shows the section
+  // but skipShow can be used to avoid this behaviour
+  appendChild(
+    content: HTMLElement,
+    jsonKey?: string,
+    skipShow?: boolean,
+  ): void {
     const section = this.getSectionWithFallback(jsonKey);
     section.body.appendChild(content);
-    section.container.dataset.hidden = hidden ? "true" : "false";
+    if (!skipShow) {
+      this.showSection(section.jsonKey);
+    }
   }
 
   /**
