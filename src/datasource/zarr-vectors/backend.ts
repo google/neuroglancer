@@ -26,6 +26,8 @@ import {
   annotationTypeHandlers,
   annotationTypes,
 } from "#src/annotation/index.js";
+import { decodeZstd } from "#src/async_computation/decode_zstd_request.js";
+import { requestAsyncComputation } from "#src/async_computation/request.js";
 import { WithParameters } from "#src/chunk_manager/backend.js";
 import type { ZarrVectorsAttributeDtype } from "#src/datasource/zarr-vectors/base.js";
 import {
@@ -37,6 +39,36 @@ import { joinBaseUrlAndPath } from "#src/kvstore/url.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
 
 const IS_LITTLE_ENDIAN = true;
+
+// Zstd frame magic ("0xFD2FB528" little-endian).  Coarser pyramid
+// levels written by zarr-vectors are zstd-compressed even though
+// level 0 is raw; we sniff the magic byte to decide whether to
+// decompress.  Robust to whatever per-chunk codec config the writer
+// emits — we don't need to read each chunk's individual zarr.json.
+const ZSTD_MAGIC = [0x28, 0xb5, 0x2f, 0xfd] as const;
+
+function looksLikeZstd(bytes: Uint8Array): boolean {
+  if (bytes.byteLength < 4) return false;
+  return (
+    bytes[0] === ZSTD_MAGIC[0] &&
+    bytes[1] === ZSTD_MAGIC[1] &&
+    bytes[2] === ZSTD_MAGIC[2] &&
+    bytes[3] === ZSTD_MAGIC[3]
+  );
+}
+
+async function maybeDecompress(
+  bytes: Uint8Array<ArrayBuffer>,
+  signal: AbortSignal,
+): Promise<Uint8Array<ArrayBuffer>> {
+  if (!looksLikeZstd(bytes)) return bytes;
+  return await requestAsyncComputation(
+    decodeZstd,
+    signal,
+    [bytes.buffer],
+    bytes,
+  );
+}
 
 // Per-chunk arrays in zarr-vectors are stored as single-chunk 1D zarr
 // v3 uint8 arrays with separator="/" and chunk-key encoding "default",
@@ -213,8 +245,9 @@ export class ZarrVectorsAnnotationSpatialIndexSourceBackend extends WithParamete
       chunk.data = emptyGeometryData();
       return;
     }
-    const vertexBytes = new Uint8Array(
-      await vertexResponse.response.arrayBuffer(),
+    const vertexBytes = await maybeDecompress(
+      new Uint8Array(await vertexResponse.response.arrayBuffer()),
+      signal,
     );
     if (vertexBytes.byteLength === 0) {
       chunk.data = emptyGeometryData();
@@ -248,7 +281,10 @@ export class ZarrVectorsAnnotationSpatialIndexSourceBackend extends WithParamete
             `zarr-vectors: chunk ${chunkKey} has vertices but property ${JSON.stringify(name)} is missing`,
           );
         }
-        const bytes = new Uint8Array(await response.response.arrayBuffer());
+        const bytes = await maybeDecompress(
+          new Uint8Array(await response.response.arrayBuffer()),
+          signal,
+        );
         return reinterpretBytes(bytes, attributeDtypes[i], numPoints);
       }),
     );

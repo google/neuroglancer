@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
-// Reserved for future codec hooks (e.g. blosc-compressed vertex
-// chunks).  Intentionally empty in v1 — zarr-vectors writes per-chunk
-// arrays with the "bytes" codec only.
+// Worker-side codec registrations.  Coarsened pyramid levels written
+// by zarr-vectors use zstd compression; the backend sniffs the
+// magic byte and dispatches through this worker.
+import "#src/async_computation/decode_zstd.js";

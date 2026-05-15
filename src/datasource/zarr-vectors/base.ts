@@ -33,10 +33,25 @@ export type ZarrVectorsAttributeDtype =
   | "int16"
   | "int32";
 
+/**
+ * How the annotation renderer should combine spatial-index levels of a
+ * multi-resolution pyramid.
+ *
+ * - "additive": levels are non-overlapping; renderer accumulates them
+ *   into the buffer (precomputed annotations' classic behavior).  Each
+ *   point lives at exactly one level.
+ * - "replace": levels are complete representations at decreasing
+ *   fidelity; renderer picks one level per zoom (image-style).  Right
+ *   choice for metanode pyramids — drawing a metanode and its children
+ *   simultaneously would double-count.
+ */
+export type ZarrVectorsPyramidMode = "additive" | "replace";
+
 export class ZarrVectorsAnnotationSourceParameters {
   rank: number;
   type: AnnotationType;
   properties: AnnotationPropertySpec[];
+  pyramidMode: ZarrVectorsPyramidMode;
   static RPC_ID = "zarr-vectors/AnnotationSource";
 }
 

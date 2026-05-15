@@ -39,6 +39,7 @@ import {
 } from "#src/datasource/index.js";
 import type {
   ZarrVectorsAttributeDtype,
+  ZarrVectorsPyramidMode,
 } from "#src/datasource/zarr-vectors/base.js";
 import {
   ZarrVectorsAnnotationSourceParameters,
@@ -389,6 +390,53 @@ async function buildPropertySpecsAndDtypes(
   return { properties, attributeNames, attributeDtypes };
 }
 
+const FALLBACK_LEVEL_LIMIT = 1_000_000;
+
+function parsePyramidMode(raw: unknown): ZarrVectorsPyramidMode {
+  if (raw === "additive" || raw === "replace") return raw;
+  // Default: "replace" — see plan §"Context (v2)".  Safe for
+  // metanode-style pyramids (no double-count) and matches the
+  // image-style mental model of resolution alternatives.  A single
+  // level falls through both branches identically.
+  return "replace";
+}
+
+function enumerateLevelPaths(multiscales: any): string[] {
+  const entry = Array.isArray(multiscales) ? multiscales[0] : undefined;
+  const datasets = entry?.datasets;
+  if (Array.isArray(datasets) && datasets.length > 0) {
+    const paths: string[] = [];
+    for (const d of datasets) {
+      if (typeof d?.path === "string" && d.path.length > 0) {
+        paths.push(d.path);
+      }
+    }
+    if (paths.length > 0) return paths;
+  }
+  // No multiscales metadata → assume a single level "0".  This
+  // preserves v1 behavior for stores written before pyramid support.
+  return ["0"];
+}
+
+function computeLevelLimit(
+  levelAttrs: any,
+  numChunks: number,
+  level0Limit: number,
+  rank: number,
+): number {
+  const vertexCount = Number(levelAttrs?.vertex_count);
+  if (Number.isFinite(vertexCount) && vertexCount > 0 && numChunks > 0) {
+    return Math.max(1, Math.ceil(vertexCount / numChunks));
+  }
+  const binRatio = levelAttrs?.bin_ratio;
+  if (Array.isArray(binRatio) && binRatio.length === rank) {
+    let prod = 1;
+    for (const v of binRatio) prod *= Math.max(1, Number(v) || 1);
+    if (prod > 1) return Math.max(1, Math.round(level0Limit / prod));
+  }
+  return level0Limit;
+}
+
 async function buildAnnotationMetadata(
   sharedKvStoreContext: SharedKvStoreContext,
   storeUrl: string,
@@ -406,7 +454,7 @@ async function buildAnnotationMetadata(
     : [];
   if (!geometryTypes.includes("point_cloud")) {
     throw new Error(
-      `zarr-vectors datasource: only 'point_cloud' geometry is supported in v1 ` +
+      `zarr-vectors datasource: only 'point_cloud' geometry is supported ` +
         `(found: ${JSON.stringify(geometryTypes)})`,
     );
   }
@@ -458,22 +506,28 @@ async function buildAnnotationMetadata(
     );
   }
 
-  const levelUrl = kvstoreEnsureDirectoryPipelineUrl(
-    pipelineUrlJoin(storeUrl, "0"),
-  );
+  const pyramidMode = parsePyramidMode(ngHints.pyramid_mode);
+  const levelPaths = enumerateLevelPaths(rootAttrs.multiscales);
 
+  // Property discovery runs once against level 0 — per the
+  // zarr-vectors spec, attribute dtypes don't vary across levels.
+  const level0Url = kvstoreEnsureDirectoryPipelineUrl(
+    pipelineUrlJoin(storeUrl, levelPaths[0]),
+  );
   const { properties, attributeNames, attributeDtypes } =
     await buildPropertySpecsAndDtypes(
       sharedKvStoreContext,
-      levelUrl,
+      level0Url,
       ngHints,
       options,
     );
 
-  // Single spatial-index level mapping zarr-vectors chunks 1:1.
+  // Shared per-level geometry: all levels share the same physical
+  // chunk grid on disk in zarr-vectors.
   const chunkShapeF32 = new Float32Array(rank);
   const gridShape = new Float32Array(rank);
   const gridShapeInVoxels = new Float32Array(rank);
+  let numChunks = 1;
   for (let i = 0; i < rank; ++i) {
     const cs = Number(chunkShape[i]);
     chunkShapeF32[i] = cs;
@@ -481,6 +535,7 @@ async function buildAnnotationMetadata(
     const g = Math.max(1, Math.ceil(extent / cs));
     gridShape[i] = g;
     gridShapeInVoxels[i] = g * cs;
+    numChunks *= g;
   }
   const chunkToMultiscaleTransform = matrix.createIdentity(
     Float32Array,
@@ -489,33 +544,65 @@ async function buildAnnotationMetadata(
   for (let i = 0; i < rank; ++i) {
     chunkToMultiscaleTransform[(rank + 1) * rank + i] = lowerBounds[i];
   }
-  const spec: AnnotationGeometryChunkSpecification = {
-    limit: 1_000_000,
-    chunkToMultiscaleTransform,
-    ...makeSliceViewChunkSpecification({
-      rank,
-      chunkDataSize: chunkShapeF32,
-      upperVoxelBound: gridShapeInVoxels,
-    }),
-  };
-  spec.upperChunkBound = gridShape;
+
+  // Build one spatial-index level per zarr-vectors level.  Order:
+  // finest first (level 0 first), which is the order
+  // forEachVisibleAnnotationChunk expects (it iterates length-1 → 0).
+  const spatialIndices: AnnotationSpatialIndexLevelMetadata[] = [];
+  let level0Limit = FALLBACK_LEVEL_LIMIT;
+  for (let k = 0; k < levelPaths.length; ++k) {
+    const levelPath = levelPaths[k];
+    const levelUrl = kvstoreEnsureDirectoryPipelineUrl(
+      pipelineUrlJoin(storeUrl, levelPath),
+    );
+    let levelAttrs: any;
+    try {
+      const levelJson = await getJsonResource(
+        sharedKvStoreContext,
+        joinBaseUrlAndPath(levelUrl, "zarr.json"),
+        `zarr-vectors level ${JSON.stringify(levelPath)} metadata`,
+        options,
+      );
+      levelAttrs = levelJson?.attributes?.zarr_vectors_level;
+    } catch {
+      levelAttrs = undefined;
+    }
+    const limit = computeLevelLimit(levelAttrs, numChunks, level0Limit, rank);
+    if (k === 0) level0Limit = limit;
+
+    const spec: AnnotationGeometryChunkSpecification = {
+      limit,
+      chunkToMultiscaleTransform,
+      pyramidMode,
+      ...makeSliceViewChunkSpecification({
+        rank,
+        chunkDataSize: chunkShapeF32,
+        upperVoxelBound: gridShapeInVoxels,
+      }),
+    };
+    spec.upperChunkBound = gridShape;
+
+    const spatialParams =
+      new ZarrVectorsAnnotationSpatialIndexSourceParameters();
+    spatialParams.baseUrl = levelUrl;
+    spatialParams.rank = rank;
+    spatialParams.attributeNames = attributeNames;
+    spatialParams.attributeDtypes = attributeDtypes;
+
+    spatialIndices.push({ parameters: spatialParams, spec });
+  }
 
   const parameters = new ZarrVectorsAnnotationSourceParameters();
   parameters.rank = rank;
   parameters.type = AnnotationType.POINT;
   parameters.properties = properties;
-
-  const spatialParams = new ZarrVectorsAnnotationSpatialIndexSourceParameters();
-  spatialParams.baseUrl = levelUrl;
-  spatialParams.rank = rank;
-  spatialParams.attributeNames = attributeNames;
-  spatialParams.attributeDtypes = attributeDtypes;
+  parameters.pyramidMode = pyramidMode;
 
   const meta: AnnotationMetadata = {
     rank,
     coordinateSpace,
     parameters,
-    spatialIndices: [{ parameters: spatialParams, spec }],
+    spatialIndices,
   };
   return meta;
 }
