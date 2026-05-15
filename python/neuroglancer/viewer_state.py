@@ -1920,9 +1920,7 @@ class ViewerState(JsonObjectWrapper):
     ssao_intensity = ssaoIntensity = wrapped_property(
         "ssaoIntensity", optional(float, 1.8)
     )
-    ssao_radius = ssaoRadius = wrapped_property(
-        "ssaoRadius", optional(float, 0.05)
-    )
+    ssao_radius = ssaoRadius = wrapped_property("ssaoRadius", optional(float, 0.05))
     enable_adaptive_downsampling = enableAdaptiveDownsampling = wrapped_property(
         "enableAdaptiveDownsampling", optional(bool, True)
     )
