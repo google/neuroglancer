@@ -64,8 +64,8 @@
 
 .neuroglancer-accordion-body {
   padding: 8px 2px;
-  overflow-x: auto;
-  overflow-y: auto;
+  overflow-x: visible;
+  overflow-y: visible;
   padding-top: 0;
   flex-direction: column;
 }
