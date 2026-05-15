@@ -140,11 +140,18 @@ import {
   SpatialSkeletonNodeFilterType,
 } from "#src/skeleton/node_types.js";
 import {
+  editableSpatiallyIndexedSkeletonSourceSupportsAction,
   getEditableSpatiallyIndexedSkeletonSource,
   getSpatiallyIndexedSkeletonSource,
   isSpatiallyIndexedSkeletonSourceReadOnly,
   SpatialSkeletonState,
 } from "#src/skeleton/spatial_skeleton_manager.js";
+import {
+  buildSpatialSkeletonGridLevels,
+  getSpatialSkeletonGridSpacing,
+  type SpatialSkeletonGridLevel,
+  type SpatialSkeletonGridSize,
+} from "#src/skeleton/spatial_chunk_sizing.js";
 import { DataType, VolumeType } from "#src/sliceview/volume/base.js";
 import { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import { SegmentationRenderLayer } from "#src/sliceview/volume/segmentation_renderlayer.js";
@@ -577,24 +584,6 @@ class LinkedSegmentationGroupState<
   }
 }
 
-type SpatialSkeletonGridSize = { x: number; y: number; z: number };
-type SpatialSkeletonGridLevel = { size: SpatialSkeletonGridSize; lod: number };
-
-function getSpatialSkeletonGridSpacing(size: SpatialSkeletonGridSize) {
-  return Math.min(size.x, size.y, size.z);
-}
-
-function buildSpatialSkeletonGridLevels(
-  gridSizes: SpatialSkeletonGridSize[],
-): SpatialSkeletonGridLevel[] {
-  if (gridSizes.length === 0) return [];
-  const lastIndex = gridSizes.length - 1;
-  return gridSizes.map((size, index) => ({
-    size,
-    lod: lastIndex === 0 ? 0 : index / lastIndex,
-  }));
-}
-
 function findClosestSpatialSkeletonGridLevelBySpacing(
   levels: SpatialSkeletonGridLevel[],
   spacing: number,
@@ -885,10 +874,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   };
 
   setSpatialSkeletonGridSizes(gridSizes: SpatialSkeletonGridSize[]) {
-    const sortedSizes = [...gridSizes].sort(
-      (a, b) => Math.min(b.x, b.y, b.z) - Math.min(a.x, a.y, a.z),
-    );
-    const levels = buildSpatialSkeletonGridLevels(sortedSizes);
+    const levels = buildSpatialSkeletonGridLevels(gridSizes);
     const { origin: histogramOrigin, binSize: histogramBinSize } =
       getSpatialSkeletonGridHistogramConfig(levels);
     if (
@@ -1593,29 +1579,7 @@ export class SegmentationUserLayer extends Base {
     }
     const source = getEditableSpatiallyIndexedSkeletonSource(skeletonLayer);
     if (source === undefined) return false;
-    switch (action) {
-      case SpatialSkeletonActions.addNodes:
-      case SpatialSkeletonActions.deleteNodes:
-      case SpatialSkeletonActions.moveNodes:
-      case SpatialSkeletonActions.splitSkeletons:
-      case SpatialSkeletonActions.mergeSkeletons:
-        return true;
-      case SpatialSkeletonActions.insertNodes:
-        return source.insertNodesCommand !== undefined;
-      case SpatialSkeletonActions.reroot:
-        return source.rerootCommand !== undefined;
-      case SpatialSkeletonActions.editNodeDescription:
-        return source.editNodeDescriptionCommand !== undefined;
-      case SpatialSkeletonActions.editNodeTrueEnd:
-        return source.editNodeTrueEndCommand !== undefined;
-      case SpatialSkeletonActions.editNodeRadius:
-        return source.editNodeRadiusCommand !== undefined;
-      case SpatialSkeletonActions.editNodeConfidence:
-        return (
-          source.editNodeConfidenceCommand !== undefined &&
-          source.spatialSkeletonConfidenceConfiguration !== undefined
-        );
-    }
+    return editableSpatiallyIndexedSkeletonSourceSupportsAction(source, action);
   }
 
   private getMissingSpatialSkeletonSupportReason(

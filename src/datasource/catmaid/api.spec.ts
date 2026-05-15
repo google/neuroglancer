@@ -517,7 +517,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     (client as any).fetch = fetchMock;
 
     await expect(
-      client.fetchNodesInBoundingBox({
+      client.fetchNodes({
         lowerBounds: [0, 0, 0],
         upperBounds: [10, 10, 10],
       }),
@@ -557,7 +557,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     (client as any).fetch = fetchMock;
 
     await expect(
-      client.fetchNodesInBoundingBox({
+      client.fetchNodes({
         lowerBounds: [0, 0],
         upperBounds: [10, 10],
       }),

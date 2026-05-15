@@ -121,18 +121,3 @@ export function selectSpatiallyIndexedSkeletonEntriesForView<T>(
     getGridIndex,
   );
 }
-
-export function dedupeSpatiallyIndexedSkeletonEntries<T>(
-  entries: Iterable<T>,
-  getKey: (entry: T) => string,
-) {
-  const deduped: T[] = [];
-  const seenKeys = new Set<string>();
-  for (const entry of entries) {
-    const key = getKey(entry);
-    if (seenKeys.has(key)) continue;
-    seenKeys.add(key);
-    deduped.push(entry);
-  }
-  return deduped;
-}

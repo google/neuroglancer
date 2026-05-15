@@ -23,7 +23,9 @@ import {
   getSkeletonRootNode,
 } from "#src/skeleton/navigation_graph.js";
 import {
+  editableSpatiallyIndexedSkeletonSourceSupportsAction,
   getEditableSpatiallyIndexedSkeletonSource,
+  getSpatialSkeletonEditCommandFactoryForAction,
   isSpatiallyIndexedSkeletonSourceReadOnly,
   SpatialSkeletonState,
 } from "#src/skeleton/spatial_skeleton_manager.js";
@@ -108,6 +110,40 @@ describe("skeleton/spatial_skeleton_manager", () => {
     expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
   });
 
+  it("looks up edit command factories from shared action metadata", () => {
+    const source = {
+      ...makeEditableSourceCommands(),
+      insertNodesCommand: makeCommandFactory(
+        SpatialSkeletonActions.insertNodes,
+      ),
+      rerootCommand: makeCommandFactory(SpatialSkeletonActions.reroot),
+      readonly: false,
+      listSkeletons: async () => [],
+      getSkeleton: async () => [],
+      fetchNodes: async () => [],
+      getSpatialIndexMetadata: async () => null,
+    };
+
+    expect(
+      getSpatialSkeletonEditCommandFactoryForAction(
+        source as any,
+        SpatialSkeletonActions.moveNodes,
+      ),
+    ).toBe(source.moveNodesCommand);
+    expect(
+      getSpatialSkeletonEditCommandFactoryForAction(
+        source as any,
+        SpatialSkeletonActions.insertNodes,
+      ),
+    ).toBe(source.insertNodesCommand);
+    expect(
+      getSpatialSkeletonEditCommandFactoryForAction(
+        source as any,
+        SpatialSkeletonActions.inspect,
+      ),
+    ).toBeUndefined();
+  });
+
   it("validates optional confidence configuration for editable sources", () => {
     const source = {
       ...makeEditableSourceCommands(),
@@ -136,6 +172,46 @@ describe("skeleton/spatial_skeleton_manager", () => {
         },
       }),
     ).toBeUndefined();
+  });
+
+  it("requires confidence configuration only for confidence edit support", () => {
+    const source = {
+      ...makeEditableSourceCommands(),
+      editNodeConfidenceCommand: makeCommandFactory(
+        SpatialSkeletonActions.editNodeConfidence,
+      ),
+      readonly: false,
+      listSkeletons: async () => [],
+      getSkeleton: async () => [],
+      fetchNodes: async () => [],
+      getSpatialIndexMetadata: async () => null,
+    };
+
+    expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
+    expect(
+      editableSpatiallyIndexedSkeletonSourceSupportsAction(
+        source as any,
+        SpatialSkeletonActions.addNodes,
+      ),
+    ).toBe(true);
+    expect(
+      editableSpatiallyIndexedSkeletonSourceSupportsAction(
+        source as any,
+        SpatialSkeletonActions.editNodeConfidence,
+      ),
+    ).toBe(false);
+
+    expect(
+      editableSpatiallyIndexedSkeletonSourceSupportsAction(
+        {
+          ...source,
+          spatialSkeletonConfidenceConfiguration: {
+            values: [0, 50, 100],
+          },
+        } as any,
+        SpatialSkeletonActions.editNodeConfidence,
+      ),
+    ).toBe(true);
   });
 
   it("does not treat a read-only source with edit commands as editable", () => {

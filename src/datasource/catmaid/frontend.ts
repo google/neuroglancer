@@ -23,10 +23,12 @@ import {
 } from "#src/coordinate_transform.js";
 import { WithCredentialsProvider } from "#src/credentials_provider/chunk_source_frontend.js";
 import type { CredentialsProvider } from "#src/credentials_provider/index.js";
-import type { CatmaidToken } from "#src/datasource/catmaid/api.js";
+import type {
+  CatmaidClient,
+  CatmaidToken,
+} from "#src/datasource/catmaid/api.js";
 import {
   CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES,
-  CatmaidClient,
   credentialsKey,
   getCatmaidSpatialSkeletonGridCellBounds,
 } from "#src/datasource/catmaid/api.js";
@@ -34,6 +36,8 @@ import {
   CatmaidSkeletonSourceParameters,
   CatmaidCompleteSkeletonSourceParameters,
   CatmaidDataSourceParameters,
+  makeCatmaidClient,
+  makeCatmaidSkeletonMetadata,
 } from "#src/datasource/catmaid/base.js";
 import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
 import type {
@@ -58,11 +62,15 @@ import {
   MultiscaleSpatiallyIndexedSkeletonSource,
   SPATIAL_SKELETON_SOURCE_OPTIONS,
 } from "#src/skeleton/frontend.js";
+import {
+  buildSpatialSkeletonGridLevels,
+  type SpatialSkeletonGridLevel,
+  type SpatialSkeletonGridSize,
+} from "#src/skeleton/spatial_chunk_sizing.js";
 import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
 import { makeSliceViewChunkSpecification } from "#src/sliceview/base.js";
 import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
 import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
-import { DataType } from "#src/util/data_type.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { mat4, vec3 } from "#src/util/geom.js";
 import "#src/datasource/catmaid/register_credentials_provider.js";
@@ -140,18 +148,10 @@ export class CatmaidSpatiallyIndexedSkeletonSource extends WithParameters(
   }
 
   private get client() {
-    let client = this.client_;
-    if (client !== undefined) {
-      return client;
-    }
-    const catmaidParameters = this.parameters.catmaidParameters;
-    client = new CatmaidClient(
-      catmaidParameters.url,
-      catmaidParameters.projectId,
+    return (this.client_ ??= makeCatmaidClient(
+      this.parameters.catmaidParameters,
       this.credentialsProvider,
-    );
-    this.client_ = client;
-    return client;
+    ));
   }
 
   getSkeleton(
@@ -179,14 +179,10 @@ export class CatmaidSpatiallyIndexedSkeletonSource extends WithParameters(
       cellIndex.cell,
       this.spec.chunkDataSize,
     );
-    return this.client.fetchNodesInBoundingBox(
-      bounds,
-      this.parameters.catmaidLod ?? 0,
-      {
-        cacheProvider: this.parameters.catmaidParameters.cacheProvider,
-        signal: options.signal,
-      },
-    );
+    return this.client.fetchNodes(bounds, this.parameters.catmaidLod ?? 0, {
+      cacheProvider: this.parameters.catmaidParameters.cacheProvider,
+      signal: options.signal,
+    });
   }
 
   getSkeletonRootNode(skeletonId: number) {
@@ -208,7 +204,7 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
     return 3;
   }
 
-  private sortedGridCellSizes: Array<{ x: number; y: number; z: number }>;
+  private gridLevels: SpatialSkeletonGridLevel[];
 
   constructor(
     chunkManager: Borrowed<ChunkManager>,
@@ -218,18 +214,16 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
     private coordinateScaleFactorsInMeters: Float32Array,
     private lowerBoundsInNanometers: Float32Array,
     private upperBoundsInNanometers: Float32Array,
-    gridCellSizes: Array<{ x: number; y: number; z: number }>,
+    gridCellSizes: SpatialSkeletonGridSize[],
     private cacheProvider?: string,
     private sourceReadonly = true,
   ) {
     super(chunkManager);
-    this.sortedGridCellSizes = [...gridCellSizes].sort(
-      (a, b) => Math.min(b.x, b.y, b.z) - Math.min(a.x, a.y, a.z),
-    );
+    this.gridLevels = buildSpatialSkeletonGridLevels(gridCellSizes);
   }
 
-  getSpatialSkeletonGridSizes(): Array<{ x: number; y: number; z: number }> {
-    return this.sortedGridCellSizes;
+  getSpatialSkeletonGridSizes(): SpatialSkeletonGridSize[] {
+    return this.gridLevels.map(({ size }) => size);
   }
 
   getPerspectiveSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] {
@@ -247,11 +241,10 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
     const sources: SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] =
       [];
 
-    // Sorted by minimum dimension (Descending: Large/Coarse -> Small/Fine)
-    const sortedGridSizes = this.sortedGridCellSizes;
-
-    const lastGridIndex = sortedGridSizes.length - 1;
-    for (const [gridIndex, gridCellSize] of sortedGridSizes.entries()) {
+    for (const [
+      gridIndex,
+      { size: gridCellSize, lod },
+    ] of this.gridLevels.entries()) {
       const chunkDataSize = Uint32Array.from([
         gridCellSize.x,
         gridCellSize.y,
@@ -291,15 +284,8 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
       parameters.catmaidParameters.cacheProvider = this.cacheProvider;
       parameters.catmaidParameters.readonly = this.sourceReadonly;
       parameters.gridIndex = gridIndex;
-      parameters.catmaidLod =
-        lastGridIndex <= 0 ? 0 : gridIndex / lastGridIndex;
-      parameters.metadata = {
-        transform: mat4.create(),
-        vertexAttributes: new Map([
-          ["segment", { dataType: DataType.UINT32, numComponents: 1 }],
-        ]),
-        sharding: undefined,
-      };
+      parameters.catmaidLod = lod;
+      parameters.metadata = makeCatmaidSkeletonMetadata();
 
       const chunkSource = this.chunkManager.getChunkSource(
         CatmaidSpatiallyIndexedSkeletonSource,
@@ -362,7 +348,10 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
         { serverUrl: baseUrl },
       ) as CredentialsProvider<CatmaidToken>;
 
-    const client = new CatmaidClient(baseUrl, projectId, credentialsProvider);
+    const client = makeCatmaidClient(
+      { url: baseUrl, projectId, readonly: true },
+      credentialsProvider,
+    );
 
     // Fetch metadata-derived values through the generic source interface.
     const [spatialIndexMetadata, cacheProvider, skeletonIds] =
@@ -453,13 +442,7 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
     completeSkeletonParameters.catmaidParameters.url = baseUrl;
     completeSkeletonParameters.catmaidParameters.projectId = projectId;
     completeSkeletonParameters.url = providerUrl;
-    completeSkeletonParameters.metadata = {
-      transform: mat4.create(),
-      vertexAttributes: new Map([
-        ["segment", { dataType: DataType.UINT32, numComponents: 1 }],
-      ]),
-      sharding: undefined,
-    };
+    completeSkeletonParameters.metadata = makeCatmaidSkeletonMetadata();
 
     const completeSkeletonSource = options.registry.chunkManager.getChunkSource(
       CatmaidSkeletonSource,

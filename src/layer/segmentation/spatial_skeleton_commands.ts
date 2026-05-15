@@ -29,7 +29,10 @@ import type {
 } from "#src/skeleton/command_factories.js";
 import type { SpatialSkeletonCommand } from "#src/skeleton/command_history.js";
 import { getSpatialSkeletonActionErrorMessage } from "#src/skeleton/edit_errors.js";
-import { getEditableSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial_skeleton_manager.js";
+import {
+  getEditableSpatiallyIndexedSkeletonSource,
+  getSpatialSkeletonEditCommandFactoryForAction,
+} from "#src/skeleton/spatial_skeleton_manager.js";
 import { StatusMessage } from "#src/status.js";
 
 interface SpatialSkeletonSourceAccess {
@@ -56,32 +59,7 @@ export function getSpatialSkeletonEditCommandFactory(
 ): SpatialSkeletonEditCommandFactory | undefined {
   const source = getEditableSpatiallyIndexedSkeletonSource(value);
   if (source === undefined) return undefined;
-  switch (action) {
-    case SpatialSkeletonActions.addNodes:
-      return source.addNodesCommand;
-    case SpatialSkeletonActions.insertNodes:
-      return source.insertNodesCommand;
-    case SpatialSkeletonActions.moveNodes:
-      return source.moveNodesCommand;
-    case SpatialSkeletonActions.deleteNodes:
-      return source.deleteNodesCommand;
-    case SpatialSkeletonActions.reroot:
-      return source.rerootCommand;
-    case SpatialSkeletonActions.editNodeDescription:
-      return source.editNodeDescriptionCommand;
-    case SpatialSkeletonActions.editNodeTrueEnd:
-      return source.editNodeTrueEndCommand;
-    case SpatialSkeletonActions.editNodeRadius:
-      return source.editNodeRadiusCommand;
-    case SpatialSkeletonActions.editNodeConfidence:
-      return source.editNodeConfidenceCommand;
-    case SpatialSkeletonActions.mergeSkeletons:
-      return source.mergeSkeletonsCommand;
-    case SpatialSkeletonActions.splitSkeletons:
-      return source.splitSkeletonsCommand;
-    case SpatialSkeletonActions.inspect:
-      return undefined;
-  }
+  return getSpatialSkeletonEditCommandFactoryForAction(source, action);
 }
 
 function executeCommand(
@@ -126,19 +104,128 @@ function createSpatialSkeletonCommand(
   return commandFactory.createCommand(layer, payload);
 }
 
+interface SpatialSkeletonExecutionMetadata {
+  readonly unsupportedMessage: string;
+  readonly pendingMessage?: string;
+}
+
+const spatialSkeletonExecutionMetadata = new Map<
+  SpatialSkeletonAction,
+  SpatialSkeletonExecutionMetadata
+>([
+  [
+    SpatialSkeletonActions.addNodes,
+    {
+      unsupportedMessage:
+        "The active skeleton source does not support node creation.",
+      pendingMessage: "Creating node...",
+    },
+  ],
+  [
+    SpatialSkeletonActions.insertNodes,
+    {
+      unsupportedMessage:
+        "The active skeleton source does not support node insertion.",
+      pendingMessage: "Inserting node...",
+    },
+  ],
+  [
+    SpatialSkeletonActions.moveNodes,
+    {
+      unsupportedMessage:
+        "The active skeleton source does not support node movement.",
+    },
+  ],
+  [
+    SpatialSkeletonActions.deleteNodes,
+    {
+      unsupportedMessage:
+        "The active skeleton source does not support node deletion.",
+      pendingMessage: "Deleting node...",
+    },
+  ],
+  [
+    SpatialSkeletonActions.editNodeDescription,
+    {
+      unsupportedMessage:
+        "The active skeleton source does not support node description editing.",
+    },
+  ],
+  [
+    SpatialSkeletonActions.editNodeTrueEnd,
+    {
+      unsupportedMessage:
+        "The active skeleton source does not support node true-end editing.",
+    },
+  ],
+  [
+    SpatialSkeletonActions.editNodeRadius,
+    {
+      unsupportedMessage:
+        "The active skeleton source does not support node radius editing.",
+    },
+  ],
+  [
+    SpatialSkeletonActions.editNodeConfidence,
+    {
+      unsupportedMessage:
+        "The active skeleton source does not support node confidence editing.",
+    },
+  ],
+  [
+    SpatialSkeletonActions.reroot,
+    {
+      unsupportedMessage:
+        "The active skeleton source does not support skeleton rerooting.",
+    },
+  ],
+  [
+    SpatialSkeletonActions.splitSkeletons,
+    {
+      unsupportedMessage:
+        "The active skeleton source does not support skeleton splitting.",
+      pendingMessage: "Splitting skeleton...",
+    },
+  ],
+  [
+    SpatialSkeletonActions.mergeSkeletons,
+    {
+      unsupportedMessage:
+        "The active skeleton source does not support skeleton merging.",
+      pendingMessage: "Merging skeletons...",
+    },
+  ],
+]);
+
+function executeSpatialSkeletonAction(
+  layer: SegmentationUserLayer,
+  action: SpatialSkeletonAction,
+  payload: SpatialSkeletonCommandPayload,
+) {
+  const metadata = spatialSkeletonExecutionMetadata.get(action);
+  if (metadata === undefined) {
+    throw new Error(`Unsupported spatial skeleton edit action: ${action}`);
+  }
+  const command = createSpatialSkeletonCommand(
+    layer,
+    action,
+    payload,
+    metadata.unsupportedMessage,
+  );
+  const execution = executeCommand(layer, command);
+  return metadata.pendingMessage === undefined
+    ? execution
+    : executeCommandWithPendingMessage(execution, metadata.pendingMessage);
+}
+
 export function executeSpatialSkeletonAddNode(
   layer: SegmentationUserLayer,
   options: SpatialSkeletonCommandPayload,
 ) {
-  const command = createSpatialSkeletonCommand(
+  return executeSpatialSkeletonAction(
     layer,
     SpatialSkeletonActions.addNodes,
     options,
-    "The active skeleton source does not support node creation.",
-  );
-  return executeCommandWithPendingMessage(
-    executeCommand(layer, command),
-    "Creating node...",
   );
 }
 
@@ -146,15 +233,10 @@ export function executeSpatialSkeletonInsertNode(
   layer: SegmentationUserLayer,
   options: SpatialSkeletonCommandPayload,
 ) {
-  const command = createSpatialSkeletonCommand(
+  return executeSpatialSkeletonAction(
     layer,
     SpatialSkeletonActions.insertNodes,
     options,
-    "The active skeleton source does not support node insertion.",
-  );
-  return executeCommandWithPendingMessage(
-    executeCommand(layer, command),
-    "Inserting node...",
   );
 }
 
@@ -162,28 +244,21 @@ export function executeSpatialSkeletonMoveNode(
   layer: SegmentationUserLayer,
   options: SpatialSkeletonCommandPayload,
 ) {
-  const command = createSpatialSkeletonCommand(
+  return executeSpatialSkeletonAction(
     layer,
     SpatialSkeletonActions.moveNodes,
     options,
-    "The active skeleton source does not support node movement.",
   );
-  return executeCommand(layer, command);
 }
 
 export function executeSpatialSkeletonDeleteNode(
   layer: SegmentationUserLayer,
   node: SpatiallyIndexedSkeletonNode,
 ) {
-  const command = createSpatialSkeletonCommand(
+  return executeSpatialSkeletonAction(
     layer,
     SpatialSkeletonActions.deleteNodes,
     node,
-    "The active skeleton source does not support node deletion.",
-  );
-  return executeCommandWithPendingMessage(
-    executeCommand(layer, command),
-    "Deleting node...",
   );
 }
 
@@ -191,80 +266,65 @@ export function executeSpatialSkeletonNodeDescriptionUpdate(
   layer: SegmentationUserLayer,
   options: SpatialSkeletonCommandPayload,
 ) {
-  const command = createSpatialSkeletonCommand(
+  return executeSpatialSkeletonAction(
     layer,
     SpatialSkeletonActions.editNodeDescription,
     options,
-    "The active skeleton source does not support node description editing.",
   );
-  return executeCommand(layer, command);
 }
 
 export function executeSpatialSkeletonNodeTrueEndUpdate(
   layer: SegmentationUserLayer,
   options: SpatialSkeletonCommandPayload,
 ) {
-  const command = createSpatialSkeletonCommand(
+  return executeSpatialSkeletonAction(
     layer,
     SpatialSkeletonActions.editNodeTrueEnd,
     options,
-    "The active skeleton source does not support node true-end editing.",
   );
-  return executeCommand(layer, command);
 }
 
 export function executeSpatialSkeletonNodeRadiusUpdate(
   layer: SegmentationUserLayer,
   options: SpatialSkeletonCommandPayload,
 ) {
-  const command = createSpatialSkeletonCommand(
+  return executeSpatialSkeletonAction(
     layer,
     SpatialSkeletonActions.editNodeRadius,
     options,
-    "The active skeleton source does not support node radius editing.",
   );
-  return executeCommand(layer, command);
 }
 
 export function executeSpatialSkeletonNodeConfidenceUpdate(
   layer: SegmentationUserLayer,
   options: SpatialSkeletonCommandPayload,
 ) {
-  const command = createSpatialSkeletonCommand(
+  return executeSpatialSkeletonAction(
     layer,
     SpatialSkeletonActions.editNodeConfidence,
     options,
-    "The active skeleton source does not support node confidence editing.",
   );
-  return executeCommand(layer, command);
 }
 
 export function executeSpatialSkeletonReroot(
   layer: SegmentationUserLayer,
   node: SpatialSkeletonCommandPayload,
 ) {
-  const command = createSpatialSkeletonCommand(
+  return executeSpatialSkeletonAction(
     layer,
     SpatialSkeletonActions.reroot,
     node,
-    "The active skeleton source does not support skeleton rerooting.",
   );
-  return executeCommand(layer, command);
 }
 
 export function executeSpatialSkeletonSplit(
   layer: SegmentationUserLayer,
   node: SpatialSkeletonCommandPayload,
 ) {
-  const command = createSpatialSkeletonCommand(
+  return executeSpatialSkeletonAction(
     layer,
     SpatialSkeletonActions.splitSkeletons,
     node,
-    "The active skeleton source does not support skeleton splitting.",
-  );
-  return executeCommandWithPendingMessage(
-    executeCommand(layer, command),
-    "Splitting skeleton...",
   );
 }
 
@@ -273,15 +333,10 @@ export function executeSpatialSkeletonMerge(
   firstNode: SpatialSkeletonCommandPayload,
   secondNode: SpatialSkeletonCommandPayload,
 ) {
-  const command = createSpatialSkeletonCommand(
+  return executeSpatialSkeletonAction(
     layer,
     SpatialSkeletonActions.mergeSkeletons,
     { firstNode, secondNode },
-    "The active skeleton source does not support skeleton merging.",
-  );
-  return executeCommandWithPendingMessage(
-    executeCommand(layer, command),
-    "Merging skeletons...",
   );
 }
 

@@ -59,6 +59,7 @@ type CatmaidFetchPriority = "high" | "low" | "auto";
 type CatmaidRequestInit = RequestInit & { priority?: CatmaidFetchPriority };
 
 export type CatmaidNodeSourceState = { readonly revisionToken: string };
+export type CatmaidRank3Vector = readonly [number, number, number];
 
 export interface CatmaidEditNodeContext {
   nodeId: number;
@@ -568,10 +569,10 @@ function getDefaultCatmaidSpatialIndexLevel(
   };
 }
 
-function requireCatmaidRank3Vector(
+export function requireCatmaidRank3Vector(
   vector: SpatialSkeletonVector,
   label: string,
-): readonly [number, number, number] {
+): CatmaidRank3Vector {
   if (vector.length < 3) {
     throw new Error(`CATMAID ${label} requires at least 3 coordinates.`);
   }
@@ -586,10 +587,10 @@ function requireCatmaidRank3Vector(
   return values;
 }
 
-function requireCatmaidPositiveRank3Vector(
+export function requireCatmaidPositiveRank3Vector(
   value: unknown,
   label: string,
-): readonly [number, number, number] {
+): CatmaidRank3Vector {
   if (!Array.isArray(value) || value.length !== 3) {
     throw new Error(`CATMAID ${label} must be a rank-3 array.`);
   }
@@ -604,6 +605,13 @@ function requireCatmaidPositiveRank3Vector(
     );
   }
   return values;
+}
+
+export function toCatmaidPositionInModelSpace(
+  position: SpatialSkeletonVector,
+  label: string,
+) {
+  return new Float32Array(requireCatmaidRank3Vector(position, label));
 }
 
 function requireCatmaidNonNegativeInt(value: unknown, label: string): number {
@@ -1426,7 +1434,7 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     }));
   }
 
-  async fetchNodesInBoundingBox(
+  async fetchNodes(
     bounds: SpatialSkeletonBounds,
     lod: number = 0,
     options: {

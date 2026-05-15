@@ -14,10 +14,7 @@
  * limitations under the License.
  */
 
-import {
-  SpatialSkeletonActions,
-  type SpatialSkeletonAction,
-} from "#src/skeleton/actions.js";
+import type { SpatialSkeletonAction } from "#src/skeleton/actions.js";
 import type {
   EditableSpatiallyIndexedSkeletonSource,
   SpatialSkeletonConfidenceConfiguration,
@@ -25,7 +22,12 @@ import type {
   SpatialSkeletonSourceState,
   SpatiallyIndexedSkeletonSource,
 } from "#src/skeleton/api.js";
-import { isSpatialSkeletonEditCommandFactory } from "#src/skeleton/command_factories.js";
+import {
+  getSpatialSkeletonEditCommandFactoryFromSource,
+  getSpatialSkeletonEditCommandMetadata,
+  isSpatialSkeletonEditCommandFactory,
+  SPATIAL_SKELETON_EDIT_COMMAND_METADATA,
+} from "#src/skeleton/command_factories.js";
 import { SpatialSkeletonCommandHistory } from "#src/skeleton/command_history.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/frontend.js";
 import { WatchableValue } from "#src/trackable_value.js";
@@ -52,26 +54,14 @@ function getProperty<T extends string>(value: unknown, property: T): unknown {
     : undefined;
 }
 
-function hasCommandFactory<T extends string>(
+function hasValidCommandFactory(
   value: unknown,
-  property: T,
-  action: SpatialSkeletonAction,
+  metadata: (typeof SPATIAL_SKELETON_EDIT_COMMAND_METADATA)[number],
 ) {
-  return isSpatialSkeletonEditCommandFactory(
-    getProperty(value, property),
-    action,
-  );
-}
-
-function hasOptionalCommandFactory<T extends string>(
-  value: unknown,
-  property: T,
-  action: SpatialSkeletonAction,
-) {
-  const commandFactory = getProperty(value, property);
+  const commandFactory = getProperty(value, metadata.commandProperty);
   return (
-    commandFactory === undefined ||
-    isSpatialSkeletonEditCommandFactory(commandFactory, action)
+    (commandFactory === undefined && !metadata.required) ||
+    isSpatialSkeletonEditCommandFactory(commandFactory, metadata.action)
   );
 }
 
@@ -121,60 +111,8 @@ export function isEditableSpatiallyIndexedSkeletonSource(
   return (
     isSpatiallyIndexedSkeletonSource(value) &&
     !value.readonly &&
-    hasCommandFactory(
-      value,
-      "addNodesCommand",
-      SpatialSkeletonActions.addNodes,
-    ) &&
-    hasCommandFactory(
-      value,
-      "deleteNodesCommand",
-      SpatialSkeletonActions.deleteNodes,
-    ) &&
-    hasCommandFactory(
-      value,
-      "moveNodesCommand",
-      SpatialSkeletonActions.moveNodes,
-    ) &&
-    hasCommandFactory(
-      value,
-      "splitSkeletonsCommand",
-      SpatialSkeletonActions.splitSkeletons,
-    ) &&
-    hasCommandFactory(
-      value,
-      "mergeSkeletonsCommand",
-      SpatialSkeletonActions.mergeSkeletons,
-    ) &&
-    hasOptionalCommandFactory(
-      value,
-      "insertNodesCommand",
-      SpatialSkeletonActions.insertNodes,
-    ) &&
-    hasOptionalCommandFactory(
-      value,
-      "rerootCommand",
-      SpatialSkeletonActions.reroot,
-    ) &&
-    hasOptionalCommandFactory(
-      value,
-      "editNodeDescriptionCommand",
-      SpatialSkeletonActions.editNodeDescription,
-    ) &&
-    hasOptionalCommandFactory(
-      value,
-      "editNodeTrueEndCommand",
-      SpatialSkeletonActions.editNodeTrueEnd,
-    ) &&
-    hasOptionalCommandFactory(
-      value,
-      "editNodeRadiusCommand",
-      SpatialSkeletonActions.editNodeRadius,
-    ) &&
-    hasOptionalCommandFactory(
-      value,
-      "editNodeConfidenceCommand",
-      SpatialSkeletonActions.editNodeConfidence,
+    SPATIAL_SKELETON_EDIT_COMMAND_METADATA.every((metadata) =>
+      hasValidCommandFactory(value, metadata),
     ) &&
     hasOptionalConfidenceConfiguration(value)
   );
@@ -202,6 +140,29 @@ export function getEditableSpatiallyIndexedSkeletonSource(
   return isEditableSpatiallyIndexedSkeletonSource(value.source)
     ? value.source
     : undefined;
+}
+
+export function getSpatialSkeletonEditCommandFactoryForAction(
+  source: EditableSpatiallyIndexedSkeletonSource,
+  action: SpatialSkeletonAction,
+) {
+  return getSpatialSkeletonEditCommandFactoryFromSource(source, action);
+}
+
+export function editableSpatiallyIndexedSkeletonSourceSupportsAction(
+  source: EditableSpatiallyIndexedSkeletonSource,
+  action: SpatialSkeletonAction,
+) {
+  const commandFactory = getSpatialSkeletonEditCommandFactoryForAction(
+    source,
+    action,
+  );
+  if (commandFactory === undefined) return false;
+  const metadata = getSpatialSkeletonEditCommandMetadata(action);
+  return (
+    metadata?.requiresConfidenceConfiguration !== true ||
+    source.spatialSkeletonConfidenceConfiguration !== undefined
+  );
 }
 
 export function normalizeSpatiallyIndexedSkeletonNode(
