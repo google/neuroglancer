@@ -1,6 +1,7 @@
 ## Neuroglancer: Web-based volumetric data visualization
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![NPM](https://img.shields.io/npm/v/neuroglancer)](https://www.npmjs.com/package/neuroglancer)
 [![PyPI](https://img.shields.io/pypi/v/neuroglancer)](https://pypi.org/project/neuroglancer)
 ![Build](https://github.com/google/neuroglancer/actions/workflows/build.yml/badge.svg)
 [![DOI](https://zenodo.org/badge/59798355.svg)](https://zenodo.org/badge/latestdoi/59798355)
