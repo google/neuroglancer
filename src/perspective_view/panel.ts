@@ -1577,10 +1577,11 @@ export class PerspectivePanel extends RenderedDataPanel {
     gl.disable(WebGL2RenderingContext.STENCIL_TEST);
 
     if (
-      !ssaoActive &&
       this.viewer.showScaleBar.value &&
       this.viewer.orthographicProjection.value
     ) {
+      // Works when SSAO is on, because `scaleBars.draw` sets its own
+      // (panel-local) viewport.
       this.drawScaleBarOverlay(/*toScreen=*/ false);
     }
     offscreenFramebuffer.unbind();
@@ -1592,9 +1593,8 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
 
   // Final compositing of the offscreen color buffer to the canvas, plus the
-  // post-composite overlays (axis lines, scale bar) used in the SSAO path.
-  // The non-SSAO path renders those overlays into the offscreen FB before the
-  // copy and arrives here just to blit.
+  // post-composite axis-line overlay for the SSAO path. The non-SSAO path
+  // renders axis lines into the offscreen FB before the copy.
   private compositeAndOverlay(
     ssaoActive: boolean,
     offscreenFramebuffer: FramebufferConfiguration<TextureBuffer>,
@@ -1620,12 +1620,6 @@ export class PerspectivePanel extends RenderedDataPanel {
     if (this.viewer.showAxisLines.value) {
       gl.disable(WebGL2RenderingContext.DEPTH_TEST);
       this.drawAxisLines(/*toScreen=*/ true);
-    }
-    if (
-      this.viewer.showScaleBar.value &&
-      this.viewer.orthographicProjection.value
-    ) {
-      this.drawScaleBarOverlay(/*toScreen=*/ true);
     }
   }
 
