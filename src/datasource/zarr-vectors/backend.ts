@@ -176,12 +176,18 @@ function buildPointAnnotationGeometryData(
     // Geometry — reuse a Float32Array view onto the source positions
     // for this point.
     const point = positions.subarray(i * rank, (i + 1) * rank);
-    pointHandler.serialize(dv, perAnnotationStride * i, IS_LITTLE_ENDIAN, rank, {
-      type: AnnotationType.POINT,
-      point,
-      id: ids[i],
-      properties: [],
-    } as any);
+    pointHandler.serialize(
+      dv,
+      perAnnotationStride * i,
+      IS_LITTLE_ENDIAN,
+      rank,
+      {
+        type: AnnotationType.POINT,
+        point,
+        id: ids[i],
+        properties: [],
+      } as any,
+    );
     // Properties
     for (let p = 0; p < numProps; ++p) {
       propValues[p] = propertyValuesPerPoint[p][i] as number;
@@ -197,7 +203,9 @@ function buildPointAnnotationGeometryData(
   result.typeToInstanceCounts = annotationTypes.map(() => [] as number[]);
   result.typeToSize = annotationTypes.map(() => 0);
   result.typeToIds[AnnotationType.POINT] = ids;
-  result.typeToIdMaps[AnnotationType.POINT] = new Map(ids.map((id, i) => [id, i]));
+  result.typeToIdMaps[AnnotationType.POINT] = new Map(
+    ids.map((id, i) => [id, i]),
+  );
   result.typeToInstanceCounts[AnnotationType.POINT] = Array.from(
     { length: numPoints },
     (_, i) => i,

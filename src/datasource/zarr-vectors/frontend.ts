@@ -317,7 +317,11 @@ async function buildPropertySpecsAndDtypes(
     declaredHints.map((p) => [String(p.identifier), p]),
   );
 
-  const names = await listAttributeNames(sharedKvStoreContext, levelUrl, options);
+  const names = await listAttributeNames(
+    sharedKvStoreContext,
+    levelUrl,
+    options,
+  );
 
   // Stable order: declared properties first (in their declared order),
   // then any remaining listed attributes in alphabetical order.
@@ -346,8 +350,7 @@ async function buildPropertySpecsAndDtypes(
         `attribute ${JSON.stringify(name)} metadata`,
         options,
       );
-      dtype =
-        arrayMeta?.attributes?.dtype ?? arrayMeta?.data_type ?? undefined;
+      dtype = arrayMeta?.attributes?.dtype ?? arrayMeta?.data_type ?? undefined;
     } catch {
       dtype = undefined;
     }
@@ -497,13 +500,13 @@ async function buildAnnotationMetadata(
   }
   const rank = bounds[0].length;
   if (bounds[1].length !== rank) {
-    throw new Error("zarr-vectors store: bounds[0] and bounds[1] have different rank");
+    throw new Error(
+      "zarr-vectors store: bounds[0] and bounds[1] have different rank",
+    );
   }
   const chunkShape = zv.chunk_shape;
   if (!Array.isArray(chunkShape) || chunkShape.length !== rank) {
-    throw new Error(
-      `zarr-vectors store: 'chunk_shape' must have rank ${rank}`,
-    );
+    throw new Error(`zarr-vectors store: 'chunk_shape' must have rank ${rank}`);
   }
 
   const lowerBounds = Float64Array.from(bounds[0], Number);
