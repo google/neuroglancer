@@ -296,9 +296,12 @@ export class MeshShaderManager {
     mat3.transpose(tempMat3, tempMat3);
     gl.uniformMatrix3fv(shader.uniform("uNormalMatrix"), false, tempMat3);
     if (renderContext.emitNormals) {
-      // World→view normal transform; world-space normals (produced by
-      // uNormalMatrix) get rotated into view space for the SSAO output.
-      mat3FromMat4(tempMat3, projectionParameters.invViewMatrix);
+      // Combined model→view normal transform for SSAO. Uses `modelMat`
+      // directly, bypassing `uNormalMatrix`'s `canonicalVoxelFactors` scaling,
+      // which gives wrong oblique normals on anisotropic data.
+      mat4.multiply(tempMat4, projectionParameters.viewMatrix, modelMat);
+      mat4.invert(tempMat4, tempMat4);
+      mat3FromMat4(tempMat3, tempMat4);
       mat3.transpose(tempMat3, tempMat3);
       gl.uniformMatrix3fv(shader.uniform("uViewNormalMatrix"), false, tempMat3);
     }
@@ -409,8 +412,10 @@ float lightingFactor = absCosAngle + uLightDirection.w;
 vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
 `;
         if (emitNormals) {
+          // Bypass `normal` (post-uNormalMatrix); `uViewNormalMatrix`
+          // already encodes the full model→view transform.
           vertexMain += `
-vViewNormal = normalize(uViewNormalMatrix * normal);
+vViewNormal = normalize(uViewNormalMatrix * (normalMultiplier * origNormal));
 `;
         }
         if (silhouetteRenderingEnabled) {
