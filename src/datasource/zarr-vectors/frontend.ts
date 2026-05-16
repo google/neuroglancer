@@ -261,7 +261,7 @@ async function listAttributeNames(
   levelUrl: string,
   options: Partial<ProgressOptions>,
 ): Promise<string[]> {
-  const attributesUrl = joinBaseUrlAndPath(levelUrl, "attributes/");
+  const attributesUrl = joinBaseUrlAndPath(levelUrl, "vertex_attributes/");
   const response = await sharedKvStoreContext.kvStoreContext
     .list(attributesUrl, {
       responseKeys: "suffix",
@@ -269,7 +269,7 @@ async function listAttributeNames(
     })
     .catch(() => undefined);
   if (response === undefined) return [];
-  // Each subdirectory under attributes/ is one property.  Strip the
+  // Each subdirectory under vertex_attributes/ is one property.  Strip the
   // trailing "/" if present.
   return response.directories
     .map((d) => (d.endsWith("/") ? d.slice(0, -1) : d))
@@ -338,10 +338,11 @@ async function buildPropertySpecsAndDtypes(
 
   for (const name of orderedNames) {
     let dtype: string | undefined;
+    let arrayMeta: any | undefined;
     try {
-      const arrayMeta = await getJsonResource(
+      arrayMeta = await getJsonResource(
         sharedKvStoreContext,
-        joinBaseUrlAndPath(levelUrl, `attributes/${name}/zarr.json`),
+        joinBaseUrlAndPath(levelUrl, `vertex_attributes/${name}/zarr.json`),
         `attribute ${JSON.stringify(name)} metadata`,
         options,
       );
@@ -357,13 +358,38 @@ async function buildPropertySpecsAndDtypes(
     attributeNames.push(name);
     attributeDtypes.push(dtype as ZarrVectorsAttributeDtype);
 
+    // Dictionary-encoded (categorical/enum) attributes: surface as a
+    // numeric annotation property with enum_values + enum_labels so
+    // shaders see category names, not raw codes.  The on-disk
+    // convention is documented in zarr-vectors:
+    // ``encoding: "dictionary"`` + ``categories: [...]`` lives in the
+    // attribute array's metadata block.
+    let enumValues: number[] | undefined;
+    let enumLabels: string[] | undefined;
+    if (arrayMeta?.attributes?.encoding === "dictionary") {
+      const categories = arrayMeta.attributes.categories;
+      if (Array.isArray(categories)) {
+        enumLabels = categories.map((c: unknown) => String(c));
+        enumValues = enumLabels.map((_, i) => i);
+      }
+    }
+
     const hint = declaredByName.get(name);
     if (hint !== undefined) {
-      rawPropertyJson.push({ ...hint, type: hint.type ?? dtype });
+      rawPropertyJson.push({
+        ...hint,
+        type: hint.type ?? dtype,
+        // Hints win for enum metadata; only fill in from the on-disk
+        // dictionary when the user didn't already specify it.
+        enum_values: hint.enum_values ?? enumValues,
+        enum_labels: hint.enum_labels ?? enumLabels,
+      });
     } else {
       rawPropertyJson.push({
         id: name,
         type: ATTR_DTYPE_TO_NG_TYPE[dtype],
+        enum_values: enumValues,
+        enum_labels: enumLabels,
       });
     }
   }

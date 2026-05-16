@@ -270,7 +270,7 @@ export class ZarrVectorsAnnotationSpatialIndexSourceBackend extends WithParamete
       attributeNames.map(async (name, i) => {
         const url = joinBaseUrlAndPath(
           baseUrl,
-          `attributes/${name}/${chunkKey}/${CHUNK_DATA_FILE}`,
+          `vertex_attributes/${name}/${chunkKey}/${CHUNK_DATA_FILE}`,
         );
         const response = await this.sharedKvStoreContext.kvStoreContext.read(
           url,

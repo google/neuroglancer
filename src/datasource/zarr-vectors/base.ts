@@ -61,7 +61,7 @@ export class ZarrVectorsAnnotationSpatialIndexSourceParameters {
   baseUrl: string;
   rank: number;
   // Parallel arrays: attributeNames[i] is the directory name under
-  // <baseUrl>/attributes/, and attributeDtypes[i] is the numpy dtype of
+  // <baseUrl>/vertex_attributes/, and attributeDtypes[i] is the numpy dtype of
   // the chunk byte blob.  Index i in this list corresponds to property
   // index i on the parent AnnotationSource.
   attributeNames: string[];
