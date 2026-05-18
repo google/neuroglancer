@@ -414,7 +414,7 @@ vNormalizedPosition = gl_Position = uModelViewProjectionMatrix * vec4(position, 
 gl_Position.z = 0.0;
 `);
           builder.addFragmentCode(`
-uniform sampler3D uBrushTexture;
+uniform highp sampler3D uBrushTexture;
 uniform bool uBrushEnabled;
 
 vec3 curChunkPosition;
