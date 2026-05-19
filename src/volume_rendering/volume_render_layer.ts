@@ -192,7 +192,7 @@ export function getVolumeRenderingDepthSamplesBoundsLogScale(): [
 ] {
   const logScaleMax = Math.round(
     VOLUME_RENDERING_DEPTH_SAMPLES_LOG_SCALE_ORIGIN +
-      numRenderScaleHistogramBins * renderScaleHistogramBinSize,
+    numRenderScaleHistogramBins * renderScaleHistogramBinSize,
   );
   return [VOLUME_RENDERING_DEPTH_SAMPLES_LOG_SCALE_ORIGIN, logScaleMax];
 }
@@ -549,8 +549,8 @@ void main() {
           addControlsToBuilder(shaderBuilderState, builder);
           builder.addFragmentCode(
             "\n#define main userMain\n" +
-              shaderCodeWithLineDirective(shaderBuilderState.parseResult.code) +
-              "\n#undef main\n",
+            shaderCodeWithLineDirective(shaderBuilderState.parseResult.code) +
+            "\n#undef main\n",
           );
         },
       },
@@ -760,7 +760,6 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       VolumeRenderingAttachmentState
     >,
   ) {
-    console.log("drawing");
     if (!renderContext.emitColor) return;
     const allSources = attachment.state!.sources.value;
     if (allSources.length === 0) return;
@@ -1358,7 +1357,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       this.localPosition.value,
       this.depthSamplesTarget.value,
       allSources[0],
-      () => {},
+      () => { },
       (tsource) => {
         const chunk = tsource.source.chunks.get(
           tsource.curPositionInChunks.join(),
