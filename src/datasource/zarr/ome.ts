@@ -68,6 +68,7 @@ const SUPPORTED_OME_MULTISCALE_VERSIONS = new Set([
   "0.5-dev",
   "0.5",
   "0.6.dev1",
+  "0.6.dev3",
   "0.6",
 ]);
 
