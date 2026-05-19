@@ -24,13 +24,13 @@ import { RenderedPanel } from "#src/display_context.js";
 import type { NavigationState } from "#src/navigation_state.js";
 import { PickIDManager } from "#src/object_picking.js";
 import {
-  clearOutOfBoundsPickData,
-  getPickDiameter,
-} from "#src/rendered_data_panel_picking.js";
-import {
   displayToLayerCoordinates,
   layerToDisplayCoordinates,
 } from "#src/render_coordinate_transform.js";
+import {
+  clearOutOfBoundsPickData,
+  getPickDiameter,
+} from "#src/rendered_data_panel_picking.js";
 import { StatusMessage } from "#src/status.js";
 import type { TrackableValue } from "#src/trackable_value.js";
 import { AutomaticallyFocusedElement } from "#src/util/automatic_focus.js";
@@ -80,15 +80,6 @@ export class PickRequest {
 }
 
 const pickRequestInterval = 30;
-
-export {
-  clearOutOfBoundsPickData,
-  getCenteredPickWindowCoordinate,
-  getPickDiameter,
-  getPickOffsetSequence,
-  resolveNearestPanelPickSample,
-  type ResolvedPanelPickSample,
-} from "#src/rendered_data_panel_picking.js";
 
 export abstract class RenderedDataPanel extends RenderedPanel {
   /**

@@ -35,13 +35,12 @@ import type {
   FramePickingData,
   RenderedDataViewerState,
 } from "#src/rendered_data_panel.js";
+import { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import {
-  getCenteredPickWindowCoordinate,
   getPickDiameter,
   getPickOffsetSequence,
-  RenderedDataPanel,
   resolveNearestPanelPickSample,
-} from "#src/rendered_data_panel.js";
+} from "#src/rendered_data_panel_picking.js";
 import {
   DerivedProjectionParameters,
   SharedProjectionParameters,
@@ -734,21 +733,11 @@ export class PerspectivePanel extends RenderedDataPanel {
     }
     const glWindowZ = 1.0 - resolvedPick.depthValue;
     tempVec3[0] =
-      (2.0 *
-        getCenteredPickWindowCoordinate(
-          glWindowX,
-          resolvedPick.relativeX,
-          pickRadius,
-        )) /
+      (2.0 * (glWindowX + resolvedPick.relativeX - pickRadius)) /
         pickingData.viewportWidth -
       1.0;
     tempVec3[1] =
-      (2.0 *
-        getCenteredPickWindowCoordinate(
-          glWindowY,
-          resolvedPick.relativeY,
-          pickRadius,
-        )) /
+      (2.0 * (glWindowY + resolvedPick.relativeY - pickRadius)) /
         pickingData.viewportHeight -
       1.0;
     tempVec3[2] = 2.0 * glWindowZ - 1.0;
@@ -760,9 +749,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       mousePosition = mouseState.position = new Float32Array(rank);
     }
     if (unsnappedPosition.length !== rank) {
-      unsnappedPosition = mouseState.unsnappedPosition = new Float32Array(
-        rank,
-      );
+      unsnappedPosition = mouseState.unsnappedPosition = new Float32Array(rank);
     }
     mousePosition.set(voxelCoordinates);
     mouseState.coordinateSpace = this.navigationState.coordinateSpace.value;
