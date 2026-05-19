@@ -1639,6 +1639,7 @@ export class SpatialSkeletonEditTab extends Tab {
     );
     this.registerDisposer(
       layer.spatialSkeletonState.commandHistory.isBusy.changed.add(() => {
+        updateGateStatus();
         updateHistoryButtons();
       }),
     );

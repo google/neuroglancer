@@ -108,6 +108,33 @@ function makeSpatialSkeletonLayerWithSource(source: unknown) {
   };
 }
 
+function makeSpatialSkeletonActionGateLayer(options: {
+  source: unknown;
+  visibleChunksLoaded?: boolean;
+  visibleChunksNeeded?: number;
+  visibleChunksAvailable?: number;
+  commandBusy?: boolean;
+}) {
+  return Object.assign(Object.create(SegmentationUserLayer.prototype), {
+    getSpatiallyIndexedSkeletonLayer: () =>
+      makeSpatialSkeletonLayerWithSource(options.source),
+    spatialSkeletonState: {
+      commandHistory: {
+        isBusy: new WatchableValue(options.commandBusy ?? false),
+      },
+    },
+    spatialSkeletonVisibleChunksLoaded: new WatchableValue(
+      options.visibleChunksLoaded ?? true,
+    ),
+    spatialSkeletonVisibleChunksNeeded: new WatchableValue(
+      options.visibleChunksNeeded ?? 0,
+    ),
+    spatialSkeletonVisibleChunksAvailable: new WatchableValue(
+      options.visibleChunksAvailable ?? 0,
+    ),
+  });
+}
+
 describe("layer/segmentation spatial skeleton chunk stats", () => {
   it("tracks combined chunk load state from the loading render layers only", () => {
     // After the 2D/3D backend unification, only PerspectiveViewSpatiallyIndexedSkeletonLayer
@@ -152,20 +179,11 @@ describe("layer/segmentation spatial skeleton chunk stats", () => {
 
 describe("layer/segmentation spatial skeleton action gating", () => {
   it("does not require a specific grid level for skeleton actions", () => {
-    const layer = Object.assign(
-      Object.create(SegmentationUserLayer.prototype),
-      {
-        getSpatiallyIndexedSkeletonLayer: () =>
-          makeSpatialSkeletonLayerWithSource(
-            makeEditableSpatialSkeletonSource({
-              rerootCommand: true,
-            }),
-          ),
-        spatialSkeletonVisibleChunksLoaded: new WatchableValue(true),
-        spatialSkeletonVisibleChunksNeeded: new WatchableValue(0),
-        spatialSkeletonVisibleChunksAvailable: new WatchableValue(0),
-      },
-    );
+    const layer = makeSpatialSkeletonActionGateLayer({
+      source: makeEditableSpatialSkeletonSource({
+        rerootCommand: true,
+      }),
+    });
 
     expect(
       layer.getSpatialSkeletonActionsDisabledReason(
@@ -188,19 +206,47 @@ describe("layer/segmentation spatial skeleton action gating", () => {
     ).toBeUndefined();
   });
 
+  it("blocks edit actions while a skeleton edit is in flight", () => {
+    const layer = makeSpatialSkeletonActionGateLayer({
+      source: makeEditableSpatialSkeletonSource({
+        rerootCommand: true,
+      }),
+      commandBusy: true,
+    });
+
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason(
+        SpatialSkeletonActions.moveNodes,
+      ),
+    ).toBe("Wait for the current skeleton edit to finish.");
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason([
+        SpatialSkeletonActions.inspect,
+        SpatialSkeletonActions.addNodes,
+      ]),
+    ).toBe("Wait for the current skeleton edit to finish.");
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason(
+        SpatialSkeletonActions.inspect,
+      ),
+    ).toBeUndefined();
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason(
+        SpatialSkeletonActions.moveNodes,
+        {
+          ignoreCommandBusy: true,
+        },
+      ),
+    ).toBeUndefined();
+  });
+
   it("still reports visible chunk loading when requested", () => {
-    const layer = Object.assign(
-      Object.create(SegmentationUserLayer.prototype),
-      {
-        getSpatiallyIndexedSkeletonLayer: () =>
-          makeSpatialSkeletonLayerWithSource(
-            makeEditableSpatialSkeletonSource(),
-          ),
-        spatialSkeletonVisibleChunksLoaded: new WatchableValue(false),
-        spatialSkeletonVisibleChunksNeeded: new WatchableValue(3),
-        spatialSkeletonVisibleChunksAvailable: new WatchableValue(1),
-      },
-    );
+    const layer = makeSpatialSkeletonActionGateLayer({
+      source: makeEditableSpatialSkeletonSource(),
+      visibleChunksLoaded: false,
+      visibleChunksNeeded: 3,
+      visibleChunksAvailable: 1,
+    });
 
     expect(
       layer.getSpatialSkeletonActionsDisabledReason(
@@ -213,18 +259,9 @@ describe("layer/segmentation spatial skeleton action gating", () => {
   });
 
   it("reports missing reroot support explicitly", () => {
-    const layer = Object.assign(
-      Object.create(SegmentationUserLayer.prototype),
-      {
-        getSpatiallyIndexedSkeletonLayer: () =>
-          makeSpatialSkeletonLayerWithSource(
-            makeEditableSpatialSkeletonSource(),
-          ),
-        spatialSkeletonVisibleChunksLoaded: new WatchableValue(true),
-        spatialSkeletonVisibleChunksNeeded: new WatchableValue(0),
-        spatialSkeletonVisibleChunksAvailable: new WatchableValue(0),
-      },
-    );
+    const layer = makeSpatialSkeletonActionGateLayer({
+      source: makeEditableSpatialSkeletonSource(),
+    });
 
     expect(
       layer.getSpatialSkeletonActionsDisabledReason(
@@ -239,18 +276,9 @@ describe("layer/segmentation spatial skeleton action gating", () => {
   });
 
   it("requires confidence configuration for confidence edit support", () => {
-    const layer = Object.assign(
-      Object.create(SegmentationUserLayer.prototype),
-      {
-        getSpatiallyIndexedSkeletonLayer: () =>
-          makeSpatialSkeletonLayerWithSource(
-            makeEditableSpatialSkeletonSource(),
-          ),
-        spatialSkeletonVisibleChunksLoaded: new WatchableValue(true),
-        spatialSkeletonVisibleChunksNeeded: new WatchableValue(0),
-        spatialSkeletonVisibleChunksAvailable: new WatchableValue(0),
-      },
-    );
+    const layer = makeSpatialSkeletonActionGateLayer({
+      source: makeEditableSpatialSkeletonSource(),
+    });
 
     expect(
       layer.getSpatialSkeletonActionsDisabledReason(
@@ -275,21 +303,14 @@ describe("layer/segmentation spatial skeleton action gating", () => {
   });
 
   it("reports read-only spatial skeleton sources explicitly", () => {
-    const layer = Object.assign(
-      Object.create(SegmentationUserLayer.prototype),
-      {
-        getSpatiallyIndexedSkeletonLayer: () =>
-          makeSpatialSkeletonLayerWithSource({
-            ...makeEditableSpatialSkeletonSource({
-              rerootCommand: true,
-            }),
-            readonly: true,
-          }),
-        spatialSkeletonVisibleChunksLoaded: new WatchableValue(true),
-        spatialSkeletonVisibleChunksNeeded: new WatchableValue(0),
-        spatialSkeletonVisibleChunksAvailable: new WatchableValue(0),
+    const layer = makeSpatialSkeletonActionGateLayer({
+      source: {
+        ...makeEditableSpatialSkeletonSource({
+          rerootCommand: true,
+        }),
+        readonly: true,
       },
-    );
+    });
 
     expect(
       layer.getSpatialSkeletonActionsDisabledReason(

@@ -579,7 +579,9 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
   ) {
     const handleStateChanged = () => {
       const disabledReason =
-        this.layer.getSpatialSkeletonActionsDisabledReason(requiredActions);
+        this.layer.getSpatialSkeletonActionsDisabledReason(requiredActions, {
+          ignoreCommandBusy: true,
+        });
       if (disabledReason === undefined) {
         onReady?.();
         return;
@@ -747,6 +749,7 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
       layer.getSpatialSkeletonActionsDisabledReason(
         [SpatialSkeletonActions.addNodes, SpatialSkeletonActions.moveNodes],
         {
+          ignoreCommandBusy: true,
           requireVisibleChunks: false,
         },
       );
@@ -798,6 +801,11 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
     );
     activation.registerDisposer(
       layer.manager.root.selectionState.changed.add(renderStatus),
+    );
+    activation.registerDisposer(
+      layer.spatialSkeletonState.commandHistory.isBusy.changed.add(
+        updateInteractionStatus,
+      ),
     );
     activation.registerDisposer(
       layer.layersChanged.add(() => {

@@ -109,6 +109,7 @@ import { SharedWatchableValue } from "#src/shared_watchable_value.js";
 import {
   DEFAULT_SPATIAL_SKELETON_EDIT_ACTIONS,
   getSpatialSkeletonActionSupportLabel,
+  isSpatialSkeletonEditAction,
   SpatialSkeletonActions,
   type SpatialSkeletonAction,
 } from "#src/skeleton/actions.js";
@@ -1613,14 +1614,26 @@ export class SegmentationUserLayer extends Base {
       | SpatialSkeletonAction
       | readonly SpatialSkeletonAction[] = DEFAULT_SPATIAL_SKELETON_EDIT_ACTIONS,
     options: {
+      ignoreCommandBusy?: boolean;
       requireVisibleChunks?: boolean;
     } = {},
   ) {
-    const { requireVisibleChunks = false } = options;
+    const { ignoreCommandBusy = false, requireVisibleChunks = false } =
+      options;
     const missingSupportReason =
       this.getMissingSpatialSkeletonSupportReason(requiredActions);
     if (missingSupportReason !== undefined) {
       return missingSupportReason;
+    }
+    const requirements = Array.isArray(requiredActions)
+      ? requiredActions
+      : [requiredActions];
+    if (
+      !ignoreCommandBusy &&
+      requirements.some((action) => isSpatialSkeletonEditAction(action)) &&
+      this.spatialSkeletonState.commandHistory.isBusy.value
+    ) {
+      return "Wait for the current skeleton edit to finish.";
     }
     if (
       requireVisibleChunks &&

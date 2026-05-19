@@ -38,6 +38,10 @@ export const DEFAULT_SPATIAL_SKELETON_EDIT_ACTIONS = [
   SpatialSkeletonActions.deleteNodes,
 ] as const satisfies readonly SpatialSkeletonAction[];
 
+export function isSpatialSkeletonEditAction(action: SpatialSkeletonAction) {
+  return action !== SpatialSkeletonActions.inspect;
+}
+
 export function getSpatialSkeletonActionSupportLabel(
   action: SpatialSkeletonAction,
 ) {
