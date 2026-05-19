@@ -64,6 +64,7 @@ import { setClipboard } from "#src/util/clipboard.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { makeValueOrError } from "#src/util/error.js";
 import { verifyOptionalObjectProperty } from "#src/util/json.js";
+import { TrackableVolumeClipBounds } from "#src/volume_rendering/trackable_volume_clip_bounds.js";
 import {
   trackableShaderModeValue,
   VolumeRenderingModes,
@@ -115,6 +116,7 @@ const CHANNEL_DIMENSIONS_JSON_KEY = "channelDimensions";
 const VOLUME_RENDERING_JSON_KEY = "volumeRendering";
 const VOLUME_RENDERING_GAIN_JSON_KEY = "volumeRenderingGain";
 const VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY = "volumeRenderingDepthSamples";
+const VOLUME_RENDERING_CLIP_BOUNDS_JSON_KEY = "volumeRenderingClipBounds";
 
 export interface ImageLayerSelectionState extends UserLayerSelectionState {
   value: any;
@@ -157,6 +159,7 @@ export class ImageUserLayer extends Base {
     ),
   );
   volumeRenderingMode = trackableShaderModeValue();
+  volumeRenderingClipBounds = new TrackableVolumeClipBounds();
 
   shaderControlState = this.registerDisposer(
     new ShaderControlState(
@@ -217,6 +220,9 @@ export class ImageUserLayer extends Base {
       this.specificationChanged.dispatch,
     );
     this.volumeRenderingMode.changed.add(this.specificationChanged.dispatch);
+    this.volumeRenderingClipBounds.changed.add(
+      this.specificationChanged.dispatch,
+    );
     this.volumeRenderingDepthSamplesTarget.changed.add(
       this.specificationChanged.dispatch,
     );
@@ -277,6 +283,7 @@ export class ImageUserLayer extends Base {
             localPosition: this.localPosition,
             channelCoordinateSpace: this.channelCoordinateSpace,
             mode: this.volumeRenderingMode,
+            clipBounds: this.volumeRenderingClipBounds,
           }),
         );
         context.registerDisposer(
@@ -340,6 +347,11 @@ export class ImageUserLayer extends Base {
           volumeRenderingDepthSamplesTarget,
         ),
     );
+    verifyOptionalObjectProperty(
+      specification,
+      VOLUME_RENDERING_CLIP_BOUNDS_JSON_KEY,
+      (clipBounds) => this.volumeRenderingClipBounds.restoreState(clipBounds),
+    );
   }
   toJSON() {
     const x = super.toJSON();
@@ -355,6 +367,8 @@ export class ImageUserLayer extends Base {
     x[VOLUME_RENDERING_GAIN_JSON_KEY] = this.volumeRenderingGain.toJSON();
     x[VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY] =
       this.volumeRenderingDepthSamplesTarget.toJSON();
+    x[VOLUME_RENDERING_CLIP_BOUNDS_JSON_KEY] =
+      this.volumeRenderingClipBounds.toJSON();
     return x;
   }
 

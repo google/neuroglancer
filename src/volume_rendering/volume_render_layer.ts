@@ -64,6 +64,7 @@ import {
   VOLUME_RENDERING_RENDER_LAYER_RPC_ID,
   VOLUME_RENDERING_RENDER_LAYER_UPDATE_SOURCES_RPC_ID,
 } from "#src/volume_rendering/base.js";
+import type { TrackableVolumeClipBounds } from "#src/volume_rendering/trackable_volume_clip_bounds.js";
 import type { TrackableVolumeRenderingModeValue } from "#src/volume_rendering/trackable_volume_rendering_mode.js";
 import {
   isProjectionMode,
@@ -147,6 +148,7 @@ export interface VolumeRenderingRenderLayerOptions {
   depthSamplesTarget: WatchableValueInterface<number>;
   chunkResolutionHistogram: RenderScaleHistogram;
   mode: TrackableVolumeRenderingModeValue;
+  clipBounds: TrackableVolumeClipBounds;
 }
 
 interface VolumeRenderingShaderParameters {
@@ -185,6 +187,8 @@ interface PerChunkShaderUniforms {
 
 const tempMat4 = mat4.create();
 const tempVisibleVolumetricClippingPlanes = new Float32Array(24);
+const tempEffectiveLowerClipBound = vec3.create();
+const tempEffectiveUpperClipBound = vec3.create();
 
 export function getVolumeRenderingDepthSamplesBoundsLogScale(): [
   number,
@@ -217,6 +221,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   depthSamplesTarget: WatchableValueInterface<number>;
   chunkResolutionHistogram: RenderScaleHistogram;
   mode: TrackableVolumeRenderingModeValue;
+  clipBounds: TrackableVolumeClipBounds;
   backend: ChunkRenderLayerFrontend;
   highestResolutionLoadedVoxelSize: Float32Array | undefined;
   private modeOverride: TrackableVolumeRenderingModeValue;
@@ -264,6 +269,10 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.depthSamplesTarget = options.depthSamplesTarget;
     this.chunkResolutionHistogram = options.chunkResolutionHistogram;
     this.mode = options.mode;
+    this.clipBounds = options.clipBounds;
+    this.registerDisposer(
+      this.clipBounds.changed.add(() => this.redrawNeeded.dispatch()),
+    );
     this.modeOverride = trackableShaderModeValue();
     this.dataHistogramSpecifications =
       this.shaderControlState.histogramSpecifications;
@@ -954,11 +963,31 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         getFrustrumPlanes(clippingPlanes, modelViewProjection);
         const inverseModelViewProjection = mat4.create();
         mat4.invert(inverseModelViewProjection, modelViewProjection);
+        // Intersect the source's full clip-display bounds with the user's
+        // per-axis fractional override. Identity case skips the math and
+        // hands the source bounds straight to the shader.
+        const sourceLower = transformedSource.lowerClipDisplayBound;
+        const sourceUpper = transformedSource.upperClipDisplayBound;
+        let effectiveLower: vec3;
+        let effectiveUpper: vec3;
+        if (this.clipBounds.isIdentity) {
+          effectiveLower = sourceLower;
+          effectiveUpper = sourceUpper;
+        } else {
+          const { lower: userLo, upper: userHi } = this.clipBounds;
+          for (let i = 0; i < 3; ++i) {
+            const span = sourceUpper[i] - sourceLower[i];
+            tempEffectiveLowerClipBound[i] = sourceLower[i] + userLo[i] * span;
+            tempEffectiveUpperClipBound[i] = sourceLower[i] + userHi[i] * span;
+          }
+          effectiveLower = tempEffectiveLowerClipBound;
+          effectiveUpper = tempEffectiveUpperClipBound;
+        }
         const { near, far, adjustedNear, adjustedFar } =
           getVolumeRenderingNearFarBounds(
             clippingPlanes,
-            transformedSource.lowerClipDisplayBound,
-            transformedSource.upperClipDisplayBound,
+            effectiveLower,
+            effectiveUpper,
           );
         const optimalSampleRate = optimalSamples;
         const actualSampleRate = this.depthSamplesTarget.value;
@@ -972,8 +1001,8 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           uBrightnessFactor: brightnessFactor,
           uGain: Math.exp(this.gain.value),
           uPickId: pickId,
-          uLowerClipBound: transformedSource.lowerClipDisplayBound,
-          uUpperClipBound: transformedSource.upperClipDisplayBound,
+          uLowerClipBound: effectiveLower,
+          uUpperClipBound: effectiveUpper,
           uModelViewProjectionMatrix: modelViewProjection,
           uInvModelViewProjectionMatrix: inverseModelViewProjection,
         };
