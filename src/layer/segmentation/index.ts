@@ -21,6 +21,7 @@ import svg_flag from "ikonate/icons/flag.svg?raw";
 import svg_minus from "ikonate/icons/minus.svg?raw";
 import svg_origin from "ikonate/icons/origin.svg?raw";
 import svg_share_android from "ikonate/icons/share-android.svg?raw";
+import { debounce } from "lodash-es";
 import type { CoordinateTransformSpecification } from "#src/coordinate_transform.js";
 import { emptyValidCoordinateSpace } from "#src/coordinate_transform.js";
 import type { DataSourceSpecification } from "#src/datasource/index.js";
@@ -2907,9 +2908,13 @@ export class SegmentationUserLayer extends Base {
           }
         })();
       };
+      const debouncedCommitRadius = context.registerCancellable(
+        debounce(commitRadius, 500),
+      );
       radiusInput.addEventListener("input", updateRadiusEditorState);
+      radiusInput.addEventListener("change", () => debouncedCommitRadius());
+      radiusInput.addEventListener("blur", () => debouncedCommitRadius.flush());
       radiusInput.addEventListener("keydown", handlePropertyInputKeyDown);
-      radiusInput.addEventListener("change", commitRadius);
       updateRadiusEditorState();
     }
 
