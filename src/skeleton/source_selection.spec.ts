@@ -16,50 +16,170 @@
 
 import { describe, expect, it } from "vitest";
 
-import { selectSpatiallyIndexedSkeletonEntriesByGrid } from "#src/skeleton/source_selection.js";
+import { selectSpatialSkeletonSourcesByLimit } from "#src/skeleton/source_selection.js";
 
 describe("skeleton/source_selection", () => {
-  it("returns the exact grid match when available", () => {
-    const entries = [
-      { id: "coarse", gridIndex: 0 },
-      { id: "medium", gridIndex: 2 },
-      { id: "fine", gridIndex: 4 },
-    ];
+  it("selects only enough 3D sources to meet the spacing-derived density target", () => {
     expect(
-      selectSpatiallyIndexedSkeletonEntriesByGrid(
-        entries,
-        2,
-        (entry) => entry.gridIndex,
-      ),
-    ).toEqual([entries[1]]);
+      selectSpatialSkeletonSourcesByLimit(
+        [
+          {
+            source: "coarse",
+            index: 0,
+            physicalVolume: 1000,
+            limit: 200,
+            sliceFraction: 1,
+          },
+          {
+            source: "fine",
+            index: 1,
+            physicalVolume: 125,
+            limit: 500,
+            sliceFraction: 1,
+          },
+        ],
+        0.1,
+        1000,
+        100,
+      ).map((selection) => selection.source),
+    ).toEqual(["coarse"]);
   });
 
-  it("returns the nearest grid match and keeps the first entry on ties", () => {
-    const entries = [
-      { id: "left", gridIndex: 0 },
-      { id: "right", gridIndex: 4 },
-    ];
+  it("adds finer 2D sources when slice density is below the target", () => {
     expect(
-      selectSpatiallyIndexedSkeletonEntriesByGrid(
-        entries,
-        2,
-        (entry) => entry.gridIndex,
-      ),
-    ).toEqual([entries[0]]);
+      selectSpatialSkeletonSourcesByLimit(
+        [
+          {
+            source: "coarse",
+            index: 0,
+            physicalVolume: 1000,
+            limit: 200,
+            sliceFraction: 0.1,
+          },
+          {
+            source: "fine",
+            index: 1,
+            physicalVolume: 125,
+            limit: 500,
+            sliceFraction: 0.1,
+          },
+        ],
+        0.1,
+        1000,
+        100,
+      ).map((selection) => selection.source),
+    ).toEqual(["coarse", "fine"]);
   });
 
-  it("returns all entries if any entry is missing a grid index", () => {
-    const entries = [
-      { id: "indexed", gridIndex: 0 },
-      { id: "unindexed" },
-      { id: "indexed-2", gridIndex: 2 },
-    ];
+  it("keeps zero-limit sources selectable without density contribution", () => {
+    const selections = selectSpatialSkeletonSourcesByLimit(
+      [
+        {
+          source: "unknown-density-coarse",
+          index: 0,
+          physicalVolume: 1000,
+          limit: 0,
+          sliceFraction: 1,
+        },
+        {
+          source: "unknown-density-fine",
+          index: 1,
+          physicalVolume: 125,
+          limit: 0,
+          sliceFraction: 1,
+        },
+      ],
+      0.1,
+      1000,
+      100,
+    );
+
+    expect(selections.map((selection) => selection.source)).toEqual([
+      "unknown-density-coarse",
+      "unknown-density-fine",
+    ]);
+    for (const selection of selections) {
+      expect(selection.physicalDensity).toBe(0);
+      expect(selection.physicalSpacing).toBe(Number.POSITIVE_INFINITY);
+      expect(selection.pixelSpacing).toBe(Number.POSITIVE_INFINITY);
+    }
+  });
+
+  it("includes zero-limit sources reached before the density target is met", () => {
     expect(
-      selectSpatiallyIndexedSkeletonEntriesByGrid(
-        entries,
+      selectSpatialSkeletonSourcesByLimit(
+        [
+          {
+            source: "unknown-density",
+            index: 0,
+            physicalVolume: 1000,
+            limit: 0,
+            sliceFraction: 1,
+          },
+          {
+            source: "estimated-density",
+            index: 1,
+            physicalVolume: 125,
+            limit: 500,
+            sliceFraction: 1,
+          },
+        ],
+        0.1,
+        1000,
+        100,
+      ).map((selection) => selection.source),
+    ).toEqual(["unknown-density", "estimated-density"]);
+  });
+
+  it("stops before later zero-limit sources once positive density reaches the target", () => {
+    expect(
+      selectSpatialSkeletonSourcesByLimit(
+        [
+          {
+            source: "coarse",
+            index: 0,
+            physicalVolume: 1000,
+            limit: 200,
+            sliceFraction: 1,
+          },
+          {
+            source: "unknown-density-fine",
+            index: 1,
+            physicalVolume: 125,
+            limit: 0,
+            sliceFraction: 1,
+          },
+        ],
+        0.1,
+        1000,
+        100,
+      ).map((selection) => selection.source),
+    ).toEqual(["coarse"]);
+  });
+
+  it("selects sources from coarsest to finest physical volume", () => {
+    expect(
+      selectSpatialSkeletonSourcesByLimit(
+        [
+          {
+            source: "fine",
+            index: 1,
+            physicalVolume: 125,
+            limit: 500,
+            sliceFraction: 1,
+          },
+          {
+            source: "coarse",
+            index: 0,
+            physicalVolume: 1000,
+            limit: 10,
+            sliceFraction: 1,
+          },
+        ],
         1,
-        (entry) => entry.gridIndex,
-      ),
-    ).toEqual(entries);
+        1000,
+        100,
+      ).map((selection) => selection.source),
+    ).toEqual(["coarse", "fine"]);
   });
 });

@@ -23,10 +23,15 @@ const DEFAULT_SPATIALLY_INDEXED_SKELETON_MAX_CHUNKS = 64;
 const DEFAULT_SPATIALLY_INDEXED_SKELETON_MIN_CHUNK_SIZE = 1;
 
 export type SpatiallyIndexedSkeletonChunkSize = number[];
-export type SpatialSkeletonGridSize = { x: number; y: number; z: number };
+export type SpatialSkeletonGridSize = {
+  x: number;
+  y: number;
+  z: number;
+  limit: number;
+};
 export type SpatialSkeletonGridLevel = {
   size: SpatialSkeletonGridSize;
-  lod: number;
+  limit: number;
 };
 
 export interface DefaultSpatiallyIndexedSkeletonChunkSizeOptions {
@@ -51,11 +56,9 @@ export function buildSpatialSkeletonGridLevels(
   gridSizes: readonly SpatialSkeletonGridSize[],
 ): SpatialSkeletonGridLevel[] {
   const sortedSizes = sortSpatialSkeletonGridSizes(gridSizes);
-  if (sortedSizes.length === 0) return [];
-  const lastIndex = sortedSizes.length - 1;
-  return sortedSizes.map((size, index) => ({
+  return sortedSizes.map((size) => ({
     size,
-    lod: lastIndex === 0 ? 0 : index / lastIndex,
+    limit: size.limit,
   }));
 }
 

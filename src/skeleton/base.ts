@@ -14,7 +14,21 @@
  * limitations under the License.
  */
 
+import type { ProjectionParameters } from "#src/projection_parameters.js";
+import type {
+  SliceViewChunkSource,
+  SliceViewChunkSpecification,
+  TransformedSource,
+} from "#src/sliceview/base.js";
+import { forEachVisibleVolumetricChunk } from "#src/sliceview/base.js";
+import { selectSpatialSkeletonSourcesByLimit } from "#src/skeleton/source_selection.js";
 import type { DataType } from "#src/util/data_type.js";
+import {
+  getViewFrustrumVolume,
+  mat3,
+  mat3FromMat4,
+  prod3,
+} from "#src/util/geom.js";
 
 export const SKELETON_LAYER_RPC_ID = "skeleton/SkeletonLayer";
 
@@ -26,4 +40,126 @@ export const SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_UPDATE_SOURCES_RPC_ID =
 export interface VertexAttributeInfo {
   dataType: DataType;
   numComponents: number;
+}
+
+export interface SpatiallyIndexedSkeletonChunkSpecification
+  extends SliceViewChunkSpecification {
+  chunkLayout: any;
+  limit: number;
+}
+
+const tempMat3 = mat3.create();
+
+function getSpatialSkeletonSliceFraction(transformedSource: TransformedSource) {
+  const spec = transformedSource.source
+    .spec as SpatiallyIndexedSkeletonChunkSpecification;
+  const { rank } = spec;
+  const { nonDisplayLowerClipBound, nonDisplayUpperClipBound } =
+    transformedSource;
+  let sliceFraction = 1;
+  for (let i = 0; i < rank; ++i) {
+    const b = nonDisplayUpperClipBound[i] - nonDisplayLowerClipBound[i];
+    if (Number.isFinite(b)) sliceFraction /= b;
+  }
+  return sliceFraction;
+}
+
+function getSpatialSkeletonChunkPhysicalVolume(
+  transformedSource: TransformedSource,
+  canonicalToPhysicalScale: number,
+) {
+  const { chunkLayout } = transformedSource;
+  return (
+    prod3(chunkLayout.size) *
+    Math.abs(chunkLayout.detTransform) *
+    canonicalToPhysicalScale
+  );
+}
+
+export function forEachVisibleSpatialSkeletonChunk<
+  Transformed extends TransformedSource<any, SliceViewChunkSource>,
+>(
+  projectionParameters: ProjectionParameters,
+  localPosition: Float32Array,
+  spacingTarget: number,
+  transformedSources: readonly Transformed[],
+  beginScale: (source: Transformed, index: number) => void,
+  callback: (
+    source: Transformed,
+    index: number,
+    physicalSpacing: number,
+    pixelSpacing: number,
+  ) => void,
+) {
+  if (transformedSources.length === 0) return;
+
+  const {
+    displayDimensionRenderInfo,
+    viewMatrix,
+    projectionMat,
+    width,
+    height,
+  } = projectionParameters;
+  const { voxelPhysicalScales } = displayDimensionRenderInfo;
+  const viewDet = Math.abs(
+    mat3.determinant(mat3FromMat4(tempMat3, viewMatrix)),
+  );
+  const canonicalToPhysicalScale = prod3(voxelPhysicalScales);
+  const viewFrustrumVolume =
+    (getViewFrustrumVolume(projectionMat) / viewDet) * canonicalToPhysicalScale;
+
+  const sourceDensityInputs = transformedSources.map((tsource, index) => {
+    const spec = tsource.source
+      .spec as SpatiallyIndexedSkeletonChunkSpecification;
+    return {
+      source: tsource,
+      index,
+      physicalVolume: getSpatialSkeletonChunkPhysicalVolume(
+        tsource,
+        canonicalToPhysicalScale,
+      ),
+      limit: spec.limit,
+      sliceFraction: getSpatialSkeletonSliceFraction(tsource),
+    };
+  });
+  const baseSource = sourceDensityInputs.reduce((best, source) =>
+    source.physicalVolume > best.physicalVolume ? source : best,
+  ).source;
+  let sourceVolume =
+    Math.abs(baseSource.chunkLayout.detTransform) * canonicalToPhysicalScale;
+  const { lowerClipDisplayBound, upperClipDisplayBound } = baseSource;
+  for (let i = 0; i < 3; ++i) {
+    sourceVolume *= upperClipDisplayBound[i] - lowerClipDisplayBound[i];
+  }
+
+  const effectiveVolume = Math.min(sourceVolume, viewFrustrumVolume);
+  const viewportArea = width * height;
+  const targetNumNodes = viewportArea / spacingTarget ** 2;
+  const physicalDensityTarget = targetNumNodes / effectiveVolume;
+
+  for (const {
+    source: tsource,
+    index,
+    physicalSpacing,
+    pixelSpacing,
+  } of selectSpatialSkeletonSourcesByLimit(
+    sourceDensityInputs,
+    physicalDensityTarget,
+    effectiveVolume,
+    viewportArea,
+  )) {
+    let firstChunk = true;
+    forEachVisibleVolumetricChunk(
+      projectionParameters,
+      localPosition,
+      tsource,
+      () => {
+        if (firstChunk) {
+          beginScale(tsource, index);
+          firstChunk = false;
+        }
+        callback(tsource, index, physicalSpacing, pixelSpacing);
+      },
+    );
+  }
 }

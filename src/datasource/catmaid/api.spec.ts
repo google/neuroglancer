@@ -539,7 +539,28 @@ describe("CatmaidClient skeleton editing methods", () => {
     ]);
 
     expect(getFetchPath(fetchMock)).toMatch(/^node\/list\?/);
+    expect(
+      new URLSearchParams(getFetchPath(fetchMock).split("?")[1]).get("lod"),
+    ).toBe("0");
     expect(getFetchInit(fetchMock).priority).toBe("low");
+  });
+
+  it("passes the CATMAID source-associated lod to node/list", async () => {
+    const client = new CatmaidClient("https://example.invalid", 1);
+    const fetchMock = vi.fn().mockResolvedValue([[], [], {}, false, [], []]);
+    (client as any).fetch = fetchMock;
+
+    await client.fetchNodes(
+      {
+        lowerBounds: [0, 0, 0],
+        upperBounds: [10, 10, 10],
+      },
+      0.5,
+    );
+
+    expect(
+      new URLSearchParams(getFetchPath(fetchMock).split("?")[1]).get("lod"),
+    ).toBe("0.5");
   });
 
   it("converts spatial skeleton grid cell indices to CATMAID bounds", () => {

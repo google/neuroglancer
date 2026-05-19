@@ -241,10 +241,12 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
     const sources: SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] =
       [];
 
+    const lastGridIndex = this.gridLevels.length - 1;
     for (const [
       gridIndex,
-      { size: gridCellSize, lod },
+      { size: gridCellSize, limit },
     ] of this.gridLevels.entries()) {
+      const catmaidLod = lastGridIndex === 0 ? 0 : gridIndex / lastGridIndex;
       const chunkDataSize = Uint32Array.from([
         gridCellSize.x,
         gridCellSize.y,
@@ -275,6 +277,7 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
           upperVoxelBound: this.upperBoundsInNanometers,
         }),
         chunkLayout,
+        limit,
       };
 
       const parameters = new CatmaidSkeletonSourceParameters();
@@ -284,7 +287,7 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
       parameters.catmaidParameters.cacheProvider = this.cacheProvider;
       parameters.catmaidParameters.readonly = this.sourceReadonly;
       parameters.gridIndex = gridIndex;
-      parameters.catmaidLod = lod;
+      parameters.catmaidLod = catmaidLod;
       parameters.metadata = makeCatmaidSkeletonMetadata();
 
       const chunkSource = this.chunkManager.getChunkSource(
@@ -383,10 +386,11 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
       spatial,
       readonly: sourceReadonly,
     } = spatialIndexMetadata;
-    const gridCellSizes = spatial.map(({ chunkSize }) => ({
+    const gridCellSizes = spatial.map(({ chunkSize, limit }) => ({
       x: Number(chunkSize[0]),
       y: Number(chunkSize[1]),
       z: Number(chunkSize[2]),
+      limit,
     }));
 
     // The model-space coordinates we emit are in nanometers, converted to meters for Neuroglancer.

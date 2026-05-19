@@ -16,7 +16,10 @@
 
 import { describe, expect, it } from "vitest";
 
-import { getDefaultSpatiallyIndexedSkeletonChunkSize } from "#src/skeleton/spatial_chunk_sizing.js";
+import {
+  buildSpatialSkeletonGridLevels,
+  getDefaultSpatiallyIndexedSkeletonChunkSize,
+} from "#src/skeleton/spatial_chunk_sizing.js";
 
 describe("skeleton/spatial_chunk_sizing", () => {
   it("derives an isotropic chunk size that stays within the default chunk budget", () => {
@@ -116,5 +119,19 @@ describe("skeleton/spatial_chunk_sizing", () => {
         { maxChunks: Number.POSITIVE_INFINITY },
       ),
     ).toThrow(/maxChunks must be finite/i);
+  });
+
+  it("sorts spatial skeleton grid levels by spacing and preserves limits", () => {
+    expect(
+      buildSpatialSkeletonGridLevels([
+        { x: 10, y: 10, z: 10, limit: 1000 },
+        { x: 40, y: 40, z: 40, limit: 10 },
+        { x: 20, y: 20, z: 20, limit: 100 },
+      ]),
+    ).toEqual([
+      { size: { x: 40, y: 40, z: 40, limit: 10 }, limit: 10 },
+      { size: { x: 20, y: 20, z: 20, limit: 100 }, limit: 100 },
+      { size: { x: 10, y: 10, z: 10, limit: 1000 }, limit: 1000 },
+    ]);
   });
 });
