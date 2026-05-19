@@ -481,10 +481,64 @@ async function buildAnnotationMetadata(
   const geometryTypes: string[] = Array.isArray(zv.geometry_types)
     ? zv.geometry_types
     : [];
-  if (!geometryTypes.includes("point_cloud")) {
+  const SKELETON_LIKE = new Set(["skeleton", "polyline", "streamline"]);
+  const supportedGeom = new Set(["point_cloud", ...SKELETON_LIKE]);
+  const unsupported = geometryTypes.filter((g) => !supportedGeom.has(g));
+  if (unsupported.length > 0) {
     throw new Error(
-      `zarr-vectors datasource: only 'point_cloud' geometry is supported ` +
-        `(found: ${JSON.stringify(geometryTypes)})`,
+      `zarr-vectors datasource: unsupported geometry types ` +
+        `${JSON.stringify(unsupported)}.  Supported: ` +
+        `${JSON.stringify(Array.from(supportedGeom))}`,
+    );
+  }
+  // Skeleton / polyline / streamline are read through the segmentation
+  // data-source pathway (so the existing segment-list UI drives the
+  // pass-2 explicit-ID rendering); see the §1 dispatch design in
+  // /Users/forrestc/.claude/plans/i-wanted-you-to-spicy-candy.md.  That
+  // pathway requires ``object_index/`` to be present (per the spec's
+  // ``object_index_convention: "standard"``).
+  const hasSkeletonLike = geometryTypes.some((g) => SKELETON_LIKE.has(g));
+  const hasPointCloud = geometryTypes.includes("point_cloud");
+  if (hasSkeletonLike) {
+    if (hasPointCloud) {
+      // Mixed-geometry stores are out of scope for now — the driver
+      // would have to pick one dispatch.  Reject explicitly so the
+      // failure mode is clear.
+      throw new Error(
+        `zarr-vectors datasource: stores with both point_cloud and ` +
+          `skeleton/polyline/streamline geometry are not yet supported ` +
+          `(found: ${JSON.stringify(geometryTypes)})`,
+      );
+    }
+    const objectIndexConvention = zv.object_index_convention;
+    if (
+      objectIndexConvention !== "standard" &&
+      objectIndexConvention !== undefined
+    ) {
+      throw new Error(
+        `zarr-vectors datasource: skeleton/polyline/streamline geometry ` +
+          `requires object_index_convention='standard' (got ` +
+          `${JSON.stringify(objectIndexConvention)})`,
+      );
+    }
+    // TODO(slice 4): replace this with the segmentation-shaped
+    // DataSource that wraps the pass-1 spatial chunk source and the
+    // pass-2 object-keyed chunk source.  Until that lands, fail
+    // cleanly so callers get a navigable error rather than a deep
+    // crash inside the annotation-layer construction below.
+    throw new Error(
+      `zarr-vectors datasource: skeleton/polyline/streamline rendering ` +
+        `is not yet routed to a render layer in this build.  The chunk ` +
+        `format decoders are present (fragment_index.ts, ` +
+        `skeleton_chunk.ts, object_manifest.ts) but the segmentation-` +
+        `layer dispatch is pending.  See the implementation plan.`,
+    );
+  }
+  if (!hasPointCloud) {
+    throw new Error(
+      `zarr-vectors datasource: no recognised geometry type in ` +
+        `${JSON.stringify(geometryTypes)}; expected 'point_cloud' or ` +
+        `one of ${JSON.stringify(Array.from(SKELETON_LIKE))}`,
     );
   }
   const bounds = zv.bounds;
