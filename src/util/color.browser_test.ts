@@ -16,6 +16,8 @@
 
 import { describe, it, expect } from "vitest";
 import {
+  computeHighVisibilityContrastColor,
+  getContrastRatio,
   parseColorSerialization,
   parseRGBColorSpecification,
   packColor,
@@ -83,6 +85,12 @@ describe("color", () => {
   });
 });
 
+function expectColorClose(actual: Float32Array, expected: readonly number[]) {
+  for (let i = 0; i < 3; ++i) {
+    expect(actual[i]).toBeCloseTo(expected[i]);
+  }
+}
+
 describe("useWhiteBackground", () => {
   it("works for simple cases", () => {
     expect(useWhiteBackground(vec3.fromValues(0, 0, 0))).toBe(true);
@@ -90,5 +98,95 @@ describe("useWhiteBackground", () => {
     expect(useWhiteBackground(vec3.fromValues(1, 0, 0))).toBe(false);
     expect(useWhiteBackground(vec3.fromValues(0, 1, 0))).toBe(false);
     expect(useWhiteBackground(vec3.fromValues(0, 0, 1))).toBe(true);
+  });
+});
+
+describe("getContrastRatio", () => {
+  it("matches WCAG contrast-ratio reference values", () => {
+    expect(
+      getContrastRatio(vec3.fromValues(0, 0, 0), vec3.fromValues(1, 1, 1)),
+    ).toBeCloseTo(21);
+    expect(
+      getContrastRatio(
+        vec3.fromValues(0.5, 0.5, 0.5),
+        vec3.fromValues(0.5, 0.5, 0.5),
+      ),
+    ).toBeCloseTo(1);
+  });
+});
+
+describe("computeHighVisibilityContrastColor", () => {
+  it("uses white for dark colors", () => {
+    const sourceColor = vec3.fromValues(0, 0, 0);
+    const color = computeHighVisibilityContrastColor(
+      vec3.create(),
+      sourceColor,
+    );
+
+    expectColorClose(color, [1, 1, 1]);
+    expect(getContrastRatio(color, sourceColor)).toBeGreaterThanOrEqual(3);
+  });
+
+  it("uses red for bright colors", () => {
+    const sourceColor = vec3.fromValues(1, 1, 1);
+    const color = computeHighVisibilityContrastColor(
+      vec3.create(),
+      sourceColor,
+    );
+
+    expectColorClose(color, [1, 0, 0]);
+    expect(getContrastRatio(color, sourceColor)).toBeGreaterThanOrEqual(3);
+  });
+
+  it("keeps a bright visible candidate for saturated colors", () => {
+    const sourceColor = vec3.fromValues(1, 0, 0);
+    const color = computeHighVisibilityContrastColor(
+      vec3.create(),
+      sourceColor,
+    );
+
+    expectColorClose(color, [1, 1, 1]);
+    expect(getContrastRatio(color, sourceColor)).toBeGreaterThanOrEqual(3);
+  });
+
+  it("handles low-saturation colors without choosing black", () => {
+    const sourceColor = vec3.fromValues(0.5, 0.5, 0.5);
+    const color = computeHighVisibilityContrastColor(
+      vec3.create(),
+      sourceColor,
+    );
+
+    expectColorClose(color, [1, 1, 1]);
+    expect(getContrastRatio(color, sourceColor)).toBeGreaterThanOrEqual(3);
+  });
+
+  it("uses white for near-black colors", () => {
+    const sourceColor = vec3.fromValues(0.05, 0.05, 0.05);
+    const color = computeHighVisibilityContrastColor(
+      vec3.create(),
+      sourceColor,
+    );
+
+    expectColorClose(color, [1, 1, 1]);
+  });
+
+  it("uses red for near-white colors", () => {
+    const sourceColor = vec3.fromValues(0.95, 0.95, 0.95);
+    const color = computeHighVisibilityContrastColor(
+      vec3.create(),
+      sourceColor,
+    );
+
+    expectColorClose(color, [1, 0, 0]);
+  });
+
+  it("uses red for yellow-like segment colors", () => {
+    const sourceColor = vec3.fromValues(1, 0.95, 0.35);
+    const color = computeHighVisibilityContrastColor(
+      vec3.create(),
+      sourceColor,
+    );
+
+    expectColorClose(color, [1, 0, 0]);
   });
 });

@@ -17,6 +17,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { Uint64Set } from "#src/uint64_set.js";
+import { getContrastRatio } from "#src/util/color.js";
+import { vec3 } from "#src/util/geom.js";
 
 if (!("WebGL2RenderingContext" in globalThis)) {
   Object.defineProperty(globalThis, "WebGL2RenderingContext", {
@@ -110,6 +112,46 @@ describe("SpatiallyIndexedSkeletonLayer browse node picks", () => {
       position: new Float32Array([4, 5, 6]),
       sourceState: { revisionToken: "2026-03-29T11:51:00Z" },
     });
+  });
+});
+
+describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
+  it("derives the selected-node outline color from the selected segment color", () => {
+    const sourceColor = vec3.fromValues(1, 0, 0);
+    const displayState = {
+      segmentationColorGroupState: {
+        value: {
+          segmentStatedColors: new Map(),
+          segmentDefaultColor: { value: sourceColor },
+          segmentColorHash: { compute: vi.fn() },
+        },
+      },
+      saturation: { value: 1 },
+      hoverHighlight: { value: false },
+      segmentSelectionState: { isSelected: vi.fn(() => false) },
+    };
+    const getCachedNodeSnapshot = vi.fn(() => ({
+      nodeId: 101,
+      segmentId: 11,
+      position: new Float32Array([1, 2, 3]),
+    }));
+    const layer = Object.assign(
+      Object.create(SpatiallyIndexedSkeletonLayer.prototype),
+      {
+        selectedNodeId: { value: 101 },
+        selectedNodeOutlineColor: vec3.create(),
+        displayState,
+        getCachedNodeSnapshot,
+      },
+    );
+
+    const outlineColor = (layer as any).getSelectedNodeOutlineColor();
+
+    expect(getCachedNodeSnapshot).toHaveBeenCalledWith(101);
+    expect([...outlineColor]).toEqual([1, 1, 1]);
+    expect(getContrastRatio(outlineColor, sourceColor)).toBeGreaterThanOrEqual(
+      3,
+    );
   });
 });
 

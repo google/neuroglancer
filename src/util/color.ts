@@ -161,6 +161,14 @@ export function getRelativeLuminance(color: vec3 | vec4) {
   );
 }
 
+export function getContrastRatio(colorA: vec3 | vec4, colorB: vec3 | vec4) {
+  const luminanceA = getRelativeLuminance(colorA);
+  const luminanceB = getRelativeLuminance(colorB);
+  const darker = Math.min(luminanceA, luminanceB);
+  const lighter = Math.max(luminanceA, luminanceB);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 // Determines whether a white background would provide higher contrast than a black background for
 // the given foreground color.
 //
@@ -170,6 +178,41 @@ export function getRelativeLuminance(color: vec3 | vec4) {
 // https://stackoverflow.com/a/3943023
 export function useWhiteBackground(foregroundColor: vec3 | vec4) {
   return getRelativeLuminance(foregroundColor) <= 0.179;
+}
+
+const whiteAccent = vec3.fromValues(1, 1, 1);
+const visibleHighlightCandidates = [
+  whiteAccent,
+  vec3.fromValues(1, 0.95, 0.35), // yellow
+  vec3.fromValues(0, 1, 1), // cyan
+  vec3.fromValues(1, 0, 1), // magenta
+  vec3.fromValues(1, 0, 0), // red
+  vec3.fromValues(0.35, 1, 0.35), // green
+  vec3.fromValues(1, 0.55, 0), // orange
+];
+
+function copyRgb<T extends Float32Array>(out: T, color: ArrayLike<number>) {
+  out[0] = color[0];
+  out[1] = color[1];
+  out[2] = color[2];
+  return out;
+}
+
+export function computeHighVisibilityContrastColor<T extends Float32Array>(
+  out: T,
+  sourceColor: vec3 | vec4,
+) {
+  let bestColor = visibleHighlightCandidates[0];
+  let bestContrast = getContrastRatio(bestColor, sourceColor);
+  for (let i = 1; i < visibleHighlightCandidates.length; ++i) {
+    const candidate = visibleHighlightCandidates[i];
+    const contrast = getContrastRatio(candidate, sourceColor);
+    if (contrast > bestContrast) {
+      bestColor = candidate;
+      bestContrast = contrast;
+    }
+  }
+  return copyRgb(out, bestColor);
 }
 
 export class TrackableRGB extends WatchableValue<vec3> {
