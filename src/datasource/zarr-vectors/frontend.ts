@@ -44,7 +44,13 @@ import type {
 import {
   ZarrVectorsAnnotationSourceParameters,
   ZarrVectorsAnnotationSpatialIndexSourceParameters,
+  ZarrVectorsObjectKeyedSkeletonSourceParameters,
+  ZarrVectorsSpatiallyIndexedSkeletonSourceParameters,
 } from "#src/datasource/zarr-vectors/base.js";
+import {
+  ZarrVectorsMultiscaleSpatiallyIndexedSkeletonSource,
+  ZarrVectorsObjectKeyedSkeletonSource,
+} from "#src/datasource/zarr-vectors/skeleton_frontend.js";
 import type { AutoDetectRegistry } from "#src/kvstore/auto_detect.js";
 import { WithSharedKvStoreContext } from "#src/kvstore/chunk_source_frontend.js";
 import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
@@ -478,67 +484,18 @@ async function buildAnnotationMetadata(
       "Not a zarr-vectors store: root attributes lack a 'zarr_vectors' block",
     );
   }
+  // Geometry-type validation lives at the dispatch layer
+  // (`ZarrVectorsDataSource.get`) — by the time `buildAnnotationMetadata`
+  // is called, the dispatcher has already verified that `geometry_types`
+  // is `["point_cloud"]`.  Re-validate defensively here so a direct
+  // caller (e.g. tests) gets a clear error.
   const geometryTypes: string[] = Array.isArray(zv.geometry_types)
     ? zv.geometry_types
     : [];
-  const SKELETON_LIKE = new Set(["skeleton", "polyline", "streamline"]);
-  const supportedGeom = new Set(["point_cloud", ...SKELETON_LIKE]);
-  const unsupported = geometryTypes.filter((g) => !supportedGeom.has(g));
-  if (unsupported.length > 0) {
+  if (!geometryTypes.includes("point_cloud")) {
     throw new Error(
-      `zarr-vectors datasource: unsupported geometry types ` +
-        `${JSON.stringify(unsupported)}.  Supported: ` +
-        `${JSON.stringify(Array.from(supportedGeom))}`,
-    );
-  }
-  // Skeleton / polyline / streamline are read through the segmentation
-  // data-source pathway (so the existing segment-list UI drives the
-  // pass-2 explicit-ID rendering); see the §1 dispatch design in
-  // /Users/forrestc/.claude/plans/i-wanted-you-to-spicy-candy.md.  That
-  // pathway requires ``object_index/`` to be present (per the spec's
-  // ``object_index_convention: "standard"``).
-  const hasSkeletonLike = geometryTypes.some((g) => SKELETON_LIKE.has(g));
-  const hasPointCloud = geometryTypes.includes("point_cloud");
-  if (hasSkeletonLike) {
-    if (hasPointCloud) {
-      // Mixed-geometry stores are out of scope for now — the driver
-      // would have to pick one dispatch.  Reject explicitly so the
-      // failure mode is clear.
-      throw new Error(
-        `zarr-vectors datasource: stores with both point_cloud and ` +
-          `skeleton/polyline/streamline geometry are not yet supported ` +
-          `(found: ${JSON.stringify(geometryTypes)})`,
-      );
-    }
-    const objectIndexConvention = zv.object_index_convention;
-    if (
-      objectIndexConvention !== "standard" &&
-      objectIndexConvention !== undefined
-    ) {
-      throw new Error(
-        `zarr-vectors datasource: skeleton/polyline/streamline geometry ` +
-          `requires object_index_convention='standard' (got ` +
-          `${JSON.stringify(objectIndexConvention)})`,
-      );
-    }
-    // TODO(slice 4): replace this with the segmentation-shaped
-    // DataSource that wraps the pass-1 spatial chunk source and the
-    // pass-2 object-keyed chunk source.  Until that lands, fail
-    // cleanly so callers get a navigable error rather than a deep
-    // crash inside the annotation-layer construction below.
-    throw new Error(
-      `zarr-vectors datasource: skeleton/polyline/streamline rendering ` +
-        `is not yet routed to a render layer in this build.  The chunk ` +
-        `format decoders are present (fragment_index.ts, ` +
-        `skeleton_chunk.ts, object_manifest.ts) but the segmentation-` +
-        `layer dispatch is pending.  See the implementation plan.`,
-    );
-  }
-  if (!hasPointCloud) {
-    throw new Error(
-      `zarr-vectors datasource: no recognised geometry type in ` +
-        `${JSON.stringify(geometryTypes)}; expected 'point_cloud' or ` +
-        `one of ${JSON.stringify(Array.from(SKELETON_LIKE))}`,
+      `buildAnnotationMetadata: called for a non-point_cloud store ` +
+        `(geometry_types=${JSON.stringify(geometryTypes)})`,
     );
   }
   const bounds = zv.bounds;
@@ -716,6 +673,503 @@ function getAnnotationDataSource(
 }
 
 // ---------------------------------------------------------------
+// Skeleton / polyline / streamline path
+// ---------------------------------------------------------------
+
+interface SkeletonMetadata {
+  rank: number;
+  coordinateSpace: ReturnType<typeof makeCoordinateSpace>;
+  /** Parameters for the per-segment (pass-2) chunk source. */
+  pass2Params: ZarrVectorsObjectKeyedSkeletonSourceParameters;
+  /**
+   * Per-level parameter blobs for the spatially-indexed (pass-1) chunk
+   * sources, finest-first.  Together with `spatialGrid` they let the
+   * multiscale source build the per-level chunk specs.
+   *
+   * `undefined` when the store's rank is not 3 (neuroglancer's
+   * spatially-indexed skeleton machinery hardcodes vec3 position
+   * texture format) — the dispatch falls back to pass-2 only in that
+   * case.
+   */
+  pass1Levels?: ReadonlyArray<{
+    parameters: ZarrVectorsSpatiallyIndexedSkeletonSourceParameters;
+  }>;
+  /** Grid info shared across all pass-1 levels.  Co-defined with `pass1Levels`. */
+  spatialGrid?: {
+    chunkShape: Float32Array;
+    /**
+     * World-space lower bound of the data.  Can be negative — zarr-vectors
+     * chunks are indexed around world origin `(0,0,0)`, NOT around
+     * `lowerBounds`.  `makeSliceViewChunkSpecification` consumes this as
+     * `lowerVoxelBound` and computes negative chunk indices accordingly.
+     */
+    lowerBounds: Float32Array;
+    /** World-space upper bound of the data. */
+    upperBounds: Float32Array;
+    /**
+     * Per-level synthetic "spacing" multiplier used by
+     * {@link ZarrVectorsMultiscaleSpatiallyIndexedSkeletonSource.getSpatialSkeletonGridSizes}
+     * to populate the segmentation layer's grid-resolution picker.
+     *
+     * zarr-vectors keeps the chunk grid uniform across pyramid levels,
+     * so the picker would collapse all levels to one position if we
+     * reported the real chunk size everywhere.  We instead synthesise a
+     * per-level factor derived from either the NGFF multiscales
+     * `coordinateTransformations.scale[0]` (preferred) or
+     * `1/object_sparsity` (fallback when NGFF scales are identical).
+     * Reported spacing for level k = `chunkShape * levelSpacingFactors[k]`.
+     *
+     * Finest-first order, length == `pass1Levels.length`.
+     */
+    levelSpacingFactors: Float32Array;
+  };
+}
+
+const SKELETON_LIKE_GEOM = new Set<string>(["skeleton", "polyline", "streamline"]);
+
+/**
+ * Read store metadata for a skeleton / polyline / streamline store and
+ * assemble the parameter blob needed to construct chunk sources.
+ *
+ * Layout assumptions (per the zarr-vectors spec):
+ *
+ * - `zarr_vectors.geometry_types` contains exactly one of
+ *   `"skeleton"`, `"polyline"`, `"streamline"`.
+ * - `zarr_vectors.object_index_convention === "standard"` (the only
+ *   value that maps to the segmentation-layer pathway).
+ * - Level-0 metadata lives under `multiscales[0].datasets[0].path`.
+ * - `links/0/.zattrs.dtype` (or `data_type` fallback) declares the
+ *   on-disk link dtype; absent for `implicit_sequential` stores.
+ */
+/**
+ * Compute the synthetic per-level "spacing" factor exposed to the
+ * segmentation layer's spatially-indexed skeleton grid-resolution
+ * picker.  See `SkeletonMetadata.spatialGrid.levelSpacingFactors`.
+ *
+ * Resolution order:
+ *
+ * 1. **NGFF scales.** Read `multiscales[0].datasets[k].coordinateTransformations`'s
+ *    `scale[0]` for each level.  If the resulting values are distinct
+ *    across levels (i.e. each level has a different scale), use them
+ *    verbatim — these reflect the writer's stated coarsening factor.
+ *
+ * 2. **Per-level `object_sparsity` fallback.** zarr-vectors pyramids
+ *    often share the NGFF scale across levels (the grid is the same;
+ *    coarsening is by *object drop*, not by *grid size*).  In that case
+ *    NGFF can't distinguish levels, so we synthesise spacings from each
+ *    level's `zarr_vectors_level.object_sparsity` attribute: factor =
+ *    `1 / object_sparsity`.  Level 0 (sparsity 1.0) → factor 1; a
+ *    sparsity-0.25 level → factor 4 (4× the chunk size).
+ *
+ * 3. **Last-resort fallback.** If neither NGFF nor `object_sparsity`
+ *    yields useful information, return `[1, 2, 4, 8, …]` (powers of two
+ *    keyed off the level index) — guarantees distinct slider positions
+ *    so the picker remains usable even on stores without proper
+ *    pyramid metadata.
+ *
+ * Returned array is finest-first, length == `levelPaths.length`.
+ */
+async function computeLevelSpacingFactors(
+  sharedKvStoreContext: SharedKvStoreContext,
+  storeUrl: string,
+  levelPaths: readonly string[],
+  multiscales: any,
+  options: Partial<ProgressOptions>,
+): Promise<Float32Array> {
+  const numLevels = levelPaths.length;
+  const factors = new Float32Array(numLevels);
+
+  // 1. NGFF: pull scale[0] off each dataset.
+  const datasets = Array.isArray(multiscales)
+    ? multiscales[0]?.datasets
+    : undefined;
+  const ngffScales: (number | undefined)[] = new Array(numLevels);
+  if (Array.isArray(datasets)) {
+    for (let k = 0; k < numLevels; ++k) {
+      const ds = datasets[k];
+      const scaleXform = ds?.coordinateTransformations?.find(
+        (t: any) => t?.type === "scale",
+      );
+      const v = scaleXform?.scale?.[0];
+      if (typeof v === "number" && Number.isFinite(v) && v > 0) {
+        ngffScales[k] = v;
+      }
+    }
+  }
+  const ngffPopulated = ngffScales.every((v) => v !== undefined);
+  const ngffDistinct =
+    ngffPopulated &&
+    new Set(ngffScales.map((v) => v as number)).size === numLevels;
+  if (ngffDistinct) {
+    // Normalise to level-0 = 1.0 so the multiplier is "relative to
+    // the finest level's grid", regardless of NGFF's chosen base.
+    const base = ngffScales[0] as number;
+    for (let k = 0; k < numLevels; ++k) {
+      factors[k] = (ngffScales[k] as number) / base;
+    }
+    return factors;
+  }
+
+  // 2. Per-level object_sparsity fallback.  Fetch each level's
+  // zarr.json in parallel; pull `attributes.zarr_vectors_level.object_sparsity`.
+  const sparsities = await Promise.all(
+    levelPaths.map(async (levelPath) => {
+      const levelUrl = kvstoreEnsureDirectoryPipelineUrl(
+        pipelineUrlJoin(storeUrl, levelPath),
+      );
+      try {
+        const levelJson = await getJsonResource(
+          sharedKvStoreContext,
+          joinBaseUrlAndPath(levelUrl, "zarr.json"),
+          `zarr-vectors level ${JSON.stringify(levelPath)} metadata`,
+          options,
+        );
+        const s = levelJson?.attributes?.zarr_vectors_level?.object_sparsity;
+        return typeof s === "number" && Number.isFinite(s) && s > 0
+          ? s
+          : undefined;
+      } catch {
+        return undefined;
+      }
+    }),
+  );
+  const sparsityPopulated = sparsities.every((s) => s !== undefined);
+  const sparsityDistinct =
+    sparsityPopulated &&
+    new Set(sparsities.map((s) => s as number)).size === numLevels;
+  if (sparsityDistinct) {
+    // Normalise so level-0 (typically sparsity 1.0) maps to factor 1.0.
+    const base = sparsities[0] as number;
+    for (let k = 0; k < numLevels; ++k) {
+      factors[k] = base / (sparsities[k] as number);
+    }
+    return factors;
+  }
+
+  // 3. Last-resort: power-of-two by level index so the picker always
+  // sees distinct positions.
+  for (let k = 0; k < numLevels; ++k) {
+    factors[k] = 2 ** k;
+  }
+  return factors;
+}
+
+async function buildSkeletonMetadata(
+  sharedKvStoreContext: SharedKvStoreContext,
+  storeUrl: string,
+  rootAttrs: any,
+  options: Partial<ProgressOptions>,
+): Promise<SkeletonMetadata> {
+  const zv = rootAttrs?.zarr_vectors;
+  if (zv === undefined) {
+    throw new Error(
+      "Not a zarr-vectors store: root attributes lack a 'zarr_vectors' block",
+    );
+  }
+  const geometryTypes: string[] = Array.isArray(zv.geometry_types)
+    ? zv.geometry_types
+    : [];
+  const skeletonKindsPresent = geometryTypes.filter((g) =>
+    SKELETON_LIKE_GEOM.has(g),
+  );
+  if (skeletonKindsPresent.length !== 1) {
+    throw new Error(
+      `buildSkeletonMetadata: expected exactly one skeleton-like ` +
+        `geometry type (got ${JSON.stringify(skeletonKindsPresent)})`,
+    );
+  }
+  const geometryKind = skeletonKindsPresent[0] as
+    | "skeleton"
+    | "polyline"
+    | "streamline";
+
+  // Bounds + rank — identical idiom to the annotation path.
+  const bounds = zv.bounds;
+  if (
+    !Array.isArray(bounds) ||
+    bounds.length !== 2 ||
+    !Array.isArray(bounds[0]) ||
+    !Array.isArray(bounds[1])
+  ) {
+    throw new Error(
+      "zarr-vectors store: 'bounds' must be [[lower...], [upper...]]",
+    );
+  }
+  const rank = bounds[0].length;
+  if (bounds[1].length !== rank) {
+    throw new Error(
+      "zarr-vectors store: bounds[0] and bounds[1] have different rank",
+    );
+  }
+  const lowerBounds = Float64Array.from(bounds[0], Number);
+  const upperBounds = Float64Array.from(bounds[1], Number);
+
+  // Coordinate space — prefer NGFF multiscales axes / scales.
+  const ngHints = rootAttrs.neuroglancer ?? {};
+  const coordinateSpace =
+    ngHints.coordinate_space &&
+    Array.isArray(ngHints.coordinate_space.names) &&
+    ngHints.coordinate_space.names.length === rank
+      ? buildCoordinateSpaceFromHints(
+          ngHints.coordinate_space,
+          lowerBounds,
+          upperBounds,
+        )
+      : buildCoordinateSpaceFromMultiscales(
+          rootAttrs.multiscales,
+          lowerBounds,
+          upperBounds,
+          rank,
+        );
+
+  // Resolve level 0 — the per-segment manifest lookup operates at one
+  // fixed level (the v1 dispatch always uses level 0).  Multi-level
+  // pass-1 spatial rendering will use `levelPaths` more broadly in
+  // slice 4c-step2.
+  const levelPaths = enumerateLevelPaths(rootAttrs.multiscales);
+  const level0Url = kvstoreEnsureDirectoryPipelineUrl(
+    pipelineUrlJoin(storeUrl, levelPaths[0]),
+  );
+
+  // Per-vertex attribute discovery — reuse the annotation-path machinery
+  // verbatim; the resulting (attributeNames, attributeDtypes) feed the
+  // skeleton render layer's `prop_<name>()` shader bridge.
+  const { attributeNames, attributeDtypes } = await buildPropertySpecsAndDtypes(
+    sharedKvStoreContext,
+    level0Url,
+    ngHints,
+    options,
+  );
+
+  // Links convention — drives whether explicit `links/0/<chunk>` edges
+  // are read in addition to the implicit sequential ones synthesised
+  // from fragment ranges.
+  const linksConventionRaw = zv.links_convention;
+  let linksConvention: "implicit_sequential" | "implicit_sequential_with_branches" | "explicit";
+  if (linksConventionRaw === undefined) {
+    // Spec default per geometry: streamline / polyline → implicit_sequential,
+    // skeleton → implicit_sequential_with_branches.
+    linksConvention =
+      geometryKind === "skeleton"
+        ? "implicit_sequential_with_branches"
+        : "implicit_sequential";
+  } else if (
+    linksConventionRaw === "implicit_sequential" ||
+    linksConventionRaw === "implicit_sequential_with_branches" ||
+    linksConventionRaw === "explicit"
+  ) {
+    linksConvention = linksConventionRaw;
+  } else {
+    throw new Error(
+      `zarr-vectors links_convention=${JSON.stringify(linksConventionRaw)}: ` +
+        `expected 'implicit_sequential', 'implicit_sequential_with_branches', or 'explicit'`,
+    );
+  }
+
+  // Link dtype: read `links/0/zarr.json`'s declared dtype if the
+  // convention has explicit edges.  Default to int64 (universally safe)
+  // when no links array exists.
+  let linkDtype:
+    | "uint8" | "uint16" | "uint32" | "int8" | "int16" | "int32" | "int64";
+  if (linksConvention === "implicit_sequential") {
+    linkDtype = "int64";
+  } else {
+    let linksZarrJson: any | undefined;
+    try {
+      linksZarrJson = await getJsonResource(
+        sharedKvStoreContext,
+        joinBaseUrlAndPath(level0Url, "links/0/zarr.json"),
+        "zarr-vectors links/0 metadata",
+        options,
+      );
+    } catch {
+      linksZarrJson = undefined;
+    }
+    const raw =
+      linksZarrJson?.attributes?.dtype ??
+      linksZarrJson?.data_type ??
+      "int64";
+    if (
+      raw !== "uint8" &&
+      raw !== "uint16" &&
+      raw !== "uint32" &&
+      raw !== "int8" &&
+      raw !== "int16" &&
+      raw !== "int32" &&
+      raw !== "int64"
+    ) {
+      throw new Error(
+        `zarr-vectors links/0 dtype=${JSON.stringify(raw)}: expected an integer dtype`,
+      );
+    }
+    linkDtype = raw;
+  }
+
+  const pass2Params = new ZarrVectorsObjectKeyedSkeletonSourceParameters();
+  pass2Params.baseUrl = level0Url;
+  pass2Params.rank = rank;
+  pass2Params.attributeNames = attributeNames;
+  pass2Params.attributeDtypes = attributeDtypes;
+  pass2Params.linksConvention = linksConvention;
+  pass2Params.geometryKind = geometryKind;
+  pass2Params.linkDtype = linkDtype;
+
+  // Pass-1 (spatially-indexed) wiring — only when the store is 3-D.
+  // Neuroglancer's spatially-indexed skeleton machinery hardcodes a
+  // vec3 position texture format (`skeleton/frontend.ts:1706-1709`); 2-D
+  // or higher-rank stores fall back to pass-2 only.
+  let pass1Levels:
+    | ReadonlyArray<{ parameters: ZarrVectorsSpatiallyIndexedSkeletonSourceParameters }>
+    | undefined;
+  let spatialGrid:
+    | {
+        chunkShape: Float32Array;
+        lowerBounds: Float32Array;
+        upperBounds: Float32Array;
+        levelSpacingFactors: Float32Array;
+      }
+    | undefined;
+  if (rank === 3) {
+    const chunkShape = zv.chunk_shape;
+    if (!Array.isArray(chunkShape) || chunkShape.length !== rank) {
+      throw new Error(`zarr-vectors store: 'chunk_shape' must have rank ${rank}`);
+    }
+    // zarr-vectors chunks are indexed around world origin (chunk
+    // `(i,j,k)` covers world `[i*chunkShape, (i+1)*chunkShape]`), so we
+    // pass world-space lower/upper bounds verbatim to the chunk spec
+    // and let `makeSliceViewChunkSpecification` derive the chunk-index
+    // range — which is allowed to span negatives.
+    const chunkShapeF32 = new Float32Array(rank);
+    for (let i = 0; i < rank; ++i) {
+      chunkShapeF32[i] = Number(chunkShape[i]);
+    }
+    const lowerBoundsF32 = Float32Array.from(lowerBounds);
+    const upperBoundsF32 = Float32Array.from(upperBounds);
+
+    // Per-level parameter blobs.  All levels share the same grid (the
+    // pyramid stores fewer fragments at coarser levels rather than a
+    // coarser grid).
+    const levels: { parameters: ZarrVectorsSpatiallyIndexedSkeletonSourceParameters }[] =
+      [];
+    for (let k = 0; k < levelPaths.length; ++k) {
+      const levelUrl = kvstoreEnsureDirectoryPipelineUrl(
+        pipelineUrlJoin(storeUrl, levelPaths[k]),
+      );
+      const params = new ZarrVectorsSpatiallyIndexedSkeletonSourceParameters();
+      params.baseUrl = levelUrl;
+      params.rank = rank;
+      params.attributeNames = attributeNames;
+      params.attributeDtypes = attributeDtypes;
+      params.linksConvention = linksConvention;
+      params.geometryKind = geometryKind;
+      params.linkDtype = linkDtype;
+      // gridIndex must match the framework's `spatialSkeletonGridLevels`
+      // ordering, which is sorted DESCENDING by spacing (largest first).
+      // Our `levelPaths[0]` is the FINEST pyramid level (smallest spacing),
+      // so it should land at the END of the sorted list:
+      //   levelPaths[0]  (finest, factor=1)   → gridIndex = numLevels - 1
+      //   levelPaths[N-1] (coarsest, factor=2^(N-1)) → gridIndex = 0
+      // See `findClosestSpatialSkeletonGridLevelBySpacing` in
+      // `src/layer/segmentation/index.ts:588-603` for the picker that
+      // then looks up sources by `gridIndex`.
+      params.gridIndex = levelPaths.length - 1 - k;
+      levels.push({ parameters: params });
+    }
+
+    const levelSpacingFactors = await computeLevelSpacingFactors(
+      sharedKvStoreContext,
+      storeUrl,
+      levelPaths,
+      rootAttrs.multiscales,
+      options,
+    );
+
+    pass1Levels = levels;
+    spatialGrid = {
+      chunkShape: chunkShapeF32,
+      lowerBounds: lowerBoundsF32,
+      upperBounds: upperBoundsF32,
+      levelSpacingFactors,
+    };
+  }
+
+  return { rank, coordinateSpace, pass2Params, pass1Levels, spatialGrid };
+}
+
+/**
+ * Construct a segmentation-shaped `DataSource` from skeleton metadata.
+ *
+ * The data source exposes up to **two** chunk sources under
+ * `subsource.mesh`, each in its own subsource entry:
+ *
+ *   - `"skeleton-spatial"` — the multiscale spatially-indexed source
+ *     that drives **pass 1** (camera-relative chunk loading).  Only
+ *     emitted when the store is 3-D (the spatially-indexed skeleton
+ *     render layer in neuroglancer assumes vec3 positions).
+ *   - `"skeleton"` — the per-segment source that drives **pass 2**
+ *     (user-typed object IDs in the segments-list UI).
+ *
+ * Neuroglancer's `SegmentationUserLayer.renderLayers` dispatches by
+ * `instanceof` on `subsource.mesh`:
+ *
+ *   - `MultiscaleSpatiallyIndexedSkeletonSource` → mounts the
+ *     spatially-indexed render layer.
+ *   - `SkeletonSource` → mounts the per-segment render layer.
+ *
+ * Both render layers can coexist on the same segmentation layer, which
+ * is how the two passes compose visually.
+ */
+function getSkeletonDataSource(
+  sharedKvStoreContext: SharedKvStoreContext,
+  metadata: SkeletonMetadata,
+): DataSource {
+  const subsources: DataSource["subsources"] = [];
+
+  if (metadata.pass1Levels !== undefined && metadata.spatialGrid !== undefined) {
+    subsources.push({
+      id: "skeleton-spatial",
+      default: true,
+      subsource: {
+        mesh: new ZarrVectorsMultiscaleSpatiallyIndexedSkeletonSource(
+          sharedKvStoreContext.chunkManager,
+          sharedKvStoreContext,
+          {
+            levels: metadata.pass1Levels,
+            chunkShape: metadata.spatialGrid.chunkShape,
+            lowerBounds: metadata.spatialGrid.lowerBounds,
+            upperBounds: metadata.spatialGrid.upperBounds,
+            levelSpacingFactors: metadata.spatialGrid.levelSpacingFactors,
+          },
+        ),
+      },
+    });
+  }
+
+  // Pass-2 (per-segment) source is opt-in.  The segmentation layer's
+  // standard subsource toggle lets the user enable it when they want the
+  // visible-segments-set to drive a second render layer drawn on top of
+  // pass 1.  Matches catmaid's default-flag convention.
+  subsources.push({
+    id: "skeleton",
+    default: false,
+    subsource: {
+      mesh: sharedKvStoreContext.chunkManager.getChunkSource(
+        ZarrVectorsObjectKeyedSkeletonSource,
+        {
+          sharedKvStoreContext,
+          parameters: metadata.pass2Params,
+        },
+      ),
+    },
+  });
+
+  return {
+    modelTransform: makeIdentityTransform(metadata.coordinateSpace),
+    subsources,
+  };
+}
+
+// ---------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------
 
@@ -779,13 +1233,82 @@ export class ZarrVectorsDataSource implements KvStoreBasedDataSourceProvider {
           );
         }
         const attrs = rootJson.attributes ?? {};
-        const meta = await buildAnnotationMetadata(
-          sharedKvStoreContext,
-          kvStoreUrl,
-          attrs,
-          progressOptions,
+        // Dispatch by geometry_types: point_cloud → annotation layer
+        // (existing path); skeleton / polyline / streamline → segmentation
+        // layer (slice 4c).  Validation (unknown types, mixed-geometry,
+        // wrong object_index_convention) happens here so the failure
+        // surface is consistent across geometries.
+        const zv = attrs.zarr_vectors;
+        if (zv === undefined) {
+          throw new Error(
+            "Not a zarr-vectors store: root attributes lack a 'zarr_vectors' block",
+          );
+        }
+        const geometryTypes: string[] = Array.isArray(zv.geometry_types)
+          ? zv.geometry_types
+          : [];
+        const supportedGeom = new Set<string>([
+          "point_cloud",
+          "skeleton",
+          "polyline",
+          "streamline",
+        ]);
+        const unsupported = geometryTypes.filter((g) => !supportedGeom.has(g));
+        if (unsupported.length > 0) {
+          throw new Error(
+            `zarr-vectors datasource: unsupported geometry types ` +
+              `${JSON.stringify(unsupported)}.  Supported: ` +
+              `${JSON.stringify(Array.from(supportedGeom))}`,
+          );
+        }
+        const hasSkeletonLike = geometryTypes.some((g) =>
+          SKELETON_LIKE_GEOM.has(g),
         );
-        const dataSource = getAnnotationDataSource(sharedKvStoreContext, meta);
+        const hasPointCloud = geometryTypes.includes("point_cloud");
+        if (hasSkeletonLike && hasPointCloud) {
+          throw new Error(
+            `zarr-vectors datasource: stores with both point_cloud and ` +
+              `skeleton/polyline/streamline geometry are not yet supported ` +
+              `(found: ${JSON.stringify(geometryTypes)})`,
+          );
+        }
+        if (!hasSkeletonLike && !hasPointCloud) {
+          throw new Error(
+            `zarr-vectors datasource: no recognised geometry type in ` +
+              `${JSON.stringify(geometryTypes)}; expected 'point_cloud' or ` +
+              `one of ${JSON.stringify(Array.from(SKELETON_LIKE_GEOM))}`,
+          );
+        }
+
+        let dataSource: DataSource;
+        if (hasSkeletonLike) {
+          const objectIndexConvention = zv.object_index_convention;
+          if (
+            objectIndexConvention !== "standard" &&
+            objectIndexConvention !== undefined
+          ) {
+            throw new Error(
+              `zarr-vectors datasource: skeleton/polyline/streamline geometry ` +
+                `requires object_index_convention='standard' (got ` +
+                `${JSON.stringify(objectIndexConvention)})`,
+            );
+          }
+          const skelMeta = await buildSkeletonMetadata(
+            sharedKvStoreContext,
+            kvStoreUrl,
+            attrs,
+            progressOptions,
+          );
+          dataSource = getSkeletonDataSource(sharedKvStoreContext, skelMeta);
+        } else {
+          const meta = await buildAnnotationMetadata(
+            sharedKvStoreContext,
+            kvStoreUrl,
+            attrs,
+            progressOptions,
+          );
+          dataSource = getAnnotationDataSource(sharedKvStoreContext, meta);
+        }
         dataSource.canonicalUrl = `${kvStoreUrl}|${options.url.scheme}:`;
         return dataSource;
       },

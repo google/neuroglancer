@@ -275,6 +275,22 @@ export async function downloadSkeletonChunk(
   }
 
   // 4. Per-vertex attributes — one fetch per declared attribute name.
+  // A missing per-chunk attribute blob is tolerated and degrades to a
+  // zero-filled array of the declared dtype.  Two situations trigger
+  // this in practice:
+  //
+  //   - The writer's pyramid coarsening doesn't propagate
+  //     `vertex_attributes/<name>/` to higher levels (see
+  //     `zarr-vectors-py multiresolution/coarsen.py`); coarser levels
+  //     have vertices but no attribute arrays.
+  //   - Future writers may emit attributes sparsely (per-chunk
+  //     opt-in).
+  //
+  // The user-visible effect is `prop_<name>()` evaluating to 0 inside
+  // the shader for chunks without that attribute.  This matches how
+  // the spatially-indexed skeleton shader handles "this segment has no
+  // value" elsewhere and avoids cascading layer failures from a
+  // single missing optional blob.
   const vertexAttributes: AttributeTypedArray[] = await Promise.all(
     attributeNames.map(async (name, i) => {
       const bytes = await kvStoreRead(
@@ -282,9 +298,10 @@ export async function downloadSkeletonChunk(
         signal,
       );
       if (bytes === undefined) {
-        throw new Error(
-          `zarr-vectors chunk ${chunkKey} has vertices but ` +
-            `vertex_attributes/${name} is missing`,
+        return reinterpretBytes(
+          new Uint8Array(numVertices * BYTES_PER_ELEMENT[attributeDtypes[i]]),
+          attributeDtypes[i],
+          numVertices,
         );
       }
       return reinterpretBytes(bytes, attributeDtypes[i], numVertices);

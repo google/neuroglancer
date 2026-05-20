@@ -247,27 +247,37 @@ describe("downloadSkeletonChunk — orchestrator", () => {
     ).rejects.toThrow(/vertex_fragments is missing/);
   });
 
-  it("rejects when a declared attribute chunk is missing", async () => {
+  it("zero-fills declared attributes when the per-chunk blob is missing", async () => {
+    // Used by the pyramid case: coarser levels often have vertices but
+    // no `vertex_attributes/<name>/` arrays at all (the writer's
+    // metavertex aggregation skips attribute propagation).  Rather
+    // than fail the whole chunk, the reader degrades each missing
+    // attribute to zero-filled.
     const kvStoreRead = makeKvStore({
-      "vertices/0.0.0/c/0": verticesBlob([0, 0, 0]),
-      "vertex_fragments/0.0.0/c/0": singleRangeFragmentBlob(1),
+      "vertices/0.0.0/c/0": verticesBlob([0, 0, 0, 1, 0, 0]),
+      "vertex_fragments/0.0.0/c/0": singleRangeFragmentBlob(2),
       // intentionally missing vertex_attributes/radius/...
     });
-    await expect(
-      downloadSkeletonChunk(
-        {
-          chunkKey: "0.0.0",
-          rank: 3,
-          linkDtype: "int64",
-          attributeNames: ["radius"],
-          attributeDtypes: ["float32"],
-          linksConvention: "implicit_sequential",
-          geometryKind: "polyline",
-          kvStoreRead,
-        },
-        new AbortController().signal,
-      ),
-    ).rejects.toThrow(/vertex_attributes\/radius is missing/);
+    const chunk = await downloadSkeletonChunk(
+      {
+        chunkKey: "0.0.0",
+        rank: 3,
+        linkDtype: "int64",
+        attributeNames: ["radius"],
+        attributeDtypes: ["float32"],
+        linksConvention: "implicit_sequential",
+        geometryKind: "polyline",
+        kvStoreRead,
+      },
+      new AbortController().signal,
+    );
+    expect(chunk).toBeDefined();
+    expect(chunk!.vertexAttributes).toHaveLength(1);
+    expect(chunk!.vertexAttributes[0]).toBeInstanceOf(Float32Array);
+    expect(chunk!.vertexAttributes[0].length).toBe(2); // numVertices
+    expect(Array.from(chunk!.vertexAttributes[0] as Float32Array)).toEqual([
+      0, 0,
+    ]);
   });
 
   it("widens narrow-int link dtypes to chunk-local Uint32Array", async () => {

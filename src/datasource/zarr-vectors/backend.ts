@@ -14,6 +14,13 @@
  * limitations under the License.
  */
 
+// Side-effect import: pulls in the skeleton / polyline / streamline
+// chunk-source backends so their `@registerSharedObject()` decorators
+// run when the worker loads this module.  Without this import the new
+// backends would never appear in the RPC registry and the frontend
+// would fail to instantiate matching chunk sources.
+import "#src/datasource/zarr-vectors/skeleton_backend.js";
+
 import type { AnnotationGeometryChunk } from "#src/annotation/backend.js";
 import {
   AnnotationGeometryChunkSourceBackend,

@@ -68,3 +68,106 @@ export class ZarrVectorsAnnotationSpatialIndexSourceParameters {
   attributeDtypes: ZarrVectorsAttributeDtype[];
   static RPC_ID = "zarr-vectors/AnnotationSpatialIndexSource";
 }
+
+/**
+ * How vertex-to-vertex edges are encoded inside a chunk.  Mirrors the
+ * spec's root-level ``links_convention`` field.
+ *
+ * - "implicit_sequential": polyline / streamline — edges go vertex
+ *   ``i`` → ``i+1`` inside each fragment; the chunk has no
+ *   ``links/0/<chunk>`` array.
+ * - "implicit_sequential_with_branches": skeleton — implicit sequential
+ *   edges plus an explicit ``links/0/<chunk>`` array of branch edges.
+ * - "explicit": all edges live in ``links/0/<chunk>`` (general graphs).
+ */
+export type ZarrVectorsLinksConvention =
+  | "implicit_sequential"
+  | "implicit_sequential_with_branches"
+  | "explicit";
+
+/**
+ * Geometry kind for a zarr-vectors skeleton-flavoured store.  Drives
+ * whether per-vertex tangent vectors are precomputed for the default
+ * RGB-by-direction streamline shader.
+ */
+export type ZarrVectorsSkeletonGeometryKind =
+  | "streamline"
+  | "polyline"
+  | "skeleton";
+
+/**
+ * Integer dtype for ``links/0/<chunk>``.  Writers pick the narrowest
+ * width that covers ``n_vertices_in_chunk`` (see spec §7.5); the
+ * reader honours whatever was declared in ``.zattrs.dtype``.  Unused
+ * for stores with ``links_convention = "implicit_sequential"``.
+ */
+export type ZarrVectorsLinkDtype =
+  | "uint8"
+  | "uint16"
+  | "uint32"
+  | "int8"
+  | "int16"
+  | "int32"
+  | "int64";
+
+/**
+ * Parameters for the spatially-indexed skeleton chunk source (pass 1).
+ * Mirrors :class:`SpatiallyIndexedSkeletonSourceBackend` semantics: the
+ * source enumerates chunks visible to the camera and downloads each one
+ * via the zarr-vectors chunk-download orchestrator.
+ *
+ * One instance per **resolution level** in the multiscale pyramid.
+ * ``baseUrl`` ends with ``/`` and points at the level directory (e.g.
+ * ``".../store.zvr/0/"``).
+ */
+export class ZarrVectorsSpatiallyIndexedSkeletonSourceParameters {
+  baseUrl!: string;
+  rank!: number;
+  /** Parallel arrays describing per-vertex attribute discovery. */
+  attributeNames!: string[];
+  attributeDtypes!: ZarrVectorsAttributeDtype[];
+  /** From the store's ``zarr_vectors.links_convention``. */
+  linksConvention!: ZarrVectorsLinksConvention;
+  /** Drives tangent precomputation for streamline/polyline shaders. */
+  geometryKind!: ZarrVectorsSkeletonGeometryKind;
+  /**
+   * Declared ``links/0/.zattrs.dtype``.  Unused when
+   * ``linksConvention === "implicit_sequential"`` — keep ``"int64"`` as
+   * a defensive default in that case.
+   */
+  linkDtype!: ZarrVectorsLinkDtype;
+  /**
+   * Zero-based index of this level in the multiscale pyramid (finest = 0).
+   * Read by neuroglancer's spatially-indexed skeleton render layer to
+   * decide which source backs the user-selected `spatialSkeletonGridLevel`.
+   * See [src/skeleton/source_selection.ts:51-57]
+   * (#src/skeleton/source_selection.ts) for the consumer side.
+   */
+  gridIndex!: number;
+  static RPC_ID = "zarr-vectors/SpatiallyIndexedSkeletonSource";
+}
+
+/**
+ * Parameters for the per-segment (object-keyed) skeleton chunk source
+ * used by the **pass-2** rendering path.  The source is parametrised
+ * the same way as pass 1 (the underlying chunk format is identical),
+ * but its ``download(chunk)`` is called once per visible object_id and
+ * is responsible for resolving the object's manifest in
+ * ``object_index/manifests`` and aggregating its fragments across
+ * chunks.
+ *
+ * The manifest resolution is intentionally pinned to a single
+ * resolution level (typically level 0).  Pass 1 is the level-aware
+ * multiscale path; pass 2 always renders the highlighted objects at
+ * full fidelity.
+ */
+export class ZarrVectorsObjectKeyedSkeletonSourceParameters {
+  baseUrl!: string;
+  rank!: number;
+  attributeNames!: string[];
+  attributeDtypes!: ZarrVectorsAttributeDtype[];
+  linksConvention!: ZarrVectorsLinksConvention;
+  geometryKind!: ZarrVectorsSkeletonGeometryKind;
+  linkDtype!: ZarrVectorsLinkDtype;
+  static RPC_ID = "zarr-vectors/ObjectKeyedSkeletonSource";
+}
