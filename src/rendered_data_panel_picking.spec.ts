@@ -74,16 +74,7 @@ describe("clearOutOfBoundsPickData", () => {
     const pickDiameter = getPickDiameter(pickRadius);
     const buffer = new Float32Array(4 * pickDiameter * pickDiameter).fill(1);
 
-    clearOutOfBoundsPickData(
-      buffer,
-      0,
-      4,
-      0,
-      0,
-      3,
-      3,
-      pickRadius,
-    );
+    clearOutOfBoundsPickData(buffer, 0, 4, 0, 0, 3, 3, pickRadius);
 
     expect(buffer[0]).toBe(0);
     expect(buffer[4]).toBe(0);
