@@ -696,7 +696,20 @@ interface SkeletonMetadata {
   }>;
   /** Grid info shared across all pass-1 levels.  Co-defined with `pass1Levels`. */
   spatialGrid?: {
-    chunkShape: Float32Array;
+    /**
+     * Per-level chunk shape in world units.  Length == pass1Levels.length.
+     * Each entry comes from the level's ``zarr_vectors_level.chunk_shape``
+     * override if present, otherwise from root chunk_shape.  Writers
+     * that want the spatial grid-resolution picker to expose multiple
+     * LOD levels should set ``chunk_scale_factors`` so each level's
+     * chunk_shape is monotonically distinct — that's the same pattern
+     * CATMAID's per-level ``chunkSize`` follows
+     * (`src/datasource/catmaid/frontend.ts:386-390`).  Sparsity-only
+     * pyramids without per-level chunk-shape changes still load, but
+     * adjacent levels with identical chunk_shape will collapse into a
+     * single picker entry.
+     */
+    perLevelChunkShape: Float32Array[];
     /**
      * World-space lower bound of the data.  Can be negative — zarr-vectors
      * chunks are indexed around world origin `(0,0,0)`, NOT around
@@ -706,22 +719,6 @@ interface SkeletonMetadata {
     lowerBounds: Float32Array;
     /** World-space upper bound of the data. */
     upperBounds: Float32Array;
-    /**
-     * Per-level synthetic "spacing" multiplier used by
-     * {@link ZarrVectorsMultiscaleSpatiallyIndexedSkeletonSource.getSpatialSkeletonGridSizes}
-     * to populate the segmentation layer's grid-resolution picker.
-     *
-     * zarr-vectors keeps the chunk grid uniform across pyramid levels,
-     * so the picker would collapse all levels to one position if we
-     * reported the real chunk size everywhere.  We instead synthesise a
-     * per-level factor derived from either the NGFF multiscales
-     * `coordinateTransformations.scale[0]` (preferred) or
-     * `1/object_sparsity` (fallback when NGFF scales are identical).
-     * Reported spacing for level k = `chunkShape * levelSpacingFactors[k]`.
-     *
-     * Finest-first order, length == `pass1Levels.length`.
-     */
-    levelSpacingFactors: Float32Array;
   };
 }
 
@@ -741,119 +738,6 @@ const SKELETON_LIKE_GEOM = new Set<string>(["skeleton", "polyline", "streamline"
  * - `links/0/.zattrs.dtype` (or `data_type` fallback) declares the
  *   on-disk link dtype; absent for `implicit_sequential` stores.
  */
-/**
- * Compute the synthetic per-level "spacing" factor exposed to the
- * segmentation layer's spatially-indexed skeleton grid-resolution
- * picker.  See `SkeletonMetadata.spatialGrid.levelSpacingFactors`.
- *
- * Resolution order:
- *
- * 1. **NGFF scales.** Read `multiscales[0].datasets[k].coordinateTransformations`'s
- *    `scale[0]` for each level.  If the resulting values are distinct
- *    across levels (i.e. each level has a different scale), use them
- *    verbatim — these reflect the writer's stated coarsening factor.
- *
- * 2. **Per-level `object_sparsity` fallback.** zarr-vectors pyramids
- *    often share the NGFF scale across levels (the grid is the same;
- *    coarsening is by *object drop*, not by *grid size*).  In that case
- *    NGFF can't distinguish levels, so we synthesise spacings from each
- *    level's `zarr_vectors_level.object_sparsity` attribute: factor =
- *    `1 / object_sparsity`.  Level 0 (sparsity 1.0) → factor 1; a
- *    sparsity-0.25 level → factor 4 (4× the chunk size).
- *
- * 3. **Last-resort fallback.** If neither NGFF nor `object_sparsity`
- *    yields useful information, return `[1, 2, 4, 8, …]` (powers of two
- *    keyed off the level index) — guarantees distinct slider positions
- *    so the picker remains usable even on stores without proper
- *    pyramid metadata.
- *
- * Returned array is finest-first, length == `levelPaths.length`.
- */
-async function computeLevelSpacingFactors(
-  sharedKvStoreContext: SharedKvStoreContext,
-  storeUrl: string,
-  levelPaths: readonly string[],
-  multiscales: any,
-  options: Partial<ProgressOptions>,
-): Promise<Float32Array> {
-  const numLevels = levelPaths.length;
-  const factors = new Float32Array(numLevels);
-
-  // 1. NGFF: pull scale[0] off each dataset.
-  const datasets = Array.isArray(multiscales)
-    ? multiscales[0]?.datasets
-    : undefined;
-  const ngffScales: (number | undefined)[] = new Array(numLevels);
-  if (Array.isArray(datasets)) {
-    for (let k = 0; k < numLevels; ++k) {
-      const ds = datasets[k];
-      const scaleXform = ds?.coordinateTransformations?.find(
-        (t: any) => t?.type === "scale",
-      );
-      const v = scaleXform?.scale?.[0];
-      if (typeof v === "number" && Number.isFinite(v) && v > 0) {
-        ngffScales[k] = v;
-      }
-    }
-  }
-  const ngffPopulated = ngffScales.every((v) => v !== undefined);
-  const ngffDistinct =
-    ngffPopulated &&
-    new Set(ngffScales.map((v) => v as number)).size === numLevels;
-  if (ngffDistinct) {
-    // Normalise to level-0 = 1.0 so the multiplier is "relative to
-    // the finest level's grid", regardless of NGFF's chosen base.
-    const base = ngffScales[0] as number;
-    for (let k = 0; k < numLevels; ++k) {
-      factors[k] = (ngffScales[k] as number) / base;
-    }
-    return factors;
-  }
-
-  // 2. Per-level object_sparsity fallback.  Fetch each level's
-  // zarr.json in parallel; pull `attributes.zarr_vectors_level.object_sparsity`.
-  const sparsities = await Promise.all(
-    levelPaths.map(async (levelPath) => {
-      const levelUrl = kvstoreEnsureDirectoryPipelineUrl(
-        pipelineUrlJoin(storeUrl, levelPath),
-      );
-      try {
-        const levelJson = await getJsonResource(
-          sharedKvStoreContext,
-          joinBaseUrlAndPath(levelUrl, "zarr.json"),
-          `zarr-vectors level ${JSON.stringify(levelPath)} metadata`,
-          options,
-        );
-        const s = levelJson?.attributes?.zarr_vectors_level?.object_sparsity;
-        return typeof s === "number" && Number.isFinite(s) && s > 0
-          ? s
-          : undefined;
-      } catch {
-        return undefined;
-      }
-    }),
-  );
-  const sparsityPopulated = sparsities.every((s) => s !== undefined);
-  const sparsityDistinct =
-    sparsityPopulated &&
-    new Set(sparsities.map((s) => s as number)).size === numLevels;
-  if (sparsityDistinct) {
-    // Normalise so level-0 (typically sparsity 1.0) maps to factor 1.0.
-    const base = sparsities[0] as number;
-    for (let k = 0; k < numLevels; ++k) {
-      factors[k] = base / (sparsities[k] as number);
-    }
-    return factors;
-  }
-
-  // 3. Last-resort: power-of-two by level index so the picker always
-  // sees distinct positions.
-  for (let k = 0; k < numLevels; ++k) {
-    factors[k] = 2 ** k;
-  }
-  return factors;
-}
-
 async function buildSkeletonMetadata(
   sharedKvStoreContext: SharedKvStoreContext,
   storeUrl: string,
@@ -1023,10 +907,9 @@ async function buildSkeletonMetadata(
     | undefined;
   let spatialGrid:
     | {
-        chunkShape: Float32Array;
+        perLevelChunkShape: Float32Array[];
         lowerBounds: Float32Array;
         upperBounds: Float32Array;
-        levelSpacingFactors: Float32Array;
       }
     | undefined;
   if (rank === 3) {
@@ -1034,21 +917,48 @@ async function buildSkeletonMetadata(
     if (!Array.isArray(chunkShape) || chunkShape.length !== rank) {
       throw new Error(`zarr-vectors store: 'chunk_shape' must have rank ${rank}`);
     }
-    // zarr-vectors chunks are indexed around world origin (chunk
-    // `(i,j,k)` covers world `[i*chunkShape, (i+1)*chunkShape]`), so we
-    // pass world-space lower/upper bounds verbatim to the chunk spec
-    // and let `makeSliceViewChunkSpecification` derive the chunk-index
-    // range — which is allowed to span negatives.
-    const chunkShapeF32 = new Float32Array(rank);
+    // Root chunk_shape is the default per-level chunk size.  When a
+    // level stamps its own ``zarr_vectors_level.chunk_shape`` on disk
+    // (writers using ``chunk_scale_factors`` to grow chunks at coarser
+    // levels), that overrides the root for that level.
+    const rootChunkShapeF32 = new Float32Array(rank);
     for (let i = 0; i < rank; ++i) {
-      chunkShapeF32[i] = Number(chunkShape[i]);
+      rootChunkShapeF32[i] = Number(chunkShape[i]);
     }
     const lowerBoundsF32 = Float32Array.from(lowerBounds);
     const upperBoundsF32 = Float32Array.from(upperBounds);
 
-    // Per-level parameter blobs.  All levels share the same grid (the
-    // pyramid stores fewer fragments at coarser levels rather than a
-    // coarser grid).
+    // Fetch each level's zarr.json in parallel to read its optional
+    // per-level chunk_shape override.  Reuses kvstore caching: the
+    // same files are read again below by the chunk-source download
+    // path with zero net traffic.
+    const perLevelChunkShape: Float32Array[] = await Promise.all(
+      levelPaths.map(async (levelPath) => {
+        const levelUrl = kvstoreEnsureDirectoryPipelineUrl(
+          pipelineUrlJoin(storeUrl, levelPath),
+        );
+        try {
+          const levelJson = await getJsonResource(
+            sharedKvStoreContext,
+            joinBaseUrlAndPath(levelUrl, "zarr.json"),
+            `zarr-vectors level ${JSON.stringify(levelPath)} metadata`,
+            options,
+          );
+          const override = levelJson?.attributes?.zarr_vectors_level?.chunk_shape;
+          if (Array.isArray(override) && override.length === rank) {
+            const arr = new Float32Array(rank);
+            for (let i = 0; i < rank; ++i) arr[i] = Number(override[i]);
+            return arr;
+          }
+        } catch {
+          // fall through to default
+        }
+        return new Float32Array(rootChunkShapeF32);
+      }),
+    );
+
+    // Per-level parameter blobs.  Each level gets its own chunkShape
+    // (may differ when the writer used ``chunk_scale_factors``).
     const levels: { parameters: ZarrVectorsSpatiallyIndexedSkeletonSourceParameters }[] =
       [];
     for (let k = 0; k < levelPaths.length; ++k) {
@@ -1067,8 +977,8 @@ async function buildSkeletonMetadata(
       // ordering, which is sorted DESCENDING by spacing (largest first).
       // Our `levelPaths[0]` is the FINEST pyramid level (smallest spacing),
       // so it should land at the END of the sorted list:
-      //   levelPaths[0]  (finest, factor=1)   → gridIndex = numLevels - 1
-      //   levelPaths[N-1] (coarsest, factor=2^(N-1)) → gridIndex = 0
+      //   levelPaths[0]  (finest)   → gridIndex = numLevels - 1
+      //   levelPaths[N-1] (coarsest) → gridIndex = 0
       // See `findClosestSpatialSkeletonGridLevelBySpacing` in
       // `src/layer/segmentation/index.ts:588-603` for the picker that
       // then looks up sources by `gridIndex`.
@@ -1076,20 +986,11 @@ async function buildSkeletonMetadata(
       levels.push({ parameters: params });
     }
 
-    const levelSpacingFactors = await computeLevelSpacingFactors(
-      sharedKvStoreContext,
-      storeUrl,
-      levelPaths,
-      rootAttrs.multiscales,
-      options,
-    );
-
     pass1Levels = levels;
     spatialGrid = {
-      chunkShape: chunkShapeF32,
+      perLevelChunkShape,
       lowerBounds: lowerBoundsF32,
       upperBounds: upperBoundsF32,
-      levelSpacingFactors,
     };
   }
 
@@ -1135,10 +1036,9 @@ function getSkeletonDataSource(
           sharedKvStoreContext,
           {
             levels: metadata.pass1Levels,
-            chunkShape: metadata.spatialGrid.chunkShape,
+            perLevelChunkShape: metadata.spatialGrid.perLevelChunkShape,
             lowerBounds: metadata.spatialGrid.lowerBounds,
             upperBounds: metadata.spatialGrid.upperBounds,
-            levelSpacingFactors: metadata.spatialGrid.levelSpacingFactors,
           },
         ),
       },

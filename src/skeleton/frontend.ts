@@ -1785,6 +1785,18 @@ export function getSpatialSkeletonCellKeyPrefix(
 }
 
 export abstract class MultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleSliceViewChunkSource<SpatiallyIndexedSkeletonSource> {
+  /**
+   * When `true`, the segmentation layer enables
+   * `autoSpatialSkeletonGridLevel{3d,2d}` on attach: the render layer
+   * will overwrite `spatialSkeletonGridResolutionTarget*` every frame
+   * from the camera projection.  Default `false` preserves the
+   * existing manual-slider UX for sources that haven't opted in
+   * (CATMAID).  Subclasses (e.g. zarr-vectors) override to `true`.
+   */
+  get prefersAutoSpatialSkeletonGridLevel(): boolean {
+    return false;
+  }
+
   getPerspectiveSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] {
     const sources = this.getSources(SPATIAL_SKELETON_SOURCE_OPTIONS);
     const flattened: SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] =
@@ -1966,6 +1978,142 @@ function getSpatialSkeletonGridSpacing(
   return Math.max(Math.min(chunkSize[0], chunkSize[1], chunkSize[2]), 1e-6);
 }
 
+/**
+ * World units per screen pixel at `worldPoint`, derived from a
+ * model-view-projection matrix and viewport dimensions.  Same
+ * formulation the multiscale-mesh renderer uses to pick per-fragment
+ * LOD ({@link getDesiredMultiscaleMeshChunks} in
+ * `src/mesh/multiscale.ts:154-202`): take the maximum of x-, y-, and
+ * z-axis screen-space scale factors, divide the point's w-component
+ * by that scaleFactor to get world-units-per-screen-pixel.
+ *
+ * Returns `+Infinity` for a behind-camera or invalid `w` so callers
+ * fall back to the largest available level.
+ */
+function computeWorldUnitsPerScreenPixel(
+  modelViewProjection: mat4,
+  viewportWidth: number,
+  viewportHeight: number,
+  worldPoint: Float32Array,
+): number {
+  const m = modelViewProjection;
+  // Column-major mat4 indices.
+  const m00 = m[0], m10 = m[1];
+  const m01 = m[4], m11 = m[5];
+  const m02 = m[8], m12 = m[9];
+  const m30 = m[3], m31 = m[7], m32 = m[11], m33 = m[15];
+  const w = m30 * worldPoint[0] + m31 * worldPoint[1] + m32 * worldPoint[2] + m33;
+  if (!Number.isFinite(w) || w <= 0) return Number.POSITIVE_INFINITY;
+  const xScale = Math.sqrt(
+    (m00 * viewportWidth) ** 2 + (m10 * viewportHeight) ** 2,
+  );
+  const yScale = Math.sqrt(
+    (m01 * viewportWidth) ** 2 + (m11 * viewportHeight) ** 2,
+  );
+  const zScale = Math.sqrt(
+    (m02 * viewportWidth) ** 2 + (m12 * viewportHeight) ** 2,
+  );
+  const scaleFactor = Math.max(xScale, yScale, zScale);
+  if (!Number.isFinite(scaleFactor) || scaleFactor <= 0) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return w / scaleFactor;
+}
+
+/**
+ * Multiplier from "world units per screen pixel" to the resolution
+ * target the level picker matches against `levels[k].size`.  The picker
+ * finds the level whose spacing is closest to the target, so target
+ * needs to live in the same magnitude as a level spacing (typical
+ * neuroscience streamline chunk = 50–500 µm/mm, while raw world-units-
+ * per-pixel is a couple of orders of magnitude smaller for a normal
+ * zoom).  200 means "a chunk should be ~200 screen pixels at the
+ * matching level" — finest level when chunks are bigger than that on
+ * screen, coarser otherwise.  Mirrors the mesh layer's `detailCutoff`
+ * tunable in [src/mesh/multiscale.ts:202](src/mesh/multiscale.ts#L202).
+ */
+const AUTO_SPATIAL_SKELETON_GRID_DETAIL_CUTOFF = 200;
+
+/**
+ * If `displayState.autoSpatialSkeletonGridLevel{view}` is enabled,
+ * compute the camera-derived "world units per screen pixel" at a
+ * representative world position, multiply by the detail-cutoff
+ * constant, and write the result to
+ * `spatialSkeletonGridResolutionTarget{view}`.  Because
+ * `findClosestSpatialSkeletonGridLevelBySpacing` re-runs on every
+ * change of that target, the picker (and the histogram widget) snap
+ * to the appropriate discrete level for the current zoom.
+ *
+ * No-op when:
+ * - The flag is absent or false (default; CATMAID/legacy behaviour).
+ * - The target watchable isn't wired up.
+ * - The computed target isn't finite.
+ *
+ * Reference point: prefer `projectionParameters.globalPosition` (the
+ * camera's look-at point in global space).  Fall back to
+ * `localPosition` (per-layer position, usually empty for segmentation
+ * layers without layer-local dimensions) and finally to the origin.
+ * In orthographic projection `w` is independent of position, so the
+ * choice only matters for perspective views; either way the helper
+ * returns a meaningful value for any of these fallbacks.
+ */
+function maybeUpdateAutoSpatialSkeletonGridResolutionTarget(
+  displayState: SpatiallyIndexedSkeletonLayerDisplayState,
+  projectionParameters: {
+    viewProjectionMat: mat4;
+    width: number;
+    height: number;
+    globalPosition?: Float32Array;
+  },
+  localPosition: Float32Array,
+  view: "2d" | "3d",
+): void {
+  const autoFlag =
+    view === "3d"
+      ? displayState.autoSpatialSkeletonGridLevel3d
+      : displayState.autoSpatialSkeletonGridLevel2d;
+  if (autoFlag === undefined || autoFlag.value !== true) return;
+  const target =
+    view === "3d"
+      ? displayState.spatialSkeletonGridResolutionTarget3d
+      : displayState.spatialSkeletonGridResolutionTarget2d;
+  if (target === undefined) return;
+  // Pick the first non-empty reference position.  GlobalPosition is
+  // populated for all 3D-view renders even when the segmentation
+  // layer has no layer-local dimensions (the common case, where
+  // `localPosition` is a zero-length array).
+  let reference: Float32Array | undefined;
+  if (
+    projectionParameters.globalPosition !== undefined &&
+    projectionParameters.globalPosition.length >= 3
+  ) {
+    reference = projectionParameters.globalPosition;
+  } else if (localPosition.length >= 3) {
+    reference = localPosition;
+  } else {
+    reference = new Float32Array(3); // origin fallback
+  }
+  const pixelSize = computeWorldUnitsPerScreenPixel(
+    projectionParameters.viewProjectionMat,
+    projectionParameters.width,
+    projectionParameters.height,
+    reference,
+  );
+  if (!Number.isFinite(pixelSize) || pixelSize <= 0) return;
+  const next = pixelSize * AUTO_SPATIAL_SKELETON_GRID_DETAIL_CUTOFF;
+  // Only write when the value actually changes by more than 0.1%;
+  // TrackableValue's `value` setter dispatches `changed` regardless
+  // of equality, which triggers a chain of re-evaluations (level
+  // pick → grid level index → render-layer re-attach).
+  if (
+    Math.abs((target.value as number) - next) <
+    Math.max(target.value as number, next) * 1e-3
+  ) {
+    return;
+  }
+  target.value = next;
+}
+
 // Tracks chunk keys already counted for a given histogram within a single frame,
 // preventing the same chunk from being counted multiple times when it falls within
 // the visible frustum of more than one slice panel in the same frame.
@@ -2048,6 +2196,26 @@ export interface SpatiallyIndexedSkeletonLayerDisplayState
   >;
   spatialSkeletonGridRenderScaleHistogram2d?: RenderScaleHistogram;
   spatialSkeletonGridRenderScaleHistogram3d?: RenderScaleHistogram;
+  /**
+   * Optional writable target that the picker is matched against;
+   * paired with the `auto*` flags below.  When auto is enabled the
+   * render layer overwrites this every frame from the camera
+   * projection.
+   */
+  spatialSkeletonGridResolutionTarget2d?: WatchableValueInterface<number> & {
+    value: number;
+  };
+  spatialSkeletonGridResolutionTarget3d?: WatchableValueInterface<number> & {
+    value: number;
+  };
+  /**
+   * When `true` the render layer auto-derives `spatialSkeletonGridResolutionTarget*`
+   * from the current camera projection at the layer's `localPosition`
+   * (world units per screen pixel).  Default off; opt in to get
+   * camera-driven LOD switching for spatially-indexed skeletons.
+   */
+  autoSpatialSkeletonGridLevel2d?: WatchableValueInterface<boolean>;
+  autoSpatialSkeletonGridLevel3d?: WatchableValueInterface<boolean>;
 }
 
 export function resolveSpatiallyIndexedSkeletonSegmentPick(
@@ -3515,6 +3683,17 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
       return;
     }
     const { displayState } = this.base;
+    // Auto-LOD: refresh the resolution target from the current camera
+    // projection before chunk selection, so the picker tracks zoom
+    // (same path the manual slider takes).  Opt-in via
+    // `autoSpatialSkeletonGridLevel3d` to preserve existing
+    // user-driven behaviour for layers that don't want it.
+    maybeUpdateAutoSpatialSkeletonGridResolutionTarget(
+      displayState,
+      renderContext.projectionParameters,
+      this.base.localPosition.value,
+      "3d",
+    );
     const lodValue = displayState.skeletonLod?.value;
     const visibleChunks = this.base.getVisibleChunksInCurrentViewAndLod(
       "3d",
@@ -3694,6 +3873,12 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
     >,
   ) {
     const { displayState } = this.base;
+    maybeUpdateAutoSpatialSkeletonGridResolutionTarget(
+      displayState,
+      renderContext.sliceView.projectionParameters.value,
+      this.base.localPosition.value,
+      "2d",
+    );
     const lodValue = displayState.spatialSkeletonLod2d?.value;
     const visibleChunks = this.base.getVisibleChunksInCurrentViewAndLod(
       "2d",

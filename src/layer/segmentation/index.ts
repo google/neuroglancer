@@ -848,6 +848,16 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
     verifyFiniteNonNegativeFloat,
     1,
   );
+  // When true, the render layer overwrites
+  // `spatialSkeletonGridResolutionTarget{2d,3d}` every frame with a
+  // value derived from the current camera projection: world-units-per-
+  // screen-pixel at the layer's localPosition.  This makes the level
+  // picker auto-track camera zoom (like image LOD selection), so
+  // zooming out switches to coarser pyramid levels and zooming in
+  // restores finer ones.  Default off to preserve existing user-
+  // controlled behavior for layers that don't want this (CATMAID).
+  autoSpatialSkeletonGridLevel2d = new TrackableBoolean(false, false);
+  autoSpatialSkeletonGridLevel3d = new TrackableBoolean(false, false);
   spatialSkeletonGridRenderScaleHistogram2d = new RenderScaleHistogram();
   spatialSkeletonGridRenderScaleHistogram3d = new RenderScaleHistogram();
   spatialSkeletonLod2d = new WatchableValue<number>(0);
@@ -1782,6 +1792,14 @@ export class SegmentationUserLayer extends Base {
               perspectiveSources.length > 0
                 ? perspectiveSources
                 : slicePanelSources;
+            // Honour the source's auto-LOD preference: data sources that
+            // emit several pyramid levels and want camera-driven level
+            // switching (e.g. zarr-vectors) opt in here.  CATMAID
+            // leaves it false, preserving manual-slider UX.
+            if (mesh.prefersAutoSpatialSkeletonGridLevel) {
+              this.displayState.autoSpatialSkeletonGridLevel3d.value = true;
+              this.displayState.autoSpatialSkeletonGridLevel2d.value = true;
+            }
             if (sharedSpatialSkeletonSources.length > 0) {
               // Share one mutable skeleton base across 2D/3D projections so
               // local edit state stays consistent across panels.

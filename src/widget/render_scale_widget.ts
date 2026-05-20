@@ -63,6 +63,15 @@ function formatPixelNumber(x: number) {
 export interface RenderScaleWidgetOptions {
   histogram: RenderScaleHistogram;
   target: TrackableValueInterface<number>;
+  /**
+   * Optional unit string appended to formatted target / hover values
+   * in the widget's legend.  When omitted, falls back to the
+   * widget-class default (e.g. "nm" for
+   * `SpatialSkeletonGridRenderScaleWidget`).  Pass a layer-derived
+   * value (e.g. the spatial coordinate-space unit) to label values
+   * correctly when the data isn't in nanometres.
+   */
+  unitOfTarget?: string;
 }
 
 export class RenderScaleWidget extends RefCounted {
@@ -75,7 +84,7 @@ export class RenderScaleWidget extends RefCounted {
   legendChunks = document.createElement("div");
   protected logScaleOrigin = renderScaleHistogramOrigin;
   protected logScaleBinSize = renderScaleHistogramBinSize;
-  protected unitOfTarget = "px";
+  unitOfTarget = "px";
   private ctx = this.canvas.getContext("2d")!;
   hoverTarget = new WatchableValue<[number, number] | undefined>(undefined);
   private throttledUpdateView = this.registerCancellable(
@@ -402,7 +411,7 @@ export class RenderScaleWidget extends RefCounted {
 }
 
 export class VolumeRenderingRenderScaleWidget extends RenderScaleWidget {
-  protected unitOfTarget = "samples";
+  unitOfTarget = "samples";
   protected logScaleOrigin = 1;
 
   getWheelMoveValue(event: WheelEvent) {
@@ -411,7 +420,7 @@ export class VolumeRenderingRenderScaleWidget extends RenderScaleWidget {
 }
 
 export class SpatialSkeletonGridRenderScaleWidget extends RenderScaleWidget {
-  protected unitOfTarget = "nm";
+  unitOfTarget = "nm";
 
   updateView() {
     this.logScaleOrigin = this.histogram.logScaleOrigin;
@@ -481,10 +490,23 @@ export function renderScaleLayerControl<
 ): LayerControlFactory<LayerType, RenderScaleWidget> {
   return {
     makeControl: (layer, context) => {
-      const { histogram, target } = getter(layer);
+      const options = getter(layer);
+      const { histogram, target } = options;
       const control = context.registerDisposer(
         new widgetClass(histogram, target),
       );
+      if (options.unitOfTarget !== undefined) {
+        // Public-property assignment overrides the widget-class
+        // default (e.g. "nm" baked into
+        // `SpatialSkeletonGridRenderScaleWidget`).  Used to label the
+        // legend values with the layer's actual spatial unit so a
+        // millimetre-data layer doesn't read as "339 nm".  The
+        // following `updateView()` re-runs the label-formatting code
+        // with the new unit; the constructor's initial paint already
+        // ran with the default before we got here.
+        control.unitOfTarget = options.unitOfTarget;
+        control.updateView();
+      }
       return { control, controlElement: control.element };
     },
     activateTool: (activation, control) => {

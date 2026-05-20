@@ -331,44 +331,55 @@ export interface ZarrVectorsSkeletonSpatialLevel {
  * caller (`buildSkeletonMetadata`) must enforce this.
  */
 export class ZarrVectorsMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleSpatiallyIndexedSkeletonSource {
+  /**
+   * Opt in to camera-driven LOD picking: zarr-vectors stores publish
+   * synthetic per-level spacings via `getSpatialSkeletonGridSizes()`,
+   * so the picker can pick a meaningful level for the current camera
+   * zoom.  See `src/skeleton/frontend.ts:maybeUpdateAutoSpatialSkeletonGridResolutionTarget`.
+   */
+  override get prefersAutoSpatialSkeletonGridLevel(): boolean {
+    return true;
+  }
+
   /** Per-level chunk-source parameter blobs in finest-first order. */
   readonly levels: ReadonlyArray<ZarrVectorsSkeletonSpatialLevel>;
-  /** Shared grid info — all levels share the same chunk-grid in zarr-vectors. */
-  readonly chunkShape: Float32Array;
+  /**
+   * Per-level chunk shape in world units, finest-first.  Length ==
+   * `levels.length`.  Each entry comes from the level's own
+   * ``zarr_vectors_level.chunk_shape`` if present, otherwise from the
+   * root chunk_shape.  Writers should use ``chunk_scale_factors`` to
+   * make this monotonically distinct across levels — that's what makes
+   * the spatial grid-resolution picker show multiple positions and
+   * what makes auto-LOD level switching meaningful (matches the
+   * CATMAID per-level chunk-size pattern at
+   * `src/datasource/catmaid/frontend.ts:386-390`).  Sparsity-only
+   * pyramids without per-level chunk-shape changes still load, but
+   * adjacent levels collapse into one widget entry.
+   */
+  readonly perLevelChunkShape: Float32Array[];
   /** World-space lower bound of the data; can be negative. */
   readonly lowerBounds: Float32Array;
   /** World-space upper bound of the data. */
   readonly upperBounds: Float32Array;
-  /**
-   * Per-level synthetic spacing multiplier reported to neuroglancer's
-   * grid-resolution picker.  See
-   * `frontend.ts:computeLevelSpacingFactors` for derivation rules.
-   * Finest-first, length == `levels.length`.
-   */
-  readonly levelSpacingFactors: Float32Array;
 
   get rank(): number {
     return 3;
   }
 
   /**
-   * Exposes per-level grid sizes to the segmentation layer's grid-level
-   * picker UI.  zarr-vectors uses a uniform chunk grid across pyramid
-   * levels (the pyramid stores fewer fragments per chunk at coarser
-   * levels, not a coarser grid), so every entry is identical — but the
-   * render layer still needs one entry per level so its grid-level
-   * watchable maps cleanly to `parameters.gridIndex`.
+   * Returns each level's chunk shape verbatim as the grid spacing the
+   * picker UI matches against.  Mirrors CATMAID's per-level
+   * ``chunkSize`` extraction — no synthetic factors, no inference.
+   * Writers that want distinct picker entries set
+   * ``chunk_scale_factors`` so each level's chunk_shape is monotonically
+   * different.
    */
   override getSpatialSkeletonGridSizes(): { x: number; y: number; z: number }[] {
-    const { chunkShape, levelSpacingFactors } = this;
-    return this.levels.map((_, k) => {
-      const f = levelSpacingFactors[k];
-      return {
-        x: chunkShape[0] * f,
-        y: chunkShape[1] * f,
-        z: chunkShape[2] * f,
-      };
-    });
+    return this.perLevelChunkShape.map((cs) => ({
+      x: cs[0],
+      y: cs[1],
+      z: cs[2],
+    }));
   }
 
   /**
@@ -394,18 +405,16 @@ export class ZarrVectorsMultiscaleSpatiallyIndexedSkeletonSource extends Multisc
     private readonly sharedKvStoreContext: SharedKvStoreContext,
     options: {
       levels: ReadonlyArray<ZarrVectorsSkeletonSpatialLevel>;
-      chunkShape: Float32Array;
+      perLevelChunkShape: Float32Array[];
       lowerBounds: Float32Array;
       upperBounds: Float32Array;
-      levelSpacingFactors: Float32Array;
     },
   ) {
     super(chunkManager);
     this.levels = options.levels;
-    this.chunkShape = options.chunkShape;
+    this.perLevelChunkShape = options.perLevelChunkShape;
     this.lowerBounds = options.lowerBounds;
     this.upperBounds = options.upperBounds;
-    this.levelSpacingFactors = options.levelSpacingFactors;
   }
 
   getSources(
@@ -413,14 +422,18 @@ export class ZarrVectorsMultiscaleSpatiallyIndexedSkeletonSource extends Multisc
   ): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[][] {
     const sources: SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] =
       [];
-    const { chunkShape, lowerBounds, upperBounds } = this;
+    const { perLevelChunkShape, lowerBounds, upperBounds } = this;
 
-    for (const level of this.levels) {
+    for (let k = 0; k < this.levels.length; ++k) {
+      const level = this.levels[k];
+      const chunkShape = perLevelChunkShape[k];
       // zarr-vectors chunks are indexed around world origin (chunk
       // `(i,j,k)` covers world `[i*chunkShape, (i+1)*chunkShape]`),
       // and chunk indices can be negative.  Both chunkLayout and
       // chunkToMultiscaleTransform are identity — vertex world coords
-      // come straight off disk in NGFF physical units.
+      // come straight off disk in NGFF physical units.  Per-level
+      // `chunkShape` may differ when the writer used
+      // `chunk_scale_factors`.
       const chunkLayoutTransform = mat4.create();
       const chunkLayout = new ChunkLayout(
         vec3.fromValues(chunkShape[0], chunkShape[1], chunkShape[2]),
