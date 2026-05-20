@@ -8,9 +8,12 @@
 import { describe, expect, it } from "vitest";
 import { FragmentIndex } from "#src/datasource/zarr-vectors/fragment_index.js";
 import {
+  appendGhostVertices,
+  appendIntraChunkEdges,
   buildSkeletonChunk,
   computeTangents,
   mergeEdges,
+  recomputeTangentsForBridges,
   synthesizeSequentialEdges,
 } from "#src/datasource/zarr-vectors/skeleton_chunk.js";
 
@@ -355,5 +358,436 @@ describe("buildSkeletonChunk", () => {
     expect(chunk.vertexAttributes.length).toBe(2);
     expect(chunk.vertexAttributes[0]).toBe(radius);
     expect(chunk.vertexAttributes[1]).toBe(swcType);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// recomputeTangentsForBridges
+// ---------------------------------------------------------------------------
+
+describe("recomputeTangentsForBridges", () => {
+  function coarseChunk(positions: number[]): ReturnType<typeof buildSkeletonChunk> {
+    // Coarser-pyramid-level layout: one metavertex per fragment.
+    // computeTangents will assign zero tangents to all of them.
+    const n = positions.length / 3;
+    const fragments = Array.from({ length: n }, (_, i) => ({
+      range: { start: i, count: 1 },
+    }));
+    return buildSkeletonChunk({
+      rank: 3,
+      positions: new Float32Array(positions),
+      fragmentIndex: buildFragmentIndex(fragments),
+      linksConvention: "implicit_sequential",
+      geometryKind: "streamline",
+      vertexAttributes: [Float32Array.from(Array(n).fill(0))],
+    });
+  }
+
+  it("derives central-difference tangents from a chain of bridges", () => {
+    // Three metavertices on a straight +X line: (0,0,0), (1,0,0), (2,0,0).
+    // Bridges: 0→1 (predecessor=0, successor=1) and 1→2.
+    const chunk = coarseChunk([0, 0, 0, 1, 0, 0, 2, 0, 0]);
+    // All initial tangents are zero (single-vertex fragments).
+    expect(Array.from(chunk.tangents!)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    const result = recomputeTangentsForBridges(chunk, [
+      { predecessorLocalIdx: 0, successorLocalIdx: 1 },
+      { predecessorLocalIdx: 1, successorLocalIdx: 2 },
+    ]);
+    // Endpoint 0: only one incident bridge contributing +X.  Normalised = (1,0,0).
+    expect(Array.from(result.tangents!.slice(0, 3))).toEqual([1, 0, 0]);
+    // Endpoint 2: only one incident bridge contributing +X.
+    expect(Array.from(result.tangents!.slice(6, 9))).toEqual([1, 0, 0]);
+    // Interior 1: TWO incident bridges (from 0→1 and 1→2), each +X.
+    // Accumulator = (2,0,0), normalised = (1,0,0).
+    expect(Array.from(result.tangents!.slice(3, 6))).toEqual([1, 0, 0]);
+  });
+
+  it("leaves un-bridged vertices' tangents untouched", () => {
+    // Three vertices; only bridge (0→1).  Vertex 2 has no bridge.
+    const chunk = coarseChunk([0, 0, 0, 1, 0, 0, 5, 5, 5]);
+    const result = recomputeTangentsForBridges(chunk, [
+      { predecessorLocalIdx: 0, successorLocalIdx: 1 },
+    ]);
+    expect(Array.from(result.tangents!.slice(0, 3))).toEqual([1, 0, 0]);
+    expect(Array.from(result.tangents!.slice(3, 6))).toEqual([1, 0, 0]);
+    // Vertex 2 stays at the original zero tangent.
+    expect(Array.from(result.tangents!.slice(6, 9))).toEqual([0, 0, 0]);
+  });
+
+  it("returns input unchanged for empty bridge list", () => {
+    const chunk = coarseChunk([0, 0, 0, 1, 0, 0]);
+    const result = recomputeTangentsForBridges(chunk, []);
+    expect(result).toBe(chunk);
+  });
+
+  it("returns input unchanged for skeleton geometry (no tangents)", () => {
+    const chunk = buildSkeletonChunk({
+      rank: 3,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0]),
+      fragmentIndex: buildFragmentIndex([
+        { range: { start: 0, count: 1 } },
+        { range: { start: 1, count: 1 } },
+      ]),
+      linksConvention: "implicit_sequential_with_branches",
+      geometryKind: "skeleton",
+      vertexAttributes: [Uint32Array.from([0, 0])],
+    });
+    expect(chunk.tangents).toBeUndefined();
+    const result = recomputeTangentsForBridges(chunk, [
+      { predecessorLocalIdx: 0, successorLocalIdx: 1 },
+    ]);
+    expect(result).toBe(chunk);
+  });
+
+  it("handles diagonal bridges (non-axis-aligned tangents)", () => {
+    // Two metavertices at (0,0,0) and (1,1,1).  Bridge direction is
+    // normalize(1,1,1) = (1,1,1)/sqrt(3).
+    const chunk = coarseChunk([0, 0, 0, 1, 1, 1]);
+    const result = recomputeTangentsForBridges(chunk, [
+      { predecessorLocalIdx: 0, successorLocalIdx: 1 },
+    ]);
+    const expected = 1 / Math.sqrt(3);
+    expect(result.tangents![0]).toBeCloseTo(expected);
+    expect(result.tangents![1]).toBeCloseTo(expected);
+    expect(result.tangents![2]).toBeCloseTo(expected);
+    expect(result.tangents![3]).toBeCloseTo(expected);
+  });
+
+  it("skips bridge records with out-of-range endpoints", () => {
+    const chunk = coarseChunk([0, 0, 0, 1, 0, 0]);
+    const result = recomputeTangentsForBridges(chunk, [
+      { predecessorLocalIdx: 0, successorLocalIdx: 99 }, // out of range
+      { predecessorLocalIdx: 0, successorLocalIdx: 1 },
+    ]);
+    // The valid record (0→1) gives both vertices tangent +X; the
+    // out-of-range record is silently dropped.
+    expect(Array.from(result.tangents!.slice(0, 3))).toEqual([1, 0, 0]);
+    expect(Array.from(result.tangents!.slice(3, 6))).toEqual([1, 0, 0]);
+  });
+
+  it("keeps tangent at zero when incident bridges cancel (symmetric P+S)", () => {
+    // Three metavertices at (-1,0,0), (0,0,0), (1,0,0).  Vertex 1 has
+    // a predecessor 0 (step +X) AND a successor 2 (step +X).  Both
+    // contribute (1,0,0).  Accumulator = (2,0,0).  Normalises to
+    // (1,0,0), NOT zero.  But if we had a STAR pattern with two
+    // opposite neighbors, cancellation would occur.
+    //
+    // For this test, construct the cancellation case: vertex 0 is the
+    // predecessor of vertex 1 with step (+1,0,0), and ALSO the
+    // successor of vertex 1 (in another bridge) with step (-1,0,0).
+    // Both bridges contribute opposite steps; accumulator sums to 0.
+    const chunk = coarseChunk([0, 0, 0, 1, 0, 0]);
+    const result = recomputeTangentsForBridges(chunk, [
+      { predecessorLocalIdx: 0, successorLocalIdx: 1 }, // step +X
+      { predecessorLocalIdx: 1, successorLocalIdx: 0 }, // step -X
+    ]);
+    // Both vertices' accumulators cancel.  Tangent stays at original
+    // (zero) value.
+    expect(Array.from(result.tangents!.slice(0, 3))).toEqual([0, 0, 0]);
+    expect(Array.from(result.tangents!.slice(3, 6))).toEqual([0, 0, 0]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// appendIntraChunkEdges
+// ---------------------------------------------------------------------------
+
+describe("appendIntraChunkEdges", () => {
+  function streamline2(): ReturnType<typeof buildSkeletonChunk> {
+    return buildSkeletonChunk({
+      rank: 3,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0]),
+      fragmentIndex: buildFragmentIndex([
+        { range: { start: 0, count: 1 } },
+        { range: { start: 1, count: 1 } },
+      ]),
+      linksConvention: "implicit_sequential",
+      geometryKind: "streamline",
+      vertexAttributes: [Float32Array.from([0.1, 0.5])],
+    });
+  }
+
+  it("appends one extra edge between two existing vertices", () => {
+    // Two 1-vertex fragments → 0 implicit edges.  Add an explicit
+    // intra-chunk edge connecting them.
+    const chunk = streamline2();
+    expect(chunk.numEdges).toBe(0);
+    const result = appendIntraChunkEdges(chunk, Uint32Array.from([0, 1]));
+    expect(result.numEdges).toBe(1);
+    expect(Array.from(result.edges)).toEqual([0, 1]);
+    // Vertex texture unchanged.
+    expect(result.positions).toBe(chunk.positions);
+    expect(result.vertexAttributes).toBe(chunk.vertexAttributes);
+  });
+
+  it("appends multiple extra edges, preserving original edges", () => {
+    const chunk = buildSkeletonChunk({
+      rank: 3,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0, 2, 0, 0]),
+      fragmentIndex: buildFragmentIndex([{ range: { start: 0, count: 3 } }]),
+      linksConvention: "implicit_sequential",
+      geometryKind: "streamline",
+      vertexAttributes: [Float32Array.from([0, 0, 0])],
+    });
+    // Original chunk has 2 implicit edges: (0,1), (1,2).
+    expect(chunk.numEdges).toBe(2);
+    // Add 2 explicit intra-chunk edges: (0,2), (2,0) — meaningless but
+    // tests the appending logic.
+    const result = appendIntraChunkEdges(chunk, Uint32Array.from([0, 2, 2, 0]));
+    expect(result.numEdges).toBe(4);
+    expect(Array.from(result.edges)).toEqual([0, 1, 1, 2, 0, 2, 2, 0]);
+  });
+
+  it("returns the input unchanged for an empty edge list", () => {
+    const chunk = streamline2();
+    const result = appendIntraChunkEdges(chunk, new Uint32Array(0));
+    expect(result).toBe(chunk);
+  });
+
+  it("throws when extra edges length is odd", () => {
+    const chunk = streamline2();
+    expect(() =>
+      appendIntraChunkEdges(chunk, Uint32Array.from([0, 1, 0])),
+    ).toThrow(/not a multiple of 2/);
+  });
+
+  it("throws when an endpoint index is out of range", () => {
+    const chunk = streamline2();
+    expect(() =>
+      appendIntraChunkEdges(chunk, Uint32Array.from([0, 99])),
+    ).toThrow(/out of/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// appendGhostVertices
+// ---------------------------------------------------------------------------
+
+describe("appendGhostVertices", () => {
+  function streamlineChunk(numVerts: number): ReturnType<typeof buildSkeletonChunk> {
+    const positions = new Float32Array(numVerts * 3);
+    for (let i = 0; i < numVerts; ++i) {
+      positions[i * 3] = i;
+      positions[i * 3 + 1] = 0;
+      positions[i * 3 + 2] = 0;
+    }
+    return buildSkeletonChunk({
+      rank: 3,
+      positions,
+      fragmentIndex: buildFragmentIndex([{ range: { start: 0, count: numVerts } }]),
+      linksConvention: "implicit_sequential",
+      geometryKind: "streamline",
+      vertexAttributes: [Float32Array.from({ length: numVerts }, (_, i) => i + 1)],
+    });
+  }
+
+  it("returns the input unchanged when ghosts is empty", () => {
+    const chunk = streamlineChunk(3);
+    const result = appendGhostVertices(chunk, []);
+    expect(result).toBe(chunk);
+  });
+
+  it("appends one ghost: positions, edges, attributes, and bridge-direction tangent", () => {
+    const chunk = streamlineChunk(3);
+    // Host: 3 vertices at (0,0,0), (1,0,0), (2,0,0).  Ghost neighbor at
+    // (3, 0, 0) — directly in front of the host's last vertex.
+    const result = appendGhostVertices(chunk, [
+      {
+        position: Float32Array.from([3, 0, 0]),
+        attributes: [Float32Array.from([99])],
+        bridgeFromLocalVertex: 2,
+        isGhostPredecessor: false, // successor — typical X-side
+      },
+    ]);
+    expect(result.numVertices).toBe(4);
+    expect(Array.from(result.positions)).toEqual([
+      0, 0, 0, // host vert 0
+      1, 0, 0, // host vert 1
+      2, 0, 0, // host vert 2
+      3, 0, 0, // ghost
+    ]);
+    expect(result.numEdges).toBe(3); // 2 intra-fragment + 1 bridge
+    // Bridge edge appended at the end: (host vert 2, ghost vert 3).
+    expect(Array.from(result.edges.slice(-2))).toEqual([2, 3]);
+    // Attribute extended.
+    expect(result.vertexAttributes).toHaveLength(1);
+    expect(Array.from(result.vertexAttributes[0] as Float32Array)).toEqual([
+      1, 2, 3, 99,
+    ]);
+    // Ghost tangent = normalize((3,0,0) - (2,0,0)) = (1, 0, 0).
+    expect(result.tangents).toBeDefined();
+    expect(Array.from(result.tangents!.slice(-3))).toEqual([1, 0, 0]);
+  });
+
+  it("flips ghost tangent when isGhostPredecessor=true (Y-side of a bridge)", () => {
+    // Y-side of a chunk crossing: the host is fragment_B's first vertex
+    // (w_0), the ghost is fragment_A's last vertex (sitting BEFORE the
+    // host in walk order).  We want the ghost's tangent to point in the
+    // FORWARD walk direction = host - ghost.
+    //
+    // Use a host fragment whose own tangent at v_0 points along +X (so
+    // the bug would show as ghost.tangent ≈ -1,0,0 — opposite to host
+    // — and interpolated tangent ≈ 0 at the midpoint).
+    const chunk = streamlineChunk(3); // verts at (0,0,0),(1,0,0),(2,0,0)
+    const result = appendGhostVertices(chunk, [
+      {
+        // Ghost at world (-1,0,0): sits BEFORE the host (vert 0 at origin)
+        // along the +X walk direction.
+        position: Float32Array.from([-1, 0, 0]),
+        attributes: [Float32Array.from([0])],
+        bridgeFromLocalVertex: 0,
+        isGhostPredecessor: true,
+      },
+    ]);
+    // Ghost tangent should be +X (host - ghost = (0,0,0) - (-1,0,0) =
+    // (1,0,0)), NOT -X.  Bug would have set this to (-1,0,0).
+    const ghostT = result.tangents!.slice(-3);
+    expect(ghostT[0]).toBeCloseTo(1);
+    expect(ghostT[1]).toBeCloseTo(0);
+    expect(ghostT[2]).toBeCloseTo(0);
+    // Host vertex 0's tangent is unchanged — should also be +X (forward
+    // step direction inside the fragment).  Both tangents now agree, so
+    // the interpolated bridge tangent stays +X and the shader gets red
+    // (not black) across the bridge.
+    const hostT = result.tangents!.slice(0, 3);
+    expect(hostT[0]).toBeCloseTo(1);
+    expect(hostT[1]).toBeCloseTo(0);
+    expect(hostT[2]).toBeCloseTo(0);
+  });
+
+  it("appends multiple ghosts in order", () => {
+    const chunk = streamlineChunk(3);
+    const result = appendGhostVertices(chunk, [
+      {
+        position: Float32Array.from([3, 0, 0]),
+        attributes: [Float32Array.from([10])],
+        bridgeFromLocalVertex: 2,
+        isGhostPredecessor: false,
+      },
+      {
+        position: Float32Array.from([0, -1, 0]),
+        attributes: [Float32Array.from([20])],
+        bridgeFromLocalVertex: 0,
+        isGhostPredecessor: false,
+      },
+    ]);
+    expect(result.numVertices).toBe(5);
+    expect(result.numEdges).toBe(4); // 2 intra + 2 bridges
+    // Bridges at the END of the edge array (after the 2 intra-fragment
+    // edges (0,1),(1,2)).  Bridge order matches ghost order.
+    expect(Array.from(result.edges)).toEqual([0, 1, 1, 2, 2, 3, 0, 4]);
+  });
+
+  it("leaves the fragment index unchanged (ghosts don't belong to any fragment)", () => {
+    const chunk = streamlineChunk(3);
+    const result = appendGhostVertices(chunk, [
+      {
+        position: Float32Array.from([3, 0, 0]),
+        attributes: [Float32Array.from([0])],
+        bridgeFromLocalVertex: 2,
+      },
+    ]);
+    expect(result.fragmentIndex).toBe(chunk.fragmentIndex);
+    expect(result.fragmentIndex.numFragments).toBe(1);
+  });
+
+  it("zero tangent on coincident host/ghost (boundary-deduplication case)", () => {
+    const chunk = streamlineChunk(3);
+    // Ghost coincident with host vertex 2.
+    const result = appendGhostVertices(chunk, [
+      {
+        position: Float32Array.from([2, 0, 0]),
+        attributes: [Float32Array.from([0])],
+        bridgeFromLocalVertex: 2,
+      },
+    ]);
+    expect(Array.from(result.tangents!.slice(-3))).toEqual([0, 0, 0]);
+  });
+
+  it("works for skeleton geometry (no tangents present)", () => {
+    const positions = new Float32Array([0, 0, 0, 1, 0, 0, 2, 0, 0]);
+    const chunk = buildSkeletonChunk({
+      rank: 3,
+      positions,
+      fragmentIndex: buildFragmentIndex([{ range: { start: 0, count: 3 } }]),
+      linksConvention: "implicit_sequential_with_branches",
+      geometryKind: "skeleton",
+      vertexAttributes: [Uint32Array.from([1, 2, 3])],
+    });
+    expect(chunk.tangents).toBeUndefined();
+    const result = appendGhostVertices(chunk, [
+      {
+        position: Float32Array.from([3, 0, 0]),
+        attributes: [Uint32Array.from([99])],
+        bridgeFromLocalVertex: 2,
+      },
+    ]);
+    expect(result.tangents).toBeUndefined();
+    expect(result.numVertices).toBe(4);
+    expect(Array.from(result.vertexAttributes[0] as Uint32Array)).toEqual([
+      1, 2, 3, 99,
+    ]);
+  });
+
+  it("preserves attribute dtype (uint8 host → uint8 output)", () => {
+    const positions = new Float32Array([0, 0, 0, 1, 0, 0]);
+    const chunk = buildSkeletonChunk({
+      rank: 3,
+      positions,
+      fragmentIndex: buildFragmentIndex([{ range: { start: 0, count: 2 } }]),
+      linksConvention: "implicit_sequential",
+      geometryKind: "streamline",
+      vertexAttributes: [Uint8Array.from([7, 13])],
+    });
+    const result = appendGhostVertices(chunk, [
+      {
+        position: Float32Array.from([2, 0, 0]),
+        attributes: [Uint8Array.from([200])],
+        bridgeFromLocalVertex: 1,
+      },
+    ]);
+    expect(result.vertexAttributes[0]).toBeInstanceOf(Uint8Array);
+    expect(Array.from(result.vertexAttributes[0] as Uint8Array)).toEqual([
+      7, 13, 200,
+    ]);
+  });
+
+  it("throws when bridgeFromLocalVertex is out of range", () => {
+    const chunk = streamlineChunk(3);
+    expect(() =>
+      appendGhostVertices(chunk, [
+        {
+          position: Float32Array.from([3, 0, 0]),
+          attributes: [Float32Array.from([0])],
+          bridgeFromLocalVertex: 99,
+        },
+      ]),
+    ).toThrow(/bridgeFromLocalVertex/);
+  });
+
+  it("throws when ghost position rank doesn't match host", () => {
+    const chunk = streamlineChunk(2);
+    expect(() =>
+      appendGhostVertices(chunk, [
+        {
+          position: Float32Array.from([1, 2]), // length 2, host rank=3
+          attributes: [Float32Array.from([0])],
+          bridgeFromLocalVertex: 0,
+        },
+      ]),
+    ).toThrow(/position length/);
+  });
+
+  it("throws when ghost attribute count doesn't match host", () => {
+    const chunk = streamlineChunk(2);
+    expect(() =>
+      appendGhostVertices(chunk, [
+        {
+          position: Float32Array.from([1, 0, 0]),
+          attributes: [Float32Array.from([0]), Float32Array.from([0])], // host has 1 attr
+          bridgeFromLocalVertex: 0,
+        },
+      ]),
+    ).toThrow(/attributes/);
   });
 });

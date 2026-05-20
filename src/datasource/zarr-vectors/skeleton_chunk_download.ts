@@ -20,6 +20,7 @@ import { decodeFragments } from "#src/datasource/zarr-vectors/fragment_index.js"
 import {
   buildSkeletonChunk,
   type AttributeTypedArray,
+  type GhostVertexRecord,
   type LinksConvention,
   type SkeletonChunk,
   type SkeletonGeometryKind,
@@ -317,4 +318,163 @@ export async function downloadSkeletonChunk(
     geometryKind,
     vertexAttributes,
   });
+}
+
+/**
+ * One request for a ghost vertex.  `hostLocalVertex` identifies the
+ * endpoint in the current chunk; `neighborChunkKey` + `neighborLocalVertex`
+ * identify the source vertex in a different chunk to copy into the host.
+ */
+export interface GhostVertexRequest {
+  readonly hostLocalVertex: number;
+  readonly neighborChunkKey: string;
+  readonly neighborLocalVertex: number;
+  /**
+   * True when the neighbor's vertex precedes the host in the
+   * streamline's walk order.  Forwarded onto the resulting
+   * `GhostVertexRecord` so `appendGhostVertices` can flip the
+   * synthesised ghost-tangent sign accordingly.  Defaults to `false`
+   * (ghost is the successor) when callers don't specify it.
+   */
+  readonly isGhostPredecessor?: boolean;
+}
+
+/**
+ * Slice a single float32×rank vertex out of a `vertices/<key>/c/0` byte
+ * blob.  Returns `undefined` when the requested index is out of range —
+ * caller drops the ghost in that case (avoids dangling references on
+ * sparse / writer-inconsistent stores).
+ */
+function sliceVertexFromBytes(
+  bytes: Uint8Array,
+  vertexIndex: number,
+  rank: number,
+): Float32Array | undefined {
+  const bytesPerVertex = rank * 4;
+  const offset = vertexIndex * bytesPerVertex;
+  if (vertexIndex < 0 || offset + bytesPerVertex > bytes.byteLength) {
+    return undefined;
+  }
+  // Reinterpret a `rank`-element float32 slice.  Subarray gives a
+  // zero-copy view; reinterpretBytes handles alignment.
+  return reinterpretBytes(
+    bytes.subarray(offset, offset + bytesPerVertex),
+    "float32",
+    rank,
+  ) as Float32Array;
+}
+
+/**
+ * Slice a single attribute element from a `vertex_attributes/<name>/<key>/c/0`
+ * byte blob, packaged as a length-1 typed-array of the declared dtype.
+ * Returns `undefined` when the requested index is out of range.
+ */
+function sliceAttributeFromBytes(
+  bytes: Uint8Array,
+  vertexIndex: number,
+  dtype: AttributeDtype,
+): AttributeTypedArray | undefined {
+  const elementSize = BYTES_PER_ELEMENT[dtype];
+  const offset = vertexIndex * elementSize;
+  if (vertexIndex < 0 || offset + elementSize > bytes.byteLength) {
+    return undefined;
+  }
+  return reinterpretBytes(
+    bytes.subarray(offset, offset + elementSize),
+    dtype,
+    1,
+  );
+}
+
+/**
+ * Fetch + slice one ghost vertex per request, grouping by
+ * `neighborChunkKey` so each unique neighbor's `vertices/` and per-
+ * attribute files are fetched exactly once.  Subsequent fetches for the
+ * same key are served from the kvstore cache (and when the neighbor
+ * loads as its own render chunk, every byte is already cached — the
+ * "prefetch" reorders work rather than adding net traffic).
+ *
+ * Requests whose neighbor's `vertices/` blob is absent are silently
+ * dropped (sparse chunk presence; we never emit a dangling reference).
+ * Requests whose `vertex_attributes/<name>/` blob is absent get a
+ * zero-filled value for that attribute — same rule the per-chunk
+ * download applies for pyramid levels that don't propagate attributes.
+ */
+export async function fetchGhostVertices(
+  requests: readonly GhostVertexRequest[],
+  options: {
+    readonly rank: number;
+    readonly attributeNames: readonly string[];
+    readonly attributeDtypes: readonly AttributeDtype[];
+    readonly kvStoreRead: SkeletonChunkDownloadOptions["kvStoreRead"];
+  },
+  signal: AbortSignal,
+): Promise<GhostVertexRecord[]> {
+  const { rank, attributeNames, attributeDtypes, kvStoreRead } = options;
+  if (requests.length === 0) return [];
+
+  // 1. Group by neighbor chunk key — one fetch per unique key per file.
+  const uniqueKeys = Array.from(new Set(requests.map((r) => r.neighborChunkKey)));
+
+  // 2. Fetch positions + each attribute for each unique key in parallel.
+  type NeighborBlobs = {
+    positions: Uint8Array | undefined;
+    attrs: Array<Uint8Array | undefined>;
+  };
+  const byKey = new Map<string, NeighborBlobs>();
+  await Promise.all(
+    uniqueKeys.map(async (key) => {
+      const [positions, ...attrs] = await Promise.all([
+        kvStoreRead(`vertices/${key}/c/0`, signal),
+        ...attributeNames.map((name) =>
+          kvStoreRead(`vertex_attributes/${name}/${key}/c/0`, signal),
+        ),
+      ]);
+      byKey.set(key, { positions, attrs });
+    }),
+  );
+
+  // 3. Slice each request's element.  Drop requests whose neighbor
+  // positions blob is absent (sparse chunk) or whose vertex index is
+  // out of range — these would otherwise create dangling bridge edges.
+  const out: GhostVertexRecord[] = [];
+  for (const req of requests) {
+    const blobs = byKey.get(req.neighborChunkKey);
+    if (blobs === undefined || blobs.positions === undefined) continue;
+    const position = sliceVertexFromBytes(
+      blobs.positions,
+      req.neighborLocalVertex,
+      rank,
+    );
+    if (position === undefined) continue;
+    const attributes: AttributeTypedArray[] = [];
+    for (let i = 0; i < attributeNames.length; ++i) {
+      const bytes = blobs.attrs[i];
+      const sliced =
+        bytes === undefined
+          ? undefined
+          : sliceAttributeFromBytes(bytes, req.neighborLocalVertex, attributeDtypes[i]);
+      if (sliced === undefined) {
+        // Zero-fill missing attribute — mirrors `downloadSkeletonChunk`
+        // behavior for chunk-local attributes (pyramid levels without
+        // `vertex_attributes/<name>/`).
+        attributes.push(
+          reinterpretBytes(
+            new Uint8Array(BYTES_PER_ELEMENT[attributeDtypes[i]]),
+            attributeDtypes[i],
+            1,
+          ),
+        );
+      } else {
+        attributes.push(sliced);
+      }
+    }
+    out.push({
+      position,
+      attributes,
+      bridgeFromLocalVertex: req.hostLocalVertex,
+      isGhostPredecessor: req.isGhostPredecessor ?? false,
+    });
+  }
+  return out;
 }
