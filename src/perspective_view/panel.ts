@@ -1209,11 +1209,12 @@ export class PerspectivePanel extends RenderedDataPanel {
 
       // Clamp to the slider range; URL state could otherwise supply a
       // negative or absurd value and produce NaNs or inverted sampling.
-      const ssaoRadius = Math.min(
+      // Passed straight through; the shader normalizes by wClip so the
+      // slider's screen-space effect stays consistent across scales.
+      const radius = Math.min(
         SSAO_RADIUS_RANGE.max,
         Math.max(SSAO_RADIUS_RANGE.min, this.viewer.ssaoRadius.value),
       );
-      const radius = ssaoRadius * this.navigationState.zoomFactor.value;
 
       this.ssaoManager.render(
         width,

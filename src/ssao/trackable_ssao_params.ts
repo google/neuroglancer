@@ -18,8 +18,8 @@ import { TrackableBoolean } from "#src/trackable_boolean.js";
 import { TrackableValue } from "#src/trackable_value.js";
 import { verifyFiniteFloat } from "#src/util/json.js";
 
-// Slider / clamp range for the SSAO sampling radius (zoom-relative units).
-export const SSAO_RADIUS_RANGE = { min: 0.001, max: 0.2, step: 0.001 };
+// Slider / clamp range for the SSAO sampling radius.
+export const SSAO_RADIUS_RANGE = { min: 0.01, max: 3, step: 0.01 };
 // Slider / clamp range for the AO power exponent at composite time.
 export const SSAO_INTENSITY_RANGE = { min: 0.5, max: 5.0, step: 0.1 };
 
@@ -34,7 +34,7 @@ export function makeTrackableSSAO(initial = false) {
   return new TrackableBoolean(initial, false);
 }
 
-export function makeTrackableSSAORadius(initial = 0.05) {
+export function makeTrackableSSAORadius(initial = 2.0) {
   return new TrackableValue<number>(
     initial,
     clampToRange(SSAO_RADIUS_RANGE),

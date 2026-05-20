@@ -24,8 +24,8 @@ const glsl_gtao = `
 #define NUM_STEPS 8
 #define PI 3.14159265
 // Cap the per-pixel kernel at this fraction of viewport height; avoids
-// runaway sampling at extreme zoom-in.
-#define MAX_KERNEL_FRACTION 0.4
+// runaway sampling at extreme zoom-in. Sized for scenes of thin arbors.
+#define MAX_KERNEL_FRACTION 0.6
 // Minimum view-space distance to count a horizon sample; avoids division by zero
 // at coincident samples.
 #define MIN_SAMPLE_DIST 0.0001
@@ -78,12 +78,16 @@ export function defineGTAOShader(builder: ShaderBuilder) {
   }
   vec3 N = normalize(rawN * 2.0 - 1.0);
 
-  // World→UV scale: wClip is -P.z under perspective and 1 under ortho.
+  // Here, uRadius acts as a fraction of viewport height, clamped at a
+  // reasonable maximum, to drive the marching distance.
+  float kernelRadius = uRadius;
+  kernelRadius = min(kernelRadius, MAX_KERNEL_FRACTION);
+  // Here, uRadius scales the view-space distance for per-sample falloff.
   float wClip = uProjection[2][3] * P.z + uProjection[3][3];
-  float screenRadius = uRadius * uProjection[1][1] / (2.0 * wClip);
-  screenRadius = min(screenRadius, MAX_KERNEL_FRACTION);
+  float falloffRadius = uRadius * 2.0 * wClip / uProjection[1][1];
+
   // Sub-pixel kernel: nothing meaningful to sample.
-  if (screenRadius < 1.0 / uResolution.y) {
+  if (kernelRadius < 1.0 / uResolution.y) {
     v4f_fragColor = vec4(1.0);
     return;
   }
@@ -98,7 +102,7 @@ export function defineGTAOShader(builder: ShaderBuilder) {
     // Correct for non-square viewports so azimuthal samples are uniform in
     // world space rather than UV space.
     vec2 dir2D = vec2(cos(phi), sin(phi)) * vec2(uResolution.y / uResolution.x, 1.0);
-    vec2 stepUV = dir2D * screenRadius / float(NUM_STEPS);
+    vec2 stepUV = dir2D * kernelRadius / float(NUM_STEPS);
 
     float maxSinH_pos = 0.0;
     float maxSinH_neg = 0.0;
@@ -115,7 +119,7 @@ export function defineGTAOShader(builder: ShaderBuilder) {
           float dist = length(delta);
           if (dist > MIN_SAMPLE_DIST) {
             float sinH = dot(delta / dist, N);
-            float falloff = clamp(1.0 - dist * dist / (uRadius * uRadius), 0.0, 1.0);
+            float falloff = clamp(1.0 - dist * dist / (falloffRadius * falloffRadius), 0.0, 1.0);
             maxSinH_pos = max(maxSinH_pos, sinH * falloff);
           }
         }
@@ -130,7 +134,7 @@ export function defineGTAOShader(builder: ShaderBuilder) {
           float dist = length(delta);
           if (dist > MIN_SAMPLE_DIST) {
             float sinH = dot(delta / dist, N);
-            float falloff = clamp(1.0 - dist * dist / (uRadius * uRadius), 0.0, 1.0);
+            float falloff = clamp(1.0 - dist * dist / (falloffRadius * falloffRadius), 0.0, 1.0);
             maxSinH_neg = max(maxSinH_neg, sinH * falloff);
           }
         }
