@@ -1363,10 +1363,12 @@ export class PerspectivePanel extends RenderedDataPanel {
       );
       gl.stencilMask(2);
       if (hasVolumeRenderingPick) {
+        gl.depthMask(false);
         this.maxProjectionPickCopyHelper.draw(
           this.maxProjectionPickConfiguration.colorBuffers[0].texture /*depth*/,
           this.maxProjectionPickConfiguration.colorBuffers[1].texture /*pick*/,
         );
+        gl.depthMask(true);
       }
       for (const [renderLayer, attachment] of visibleLayers) {
         if (
