@@ -106,5 +106,13 @@ def test_pick_radius(webdriver: neuroglancer.webdriver.Webdriver) -> None:
         s.pick_radius = 1
     webdriver.sync()
 
-    # Case 6: Click offset 3 - expect failure
-    assert check_pick(webdriver, 3) is False
+    # Case 6: Click just beyond the rendered marker footprint - expect failure.
+    #
+    # `pick_radius = 1` checks the clicked pixel and its immediate neighbors.
+    # `setPointMarkerSize(1.0)` only sets the marker interior size; the default
+    # 1px marker border and 1px feather on both sides still make the 2D
+    # pickable footprint about 5px wide.  Therefore offset 3 can still overlap
+    # a pixel containing the annotation pick id, while offset 4 is the first
+    # horizontal offset whose radius-1 pick window no longer overlaps that
+    # footprint.
+    assert check_pick(webdriver, 4) is False
