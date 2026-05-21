@@ -60,7 +60,7 @@ import type { TrackableScaleBarOptions } from "#src/widget/scale_bar.js";
 import { MultipleScaleBarTextures } from "#src/widget/scale_bar.js";
 
 // Turn on to see each of the offscreen textures
-// render order is from bottom left to top right
+// render order is from top left to bottom right
 // picking will not work as expected in a subdivision
 // of the full panel, pretend you are picking from the full panel
 const DEBUG_OFFSCREEN_TEXTURES = false;

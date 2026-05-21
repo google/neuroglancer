@@ -84,7 +84,7 @@ import type { RPC } from "#src/worker_rpc.js";
 import { SharedObject } from "#src/worker_rpc.js";
 
 // Turn on to see each of the offscreen textures
-// render order is from bottom left to top right
+// render order is from top left to bottom right
 // picking will not work as expected in a subdivision
 // of the full panel, pretend you are picking from the full panel
 const DEBUG_OFFSCREEN_TEXTURES = false;
