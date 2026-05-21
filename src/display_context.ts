@@ -276,6 +276,37 @@ export abstract class RenderedPanel extends RefCounted {
     gl.scissor(canvasRelativeClippedLeft, glBottom, width, height);
   }
 
+  setSubdividedGLClippedViewport(cellIndex: number, totalCells: number) {
+    const {
+      gl,
+      canvasRelativeClippedTop,
+      canvasRelativeClippedLeft,
+      renderViewport: { width, height },
+    } = this;
+
+    const numCols = Math.ceil(Math.sqrt(totalCells));
+    const numRows = Math.ceil(totalCells / numCols);
+
+    const col = cellIndex % numCols;
+    const row = Math.floor(cellIndex / numCols);
+
+    const cellWidth = width / numCols;
+    const cellHeight = height / numRows;
+
+    const left = canvasRelativeClippedLeft + col * cellWidth;
+    const top = canvasRelativeClippedTop + row * cellHeight;
+    const bottom = top + cellHeight;
+
+    const glLeft = Math.floor(left);
+    const glBottom = Math.floor(this.context.canvas.height - bottom);
+    const glWidth = Math.ceil(cellWidth);
+    const glHeight = Math.ceil(cellHeight);
+
+    gl.enable(WebGL2RenderingContext.SCISSOR_TEST);
+    gl.viewport(glLeft, glBottom, glWidth, glHeight);
+    gl.scissor(glLeft, glBottom, glWidth, glHeight);
+  }
+
   // Sets the viewport to the logical viewport, using the scissor test to constrain drawing to the
   // clipped viewport.  Drawing does not need to take `visible{Left,Top,Width,Height}Fraction` into
   // account.

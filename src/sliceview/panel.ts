@@ -59,6 +59,12 @@ import type { ShaderBuilder } from "#src/webgl/shader.js";
 import type { TrackableScaleBarOptions } from "#src/widget/scale_bar.js";
 import { MultipleScaleBarTextures } from "#src/widget/scale_bar.js";
 
+// Turn on to see each of the offscreen textures
+// render order is from bottom left to top right
+// picking will not work as expected in a subdivision
+// of the full panel, pretend you are picking from the full panel
+const DEBUG_OFFSCREEN_TEXTURES = false;
+
 export interface SliceViewerState extends RenderedDataViewerState {
   showScaleBar: TrackableBoolean;
   wireFrame: TrackableBoolean;
@@ -431,14 +437,24 @@ export class SliceViewPanel extends RenderedDataPanel {
         gl.disable(WebGL2RenderingContext.BLEND);
       }
     }
-
     this.offscreenFramebuffer.unbind();
 
-    // Draw the texture over the whole viewport.
-    this.setGLClippedViewport();
-    this.offscreenCopyHelper.draw(
-      this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture,
-    );
+    if (DEBUG_OFFSCREEN_TEXTURES) {
+      const numTextures = OffscreenTextures.NUM_TEXTURES;
+      for (let i = 0; i < numTextures; i++) {
+        const texture = this.offscreenFramebuffer.colorBuffers[i].texture;
+        if (texture) {
+          this.setSubdividedGLClippedViewport(i, numTextures);
+          this.offscreenCopyHelper.draw(texture);
+        }
+      }
+    } else {
+      // Draw the texture over the whole viewport.
+      this.setGLClippedViewport();
+      this.offscreenCopyHelper.draw(
+        this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture,
+      );
+    }
     return true;
   }
 
