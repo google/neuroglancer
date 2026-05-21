@@ -184,25 +184,20 @@ const yellowHighlight = vec3.fromValues(1, 0.95, 0.35);
 const redHighlight = vec3.fromValues(1, 0, 0);
 const RED_HIGHLIGHT_CONTRAST_BIAS = 1.2;
 
-function copyRgb<T extends Float32Array>(out: T, color: ArrayLike<number>) {
-  out[0] = color[0];
-  out[1] = color[1];
-  out[2] = color[2];
-  return out;
-}
-
 export function computeHighVisibilityContrastColor<T extends Float32Array>(
   out: T,
   sourceColor: vec3 | vec4,
 ) {
   const yellowContrast = getContrastRatio(yellowHighlight, sourceColor);
   const redContrast = getContrastRatio(redHighlight, sourceColor);
-  return copyRgb(
-    out,
+  const color =
     redContrast > yellowContrast * RED_HIGHLIGHT_CONTRAST_BIAS
       ? redHighlight
-      : yellowHighlight,
-  );
+      : yellowHighlight;
+  out[0] = color[0];
+  out[1] = color[1];
+  out[2] = color[2];
+  return out;
 }
 
 export class TrackableRGB extends WatchableValue<vec3> {
