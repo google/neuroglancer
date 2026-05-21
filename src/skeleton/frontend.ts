@@ -2148,6 +2148,10 @@ export class SpatiallyIndexedSkeletonLayer
   private readonly selectedNodeOutlineColor = vec3.clone(
     SELECTED_NODE_OUTLINE_FALLBACK_COLOR,
   );
+  private selectedNodeOutlineColorGeneration = 0;
+  private selectedNodeOutlineColorCacheGeneration = -1;
+  private selectedNodeOutlineColorCacheNodeId: number | undefined;
+  private selectedNodeOutlineColorCacheSegmentId: number | undefined;
 
   private disposeOverlayChunk() {
     this.overlayChunk?.dispose(this.gl);
@@ -2207,6 +2211,17 @@ export class SpatiallyIndexedSkeletonLayer
     if (selectedNodeId === undefined) {
       return SELECTED_NODE_OUTLINE_FALLBACK_COLOR;
     }
+    const isCacheValid =
+      this.selectedNodeOutlineColorCacheGeneration ===
+      this.selectedNodeOutlineColorGeneration;
+    if (
+      isCacheValid &&
+      this.selectedNodeOutlineColorCacheNodeId === selectedNodeId
+    ) {
+      return (
+        this.selectedNodeOutlineColor ?? SELECTED_NODE_OUTLINE_FALLBACK_COLOR
+      );
+    }
     const segmentId = this.getCachedNodeSnapshot(selectedNodeId)?.segmentId;
     const normalizedSegmentId = Math.round(Number(segmentId));
     if (
@@ -2215,6 +2230,19 @@ export class SpatiallyIndexedSkeletonLayer
     ) {
       return SELECTED_NODE_OUTLINE_FALLBACK_COLOR;
     }
+    if (
+      isCacheValid &&
+      this.selectedNodeOutlineColorCacheSegmentId === normalizedSegmentId
+    ) {
+      this.selectedNodeOutlineColorCacheNodeId = selectedNodeId;
+      return (
+        this.selectedNodeOutlineColor ?? SELECTED_NODE_OUTLINE_FALLBACK_COLOR
+      );
+    }
+    this.selectedNodeOutlineColorCacheGeneration =
+      this.selectedNodeOutlineColorGeneration;
+    this.selectedNodeOutlineColorCacheNodeId = selectedNodeId;
+    this.selectedNodeOutlineColorCacheSegmentId = normalizedSegmentId;
     return computeHighVisibilityContrastColor(
       this.selectedNodeOutlineColor,
       getObjectColor(this.displayState, BigInt(normalizedSegmentId), 1),
@@ -2490,6 +2518,11 @@ export class SpatiallyIndexedSkeletonLayer
       ),
     );
     registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
+    this.registerDisposer(
+      this.redrawNeeded.add(() => {
+        ++this.selectedNodeOutlineColorGeneration;
+      }),
+    );
     this.displayState.shaderError.value = undefined;
     const { skeletonRenderingOptions: renderingOptions } = displayState;
     this.registerDisposer(
