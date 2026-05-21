@@ -116,14 +116,14 @@ describe("getContrastRatio", () => {
 });
 
 describe("computeHighVisibilityContrastColor", () => {
-  it("uses white for dark colors", () => {
+  it("prefers yellow for dark colors", () => {
     const sourceColor = vec3.fromValues(0, 0, 0);
     const color = computeHighVisibilityContrastColor(
       vec3.create(),
       sourceColor,
     );
 
-    expectColorClose(color, [1, 1, 1]);
+    expectColorClose(color, [1, 0.95, 0.35]);
     expect(getContrastRatio(color, sourceColor)).toBeGreaterThanOrEqual(3);
   });
 
@@ -138,36 +138,36 @@ describe("computeHighVisibilityContrastColor", () => {
     expect(getContrastRatio(color, sourceColor)).toBeGreaterThanOrEqual(3);
   });
 
-  it("keeps a bright visible candidate for saturated colors", () => {
+  it("uses yellow for red segment colors", () => {
     const sourceColor = vec3.fromValues(1, 0, 0);
     const color = computeHighVisibilityContrastColor(
       vec3.create(),
       sourceColor,
     );
 
-    expectColorClose(color, [1, 1, 1]);
+    expectColorClose(color, [1, 0.95, 0.35]);
     expect(getContrastRatio(color, sourceColor)).toBeGreaterThanOrEqual(3);
   });
 
-  it("handles low-saturation colors without choosing black", () => {
+  it("uses yellow for low-saturation midtone colors", () => {
     const sourceColor = vec3.fromValues(0.5, 0.5, 0.5);
     const color = computeHighVisibilityContrastColor(
       vec3.create(),
       sourceColor,
     );
 
-    expectColorClose(color, [1, 1, 1]);
+    expectColorClose(color, [1, 0.95, 0.35]);
     expect(getContrastRatio(color, sourceColor)).toBeGreaterThanOrEqual(3);
   });
 
-  it("uses white for near-black colors", () => {
+  it("uses yellow for near-black colors", () => {
     const sourceColor = vec3.fromValues(0.05, 0.05, 0.05);
     const color = computeHighVisibilityContrastColor(
       vec3.create(),
       sourceColor,
     );
 
-    expectColorClose(color, [1, 1, 1]);
+    expectColorClose(color, [1, 0.95, 0.35]);
   });
 
   it("uses red for near-white colors", () => {
@@ -182,6 +182,16 @@ describe("computeHighVisibilityContrastColor", () => {
 
   it("uses red for yellow-like segment colors", () => {
     const sourceColor = vec3.fromValues(1, 0.95, 0.35);
+    const color = computeHighVisibilityContrastColor(
+      vec3.create(),
+      sourceColor,
+    );
+
+    expectColorClose(color, [1, 0, 0]);
+  });
+
+  it("uses red when yellow would be close to the segment color", () => {
+    const sourceColor = vec3.fromValues(0.35, 1, 0.35);
     const color = computeHighVisibilityContrastColor(
       vec3.create(),
       sourceColor,

@@ -148,7 +148,9 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
     const outlineColor = (layer as any).getSelectedNodeOutlineColor();
 
     expect(getCachedNodeSnapshot).toHaveBeenCalledWith(101);
-    expect([...outlineColor]).toEqual([1, 1, 1]);
+    expect(outlineColor[0]).toBeCloseTo(1);
+    expect(outlineColor[1]).toBeCloseTo(0.95);
+    expect(outlineColor[2]).toBeCloseTo(0.35);
     expect(getContrastRatio(outlineColor, sourceColor)).toBeGreaterThanOrEqual(
       3,
     );

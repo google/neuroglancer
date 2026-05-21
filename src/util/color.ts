@@ -180,16 +180,9 @@ export function useWhiteBackground(foregroundColor: vec3 | vec4) {
   return getRelativeLuminance(foregroundColor) <= 0.179;
 }
 
-const whiteAccent = vec3.fromValues(1, 1, 1);
-const visibleHighlightCandidates = [
-  whiteAccent,
-  vec3.fromValues(1, 0.95, 0.35), // yellow
-  vec3.fromValues(0, 1, 1), // cyan
-  vec3.fromValues(1, 0, 1), // magenta
-  vec3.fromValues(1, 0, 0), // red
-  vec3.fromValues(0.35, 1, 0.35), // green
-  vec3.fromValues(1, 0.55, 0), // orange
-];
+const yellowHighlight = vec3.fromValues(1, 0.95, 0.35);
+const redHighlight = vec3.fromValues(1, 0, 0);
+const RED_HIGHLIGHT_CONTRAST_BIAS = 1.2;
 
 function copyRgb<T extends Float32Array>(out: T, color: ArrayLike<number>) {
   out[0] = color[0];
@@ -202,17 +195,14 @@ export function computeHighVisibilityContrastColor<T extends Float32Array>(
   out: T,
   sourceColor: vec3 | vec4,
 ) {
-  let bestColor = visibleHighlightCandidates[0];
-  let bestContrast = getContrastRatio(bestColor, sourceColor);
-  for (let i = 1; i < visibleHighlightCandidates.length; ++i) {
-    const candidate = visibleHighlightCandidates[i];
-    const contrast = getContrastRatio(candidate, sourceColor);
-    if (contrast > bestContrast) {
-      bestColor = candidate;
-      bestContrast = contrast;
-    }
-  }
-  return copyRgb(out, bestColor);
+  const yellowContrast = getContrastRatio(yellowHighlight, sourceColor);
+  const redContrast = getContrastRatio(redHighlight, sourceColor);
+  return copyRgb(
+    out,
+    redContrast > yellowContrast * RED_HIGHLIGHT_CONTRAST_BIAS
+      ? redHighlight
+      : yellowHighlight,
+  );
 }
 
 export class TrackableRGB extends WatchableValue<vec3> {
