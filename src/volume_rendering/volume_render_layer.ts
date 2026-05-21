@@ -17,14 +17,17 @@
 import { ChunkState } from "#src/chunk_manager/base.js";
 import { ChunkRenderLayerFrontend } from "#src/chunk_manager/frontend.js";
 import type { CoordinateSpace } from "#src/coordinate_transform.js";
-import type { VisibleLayerInfo } from "#src/layer/index.js";
+import type { PickState, VisibleLayerInfo } from "#src/layer/index.js";
 import type { PerspectivePanel } from "#src/perspective_view/panel.js";
 import type {
   PerspectiveViewReadyRenderContext,
   PerspectiveViewRenderContext,
 } from "#src/perspective_view/render_layer.js";
 import { PerspectiveViewRenderLayer } from "#src/perspective_view/render_layer.js";
-import type { RenderLayerTransformOrError } from "#src/render_coordinate_transform.js";
+import {
+  getChunkPositionFromCombinedGlobalLocalPositions,
+  type RenderLayerTransformOrError,
+} from "#src/render_coordinate_transform.js";
 import type { RenderScaleHistogram } from "#src/render_scale_statistics.js";
 import {
   numRenderScaleHistogramBins,
@@ -223,6 +226,8 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   private vertexIdHelper: VertexIdHelper;
   private dataHistogramSpecifications: HistogramSpecifications;
   private inverseModelViewProjection: mat4;
+  private tempChunkPosition: Float32Array;
+  private currentTransformedSources: TransformedVolumeSource[] | null = null;
 
   private shaderGetter: ParameterizedContextDependentShaderGetter<
     { emitter: ShaderModule; chunkFormat: ChunkFormat; wireFrame: boolean },
@@ -258,6 +263,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     super();
     this.gain = options.gain;
     this.multiscaleSource = options.multiscaleSource;
+    this.tempChunkPosition = new Float32Array(options.multiscaleSource.rank);
     this.transform = options.transform;
     this.inverseModelViewProjection = mat4.create();
     this.channelCoordinateSpace = options.channelCoordinateSpace;
@@ -660,6 +666,13 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
     );
     this.registerDisposer(this.mode.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(
+      this.mode.changed.add(() => {
+        if (this.mode.value === VolumeRenderingModes.OFF) {
+          this.currentTransformedSources = null;
+        }
+      }),
+    );
+    this.registerDisposer(
       this.shaderControlState.fragmentMain.changed.add(
         this.redrawNeeded.dispatch,
       ),
@@ -740,9 +753,10 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       VolumeRenderingAttachmentState
     >,
   ) {
-    if (!renderContext.emitColor) return;
     const allSources = attachment.state!.sources.value;
-    if (allSources.length === 0) return;
+    this.currentTransformedSources =
+      allSources.length === 0 ? null : allSources[0];
+    if (!renderContext.emitColor || allSources.length === 0) return;
     let curPhysicalSpacing = 0;
     let curOptimalSamples = 0;
     let curHistogramInformation: HistogramInformation = {
@@ -933,7 +947,6 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         const { inverseModelViewProjection } = this;
         const clippingPlanes = tempVisibleVolumetricClippingPlanes;
         getFrustrumPlanes(clippingPlanes, modelViewProjection);
-        const inverseModelViewProjection = mat4.create();
         mat4.invert(inverseModelViewProjection, modelViewProjection);
         const { near, far, adjustedNear, adjustedFar } =
           getVolumeRenderingNearFarBounds(
@@ -1265,6 +1278,37 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
     if (needPickingPass || needToDrawHistogram) {
       restoreDrawingBuffersAndState();
     }
+  }
+  // The pick ID encodes no spatial data; return null so UserLayer.getValueAt
+  // falls through to getValueAt() which looks up the voxel value from the depth-derived position if in max or min mode.
+  transformPickedValue(pickState: PickState) {
+    if (pickState.pickedValue === 0n) {
+      return null;
+    }
+    return pickState.pickedValue;
+  }
+
+  getValueAt(globalPosition: Float32Array) {
+    const { currentTransformedSources, tempChunkPosition } = this;
+    if (currentTransformedSources === null) return null;
+    for (const { source, chunkTransform } of currentTransformedSources) {
+      if (
+        !getChunkPositionFromCombinedGlobalLocalPositions(
+          tempChunkPosition,
+          globalPosition,
+          this.localPosition.value,
+          chunkTransform.layerRank,
+          chunkTransform.combinedGlobalLocalToChunkTransform,
+        )
+      ) {
+        continue;
+      }
+      const result = source.getValueAt(tempChunkPosition, chunkTransform);
+      if (result != null) {
+        return result;
+      }
+    }
+    return null;
   }
 
   private bindDepthBufferTexture(
