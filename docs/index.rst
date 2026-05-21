@@ -6,7 +6,7 @@ Neuroglancer
    :hidden:
    :caption: User Guide
 
-   user-guide/navigation
+   user-guide/index
 
 .. toctree::
    :hidden:
