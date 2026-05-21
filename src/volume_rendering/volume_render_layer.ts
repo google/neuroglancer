@@ -222,6 +222,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   private modeOverride: TrackableVolumeRenderingModeValue;
   private vertexIdHelper: VertexIdHelper;
   private dataHistogramSpecifications: HistogramSpecifications;
+  private inverseModelViewProjection: mat4;
 
   private shaderGetter: ParameterizedContextDependentShaderGetter<
     { emitter: ShaderModule; chunkFormat: ChunkFormat; wireFrame: boolean },
@@ -258,6 +259,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     this.gain = options.gain;
     this.multiscaleSource = options.multiscaleSource;
     this.transform = options.transform;
+    this.inverseModelViewProjection = mat4.create();
     this.channelCoordinateSpace = options.channelCoordinateSpace;
     this.shaderControlState = options.shaderControlState;
     this.localPosition = options.localPosition;
@@ -367,7 +369,7 @@ void emitRGBA(vec4 rgba) {
             glsl_handleMaxProjectionUpdate = `
   float newIntensity = getIntensity();
   bool intensityChanged = newIntensity > savedIntensity;
-  savedIntensity = intensityChanged ? newIntensity : savedIntensity; 
+  savedIntensity = intensityChanged ? newIntensity : savedIntensity;
   savedDepth = intensityChanged ? depthAtRayPosition : savedDepth;
   outputColor = intensityChanged ? newColor : outputColor;
   emit(outputColor, savedDepth, savedIntensity, uPickId);
@@ -928,6 +930,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           projectionParameters.viewProjectionMat,
           chunkLayout.transform,
         );
+        const { inverseModelViewProjection } = this;
         const clippingPlanes = tempVisibleVolumetricClippingPlanes;
         getFrustrumPlanes(clippingPlanes, modelViewProjection);
         const inverseModelViewProjection = mat4.create();
