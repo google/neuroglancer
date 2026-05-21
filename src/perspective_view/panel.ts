@@ -120,13 +120,19 @@ enum TransparentRenderingState {
   MAX_PROJECTION = 2,
 }
 
-export const glsl_perspectivePanelEmit = `
-void emit(vec4 color, highp uint pickId) {
+// Shared color / depth / pickId output assignments used by both panel
+// emitters (with and without SSAO normals). OIT does not use this since
+// it writes to a different output set.
+const glslEmitBase = `
   out_color = color;
   float zValue = 1.0 - gl_FragCoord.z;
   out_z = vec4(zValue, zValue, zValue, 1.0);
   float pickIdFloat = float(pickId);
-  out_pickId = vec4(pickIdFloat, pickIdFloat, pickIdFloat, 1.0);
+  out_pickId = vec4(pickIdFloat, pickIdFloat, pickIdFloat, 1.0);`;
+
+export const glsl_perspectivePanelEmit = `
+void emit(vec4 color, highp uint pickId) {
+  ${glslEmitBase}
 }
 // Provided so layers can call the 3-arg form unconditionally; the normal
 // is unused when SSAO is off (no NORMAL attachment to write to).
@@ -143,11 +149,7 @@ void emit(vec4 color, highp uint pickId, vec3 viewNormal) {
 // signature for source compatibility but discards the normal.
 export const glsl_perspectivePanelEmitWithNormals = `
 void emit(vec4 color, highp uint pickId, vec3 viewNormal) {
-  out_color = color;
-  float zValue = 1.0 - gl_FragCoord.z;
-  out_z = vec4(zValue, zValue, zValue, 1.0);
-  float pickIdFloat = float(pickId);
-  out_pickId = vec4(pickIdFloat, pickIdFloat, pickIdFloat, 1.0);
+  ${glslEmitBase}
   // Caller passes vec3(0) to opt out of AO (zero-RGB sentinel).
   // Guard the normalization to avoid propagating NaN into the packed normal.
   vec3 packedNormal = dot(viewNormal, viewNormal) < 1e-8
@@ -156,11 +158,7 @@ void emit(vec4 color, highp uint pickId, vec3 viewNormal) {
   out_normal = vec4(packedNormal, 1.0);
 }
 void emit(vec4 color, highp uint pickId) {
-  out_color = color;
-  float zValue = 1.0 - gl_FragCoord.z;
-  out_z = vec4(zValue, zValue, zValue, 1.0);
-  float pickIdFloat = float(pickId);
-  out_pickId = vec4(pickIdFloat, pickIdFloat, pickIdFloat, 1.0);
+  ${glslEmitBase}
   // Zero-RGB sentinel; alpha=1 so the source overwrites dst under
   // blend(SRC_ALPHA, ONE_MINUS_SRC_ALPHA).
   out_normal = vec4(0.0, 0.0, 0.0, 1.0);
