@@ -139,7 +139,6 @@ class AnnotationUIProperty extends RefCounted {
     private parentView: AnnotationSchemaView,
   ) {
     super();
-    this.spec = spec;
     this.element.classList.add("neuroglancer-annotation-schema-row");
     this.makeUI();
   }
