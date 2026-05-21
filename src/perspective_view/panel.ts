@@ -1238,6 +1238,8 @@ export class PerspectivePanel extends RenderedDataPanel {
           // Copy the volume rendering picking result to the main picking buffer
           // Depth testing on to combine max layers into one pick buffer via depth
           bindMaxProjectionPickingBuffer();
+          gl.disable(WebGL2RenderingContext.BLEND);
+          gl.depthFunc(WebGL2RenderingContext.GREATER);
           this.maxProjectionToPickCopyHelper.draw(
             this.maxProjectionConfiguration.colorBuffers[1 /*depth*/].texture,
             this.maxProjectionConfiguration.colorBuffers[2 /*intensity*/]
