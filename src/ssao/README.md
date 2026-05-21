@@ -102,8 +102,9 @@ overloads via the `renderContext` emitter:
   lines, etc. Internally writes the zero-RGB sentinel `(0, 0, 0)` to NORMAL
   with alpha = 1. The composite shader skips the AO multiply for those pixels.
 
-Highlighted (hovered) mesh segments use the same zero-RGB sentinel
-automatically via the `uHighlighted` uniform; layer code does not need a
-special case for the hover path. The OIT emitter accepts the 3-arg signature for
-source compatibility but discards the normal: transparent surfaces do not
-contribute to opaque AO.
+Highlighted (hovered) mesh segments emit a zero-RGB sentinel from
+`MeshShaderManager`'s vertex shader, gated by a `uHighlighted` uniform owned by
+the mesh layer. Any other layer that wants to exclude fragments from AO can do
+the same: emit a zero-RGB view normal. The OIT emitter accepts the three-argument
+signature for source compatibility but discards the normal: transparent surfaces
+do not contribute to opaque AO.

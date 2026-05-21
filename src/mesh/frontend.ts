@@ -382,6 +382,8 @@ export class MeshShaderManager {
         if (emitNormals) {
           builder.addVarying("highp vec3", "vViewNormal");
           builder.addUniform("highp mat3", "uViewNormalMatrix");
+          // Hover-highlighted segments opt out of AO by writing the zero-RGB sentinel to `vViewNormal`; see below.
+          builder.addUniform("highp float", "uHighlighted");
         }
         if (silhouetteRenderingEnabled) {
           builder.addUniform("highp float", "uSilhouettePower");
@@ -413,9 +415,11 @@ vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
 `;
         if (emitNormals) {
           // Bypass `normal` (post-uNormalMatrix); `uViewNormalMatrix`
-          // already encodes the full model→view transform.
+          // already encodes the full model→view transform. Multiply by
+          // (1 - uHighlighted) so hovered segments emit the zero sentinel.
           vertexMain += `
-vViewNormal = normalize(uViewNormalMatrix * (normalMultiplier * origNormal));
+vViewNormal = (1.0 - uHighlighted) *
+              normalize(uViewNormalMatrix * (normalMultiplier * origNormal));
 `;
         }
         if (silhouetteRenderingEnabled) {

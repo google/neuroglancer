@@ -148,8 +148,11 @@ void emit(vec4 color, highp uint pickId, vec3 viewNormal) {
   out_z = vec4(zValue, zValue, zValue, 1.0);
   float pickIdFloat = float(pickId);
   out_pickId = vec4(pickIdFloat, pickIdFloat, pickIdFloat, 1.0);
-  // Highlighted objects collapse to the zero sentinel so SSAO leaves them alone.
-  vec3 packedNormal = (1.0 - uHighlighted) * (normalize(viewNormal) * 0.5 + 0.5);
+  // Caller passes vec3(0) to opt out of AO (zero-RGB sentinel).
+  // Guard the normalization to avoid propagating NaN into the packed normal.
+  vec3 packedNormal = dot(viewNormal, viewNormal) < 1e-8
+    ? vec3(0.0)
+    : normalize(viewNormal) * 0.5 + 0.5;
   out_normal = vec4(packedNormal, 1.0);
 }
 void emit(vec4 color, highp uint pickId) {
@@ -209,10 +212,6 @@ export function perspectivePanelEmitWithNormals(builder: ShaderBuilder) {
   builder.addOutputBuffer("highp vec4", "out_z", OffscreenTextures.Z);
   builder.addOutputBuffer("highp vec4", "out_pickId", OffscreenTextures.PICK);
   builder.addOutputBuffer("highp vec4", "out_normal", OffscreenTextures.NORMAL);
-  // Referenced by glsl_perspectivePanelEmitWithNormals; declared here so any
-  // shader using this emitter (mesh, annotation, etc.) gets it without having
-  // to know the emit body's internal dependencies.
-  builder.addUniform("highp float", "uHighlighted");
   builder.addFragmentCode(glsl_perspectivePanelEmitWithNormals);
 }
 
