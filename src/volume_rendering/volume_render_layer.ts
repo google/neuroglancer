@@ -1281,17 +1281,20 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
   }
   // The pick ID encodes no spatial data; return null so UserLayer.getValueAt
   // falls through to getValueAt() which looks up the voxel value from the depth-derived position if in max or min mode.
-  transformPickedValue(pickState: PickState) {
-    if (pickState.pickedValue === 0n) {
-      return null;
-    }
-    return pickState.pickedValue;
+  transformPickedValue(_pickState: PickState) {
+    return null;
   }
 
   getValueAt(globalPosition: Float32Array) {
     const { currentTransformedSources, tempChunkPosition } = this;
     if (currentTransformedSources === null) return null;
-    for (const { source, chunkTransform } of currentTransformedSources) {
+    const rank = tempChunkPosition.length;
+    for (const {
+      source,
+      chunkTransform,
+      lowerClipBound,
+      upperClipBound,
+    } of currentTransformedSources) {
       if (
         !getChunkPositionFromCombinedGlobalLocalPositions(
           tempChunkPosition,
@@ -1303,6 +1306,17 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       ) {
         continue;
       }
+      let outOfBounds = false;
+      for (let i = 0; i < rank; ++i) {
+        if (
+          tempChunkPosition[i] < lowerClipBound[i] ||
+          tempChunkPosition[i] >= upperClipBound[i]
+        ) {
+          outOfBounds = true;
+          break;
+        }
+      }
+      if (outOfBounds) continue;
       const result = source.getValueAt(tempChunkPosition, chunkTransform);
       if (result != null) {
         return result;
