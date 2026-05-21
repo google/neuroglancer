@@ -49,11 +49,15 @@ kernel, two passes) and composited with the color buffer using
 
 SSAO is limited to mesh surfaces because only `MeshLayer` and
 `MultiscaleMeshLayer` supply a view-space normal via the three-argument
-`emit(color, pickId, viewNormal)` form. All other opaque geometry (skeletons,
-single-meshes, annotations) calls the two-argument `emit(color, pickId)` form,
-which writes the zero sentinel `vec4(0)` to the NORMAL attachment. The GTAO
-shader treats a zero-RGB normal as a no-AO sentinel, so those pixels render
-at full brightness. Highlighted (hovered) mesh segments use the same
+`emit(color, pickId, viewNormal)` form. Annotations are omitted from SSAO because
+they are glyphs for which 3D shading makes little sense. Skeletons are omitted
+because they are rendered as lines without the surface normals needed for SSAO.
+Single meshes are omitted because their source files (OBJ, VTK) treat normals as
+optional; a future extension could handle the case where normals are present, sharing
+code with the other mesh layers. The omitted types call the two-argument
+`emit(color, pickId)` form, which writes the zero sentinel `vec4(0)` to the NORMAL
+attachment. The SSAO shader treats a zero-RGB normal as a no-AO sentinel, so those
+pixels render at full brightness. Highlighted (hovered) mesh segments use the same
 zero-RGB sentinel so they also render without darkening.
 
 This limitation for annotations is enforced in the compositing stage, where the
