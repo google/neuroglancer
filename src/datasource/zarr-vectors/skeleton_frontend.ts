@@ -38,10 +38,11 @@ import {
 } from "#src/datasource/zarr-vectors/base.js";
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { WithParameters } from "#src/chunk_manager/frontend.js";
+import { buildVertexAttributeMap } from "#src/datasource/zarr-vectors/skeleton_shader_bridge.js";
 import {
-  DEFAULT_STREAMLINE_FRAGMENT_MAIN,
-  buildVertexAttributeMap,
-} from "#src/datasource/zarr-vectors/skeleton_shader_bridge.js";
+  KIND_CAPABILITIES,
+  hasSynthesisedTangent,
+} from "#src/datasource/zarr-vectors/geometry_kind.js";
 import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
 import { WithSharedKvStoreContext } from "#src/kvstore/chunk_source_frontend.js";
 import type { VertexAttributeInfo } from "#src/skeleton/base.js";
@@ -152,10 +153,7 @@ function buildZvSpatialVertexAttributes(parameters: {
       glslDataType: "vec3",
     },
   ];
-  if (
-    parameters.geometryKind === "streamline" ||
-    parameters.geometryKind === "polyline"
-  ) {
+  if (hasSynthesisedTangent(parameters.geometryKind)) {
     out.push({
       name: "tangent",
       dataType: DataType.FLOAT32,
@@ -238,20 +236,18 @@ export class ZarrVectorsSpatiallyIndexedSkeletonSource extends WithParameters(
   }
 
   /**
-   * Preferred default shader text.  For streamline geometries returns
-   * the RGB-by-tangent shader; for skeleton / polyline geometries
-   * returns `undefined` (the segmentation layer's existing default of
-   * `emitDefault()` — segment-coloured — is the right fallback).
+   * Preferred default shader text, looked up from the per-kind
+   * capability table in `geometry_kind.ts`.  Streamlines auto-apply
+   * the RGB-by-tangent shader; polylines, skeletons, and graphs fall
+   * through to the segmentation layer's segment-coloured default
+   * (`undefined` here).
    *
    * The integration point that consumes this is a follow-up to slice
    * 4d (segmentation-layer mount-time hook); for now the getter is
    * available for documentation tools and tests.
    */
   get defaultFragmentMain(): string | undefined {
-    if (this.parameters.geometryKind === "streamline") {
-      return DEFAULT_STREAMLINE_FRAGMENT_MAIN;
-    }
-    return undefined;
+    return KIND_CAPABILITIES[this.parameters.geometryKind].defaultFragmentMain;
   }
 }
 
@@ -293,10 +289,7 @@ export class ZarrVectorsObjectKeyedSkeletonSource extends WithParameters(
    * design notes.
    */
   get defaultFragmentMain(): string | undefined {
-    if (this.parameters.geometryKind === "streamline") {
-      return DEFAULT_STREAMLINE_FRAGMENT_MAIN;
-    }
-    return undefined;
+    return KIND_CAPABILITIES[this.parameters.geometryKind].defaultFragmentMain;
   }
 }
 

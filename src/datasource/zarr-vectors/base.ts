@@ -86,14 +86,23 @@ export type ZarrVectorsLinksConvention =
   | "explicit";
 
 /**
- * Geometry kind for a zarr-vectors skeleton-flavoured store.  Drives
- * whether per-vertex tangent vectors are precomputed for the default
- * RGB-by-direction streamline shader.
+ * Geometry kind for a zarr-vectors store that routes through the
+ * spatially-indexed skeleton render path (streamlines, polylines,
+ * skeletons, graphs).  Drives chunk-decoder behaviour (tangent
+ * synthesis algorithm) and frontend defaults (shader text).  See
+ * {@link KIND_CAPABILITIES} in `geometry_kind.ts` for the per-kind
+ * capability table that downstream code should consult instead of
+ * spreading `geometryKind === "..."` checks.
+ *
+ * Aliases the canonical {@link ZarrVectorsGeometryKind} declared in
+ * `geometry_kind.ts` — the legacy name is retained because the
+ * parameter-class field names propagate through the RPC layer.
  */
 export type ZarrVectorsSkeletonGeometryKind =
   | "streamline"
   | "polyline"
-  | "skeleton";
+  | "skeleton"
+  | "graph";
 
 /**
  * Integer dtype for ``links/0/<chunk>``.  Writers pick the narrowest

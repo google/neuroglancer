@@ -26,6 +26,8 @@
  */
 
 import { FragmentIndex } from "#src/datasource/zarr-vectors/fragment_index.js";
+import type { ZarrVectorsGeometryKind } from "#src/datasource/zarr-vectors/geometry_kind.js";
+import { KIND_CAPABILITIES } from "#src/datasource/zarr-vectors/geometry_kind.js";
 
 /**
  * How edges between vertices in a chunk are encoded.  Mirrors the spec's
@@ -39,11 +41,13 @@ export type LinksConvention =
 
 /**
  * Geometry type (a subset of the spec's `geometry_types` values that map
- * to this render path).  Streamlines and polylines pre-compute per-vertex
- * tangents; skeletons don't (branching breaks the "direction at this
- * vertex" abstraction).
+ * to this render path).  Aliases the canonical
+ * {@link ZarrVectorsGeometryKind} declared in `geometry_kind.ts`.  See
+ * the capability table there for which kinds get tangent synthesis
+ * (streamlines/polylines: walk-order; graphs: edge-adjacency;
+ * skeletons: none).
  */
-export type SkeletonGeometryKind = "streamline" | "polyline" | "skeleton";
+export type SkeletonGeometryKind = ZarrVectorsGeometryKind;
 
 /** Backing array for per-vertex attribute data (matches zarr-vectors dtypes). */
 export type AttributeTypedArray =
@@ -235,6 +239,94 @@ export function computeTangents(
 }
 
 /**
+ * Compute per-vertex tangent vectors using **edge adjacency** rather
+ * than fragment walk order.  Generalises {@link computeTangents} to
+ * edge-based geometries that have no canonical walk order:
+ *
+ * - **Degree 0** (isolated vertex): zero tangent.
+ * - **Degree 1** (endpoint): tangent points to the lone neighbour
+ *   (sign is arbitrary; the standard RGB shader uses `abs()`).
+ * - **Degree 2** (linear interior): central difference of the two
+ *   neighbours — same formula as walk-order interior vertices on a
+ *   degree-2 chain.
+ * - **Degree ≥ 3** (branch point): central difference of the **first
+ *   two** listed neighbours (adjacency build order).  Branch points
+ *   have no canonical direction; this just gives a non-black colour
+ *   instead of singling out one branch.  For visualisation it doesn't
+ *   matter which two neighbours win.
+ *
+ * Inputs:
+ * - `positions`: flat `(numVertices, rank)` float positions; `rank` is 2 or 3.
+ * - `edges`: flat `(numEdges, 2)` chunk-local vertex-index pairs.
+ *   Self-loops `(a, a)` are skipped (they contribute no direction).
+ *
+ * Output is a flat `Float32Array` of `(numVertices * 3)` unit tangent
+ * vectors — rank-3 even for rank-2 input (uniform GPU upload format).
+ */
+export function computeTangentsFromEdges(
+  positions: Float32Array,
+  rank: number,
+  edges: Uint32Array,
+  numVertices: number,
+): Float32Array {
+  if (rank !== 2 && rank !== 3) {
+    throw new Error(
+      `computeTangentsFromEdges: rank ${rank} not supported (expected 2 or 3)`,
+    );
+  }
+  if (edges.length % 2 !== 0) {
+    throw new Error(
+      `computeTangentsFromEdges: edges.length=${edges.length} is not a multiple of 2`,
+    );
+  }
+  const out = new Float32Array(numVertices * 3);
+  if (edges.length === 0 || numVertices === 0) return out;
+
+  // Build adjacency: for each vertex, the list of its neighbours in the
+  // order edges were encountered.  Branch points later pick the first
+  // two from this list, so the order is significant but harmless —
+  // it's deterministic given a deterministic `edges` array.
+  const adj: number[][] = new Array(numVertices);
+  for (let v = 0; v < numVertices; ++v) adj[v] = [];
+  for (let e = 0; e < edges.length; e += 2) {
+    const a = edges[e];
+    const b = edges[e + 1];
+    if (a === b) continue;
+    if (a < numVertices) adj[a].push(b);
+    if (b < numVertices) adj[b].push(a);
+  }
+
+  for (let v = 0; v < numVertices; ++v) {
+    const nbrs = adj[v];
+    const d = nbrs.length;
+    if (d === 0) continue;
+    let aIdx: number;
+    let bIdx: number;
+    if (d === 1) {
+      aIdx = v;
+      bIdx = nbrs[0];
+    } else {
+      aIdx = nbrs[0];
+      bIdx = nbrs[1];
+    }
+    const dx = positions[bIdx * rank] - positions[aIdx * rank];
+    const dy = positions[bIdx * rank + 1] - positions[aIdx * rank + 1];
+    const dz =
+      rank === 3
+        ? positions[bIdx * rank + 2] - positions[aIdx * rank + 2]
+        : 0;
+    const norm = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (norm > 0) {
+      out[v * 3] = dx / norm;
+      out[v * 3 + 1] = dy / norm;
+      out[v * 3 + 2] = dz / norm;
+    }
+    // Else: zero — coincident neighbours (degenerate).
+  }
+  return out;
+}
+
+/**
  * Build a `SkeletonChunk` from already-decoded inputs.  Callers
  * (typically the chunk-source backend) are responsible for fetching the
  * raw bytes and running the dtype-aware reinterpretations.  This
@@ -306,12 +398,23 @@ export function buildSkeletonChunk(args: {
     }
   }
 
-  // Tangents only for streamline / polyline (skeletons branch — no
-  // canonical direction at a branch point).
-  const tangents =
-    geometryKind === "streamline" || geometryKind === "polyline"
-      ? computeTangents(positions, rank, fragmentIndex)
-      : undefined;
+  // Per-vertex tangent synthesis is driven by the capability table:
+  //   - `hasWalkOrderTangent` (streamline / polyline): central
+  //     differences along the fragment walk; sign is consistent across
+  //     bridges because every fragment has a well-defined direction.
+  //   - `hasEdgeAdjacencyTangent` (graph): central differences along
+  //     edge adjacency; tangents are well-defined for degree-2 vertices
+  //     and a sensible non-zero direction at branch points.
+  //   - Neither (skeleton): no tangent (branch points have no canonical
+  //     direction, and we preserve prior "no tangents for skeletons"
+  //     behaviour).
+  const caps = KIND_CAPABILITIES[geometryKind];
+  let tangents: Float32Array | undefined;
+  if (caps.hasWalkOrderTangent) {
+    tangents = computeTangents(positions, rank, fragmentIndex);
+  } else if (caps.hasEdgeAdjacencyTangent) {
+    tangents = computeTangentsFromEdges(positions, rank, edges, numVertices);
+  }
 
   return {
     rank,

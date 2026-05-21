@@ -13,15 +13,14 @@
  *   `Map<name, VertexAttributeInfo>` the skeleton render layer uses to
  *   generate `prop_<name>()` shader macros.  Order matches the backend's
  *   `chunk.vertexAttributes` packing: synthesised `tangent` (vec3
- *   float32) first for streamline / polyline geometries, then user-
- *   declared attributes in declaration order.
+ *   float32) first for any geometry kind with synthesised tangents (see
+ *   {@link hasSynthesisedTangent}), then user-declared attributes in
+ *   declaration order.
  *
- * - `DEFAULT_STREAMLINE_FRAGMENT_MAIN` is the recommended default
- *   shader for streamline stores — maps the unit-sphere direction of
- *   the tangent to RGB (the standard tractography colour-by-direction
- *   convention).  Users paste it into the segmentation layer's
- *   skeleton-shader UI; a follow-up to slice 4d will auto-apply it at
- *   layer-mount time via a segmentation-layer hook.
+ * - `DEFAULT_STREAMLINE_FRAGMENT_MAIN` lives in `geometry_kind.ts`
+ *   alongside the per-kind capability table that references it.  This
+ *   module re-exports it for callers that imported it from here before
+ *   the refactor.
  *
  * Lives in its own module (separate from `skeleton_frontend.ts`) so
  * unit tests can import it under Node without dragging in WebGL-coupled
@@ -29,8 +28,12 @@
  */
 
 import type { ZarrVectorsAttributeDtype } from "#src/datasource/zarr-vectors/base.js";
+import type { ZarrVectorsGeometryKind } from "#src/datasource/zarr-vectors/geometry_kind.js";
+import { hasSynthesisedTangent } from "#src/datasource/zarr-vectors/geometry_kind.js";
 import type { VertexAttributeInfo } from "#src/skeleton/base.js";
 import { DataType } from "#src/util/data_type.js";
+
+export { DEFAULT_STREAMLINE_FRAGMENT_MAIN } from "#src/datasource/zarr-vectors/geometry_kind.js";
 
 /**
  * Map a zarr-vectors-declared attribute dtype to neuroglancer's
@@ -56,13 +59,10 @@ const ATTR_DTYPE_TO_DATA_TYPE: Record<ZarrVectorsAttributeDtype, DataType> = {
 export function buildVertexAttributeMap(parameters: {
   attributeNames: string[];
   attributeDtypes: ZarrVectorsAttributeDtype[];
-  geometryKind: "streamline" | "polyline" | "skeleton";
+  geometryKind: ZarrVectorsGeometryKind;
 }): Map<string, VertexAttributeInfo> {
   const map = new Map<string, VertexAttributeInfo>();
-  if (
-    parameters.geometryKind === "streamline" ||
-    parameters.geometryKind === "polyline"
-  ) {
+  if (hasSynthesisedTangent(parameters.geometryKind)) {
     map.set("tangent", { dataType: DataType.FLOAT32, numComponents: 3 });
   }
   for (let i = 0; i < parameters.attributeNames.length; ++i) {
@@ -73,27 +73,3 @@ export function buildVertexAttributeMap(parameters: {
   }
   return map;
 }
-
-/**
- * Default skeleton-shader fragment-main text for **streamline** stores:
- * map the unit-sphere direction of the tangent at each vertex to an
- * RGB colour — the standard tractography "colour-by-direction"
- * convention.
- *
- * Uses the `prop_tangent()` macro that the existing skeleton render-
- * layer shader builder auto-generates from any per-vertex attribute
- * declared in the source's `vertexAttributes` map.
- * `buildVertexAttributeMap` places the synthesised tangent in that map
- * for streamline / polyline geometries, so the macro is always
- * resolvable when this shader runs.
- *
- * Until the segmentation-layer mount path grows a hook for per-source
- * default-shader injection, users plug this into the segmentation
- * layer's skeleton-shader UI box manually (or via the layer's URL JSON
- * state under the standard `skeletonShader` field).
- */
-export const DEFAULT_STREAMLINE_FRAGMENT_MAIN = `void main() {
-  vec3 d = prop_tangent();
-  emitRGB(vec3(abs(d.x), abs(d.y), abs(d.z)));
-}
-`;

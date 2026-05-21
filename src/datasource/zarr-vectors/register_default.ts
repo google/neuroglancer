@@ -22,10 +22,19 @@ import {
 import { KvStoreBasedDataSourceLegacyUrlAdapter } from "#src/datasource/index.js";
 import {
   ZarrVectorsDataSource,
+  ZarrVectorsPointCloudDataSource,
   registerAutoDetect,
 } from "#src/datasource/zarr-vectors/frontend.js";
 
 const provider = new ZarrVectorsDataSource();
 registerKvStoreBasedDataProvider(provider);
 registerProvider(new KvStoreBasedDataSourceLegacyUrlAdapter(provider));
+
+// Companion alias: re-interpret any zarr-vectors store as a point
+// cloud, ignoring edges / manifests / cross-chunk links.  Same kvstore
+// URL form as the main scheme but with `zarr-vectors-pointcloud:`.
+const pointCloudProvider = new ZarrVectorsPointCloudDataSource();
+registerKvStoreBasedDataProvider(pointCloudProvider);
+registerProvider(new KvStoreBasedDataSourceLegacyUrlAdapter(pointCloudProvider));
+
 registerAutoDetect(dataSourceAutoDetectRegistry);

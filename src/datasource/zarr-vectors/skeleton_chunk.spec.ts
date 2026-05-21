@@ -12,6 +12,7 @@ import {
   appendIntraChunkEdges,
   buildSkeletonChunk,
   computeTangents,
+  computeTangentsFromEdges,
   mergeEdges,
   recomputeTangentsForBridges,
   synthesizeSequentialEdges,
@@ -253,6 +254,91 @@ describe("computeTangents", () => {
   });
 });
 
+describe("computeTangentsFromEdges", () => {
+  it("gives +X tangent on a 5-vertex chain in +x", () => {
+    // Chain 0—1—2—3—4 along x; edges in walk order.
+    const positions = new Float32Array(15);
+    for (let i = 0; i < 5; ++i) positions[i * 3] = i;
+    const edges = new Uint32Array([0, 1, 1, 2, 2, 3, 3, 4]);
+    const tangents = computeTangentsFromEdges(positions, 3, edges, 5);
+    // Endpoints (degree-1): direction to lone neighbour — magnitude 1
+    // along +x for vertex 0 (toward 1), and +x for vertex 4 (away from 3).
+    for (let i = 0; i < 5; ++i) {
+      expect(Math.abs(tangents[i * 3])).toBeCloseTo(1, 6);
+      expect(tangents[i * 3 + 1]).toBeCloseTo(0, 6);
+      expect(tangents[i * 3 + 2]).toBeCloseTo(0, 6);
+    }
+  });
+
+  it("matches polyline computeTangents on a degree-2 chain (regression)", () => {
+    // Bend in xy plane: (0,0,0) → (1,0,0) → (1,1,0).
+    const positions = new Float32Array([0, 0, 0, 1, 0, 0, 1, 1, 0]);
+    const edges = new Uint32Array([0, 1, 1, 2]);
+    const edgeTangents = computeTangentsFromEdges(positions, 3, edges, 3);
+    // Interior vertex (1): central-diff of (0,0,0) → (1,1,0) ≈ (.707, .707, 0).
+    expect(edgeTangents[3]).toBeCloseTo(Math.SQRT1_2, 6);
+    expect(edgeTangents[4]).toBeCloseTo(Math.SQRT1_2, 6);
+    // Endpoints: degree-1 → unit vector toward / from neighbour.
+    expect(Math.abs(edgeTangents[0])).toBeCloseTo(1, 6);
+    expect(Math.abs(edgeTangents[7])).toBeCloseTo(1, 6);
+  });
+
+  it("Y-junction picks central-diff of first two neighbours at the branch", () => {
+    // Vertices: center=0 at origin, arms 1=+x, 2=+y, 3=+z.
+    const positions = new Float32Array([
+      0, 0, 0, // 0 (branch)
+      1, 0, 0, // 1
+      0, 1, 0, // 2
+      0, 0, 1, // 3
+    ]);
+    // First two neighbours of vertex 0 are 1 (+x) and 2 (+y).
+    const edges = new Uint32Array([0, 1, 0, 2, 0, 3]);
+    const tangents = computeTangentsFromEdges(positions, 3, edges, 4);
+    // Branch vertex: tangent = normalise((+y) - (+x)) = (-1/√2, 1/√2, 0).
+    expect(tangents[0]).toBeCloseTo(-Math.SQRT1_2, 6);
+    expect(tangents[1]).toBeCloseTo(Math.SQRT1_2, 6);
+    expect(tangents[2]).toBeCloseTo(0, 6);
+  });
+
+  it("isolated vertex (degree 0) gets zero tangent", () => {
+    const positions = new Float32Array([0, 0, 0, 1, 0, 0, 2, 0, 0]);
+    // Only an edge between 1 and 2 — vertex 0 is isolated.
+    const edges = new Uint32Array([1, 2]);
+    const tangents = computeTangentsFromEdges(positions, 3, edges, 3);
+    expect(tangents[0]).toBe(0);
+    expect(tangents[1]).toBe(0);
+    expect(tangents[2]).toBe(0);
+    // Vertex 1 and 2 (degree-1) point along +x.
+    expect(Math.abs(tangents[3])).toBeCloseTo(1, 6);
+    expect(Math.abs(tangents[6])).toBeCloseTo(1, 6);
+  });
+
+  it("self-loop edge is ignored", () => {
+    const positions = new Float32Array([0, 0, 0, 1, 0, 0]);
+    const edges = new Uint32Array([0, 0, 0, 1]);
+    const tangents = computeTangentsFromEdges(positions, 3, edges, 2);
+    expect(Math.abs(tangents[0])).toBeCloseTo(1, 6);
+    expect(Math.abs(tangents[3])).toBeCloseTo(1, 6);
+  });
+
+  it("rank 2 input yields zero z-component", () => {
+    const positions = new Float32Array([0, 0, 1, 0, 2, 0]);
+    const edges = new Uint32Array([0, 1, 1, 2]);
+    const tangents = computeTangentsFromEdges(positions, 2, edges, 3);
+    expect(tangents.length).toBe(9);
+    for (let i = 0; i < 3; ++i) {
+      expect(tangents[i * 3 + 2]).toBe(0);
+    }
+  });
+
+  it("rejects odd-length edges array", () => {
+    const positions = new Float32Array([0, 0, 0, 1, 0, 0]);
+    expect(() =>
+      computeTangentsFromEdges(positions, 3, new Uint32Array([0, 1, 0]), 2),
+    ).toThrow(/multiple of 2/);
+  });
+});
+
 describe("buildSkeletonChunk", () => {
   it("produces a streamline chunk with tangents and sequential edges", () => {
     const positions = new Float32Array([0, 0, 0, 1, 0, 0, 2, 0, 0]);
@@ -309,6 +395,41 @@ describe("buildSkeletonChunk", () => {
     });
     expect(chunk.numEdges).toBe(2);
     expect(Array.from(chunk.edges)).toEqual([0, 2, 1, 2]);
+  });
+
+  it("produces a graph chunk with explicit edges and edge-adjacency tangents", () => {
+    // 4 vertices on a Y junction: center=0 at origin, arms 1=+x, 2=+y, 3=+z.
+    const positions = new Float32Array([
+      0, 0, 0,
+      1, 0, 0,
+      0, 1, 0,
+      0, 0, 1,
+    ]);
+    const fi = buildFragmentIndex([{ range: { start: 0, count: 4 } }]);
+    const chunk = buildSkeletonChunk({
+      rank: 3,
+      positions,
+      fragmentIndex: fi,
+      explicitEdges: new Uint32Array([0, 1, 0, 2, 0, 3]),
+      linksConvention: "explicit",
+      geometryKind: "graph",
+      vertexAttributes: [],
+    });
+    expect(chunk.numEdges).toBe(3);
+    expect(Array.from(chunk.edges)).toEqual([0, 1, 0, 2, 0, 3]);
+    // Graphs DO get tangents now (edge-adjacency algorithm).
+    expect(chunk.tangents).toBeDefined();
+    // Branch vertex: central-diff of first two neighbours (1, 2) →
+    // normalise((+y) - (+x)) = (-1/√2, 1/√2, 0).
+    expect(chunk.tangents![0]).toBeCloseTo(-Math.SQRT1_2, 6);
+    expect(chunk.tangents![1]).toBeCloseTo(Math.SQRT1_2, 6);
+    // Endpoint (degree-1) toward / from lone neighbour — unit-length.
+    const norm = Math.sqrt(
+      chunk.tangents![3] ** 2 +
+        chunk.tangents![4] ** 2 +
+        chunk.tangents![5] ** 2,
+    );
+    expect(norm).toBeCloseTo(1, 6);
   });
 
   it("rejects implicit_sequential + explicit edges (writer bug)", () => {

@@ -17,6 +17,7 @@
  */
 
 import type { CrossChunkLinksTable } from "#src/datasource/zarr-vectors/cross_chunk_links.js";
+import { hasSynthesisedTangent } from "#src/datasource/zarr-vectors/geometry_kind.js";
 import {
   resolveFragmentRef,
 } from "#src/datasource/zarr-vectors/object_manifest.js";
@@ -333,10 +334,13 @@ export async function downloadSegmentSkeleton(
 
   const perChunkPositions: Float32Array[] = [];
   const perChunkEdges: Uint32Array[] = [];
-  // Outer array: one slot per attribute.  Inner: one entry per source chunk.
+  // Outer array: one slot per attribute.  Inner: one entry per source
+  // chunk.  Every geometry kind with synthesised tangents (streamline,
+  // polyline, graph) carries the tangent in slot 0 of
+  // `filterChunkByFragments`'s output — see `hasSynthesisedTangent` in
+  // `geometry_kind.ts` for the canonical per-kind capability table.
   const numAttrsExpected =
-    (geometryKind === "streamline" || geometryKind === "polyline" ? 1 : 0) +
-    attributeNames.length;
+    (hasSynthesisedTangent(geometryKind) ? 1 : 0) + attributeNames.length;
   const perChunkAttrs: AttributeTypedArray[][] = Array.from(
     { length: numAttrsExpected },
     () => [] as AttributeTypedArray[],

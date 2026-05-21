@@ -43,6 +43,15 @@ describe("buildVertexAttributeMap — `prop_<name>()` shader bridge", () => {
     expect(Array.from(map.keys())).toEqual([]);
   });
 
+  it("prepends tangent for graph geometry (edge-adjacency tangent algorithm)", () => {
+    const map = buildVertexAttributeMap({
+      attributeNames: [],
+      attributeDtypes: [],
+      geometryKind: "graph",
+    });
+    expect(Array.from(map.keys())).toEqual(["tangent"]);
+  });
+
   it("appends user-declared attributes after the tangent in declaration order", () => {
     const map = buildVertexAttributeMap({
       attributeNames: ["radius", "label"],
@@ -84,12 +93,13 @@ describe("buildVertexAttributeMap — `prop_<name>()` shader bridge", () => {
     // right texture sampler.  Verify ordering invariant across all
     // geometry kinds.
     const cases: Array<{
-      kind: "streamline" | "polyline" | "skeleton";
+      kind: "streamline" | "polyline" | "skeleton" | "graph";
       expectedKeys: string[];
     }> = [
       { kind: "streamline", expectedKeys: ["tangent", "u", "v"] },
       { kind: "polyline", expectedKeys: ["tangent", "u", "v"] },
       { kind: "skeleton", expectedKeys: ["u", "v"] },
+      { kind: "graph", expectedKeys: ["tangent", "u", "v"] },
     ];
     for (const { kind, expectedKeys } of cases) {
       const map = buildVertexAttributeMap({

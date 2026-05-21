@@ -38,6 +38,7 @@ import {
   readCrossChunkLinks,
   type CrossChunkLinksTable,
 } from "#src/datasource/zarr-vectors/cross_chunk_links.js";
+import { hasSynthesisedTangent } from "#src/datasource/zarr-vectors/geometry_kind.js";
 import {
   appendGhostVertices,
   appendIntraChunkEdges,
@@ -566,11 +567,13 @@ export class ZarrVectorsObjectKeyedSkeletonSourceBackend extends WithParameters(
       chunk.vertexPositions = new Float32Array(0);
       chunk.indices = new Uint32Array(0);
       chunk.vertexAttributes = attributeNames.map(() => new Float32Array(0));
-      // For streamline / polyline kinds, the spatially-indexed source
-      // also prepends a tangent attribute slot; mirror that here so
-      // the render layer's attribute count is consistent across passes
-      // even when an OID has no geometry.
-      if (geometryKind === "streamline" || geometryKind === "polyline") {
+      // Every geometry kind with synthesised tangents (streamline,
+      // polyline, graph) reserves a tangent slot at index 0 — mirror
+      // that here so the render layer's attribute count is consistent
+      // across passes even when an OID has no geometry.  See
+      // `hasSynthesisedTangent` in `geometry_kind.ts` for the canonical
+      // per-kind capability table.
+      if (hasSynthesisedTangent(geometryKind as ZarrVectorsSkeletonGeometryKind)) {
         chunk.vertexAttributes = [new Float32Array(0), ...chunk.vertexAttributes];
       }
       return;
