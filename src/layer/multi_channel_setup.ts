@@ -78,8 +78,6 @@ const DEFAULT_ARRAY_COLORS = new Map([
   [3, new Float32Array([1, 1, 1])],
 ]);
 
-const DEFAULT_VOLUME_RENDERING_SAMPLES = 256;
-
 /**
  * Rename each output dim with ^ to be ' instead.
  */
@@ -328,17 +326,16 @@ function setupLayerPostCreation(
     );
   };
 
-  const setVolumeRenderingSamples = () => {
-    userImageLayer.volumeRenderingDepthSamplesTarget.value =
-      DEFAULT_VOLUME_RENDERING_SAMPLES;
-  };
+  // Don't set volumeRenderingDepthSamplesTarget here — the host app
+  // (Ichnaea) owns this value via its viewport store + applier hook. If we
+  // wrote a default here, it would race with the host's hook and stomp the
+  // user's chosen samples value when channel layers finish initializing.
 
   const set2DBlending = () => {
     userImageLayer.blendMode.value = BLEND_MODES.ADDITIVE;
     userImageLayer.opacity.value = 1.0;
   };
 
-  postCreationSetupFunctions.push(setVolumeRenderingSamples);
   postCreationSetupFunctions.push(set2DBlending);
   postCreationSetupFunctions.push(setShaderDefaultsWhenReady);
 }
