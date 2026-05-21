@@ -448,13 +448,13 @@ export class SliceViewPanel extends RenderedDataPanel {
           this.offscreenCopyHelper.draw(texture);
         }
       }
-    } else {
-      // Draw the texture over the whole viewport.
-      this.setGLClippedViewport();
-      this.offscreenCopyHelper.draw(
-        this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture,
-      );
+      return true;
     }
+    // Draw the texture over the whole viewport
+    this.setGLClippedViewport();
+    this.offscreenCopyHelper.draw(
+      this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture,
+    );
     return true;
   }
 
