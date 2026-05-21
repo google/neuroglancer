@@ -152,16 +152,18 @@ export function srgbGammaExpand(value: number) {
 // https://www.w3.org/TR/WCAG20/#relativeluminancedef
 //
 // @param color sRGB color
-export function getRelativeLuminance(color: vec3 | vec4) {
-  const [r, g, b] = color;
+export function getRelativeLuminance(color: ArrayLike<number>) {
   return (
-    0.2126 * srgbGammaExpand(r) +
-    0.7152 * srgbGammaExpand(g) +
-    0.0722 * srgbGammaExpand(b)
+    0.2126 * srgbGammaExpand(color[0]) +
+    0.7152 * srgbGammaExpand(color[1]) +
+    0.0722 * srgbGammaExpand(color[2])
   );
 }
 
-export function getContrastRatio(colorA: vec3 | vec4, colorB: vec3 | vec4) {
+export function getContrastRatio(
+  colorA: ArrayLike<number>,
+  colorB: ArrayLike<number>,
+) {
   const luminanceA = getRelativeLuminance(colorA);
   const luminanceB = getRelativeLuminance(colorB);
   const darker = Math.min(luminanceA, luminanceB);
@@ -186,7 +188,7 @@ const RED_HIGHLIGHT_CONTRAST_BIAS = 1.2;
 
 export function computeHighVisibilityContrastColor<T extends Float32Array>(
   out: T,
-  sourceColor: vec3 | vec4,
+  sourceColor: ArrayLike<number>,
 ) {
   const yellowContrast = getContrastRatio(yellowHighlight, sourceColor);
   const redContrast = getContrastRatio(redHighlight, sourceColor);

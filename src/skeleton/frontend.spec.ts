@@ -118,6 +118,7 @@ describe("SpatiallyIndexedSkeletonLayer browse node picks", () => {
 describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
   it("derives the selected-node outline color from the selected segment color", () => {
     const sourceColor = vec3.fromValues(1, 0, 0);
+    const isSelected = vi.fn(() => true);
     const displayState = {
       segmentationColorGroupState: {
         value: {
@@ -126,9 +127,9 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
           segmentColorHash: { compute: vi.fn() },
         },
       },
-      saturation: { value: 1 },
-      hoverHighlight: { value: false },
-      segmentSelectionState: { isSelected: vi.fn(() => false) },
+      saturation: { value: 0 },
+      hoverHighlight: { value: true },
+      segmentSelectionState: { isSelected },
     };
     const getCachedNodeSnapshot = vi.fn(() => ({
       nodeId: 101,
@@ -152,6 +153,7 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
 
     expect(getCachedNodeSnapshot).toHaveBeenCalledWith(101);
     expect(getCachedNodeSnapshot).toHaveBeenCalledTimes(1);
+    expect(isSelected).not.toHaveBeenCalled();
     expect(cachedOutlineColor).toBe(outlineColor);
     expect(outlineColor[0]).toBeCloseTo(1);
     expect(outlineColor[1]).toBeCloseTo(0.95);

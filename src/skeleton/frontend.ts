@@ -60,7 +60,7 @@ import {
 import type { SegmentationDisplayState3D } from "#src/segmentation_display_state/frontend.js";
 import {
   forEachVisibleSegmentToDraw,
-  getObjectColor,
+  getBaseObjectColor,
   registerRedrawWhenSegmentationDisplayState3DChanged,
   SegmentationLayerSharedObject,
 } from "#src/segmentation_display_state/frontend.js";
@@ -2245,7 +2245,7 @@ export class SpatiallyIndexedSkeletonLayer
     this.selectedNodeOutlineColorCacheSegmentId = normalizedSegmentId;
     return computeHighVisibilityContrastColor(
       this.selectedNodeOutlineColor,
-      getObjectColor(this.displayState, BigInt(normalizedSegmentId), 1),
+      getBaseObjectColor(this.displayState, BigInt(normalizedSegmentId)),
     );
   }
 
