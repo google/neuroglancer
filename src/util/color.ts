@@ -184,7 +184,7 @@ export function useWhiteBackground(foregroundColor: vec3 | vec4) {
 
 const yellowHighlight = vec3.fromValues(1, 0.95, 0.35);
 const redHighlight = vec3.fromValues(1, 0, 0);
-const RED_HIGHLIGHT_CONTRAST_BIAS = 1.2;
+const YELLOW_HIGHLIGHT_CONTRAST_BIAS = 1.2;
 
 export function computeHighVisibilityContrastColor<T extends Float32Array>(
   out: T,
@@ -193,7 +193,7 @@ export function computeHighVisibilityContrastColor<T extends Float32Array>(
   const yellowContrast = getContrastRatio(yellowHighlight, sourceColor);
   const redContrast = getContrastRatio(redHighlight, sourceColor);
   const color =
-    redContrast > yellowContrast * RED_HIGHLIGHT_CONTRAST_BIAS
+    redContrast > yellowContrast * YELLOW_HIGHLIGHT_CONTRAST_BIAS
       ? redHighlight
       : yellowHighlight;
   out[0] = color[0];
