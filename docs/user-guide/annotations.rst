@@ -18,7 +18,7 @@ Creating a local annotation layer
 
 To create a new annotation layer:
 
-1.  Click :si-icon:`material/mouse-left-click-outline` the
+1.  :si-icon:`material/mouse-left-click-outline` Click the
     :guilabel:`+` button at the right end of the layer bar at the top
     of the viewer.
 
@@ -69,8 +69,8 @@ Annotation tools
 ----------------
 
 The :guilabel:`Annotations` tab provides one button per annotation
-type. Click a tool button to activate that tool for the layer. With
-the tool active, you place points by holding :kbd:`Ctrl` and
+type. :si-icon:`material/mouse-left-click-outline` Click a tool button to activate that tool for the layer. With
+the tool active, you place points by holding :kbd:`Ctrl` +
 :si-icon:`material/mouse-left-click-outline` left-clicking in
 **either a 2-D cross-section view or the 3-D projection view** — both
 work for every annotation tool. The point is placed at the location
@@ -131,8 +131,10 @@ regardless of whether you are clicking in a 2-D or 3-D view.
 Neuroglancer will use the same picking scheme that the right click
 tool uses when moving.
 
-Note, you can stick right click to move around, or scroll through the
-dataset to find the place where you want to annotate.
+Note, you can still :si-icon:`material/mouse-right-click-outline`
+right click to move around, or 
+:si-icon:`material/mouse-left-click-outline` drag/scroll through
+the dataset to find the place where you want to annotate.
 
 .. _working-with-polylines:
 
