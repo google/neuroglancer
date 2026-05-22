@@ -17,6 +17,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { Uint64Set } from "#src/uint64_set.js";
+import { getContrastRatio } from "#src/util/color.js";
+import { vec3 } from "#src/util/geom.js";
 
 if (!("WebGL2RenderingContext" in globalThis)) {
   Object.defineProperty(globalThis, "WebGL2RenderingContext", {
@@ -110,6 +112,190 @@ describe("SpatiallyIndexedSkeletonLayer browse node picks", () => {
       position: new Float32Array([4, 5, 6]),
       sourceState: { revisionToken: "2026-03-29T11:51:00Z" },
     });
+  });
+});
+
+describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
+  it("derives the selected-node outline color from the selected segment color", () => {
+    const sourceColor = vec3.fromValues(1, 0, 0);
+    const isSelected = vi.fn(() => true);
+    const displayState = {
+      segmentationColorGroupState: {
+        value: {
+          segmentStatedColors: new Map(),
+          segmentDefaultColor: { value: sourceColor },
+          segmentColorHash: { compute: vi.fn() },
+        },
+      },
+      saturation: { value: 0 },
+      hoverHighlight: { value: true },
+      segmentSelectionState: { isSelected },
+    };
+    const getCachedNodeSnapshot = vi.fn(() => ({
+      nodeId: 101,
+      segmentId: 11,
+      position: new Float32Array([1, 2, 3]),
+    }));
+    const layer = Object.assign(
+      Object.create(SpatiallyIndexedSkeletonLayer.prototype),
+      {
+        selectedNodeId: { value: 101 },
+        selectedNodeOutlineColor: vec3.create(),
+        selectedNodeOutlineColorGeneration: 0,
+        cachedSelectedNodeOutlineColorGeneration: -1,
+        displayState,
+        getCachedNodeSnapshot,
+      },
+    );
+
+    const outlineColor = (layer as any).getSelectedNodeOutlineColor();
+    const cachedOutlineColor = (layer as any).getSelectedNodeOutlineColor();
+
+    expect(getCachedNodeSnapshot).toHaveBeenCalledWith(101);
+    expect(getCachedNodeSnapshot).toHaveBeenCalledTimes(1);
+    expect(isSelected).not.toHaveBeenCalled();
+    expect(cachedOutlineColor).toBe(outlineColor);
+    expect(outlineColor[0]).toBeCloseTo(1);
+    expect(outlineColor[1]).toBeCloseTo(0.95);
+    expect(outlineColor[2]).toBeCloseTo(0.35);
+    expect(getContrastRatio(outlineColor, sourceColor)).toBeGreaterThanOrEqual(
+      3,
+    );
+  });
+
+  it("recomputes the outline color when the selected node changes", () => {
+    const computeSegmentColor = vi.fn((color: Float32Array) => {
+      color[0] = 1;
+      color[1] = 0;
+      color[2] = 0;
+      return color;
+    });
+    const selectedNodeId = { value: 101 };
+    const displayState = {
+      segmentationColorGroupState: {
+        value: {
+          segmentStatedColors: new Map(),
+          segmentDefaultColor: { value: undefined },
+          segmentColorHash: { compute: computeSegmentColor },
+        },
+      },
+      saturation: { value: 1 },
+      hoverHighlight: { value: false },
+      segmentSelectionState: { isSelected: vi.fn(() => false) },
+    };
+    const getCachedNodeSnapshot = vi.fn((nodeId: number) => ({
+      nodeId,
+      segmentId: 11,
+      position: new Float32Array([1, 2, 3]),
+    }));
+    const layer = Object.assign(
+      Object.create(SpatiallyIndexedSkeletonLayer.prototype),
+      {
+        selectedNodeId,
+        selectedNodeOutlineColor: vec3.create(),
+        selectedNodeOutlineColorGeneration: 0,
+        cachedSelectedNodeOutlineColorGeneration: -1,
+        displayState,
+        getCachedNodeSnapshot,
+      },
+    );
+
+    (layer as any).getSelectedNodeOutlineColor();
+    selectedNodeId.value = 202;
+    ++(layer as any).selectedNodeOutlineColorGeneration;
+    (layer as any).getSelectedNodeOutlineColor();
+
+    expect(getCachedNodeSnapshot).toHaveBeenCalledTimes(2);
+    expect(computeSegmentColor).toHaveBeenCalledTimes(2);
+  });
+
+  it("invalidates the selected-node outline cache when the input generation changes", () => {
+    const computeSegmentColor = vi.fn((color: Float32Array) => {
+      color[0] = 1;
+      color[1] = 0;
+      color[2] = 0;
+      return color;
+    });
+    const displayState = {
+      segmentationColorGroupState: {
+        value: {
+          segmentStatedColors: new Map(),
+          segmentDefaultColor: { value: undefined },
+          segmentColorHash: { compute: computeSegmentColor },
+        },
+      },
+      saturation: { value: 1 },
+      hoverHighlight: { value: false },
+      segmentSelectionState: { isSelected: vi.fn(() => false) },
+    };
+    const getCachedNodeSnapshot = vi.fn(() => ({
+      nodeId: 101,
+      segmentId: 11,
+      position: new Float32Array([1, 2, 3]),
+    }));
+    const layer = Object.assign(
+      Object.create(SpatiallyIndexedSkeletonLayer.prototype),
+      {
+        selectedNodeId: { value: 101 },
+        selectedNodeOutlineColor: vec3.create(),
+        selectedNodeOutlineColorGeneration: 0,
+        cachedSelectedNodeOutlineColorGeneration: -1,
+        displayState,
+        getCachedNodeSnapshot,
+      },
+    );
+
+    (layer as any).getSelectedNodeOutlineColor();
+    ++(layer as any).selectedNodeOutlineColorGeneration;
+    (layer as any).getSelectedNodeOutlineColor();
+
+    expect(getCachedNodeSnapshot).toHaveBeenCalledTimes(2);
+    expect(computeSegmentColor).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns the fallback outline color for an invalid selected segment", () => {
+    const computeSegmentColor = vi.fn();
+    const displayState = {
+      segmentationColorGroupState: {
+        value: {
+          segmentStatedColors: new Map(),
+          segmentDefaultColor: { value: undefined },
+          segmentColorHash: { compute: computeSegmentColor },
+        },
+      },
+      saturation: { value: 1 },
+      hoverHighlight: { value: false },
+      segmentSelectionState: { isSelected: vi.fn(() => false) },
+    };
+    const getCachedNodeSnapshot = vi.fn(() => ({
+      nodeId: 101,
+      segmentId: 0,
+      position: new Float32Array([1, 2, 3]),
+    }));
+    const layer = Object.assign(
+      Object.create(SpatiallyIndexedSkeletonLayer.prototype),
+      {
+        selectedNodeId: { value: 101 },
+        selectedNodeOutlineColor: vec3.create(),
+        selectedNodeOutlineColorGeneration: 0,
+        cachedSelectedNodeOutlineColorGeneration: -1,
+        displayState,
+        getCachedNodeSnapshot,
+      },
+    );
+
+    const outlineColor = (layer as any).getSelectedNodeOutlineColor();
+    const cachedOutlineColor = (layer as any).getSelectedNodeOutlineColor();
+
+    expect(getCachedNodeSnapshot).toHaveBeenCalledWith(101);
+    expect(getCachedNodeSnapshot).toHaveBeenCalledTimes(1);
+    expect(computeSegmentColor).not.toHaveBeenCalled();
+    expect(outlineColor[0]).toBeCloseTo(1);
+    expect(outlineColor[1]).toBeCloseTo(0.95);
+    expect(outlineColor[2]).toBeCloseTo(0.35);
+    expect(cachedOutlineColor[0]).toBeCloseTo(1);
+    expect(cachedOutlineColor[1]).toBeCloseTo(0.95);
+    expect(cachedOutlineColor[2]).toBeCloseTo(0.35);
   });
 });
 

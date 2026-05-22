@@ -60,6 +60,7 @@ import {
 import type { SegmentationDisplayState3D } from "#src/segmentation_display_state/frontend.js";
 import {
   forEachVisibleSegmentToDraw,
+  getBaseObjectColor,
   registerRedrawWhenSegmentationDisplayState3DChanged,
   SegmentationLayerSharedObject,
 } from "#src/segmentation_display_state/frontend.js";
@@ -119,6 +120,7 @@ import {
 } from "#src/trackable_value.js";
 import { Uint64Set } from "#src/uint64_set.js";
 import { gatherUpdate } from "#src/util/array.js";
+import { computeHighVisibilityContrastColor } from "#src/util/color.js";
 import { hsvToRgb } from "#src/util/colorspace.js";
 import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -198,7 +200,7 @@ const DEFAULT_FRAGMENT_MAIN = `void main() {
 }
 `;
 
-const SELECTED_NODE_OUTLINE_COLOR_RGB = "1.0, 0.95, 0.35";
+const SELECTED_NODE_OUTLINE_FALLBACK_COLOR = vec3.fromValues(1.0, 0.95, 0.35);
 const SELECTED_NODE_OUTLINE_MIN_WIDTH_2D = "1.75";
 const SELECTED_NODE_OUTLINE_MAX_WIDTH_2D = "3.0";
 const SELECTED_NODE_OUTLINE_MIN_WIDTH_3D = "1.5";
@@ -768,6 +770,7 @@ void emitDefault() {
           builder.addUniform("highp float", "uNodeDiameter");
           let selectedOutlineWidthExpression = "0.0";
           if (this.selectedNodeAttributeIndex !== undefined) {
+            builder.addUniform("highp vec3", "uSelectedNodeOutlineColor");
             builder.addVarying("highp float", "vSelectedNode", "flat");
             const selectedOutlineMinWidth = this.targetIsSliceView
               ? SELECTED_NODE_OUTLINE_MIN_WIDTH_2D
@@ -818,7 +821,7 @@ emitCircle(
             const borderColorExpression =
               selectedNodeExpression === undefined
                 ? "renderColor"
-                : `((${selectedNodeExpression} > 0.5) ? vec4(${SELECTED_NODE_OUTLINE_COLOR_RGB}, renderColor.a) : renderColor)`;
+                : `((${selectedNodeExpression} > 0.5) ? vec4(uSelectedNodeOutlineColor, renderColor.a) : renderColor)`;
             builder.addFragmentCode(`
 vec4 segmentColor() {
   return getSegmentAppearance(${segmentExpression});
@@ -868,7 +871,7 @@ void emitDefault() {
             const borderColorExpression =
               selectedNodeExpression === undefined
                 ? "renderColor"
-                : `((${selectedNodeExpression} > 0.5) ? vec4(${SELECTED_NODE_OUTLINE_COLOR_RGB}, renderColor.a) : renderColor)`;
+                : `((${selectedNodeExpression} > 0.5) ? vec4(uSelectedNodeOutlineColor, renderColor.a) : renderColor)`;
             builder.addFragmentCode(`
 vec4 segmentColor() {
   return ${segmentColorExpression};
@@ -2142,6 +2145,11 @@ export class SpatiallyIndexedSkeletonLayer
   private suppressedBrowseSegmentIds = new Set<number>();
   private retainedOverlaySegmentIds: number[] = [];
   private maxRetainedOverlaySegments: number;
+  private readonly selectedNodeOutlineColor = vec3.clone(
+    SELECTED_NODE_OUTLINE_FALLBACK_COLOR,
+  );
+  private selectedNodeOutlineColorGeneration = 0;
+  private cachedSelectedNodeOutlineColorGeneration = -1;
 
   private disposeOverlayChunk() {
     this.overlayChunk?.dispose(this.gl);
@@ -2194,6 +2202,34 @@ export class SpatiallyIndexedSkeletonLayer
     }
     segmentIds.sort((a, b) => a - b);
     return segmentIds;
+  }
+
+  private getSelectedNodeOutlineColor() {
+    const selectedNodeId = this.selectedNodeId?.value;
+    if (selectedNodeId === undefined) {
+      return SELECTED_NODE_OUTLINE_FALLBACK_COLOR;
+    }
+    const currentGeneration = this.selectedNodeOutlineColorGeneration;
+    const isCacheValid =
+      this.cachedSelectedNodeOutlineColorGeneration === currentGeneration;
+    if (isCacheValid) {
+      return this.selectedNodeOutlineColor;
+    }
+    const segmentId = this.getCachedNodeSnapshot(selectedNodeId)?.segmentId;
+    const normalizedSegmentId = Math.round(Number(segmentId));
+    if (
+      !Number.isSafeInteger(normalizedSegmentId) ||
+      normalizedSegmentId <= 0
+    ) {
+      this.cachedSelectedNodeOutlineColorGeneration = currentGeneration;
+      this.selectedNodeOutlineColor.set(SELECTED_NODE_OUTLINE_FALLBACK_COLOR);
+      return SELECTED_NODE_OUTLINE_FALLBACK_COLOR;
+    }
+    this.cachedSelectedNodeOutlineColorGeneration = currentGeneration;
+    return computeHighVisibilityContrastColor(
+      this.selectedNodeOutlineColor,
+      getBaseObjectColor(this.displayState, BigInt(normalizedSegmentId)),
+    );
   }
 
   getRetainedOverlaySegmentIds() {
@@ -2465,6 +2501,9 @@ export class SpatiallyIndexedSkeletonLayer
       ),
     );
     registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
+    const invalidateSelectedNodeOutlineColor = () => {
+      ++this.selectedNodeOutlineColorGeneration;
+    };
     this.displayState.shaderError.value = undefined;
     const { skeletonRenderingOptions: renderingOptions } = displayState;
     this.registerDisposer(
@@ -2515,6 +2554,25 @@ export class SpatiallyIndexedSkeletonLayer
       }, this.displayState.segmentationColorGroupState),
     );
     this.registerDisposer(
+      registerNested((context, colorGroupState) => {
+        context.registerDisposer(
+          colorGroupState.segmentColorHash.changed.add(
+            invalidateSelectedNodeOutlineColor,
+          ),
+        );
+        context.registerDisposer(
+          colorGroupState.segmentStatedColors.changed.add(
+            invalidateSelectedNodeOutlineColor,
+          ),
+        );
+        context.registerDisposer(
+          colorGroupState.segmentDefaultColor.changed.add(
+            invalidateSelectedNodeOutlineColor,
+          ),
+        );
+      }, this.displayState.segmentationColorGroupState),
+    );
+    this.registerDisposer(
       this.displayState.hoverHighlight.changed.add(
         updateSkeletonShaderParameters,
       ),
@@ -2544,7 +2602,12 @@ export class SpatiallyIndexedSkeletonLayer
     const requestRedraw = () => this.redrawNeeded.dispatch();
     const selectedNodeWatchable = this.selectedNodeId;
     if (selectedNodeWatchable?.changed) {
-      this.registerDisposer(selectedNodeWatchable.changed.add(requestRedraw));
+      this.registerDisposer(
+        selectedNodeWatchable.changed.add(() => {
+          invalidateSelectedNodeOutlineColor();
+          requestRedraw();
+        }),
+      );
     }
     const pendingNodePositionVersion = options.pendingNodePositionVersion;
     if (pendingNodePositionVersion?.changed) {
@@ -2556,6 +2619,7 @@ export class SpatiallyIndexedSkeletonLayer
     if (inspectionState !== undefined) {
       this.registerDisposer(
         inspectionState.nodeDataVersion.changed.add(() => {
+          invalidateSelectedNodeOutlineColor();
           this.redrawNeeded.dispatch();
         }),
       );
@@ -3149,6 +3213,12 @@ export class SpatiallyIndexedSkeletonLayer
     );
     if (passState === undefined) return;
     const { gl, edgeShader, nodeShader, skeletonParams } = passState;
+
+    nodeShader.bind();
+    gl.uniform3fv(
+      nodeShader.uniform("uSelectedNodeOutlineColor"),
+      this.getSelectedNodeOutlineColor(),
+    );
 
     if (renderContext.emitPickID) {
       const edgePickId =
