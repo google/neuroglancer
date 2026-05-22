@@ -3,6 +3,9 @@ name: Build docs preview
 on:
   pull_request:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   upload:
     runs-on: ubuntu-latest
