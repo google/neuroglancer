@@ -5,30 +5,32 @@ Annotation Layers
 
 Annotation layers let you place geometric markers — points, lines, bounding
 boxes, ellipsoids, and polylines — on top of any other data displayed in
-the viewer. Annotations are stored as part of the viewer state and can be
+the viewer. Local annotations are stored as part of the viewer state and can be
 linked to segmentation layers so that each annotation records the IDs of
-the segments it touches.
+the segments it touches. Remote annotations can stream from data locations 
+outside of neuroglancer, but this guide will focus on local annotations.
 
 .. _creating-an-annotation-layer:
 
-Creating an annotation layer
-----------------------------
+Creating a local annotation layer
+---------------------------------
 
 To create a new annotation layer:
 
-1. Click the :guilabel:`+` button at the right end of the layer bar at the
-   top of the viewer.
+1.  Click :si-icon:`material/mouse-left-click-outline` the :guilabel:`+` button at the right end of the layer bar at the
+top of the viewer.
+
+.. image:: ../images/annotation_plus.png
+   :alt: The + button at the right end of the layer bar
+
 2. In the layer type picker, choose :guilabel:`annotation` (abbreviated
-   ``ann``). (shortcut: ctrl+click the '+' button to make a new annotation layer immediately).
-OR
-1. ctrl + click the :guilabel:`+` button at the right end of the layer bar at
-   the top of the viewer, which will automate steps 1 and 2 above, in one click.
+``ann``).
 
-3. A new, empty annotation layer is added to the layer bar and its side
-   panel opens.
+shortcut: ctrl+click :si-icon:`material/mouse-left-click-outline` the '+' button to make a new annotation layer immediately.
 
-Annotation layers can also be loaded from precomputed annotation data
-sources by specifying a data source URL when creating the layer.
+3. A new, empty local annotation layer is added to the layer bar and its side
+panel opens.
+
 
 .. _annotations-tab:
 
@@ -38,11 +40,14 @@ The Annotations tab
 Selecting an annotation layer opens its side panel. Within the side panel,
 select the :guilabel:`Annotations` tab. This tab contains:
 
+.. image:: ../images/annotations_tab.png
+   :alt: The Annotations tab in the side panel
+
 - A row of tool buttons for placing new annotations (see
   :ref:`annotation-tools` below).
 - A list of all annotations in the layer. 
-:si-icon:`material/mouse-right-click-outline` an entry in this list
-  selects that annotation and moves the view to its position.
+:si-icon:`material/mouse-right-click-outline` an entry in this list 
+selects that annotation and moves the view to its position.
 
 
 the :guilabel: `Rendering tab` for controls related to how annotations are drawn, including:
@@ -60,37 +65,37 @@ active, you place points by holding :kbd:`Ctrl` and :si-icon:`material/mouse-lef
 work for every annotation tool. The point is placed at the location
 under the mouse cursor in whichever view you click.
 
-Each tool interprets your clicks as follows:
+Each tool interprets your :kbd:`Ctrl` :si-icon:`material/mouse-left-click-outline` left-clicks as follows:
 
 :guilabel:`Annotate point`
-    A single :kbd:`Ctrl` + :si-icon:`material/mouse-left-click-outline` left-click places a point at the cursor and
+    A single :kbd:`Ctrl` :si-icon:`material/mouse-left-click-outline` left-click places a point at the cursor and
     finishes the annotation. Each subsequent click starts a new
     point annotation.
 
 :guilabel:`Annotate line`
-    - **First click:** places the start endpoint of the line.
-    - **Second click:** places the end endpoint of the line and
+    - **First** :kbd:`Ctrl` + :si-icon:`material/mouse-left-click-outline`: places the start endpoint of the line.
+    - **Second** :kbd:`Ctrl` + :si-icon:`material/mouse-left-click-outline`: places the end endpoint of the line and
       finishes the annotation.
 
 :guilabel:`Annotate bounding box`
-    - **First click:** places one corner of the axis-aligned bounding
+    - **First** :kbd:`Ctrl` + :si-icon:`material/mouse-left-click-outline`: places one corner of the axis-aligned bounding
       box.
-    - **Second click:** places the opposite corner and finishes the
+    - **Second** :kbd:`Ctrl` + :si-icon:`material/mouse-left-click-outline`: places the opposite corner and finishes the
       annotation. The box is drawn axis-aligned in the annotation
       coordinate space between the two corner points.
 
 :guilabel:`Annotate ellipsoid`
-    - **First click:** places the **center** of the axis-aligned
+    - **First** :kbd:`Ctrl` + :si-icon:`material/mouse-left-click-outline`: places the **center** of the axis-aligned
       ellipsoid.
-    - **Second click:** sets the ellipsoid's radii. The radius along
+    - **Second** :kbd:`Ctrl` + :si-icon:`material/mouse-left-click-outline`: sets the ellipsoid's radii. The radius along
       each axis is taken from the absolute distance between the center
       and the second click along that axis, so clicking farther from
       the center produces a larger ellipsoid. The second click also
       finishes the annotation.
 
 :guilabel:`Annotate polyline`
-    - **First click:** places the first vertex of the polyline.
-    - **Each subsequent click:** appends another vertex, extending the
+    - **First** :kbd:`Ctrl` + :si-icon:`material/mouse-left-click-outline`: places the first vertex of the polyline.
+    - **Each subsequent** :kbd:`Ctrl` + :si-icon:`material/mouse-left-click-outline`: appends another vertex, extending the
       polyline by one segment.
     - **Finishing:** hit enter to end the
       polyline. See :ref:`working-with-polylines` for details and how
@@ -108,8 +113,11 @@ dataset to find the place where you want to annotate.
 Working with polylines
 ----------------------
 
+.. image:: ../images/polyline.png
+   :alt: The + button at the right end of the layer bar
+
 The polyline tool builds up an annotation one point at a time. To finish
-a polyline, **click the last point a second time** — that is, place a
+a polyline, hit :kbd:`Enter` or **click the last point a second time** — that is, place a
 new point at the exact location of the previous one. Neuroglancer treats
 two consecutive points at the same position as the end of the polyline.
 
@@ -158,7 +166,33 @@ Moving annotation points
 Individual points and vertices of existing annotations can be moved by
 holding :kbd:`Alt` and :si-icon:`material/mouse-left-click-outline` left-click-dragging on the point. This works for
 the endpoints of a line, the corners of a bounding box, the center and
-radius handles of an ellipsoid, and any vertex of a polyline.
+radius handles of an ellipsoid, and any vertex of a polyline. 
+
+If you do the same :kbd:`Alt` and :si-icon:`material/mouse-left-click-outline` left-click-dragging
+on the lines of an annotation you will move the entire annotation instead of just a single point.
+This is useful for repositioning an annotation without changing its shape.
+Also, this works in 3d, but moves points in the plane parallel to the screen,
+witout changing the points depth relative to the camera.  You may need to move a point
+rotate 90 degrees, and then move the point again to get it close to what where you watn to be. 
+
+If you the same :kbd:`Alt` and :si-icon:`material/mouse-left-click-outline` left-click-dragging in
+the annotation list, you can reorder the annotations in the list. 
+
+.. _reordering-annotations:
+
+Reordering annotations in the list
+----------------------------------
+
+For local annotation layers, you can change the order of annotations in
+the :guilabel:`Annotations` tab by holding :kbd:`Alt` and
+:si-icon:`material/mouse-left-click-outline` left-click-dragging an
+entry in the list to a new position. While dragging, a colored bar
+indicates whether the dragged annotation will be placed **before** (top
+edge) or **after** (bottom edge) the row under the cursor. Release the
+mouse to commit the move, or press :kbd:`Escape` to cancel.
+
+Reordering is restricted to annotations within the same local
+annotation source and is persisted in the viewer JSON state.
 
 .. _annotation-descriptions:
 
@@ -198,10 +232,14 @@ on the selected layer:
      - :kbd:`Ctrl` + :si-icon:`material/mouse-right-click-outline` right-click
    * - Move an annotation point
      - :kbd:`Alt` + :si-icon:`material/mouse-left-click-outline` left-click-drag
+   * - Reorder an annotation in the list (local annotations)
+     - :kbd:`Alt` + :si-icon:`material/mouse-left-click-outline` left-click-drag on a list entry
    * - Delete an annotation
      - :kbd:`Ctrl` + :kbd:`Alt` + :si-icon:`material/mouse-right-click-outline` right-click
    * - Undo last annotation point (during multi-point placement)
      - :kbd:`Backspace`
+   * - Finish polyline annotation
+     - :kbd:`Enter` or place a new point at the same position as the previous one
 
 .. _annotation-custom-hotkeys:
 
