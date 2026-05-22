@@ -124,6 +124,27 @@ export function selectSpatialSkeletonSourceByLimit<T>(
   );
 }
 
+export function getSpatialSkeletonSourceScalesByLimit<T>(
+  sources: readonly SpatialSkeletonSourceDensityInput<T>[],
+  effectiveVolume: number,
+  viewportArea: number,
+): SpatialSkeletonSourceDensitySelection<T>[] {
+  const orderedSources = getOrderedSpatialSkeletonSources(sources);
+  validateOrderedSpatialSkeletonLimitZeroOnlyFinest(orderedSources);
+  return orderedSources.map((source) => {
+    const physicalDensity =
+      source.limit === 0
+        ? Number.POSITIVE_INFINITY
+        : (source.limit * source.sliceFraction) / source.physicalVolume;
+    return makeSpatialSkeletonSourceSelection(
+      source,
+      physicalDensity,
+      effectiveVolume,
+      viewportArea,
+    );
+  });
+}
+
 export function validateSpatialSkeletonLimitZeroOnlyFinest<
   T extends SpatialSkeletonSourceLimitInput<unknown>,
 >(sources: readonly T[]) {

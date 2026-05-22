@@ -21,7 +21,11 @@ import type {
   TransformedSource,
 } from "#src/sliceview/base.js";
 import { forEachVisibleVolumetricChunk } from "#src/sliceview/base.js";
-import { selectSpatialSkeletonSourceByLimit } from "#src/skeleton/source_selection.js";
+import {
+  getSpatialSkeletonSourceScalesByLimit,
+  selectSpatialSkeletonSourceByLimit,
+  type SpatialSkeletonSourceDensityInput,
+} from "#src/skeleton/source_selection.js";
 import type { DataType } from "#src/util/data_type.js";
 import {
   getViewFrustrumVolume,
@@ -50,6 +54,15 @@ export interface SpatiallyIndexedSkeletonChunkSpecification
 
 const tempMat3 = mat3.create();
 
+export interface SpatialSkeletonSourceDensityContext<
+  Transformed extends TransformedSource<any, SliceViewChunkSource>,
+> {
+  sourceDensityInputs: SpatialSkeletonSourceDensityInput<Transformed>[];
+  physicalDensityTarget: number;
+  effectiveVolume: number;
+  viewportArea: number;
+}
+
 function getSpatialSkeletonSliceFraction(transformedSource: TransformedSource) {
   const spec = transformedSource.source
     .spec as SpatiallyIndexedSkeletonChunkSpecification;
@@ -76,22 +89,14 @@ function getSpatialSkeletonChunkPhysicalVolume(
   );
 }
 
-export function forEachVisibleSpatialSkeletonChunk<
+export function getSpatialSkeletonSourceDensityContext<
   Transformed extends TransformedSource<any, SliceViewChunkSource>,
 >(
   projectionParameters: ProjectionParameters,
-  localPosition: Float32Array,
   spacingTarget: number,
   transformedSources: readonly Transformed[],
-  beginScale: (source: Transformed, index: number) => void,
-  callback: (
-    source: Transformed,
-    index: number,
-    physicalSpacing: number,
-    pixelSpacing: number,
-  ) => void,
-) {
-  if (transformedSources.length === 0) return;
+): SpatialSkeletonSourceDensityContext<Transformed> | undefined {
+  if (transformedSources.length === 0) return undefined;
 
   const {
     displayDimensionRenderInfo,
@@ -136,6 +141,89 @@ export function forEachVisibleSpatialSkeletonChunk<
   const viewportArea = width * height;
   const targetNumNodes = viewportArea / spacingTarget ** 2;
   const physicalDensityTarget = targetNumNodes / effectiveVolume;
+  return {
+    sourceDensityInputs,
+    physicalDensityTarget,
+    effectiveVolume,
+    viewportArea,
+  };
+}
+
+export function forEachSpatialSkeletonSourceScale<
+  Transformed extends TransformedSource<any, SliceViewChunkSource>,
+>(
+  projectionParameters: ProjectionParameters,
+  spacingTarget: number,
+  transformedSources: readonly Transformed[],
+  callback: (
+    source: Transformed,
+    index: number,
+    physicalSpacing: number,
+    pixelSpacing: number,
+    selected: boolean,
+  ) => void,
+) {
+  const densityContext = getSpatialSkeletonSourceDensityContext(
+    projectionParameters,
+    spacingTarget,
+    transformedSources,
+  );
+  if (densityContext === undefined) return;
+  const {
+    sourceDensityInputs,
+    physicalDensityTarget,
+    effectiveVolume,
+    viewportArea,
+  } = densityContext;
+  const selection = selectSpatialSkeletonSourceByLimit(
+    sourceDensityInputs,
+    physicalDensityTarget,
+    effectiveVolume,
+    viewportArea,
+  );
+  if (selection === undefined) return;
+  for (const scale of getSpatialSkeletonSourceScalesByLimit(
+    sourceDensityInputs,
+    effectiveVolume,
+    viewportArea,
+  )) {
+    callback(
+      scale.source,
+      scale.index,
+      scale.physicalSpacing,
+      scale.pixelSpacing,
+      scale.source === selection.source,
+    );
+  }
+}
+
+export function forEachVisibleSpatialSkeletonChunk<
+  Transformed extends TransformedSource<any, SliceViewChunkSource>,
+>(
+  projectionParameters: ProjectionParameters,
+  localPosition: Float32Array,
+  spacingTarget: number,
+  transformedSources: readonly Transformed[],
+  beginScale: (source: Transformed, index: number) => void,
+  callback: (
+    source: Transformed,
+    index: number,
+    physicalSpacing: number,
+    pixelSpacing: number,
+  ) => void,
+) {
+  const densityContext = getSpatialSkeletonSourceDensityContext(
+    projectionParameters,
+    spacingTarget,
+    transformedSources,
+  );
+  if (densityContext === undefined) return;
+  const {
+    sourceDensityInputs,
+    physicalDensityTarget,
+    effectiveVolume,
+    viewportArea,
+  } = densityContext;
 
   const selection = selectSpatialSkeletonSourceByLimit(
     sourceDensityInputs,

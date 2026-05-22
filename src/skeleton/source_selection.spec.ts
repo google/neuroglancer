@@ -17,6 +17,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  getSpatialSkeletonSourceScalesByLimit,
   selectSpatialSkeletonSourceByLimit,
   SPATIAL_SKELETON_ZERO_LIMIT_FINEST_ERROR,
 } from "#src/skeleton/source_selection.js";
@@ -251,5 +252,37 @@ describe("skeleton/source_selection", () => {
     );
 
     expect(selection?.source).toBe("coarse");
+  });
+
+  it("reports all source scales in coarse-to-fine order for histogram indicators", () => {
+    const scales = getSpatialSkeletonSourceScalesByLimit(
+      [
+        {
+          source: "complete-finest",
+          index: 1,
+          physicalVolume: 125,
+          limit: 0,
+          sliceFraction: 1,
+        },
+        {
+          source: "coarse",
+          index: 0,
+          physicalVolume: 1000,
+          limit: 200,
+          sliceFraction: 1,
+        },
+      ],
+      1000,
+      100,
+    );
+
+    expect(scales.map((scale) => scale.source)).toEqual([
+      "coarse",
+      "complete-finest",
+    ]);
+    expect(scales[0].physicalDensity).toBeCloseTo(0.2);
+    expect(scales[1].physicalDensity).toBe(Number.POSITIVE_INFINITY);
+    expect(scales[1].physicalSpacing).toBe(Number.POSITIVE_INFINITY);
+    expect(scales[1].pixelSpacing).toBe(Number.POSITIVE_INFINITY);
   });
 });

@@ -69,6 +69,7 @@ import type {
   SpatialSkeletonSourceState,
 } from "#src/skeleton/api.js";
 import {
+  forEachSpatialSkeletonSourceScale,
   forEachVisibleSpatialSkeletonChunk,
   SKELETON_LAYER_RPC_ID,
   type SpatiallyIndexedSkeletonChunkSpecification,
@@ -1946,6 +1947,8 @@ const seenChunkKeysPerFrame = new WeakMap<
   { frameNumber: number; keys: Set<string> }
 >();
 
+const SPATIAL_SKELETON_RESOLUTION_INDICATOR_BAR_HEIGHT = 10;
+
 function updateSpatialSkeletonSpacingHistogram(
   histogram: RenderScaleHistogram,
   frameNumber: number,
@@ -1965,6 +1968,25 @@ function updateSpatialSkeletonSpacingHistogram(
   }
   const seenKeys = seen.keys;
   for (const scales of transformedSources) {
+    forEachSpatialSkeletonSourceScale(
+      projectionParameters,
+      spacingTarget,
+      scales,
+      (tsource, _, physicalSpacing, pixelSpacing, selected) => {
+        if (selected) return;
+        const source = tsource.source as SpatiallyIndexedSkeletonSource;
+        const indicatorKey = `indicator:${getObjectId(source)}`;
+        if (seenKeys.has(indicatorKey)) return;
+        seenKeys.add(indicatorKey);
+        histogram.add(
+          physicalSpacing,
+          pixelSpacing,
+          0,
+          SPATIAL_SKELETON_RESOLUTION_INDICATOR_BAR_HEIGHT,
+          true,
+        );
+      },
+    );
     forEachVisibleSpatialSkeletonChunk(
       projectionParameters,
       localPosition,

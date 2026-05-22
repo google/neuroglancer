@@ -17,7 +17,10 @@
 import { describe, expect, it } from "vitest";
 
 import { ProjectionParameters } from "#src/projection_parameters.js";
-import { forEachVisibleSpatialSkeletonChunk } from "#src/skeleton/base.js";
+import {
+  forEachSpatialSkeletonSourceScale,
+  forEachVisibleSpatialSkeletonChunk,
+} from "#src/skeleton/base.js";
 import { makeSliceViewChunkSpecification } from "#src/sliceview/base.js";
 import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
 import { mat4, vec3 } from "#src/util/geom.js";
@@ -115,5 +118,29 @@ describe("forEachVisibleSpatialSkeletonChunk", () => {
 
     expect(begun).toEqual(["fine"]);
     expect(visited).toEqual(["fine"]);
+  });
+
+  it("reports every source level scale while marking only the selected source", () => {
+    const projectionParameters = makeProjectionParameters();
+    const coarse = makeTransformedSource("coarse", 4, 1);
+    const fine = makeTransformedSource("fine", 1, 1000);
+    const reported: Array<{ label: string; selected: boolean }> = [];
+
+    forEachSpatialSkeletonSourceScale(
+      projectionParameters,
+      1,
+      [coarse, fine],
+      (source, _index, _physicalSpacing, _pixelSpacing, selected) => {
+        reported.push({
+          label: (source as any).label,
+          selected,
+        });
+      },
+    );
+
+    expect(reported).toEqual([
+      { label: "coarse", selected: false },
+      { label: "fine", selected: true },
+    ]);
   });
 });
