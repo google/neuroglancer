@@ -333,6 +333,8 @@ jobs:
           EOF
           cat > appengine-deploy/app.yaml <<EOF
           runtime: python312
+          automatic_scaling:
+            max_instances: 20
           handlers:
           - url: /(.+)
             static_files: public/\1
