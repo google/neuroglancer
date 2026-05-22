@@ -69,7 +69,7 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
     })),
   },
   {
-    label: "Spacing (skeleton grid 2D)",
+    label: "Spacing (cross section)",
     toolJson: json_keys.SKELETON_CROSS_SECTION_SPACING_JSON_KEY,
     isValid: (layer) =>
       makeCachedDerivedWatchableValue(
@@ -81,14 +81,14 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
         ],
       ),
     title:
-      "Select the node spacing for spatially indexed skeletons in 2D views",
+      "Select the node spacing for spatially indexed skeletons in cross-section views",
     ...renderScaleLayerControl((layer) => ({
       histogram: layer.displayState.spatialSkeletonSpacingHistogram2d,
       target: layer.displayState.spatialSkeletonSpacingTarget2d,
     })),
   },
   {
-    label: "Spacing (skeleton grid 3D)",
+    label: "Spacing (projection)",
     toolJson: json_keys.SKELETON_PERSPECTIVE_SPACING_JSON_KEY,
     isValid: (layer) =>
       makeCachedDerivedWatchableValue(
@@ -100,7 +100,7 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
         ],
       ),
     title:
-      "Select the node spacing for spatially indexed skeletons in 3D views",
+      "Select the node spacing for spatially indexed skeletons in projection views",
     ...renderScaleLayerControl((layer) => ({
       histogram: layer.displayState.spatialSkeletonSpacingHistogram3d,
       target: layer.displayState.spatialSkeletonSpacingTarget3d,
