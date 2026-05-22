@@ -47,6 +47,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: "stable"
+          cache: false
       - run: npm ci
       - run: npm run format:fix
       - name: Check for dirty working directory
