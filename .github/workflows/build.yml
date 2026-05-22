@@ -25,11 +25,11 @@ jobs:
           - "macos-latest"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # Need full history to determine version number.
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24.x
           cache: "npm"
@@ -41,7 +41,7 @@ jobs:
           enable-cache: false
       # go needed for fake_gcs_server used by the javascript tests
       - name: Setup go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: "stable"
       - run: npm ci
@@ -69,13 +69,13 @@ jobs:
       - name: Run JavaScript benchmarks
         run: npm run benchmark
       - name: Upload NPM package as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: npm-package
           path: dist/package
         if: ${{ runner.os == 'Linux' }}
       - name: Upload client as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: client
           path: dist/client
@@ -83,18 +83,18 @@ jobs:
   example-project-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 10
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24.x
           cache: "pnpm"
           cache-dependency-path: |
             examples/**/pnpm-lock.yaml
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24.x
           cache: "npm"
@@ -103,7 +103,7 @@ jobs:
       - run: npm ci
       - run: npm run example-project-test -- --reporter=html
       - name: Upload report and built clients
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: ${{ !cancelled() }}
         with:
           name: example-project-test-results
@@ -128,11 +128,11 @@ jobs:
           - "macos-latest"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # Need full history to determine version number.
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24.x
       - uses: astral-sh/setup-uv@v7
@@ -174,11 +174,11 @@ jobs:
             wheel_identifier: "macos_arm64"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # Need full history to determine version number.
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24.x
           cache: "npm"
@@ -208,7 +208,7 @@ jobs:
           CIBW_BEFORE_ALL_LINUX: /project/python/build_tools/cibuildwheel_linux_cache_setup.sh /host${{ steps.uv-cache.outputs.dir }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
       - name: Upload wheels as artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: python-wheels-${{ matrix.wheel_identifier }}
           path: |
@@ -218,7 +218,7 @@ jobs:
   docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: false
@@ -229,7 +229,7 @@ jobs:
       - name: Build docs
         run: uvx nox -s docs
       - name: Upload docs as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: docs
           path: |
@@ -244,18 +244,18 @@ jobs:
       - "python-build-package"
       - "docs"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Use Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 24.x
           registry-url: "https://registry.npmjs.org"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           pattern: python-wheels-*
           path: dist
           merge-multiple: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: npm-package
           path: npm-package
@@ -278,7 +278,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       # Download dist/client after publishing to PyPI, because PyPI publish
       # action fails if dist/client directory is present.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: client
           path: dist/client
@@ -291,7 +291,7 @@ jobs:
           target: app
       # Download dist/docs after publishing to PyPI, because PyPI publish
       # action fails if dist/docs directory is present.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: docs
           path: dist/docs
@@ -310,9 +310,9 @@ jobs:
           - ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Setup go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: ngauth_server/go.mod
           cache-dependency-path: ngauth_server/go.sum
@@ -326,7 +326,7 @@ jobs:
           - ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: ./src/mesh/draco/build.sh
       - run: ./src/sliceview/compresso/build.sh
       - run: ./src/sliceview/png/build.sh
