@@ -15,6 +15,9 @@ on:
         required: false
         default: false
 
+permissions:
+  contents: read
+
 jobs:
   client:
     strategy:
@@ -79,6 +82,12 @@ jobs:
         with:
           name: client
           path: dist/client
+        if: ${{ runner.os == 'Linux' }}
+      - name: Upload Python client static as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-client-static
+          path: python/neuroglancer/static/client
         if: ${{ runner.os == 'Linux' }}
   example-project-test:
     runs-on: ubuntu-latest
@@ -235,14 +244,13 @@ jobs:
           path: |
             dist/docs
 
-  publish-package:
-    # Only publish package on push to tag or default branch.
-    if: ${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/master') }}
+  publish:
+    # Only publish package on push to tag.
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-latest
     needs:
       - "client"
       - "python-build-package"
-      - "docs"
     steps:
       - uses: actions/checkout@v4
       - name: Use Node.js
@@ -259,29 +267,34 @@ jobs:
         with:
           name: npm-package
           path: npm-package
-      # - name: Publish to PyPI (test server)
-      #   uses: pypa/gh-action-pypi-publish@54b39fb9371c0b3a6f9f14bb8a67394defc7a806 # 2020-09-25
-      #   with:
-      #     user: __token__
-      #     password: ${{ secrets.pypi_test_token }}
       - name: Publish to PyPI (main server)
         uses: pypa/gh-action-pypi-publish@54b39fb9371c0b3a6f9f14bb8a67394defc7a806 # 2020-09-25
         with:
           user: __token__
           password: ${{ secrets.pypi_token }}
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
       - name: Publish to NPM registry
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
         run: npm publish
         working-directory: npm-package
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      # Download dist/client after publishing to PyPI, because PyPI publish
-      # action fails if dist/client directory is present.
+
+  deploy:
+    # Only deploy on push to master branch.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+    runs-on: ubuntu-latest
+    needs:
+      - "client"
+      - "docs"
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: client
           path: dist/client
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-client-static
+          path: python/neuroglancer/static/client
       - name: Publish client to Firebase hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
@@ -289,8 +302,6 @@ jobs:
           projectId: neuroglancer-demo
           channelId: live
           target: app
-      # Download dist/docs after publishing to PyPI, because PyPI publish
-      # action fails if dist/docs directory is present.
       - uses: actions/download-artifact@v4
         with:
           name: docs
@@ -302,6 +313,53 @@ jobs:
           projectId: neuroglancer-demo
           channelId: live
           target: docs
+      - name: Prepare App Engine deployment
+        run: |
+          mkdir appengine-deploy
+          mkdir appengine-deploy/public
+          mkdir appengine-deploy/public/python
+          cp -r dist/client/* appengine-deploy/public/
+          cp -r python/neuroglancer/static/client/* appengine-deploy/public/python/
+          cat > appengine-deploy/public/fafb.html <<EOF
+          <html>
+          <head><title>neuroglancer</title></head>
+          <body>
+          Redirecting to https://fafb-dot-neuroglancer-demo.appspot.com
+          <script>
+          window.location.href = "https://fafb-dot-neuroglancer-demo.appspot.com/" + (window.location.search || "") + (window.location.hash || "");
+          </script>
+          </body>
+          </html>
+          EOF
+          cat > appengine-deploy/app.yaml <<EOF
+          runtime: python312
+          handlers:
+          - url: /(.+)
+            static_files: public/\1
+            upload: public/(.*)
+
+          - url: /
+            static_files: public/index.html
+            upload: public/index.html
+          EOF
+        shell: bash
+      - id: "auth"
+        name: "Authenticate to Google Cloud"
+        uses: "google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093"
+        with:
+          credentials_json: "${{ secrets.FIREBASE_HOSTING_SERVICE_ACCOUNT_KEY }}"
+      - id: "deploy-appengine"
+        name: "Deploy to App Engine"
+        uses: "google-github-actions/deploy-appengine@54d5fc7167ec790eb0233905e3cef384221b4619"
+        with:
+          working_directory: "appengine-deploy"
+          deliverables: "app.yaml"
+          project_id: "neuroglancer-demo"
+          promote: true
+      - name: Cleanup old App Engine versions
+        run: |
+          gcloud app versions list --format="value(version.id)" --sort-by="~version.createTime" --project neuroglancer-demo | grep '^[0-9]\{8\}t[0-9]\{6\}$' | tail -n +6 | xargs -r gcloud app versions delete --quiet --project neuroglancer-demo
+        shell: bash
 
   ngauth:
     strategy:
