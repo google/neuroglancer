@@ -142,7 +142,7 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
         selectedNodeId: { value: 101 },
         selectedNodeOutlineColor: vec3.create(),
         selectedNodeOutlineColorGeneration: 0,
-        selectedNodeOutlineColorCacheGeneration: -1,
+        cachedSelectedNodeOutlineColorGeneration: -1,
         displayState,
         getCachedNodeSnapshot,
       },
@@ -163,7 +163,7 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
     );
   });
 
-  it("reuses the cached outline color when the selected node changes within the same segment", () => {
+  it("recomputes the outline color when the selected node changes", () => {
     const computeSegmentColor = vi.fn((color: Float32Array) => {
       color[0] = 1;
       color[1] = 0;
@@ -194,7 +194,7 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
         selectedNodeId,
         selectedNodeOutlineColor: vec3.create(),
         selectedNodeOutlineColorGeneration: 0,
-        selectedNodeOutlineColorCacheGeneration: -1,
+        cachedSelectedNodeOutlineColorGeneration: -1,
         displayState,
         getCachedNodeSnapshot,
       },
@@ -202,13 +202,14 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
 
     (layer as any).getSelectedNodeOutlineColor();
     selectedNodeId.value = 202;
+    ++(layer as any).selectedNodeOutlineColorGeneration;
     (layer as any).getSelectedNodeOutlineColor();
 
     expect(getCachedNodeSnapshot).toHaveBeenCalledTimes(2);
-    expect(computeSegmentColor).toHaveBeenCalledTimes(1);
+    expect(computeSegmentColor).toHaveBeenCalledTimes(2);
   });
 
-  it("invalidates the selected-node outline cache when the generation changes", () => {
+  it("invalidates the selected-node outline cache when the input generation changes", () => {
     const computeSegmentColor = vi.fn((color: Float32Array) => {
       color[0] = 1;
       color[1] = 0;
@@ -238,7 +239,7 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
         selectedNodeId: { value: 101 },
         selectedNodeOutlineColor: vec3.create(),
         selectedNodeOutlineColorGeneration: 0,
-        selectedNodeOutlineColorCacheGeneration: -1,
+        cachedSelectedNodeOutlineColorGeneration: -1,
         displayState,
         getCachedNodeSnapshot,
       },
@@ -250,6 +251,51 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
 
     expect(getCachedNodeSnapshot).toHaveBeenCalledTimes(2);
     expect(computeSegmentColor).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns the fallback outline color for an invalid selected segment", () => {
+    const computeSegmentColor = vi.fn();
+    const displayState = {
+      segmentationColorGroupState: {
+        value: {
+          segmentStatedColors: new Map(),
+          segmentDefaultColor: { value: undefined },
+          segmentColorHash: { compute: computeSegmentColor },
+        },
+      },
+      saturation: { value: 1 },
+      hoverHighlight: { value: false },
+      segmentSelectionState: { isSelected: vi.fn(() => false) },
+    };
+    const getCachedNodeSnapshot = vi.fn(() => ({
+      nodeId: 101,
+      segmentId: 0,
+      position: new Float32Array([1, 2, 3]),
+    }));
+    const layer = Object.assign(
+      Object.create(SpatiallyIndexedSkeletonLayer.prototype),
+      {
+        selectedNodeId: { value: 101 },
+        selectedNodeOutlineColor: vec3.create(),
+        selectedNodeOutlineColorGeneration: 0,
+        cachedSelectedNodeOutlineColorGeneration: -1,
+        displayState,
+        getCachedNodeSnapshot,
+      },
+    );
+
+    const outlineColor = (layer as any).getSelectedNodeOutlineColor();
+    const cachedOutlineColor = (layer as any).getSelectedNodeOutlineColor();
+
+    expect(getCachedNodeSnapshot).toHaveBeenCalledWith(101);
+    expect(getCachedNodeSnapshot).toHaveBeenCalledTimes(1);
+    expect(computeSegmentColor).not.toHaveBeenCalled();
+    expect(outlineColor[0]).toBeCloseTo(1);
+    expect(outlineColor[1]).toBeCloseTo(0.95);
+    expect(outlineColor[2]).toBeCloseTo(0.35);
+    expect(cachedOutlineColor[0]).toBeCloseTo(1);
+    expect(cachedOutlineColor[1]).toBeCloseTo(0.95);
+    expect(cachedOutlineColor[2]).toBeCloseTo(0.35);
   });
 });
 

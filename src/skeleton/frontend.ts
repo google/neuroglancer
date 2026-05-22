@@ -2149,9 +2149,7 @@ export class SpatiallyIndexedSkeletonLayer
     SELECTED_NODE_OUTLINE_FALLBACK_COLOR,
   );
   private selectedNodeOutlineColorGeneration = 0;
-  private selectedNodeOutlineColorCacheGeneration = -1;
-  private selectedNodeOutlineColorCacheNodeId: number | undefined;
-  private selectedNodeOutlineColorCacheSegmentId: number | undefined;
+  private cachedSelectedNodeOutlineColorGeneration = -1;
 
   private disposeOverlayChunk() {
     this.overlayChunk?.dispose(this.gl);
@@ -2211,16 +2209,11 @@ export class SpatiallyIndexedSkeletonLayer
     if (selectedNodeId === undefined) {
       return SELECTED_NODE_OUTLINE_FALLBACK_COLOR;
     }
+    const currentGeneration = this.selectedNodeOutlineColorGeneration;
     const isCacheValid =
-      this.selectedNodeOutlineColorCacheGeneration ===
-      this.selectedNodeOutlineColorGeneration;
-    if (
-      isCacheValid &&
-      this.selectedNodeOutlineColorCacheNodeId === selectedNodeId
-    ) {
-      return (
-        this.selectedNodeOutlineColor ?? SELECTED_NODE_OUTLINE_FALLBACK_COLOR
-      );
+      this.cachedSelectedNodeOutlineColorGeneration === currentGeneration;
+    if (isCacheValid) {
+      return this.selectedNodeOutlineColor;
     }
     const segmentId = this.getCachedNodeSnapshot(selectedNodeId)?.segmentId;
     const normalizedSegmentId = Math.round(Number(segmentId));
@@ -2228,21 +2221,11 @@ export class SpatiallyIndexedSkeletonLayer
       !Number.isSafeInteger(normalizedSegmentId) ||
       normalizedSegmentId <= 0
     ) {
+      this.cachedSelectedNodeOutlineColorGeneration = currentGeneration;
+      this.selectedNodeOutlineColor.set(SELECTED_NODE_OUTLINE_FALLBACK_COLOR);
       return SELECTED_NODE_OUTLINE_FALLBACK_COLOR;
     }
-    if (
-      isCacheValid &&
-      this.selectedNodeOutlineColorCacheSegmentId === normalizedSegmentId
-    ) {
-      this.selectedNodeOutlineColorCacheNodeId = selectedNodeId;
-      return (
-        this.selectedNodeOutlineColor ?? SELECTED_NODE_OUTLINE_FALLBACK_COLOR
-      );
-    }
-    this.selectedNodeOutlineColorCacheGeneration =
-      this.selectedNodeOutlineColorGeneration;
-    this.selectedNodeOutlineColorCacheNodeId = selectedNodeId;
-    this.selectedNodeOutlineColorCacheSegmentId = normalizedSegmentId;
+    this.cachedSelectedNodeOutlineColorGeneration = currentGeneration;
     return computeHighVisibilityContrastColor(
       this.selectedNodeOutlineColor,
       getBaseObjectColor(this.displayState, BigInt(normalizedSegmentId)),
@@ -2518,11 +2501,9 @@ export class SpatiallyIndexedSkeletonLayer
       ),
     );
     registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
-    this.registerDisposer(
-      this.redrawNeeded.add(() => {
-        ++this.selectedNodeOutlineColorGeneration;
-      }),
-    );
+    const invalidateSelectedNodeOutlineColor = () => {
+      ++this.selectedNodeOutlineColorGeneration;
+    };
     this.displayState.shaderError.value = undefined;
     const { skeletonRenderingOptions: renderingOptions } = displayState;
     this.registerDisposer(
@@ -2573,6 +2554,25 @@ export class SpatiallyIndexedSkeletonLayer
       }, this.displayState.segmentationColorGroupState),
     );
     this.registerDisposer(
+      registerNested((context, colorGroupState) => {
+        context.registerDisposer(
+          colorGroupState.segmentColorHash.changed.add(
+            invalidateSelectedNodeOutlineColor,
+          ),
+        );
+        context.registerDisposer(
+          colorGroupState.segmentStatedColors.changed.add(
+            invalidateSelectedNodeOutlineColor,
+          ),
+        );
+        context.registerDisposer(
+          colorGroupState.segmentDefaultColor.changed.add(
+            invalidateSelectedNodeOutlineColor,
+          ),
+        );
+      }, this.displayState.segmentationColorGroupState),
+    );
+    this.registerDisposer(
       this.displayState.hoverHighlight.changed.add(
         updateSkeletonShaderParameters,
       ),
@@ -2602,7 +2602,12 @@ export class SpatiallyIndexedSkeletonLayer
     const requestRedraw = () => this.redrawNeeded.dispatch();
     const selectedNodeWatchable = this.selectedNodeId;
     if (selectedNodeWatchable?.changed) {
-      this.registerDisposer(selectedNodeWatchable.changed.add(requestRedraw));
+      this.registerDisposer(
+        selectedNodeWatchable.changed.add(() => {
+          invalidateSelectedNodeOutlineColor();
+          requestRedraw();
+        }),
+      );
     }
     const pendingNodePositionVersion = options.pendingNodePositionVersion;
     if (pendingNodePositionVersion?.changed) {
@@ -2614,6 +2619,7 @@ export class SpatiallyIndexedSkeletonLayer
     if (inspectionState !== undefined) {
       this.registerDisposer(
         inspectionState.nodeDataVersion.changed.add(() => {
+          invalidateSelectedNodeOutlineColor();
           this.redrawNeeded.dispatch();
         }),
       );
