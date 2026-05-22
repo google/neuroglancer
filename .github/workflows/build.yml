@@ -24,7 +24,7 @@ jobs:
       matrix:
         os:
           - "ubuntu-latest"
-          - "windows-latest"
+          - "windows-2025-vs2026"
           - "macos-latest"
     runs-on: ${{ matrix.os }}
     steps:
@@ -133,7 +133,7 @@ jobs:
           - "3.13"
         os:
           - "ubuntu-latest"
-          - "windows-latest"
+          - "windows-2025-vs2026"
           - "macos-latest"
     runs-on: ${{ matrix.os }}
     steps:
@@ -172,7 +172,7 @@ jobs:
           - os: "ubuntu-latest"
             cibw_build: "*"
             wheel_identifier: "linux"
-          - os: "windows-latest"
+          - os: "windows-2025-vs2026"
             cibw_build: "*"
             wheel_identifier: "windows"
           - os: "macos-14"
