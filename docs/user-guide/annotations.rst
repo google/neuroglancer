@@ -309,7 +309,7 @@ makes the annotations render at a similar relative "depths" to the
 size of the voxels being used to render the current view. 
 
 However for some applications this is unintuitive. For example,
-in this application, we migth want to be able to easily see if
+in this application, we might want to be able to easily see if
 you have already annotated a cell no matter what the zoom is.
 Disabling the "zoom-relative" option, and setting the depth-range
 to the approximate radius of the object you are annotating
