@@ -21,7 +21,7 @@ import type {
   TransformedSource,
 } from "#src/sliceview/base.js";
 import { forEachVisibleVolumetricChunk } from "#src/sliceview/base.js";
-import { selectSpatialSkeletonSourcesByLimit } from "#src/skeleton/source_selection.js";
+import { selectSpatialSkeletonSourceByLimit } from "#src/skeleton/source_selection.js";
 import type { DataType } from "#src/util/data_type.js";
 import {
   getViewFrustrumVolume,
@@ -137,29 +137,26 @@ export function forEachVisibleSpatialSkeletonChunk<
   const targetNumNodes = viewportArea / spacingTarget ** 2;
   const physicalDensityTarget = targetNumNodes / effectiveVolume;
 
-  for (const {
-    source: tsource,
-    index,
-    physicalSpacing,
-    pixelSpacing,
-  } of selectSpatialSkeletonSourcesByLimit(
+  const selection = selectSpatialSkeletonSourceByLimit(
     sourceDensityInputs,
     physicalDensityTarget,
     effectiveVolume,
     viewportArea,
-  )) {
-    let firstChunk = true;
-    forEachVisibleVolumetricChunk(
-      projectionParameters,
-      localPosition,
-      tsource,
-      () => {
-        if (firstChunk) {
-          beginScale(tsource, index);
-          firstChunk = false;
-        }
-        callback(tsource, index, physicalSpacing, pixelSpacing);
-      },
-    );
-  }
+  );
+  if (selection === undefined) return;
+
+  const { source: tsource, index, physicalSpacing, pixelSpacing } = selection;
+  let firstChunk = true;
+  forEachVisibleVolumetricChunk(
+    projectionParameters,
+    localPosition,
+    tsource,
+    () => {
+      if (firstChunk) {
+        beginScale(tsource, index);
+        firstChunk = false;
+      }
+      callback(tsource, index, physicalSpacing, pixelSpacing);
+    },
+  );
 }

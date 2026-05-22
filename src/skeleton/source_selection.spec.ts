@@ -16,73 +16,134 @@
 
 import { describe, expect, it } from "vitest";
 
-import { selectSpatialSkeletonSourcesByLimit } from "#src/skeleton/source_selection.js";
+import {
+  selectSpatialSkeletonSourceByLimit,
+  SPATIAL_SKELETON_ZERO_LIMIT_FINEST_ERROR,
+} from "#src/skeleton/source_selection.js";
 
 describe("skeleton/source_selection", () => {
-  it("selects only enough 3D sources to meet the spacing-derived density target", () => {
-    expect(
-      selectSpatialSkeletonSourcesByLimit(
-        [
-          {
-            source: "coarse",
-            index: 0,
-            physicalVolume: 1000,
-            limit: 200,
-            sliceFraction: 1,
-          },
-          {
-            source: "fine",
-            index: 1,
-            physicalVolume: 125,
-            limit: 500,
-            sliceFraction: 1,
-          },
-        ],
-        0.1,
-        1000,
-        100,
-      ).map((selection) => selection.source),
-    ).toEqual(["coarse"]);
-  });
-
-  it("adds finer 2D sources when slice density is below the target", () => {
-    expect(
-      selectSpatialSkeletonSourcesByLimit(
-        [
-          {
-            source: "coarse",
-            index: 0,
-            physicalVolume: 1000,
-            limit: 200,
-            sliceFraction: 0.1,
-          },
-          {
-            source: "fine",
-            index: 1,
-            physicalVolume: 125,
-            limit: 500,
-            sliceFraction: 0.1,
-          },
-        ],
-        0.1,
-        1000,
-        100,
-      ).map((selection) => selection.source),
-    ).toEqual(["coarse", "fine"]);
-  });
-
-  it("keeps zero-limit sources selectable without density contribution", () => {
-    const selections = selectSpatialSkeletonSourcesByLimit(
+  it("selects exactly one coarse source when it satisfies the density target", () => {
+    const selection = selectSpatialSkeletonSourceByLimit(
       [
         {
-          source: "unknown-density-coarse",
+          source: "coarse",
           index: 0,
           physicalVolume: 1000,
-          limit: 0,
+          limit: 200,
           sliceFraction: 1,
         },
         {
-          source: "unknown-density-fine",
+          source: "fine",
+          index: 1,
+          physicalVolume: 125,
+          limit: 500,
+          sliceFraction: 1,
+        },
+      ],
+      0.1,
+      1000,
+      100,
+    );
+
+    expect(selection?.source).toBe("coarse");
+    expect(selection?.physicalDensity).toBeCloseTo(0.2);
+  });
+
+  it("selects a finer positive-limit source when coarser sources are too sparse", () => {
+    const selection = selectSpatialSkeletonSourceByLimit(
+      [
+        {
+          source: "coarse",
+          index: 0,
+          physicalVolume: 1000,
+          limit: 10,
+          sliceFraction: 1,
+        },
+        {
+          source: "fine",
+          index: 1,
+          physicalVolume: 125,
+          limit: 500,
+          sliceFraction: 1,
+        },
+      ],
+      0.1,
+      1000,
+      100,
+    );
+
+    expect(selection?.source).toBe("fine");
+    expect(selection?.physicalDensity).toBeCloseTo(4);
+  });
+
+  it("falls back to the finest positive-limit source when no source satisfies the target", () => {
+    const selection = selectSpatialSkeletonSourceByLimit(
+      [
+        {
+          source: "coarse",
+          index: 0,
+          physicalVolume: 1000,
+          limit: 10,
+          sliceFraction: 1,
+        },
+        {
+          source: "fine",
+          index: 1,
+          physicalVolume: 125,
+          limit: 10,
+          sliceFraction: 1,
+        },
+      ],
+      100,
+      1000,
+      100,
+    );
+
+    expect(selection?.source).toBe("fine");
+    expect(selection?.physicalDensity).toBeCloseTo(0.08);
+  });
+
+  it("selects a finest zero-limit source when positive-limit sources are too sparse", () => {
+    const selection = selectSpatialSkeletonSourceByLimit(
+      [
+        {
+          source: "coarse",
+          index: 0,
+          physicalVolume: 1000,
+          limit: 10,
+          sliceFraction: 1,
+        },
+        {
+          source: "complete-finest",
+          index: 1,
+          physicalVolume: 125,
+          limit: 0,
+          sliceFraction: 1,
+        },
+      ],
+      100,
+      1000,
+      100,
+    );
+
+    expect(selection?.source).toBe("complete-finest");
+    expect(selection?.physicalDensity).toBe(Number.POSITIVE_INFINITY);
+    expect(selection?.physicalSpacing).toBe(Number.POSITIVE_INFINITY);
+    expect(selection?.pixelSpacing).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it("does not select a finest zero-limit source if a coarser source satisfies the target", () => {
+    const selection = selectSpatialSkeletonSourceByLimit(
+      [
+        {
+          source: "coarse",
+          index: 0,
+          physicalVolume: 1000,
+          limit: 200,
+          sliceFraction: 1,
+        },
+        {
+          source: "complete-finest",
           index: 1,
           physicalVolume: 125,
           limit: 0,
@@ -94,73 +155,20 @@ describe("skeleton/source_selection", () => {
       100,
     );
 
-    expect(selections.map((selection) => selection.source)).toEqual([
-      "unknown-density-coarse",
-      "unknown-density-fine",
-    ]);
-    for (const selection of selections) {
-      expect(selection.physicalDensity).toBe(0);
-      expect(selection.physicalSpacing).toBe(Number.POSITIVE_INFINITY);
-      expect(selection.pixelSpacing).toBe(Number.POSITIVE_INFINITY);
-    }
+    expect(selection?.source).toBe("coarse");
   });
 
-  it("includes zero-limit sources reached before the density target is met", () => {
-    expect(
-      selectSpatialSkeletonSourcesByLimit(
+  it("rejects a non-finest zero-limit source", () => {
+    expect(() =>
+      selectSpatialSkeletonSourceByLimit(
         [
           {
-            source: "unknown-density",
+            source: "complete-coarse",
             index: 0,
             physicalVolume: 1000,
             limit: 0,
             sliceFraction: 1,
           },
-          {
-            source: "estimated-density",
-            index: 1,
-            physicalVolume: 125,
-            limit: 500,
-            sliceFraction: 1,
-          },
-        ],
-        0.1,
-        1000,
-        100,
-      ).map((selection) => selection.source),
-    ).toEqual(["unknown-density", "estimated-density"]);
-  });
-
-  it("stops before later zero-limit sources once positive density reaches the target", () => {
-    expect(
-      selectSpatialSkeletonSourcesByLimit(
-        [
-          {
-            source: "coarse",
-            index: 0,
-            physicalVolume: 1000,
-            limit: 200,
-            sliceFraction: 1,
-          },
-          {
-            source: "unknown-density-fine",
-            index: 1,
-            physicalVolume: 125,
-            limit: 0,
-            sliceFraction: 1,
-          },
-        ],
-        0.1,
-        1000,
-        100,
-      ).map((selection) => selection.source),
-    ).toEqual(["coarse"]);
-  });
-
-  it("selects sources from coarsest to finest physical volume", () => {
-    expect(
-      selectSpatialSkeletonSourcesByLimit(
-        [
           {
             source: "fine",
             index: 1,
@@ -168,18 +176,80 @@ describe("skeleton/source_selection", () => {
             limit: 500,
             sliceFraction: 1,
           },
+        ],
+        0.1,
+        1000,
+        100,
+      ),
+    ).toThrow(SPATIAL_SKELETON_ZERO_LIMIT_FINEST_ERROR);
+  });
+
+  it("rejects multiple zero-limit sources unless there is only one source", () => {
+    expect(() =>
+      selectSpatialSkeletonSourceByLimit(
+        [
           {
-            source: "coarse",
+            source: "complete-coarse",
             index: 0,
             physicalVolume: 1000,
-            limit: 10,
+            limit: 0,
+            sliceFraction: 1,
+          },
+          {
+            source: "complete-fine",
+            index: 1,
+            physicalVolume: 125,
+            limit: 0,
             sliceFraction: 1,
           },
         ],
-        1,
+        0.1,
         1000,
         100,
-      ).map((selection) => selection.source),
-    ).toEqual(["coarse", "fine"]);
+      ),
+    ).toThrow(SPATIAL_SKELETON_ZERO_LIMIT_FINEST_ERROR);
+
+    expect(
+      selectSpatialSkeletonSourceByLimit(
+        [
+          {
+            source: "single-complete",
+            index: 0,
+            physicalVolume: 1000,
+            limit: 0,
+            sliceFraction: 1,
+          },
+        ],
+        0.1,
+        1000,
+        100,
+      )?.source,
+    ).toBe("single-complete");
+  });
+
+  it("selects sources from coarsest to finest physical volume", () => {
+    const selection = selectSpatialSkeletonSourceByLimit(
+      [
+        {
+          source: "fine",
+          index: 1,
+          physicalVolume: 125,
+          limit: 500,
+          sliceFraction: 1,
+        },
+        {
+          source: "coarse",
+          index: 0,
+          physicalVolume: 1000,
+          limit: 200,
+          sliceFraction: 1,
+        },
+      ],
+      0.1,
+      1000,
+      100,
+    );
+
+    expect(selection?.source).toBe("coarse");
   });
 });

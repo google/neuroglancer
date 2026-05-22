@@ -16,11 +16,15 @@
 
 export type SpatiallyIndexedSkeletonView = "2d" | "3d";
 
-export interface SpatialSkeletonSourceDensityInput<T> {
+export interface SpatialSkeletonSourceLimitInput<T> {
   source: T;
   index: number;
   physicalVolume: number;
   limit: number;
+}
+
+export interface SpatialSkeletonSourceDensityInput<T>
+  extends SpatialSkeletonSourceLimitInput<T> {
   sliceFraction: number;
 }
 
@@ -32,45 +36,98 @@ export interface SpatialSkeletonSourceDensitySelection<T>
   pixelSpacing: number;
 }
 
-export function selectSpatialSkeletonSourcesByLimit<T>(
+export const SPATIAL_SKELETON_ZERO_LIMIT_FINEST_ERROR =
+  "Spatial skeleton limit: 0 is only supported on the finest source level.";
+
+function getOrderedSpatialSkeletonSources<
+  T extends SpatialSkeletonSourceLimitInput<unknown>,
+>(sources: readonly T[]): T[] {
+  return [...sources].sort(
+    (a, b) => b.physicalVolume - a.physicalVolume || a.index - b.index,
+  );
+}
+
+function validateOrderedSpatialSkeletonLimitZeroOnlyFinest<
+  T extends SpatialSkeletonSourceLimitInput<unknown>,
+>(orderedSources: readonly T[]) {
+  for (let i = 0; i < orderedSources.length - 1; ++i) {
+    if (orderedSources[i].limit === 0) {
+      throw new Error(SPATIAL_SKELETON_ZERO_LIMIT_FINEST_ERROR);
+    }
+  }
+}
+
+function makeSpatialSkeletonSourceSelection<T>(
+  source: SpatialSkeletonSourceDensityInput<T>,
+  physicalDensity: number,
+  effectiveVolume: number,
+  viewportArea: number,
+): SpatialSkeletonSourceDensitySelection<T> {
+  const hasKnownDensity =
+    Number.isFinite(physicalDensity) && physicalDensity > 0;
+  return {
+    ...source,
+    physicalDensity,
+    totalPhysicalDensity: physicalDensity,
+    physicalSpacing: hasKnownDensity
+      ? (1 / physicalDensity) ** (1 / 3)
+      : Number.POSITIVE_INFINITY,
+    pixelSpacing: hasKnownDensity
+      ? Math.sqrt(viewportArea / (physicalDensity * effectiveVolume))
+      : Number.POSITIVE_INFINITY,
+  };
+}
+
+export function selectSpatialSkeletonSourceByLimit<T>(
   sources: readonly SpatialSkeletonSourceDensityInput<T>[],
   physicalDensityTarget: number,
   effectiveVolume: number,
   viewportArea: number,
-): SpatialSkeletonSourceDensitySelection<T>[] {
-  const orderedSources = [...sources].sort(
-    (a, b) => b.physicalVolume - a.physicalVolume || a.index - b.index,
-  );
-  const selected: SpatialSkeletonSourceDensitySelection<T>[] = [];
-  let totalPhysicalDensity = 0;
+): SpatialSkeletonSourceDensitySelection<T> | undefined {
+  const orderedSources = getOrderedSpatialSkeletonSources(sources);
+  if (orderedSources.length === 0) return undefined;
+  validateOrderedSpatialSkeletonLimitZeroOnlyFinest(orderedSources);
+
   for (const source of orderedSources) {
-    if (
-      totalPhysicalDensity > 0 &&
-      totalPhysicalDensity >= physicalDensityTarget
-    ) {
-      break;
+    if (source.limit === 0) {
+      continue;
     }
     const physicalDensity =
-      source.limit > 0
-        ? (source.limit * source.sliceFraction) / source.physicalVolume
-        : 0;
-    const newTotalPhysicalDensity = totalPhysicalDensity + physicalDensity;
-    selected.push({
-      ...source,
-      physicalDensity,
-      totalPhysicalDensity: newTotalPhysicalDensity,
-      physicalSpacing:
-        newTotalPhysicalDensity > 0
-          ? (1 / newTotalPhysicalDensity) ** (1 / 3)
-          : Number.POSITIVE_INFINITY,
-      pixelSpacing:
-        newTotalPhysicalDensity > 0
-          ? Math.sqrt(
-              viewportArea / (newTotalPhysicalDensity * effectiveVolume),
-            )
-          : Number.POSITIVE_INFINITY,
-    });
-    totalPhysicalDensity = newTotalPhysicalDensity;
+      (source.limit * source.sliceFraction) / source.physicalVolume;
+    if (physicalDensity >= physicalDensityTarget) {
+      return makeSpatialSkeletonSourceSelection(
+        source,
+        physicalDensity,
+        effectiveVolume,
+        viewportArea,
+      );
+    }
   }
-  return selected;
+
+  const finestSource = orderedSources[orderedSources.length - 1];
+  if (finestSource.limit === 0) {
+    return makeSpatialSkeletonSourceSelection(
+      finestSource,
+      Number.POSITIVE_INFINITY,
+      effectiveVolume,
+      viewportArea,
+    );
+  }
+  const physicalDensity =
+    (finestSource.limit * finestSource.sliceFraction) /
+    finestSource.physicalVolume;
+  return makeSpatialSkeletonSourceSelection(
+    finestSource,
+    physicalDensity,
+    effectiveVolume,
+    viewportArea,
+  );
+}
+
+export function validateSpatialSkeletonLimitZeroOnlyFinest<
+  T extends SpatialSkeletonSourceLimitInput<unknown>,
+>(sources: readonly T[]) {
+  validateOrderedSpatialSkeletonLimitZeroOnlyFinest(
+    getOrderedSpatialSkeletonSources(sources),
+  );
 }
