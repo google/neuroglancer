@@ -155,6 +155,52 @@ export enum BrushShape {
   SPHERE = 1,
 }
 
+const sphereRowRangesKernelCache = new Map<number, Int16Array>();
+
+export function getSphereRowRangesKernel(radius: number): Int16Array {
+  let kernel = sphereRowRangesKernelCache.get(radius);
+  if (kernel !== undefined) return kernel;
+  if (!Number.isInteger(radius) || radius < 0) {
+    throw new Error(`Invalid sphere radius: ${radius}`);
+  }
+  const rr = radius * radius;
+  const ranges: number[] = [];
+  for (let dz = -radius; dz <= radius; ++dz) {
+    const dz2 = dz * dz;
+    for (let dy = -radius; dy <= radius; ++dy) {
+      const remaining = rr - dz2 - dy * dy;
+      if (remaining < 0) continue;
+      const maxDx = Math.floor(Math.sqrt(remaining));
+      ranges.push(dy, dz, -maxDx, maxDx + 1);
+    }
+  }
+  kernel = Int16Array.from(ranges);
+  sphereRowRangesKernelCache.set(radius, kernel);
+  return kernel;
+}
+
+const diskStencilKernelCache = new Map<number, Int16Array>();
+
+export function getDiskStencilKernel(radius: number): Int16Array {
+  let kernel = diskStencilKernelCache.get(radius);
+  if (kernel !== undefined) return kernel;
+  if (!Number.isInteger(radius) || radius < 0) {
+    throw new Error(`Invalid disk radius: ${radius}`);
+  }
+  const rr = radius * radius;
+  const pairs: number[] = [];
+  for (let j = -radius; j <= radius; ++j) {
+    for (let i = -radius; i <= radius; ++i) {
+      if (i * i + j * j <= rr) {
+        pairs.push(i, j);
+      }
+    }
+  }
+  kernel = Int16Array.from(pairs);
+  diskStencilKernelCache.set(radius, kernel);
+  return kernel;
+}
+
 export interface VoxelEditControllerHost {
   primarySource: MultiscaleVolumeChunkSource;
   previewSource?: VoxelPreviewMultiscaleSource;

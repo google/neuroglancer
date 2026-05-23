@@ -18,11 +18,12 @@ import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transf
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
 import type {
   InMemoryVolumeChunkSource,
+  LocalVolumeEdit,
   VolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
-import { vec3 } from "#src/util/geom.js";
+import type { vec3 } from "#src/util/geom.js";
 import type {
   VoxelEditControllerHost,
   VoxelLayerResolution,
@@ -32,6 +33,8 @@ import type {
 import {
   makeVoxChunkKey,
   BrushShape,
+  getDiskStencilKernel,
+  getSphereRowRangesKernel,
   parseVoxChunkKey,
   VOX_EDIT_BACKEND_RPC_ID,
   VOX_EDIT_FAILURE_RPC_ID,
@@ -145,57 +148,51 @@ export class VoxelEditController extends SharedObject {
     basis: { u: Float32Array; v: Float32Array },
     filterValue?: bigint,
   ) {
+    if (!this.host.previewSource) return;
+
     const voxelSize = 1; // Assuming LOD 0
     let r = Math.round(radiusCanonical / voxelSize);
     if (r <= 0) {
       throw new Error("Brush radius must be positive.");
     }
     r -= 1;
-    const rr = r * r;
-    const { u: uVec, v: vVec } = basis as { u: vec3; v: vec3 };
-    const n = vec3.create();
-    vec3.cross(n, uVec, vVec);
-    vec3.normalize(n, n);
-    const ux = uVec[0],
-      uy = uVec[1],
-      uz = uVec[2];
-    const vx = vVec[0],
-      vy = vVec[1],
-      vz = vVec[2];
-    const nx = n[0],
-      ny = n[1],
-      nz = n[2];
 
-    // WATCHOUT: update this value if the max possible voxel count changes
-    const maxCapacity = Math.ceil((2 * r + 1) ** 2 * 4);
-    const voxelBuffer = new Int32Array(maxCapacity * 3);
+    const previewSource = this.host.previewSource.getSources(
+      this.getIdentitySliceViewSourceOptions(),
+    )[0][0].chunkSource as InMemoryVolumeChunkSource;
 
-    const edits = new Map<string, { indices: number[]; value: bigint }>();
-    const previewValue = valueGetter(true);
+    const { chunkDataSize } = previewSource.spec;
+    const sizeX = chunkDataSize[0];
+    const sizeY = chunkDataSize[1];
+    const sizeZ = chunkDataSize[2];
+    const strideY = sizeX;
+    const strideZ = sizeX * sizeY;
 
-    let previewSource: InMemoryVolumeChunkSource | undefined;
-    let sizeX = 0,
-      sizeY = 0,
-      sizeZ = 0;
-    let strideY = 0,
-      strideZ = 0;
-
-    if (this.host.previewSource) {
-      previewSource = this.host.previewSource.getSources(
-        this.getIdentitySliceViewSourceOptions(),
-      )[0][0].chunkSource as InMemoryVolumeChunkSource;
-
-      const { chunkDataSize } = previewSource.spec;
-      sizeX = chunkDataSize[0];
-      sizeY = chunkDataSize[1];
-      sizeZ = chunkDataSize[2];
-      strideY = sizeX;
-      strideZ = sizeX * sizeY;
+    // Deduplicate centers that round to the same voxel position
+    const centers: [number, number, number][] = [];
+    if (points.length <= 1) {
+      const c = points[0]!;
+      centers.push([
+        Math.round((c[0] ?? 0) / voxelSize),
+        Math.round((c[1] ?? 0) / voxelSize),
+        Math.round((c[2] ?? 0) / voxelSize),
+      ]);
+    } else {
+      const seen = new Set<string>();
+      for (const c of points) {
+        const cx = Math.round((c[0] ?? 0) / voxelSize);
+        const cy = Math.round((c[1] ?? 0) / voxelSize);
+        const cz = Math.round((c[2] ?? 0) / voxelSize);
+        const key = `${cx},${cy},${cz}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        centers.push([cx, cy, cz]);
+      }
     }
 
+    // filterValue setup (slow path only)
     let baseSource: VolumeChunkSource | undefined;
     const tempPos = new Float32Array(3);
-
     if (filterValue !== undefined) {
       const sourcesByScale = this.host.primarySource.getSources(
         this.getIdentitySliceViewSourceOptions(),
@@ -203,94 +200,147 @@ export class VoxelEditController extends SharedObject {
       baseSource = sourcesByScale[0][0].chunkSource as VolumeChunkSource;
     }
 
-    for (const centerCanonical of points) {
-      let voxelCount = 0;
+    const passesFilter = (x: number, y: number, z: number): boolean => {
+      tempPos[0] = x;
+      tempPos[1] = y;
+      tempPos[2] = z;
+      const val = baseSource!.getValueAt(tempPos, this.singleChannelAccess);
+      if (val == null) return true;
+      const bigVal = typeof val === "bigint" ? val : BigInt(val);
+      return bigVal === filterValue;
+    };
 
-      const addVoxel = (x: number, y: number, z: number) => {
-        if (filterValue && baseSource !== undefined) {
-          tempPos[0] = x;
-          tempPos[1] = y;
-          tempPos[2] = z;
-          const val = baseSource.getValueAt(tempPos, this.singleChannelAccess);
-          if (val != null) {
-            const bigVal = typeof val === "bigint" ? val : BigInt(val);
-            if (bigVal !== filterValue) return;
+    type EditEntry = LocalVolumeEdit & {
+      indices: number[];
+      indexRanges: number[];
+    };
+    const edits = new Map<string, EditEntry>();
+    const previewValue = valueGetter(true);
+
+    const getOrCreateEdit = (
+      chunkX: number,
+      chunkY: number,
+      chunkZ: number,
+    ): EditEntry => {
+      const key = `${chunkX},${chunkY},${chunkZ}`;
+      let entry = edits.get(key);
+      if (entry !== undefined) return entry;
+      entry = {
+        indices: [],
+        indexRanges: [],
+        value: previewValue,
+        chunkGridPosition: Float32Array.of(chunkX, chunkY, chunkZ),
+      };
+      edits.set(key, entry);
+      return entry;
+    };
+
+    // Append a single voxel to the correct chunk edit (used by slow paths)
+    const appendVoxel = (x: number, y: number, z: number) => {
+      const chunkX = Math.floor(x / sizeX);
+      const chunkY = Math.floor(y / sizeY);
+      const chunkZ = Math.floor(z / sizeZ);
+      const lx = x - chunkX * sizeX;
+      const ly = y - chunkY * sizeY;
+      const lz = z - chunkZ * sizeZ;
+      getOrCreateEdit(chunkX, chunkY, chunkZ).indices.push(
+        lz * strideZ + ly * strideY + lx,
+      );
+    };
+
+    // Append a contiguous x-run [xStart, xEndExcl) at (y, z), splitting at chunk boundaries.
+    // Merges adjacent ranges within the same chunk entry.
+    const appendRange = (
+      xStart: number,
+      xEndExcl: number,
+      y: number,
+      z: number,
+    ) => {
+      const chunkY = Math.floor(y / sizeY);
+      const chunkZ = Math.floor(z / sizeZ);
+      const ly = y - chunkY * sizeY;
+      const lz = z - chunkZ * sizeZ;
+      const baseIndex = lz * strideZ + ly * strideY;
+
+      let currentX = xStart;
+      while (currentX < xEndExcl) {
+        const chunkX = Math.floor(currentX / sizeX);
+        const segEnd = Math.min(xEndExcl, (chunkX + 1) * sizeX);
+        const startIndex = baseIndex + (currentX - chunkX * sizeX);
+        const length = segEnd - currentX;
+
+        const entry = getOrCreateEdit(chunkX, chunkY, chunkZ);
+        if (length === 1) {
+          entry.indices.push(startIndex);
+        } else {
+          const ranges = entry.indexRanges;
+          const last = ranges.length - 1;
+          if (last >= 1 && ranges[last - 1]! + ranges[last]! === startIndex) {
+            ranges[last] = ranges[last]! + length;
+          } else {
+            ranges.push(startIndex, length);
           }
         }
+        currentX = segEnd;
+      }
+    };
 
-        const base = voxelCount * 3;
-        voxelBuffer[base] = x;
-        voxelBuffer[base + 1] = y;
-        voxelBuffer[base + 2] = z;
-        voxelCount++;
-      };
-
-      const cx = Math.round((centerCanonical[0] ?? 0) / voxelSize);
-      const cy = Math.round((centerCanonical[1] ?? 0) / voxelSize);
-      const cz = Math.round((centerCanonical[2] ?? 0) / voxelSize);
-
-      if (shape === BrushShape.DISK) {
-        for (let j = -r; j <= r; ++j) {
-          for (let i = -r; i <= r; ++i) {
-            if (i * i + j * j <= rr) {
-              const px = Math.round(cx + ux * i + vx * j);
-              const py = Math.round(cy + uy * i + vy * j);
-              const pz = Math.round(cz + uz * i + vz * j);
-              addVoxel(px, py, pz);
-            }
+    if (shape === BrushShape.SPHERE) {
+      const kernel = getSphereRowRangesKernel(r);
+      if (filterValue === undefined) {
+        // Fast path: contiguous row ranges → TypedArray.fill()
+        for (const [cx, cy, cz] of centers) {
+          for (let i = 0; i < kernel.length; i += 4) {
+            appendRange(
+              cx + kernel[i + 2]!,
+              cx + kernel[i + 3]!,
+              cy + kernel[i]!,
+              cz + kernel[i + 1]!,
+            );
           }
         }
       } else {
-        for (let j = -r; j <= r; ++j) {
-          for (let i = -r; i <= r; ++i) {
-            if (i * i + j * j <= rr) {
-              let px = Math.round(cx + ux * i + vx * j);
-              let py = Math.round(cy + uy * i + vy * j);
-              let pz = Math.round(cz + uz * i + vz * j);
-              addVoxel(px, py, pz);
-
-              px = Math.round(cx + ux * i + nx * j);
-              py = Math.round(cy + uy * i + ny * j);
-              pz = Math.round(cz + uz * i + nz * j);
-              addVoxel(px, py, pz);
-
-              px = Math.round(cx + nx * i + vx * j);
-              py = Math.round(cy + ny * i + vy * j);
-              pz = Math.round(cz + nz * i + vz * j);
-              addVoxel(px, py, pz);
+        // Slow path: per-voxel filter check
+        for (const [cx, cy, cz] of centers) {
+          for (let i = 0; i < kernel.length; i += 4) {
+            const dy = kernel[i]!;
+            const dz = kernel[i + 1]!;
+            const xStart = kernel[i + 2]!;
+            const xEndExcl = kernel[i + 3]!;
+            for (let dx = xStart; dx < xEndExcl; ++dx) {
+              const x = cx + dx;
+              const y = cy + dy;
+              const z = cz + dz;
+              if (passesFilter(x, y, z)) appendVoxel(x, y, z);
             }
           }
         }
       }
+    } else {
+      // DISK: project stencil through basis vectors, no axis-aligned runs possible
+      const { u: uVec, v: vVec } = basis as { u: vec3; v: vec3 };
+      const ux = uVec[0],
+        uy = uVec[1],
+        uz = uVec[2];
+      const vx = vVec[0],
+        vy = vVec[1],
+        vz = vVec[2];
+      const stencil = getDiskStencilKernel(r);
 
-      if (voxelCount > 0 && previewSource) {
-        for (let i = 0; i < voxelCount; ++i) {
-          const base = i * 3;
-          const x = voxelBuffer[base];
-          const y = voxelBuffer[base + 1];
-          const z = voxelBuffer[base + 2];
-
-          const chunkX = Math.floor(x / sizeX);
-          const chunkY = Math.floor(y / sizeY);
-          const chunkZ = Math.floor(z / sizeZ);
-
-          const lx = x - chunkX * sizeX;
-          const ly = y - chunkY * sizeY;
-          const lz = z - chunkZ * sizeZ;
-
-          const key = `${chunkX},${chunkY},${chunkZ}`;
-          let entry = edits.get(key);
-          if (!entry) {
-            entry = { indices: [], value: previewValue };
-            edits.set(key, entry);
-          }
-          const index = lz * strideZ + ly * strideY + lx;
-          entry.indices.push(index);
+      for (const [cx, cy, cz] of centers) {
+        for (let i = 0; i < stencil.length; i += 2) {
+          const si = stencil[i]!;
+          const sj = stencil[i + 1]!;
+          const x = Math.round(cx + ux * si + vx * sj);
+          const y = Math.round(cy + uy * si + vy * sj);
+          const z = Math.round(cz + uz * si + vz * sj);
+          if (filterValue !== undefined && !passesFilter(x, y, z)) continue;
+          appendVoxel(x, y, z);
         }
       }
     }
 
-    if (edits.size > 0 && previewSource) {
+    if (edits.size > 0) {
       previewSource.applyLocalEdits(edits);
     }
   }
@@ -366,7 +416,19 @@ export class VoxelEditController extends SharedObject {
     };
 
     const originalValue = getValue(startX, startY, startZ);
-    if (originalValue === null) return;
+    if (originalValue === null) {
+      // Chunk not yet loaded on the frontend — skip preview and dispatch directly
+      // to the backend, which will load the chunk itself.
+      await this.dispatchOperation({
+        type: VoxelOperationType.FLOOD_FILL,
+        seed: startPositionCanonical,
+        value: fillValueGetter(false),
+        maxVoxels,
+        basis,
+        filterValue,
+      });
+      return;
+    }
     if (filterValue !== undefined && originalValue !== filterValue) return;
     if (originalValue === previewValue) return;
 

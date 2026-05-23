@@ -44,6 +44,25 @@ import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import { getShaderType, glsl_mixLinear } from "#src/webgl/shader_lib.js";
 import { registerSharedObjectOwner } from "#src/worker_rpc.js";
 
+export interface LocalVolumeEdit {
+  indices: number[];
+  indexRanges?: number[];
+  value: bigint;
+  chunkGridPosition?: Float32Array;
+}
+
+function parseChunkGridPositionKey(key: string): Float32Array {
+  const pos = new Float32Array(3);
+  let component = 0;
+  let start = 0;
+  for (let i = 0; i <= key.length && component < 3; ++i) {
+    if (i !== key.length && key.charCodeAt(i) !== 44) continue;
+    pos[component++] = Number(key.slice(start, i));
+    start = i + 1;
+  }
+  return pos;
+}
+
 export interface ChunkFormat {
   shaderKey: string;
 
@@ -305,19 +324,19 @@ export class InMemoryVolumeChunkSource extends VolumeChunkSource {
     setTimeout(update, 100);
   }
 
-  applyLocalEdits(
-    edits: Map<string, { indices: number[]; value: bigint }>,
-  ): void {
+  applyLocalEdits(edits: Map<string, LocalVolumeEdit>): void {
     const chunksToUpdate = new Set<VolumeChunk>();
     const { dataType } = this.spec;
+    const isUint64 = dataType === DataType.UINT64;
 
     for (const [key, edit] of edits.entries()) {
-      const chunkGridPosition = new Float32Array(key.split(",").map(Number));
+      const chunkGridPosition =
+        edit.chunkGridPosition ?? parseChunkGridPositionKey(key);
 
       let chunk = this.chunks.get(key) as UncompressedVolumeChunk | undefined;
       if (chunk === undefined) {
         chunk = this.getChunk({
-          chunkGridPosition: chunkGridPosition,
+          chunkGridPosition,
         }) as UncompressedVolumeChunk;
         this.addChunk(key, chunk);
       }
@@ -330,27 +349,22 @@ export class InMemoryVolumeChunkSource extends VolumeChunkSource {
       chunksToUpdate.add(chunk);
 
       const cpuArray = chunk.data!;
+      const fillValue = isUint64 ? edit.value : Number(edit.value);
+
+      const { indexRanges } = edit;
+      if (indexRanges !== undefined) {
+        for (let i = 0; i < indexRanges.length; i += 2) {
+          const start = indexRanges[i]!;
+          const length = indexRanges[i + 1]!;
+          (cpuArray as any).fill(fillValue, start, start + length);
+        }
+      }
 
       for (const index of edit.indices) {
-        const value = edit.value;
-        switch (dataType) {
-          case DataType.UINT8:
-          case DataType.INT8:
-          case DataType.UINT16:
-          case DataType.INT16:
-          case DataType.UINT32:
-          case DataType.INT32:
-          case DataType.FLOAT32:
-            cpuArray[index] = Number(value);
-            break;
-          case DataType.UINT64:
-            (cpuArray as BigUint64Array)[index] = value;
-            break;
-          default:
-            console.warn(
-              `Unsupported data type for editing: ${DataType[dataType]}`,
-            );
-            break;
+        if (isUint64) {
+          (cpuArray as BigUint64Array)[index] = edit.value;
+        } else {
+          cpuArray[index] = fillValue as number;
         }
       }
     }
