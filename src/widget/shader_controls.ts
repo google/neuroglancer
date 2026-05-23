@@ -39,6 +39,7 @@ import {
 import { channelInvlerpLayerControl } from "#src/widget/layer_control_channel_invlerp.js";
 import { checkboxLayerControl } from "#src/widget/layer_control_checkbox.js";
 import { colorLayerControl } from "#src/widget/layer_control_color.js";
+import { colormapLayerControl } from "#src/widget/layer_control_colormap.js";
 import { propertyInvlerpLayerControl } from "#src/widget/layer_control_property_invlerp.js";
 import { rangeLayerControl } from "#src/widget/layer_control_range.js";
 import { Tab } from "#src/widget/tab_view.js";
@@ -105,17 +106,31 @@ function getShaderLayerControlFactory<LayerType extends UserLayer>(
         histogramIndex: calculateHistogramIndex(),
       }));
     }
+    case "colormap": {
+      return colormapLayerControl(() => ({
+        dataType: control.dataType,
+        watchableValue: controlState.trackable,
+        channelCoordinateSpaceCombiner:
+          shaderControlState.channelCoordinateSpaceCombiner,
+        defaultChannel: control.default.channel,
+        histogramSpecifications: shaderControlState.histogramSpecifications,
+        histogramIndex: calculateHistogramIndex(),
+        legendShaderOptions: layerShaderControls.legendShaderOptions,
+      }));
+    }
   }
 
   function calculateHistogramIndex(controlType: string = control.type) {
     const isMatchingControlType = (otherControlType: string) => {
       if (
         controlType === "imageInvlerp" ||
-        controlType === "transferFunction"
+        controlType === "transferFunction" ||
+        controlType === "colormap"
       ) {
         return (
           otherControlType === "imageInvlerp" ||
-          otherControlType === "transferFunction"
+          otherControlType === "transferFunction" ||
+          otherControlType === "colormap"
         );
       } else if (controlType === "propertyInvlerp") {
         return otherControlType === "propertyInvlerp";

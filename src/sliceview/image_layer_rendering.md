@@ -191,6 +191,72 @@ The following parameters are supported:
 - `defaultColor`: Optional. The default color for new control points added via the UI control.
   Defaults to `#ffffff`, and must be specified as a hex string if provided `#rrggbb`.
 
+### `colormap` controls
+
+The `colormap` control type combines an `invlerp`-style range/histogram control with an interactive colormap picker and gradient preview. It is the easiest way to apply a named colormap to a single-channel image layer with no GLSL beyond the directive itself.
+
+Directive syntax:
+
+```glsl
+#uicontrol colormap <name>
+#uicontrol colormap <name> colormap(default="<colormap>", range=[<min>, <max>], window=[<min>, <max>], channel=<index>)
+```
+
+The following parameters are supported:
+
+- `default`: Optional. The initial colormap to apply. Must be one of: `"grayscale"` (default), `"viridis"`, `"plasma"`, `"inferno"`, `"magma"`, `"coolwarm"`, `"rdbu"`, `"jet"`, `"cubehelix"`.
+- `range`: Optional. The data interval to map to the colormap input `[0, 1]`. May be overridden in the UI.
+- `window`: Optional. The histogram display window. Defaults to `range` if not specified.
+- `channel`: Optional. The channel to use for the colormap. Defaults to channel 0.
+
+> **Note**: Changing the colormap in the UI recompiles the shader (the colormap is a compile-time constant). Adjusting the range or window updates display without recompile.
+
+This directive makes the following shader functions available:
+
+```glsl
+// Maps the current channel data value → RGB color
+vec3 <name>();
+
+// Maps an explicit typed data value → RGB color
+vec3 <name>(T value);
+
+// Maps a normalized float [0, 1] → RGB color
+vec3 <name>(float t);
+```
+
+**Example — grayscale (default):**
+
+```glsl
+#uicontrol colormap intensity
+void main() {
+  emitRGB(intensity());
+}
+```
+
+**Example — viridis with explicit range:**
+
+```glsl
+#uicontrol colormap cmap colormap(default="viridis", range=[0, 1000])
+void main() {
+  emitRGB(cmap());
+}
+```
+
+**Example — volume rendering aware:**
+
+```glsl
+#uicontrol colormap cmap colormap(default="inferno")
+void main() {
+  vec3 color = cmap();
+  float alpha = cmap()[0]; // luminance as opacity
+  if (VOLUME_RENDERING) {
+    emitRGBA(vec4(color, alpha));
+  } else {
+    emitRGB(color);
+  }
+}
+```
+
 ## API
 
 ### Retrieving voxel channel value
