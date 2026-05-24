@@ -177,4 +177,28 @@ describe("InMemoryVolumeChunkSource", () => {
     expect(chunk.updateFromCpuData).toHaveBeenCalledWith(glMock);
     expect(visibleChunksChangedMock.dispatch).toHaveBeenCalled();
   });
+
+  it("Uses provided chunkGridPosition instead of parsing the key", () => {
+    const source = createSource(DataType.UINT64);
+    const chunkGridPosition = Float32Array.of(4, 5, 6);
+
+    source.applyLocalEdits(
+      new Map([["4,5,6", { indices: [0], value: 123n, chunkGridPosition }]]),
+    );
+
+    const chunk = source.chunks.get("4,5,6") as unknown as MockChunk;
+    expect(chunk.chunkGridPosition).toBe(chunkGridPosition);
+    expect(chunk.data[0]).toBe(123n);
+  });
+
+  it("Applies contiguous index ranges with typed-array fills", () => {
+    const source = createSource(DataType.UINT64);
+
+    source.applyLocalEdits(
+      new Map([["0,0,0", { indices: [], indexRanges: [1, 3], value: 99n }]]),
+    );
+
+    const chunk = source.chunks.get("0,0,0") as unknown as MockChunk;
+    expect(Array.from(chunk.data)).toEqual([0n, 99n, 99n, 99n, 0n, 0n, 0n, 0n]);
+  });
 });
