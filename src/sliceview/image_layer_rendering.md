@@ -193,69 +193,55 @@ The following parameters are supported:
 
 ### `colormap` controls
 
-The `colormap` control type combines an `invlerp`-style range/histogram control with an interactive colormap picker and gradient preview. It is the easiest way to apply a named colormap to a single-channel image layer with no GLSL beyond the directive itself.
+The `colormap` control type exposes a named colormap as a pure function `vec3(float)`, with a dropdown picker and gradient swatch in the UI. It does not know about image data, ranges, or channels — pair it with an `invlerp` (or any other source of a `[0, 1]` float) to map data into a color.
 
 Directive syntax:
 
 ```glsl
 #uicontrol colormap <name>
-#uicontrol colormap <name> colormap(default="<colormap>", range=[<min>, <max>], window=[<min>, <max>], channel=<index>)
+#uicontrol colormap <name> colormap(default="<colormap>")
 ```
 
 The following parameters are supported:
 
 - `default`: Optional. The initial colormap to apply. Must be one of: `"grayscale"` (default), `"viridis"`, `"plasma"`, `"inferno"`, `"magma"`, `"coolwarm"`, `"rdbu"`, `"jet"`, `"cubehelix"`.
-- `range`: Optional. The data interval to map to the colormap input `[0, 1]`. May be overridden in the UI.
-- `window`: Optional. The histogram display window. Defaults to `range` if not specified.
-- `channel`: Optional. The channel to use for the colormap. Defaults to channel 0.
 
-> **Note**: Changing the colormap in the UI recompiles the shader (the colormap is a compile-time constant). Adjusting the range or window updates display without recompile.
+> **Note**: Changing the colormap in the UI recompiles the shader (the colormap is a compile-time constant).
 
-This directive makes the following shader functions available:
+This directive makes the following shader function available:
 
 ```glsl
-// Maps the current channel data value → RGB color
-vec3 <name>();
-
-// Maps an explicit typed data value → RGB color
-vec3 <name>(T value);
-
 // Maps a normalized float [0, 1] → RGB color
 vec3 <name>(float t);
 ```
 
-**Example — grayscale (default):**
+**Example — pair with `invlerp` for an image layer:**
 
 ```glsl
-#uicontrol colormap intensity
+#uicontrol invlerp normalized
+#uicontrol colormap cmap colormap(default="viridis")
 void main() {
-  emitRGB(intensity());
-}
-```
-
-**Example — viridis with explicit range:**
-
-```glsl
-#uicontrol colormap cmap colormap(default="viridis", range=[0, 1000])
-void main() {
-  emitRGB(cmap());
+  emitRGB(cmap(normalized()));
 }
 ```
 
 **Example — volume rendering aware:**
 
 ```glsl
+#uicontrol invlerp normalized
 #uicontrol colormap cmap colormap(default="inferno")
 void main() {
-  vec3 color = cmap();
-  float alpha = cmap()[0]; // luminance as opacity
+  float t = normalized();
+  vec3 color = cmap(t);
   if (VOLUME_RENDERING) {
-    emitRGBA(vec4(color, alpha));
+    emitRGBA(vec4(color, t));
   } else {
     emitRGB(color);
   }
 }
 ```
+
+Because the colormap directive has no dependency on image data, the same function is also available in annotation shaders, segmentation shaders, and anywhere else `#uicontrol` directives are supported.
 
 ## API
 

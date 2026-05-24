@@ -14,23 +14,14 @@
  * limitations under the License.
  */
 
-import type { DisplayContext } from "#src/display_context.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
-import type { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
-import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
 import {
   COLORMAP_NAMES,
   colormapDisplayName,
   computeColormapColor,
 } from "#src/webgl/colormaps.js";
-import type {
-  ColormapParameters,
-  InvlerpParameters,
-} from "#src/webgl/shader_ui_controls.js";
-import type { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
-import { InvlerpWidget } from "#src/widget/invlerp.js";
-import type { LegendShaderOptions } from "#src/widget/shader_controls.js";
+import type { ColormapParameters } from "#src/webgl/shader_ui_controls.js";
 
 const SWATCH_WIDTH = 200;
 const SWATCH_HEIGHT = 16;
@@ -59,39 +50,17 @@ function renderColormapSwatch(
 }
 
 /**
- * Widget that combines a colormap picker (select + gradient swatch) with an
- * InvlerpWidget for range/histogram control.  Used for the `#uicontrol colormap`
- * directive.
+ * Widget for the `#uicontrol colormap` directive: a select for choosing the
+ * named colormap, plus a gradient swatch preview.
  */
 export class ColormapWidget extends RefCounted {
   element: HTMLElement;
-  // Exposed for activateInvlerpTool compatibility
-  readonly dataType: DataType;
-  readonly trackable: WatchableValueInterface<InvlerpParameters>;
 
-  constructor(
-    visibility: WatchableVisibilityPriority,
-    display: DisplayContext,
-    dataType: DataType,
-    colormapTrackable: WatchableValueInterface<ColormapParameters>,
-    histogramSpecifications: HistogramSpecifications,
-    histogramIndex: number,
-    legendShaderOptions: LegendShaderOptions | undefined,
-  ) {
+  constructor(colormapTrackable: WatchableValueInterface<ColormapParameters>) {
     super();
-
-    this.dataType = dataType;
-    // ColormapParameters extends InvlerpParameters; all mutations spread existing
-    // value so extra fields are preserved — safe to alias here.
-    this.trackable =
-      colormapTrackable as unknown as WatchableValueInterface<InvlerpParameters>;
 
     const container = (this.element = document.createElement("div"));
     container.classList.add("neuroglancer-colormap-widget");
-
-    // Colormap picker row
-    const pickerRow = document.createElement("div");
-    pickerRow.classList.add("neuroglancer-colormap-picker-row");
 
     const select = document.createElement("select");
     select.classList.add("neuroglancer-colormap-select");
@@ -111,37 +80,21 @@ export class ColormapWidget extends RefCounted {
 
     select.addEventListener("change", () => {
       const name = select.value as (typeof COLORMAP_NAMES)[number];
-      colormapTrackable.value = { ...colormapTrackable.value, colormap: name };
+      colormapTrackable.value = { colormap: name };
       renderColormapSwatch(swatch, name);
     });
 
-    pickerRow.appendChild(select);
-    pickerRow.appendChild(swatch);
-    container.appendChild(pickerRow);
+    container.appendChild(select);
+    container.appendChild(swatch);
 
-    // Sync select when trackable changes externally (e.g., JSON load)
-    const updateSelect = () => {
-      const name = colormapTrackable.value.colormap;
-      if (select.value !== name) {
-        select.value = name;
-        renderColormapSwatch(swatch, name);
-      }
-    };
-    this.registerDisposer(colormapTrackable.changed.add(updateSelect));
-
-    // InvlerpWidget for range/histogram control — shares the same trackable;
-    // spread-based mutations preserve the colormap/channel fields.
-    const invlerpWidget = this.registerDisposer(
-      new InvlerpWidget(
-        visibility,
-        display,
-        dataType,
-        this.trackable,
-        histogramSpecifications,
-        histogramIndex,
-        legendShaderOptions,
-      ),
+    this.registerDisposer(
+      colormapTrackable.changed.add(() => {
+        const name = colormapTrackable.value.colormap;
+        if (select.value !== name) {
+          select.value = name;
+          renderColormapSwatch(swatch, name);
+        }
+      }),
     );
-    container.appendChild(invlerpWidget.element);
   }
 }

@@ -108,14 +108,7 @@ function getShaderLayerControlFactory<LayerType extends UserLayer>(
     }
     case "colormap": {
       return colormapLayerControl(() => ({
-        dataType: control.dataType,
         watchableValue: controlState.trackable,
-        channelCoordinateSpaceCombiner:
-          shaderControlState.channelCoordinateSpaceCombiner,
-        defaultChannel: control.default.channel,
-        histogramSpecifications: shaderControlState.histogramSpecifications,
-        histogramIndex: calculateHistogramIndex(),
-        legendShaderOptions: layerShaderControls.legendShaderOptions,
       }));
     }
   }
@@ -124,13 +117,11 @@ function getShaderLayerControlFactory<LayerType extends UserLayer>(
     const isMatchingControlType = (otherControlType: string) => {
       if (
         controlType === "imageInvlerp" ||
-        controlType === "transferFunction" ||
-        controlType === "colormap"
+        controlType === "transferFunction"
       ) {
         return (
           otherControlType === "imageInvlerp" ||
-          otherControlType === "transferFunction" ||
-          otherControlType === "colormap"
+          otherControlType === "transferFunction"
         );
       } else if (controlType === "propertyInvlerp") {
         return otherControlType === "propertyInvlerp";

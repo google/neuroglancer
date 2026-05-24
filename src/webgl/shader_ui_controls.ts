@@ -65,7 +65,6 @@ import {
   enableLerpShaderFunction,
 } from "#src/webgl/lerp.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
-import { getShaderType as getShaderTypeFromDataType } from "#src/webgl/shader_lib.js";
 import {
   COLORMAP_NAMES,
   colormapGlslFunctionName,
@@ -124,15 +123,12 @@ export interface ShaderTransferFunctionControl {
   default: TransferFunctionParameters;
 }
 
-export interface ColormapParameters extends InvlerpParameters {
+export interface ColormapParameters {
   colormap: ColormapName;
-  channel: number[];
 }
 
 export interface ShaderColormapControl {
   type: "colormap";
-  dataType: DataType;
-  clamp: boolean;
   default: ColormapParameters;
 }
 
@@ -697,22 +693,13 @@ export interface ShaderDataContext {
 function parseColormapDirective(
   valueType: string,
   parameters: DirectiveParameters,
-  dataContext: ShaderDataContext,
+  _dataContext: ShaderDataContext,
 ): DirectiveParseResult {
-  const { imageData } = dataContext;
   const errors: string[] = [];
   if (valueType !== "colormap") {
     errors.push("type must be colormap");
   }
-  if (imageData === undefined) {
-    errors.push("colormap control requires image data");
-    return { errors };
-  }
-  const { dataType, channelRank } = imageData;
-  let channel = new Array(channelRank).fill(0);
   let colormapName: ColormapName = "grayscale";
-  let range = defaultDataTypeRange[dataType];
-  let window: DataTypeInterval | undefined;
   for (const [key, value] of parameters) {
     try {
       switch (key) {
@@ -725,20 +712,6 @@ function parseColormapDirective(
           } else {
             colormapName = s as ColormapName;
           }
-          break;
-        }
-        case "channel": {
-          channel = parseInvlerpChannel(value, channel.length);
-          break;
-        }
-        case "range": {
-          range = parseDataTypeInterval(value, dataType);
-          break;
-        }
-        case "window": {
-          window = validateDataTypeInterval(
-            parseDataTypeInterval(value, dataType),
-          );
           break;
         }
         default:
@@ -755,14 +728,7 @@ function parseColormapDirective(
   return {
     control: {
       type: "colormap",
-      dataType,
-      clamp: true,
-      default: {
-        colormap: colormapName,
-        channel,
-        range,
-        window: window ?? normalizeDataTypeInterval(range),
-      },
+      default: { colormap: colormapName },
     } as ShaderColormapControl,
     errors: undefined,
   };
@@ -917,28 +883,16 @@ float ${uName}() {
         break;
       }
       case "colormap": {
-        const lerpName = `${uName}_lerp`;
         const glslFn = colormapGlslFunctionName(builderValue.colormap);
-        const dataType: DataType = builderValue.dataType;
-        const channelArgs: string = (builderValue.channel as number[]).join(",");
-        const shaderDataType = getShaderTypeFromDataType(dataType);
         const code = [
           glsl_COLORMAPS,
-          defineInvlerpShaderFunction(builder, lerpName, dataType, true),
-          `
-vec3 ${uName}(float t) {
-  return ${glslFn}(t);
-}
-vec3 ${uName}(${shaderDataType} inputValue) {
-  return ${uName}(${lerpName}(inputValue));
-}
-vec3 ${uName}() {
-  return ${uName}(${lerpName}(getDataValue(${channelArgs})));
-}
-`,
+          `vec3 ${uName}(float t) { return ${glslFn}(t); }\n`,
         ];
+        const define = `#define ${name} ${uName}\n`;
         builder.addFragmentCode(code);
-        builder.addFragmentCode(`#define ${name} ${uName}\n`);
+        builder.addFragmentCode(define);
+        builder.addVertexCode(code);
+        builder.addVertexCode(define);
         break;
       }
       default: {
@@ -1069,93 +1023,43 @@ class TrackableImageInvlerpParameters extends TrackableValue<ImageInvlerpParamet
   }
 }
 
+function parseColormapName(x: unknown): ColormapName {
+  const s = verifyString(x);
+  if (!(COLORMAP_NAMES as readonly string[]).includes(s)) {
+    throw new Error(`Invalid colormap name: ${JSON.stringify(s)}`);
+  }
+  return s as ColormapName;
+}
+
 function parseColormapParameters(
   obj: unknown,
-  dataType: DataType,
   defaultValue: ColormapParameters,
 ): ColormapParameters {
   if (obj === undefined) return defaultValue;
+  // Accept either a bare string (e.g. "viridis") or an object {colormap: "..."}.
+  if (typeof obj === "string") {
+    return { colormap: parseColormapName(obj) };
+  }
   verifyObject(obj);
-  const colormapName = verifyOptionalObjectProperty(
-    obj,
-    "colormap",
-    (x) => {
-      const s = verifyString(x);
-      if (!(COLORMAP_NAMES as readonly string[]).includes(s)) {
-        throw new Error(`Invalid colormap name: ${JSON.stringify(s)}`);
-      }
-      return s as ColormapName;
-    },
-    defaultValue.colormap,
-  );
   return {
-    colormap: colormapName,
-    range: verifyOptionalObjectProperty(
+    colormap: verifyOptionalObjectProperty(
       obj,
-      "range",
-      (x) => parseDataTypeInterval(x, dataType),
-      defaultValue.range,
-    ),
-    window: verifyOptionalObjectProperty(
-      obj,
-      "window",
-      (x) => validateDataTypeInterval(parseDataTypeInterval(x, dataType)),
-      defaultValue.window,
-    ),
-    channel: verifyOptionalObjectProperty(
-      obj,
-      "channel",
-      (x) => parseInvlerpChannel(x, defaultValue.channel.length),
-      defaultValue.channel,
+      "colormap",
+      parseColormapName,
+      defaultValue.colormap,
     ),
   };
 }
 
 class TrackableColormapParameters extends TrackableValue<ColormapParameters> {
-  constructor(
-    public dataType: DataType,
-    public defaultValue: ColormapParameters,
-  ) {
-    super(defaultValue, (obj) =>
-      parseColormapParameters(obj, dataType, defaultValue),
-    );
+  constructor(public defaultValue: ColormapParameters) {
+    super(defaultValue, (obj) => parseColormapParameters(obj, defaultValue));
   }
 
   toJSON() {
-    const {
-      value: { colormap, range, window, channel },
-      dataType,
-      defaultValue,
-    } = this;
-    const colormapJson =
-      colormap === defaultValue.colormap ? undefined : colormap;
-    const rangeJson = dataTypeIntervalToJson(
-      range,
-      dataType,
-      defaultValue.range,
-    );
-    const windowJson = dataTypeIntervalToJson(
-      window,
-      dataType,
-      defaultValue.window,
-    );
-    const channelJson = arraysEqual(defaultValue.channel, channel)
-      ? undefined
-      : channel;
-    if (
-      colormapJson === undefined &&
-      rangeJson === undefined &&
-      windowJson === undefined &&
-      channelJson === undefined
-    ) {
-      return undefined;
-    }
-    return {
-      colormap: colormapJson,
-      range: rangeJson,
-      window: windowJson,
-      channel: channelJson,
-    };
+    const { colormap } = this.value;
+    if (colormap === this.defaultValue.colormap) return undefined;
+    return colormap;
   }
 }
 
@@ -1482,14 +1386,9 @@ function getControlTrackable(control: ShaderUiControl): {
       };
     case "colormap":
       return {
-        trackable: new TrackableColormapParameters(
-          control.dataType,
-          control.default,
-        ),
+        trackable: new TrackableColormapParameters(control.default),
         getBuilderValue: (value: ColormapParameters) => ({
           colormap: value.colormap,
-          channel: value.channel,
-          dataType: control.dataType,
         }),
       };
   }
@@ -1621,8 +1520,7 @@ export class ShaderControlState
         for (const { control, trackable } of state.values()) {
           if (
             control.type !== "imageInvlerp" &&
-            control.type !== "transferFunction" &&
-            control.type !== "colormap"
+            control.type !== "transferFunction"
           )
             continue;
           channels.push({ channel: trackable.value.channel });
@@ -1652,8 +1550,7 @@ export class ShaderControlState
       for (const { control, trackable } of state.values()) {
         if (
           control.type === "imageInvlerp" ||
-          control.type === "transferFunction" ||
-          control.type === "colormap"
+          control.type === "transferFunction"
         ) {
           bounds.push(trackable.value.window);
         } else if (control.type === "propertyInvlerp") {
@@ -1882,12 +1779,8 @@ function setControlInShader(
       );
       break;
     case "colormap":
-      enableLerpShaderFunction(
-        shader,
-        `${uName}_lerp`,
-        control.dataType,
-        value.range,
-      );
+      // Pure float→vec3 mapping; colormap function is inlined at build time,
+      // and no uniforms need to be uploaded per-frame.
       break;
   }
 }
