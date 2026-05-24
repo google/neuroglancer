@@ -10,9 +10,12 @@ Topics
 - :doc:`navigation` — moving, rotating, and zooming the data views.
 - :doc:`annotations` — creating and editing annotations, and linking them
   to segmentation layers.
+- :doc:`annotation_shaders` — writing custom GLSL shader code to drive
+  the visual appearance of annotations from their properties.
 
 .. toctree::
    :hidden:
 
    navigation
    annotations
+   annotation_shaders

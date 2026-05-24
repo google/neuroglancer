@@ -318,6 +318,49 @@ on that length scale, no matter the zoom.
 
 .. _annotation-keyboard-shortcuts:
 
+Annotation Properties and Schema
+--------------------------------
+Annotations are geometries in space that can represent many things,
+but often you also want to write something else down about those 
+annotations. The description field is nice, but any scientist who
+has tried to turn free form text fields into data knows that 
+unstructured fields are not the best way to capture information. 
+Plus, if we write down our data in structured way we can easily
+use that data to drive the visual appearence of our annotations,
+which you can read about in :doc:`annotation_shaders`.
+
+The schema tab of the local annotation layer lets you define custom
+properties for your annotations, with default properties. 
+To add a new property click the + button. You first select a data type
+from the list of available types. This will add a new row to the schema.
+Once added, you can name the property and give it a default value.
+New annotations will hae the default value.  Note however, if you change
+the default value, existing annotations will not be updated to have the new default value. Press the pencil icon to the right to edit the description
+of the property.
+
+Once you have added properties, the selection widget will show the
+properties of that annotation in the selection widget,
+and you can set the properties for that annotation there.  and the rendering
+tab will show the properties as options to drive the shader code
+(see :doc:`annotation_shaders`).  The descriptions will be available
+as tooltips hover text in both locations.
+
+Enums
+~~~~~
+If you scroll down in this list of available types, below "Numeric"
+you will find a list of "Enum" types. These are useful for when you
+want to mark annotations with a controlled vocabulary of strings.
+If you want free form text, the annotation description field is 
+already available for that. 
+
+When you pick an enum type, below the "Default value" for that enum
+will be a interface to add and rename enum values. You can add new
+values with the + button found there.  Once you have added some enum
+values, you can select one as the default value for that property.
+When you edit the property of an annotation, you will get a dropdown
+to select which enum value you want to set that property to.
+
+
 Keyboard and mouse shortcuts
 ----------------------------
 
@@ -381,6 +424,27 @@ through named **relationships**. The default relationship is named
 ``segments``. When an annotation is created on or near a segment in a
 linked segmentation layer, the segment's ID is captured on the
 annotation as a **related ID** for that relationship.
+
+.. raw:: html
+
+   <video src="../_static/linked_annotations.mp4"
+          autoplay loop muted playsinline
+          style="max-width: 100%; border-radius: 4px;">
+   </video>
+
+As shown in the video above, in order to link an annotation to 
+a segmentation, you have to select the segmentation layer from the 
+dropdown next to the segments relationship control. Once selected,
+any annotations you make will capture the segment ID underneath 
+the annotation, in either 2d or 3d.  
+
+Once annotations have related IDs, then checking the box next to
+the relationship control will trigger selective loading of the 
+annotations that are related to visible segmentIDs selected 
+from the segmentation layer. 
+
+Note, this same control works for non-local annotation layers that
+have registered relationships as well.  
 
 Linking a segmentation layer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
