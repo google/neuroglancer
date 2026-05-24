@@ -259,7 +259,8 @@ vec3 colormapGrayscale(float x) {
    * https://iquilezles.org/articles/palettes/
    *
    * Coefficients computed by least-squares regression over the 256-entry tables.
-   * Maximum error across all channels: < 0.005 (visually imperceptible).
+   * Maximum error across all channels is approximately 0.01-0.02 depending on
+   * the colormap — visually close but not exact reproduction.
    */
   `vec3 colormapViridis(float x) {
   x = clamp(x, 0.0, 1.0);
