@@ -99,6 +99,18 @@
   background-color: #969;
 }
 
+.neuroglancer-annotation-dragging {
+  opacity: 0.5;
+}
+
+.neuroglancer-annotation-drop-before {
+  box-shadow: inset 0 2px 0 0 #fc0;
+}
+
+.neuroglancer-annotation-drop-after {
+  box-shadow: inset 0 -2px 0 0 #fc0;
+}
+
 .neuroglancer-tab-content.neuroglancer-annotation-details {
   flex: 0 0 auto;
   align-self: stretch;

@@ -321,6 +321,9 @@ export class AnnotationLayerView extends Tab {
             this.deleteAnnotationElement(annotationId, state),
           ),
         );
+        refCounted.registerDisposer(
+          source.childrenReordered.add(this.forceUpdateView),
+        );
       }
       refCounted.registerDisposer(
         state.transform.changed.add(this.forceUpdateView),
@@ -504,9 +507,9 @@ export class AnnotationLayerView extends Tab {
 
     const helpIcon = makeIcon({
       title:
-        "The left icons allow you to select the type of the anotation. Color and other display settings are available in the 'Rendering' tab.",
+        "The left icons allow you to select the type of the annotation. Color and other display settings are available in the 'Rendering' tab. Click for documentation.",
       svg: svg_help,
-      clickable: false,
+      href: "https://neuroglancer-docs.web.app/user-guide/annotation.html",
     });
     helpIcon.style.marginLeft = "auto";
     mutableControls.appendChild(helpIcon);
@@ -550,6 +553,150 @@ export class AnnotationLayerView extends Tab {
     this.updateCoordinateSpace();
     this.updateAttachedAnnotationLayerStates();
     this.updateSelectionView();
+    this.setupListReorder();
+  }
+
+  private findStateForAnnotationId(
+    annotationId: AnnotationId,
+  ): AnnotationLayerState | undefined {
+    for (const [state, info] of this.attachedAnnotationStates) {
+      if (info.idToIndex.has(annotationId)) return state;
+    }
+    return undefined;
+  }
+
+  // Wires alt+left-click-drag on annotation list rows to reorder annotations
+  // within a single local annotation source.
+  private setupListReorder() {
+    const listElement = this.virtualList.element;
+    let dragState:
+      | {
+          sourceId: AnnotationId;
+          state: AnnotationLayerState;
+          sourceRow: HTMLElement;
+          dropRow: HTMLElement | undefined;
+          dropPlacement: "before" | "after" | undefined;
+        }
+      | undefined;
+
+    const clearDropTarget = () => {
+      if (dragState?.dropRow !== undefined) {
+        dragState.dropRow.classList.remove(
+          "neuroglancer-annotation-drop-before",
+          "neuroglancer-annotation-drop-after",
+        );
+        dragState.dropRow = undefined;
+        dragState.dropPlacement = undefined;
+      }
+    };
+
+    const finish = (commit: boolean) => {
+      if (dragState === undefined) return;
+      const { sourceId, state, sourceRow, dropRow, dropPlacement } = dragState;
+      sourceRow.classList.remove("neuroglancer-annotation-dragging");
+      clearDropTarget();
+      document.removeEventListener("mousemove", onMouseMove, true);
+      document.removeEventListener("mouseup", onMouseUp, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+      dragState = undefined;
+      if (!commit || dropRow === undefined || dropPlacement === undefined) {
+        return;
+      }
+      const targetId = dropRow.dataset.annotationId;
+      if (targetId === undefined || targetId === sourceId) return;
+      const source = state.source;
+      if (!(source instanceof AnnotationSource)) return;
+      source.reorder(sourceId, targetId, dropPlacement);
+    };
+
+    const onMouseMove = (event: MouseEvent) => {
+      if (dragState === undefined) return;
+      const target = (event.target as HTMLElement | null)?.closest(
+        ".neuroglancer-annotation-list-entry",
+      ) as HTMLElement | null;
+      if (
+        target === null ||
+        target === dragState.sourceRow ||
+        target.dataset.annotationId === undefined
+      ) {
+        clearDropTarget();
+        return;
+      }
+      // Only allow drops within the same annotation source.
+      const targetState = this.findStateForAnnotationId(
+        target.dataset.annotationId,
+      );
+      if (targetState !== dragState.state) {
+        clearDropTarget();
+        return;
+      }
+      const rect = target.getBoundingClientRect();
+      const placement: "before" | "after" =
+        event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+      if (
+        dragState.dropRow === target &&
+        dragState.dropPlacement === placement
+      ) {
+        return;
+      }
+      clearDropTarget();
+      target.classList.add(
+        placement === "before"
+          ? "neuroglancer-annotation-drop-before"
+          : "neuroglancer-annotation-drop-after",
+      );
+      dragState.dropRow = target;
+      dragState.dropPlacement = placement;
+    };
+
+    const onMouseUp = (event: MouseEvent) => {
+      if (event.button !== 0) return;
+      finish(true);
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        finish(false);
+      }
+    };
+
+    const onMouseDown = (event: MouseEvent) => {
+      if (event.button !== 0 || !event.altKey) return;
+      const row = (event.target as HTMLElement | null)?.closest(
+        ".neuroglancer-annotation-list-entry",
+      ) as HTMLElement | null;
+      if (row === null) return;
+      const sourceId = row.dataset.annotationId;
+      if (sourceId === undefined) return;
+      const state = this.findStateForAnnotationId(sourceId);
+      if (state === undefined) return;
+      if (
+        !(state.source instanceof AnnotationSource) ||
+        state.source.readonly
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      row.classList.add("neuroglancer-annotation-dragging");
+      dragState = {
+        sourceId,
+        state,
+        sourceRow: row,
+        dropRow: undefined,
+        dropPlacement: undefined,
+      };
+      document.addEventListener("mousemove", onMouseMove, true);
+      document.addEventListener("mouseup", onMouseUp, true);
+      document.addEventListener("keydown", onKeyDown, true);
+    };
+
+    listElement.addEventListener("mousedown", onMouseDown);
+    this.registerDisposer(() => {
+      finish(false);
+      listElement.removeEventListener("mousedown", onMouseDown);
+    });
   }
 
   private getRenderedAnnotationListElement(
@@ -2563,6 +2710,7 @@ export function makeAnnotationListElement(
   const element = document.createElement("div");
   element.classList.add("neuroglancer-annotation-list-entry");
   element.dataset.color = state.displayState.color.toString();
+  element.dataset.annotationId = annotation.id;
   element.style.gridTemplateColumns = gridTemplate;
   const icon = document.createElement("div");
   icon.className = "neuroglancer-annotation-icon";
