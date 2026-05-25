@@ -993,21 +993,23 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
         );
         let totalDeltaX = 0;
         let totalDeltaY = 0;
-        let dragDistanceSquared = 0;
         let dragActive = false;
         startRelativeMouseDrag(
           event.detail,
           (_event, deltaX, deltaY) => {
-            dragDistanceSquared += deltaX * deltaX + deltaY * deltaY;
+            totalDeltaX += deltaX;
+            totalDeltaY += deltaY;
             const thresholdSquared =
               DRAG_START_DISTANCE_PX * DRAG_START_DISTANCE_PX;
-            if (!dragActive && dragDistanceSquared >= thresholdSquared) {
+            if (
+              !dragActive &&
+              totalDeltaX * totalDeltaX + totalDeltaY * totalDeltaY >=
+                thresholdSquared
+            ) {
               dragActive = true;
               setStatus(SPATIAL_SKELETON_MOVING_NODE_MESSAGE);
             }
             if (!dragActive) return;
-            totalDeltaX += deltaX;
-            totalDeltaY += deltaY;
             dragPanel.translateDataPointByViewportPixels(
               this.dragGlobalPosition,
               this.dragGlobalAnchorPosition,
