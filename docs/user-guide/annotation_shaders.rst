@@ -1,25 +1,25 @@
 Annotation Shaders
 ------------------
 As with other elements of neuroglancer, one can write custom
-GSL code to control the way annotations are rendered on the
+GLSL code to control the way annotations are rendered on the
 screen.  Complete technical documentation about how to set control
 different aspects of the annotations can be found here (TODO: ADD LINK).
 
-This guide is a more gentle introduction to GSL that will
+This guide is a more gentle introduction to GLSL that will
 guide you through developing your first annotation shader code,
-so that properties of annotations can adjust their visual appearence.
+so that properties of annotations can adjust their visual appearance.
 
-Many of the lessons applied here also are relevant to shader on image layers
+Many of the lessons applied here also are relevant to shaders on image layers
 or segmentation layers, but this will stay focused on annotation shaders.
 
 Color
 ~~~~~
-The first and most obvious thing to change about an annotation is it's
+The first and most obvious thing to change about an annotation is its
 color. Colors can either be defined by red,green,blue (RGB) values, or
 red,green,blue,alpha (RGBA) values, if you want annotations to be
-transparent.  In GSL, RGB colors are defined by a ``vec3`` variable type
+transparent.  In GLSL, RGB colors are defined by a ``vec3`` variable type
 and RGBA colors are ``vec4``. Calling ``setColor`` with either a ``vec3``
-or ``vec4``  will set the color.
+or ``vec4`` will set the color.
 
 You can see this in the default shader that comes with any new annotation
 layer
@@ -42,18 +42,18 @@ directive, optionally give it a default value, and pass it to set color.
 
   #uicontrol vec3 mycolor color(default="red")
   void main() {
-    setColor(mycolor());
+    setColor(mycolor);
   }
 
-There are more ``#uicontrol``, such as a ``slider``. Let's add a ``slider`` to
-control the red channel of a color.  To create a new ``vec3`` object,
-we define it with a ``var`` decleration
+There are more ``#uicontrol`` types, such as ``slider``. Let's add a ``slider`` to
+control the red channel of a color.  To create a new ``vec3`` value,
+we declare it with the type, name, and an initializer.
 
 .. code-block:: glsl
 
   #uicontrol float red slider(min=0.0, max=1.0, step=0.05, default=1.0)
   void main() {
-    var mycolor vec3(slider, 0.0, 0.0)
+    vec3 mycolor = vec3(red, 0.0, 0.0);
     setColor(mycolor);
   }
 
@@ -72,7 +72,7 @@ will map help us to do that.
 
   #uicontrol float red invlerp(range=[10,30], window=[0,1000])
   void main() {
-    var mycolor vec3(red(), 0.0, 0.0)
+    vec3 mycolor = vec3(red(), 0.0, 0.0);
     setColor(mycolor);
   }
 
@@ -101,38 +101,50 @@ as an annotation property gets larger and smaller.
   }
 
 I can simply scale the ``mycolor`` ``vec3`` by my remapped intensity
-inlerp control that will be between 0 and 1.  Users can now
+invlerp control that will be between 0 and 1.  Users can now
 change the colormap and set what 'bright' looks like.
 
-What about discrete variables, like categories, where continous
-changes don't make sense? We can setup a lookup table where
-each of the discrete values maps to a specific color.
+What about discrete variables, like categories, where continuous
+changes don't make sense? We can set up a lookup table that maps
+each discrete code to a specific color. The natural way to express
+this in GLSL is a constant array indexed by the code.
 
-let's say we had a property called ``category`` which
-was either 1,2 or 3.  Then we might color each of those
-categories different user configurable colors like this
-
-TODO: fix with array code
+Let's say we had a categorical property called ``category`` whose
+values are codes ``0``, ``1``, or ``2``. (Categorical / dictionary-encoded
+annotation properties surface in the shader as a ``uint`` code — the index
+into the property's ``categories`` array — so we use ``uint`` for the
+lookup index.) Declare a ``const vec3`` array with one row per code,
+index it by the code, and fall back to ``defaultColor()`` for
+out-of-range values:
 
 .. code-block:: glsl
 
-  #uicontrol vec3 category1 color(default="red")
-  #uicontrol vec3 category1 color(default="green")
-  #uicontrol vec3 category1 color(default="blue")
-
-  vec3 mymap(int value){
-    switch(int):
-    case 0:
-      return category1;
-    case 1:
-      return category2;
-    case 2:
-      return category3;
-  }
+  const vec3 categoryColors[3] = vec3[3](
+    vec3(1.0, 0.0, 0.0),  // 0: red
+    vec3(0.0, 1.0, 0.0),  // 1: green
+    vec3(0.0, 0.0, 1.0)   // 2: blue
+  );
 
   void main() {
-    setColor(mymap(prop_category()));
+    uint code = prop_category();
+    vec3 rgb = (code < 3u) ? categoryColors[code] : defaultColor();
+    setColor(rgb);
   }
+
+A few things to notice:
+
+- ``const vec3 array[N] = vec3[N](...)`` is the GLSL syntax for a
+  compile-time-constant array. The size ``N`` appears in both the
+  declaration and the constructor and must match.
+- Array indices must be non-negative integers, so ``code`` is a ``uint``
+  and the bounds check uses ``3u`` (a ``uint`` literal). Comparing
+  ``uint`` to ``int`` is not allowed.
+- The fallback to ``defaultColor()`` handles unexpected codes safely —
+  without it, reading past the array end is undefined.
+- This pattern scales naturally to dozens or hundreds of categories
+  (e.g. cell-type taxonomies). Lining up the row comment with the
+  corresponding entry in the property's on-disk ``categories`` array
+  makes the mapping easy to audit.
 
 Lines and Polylines have colors for their lines, points and endpoints.
 ``setLineColor`` can be called with 1 color, or with 2, if you want the
@@ -148,14 +160,14 @@ Annotations have different things to size. Points have ``setPointMarkerSize``
 which will dynamically scale annotations.  All the same things that we
 learned about ``#uicontrol`` apply here. So if we wanted our point
 annotations to scale between 1 pixels and 20 pixels based on a property,
-we might use the inverlp control again.
+we might use the invlerp control again.
 
 .. code-block:: glsl
 
   #uicontrol float intensity invlerp(range=[10,30], window=[0,1000])
   void main() {
     setColor(defaultColor());
-    setPointMarkerSize(1.0 + 19*intensity())
+    setPointMarkerSize(1.0 + 19.0*intensity());
   }
 
 We could control the maximum size with a slider to give the user even more
@@ -167,7 +179,7 @@ control.
   #uicontrol float maxsize slider(min=1.0, max=50.0, step=1.0)
   void main() {
     setColor(defaultColor());
-    setPointMarkerSize(1.0 + (maxsize-1.0)*intensity())
+    setPointMarkerSize(1.0 + (maxsize-1.0)*intensity());
   }
 
 using the 1.0+ and (maxsize-1.0) here means that our points never disappear,
@@ -180,15 +192,16 @@ As the number of annotation points you want to render gets higher and higher
 the performance of rendering will go down. The controls will start to feel
 sluggish, and your page might crash if the GPU gets overwhelmed.
 
-One was to address this, is to figure out how to use the data to render the
+One way to address this, is to figure out how to use the data to render the
 subset of points you are interested in.
 
 .. code-block:: glsl
 
   void main() {
-    if (prop_quality()<0.5){
+    if (prop_quality()<0.5) {
       discard;
     }
-    else{
+    else {
       setColor(defaultColor());
     }
+  }
