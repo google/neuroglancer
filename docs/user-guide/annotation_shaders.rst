@@ -50,6 +50,7 @@ control the red channel of a color.  To create a new `vec3` object,
 we define it with a `var` decleration
 
 .. code-block:: glsl
+  
   #uicontrol float red slider(min=0.0, max=1.0, step=0.05, default=1.0)
   void main() {
     var mycolor vec3(slider, 0.0, 0.0)
