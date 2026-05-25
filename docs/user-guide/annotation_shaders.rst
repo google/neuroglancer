@@ -15,8 +15,8 @@ or segmentation layers, but this will stay focused on annotation shaders.
 Color
 ~~~~~
 The first and most obvious thing to change about an annotation is its
-color. Colors can either be defined by red,green,blue (RGB) values, or
-red,green,blue,alpha (RGBA) values, if you want annotations to be
+color. Colors can either be defined by red, green, blue (RGB) values,
+or red, green, blue, alpha (RGBA) values, if you want annotations to be
 transparent.  In GLSL, RGB colors are defined by a ``vec3`` variable type
 and RGBA colors are ``vec4``. Calling ``setColor`` with either a ``vec3``
 or ``vec4`` will set the color.
@@ -30,10 +30,10 @@ layer
     setColor(defaultColor());
   }
 
-Here, defaultColor() is a function which returns the ``vec3`` RGB color
-that is ``Annotation color`` UI control that is just below the shader code.
-Clicking on the UI control will bring up a RGB picker that will allow you
-to change the color returned by defaultColor().
+Here, ``defaultColor()`` is a function which returns the ``vec3`` RGB color
+that is the ``Annotation color`` UI control just below the shader code.
+Clicking on the UI control will bring up an RGB picker that will allow you
+to change the color returned by ``defaultColor()``.
 
 You can add more color pickers to the set of UI controls with a ``#uicontrol``
 directive, optionally give it a default value, and pass it to set color.
@@ -65,8 +65,8 @@ property and use it to drive the red channel.  However to do so,
 we often want to remap the values of that property to a ``0-1`` range.
 Say our annotation has a property called ``temperature`` and it ranges
 from 0 to 1000 across the annotations, but most annotations are
-around 10-30.  The ``invlerp`` control **inverse linear interpolation**
-will map help us to do that.
+around 10-30.  The ``invlerp`` control (short for **inverse linear
+interpolation**) will help us do that.
 
 .. code-block:: glsl
 
@@ -77,20 +77,19 @@ will map help us to do that.
   }
 
 Now in the UI you will see a widget appear that has a dropdown menu
-to select which property you want to remap.  The ``range`` refers to what
-the min and max values of the linear remapping regime are.  Things
-larger than the max will map to 1, and lower than the range will
-map to 0.  ``window`` refers to the what values the widget shows to you
-to adjust the range within.  You can omit the ``window`` which will
-default it to be the same as the ``range``, and you can omit the ``range``
-and it will try to use the current distribution of the selected
-property to pick a reasonable ``range``. Both can be adjusted by the
-user via the widget's user interface.
+to select which property you want to remap.  The ``range`` parameter
+sets the min and max data values of the linear remap: values above the
+max are clamped to 1, and values below the min are clamped to 0.
+``window`` sets what range of values the widget shows you when adjusting
+``range``.  You can omit ``window``, which defaults to the same interval
+as ``range``, and you can omit ``range``, in which case neuroglancer
+will pick a reasonable default from the current distribution of the
+selected property.  Both can be adjusted from the widget at any time.
 
 These basic elements can be combined to create many kinds of coloring
-behaviors. For example, let's say we want a single color colormap,
-where the color goes from black to a user selectable color,
-as an annotation property gets larger and smaller.
+behaviors. For example, let's say we want a single-color colormap
+that ramps from black to a user-selectable color as an annotation
+property goes from low to high.
 
 .. code-block:: glsl
 
@@ -159,8 +158,8 @@ The next obvious thing to modulate beside color is the size of annotations.
 Annotations have different things to size. Points have ``setPointMarkerSize``
 which will dynamically scale annotations.  All the same things that we
 learned about ``#uicontrol`` apply here. So if we wanted our point
-annotations to scale between 1 pixels and 20 pixels based on a property,
-we might use the invlerp control again.
+annotations to scale between 1 and 20 pixels based on a property,
+we might use the ``invlerp`` control again.
 
 .. code-block:: glsl
 
@@ -182,26 +181,104 @@ control.
     setPointMarkerSize(1.0 + (maxsize-1.0)*intensity());
   }
 
-using the 1.0+ and (maxsize-1.0) here means that our points never disappear,
-no matter how small they are.
+The ``1.0 +`` and ``(maxsize - 1.0)`` here mean that our points never
+disappear, no matter how small the slider goes.
+
+
+Toggles
+~~~~~~~
+
+To switch a visual feature on and off, use a ``checkbox`` uicontrol.
+
+The name of the UI control will be available to the shader as a 
+boolean binary variable.  We can use this to
+toggle some aspect of our visualization on and off, such as making 
+the bordrs of point annotations visible or invisible in the 
+example below.
+
+.. code-block:: glsl
+
+  #uicontrol bool showBorders checkbox(default=true)
+
+  void main() {
+    setColor(defaultColor());
+    setPointMarkerSize(8.0);
+    if (showBorders) {
+      setPointMarkerBorderColor(vec4(0.0, 0.0, 0.0, 1.0));
+      setPointMarkerBorderWidth(1.0);
+    }
+    else {
+      setPointMarkerBorderWidth(0.0);
+    }
+  }
+
 
 
 Discard
 ~~~~~~~
-As the number of annotation points you want to render gets higher and higher
-the performance of rendering will go down. The controls will start to feel
-sluggish, and your page might crash if the GPU gets overwhelmed.
+As the number of annotation points you want to render gets higher and
+higher, the performance of rendering will go down. The controls will
+start to feel sluggish, and your page might crash if the GPU gets
+overwhelmed.
 
-One way to address this, is to figure out how to use the data to render the
-subset of points you are interested in.
+One way to address this is to use the data itself to render only the
+subset of points you are interested in. Inside ``main()``, the
+``discard`` keyword drops the current annotation entirely — no
+geometry is drawn for it.
 
 .. code-block:: glsl
 
   void main() {
-    if (prop_quality()<0.5) {
+    if (prop_quality() < 0.5) {
       discard;
-    }
-    else {
+    } else {
       setColor(defaultColor());
     }
+  }
+
+To let the user adjust the cutoff interactively, drive it from a
+slider:
+
+.. code-block:: glsl
+
+  #uicontrol float minQuality slider(min=0.0, max=1.0, step=0.01, default=0.5)
+  void main() {
+    if (prop_quality() < minQuality) discard;
+    setColor(defaultColor());
+  }
+
+For a categorical property, compare against the code directly. To show
+only annotations belonging to a single category, pair a ``uint``
+slider with an equality check:
+
+.. code-block:: glsl
+
+  #uicontrol uint onlyCategory slider(min=0, max=2, default=0)
+  void main() {
+    if (prop_category() != onlyCategory) discard;
+    setColor(defaultColor());
+  }
+
+Combine a ``checkbox`` with a discard to make a filter optional —
+when the checkbox is off, all the annotations of a particular 
+category are dropped.
+
+.. code-block:: glsl
+
+  #uicontrol bool hideCategoryTwo checkbox(default=false)
+  void main() {
+    if (hideCategoryTwo && prop_category() == 2u) discard;
+    setColor(defaultColor());
+  }
+
+Multiple discards can be stacked — the annotation is dropped if
+*any* condition matches:
+
+.. code-block:: glsl
+
+  #uicontrol float minQuality slider(min=0.0, max=1.0, default=0.5)
+  void main() {
+    if (prop_quality() < minQuality) discard;
+    if (prop_category() == 2u) discard;
+    setColor(defaultColor());
   }
