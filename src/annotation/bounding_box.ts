@@ -35,7 +35,7 @@ import {
 } from "#src/sliceview/bounding_box_shader_helper.js";
 import type { SliceViewPanelRenderContext } from "#src/sliceview/renderlayer.js";
 import { tile2dArray } from "#src/util/array.js";
-import { getViewFrustrumWorldBounds, mat4 } from "#src/util/geom.js";
+import { getViewFrustumWorldBounds, mat4 } from "#src/util/geom.js";
 import { CORNERS_PER_BOX, EDGES_PER_BOX } from "#src/webgl/bounding_box.js";
 import { GLBuffer } from "#src/webgl/buffer.js";
 import {
@@ -226,7 +226,7 @@ abstract class RenderHelper extends AnnotationRenderHelper {
       tempInvModelViewProjectionMatrix,
       context.modelViewProjectionMatrix,
     );
-    getViewFrustrumWorldBounds(
+    getViewFrustumWorldBounds(
       tempInvModelViewProjectionMatrix,
       tempWorldBounds,
     );
