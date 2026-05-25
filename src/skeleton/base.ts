@@ -15,17 +15,17 @@
  */
 
 import type { ProjectionParameters } from "#src/projection_parameters.js";
+import {
+  getSpatialSkeletonSourceScalesByLimit,
+  selectSpatialSkeletonSourceByLimit,
+  type SpatialSkeletonSourceDensityInput,
+} from "#src/skeleton/source_selection.js";
 import type {
   SliceViewChunkSource,
   SliceViewChunkSpecification,
   TransformedSource,
 } from "#src/sliceview/base.js";
 import { forEachVisibleVolumetricChunk } from "#src/sliceview/base.js";
-import {
-  getSpatialSkeletonSourceScalesByLimit,
-  selectSpatialSkeletonSourceByLimit,
-  type SpatialSkeletonSourceDensityInput,
-} from "#src/skeleton/source_selection.js";
 import type { DataType } from "#src/util/data_type.js";
 import {
   getViewFrustrumVolume,
