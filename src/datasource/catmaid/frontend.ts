@@ -222,10 +222,6 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
     this.gridLevels = buildSpatialSkeletonGridLevels(gridCellSizes);
   }
 
-  getSpatialSkeletonGridSizes(): SpatialSkeletonGridSize[] {
-    return this.gridLevels.map(({ size }) => size);
-  }
-
   getPerspectiveSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] {
     const sources = this.getSources(SPATIAL_SKELETON_SOURCE_OPTIONS);
     return sources.length > 0 ? sources[0] : [];

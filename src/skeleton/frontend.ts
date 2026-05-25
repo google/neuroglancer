@@ -1791,20 +1791,12 @@ export abstract class MultiscaleSpatiallyIndexedSkeletonSource extends Multiscal
   getSliceViewPanelSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] {
     return this.getPerspectiveSources();
   }
-
-  getSpatialSkeletonGridSizes():
-    | { x: number; y: number; z: number; limit: number }[]
-    | undefined {
-    return undefined;
-  }
 }
 
 type SpatiallyIndexedSkeletonSourceEntry =
   SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>;
 
 interface SpatiallyIndexedSkeletonLayerOptions {
-  spacingTarget?: WatchableValueInterface<number>;
-  spacingTarget2d?: WatchableValueInterface<number>;
   sources2d?: SpatiallyIndexedSkeletonSourceEntry[];
   selectedNodeId?: WatchableValueInterface<number | undefined>;
   pendingNodePositionVersion?: WatchableValueInterface<number>;
@@ -2012,16 +2004,10 @@ function updateSpatialSkeletonSpacingHistogram(
 
 export interface SpatiallyIndexedSkeletonLayerDisplayState
   extends SkeletonLayerDisplayState {
-  spatialSkeletonSpacingTarget2d?: WatchableValueInterface<number>;
-  spatialSkeletonSpacingTarget3d?: WatchableValueInterface<number>;
-  spatialSkeletonGridLevels?: WatchableValueInterface<
-    Array<{
-      size: { x: number; y: number; z: number; limit: number };
-      limit: number;
-    }>
-  >;
-  spatialSkeletonSpacingHistogram2d?: RenderScaleHistogram;
-  spatialSkeletonSpacingHistogram3d?: RenderScaleHistogram;
+  spatialSkeletonSpacingTarget2d: WatchableValueInterface<number>;
+  spatialSkeletonSpacingTarget3d: WatchableValueInterface<number>;
+  spatialSkeletonSpacingHistogram2d: RenderScaleHistogram;
+  spatialSkeletonSpacingHistogram3d: RenderScaleHistogram;
 }
 
 export function resolveSpatiallyIndexedSkeletonSegmentPick(
@@ -2087,8 +2073,6 @@ export class SpatiallyIndexedSkeletonLayer
         computeTextureFormat(new TextureFormat(), dataType, numComponents),
     ));
   }
-  spacingTarget: WatchableValueInterface<number>;
-  spacingTarget2d: WatchableValueInterface<number>;
   private selectedNodeId:
     | WatchableValueInterface<number | undefined>
     | undefined;
@@ -2414,14 +2398,6 @@ export class SpatiallyIndexedSkeletonLayer
         this.displayState.transform,
       ),
     );
-    this.spacingTarget =
-      options.spacingTarget ??
-      displayState.spatialSkeletonSpacingTarget3d ??
-      new WatchableValue(8);
-    this.spacingTarget2d =
-      options.spacingTarget2d ??
-      displayState.spatialSkeletonSpacingTarget2d ??
-      this.spacingTarget;
     this.selectedNodeId = options.selectedNodeId;
     this.pendingNodePositionVersion = options.pendingNodePositionVersion;
     this.getPendingNodePositionOverride = options.getPendingNodePosition;
@@ -2539,11 +2515,17 @@ export class SpatiallyIndexedSkeletonLayer
     sharedObject.RPC_TYPE_ID = SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_RPC_ID;
 
     const skeletonSpacingTargetWatchable = this.registerDisposer(
-      SharedWatchableValue.makeFromExisting(rpc, this.spacingTarget),
+      SharedWatchableValue.makeFromExisting(
+        rpc,
+        this.displayState.spatialSkeletonSpacingTarget3d,
+      ),
     );
 
     const skeletonSpacingTarget2dWatchable = this.registerDisposer(
-      SharedWatchableValue.makeFromExisting(rpc, this.spacingTarget2d),
+      SharedWatchableValue.makeFromExisting(
+        rpc,
+        this.displayState.spatialSkeletonSpacingTarget2d,
+      ),
     );
 
     sharedObject.initializeCounterpart(rpc, {
@@ -3346,15 +3328,11 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
       renderOptions.lineWidth.changed.add(this.redrawNeeded.dispatch),
     );
     const spacingTarget3d = base.displayState.spatialSkeletonSpacingTarget3d;
-    if (spacingTarget3d?.changed) {
-      this.registerDisposer(
-        spacingTarget3d.changed.add(this.redrawNeeded.dispatch),
-      );
-    }
+    this.registerDisposer(
+      spacingTarget3d.changed.add(this.redrawNeeded.dispatch),
+    );
     const histogram3d = base.displayState.spatialSkeletonSpacingHistogram3d;
-    if (histogram3d !== undefined) {
-      this.registerDisposer(histogram3d.visibility.add(this.visibility));
-    }
+    this.registerDisposer(histogram3d.visibility.add(this.visibility));
   }
 
   attach(
@@ -3413,27 +3391,23 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
       return;
     }
     const { displayState } = this.base;
-    const spacingTarget =
-      displayState.spatialSkeletonSpacingTarget3d?.value ??
-      this.base.spacingTarget.value;
+    const spacingTarget = displayState.spatialSkeletonSpacingTarget3d.value;
     const visibleChunks = this.base.getVisibleChunksInCurrentView(
       this.transformedSources,
       renderContext.projectionParameters,
       spacingTarget,
     );
     const histogram = displayState.spatialSkeletonSpacingHistogram3d;
-    if (histogram !== undefined) {
-      const frameNumber =
-        this.base.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber;
-      updateSpatialSkeletonSpacingHistogram(
-        histogram,
-        frameNumber,
-        this.transformedSources,
-        renderContext.projectionParameters,
-        this.base.localPosition.value,
-        spacingTarget,
-      );
-    }
+    const frameNumber =
+      this.base.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber;
+    updateSpatialSkeletonSpacingHistogram(
+      histogram,
+      frameNumber,
+      this.transformedSources,
+      renderContext.projectionParameters,
+      this.base.localPosition.value,
+      spacingTarget,
+    );
     const modelMatrix = update3dRenderLayerAttachment(
       displayState.transform.value,
       renderContext.projectionParameters.displayDimensionRenderInfo,
@@ -3497,8 +3471,7 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
     return this.base.isReady(
       this.transformedSources,
       renderContext.projectionParameters,
-      displayState.spatialSkeletonSpacingTarget3d?.value ??
-        this.base.spacingTarget.value,
+      displayState.spatialSkeletonSpacingTarget3d.value,
     );
   }
 }
@@ -3529,15 +3502,11 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
     );
     const { displayState: displayState2d } = base;
     const spacingTarget2d = displayState2d.spatialSkeletonSpacingTarget2d;
-    if (spacingTarget2d?.changed) {
-      this.registerDisposer(
-        spacingTarget2d.changed.add(this.redrawNeeded.dispatch),
-      );
-    }
+    this.registerDisposer(
+      spacingTarget2d.changed.add(this.redrawNeeded.dispatch),
+    );
     const histogram2d = displayState2d.spatialSkeletonSpacingHistogram2d;
-    if (histogram2d !== undefined) {
-      this.registerDisposer(histogram2d.visibility.add(this.visibility));
-    }
+    this.registerDisposer(histogram2d.visibility.add(this.visibility));
   }
 
   get gl() {
@@ -3584,27 +3553,23 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
     >,
   ) {
     const { displayState } = this.base;
-    const spacingTarget =
-      displayState.spatialSkeletonSpacingTarget2d?.value ??
-      this.base.spacingTarget2d.value;
+    const spacingTarget = displayState.spatialSkeletonSpacingTarget2d.value;
     const visibleChunks = this.base.getVisibleChunksInCurrentView(
       this.transformedSources,
       renderContext.sliceView.projectionParameters.value,
       spacingTarget,
     );
     const histogram = displayState.spatialSkeletonSpacingHistogram2d;
-    if (histogram !== undefined) {
-      const frameNumber =
-        this.base.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber;
-      updateSpatialSkeletonSpacingHistogram(
-        histogram,
-        frameNumber,
-        this.transformedSources,
-        renderContext.sliceView.projectionParameters.value,
-        this.base.localPosition.value,
-        spacingTarget,
-      );
-    }
+    const frameNumber =
+      this.base.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber;
+    updateSpatialSkeletonSpacingHistogram(
+      histogram,
+      frameNumber,
+      this.transformedSources,
+      renderContext.sliceView.projectionParameters.value,
+      this.base.localPosition.value,
+      spacingTarget,
+    );
     const modelMatrix = update3dRenderLayerAttachment(
       displayState.transform.value,
       renderContext.projectionParameters.displayDimensionRenderInfo,
@@ -3633,8 +3598,7 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
     return this.base.isReady(
       this.transformedSources,
       renderContext.projectionParameters,
-      displayState.spatialSkeletonSpacingTarget2d?.value ??
-        this.base.spacingTarget2d.value,
+      displayState.spatialSkeletonSpacingTarget2d.value,
     );
   }
 }

@@ -138,11 +138,6 @@ import {
   SpatialSkeletonNodeFilterType,
 } from "#src/skeleton/node_types.js";
 import {
-  buildSpatialSkeletonGridLevels,
-  type SpatialSkeletonGridLevel,
-  type SpatialSkeletonGridSize,
-} from "#src/skeleton/spatial_chunk_sizing.js";
-import {
   editableSpatiallyIndexedSkeletonSourceSupportsAction,
   getEditableSpatiallyIndexedSkeletonSource,
   getSpatiallyIndexedSkeletonSource,
@@ -715,9 +710,6 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   );
   objectAlpha = trackableAlphaValue(1.0);
   hiddenObjectAlpha = trackableAlphaValue(0.5);
-  spatialSkeletonGridLevels = new WatchableValue<SpatialSkeletonGridLevel[]>(
-    [],
-  );
   spatialSkeletonSpacingTarget2d = trackableRenderScaleTarget(8);
   spatialSkeletonSpacingTarget3d = trackableRenderScaleTarget(8);
   spatialSkeletonSpacingHistogram2d = new RenderScaleHistogram();
@@ -744,11 +736,6 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   moveToSegment = (id: bigint) => {
     this.layer.moveToSegment(id);
   };
-
-  setSpatialSkeletonGridSizes(gridSizes: SpatialSkeletonGridSize[]) {
-    const levels = buildSpatialSkeletonGridLevels(gridSizes);
-    this.spatialSkeletonGridLevels.value = levels;
-  }
 
   linkedSegmentationGroup: LinkedLayerGroup;
   linkedSegmentationColorGroup: LinkedLayerGroup;
@@ -1538,7 +1525,6 @@ export class SegmentationUserLayer extends Base {
       this.displayState.linkedSegmentationGroup.root.value === this;
     let updatedGraph: SegmentationGraphSource | undefined;
     let hasVolume = false;
-    let spatialSkeletonGridSizes: SpatialSkeletonGridSize[] | undefined;
     for (const loadedSubsource of subsources) {
       if (this.addStaticAnnotations(loadedSubsource)) continue;
       const { volume, mesh, segmentPropertyMap, segmentationGraph, local } =
@@ -1566,11 +1552,6 @@ export class SegmentationUserLayer extends Base {
           this.displayState.segmentationGroupState.value,
         );
       } else if (mesh !== undefined) {
-        if (mesh instanceof MultiscaleSpatiallyIndexedSkeletonSource) {
-          // Collect grid metadata outside `activate`, since `activate` is a no-op
-          // when guard values are unchanged and may skip the callback.
-          spatialSkeletonGridSizes = mesh.getSpatialSkeletonGridSizes();
-        }
         loadedSubsource.activate(() => {
           const displayState = {
             ...this.displayState,
@@ -1604,8 +1585,6 @@ export class SegmentationUserLayer extends Base {
                 sharedSpatialSkeletonSources,
                 displayState,
                 {
-                  spacingTarget: displayState.spatialSkeletonSpacingTarget3d,
-                  spacingTarget2d: displayState.spatialSkeletonSpacingTarget2d,
                   sources2d: slicePanelSources,
                   selectedNodeId: this.selectedSpatialSkeletonNodeId,
                   pendingNodePositionVersion:
@@ -1640,8 +1619,6 @@ export class SegmentationUserLayer extends Base {
               mesh,
               displayState,
               {
-                spacingTarget: displayState.spatialSkeletonSpacingTarget3d,
-                spacingTarget2d: displayState.spatialSkeletonSpacingTarget2d,
                 selectedNodeId: this.selectedSpatialSkeletonNodeId,
                 pendingNodePositionVersion:
                   this.spatialSkeletonState.pendingNodePositionVersion,
@@ -1751,9 +1728,6 @@ export class SegmentationUserLayer extends Base {
         updatedSegmentPropertyMaps,
       );
     this.displayState.originalSegmentationGroupState.graph.value = updatedGraph;
-    this.displayState.setSpatialSkeletonGridSizes(
-      spatialSkeletonGridSizes ?? [],
-    );
     this.displayState.hasVolume.value = hasVolume;
     this.updateSpatialSkeletonChunkLoadState();
   }

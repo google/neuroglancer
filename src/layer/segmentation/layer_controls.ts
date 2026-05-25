@@ -1,6 +1,5 @@
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import * as json_keys from "#src/layer/segmentation/json_keys.js";
-import { makeCachedDerivedWatchableValue } from "#src/trackable_value.js";
 import type { LayerControlDefinition } from "#src/widget/layer_control.js";
 import { registerLayerControl } from "#src/widget/layer_control.js";
 import { checkboxLayerControl } from "#src/widget/layer_control_checkbox.js";
@@ -71,15 +70,7 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
   {
     label: "Spacing (cross section)",
     toolJson: json_keys.SKELETON_CROSS_SECTION_SPACING_JSON_KEY,
-    isValid: (layer) =>
-      makeCachedDerivedWatchableValue(
-        (levels, hasSpatialSkeletons) =>
-          hasSpatialSkeletons && levels.length > 0,
-        [
-          layer.displayState.spatialSkeletonGridLevels,
-          layer.hasSpatiallyIndexedSkeletonsLayer,
-        ],
-      ),
+    isValid: (layer) => layer.hasSpatiallyIndexedSkeletonsLayer,
     title:
       "Select the node spacing for spatially indexed skeletons in cross-section views",
     ...renderScaleLayerControl((layer) => ({
@@ -90,15 +81,7 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
   {
     label: "Spacing (projection)",
     toolJson: json_keys.SKELETON_PERSPECTIVE_SPACING_JSON_KEY,
-    isValid: (layer) =>
-      makeCachedDerivedWatchableValue(
-        (levels, hasSpatialSkeletons) =>
-          hasSpatialSkeletons && levels.length > 0,
-        [
-          layer.displayState.spatialSkeletonGridLevels,
-          layer.hasSpatiallyIndexedSkeletonsLayer,
-        ],
-      ),
+    isValid: (layer) => layer.hasSpatiallyIndexedSkeletonsLayer,
     title:
       "Select the node spacing for spatially indexed skeletons in projection views",
     ...renderScaleLayerControl((layer) => ({
