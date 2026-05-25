@@ -115,7 +115,7 @@ export function getSpatiallyIndexedSkeletonRenderPriority(
 registerRPC(
   SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_UPDATE_SOURCES_RPC_ID,
   function (x) {
-    const view = this.get(x.view) as RenderedViewBackend;
+    const view: RenderedViewBackend = this.get(x.view);
     const layer = this.get(
       x.layer,
     ) as SpatiallyIndexedSkeletonRenderLayerBackend;
