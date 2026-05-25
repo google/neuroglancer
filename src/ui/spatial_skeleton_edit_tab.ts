@@ -679,53 +679,45 @@ export class SpatialSkeletonEditTab extends Tab {
       updateDisplay();
     };
 
-    const getSelectedNavigationContext = () => {
+    const ensureSkeletonNavigationReady = (segmentId: number) => {
       if (
         !ensureActionsAllowed(SpatialSkeletonActions.inspect, {
           requireVisibleChunks: false,
         })
       ) {
-        return undefined;
-      }
-      const selectedNode = getSelectedNode();
-      if (selectedNode === undefined) {
-        StatusMessage.showTemporaryMessage("No skeleton node is selected.");
-        return undefined;
+        return false;
       }
       try {
-        getSegmentNavigationGraph(selectedNode.segmentId);
-        return { selectedNode, skeletonApi: skeletonNavigationApi };
+        getSegmentNavigationGraph(segmentId);
+        return true;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         StatusMessage.showTemporaryMessage(
           `Unable to resolve the local skeleton graph for navigation: ${message}`,
         );
-        return undefined;
+        return false;
       }
     };
 
-    const getSelectedSegmentForNavigation = () => {
-      if (
-        !ensureActionsAllowed(SpatialSkeletonActions.inspect, {
-          requireVisibleChunks: false,
-        })
-      ) {
+    const getSelectedNavigationContext = () => {
+      const selectedNode = getSelectedNode();
+      if (selectedNode === undefined) {
+        StatusMessage.showTemporaryMessage("No skeleton node is selected.");
         return undefined;
       }
+      if (!ensureSkeletonNavigationReady(selectedNode.segmentId))
+        return undefined;
+      return { selectedNode, skeletonApi: skeletonNavigationApi };
+    };
+
+    const getSelectedSegmentForNavigation = () => {
       const segmentId = getSelectedNode()?.segmentId ?? getSelectedSegmentId();
       if (segmentId === undefined) {
         StatusMessage.showTemporaryMessage("No segment is selected.");
         return undefined;
       }
-      try {
-        getSegmentNavigationGraph(segmentId);
-        return segmentId;
-      } catch (error) {
-        StatusMessage.showTemporaryMessage(
-          `Skeleton ${segmentId} needs to be visible for navigation`,
-        );
-        return undefined;
-      }
+      if (!ensureSkeletonNavigationReady(segmentId)) return undefined;
+      return segmentId;
     };
 
     const updateTrueEndLabel = (
