@@ -726,8 +726,15 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
       makeToolActivationStatusMessageWithHeader(activation);
     header.textContent = "Spatial skeleton edit mode";
     let statusOverride: string | undefined;
+    let cachedNodeSummary:
+      | ReturnType<typeof this.getSelectedSpatialSkeletonNodeSummary>
+      | undefined;
+    const clearCachedNodeSummary = () => {
+      cachedNodeSummary = undefined;
+    };
     const renderStatus = () => {
-      const selectedPoint = this.getSelectedSpatialSkeletonNodeSummary();
+      const selectedPoint =
+        cachedNodeSummary ?? this.getSelectedSpatialSkeletonNodeSummary();
       renderSpatialSkeletonToolStatus(body, {
         message:
           statusOverride ?? getSpatialSkeletonEditBannerMessage(selectedPoint),
@@ -994,6 +1001,7 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
         let totalDeltaX = 0;
         let totalDeltaY = 0;
         let dragStarted = false;
+        cachedNodeSummary = this.getSelectedSpatialSkeletonNodeSummary();
         setStatus(SPATIAL_SKELETON_MOVING_NODE_MESSAGE);
         startRelativeMouseDrag(
           event.detail,
@@ -1038,6 +1046,7 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
             this.dragModelSpacePosition.set(modelPosition);
           },
           (_finishEvent) => {
+            clearCachedNodeSummary();
             setReadyStatus();
             if (!dragStarted) {
               return;
