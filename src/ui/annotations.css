@@ -87,6 +87,12 @@
   visibility: visible;
 }
 
+.neuroglancer-annotation-list-dragging
+  .neuroglancer-annotation-list-entry:hover
+  > .neuroglancer-annotation-list-entry-delete {
+  visibility: hidden;
+}
+
 .neuroglancer-annotation-hover {
   background-color: #333;
 }

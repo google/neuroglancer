@@ -594,6 +594,7 @@ export class AnnotationLayerView extends Tab {
       if (dragState === undefined) return;
       const { sourceId, state, sourceRow, dropRow, dropPlacement } = dragState;
       sourceRow.classList.remove("neuroglancer-annotation-dragging");
+      listElement.classList.remove("neuroglancer-annotation-list-dragging");
       clearDropTarget();
       document.removeEventListener("mousemove", onMouseMove, true);
       document.removeEventListener("mouseup", onMouseUp, true);
@@ -680,6 +681,7 @@ export class AnnotationLayerView extends Tab {
       event.preventDefault();
       event.stopPropagation();
       row.classList.add("neuroglancer-annotation-dragging");
+      listElement.classList.add("neuroglancer-annotation-list-dragging");
       dragState = {
         sourceId,
         state,
