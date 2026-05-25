@@ -679,29 +679,45 @@ export class SpatialSkeletonEditTab extends Tab {
       updateDisplay();
     };
 
-    const getSelectedNavigationContext = () => {
+    const ensureSkeletonNavigationReady = (segmentId: number) => {
       if (
         !ensureActionsAllowed(SpatialSkeletonActions.inspect, {
           requireVisibleChunks: false,
         })
       ) {
-        return undefined;
-      }
-      const selectedNode = getSelectedNode();
-      if (selectedNode === undefined) {
-        StatusMessage.showTemporaryMessage("No skeleton node is selected.");
-        return undefined;
+        return false;
       }
       try {
-        getSegmentNavigationGraph(selectedNode.segmentId);
-        return { selectedNode, skeletonApi: skeletonNavigationApi };
+        getSegmentNavigationGraph(segmentId);
+        return true;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         StatusMessage.showTemporaryMessage(
           `Unable to resolve the local skeleton graph for navigation: ${message}`,
         );
+        return false;
+      }
+    };
+
+    const getSelectedNavigationContext = () => {
+      const selectedNode = getSelectedNode();
+      if (selectedNode === undefined) {
+        StatusMessage.showTemporaryMessage("No skeleton node is selected.");
         return undefined;
       }
+      if (!ensureSkeletonNavigationReady(selectedNode.segmentId))
+        return undefined;
+      return selectedNode;
+    };
+
+    const getSelectedSegmentForNavigation = () => {
+      const segmentId = getSelectedNode()?.segmentId ?? getSelectedSegmentId();
+      if (segmentId === undefined) {
+        StatusMessage.showTemporaryMessage("No segment is selected.");
+        return undefined;
+      }
+      if (!ensureSkeletonNavigationReady(segmentId)) return undefined;
+      return segmentId;
     };
 
     const updateTrueEndLabel = (
@@ -738,12 +754,11 @@ export class SpatialSkeletonEditTab extends Tab {
     };
 
     const goToClosestUnfinishedBranch = () => {
-      const context = getSelectedNavigationContext();
-      if (context === undefined) return;
-      const { selectedNode, skeletonApi } = context;
+      const selectedNode = getSelectedNavigationContext();
+      if (selectedNode === undefined) return;
       void (async () => {
         try {
-          const openLeaves = await skeletonApi.getOpenLeaves(
+          const openLeaves = await skeletonNavigationApi.getOpenLeaves(
             selectedNode.segmentId,
             selectedNode.nodeId,
           );
@@ -834,13 +849,12 @@ export class SpatialSkeletonEditTab extends Tab {
       svg_origin,
       "Go to root",
       () => {
-        const context = getSelectedNavigationContext();
-        if (context === undefined) return;
-        const { selectedNode, skeletonApi } = context;
+        const segmentId = getSelectedSegmentForNavigation();
+        if (segmentId === undefined) return;
         void (async () => {
           try {
             navigateToNodeTarget(
-              await skeletonApi.getSkeletonRootNode(selectedNode.segmentId),
+              await skeletonNavigationApi.getSkeletonRootNode(segmentId),
             );
           } catch (error) {
             const message =
@@ -857,13 +871,12 @@ export class SpatialSkeletonEditTab extends Tab {
       svg_chevrons_left,
       "Go to start of the branch",
       () => {
-        const context = getSelectedNavigationContext();
-        if (context === undefined) return;
-        const { selectedNode, skeletonApi } = context;
+        const selectedNode = getSelectedNavigationContext();
+        if (selectedNode === undefined) return;
         void (async () => {
           try {
             navigateToNodeTarget(
-              await skeletonApi.getBranchStart(selectedNode.nodeId),
+              await skeletonNavigationApi.getBranchStart(selectedNode.nodeId),
             );
           } catch (error) {
             const message =
@@ -880,13 +893,12 @@ export class SpatialSkeletonEditTab extends Tab {
       svg_chevrons_right,
       "Go to end of the branch",
       () => {
-        const context = getSelectedNavigationContext();
-        if (context === undefined) return;
-        const { selectedNode, skeletonApi } = context;
+        const selectedNode = getSelectedNavigationContext();
+        if (selectedNode === undefined) return;
         void (async () => {
           try {
             navigateToNodeTarget(
-              await skeletonApi.getBranchEnd(selectedNode.nodeId),
+              await skeletonNavigationApi.getBranchEnd(selectedNode.nodeId),
             );
           } catch (error) {
             const message =
@@ -903,13 +915,14 @@ export class SpatialSkeletonEditTab extends Tab {
       svg_retweet,
       "Cycle through level nodes",
       () => {
-        const context = getSelectedNavigationContext();
-        if (context === undefined) return;
-        const { selectedNode, skeletonApi } = context;
+        const selectedNode = getSelectedNavigationContext();
+        if (selectedNode === undefined) return;
         void (async () => {
           try {
             navigateToNodeTarget(
-              await skeletonApi.getNextCollapsedLevelNode(selectedNode.nodeId),
+              await skeletonNavigationApi.getNextCollapsedLevelNode(
+                selectedNode.nodeId,
+              ),
             );
           } catch (error) {
             const message =
@@ -926,12 +939,13 @@ export class SpatialSkeletonEditTab extends Tab {
       svg_arrow_left,
       "Go to parent",
       () => {
-        const context = getSelectedNavigationContext();
-        if (context === undefined) return;
-        const { selectedNode, skeletonApi } = context;
+        const selectedNode = getSelectedNavigationContext();
+        if (selectedNode === undefined) return;
         void (async () => {
           try {
-            const target = await skeletonApi.getParentNode(selectedNode.nodeId);
+            const target = await skeletonNavigationApi.getParentNode(
+              selectedNode.nodeId,
+            );
             if (target === undefined) {
               StatusMessage.showTemporaryMessage(
                 "Selected node has no parent.",
@@ -954,12 +968,13 @@ export class SpatialSkeletonEditTab extends Tab {
       svg_arrow_right,
       "Go to child",
       () => {
-        const context = getSelectedNavigationContext();
-        if (context === undefined) return;
-        const { selectedNode, skeletonApi } = context;
+        const selectedNode = getSelectedNavigationContext();
+        if (selectedNode === undefined) return;
         void (async () => {
           try {
-            const target = await skeletonApi.getChildNode(selectedNode.nodeId);
+            const target = await skeletonNavigationApi.getChildNode(
+              selectedNode.nodeId,
+            );
             if (target === undefined) {
               StatusMessage.showTemporaryMessage("Selected node has no child.");
               return;
