@@ -73,7 +73,10 @@ function evalPoly6(
   x: number,
   c: [number, number, number, number, number, number, number],
 ): number {
-  return clamp01(c[0] + x * (c[1] + x * (c[2] + x * (c[3] + x * (c[4] + x * (c[5] + x * c[6]))))));
+  return clamp01(
+    c[0] +
+      x * (c[1] + x * (c[2] + x * (c[3] + x * (c[4] + x * (c[5] + x * c[6]))))),
+  );
 }
 
 const VIRIDIS_R: [number, number, number, number, number, number, number] = [
@@ -91,16 +94,16 @@ const VIRIDIS_B: [number, number, number, number, number, number, number] = [
 ];
 
 const PLASMA_R: [number, number, number, number, number, number, number] = [
-  0.05873234392399702, 2.176514634195958, -2.689460476458034,
-  6.130348345893603, -11.10743619062271, 10.02306557647065, -3.658713842777788,
+  0.05873234392399702, 2.176514634195958, -2.689460476458034, 6.130348345893603,
+  -11.10743619062271, 10.02306557647065, -3.658713842777788,
 ];
 const PLASMA_G: [number, number, number, number, number, number, number] = [
-  0.02333670892565664, 0.2383834171260182, -7.455851135738909,
-  42.3461881477227, -82.66631109428045, 71.41361770095349, -22.93153465461149,
+  0.02333670892565664, 0.2383834171260182, -7.455851135738909, 42.3461881477227,
+  -82.66631109428045, 71.41361770095349, -22.93153465461149,
 ];
 const PLASMA_B: [number, number, number, number, number, number, number] = [
-  0.5433401826748754, 0.7539604599784036, 3.110799939717086,
-  -28.51885465332158, 60.13984767418263, -54.07218655740221, 18.19190778539828,
+  0.5433401826748754, 0.7539604599784036, 3.110799939717086, -28.51885465332158,
+  60.13984767418263, -54.07218655740221, 18.19190778539828,
 ];
 
 const INFERNO_R: [number, number, number, number, number, number, number] = [
@@ -112,8 +115,8 @@ const INFERNO_G: [number, number, number, number, number, number, number] = [
   17.43639888205313, -33.40235894210092, 32.62606426397723, -12.24266895238567,
 ];
 const INFERNO_B: [number, number, number, number, number, number, number] = [
-  -0.01948089843709184, 3.932712388889277, -15.9423941062914,
-  44.35414519872813, -81.80730925738993, 73.20951985803202, -23.07032500287172,
+  -0.01948089843709184, 3.932712388889277, -15.9423941062914, 44.35414519872813,
+  -81.80730925738993, 73.20951985803202, -23.07032500287172,
 ];
 
 const MAGMA_R: [number, number, number, number, number, number, number] = [
@@ -141,9 +144,13 @@ function evalColormapJs(
 
 function colormapJetJs(x: number): [number, number, number] {
   x = clamp01(x);
-  const r = clamp01(x < 0.89 ? (x - 0.35) / 0.31 : 1.0 - ((x - 0.89) / 0.11) * 0.5);
+  const r = clamp01(
+    x < 0.89 ? (x - 0.35) / 0.31 : 1.0 - ((x - 0.89) / 0.11) * 0.5,
+  );
   const g = clamp01(x < 0.64 ? (x - 0.125) * 4.0 : 1.0 - (x - 0.64) / 0.27);
-  const b = clamp01(x < 0.34 ? 0.5 + (x * 0.5) / 0.11 : 1.0 - (x - 0.34) / 0.31);
+  const b = clamp01(
+    x < 0.34 ? 0.5 + (x * 0.5) / 0.11 : 1.0 - (x - 0.34) / 0.31,
+  );
   return [r, g, b];
 }
 
@@ -163,7 +170,7 @@ function colormapCoolwarmJs(x: number): [number, number, number] {
   x = clamp01(x);
   const blue: [number, number, number] = [0.229, 0.298, 0.754];
   const white: [number, number, number] = [0.865, 0.865, 0.865];
-  const red: [number, number, number] = [0.706, 0.016, 0.150];
+  const red: [number, number, number] = [0.706, 0.016, 0.15];
   const [a, b] = x < 0.5 ? [blue, white] : [white, red];
   const t = x < 0.5 ? x * 2.0 : (x - 0.5) * 2.0;
   return [

@@ -28,7 +28,9 @@ export function colormapLayerControl<LayerType extends UserLayer>(
   return {
     makeControl: (layer, context) => {
       const { watchableValue } = getter(layer);
-      const control = context.registerDisposer(new ColormapWidget(watchableValue));
+      const control = context.registerDisposer(
+        new ColormapWidget(watchableValue),
+      );
       return { control, controlElement: control.element };
     },
     activateTool: () => {
