@@ -57,6 +57,12 @@ import {
 } from "#src/util/lerp.js";
 import { NullarySignal } from "#src/util/signal.js";
 import type { Trackable } from "#src/util/trackable.js";
+import type { ColormapName } from "#src/webgl/colormaps.js";
+import {
+  COLORMAP_NAMES,
+  colormapGlslFunctionName,
+  glsl_COLORMAPS,
+} from "#src/webgl/colormaps.js";
 import type { GL } from "#src/webgl/context.js";
 import type { HistogramChannelSpecification } from "#src/webgl/empirical_cdf.js";
 import { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
@@ -65,12 +71,6 @@ import {
   enableLerpShaderFunction,
 } from "#src/webgl/lerp.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
-import {
-  COLORMAP_NAMES,
-  colormapGlslFunctionName,
-  glsl_COLORMAPS,
-} from "#src/webgl/colormaps.js";
-import type { ColormapName } from "#src/webgl/colormaps.js";
 import type { TransferFunctionParameters } from "#src/widget/transfer_function.js";
 import {
   defineTransferFunctionShader,
