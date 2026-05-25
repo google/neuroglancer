@@ -994,6 +994,7 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
         let totalDeltaX = 0;
         let totalDeltaY = 0;
         let dragStarted = false;
+        setStatus(SPATIAL_SKELETON_MOVING_NODE_MESSAGE);
         startRelativeMouseDrag(
           event.detail,
           (_event, deltaX, deltaY) => {
@@ -1008,7 +1009,6 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
               )
                 return;
               dragStarted = true;
-              setStatus(SPATIAL_SKELETON_MOVING_NODE_MESSAGE);
             }
             dragPanel.translateDataPointByViewportPixels(
               this.dragGlobalPosition,
