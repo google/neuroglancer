@@ -16,6 +16,7 @@ import zipfile
 import ngff_zarr as nz
 import numpy as np
 import tensorstore as ts
+from ngff_zarr.v04.zarr_metadata import Omero, OmeroChannel, OmeroWindow
 
 THIS_DIR = os.path.abspath(os.path.dirname(__file__))
 
@@ -34,6 +35,20 @@ def write_data(path: str, version: str):
 
     multiscales = nz.to_multiscales(
         image, scale_factors=[{"x": 2, "y": 2}, {"x": 4, "y": 4}]
+    )
+    multiscales.metadata.omero = Omero(
+        channels=[
+            OmeroChannel(
+                label="channelA",
+                color="0000FF",
+                window=OmeroWindow(min=0, max=65535, start=0, end=1000),
+            ),
+            OmeroChannel(
+                label="channelB",
+                color="00FF00",
+                window=OmeroWindow(min=0, max=65535, start=100, end=5000),
+            ),
+        ]
     )
 
     full_path = os.path.join(THIS_DIR, path)

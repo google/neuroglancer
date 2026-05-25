@@ -1,4 +1,28 @@
 {
+  "omero": {
+    "channels": [
+      {
+        "color": "0000FF",
+        "window": {
+          "min": 0,
+          "max": 65535,
+          "start": 0,
+          "end": 1000
+        },
+        "label": "channelA"
+      },
+      {
+        "color": "00FF00",
+        "window": {
+          "min": 0,
+          "max": 65535,
+          "start": 100,
+          "end": 5000
+        },
+        "label": "channelB"
+      }
+    ]
+  },
   "multiscales": [
     {
       "axes": [
@@ -45,8 +69,8 @@
             },
             {
               "translation": [
-                2,
-                15
+                2.0,
+                15.0
               ],
               "type": "translation"
             }
@@ -64,8 +88,8 @@
             },
             {
               "translation": [
-                6,
-                45
+                6.0,
+                45.0
               ],
               "type": "translation"
             }
@@ -74,6 +98,12 @@
       ],
       "name": "image",
       "version": "0.4",
+      "type": "itkwasm_gaussian",
+      "metadata": {
+        "description": "Smoothed with a discrete gaussian filter to generate a scale space, ideal for intensity images. ITK-Wasm implementation is extremely portable and SIMD accelerated.",
+        "method": "itkwasm_downsample.downsample",
+        "version": "1.8.1"
+      },
       "@type": "ngff:Image"
     }
   ]

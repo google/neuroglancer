@@ -41,7 +41,7 @@ export function getDatasourceSnapshot(datasource: DataSource) {
       datasource.modelTransform,
     ),
     canonicalUrl: redactUrl(datasource.canonicalUrl),
-    ...getKeys(datasource, ["canChangeModelSpaceRank"]),
+    ...getKeys(datasource, ["canChangeModelSpaceRank", "channelMetadata"]),
   };
 }
 
