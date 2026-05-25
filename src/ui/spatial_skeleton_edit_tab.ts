@@ -725,10 +725,13 @@ export class SpatialSkeletonEditTab extends Tab {
         return undefined;
       }
 
-      // No node selected
       if (selectedNode === undefined) {
-        StatusMessage.showTemporaryMessage(NO_NODE_SELECTED_MESSAGE);
-        return requireNode ? undefined : { segmentId: selectedSegmentId };
+        // No node selected, but node required
+        if (requireNode) {
+          StatusMessage.showTemporaryMessage(NO_NODE_SELECTED_MESSAGE);
+          return undefined;
+        }
+        return { segmentId: selectedSegmentId };
       }
 
       return selectedNode;
