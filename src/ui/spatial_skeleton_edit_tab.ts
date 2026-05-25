@@ -689,7 +689,13 @@ export class SpatialSkeletonEditTab extends Tab {
       }
     };
 
-    const getSelectedNavigationContext = (requireNode: boolean = true) => {
+    function getSelectedNavigationContext(
+      requireNode: false,
+    ): { segmentId: number } | undefined;
+    function getSelectedNavigationContext(
+      requireNode?: true,
+    ): SpatiallyIndexedSkeletonNode | undefined;
+    function getSelectedNavigationContext(requireNode: boolean = true) {
       // Inspect actions NA, message handled in ensureActionsAllowed
       if (
         !ensureActionsAllowed(SpatialSkeletonActions.inspect, {
@@ -719,14 +725,14 @@ export class SpatialSkeletonEditTab extends Tab {
         return undefined;
       }
 
-      // No node selected, action requires node
-      if (selectedNode === undefined && requireNode) {
+      // No node selected
+      if (selectedNode === undefined) {
         StatusMessage.showTemporaryMessage(NO_NODE_SELECTED_MESSAGE);
-        return { segmentId: selectedSegmentId, nodeId: undefined };
+        return requireNode ? undefined : { segmentId: selectedSegmentId };
       }
 
       return selectedNode;
-    };
+    }
 
     const updateTrueEndLabel = (
       node: SpatiallyIndexedSkeletonNode,
@@ -768,7 +774,7 @@ export class SpatialSkeletonEditTab extends Tab {
         try {
           const openLeaves = await skeletonNavigationApi.getOpenLeaves(
             selectedNode.segmentId,
-            selectedNode.nodeId!,
+            selectedNode.nodeId,
           );
           if (openLeaves.length === 0) {
             StatusMessage.showTemporaryMessage(
@@ -886,7 +892,7 @@ export class SpatialSkeletonEditTab extends Tab {
         void (async () => {
           try {
             navigateToNodeTarget(
-              await skeletonNavigationApi.getBranchStart(selectedNode.nodeId!),
+              await skeletonNavigationApi.getBranchStart(selectedNode.nodeId),
             );
           } catch (error) {
             const message =
@@ -908,7 +914,7 @@ export class SpatialSkeletonEditTab extends Tab {
         void (async () => {
           try {
             navigateToNodeTarget(
-              await skeletonNavigationApi.getBranchEnd(selectedNode.nodeId!),
+              await skeletonNavigationApi.getBranchEnd(selectedNode.nodeId),
             );
           } catch (error) {
             const message =
@@ -931,7 +937,7 @@ export class SpatialSkeletonEditTab extends Tab {
           try {
             navigateToNodeTarget(
               await skeletonNavigationApi.getNextCollapsedLevelNode(
-                selectedNode.nodeId!,
+                selectedNode.nodeId,
               ),
             );
           } catch (error) {
@@ -954,7 +960,7 @@ export class SpatialSkeletonEditTab extends Tab {
         void (async () => {
           try {
             const target = await skeletonNavigationApi.getParentNode(
-              selectedNode.nodeId!,
+              selectedNode.nodeId,
             );
             if (target === undefined) {
               StatusMessage.showTemporaryMessage(
@@ -983,7 +989,7 @@ export class SpatialSkeletonEditTab extends Tab {
         void (async () => {
           try {
             const target = await skeletonNavigationApi.getChildNode(
-              selectedNode.nodeId!,
+              selectedNode.nodeId,
             );
             if (target === undefined) {
               StatusMessage.showTemporaryMessage("Selected node has no child.");
