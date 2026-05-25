@@ -1,15 +1,11 @@
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import * as json_keys from "#src/layer/segmentation/json_keys.js";
-import { makeCachedDerivedWatchableValue } from "#src/trackable_value.js";
 import type { LayerControlDefinition } from "#src/widget/layer_control.js";
 import { registerLayerControl } from "#src/widget/layer_control.js";
 import { checkboxLayerControl } from "#src/widget/layer_control_checkbox.js";
 import { enumLayerControl } from "#src/widget/layer_control_enum.js";
 import { rangeLayerControl } from "#src/widget/layer_control_range.js";
-import {
-  renderScaleLayerControl,
-  SpatialSkeletonGridRenderScaleWidget,
-} from "#src/widget/render_scale_widget.js";
+import { renderScaleLayerControl } from "#src/widget/render_scale_widget.js";
 import {
   colorSeedLayerControl,
   fixedColorLayerControl,
@@ -72,48 +68,26 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
     })),
   },
   {
-    label: "Resolution (skeleton grid 2D)",
-    toolJson: json_keys.SKELETON_CROSS_SECTION_RENDER_SCALE_JSON_KEY,
-    isValid: (layer) =>
-      makeCachedDerivedWatchableValue(
-        (levels, hasSpatialSkeletons) =>
-          hasSpatialSkeletons && levels.length > 0,
-        [
-          layer.displayState.spatialSkeletonGridLevels,
-          layer.hasSpatiallyIndexedSkeletonsLayer,
-        ],
-      ),
+    label: "Spacing (cross section)",
+    toolJson: json_keys.SKELETON_CROSS_SECTION_SPACING_JSON_KEY,
+    isValid: (layer) => layer.hasSpatiallyIndexedSkeletonsLayer,
     title:
-      "Select the grid size level for spatially indexed skeletons in 2D views",
-    ...renderScaleLayerControl(
-      (layer) => ({
-        histogram: layer.displayState.spatialSkeletonGridRenderScaleHistogram2d,
-        target: layer.displayState.spatialSkeletonGridResolutionTarget2d,
-      }),
-      SpatialSkeletonGridRenderScaleWidget,
-    ),
+      "Select the node spacing for spatially indexed skeletons in cross-section views",
+    ...renderScaleLayerControl((layer) => ({
+      histogram: layer.displayState.spatialSkeletonSpacingHistogram2d,
+      target: layer.displayState.spatialSkeletonSpacingTarget2d,
+    })),
   },
   {
-    label: "Resolution (skeleton grid 3D)",
-    toolJson: json_keys.SKELETON_PERSPECTIVE_RENDER_SCALE_JSON_KEY,
-    isValid: (layer) =>
-      makeCachedDerivedWatchableValue(
-        (levels, hasSpatialSkeletons) =>
-          hasSpatialSkeletons && levels.length > 0,
-        [
-          layer.displayState.spatialSkeletonGridLevels,
-          layer.hasSpatiallyIndexedSkeletonsLayer,
-        ],
-      ),
+    label: "Spacing (projection)",
+    toolJson: json_keys.SKELETON_PERSPECTIVE_SPACING_JSON_KEY,
+    isValid: (layer) => layer.hasSpatiallyIndexedSkeletonsLayer,
     title:
-      "Select the grid size level for spatially indexed skeletons in 3D views",
-    ...renderScaleLayerControl(
-      (layer) => ({
-        histogram: layer.displayState.spatialSkeletonGridRenderScaleHistogram3d,
-        target: layer.displayState.spatialSkeletonGridResolutionTarget3d,
-      }),
-      SpatialSkeletonGridRenderScaleWidget,
-    ),
+      "Select the node spacing for spatially indexed skeletons in projection views",
+    ...renderScaleLayerControl((layer) => ({
+      histogram: layer.displayState.spatialSkeletonSpacingHistogram3d,
+      target: layer.displayState.spatialSkeletonSpacingTarget3d,
+    })),
   },
   {
     label: "Opacity (3d)",

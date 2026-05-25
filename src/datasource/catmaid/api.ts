@@ -28,7 +28,11 @@ import type {
 } from "#src/skeleton/api.js";
 import { SpatialSkeletonEditConflictError } from "#src/skeleton/edit_errors.js";
 import type { SpatiallyIndexedSkeletonNavigationTarget } from "#src/skeleton/navigation_graph.js";
-import { getDefaultSpatiallyIndexedSkeletonChunkSize } from "#src/skeleton/spatial_chunk_sizing.js";
+import { validateSpatialSkeletonLimitZeroOnlyFinest } from "#src/skeleton/source_selection.js";
+import {
+  getDefaultSpatiallyIndexedSkeletonChunkSize,
+  sortSpatialSkeletonGridSizes,
+} from "#src/skeleton/spatial_chunk_sizing.js";
 import { HttpError } from "#src/util/http_request.js";
 
 interface CatmaidStackInfo {
@@ -567,6 +571,20 @@ function getDefaultCatmaidSpatialIndexLevel(
     gridShape: getCatmaidSpatialSkeletonGridShape(chunkSize, extents),
     limit: 0,
   };
+}
+
+function validateCatmaidSpatialSkeletonLimitZeroOnlyFinest(
+  levels: readonly SpatialSkeletonSpatialIndexLevel[],
+) {
+  const sortedLevels = sortSpatialSkeletonGridSizes(
+    levels.map((level) => ({
+      x: level.chunkSize[0],
+      y: level.chunkSize[1],
+      z: level.chunkSize[2],
+      limit: level.limit,
+    })),
+  );
+  validateSpatialSkeletonLimitZeroOnlyFinest(sortedLevels);
 }
 
 export function requireCatmaidRank3Vector(
@@ -1303,7 +1321,7 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     if (spatial.length === 0) {
       return [getDefaultCatmaidSpatialIndexLevel(bounds, extents)];
     }
-    return spatial.map((level, index) => {
+    const levels = spatial.map((level, index) => {
       const chunkSize = requireCatmaidPositiveRank3Vector(
         level?.chunk_size,
         `spatial skeleton metadata spatial[${index}].chunk_size`,
@@ -1318,6 +1336,8 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
         limit,
       };
     });
+    validateCatmaidSpatialSkeletonLimitZeroOnlyFinest(levels);
+    return levels;
   }
 
   private getSpatialIndexLevelsFromMetadataInfo(

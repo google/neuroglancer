@@ -306,13 +306,13 @@ describe("SpatiallyIndexedSkeletonLayer targeted source invalidation", () => {
         new Float32Array([100, 200, 300]),
         new Float32Array([100, 100, 100]),
       ),
-    ).toBe("1,2,3:");
+    ).toBe("1,2,3");
     expect(
       getSpatialSkeletonCellKeyPrefix(
         new Float32Array([99.999, 199.999, 299.999]),
         new Float32Array([100, 100, 100]),
       ),
-    ).toBe("0,1,2:");
+    ).toBe("0,1,2");
   });
 
   it("dedupes cell prefixes per unique source entry", () => {
@@ -349,13 +349,11 @@ describe("SpatiallyIndexedSkeletonLayer targeted source invalidation", () => {
 
     expect(invalidated).toBe(true);
     expect(invalidateCacheKeyPrefixes).toHaveBeenCalledTimes(1);
-    expect([...invalidateCacheKeyPrefixes.mock.calls[0][0]]).toEqual([
-      "1,2,3:",
-    ]);
+    expect([...invalidateCacheKeyPrefixes.mock.calls[0][0]]).toEqual(["1,2,3"]);
     expect(source2d.invalidateCacheKeyPrefixes).toHaveBeenCalledTimes(1);
     expect([...source2d.invalidateCacheKeyPrefixes.mock.calls[0][0]]).toEqual([
-      "2,4,6:",
-      "3,4,6:",
+      "2,4,6",
+      "3,4,6",
     ]);
     expect(redrawNeeded.dispatch).toHaveBeenCalledTimes(1);
   });

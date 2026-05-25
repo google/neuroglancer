@@ -44,7 +44,9 @@ entry for each spatial index level:
    }
 
 ``chunk_size`` is specified in CATMAID project-space nanometers. ``limit`` is
-the maximum node count expected for that spatial level and is required.
+the maximum node count expected for that spatial level and is required. A
+``limit`` of ``0`` is allowed only on the finest spatial level and means that
+level is complete/unlimited.
 ``cache_provider`` is optional and, when present, is passed to CATMAID node-list
 requests. If ``read_only`` is not set to ``false``, Neuroglancer treats the
 source as read-only: skeletons can be inspected, but edit actions are disabled.
@@ -73,8 +75,8 @@ In the **Render** tab you can adjust:
 When you make a skeleton visible, a full fetch is triggered and you are guaranteed
 to see all nodes and details of that skeleton. Otherwise you see whatever is
 provided by the spatial index level selected for the current view. The selected
-grid size is controlled via the **Resolution (skeleton grid 2D)** and
-**Resolution (skeleton grid 3D)** settings.
+level is controlled via the **Spacing (cross section)** and
+**Spacing (projection)** settings.
 
 The **Seg** tab works as normal for a segmentation layer, allowing you to set the
 visibility of segments/skeletons by their ID or by label if one has been assigned.

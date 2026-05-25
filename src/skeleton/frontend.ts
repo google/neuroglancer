@@ -69,11 +69,14 @@ import type {
   SpatiallyIndexedSkeletonNode,
   SpatialSkeletonSourceState,
 } from "#src/skeleton/api.js";
-import type { VertexAttributeInfo } from "#src/skeleton/base.js";
 import {
+  forEachSpatialSkeletonSourceScale,
+  forEachVisibleSpatialSkeletonChunk,
   SKELETON_LAYER_RPC_ID,
+  type SpatiallyIndexedSkeletonChunkSpecification,
   SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_RPC_ID,
   SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_UPDATE_SOURCES_RPC_ID,
+  type VertexAttributeInfo,
 } from "#src/skeleton/base.js";
 import {
   buildSpatiallyIndexedSkeletonOverlayGeometry,
@@ -84,15 +87,8 @@ import {
   mergeSpatiallyIndexedSkeletonOverlaySegmentIds,
   retainSpatiallyIndexedSkeletonOverlaySegment,
 } from "#src/skeleton/segment_overlay.js";
+import type { SpatiallyIndexedSkeletonView } from "#src/skeleton/source_selection.js";
 import {
-  getSpatiallyIndexedSkeletonGridIndex,
-  getSpatiallyIndexedSkeletonSourceView,
-  selectSpatiallyIndexedSkeletonEntriesForView,
-  type SpatiallyIndexedSkeletonView,
-} from "#src/skeleton/source_selection.js";
-import {
-  forEachVisibleVolumetricChunk,
-  type SliceViewChunkSpecification,
   type SliceViewSourceOptions,
   type TransformedSource,
 } from "#src/sliceview/base.js";
@@ -1696,11 +1692,6 @@ export class SpatiallyIndexedSkeletonChunk
   }
 }
 
-export interface SpatiallyIndexedSkeletonChunkSpecification
-  extends SliceViewChunkSpecification {
-  chunkLayout: ChunkLayout;
-}
-
 type SpatiallyIndexedSkeletonChunkListener = (
   key: string,
   chunk: SpatiallyIndexedSkeletonChunk,
@@ -1784,7 +1775,7 @@ export function getSpatialSkeletonCellKeyPrefix(
     }
     cell[i] = Math.floor(coordinate / chunkSize);
   }
-  return `${cell[0]},${cell[1]},${cell[2]}:`;
+  return `${cell[0]},${cell[1]},${cell[2]}`;
 }
 
 export abstract class MultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleSliceViewChunkSource<SpatiallyIndexedSkeletonSource> {
@@ -1803,23 +1794,12 @@ export abstract class MultiscaleSpatiallyIndexedSkeletonSource extends Multiscal
   getSliceViewPanelSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] {
     return this.getPerspectiveSources();
   }
-
-  getSpatialSkeletonGridSizes():
-    | { x: number; y: number; z: number }[]
-    | undefined {
-    return undefined;
-  }
 }
 
 type SpatiallyIndexedSkeletonSourceEntry =
   SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>;
 
-// TODO (SKM): is all of this really optional?
 interface SpatiallyIndexedSkeletonLayerOptions {
-  gridLevel?: WatchableValueInterface<number>;
-  lod?: WatchableValueInterface<number>;
-  gridLevel2d?: WatchableValueInterface<number>;
-  lod2d?: WatchableValueInterface<number>;
   sources2d?: SpatiallyIndexedSkeletonSourceEntry[];
   selectedNodeId?: WatchableValueInterface<number | undefined>;
   pendingNodePositionVersion?: WatchableValueInterface<number>;
@@ -1954,21 +1934,6 @@ class SkeletonOverlayChunk implements SkeletonGPUGeometry {
   }
 }
 
-function getSpatialSkeletonGridSpacing(
-  transformedSource: TransformedSource,
-  levels:
-    | Array<{ size: { x: number; y: number; z: number }; lod: number }>
-    | undefined,
-  gridIndex: number,
-) {
-  const levelSize = levels?.[gridIndex]?.size;
-  if (levelSize !== undefined) {
-    return Math.max(Math.min(levelSize.x, levelSize.y, levelSize.z), 1e-6);
-  }
-  const chunkSize = transformedSource.chunkLayout.size;
-  return Math.max(Math.min(chunkSize[0], chunkSize[1], chunkSize[2]), 1e-6);
-}
-
 // Tracks chunk keys already counted for a given histogram within a single frame,
 // preventing the same chunk from being counted multiple times when it falls within
 // the visible frustum of more than one slice panel in the same frame.
@@ -1977,24 +1942,18 @@ const seenChunkKeysPerFrame = new WeakMap<
   { frameNumber: number; keys: Set<string> }
 >();
 
-function updateSpatialSkeletonGridRenderScaleHistogram(
+const SPATIAL_SKELETON_RESOLUTION_INDICATOR_BAR_HEIGHT = 10;
+
+function updateSpatialSkeletonSpacingHistogram(
   histogram: RenderScaleHistogram,
   frameNumber: number,
   transformedSources: readonly TransformedSource[][],
-  projectionParameters: any,
+  projectionParameters: ProjectionParameters,
   localPosition: Float32Array,
-  lod: number | undefined,
-  levels:
-    | Array<{ size: { x: number; y: number; z: number }; lod: number }>
-    | undefined,
+  spacingTarget: number,
 ) {
   histogram.begin(frameNumber);
-  if (lod === undefined || transformedSources.length === 0) {
-    return;
-  }
-  const lodSuffix = `:${lod}`;
-  const scales = transformedSources[0] ?? [];
-  if (scales.length === 0) {
+  if (transformedSources.length === 0) {
     return;
   }
   let seen = seenChunkKeysPerFrame.get(histogram);
@@ -2003,54 +1962,55 @@ function updateSpatialSkeletonGridRenderScaleHistogram(
     seenChunkKeysPerFrame.set(histogram, seen);
   }
   const seenKeys = seen.keys;
-  for (const tsource of scales) {
-    const gridIndex = getSpatiallyIndexedSkeletonGridIndex(tsource.source);
-    if (gridIndex === undefined) {
-      continue;
-    }
-    const source = tsource.source as SpatiallyIndexedSkeletonSource;
-    let presentCount = 0;
-    let missingCount = 0;
-    forEachVisibleVolumetricChunk(
+  for (const scales of transformedSources) {
+    forEachSpatialSkeletonSourceScale(
+      projectionParameters,
+      spacingTarget,
+      scales,
+      (tsource, _, physicalSpacing, pixelSpacing, selected) => {
+        if (selected) return;
+        const source = tsource.source as SpatiallyIndexedSkeletonSource;
+        const indicatorKey = `indicator:${getObjectId(source)}`;
+        if (seenKeys.has(indicatorKey)) return;
+        seenKeys.add(indicatorKey);
+        histogram.add(
+          physicalSpacing,
+          pixelSpacing,
+          0,
+          SPATIAL_SKELETON_RESOLUTION_INDICATOR_BAR_HEIGHT,
+          true,
+        );
+      },
+    );
+    forEachVisibleSpatialSkeletonChunk(
       projectionParameters,
       localPosition,
-      tsource,
-      (positionInChunks) => {
-        const chunkKey = `${positionInChunks.join()}${lodSuffix}`;
-        const seenKey = `${gridIndex}:${chunkKey}`;
+      spacingTarget,
+      scales,
+      () => {},
+      (tsource, _, physicalSpacing, pixelSpacing) => {
+        const source = tsource.source as SpatiallyIndexedSkeletonSource;
+        const chunkKey = tsource.curPositionInChunks.join();
+        const seenKey = `${getObjectId(source)}:${chunkKey}`;
         if (seenKeys.has(seenKey)) return;
         seenKeys.add(seenKey);
         const chunk = source.chunks.get(chunkKey);
         if (chunk?.state === ChunkState.GPU_MEMORY) {
-          presentCount++;
+          histogram.add(physicalSpacing, pixelSpacing, 1, 0);
         } else {
-          missingCount++;
+          histogram.add(physicalSpacing, pixelSpacing, 0, 1);
         }
       },
     );
-    const spacing = getSpatialSkeletonGridSpacing(tsource, levels, gridIndex);
-    const total = presentCount + missingCount;
-    if (total > 0) {
-      histogram.add(spacing, spacing, presentCount, missingCount);
-    } else if (!histogram.spatialScales.has(spacing)) {
-      // Keep the row visible in the histogram when no chunks are in view,
-      // but only if no earlier panel already populated it this frame.
-      histogram.add(spacing, spacing, 0, 1, true);
-    }
   }
 }
 
 export interface SpatiallyIndexedSkeletonLayerDisplayState
   extends SkeletonLayerDisplayState {
-  spatialSkeletonGridLevel2d?: WatchableValueInterface<number>;
-  spatialSkeletonGridLevel3d?: WatchableValueInterface<number>;
-  skeletonLod?: WatchableValueInterface<number>;
-  spatialSkeletonLod2d?: WatchableValueInterface<number>;
-  spatialSkeletonGridLevels?: WatchableValueInterface<
-    Array<{ size: { x: number; y: number; z: number }; lod: number }>
-  >;
-  spatialSkeletonGridRenderScaleHistogram2d?: RenderScaleHistogram;
-  spatialSkeletonGridRenderScaleHistogram3d?: RenderScaleHistogram;
+  spatialSkeletonSpacingTarget2d: WatchableValueInterface<number>;
+  spatialSkeletonSpacingTarget3d: WatchableValueInterface<number>;
+  spatialSkeletonSpacingHistogram2d: RenderScaleHistogram;
+  spatialSkeletonSpacingHistogram3d: RenderScaleHistogram;
 }
 
 export function resolveSpatiallyIndexedSkeletonSegmentPick(
@@ -2116,10 +2076,6 @@ export class SpatiallyIndexedSkeletonLayer
         computeTextureFormat(new TextureFormat(), dataType, numComponents),
     ));
   }
-  gridLevel: WatchableValueInterface<number>;
-  lod: WatchableValueInterface<number>;
-  gridLevel2d: WatchableValueInterface<number>;
-  lod2d: WatchableValueInterface<number>;
   private selectedNodeId:
     | WatchableValueInterface<number | undefined>
     | undefined;
@@ -2478,16 +2434,6 @@ export class SpatiallyIndexedSkeletonLayer
         this.displayState.transform,
       ),
     );
-    this.gridLevel =
-      options.gridLevel ??
-      displayState.spatialSkeletonGridLevel3d ??
-      new WatchableValue(0);
-    this.lod = options.lod ?? displayState.skeletonLod ?? new WatchableValue(0);
-    this.gridLevel2d =
-      options.gridLevel2d ??
-      displayState.spatialSkeletonGridLevel2d ??
-      this.gridLevel;
-    this.lod2d = options.lod2d ?? displayState.spatialSkeletonLod2d ?? this.lod;
     this.selectedNodeId = options.selectedNodeId;
     this.pendingNodePositionVersion = options.pendingNodePositionVersion;
     this.getPendingNodePositionOverride = options.getPendingNodePosition;
@@ -2632,27 +2578,18 @@ export class SpatiallyIndexedSkeletonLayer
     this.rpc = rpc;
     sharedObject.RPC_TYPE_ID = SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_RPC_ID;
 
-    const renderScaleTargetWatchable = this.registerDisposer(
+    const skeletonSpacingTargetWatchable = this.registerDisposer(
       SharedWatchableValue.makeFromExisting(
         rpc,
-        displayState.renderScaleTarget,
+        this.displayState.spatialSkeletonSpacingTarget3d,
       ),
     );
 
-    const skeletonLodWatchable = this.registerDisposer(
-      SharedWatchableValue.makeFromExisting(rpc, this.lod),
-    );
-
-    const skeletonGridLevelWatchable = this.registerDisposer(
-      SharedWatchableValue.makeFromExisting(rpc, this.gridLevel),
-    );
-
-    const skeletonLod2dWatchable = this.registerDisposer(
-      SharedWatchableValue.makeFromExisting(rpc, this.lod2d),
-    );
-
-    const skeletonGridLevel2dWatchable = this.registerDisposer(
-      SharedWatchableValue.makeFromExisting(rpc, this.gridLevel2d),
+    const skeletonSpacingTarget2dWatchable = this.registerDisposer(
+      SharedWatchableValue.makeFromExisting(
+        rpc,
+        this.displayState.spatialSkeletonSpacingTarget2d,
+      ),
     );
 
     sharedObject.initializeCounterpart(rpc, {
@@ -2660,11 +2597,8 @@ export class SpatiallyIndexedSkeletonLayer
       localPosition: this.registerDisposer(
         SharedWatchableValue.makeFromExisting(rpc, this.localPosition),
       ).rpcId,
-      renderScaleTarget: renderScaleTargetWatchable.rpcId,
-      skeletonLod: skeletonLodWatchable.rpcId,
-      skeletonGridLevel: skeletonGridLevelWatchable.rpcId,
-      skeletonLod2d: skeletonLod2dWatchable.rpcId,
-      skeletonGridLevel2d: skeletonGridLevel2dWatchable.rpcId,
+      skeletonSpacingTarget: skeletonSpacingTargetWatchable.rpcId,
+      skeletonSpacingTarget2d: skeletonSpacingTarget2dWatchable.rpcId,
     });
     this.backend = sharedObject;
     this.gpuBrowseExcludedSegmentsHashTable = this.registerDisposer(
@@ -2678,19 +2612,6 @@ export class SpatiallyIndexedSkeletonLayer
 
   getSources(view: SpatiallyIndexedSkeletonView) {
     return view === "2d" ? this.sources2d : this.sources;
-  }
-
-  private selectSourcesForViewAndGrid(
-    view: SpatiallyIndexedSkeletonView,
-    gridLevel: number | undefined,
-  ) {
-    return selectSpatiallyIndexedSkeletonEntriesForView(
-      this.getSources(view),
-      view,
-      gridLevel,
-      getSpatiallyIndexedSkeletonSourceView,
-      getSpatiallyIndexedSkeletonGridIndex,
-    );
   }
 
   private getCachedNodeSnapshot(nodeId: number) {
@@ -2823,70 +2744,46 @@ export class SpatiallyIndexedSkeletonLayer
     };
   }
 
-  // Iterates every chunk slot in view for the given view/gridLevel/lod.
-  // Callback receives (chunkKey, chunkSource, chunkLayout); return false to stop early.
+  // Iterates every chunk slot selected by the current spacing target.
+  // Callback receives (chunkKey, chunkSource, chunkLayout).
   private forEachVisibleChunkSlot(
-    view: SpatiallyIndexedSkeletonView,
-    gridLevel: number | undefined,
     transformedSources: readonly TransformedSource[][],
     projectionParameters: ProjectionParameters,
-    lod: number,
+    spacingTarget: number,
     callback: (
       chunkKey: string,
       chunkSource: SpatiallyIndexedSkeletonSource,
       chunkLayout: ChunkLayout,
-    ) => boolean | void,
+    ) => void,
   ) {
-    const selectedSourceIds = new Set(
-      this.selectSourcesForViewAndGrid(view, gridLevel).map((s) =>
-        getObjectId(s.chunkSource),
-      ),
-    );
-    const lodSuffix = `:${lod}`;
-    let shouldContinue = true;
     for (const scales of transformedSources) {
-      for (const tsource of scales) {
-        if (!shouldContinue) return;
-        if (!selectedSourceIds.has(getObjectId(tsource.source))) continue;
-        forEachVisibleVolumetricChunk(
-          projectionParameters,
-          this.localPosition.value,
-          tsource,
-          (positionInChunks) => {
-            if (!shouldContinue) return;
-            const chunkKey = `${positionInChunks.join()}${lodSuffix}`;
-            if (
-              callback(
-                chunkKey,
-                tsource.source as SpatiallyIndexedSkeletonSource,
-                tsource.chunkLayout,
-              ) === false
-            ) {
-              shouldContinue = false;
-            }
-          },
-        );
-      }
+      forEachVisibleSpatialSkeletonChunk(
+        projectionParameters,
+        this.localPosition.value,
+        spacingTarget,
+        scales,
+        () => {},
+        (tsource) => {
+          callback(
+            tsource.curPositionInChunks.join(),
+            tsource.source as SpatiallyIndexedSkeletonSource,
+            tsource.chunkLayout,
+          );
+        },
+      );
     }
   }
 
-  getVisibleChunksInCurrentViewAndLod(
-    view: SpatiallyIndexedSkeletonView,
-    gridLevel: number | undefined,
+  getVisibleChunksInCurrentView(
     transformedSources: readonly TransformedSource[][],
-    projectionParameters: any,
-    lod: number | undefined,
+    projectionParameters: ProjectionParameters,
+    spacingTarget: number,
   ): VisibleChunk[] {
-    if (lod === undefined) {
-      return [];
-    }
     const result: VisibleChunk[] = [];
     this.forEachVisibleChunkSlot(
-      view,
-      gridLevel,
       transformedSources,
       projectionParameters,
-      lod,
+      spacingTarget,
       (chunkKey, chunkSource, chunkLayout) => {
         const chunk = chunkSource.chunks.get(chunkKey);
         if (chunk?.state === ChunkState.GPU_MEMORY) {
@@ -2898,11 +2795,9 @@ export class SpatiallyIndexedSkeletonLayer
   }
 
   private areVisibleChunksReady(
-    view: SpatiallyIndexedSkeletonView,
-    gridLevel: number | undefined,
     transformedSources: readonly TransformedSource[][],
     projectionParameters: ProjectionParameters,
-    lod: number | undefined,
+    spacingTarget: number,
   ) {
     if (
       this.displayState.objectAlpha.value <= 0.0 &&
@@ -2910,39 +2805,25 @@ export class SpatiallyIndexedSkeletonLayer
     ) {
       return true;
     }
-    if (lod === undefined) {
-      // No LOD configured — draw() renders nothing in this case, so nothing to wait for.
-      return true;
-    }
     if (transformedSources.length === 0) {
       return false;
     }
     let ready = true;
     this.forEachVisibleChunkSlot(
-      view,
-      gridLevel,
       transformedSources,
       projectionParameters,
-      lod,
+      spacingTarget,
       (chunkKey, chunkSource, _) => {
         const chunk = chunkSource.chunks.get(chunkKey);
         if (chunk?.state !== ChunkState.GPU_MEMORY) {
           ready = false;
-          return false;
         }
-        return true;
       },
     );
     return ready;
   }
 
-  getNode(
-    nodeId: number,
-    options: {
-      lod?: number;
-    } = {},
-  ): SpatiallyIndexedSkeletonNode | undefined {
-    void options.lod;
+  getNode(nodeId: number): SpatiallyIndexedSkeletonNode | undefined {
     if (!Number.isSafeInteger(nodeId) || nodeId <= 0) return undefined;
     return this.getCachedNodeSnapshot(nodeId);
   }
@@ -2950,10 +2831,8 @@ export class SpatiallyIndexedSkeletonLayer
   getNodes(
     options: {
       segmentId?: bigint;
-      lod?: number;
     } = {},
   ): SpatiallyIndexedSkeletonNode[] {
-    void options.lod;
     const normalizedSegmentFilter =
       options.segmentId === undefined
         ? undefined
@@ -3328,18 +3207,14 @@ export class SpatiallyIndexedSkeletonLayer
   }
 
   isReady(
-    view: SpatiallyIndexedSkeletonView,
-    gridLevel: number | undefined,
     transformedSources: readonly TransformedSource[][],
     projectionParameters: ProjectionParameters,
-    lod?: number,
+    spacingTarget: number,
   ) {
     return this.areVisibleChunksReady(
-      view,
-      gridLevel,
       transformedSources,
       projectionParameters,
-      lod,
+      spacingTarget,
     );
   }
 }
@@ -3522,11 +3397,12 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
     this.registerDisposer(
       renderOptions.lineWidth.changed.add(this.redrawNeeded.dispatch),
     );
-    const histogram3d =
-      base.displayState.spatialSkeletonGridRenderScaleHistogram3d;
-    if (histogram3d !== undefined) {
-      this.registerDisposer(histogram3d.visibility.add(this.visibility));
-    }
+    const spacingTarget3d = base.displayState.spatialSkeletonSpacingTarget3d;
+    this.registerDisposer(
+      spacingTarget3d.changed.add(this.redrawNeeded.dispatch),
+    );
+    const histogram3d = base.displayState.spatialSkeletonSpacingHistogram3d;
+    this.registerDisposer(histogram3d.visibility.add(this.visibility));
   }
 
   attach(
@@ -3585,29 +3461,23 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
       return;
     }
     const { displayState } = this.base;
-    const lodValue = displayState.skeletonLod?.value;
-    const visibleChunks = this.base.getVisibleChunksInCurrentViewAndLod(
-      "3d",
-      displayState.spatialSkeletonGridLevel3d?.value,
+    const spacingTarget = displayState.spatialSkeletonSpacingTarget3d.value;
+    const visibleChunks = this.base.getVisibleChunksInCurrentView(
       this.transformedSources,
       renderContext.projectionParameters,
-      lodValue,
+      spacingTarget,
     );
-    const levels = displayState.spatialSkeletonGridLevels?.value;
-    const histogram = displayState.spatialSkeletonGridRenderScaleHistogram3d;
-    if (histogram !== undefined) {
-      const frameNumber =
-        this.base.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber;
-      updateSpatialSkeletonGridRenderScaleHistogram(
-        histogram,
-        frameNumber,
-        this.transformedSources,
-        renderContext.projectionParameters,
-        this.base.localPosition.value,
-        lodValue,
-        levels,
-      );
-    }
+    const histogram = displayState.spatialSkeletonSpacingHistogram3d;
+    const frameNumber =
+      this.base.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber;
+    updateSpatialSkeletonSpacingHistogram(
+      histogram,
+      frameNumber,
+      this.transformedSources,
+      renderContext.projectionParameters,
+      this.base.localPosition.value,
+      spacingTarget,
+    );
     const modelMatrix = update3dRenderLayerAttachment(
       displayState.transform.value,
       renderContext.projectionParameters.displayDimensionRenderInfo,
@@ -3669,11 +3539,9 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
   ) {
     const { displayState } = this.base;
     return this.base.isReady(
-      "3d",
-      displayState.spatialSkeletonGridLevel3d?.value,
       this.transformedSources,
       renderContext.projectionParameters,
-      displayState.skeletonLod?.value,
+      displayState.spatialSkeletonSpacingTarget3d.value,
     );
   }
 }
@@ -3703,21 +3571,12 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
       renderOptions.lineWidth.changed.add(this.redrawNeeded.dispatch),
     );
     const { displayState: displayState2d } = base;
-    const gridLevel2d = displayState2d.spatialSkeletonGridLevel2d;
-    if (gridLevel2d?.changed) {
-      this.registerDisposer(
-        gridLevel2d.changed.add(this.redrawNeeded.dispatch),
-      );
-    }
-    const lod2d = displayState2d.spatialSkeletonLod2d;
-    if (lod2d?.changed) {
-      this.registerDisposer(lod2d.changed.add(this.redrawNeeded.dispatch));
-    }
-    const histogram2d =
-      displayState2d.spatialSkeletonGridRenderScaleHistogram2d;
-    if (histogram2d !== undefined) {
-      this.registerDisposer(histogram2d.visibility.add(this.visibility));
-    }
+    const spacingTarget2d = displayState2d.spatialSkeletonSpacingTarget2d;
+    this.registerDisposer(
+      spacingTarget2d.changed.add(this.redrawNeeded.dispatch),
+    );
+    const histogram2d = displayState2d.spatialSkeletonSpacingHistogram2d;
+    this.registerDisposer(histogram2d.visibility.add(this.visibility));
   }
 
   get gl() {
@@ -3764,29 +3623,23 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
     >,
   ) {
     const { displayState } = this.base;
-    const lodValue = displayState.spatialSkeletonLod2d?.value;
-    const visibleChunks = this.base.getVisibleChunksInCurrentViewAndLod(
-      "2d",
-      displayState.spatialSkeletonGridLevel2d?.value,
+    const spacingTarget = displayState.spatialSkeletonSpacingTarget2d.value;
+    const visibleChunks = this.base.getVisibleChunksInCurrentView(
       this.transformedSources,
       renderContext.sliceView.projectionParameters.value,
-      lodValue,
+      spacingTarget,
     );
-    const levels = displayState.spatialSkeletonGridLevels?.value;
-    const histogram = displayState.spatialSkeletonGridRenderScaleHistogram2d;
-    if (histogram !== undefined) {
-      const frameNumber =
-        this.base.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber;
-      updateSpatialSkeletonGridRenderScaleHistogram(
-        histogram,
-        frameNumber,
-        this.transformedSources,
-        renderContext.sliceView.projectionParameters.value,
-        this.base.localPosition.value,
-        lodValue,
-        levels,
-      );
-    }
+    const histogram = displayState.spatialSkeletonSpacingHistogram2d;
+    const frameNumber =
+      this.base.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber;
+    updateSpatialSkeletonSpacingHistogram(
+      histogram,
+      frameNumber,
+      this.transformedSources,
+      renderContext.sliceView.projectionParameters.value,
+      this.base.localPosition.value,
+      spacingTarget,
+    );
     const modelMatrix = update3dRenderLayerAttachment(
       displayState.transform.value,
       renderContext.projectionParameters.displayDimensionRenderInfo,
@@ -3813,11 +3666,9 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
   ) {
     const { displayState } = this.base;
     return this.base.isReady(
-      "2d",
-      displayState.spatialSkeletonGridLevel2d?.value,
       this.transformedSources,
       renderContext.projectionParameters,
-      displayState.spatialSkeletonLod2d?.value,
+      displayState.spatialSkeletonSpacingTarget2d.value,
     );
   }
 }

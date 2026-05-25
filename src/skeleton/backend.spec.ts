@@ -20,7 +20,6 @@ import {
   getSpatiallyIndexedSkeletonChunkPriority,
   getSpatiallyIndexedSkeletonRenderPriority,
   SPATIALLY_INDEXED_SKELETON_PRIORITY_BOOST,
-  SpatiallyIndexedSkeletonChunkRequestOwner,
 } from "#src/skeleton/backend.js";
 import {
   BASE_PRIORITY,
@@ -63,7 +62,7 @@ describe("skeleton/backend chunk priority", () => {
     expect(SPATIALLY_INDEXED_SKELETON_PRIORITY_BOOST).toBe(-BASE_PRIORITY);
   });
 
-  it("boosts spatial skeleton chunks in all views above equivalent volume-rendering chunks", () => {
+  it("boosts spatial skeleton chunks above equivalent volume-rendering chunks", () => {
     const basePriority = BASE_PRIORITY;
     const scaleIndex = 2;
     const localCenter = Float32Array.of(10, 20, 30);
@@ -77,26 +76,18 @@ describe("skeleton/backend chunk priority", () => {
     const equivalentVolumeRenderingPriority =
       basePriority + SCALE_PRIORITY_MULTIPLIER * scaleIndex + distancePriority;
 
-    for (const owner of [
-      SpatiallyIndexedSkeletonChunkRequestOwner.VIEW_2D,
-      SpatiallyIndexedSkeletonChunkRequestOwner.VIEW_3D,
-    ]) {
-      expect(owner).not.toBe(SpatiallyIndexedSkeletonChunkRequestOwner.NONE);
-      const skeletonPriority = getSpatiallyIndexedSkeletonRenderPriority(
-        basePriority,
-        scaleIndex,
-        localCenter,
-        chunkSize,
-        positionInChunks,
-      );
+    const skeletonPriority = getSpatiallyIndexedSkeletonRenderPriority(
+      basePriority,
+      scaleIndex,
+      localCenter,
+      chunkSize,
+      positionInChunks,
+    );
 
-      expect(skeletonPriority).toBeGreaterThan(
-        equivalentVolumeRenderingPriority,
-      );
-      expect(skeletonPriority - equivalentVolumeRenderingPriority).toBeCloseTo(
-        SPATIALLY_INDEXED_SKELETON_PRIORITY_BOOST,
-      );
-    }
+    expect(skeletonPriority).toBeGreaterThan(equivalentVolumeRenderingPriority);
+    expect(skeletonPriority - equivalentVolumeRenderingPriority).toBeCloseTo(
+      SPATIALLY_INDEXED_SKELETON_PRIORITY_BOOST,
+    );
   });
 
   it("keeps spatial skeleton chunks ordered by distance after applying the boost", () => {

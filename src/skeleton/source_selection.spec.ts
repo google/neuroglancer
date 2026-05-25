@@ -16,50 +16,268 @@
 
 import { describe, expect, it } from "vitest";
 
-import { selectSpatiallyIndexedSkeletonEntriesByGrid } from "#src/skeleton/source_selection.js";
+import {
+  getSpatialSkeletonSourceScalesByLimit,
+  selectSpatialSkeletonSourceByLimit,
+  SPATIAL_SKELETON_ZERO_LIMIT_FINEST_ERROR,
+} from "#src/skeleton/source_selection.js";
 
 describe("skeleton/source_selection", () => {
-  it("returns the exact grid match when available", () => {
-    const entries = [
-      { id: "coarse", gridIndex: 0 },
-      { id: "medium", gridIndex: 2 },
-      { id: "fine", gridIndex: 4 },
-    ];
-    expect(
-      selectSpatiallyIndexedSkeletonEntriesByGrid(
-        entries,
-        2,
-        (entry) => entry.gridIndex,
-      ),
-    ).toEqual([entries[1]]);
+  it("selects exactly one coarse source when it satisfies the density target", () => {
+    const selection = selectSpatialSkeletonSourceByLimit(
+      [
+        {
+          source: "coarse",
+          index: 0,
+          physicalVolume: 1000,
+          limit: 200,
+          sliceFraction: 1,
+        },
+        {
+          source: "fine",
+          index: 1,
+          physicalVolume: 125,
+          limit: 500,
+          sliceFraction: 1,
+        },
+      ],
+      0.1,
+      1000,
+      100,
+    );
+
+    expect(selection?.source).toBe("coarse");
+    expect(selection?.physicalDensity).toBeCloseTo(0.2);
   });
 
-  it("returns the nearest grid match and keeps the first entry on ties", () => {
-    const entries = [
-      { id: "left", gridIndex: 0 },
-      { id: "right", gridIndex: 4 },
-    ];
-    expect(
-      selectSpatiallyIndexedSkeletonEntriesByGrid(
-        entries,
-        2,
-        (entry) => entry.gridIndex,
-      ),
-    ).toEqual([entries[0]]);
+  it("selects a finer positive-limit source when coarser sources are too sparse", () => {
+    const selection = selectSpatialSkeletonSourceByLimit(
+      [
+        {
+          source: "coarse",
+          index: 0,
+          physicalVolume: 1000,
+          limit: 10,
+          sliceFraction: 1,
+        },
+        {
+          source: "fine",
+          index: 1,
+          physicalVolume: 125,
+          limit: 500,
+          sliceFraction: 1,
+        },
+      ],
+      0.1,
+      1000,
+      100,
+    );
+
+    expect(selection?.source).toBe("fine");
+    expect(selection?.physicalDensity).toBeCloseTo(4);
   });
 
-  it("returns all entries if any entry is missing a grid index", () => {
-    const entries = [
-      { id: "indexed", gridIndex: 0 },
-      { id: "unindexed" },
-      { id: "indexed-2", gridIndex: 2 },
-    ];
-    expect(
-      selectSpatiallyIndexedSkeletonEntriesByGrid(
-        entries,
-        1,
-        (entry) => entry.gridIndex,
+  it("falls back to the finest positive-limit source when no source satisfies the target", () => {
+    const selection = selectSpatialSkeletonSourceByLimit(
+      [
+        {
+          source: "coarse",
+          index: 0,
+          physicalVolume: 1000,
+          limit: 10,
+          sliceFraction: 1,
+        },
+        {
+          source: "fine",
+          index: 1,
+          physicalVolume: 125,
+          limit: 10,
+          sliceFraction: 1,
+        },
+      ],
+      100,
+      1000,
+      100,
+    );
+
+    expect(selection?.source).toBe("fine");
+    expect(selection?.physicalDensity).toBeCloseTo(0.08);
+  });
+
+  it("selects a finest zero-limit source when positive-limit sources are too sparse", () => {
+    const selection = selectSpatialSkeletonSourceByLimit(
+      [
+        {
+          source: "coarse",
+          index: 0,
+          physicalVolume: 1000,
+          limit: 10,
+          sliceFraction: 1,
+        },
+        {
+          source: "complete-finest",
+          index: 1,
+          physicalVolume: 125,
+          limit: 0,
+          sliceFraction: 1,
+        },
+      ],
+      100,
+      1000,
+      100,
+    );
+
+    expect(selection?.source).toBe("complete-finest");
+    expect(selection?.physicalDensity).toBe(Number.POSITIVE_INFINITY);
+    expect(selection?.physicalSpacing).toBe(Number.POSITIVE_INFINITY);
+    expect(selection?.pixelSpacing).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it("does not select a finest zero-limit source if a coarser source satisfies the target", () => {
+    const selection = selectSpatialSkeletonSourceByLimit(
+      [
+        {
+          source: "coarse",
+          index: 0,
+          physicalVolume: 1000,
+          limit: 200,
+          sliceFraction: 1,
+        },
+        {
+          source: "complete-finest",
+          index: 1,
+          physicalVolume: 125,
+          limit: 0,
+          sliceFraction: 1,
+        },
+      ],
+      0.1,
+      1000,
+      100,
+    );
+
+    expect(selection?.source).toBe("coarse");
+  });
+
+  it("rejects a non-finest zero-limit source", () => {
+    expect(() =>
+      selectSpatialSkeletonSourceByLimit(
+        [
+          {
+            source: "complete-coarse",
+            index: 0,
+            physicalVolume: 1000,
+            limit: 0,
+            sliceFraction: 1,
+          },
+          {
+            source: "fine",
+            index: 1,
+            physicalVolume: 125,
+            limit: 500,
+            sliceFraction: 1,
+          },
+        ],
+        0.1,
+        1000,
+        100,
       ),
-    ).toEqual(entries);
+    ).toThrow(SPATIAL_SKELETON_ZERO_LIMIT_FINEST_ERROR);
+  });
+
+  it("rejects multiple zero-limit sources unless there is only one source", () => {
+    expect(() =>
+      selectSpatialSkeletonSourceByLimit(
+        [
+          {
+            source: "complete-coarse",
+            index: 0,
+            physicalVolume: 1000,
+            limit: 0,
+            sliceFraction: 1,
+          },
+          {
+            source: "complete-fine",
+            index: 1,
+            physicalVolume: 125,
+            limit: 0,
+            sliceFraction: 1,
+          },
+        ],
+        0.1,
+        1000,
+        100,
+      ),
+    ).toThrow(SPATIAL_SKELETON_ZERO_LIMIT_FINEST_ERROR);
+
+    expect(
+      selectSpatialSkeletonSourceByLimit(
+        [
+          {
+            source: "single-complete",
+            index: 0,
+            physicalVolume: 1000,
+            limit: 0,
+            sliceFraction: 1,
+          },
+        ],
+        0.1,
+        1000,
+        100,
+      )?.source,
+    ).toBe("single-complete");
+  });
+
+  it("uses the provided source order rather than sorting by physical volume", () => {
+    const selection = selectSpatialSkeletonSourceByLimit(
+      [
+        {
+          source: "fine",
+          index: 1,
+          physicalVolume: 125,
+          limit: 500,
+          sliceFraction: 1,
+        },
+        {
+          source: "coarse",
+          index: 0,
+          physicalVolume: 1000,
+          limit: 200,
+          sliceFraction: 1,
+        },
+      ],
+      0.1,
+      1000,
+      100,
+    );
+
+    expect(selection?.source).toBe("fine");
+  });
+
+  it("reports all source scales in source order for histogram indicators", () => {
+    const scales = getSpatialSkeletonSourceScalesByLimit(
+      [
+        {
+          source: "fine",
+          index: 1,
+          physicalVolume: 125,
+          limit: 500,
+          sliceFraction: 1,
+        },
+        {
+          source: "coarse",
+          index: 0,
+          physicalVolume: 1000,
+          limit: 200,
+          sliceFraction: 1,
+        },
+      ],
+      1000,
+      100,
+    );
+
+    expect(scales.map((scale) => scale.source)).toEqual(["fine", "coarse"]);
+    expect(scales[0].physicalDensity).toBeCloseTo(4);
+    expect(scales[1].physicalDensity).toBeCloseTo(0.2);
   });
 });

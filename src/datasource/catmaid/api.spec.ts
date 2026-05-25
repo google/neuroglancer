@@ -260,6 +260,46 @@ describe("CatmaidClient skeleton editing methods", () => {
     });
   });
 
+  it("accepts zero CATMAID spatial skeleton metadata limits only on the finest level", async () => {
+    const client = new CatmaidClient("https://example.invalid", 1);
+    (client as any).listStacks = vi.fn().mockResolvedValue([{ id: 7 }]);
+    (client as any).getStackInfo = vi.fn().mockResolvedValue({
+      dimension: { x: 10, y: 20, z: 30 },
+      resolution: { x: 2, y: 3, z: 4 },
+      translation: { x: 5, y: 6, z: 7 },
+      metadata: {
+        spatial: [
+          { chunk_size: [30, 30, 30], limit: 10 },
+          { chunk_size: [15, 15, 15], limit: 0 },
+        ],
+      },
+    });
+
+    await expect(client.getSpatialIndexMetadata()).resolves.toMatchObject({
+      spatial: [{ limit: 10 }, { limit: 0 }],
+    });
+  });
+
+  it("rejects zero CATMAID spatial skeleton metadata limits on non-finest levels", async () => {
+    const client = new CatmaidClient("https://example.invalid", 1);
+    (client as any).listStacks = vi.fn().mockResolvedValue([{ id: 7 }]);
+    (client as any).getStackInfo = vi.fn().mockResolvedValue({
+      dimension: { x: 10, y: 20, z: 30 },
+      resolution: { x: 2, y: 3, z: 4 },
+      translation: { x: 5, y: 6, z: 7 },
+      metadata: {
+        spatial: [
+          { chunk_size: [30, 30, 30], limit: 0 },
+          { chunk_size: [15, 15, 15], limit: 10 },
+        ],
+      },
+    });
+
+    await expect(client.getSpatialIndexMetadata()).rejects.toThrow(
+      "Spatial skeleton limit: 0 is only supported on the finest source level.",
+    );
+  });
+
   it("parses live compact-detail history rows and current label maps", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi
@@ -539,7 +579,28 @@ describe("CatmaidClient skeleton editing methods", () => {
     ]);
 
     expect(getFetchPath(fetchMock)).toMatch(/^node\/list\?/);
+    expect(
+      new URLSearchParams(getFetchPath(fetchMock).split("?")[1]).get("lod"),
+    ).toBe("0");
     expect(getFetchInit(fetchMock).priority).toBe("low");
+  });
+
+  it("passes the CATMAID source-associated lod to node/list", async () => {
+    const client = new CatmaidClient("https://example.invalid", 1);
+    const fetchMock = vi.fn().mockResolvedValue([[], [], {}, false, [], []]);
+    (client as any).fetch = fetchMock;
+
+    await client.fetchNodes(
+      {
+        lowerBounds: [0, 0, 0],
+        upperBounds: [10, 10, 10],
+      },
+      0.5,
+    );
+
+    expect(
+      new URLSearchParams(getFetchPath(fetchMock).split("?")[1]).get("lod"),
+    ).toBe("0.5");
   });
 
   it("converts spatial skeleton grid cell indices to CATMAID bounds", () => {
