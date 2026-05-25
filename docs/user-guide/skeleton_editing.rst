@@ -75,8 +75,8 @@ In the **Render** tab you can adjust:
 When you make a skeleton visible, a full fetch is triggered and you are guaranteed
 to see all nodes and details of that skeleton. Otherwise you see whatever is
 provided by the spatial index level selected for the current view. The selected
-level is controlled via the **Spacing (skeleton grid 2D)** and
-**Spacing (skeleton grid 3D)** settings.
+level is controlled via the **Spacing (cross section)** and
+**Spacing (projection)** settings.
 
 The **Seg** tab works as normal for a segmentation layer, allowing you to set the
 visibility of segments/skeletons by their ID or by label if one has been assigned.
