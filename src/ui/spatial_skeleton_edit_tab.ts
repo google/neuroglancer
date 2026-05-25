@@ -704,6 +704,30 @@ export class SpatialSkeletonEditTab extends Tab {
       }
     };
 
+    const getSelectedSegmentForNavigation = () => {
+      if (
+        !ensureActionsAllowed(SpatialSkeletonActions.inspect, {
+          requireVisibleChunks: false,
+        })
+      ) {
+        return undefined;
+      }
+      const segmentId = getSelectedNode()?.segmentId ?? getSelectedSegmentId();
+      if (segmentId === undefined) {
+        StatusMessage.showTemporaryMessage("No segment is selected.");
+        return undefined;
+      }
+      try {
+        getSegmentNavigationGraph(segmentId);
+        return segmentId;
+      } catch (error) {
+        StatusMessage.showTemporaryMessage(
+          `Skeleton ${segmentId} needs to be visible for navigation`,
+        );
+        return undefined;
+      }
+    };
+
     const updateTrueEndLabel = (
       node: SpatiallyIndexedSkeletonNode,
       present: boolean,
@@ -834,13 +858,12 @@ export class SpatialSkeletonEditTab extends Tab {
       svg_origin,
       "Go to root",
       () => {
-        const context = getSelectedNavigationContext();
-        if (context === undefined) return;
-        const { selectedNode, skeletonApi } = context;
+        const segmentId = getSelectedSegmentForNavigation();
+        if (segmentId === undefined) return;
         void (async () => {
           try {
             navigateToNodeTarget(
-              await skeletonApi.getSkeletonRootNode(selectedNode.segmentId),
+              await skeletonNavigationApi.getSkeletonRootNode(segmentId),
             );
           } catch (error) {
             const message =
