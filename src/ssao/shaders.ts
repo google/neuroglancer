@@ -49,21 +49,12 @@ float gtaoHash(vec2 p) {
   p3 += dot(p3, p3.yzx + 33.33);
   return fract((p3.x + p3.y) * p3.z);
 }
-`;
 
-export function defineGTAOShader(builder: ShaderBuilder) {
-  builder.addUniform("highp mat4", "uProjection");
-  builder.addUniform("highp mat4", "uInvProjection");
-  builder.addUniform("highp float", "uRadius");
-  builder.addUniform("highp vec2", "uResolution");
-  builder.addOutputBuffer("vec4", "v4f_fragColor", null);
-  builder.addFragmentCode(glsl_gtao);
-  builder.setFragmentMain(`
+vec4 gtao() {
   vec2 uv = vTexCoord;
   float depthVal = getValue0().r;
   if (depthVal == 0.0) {
-    v4f_fragColor = vec4(1.0);
-    return;
+    return vec4(1.0);
   }
 
   float fragZ = 1.0 - depthVal;
@@ -73,8 +64,7 @@ export function defineGTAOShader(builder: ShaderBuilder) {
   // highlighted objects (see emit shader) both land here.
   vec3 rawN = getValue1().rgb;
   if (dot(rawN, rawN) < SENTINEL_EPS) {
-    v4f_fragColor = vec4(1.0);
-    return;
+    return vec4(1.0);
   }
   vec3 N = normalize(rawN * 2.0 - 1.0);
 
@@ -88,8 +78,7 @@ export function defineGTAOShader(builder: ShaderBuilder) {
 
   // Sub-pixel kernel: nothing meaningful to sample.
   if (kernelRadius < 1.0 / uResolution.y) {
-    v4f_fragColor = vec4(1.0);
-    return;
+    return vec4(1.0);
   }
 
   float noiseAngle = gtaoHash(gl_FragCoord.xy) * PI;
@@ -146,21 +135,26 @@ export function defineGTAOShader(builder: ShaderBuilder) {
 
   float ao = 1.0 - totalOcclusion / float(NUM_DIRECTIONS);
   ao = clamp(ao, 0.0, 1.0);
-  v4f_fragColor = vec4(vec3(ao), 1.0);
-`);
+  return vec4(vec3(ao), 1.0);
+}
+`;
+
+export function defineGTAOShader(builder: ShaderBuilder) {
+  builder.addUniform("highp mat4", "uProjection");
+  builder.addUniform("highp mat4", "uInvProjection");
+  builder.addUniform("highp float", "uRadius");
+  builder.addUniform("highp vec2", "uResolution");
+  builder.addOutputBuffer("vec4", "v4f_fragColor", null);
+  builder.addFragmentCode(glsl_gtao);
+  builder.setFragmentMain(`v4f_fragColor = gtao();`);
 }
 
 const glsl_blur = `
 // Bilateral falloff sharpness; tuned for normalized [0,1] depth so that
 // samples across surface boundaries get rejected.
 #define DEPTH_AWARE_FALLOFF 1000.0
-`;
 
-export function defineBlurShader(builder: ShaderBuilder) {
-  builder.addUniform("highp vec2", "uDirection");
-  builder.addOutputBuffer("vec4", "v4f_fragColor", null);
-  builder.addFragmentCode(glsl_blur);
-  builder.setFragmentMain(`
+vec4 blur() {
   vec2 texelSize = 1.0 / vec2(textureSize(uSampler[0], 0));
   float centerDepth = getValue1().r;
 
@@ -177,8 +171,15 @@ export function defineBlurShader(builder: ShaderBuilder) {
     totalWeight += w;
   }
 
-  v4f_fragColor = vec4(vec3(result / totalWeight), 1.0);
-`);
+  return vec4(vec3(result / totalWeight), 1.0);
+}
+`;
+
+export function defineBlurShader(builder: ShaderBuilder) {
+  builder.addUniform("highp vec2", "uDirection");
+  builder.addOutputBuffer("vec4", "v4f_fragColor", null);
+  builder.addFragmentCode(glsl_blur);
+  builder.setFragmentMain(`v4f_fragColor = blur();`);
 }
 
 const glsl_ssaoComposite = `
@@ -191,13 +192,8 @@ const glsl_ssaoComposite = `
 // the color * AO composite. Useful for fine-tuning radius, intensity or
 // blur falloff without the effect of mesh color or lighting.
 #define DEBUG_SSAO 0
-`;
 
-export function defineSSAOCompositeShader(builder: ShaderBuilder) {
-  builder.addUniform("highp float", "uIntensity");
-  builder.addOutputBuffer("vec4", "v4f_fragColor", null);
-  builder.addFragmentCode(glsl_ssaoComposite);
-  builder.setFragmentMain(`
+vec4 composite() {
   vec4 color = getValue0();
   float ao = getValue1().r;
   // Zero-RGB normal is the no-AO sentinel: cleared background, opaque
@@ -207,9 +203,16 @@ export function defineSSAOCompositeShader(builder: ShaderBuilder) {
   vec3 normal = getValue2().rgb;
   ao = dot(normal, normal) < SENTINEL_EPS ? 1.0 : pow(ao, uIntensity);
   #if DEBUG_SSAO
-  v4f_fragColor = vec4(vec3(ao), 1.0);
+  return vec4(vec3(ao), 1.0);
   #else
-  v4f_fragColor = vec4(color.rgb * ao, color.a);
+  return vec4(color.rgb * ao, color.a);
   #endif
-`);
+}
+`;
+
+export function defineSSAOCompositeShader(builder: ShaderBuilder) {
+  builder.addUniform("highp float", "uIntensity");
+  builder.addOutputBuffer("vec4", "v4f_fragColor", null);
+  builder.addFragmentCode(glsl_ssaoComposite);
+  builder.setFragmentMain(`v4f_fragColor = composite();`);
 }
