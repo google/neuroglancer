@@ -16,15 +16,15 @@
 
 export type SpatiallyIndexedSkeletonView = "2d" | "3d";
 
-export interface SpatialSkeletonSourceLimitInput<T> {
-  source: T;
-  index: number;
-  physicalVolume: number;
+export interface SpatialSkeletonSourceLimitInput {
   limit: number;
 }
 
 export interface SpatialSkeletonSourceDensityInput<T>
-  extends SpatialSkeletonSourceLimitInput<T> {
+  extends SpatialSkeletonSourceLimitInput {
+  source: T;
+  index: number;
+  physicalVolume: number;
   sliceFraction: number;
 }
 
@@ -39,19 +39,11 @@ export interface SpatialSkeletonSourceDensitySelection<T>
 export const SPATIAL_SKELETON_ZERO_LIMIT_FINEST_ERROR =
   "Spatial skeleton limit: 0 is only supported on the finest source level.";
 
-function getOrderedSpatialSkeletonSources<
-  T extends SpatialSkeletonSourceLimitInput<unknown>,
->(sources: readonly T[]): T[] {
-  return [...sources].sort(
-    (a, b) => b.physicalVolume - a.physicalVolume || a.index - b.index,
-  );
-}
-
-function validateOrderedSpatialSkeletonLimitZeroOnlyFinest<
-  T extends SpatialSkeletonSourceLimitInput<unknown>,
->(orderedSources: readonly T[]) {
-  for (let i = 0; i < orderedSources.length - 1; ++i) {
-    if (orderedSources[i].limit === 0) {
+function validateSpatialSkeletonLimitZeroOnlyFinalSource<
+  T extends SpatialSkeletonSourceLimitInput,
+>(sources: readonly T[]) {
+  for (let i = 0; i < sources.length - 1; ++i) {
+    if (sources[i].limit === 0) {
       throw new Error(SPATIAL_SKELETON_ZERO_LIMIT_FINEST_ERROR);
     }
   }
@@ -84,11 +76,10 @@ export function selectSpatialSkeletonSourceByLimit<T>(
   effectiveVolume: number,
   viewportArea: number,
 ): SpatialSkeletonSourceDensitySelection<T> | undefined {
-  const orderedSources = getOrderedSpatialSkeletonSources(sources);
-  if (orderedSources.length === 0) return undefined;
-  validateOrderedSpatialSkeletonLimitZeroOnlyFinest(orderedSources);
+  if (sources.length === 0) return undefined;
+  validateSpatialSkeletonLimitZeroOnlyFinalSource(sources);
 
-  for (const source of orderedSources) {
+  for (const source of sources) {
     if (source.limit === 0) {
       continue;
     }
@@ -104,7 +95,7 @@ export function selectSpatialSkeletonSourceByLimit<T>(
     }
   }
 
-  const finestSource = orderedSources[orderedSources.length - 1];
+  const finestSource = sources[sources.length - 1];
   if (finestSource.limit === 0) {
     return makeSpatialSkeletonSourceSelection(
       finestSource,
@@ -129,9 +120,8 @@ export function getSpatialSkeletonSourceScalesByLimit<T>(
   effectiveVolume: number,
   viewportArea: number,
 ): SpatialSkeletonSourceDensitySelection<T>[] {
-  const orderedSources = getOrderedSpatialSkeletonSources(sources);
-  validateOrderedSpatialSkeletonLimitZeroOnlyFinest(orderedSources);
-  return orderedSources.map((source) => {
+  validateSpatialSkeletonLimitZeroOnlyFinalSource(sources);
+  return sources.map((source) => {
     const physicalDensity =
       source.limit === 0
         ? Number.POSITIVE_INFINITY
@@ -146,9 +136,7 @@ export function getSpatialSkeletonSourceScalesByLimit<T>(
 }
 
 export function validateSpatialSkeletonLimitZeroOnlyFinest<
-  T extends SpatialSkeletonSourceLimitInput<unknown>,
+  T extends SpatialSkeletonSourceLimitInput,
 >(sources: readonly T[]) {
-  validateOrderedSpatialSkeletonLimitZeroOnlyFinest(
-    getOrderedSpatialSkeletonSources(sources),
-  );
+  validateSpatialSkeletonLimitZeroOnlyFinalSource(sources);
 }

@@ -228,7 +228,7 @@ describe("skeleton/source_selection", () => {
     ).toBe("single-complete");
   });
 
-  it("selects sources from coarsest to finest physical volume", () => {
+  it("uses the provided source order rather than sorting by physical volume", () => {
     const selection = selectSpatialSkeletonSourceByLimit(
       [
         {
@@ -251,17 +251,17 @@ describe("skeleton/source_selection", () => {
       100,
     );
 
-    expect(selection?.source).toBe("coarse");
+    expect(selection?.source).toBe("fine");
   });
 
-  it("reports all source scales in coarse-to-fine order for histogram indicators", () => {
+  it("reports all source scales in source order for histogram indicators", () => {
     const scales = getSpatialSkeletonSourceScalesByLimit(
       [
         {
-          source: "complete-finest",
+          source: "fine",
           index: 1,
           physicalVolume: 125,
-          limit: 0,
+          limit: 500,
           sliceFraction: 1,
         },
         {
@@ -276,13 +276,8 @@ describe("skeleton/source_selection", () => {
       100,
     );
 
-    expect(scales.map((scale) => scale.source)).toEqual([
-      "coarse",
-      "complete-finest",
-    ]);
-    expect(scales[0].physicalDensity).toBeCloseTo(0.2);
-    expect(scales[1].physicalDensity).toBe(Number.POSITIVE_INFINITY);
-    expect(scales[1].physicalSpacing).toBe(Number.POSITIVE_INFINITY);
-    expect(scales[1].pixelSpacing).toBe(Number.POSITIVE_INFINITY);
+    expect(scales.map((scale) => scale.source)).toEqual(["fine", "coarse"]);
+    expect(scales[0].physicalDensity).toBeCloseTo(4);
+    expect(scales[1].physicalDensity).toBeCloseTo(0.2);
   });
 });

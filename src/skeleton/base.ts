@@ -127,9 +127,7 @@ export function getSpatialSkeletonSourceDensityContext<
       sliceFraction: getSpatialSkeletonSliceFraction(tsource),
     };
   });
-  const baseSource = sourceDensityInputs.reduce((best, source) =>
-    source.physicalVolume > best.physicalVolume ? source : best,
-  ).source;
+  const baseSource = sourceDensityInputs[0].source;
   let sourceVolume =
     Math.abs(baseSource.chunkLayout.detTransform) * canonicalToPhysicalScale;
   const { lowerClipDisplayBound, upperClipDisplayBound } = baseSource;

@@ -29,7 +29,10 @@ import type {
 import { SpatialSkeletonEditConflictError } from "#src/skeleton/edit_errors.js";
 import type { SpatiallyIndexedSkeletonNavigationTarget } from "#src/skeleton/navigation_graph.js";
 import { validateSpatialSkeletonLimitZeroOnlyFinest } from "#src/skeleton/source_selection.js";
-import { getDefaultSpatiallyIndexedSkeletonChunkSize } from "#src/skeleton/spatial_chunk_sizing.js";
+import {
+  getDefaultSpatiallyIndexedSkeletonChunkSize,
+  sortSpatialSkeletonGridSizes,
+} from "#src/skeleton/spatial_chunk_sizing.js";
 import { HttpError } from "#src/util/http_request.js";
 
 interface CatmaidStackInfo {
@@ -570,27 +573,18 @@ function getDefaultCatmaidSpatialIndexLevel(
   };
 }
 
-function getCatmaidSpatialIndexLevelVolume(
-  level: SpatialSkeletonSpatialIndexLevel,
-) {
-  let volume = 1;
-  for (let i = 0; i < level.chunkSize.length; ++i) {
-    volume *= level.chunkSize[i];
-  }
-  return volume;
-}
-
 function validateCatmaidSpatialSkeletonLimitZeroOnlyFinest(
   levels: readonly SpatialSkeletonSpatialIndexLevel[],
 ) {
-  validateSpatialSkeletonLimitZeroOnlyFinest(
-    levels.map((level, index) => ({
-      source: level,
-      index,
-      physicalVolume: getCatmaidSpatialIndexLevelVolume(level),
+  const sortedLevels = sortSpatialSkeletonGridSizes(
+    levels.map((level) => ({
+      x: level.chunkSize[0],
+      y: level.chunkSize[1],
+      z: level.chunkSize[2],
       limit: level.limit,
     })),
   );
+  validateSpatialSkeletonLimitZeroOnlyFinest(sortedLevels);
 }
 
 export function requireCatmaidRank3Vector(
