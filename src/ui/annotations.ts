@@ -102,6 +102,7 @@ import { Endianness, ENDIANNESS } from "#src/util/endian.js";
 import type { ValueOrError } from "#src/util/error.js";
 import { vec3, vec4 } from "#src/util/geom.js";
 import { parseUint64 } from "#src/util/json.js";
+import type { ActionEvent } from "#src/util/keyboard_bindings.js";
 import {
   EventActionMap,
   KeyboardEventBinder,
@@ -662,9 +663,8 @@ export class AnnotationLayerView extends Tab {
       }
     };
 
-    const onMouseDown = (event: MouseEvent) => {
-      if (event.button !== 0 || !event.altKey) return;
-      const row = (event.target as HTMLElement | null)?.closest(
+    const onReorderStart = (event: ActionEvent<MouseEvent>) => {
+      const row = (event.detail.target as HTMLElement | null)?.closest(
         ".neuroglancer-annotation-list-entry",
       ) as HTMLElement | null;
       if (row === null) return;
@@ -678,8 +678,6 @@ export class AnnotationLayerView extends Tab {
       ) {
         return;
       }
-      event.preventDefault();
-      event.stopPropagation();
       row.classList.add("neuroglancer-annotation-dragging");
       listElement.classList.add("neuroglancer-annotation-list-dragging");
       dragState = {
@@ -694,10 +692,14 @@ export class AnnotationLayerView extends Tab {
       document.addEventListener("keydown", onKeyDown, true);
     };
 
-    listElement.addEventListener("mousedown", onMouseDown);
+    const unregister = registerActionListener<MouseEvent>(
+      listElement,
+      "reorder-annotation",
+      onReorderStart,
+    );
     this.registerDisposer(() => {
       finish(false);
-      listElement.removeEventListener("mousedown", onMouseDown);
+      unregister();
     });
   }
 

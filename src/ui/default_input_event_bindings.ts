@@ -71,6 +71,7 @@ export function getDefaultAnnotationListBindings() {
       {
         click0: "pin-annotation",
         mousedown2: "move-to-annotation",
+        "alt+mousedown0": "reorder-annotation",
       },
       { parents: [[getDefaultSelectBindings(), 0]] },
     );
