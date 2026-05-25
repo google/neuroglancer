@@ -47,10 +47,10 @@ if (!("WebGL2RenderingContext" in globalThis)) {
 const { setSpatialSkeletonModesToLinesAndPoints, SkeletonRenderMode } =
   await import("#src/skeleton/frontend.js");
 const { SpatialSkeletonEditModeTool } = await import(
-  "#src/ui/spatial_skeleton_edit_tool.js"
+  "#src/ui/spatial_skeleton_edit_tools.js"
 );
 const { SpatialSkeletonMergeModeTool, SpatialSkeletonSplitModeTool } =
-  await import("#src/ui/spatial_skeleton_edit_tool.js");
+  await import("#src/ui/spatial_skeleton_edit_tools.js");
 
 function makeVisibleSegmentsState(initialVisibleSegments: bigint[] = []) {
   return {

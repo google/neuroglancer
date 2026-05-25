@@ -77,7 +77,7 @@ import {
   SPATIAL_SKELETON_EDIT_MODE_TOOL_ID,
   SPATIAL_SKELETON_MERGE_MODE_TOOL_ID,
   SPATIAL_SKELETON_SPLIT_MODE_TOOL_ID,
-} from "#src/ui/spatial_skeleton_edit_tool.js";
+} from "#src/ui/spatial_skeleton_edit_tools.js";
 import { makeToolButton } from "#src/ui/tool.js";
 import type { ArraySpliceOp } from "#src/util/array.js";
 import * as matrix from "#src/util/matrix.js";

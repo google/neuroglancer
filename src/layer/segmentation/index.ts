@@ -181,7 +181,7 @@ import { registerSegmentSelectTools } from "#src/ui/segment_select_tools.js";
 import { registerSegmentSplitMergeTools } from "#src/ui/segment_split_merge_tools.js";
 import { DisplayOptionsTab } from "#src/ui/segmentation_display_options_tab.js";
 import { SpatialSkeletonEditTab } from "#src/ui/spatial_skeleton_edit_tab.js";
-import { registerSpatialSkeletonEditModeTool } from "#src/ui/spatial_skeleton_edit_tool.js";
+import { registerSpatialSkeletonEditModeTool } from "#src/ui/spatial_skeleton_edit_tools.js";
 import { Uint64Map } from "#src/uint64_map.js";
 import { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import { Uint64Set } from "#src/uint64_set.js";
@@ -1619,8 +1619,7 @@ export class SegmentationUserLayer extends Base {
       requireVisibleChunks?: boolean;
     } = {},
   ) {
-    const { ignoreCommandBusy = false, requireVisibleChunks = false } =
-      options;
+    const { ignoreCommandBusy = false, requireVisibleChunks = false } = options;
     const missingSupportReason =
       this.getMissingSpatialSkeletonSupportReason(requiredActions);
     if (missingSupportReason !== undefined) {

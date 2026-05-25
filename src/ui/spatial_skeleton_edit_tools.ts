@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import "#src/ui/spatial_skeleton_edit_tool.css";
+import "#src/ui/spatial_skeleton_edit_tools.css";
 
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import {
@@ -55,6 +55,7 @@ import {
   getSpatialSkeletonEditBannerMessage,
   getSpatialSkeletonMergeBannerMessage,
   getSpatialSkeletonToolPointStatusFields,
+  SPATIAL_SKELETON_MOVING_NODE_MESSAGE,
 } from "#src/ui/spatial_skeleton_tool_messages.js";
 import type { ToolActivation } from "#src/ui/tool.js";
 import {
@@ -578,10 +579,12 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     onReady?: () => void,
   ) {
     const handleStateChanged = () => {
-      const disabledReason =
-        this.layer.getSpatialSkeletonActionsDisabledReason(requiredActions, {
+      const disabledReason = this.layer.getSpatialSkeletonActionsDisabledReason(
+        requiredActions,
+        {
           ignoreCommandBusy: true,
-        });
+        },
+      );
       if (disabledReason === undefined) {
         onReady?.();
         return;
@@ -1000,7 +1003,7 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
               DRAG_START_DISTANCE_PX * DRAG_START_DISTANCE_PX;
             if (!dragActive && dragDistanceSquared >= thresholdSquared) {
               dragActive = true;
-              setStatus("Dragging node");
+              setStatus(SPATIAL_SKELETON_MOVING_NODE_MESSAGE);
             }
             if (!dragActive) return;
             totalDeltaX += deltaX;
