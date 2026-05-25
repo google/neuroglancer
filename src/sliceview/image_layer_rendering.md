@@ -204,7 +204,7 @@ Directive syntax:
 
 The following parameters are supported:
 
-- `default`: Optional. The initial colormap to apply. Must be one of: `"grayscale"` (default), `"viridis"`, `"plasma"`, `"inferno"`, `"magma"`, `"coolwarm"`, `"rdbu"`, `"jet"`, `"cubehelix"`.
+- `default`: Optional. The initial colormap to apply. Must be one of: `"grayscale"` (default), `"viridis"`, `"plasma"`, `"cividis"`, `"magma"`, `"coolwarm"`, `"rdbu"`, `"turbo"`, `"cubehelix"`.
 
 > **Note**: Changing the colormap in the UI recompiles the shader (the colormap is a compile-time constant).
 
@@ -229,7 +229,7 @@ void main() {
 
 ```glsl
 #uicontrol invlerp normalized
-#uicontrol colormap cmap colormap(default="inferno")
+#uicontrol colormap cmap colormap(default="magma")
 void main() {
   float t = normalized();
   vec3 color = cmap(t);

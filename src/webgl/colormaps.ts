@@ -19,11 +19,11 @@ export const COLORMAP_NAMES = [
   "grayscale",
   "viridis",
   "plasma",
-  "inferno",
+  "cividis",
   "magma",
   "coolwarm",
   "rdbu",
-  "jet",
+  "turbo",
   "cubehelix",
 ] as const;
 
@@ -33,11 +33,11 @@ const COLORMAP_GLSL_NAMES: Record<ColormapName, string> = {
   grayscale: "colormapGrayscale",
   viridis: "colormapViridis",
   plasma: "colormapPlasma",
-  inferno: "colormapInferno",
+  cividis: "colormapCividis",
   magma: "colormapMagma",
   coolwarm: "colormapCoolwarm",
   rdbu: "colormapRdBu",
-  jet: "colormapJet",
+  turbo: "colormapTurbo",
   cubehelix: "colormapCubehelix",
 };
 
@@ -45,11 +45,11 @@ const COLORMAP_DISPLAY_NAMES: Record<ColormapName, string> = {
   grayscale: "Grayscale",
   viridis: "Viridis",
   plasma: "Plasma",
-  inferno: "Inferno",
+  cividis: "Cividis",
   magma: "Magma",
   coolwarm: "Coolwarm",
   rdbu: "RdBu",
-  jet: "Jet",
+  turbo: "Turbo",
   cubehelix: "Cubehelix",
 };
 
@@ -106,18 +106,20 @@ const PLASMA_B: [number, number, number, number, number, number, number] = [
   60.13984767418263, -54.07218655740221, 18.19190778539828,
 ];
 
-const INFERNO_R: [number, number, number, number, number, number, number] = [
-  0.0002189403691192265, 0.1065134194856116, 11.60249308247187,
-  -41.70399613249965, 77.162935699427, -71.31942824499214, 25.13112622477341,
+const CIVIDIS_R: [number, number, number, number, number, number, number] = [
+  -0.00897344252152263, -0.3846890463016869, 15.429210348544196,
+  -58.977031461143795, 102.37049151041279, -83.1872389608605,
+  25.776070143621226,
 ];
-const INFERNO_G: [number, number, number, number, number, number, number] = [
-  0.001651004631528365, 0.5639564367884091, -3.972853965665698,
-  17.43639888205313, -33.40235894210092, 32.62606426397723, -12.24266895238567,
+const CIVIDIS_G: [number, number, number, number, number, number, number] = [
+  0.1367558935859396, 0.6394937024193746, 0.38556165071843673,
+  -1.404197119381969, 2.6009142964887255, -2.140750389311616, 0.6881223150334494,
 ];
-const INFERNO_B: [number, number, number, number, number, number, number] = [
-  -0.01948089843709184, 3.932712388889277, -15.9423941062914, 44.35414519872813,
-  -81.80730925738993, 73.20951985803202, -23.07032500287172,
+const CIVIDIS_B: [number, number, number, number, number, number, number] = [
+  0.29417018709395076, 2.982653925809889, -22.36376037224533, 74.86356109800225,
+  -121.30316422065403, 93.97421639576243, -28.262533018402806,
 ];
+
 
 const MAGMA_R: [number, number, number, number, number, number, number] = [
   -0.002136485053939582, 0.2516605407371642, 8.353717279216625,
@@ -142,16 +144,44 @@ function evalColormapJs(
   return [evalPoly6(x, rc), evalPoly6(x, gc), evalPoly6(x, bc)];
 }
 
-function colormapJetJs(x: number): [number, number, number] {
+/*
+ * Turbo polynomial approximation by Anton Mikhailov (colormap design) and
+ * Ruofei Du (GLSL approximation), Google. Apache-2.0.
+ * https://gist.github.com/mikhailov-work/0d177465a8151eb6ede1768d51d476c7
+ * Degree-5 polynomial; output clamped to [0, 1] to match the other colormaps.
+ */
+function colormapTurboJs(x: number): [number, number, number] {
   x = clamp01(x);
-  const r = clamp01(
-    x < 0.89 ? (x - 0.35) / 0.31 : 1.0 - ((x - 0.89) / 0.11) * 0.5,
-  );
-  const g = clamp01(x < 0.64 ? (x - 0.125) * 4.0 : 1.0 - (x - 0.64) / 0.27);
-  const b = clamp01(
-    x < 0.34 ? 0.5 + (x * 0.5) / 0.11 : 1.0 - (x - 0.34) / 0.31,
-  );
-  return [r, g, b];
+  const x2 = x * x;
+  const x3 = x2 * x;
+  const x4 = x2 * x2;
+  const x5 = x4 * x;
+  return [
+    clamp01(
+      0.13572138 +
+        4.6153926 * x -
+        42.66032258 * x2 +
+        132.13108234 * x3 -
+        152.94239396 * x4 +
+        59.28637943 * x5,
+    ),
+    clamp01(
+      0.09140261 +
+        2.19418839 * x +
+        4.84296658 * x2 -
+        14.18503333 * x3 +
+        4.27729857 * x4 +
+        2.82956604 * x5,
+    ),
+    clamp01(
+      0.1066733 +
+        12.64194608 * x -
+        60.58204836 * x2 +
+        110.36276771 * x3 -
+        89.90310912 * x4 +
+        27.34824973 * x5,
+    ),
+  ];
 }
 
 function colormapCubehelixJs(x: number): [number, number, number] {
@@ -209,22 +239,25 @@ export function computeColormapColor(
       return evalColormapJs(t, VIRIDIS_R, VIRIDIS_G, VIRIDIS_B);
     case "plasma":
       return evalColormapJs(t, PLASMA_R, PLASMA_G, PLASMA_B);
-    case "inferno":
-      return evalColormapJs(t, INFERNO_R, INFERNO_G, INFERNO_B);
+    case "cividis":
+      return evalColormapJs(t, CIVIDIS_R, CIVIDIS_G, CIVIDIS_B);
     case "magma":
       return evalColormapJs(t, MAGMA_R, MAGMA_G, MAGMA_B);
     case "coolwarm":
       return colormapCoolwarmJs(t);
     case "rdbu":
       return colormapRdBuJs(t);
-    case "jet":
-      return colormapJetJs(t);
+    case "turbo":
+      return colormapTurboJs(t);
     case "cubehelix":
       return colormapCubehelixJs(t);
   }
 }
 
 export const glsl_COLORMAPS =
+  // colormapJet is no longer offered in the #uicontrol colormap dropdown
+  // (replaced by colormapTurbo), but the GLSL function is retained so that
+  // existing shaders that call colormapJet() directly continue to compile.
   `vec3 colormapJet(float x) {
   vec3 result;
   result.r = x < 0.89 ? ((x - 0.35) / 0.31) : (1.0 - (x - 0.89) / 0.11 * 0.5);
@@ -256,8 +289,8 @@ vec3 colormapGrayscale(float x) {
 }
 ` +
   /*
-   * Perceptually uniform sequential colormaps (viridis, plasma, inferno, magma)
-   * and diverging colormaps (coolwarm, rdbu).
+   * Perceptually uniform sequential colormaps (viridis, plasma, cividis, magma),
+   * diverging colormaps (coolwarm, rdbu), and turbo (an improved rainbow).
    *
    * Polynomial approximations derived from the matplotlib colormap lookup tables:
    * https://github.com/matplotlib/matplotlib/blob/main/lib/matplotlib/_cm_listed.py
@@ -266,8 +299,9 @@ vec3 colormapGrayscale(float x) {
    * https://iquilezles.org/articles/palettes/
    *
    * Coefficients computed by least-squares regression over the 256-entry tables.
-   * Maximum error across all channels is approximately 0.01-0.02 depending on
-   * the colormap — visually close but not exact reproduction.
+   * Maximum error is ~0.01-0.04 for the perceptual maps and ~0.11 for turbo,
+   * which has rainbow oscillations that don't fit cleanly at order 6 — visually
+   * recognizable but not exact.
    */
   `vec3 colormapViridis(float x) {
   x = clamp(x, 0.0, 1.0);
@@ -291,15 +325,15 @@ vec3 colormapPlasma(float x) {
   vec3 c6 = vec3(-3.658713842777788, -22.93153465461149, 18.19190778539828);
   return clamp(c0 + x*(c1 + x*(c2 + x*(c3 + x*(c4 + x*(c5 + x*c6))))), 0.0, 1.0);
 }
-vec3 colormapInferno(float x) {
+vec3 colormapCividis(float x) {
   x = clamp(x, 0.0, 1.0);
-  vec3 c0 = vec3(0.0002189403691192265, 0.001651004631528365, -0.01948089843709184);
-  vec3 c1 = vec3(0.1065134194856116, 0.5639564367884091, 3.932712388889277);
-  vec3 c2 = vec3(11.60249308247187, -3.972853965665698, -15.9423941062914);
-  vec3 c3 = vec3(-41.70399613249965, 17.43639888205313, 44.35414519872813);
-  vec3 c4 = vec3(77.162935699427, -33.40235894210092, -81.80730925738993);
-  vec3 c5 = vec3(-71.31942824499214, 32.62606426397723, 73.20951985803202);
-  vec3 c6 = vec3(25.13112622477341, -12.24266895238567, -23.07032500287172);
+  vec3 c0 = vec3(-0.00897344252152263, 0.1367558935859396, 0.29417018709395076);
+  vec3 c1 = vec3(-0.3846890463016869, 0.6394937024193746, 2.982653925809889);
+  vec3 c2 = vec3(15.429210348544196, 0.38556165071843673, -22.36376037224533);
+  vec3 c3 = vec3(-58.977031461143795, -1.404197119381969, 74.86356109800225);
+  vec3 c4 = vec3(102.37049151041279, 2.6009142964887255, -121.30316422065403);
+  vec3 c5 = vec3(-83.1872389608605, -2.140750389311616, 93.97421639576243);
+  vec3 c6 = vec3(25.776070143621226, 0.6881223150334494, -28.262533018402806);
   return clamp(c0 + x*(c1 + x*(c2 + x*(c3 + x*(c4 + x*(c5 + x*c6))))), 0.0, 1.0);
 }
 vec3 colormapMagma(float x) {
@@ -330,5 +364,24 @@ vec3 colormapRdBu(float x) {
   return x < 0.5
     ? mix(red, white, x * 2.0)
     : mix(white, blue, (x - 0.5) * 2.0);
+}
+// Turbo: degree-5 polynomial approximation by Anton Mikhailov (colormap) and
+// Ruofei Du (GLSL), Google. Apache-2.0.
+// https://gist.github.com/mikhailov-work/0d177465a8151eb6ede1768d51d476c7
+vec3 colormapTurbo(float x) {
+  x = clamp(x, 0.0, 1.0);
+  const vec4 kRedVec4   = vec4(0.13572138, 4.61539260, -42.66032258, 132.13108234);
+  const vec4 kGreenVec4 = vec4(0.09140261, 2.19418839,   4.84296658, -14.18503333);
+  const vec4 kBlueVec4  = vec4(0.10667330, 12.64194608, -60.58204836, 110.36276771);
+  const vec2 kRedVec2   = vec2(-152.94239396, 59.28637943);
+  const vec2 kGreenVec2 = vec2(   4.27729857,  2.82956604);
+  const vec2 kBlueVec2  = vec2( -89.90310912, 27.34824973);
+  vec4 v4 = vec4(1.0, x, x*x, x*x*x);
+  vec2 v2 = v4.zw * v4.z;
+  return clamp(vec3(
+    dot(v4, kRedVec4)   + dot(v2, kRedVec2),
+    dot(v4, kGreenVec4) + dot(v2, kGreenVec2),
+    dot(v4, kBlueVec4)  + dot(v2, kBlueVec2)
+  ), 0.0, 1.0);
 }
 `;
