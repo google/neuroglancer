@@ -35,11 +35,13 @@ function makeTexture(
   format: number,
   type: number,
   data: ArrayBufferView,
+  w = 1,
+  h = 1,
 ): WebGLTexture {
   const tex = gl.createTexture()!;
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-  gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, 1, 1, 0, format, type, data);
+  gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, w, h, 0, format, type, data);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.bindTexture(gl.TEXTURE_2D, null);
@@ -71,6 +73,91 @@ function readRgba8(gl: GL): Uint8Array {
     out,
   );
   return out;
+}
+
+// Runs the GTAO (SSAO) shader on a w × h depth grid with every pixel's normal facing
+// the camera, and returns the RGBA bytes at (cx, cy). Used by tests that vary
+// only the depth pattern.
+function runGTAOAndReadCenter(
+  gl: GL,
+  w: number,
+  h: number,
+  cx: number,
+  cy: number,
+  depths: Float32Array,
+): Uint8Array {
+  const helper = OffscreenCopyHelper.get(gl, defineGTAOShader, 2);
+  const depthTex = makeTexture(
+    gl,
+    WebGL2RenderingContext.R32F,
+    WebGL2RenderingContext.RED,
+    WebGL2RenderingContext.FLOAT,
+    depths,
+    w,
+    h,
+  );
+  // Every pixel: packed view-space normal (0, 0, 1), i.e., facing the camera.
+  const normals = new Uint8Array(w * h * 4);
+  for (let i = 0; i < w * h; i++) {
+    normals[i * 4] = 128;
+    normals[i * 4 + 1] = 128;
+    normals[i * 4 + 2] = 255;
+    normals[i * 4 + 3] = 255;
+  }
+  const normalTex = makeTexture(
+    gl,
+    WebGL2RenderingContext.RGBA8,
+    WebGL2RenderingContext.RGBA,
+    WebGL2RenderingContext.UNSIGNED_BYTE,
+    normals,
+    w,
+    h,
+  );
+  const fbo = new FramebufferConfiguration(gl, {
+    colorBuffers: [
+      new TextureBuffer(
+        gl,
+        WebGL2RenderingContext.RGBA8,
+        WebGL2RenderingContext.RGBA,
+        WebGL2RenderingContext.UNSIGNED_BYTE,
+      ),
+    ],
+  });
+  try {
+    fbo.bind(w, h);
+    helper.shader.bind();
+    const proj = mat4.create();
+    // Make a camera with 90 degree vertical FOV, square aspect, [0.1, 10] depth range.
+    mat4.perspective(proj, Math.PI / 2, 1.0, 0.1, 10.0);
+    const invProj = mat4.create();
+    mat4.invert(invProj, proj);
+    gl.uniformMatrix4fv(helper.shader.uniform("uProjection"), false, proj);
+    gl.uniformMatrix4fv(
+      helper.shader.uniform("uInvProjection"),
+      false,
+      invProj,
+    );
+    // 0.4 > 1/uResolution.y (i.e., 0.125), so the sub-pixel exit is skipped;
+    // kernel reaches ~3 pixels from center.
+    gl.uniform1f(helper.shader.uniform("uRadius"), 0.4);
+    gl.uniform2f(helper.shader.uniform("uResolution"), w, h);
+    helper.draw(depthTex, normalTex);
+    const px = new Uint8Array(4);
+    gl.readPixels(
+      cx,
+      cy,
+      1,
+      1,
+      WebGL2RenderingContext.RGBA,
+      WebGL2RenderingContext.UNSIGNED_BYTE,
+      px,
+    );
+    return px;
+  } finally {
+    fbo.dispose();
+    gl.deleteTexture(depthTex);
+    gl.deleteTexture(normalTex);
+  }
 }
 
 describe("SSAO shaders", () => {
@@ -172,7 +259,7 @@ describe("SSAO shaders", () => {
     });
   });
 
-  it("GTAO no-AO sentinel: cleared depth (=0) returns ao=1.0", () => {
+  it("SSAO no-AO sentinel: cleared depth (=0) returns ao=1.0", () => {
     webglTest((gl) => {
       const helper = OffscreenCopyHelper.get(gl, defineGTAOShader, 2);
       // Cleared-background sentinel: shader bails before reading the normal.
@@ -212,7 +299,7 @@ describe("SSAO shaders", () => {
     });
   });
 
-  it("GTAO no-AO sentinel: zero-RGB normal returns ao=1.0", () => {
+  it("SSAO no-AO sentinel: zero-RGB normal returns ao=1.0", () => {
     webglTest((gl) => {
       const helper = OffscreenCopyHelper.get(gl, defineGTAOShader, 2);
       // Non-cleared depth so the shader proceeds past the depth check, then
@@ -250,6 +337,44 @@ describe("SSAO shaders", () => {
         gl.deleteTexture(depthTex);
         gl.deleteTexture(normalTex);
       }
+    });
+  });
+
+  it("SSAO produces lowish < ao < highish when neighbors occlude the center", () => {
+    webglTest((gl) => {
+      const w = 8;
+      const h = 8;
+      const cx = 4;
+      const cy = 4;
+      // Center at depthVal 0.4 (further from camera); surrounding pixels at
+      // 0.7 (closer). The shader does fragZ = 1 - depthVal, so the center
+      // is "lower" and its raised neighbors occlude it.
+      const depths = new Float32Array(w * h);
+      for (let i = 0; i < w * h; i++) {
+        depths[i] = 0.7;
+      }
+      depths[cy * w + cx] = 0.4;
+      const px = runGTAOAndReadCenter(gl, w, h, cx, cy, depths);
+      // Loose bounds: tight enough to catch regressions where the algorithm
+      // pegs to either extreme (no AO or full black), wide enough to absorb
+      // expected variation in noise, falloff curve, or sample count.
+      expect(px[0]).toBeGreaterThan(64);
+      expect(px[0]).toBeLessThan(192);
+    });
+  });
+
+  it("SSAO produces ao ≈ 1 on a flat surface (no occluders)", () => {
+    webglTest((gl) => {
+      const w = 8;
+      const h = 8;
+      const cx = 4;
+      const cy = 4;
+      // All pixels at the same depth: no occlusion possible.
+      const depths = new Float32Array(w * h).fill(0.5);
+      const px = runGTAOAndReadCenter(gl, w, h, cx, cy, depths);
+      // Every sample has sinH ≤ 0, total occlusion is 0, ao = 1.0. Allow
+      // tiny slack for floating-point rounding.
+      expect(px[0]).toBeGreaterThanOrEqual(250);
     });
   });
 
