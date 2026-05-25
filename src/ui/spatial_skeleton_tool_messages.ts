@@ -43,6 +43,7 @@ export const SPATIAL_SKELETON_MERGE_BANNER_MESSAGE = "Select 2 nodes to merge";
 export const SPATIAL_SKELETON_MERGE_SELECTED_BANNER_MESSAGE =
   "Select 2nd node from a different skeleton to merge with";
 export const SPATIAL_SKELETON_SPLIT_BANNER_MESSAGE = "Select 1 node to split";
+export const SPATIAL_SKELETON_MOVING_NODE_MESSAGE = "Moving node";
 
 export function formatSpatialSkeletonToolPoint(
   point: SpatialSkeletonToolPointInfo,

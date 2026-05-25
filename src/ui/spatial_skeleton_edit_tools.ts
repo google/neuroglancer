@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import "#src/ui/spatial_skeleton_edit_tool.css";
+import "#src/ui/spatial_skeleton_edit_tools.css";
 
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import {
@@ -55,6 +55,7 @@ import {
   getSpatialSkeletonEditBannerMessage,
   getSpatialSkeletonMergeBannerMessage,
   getSpatialSkeletonToolPointStatusFields,
+  SPATIAL_SKELETON_MOVING_NODE_MESSAGE,
 } from "#src/ui/spatial_skeleton_tool_messages.js";
 import type { ToolActivation } from "#src/ui/tool.js";
 import {
@@ -578,10 +579,12 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     onReady?: () => void,
   ) {
     const handleStateChanged = () => {
-      const disabledReason =
-        this.layer.getSpatialSkeletonActionsDisabledReason(requiredActions, {
+      const disabledReason = this.layer.getSpatialSkeletonActionsDisabledReason(
+        requiredActions,
+        {
           ignoreCommandBusy: true,
-        });
+        },
+      );
       if (disabledReason === undefined) {
         onReady?.();
         return;
@@ -723,8 +726,15 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
       makeToolActivationStatusMessageWithHeader(activation);
     header.textContent = "Spatial skeleton edit mode";
     let statusOverride: string | undefined;
+    let cachedNodeSummary:
+      | ReturnType<typeof this.getSelectedSpatialSkeletonNodeSummary>
+      | undefined;
+    const clearCachedNodeSummary = () => {
+      cachedNodeSummary = undefined;
+    };
     const renderStatus = () => {
-      const selectedPoint = this.getSelectedSpatialSkeletonNodeSummary();
+      const selectedPoint =
+        cachedNodeSummary ?? this.getSelectedSpatialSkeletonNodeSummary();
       renderSpatialSkeletonToolStatus(body, {
         message:
           statusOverride ?? getSpatialSkeletonEditBannerMessage(selectedPoint),
@@ -990,21 +1000,24 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
         );
         let totalDeltaX = 0;
         let totalDeltaY = 0;
-        let dragDistanceSquared = 0;
-        let dragActive = false;
+        let dragStarted = false;
+        cachedNodeSummary = this.getSelectedSpatialSkeletonNodeSummary();
+        setStatus(SPATIAL_SKELETON_MOVING_NODE_MESSAGE);
         startRelativeMouseDrag(
           event.detail,
           (_event, deltaX, deltaY) => {
-            dragDistanceSquared += deltaX * deltaX + deltaY * deltaY;
-            const thresholdSquared =
-              DRAG_START_DISTANCE_PX * DRAG_START_DISTANCE_PX;
-            if (!dragActive && dragDistanceSquared >= thresholdSquared) {
-              dragActive = true;
-              setStatus("Dragging node");
-            }
-            if (!dragActive) return;
             totalDeltaX += deltaX;
             totalDeltaY += deltaY;
+            if (!dragStarted) {
+              const thresholdSquared =
+                DRAG_START_DISTANCE_PX * DRAG_START_DISTANCE_PX;
+              if (
+                totalDeltaX * totalDeltaX + totalDeltaY * totalDeltaY <
+                thresholdSquared
+              )
+                return;
+              dragStarted = true;
+            }
             dragPanel.translateDataPointByViewportPixels(
               this.dragGlobalPosition,
               this.dragGlobalAnchorPosition,
@@ -1033,11 +1046,11 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
             this.dragModelSpacePosition.set(modelPosition);
           },
           (_finishEvent) => {
-            if (!dragActive) {
-              setReadyStatus();
+            clearCachedNodeSummary();
+            setReadyStatus();
+            if (!dragStarted) {
               return;
             }
-            setReadyStatus();
             if (moved) {
               void executeSpatialSkeletonMoveNode(layer, {
                 node: nodeInfo,
