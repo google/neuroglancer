@@ -186,6 +186,11 @@ const glsl_ssaoComposite = `
 // sentinel (zero-RGB plus rounding tolerance). Real packed unit normals
 // have squared length >= 1/3, so 0.01 is safely below.
 #define SENTINEL_EPS 0.01
+
+// Set to 1 to visualize the (post-intensity) AO buffer directly instead of
+// the color * AO composite. Useful for fine-tuning radius, intensity or
+// blur falloff without the effect of mesh color or lighting.
+#define DEBUG_SSAO 0
 `;
 
 export function defineSSAOCompositeShader(builder: ShaderBuilder) {
@@ -201,6 +206,10 @@ export function defineSSAOCompositeShader(builder: ShaderBuilder) {
   // appearance.
   vec3 normal = getValue2().rgb;
   ao = dot(normal, normal) < SENTINEL_EPS ? 1.0 : pow(ao, uIntensity);
+  #if DEBUG_SSAO
+  v4f_fragColor = vec4(vec3(ao), 1.0);
+  #else
   v4f_fragColor = vec4(color.rgb * ao, color.a);
+  #endif
 `);
 }
