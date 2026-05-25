@@ -23,7 +23,7 @@ import { forEachVisibleVolumetricChunk } from "#src/sliceview/base.js";
 import type { VolumeChunkSource } from "#src/sliceview/volume/base.js";
 import type { vec3 } from "#src/util/geom.js";
 import {
-  getViewFrustrumDepthRange,
+  getViewFrustumDepthRange,
   mat3,
   mat3FromMat4,
   prod3,
@@ -73,7 +73,7 @@ export function getVolumeRenderingNearFarBounds(
 //   const modelViewProjection = mat4.multiply(
 //       tempMat4, projectionParameters.viewProjectionMat, tsource.chunkLayout.transform);
 //   const clippingPlanes = tempVisibleVolumetricClippingPlanes;
-//   getFrustrumPlanes(clippingPlanes, modelViewProjection);
+//   getFrustumPlanes(clippingPlanes, modelViewProjection);
 //   const {near, far} = getVolumeRenderingNearFarBounds(
 //       clippingPlanes, tsource.lowerClipDisplayBound, tsource.upperClipDisplayBound);
 //   if (near === far) return -1;
@@ -112,7 +112,7 @@ export function forEachVisibleVolumeRenderingChunk<
   const { voxelPhysicalScales } = displayDimensionRenderInfo;
   const canonicalToPhysicalScale = prod3(voxelPhysicalScales);
 
-  const depthRange = getViewFrustrumDepthRange(projectionMat);
+  const depthRange = getViewFrustumDepthRange(projectionMat);
   // Target voxel spacing in view space
   const targetViewSpacing = depthRange / volumeRenderingDepthSamples;
   // Target voxel volume in view space.
