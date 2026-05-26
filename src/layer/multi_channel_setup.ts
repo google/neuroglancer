@@ -57,7 +57,14 @@ type MakeLayerFn = (
   spec: any,
 ) => ManagedUserLayer;
 
-const MULTICHANNEL_FRAGMENT_MAIN = `#uicontrol invlerp contrast
+// Leading sentinel comment marks this template as the managed "color"
+// shader (paired with the Ichnaea-side LUT variant in
+// `web/src/lib/shaderTemplates.ts`). Editing the body away from this
+// shape — or deleting the comment line — flips the layer into "custom"
+// mode in the inspector, which surfaces a warning and disables the
+// LUT toggle until the user resets the shader.
+const MULTICHANNEL_FRAGMENT_MAIN = `// @ichnaea:color-shader
+#uicontrol invlerp contrast
 #uicontrol vec3 color color
 void main() {
   if (VOLUME_RENDERING) {
@@ -340,12 +347,23 @@ function setupLayerPostCreation(
   postCreationSetupFunctions.push(setShaderDefaultsWhenReady);
 }
 
+// Tracks which ManagedUserLayer objects this function has already
+// processed. AutoUserLayer.activateDataSubsources subscribes to
+// `managedLayer.readyStateChanged` and calls back here every time
+// isReady flips true — which happens again after the upgraded ImageLayer
+// finishes its async data load. The second pass would re-apply the
+// multichannel shader and re-rename the layer, wiping in-memory color
+// edits and orphaning persisted state (keyed by layer name) in the
+// outer app's store. WeakSet so disposed layers don't pin memory.
+const setupComplete = new WeakSet<ManagedUserLayer>();
+
 export function createImageLayerAsMultiChannel(
   managedLayer: Borrowed<ManagedUserLayer>,
   makeLayer: MakeLayerFn,
   checkForMultipleChannels: boolean = false,
 ) {
   if (managedLayer.layer?.type !== "image") return;
+  if (setupComplete.has(managedLayer)) return;
 
   renameChannelDimensions(managedLayer.layer);
   const { dataLocalChannels, lowerBounds, upperBounds, localDimensionRank } =
@@ -353,6 +371,11 @@ export function createImageLayerAsMultiChannel(
   const totalLocalChannels = Math.max(dataLocalChannels, 1);
 
   if (totalLocalChannels <= 1 && checkForMultipleChannels) return;
+
+  // Past the early-return gauntlet; commit to running once. The mark
+  // happens before any mutation so a re-entrant readyStateChanged fire
+  // mid-setup also gets caught.
+  setupComplete.add(managedLayer);
 
   const ranges = [];
   for (let i = 0; i < localDimensionRank; i++) {

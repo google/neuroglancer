@@ -18,6 +18,7 @@ import { ChunkState } from "#src/chunk_manager/base.js";
 import { ChunkRenderLayerFrontend } from "#src/chunk_manager/frontend.js";
 import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import type { VisibleLayerInfo } from "#src/layer/index.js";
+import { luts } from "#src/luts/luts.js";
 import type { PerspectivePanel } from "#src/perspective_view/panel.js";
 import type {
   PerspectiveViewReadyRenderContext,
@@ -390,6 +391,11 @@ void emitRGBA(vec4 rgba) {
           // Far limit in [0, 1] as fraction of full limit.
           builder.addUniform("highp float", "uFarLimitFraction");
           builder.addUniform("highp int", "uMaxSteps");
+          // Indexed 256-entry RGBA lookup table used by the LUT image
+          // shader template. The 2D slice shader declares the same
+          // uniform — both pipelines must agree on the binding so a
+          // single shader template renders identically in 2D and 3D.
+          builder.addUniform("vec4", "lut", 256);
 
           // Specifies translation of the current chunk.
           builder.addUniform("highp vec3", "uTranslation");
@@ -941,6 +947,19 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
                 this.shaderControlState,
                 shaderResult.parameters.parseResult.controls,
               );
+              // Mirror image_renderlayer's LUT binding so the 3D volume
+              // render uses the same lookup table as the 2D slice view.
+              // `window.lutName` is owned by the application layer and
+              // mirrors the persisted LUT setting; the "Tricolor 1"
+              // fallback matches the 2D side.
+              const lutName =
+                (window as any).lutName === undefined
+                  ? "Tricolor 1"
+                  : (window as any).lutName;
+              gl.uniform4fv(
+                shader.uniform("lut"),
+                new Float32Array((luts as any)[lutName]),
+              );
               this.bindDepthBufferTexture(renderContext, shader);
               chunkFormat.beginDrawing(gl, shader);
               chunkFormat.beginSource(gl, shader);
@@ -1130,6 +1149,15 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
                 shader,
                 this.shaderControlState,
                 shaderResult.parameters.parseResult.controls,
+              );
+              // LUT binding (see comment in primary pass above).
+              const lutName =
+                (window as any).lutName === undefined
+                  ? "Tricolor 1"
+                  : (window as any).lutName;
+              gl.uniform4fv(
+                shader.uniform("lut"),
+                new Float32Array((luts as any)[lutName]),
               );
               this.bindDepthBufferTexture(renderContext, shader);
               this.setShaderUniforms(shader, shaderSetupUniforms);
