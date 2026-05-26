@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {asyncComputation} from '#src/async_computation/index.js';
+import { asyncComputation } from "#src/async_computation/index.js";
 
-export const decodeCrackle = asyncComputation<(data: Uint8Array) => Uint8Array>('decodeCrackle');
+export const decodeCrackle =
+  asyncComputation<(data: Uint8Array) => Uint8Array>("decodeCrackle");

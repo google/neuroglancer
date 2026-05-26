@@ -76,8 +76,8 @@ export function estimateSliceAreaPerChunk(
 }
 
 export interface wasmModuleInstance {
-    module: WebAssembly.Module;
-    instance: WebAssembly.Instance;
+  module: WebAssembly.Module;
+  instance: WebAssembly.Instance;
 }
 
 export interface MultiscaleVolumetricDataRenderLayer {

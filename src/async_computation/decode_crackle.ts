@@ -14,13 +14,11 @@
  * limitations under the License.
  */
 
-import { decompressCrackle } from '#src/sliceview/crackle/index.js';
-import { decodeCrackle } from '#src/async_computation/decode_crackle_request.js';
-import { registerAsyncComputation } from '#src/async_computation/handler.js';
+import { decodeCrackle } from "#src/async_computation/decode_crackle_request.js";
+import { registerAsyncComputation } from "#src/async_computation/handler.js";
+import { decompressCrackle } from "#src/sliceview/crackle/index.js";
 
-registerAsyncComputation(
-    decodeCrackle,
-    async function(data: Uint8Array) {      
-      const result = await decompressCrackle(data);
-      return { value: result, transfer: [result.buffer] };
-    });
+registerAsyncComputation(decodeCrackle, async function (data: Uint8Array) {
+  const result = await decompressCrackle(data);
+  return { value: result, transfer: [result.buffer] };
+});
