@@ -135,6 +135,10 @@ export function buildSpatialSkeletonSegmentRenderState(
     }
   }
 
+  const hasActiveFilter =
+    options.filterText.length > 0 ||
+    options.nodeFilterType !== SpatialSkeletonNodeFilterType.NONE;
+
   const rows: SpatialSkeletonSegmentRenderRow[] = [];
   for (const nodeId of visibleNodeIds) {
     const node = nodeById.get(nodeId);
@@ -144,6 +148,7 @@ export function buildSpatialSkeletonSegmentRenderState(
       node.parentNodeId !== undefined && nodeById.has(node.parentNodeId);
     const type = classifyNodeType(node, children.length, parentInTree);
     if (
+      !hasActiveFilter &&
       type === SpatialSkeletonDisplayNodeType.REGULAR &&
       !(node.isTrueEnd ?? false)
     ) {
