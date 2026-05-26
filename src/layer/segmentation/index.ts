@@ -1836,11 +1836,11 @@ export class SegmentationUserLayer extends Base {
       specification[json_keys.HIDDEN_OPACITY_3D_JSON_KEY],
     );
     this.displayState.spatialSkeletonNodeQuery.restoreState(
-      specification[json_keys.SPATIAL_SKELETON_NODE_QUERY_JSON_KEY],
+      specification[json_keys.SKELETON_NODE_QUERY_JSON_KEY],
     );
     verifyOptionalObjectProperty(
       specification,
-      json_keys.SPATIAL_SKELETON_NODE_FILTER_JSON_KEY,
+      json_keys.SKELETON_NODE_FILTER_JSON_KEY,
       (value) =>
         this.displayState.spatialSkeletonNodeFilter.restoreState(value),
     );
@@ -1913,9 +1913,9 @@ export class SegmentationUserLayer extends Base {
       this.displayState.notSelectedAlpha.toJSON();
     x[json_keys.SATURATION_JSON_KEY] = this.displayState.saturation.toJSON();
     x[json_keys.OBJECT_ALPHA_JSON_KEY] = this.displayState.objectAlpha.toJSON();
-    x[json_keys.SPATIAL_SKELETON_NODE_QUERY_JSON_KEY] =
+    x[json_keys.SKELETON_NODE_QUERY_JSON_KEY] =
       this.displayState.spatialSkeletonNodeQuery.toJSON();
-    x[json_keys.SPATIAL_SKELETON_NODE_FILTER_JSON_KEY] =
+    x[json_keys.SKELETON_NODE_FILTER_JSON_KEY] =
       this.displayState.spatialSkeletonNodeFilter.toJSON();
     x[json_keys.HIDDEN_OPACITY_3D_JSON_KEY] =
       this.displayState.hiddenObjectAlpha.toJSON();
