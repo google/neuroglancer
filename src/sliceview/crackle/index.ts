@@ -94,19 +94,20 @@ export async function decompressCrackle(
   // memory growth can detatch the buffer.
   const bufPtr = (m.instance.exports.malloc as Function)(buffer.byteLength);
   const imagePtr = (m.instance.exports.malloc as Function)(nbytes);
-  const heap = new Uint8Array(
-    (m.instance.exports.memory as WebAssembly.Memory).buffer,
-  );
-  heap.set(buffer, bufPtr);
-
-  const code = (m.instance.exports.crackle_decompress as Function)(
-    bufPtr,
-    buffer.byteLength,
-    imagePtr,
-    nbytes,
-  );
 
   try {
+    const heap = new Uint8Array(
+      (m.instance.exports.memory as WebAssembly.Memory).buffer,
+    );
+    heap.set(buffer, bufPtr);
+
+    const code = (m.instance.exports.crackle_decompress as Function)(
+      bufPtr,
+      buffer.byteLength,
+      imagePtr,
+      nbytes,
+    );
+
     if (code !== 0) {
       throw new Error(`crackle: Failed to decode image. decoder code: ${code}`);
     }
