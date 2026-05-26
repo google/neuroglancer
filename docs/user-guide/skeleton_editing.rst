@@ -12,6 +12,9 @@ Supported Sources
 Skeleton editing is currently only supported on CATMAID data sources. See the
 CATMAID documentation to set up a CATMAID server. At minimum you will need:
 
+- CATMAID commit ``ed261715a0c4b2b1698dfd9a0e2d6f4233533f19`` or newer. This
+  version adds the edition-time metadata that Neuroglancer uses to validate
+  edits against the current CATMAID skeleton state.
 - A CATMAID project
 - A linked project stack
 - ``AnonymousUser`` permissions to read and edit the data on that project
