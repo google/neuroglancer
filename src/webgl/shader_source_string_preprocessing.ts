@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import { glsl_string } from "#src/webgl/shader_lib.js";
+
 export type ShaderStringLiteralIdMap = ReadonlyMap<string, number>;
 
 export interface ShaderStringPreprocessingResult {
@@ -21,13 +23,17 @@ export interface ShaderStringPreprocessingResult {
   stringLiteralIds: ShaderStringLiteralIdMap;
 }
 
+export const shaderStringTypeDefinition = glsl_string;
+
 // Matches double-quoted string literals without terminating on escaped quotes.
 const doubleQuotedStringPattern = /"(?:\\.|[^\\"])*"/g;
 
+// TODO, if we want to guarantee mapping values, add optional map argument
 export function preprocessStrings(
   userShader: string,
+  mapping?: Map<string, number>,
 ): ShaderStringPreprocessingResult {
-  const stringLiteralIds = new Map<string, number>();
+  const stringLiteralIds = mapping ?? new Map<string, number>();
   const code = userShader.replace(doubleQuotedStringPattern, (token) => {
     const value = JSON.parse(token) as string;
     let index = stringLiteralIds.get(value);
@@ -35,7 +41,7 @@ export function preprocessStrings(
       index = stringLiteralIds.size + 1;
       stringLiteralIds.set(value, index);
     }
-    return `${index}u`;
+    return `string_t(${index}u)`;
   });
   return { code, stringLiteralIds };
 }

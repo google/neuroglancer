@@ -166,7 +166,7 @@ export class ShaderProgram extends RefCounted {
   fragmentShader: WebGLShader;
   attributes = new Map<string, AttributeIndex>();
   uniforms = new Map<string, WebGLUniformLocation | null>();
-  textureUnits: Map<any, number>;
+  textureUnits: Map<any, number> = new Map<any, number>();
   vertexShaderInputBinders: { [name: string]: VertexShaderInputBinder } = {};
   vertexDebugOutputs?: VertexDebugOutput[];
   transferFunctionTextures: Map<any, ControlPointTexture> = new Map<
@@ -224,10 +224,10 @@ export class ShaderProgram extends RefCounted {
     }
     this.program = shaderProgram!;
 
-    const { uniforms, attributes } = this;
+    const { attributes } = this;
     if (uniformNames) {
       for (const name of uniformNames) {
-        uniforms.set(name, gl.getUniformLocation(shaderProgram, name));
+        this.uniforms.set(name, gl.getUniformLocation(shaderProgram, name));
       }
     }
 
@@ -238,8 +238,12 @@ export class ShaderProgram extends RefCounted {
     }
   }
 
-  uniform(name: string): WebGLUniformLocation {
-    return this.uniforms.get(name)!;
+  uniform(name: string): WebGLUniformLocation | null {
+    const location = this.uniforms.get(name);
+    if (location === undefined) {
+      throw new Error(`Invalid uniform: ${name}`);
+    }
+    return location;
   }
 
   attribute(name: string): number {
@@ -478,6 +482,7 @@ interface VertexDebugOutput {
 export class ShaderBuilder {
   private nextSymbolID = 0;
   private nextTextureUnit = 0;
+  private uniformDefinitionsCode = new ShaderCode();
   private uniformsCode = "";
   private attributesCode = "";
   private varyingsCodeVS = "";
@@ -576,6 +581,10 @@ export class ShaderBuilder {
     return name;
   }
 
+  addUniformDefinition(code: ShaderCodePart) {
+    this.uniformDefinitionsCode.add(code);
+  }
+
   addFragmentExtension(name: string) {
     if (this.fragmentExtensionsSet.has(name)) {
       return;
@@ -625,6 +634,7 @@ ${code}
     const vertexSource = `#version 300 es
 precision highp float;
 precision highp int;
+${this.uniformDefinitionsCode}
 ${this.uniformsCode}
 ${this.attributesCode}
 ${this.varyingsCodeVS}
@@ -638,6 +648,7 @@ ${this.vertexMain}
 ${this.fragmentExtensions}
 precision highp float;
 precision highp int;
+  ${this.uniformDefinitionsCode}
 ${this.uniformsCode}
 ${this.varyingsCodeFS}
 ${this.outputBufferCode}

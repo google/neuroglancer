@@ -26,19 +26,27 @@ const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
   "at:shift+wheel": { action: "adjust-via-wheel" },
 });
 
-export function selectLayerControl<LayerType extends UserLayer>(
+export interface SelectLayerControlOption<T extends string | number> {
+  value: T;
+  label: string;
+}
+
+export function selectLayerControl<LayerType extends UserLayer, T extends string | number>(
   getter: (layer: LayerType) => {
-    value: WatchableValueInterface<string>;
-    options: string[];
+    value: WatchableValueInterface<T>;
+    options: SelectLayerControlOption<T>[];
   },
 ): LayerControlFactory<LayerType, EnumSelectWidget<number>> {
   return {
     makeControl: (layer, context) => {
       const { value, options } = getter(layer);
-      const initialIndex = Math.max(0, options.indexOf(value.value));
+      const initialIndex = Math.max(
+        0,
+        options.findIndex((option) => option.value === value.value),
+      );
       const trackableEnum = new TrackableEnum(
         Object.fromEntries(
-          options.map((option, index) => [option.toUpperCase(), index]),
+          options.map((_option, index) => [`OPTION_${index}`, index]),
         ),
         initialIndex,
       );
@@ -48,13 +56,12 @@ export function selectLayerControl<LayerType extends UserLayer>(
       for (const [index, option] of options.entries()) {
         const element = control.element.options.item(index);
         if (element !== null) {
-          element.value = option;
-          element.textContent = option;
+          element.textContent = option.label;
         }
       }
       context.registerDisposer(
         value.changed.add(() => {
-          const index = options.indexOf(value.value);
+          const index = options.findIndex((option) => option.value === value.value);
           if (index !== -1) {
             trackableEnum.value = index;
           }
@@ -64,7 +71,7 @@ export function selectLayerControl<LayerType extends UserLayer>(
         trackableEnum.changed.add(() => {
           const option = options[trackableEnum.value];
           if (option !== undefined) {
-            value.value = option;
+            value.value = option.value;
           }
         }),
       );

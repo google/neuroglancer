@@ -32,7 +32,10 @@ import type {
   ParameterizedEmitterDependentShaderOptions,
   ParameterizedShaderGetterResult,
 } from "#src/webgl/dynamic_shader.js";
-import type { ShaderControlState } from "#src/webgl/shader_ui_controls.js";
+import {
+  getShaderSelectOptionLabel,
+  type ShaderControlState,
+} from "#src/webgl/shader_ui_controls.js";
 import type {
   LayerControlDefinition,
   LayerControlFactory,
@@ -85,7 +88,10 @@ function getShaderLayerControlFactory<LayerType extends UserLayer>(
     case "select":
       return selectLayerControl(() => ({
         value: controlState.trackable,
-        options: control.options,
+        options: control.options.map((option) => ({
+          value: option.value,
+          label: getShaderSelectOptionLabel(option),
+        })),
       }));
     case "imageInvlerp": {
       return channelInvlerpLayerControl(() => ({

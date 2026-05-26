@@ -28,6 +28,7 @@ import {
   makeTrackableFragmentMain,
   shaderCodeWithLineDirective,
 } from "#src/webgl/dynamic_shader.js";
+import { glsl_string } from "#src/webgl/shader_lib.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import type {
   ShaderControlsBuilderState,
@@ -81,6 +82,7 @@ void emitIntensity(float value) {
 `);
   builder.addFragmentCode(glsl_COLORMAPS);
   addControlsToBuilder(shaderBuilderState, builder);
+  builder.addUniformDefinition(glsl_string);
   builder.setFragmentMainFunction(
     shaderCodeWithLineDirective(shaderBuilderState.parseResult.code),
   );

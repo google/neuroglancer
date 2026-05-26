@@ -78,7 +78,7 @@ import type {
   ShaderProgram,
   ShaderSamplerType,
 } from "#src/webgl/shader.js";
-import { getShaderType } from "#src/webgl/shader_lib.js";
+import { getShaderType, glsl_string } from "#src/webgl/shader_lib.js";
 import type { ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
 import {
   addControlsToBuilder,
@@ -504,6 +504,7 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensional
           }
           addControlsToBuilder(shaderBuilderState, builder);
           this.shaderManager.defineShader(builder);
+          builder.addUniformDefinition(glsl_string);
           builder.setFragmentMainFunction(
             shaderCodeWithLineDirective(shaderBuilderState.parseResult.code),
           );
