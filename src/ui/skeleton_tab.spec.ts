@@ -19,7 +19,7 @@ import { describe, expect, it } from "vitest";
 import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
 import { buildSpatiallyIndexedSkeletonNavigationGraph } from "#src/skeleton/navigation_graph.js";
 import { SpatialSkeletonNodeFilterType } from "#src/skeleton/node_types.js";
-import { buildSpatialSkeletonSegmentRenderState } from "#src/ui/spatial_skeleton_edit_tab_render.js";
+import { buildSpatialSkeletonSegmentRenderState } from "#src/ui/skeleton_tab_render.js";
 
 function makeNode(
   nodeId: number,
@@ -49,7 +49,7 @@ async function getBuildSpatialSkeletonVirtualListItems() {
   (
     globalThis as { WebGL2RenderingContext?: unknown }
   ).WebGL2RenderingContext ??= webglContextStub;
-  return (await import("#src/ui/spatial_skeleton_edit_tab.js"))
+  return (await import("#src/ui/skeleton_tab.js"))
     .buildSpatialSkeletonVirtualListItems;
 }
 

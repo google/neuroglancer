@@ -11,7 +11,7 @@ import {
   getSpatialSkeletonToolPointStatusFields,
   getSpatialSkeletonEditBannerMessage,
   getSpatialSkeletonMergeBannerMessage,
-} from "#src/ui/spatial_skeleton_tool_messages.js";
+} from "#src/ui/skeleton_edit_tool_messages.js";
 
 describe("spatial_skeleton_tool_messages", () => {
   it("formats tool points with node and segment ids", () => {
