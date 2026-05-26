@@ -89,6 +89,12 @@ import { Tab } from "#src/widget/tab_view.js";
 import type { VirtualListSource } from "#src/widget/virtual_list.js";
 import { VirtualList } from "#src/widget/virtual_list.js";
 
+const NO_SEGMENT_SELECTED_MESSAGE = "No segment/skeleton is selected.";
+const NO_NODE_SELECTED_MESSAGE =
+  "No skeleton node is selected, only go to root is supported on skeleton edges.";
+const NAVIGATE_FROM_SPATIAL_INDEX_MESSAGE =
+  "A non-visible segment is selected. Make it visible to use skeleton navigation features.";
+
 export type SegmentDisplayState = SpatialSkeletonSegmentRenderState & {
   segmentLabel: string | undefined;
 };
@@ -380,12 +386,6 @@ export class SpatialSkeletonEditTab extends Tab {
         );
       }
       return [0, 1, 2].map((i) => String(Math.round(Number(position[i]))));
-    };
-
-    const getSelectedNode = () => {
-      const selectedId = layer.selectedSpatialSkeletonNodeId.value;
-      if (selectedId === undefined) return undefined;
-      return allNodes.find((node) => node.nodeId === selectedId);
     };
 
     const getFilterText = () => nodeQuery.value.trim().toLowerCase();
@@ -680,45 +680,62 @@ export class SpatialSkeletonEditTab extends Tab {
     };
 
     const ensureSkeletonNavigationReady = (segmentId: number) => {
+      try {
+        getSegmentNavigationGraph(segmentId);
+        return true;
+      } catch (error) {
+        StatusMessage.showTemporaryMessage(NAVIGATE_FROM_SPATIAL_INDEX_MESSAGE);
+        return false;
+      }
+    };
+
+    function getSelectedNavigationContext(
+      requireNode: false,
+    ): { segmentId: number } | undefined;
+    function getSelectedNavigationContext(
+      requireNode?: true,
+    ): SpatiallyIndexedSkeletonNode | undefined;
+    function getSelectedNavigationContext(requireNode: boolean = true) {
+      // Inspect actions NA, message handled in ensureActionsAllowed
       if (
         !ensureActionsAllowed(SpatialSkeletonActions.inspect, {
           requireVisibleChunks: false,
         })
       ) {
-        return false;
+        return undefined;
       }
-      try {
-        getSegmentNavigationGraph(segmentId);
-        return true;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        StatusMessage.showTemporaryMessage(
-          `Unable to resolve the local skeleton graph for navigation: ${message}`,
-        );
-        return false;
-      }
-    };
 
-    const getSelectedNavigationContext = () => {
-      const selectedNode = getSelectedNode();
+      // Extract selected node and segment ID
+      const selectedId = layer.selectedSpatialSkeletonNodeId.value;
+      const selectedNode =
+        selectedId === undefined
+          ? undefined
+          : allNodes.find((node) => node.nodeId === selectedId);
+      const selectedSegmentId =
+        selectedNode?.segmentId ?? getSelectedSegmentId();
+
+      // No segment selected, can't navigate
+      if (selectedSegmentId === undefined) {
+        StatusMessage.showTemporaryMessage(NO_SEGMENT_SELECTED_MESSAGE);
+        return undefined;
+      }
+
+      // Segment from spatial index, message handled in ensureSkeletonNavigationReady
+      if (!ensureSkeletonNavigationReady(selectedSegmentId)) {
+        return undefined;
+      }
+
       if (selectedNode === undefined) {
-        StatusMessage.showTemporaryMessage("No skeleton node is selected.");
-        return undefined;
+        // No node selected, but node required
+        if (requireNode) {
+          StatusMessage.showTemporaryMessage(NO_NODE_SELECTED_MESSAGE);
+          return undefined;
+        }
+        return { segmentId: selectedSegmentId };
       }
-      if (!ensureSkeletonNavigationReady(selectedNode.segmentId))
-        return undefined;
-      return selectedNode;
-    };
 
-    const getSelectedSegmentForNavigation = () => {
-      const segmentId = getSelectedNode()?.segmentId ?? getSelectedSegmentId();
-      if (segmentId === undefined) {
-        StatusMessage.showTemporaryMessage("No segment is selected.");
-        return undefined;
-      }
-      if (!ensureSkeletonNavigationReady(segmentId)) return undefined;
-      return segmentId;
-    };
+      return selectedNode;
+    }
 
     const updateTrueEndLabel = (
       node: SpatiallyIndexedSkeletonNode,
@@ -849,7 +866,9 @@ export class SpatialSkeletonEditTab extends Tab {
       svg_origin,
       "Go to root",
       () => {
-        const segmentId = getSelectedSegmentForNavigation();
+        const segmentId = getSelectedNavigationContext(
+          false /* requireNode */,
+        )?.segmentId;
         if (segmentId === undefined) return;
         void (async () => {
           try {
