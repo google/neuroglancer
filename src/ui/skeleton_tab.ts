@@ -69,15 +69,15 @@ import {
 import { StatusMessage } from "#src/status.js";
 import { observeWatchable, registerNested } from "#src/trackable_value.js";
 import {
-  buildSpatialSkeletonSegmentRenderState,
-  type SpatialSkeletonSegmentRenderRow,
-  type SpatialSkeletonSegmentRenderState,
-} from "#src/ui/spatial_skeleton_edit_tab_render.js";
-import {
   SPATIAL_SKELETON_EDIT_MODE_TOOL_ID,
   SPATIAL_SKELETON_MERGE_MODE_TOOL_ID,
   SPATIAL_SKELETON_SPLIT_MODE_TOOL_ID,
-} from "#src/ui/spatial_skeleton_edit_tools.js";
+} from "#src/ui/skeleton_edit_tools.js";
+import {
+  buildSpatialSkeletonSegmentRenderState,
+  type SpatialSkeletonSegmentRenderRow,
+  type SpatialSkeletonSegmentRenderState,
+} from "#src/ui/skeleton_tab_render.js";
 import { makeToolButton } from "#src/ui/tool.js";
 import type { ArraySpliceOp } from "#src/util/array.js";
 import * as matrix from "#src/util/matrix.js";

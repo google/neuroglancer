@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import "#src/ui/spatial_skeleton_edit_tools.css";
+import "#src/ui/skeleton_edit_tools.css";
 
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import {
@@ -49,14 +49,14 @@ import {
   SliceViewPanelSpatiallyIndexedSkeletonLayer,
 } from "#src/skeleton/frontend.js";
 import { StatusMessage } from "#src/status.js";
-import type { SpatialSkeletonToolPointInfo } from "#src/ui/spatial_skeleton_tool_messages.js";
+import type { SpatialSkeletonToolPointInfo } from "#src/ui/skeleton_edit_tool_messages.js";
 import {
   SPATIAL_SKELETON_SPLIT_BANNER_MESSAGE,
   getSpatialSkeletonEditBannerMessage,
   getSpatialSkeletonMergeBannerMessage,
   getSpatialSkeletonToolPointStatusFields,
   SPATIAL_SKELETON_MOVING_NODE_MESSAGE,
-} from "#src/ui/spatial_skeleton_tool_messages.js";
+} from "#src/ui/skeleton_edit_tool_messages.js";
 import type { ToolActivation } from "#src/ui/tool.js";
 import {
   LayerTool,
