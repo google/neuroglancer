@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { wasmModuleInstance } from 'neuroglancer/sliceview/base';
+import type { wasmModuleInstance } from "neuroglancer/sliceview/base";
 
 const libraryEnv = {
   emscripten_notify_memory_growth: function () {},
@@ -23,15 +23,15 @@ const libraryEnv = {
   },
 };
 
-let wasmModule:wasmModuleInstance|null = null;
+let wasmModule: wasmModuleInstance | null = null;
 
-async function loadCrackleModule () {
+async function loadCrackleModule() {
   // import crackleWasmDataUrl from './libcrackle.wasm';
   if (wasmModule !== null) {
     return wasmModule;
   }
 
-  const crackleWasmDataUrl = new URL("./libcrackle.wasm", import.meta.url)
+  const crackleWasmDataUrl = new URL("./libcrackle.wasm", import.meta.url);
   const response = await fetch(crackleWasmDataUrl);
   const wasmCode = await response.arrayBuffer();
   const m = await WebAssembly.instantiate(wasmCode, {
@@ -44,14 +44,19 @@ async function loadCrackleModule () {
 }
 
 // not a full implementation of read header, just the parts we need
-function readHeader(buffer: Uint8Array) 
-  : {sx:number,sy:number,sz:number,sw:number,dataWidth:number} 
-{
+function readHeader(buffer: Uint8Array): {
+  sx: number;
+  sy: number;
+  sz: number;
+  sw: number;
+  dataWidth: number;
+} {
   // check for header "crkl"
-  const magic = (
-       buffer[0] === 'c'.charCodeAt(0) && buffer[1] === 'r'.charCodeAt(0)
-    && buffer[2] === 'k'.charCodeAt(0) && buffer[3] === 'l'.charCodeAt(0)
-  );
+  const magic =
+    buffer[0] === "c".charCodeAt(0) &&
+    buffer[1] === "r".charCodeAt(0) &&
+    buffer[2] === "k".charCodeAt(0) &&
+    buffer[3] === "l".charCodeAt(0);
   if (!magic) {
     throw new Error("crackle: didn't match magic numbers");
   }
@@ -61,38 +66,44 @@ function readHeader(buffer: Uint8Array)
   }
 
   const bufview = new DataView(buffer.buffer, 0);
-  
-  const format_bytes = bufview.getUint16(5, /*littleEndian=*/true);
-  const dataWidth = Math.pow(2, format_bytes & 0b11);
-  const sx = bufview.getUint32(7, /*littleEndian=*/true);
-  const sy = bufview.getUint32(11, /*littleEndian=*/true);
-  const sz = bufview.getUint32(15, /*littleEndian=*/true);
 
-  return {sx,sy,sz,dataWidth};
+  const format_bytes = bufview.getUint16(5, /*littleEndian=*/ true);
+  const dataWidth = Math.pow(2, format_bytes & 0b11);
+  const sx = bufview.getUint32(7, /*littleEndian=*/ true);
+  const sy = bufview.getUint32(11, /*littleEndian=*/ true);
+  const sz = bufview.getUint32(15, /*littleEndian=*/ true);
+
+  return { sx, sy, sz, dataWidth };
 }
 
 export async function decompressCrackle(
-  buffer: Uint8Array
-) : Promise<Uint8Array> {
-
+  buffer: Uint8Array,
+): Promise<Uint8Array> {
   const m = await loadCrackleModule();
-  let {sx,sy,sz,dataWidth} = readHeader(buffer);
+  const { sx, sy, sz, dataWidth } = readHeader(buffer);
 
   const voxels = sx * sy * sz;
   const nbytes = voxels * dataWidth;
   if (nbytes < 0) {
-    throw new Error(`crackle: Failed to decode image size. image size: ${nbytes}`);
+    throw new Error(
+      `crackle: Failed to decode image size. image size: ${nbytes}`,
+    );
   }
 
   // heap must be referenced after creating bufPtr and imagePtr because
   // memory growth can detatch the buffer.
-  let bufPtr = (m.instance.exports.malloc as Function)(buffer.byteLength);
+  const bufPtr = (m.instance.exports.malloc as Function)(buffer.byteLength);
   const imagePtr = (m.instance.exports.malloc as Function)(nbytes);
-  let heap = new Uint8Array((m.instance.exports.memory as WebAssembly.Memory).buffer);
+  const heap = new Uint8Array(
+    (m.instance.exports.memory as WebAssembly.Memory).buffer,
+  );
   heap.set(buffer, bufPtr);
 
   const code = (m.instance.exports.crackle_decompress as Function)(
-    bufPtr, buffer.byteLength, imagePtr, nbytes
+    bufPtr,
+    buffer.byteLength,
+    imagePtr,
+    nbytes,
   );
 
   try {
@@ -105,14 +116,14 @@ export async function decompressCrackle(
     // the buffer.
     const image = new Uint8Array(
       (m.instance.exports.memory as WebAssembly.Memory).buffer,
-      imagePtr, nbytes
+      imagePtr,
+      nbytes,
     );
     // copy the array so it can be memory managed by JS
     // and we can free the emscripten buffer
     return image.slice(0);
-  }
-  finally {
+  } finally {
     (m.instance.exports.free as Function)(bufPtr);
-    (m.instance.exports.free as Function)(imagePtr);      
+    (m.instance.exports.free as Function)(imagePtr);
   }
 }
