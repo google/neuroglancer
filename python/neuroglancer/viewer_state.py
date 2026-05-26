@@ -645,7 +645,7 @@ def _linked_segmentation_color_group_value(x):
 
 
 @export
-class SpatialSkeletonNodeFilterType(enum.StrEnum):
+class SkeletonNodeFilterType(enum.StrEnum):
     NONE = "none"
     LEAF = "leaf"
     VIRTUAL_END = "virtual_end"
@@ -987,19 +987,19 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
     )
     segment_query = segmentQuery = wrapped_property("segmentQuery", optional(str))
     spatial_skeleton_node_query = spatialSkeletonNodeQuery = wrapped_property(
-        "spatialSkeletonNodeQuery", optional(str, "")
+        "skeletonNodeQuery", optional(str, "")
     )
     spatial_skeleton_node_filter = spatialSkeletonNodeFilter = wrapped_property(
-        "spatialSkeletonNodeFilter", optional(SpatialSkeletonNodeFilterType)
+        "skeletonNodeFilter", optional(SkeletonNodeFilterType)
     )
     hidden_object_alpha = hiddenObjectAlpha = wrapped_property(
         "hiddenObjectAlpha", optional(float, 0.5)
     )
     skeleton_cross_section_render_scale = skeletonCrossSectionRenderScale = (
-        wrapped_property("skeletonCrossSectionRenderScale", optional(float, 1))
+        wrapped_property("skeletonCrossSectionSpacing", optional(float, 1))
     )
     skeleton_perspective_render_scale = skeletonPerspectiveRenderScale = (
-        wrapped_property("skeletonPerspectiveRenderScale", optional(float, 1))
+        wrapped_property("skeletonPerspectiveSpacing", optional(float, 1))
     )
     segment_colors = segmentColors = wrapped_property(
         "segmentColors", typed_map(key_type=np.uint64, value_type=str)
