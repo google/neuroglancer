@@ -57,6 +57,13 @@ export interface SpatialSkeletonSegmentRenderState {
   rows: readonly SpatialSkeletonSegmentRenderRow[];
 }
 
+interface NodeClassification {
+  node: SpatiallyIndexedSkeletonNode;
+  type: SkeletonNodeType;
+  isLeaf: boolean;
+  description: string | undefined;
+}
+
 export function buildSpatialSkeletonSegmentRenderState(
   segmentId: number,
   graph: SpatiallyIndexedSkeletonNavigationGraph,
@@ -80,53 +87,57 @@ export function buildSpatialSkeletonSegmentRenderState(
     };
   }
 
-  const visibleMemo = new Map<number, boolean>();
-  const isNodeVisible = (nodeId: number): boolean => {
-    const cached = visibleMemo.get(nodeId);
-    if (cached !== undefined) {
-      return cached;
-    }
-    const node = nodeById.get(nodeId);
-    if (node === undefined) {
-      visibleMemo.set(nodeId, false);
-      return false;
-    }
+  // Classify each node once; reused for filter matching and row building.
+  const classificationById = new Map<number, NodeClassification>();
+  for (const [nodeId, node] of nodeById) {
     const children = childrenByParent.get(nodeId) ?? [];
     const parentInTree =
       node.parentNodeId !== undefined && nodeById.has(node.parentNodeId);
-    const nodeType = classifyNodeType(node, children.length, parentInTree);
+    const type = classifyNodeType(node, children.length, parentInTree);
     const description = options.getNodeDescription(node);
-    const visible =
+    classificationById.set(nodeId, {
+      node,
+      type,
+      isLeaf: children.length === 0,
+      description,
+    });
+  }
+
+  // Stage 1: does this node match the user's text and type filters?
+  const matchesSearchFilter = (nodeId: number): boolean => {
+    const info = classificationById.get(nodeId);
+    if (info === undefined) return false;
+    const { node, type, isLeaf, description } = info;
+    return (
       (options.nodeFilterType === SpatialSkeletonNodeFilterType.NONE ||
         matchesSpatialSkeletonNodeFilter(options.nodeFilterType, {
-          isLeaf: children.length === 0,
+          isLeaf,
           nodeHasDescription: hasNonEmptyNodeDescription(description),
           nodeIsTrueEnd: node.isTrueEnd ?? false,
-          nodeType,
+          nodeType: type,
         })) &&
-      nodeMatchesFilter(node, options.filterText, description);
-    visibleMemo.set(nodeId, visible);
-    return visible;
+      nodeMatchesFilter(node, options.filterText, description)
+    );
   };
 
-  const visibleNodeIds = getFlatListNodeIds(graph, {
+  const matchedNodeIds = getFlatListNodeIds(graph, {
     collapseRegularNodesForOrdering: true,
-  }).filter((nodeId) => isNodeVisible(nodeId));
-  const visibleNodeIdSet = new Set<number>(visibleNodeIds);
+  }).filter(matchesSearchFilter);
+  const matchedNodeIdSet = new Set<number>(matchedNodeIds);
 
+  // branchCount uses all matched nodes (including collapsed ones) for correct topology.
   let branchCount = 0;
-  for (const nodeId of visibleNodeIds) {
-    const node = nodeById.get(nodeId);
-    if (node === undefined) continue;
+  for (const nodeId of matchedNodeIds) {
+    const node = nodeById.get(nodeId)!;
     const visibleParent =
       node.parentNodeId !== undefined &&
-      visibleNodeIdSet.has(node.parentNodeId);
+      matchedNodeIdSet.has(node.parentNodeId);
     if (!visibleParent) {
       branchCount++;
     }
     let visibleChildCount = 0;
     for (const childNodeId of childrenByParent.get(nodeId) ?? []) {
-      if (visibleNodeIdSet.has(childNodeId)) {
+      if (matchedNodeIdSet.has(childNodeId)) {
         visibleChildCount++;
       }
     }
@@ -135,32 +146,34 @@ export function buildSpatialSkeletonSegmentRenderState(
     }
   }
 
+  // Stage 2: among matched nodes, plain regular chain nodes are collapsed from the
+  // display list when no filter is active. An active filter means the user explicitly
+  // searched for something, so every match should be shown.
   const hasActiveFilter =
     options.filterText.length > 0 ||
     options.nodeFilterType !== SpatialSkeletonNodeFilterType.NONE;
 
+  const isCollapsedFromDisplay = (nodeId: number): boolean => {
+    if (hasActiveFilter) return false;
+    const info = classificationById.get(nodeId);
+    if (info === undefined) return true;
+    return (
+      info.type === SpatialSkeletonDisplayNodeType.REGULAR &&
+      !(info.node.isTrueEnd ?? false)
+    );
+  };
+
   const rows: SpatialSkeletonSegmentRenderRow[] = [];
-  for (const nodeId of visibleNodeIds) {
-    const node = nodeById.get(nodeId);
-    if (node === undefined) continue;
-    const children = childrenByParent.get(nodeId) ?? [];
-    const parentInTree =
-      node.parentNodeId !== undefined && nodeById.has(node.parentNodeId);
-    const type = classifyNodeType(node, children.length, parentInTree);
-    if (
-      !hasActiveFilter &&
-      type === SpatialSkeletonDisplayNodeType.REGULAR &&
-      !(node.isTrueEnd ?? false)
-    ) {
-      continue;
-    }
-    rows.push({ node, type, isLeaf: children.length === 0 });
+  for (const nodeId of matchedNodeIds) {
+    if (isCollapsedFromDisplay(nodeId)) continue;
+    const { node, type, isLeaf } = classificationById.get(nodeId)!;
+    rows.push({ node, type, isLeaf });
   }
 
   return {
     segmentId,
     totalNodeCount: nodeById.size,
-    matchedNodeCount: visibleNodeIds.length,
+    matchedNodeCount: matchedNodeIds.length,
     displayedNodeCount: rows.length,
     branchCount,
     rows,
