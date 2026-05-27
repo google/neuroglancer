@@ -418,7 +418,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     );
   });
 
-  it("rejects compact-detail rows missing edition times", async () => {
+  it("parses compact-detail rows without local edition-time validation", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi
       .fn()
@@ -431,9 +431,19 @@ describe("CatmaidClient skeleton editing methods", () => {
       ]);
     (client as any).fetchProjectEndpoint = fetchMock;
 
-    await expect(client.getSkeleton(2)).rejects.toThrow(
-      "CATMAID skeletons/compact-detail did not return node edition times. The server must support with_edition_times=true.",
-    );
+    await expect(client.getSkeleton(2)).resolves.toEqual([
+      {
+        nodeId: 22107946,
+        parentNodeId: undefined,
+        position: new Float32Array([23697030, 15055839, 16651262]),
+        segmentId: 2,
+        radius: 2000,
+        confidence: 100,
+        description: undefined,
+        isTrueEnd: false,
+        sourceState: undefined,
+      },
+    ]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

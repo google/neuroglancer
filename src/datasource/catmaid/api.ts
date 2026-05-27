@@ -1020,18 +1020,6 @@ function getCatmaidSingleNodeRevisionResult(
   return sourceState === undefined ? {} : { sourceState };
 }
 
-function requireCatmaidCompactDetailNodeRevisionToken(
-  row: readonly unknown[],
-): string {
-  const revisionToken = normalizeCatmaidRevisionToken(row[8]);
-  if (revisionToken === undefined) {
-    throw new Error(
-      "CATMAID skeletons/compact-detail did not return node edition times. The server must support with_edition_times=true.",
-    );
-  }
-  return revisionToken;
-}
-
 function parseCatmaidMoveRevisionToken(
   response: any,
   nodeId: number,
@@ -1490,7 +1478,7 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
       description: descriptionByNodeId.get(Number(n[0])),
       isTrueEnd: trueEndByNodeId.has(Number(n[0])),
       sourceState: makeCatmaidNodeSourceState(
-        requireCatmaidCompactDetailNodeRevisionToken(n),
+        normalizeCatmaidRevisionToken(n[8]),
       ),
     }));
   }
