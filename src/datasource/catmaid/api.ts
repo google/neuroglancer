@@ -57,7 +57,9 @@ export const credentialsKey = "CATMAID";
 const CATMAID_NO_MATCHING_NODE_PROVIDER_ERROR =
   "Could not find matching node provider for request";
 const CATMAID_STATE_MATCHING_ERROR_TYPE = "StateMatchingError";
-const CATMAID_MIN_SUPPORTED_VERSION_DATE = "2026.05.21";
+const CATMAID_MIN_SUPPORTED_RELEASE_TAG = "2026.05.06";
+const CATMAID_MIN_SUPPORTED_COMMITS_AFTER_RELEASE_TAG = 12;
+const CATMAID_MIN_SUPPORTED_GIT_DESCRIBE_VERSION = `${CATMAID_MIN_SUPPORTED_RELEASE_TAG}.dev${CATMAID_MIN_SUPPORTED_COMMITS_AFTER_RELEASE_TAG}+g...`;
 
 type CatmaidStatePayload = object;
 type CatmaidFetchPriority = "high" | "low" | "auto";
@@ -1111,16 +1113,41 @@ function parseCatmaidServerVersionFromResponse(
     : undefined;
 }
 
-function parseCatmaidVersionDate(version: string | undefined) {
-  const match = version?.match(/^(\d{4})\.(\d{2})\.(\d{2})/);
-  return match == null ? undefined : `${match[1]}.${match[2]}.${match[3]}`;
+interface CatmaidGitDescribeVersion {
+  releaseTag: string;
+  commitsAfterReleaseTag: number;
+  commitHash: string;
+}
+
+function parseCatmaidGitDescribeVersion(
+  version: string | undefined,
+): CatmaidGitDescribeVersion | undefined {
+  const match = version?.match(
+    /^(\d{4}\.\d{2}\.\d{2})\.dev(\d+)\+g([0-9a-fA-F]+)$/,
+  );
+  if (match == null) {
+    return undefined;
+  }
+  return {
+    releaseTag: match[1],
+    commitsAfterReleaseTag: Number(match[2]),
+    commitHash: match[3],
+  };
 }
 
 function isCatmaidServerVersionSupported(version: string | undefined) {
-  const versionDate = parseCatmaidVersionDate(version);
+  const parsed = parseCatmaidGitDescribeVersion(version);
+  if (parsed === undefined) {
+    return false;
+  }
+  const releaseComparison = parsed.releaseTag.localeCompare(
+    CATMAID_MIN_SUPPORTED_RELEASE_TAG,
+  );
   return (
-    versionDate !== undefined &&
-    versionDate.localeCompare(CATMAID_MIN_SUPPORTED_VERSION_DATE) >= 0
+    releaseComparison > 0 ||
+    (releaseComparison === 0 &&
+      parsed.commitsAfterReleaseTag >=
+        CATMAID_MIN_SUPPORTED_COMMITS_AFTER_RELEASE_TAG)
   );
 }
 
@@ -1308,7 +1335,7 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     throw new Error(
       `CATMAID server ${this.baseUrl} version ${
         version ?? "unknown"
-      } is not supported. Version ${CATMAID_MIN_SUPPORTED_VERSION_DATE} or newer is required.`,
+      } is not supported. Version ${CATMAID_MIN_SUPPORTED_GIT_DESCRIBE_VERSION} or later by git-describe semantics is required for compact-detail with_edition_times support.`,
     );
   }
 

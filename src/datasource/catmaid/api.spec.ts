@@ -67,28 +67,48 @@ function getFetchInit(fetchMock: FetchMock, callIndex = 0) {
 }
 
 describe("CatmaidClient skeleton editing methods", () => {
-  it("accepts supported CATMAID server version dates", async () => {
-    const client = new CatmaidClient("https://example.invalid", 1);
-    const fetchServerEndpointMock = vi
-      .fn()
-      .mockResolvedValue({ SERVER_VERSION: "2026.05.21.dev1+gabcdef0" });
-    (client as any).fetchServerEndpoint = fetchServerEndpointMock;
+  it("accepts supported CATMAID server git-described versions", async () => {
+    for (const version of [
+      "2026.05.06.dev12+g24ed227e31",
+      "2026.05.06.dev13+gabcdef123",
+      "2026.05.07.dev0+gabcdef123",
+    ]) {
+      const client = new CatmaidClient("https://example.invalid", 1);
+      const fetchServerEndpointMock = vi
+        .fn()
+        .mockResolvedValue({ SERVER_VERSION: version });
+      (client as any).fetchServerEndpoint = fetchServerEndpointMock;
 
-    await expect(client.validateServerVersion()).resolves.toBeUndefined();
-    expect(fetchServerEndpointMock).toHaveBeenCalledWith("version");
+      await expect(client.validateServerVersion()).resolves.toBeUndefined();
+      expect(fetchServerEndpointMock).toHaveBeenCalledWith("version");
+    }
   });
 
-  it("rejects unsupported CATMAID server version dates", async () => {
-    const client = new CatmaidClient("https://example.invalid", 1);
-    const fetchServerEndpointMock = vi
-      .fn()
-      .mockResolvedValue({ SERVER_VERSION: "2026.05.20.dev12+gabcdef0" });
-    (client as any).fetchServerEndpoint = fetchServerEndpointMock;
+  it("rejects unsupported CATMAID server git-described versions", async () => {
+    for (const { response, version } of [
+      {
+        response: { SERVER_VERSION: "2026.05.06.dev11+gabcdef123" },
+        version: "2026.05.06.dev11+gabcdef123",
+      },
+      {
+        response: { SERVER_VERSION: "2026.05.05.dev999+gabcdef123" },
+        version: "2026.05.05.dev999+gabcdef123",
+      },
+      { response: {}, version: "unknown" },
+      {
+        response: { SERVER_VERSION: "2026.05.06-12-gabcdef123" },
+        version: "2026.05.06-12-gabcdef123",
+      },
+    ]) {
+      const client = new CatmaidClient("https://example.invalid", 1);
+      const fetchServerEndpointMock = vi.fn().mockResolvedValue(response);
+      (client as any).fetchServerEndpoint = fetchServerEndpointMock;
 
-    await expect(client.validateServerVersion()).rejects.toThrow(
-      "CATMAID server https://example.invalid version 2026.05.20.dev12+gabcdef0 is not supported. Version 2026.05.21 or newer is required.",
-    );
-    expect(fetchServerEndpointMock).toHaveBeenCalledWith("version");
+      await expect(client.validateServerVersion()).rejects.toThrow(
+        `CATMAID server https://example.invalid version ${version} is not supported. Version 2026.05.06.dev12+g... or later by git-describe semantics is required for compact-detail with_edition_times support.`,
+      );
+      expect(fetchServerEndpointMock).toHaveBeenCalledWith("version");
+    }
   });
 
   it("does not cache transient metadata discovery failures as null", async () => {
