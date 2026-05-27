@@ -22,7 +22,6 @@ import { WithParameters } from "#src/chunk_manager/frontend.js";
 import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import {
   makeCoordinateSpace,
-  makeIdentityTransform,
   makeIdentityTransformedBoundingBox,
 } from "#src/coordinate_transform.js";
 import type {
@@ -224,6 +223,7 @@ interface ZarrMultiscaleInfo {
   coordinateSpace: CoordinateSpace;
   dataType: DataType;
   scales: ZarrScaleInfo[];
+  baseTransform: Float64Array;
 }
 
 function getNormalizedDimensionNames(
@@ -291,6 +291,7 @@ function getMultiscaleInfoForSingleArray(
         metadata,
       },
     ],
+    baseTransform: transform,
   };
 }
 
@@ -373,6 +374,7 @@ async function resolveOmeMultiscale(
         metadata: zarrMetadata,
       };
     }),
+    baseTransform: multiscale.baseInfo.baseTransform,
   };
 }
 
@@ -547,9 +549,16 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
           sharedKvStoreContext,
           multiscaleInfo,
         );
+        const modelTransform = {
+          rank: volume.modelSpace.rank,
+          sourceRank: volume.modelSpace.rank,
+          inputSpace: volume.modelSpace,
+          outputSpace: volume.modelSpace,
+          transform: multiscaleInfo.baseTransform,
+        };
         return {
           canonicalUrl: `${kvStoreUrl}|zarr${metadata.zarrVersion}:`,
-          modelTransform: makeIdentityTransform(volume.modelSpace),
+          modelTransform,
           channelMetadata,
           subsources: [
             {

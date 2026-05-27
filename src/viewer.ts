@@ -184,6 +184,7 @@ export const VIEWER_UI_CONFIG_OPTIONS = [
   "showTopBar",
   "showUIControls",
   "showPanelBorders",
+  "showAllDimensionPlotBounds",
   "pickRadius",
 ] as const;
 
@@ -716,6 +717,7 @@ export class Viewer extends RefCounted implements ViewerState {
         {
           velocity: this.velocity,
           getToolBinder: () => this.toolBinder,
+          showAllPlotBounds: this.uiConfiguration.showAllDimensionPlotBounds,
         },
       ),
     );

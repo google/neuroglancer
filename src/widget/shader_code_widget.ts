@@ -134,6 +134,7 @@ export class ShaderCodeWidget extends RefCounted {
       controlParseErrors = [];
     }
     if (error === undefined && controlParseErrors.length === 0) {
+      this.textEditor.setOption("lint", undefined);
       this.setValidState(undefined);
     } else if (error != null || controlParseErrors.length !== 0) {
       this.textEditor.setOption("lint", {

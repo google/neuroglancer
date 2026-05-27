@@ -54,7 +54,7 @@ import {
   registerNested,
 } from "#src/trackable_value.js";
 import type { RefCountedValue } from "#src/util/disposable.js";
-import { getFrustrumPlanes, mat4, vec3 } from "#src/util/geom.js";
+import { getFrustumPlanes, mat4, vec3 } from "#src/util/geom.js";
 import { clampToInterval } from "#src/util/lerp.js";
 import { getObjectId } from "#src/util/object_id.js";
 import type { HistogramInformation } from "#src/volume_rendering/base.js";
@@ -367,7 +367,7 @@ void emitRGBA(vec4 rgba) {
             glsl_handleMaxProjectionUpdate = `
   float newIntensity = getIntensity();
   bool intensityChanged = newIntensity > savedIntensity;
-  savedIntensity = intensityChanged ? newIntensity : savedIntensity; 
+  savedIntensity = intensityChanged ? newIntensity : savedIntensity;
   savedDepth = intensityChanged ? depthAtRayPosition : savedDepth;
   outputColor = intensityChanged ? newColor : outputColor;
   emit(outputColor, savedDepth, savedIntensity, uPickId);
@@ -929,7 +929,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           chunkLayout.transform,
         );
         const clippingPlanes = tempVisibleVolumetricClippingPlanes;
-        getFrustrumPlanes(clippingPlanes, modelViewProjection);
+        getFrustumPlanes(clippingPlanes, modelViewProjection);
         const inverseModelViewProjection = mat4.create();
         mat4.invert(inverseModelViewProjection, modelViewProjection);
         const { near, far, adjustedNear, adjustedFar } =
