@@ -57,14 +57,14 @@ type MakeLayerFn = (
   spec: any,
 ) => ManagedUserLayer;
 
-// Leading sentinel comment marks this template as the managed "color"
-// shader (paired with the Ichnaea-side LUT variant in
-// `web/src/lib/shaderTemplates.ts`). Editing the body away from this
-// shape — or deleting the comment line — flips the layer into "custom"
-// mode in the inspector, which surfaces a warning and disables the
-// LUT toggle until the user resets the shader.
-const MULTICHANNEL_FRAGMENT_MAIN = `// @ichnaea:color-shader
-#uicontrol invlerp contrast
+// Managed "color" template the multichannel setup writes into every
+// freshly created image-channel layer's `fragmentMain`. Kept byte-for-
+// byte identical to `MANAGED_COLOR_FRAGMENT_MAIN` in
+// `web/src/lib/shaderRender.ts` — the per-layer reconciler is the
+// single source of truth for shader mode/color/LUT, and matching this
+// template means the reconciler's "swap to managed color" is a no-op
+// against fresh layers (no false-positive external-edit reverts).
+const MULTICHANNEL_FRAGMENT_MAIN = `#uicontrol invlerp contrast
 #uicontrol vec3 color color
 void main() {
   if (VOLUME_RENDERING) {
@@ -303,7 +303,16 @@ function setupLayerPostCreation(
   };
 
   const setupWidgetsFunction = () => {
-    shaderControlValue.get("color")!.trackable.value = determineColor();
+    // The host may have already swapped the shader to a LUT-mode
+    // template that omits the `color` uicontrol (the new reconciler
+    // pre-applies persisted LUT state before this callback runs on
+    // hydration). Skipping the write is safe: the host is the
+    // authoritative writer for color in managed mode, and a missing
+    // control means there is no color uniform to drive anyway.
+    const colorEntry = shaderControlValue.get("color");
+    if (colorEntry) {
+      colorEntry.trackable.value = determineColor();
+    }
     if (
       channel?.range !== undefined &&
       channel?.window !== undefined &&
@@ -403,14 +412,23 @@ export function createImageLayerAsMultiChannel(
   for (let i = 0; i < totalLocalChannels; i++) {
     const channelMetadata = getLayerChannelMetadata(managedLayer, i);
     const { localPosition, chanName } = getAdjustedLocalPositionAndName(i);
-    let nameSuffix = "";
+    // Naming priority:
+    //   1. Channel metadata provides a label (e.g. OME-NGFF channel name)
+    //      → use the label *verbatim* as the layer name. Don't prefix
+    //      with the parent dataset's name; the label is the canonical
+    //      identifier for that channel.
+    //   2. Multi-channel image without per-channel labels → append a
+    //      positional suffix to the parent name so each channel ends up
+    //      with a distinct identifier.
+    //   3. Single-channel image without a label → keep the parent name.
+    let name: string;
     if (channelMetadata?.label) {
-      nameSuffix = ` ${channelMetadata.label}`;
+      name = channelMetadata.label;
     } else if (totalLocalChannels !== 1) {
-      nameSuffix = ` c${chanName}`;
+      name = `${startingName} c${chanName}`;
+    } else {
+      name = startingName;
     }
-
-    const name = `${startingName}${nameSuffix}`;
     let addedLayer: any = managedLayer;
     if (i == 0) {
       changeLayerName(managedLayer, name);
