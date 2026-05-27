@@ -17,6 +17,7 @@
 import { debounce } from "lodash-es";
 import type { DisplayContext } from "#src/display_context.js";
 import type { UserLayer, UserLayerConstructor } from "#src/layer/index.js";
+import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
 import { registerTool } from "#src/ui/tool.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeChildren } from "#src/util/dom.js";
@@ -164,6 +165,7 @@ function getShaderLayerControlDefinition<LayerType extends UserLayer>(
 
 export class ShaderControls extends Tab {
   private controlDisposer: RefCounted | undefined = undefined;
+  private controlsContainer: HTMLDivElement;
   private toolId: string;
   constructor(
     public state: ShaderControlState,
@@ -176,28 +178,75 @@ export class ShaderControls extends Tab {
     this.toolId = toolId;
     const { element } = this;
     element.style.display = "contents";
+
+    // Header row with the "Hide inactive controls" toggle. Built once and
+    // never torn down by `updateControls()`, so its UI state is stable
+    // across shader recompiles.
+    const header = document.createElement("label");
+    header.className = "neuroglancer-shader-controls-hide-inactive";
+    header.style.display = "flex";
+    header.style.alignItems = "center";
+    header.style.gap = "4px";
+    header.style.fontSize = "smaller";
+    const checkbox = this.registerDisposer(
+      new TrackableBooleanCheckbox(state.hideInactiveControls, {
+        enabledTitle:
+          "Show all #uicontrols (including ones with no effect on the current render).",
+        disabledTitle:
+          "Hide #uicontrols whose uniforms are eliminated by the GLSL compiler" +
+          " for the current shader (e.g. controls only referenced inside an" +
+          " `if (checkbox)` branch that's currently false).",
+      }),
+    );
+    header.appendChild(checkbox.element);
+    header.appendChild(document.createTextNode("Hide inactive controls"));
+    element.appendChild(header);
+
+    // Separate container so the rebuild loop only tears down the controls,
+    // not the header.
+    const controlsContainer = (this.controlsContainer =
+      document.createElement("div"));
+    controlsContainer.style.display = "contents";
+    element.appendChild(controlsContainer);
+
     const { controls } = state;
+    const scheduleUpdate = this.registerCancellable(
+      debounce(() => this.updateControls(), 0),
+    );
+    this.registerDisposer(controls.changed.add(scheduleUpdate));
+    this.registerDisposer(state.activeControls.changed.add(scheduleUpdate));
     this.registerDisposer(
-      controls.changed.add(
-        this.registerCancellable(debounce(() => this.updateControls(), 0)),
-      ),
+      state.hideInactiveControls.changed.add(scheduleUpdate),
     );
     this.updateControls();
   }
 
   updateControls() {
-    const { element } = this;
+    const container = this.controlsContainer;
     if (this.controlDisposer !== undefined) {
       this.controlDisposer.dispose();
-      removeChildren(element);
+      removeChildren(container);
     }
     const controlDisposer = (this.controlDisposer = new RefCounted());
     const layerShaderControlsGetter = () => ({
       shaderControlState: this.state,
       legendShaderOptions: this.options.legendShaderOptions,
     });
+    const hideInactive = this.state.hideInactiveControls.value;
+    const activeControls = this.state.activeControls.value;
     for (const name of this.state.state.keys()) {
-      element.appendChild(
+      // Skip when the user has opted in and we have a known active set
+      // (computed from the last linked shader) that does not include `name`.
+      // `activeControls === undefined` means we haven't rendered yet; show
+      // everything in that case to avoid hiding controls prematurely.
+      if (
+        hideInactive &&
+        activeControls !== undefined &&
+        !activeControls.has(name)
+      ) {
+        continue;
+      }
+      container.appendChild(
         addLayerControlToOptionsTab(
           controlDisposer,
           this.layer,

@@ -25,6 +25,7 @@ import {
   makeCachedDerivedWatchableValue,
   makeCachedLazyDerivedWatchableValue,
   TrackableValue,
+  WatchableValue,
 } from "#src/trackable_value.js";
 import { arraysEqual, arraysEqualWithPredicate } from "#src/util/array.js";
 import {
@@ -65,6 +66,10 @@ import {
   enableLerpShaderFunction,
 } from "#src/webgl/lerp.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
+import {
+  activeControlsEqual,
+  computeActiveControls,
+} from "#src/webgl/shader_control_reachability.js";
 import type { TransferFunctionParameters } from "#src/widget/transfer_function.js";
 import {
   defineTransferFunctionShader,
@@ -1313,6 +1318,11 @@ export function getFallbackBuilderState(
   };
 }
 
+// JSON key under which `hideInactiveControls` is serialized inside the
+// shaderControlState object. The double-underscore prefix avoids collisions
+// with #uicontrol names (which by convention start with a letter).
+const HIDE_INACTIVE_JSON_KEY = "__hideInactiveControls";
+
 export class ShaderControlState
   extends RefCounted
   implements Trackable, WatchableValueInterface<ShaderControlMap>
@@ -1324,6 +1334,12 @@ export class ShaderControlState
   parseResult: WatchableValueInterface<ShaderControlsParseResult>;
   builderState: WatchableValueInterface<ShaderControlsBuilderState>;
   histogramSpecifications: HistogramSpecifications;
+  // Set of #uicontrol names that survived GLSL link-time dead-code elimination
+  // for the most recently rendered shader. `undefined` means "not yet known"
+  // (no shader has linked yet); UI treats that as "show everything".
+  activeControls = new WatchableValue<Set<string> | undefined>(undefined);
+  // When true, the controls panel hides any control not in `activeControls`.
+  hideInactiveControls = new TrackableBoolean(false);
 
   private fragmentMainGeneration = -1;
   private dataContextGeneration = -1;
@@ -1332,6 +1348,7 @@ export class ShaderControlState
   private parseResult_: ShaderControlsParseResult;
   private controlsGeneration = -1;
   private parseResultChanged = new NullarySignal();
+  private lastReportedProgram: WebGLProgram | undefined = undefined;
 
   constructor(
     public fragmentMain: WatchableValueInterface<string>,
@@ -1349,6 +1366,9 @@ export class ShaderControlState
     );
     this.registerDisposer(
       this.dataContext.changed.add(() => this.handleFragmentMainChanged()),
+    );
+    this.registerDisposer(
+      this.hideInactiveControls.changed.add(this.changed.dispatch),
     );
     this.handleFragmentMainChanged();
     const self = this;
@@ -1482,7 +1502,27 @@ export class ShaderControlState
         this.controls.value = result.controls;
       }
     }
+    // The active-controls set was derived from the previous shader and no
+    // longer matches the new control names; clear it so the UI shows
+    // everything until the next shader links.
+    this.lastReportedProgram = undefined;
+    if (this.activeControls.value !== undefined) {
+      this.activeControls.value = undefined;
+    }
     this.parseResultChanged.dispatch();
+  }
+
+  // Called by `setControlsInShader` once per linked shader program. Reads
+  // which uniforms survived link-time dead-code elimination and publishes the
+  // resulting set on `activeControls`. Idempotent for repeated calls with the
+  // same program.
+  reportLinkedShader(shader: ShaderProgram) {
+    if (shader.program === this.lastReportedProgram) return;
+    this.lastReportedProgram = shader.program;
+    const next = computeActiveControls(shader, this.parseResult_);
+    if (!activeControlsEqual(this.activeControls.value, next)) {
+      this.activeControls.value = next;
+    }
   }
 
   private handleControlsChanged() {
@@ -1562,6 +1602,11 @@ export class ShaderControlState
     if (value === undefined) return;
     const { state } = this;
     verifyObject(value);
+    if (Object.prototype.hasOwnProperty.call(value, HIDE_INACTIVE_JSON_KEY)) {
+      this.hideInactiveControls.restoreState(value[HIDE_INACTIVE_JSON_KEY]);
+    } else {
+      this.hideInactiveControls.reset();
+    }
     const controls = this.controls.value;
     if (controls === undefined) {
       this.unparsedJson = value;
@@ -1583,6 +1628,7 @@ export class ShaderControlState
   }
 
   reset() {
+    this.hideInactiveControls.reset();
     for (const controlState of this.state.values()) {
       controlState.trackable.reset();
     }
@@ -1598,6 +1644,11 @@ export class ShaderControlState
     if (unparsedJson !== undefined) return unparsedJson;
     const obj: any = {};
     let empty = true;
+    const hideInactiveJson = this.hideInactiveControls.toJSON();
+    if (hideInactiveJson !== undefined) {
+      obj[HIDE_INACTIVE_JSON_KEY] = hideInactiveJson;
+      empty = false;
+    }
     for (const [key, value] of state) {
       const valueJson = value.trackable.toJSON();
       if (valueJson !== undefined) {
@@ -1665,6 +1716,11 @@ export function setControlsInShader(
   shaderControlState: ShaderControlState,
   controls: Controls,
 ) {
+  // Each renderer calls this once per draw, so it's the natural place to
+  // record which controls survived link-time DCE for the current shader.
+  // The call is idempotent for the same program — no GL roundtrip beyond
+  // the initial computation.
+  shaderControlState.reportLinkedShader(shader);
   const { state } = shaderControlState;
   if (shaderControlState.controls.value === controls) {
     // Case when shader doesn't have any errors.
