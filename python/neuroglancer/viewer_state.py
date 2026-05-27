@@ -986,20 +986,20 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
         "meshSilhouetteRendering", optional(float, 0)
     )
     segment_query = segmentQuery = wrapped_property("segmentQuery", optional(str))
-    spatial_skeleton_node_query = spatialSkeletonNodeQuery = wrapped_property(
+    skeleton_node_query = skeletonNodeQuery = wrapped_property(
         "skeletonNodeQuery", optional(str, "")
     )
-    spatial_skeleton_node_filter = spatialSkeletonNodeFilter = wrapped_property(
+    skeleton_node_filter = skeletonNodeFilter = wrapped_property(
         "skeletonNodeFilter", optional(SkeletonNodeFilterType)
     )
     hidden_object_alpha = hiddenObjectAlpha = wrapped_property(
         "hiddenObjectAlpha", optional(float, 0.5)
     )
-    skeleton_cross_section_render_scale = skeletonCrossSectionRenderScale = (
-        wrapped_property("skeletonCrossSectionSpacing", optional(float, 1))
+    skeleton_cross_section_spacing = skeletonCrossSectionSpacing = wrapped_property(
+        "skeletonCrossSectionSpacing", optional(float, 1)
     )
-    skeleton_perspective_render_scale = skeletonPerspectiveRenderScale = (
-        wrapped_property("skeletonPerspectiveSpacing", optional(float, 1))
+    skeleton_perspective_spacing = skeletonPerspectiveSpacing = wrapped_property(
+        "skeletonPerspectiveSpacing", optional(float, 1)
     )
     segment_colors = segmentColors = wrapped_property(
         "segmentColors", typed_map(key_type=np.uint64, value_type=str)
