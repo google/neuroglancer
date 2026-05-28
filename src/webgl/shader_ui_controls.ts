@@ -455,8 +455,8 @@ function parseSelectOptions(
     if (Array.isArray(value)) {
       options = value.map((optionValue) => parseOption(optionValue));
     } else if (typeof value === "object" && value !== null) {
-      options = Object.entries(verifyObject(value)).map(([label, optionValue]) =>
-        parseOption(optionValue, label),
+      options = Object.entries(verifyObject(value)).map(
+        ([label, optionValue]) => parseOption(optionValue, label),
       );
     } else {
       return {
@@ -1042,7 +1042,10 @@ function replaceBigintAndMap(_key: string, value: unknown) {
 }
 
 function encodeControls(controls: Controls | undefined) {
-  return JSON.stringify(Object.fromEntries(controls ?? []), replaceBigintAndMap);
+  return JSON.stringify(
+    Object.fromEntries(controls ?? []),
+    replaceBigintAndMap,
+  );
 }
 
 export class WatchableShaderUiControls
@@ -1241,7 +1244,7 @@ function parseTransferFunctionControlPoints(
       typeof x[2] !== "number"
     ) {
       throw new Error(
-        `Expected array of length 3 (x, \"#RRGGBB\", A), but received: ${JSON.stringify(
+        `Expected array of length 3 (x, "#RRGGBB", A), but received: ${JSON.stringify(
           x,
         )}`,
       );
@@ -1459,15 +1462,18 @@ function getControlTrackable(control: ShaderUiControl): {
       const { options, valueType } = control;
       const optionValues = options.map((option) => option.value);
       return {
-        trackable: new TrackableValue<ShaderSelectValue>(control.default, (x) => {
-          const value = verifyShaderSelectValue(valueType, x);
-          if (!optionValues.includes(value)) {
-            throw new Error(
-              `${JSON.stringify(value)} is not one of the valid options ${JSON.stringify(optionValues)}`,
-            );
-          }
-          return value;
-        }),
+        trackable: new TrackableValue<ShaderSelectValue>(
+          control.default,
+          (x) => {
+            const value = verifyShaderSelectValue(valueType, x);
+            if (!optionValues.includes(value)) {
+              throw new Error(
+                `${JSON.stringify(value)} is not one of the valid options ${JSON.stringify(optionValues)}`,
+              );
+            }
+            return value;
+          },
+        ),
         getBuilderValue: () => null,
       };
     }

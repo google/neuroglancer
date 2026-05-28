@@ -28,8 +28,8 @@ import {
   makeTrackableFragmentMain,
   shaderCodeWithLineDirective,
 } from "#src/webgl/dynamic_shader.js";
-import { glsl_string } from "#src/webgl/shader_lib.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
+import { glsl_string } from "#src/webgl/shader_lib.js";
 import type {
   ShaderControlsBuilderState,
   ShaderControlState,

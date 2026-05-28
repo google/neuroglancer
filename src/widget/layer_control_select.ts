@@ -31,7 +31,10 @@ export interface SelectLayerControlOption<T extends string | number> {
   label: string;
 }
 
-export function selectLayerControl<LayerType extends UserLayer, T extends string | number>(
+export function selectLayerControl<
+  LayerType extends UserLayer,
+  T extends string | number,
+>(
   getter: (layer: LayerType) => {
     value: WatchableValueInterface<T>;
     options: SelectLayerControlOption<T>[];
@@ -61,7 +64,9 @@ export function selectLayerControl<LayerType extends UserLayer, T extends string
       }
       context.registerDisposer(
         value.changed.add(() => {
-          const index = options.findIndex((option) => option.value === value.value);
+          const index = options.findIndex(
+            (option) => option.value === value.value,
+          );
           if (index !== -1) {
             trackableEnum.value = index;
           }

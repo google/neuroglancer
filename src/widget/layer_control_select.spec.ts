@@ -15,8 +15,8 @@
  */
 
 import { afterEach, describe, expect, it } from "vitest";
-import { RefCounted } from "#src/util/disposable.js";
 import { WatchableValue } from "#src/trackable_value.js";
+import { RefCounted } from "#src/util/disposable.js";
 import { selectLayerControl } from "#src/widget/layer_control_select.js";
 
 afterEach(() => {
@@ -42,10 +42,9 @@ describe("selectLayerControl", () => {
         visibility: {} as any,
       });
       const select = controlElement as HTMLSelectElement;
-      expect(Array.from(select.options, (option) => option.textContent)).toEqual([
-        "Alpha mode (alpha)",
-        "Beta mode (beta)",
-      ]);
+      expect(
+        Array.from(select.options, (option) => option.textContent),
+      ).toEqual(["Alpha mode (alpha)", "Beta mode (beta)"]);
       expect(select.selectedIndex).toBe(1);
     } finally {
       context.dispose();
