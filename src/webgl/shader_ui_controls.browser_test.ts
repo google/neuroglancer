@@ -1330,7 +1330,7 @@ void main() {
           getFallbackBuilderState(parseResult),
           tester.builder,
         );
-        tester.builder.addUniformDefinition(glsl_string);
+        tester.builder.addFragmentCode(glsl_string);
         tester.builder.setFragmentMainFunction(parseResult.code);
         tester.build();
         tester.shader.bind();
@@ -1366,7 +1366,7 @@ void main() {
           getFallbackBuilderState(parseResult),
           tester.builder,
         );
-        tester.builder.addUniformDefinition(glsl_string);
+        tester.builder.addFragmentCode(glsl_string);
         tester.builder.setFragmentMainFunction(parseResult.code);
         tester.build();
         tester.shader.bind();
@@ -1401,7 +1401,7 @@ void main() {
           getFallbackBuilderState(parseResult),
           tester.builder,
         );
-        tester.builder.addUniformDefinition(glsl_string);
+        tester.builder.addFragmentCode(glsl_string);
         tester.builder.setFragmentMainFunction(parseResult.code);
         tester.build();
         tester.shader.bind();
@@ -1473,7 +1473,7 @@ void main() {
           getFallbackBuilderState(parseResult),
           tester.builder,
         );
-        tester.builder.addUniformDefinition(glsl_string);
+        tester.builder.addFragmentCode(glsl_string);
         tester.builder.setFragmentMainFunction(parseResult.code);
         tester.build();
         tester.shader.bind();

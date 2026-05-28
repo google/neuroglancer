@@ -559,7 +559,7 @@ void userMain();
           renderHandler.defineShaderNoOpSetters(builder);
         }
         defineShader(builder);
-        builder.addUniformDefinition(glsl_string);
+        builder.addVertexCode(glsl_string);
         builder.addVertexCode(
           "\n#define main userMain\n" +
             shaderCodeWithLineDirective(parameters.parseResult.code) +

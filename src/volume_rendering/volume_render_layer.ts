@@ -529,7 +529,7 @@ void main() {
           }
           builder.addFragmentCode(glsl_COLORMAPS);
           addControlsToBuilder(shaderBuilderState, builder);
-          builder.addUniformDefinition(glsl_string);
+          builder.addFragmentCode(glsl_string);
           builder.addFragmentCode(
             "\n#define main userMain\n" +
               shaderCodeWithLineDirective(shaderBuilderState.parseResult.code) +

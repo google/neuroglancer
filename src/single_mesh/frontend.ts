@@ -504,7 +504,7 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensional
           }
           addControlsToBuilder(shaderBuilderState, builder);
           this.shaderManager.defineShader(builder);
-          builder.addUniformDefinition(glsl_string);
+          builder.addFragmentCode(glsl_string);
           builder.setFragmentMainFunction(
             shaderCodeWithLineDirective(shaderBuilderState.parseResult.code),
           );

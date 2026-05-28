@@ -202,7 +202,7 @@ void emitDefault() {
           }
           builder.setVertexMain(vertexMain);
           addControlsToBuilder(shaderBuilderState, builder);
-          builder.addUniformDefinition(glsl_string);
+          builder.addFragmentCode(glsl_string);
           builder.setFragmentMainFunction(
             shaderCodeWithLineDirective(shaderBuilderState.parseResult.code),
           );
@@ -272,7 +272,7 @@ void emitDefault() {
           }
           builder.setVertexMain(vertexMain);
           addControlsToBuilder(shaderBuilderState, builder);
-          builder.addUniformDefinition(glsl_string);
+          builder.addFragmentCode(glsl_string);
           builder.setFragmentMainFunction(
             shaderCodeWithLineDirective(shaderBuilderState.parseResult.code),
           );
