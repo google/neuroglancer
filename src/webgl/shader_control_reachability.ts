@@ -23,9 +23,23 @@ function uniformName(controlName: string): string {
   return `${UNIFORM_PREFIX}${controlName}`;
 }
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isCheckboxUsedInCode(
+  controlName: string,
+  parseResult: ShaderControlsParseResult,
+): boolean {
+  return new RegExp(`\\b${escapeRegExp(controlName)}\\b`).test(
+    parseResult.code,
+  );
+}
+
 // Returns the set of #uicontrol names whose generated uniforms survived GLSL
 // link-time dead-code elimination. Controls that compile to no uniforms
-// (checkbox, which becomes a `#define`) are always considered active.
+// (checkbox, which becomes a `#define`) are considered active only if the
+// parsed shader code actually references the generated identifier.
 //
 // `shader.uniforms` is the map populated by ShaderProgram at link time:
 // each declared uniform name maps to its location (`WebGLUniformLocation`)
@@ -38,9 +52,11 @@ export function computeActiveControls(
   const { uniforms } = shader;
   for (const [name, control] of parseResult.controls) {
     if (control.type === "checkbox") {
-      // Checkboxes become `#define`s at compile time; they have no uniform.
-      // They gate other controls, so always show them.
-      active.add(name);
+      // Checkboxes become `#define`s at compile time; they have no uniform, so
+      // infer reachability from whether the shader code references the symbol.
+      if (isCheckboxUsedInCode(name, parseResult)) {
+        active.add(name);
+      }
       continue;
     }
     if (
