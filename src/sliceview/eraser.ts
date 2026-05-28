@@ -15,9 +15,12 @@ import { Signal } from "#src/util/signal.js";
 import type { Viewer } from "#src/viewer.js";
 
 export interface ErasePoint {
-  z: number;
-  y: number;
+  /** Spatial X-axis (OME X = last storage dim). */
   x: number;
+  /** Spatial Y-axis. */
+  y: number;
+  /** Spatial Z-axis (OME Z = first non-T/C storage dim). */
+  z: number;
 }
 
 export class EraserTool extends Tool<Viewer> {

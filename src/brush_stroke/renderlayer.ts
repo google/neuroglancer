@@ -195,18 +195,21 @@ function BrushStrokeRenderLayer<
                     // Round to nearest voxel coordinate
                     ivec3 voxelPos = ivec3(round(worldPos));
                     
-                    // Extract coordinates for hash function (z, y, x order)
-                    // Handle negative coordinates properly - only process non-negative coordinates
+                    // Extract spatial (x, y, z) for the hash. voxelPos
+                    // already lives in spatial XYZ for our datasets, so
+                    // each component maps to its same-named hash slot.
+                    // Must stay in lock-step with BrushHashTable.getBrushKey
+                    // (CPU); changing the multipliers on one side breaks
+                    // visualization on the other.
                     if (voxelPos.x < 0 || voxelPos.y < 0 || voxelPos.z < 0) {
                         // Negative coordinates - no brush strokes in negative space
                         discard;
                     }
-                    
-                    uint z1 = uint(voxelPos.x);  // global z 
-                    uint y1 = uint(voxelPos.y);  // global y  
-                    uint x1 = uint(voxelPos.z);  // global x
-                    
-                    // Hash function matching CPU implementation
+
+                    uint x1 = uint(voxelPos.x);
+                    uint y1 = uint(voxelPos.y);
+                    uint z1 = uint(voxelPos.z);
+
                     uint h1 = ((x1 * 73u) * 1271u) ^ ((y1 * 513u) * 1345u) ^ ((z1 * 421u) * 675u);
                     uint h2 = ((x1 * 127u) * 337u) ^ ((y1 * 111u) * 887u) ^ ((z1 * 269u) * 325u);
                     

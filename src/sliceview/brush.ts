@@ -15,9 +15,12 @@ import { Signal } from "#src/util/signal.js";
 import type { Viewer } from "#src/viewer.js";
 
 export interface BrushPoint {
-  z: number;
-  y: number;
+  /** Spatial X-axis (OME X = last storage dim). */
   x: number;
+  /** Spatial Y-axis. */
+  y: number;
+  /** Spatial Z-axis (OME Z = first non-T/C storage dim). */
+  z: number;
   value: number;
 }
 
@@ -172,8 +175,11 @@ export class BrushTool extends Tool<Viewer> {
               mouseState.pose?.position.coordinateSpace.value.bounds;
 
             if (bounds) {
-              // Snap each coordinate to voxel center to avoid offset errors
-              const z = clampAndRoundCoordinateToVoxelCenter(
+              // Snap each coordinate to voxel center. For our datasets
+              // neuroglancer's position vector is in spatial XYZ order
+              // (newPosition[0] = X, [1] = Y, [2] = Z); the matching
+                // ErasePoint already follows this convention.
+              const x = clampAndRoundCoordinateToVoxelCenter(
                 bounds,
                 0,
                 newPosition[0],
@@ -183,13 +189,13 @@ export class BrushTool extends Tool<Viewer> {
                 1,
                 newPosition[1],
               );
-              const x = clampAndRoundCoordinateToVoxelCenter(
+              const z = clampAndRoundCoordinateToVoxelCenter(
                 bounds,
                 2,
                 newPosition[2],
               );
 
-              brushPoints.push({ z, y, x, value: this.brushValue });
+              brushPoints.push({ x, y, z, value: this.brushValue });
             }
           }
         }

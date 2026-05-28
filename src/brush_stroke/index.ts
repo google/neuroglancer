@@ -17,13 +17,17 @@
 import { HashMapUint64 } from "#src/gpu_hash/hash_table.js";
 
 /**
- * Simple hash table for storing brush stroke mask values at specific 3D coordinates.
- * This acts as a sparse 3D texture overlay.
+ * Sparse 3D overlay of segmentation-label voxels keyed by spatial (x, y, z).
+ *
+ * The CPU-side hash and the GPU fragment shader in `renderlayer.ts` both
+ * compute the same key from the same xyz triple — keep them in sync if
+ * the multipliers below ever change.
  */
 export class BrushHashTable extends HashMapUint64 {
-  // Store coordinates for save functionality - maps hash key to [z, y, x]
+  /** key → [x, y, z] (spatial). Used by save/replay paths that need to
+   *  reconstruct world-space coordinates from the hash table. */
   public coordinates = new Map<bigint, [number, number, number]>();
-  private getBrushKey(z: number, y: number, x: number): bigint {
+  private getBrushKey(x: number, y: number, z: number): bigint {
     const x1 = x >>> 0;
     const y1 = y >>> 0;
     const z1 = z >>> 0;
@@ -34,26 +38,24 @@ export class BrushHashTable extends HashMapUint64 {
     return BigInt(h1) + (BigInt(h2) << 32n);
   }
 
-  addBrushPoint(z: number, y: number, x: number, value: number) {
-    const key = this.getBrushKey(z, y, x);
+  addBrushPoint(x: number, y: number, z: number, value: number) {
+    const key = this.getBrushKey(x, y, z);
     this.delete(key);
     const brushValue = BigInt(value);
     this.set(key, brushValue);
 
-    // Store coordinates for save functionality
-    this.coordinates.set(key, [z, y, x]);
+    this.coordinates.set(key, [x, y, z]);
   }
 
-  deleteBrushPoint(z: number, y: number, x: number) {
-    const key = this.getBrushKey(z, y, x);
+  deleteBrushPoint(x: number, y: number, z: number) {
+    const key = this.getBrushKey(x, y, z);
     this.delete(key);
 
-    // Remove coordinates as well
     this.coordinates.delete(key);
   }
 
-  getBrushValue(z: number, y: number, x: number): number | undefined {
-    const key = this.getBrushKey(z, y, x);
+  getBrushValue(x: number, y: number, z: number): number | undefined {
+    const key = this.getBrushKey(x, y, z);
     const value = this.get(key);
     if (value !== undefined) {
       return Number(value);
@@ -61,8 +63,8 @@ export class BrushHashTable extends HashMapUint64 {
     return undefined;
   }
 
-  hasBrushPoint(z: number, y: number, x: number): boolean {
-    const key = this.getBrushKey(z, y, x);
+  hasBrushPoint(x: number, y: number, z: number): boolean {
+    const key = this.getBrushKey(x, y, z);
     return this.has(key);
   }
 
