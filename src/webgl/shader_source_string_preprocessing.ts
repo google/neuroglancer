@@ -28,12 +28,10 @@ export const shaderStringTypeDefinition = glsl_string;
 // Matches double-quoted string literals without terminating on escaped quotes.
 const doubleQuotedStringPattern = /"(?:\\.|[^\\"])*"/g;
 
-// TODO, if we want to guarantee mapping values, add optional map argument
 export function preprocessStrings(
   userShader: string,
-  mapping?: Map<string, number>,
 ): ShaderStringPreprocessingResult {
-  const stringLiteralIds = mapping ?? new Map<string, number>();
+  const stringLiteralIds = new Map<string, number>();
   const code = userShader.replace(doubleQuotedStringPattern, (token) => {
     const value = JSON.parse(token) as string;
     let index = stringLiteralIds.get(value);
