@@ -2,8 +2,11 @@ Annotation Shaders
 ------------------
 As with other elements of neuroglancer, one can write custom
 GLSL code to control the way annotations are rendered on the
-screen.  Complete technical documentation about how to set control
-different aspects of the annotations can be found here (TODO: ADD LINK).
+screen.  Technical documentation about how to set control
+different aspects of the annotations  
+`Can be found here <https://github.com/google/neuroglancer/blob/master/src/annotation/rendering.md>`_
+
+.
 
 This guide is a more gentle introduction to GLSL that will
 guide you through developing your first annotation shader code,
@@ -150,7 +153,9 @@ Lines and Polylines have colors for their lines, points and endpoints.
 color to vary across the line. ``setEndPointMarkerColor`` similarly can
 be called with 1 color to mark both ends the same, or 2 colors to
 make the start and endpoint colors different. You can read more
-about the details of these in the rendering guide (TODO: add link)
+about the details of these in the 
+`rendering guide <https://github.com/google/neuroglancer/blob/master/src/annotation/rendering.md>`_
+
 
 Size
 ~~~~
