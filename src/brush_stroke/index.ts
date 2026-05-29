@@ -15,6 +15,7 @@
  */
 
 import { HashMapUint64 } from "#src/gpu_hash/hash_table.js";
+import { NullarySignal } from "#src/util/signal.js";
 
 /**
  * Sparse 3D overlay of segmentation-label voxels keyed by spatial (x, y, z).
@@ -24,6 +25,13 @@ import { HashMapUint64 } from "#src/gpu_hash/hash_table.js";
  * the multipliers below ever change.
  */
 export class BrushHashTable extends HashMapUint64 {
+  /** Fires on every mutation (`addBrushPoint`, `deleteBrushPoint`,
+   *  `clear`). The segmentation chunk shader's brush-aware variant
+   *  subscribes to this so the slice view's framebuffer re-renders
+   *  with the new brush/erase state — without it, the user would see
+   *  no change until persistence + canonical chunk refetch lands. */
+  changed = new NullarySignal();
+
   /** key → [x, y, z] (spatial). Used by save/replay paths that need to
    *  reconstruct world-space coordinates from the hash table. */
   public coordinates = new Map<bigint, [number, number, number]>();
@@ -45,6 +53,7 @@ export class BrushHashTable extends HashMapUint64 {
     this.set(key, brushValue);
 
     this.coordinates.set(key, [x, y, z]);
+    this.changed.dispatch();
   }
 
   deleteBrushPoint(x: number, y: number, z: number) {
@@ -52,6 +61,7 @@ export class BrushHashTable extends HashMapUint64 {
     this.delete(key);
 
     this.coordinates.delete(key);
+    this.changed.dispatch();
   }
 
   getBrushValue(x: number, y: number, z: number): number | undefined {
@@ -73,6 +83,8 @@ export class BrushHashTable extends HashMapUint64 {
    */
   clear() {
     this.coordinates.clear();
-    return super.clear();
+    const cleared = super.clear();
+    this.changed.dispatch();
+    return cleared;
   }
 }

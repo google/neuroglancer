@@ -219,40 +219,51 @@ function BrushStrokeRenderLayer<
                     
                     uint64_t brushValue;
                     if (brushStroke_get(key, brushValue)) {
-                        // Found brush stroke - use proper color resolution (check override colors first)
-                        vec4 rgba;
-                        vec3 segmentColor;
-                        if (${this.base.segmentStatedColorShaderManager.getFunctionName}(brushValue, rgba)) {
-                            // Use override color from segment properties
-                            segmentColor = rgba.rgb;
+                        // value=0 marks "erased". The SEG layer's
+                        // brush-aware hijack handles erase by
+                        // discarding the canonical seg fragment at
+                        // that voxel, so the image underneath shows
+                        // through. Mirror that here: discard the
+                        // overlay so we don't paint anything that
+                        // would cover the newly-revealed pixel.
+                        if (brushValue.value[0] == 0u && brushValue.value[1] == 0u) {
+                            discard;
                         } else {
-                            // Fall back to computed color
-                            segmentColor = segmentColorHash(brushValue);
+                            // Found brush stroke - use proper color resolution (check override colors first)
+                            vec4 rgba;
+                            vec3 segmentColor;
+                            if (${this.base.segmentStatedColorShaderManager.getFunctionName}(brushValue, rgba)) {
+                                // Use override color from segment properties
+                                segmentColor = rgba.rgb;
+                            } else {
+                                // Fall back to computed color
+                                segmentColor = segmentColorHash(brushValue);
+                            }
+
+                            // Apply saturation mixing (same as segmentation layer)
+                            vec3 baseColor = mix(vec3(1.0, 1.0, 1.0), segmentColor, uSaturation);
+
+                            // Calculate final color and alpha to simulate being part of segmentation layer
+                            vec3 finalColor;
+                            float outputAlpha;
+
+                            if (uBlendingEnabled > 0.5) {
+                                // Multiple layers - simulate being part of segmentation layer
+                                bool isVisible = isSegmentVisible(brushValue);
+                                float targetAlpha = isVisible ? uSelectedAlpha : uNotSelectedAlpha;
+
+                                // Pre-multiply the color by target alpha and use full opacity for replacement
+                                // This makes the brush stroke appear with the same opacity as segmentation
+                                finalColor = baseColor * targetAlpha;
+                                outputAlpha = 1.0;
+                            } else {
+                                // Single layer - replace pixels completely
+                                finalColor = baseColor;
+                                outputAlpha = 1.0;
+                            }
+
+                            emit(vec4(finalColor, outputAlpha), 0u);
                         }
-                        
-                        // Apply saturation mixing (same as segmentation layer)
-                        vec3 baseColor = mix(vec3(1.0, 1.0, 1.0), segmentColor, uSaturation);
-                        
-                        // Calculate final color and alpha to simulate being part of segmentation layer
-                        vec3 finalColor;
-                        float outputAlpha;
-                        
-                        if (uBlendingEnabled > 0.5) {
-                            // Multiple layers - simulate being part of segmentation layer
-                            bool isVisible = isSegmentVisible(brushValue);
-                            float targetAlpha = isVisible ? uSelectedAlpha : uNotSelectedAlpha;
-                            
-                            // Pre-multiply the color by target alpha and use full opacity for replacement
-                            // This makes the brush stroke appear with the same opacity as segmentation
-                            finalColor = baseColor * targetAlpha;
-                            outputAlpha = 1.0;
-                        } else {
-                            // Single layer - replace pixels completely
-                            finalColor = baseColor;
-                            outputAlpha = 1.0;
-                        }
-                        
-                        emit(vec4(finalColor, outputAlpha), 0u);
                     } else {
                         // No brush stroke - discard fragment
                         discard;

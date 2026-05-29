@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import type { BrushHashTable } from "#src/brush_stroke/index.js";
 import { HashMapUint64 } from "#src/gpu_hash/hash_table.js";
 import {
   GPUHashTable,
@@ -77,6 +78,17 @@ export interface SliceViewSegmentationDisplayState
   notSelectedAlpha: WatchableValueInterface<number>;
   hideSegmentZero: WatchableValueInterface<boolean>;
   ignoreNullVisibleSet: WatchableValueInterface<boolean>;
+  /** Optimistic overlay shared with the segmentation layer's brush
+   *  tool. When supplied, the chunk fragment shader treats brush hits
+   *  as if they were canonical chunk data:
+   *    - value > 0 → return that segment id (paints optimistically)
+   *    - value = 0 → return 0, so `hideSegmentZero` discards the
+   *      fragment and the image layer (or whatever else is rendered
+   *      earlier into the slice view's framebuffer) shows through.
+   *  This is what makes brush AND eraser visible in real time on
+   *  both 2D slice panels and the 3D perspective cross-section
+   *  planes — they all sample the same slice-view framebuffer. */
+  brushHashTable?: BrushHashTable;
 }
 
 interface ShaderParameters {
@@ -110,6 +122,12 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
   private temporaryEquivalencesHashMap;
   private gpuEquivalencesHashTable;
   private gpuTemporaryEquivalencesHashTable;
+  // Brush-overlay machinery. Same prefix ("brushStroke") as the 2D
+  // `BrushStrokeLayer`'s manager, so the GLSL helper functions are
+  // named identically and `GPUHashTable.get(gl, table)` memoization
+  // shares the underlying GPU resource across consumers.
+  private brushHashTableManager = new HashMapShaderManager("brushStroke");
+  private gpuBrushHashTable: GPUHashTable<HashMapUint64> | undefined;
 
   constructor(
     multiscaleSource: MultiscaleVolumeChunkSource,
@@ -195,6 +213,32 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
       GPUHashTable.get(this.gl, this.temporaryEquivalencesHashMap.hashMap),
     );
 
+    const { brushHashTable } = displayState;
+    // DEBUG: trace whether the brush hash is plumbed through to this
+    // render layer. Eraser real-time visibility depends on this being
+    // truthy → hijack compiles in → discard fires on value-0.
+    console.log(
+      "[SegRenderLayer.ctor] brushHashTable present:",
+      brushHashTable !== undefined,
+      brushHashTable,
+    );
+    if (brushHashTable !== undefined) {
+      this.gpuBrushHashTable = this.registerDisposer(
+        GPUHashTable.get(this.gl, brushHashTable),
+      );
+      // Brush mutations don't flow through the segmentation display
+      // state's `changed` signal, so wire the redraw explicitly.
+      // Without this, painting wouldn't repaint the slice view's
+      // framebuffer and the new brush bytes would only appear after
+      // canonical chunks refetch from disk.
+      this.registerDisposer(
+        brushHashTable.changed.add(() => {
+                console.log("[SegRenderLayer] brushHashTable.changed fired");
+          this.redrawNeeded.dispatch();
+        }),
+      );
+    }
+
     this.registerDisposer(
       this.shaderParameters as AggregateWatchableValue<ShaderParameters>,
     );
@@ -244,12 +288,70 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
 
   defineShader(builder: ShaderBuilder, parameters: ShaderParameters) {
     this.hashTableManager.defineShader(builder);
-    let getUint64Code = `
+    // Brush-aware override of the chunk's canonical data value. Hash
+    // the world voxel position (`vChunkPosition + uTranslation`, in
+    // display order = spatial XYZ for our datasets) the same way the
+    // CPU `BrushHashTable.getBrushKey` and the slice-view brush
+    // overlay shader do; on hit, the brush value replaces the chunk
+    // datum. `value=0` returns the canonical "no segment" sentinel
+    // so `hideSegmentZero` discards the fragment — making the
+    // eraser punch through the segmentation layer and reveal the
+    // image layer behind it. Only compiled when a brushHashTable was
+    // plumbed through `displayState`.
+    const hasBrushOverlay = this.gpuBrushHashTable !== undefined;
+    console.log(
+      "[SegRenderLayer.defineShader] hasBrushOverlay:",
+      hasBrushOverlay,
+    );
+    if (hasBrushOverlay) {
+      this.brushHashTableManager.defineShader(builder);
+      // Stash the vertex's un-nudged world position into a varying.
+      // The parent's vertex main computes `vec3 position = ...`
+      // (the actual world coord at the vertex), then adds
+      // CHUNK_POSITION_EPSILON along the plane normal to
+      // `vChunkPosition`. We want the un-nudged coord here so the
+      // hash key we query exactly matches what the CPU brush
+      // emit's Math.round saw at click time — no FP-precision
+      // surprises at half-integer slice positions.
+      builder.addVarying("highp vec3", "vBrushWorldPos");
+      builder.addVertexMain("vBrushWorldPos = position;");
+    }
+    const brushLookup = hasBrushOverlay
+      ? `
+      {
+        // floor(x), matching the CPU brush hash exactly. The
+        // brush's CPU side stores (x, y, z) where each coord is
+        // Math.floor(worldCoord) + 0.5 (voxel-center-at-non-integer
+        // convention), then computes the hash key as coord >>> 0
+        // which truncates the .5 — net hash key = Math.floor(world).
+        // The backend stores ds[Math.floor(z)] too, so this also
+        // matches what the canonical chunks will show after the
+        // backend writes through.
+        uvec3 brushVoxel = uvec3(floor(vBrushWorldPos));
+        uint x1 = brushVoxel.x;
+        uint y1 = brushVoxel.y;
+        uint z1 = brushVoxel.z;
+        uint h1 = ((x1 * 73u) * 1271u) ^ ((y1 * 513u) * 1345u) ^ ((z1 * 421u) * 675u);
+        uint h2 = ((x1 * 127u) * 337u) ^ ((y1 * 111u) * 887u) ^ ((z1 * 269u) * 325u);
+        uint64_t brushKey;
+        brushKey.value[0] = h1;
+        brushKey.value[1] = h2;
+        uint64_t brushValue;
+        if (${this.brushHashTableManager.getFunctionName}(brushKey, brushValue)) {
+          // value=0 marks "erased": discard the canonical seg
+          // fragment so the image layer below shows through.
+          if (brushValue.value[0] == 0u && brushValue.value[1] == 0u) {
+            discard;
+          }
+          return brushValue;
+        }
+      }
+      `
+      : "";
+    const getUint64Code = `
     uint64_t getUint64DataValue() {
+      ${brushLookup}
       uint64_t x = toUint64(getDataValue());
-    `;
-
-    getUint64Code += `
       return x;
     }`;
     builder.addFragmentCode(getUint64Code);
@@ -416,6 +518,10 @@ uint64_t getMappedObjectId(uint64_t value) {
         ? this.gpuTemporaryHashTable
         : this.gpuHashTable,
     );
+    if (this.gpuBrushHashTable !== undefined) {
+      this.brushHashTableManager.enable(gl, shader, this.gpuBrushHashTable);
+        console.log("[SegRenderLayer.initializeShader] brush bound");
+    }
     if (parameters.hasEquivalences) {
       const useTemp =
         segmentationGroupState.useTemporarySegmentEquivalences.value;

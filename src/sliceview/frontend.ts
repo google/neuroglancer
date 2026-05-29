@@ -839,16 +839,23 @@ if (voxelPos.x >= 0 && voxelPos.y >= 0 && voxelPos.z >= 0) {
   brushKey.value[1] = h2;
   uint64_t brushValue;
   if (${this.brushHashTableManager.getFunctionName}(brushKey, brushValue)) {
-    vec4 rgba;
-    vec3 segmentColor;
-    if (${this.segmentStatedColorShaderManager.getFunctionName}(brushValue, rgba)) {
-      segmentColor = rgba.rgb;
-    } else {
-      segmentColor = segmentColorHash(brushValue);
+    // value=0 marks "erased". The canonical segmentation chunk
+    // shader already discards these voxels in the slice view's
+    // framebuffer (hideSegmentZero), so the sampled FB is
+    // transparent there. Fall through to missEmit and whatever the
+    // image layer (or panel background) drew earlier shows through.
+    if (brushValue.value[0] != 0u || brushValue.value[1] != 0u) {
+      vec4 rgba;
+      vec3 segmentColor;
+      if (${this.segmentStatedColorShaderManager.getFunctionName}(brushValue, rgba)) {
+        segmentColor = rgba.rgb;
+      } else {
+        segmentColor = segmentColorHash(brushValue);
+      }
+      vec3 baseColor = mix(vec3(1.0, 1.0, 1.0), segmentColor, uSaturation);
+      emit(vec4(baseColor, 1.0), 0u);
+      return;
     }
-    vec3 baseColor = mix(vec3(1.0, 1.0, 1.0), segmentColor, uSaturation);
-    emit(vec4(baseColor, 1.0), 0u);
-    return;
   }
 }
 ${missEmit}
