@@ -23,6 +23,7 @@ import {
   CHUNK_MANAGER_RPC_ID,
   CHUNK_QUEUE_MANAGER_RPC_ID,
   CHUNK_SOURCE_INVALIDATE_RPC_ID,
+  CHUNK_SOURCE_SOFT_INVALIDATE_RPC_ID,
   ChunkState,
   REQUEST_CHUNK_STATISTICS_RPC_ID,
 } from "#src/chunk_manager/base.js";
@@ -261,6 +262,35 @@ export class ChunkQueueManager extends SharedObject {
           source.addChunk(key, chunk);
         } else {
           chunk = source.chunks.get(key)!;
+          // Soft-swap path: an existing chunk is receiving fresh bytes
+          // from a `softInvalidateCache` round-trip. Stage the new
+          // chunk + push it to GPU *before* freeing the old chunk's
+          // GPU memory, so the visible texture for this key is never
+          // empty. Without this branch, the standard SYSTEM_MEMORY
+          // transition below would call `freeGPUMemory` first and the
+          // user would see a multi-second blank while chunks reload.
+          if (update.data !== undefined) {
+            const oldChunk = chunk;
+            const newChunk = source.getChunk(update);
+            const oldOnGPU = oldChunk.state === ChunkState.GPU_MEMORY;
+            if (oldOnGPU) {
+              newChunk.copyToGPU(this.gl);
+              newChunk.state = ChunkState.GPU_MEMORY;
+            } else {
+              // The chunk wasn't on GPU yet; let the normal state
+              // machine push it the rest of the way on subsequent
+              // updates. We set newState directly so the matching
+              // `GPU_MEMORY` follow-up from the backend (which carries
+              // no data) is a no-op state transition.
+              newChunk.state = newState;
+            }
+            source.chunks.set(key, newChunk);
+            if (oldOnGPU) {
+              oldChunk.freeGPUMemory(this.gl);
+            }
+            visibleChunksChanged = true;
+            return visibleChunksChanged;
+          }
         }
         const oldState = chunk.state;
         if (newState !== oldState) {
@@ -479,6 +509,18 @@ export class ChunkSource extends SharedObject {
    */
   invalidateCache(): void {
     this.rpc!.invoke(CHUNK_SOURCE_INVALIDATE_RPC_ID, { id: this.rpcId });
+  }
+
+  /**
+   * Soft-invalidate: re-fetch every chunk in this source, but keep the
+   * existing chunks (and their GPU memory) live until the new data
+   * arrives. Used by brush-write invalidations to avoid the multi-
+   * second blank gap that the hard {@link invalidateCache} would
+   * produce. See `softInvalidateSourceCache` on the backend for the
+   * other half of the soft-swap protocol.
+   */
+  softInvalidateCache(): void {
+    this.rpc!.invoke(CHUNK_SOURCE_SOFT_INVALIDATE_RPC_ID, { id: this.rpcId });
   }
 
   static encodeOptions(_options: object): { [key: string]: any } {

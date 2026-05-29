@@ -28,6 +28,12 @@ export class BrushTool extends Tool<Viewer> {
   private brushRadius: number = 1;
   private brushValue: number = -1;
 
+  // Stroke-level lifecycle signals. `brushPointsChanged` fires for every
+  // sub-stroke segment; these fire once per pointer down/up so subscribers
+  // can gate side-effects (e.g. canonical-chunk refresh) until the user
+  // has actually finished painting.
+  strokeStarted = new Signal<() => void>();
+  strokeEnded = new Signal<() => void>();
   // New signal specifically for brush points data
   brushPointsChanged = new Signal<(brushPoints: BrushPoint[]) => void>();
 
@@ -211,6 +217,7 @@ export class BrushTool extends Tool<Viewer> {
       "neuroglancer-brush-paint",
       (actionEvent) => {
         actionEvent.stopPropagation();
+        this.strokeStarted.dispatch();
         paint();
 
         startRelativeMouseDrag(actionEvent.detail, () => {
@@ -223,7 +230,7 @@ export class BrushTool extends Tool<Viewer> {
       "neuroglancer-brush-release",
       (actionEvent) => {
         actionEvent.stopPropagation();
-        // could build undo mechanism here
+        this.strokeEnded.dispatch();
         this.changed.dispatch();
       },
     );

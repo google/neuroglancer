@@ -24,6 +24,7 @@ import {
   CHUNK_MANAGER_RPC_ID,
   CHUNK_QUEUE_MANAGER_RPC_ID,
   CHUNK_SOURCE_INVALIDATE_RPC_ID,
+  CHUNK_SOURCE_SOFT_INVALIDATE_RPC_ID,
   ChunkDownloadStatistics,
   ChunkMemoryStatistics,
   ChunkPriorityTier,
@@ -1134,6 +1135,48 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     this.rpc!.invoke("Chunk.update", { source: source.rpcId });
     this.scheduleUpdate();
   }
+
+  /** Soft variant: re-fetch every chunk in the source, but keep the
+   *  *frontend's* existing chunks live (with GPU memory) until the new
+   *  data lands. Used by brush-write invalidations — the hard variant
+   *  would drop every chunk's GPU memory immediately and the user
+   *  would see canonical segmentation strokes vanish for the multi-
+   *  second refetch window before reappearing.
+   *
+   *  How it differs from {@link invalidateSourceCache}:
+   *  - We do *not* broadcast `Chunk.update` with no `id` (which is what
+   *    tells the frontend to wipe its `source.chunks` map).
+   *  - Worker-side data is still freed where it exists, because it
+   *    belongs to chunks that aren't on the frontend yet anyway.
+   *  - Worker-side state still resets to QUEUED so the priority queue
+   *    re-promotes each chunk through the normal download → transfer →
+   *    GPU pipeline.
+   *
+   *  When the new data finally arrives at the frontend (via
+   *  `moveChunkToFrontend`'s `Chunk.update` with `state=SYSTEM_MEMORY`
+   *  and `data`), the frontend's `applyChunkUpdate` detects that the
+   *  chunk already exists and runs a soft-swap: stage a fresh chunk,
+   *  upload to GPU, then atomically replace the entry and free the
+   *  old chunk's GPU memory. The visible GPU texture is never empty
+   *  for any key — that's the entire point.
+   */
+  softInvalidateSourceCache(source: ChunkSource) {
+    source.onInvalidateCache?.();
+    for (const chunk of source.chunks.values()) {
+      switch (chunk.state) {
+        case ChunkState.DOWNLOADING:
+          cancelChunkDownload(chunk);
+          break;
+        case ChunkState.SYSTEM_MEMORY_WORKER:
+          chunk.freeSystemMemory();
+          break;
+      }
+      this.updateChunkState(chunk, ChunkState.QUEUED);
+    }
+    // Intentionally omit `rpc.invoke("Chunk.update", { source })` —
+    // see jsdoc above. The frontend keeps its current chunks alive.
+    this.scheduleUpdate();
+  }
 }
 
 export class ChunkRenderLayerBackend
@@ -1384,6 +1427,11 @@ export function withChunkManager<
 registerRPC(CHUNK_SOURCE_INVALIDATE_RPC_ID, function (x) {
   const source = <ChunkSource>this.get(x.id);
   source.chunkManager.queueManager.invalidateSourceCache(source);
+});
+
+registerRPC(CHUNK_SOURCE_SOFT_INVALIDATE_RPC_ID, function (x) {
+  const source = <ChunkSource>this.get(x.id);
+  source.chunkManager.queueManager.softInvalidateSourceCache(source);
 });
 
 registerPromiseRPC(

@@ -26,6 +26,9 @@ export interface ErasePoint {
 export class EraserTool extends Tool<Viewer> {
   private eraserRadius: number = 1;
 
+  // Stroke-level lifecycle signals — see BrushTool for the rationale.
+  strokeStarted = new Signal<() => void>();
+  strokeEnded = new Signal<() => void>();
   // New signal specifically for erase points data
   erasePointsChanged = new Signal<(erasePoints: ErasePoint[]) => void>();
 
@@ -174,6 +177,7 @@ export class EraserTool extends Tool<Viewer> {
       "neuroglancer-eraser-erase",
       (actionEvent) => {
         actionEvent.stopPropagation();
+        this.strokeStarted.dispatch();
         erase();
 
         startRelativeMouseDrag(actionEvent.detail, () => {
@@ -186,7 +190,7 @@ export class EraserTool extends Tool<Viewer> {
       "neuroglancer-eraser-release",
       (actionEvent) => {
         actionEvent.stopPropagation();
-        // could build undo mechanism here
+        this.strokeEnded.dispatch();
         this.changed.dispatch();
       },
     );
