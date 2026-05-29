@@ -128,9 +128,35 @@ export class EraserTool extends Tool<Viewer> {
 
       const erasePoints: ErasePoint[] = [];
 
-      for (let dx = -this.eraserRadius; dx <= this.eraserRadius; dx++) {
-        for (let dy = -this.eraserRadius; dy <= this.eraserRadius; dy++) {
-          if (dx * dx + dy * dy <= this.eraserRadius * this.eraserRadius) {
+      // Use canonicalVoxelFactors to keep the eraser circle on screen
+      // matching its cursor. With anisotropic voxels (e.g. 5×5×30 nm)
+      // a fixed dx/dy step iterates uneven distances per axis, which
+      // is why the eraser looked elliptical on XZ/YZ planes.
+      // canonicalVoxelFactors converts voxel steps to canonical voxel
+      // distances per display dimension; mirror the brush's fix.
+      const renderInfo = pose.displayDimensionRenderInfo.value;
+      const { canonicalVoxelFactors, displayDimensionIndices } = renderInfo;
+
+      let xDisplayDim = 0;
+      let yDisplayDim = 0;
+      for (let i = 0; i < 3; i++) {
+        const globalDim = displayDimensionIndices[i];
+        if (globalDim === -1) continue;
+        if (xAxis[globalDim] !== 0) xDisplayDim = i;
+        if (yAxis[globalDim] !== 0) yDisplayDim = i;
+      }
+      const xFactor = canonicalVoxelFactors[xDisplayDim];
+      const yFactor = canonicalVoxelFactors[yDisplayDim];
+
+      const xRange = Math.ceil(this.eraserRadius / xFactor);
+      const yRange = Math.ceil(this.eraserRadius / yFactor);
+      const radiusSq = this.eraserRadius * this.eraserRadius;
+
+      for (let dx = -xRange; dx <= xRange; dx++) {
+        for (let dy = -yRange; dy <= yRange; dy++) {
+          const cx = dx * xFactor;
+          const cy = dy * yFactor;
+          if (cx * cx + cy * cy <= radiusSq) {
             const newPosition = vec3.fromValues(
               position[0],
               position[1],
