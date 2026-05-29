@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import type { BrushHashTable } from "#src/brush_stroke/index.js";
+import { debounce } from "lodash-es";
+import type { BrushStrokeLayer } from "#src/brush_stroke/renderlayer.js";
 import { ChunkState } from "#src/chunk_manager/base.js";
 import type {
   ChunkManager,
@@ -48,6 +49,10 @@ import {
   DerivedProjectionParameters,
   SharedProjectionParameters,
 } from "#src/renderlayer.js";
+import {
+  SegmentColorShaderManager,
+  SegmentStatedColorShaderManager,
+} from "#src/segment_color.js";
 import type {
   SliceViewChunkSource as SliceViewChunkSourceInterface,
   SliceViewChunkSpecification,
@@ -89,11 +94,14 @@ import {
   FramebufferConfiguration,
   makeTextureBuffers,
 } from "#src/webgl/offscreen.js";
-import type { ShaderBuilder, ShaderModule } from "#src/webgl/shader.js";
+import type {
+  ShaderBuilder,
+  ShaderModule,
+  ShaderProgram,
+} from "#src/webgl/shader.js";
 import { getSquareCornersBuffer } from "#src/webgl/square_corners_buffer.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { registerSharedObjectOwner } from "#src/worker_rpc.js";
-import { debounce } from "lodash-es";
 
 export type GenericChunkKey = string;
 
@@ -732,10 +740,25 @@ export class SliceViewRenderHelper extends RefCounted {
 
   private textureCoordinateAdjustment = new Float32Array(4);
   private shaderGetter: ParameterizedContextDependentShaderGetter<
-    { emitter: ShaderModule; isProjection: boolean; hasBrush: boolean },
+    {
+      emitter: ShaderModule;
+      isProjection: boolean;
+      hasBrush: boolean;
+      brushOverlayOnly: boolean;
+    },
     boolean
   >;
+  // Brush-overlay machinery used by the 3D perspective cross-section
+  // variant. Same prefixes as the 2D `BrushStrokeLayer`'s managers so
+  // the shader code is byte-identical; GPU hash tables are memoized
+  // by `GPUHashTable.get`, so the underlying resources are shared.
   private brushHashTableManager = new HashMapShaderManager("brushStroke");
+  private segmentColorShaderManager = new SegmentColorShaderManager(
+    "segmentColorHash",
+  );
+  private segmentStatedColorShaderManager = new SegmentStatedColorShaderManager(
+    "segmentStatedColor",
+  );
 
   defineShader(
     builder: ShaderBuilder,
@@ -743,6 +766,7 @@ export class SliceViewRenderHelper extends RefCounted {
     isProjection: boolean,
     emitter: ShaderModule,
     hasBrush: boolean,
+    brushOverlayOnly: boolean,
   ) {
     builder.addVarying("vec2", "vTexCoord");
     builder.addTextureSampler("sampler2D", "uSampler", "uSamplerUnit");
@@ -754,6 +778,9 @@ export class SliceViewRenderHelper extends RefCounted {
       builder.addUniform("mat4", "uSliceViewInvViewProj");
       if (hasBrush) {
         this.brushHashTableManager.defineShader(builder);
+        this.segmentColorShaderManager.defineShader(builder);
+        this.segmentStatedColorShaderManager.defineShader(builder);
+        builder.addUniform("highp float", "uSaturation");
       }
     }
     builder.require(emitter);
@@ -773,12 +800,27 @@ else {
       // 3D cross-section + brush overlay. Recover the world voxel
       // position from `vTexCoord` via the slice view's inverse
       // view-projection, hash it with the same multipliers as the
-      // CPU-side `BrushHashTable.getBrushKey` (and the slice-view
-      // brush overlay shader), and emit the brush color on hit.
-      // Otherwise fall through to the sampled slice-view framebuffer.
-      // TODO: replace the magenta placeholder with proper segment
-      // colour resolution (`segmentStatedColor_get` →
-      // `segmentColorHash`), matching the slice-view brush overlay.
+      // CPU-side `BrushHashTable.getBrushKey` and the slice-view
+      // brush overlay shader. On a hit, resolve segment colour the
+      // same way the 2D brush overlay does in its single-layer
+      // branch: stated-color override → segment colour hash, mixed
+      // with saturation, emitted at full opacity. Visibility-gated
+      // alpha (the 2D multi-layer branch) intentionally not used —
+      // an actively-painted segment isn't yet in the visible set, so
+      // alpha would round to zero and the brush would draw invisible
+      // until persistence promoted it into canonical chunks.
+      //
+      // Two sub-variants:
+      //   `brushOverlayOnly=false` — inline: brush hit emits, miss
+      //     falls through to `sampledColor`. Used for the first
+      //     segmentation layer's brush.
+      //   `brushOverlayOnly=true`  — overlay: brush hit emits, miss
+      //     `discard`s so the framebuffer already drawn (by an inline
+      //     draw or a previous overlay) shows through. Used for
+      //     subsequent segmentation layers on the same cross-section.
+      const missEmit = brushOverlayOnly
+        ? "discard;"
+        : "emit(sampledColor * uColorFactor, 0u);";
       glsl_fragmentMainEnd = `
   sampledColor = uBackgroundColor;
 }
@@ -797,11 +839,19 @@ if (voxelPos.x >= 0 && voxelPos.y >= 0 && voxelPos.z >= 0) {
   brushKey.value[1] = h2;
   uint64_t brushValue;
   if (${this.brushHashTableManager.getFunctionName}(brushKey, brushValue)) {
-    emit(vec4(1.0, 0.0, 1.0, 1.0), 0u);
+    vec4 rgba;
+    vec3 segmentColor;
+    if (${this.segmentStatedColorShaderManager.getFunctionName}(brushValue, rgba)) {
+      segmentColor = rgba.rgb;
+    } else {
+      segmentColor = segmentColorHash(brushValue);
+    }
+    vec3 baseColor = mix(vec3(1.0, 1.0, 1.0), segmentColor, uSaturation);
+    emit(vec4(baseColor, 1.0), 0u);
     return;
   }
 }
-emit(sampledColor * uColorFactor, 0u);
+${missEmit}
 `;
     } else {
       glsl_fragmentMainEnd = `
@@ -833,8 +883,13 @@ gl_Position = uProjectionMatrix * aVertexPosition;
       {
         memoizeKey: "sliceview/SliceViewRenderHelper",
         parameters: this.viewer.hideCrossSectionBackground3D,
-        getContextKey: ({ emitter, isProjection, hasBrush }) =>
-          `${getObjectId(emitter)}${isProjection}${hasBrush}`,
+        getContextKey: ({
+          emitter,
+          isProjection,
+          hasBrush,
+          brushOverlayOnly,
+        }) =>
+          `${getObjectId(emitter)}${isProjection}${hasBrush}${brushOverlayOnly}`,
         defineShader: (builder, context, hideTransparent) => {
           this.defineShader(
             builder,
@@ -842,6 +897,7 @@ gl_Position = uProjectionMatrix * aVertexPosition;
             context.isProjection,
             context.emitter,
             context.hasBrush,
+            context.brushOverlayOnly,
           );
         },
       },
@@ -858,17 +914,28 @@ gl_Position = uProjectionMatrix * aVertexPosition;
     xEnd: number,
     yEnd: number,
     sliceViewInvViewProj?: mat4,
-    brushHashTable?: BrushHashTable,
+    /** Owning segmentation layer's brush stroke layer. When passed
+     *  (3D cross-section variant only), brush voxels are baked into
+     *  this draw with full segment-color resolution. */
+    brushStrokeLayer?: BrushStrokeLayer,
+    /** When true, treat the brush as an overlay only: brush-miss
+     *  fragments `discard` instead of falling through to the sampled
+     *  slice-view framebuffer. Used by `drawSliceViews` to composite
+     *  additional segmentation layers' brushes on top of an already-
+     *  rendered cross-section without overwriting it. */
+    brushOverlayOnly = false,
   ) {
     const { gl, textureCoordinateAdjustment } = this;
     textureCoordinateAdjustment[0] = xStart;
     textureCoordinateAdjustment[1] = yStart;
     textureCoordinateAdjustment[2] = xEnd - xStart;
     textureCoordinateAdjustment[3] = yEnd - yStart;
+    const hasBrush = brushStrokeLayer !== undefined;
     const shaderResult = this.shaderGetter({
       emitter: this.emitter,
       isProjection: this.isProjection,
-      hasBrush: brushHashTable !== undefined,
+      hasBrush,
+      brushOverlayOnly: hasBrush && brushOverlayOnly,
     });
     const shader = shaderResult.shader;
     if (shader === null) {
@@ -897,10 +964,8 @@ gl_Position = uProjectionMatrix * aVertexPosition;
         sliceViewInvViewProj,
       );
     }
-    if (this.isProjection && brushHashTable !== undefined) {
-      const gpuBrushHashTable: GPUHashTable<HashMapUint64> =
-        GPUHashTable.get(gl, brushHashTable);
-      this.brushHashTableManager.enable(gl, shader, gpuBrushHashTable);
+    if (this.isProjection && brushStrokeLayer !== undefined) {
+      this.bindBrushResources(gl, shader, brushStrokeLayer);
     }
 
     const aVertexPosition = shader.attribute("aVertexPosition");
@@ -913,6 +978,43 @@ gl_Position = uProjectionMatrix * aVertexPosition;
 
     gl.disableVertexAttribArray(aVertexPosition);
     gl.bindTexture(gl.TEXTURE_2D, null);
+  }
+
+  /** Bind the GPU resources and uniforms needed for the brush-aware
+   *  cross-section shader variant — brush hash table, segment colour
+   *  hash, override stated colours, and saturation. Visibility-set
+   *  binding intentionally omitted; see the shader comment above for
+   *  why the brush ignores visibility-gated alpha. */
+  private bindBrushResources(
+    gl: GL,
+    shader: ShaderProgram,
+    brushStrokeLayer: BrushStrokeLayer,
+  ) {
+    const gpuBrushHashTable: GPUHashTable<HashMapUint64> = GPUHashTable.get(
+      gl,
+      brushStrokeLayer.brushHashTable,
+    );
+    this.brushHashTableManager.enable(gl, shader, gpuBrushHashTable);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const displayState = brushStrokeLayer.displayState as any;
+    const colorGroupState = displayState.segmentationColorGroupState.value;
+    this.segmentColorShaderManager.enable(
+      gl,
+      shader,
+      colorGroupState.segmentColorHash.value,
+    );
+
+    const segmentStatedColors = displayState.useTempSegmentStatedColors2d.value
+      ? displayState.tempSegmentStatedColors2d.value
+      : displayState.segmentStatedColors.value;
+    this.segmentStatedColorShaderManager.enable(
+      gl,
+      shader,
+      GPUHashTable.get(gl, segmentStatedColors.hashTable),
+    );
+
+    gl.uniform1f(shader.uniform("uSaturation"), displayState.saturation.value);
   }
 
   static get(

@@ -19,7 +19,7 @@ import "#src/perspective_view/panel.css";
 
 import type { PerspectiveViewAnnotationLayer } from "#src/annotation/renderlayer.js";
 import { AxesLineHelper, computeAxisLineMatrix } from "#src/axes_lines.js";
-import type { BrushHashTable } from "#src/brush_stroke/index.js";
+import type { BrushStrokeLayer } from "#src/brush_stroke/renderlayer.js";
 import type { DisplayContext } from "#src/display_context.js";
 import { applyRenderViewportToProjectionMatrix } from "#src/display_context.js";
 import type { VisibleRenderLayerTracker } from "#src/layer/index.js";
@@ -185,23 +185,26 @@ const tempVec3 = vec3.create();
 const tempVec4 = vec4.create();
 const tempMat4 = mat4.create();
 
-/** First segmentation user layer's brush hash table, used by
- *  `drawSliceViews` to overlay optimistic strokes on the 3D
- *  cross-section planes. Duck-typed on `brushHashTable` to avoid
- *  pulling in the segmentation user layer module (would be a layering
- *  cycle). Multi-segmentation-layer brush is a follow-up. */
-function findFirstBrushHashTable(
+/** All segmentation user layers' `BrushStrokeLayer` instances, used
+ *  by `drawSliceViews` to overlay optimistic strokes on the 3D
+ *  cross-section planes — one inline draw per cross-section for the
+ *  first layer, plus an overlay pass per additional layer. Duck-typed
+ *  on `brushStrokeLayer` to avoid pulling the segmentation user layer
+ *  module into the perspective view (would be a layering cycle). */
+function findBrushStrokeLayers(
   viewer: PerspectiveViewerState,
-): BrushHashTable | undefined {
+): BrushStrokeLayer[] {
+  const result: BrushStrokeLayer[] = [];
   for (const managedLayer of viewer.layerManager.managedLayers) {
     const userLayer = (
-      managedLayer as { layer?: { brushHashTable?: BrushHashTable } }
+      managedLayer as { layer?: { brushStrokeLayer?: BrushStrokeLayer | null } }
     ).layer;
-    if (userLayer?.brushHashTable !== undefined) {
-      return userLayer.brushHashTable;
+    const brushStrokeLayer = userLayer?.brushStrokeLayer;
+    if (brushStrokeLayer) {
+      result.push(brushStrokeLayer);
     }
   }
-  return undefined;
+  return result;
 }
 
 // Copy the OIT values to the main color buffer
@@ -1464,6 +1467,14 @@ export class PerspectivePanel extends RenderedDataPanel {
     } = renderContext;
 
     const showSliceViews = this.viewer.showSliceViews.value;
+    // Snapshot the brush-stroke layers once per `drawSliceViews` —
+    // they don't change mid-pass, and the array is reused across
+    // every slice view. First entry is rendered inline with the
+    // cross-section quad; any remaining entries get their own
+    // overlay draws so their brush composites on top.
+    const brushStrokeLayers = findBrushStrokeLayers(this.viewer);
+    const inlineBrushLayer: BrushStrokeLayer | undefined =
+      brushStrokeLayers[0];
     for (const [sliceView, unconditional] of this.sliceViews) {
       if (!unconditional && !showSliceViews) {
         continue;
@@ -1495,6 +1506,10 @@ export class PerspectivePanel extends RenderedDataPanel {
       backgroundColor[1] = crossSectionBackgroundColor[1];
       backgroundColor[2] = crossSectionBackgroundColor[2];
       backgroundColor[3] = 1;
+      const invViewProj =
+        sliceView.projectionParameters.value.invViewProjectionMat;
+      // Inline draw: sampled slice-view framebuffer + first
+      // segmentation layer's brush (if any).
       sliceViewRenderHelper.draw(
         sliceView.offscreenFramebuffer.colorBuffers[0].texture,
         mat,
@@ -1504,13 +1519,38 @@ export class PerspectivePanel extends RenderedDataPanel {
         0,
         1,
         1,
-        // Inverse view-projection + brush hash: the cross-section
-        // fragment shader recovers each pixel's world voxel from the
-        // inverse matrix, then looks it up in the brush hash table to
-        // overlay optimistic strokes on the 3D plane.
-        sliceView.projectionParameters.value.invViewProjectionMat,
-        findFirstBrushHashTable(this.viewer),
+        invViewProj,
+        inlineBrushLayer,
       );
+      // Overlay pass per additional segmentation layer — brush hits
+      // emit, misses `discard`, so each layer's brush composites on
+      // top of the previous frame without overwriting it.
+      //
+      // Switch depth test to LEQUAL: the overlay quad is at the
+      // exact same depth as the inline draw above (same vertex
+      // shader, same plane), so the default `gl.LESS` would reject
+      // every fragment — the brush wouldn't show. Restored to LESS
+      // after the loop so we don't change global state for the rest
+      // of the perspective render.
+      if (brushStrokeLayers.length > 1) {
+        this.gl.depthFunc(WebGL2RenderingContext.LEQUAL);
+        for (let i = 1; i < brushStrokeLayers.length; ++i) {
+          sliceViewRenderHelper.draw(
+            sliceView.offscreenFramebuffer.colorBuffers[0].texture,
+            mat,
+            vec4.fromValues(factor, factor, factor, 1),
+            tempVec4,
+            0,
+            0,
+            1,
+            1,
+            invViewProj,
+            brushStrokeLayers[i],
+            /*brushOverlayOnly=*/ true,
+          );
+        }
+        this.gl.depthFunc(WebGL2RenderingContext.LESS);
+      }
     }
   }
 
