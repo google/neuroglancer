@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { debounce } from "lodash-es";
+import type { BrushHashTable } from "#src/brush_stroke/index.js";
 import { ChunkState } from "#src/chunk_manager/base.js";
 import type {
   ChunkManager,
@@ -22,6 +22,11 @@ import type {
 } from "#src/chunk_manager/frontend.js";
 import { Chunk, ChunkSource } from "#src/chunk_manager/frontend.js";
 import { applyRenderViewportToProjectionMatrix } from "#src/display_context.js";
+import type { HashMapUint64 } from "#src/gpu_hash/hash_table.js";
+import {
+  GPUHashTable,
+  HashMapShaderManager,
+} from "#src/gpu_hash/shader.js";
 import type { LayerManager } from "#src/layer/index.js";
 import type {
   DisplayDimensionRenderInfo,
@@ -88,6 +93,7 @@ import type { ShaderBuilder, ShaderModule } from "#src/webgl/shader.js";
 import { getSquareCornersBuffer } from "#src/webgl/square_corners_buffer.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { registerSharedObjectOwner } from "#src/worker_rpc.js";
+import { debounce } from "lodash-es";
 
 export type GenericChunkKey = string;
 
@@ -95,7 +101,7 @@ class FrontendSliceViewBase extends SliceViewBase<
   SliceViewChunkSource,
   SliceViewRenderLayer,
   FrontendTransformedSource
-> {}
+> { }
 const Base = withSharedVisibility(FrontendSliceViewBase);
 
 export interface FrontendTransformedSource<
@@ -608,12 +614,11 @@ export interface SliceViewChunkSourceOptions<
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export abstract class SliceViewChunkSource<
-    Spec extends SliceViewChunkSpecification = SliceViewChunkSpecification,
-    ChunkType extends SliceViewChunk = SliceViewChunk,
-  >
+  Spec extends SliceViewChunkSpecification = SliceViewChunkSpecification,
+  ChunkType extends SliceViewChunk = SliceViewChunk,
+>
   extends ChunkSource
-  implements SliceViewChunkSourceInterface
-{
+  implements SliceViewChunkSourceInterface {
   declare chunks: Map<string, ChunkType>;
 
   declare OPTIONS: SliceViewChunkSourceOptions<Spec>;
@@ -727,25 +732,30 @@ export class SliceViewRenderHelper extends RefCounted {
 
   private textureCoordinateAdjustment = new Float32Array(4);
   private shaderGetter: ParameterizedContextDependentShaderGetter<
-    { emitter: ShaderModule; isProjection: boolean },
+    { emitter: ShaderModule; isProjection: boolean; hasBrush: boolean },
     boolean
   >;
+  private brushHashTableManager = new HashMapShaderManager("brushStroke");
 
   defineShader(
     builder: ShaderBuilder,
     hideTransparent: boolean,
     isProjection: boolean,
     emitter: ShaderModule,
+    hasBrush: boolean,
   ) {
     builder.addVarying("vec2", "vTexCoord");
-    builder.addUniform("sampler2D", "uSampler");
-    builder.addInitializer((shader) => {
-      this.gl.uniform1i(shader.uniform("uSampler"), 0);
-    });
+    builder.addTextureSampler("sampler2D", "uSampler", "uSamplerUnit");
     builder.addUniform("vec4", "uColorFactor");
     builder.addUniform("vec4", "uBackgroundColor");
     builder.addUniform("mat4", "uProjectionMatrix");
     builder.addUniform("vec4", "uTextureCoordinateAdjustment");
+    if (isProjection) {
+      builder.addUniform("mat4", "uSliceViewInvViewProj");
+      if (hasBrush) {
+        this.brushHashTableManager.defineShader(builder);
+      }
+    }
     builder.require(emitter);
     const glsl_fragmentMainStart = `
 vec4 sampledColor = texture(uSampler, vTexCoord);
@@ -758,6 +768,40 @@ if (sampledColor.a == 0.0) {`;
 else {
   emit(sampledColor * uColorFactor, 0u);
 }
+`;
+    } else if (isProjection && hasBrush) {
+      // 3D cross-section + brush overlay. Recover the world voxel
+      // position from `vTexCoord` via the slice view's inverse
+      // view-projection, hash it with the same multipliers as the
+      // CPU-side `BrushHashTable.getBrushKey` (and the slice-view
+      // brush overlay shader), and emit the brush color on hit.
+      // Otherwise fall through to the sampled slice-view framebuffer.
+      // TODO: replace the magenta placeholder with proper segment
+      // colour resolution (`segmentStatedColor_get` →
+      // `segmentColorHash`), matching the slice-view brush overlay.
+      glsl_fragmentMainEnd = `
+  sampledColor = uBackgroundColor;
+}
+vec4 clipPos = vec4(2.0 * vTexCoord - 1.0, 0.0, 1.0);
+vec4 worldPos4 = uSliceViewInvViewProj * clipPos;
+vec3 worldPos = worldPos4.xyz / worldPos4.w;
+ivec3 voxelPos = ivec3(round(worldPos));
+if (voxelPos.x >= 0 && voxelPos.y >= 0 && voxelPos.z >= 0) {
+  uint x1 = uint(voxelPos.x);
+  uint y1 = uint(voxelPos.y);
+  uint z1 = uint(voxelPos.z);
+  uint h1 = ((x1 * 73u) * 1271u) ^ ((y1 * 513u) * 1345u) ^ ((z1 * 421u) * 675u);
+  uint h2 = ((x1 * 127u) * 337u) ^ ((y1 * 111u) * 887u) ^ ((z1 * 269u) * 325u);
+  uint64_t brushKey;
+  brushKey.value[0] = h1;
+  brushKey.value[1] = h2;
+  uint64_t brushValue;
+  if (${this.brushHashTableManager.getFunctionName}(brushKey, brushValue)) {
+    emit(vec4(1.0, 0.0, 1.0, 1.0), 0u);
+    return;
+  }
+}
+emit(sampledColor * uColorFactor, 0u);
 `;
     } else {
       glsl_fragmentMainEnd = `
@@ -789,14 +833,15 @@ gl_Position = uProjectionMatrix * aVertexPosition;
       {
         memoizeKey: "sliceview/SliceViewRenderHelper",
         parameters: this.viewer.hideCrossSectionBackground3D,
-        getContextKey: ({ emitter, isProjection }) =>
-          `${getObjectId(emitter)}${isProjection}`,
+        getContextKey: ({ emitter, isProjection, hasBrush }) =>
+          `${getObjectId(emitter)}${isProjection}${hasBrush}`,
         defineShader: (builder, context, hideTransparent) => {
           this.defineShader(
             builder,
             hideTransparent,
             context.isProjection,
             context.emitter,
+            context.hasBrush,
           );
         },
       },
@@ -812,6 +857,8 @@ gl_Position = uProjectionMatrix * aVertexPosition;
     yStart: number,
     xEnd: number,
     yEnd: number,
+    sliceViewInvViewProj?: mat4,
+    brushHashTable?: BrushHashTable,
   ) {
     const { gl, textureCoordinateAdjustment } = this;
     textureCoordinateAdjustment[0] = xStart;
@@ -821,13 +868,15 @@ gl_Position = uProjectionMatrix * aVertexPosition;
     const shaderResult = this.shaderGetter({
       emitter: this.emitter,
       isProjection: this.isProjection,
+      hasBrush: brushHashTable !== undefined,
     });
     const shader = shaderResult.shader;
     if (shader === null) {
       throw new Error("Shader compilation failed in SliceViewRenderHelper.");
     }
     shader.bind();
-    gl.activeTexture(gl.TEXTURE0);
+    const uSamplerUnit = shader.textureUnit("uSamplerUnit");
+    gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + uSamplerUnit);
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.disable(WebGL2RenderingContext.BLEND);
     gl.uniformMatrix4fv(
@@ -841,6 +890,18 @@ gl_Position = uProjectionMatrix * aVertexPosition;
       shader.uniform("uTextureCoordinateAdjustment"),
       textureCoordinateAdjustment,
     );
+    if (this.isProjection && sliceViewInvViewProj !== undefined) {
+      gl.uniformMatrix4fv(
+        shader.uniform("uSliceViewInvViewProj"),
+        false,
+        sliceViewInvViewProj,
+      );
+    }
+    if (this.isProjection && brushHashTable !== undefined) {
+      const gpuBrushHashTable: GPUHashTable<HashMapUint64> =
+        GPUHashTable.get(gl, brushHashTable);
+      this.brushHashTableManager.enable(gl, shader, gpuBrushHashTable);
+    }
 
     const aVertexPosition = shader.attribute("aVertexPosition");
     this.copyVertexPositionsBuffer.bindToVertexAttrib(
@@ -911,7 +972,7 @@ export abstract class MultiscaleSliceViewChunkSource<
     options: SourceOptions,
   ): SliceViewSingleResolutionSource<Source>[][];
 
-  constructor(public chunkManager: Borrowed<ChunkManager>) {}
+  constructor(public chunkManager: Borrowed<ChunkManager>) { }
 }
 
 export function getVolumetricTransformedSources(
@@ -991,11 +1052,11 @@ export function getVolumetricTransformedSources(
         if (chunkDataSize[chunkDim] !== size) {
           throw new Error(
             "Channel dimension " +
-              transform.layerDimensionNames[
-                transform.channelToRenderLayerDimensions[channelDim]
-              ] +
-              ` has extent ${size} but corresponding chunk dimension has extent ` +
-              `${chunkDataSize[chunkDim]}`,
+            transform.layerDimensionNames[
+            transform.channelToRenderLayerDimensions[channelDim]
+            ] +
+            ` has extent ${size} but corresponding chunk dimension has extent ` +
+            `${chunkDataSize[chunkDim]}`,
           );
         }
         nonDisplayLowerClipBound[chunkDim] = Number.NEGATIVE_INFINITY;

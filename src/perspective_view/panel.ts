@@ -19,6 +19,7 @@ import "#src/perspective_view/panel.css";
 
 import type { PerspectiveViewAnnotationLayer } from "#src/annotation/renderlayer.js";
 import { AxesLineHelper, computeAxisLineMatrix } from "#src/axes_lines.js";
+import type { BrushHashTable } from "#src/brush_stroke/index.js";
 import type { DisplayContext } from "#src/display_context.js";
 import { applyRenderViewportToProjectionMatrix } from "#src/display_context.js";
 import type { VisibleRenderLayerTracker } from "#src/layer/index.js";
@@ -183,6 +184,25 @@ void emit(vec4 color, float depth, float intensity, highp uint pickId) {
 const tempVec3 = vec3.create();
 const tempVec4 = vec4.create();
 const tempMat4 = mat4.create();
+
+/** First segmentation user layer's brush hash table, used by
+ *  `drawSliceViews` to overlay optimistic strokes on the 3D
+ *  cross-section planes. Duck-typed on `brushHashTable` to avoid
+ *  pulling in the segmentation user layer module (would be a layering
+ *  cycle). Multi-segmentation-layer brush is a follow-up. */
+function findFirstBrushHashTable(
+  viewer: PerspectiveViewerState,
+): BrushHashTable | undefined {
+  for (const managedLayer of viewer.layerManager.managedLayers) {
+    const userLayer = (
+      managedLayer as { layer?: { brushHashTable?: BrushHashTable } }
+    ).layer;
+    if (userLayer?.brushHashTable !== undefined) {
+      return userLayer.brushHashTable;
+    }
+  }
+  return undefined;
+}
 
 // Copy the OIT values to the main color buffer
 function defineTransparencyCopyShader(builder: ShaderBuilder) {
@@ -1484,6 +1504,12 @@ export class PerspectivePanel extends RenderedDataPanel {
         0,
         1,
         1,
+        // Inverse view-projection + brush hash: the cross-section
+        // fragment shader recovers each pixel's world voxel from the
+        // inverse matrix, then looks it up in the brush hash table to
+        // overlay optimistic strokes on the 3D plane.
+        sliceView.projectionParameters.value.invViewProjectionMat,
+        findFirstBrushHashTable(this.viewer),
       );
     }
   }
