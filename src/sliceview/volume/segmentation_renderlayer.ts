@@ -56,7 +56,7 @@ import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 export class EquivalencesHashMap {
   generation = Number.NaN;
   hashMap = new HashMapUint64();
-  constructor(public disjointSets: DisjointUint64Sets) {}
+  constructor(public disjointSets: DisjointUint64Sets) { }
   update() {
     const { disjointSets } = this;
     const { generation } = disjointSets;
@@ -73,7 +73,7 @@ export class EquivalencesHashMap {
 
 export interface SliceViewSegmentationDisplayState
   extends SegmentationDisplayState,
-    RenderLayerBaseOptions {
+  RenderLayerBaseOptions {
   selectedAlpha: WatchableValueInterface<number>;
   notSelectedAlpha: WatchableValueInterface<number>;
   hideSegmentZero: WatchableValueInterface<boolean>;
@@ -214,14 +214,6 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
     );
 
     const { brushHashTable } = displayState;
-    // DEBUG: trace whether the brush hash is plumbed through to this
-    // render layer. Eraser real-time visibility depends on this being
-    // truthy → hijack compiles in → discard fires on value-0.
-    console.log(
-      "[SegRenderLayer.ctor] brushHashTable present:",
-      brushHashTable !== undefined,
-      brushHashTable,
-    );
     if (brushHashTable !== undefined) {
       this.gpuBrushHashTable = this.registerDisposer(
         GPUHashTable.get(this.gl, brushHashTable),
@@ -233,7 +225,6 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
       // canonical chunks refetch from disk.
       this.registerDisposer(
         brushHashTable.changed.add(() => {
-                console.log("[SegRenderLayer] brushHashTable.changed fired");
           this.redrawNeeded.dispatch();
         }),
       );
@@ -299,10 +290,6 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
     // image layer behind it. Only compiled when a brushHashTable was
     // plumbed through `displayState`.
     const hasBrushOverlay = this.gpuBrushHashTable !== undefined;
-    console.log(
-      "[SegRenderLayer.defineShader] hasBrushOverlay:",
-      hasBrushOverlay,
-    );
     if (hasBrushOverlay) {
       this.brushHashTableManager.defineShader(builder);
       // Stash the vertex's un-nudged world position into a varying.
@@ -381,12 +368,10 @@ uint64_t getMappedObjectId(uint64_t value) {
     let fragmentMain = `
   uint64_t baseValue = getUint64DataValue();
   uint64_t value = getMappedObjectId(baseValue);
-  uint64_t valueForColor = ${
-    parameters.baseSegmentColoring ? "baseValue" : "value"
-  };
-  uint64_t valueForHighlight = ${
-    parameters.baseSegmentHighlighting ? "baseValue" : "value"
-  };
+  uint64_t valueForColor = ${parameters.baseSegmentColoring ? "baseValue" : "value"
+      };
+  uint64_t valueForHighlight = ${parameters.baseSegmentHighlighting ? "baseValue" : "value"
+      };
 
   float alpha = uSelectedAlpha;
   float saturation = uSaturation;
@@ -520,7 +505,6 @@ uint64_t getMappedObjectId(uint64_t value) {
     );
     if (this.gpuBrushHashTable !== undefined) {
       this.brushHashTableManager.enable(gl, shader, this.gpuBrushHashTable);
-        console.log("[SegRenderLayer.initializeShader] brush bound");
     }
     if (parameters.hasEquivalences) {
       const useTemp =
@@ -560,7 +544,7 @@ uint64_t getMappedObjectId(uint64_t value) {
       if (
         gpuSegmentStatedColorHashTable === undefined ||
         gpuSegmentStatedColorHashTable.hashTable !==
-          segmentStatedColors.hashTable
+        segmentStatedColors.hashTable
       ) {
         gpuSegmentStatedColorHashTable?.dispose();
         this.gpuSegmentStatedColorHashTable = gpuSegmentStatedColorHashTable =
