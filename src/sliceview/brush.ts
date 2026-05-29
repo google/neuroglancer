@@ -260,11 +260,27 @@ export class BrushTool extends Tool<Viewer> {
       },
     );
 
+    // mousemove only fires while the cursor is over the viewer canvas;
+    // once it leaves (onto the sidebars / overlays / outside the
+    // window), no more updates land and the circle would stay frozen
+    // at its last position, painted over the sidebar via z-index 1000.
+    // Hide on mouseleave and restore on mouseenter for symmetry.
+    const handleMouseLeave = () => {
+      cursor.style.display = "none";
+    };
+    const handleMouseEnter = (event: MouseEvent) => {
+      handleMouseMove(event);
+    };
+
     this.viewer.element.addEventListener("mousemove", handleMouseMove);
+    this.viewer.element.addEventListener("mouseleave", handleMouseLeave);
+    this.viewer.element.addEventListener("mouseenter", handleMouseEnter);
 
     activation.registerDisposer(() => {
       document.body.removeChild(cursor);
       this.viewer.element.removeEventListener("mousemove", handleMouseMove);
+      this.viewer.element.removeEventListener("mouseleave", handleMouseLeave);
+      this.viewer.element.removeEventListener("mouseenter", handleMouseEnter);
       zoomSubscription();
     });
   }
