@@ -38,6 +38,7 @@ import { buttonLayerControl } from "#src/widget/layer_control_button.js";
 import { checkboxLayerControl } from "#src/widget/layer_control_checkbox.js";
 import { enumLayerControl } from "#src/widget/layer_control_enum.js";
 import { rangeLayerControl } from "#src/widget/layer_control_range.js";
+import type { RangeWidget } from "#src/widget/range.js";
 
 export function getEditingContext(
   layer: UserLayerWithVoxelEditing,
@@ -183,9 +184,12 @@ const TOOL_SPECIFIC_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEditing>[
             options: { min: 1, max: 64, step: 1 },
           }),
         );
+        const originalActivateTool = control.activateTool;
         return {
           ...control,
-          activateTool: (activation, _controlContext) => {
+          activateTool: (activation, controlContext) => {
+            originalActivateTool(activation, controlContext as RangeWidget);
+
             const layer = activation.tool.layer as UserLayerWithVoxelEditing;
             const trigger = () => {
               for (const panel of layer.manager.root.display.panels) {
