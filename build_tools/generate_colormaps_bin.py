@@ -72,7 +72,12 @@ def main() -> int:
         print(f"size mismatch: got {len(out)} expected {expected}", file=sys.stderr)
         return 1
 
-    target = pathlib.Path(__file__).resolve().parent.parent / "src" / "webgl" / "colormaps.bin"
+    target = (
+        pathlib.Path(__file__).resolve().parent.parent
+        / "src"
+        / "webgl"
+        / "colormaps.bin"
+    )
     target.write_bytes(out)
     print(f"wrote {target} ({len(out)} bytes, {len(NAMES)} colormaps)")
     return 0
