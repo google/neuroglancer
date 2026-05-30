@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "matplotlib",
+#     "numpy",
+# ]
+# ///
 """Generate src/webgl/colormaps.bin from matplotlib's named colormaps.
 
 The file is a concatenation of N x 256 x 3 uint8 RGB triples, one 768-byte
 block per colormap in the order of NAMES below. The order MUST match
-COLORMAP_NAMES in src/webgl/colormaps.ts.
+COLORMAP_BIN_NAMES in src/webgl/colormaps.ts.
 
 Re-run this script after adding or reordering colormaps. CI does not run this:
 the produced colormaps.bin is committed to the repo.
 
-Usage (requires uv + matplotlib + numpy):
-    uv run --with matplotlib --with numpy --no-project \
-        build_tools/generate_colormaps_bin.py
+Usage (uv reads the PEP 723 header above to set up the env automatically):
+    uv run --no-project build_tools/generate_colormaps_bin.py
 """
 
 from __future__ import annotations
@@ -44,9 +50,12 @@ ALIASES = {
 
 
 def main() -> int:
+    # matplotlib/numpy aren't installed in the mypy nox session's env (they're
+    # supplied at runtime via the PEP 723 header above), so silence the
+    # import-not-found warning here.
     try:
-        import matplotlib
-        import numpy as np
+        import matplotlib  # type: ignore[import-not-found]
+        import numpy as np  # type: ignore[import-not-found]
     except ImportError as e:
         print(f"missing dependency: {e}", file=sys.stderr)
         return 1
