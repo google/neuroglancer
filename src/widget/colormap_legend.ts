@@ -22,8 +22,10 @@ import { positionDropdown } from "#src/util/dropdown.js";
 import {
   COLORMAP_NAMES,
   type ColormapName,
+  colormapDataLoaded,
   colormapDisplayName,
-  computeColormapColor,
+  getColormapBytes,
+  getColormapDataPromise,
 } from "#src/webgl/colormaps.js";
 import type { ColormapParameters } from "#src/webgl/shader_ui_controls.js";
 
@@ -44,14 +46,34 @@ function renderColormapSwatch(
   const ctx = canvas.getContext("2d")!;
   const imageData = ctx.createImageData(width, height);
   const { data } = imageData;
+  const bytes = getColormapBytes(colormapName);
+  if (bytes === undefined) {
+    // LUT not loaded yet; render a placeholder (mid-grey). The widget
+    // subscribes to colormapDataLoaded and will re-render once available.
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = 64;
+      data[i + 1] = 64;
+      data[i + 2] = 64;
+      data[i + 3] = 255;
+    }
+    ctx.putImageData(imageData, 0, 0);
+    return;
+  }
   for (let x = 0; x < width; x++) {
-    const t = x / (width - 1);
-    const [r, g, b] = computeColormapColor(colormapName, t);
+    // Linearly interpolate between the two adjacent LUT entries for smooth
+    // swatches at any width.
+    const t = (x / (width - 1)) * 255;
+    const lo = Math.floor(t);
+    const hi = Math.min(lo + 1, 255);
+    const f = t - lo;
+    const r = bytes[lo * 3] * (1 - f) + bytes[hi * 3] * f;
+    const g = bytes[lo * 3 + 1] * (1 - f) + bytes[hi * 3 + 1] * f;
+    const b = bytes[lo * 3 + 2] * (1 - f) + bytes[hi * 3 + 2] * f;
     for (let y = 0; y < height; y++) {
       const idx = (y * width + x) * 4;
-      data[idx] = Math.round(r * 255);
-      data[idx + 1] = Math.round(g * 255);
-      data[idx + 2] = Math.round(b * 255);
+      data[idx] = r;
+      data[idx + 1] = g;
+      data[idx + 2] = b;
       data[idx + 3] = 255;
     }
   }
@@ -144,6 +166,27 @@ export class ColormapWidget extends RefCounted {
     };
     syncFromTrackable();
     this.registerDisposer(colormapTrackable.changed.add(syncFromTrackable));
+
+    // Kick off the LUT fetch (idempotent) and re-render all swatches once it
+    // arrives. Until then renderColormapSwatch shows mid-grey placeholders.
+    void getColormapDataPromise();
+    const rerenderAllSwatches = () => {
+      renderColormapSwatch(swatch, colormapTrackable.value.colormap);
+      for (const [optionName, optionEl] of this.optionElements) {
+        const optionSwatch = optionEl.querySelector(
+          ".neuroglancer-colormap-option-swatch",
+        ) as HTMLCanvasElement | null;
+        if (optionSwatch !== null) {
+          renderColormapSwatch(
+            optionSwatch,
+            optionName,
+            OPTION_SWATCH_WIDTH,
+            OPTION_SWATCH_HEIGHT,
+          );
+        }
+      }
+    };
+    this.registerDisposer(colormapDataLoaded.add(rerenderAllSwatches));
 
     button.addEventListener("click", () => {
       if (this.isOpen) {

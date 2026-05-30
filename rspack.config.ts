@@ -53,6 +53,12 @@ export default defineConfig((env, args) => {
           resourceQuery: /raw/,
           type: "asset/source",
         },
+        // Needed for .bin imports (e.g. the bundled colormaps.bin asset);
+        // emits the file alongside the JS bundle with a content-hashed name.
+        {
+          test: /\.bin$/,
+          type: "asset/resource",
+        },
         // Needed for .html assets used for auth redirect pages for the
         // brainmaps and bossDB data sources.
         {

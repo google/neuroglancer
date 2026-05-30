@@ -16,6 +16,8 @@
 
 import type { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
+import type { ColormapBinName } from "#src/webgl/colormaps.js";
+import { ColormapTexture } from "#src/webgl/colormaps.js";
 import type { GL } from "#src/webgl/context.js";
 import type {
   ControlPointTexture,
@@ -173,6 +175,7 @@ export class ShaderProgram extends RefCounted {
     any,
     ControlPointTexture
   >();
+  colormapTextures: Map<any, ColormapTexture> = new Map<any, ColormapTexture>();
 
   constructor(
     public gl: GL,
@@ -290,6 +293,30 @@ export class ShaderProgram extends RefCounted {
     }
   }
 
+  /**
+   * Binds the colormap texture associated with `symbol` to its allocated
+   * texture unit and uploads `colormapName`'s LUT if the selection has
+   * changed (or on first call). Lazily creates the ColormapTexture on first
+   * use.
+   */
+  bindAndUpdateColormapTexture(
+    symbol: symbol | string,
+    colormapName: ColormapBinName,
+  ) {
+    const textureUnit = this.textureUnits.get(symbol);
+    if (textureUnit === undefined) {
+      throw new Error(
+        `Invalid colormap texture unit symbol: ${String(symbol)}`,
+      );
+    }
+    let texture = this.colormapTextures.get(symbol);
+    if (texture === undefined) {
+      texture = this.registerDisposer(new ColormapTexture(this.gl));
+      this.colormapTextures.set(symbol, texture);
+    }
+    texture.bindAndUpload(textureUnit, colormapName);
+  }
+
   disposed() {
     const { gl } = this;
     gl.deleteShader(this.vertexShader);
@@ -302,6 +329,7 @@ export class ShaderProgram extends RefCounted {
     this.attributes = <any>undefined;
     this.uniforms = <any>undefined;
     this.transferFunctionTextures = <any>undefined;
+    this.colormapTextures = <any>undefined;
   }
 }
 

@@ -57,12 +57,8 @@ import {
 } from "#src/util/lerp.js";
 import { NullarySignal } from "#src/util/signal.js";
 import type { Trackable } from "#src/util/trackable.js";
-import type { ColormapName } from "#src/webgl/colormaps.js";
-import {
-  COLORMAP_NAMES,
-  colormapGlslFunctionName,
-  glsl_COLORMAPS,
-} from "#src/webgl/colormaps.js";
+import type { ColormapBinName, ColormapName } from "#src/webgl/colormaps.js";
+import { COLORMAP_NAMES } from "#src/webgl/colormaps.js";
 import type { GL } from "#src/webgl/context.js";
 import type { HistogramChannelSpecification } from "#src/webgl/empirical_cdf.js";
 import { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
@@ -153,6 +149,31 @@ export interface ShaderControlsParseResult {
   code: string;
   controls: Map<string, ShaderUiControl>;
   errors: ShaderControlParseError[];
+  // Back-compat colormap free-functions referenced directly by the user's
+  // shader (e.g. `colormapJet`, `colormapCubehelix`). Each entry triggers
+  // emission of a hidden sampler + wrapper bound to the named colormap.
+  compatColormaps: readonly CompatColormap[];
+}
+
+interface CompatColormap {
+  funcName: string;
+  name: ColormapBinName;
+}
+
+/** Free GLSL colormap functions kept for backwards compatibility. */
+const COMPAT_COLORMAPS: readonly CompatColormap[] = [
+  { funcName: "colormapJet", name: "jet" },
+  { funcName: "colormapCubehelix", name: "cubehelix" },
+];
+
+function detectCompatColormaps(source: string): CompatColormap[] {
+  const found: CompatColormap[] = [];
+  for (const entry of COMPAT_COLORMAPS) {
+    if (new RegExp(`\\b${entry.funcName}\\b`).test(source)) {
+      found.push(entry);
+    }
+  }
+  return found;
 }
 
 export interface ShaderControlsBuilderState {
@@ -813,7 +834,8 @@ export function parseShaderUiControls(
       return "";
     },
   );
-  return { source: code, code: newCode, errors, controls };
+  const compatColormaps = detectCompatColormaps(newCode);
+  return { source: code, code: newCode, errors, controls, compatColormaps };
 }
 
 export type Controls = Map<string, ShaderUiControl>;
@@ -883,15 +905,16 @@ float ${uName}() {
         break;
       }
       case "colormap": {
-        const glslFn = colormapGlslFunctionName(builderValue.colormap);
-        const code = [
-          glsl_COLORMAPS,
-          `vec3 ${uName}(float t) { return ${glslFn}(t); }\n`,
-        ];
+        // Sample the colormap as a 256x1 RGB texture. The texture is bound
+        // per-draw (see setControlInShader); switching the selected colormap
+        // re-uploads the texture rather than recompiling the shader.
+        const samplerName = `${uName}_sampler`;
+        builder.addTextureSampler("sampler2D", samplerName, name);
+        const wrapper = `vec3 ${uName}(float t) { return texture(${samplerName}, vec2(clamp(t, 0.0, 1.0), 0.5)).rgb; }\n`;
         const define = `#define ${name} ${uName}\n`;
-        builder.addFragmentCode(code);
+        builder.addFragmentCode(wrapper);
         builder.addFragmentCode(define);
-        builder.addVertexCode(code);
+        builder.addVertexCode(wrapper);
         builder.addVertexCode(define);
         break;
       }
@@ -903,6 +926,26 @@ float ${uName}() {
       }
     }
   }
+  // Back-compat: free GLSL functions like `colormapJet` / `colormapCubehelix`
+  // referenced directly by the user's shader are wired through the same
+  // sampler-based path. The texture is bound per-draw in setControlsInShader.
+  for (const { funcName } of builderState.parseResult.compatColormaps) {
+    const samplerName = `${funcName}_sampler`;
+    const sym = compatColormapSamplerSymbol(funcName);
+    builder.addTextureSampler("sampler2D", samplerName, sym);
+    const wrapper = `vec3 ${funcName}(float t) { return texture(${samplerName}, vec2(clamp(t, 0.0, 1.0), 0.5)).rgb; }\n`;
+    builder.addFragmentCode(wrapper);
+    builder.addVertexCode(wrapper);
+  }
+}
+
+/**
+ * Symbol used to allocate the texture unit + bind the texture for the back-
+ * compat free function named `funcName` (e.g. `colormapJet`). Stable across
+ * build + draw time so the bound unit and uploaded texture line up.
+ */
+function compatColormapSamplerSymbol(funcName: string): string {
+  return `_neuroglancer_compatColormap_${funcName}`;
 }
 
 function replaceBigintAndMap(_key: string, value: unknown) {
@@ -1387,9 +1430,10 @@ function getControlTrackable(control: ShaderUiControl): {
     case "colormap":
       return {
         trackable: new TrackableColormapParameters(control.default),
-        getBuilderValue: (value: ColormapParameters) => ({
-          colormap: value.colormap,
-        }),
+        // The colormap name is bound at draw time via a texture upload, so
+        // it intentionally does NOT participate in the shader build key.
+        // Switching colormaps rebinds the texture without recompiling.
+        getBuilderValue: () => null,
       };
   }
 }
@@ -1588,6 +1632,7 @@ export class ShaderControlState
         code: "",
         controls: new Map(),
         errors: [{ line: 0, message: "Loading" }],
+        compatColormaps: [],
       };
       this.parseErrors_ = [];
       this.processedFragmentMain_ = "";
@@ -1779,8 +1824,10 @@ function setControlInShader(
       );
       break;
     case "colormap":
-      // Pure float→vec3 mapping; colormap function is inlined at build time,
-      // and no uniforms need to be uploaded per-frame.
+      // Bind the texture holding this control's LUT, uploading on first use
+      // and on each colormap change. The bound texture unit was allocated at
+      // build time via builder.addTextureSampler(_, _, name).
+      shader.bindAndUpdateColormapTexture(name, value.colormap);
       break;
   }
 }
@@ -1790,6 +1837,7 @@ export function setControlsInShader(
   shader: ShaderProgram,
   shaderControlState: ShaderControlState,
   controls: Controls,
+  compatColormaps: readonly CompatColormap[] = [],
 ) {
   const { state } = shaderControlState;
   if (shaderControlState.controls.value === controls) {
@@ -1815,5 +1863,14 @@ export function setControlsInShader(
           : control.default;
       setControlInShader(gl, shader, name, control, value);
     }
+  }
+  // Bind back-compat colormap textures (one per `colormapJet`/etc. usage).
+  // The list comes from the currently-bound shader's parseResult so the
+  // sampler symbols line up with what addControlsToBuilder emitted.
+  for (const { funcName, name } of compatColormaps) {
+    shader.bindAndUpdateColormapTexture(
+      compatColormapSamplerSymbol(funcName),
+      name,
+    );
   }
 }

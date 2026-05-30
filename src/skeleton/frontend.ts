@@ -57,7 +57,6 @@ import {
   drawCircles,
   initializeCircleShader,
 } from "#src/webgl/circles.js";
-import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
 import type { GL } from "#src/webgl/context.js";
 import type { WatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import {
@@ -186,7 +185,6 @@ void emitDefault() {
   emit(vec4(uColor.rgb, uColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
 }
 `);
-          builder.addFragmentCode(glsl_COLORMAPS);
           const { vertexAttributes } = this;
           const numAttributes = vertexAttributes.length;
           for (let i = 1; i < numAttributes; ++i) {
@@ -255,7 +253,6 @@ void emitDefault() {
   emitRGBA(uColor);
 }
 `);
-          builder.addFragmentCode(glsl_COLORMAPS);
           const { vertexAttributes } = this;
           const numAttributes = vertexAttributes.length;
           for (let i = 1; i < numAttributes; ++i) {
@@ -585,6 +582,7 @@ export class SkeletonLayer extends RefCounted {
       edgeShader,
       shaderControlState,
       edgeShaderParameters.parseResult.controls,
+      edgeShaderParameters.parseResult.compatColormaps,
     );
     gl.uniform1f(edgeShader.uniform("uLineWidth"), lineWidth!);
 
@@ -596,6 +594,7 @@ export class SkeletonLayer extends RefCounted {
       nodeShader,
       shaderControlState,
       nodeShaderParameters.parseResult.controls,
+      nodeShaderParameters.parseResult.compatColormaps,
     );
 
     const skeletons = source.chunks;
