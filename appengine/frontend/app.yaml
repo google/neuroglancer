@@ -1,0 +1,19 @@
+runtime: python312
+
+service: neuroglancer
+
+handlers:
+  # Handle the main page by serving the index page.
+  # Note the $ to specify the end of the path, since app.yaml does prefix matching.
+  - url: /$
+    static_files: static/index.html
+    upload: static/index.html
+    login: optional
+    secure: always
+    redirect_http_response_code: 301
+
+  - url: /
+    static_dir: static
+    login: optional
+    secure: always
+    redirect_http_response_code: 301
