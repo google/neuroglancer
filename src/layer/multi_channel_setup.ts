@@ -187,12 +187,9 @@ function getLayerChannelMetadata(
 }
 
 function checkLayerInputMetadataForErrors(layer: ManagedUserLayer): boolean {
-  // If all the ranges are the same and the colors are black, then we can
-  // assume that the input metadata is not set up correctly
   const channels = getChannelMetadata(layer);
   if (!channels || channels.length === 0) return true;
 
-  // Check if all ranges that are defined are the same
   const definedRanges = channels
     .map((channel) => channel.range)
     .filter((range): range is [number, number] => range !== undefined);
@@ -295,7 +292,6 @@ function setupLayerPostCreation(
     const debouncedCheckDataReady = debounce(() => {
       checkDataReady();
     }, 500);
-    // The first wait should give some time for data to load in
     const firstCheckForData = debounce(() => {
       checkDataReady();
     }, 1200);
@@ -303,12 +299,6 @@ function setupLayerPostCreation(
   };
 
   const setupWidgetsFunction = () => {
-    // The host may have already swapped the shader to a LUT-mode
-    // template that omits the `color` uicontrol (the new reconciler
-    // pre-applies persisted LUT state before this callback runs on
-    // hydration). Skipping the write is safe: the host is the
-    // authoritative writer for color in managed mode, and a missing
-    // control means there is no color uniform to drive anyway.
     const colorEntry = shaderControlValue.get("color");
     if (colorEntry) {
       colorEntry.trackable.value = determineColor();
@@ -356,14 +346,6 @@ function setupLayerPostCreation(
   postCreationSetupFunctions.push(setShaderDefaultsWhenReady);
 }
 
-// Tracks which ManagedUserLayer objects this function has already
-// processed. AutoUserLayer.activateDataSubsources subscribes to
-// `managedLayer.readyStateChanged` and calls back here every time
-// isReady flips true — which happens again after the upgraded ImageLayer
-// finishes its async data load. The second pass would re-apply the
-// multichannel shader and re-rename the layer, wiping in-memory color
-// edits and orphaning persisted state (keyed by layer name) in the
-// outer app's store. WeakSet so disposed layers don't pin memory.
 const setupComplete = new WeakSet<ManagedUserLayer>();
 
 export function createImageLayerAsMultiChannel(
@@ -381,9 +363,6 @@ export function createImageLayerAsMultiChannel(
 
   if (totalLocalChannels <= 1 && checkForMultipleChannels) return;
 
-  // Past the early-return gauntlet; commit to running once. The mark
-  // happens before any mutation so a re-entrant readyStateChanged fire
-  // mid-setup also gets caught.
   setupComplete.add(managedLayer);
 
   const ranges = [];
@@ -412,15 +391,6 @@ export function createImageLayerAsMultiChannel(
   for (let i = 0; i < totalLocalChannels; i++) {
     const channelMetadata = getLayerChannelMetadata(managedLayer, i);
     const { localPosition, chanName } = getAdjustedLocalPositionAndName(i);
-    // Naming priority:
-    //   1. Channel metadata provides a label (e.g. OME-NGFF channel name)
-    //      → use the label *verbatim* as the layer name. Don't prefix
-    //      with the parent dataset's name; the label is the canonical
-    //      identifier for that channel.
-    //   2. Multi-channel image without per-channel labels → append a
-    //      positional suffix to the parent name so each channel ends up
-    //      with a distinct identifier.
-    //   3. Single-channel image without a label → keep the parent name.
     let name: string;
     if (channelMetadata?.label) {
       name = channelMetadata.label;

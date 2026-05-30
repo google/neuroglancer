@@ -97,11 +97,7 @@ export const PREFETCH_PRIORITY_MULTIPLIER = 1e13;
 export const CHUNK_QUEUE_MANAGER_RPC_ID = "ChunkQueueManager";
 export const CHUNK_MANAGER_RPC_ID = "ChunkManager";
 export const CHUNK_SOURCE_INVALIDATE_RPC_ID = "ChunkSource.invalidate";
-/** Soft refresh: re-fetch every chunk in the source but keep existing data
- *  visible until the new bytes land. Used so brush-write invalidations
- *  don't blank already-loaded segmentation chunks during their multi-
- *  second refetch window. See `softInvalidateSourceCache` in `backend.ts`
- *  and the matching swap path in `applyChunkUpdate` in `frontend.ts`. */
+
 export const CHUNK_SOURCE_SOFT_INVALIDATE_RPC_ID =
   "ChunkSource.softInvalidate";
 
@@ -113,7 +109,7 @@ export const CHUNK_LAYER_STATISTICS_RPC_ID =
   "ChunkManager.chunkLayerStatistics";
 
 export interface ChunkSourceParametersConstructor<T> {
-  new (): T;
+  new(): T;
   RPC_ID: string;
 }
 

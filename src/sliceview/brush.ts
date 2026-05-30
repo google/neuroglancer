@@ -27,20 +27,10 @@ export interface BrushPoint {
 export class BrushTool extends Tool<Viewer> {
   private brushRadius: number = 1;
   private brushValue: number = -1;
-  // Center of the previous brush stamp within the current stroke (spatial
-  // XYZ), or null at the start of a stroke. Used to interpolate stamps along
-  // a fast drag so the result is a continuous swath rather than isolated
-  // dots. Reset to null on mousedown so a new stroke never bridges to the
-  // end of the previous one.
   private lastPaintPosition: vec3 | null = null;
 
-  // Stroke-level lifecycle signals. `brushPointsChanged` fires for every
-  // sub-stroke segment; these fire once per pointer down/up so subscribers
-  // can gate side-effects (e.g. canonical-chunk refresh) until the user
-  // has actually finished painting.
   strokeStarted = new Signal<() => void>();
   strokeEnded = new Signal<() => void>();
-  // New signal specifically for brush points data
   brushPointsChanged = new Signal<(brushPoints: BrushPoint[]) => void>();
 
   constructor(public viewer: Viewer) {
@@ -171,9 +161,6 @@ export class BrushTool extends Tool<Viewer> {
       const bounds = mouseState.pose?.position.coordinateSpace.value.bounds;
       if (!bounds) return;
 
-      // Stamp one filled brush circle centered at `center` (spatial XYZ).
-      // Duplicate voxels across overlapping stamps are harmless — the
-      // BrushHashTable overwrites and the backend writes idempotently.
       const stampCircle = (center: vec3) => {
         for (let dx = -xRange; dx <= xRange; dx++) {
           for (let dy = -yRange; dy <= yRange; dy++) {
@@ -186,10 +173,6 @@ export class BrushTool extends Tool<Viewer> {
             vec3.scaleAndAdd(newPosition, newPosition, xAxis, dx);
             vec3.scaleAndAdd(newPosition, newPosition, yAxis, dy);
 
-            // Snap each coordinate to voxel center. For our datasets
-            // neuroglancer's position vector is in spatial XYZ order
-            // (newPosition[0] = X, [1] = Y, [2] = Z); the matching
-            // ErasePoint already follows this convention.
             const x = clampAndRoundCoordinateToVoxelCenter(bounds, 0, newPosition[0]);
             const y = clampAndRoundCoordinateToVoxelCenter(bounds, 1, newPosition[1]);
             const z = clampAndRoundCoordinateToVoxelCenter(bounds, 2, newPosition[2]);
@@ -200,12 +183,6 @@ export class BrushTool extends Tool<Viewer> {
 
       // Interpolate between the previous stamp center and the current one so
       // a fast drag paints a continuous swath instead of isolated dots.
-      // Pointermove fires at a fixed rate, so when the cursor travels more
-      // than ~one brush width between events a single stamp leaves gaps. We
-      // measure the in-plane gap in canonical voxel units (projecting the
-      // displacement onto the in-plane axes and scaling by the per-axis
-      // factors) and stamp along the segment at <= half-radius spacing to
-      // guarantee the disks overlap.
       const current = vec3.fromValues(position[0], position[1], position[2]);
       const last = this.lastPaintPosition;
       if (last !== null) {
@@ -215,8 +192,6 @@ export class BrushTool extends Tool<Viewer> {
         const canonicalDist = Math.hypot(du, dv);
         const spacing = Math.max(this.brushRadius * 0.5, 0.5);
         const steps = Math.max(1, Math.ceil(canonicalDist / spacing));
-        // Start at s=1: the segment's start was already stamped on the
-        // previous paint() call, so we only fill forward to `current`.
         for (let s = 1; s <= steps; s++) {
           const center = vec3.lerp(vec3.create(), last, current, s / steps);
           stampCircle(center);
@@ -226,7 +201,6 @@ export class BrushTool extends Tool<Viewer> {
       }
       this.lastPaintPosition = current;
 
-      // Dispatch brush points changed event with the new brush points data
       if (brushPoints.length > 0) {
         this.brushPointsChanged.dispatch(brushPoints);
       }
@@ -236,9 +210,6 @@ export class BrushTool extends Tool<Viewer> {
       "neuroglancer-brush-paint",
       (actionEvent) => {
         actionEvent.stopPropagation();
-        // Fresh stroke: drop the previous stamp center so the first stamp is
-        // placed at the click point rather than interpolated from wherever
-        // the last stroke ended.
         this.lastPaintPosition = null;
         this.strokeStarted.dispatch();
         paint();
@@ -283,11 +254,6 @@ export class BrushTool extends Tool<Viewer> {
       },
     );
 
-    // mousemove only fires while the cursor is over the viewer canvas;
-    // once it leaves (onto the sidebars / overlays / outside the
-    // window), no more updates land and the circle would stay frozen
-    // at its last position, painted over the sidebar via z-index 1000.
-    // Hide on mouseleave and restore on mouseenter for symmetry.
     const handleMouseLeave = () => {
       cursor.style.display = "none";
     };

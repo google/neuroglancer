@@ -748,10 +748,6 @@ export class SliceViewRenderHelper extends RefCounted {
     },
     boolean
   >;
-  // Brush-overlay machinery used by the 3D perspective cross-section
-  // variant. Same prefixes as the 2D `BrushStrokeLayer`'s managers so
-  // the shader code is byte-identical; GPU hash tables are memoized
-  // by `GPUHashTable.get`, so the underlying resources are shared.
   private brushHashTableManager = new HashMapShaderManager("brushStroke");
   private segmentColorShaderManager = new SegmentColorShaderManager(
     "segmentColorHash",
@@ -839,11 +835,7 @@ if (voxelPos.x >= 0 && voxelPos.y >= 0 && voxelPos.z >= 0) {
   brushKey.value[1] = h2;
   uint64_t brushValue;
   if (${this.brushHashTableManager.getFunctionName}(brushKey, brushValue)) {
-    // value=0 marks "erased". The canonical segmentation chunk
-    // shader already discards these voxels in the slice view's
-    // framebuffer (hideSegmentZero), so the sampled FB is
-    // transparent there. Fall through to missEmit and whatever the
-    // image layer (or panel background) drew earlier shows through.
+    // value=0 marks "erased"
     if (brushValue.value[0] != 0u || brushValue.value[1] != 0u) {
       vec4 rgba;
       vec3 segmentColor;
@@ -921,15 +913,7 @@ gl_Position = uProjectionMatrix * aVertexPosition;
     xEnd: number,
     yEnd: number,
     sliceViewInvViewProj?: mat4,
-    /** Owning segmentation layer's brush stroke layer. When passed
-     *  (3D cross-section variant only), brush voxels are baked into
-     *  this draw with full segment-color resolution. */
     brushStrokeLayer?: BrushStrokeLayer,
-    /** When true, treat the brush as an overlay only: brush-miss
-     *  fragments `discard` instead of falling through to the sampled
-     *  slice-view framebuffer. Used by `drawSliceViews` to composite
-     *  additional segmentation layers' brushes on top of an already-
-     *  rendered cross-section without overwriting it. */
     brushOverlayOnly = false,
   ) {
     const { gl, textureCoordinateAdjustment } = this;
@@ -987,11 +971,6 @@ gl_Position = uProjectionMatrix * aVertexPosition;
     gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
-  /** Bind the GPU resources and uniforms needed for the brush-aware
-   *  cross-section shader variant — brush hash table, segment colour
-   *  hash, override stated colours, and saturation. Visibility-set
-   *  binding intentionally omitted; see the shader comment above for
-   *  why the brush ignores visibility-gated alpha. */
   private bindBrushResources(
     gl: GL,
     shader: ShaderProgram,
@@ -1003,7 +982,6 @@ gl_Position = uProjectionMatrix * aVertexPosition;
     );
     this.brushHashTableManager.enable(gl, shader, gpuBrushHashTable);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const displayState = brushStrokeLayer.displayState as any;
     const colorGroupState = displayState.segmentationColorGroupState.value;
     this.segmentColorShaderManager.enable(

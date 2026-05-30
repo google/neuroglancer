@@ -78,16 +78,6 @@ export interface SliceViewSegmentationDisplayState
   notSelectedAlpha: WatchableValueInterface<number>;
   hideSegmentZero: WatchableValueInterface<boolean>;
   ignoreNullVisibleSet: WatchableValueInterface<boolean>;
-  /** Optimistic overlay shared with the segmentation layer's brush
-   *  tool. When supplied, the chunk fragment shader treats brush hits
-   *  as if they were canonical chunk data:
-   *    - value > 0 → return that segment id (paints optimistically)
-   *    - value = 0 → return 0, so `hideSegmentZero` discards the
-   *      fragment and the image layer (or whatever else is rendered
-   *      earlier into the slice view's framebuffer) shows through.
-   *  This is what makes brush AND eraser visible in real time on
-   *  both 2D slice panels and the 3D perspective cross-section
-   *  planes — they all sample the same slice-view framebuffer. */
   brushHashTable?: BrushHashTable;
 }
 
@@ -218,11 +208,6 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
       this.gpuBrushHashTable = this.registerDisposer(
         GPUHashTable.get(this.gl, brushHashTable),
       );
-      // Brush mutations don't flow through the segmentation display
-      // state's `changed` signal, so wire the redraw explicitly.
-      // Without this, painting wouldn't repaint the slice view's
-      // framebuffer and the new brush bytes would only appear after
-      // canonical chunks refetch from disk.
       this.registerDisposer(
         brushHashTable.changed.add(() => {
           this.redrawNeeded.dispatch();
@@ -279,16 +264,6 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
 
   defineShader(builder: ShaderBuilder, parameters: ShaderParameters) {
     this.hashTableManager.defineShader(builder);
-    // Brush-aware override of the chunk's canonical data value. Hash
-    // the world voxel position (`vChunkPosition + uTranslation`, in
-    // display order = spatial XYZ for our datasets) the same way the
-    // CPU `BrushHashTable.getBrushKey` and the slice-view brush
-    // overlay shader do; on hit, the brush value replaces the chunk
-    // datum. `value=0` returns the canonical "no segment" sentinel
-    // so `hideSegmentZero` discards the fragment — making the
-    // eraser punch through the segmentation layer and reveal the
-    // image layer behind it. Only compiled when a brushHashTable was
-    // plumbed through `displayState`.
     const hasBrushOverlay = this.gpuBrushHashTable !== undefined;
     if (hasBrushOverlay) {
       this.brushHashTableManager.defineShader(builder);

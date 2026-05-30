@@ -781,11 +781,6 @@ export class SegmentationUserLayer extends Base {
                 renderScaleTarget: this.sliceViewRenderScaleTarget,
                 renderScaleHistogram: this.sliceViewRenderScaleHistogram,
                 localPosition: this.localPosition,
-                // Brush overlay is baked into the chunk fragment
-                // shader: paint (value > 0) replaces the chunk datum
-                // optimistically; erase (value = 0) returns segment-0
-                // so `hideSegmentZero` discards and the image layer
-                // shows through.
                 brushHashTable: this.brushHashTable,
               }),
             ),

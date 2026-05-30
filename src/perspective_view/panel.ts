@@ -185,12 +185,6 @@ const tempVec3 = vec3.create();
 const tempVec4 = vec4.create();
 const tempMat4 = mat4.create();
 
-/** All segmentation user layers' `BrushStrokeLayer` instances, used
- *  by `drawSliceViews` to overlay optimistic strokes on the 3D
- *  cross-section planes — one inline draw per cross-section for the
- *  first layer, plus an overlay pass per additional layer. Duck-typed
- *  on `brushStrokeLayer` to avoid pulling the segmentation user layer
- *  module into the perspective view (would be a layering cycle). */
 function findBrushStrokeLayers(
   viewer: PerspectiveViewerState,
 ): BrushStrokeLayer[] {
@@ -757,11 +751,11 @@ export class PerspectivePanel extends RenderedDataPanel {
       const glWindowZ = 1.0 - zValue;
       tempVec3[0] =
         (2.0 * (glWindowX + relativeX - pickRadius)) /
-          pickingData.viewportWidth -
+        pickingData.viewportWidth -
         1.0;
       tempVec3[1] =
         (2.0 * (glWindowY + relativeY - pickRadius)) /
-          pickingData.viewportHeight -
+        pickingData.viewportHeight -
         1.0;
       tempVec3[2] = 2.0 * glWindowZ - 1.0;
       vec3.transformMat4(tempVec3, tempVec3, pickingData.invTransform);
@@ -1138,9 +1132,9 @@ export class PerspectivePanel extends RenderedDataPanel {
       }
 
       // Create volume rendering related buffers.
-      let bindMaxProjectionBuffer: () => void = () => {};
-      let bindMaxProjectionPickingBuffer: () => void = () => {};
-      let bindVolumeRenderingBuffer: () => void = () => {};
+      let bindMaxProjectionBuffer: () => void = () => { };
+      let bindMaxProjectionPickingBuffer: () => void = () => { };
+      let bindVolumeRenderingBuffer: () => void = () => { };
       if (this.hasVolumeRendering) {
         // Max projection setup
         renderContext.maxProjectionEmit = maxProjectionEmit;
@@ -1158,7 +1152,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         gl.clearDepth(0.0);
         gl.clear(
           WebGL2RenderingContext.COLOR_BUFFER_BIT |
-            WebGL2RenderingContext.DEPTH_BUFFER_BIT,
+          WebGL2RenderingContext.DEPTH_BUFFER_BIT,
         );
 
         // Max projection picking setup
@@ -1172,7 +1166,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         bindMaxProjectionPickingBuffer();
         gl.clear(
           WebGL2RenderingContext.COLOR_BUFFER_BIT |
-            WebGL2RenderingContext.DEPTH_BUFFER_BIT,
+          WebGL2RenderingContext.DEPTH_BUFFER_BIT,
         );
 
         // Volume rendering setup
@@ -1188,7 +1182,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         gl.clearColor(0.0, 0.0, 0.0, 1.0);
         gl.clear(
           WebGL2RenderingContext.COLOR_BUFFER_BIT |
-            WebGL2RenderingContext.DEPTH_BUFFER_BIT,
+          WebGL2RenderingContext.DEPTH_BUFFER_BIT,
         );
       }
 
@@ -1304,7 +1298,7 @@ export class PerspectivePanel extends RenderedDataPanel {
           gl.clearDepth(0.0);
           gl.clear(
             WebGL2RenderingContext.COLOR_BUFFER_BIT |
-              WebGL2RenderingContext.DEPTH_BUFFER_BIT,
+            WebGL2RenderingContext.DEPTH_BUFFER_BIT,
           );
 
           // Set some values back to non-max projection state
@@ -1442,7 +1436,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         this.navigationState.displayDimensionRenderInfo.value,
         this.navigationState.relativeDisplayScales.value,
         this.navigationState.zoomFactor.value /
-          this.renderViewport.logicalHeight,
+        this.renderViewport.logicalHeight,
         options,
       );
       gl.disable(WebGL2RenderingContext.BLEND);
@@ -1467,11 +1461,6 @@ export class PerspectivePanel extends RenderedDataPanel {
     } = renderContext;
 
     const showSliceViews = this.viewer.showSliceViews.value;
-    // Snapshot the brush-stroke layers once per `drawSliceViews` —
-    // they don't change mid-pass, and the array is reused across
-    // every slice view. First entry is rendered inline with the
-    // cross-section quad; any remaining entries get their own
-    // overlay draws so their brush composites on top.
     const brushStrokeLayers = findBrushStrokeLayers(this.viewer);
     const inlineBrushLayer: BrushStrokeLayer | undefined =
       brushStrokeLayers[0];

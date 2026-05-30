@@ -25,14 +25,8 @@ export interface ErasePoint {
 
 export class EraserTool extends Tool<Viewer> {
   private eraserRadius: number = 1;
-  // Center of the previous erase stamp within the current stroke (spatial
-  // XYZ), or null at the start of a stroke. Used to interpolate stamps along
-  // a fast drag so the result is a continuous swath rather than isolated
-  // dots. Reset to null on mousedown so a new stroke never bridges to the
-  // end of the previous one.
   private lastErasePosition: vec3 | null = null;
 
-  // Stroke-level lifecycle signals — see BrushTool for the rationale.
   strokeStarted = new Signal<() => void>();
   strokeEnded = new Signal<() => void>();
   // New signal specifically for erase points data
@@ -183,9 +177,7 @@ export class EraserTool extends Tool<Viewer> {
       };
 
       // Interpolate between the previous stamp center and the current one so
-      // a fast drag erases a continuous swath instead of isolated dots — see
-      // BrushTool.paint for the full rationale. Spacing is measured in
-      // canonical voxel units and capped at half the radius so disks overlap.
+      // a fast drag erases a continuous swath instead of isolated dots
       const current = vec3.fromValues(position[0], position[1], position[2]);
       const last = this.lastErasePosition;
       if (last !== null) {
@@ -204,7 +196,6 @@ export class EraserTool extends Tool<Viewer> {
       }
       this.lastErasePosition = current;
 
-      // Emit the erase points via signal instead of directly accessing hash table
       if (erasePoints.length > 0) {
         this.erasePointsChanged.dispatch(erasePoints);
       }
@@ -214,9 +205,6 @@ export class EraserTool extends Tool<Viewer> {
       "neuroglancer-eraser-erase",
       (actionEvent) => {
         actionEvent.stopPropagation();
-        // Fresh stroke: drop the previous stamp center so the first stamp is
-        // placed at the click point rather than interpolated from wherever
-        // the last stroke ended.
         this.lastErasePosition = null;
         this.strokeStarted.dispatch();
         erase();
@@ -261,11 +249,6 @@ export class EraserTool extends Tool<Viewer> {
       },
     );
 
-    // mousemove only fires while the cursor is over the viewer canvas;
-    // once it leaves (onto the sidebars / overlays / outside the
-    // window), no more updates land and the circle would stay frozen
-    // at its last position, painted over the sidebar via z-index 1000.
-    // Hide on mouseleave and restore on mouseenter for symmetry.
     const handleMouseLeave = () => {
       cursor.style.display = "none";
     };

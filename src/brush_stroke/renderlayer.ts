@@ -219,13 +219,7 @@ function BrushStrokeRenderLayer<
                     
                     uint64_t brushValue;
                     if (brushStroke_get(key, brushValue)) {
-                        // value=0 marks "erased". The SEG layer's
-                        // brush-aware hijack handles erase by
-                        // discarding the canonical seg fragment at
-                        // that voxel, so the image underneath shows
-                        // through. Mirror that here: discard the
-                        // overlay so we don't paint anything that
-                        // would cover the newly-revealed pixel.
+                        // value=0 marks "erased"
                         if (brushValue.value[0] == 0u && brushValue.value[1] == 0u) {
                             discard;
                         } else {

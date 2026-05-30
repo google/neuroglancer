@@ -25,15 +25,8 @@ import { NullarySignal } from "#src/util/signal.js";
  * the multipliers below ever change.
  */
 export class BrushHashTable extends HashMapUint64 {
-  /** Fires on every mutation (`addBrushPoint`, `deleteBrushPoint`,
-   *  `clear`). The segmentation chunk shader's brush-aware variant
-   *  subscribes to this so the slice view's framebuffer re-renders
-   *  with the new brush/erase state — without it, the user would see
-   *  no change until persistence + canonical chunk refetch lands. */
   changed = new NullarySignal();
 
-  /** key → [x, y, z] (spatial). Used by save/replay paths that need to
-   *  reconstruct world-space coordinates from the hash table. */
   public coordinates = new Map<bigint, [number, number, number]>();
   private getBrushKey(x: number, y: number, z: number): bigint {
     const x1 = x >>> 0;
@@ -78,9 +71,6 @@ export class BrushHashTable extends HashMapUint64 {
     return this.has(key);
   }
 
-  /**
-   * Override clear to also clear coordinates
-   */
   clear() {
     this.coordinates.clear();
     const cleared = super.clear();

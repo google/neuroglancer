@@ -391,10 +391,7 @@ void emitRGBA(vec4 rgba) {
           // Far limit in [0, 1] as fraction of full limit.
           builder.addUniform("highp float", "uFarLimitFraction");
           builder.addUniform("highp int", "uMaxSteps");
-          // Indexed 256-entry RGBA lookup table used by the LUT image
-          // shader template. The 2D slice shader declares the same
-          // uniform — both pipelines must agree on the binding so a
-          // single shader template renders identically in 2D and 3D.
+          // Indexed 256-entry RGBA lookup table used by LUT shader
           builder.addUniform("vec4", "lut", 256);
 
           // Specifies translation of the current chunk.
@@ -447,7 +444,6 @@ float getBrushValue(vec3 position) {
 void userMain();
 `);
 
-          // Before defineChunkDataShaderAccess is called (around line 501)
           builder.addFragmentCode(`
   float getDataValue(vec3 position) {
     float brushValue = getBrushValue(position);
@@ -790,7 +786,6 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       ShaderControlsBuilderState,
       VolumeRenderingShaderParameters
     >;
-    // Size of chunk (in voxels) in the "display" subspace of the chunk coordinate space.
     const chunkDataDisplaySize = vec3.create();
 
     const { gl } = this;
@@ -947,11 +942,6 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
                 this.shaderControlState,
                 shaderResult.parameters.parseResult.controls,
               );
-              // Mirror image_renderlayer's LUT binding so the 3D volume
-              // render uses the same lookup table as the 2D slice view.
-              // `window.lutName` is owned by the application layer and
-              // mirrors the persisted LUT setting; the "Tricolor 1"
-              // fallback matches the 2D side.
               const lutName =
                 (window as any).lutName === undefined
                   ? "Tricolor 1"
@@ -1079,7 +1069,6 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
               newSource,
             );
           }
-          // Save information for possible repasses through the data
           if (needToDrawHistogram || needPickingPass) {
             chunkInfoForMultipass.push({
               chunk,
@@ -1150,7 +1139,6 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
                 this.shaderControlState,
                 shaderResult.parameters.parseResult.controls,
               );
-              // LUT binding (see comment in primary pass above).
               const lutName =
                 (window as any).lutName === undefined
                   ? "Tricolor 1"
