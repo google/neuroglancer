@@ -25,6 +25,12 @@
     "lib": ["dom", "webworker", "esnext", "dom.iterable"],
     "typeRoots": [],
     "module": "ESNext",
+    // tsc is only used for type-checking here (the `typecheck` script and
+    // the editor); the actual build goes through the bundler in
+    // build_tools/. Without this, a bare `tsc -p` runs in emit mode and
+    // fails with hundreds of TS5055 "would overwrite input file" errors
+    // because allowJs pulls existing .js files in as inputs.
+    "noEmit": true,
   },
   "exclude": [
     "node_modules",

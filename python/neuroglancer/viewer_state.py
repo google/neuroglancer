@@ -1416,7 +1416,7 @@ def navigation_link_type(x):
     x = str(x)
     x = x.lower()
     if x not in ["linked", "unlinked", "relative"]:
-        raise ValueError("Invalid navigation link type: %r" % x)
+        raise ValueError(f"Invalid navigation link type: {x!r}")
     return x
 
 

@@ -25,6 +25,12 @@ export interface ErasePoint {
 
 export class EraserTool extends Tool<Viewer> {
   private eraserRadius: number = 1;
+  // Center of the previous erase stamp within the current stroke (spatial
+  // XYZ), or null at the start of a stroke. Used to interpolate stamps along
+  // a fast drag so the result is a continuous swath rather than isolated
+  // dots. Reset to null on mousedown so a new stroke never bridges to the
+  // end of the previous one.
+  private lastErasePosition: vec3 | null = null;
 
   // Stroke-level lifecycle signals — see BrushTool for the rationale.
   strokeStarted = new Signal<() => void>();
@@ -152,46 +158,51 @@ export class EraserTool extends Tool<Viewer> {
       const yRange = Math.ceil(this.eraserRadius / yFactor);
       const radiusSq = this.eraserRadius * this.eraserRadius;
 
-      for (let dx = -xRange; dx <= xRange; dx++) {
-        for (let dy = -yRange; dy <= yRange; dy++) {
-          const cx = dx * xFactor;
-          const cy = dy * yFactor;
-          if (cx * cx + cy * cy <= radiusSq) {
-            const newPosition = vec3.fromValues(
-              position[0],
-              position[1],
-              position[2],
-            );
+      const bounds = mouseState.pose?.position.coordinateSpace.value.bounds;
+      if (!bounds) return;
 
+      // Stamp one filled eraser circle centered at `center` (spatial XYZ).
+      const stampCircle = (center: vec3) => {
+        for (let dx = -xRange; dx <= xRange; dx++) {
+          for (let dy = -yRange; dy <= yRange; dy++) {
+            const cx = dx * xFactor;
+            const cy = dy * yFactor;
+            if (cx * cx + cy * cy > radiusSq) continue;
+
+            const newPosition = vec3.fromValues(center[0], center[1], center[2]);
             vec3.scaleAndAdd(newPosition, newPosition, xAxis, dx);
             vec3.scaleAndAdd(newPosition, newPosition, yAxis, dy);
 
-            const bounds =
-              mouseState.pose?.position.coordinateSpace.value.bounds;
-
-            if (bounds) {
-              // Snap each coordinate to voxel center to avoid offset errors
-              const x = clampAndRoundCoordinateToVoxelCenter(
-                bounds,
-                0,
-                newPosition[0],
-              );
-              const y = clampAndRoundCoordinateToVoxelCenter(
-                bounds,
-                1,
-                newPosition[1],
-              );
-              const z = clampAndRoundCoordinateToVoxelCenter(
-                bounds,
-                2,
-                newPosition[2],
-              );
-
-              erasePoints.push({ x, y, z });
-            }
+            // Snap each coordinate to voxel center to avoid offset errors
+            const x = clampAndRoundCoordinateToVoxelCenter(bounds, 0, newPosition[0]);
+            const y = clampAndRoundCoordinateToVoxelCenter(bounds, 1, newPosition[1]);
+            const z = clampAndRoundCoordinateToVoxelCenter(bounds, 2, newPosition[2]);
+            erasePoints.push({ x, y, z });
           }
         }
+      };
+
+      // Interpolate between the previous stamp center and the current one so
+      // a fast drag erases a continuous swath instead of isolated dots — see
+      // BrushTool.paint for the full rationale. Spacing is measured in
+      // canonical voxel units and capped at half the radius so disks overlap.
+      const current = vec3.fromValues(position[0], position[1], position[2]);
+      const last = this.lastErasePosition;
+      if (last !== null) {
+        const delta = vec3.subtract(vec3.create(), current, last);
+        const du = vec3.dot(delta, xAxis) * xFactor;
+        const dv = vec3.dot(delta, yAxis) * yFactor;
+        const canonicalDist = Math.hypot(du, dv);
+        const spacing = Math.max(this.eraserRadius * 0.5, 0.5);
+        const steps = Math.max(1, Math.ceil(canonicalDist / spacing));
+        for (let s = 1; s <= steps; s++) {
+          const center = vec3.lerp(vec3.create(), last, current, s / steps);
+          stampCircle(center);
+        }
+      } else {
+        stampCircle(current);
       }
+      this.lastErasePosition = current;
 
       // Emit the erase points via signal instead of directly accessing hash table
       if (erasePoints.length > 0) {
@@ -203,6 +214,10 @@ export class EraserTool extends Tool<Viewer> {
       "neuroglancer-eraser-erase",
       (actionEvent) => {
         actionEvent.stopPropagation();
+        // Fresh stroke: drop the previous stamp center so the first stamp is
+        // placed at the click point rather than interpolated from wherever
+        // the last stroke ended.
+        this.lastErasePosition = null;
         this.strokeStarted.dispatch();
         erase();
 

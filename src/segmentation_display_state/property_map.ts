@@ -1236,7 +1236,8 @@ export function executeSegmentQuery(
     if (property.type !== "number") {
       const { values } = property;
       indices.sort(
-        (a, b) => defaultStringCompare(values[a], values[b]) * orderCoeff,
+        (a, b) =>
+          defaultStringCompare(values[a] ?? "", values[b] ?? "") * orderCoeff,
       );
     } else {
       const values = property.values as TypedNumberArray;

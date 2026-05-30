@@ -27,6 +27,12 @@ export interface BrushPoint {
 export class BrushTool extends Tool<Viewer> {
   private brushRadius: number = 1;
   private brushValue: number = -1;
+  // Center of the previous brush stamp within the current stroke (spatial
+  // XYZ), or null at the start of a stroke. Used to interpolate stamps along
+  // a fast drag so the result is a continuous swath rather than isolated
+  // dots. Reset to null on mousedown so a new stroke never bridges to the
+  // end of the previous one.
+  private lastPaintPosition: vec3 | null = null;
 
   // Stroke-level lifecycle signals. `brushPointsChanged` fires for every
   // sub-stroke segment; these fire once per pointer down/up so subscribers
@@ -162,50 +168,63 @@ export class BrushTool extends Tool<Viewer> {
       const yRange = Math.ceil(this.brushRadius / yFactor);
       const radiusSq = this.brushRadius * this.brushRadius;
 
-      for (let dx = -xRange; dx <= xRange; dx++) {
-        for (let dy = -yRange; dy <= yRange; dy++) {
-          // Convert voxel steps to canonical voxel distances
-          const cx = dx * xFactor;
-          const cy = dy * yFactor;
-          if (cx * cx + cy * cy <= radiusSq) {
-            const newPosition = vec3.fromValues(
-              position[0],
-              position[1],
-              position[2],
-            );
+      const bounds = mouseState.pose?.position.coordinateSpace.value.bounds;
+      if (!bounds) return;
 
+      // Stamp one filled brush circle centered at `center` (spatial XYZ).
+      // Duplicate voxels across overlapping stamps are harmless — the
+      // BrushHashTable overwrites and the backend writes idempotently.
+      const stampCircle = (center: vec3) => {
+        for (let dx = -xRange; dx <= xRange; dx++) {
+          for (let dy = -yRange; dy <= yRange; dy++) {
+            // Convert voxel steps to canonical voxel distances
+            const cx = dx * xFactor;
+            const cy = dy * yFactor;
+            if (cx * cx + cy * cy > radiusSq) continue;
+
+            const newPosition = vec3.fromValues(center[0], center[1], center[2]);
             vec3.scaleAndAdd(newPosition, newPosition, xAxis, dx);
             vec3.scaleAndAdd(newPosition, newPosition, yAxis, dy);
 
-            const bounds =
-              mouseState.pose?.position.coordinateSpace.value.bounds;
-
-            if (bounds) {
-              // Snap each coordinate to voxel center. For our datasets
-              // neuroglancer's position vector is in spatial XYZ order
-              // (newPosition[0] = X, [1] = Y, [2] = Z); the matching
-                // ErasePoint already follows this convention.
-              const x = clampAndRoundCoordinateToVoxelCenter(
-                bounds,
-                0,
-                newPosition[0],
-              );
-              const y = clampAndRoundCoordinateToVoxelCenter(
-                bounds,
-                1,
-                newPosition[1],
-              );
-              const z = clampAndRoundCoordinateToVoxelCenter(
-                bounds,
-                2,
-                newPosition[2],
-              );
-
-              brushPoints.push({ x, y, z, value: this.brushValue });
-            }
+            // Snap each coordinate to voxel center. For our datasets
+            // neuroglancer's position vector is in spatial XYZ order
+            // (newPosition[0] = X, [1] = Y, [2] = Z); the matching
+            // ErasePoint already follows this convention.
+            const x = clampAndRoundCoordinateToVoxelCenter(bounds, 0, newPosition[0]);
+            const y = clampAndRoundCoordinateToVoxelCenter(bounds, 1, newPosition[1]);
+            const z = clampAndRoundCoordinateToVoxelCenter(bounds, 2, newPosition[2]);
+            brushPoints.push({ x, y, z, value: this.brushValue });
           }
         }
+      };
+
+      // Interpolate between the previous stamp center and the current one so
+      // a fast drag paints a continuous swath instead of isolated dots.
+      // Pointermove fires at a fixed rate, so when the cursor travels more
+      // than ~one brush width between events a single stamp leaves gaps. We
+      // measure the in-plane gap in canonical voxel units (projecting the
+      // displacement onto the in-plane axes and scaling by the per-axis
+      // factors) and stamp along the segment at <= half-radius spacing to
+      // guarantee the disks overlap.
+      const current = vec3.fromValues(position[0], position[1], position[2]);
+      const last = this.lastPaintPosition;
+      if (last !== null) {
+        const delta = vec3.subtract(vec3.create(), current, last);
+        const du = vec3.dot(delta, xAxis) * xFactor;
+        const dv = vec3.dot(delta, yAxis) * yFactor;
+        const canonicalDist = Math.hypot(du, dv);
+        const spacing = Math.max(this.brushRadius * 0.5, 0.5);
+        const steps = Math.max(1, Math.ceil(canonicalDist / spacing));
+        // Start at s=1: the segment's start was already stamped on the
+        // previous paint() call, so we only fill forward to `current`.
+        for (let s = 1; s <= steps; s++) {
+          const center = vec3.lerp(vec3.create(), last, current, s / steps);
+          stampCircle(center);
+        }
+      } else {
+        stampCircle(current);
       }
+      this.lastPaintPosition = current;
 
       // Dispatch brush points changed event with the new brush points data
       if (brushPoints.length > 0) {
@@ -217,6 +236,10 @@ export class BrushTool extends Tool<Viewer> {
       "neuroglancer-brush-paint",
       (actionEvent) => {
         actionEvent.stopPropagation();
+        // Fresh stroke: drop the previous stamp center so the first stamp is
+        // placed at the click point rather than interpolated from wherever
+        // the last stroke ended.
+        this.lastPaintPosition = null;
         this.strokeStarted.dispatch();
         paint();
 
