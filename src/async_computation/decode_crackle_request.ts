@@ -16,4 +16,4 @@
 import { asyncComputation } from "#src/async_computation/index.js";
 
 export const decodeCrackle =
-  asyncComputation<(data: Uint8Array) => Uint8Array>("decodeCrackle");
+  asyncComputation<(data: Uint8Array<ArrayBuffer>) => Uint8Array<ArrayBuffer>("decodeCrackle");
