@@ -48,7 +48,6 @@ function readHeader(buffer: Uint8Array): {
   sx: number;
   sy: number;
   sz: number;
-  sw: number;
   dataWidth: number;
 } {
   // check for header "crkl"
