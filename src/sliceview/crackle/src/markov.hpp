@@ -18,7 +18,6 @@
 #define __MARKOV_HXX__
 
 #include <algorithm>
-#include <atomic>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -223,52 +222,6 @@ namespace markov {
 		}
 
 		return stats;
-	}
-
-	std::vector<std::vector<uint8_t>> stats_to_model(
-		std::vector<std::array<std::atomic<uint32_t>, 4>>& stats
-	) {
-		struct {
-			bool operator()(
-				std::pair<uint8_t,uint32_t>& a, std::pair<uint8_t,uint32_t>& b
-			) const { 
-				return a.second >= b.second;
-			}
-		} CmpIndex;
-
-		// model is: index is direction, value is which 
-		// codepoint to use
-
-		std::vector<std::vector<uint8_t>> model(stats.size());
-		for (uint64_t i = 0; i < model.size(); i++) {
-			std::vector<std::pair<uint8_t,uint32_t>> pair_row;
-			pair_row.reserve(4);
-			for (int l = 0; l < 4; l++) {
-				pair_row.emplace_back(l, stats[i][l]);
-			}
-			// most frequent in lowest index
-			std::sort(pair_row.begin(), pair_row.end(), CmpIndex);
-			std::vector<uint8_t> row(4);
-			std::vector<bool> marked(4);
-			uint64_t j = 0;
-			for (j = 0; j < pair_row.size(); j++) {
-				row[pair_row[j].first] = j;
-				marked[pair_row[j].first] = true;
-			}
-			// handle sparse statistics
-			if (j < 4) {
-				for (uint64_t k = 0; k < 4; k++) {
-					if (marked[k]) {
-						continue;
-					}
-					row[k] = j;
-					j++;
-				}
-			}
-			model[i] = std::move(row);
-		}
-
-		return model;
 	}
 
 	std::vector<uint8_t> decode_codepoints(
