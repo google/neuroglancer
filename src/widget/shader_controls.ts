@@ -166,6 +166,7 @@ function getShaderLayerControlDefinition<LayerType extends UserLayer>(
 export class ShaderControls extends Tab {
   private controlDisposer: RefCounted | undefined = undefined;
   private controlsContainer: HTMLDivElement;
+  private hiddenCountElement: HTMLSpanElement;
   private toolId: string;
   constructor(
     public state: ShaderControlState,
@@ -200,6 +201,12 @@ export class ShaderControls extends Tab {
     );
     header.appendChild(checkbox.element);
     header.appendChild(document.createTextNode("Hide inactive controls"));
+    // Trailing "(X hidden)" annotation, updated by `updateControls()`.
+    const hiddenCountElement = (this.hiddenCountElement =
+      document.createElement("span"));
+    hiddenCountElement.className =
+      "neuroglancer-shader-controls-hidden-count";
+    header.appendChild(hiddenCountElement);
     element.appendChild(header);
 
     // Separate container so the rebuild loop only tears down the controls,
@@ -234,6 +241,7 @@ export class ShaderControls extends Tab {
     });
     const hideInactive = this.state.hideInactiveControls.value;
     const activeControls = this.state.activeControls.value;
+    let hiddenCount = 0;
     for (const name of this.state.state.keys()) {
       // Skip when the user has opted in and we have a known active set
       // (computed from the last linked shader) that does not include `name`.
@@ -244,6 +252,7 @@ export class ShaderControls extends Tab {
         activeControls !== undefined &&
         !activeControls.has(name)
       ) {
+        ++hiddenCount;
         continue;
       }
       container.appendChild(
@@ -259,6 +268,8 @@ export class ShaderControls extends Tab {
         ),
       );
     }
+    this.hiddenCountElement.textContent =
+      hiddenCount > 0 ? ` (${hiddenCount} hidden)` : "";
   }
 
   disposed() {
