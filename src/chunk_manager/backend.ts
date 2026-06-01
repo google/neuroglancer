@@ -25,6 +25,7 @@ import {
   CHUNK_QUEUE_MANAGER_RPC_ID,
   CHUNK_SOURCE_INVALIDATE_RPC_ID,
   CHUNK_SOURCE_SOFT_INVALIDATE_RPC_ID,
+  CHUNK_SOURCE_SOFT_INVALIDATE_COMPLETE_RPC_ID,
   ChunkDownloadStatistics,
   ChunkMemoryStatistics,
   ChunkPriorityTier,
@@ -129,6 +130,16 @@ export class Chunk implements Disposable {
    */
   downloadAbortController: AbortController | undefined = undefined;
 
+  /**
+   * Set when a chunk is being re-fetched as part of a soft invalidation
+   * (see {@link ChunkQueueManager.softInvalidateSourceCache}). The frontend
+   * already holds this chunk (with live GPU memory), so its next transfer
+   * is serialized with `new: false` to route it through the soft-swap path
+   * in `applyChunkUpdate` rather than the blank-then-fill new-chunk path.
+   * Reset as soon as it's serialized so subsequent updates are normal.
+   */
+  softRefetch = false;
+
   initialize(key: string) {
     this.key = key;
     this.priority = Number.NEGATIVE_INFINITY;
@@ -139,6 +150,7 @@ export class Chunk implements Disposable {
     this.state = ChunkState.NEW;
     this.requestedState = ChunkState.NEW;
     this.newRequestedState = ChunkState.NEW;
+    this.softRefetch = false;
   }
 
   /**
@@ -171,15 +183,26 @@ export class Chunk implements Disposable {
 
   downloadFailed(error: any) {
     this.error = error;
+    const wasSoftRefetch = this.softRefetch;
     this.queueManager.updateChunkState(this, ChunkState.FAILED);
+    if (wasSoftRefetch) {
+      this.softRefetch = false;
+      this.queueManager.noteSoftRefetchSettled(this.source as ChunkSource);
+    }
   }
 
   downloadSucceeded() {
+    // Capture before `moveChunkToFrontend` -> `serialize` clears the flag.
+    const wasSoftRefetch = this.softRefetch;
     if (this.requestedState === ChunkState.SYSTEM_MEMORY) {
       this.queueManager.moveChunkToFrontend(this);
       this.queueManager.updateChunkState(this, ChunkState.SYSTEM_MEMORY);
     } else {
       this.queueManager.updateChunkState(this, ChunkState.SYSTEM_MEMORY_WORKER);
+    }
+    if (wasSoftRefetch) {
+      this.softRefetch = false;
+      this.queueManager.noteSoftRefetchSettled(this.source as ChunkSource);
     }
   }
 
@@ -188,7 +211,12 @@ export class Chunk implements Disposable {
   serialize(msg: any, _transfers: any[]) {
     msg.id = this.key;
     msg.source = (<ChunkSource>this.source).rpcId;
-    msg.new = true;
+    // Soft-refetched chunks already exist on the frontend; mark them
+    // `new: false` so `applyChunkUpdate` takes the soft-swap path (upload
+    // new data to GPU, then atomically replace + free the old texture)
+    // instead of overwriting the live chunk with a GPU-less one.
+    msg.new = !this.softRefetch;
+    this.softRefetch = false;
   }
 
   toString() {
@@ -288,6 +316,15 @@ export class ChunkSourceBase extends SharedObject {
   chunks: Map<string, Chunk> = new Map<string, Chunk>();
   freeChunks: Chunk[] = new Array<Chunk>();
   statistics = new Float64Array(numChunkStatistics);
+
+  // Soft-invalidate completion tracking. While a soft-invalidate is in
+  // flight, `softRefetchToken` holds the caller's token and
+  // `softRefetchPending` counts re-queued chunks not yet re-fetched
+  // (settled via `ChunkQueueManager.noteSoftRefetchSettled`). When it hits
+  // zero we fire CHUNK_SOURCE_SOFT_INVALIDATE_COMPLETE_RPC_ID so the
+  // frontend can reap its optimistic overlay deterministically.
+  softRefetchToken: number | undefined = undefined;
+  softRefetchPending = 0;
 
   /**
    * sourceQueueLevel must be greater than the sourceQueueLevel of any ChunkSource whose download
@@ -1158,8 +1195,9 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
    *  upload to GPU, then atomically replace the entry and free the
    *  old chunk's GPU memory. The visible GPU texture is never empty.
    */
-  softInvalidateSourceCache(source: ChunkSource) {
+  softInvalidateSourceCache(source: ChunkSource, token: number) {
     source.onInvalidateCache?.();
+    let n = 0;
     for (const chunk of source.chunks.values()) {
       switch (chunk.state) {
         case ChunkState.DOWNLOADING:
@@ -1169,11 +1207,44 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
           chunk.freeSystemMemory();
           break;
       }
+      // Flag so the re-download's transfer serializes with `new: false`
+      // and the frontend swaps without ever blanking the live texture.
+      chunk.softRefetch = true;
       this.updateChunkState(chunk, ChunkState.QUEUED);
+      n += 1;
+    }
+    // Track this re-fetch so we can tell the frontend when every re-queued
+    // chunk has been re-downloaded (settled in downloadSucceeded/Failed).
+    source.softRefetchToken = token;
+    source.softRefetchPending = n;
+    if (n === 0) {
+      // Nothing to re-fetch — signal completion immediately.
+      source.softRefetchToken = undefined;
+      this.rpc!.invoke(CHUNK_SOURCE_SOFT_INVALIDATE_COMPLETE_RPC_ID, {
+        source: source.rpcId,
+        token,
+      });
     }
     // Intentionally omit `rpc.invoke("Chunk.update", { source })` —
     // see jsdoc above. The frontend keeps its current chunks alive.
     this.scheduleUpdate();
+  }
+
+  /** Called when a soft-refetched chunk has finished re-downloading (or
+   *  failed). Decrements the source's pending count and, once all
+   *  re-queued chunks have settled, notifies the frontend so it can reap
+   *  its optimistic overlay. */
+  noteSoftRefetchSettled(source: ChunkSource) {
+    if (source.softRefetchToken === undefined) return;
+    if (source.softRefetchPending > 0) source.softRefetchPending -= 1;
+    if (source.softRefetchPending === 0) {
+      const token = source.softRefetchToken;
+      source.softRefetchToken = undefined;
+      this.rpc!.invoke(CHUNK_SOURCE_SOFT_INVALIDATE_COMPLETE_RPC_ID, {
+        source: source.rpcId,
+        token,
+      });
+    }
   }
 }
 
@@ -1428,7 +1499,7 @@ registerRPC(CHUNK_SOURCE_INVALIDATE_RPC_ID, function (x) {
 
 registerRPC(CHUNK_SOURCE_SOFT_INVALIDATE_RPC_ID, function (x) {
   const source = <ChunkSource>this.get(x.id);
-  source.chunkManager.queueManager.softInvalidateSourceCache(source);
+  source.chunkManager.queueManager.softInvalidateSourceCache(source, x.token);
 });
 
 registerPromiseRPC(

@@ -24,6 +24,7 @@ import {
   CHUNK_QUEUE_MANAGER_RPC_ID,
   CHUNK_SOURCE_INVALIDATE_RPC_ID,
   CHUNK_SOURCE_SOFT_INVALIDATE_RPC_ID,
+  CHUNK_SOURCE_SOFT_INVALIDATE_COMPLETE_RPC_ID,
   ChunkState,
   REQUEST_CHUNK_STATISTICS_RPC_ID,
 } from "#src/chunk_manager/base.js";
@@ -45,6 +46,19 @@ import {
 } from "#src/worker_rpc.js";
 
 const DEBUG_CHUNK_UPDATES = false;
+
+// Deterministic soft-invalidate completion: each `softInvalidateCache` call
+// gets a token; the worker fires CHUNK_SOURCE_SOFT_INVALIDATE_COMPLETE_RPC_ID
+// with that token once every re-queued chunk has been re-downloaded. The
+// matching resolver below settles the caller's promise.
+let nextSoftInvalidateToken = 0;
+const pendingSoftInvalidations = new Map<number, () => void>();
+const SOFT_INVALIDATE_TIMEOUT_MS = 15000;
+
+registerRPC(CHUNK_SOURCE_SOFT_INVALIDATE_COMPLETE_RPC_ID, function (x) {
+  const finish = pendingSoftInvalidations.get(x.token);
+  if (finish !== undefined) finish();
+});
 
 export class Chunk {
   state = ChunkState.SYSTEM_MEMORY;
@@ -257,11 +271,15 @@ export class ChunkQueueManager extends SharedObject {
       } else {
         let chunk: Chunk;
         const key = update.id;
-        if (update.new) {
+        const existing = source.chunks.get(key);
+        if (update.new || existing === undefined) {
+          // First load, or a soft-refetch (`new === false`) of a chunk the
+          // frontend evicted in the meantime — either way there's no live
+          // chunk to swap against, so create a fresh one.
           chunk = source.getChunk(update);
           source.addChunk(key, chunk);
         } else {
-          chunk = source.chunks.get(key)!;
+          chunk = existing;
           // Soft-swap path: an existing chunk is receiving fresh bytes
           // from a `softInvalidateCache` round-trip. Stage the new
           // chunk + push it to GPU *before* freeing the old chunk's
@@ -518,9 +536,31 @@ export class ChunkSource extends SharedObject {
    * second blank gap that the hard {@link invalidateCache} would
    * produce. See `softInvalidateSourceCache` on the backend for the
    * other half of the soft-swap protocol.
+   *
+   * Returns a promise that resolves once every re-queued chunk has been
+   * re-downloaded and pushed back to the frontend, so callers can reap
+   * optimistic overlays deterministically. A safety timeout resolves the
+   * promise anyway if the backend never signals completion (e.g. a chunk
+   * was evicted before it could re-download).
    */
-  softInvalidateCache(): void {
-    this.rpc!.invoke(CHUNK_SOURCE_SOFT_INVALIDATE_RPC_ID, { id: this.rpcId });
+  softInvalidateCache(): Promise<void> {
+    const token = ++nextSoftInvalidateToken;
+    this.rpc!.invoke(CHUNK_SOURCE_SOFT_INVALIDATE_RPC_ID, {
+      id: this.rpcId,
+      token,
+    });
+    return new Promise<void>((resolve) => {
+      const finish = () => {
+        if (pendingSoftInvalidations.delete(token)) {
+          clearTimeout(timer);
+          resolve();
+        }
+      };
+      // Safety net: resolve anyway if the completion signal never arrives
+      // (e.g. a re-queued chunk was evicted before it could re-download).
+      const timer = setTimeout(finish, SOFT_INVALIDATE_TIMEOUT_MS);
+      pendingSoftInvalidations.set(token, finish);
+    });
   }
 
   static encodeOptions(_options: object): { [key: string]: any } {

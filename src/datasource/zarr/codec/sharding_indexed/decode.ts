@@ -184,9 +184,15 @@ class ShardedKvStore<BaseKey>
   invalidateIndexCache() {
     const { indexCache } = this;
     for (const chunk of indexCache.chunks.values()) {
-      if (chunk.state === ChunkState.SYSTEM_MEMORY_WORKER) {
-        chunk.freeSystemMemory();
-      }
+      // Always drop the memoized shard index. `SimpleAsyncCache.get` is
+      // driven purely by `chunk.asyncMemoize` (which `freeSystemMemory`
+      // clears) — NOT by the download queue — so if we only cleared it for
+      // chunks that happen to be in SYSTEM_MEMORY_WORKER, an index chunk in
+      // any other state (DOWNLOADING, QUEUED, SYSTEM_MEMORY) would keep
+      // serving its stale offsets and the volume re-fetch would read
+      // pre-edit bytes until a full page reload. Clearing unconditionally
+      // guarantees the next read re-downloads the index.
+      chunk.freeSystemMemory();
       indexCache.chunkManager.queueManager.updateChunkState(chunk, ChunkState.QUEUED);
     }
   }

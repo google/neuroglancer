@@ -281,14 +281,9 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
     const brushLookup = hasBrushOverlay
       ? `
       {
-        // floor(x), matching the CPU brush hash exactly. The
-        // brush's CPU side stores (x, y, z) where each coord is
-        // Math.floor(worldCoord) + 0.5 (voxel-center-at-non-integer
-        // convention), then computes the hash key as coord >>> 0
-        // which truncates the .5 — net hash key = Math.floor(world).
-        // The backend stores ds[Math.floor(z)] too, so this also
-        // matches what the canonical chunks will show after the
-        // backend writes through.
+        // floor(x) to derive the integer voxel index from the fragment's
+        // world position, matching the CPU brush hash (getBrushKey does
+        // coord >>> 0).
         uvec3 brushVoxel = uvec3(floor(vBrushWorldPos));
         uint x1 = brushVoxel.x;
         uint y1 = brushVoxel.y;
@@ -300,10 +295,16 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
         brushKey.value[1] = h2;
         uint64_t brushValue;
         if (${this.brushHashTableManager.getFunctionName}(brushKey, brushValue)) {
-          // value=0 marks "erased": discard the canonical seg
-          // fragment so the image layer below shows through.
+          // value=0 marks "erased". Report the canonical "no segment" id (0)
+          // rather than discarding: a raw \`discard\` does NOT reveal the
+          // layer underneath in the slice-view compositor, but the value==0
+          // transparent-emit path in fragmentMain (forced on whenever a
+          // brush overlay is present) does. value>0 paints optimistically.
           if (brushValue.value[0] == 0u && brushValue.value[1] == 0u) {
-            discard;
+            uint64_t erased;
+            erased.value[0] = 0u;
+            erased.value[1] = 0u;
+            return erased;
           }
           return brushValue;
         }
@@ -351,7 +352,12 @@ uint64_t getMappedObjectId(uint64_t value) {
   float alpha = uSelectedAlpha;
   float saturation = uSaturation;
 `;
-    if (parameters.hideSegmentZero) {
+    // Emit transparent for segment 0 when hideSegmentZero is set, OR whenever
+    // a brush overlay is present — the eraser reports erased voxels as 0
+    // (see brushLookup) and relies on this transparent emit to reveal the
+    // layer underneath. A `discard` in the hijack does not composite away in
+    // the slice view, so this is the path that makes live canonical-erase work.
+    if (parameters.hideSegmentZero || hasBrushOverlay) {
       fragmentMain += `
   if (value.value[0] == 0u && value.value[1] == 0u) {
     emit(vec4(vec4(0, 0, 0, 0)));
