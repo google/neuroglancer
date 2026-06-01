@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { wasmModuleInstance } from "neuroglancer/sliceview/base";
+import type { wasmModuleInstance } from "#src/sliceview/base.js";
 
 const libraryEnv = {
   emscripten_notify_memory_growth: function () {},
