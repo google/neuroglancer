@@ -6,7 +6,6 @@
 #include <stack>
 #include <span>
 #include <cstdint>
-#include <mutex>
 
 #include "lib.hpp"
 #include "cc3d.hpp"
