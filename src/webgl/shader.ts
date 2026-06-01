@@ -295,14 +295,19 @@ export class ShaderProgram extends RefCounted {
 
   /**
    * Binds the colormap texture associated with `symbol` to its allocated
-   * texture unit and uploads `colormapName`'s LUT if the selection has
-   * changed (or on first call). Lazily creates the ColormapTexture on first
-   * use.
+   * texture unit and uploads `colormapName`'s LUT if cached, or kicks off
+   * a fetch if not. Lazily creates the ColormapTexture on first use.
+   *
+   * Returns `{ ready: false }` only when no colormap has ever been
+   * uploaded for this symbol AND the requested colormap isn't yet cached;
+   * the caller should skip its draw in that case. On every subsequent
+   * draw the texture stays bound (either to the requested or to the
+   * previously-uploaded colormap as a toggle-fallback).
    */
   bindAndUpdateColormapTexture(
     symbol: symbol | string,
     colormapName: ColormapBinName,
-  ) {
+  ): { ready: boolean } {
     const textureUnit = this.textureUnits.get(symbol);
     if (textureUnit === undefined) {
       throw new Error(
@@ -314,7 +319,7 @@ export class ShaderProgram extends RefCounted {
       texture = this.registerDisposer(new ColormapTexture(this.gl));
       this.colormapTextures.set(symbol, texture);
     }
-    texture.bindAndUpload(textureUnit, colormapName);
+    return texture.bindAndUpload(textureUnit, colormapName);
   }
 
   disposed() {

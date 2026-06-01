@@ -44,8 +44,6 @@ const nodeDefines = {
 function defaultNodeProject(): ViteUserConfig {
   return {
     define: { ...nodeDefines },
-    // Treat .bin files as static assets so imports return a URL string.
-    assetsInclude: ["**/*.bin"],
     test: {
       environment: "jsdom-patched",
       setupFiles: [
@@ -106,8 +104,6 @@ export default defineWorkspace([
     esbuild: {
       target: "es2022",
     },
-    // Treat .bin files as static assets so imports return a URL string.
-    assetsInclude: ["**/*.bin"],
     plugins: [mswPlugin({ mode: "browser", handlers: [] })],
     optimizeDeps: {
       entries: [

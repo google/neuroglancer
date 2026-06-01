@@ -58,7 +58,7 @@ import {
 import { NullarySignal } from "#src/util/signal.js";
 import type { Trackable } from "#src/util/trackable.js";
 import type { ColormapBinName, ColormapName } from "#src/webgl/colormaps.js";
-import { COLORMAP_NAMES } from "#src/webgl/colormaps.js";
+import { COLORMAP_NAMES, colormapDataLoaded } from "#src/webgl/colormaps.js";
 import type { GL } from "#src/webgl/context.js";
 import type { HistogramChannelSpecification } from "#src/webgl/empirical_cdf.js";
 import { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";
@@ -1515,6 +1515,9 @@ export class ShaderControlState
     this.registerDisposer(
       this.dataContext.changed.add(() => this.handleFragmentMainChanged()),
     );
+    // When a new colormap LUT finishes loading, propagate so render layers
+    // can retry their draws (skipped-due-to-not-ready frames recover here).
+    this.registerDisposer(colormapDataLoaded.add(this.changed.dispatch));
     this.handleFragmentMainChanged();
     const self = this;
     this.parseErrors = {
@@ -1776,13 +1779,21 @@ export class ShaderControlState
   }
 }
 
+/**
+ * Returns `true` if the control is ready to render with. Non-colormap
+ * controls are always ready (their values are computed synchronously).
+ * Colormap controls return `false` when the requested colormap's LUT
+ * has not yet been fetched AND no fallback colormap is uploaded — the
+ * caller should skip drawing this frame and wait for the next redraw
+ * triggered by `colormapDataLoaded`.
+ */
 function setControlInShader(
   gl: GL,
   shader: ShaderProgram,
   name: string,
   control: ShaderUiControl,
   value: any,
-) {
+): boolean {
   const uName = uniformName(name);
   const uniform = shader.uniform(uName);
   switch (control.type) {
@@ -1795,13 +1806,13 @@ function setControlInShader(
         case "float":
           gl.uniform1f(uniform, value);
       }
-      break;
+      return true;
     case "color":
       gl.uniform3fv(uniform, value);
-      break;
+      return true;
     case "imageInvlerp":
       enableLerpShaderFunction(shader, uName, control.dataType, value.range);
-      break;
+      return true;
     case "propertyInvlerp": {
       const { dataType } = value as PropertyInvlerpParameters;
       enableLerpShaderFunction(
@@ -1810,11 +1821,11 @@ function setControlInShader(
         dataType,
         value.range ?? defaultDataTypeRange[dataType],
       );
-      break;
+      return true;
     }
     case "checkbox":
       // Value is hard-coded in shader.
-      break;
+      return true;
     case "transferFunction":
       enableTransferFunctionShader(
         shader,
@@ -1822,34 +1833,47 @@ function setControlInShader(
         control.dataType,
         value.sortedControlPoints,
       );
-      break;
-    case "colormap":
-      // Bind the texture holding this control's LUT, uploading on first use
-      // and on each colormap change. The bound texture unit was allocated at
-      // build time via builder.addTextureSampler(_, _, name).
-      shader.bindAndUpdateColormapTexture(name, value.colormap);
-      break;
+      return true;
+    case "colormap": {
+      // Bind the texture holding this control's LUT. If the requested
+      // colormap isn't cached yet, `bindAndUpdateColormapTexture` kicks
+      // off a fetch and returns `ready: false` only when there's no
+      // previously-uploaded fallback. The caller skips the draw on the
+      // first frame; the next frame retries via `colormapDataLoaded`.
+      return shader.bindAndUpdateColormapTexture(name, value.colormap).ready;
+    }
   }
 }
 
+/**
+ * Sets all uniforms / textures for the given shader. Returns `true` if
+ * the shader is fully ready to render — `false` if at least one colormap
+ * control is waiting for its LUT to arrive with no fallback available.
+ * Callers should skip the draw when the return value is `false`; the
+ * `colormapDataLoaded` signal (wired into `ShaderControlState.changed`)
+ * triggers a redraw on each completed colormap fetch so the layer
+ * naturally retries.
+ */
 export function setControlsInShader(
   gl: GL,
   shader: ShaderProgram,
   shaderControlState: ShaderControlState,
   controls: Controls,
   compatColormaps: readonly CompatColormap[] = [],
-) {
+): boolean {
+  let ready = true;
   const { state } = shaderControlState;
   if (shaderControlState.controls.value === controls) {
     // Case when shader doesn't have any errors.
     for (const [name, controlState] of state) {
-      setControlInShader(
-        gl,
-        shader,
-        name,
-        controlState.control,
-        controlState.trackable.value,
-      );
+      ready =
+        setControlInShader(
+          gl,
+          shader,
+          name,
+          controlState.control,
+          controlState.trackable.value,
+        ) && ready;
     }
   } else {
     // Case when shader does have errors and we are using the fallback shader, which may have a
@@ -1861,16 +1885,18 @@ export function setControlsInShader(
         JSON.stringify(controlState.control) === JSON.stringify(control)
           ? controlState.trackable.value
           : control.default;
-      setControlInShader(gl, shader, name, control, value);
+      ready = setControlInShader(gl, shader, name, control, value) && ready;
     }
   }
   // Bind back-compat colormap textures (one per `colormapJet`/etc. usage).
   // The list comes from the currently-bound shader's parseResult so the
   // sampler symbols line up with what addControlsToBuilder emitted.
   for (const { funcName, name } of compatColormaps) {
-    shader.bindAndUpdateColormapTexture(
-      compatColormapSamplerSymbol(funcName),
-      name,
-    );
+    ready =
+      shader.bindAndUpdateColormapTexture(
+        compatColormapSamplerSymbol(funcName),
+        name,
+      ).ready && ready;
   }
+  return ready;
 }

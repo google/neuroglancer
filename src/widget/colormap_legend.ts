@@ -24,8 +24,9 @@ import {
   type ColormapName,
   colormapDataLoaded,
   colormapDisplayName,
+  getAllColormapsAsync,
   getColormapBytes,
-  getColormapDataPromise,
+  getColormapBytesAsync,
 } from "#src/webgl/colormaps.js";
 import type { ColormapParameters } from "#src/webgl/shader_ui_controls.js";
 
@@ -167,9 +168,11 @@ export class ColormapWidget extends RefCounted {
     syncFromTrackable();
     this.registerDisposer(colormapTrackable.changed.add(syncFromTrackable));
 
-    // Kick off the LUT fetch (idempotent) and re-render all swatches once it
-    // arrives. Until then renderColormapSwatch shows mid-grey placeholders.
-    void getColormapDataPromise();
+    // Trigger a fetch for the currently-selected colormap so its main
+    // preview swatch can render. The dropdown options stay as grey
+    // placeholders until the user opens the menu (see `open()`), which
+    // triggers a parallel fetch of every colormap.
+    void getColormapBytesAsync(colormapTrackable.value.colormap);
     const rerenderAllSwatches = () => {
       renderColormapSwatch(swatch, colormapTrackable.value.colormap);
       for (const [optionName, optionEl] of this.optionElements) {
@@ -187,6 +190,13 @@ export class ColormapWidget extends RefCounted {
       }
     };
     this.registerDisposer(colormapDataLoaded.add(rerenderAllSwatches));
+    // Whenever the selection changes, kick off a fetch for the newly
+    // selected colormap if it isn't cached yet.
+    this.registerDisposer(
+      colormapTrackable.changed.add(() =>
+        getColormapBytesAsync(colormapTrackable.value.colormap),
+      ),
+    );
 
     button.addEventListener("click", () => {
       if (this.isOpen) {
@@ -226,6 +236,10 @@ export class ColormapWidget extends RefCounted {
     const idx = COLORMAP_NAMES.indexOf(this.colormapTrackable.value.colormap);
     this.setHighlight(idx);
     document.addEventListener("mousedown", this.onDocumentMouseDown, true);
+    // Lazily fetch every colormap so the dropdown option swatches can
+    // render. Each fetch is independent; colormapDataLoaded fires as they
+    // arrive and rerenderAllSwatches re-paints the already-rendered ones.
+    void getAllColormapsAsync();
   }
 
   private close() {
