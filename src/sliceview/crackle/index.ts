@@ -77,7 +77,7 @@ function readHeader(buffer: Uint8Array<ArrayBuffer>): {
 
 export async function decompressCrackle(
   buffer: Uint8Array<ArrayBuffer>,
-): Promise<Uint8Array> {
+): Promise<Uint8Array<ArrayBuffer>> {
   const m = await loadCrackleModule();
   const { sx, sy, sz, dataWidth } = readHeader(buffer);
 
