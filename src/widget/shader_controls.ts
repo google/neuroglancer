@@ -204,8 +204,7 @@ export class ShaderControls extends Tab {
     // Trailing "(X hidden)" annotation, updated by `updateControls()`.
     const hiddenCountElement = (this.hiddenCountElement =
       document.createElement("span"));
-    hiddenCountElement.className =
-      "neuroglancer-shader-controls-hidden-count";
+    hiddenCountElement.className = "neuroglancer-shader-controls-hidden-count";
     header.appendChild(hiddenCountElement);
     element.appendChild(header);
 
