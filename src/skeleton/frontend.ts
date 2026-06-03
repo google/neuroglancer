@@ -582,7 +582,6 @@ export class SkeletonLayer extends RefCounted {
       edgeShader,
       shaderControlState,
       edgeShaderParameters.parseResult.controls,
-      edgeShaderParameters.parseResult.compatColormaps,
     );
     gl.uniform1f(edgeShader.uniform("uLineWidth"), lineWidth!);
 
@@ -594,7 +593,6 @@ export class SkeletonLayer extends RefCounted {
       nodeShader,
       shaderControlState,
       nodeShaderParameters.parseResult.controls,
-      nodeShaderParameters.parseResult.compatColormaps,
     );
 
     const skeletons = source.chunks;

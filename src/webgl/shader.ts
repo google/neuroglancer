@@ -38,6 +38,18 @@ export interface ShaderErrorMessage {
 }
 
 /**
+ * Back-compat colormap free-function (e.g. `colormapJet`, `colormapCubehelix`)
+ * referenced directly by a user's shader. Each entry triggers emission of a
+ * hidden sampler + wrapper bound to the named colormap. Populated on each
+ * compiled `ShaderProgram` by `addControlsToBuilder` and consumed by
+ * `setControlsInShader` to bind the texture per draw.
+ */
+export interface CompatColormap {
+  funcName: string;
+  name: ColormapBinName;
+}
+
+/**
  * Parses the output of getShaderInfoLog into a list of messages.
  */
 export function parseShaderErrors(log: string) {
@@ -176,6 +188,10 @@ export class ShaderProgram extends RefCounted {
     ControlPointTexture
   >();
   colormapTextures: Map<any, ColormapTexture> = new Map<any, ColormapTexture>();
+  // Set once at compile time by `addControlsToBuilder` via an initializer; the
+  // empty default covers shaders that don't reference the legacy free
+  // functions (the overwhelming majority).
+  compatColormaps: readonly CompatColormap[] = [];
 
   constructor(
     public gl: GL,

@@ -57,7 +57,7 @@ import {
 } from "#src/util/lerp.js";
 import { NullarySignal } from "#src/util/signal.js";
 import type { Trackable } from "#src/util/trackable.js";
-import type { ColormapBinName, ColormapName } from "#src/webgl/colormaps.js";
+import type { ColormapName } from "#src/webgl/colormaps.js";
 import { COLORMAP_NAMES, colormapDataLoaded } from "#src/webgl/colormaps.js";
 import type { GL } from "#src/webgl/context.js";
 import type { HistogramChannelSpecification } from "#src/webgl/empirical_cdf.js";
@@ -66,7 +66,11 @@ import {
   defineInvlerpShaderFunction,
   enableLerpShaderFunction,
 } from "#src/webgl/lerp.js";
-import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
+import type {
+  CompatColormap,
+  ShaderBuilder,
+  ShaderProgram,
+} from "#src/webgl/shader.js";
 import type { TransferFunctionParameters } from "#src/widget/transfer_function.js";
 import {
   defineTransferFunctionShader,
@@ -149,15 +153,6 @@ export interface ShaderControlsParseResult {
   code: string;
   controls: Map<string, ShaderUiControl>;
   errors: ShaderControlParseError[];
-  // Back-compat colormap free-functions referenced directly by the user's
-  // shader (e.g. `colormapJet`, `colormapCubehelix`). Each entry triggers
-  // emission of a hidden sampler + wrapper bound to the named colormap.
-  compatColormaps: readonly CompatColormap[];
-}
-
-interface CompatColormap {
-  funcName: string;
-  name: ColormapBinName;
 }
 
 /** Free GLSL colormap functions kept for backwards compatibility. */
@@ -834,8 +829,7 @@ export function parseShaderUiControls(
       return "";
     },
   );
-  const compatColormaps = detectCompatColormaps(newCode);
-  return { source: code, code: newCode, errors, controls, compatColormaps };
+  return { source: code, code: newCode, errors, controls };
 }
 
 export type Controls = Map<string, ShaderUiControl>;
@@ -928,14 +922,21 @@ float ${uName}() {
   }
   // Back-compat: free GLSL functions like `colormapJet` / `colormapCubehelix`
   // referenced directly by the user's shader are wired through the same
-  // sampler-based path. The texture is bound per-draw in setControlsInShader.
-  for (const { funcName } of builderState.parseResult.compatColormaps) {
+  // sampler-based path. The texture is bound per-draw in setControlsInShader,
+  // which reads the list off `shader.compatColormaps`.
+  const compatColormaps = detectCompatColormaps(builderState.parseResult.code);
+  for (const { funcName } of compatColormaps) {
     const samplerName = `${funcName}_sampler`;
     const sym = compatColormapSamplerSymbol(funcName);
     builder.addTextureSampler("sampler2D", samplerName, sym);
     const wrapper = `vec3 ${funcName}(float t) { return texture(${samplerName}, vec2(clamp(t, 0.0, 1.0), 0.5)).rgb; }\n`;
     builder.addFragmentCode(wrapper);
     builder.addVertexCode(wrapper);
+  }
+  if (compatColormaps.length > 0) {
+    builder.addInitializer((shader) => {
+      shader.compatColormaps = compatColormaps;
+    });
   }
 }
 
@@ -1635,7 +1636,6 @@ export class ShaderControlState
         code: "",
         controls: new Map(),
         errors: [{ line: 0, message: "Loading" }],
-        compatColormaps: [],
       };
       this.parseErrors_ = [];
       this.processedFragmentMain_ = "";
@@ -1859,7 +1859,6 @@ export function setControlsInShader(
   shader: ShaderProgram,
   shaderControlState: ShaderControlState,
   controls: Controls,
-  compatColormaps: readonly CompatColormap[] = [],
 ): boolean {
   let ready = true;
   const { state } = shaderControlState;
@@ -1889,9 +1888,9 @@ export function setControlsInShader(
     }
   }
   // Bind back-compat colormap textures (one per `colormapJet`/etc. usage).
-  // The list comes from the currently-bound shader's parseResult so the
-  // sampler symbols line up with what addControlsToBuilder emitted.
-  for (const { funcName, name } of compatColormaps) {
+  // The list was recorded on the shader by addControlsToBuilder via an
+  // initializer, so the sampler symbols line up with what was emitted.
+  for (const { funcName, name } of shader.compatColormaps) {
     ready =
       shader.bindAndUpdateColormapTexture(
         compatColormapSamplerSymbol(funcName),

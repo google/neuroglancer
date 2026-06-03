@@ -142,7 +142,6 @@ export class ImageRenderLayer extends SliceViewVolumeRenderLayer<ShaderControlsB
       shader,
       this.shaderControlState,
       parameters.parseResult.controls,
-      parameters.parseResult.compatColormaps,
     );
   }
 

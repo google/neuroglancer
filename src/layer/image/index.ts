@@ -449,7 +449,6 @@ export class ImageUserLayer extends Base {
           shader,
           this.shaderControlState,
           shaderResult.parameters.parseResult.controls,
-          shaderResult.parameters.parseResult.compatColormaps,
         );
       },
     };
