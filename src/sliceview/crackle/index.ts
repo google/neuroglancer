@@ -16,6 +16,8 @@
 
 import type { wasmModuleInstance } from "#src/sliceview/base.js";
 
+const headerSize = 29;
+
 const libraryEnv = {
   emscripten_notify_memory_growth: function () {},
   proc_exit: (code: number) => {
@@ -24,6 +26,17 @@ const libraryEnv = {
 };
 
 let wasmModule: wasmModuleInstance | null = null;
+
+function crc8(data: Uint8Array<ArrayBuffer>) {
+  let crc = 0xff;
+  for (const value of data) {
+    crc ^= value;
+    for (let bit = 0; bit < 8; ++bit) {
+      crc = crc & 1 ? (crc >> 1) ^ 0xe7 : crc >> 1;
+    }
+  }
+  return crc;
+}
 
 async function loadCrackleModule() {
   // import crackleWasmDataUrl from './libcrackle.wasm';
@@ -50,6 +63,10 @@ function readHeader(buffer: Uint8Array<ArrayBuffer>): {
   sz: number;
   dataWidth: number;
 } {
+  if (buffer.byteLength < headerSize) {
+    throw new Error(`crackle: Invalid image size: ${buffer.byteLength}`);
+  }
+
   // check for header "crkl"
   const magic =
     buffer[0] === "c".charCodeAt(0) &&
@@ -63,8 +80,15 @@ function readHeader(buffer: Uint8Array<ArrayBuffer>): {
   if (format > 1) {
     throw new Error("crackle: didn't match format version");
   }
+  if (format > 0 && crc8(buffer.subarray(5, 28)) !== buffer[28]) {
+    throw new Error("crackle: didn't match header checksum");
+  }
 
-  const bufview = new DataView(buffer.buffer, 0);
+  const bufview = new DataView(
+    buffer.buffer,
+    buffer.byteOffset,
+    buffer.byteLength,
+  );
 
   const format_bytes = bufview.getUint16(5, /*littleEndian=*/ true);
   const dataWidth = Math.pow(2, format_bytes & 0b11);
@@ -83,7 +107,7 @@ export async function decompressCrackle(
 
   const voxels = sx * sy * sz;
   const nbytes = voxels * dataWidth;
-  if (nbytes < 0) {
+  if (!Number.isSafeInteger(nbytes) || nbytes < 0) {
     throw new Error(
       `crackle: Failed to decode image size. image size: ${nbytes}`,
     );
