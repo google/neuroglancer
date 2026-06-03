@@ -213,12 +213,15 @@ compresso
 Each chunk is encoded in `Compresso format
 <https://vcg.seas.harvard.edu/publications/compresso-efficient-compression-of-segmentation-data-for-connectomics>`__.
 
+.. _precomputed-volume-encoding-crackle:
+
 crackle
-~~~~~~~
+~~~~~~~~
 
-Each chunk is encoded in `crackle format
-<https://github.com/seung-lab/crackle>`__.
-
+Each chunk is encoded in Crackle segmentation format. The decoded voxel
+dimensions and data width must match the chunk size and
+:json:schema:`~PrecomputedVolume.data_type` specified in the ``info`` JSON
+file.
 
 2-d image format encodings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

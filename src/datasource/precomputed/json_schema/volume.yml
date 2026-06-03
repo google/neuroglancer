@@ -119,6 +119,9 @@ properties:
             - const: jxl
               title: |
                 :ref:`precomputed-volume-encoding-jxl`
+            - const: crackle
+              title: |
+                :ref:`precomputed-volume-encoding-crackle`
         jpeg_quality:
           type: integer
           minimum: 0
