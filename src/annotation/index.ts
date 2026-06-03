@@ -1478,14 +1478,9 @@ export class AnnotationSource
     if (placement === "after") targetIndex += 1;
     ids.splice(targetIndex, 0, sourceId);
     // No-op if order is unchanged.
-    let changed = false;
-    let i = 0;
-    for (const id of annotationMap.keys()) {
-      if (id !== ids[i++]) {
-        changed = true;
-        break;
-      }
-    }
+    const changed = !Array.from(annotationMap.keys()).every(
+      (id, i) => id === ids[i],
+    );
     if (!changed) return false;
     const entries = ids.map(
       (id) => [id, annotationMap.get(id)!] as [AnnotationId, Annotation],
