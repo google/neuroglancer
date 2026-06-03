@@ -17,102 +17,36 @@
 /**
  * @file Colormap names and lazy per-colormap LUT loader.
  *
- * Colormap data is shipped as a Zarr v3 array (src/webgl/colormaps.zarr/)
- * of shape (N, 256, 3) uint8 with the `sharding_indexed` codec: all N
- * logical chunks (one per colormap) live in a single physical shard file
- * at c/0/0/0. The shard's trailing index makes per-colormap fetches
- * possible via HTTP Range requests against the shard.
+ * Colormap data is shipped as a single uncompressed Zarr v3 chunk file
+ * at src/webgl/colormaps.zarr/c/0/0/0 — chunk_shape == shape, just the
+ * `bytes` codec, so the chunk file's bytes ARE the raw uint8 LUT data in
+ * C-order. The JS bundle fetches that file directly via the standard
+ * `new URL(path, import.meta.url)` asset pattern; the bundler emits the
+ * chunk file alongside the bundle with no custom rules.
  *
- * The loader is lazy and on-demand:
- *   - `getColormapBytesAsync(name)` fetches one colormap (one Range
- *     request, ~768 bytes after the metadata + index are cached).
- *   - `getAllColormapsAsync()` fetches every colormap in parallel; used by
- *     the dropdown widget when the user opens it.
- *   - `getColormapBytes(name)` is the synchronous accessor — returns
- *     cached bytes or undefined.
+ * Both the chunk file and the accompanying zarr.json are produced at
+ * build time by build_tools/generate_colormaps_zarr.py (run via the
+ * `generate-colormaps` npm script, hooked into pre-build/dev-server
+ * scripts and build_tools/build-package.ts). zarr.json itself is NOT
+ * fetched at runtime — it exists so external tools (`tensorstore`,
+ * `zarr-python`) can still open the array.
  *
- * Loading reuses Neuroglancer's Zarr v3 metadata parser and codec
- * pipeline, so the asset is opened the same way an external `tensorstore`
- * or `zarr-python` consumer would open it. Regenerate the on-disk array
- * with `uv run --no-project build_tools/generate_colormaps_zarr.py`.
+ * Per-colormap byte offset in the chunk: `i * 768` where i is the
+ * colormap's index in `COLORMAP_BIN_NAMES`.
  */
 
-// Side-effect imports to register every codec we use, in both the
-// resolve (metadata-parsing) and decode (chunk-decoding) registries.
-import "#src/datasource/zarr/codec/bytes/resolve.js";
-import "#src/datasource/zarr/codec/bytes/decode.js";
-import "#src/datasource/zarr/codec/crc32c/resolve.js";
-import "#src/datasource/zarr/codec/crc32c/decode.js";
-import { decodeArray } from "#src/datasource/zarr/codec/decode.js";
-import type {
-  CodecChainSpec,
-  CodecSpec,
-} from "#src/datasource/zarr/codec/index.js";
-
-import { CodecKind } from "#src/datasource/zarr/codec/index.js";
-import type { Configuration as ShardingConfiguration } from "#src/datasource/zarr/codec/sharding_indexed/resolve.js";
-import { ShardIndexLocation } from "#src/datasource/zarr/codec/sharding_indexed/resolve.js";
-import type { ArrayMetadata } from "#src/datasource/zarr/metadata/index.js";
-import { parseV3Metadata } from "#src/datasource/zarr/metadata/parse.js";
-import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { NullarySignal } from "#src/util/signal.js";
+import {
+  COLORMAP_BIN_NAMES,
+  COLORMAP_NAMES,
+} from "#src/webgl/colormap_names_generated.js";
 import type { GL } from "#src/webgl/context.js";
 import { setRawTextureParameters } from "#src/webgl/texture.js";
 
-// Full list of colormaps present in colormaps.zarr, in N-axis order. Includes
-// back-compat-only colormaps (e.g. `jet`) that are not exposed in the user-
-// facing dropdown but are reachable via free GLSL functions like
-// `colormapJet`. MUST match generate_colormaps_zarr.py and the
-// `attributes.colormap_names` array in colormaps.zarr/zarr.json.
-export const COLORMAP_BIN_NAMES = [
-  "grayscale",
-  "viridis",
-  "plasma",
-  "cividis",
-  "magma",
-  "coolwarm",
-  "rdbu",
-  "turbo",
-  "cubehelix",
-  "oranges",
-  "jet",
-] as const;
-
+export { COLORMAP_BIN_NAMES, COLORMAP_NAMES };
 export type ColormapBinName = (typeof COLORMAP_BIN_NAMES)[number];
-
-// User-facing list shown in the #uicontrol colormap dropdown.
-export const COLORMAP_NAMES = [
-  "grayscale",
-  "viridis",
-  "plasma",
-  "cividis",
-  "magma",
-  "coolwarm",
-  "rdbu",
-  "turbo",
-  "cubehelix",
-  "oranges",
-] as const;
-
 export type ColormapName = (typeof COLORMAP_NAMES)[number];
-
-const COLORMAP_DISPLAY_NAMES: Record<ColormapName, string> = {
-  grayscale: "Grayscale",
-  viridis: "Viridis",
-  plasma: "Plasma",
-  cividis: "Cividis",
-  magma: "Magma",
-  coolwarm: "Coolwarm",
-  rdbu: "RdBu",
-  turbo: "Turbo",
-  cubehelix: "Cubehelix",
-  oranges: "Oranges",
-};
-
-export function colormapDisplayName(name: ColormapName): string {
-  return COLORMAP_DISPLAY_NAMES[name];
-}
 
 /** Bytes per colormap LUT: 256 entries × 3 channels (RGB). */
 export const COLORMAP_STRIDE = 256 * 3;
@@ -125,162 +59,21 @@ export const colormapDataLoaded = new NullarySignal();
 
 // Per-colormap cache (permanent once populated).
 const colormapBytesCache = new Map<ColormapBinName, Uint8Array>();
-// In-flight per-colormap fetches, keyed by colormap name. Deduplicates
-// concurrent callers.
+// In-flight per-colormap fetches; deduplicates concurrent callers.
 const inFlightFetches = new Map<ColormapBinName, Promise<Uint8Array>>();
 
-interface ShardIndexEntry {
-  offset: number;
-  length: number;
-}
-
-interface ColormapZarrMetadata {
-  arrayMetadata: ArrayMetadata;
-  shardUrl: string;
-  subChunkCodecs: CodecChainSpec;
-  indexCodecs: CodecChainSpec;
-  indexLocation: ShardIndexLocation;
-  indexEncodedSize: number;
-}
-
-// rspack-injected global identifying the deployed URL prefix for emitted
-// assets. With `output.publicPath: "auto"` (the default in this config)
-// it's resolved at runtime from the bundle's script URL, so it points to
-// the directory containing the bundle and, via CopyRspackPlugin, the
-// colormaps.zarr directory. We can't use `new URL("./colormaps.zarr/",
-// import.meta.url)` because rspack only rewrites `new URL` references to
-// paths it recognizes as assets; CopyRspackPlugin-emitted directories
-// aren't in the module graph.
-declare const __webpack_public_path__: string;
-
-let metadataPromise: Promise<ColormapZarrMetadata> | undefined;
-let shardIndexPromise: Promise<ShardIndexEntry[]> | undefined;
-
-function getColormapMetadata(): Promise<ColormapZarrMetadata> {
-  if (metadataPromise === undefined) {
-    metadataPromise = (async (): Promise<ColormapZarrMetadata> => {
-      const base = new URL("colormaps.zarr/", __webpack_public_path__);
-      const metadataJson = await fetchJson(new URL("zarr.json", base).href);
-      const arrayMetadata = parseV3Metadata(metadataJson, "array");
-      if (arrayMetadata.nodeType !== "array") {
-        throw new Error(
-          `colormaps.zarr: expected an array node, got ${arrayMetadata.nodeType}`,
-        );
-      }
-      if (arrayMetadata.dataType !== DataType.UINT8) {
-        throw new Error(
-          `colormaps.zarr: expected uint8 data, got ${arrayMetadata.dataType}`,
-        );
-      }
-      const expectedShape = [COLORMAP_BIN_NAMES.length, 256, 3];
-      if (
-        arrayMetadata.shape.length !== expectedShape.length ||
-        arrayMetadata.shape.some((v, i) => v !== expectedShape[i])
-      ) {
-        throw new Error(
-          `colormaps.zarr: expected shape ${JSON.stringify(expectedShape)}, got ${JSON.stringify(arrayMetadata.shape)}`,
-        );
-      }
-      const namesAttr = arrayMetadata.userAttributes.colormap_names;
-      if (
-        !Array.isArray(namesAttr) ||
-        namesAttr.length !== COLORMAP_BIN_NAMES.length ||
-        namesAttr.some((n, i) => n !== COLORMAP_BIN_NAMES[i])
-      ) {
-        throw new Error(
-          `colormaps.zarr: attributes.colormap_names ${JSON.stringify(namesAttr)} does not match COLORMAP_BIN_NAMES ${JSON.stringify(COLORMAP_BIN_NAMES)}`,
-        );
-      }
-      const arrayToBytesCodec: CodecSpec<CodecKind.arrayToBytes> =
-        arrayMetadata.codecs[CodecKind.arrayToBytes];
-      if (arrayToBytesCodec.name !== "sharding_indexed") {
-        throw new Error(
-          `colormaps.zarr: expected sharding_indexed codec, got ${arrayToBytesCodec.name}`,
-        );
-      }
-      const shardingConfig =
-        arrayToBytesCodec.configuration as ShardingConfiguration;
-      const indexCodecs = shardingConfig.indexCodecs;
-      const indexEncodedSize =
-        indexCodecs.encodedSize[indexCodecs.encodedSize.length - 1];
-      if (indexEncodedSize === undefined) {
-        throw new Error(
-          "colormaps.zarr: sharding index codecs must have a fixed encoded size",
-        );
-      }
-      return {
-        arrayMetadata,
-        // The single outer chunk lives at "c/0/0/0" (default chunk key
-        // encoding, "/" separator, all-zero chunk grid index).
-        shardUrl: new URL("c/0/0/0", base).href,
-        subChunkCodecs: shardingConfig.subChunkCodecs,
-        indexCodecs,
-        indexLocation: shardingConfig.indexLocation,
-        indexEncodedSize,
-      };
-    })();
-  }
-  return metadataPromise;
-}
-
-function getShardIndex(): Promise<ShardIndexEntry[]> {
-  if (shardIndexPromise === undefined) {
-    shardIndexPromise = (async (): Promise<ShardIndexEntry[]> => {
-      const meta = await getColormapMetadata();
-      // Determine the byte range of the index within the shard.
-      let rangeHeader: string;
-      if (meta.indexLocation === ShardIndexLocation.END) {
-        rangeHeader = `bytes=-${meta.indexEncodedSize}`;
-      } else {
-        rangeHeader = `bytes=0-${meta.indexEncodedSize - 1}`;
-      }
-      const encoded = await fetchRange(meta.shardUrl, rangeHeader);
-      if (encoded.length !== meta.indexEncodedSize) {
-        throw new Error(
-          `colormaps.zarr: expected ${meta.indexEncodedSize}-byte shard index, got ${encoded.length}`,
-        );
-      }
-      const decoded = await decodeArray(
-        meta.indexCodecs,
-        encoded,
-        new AbortController().signal,
-      );
-      // After decoding, the index is a flat row-major array of shape
-      // [N, 1, 1, 2] uint64 values: for each sub-chunk i, (offset, length).
-      const view = new BigUint64Array(
-        decoded.buffer,
-        decoded.byteOffset,
-        decoded.byteLength / 8,
-      );
-      const numSubChunks = COLORMAP_BIN_NAMES.length;
-      if (view.length !== numSubChunks * 2) {
-        throw new Error(
-          `colormaps.zarr: expected ${numSubChunks * 2} uint64 index entries, got ${view.length}`,
-        );
-      }
-      const result: ShardIndexEntry[] = [];
-      for (let i = 0; i < numSubChunks; i++) {
-        const offset = view[i * 2];
-        const length = view[i * 2 + 1];
-        // The Zarr spec uses 0xFFFFFFFFFFFFFFFFn (max uint64) to mark a
-        // missing chunk. Our writer never produces those, but guard anyway.
-        if (offset === 0xffffffffffffffffn) {
-          throw new Error(
-            `colormaps.zarr: sub-chunk ${i} (${COLORMAP_BIN_NAMES[i]}) is missing`,
-          );
-        }
-        result.push({ offset: Number(offset), length: Number(length) });
-      }
-      return result;
-    })();
-  }
-  return shardIndexPromise;
-}
+// rspack/webpack/vite all rewrite this `new URL(static-string, import.meta.url)`
+// call at build time so it resolves to the emitted (content-hashed) asset
+// URL at runtime — no custom rules in rspack.config.ts. The chunk file's
+// bytes ARE the raw LUT data because the Zarr `bytes` codec on uint8 is a
+// no-op.
+const CHUNK_URL = new URL("./colormaps.zarr/c/0/0/0", import.meta.url).href;
 
 /**
- * Fetches the LUT bytes for one colormap. Idempotent: concurrent calls
- * for the same name share an in-flight Promise; completed calls return
- * from the per-colormap cache instantly.
+ * Fetches the LUT bytes for one colormap via an HTTP Range request
+ * against the single shared chunk file. Idempotent: concurrent calls for
+ * the same name share an in-flight Promise; completed calls return from
+ * the per-colormap cache instantly.
  */
 export function getColormapBytesAsync(
   name: ColormapBinName,
@@ -289,35 +82,36 @@ export function getColormapBytesAsync(
   if (cached !== undefined) return Promise.resolve(cached);
   const existing = inFlightFetches.get(name);
   if (existing !== undefined) return existing;
+  const idx = COLORMAP_BIN_NAMES.indexOf(name);
+  if (idx < 0) {
+    return Promise.reject(new Error(`Unknown colormap: ${name}`));
+  }
+  const start = idx * COLORMAP_STRIDE;
+  const end = start + COLORMAP_STRIDE - 1;
   const promise = (async (): Promise<Uint8Array> => {
     try {
-      const meta = await getColormapMetadata();
-      const index = await getShardIndex();
-      const idx = COLORMAP_BIN_NAMES.indexOf(name);
-      if (idx < 0) throw new Error(`Unknown colormap: ${name}`);
-      const { offset, length } = index[idx];
-      const encoded = await fetchRange(
-        meta.shardUrl,
-        `bytes=${offset}-${offset + length - 1}`,
-      );
-      if (encoded.length !== length) {
+      const response = await fetch(CHUNK_URL, {
+        headers: { Range: `bytes=${start}-${end}` },
+      });
+      // 206 Partial Content is the success status for a satisfied Range
+      // request. Some servers may respond 200 with the full body if they
+      // don't support Range — slice it ourselves in that case.
+      if (response.status !== 206 && response.status !== 200) {
         throw new Error(
-          `colormaps.zarr: expected ${length}-byte sub-chunk for ${name}, got ${encoded.length}`,
+          `Failed to fetch colormap ${name}: ${response.status} ${response.statusText}`,
         );
       }
-      const decoded = await decodeArray(
-        meta.subChunkCodecs,
-        encoded,
-        new AbortController().signal,
-      );
-      const bytes = new Uint8Array(
-        decoded.buffer,
-        decoded.byteOffset,
-        decoded.byteLength,
-      );
+      const buffer = await response.arrayBuffer();
+      let bytes: Uint8Array;
+      if (response.status === 200 && buffer.byteLength > COLORMAP_STRIDE) {
+        // Server ignored the Range header; slice client-side.
+        bytes = new Uint8Array(buffer, start, COLORMAP_STRIDE);
+      } else {
+        bytes = new Uint8Array(buffer);
+      }
       if (bytes.length !== COLORMAP_STRIDE) {
         throw new Error(
-          `colormaps.zarr: decoded sub-chunk for ${name} has ${bytes.length} bytes, expected ${COLORMAP_STRIDE}`,
+          `Colormap ${name}: expected ${COLORMAP_STRIDE} bytes, got ${bytes.length}`,
         );
       }
       colormapBytesCache.set(name, bytes);
@@ -332,13 +126,36 @@ export function getColormapBytesAsync(
 }
 
 /**
- * Fetches every colormap in parallel. Used by the dropdown widget so all
- * swatches can render. Shares the per-colormap cache + in-flight map with
- * `getColormapBytesAsync`, so calling this is safe alongside individual
- * fetches.
+ * Fetches every colormap in one HTTP request and partitions the result
+ * into the per-colormap cache. Used by the dropdown widget so all
+ * swatches can render in one round-trip. Idempotent — skips colormaps
+ * that are already cached.
  */
 export async function getAllColormapsAsync(): Promise<void> {
-  await Promise.all(COLORMAP_BIN_NAMES.map((n) => getColormapBytesAsync(n)));
+  if (COLORMAP_BIN_NAMES.every((n) => colormapBytesCache.has(n))) return;
+  const response = await fetch(CHUNK_URL);
+  if (!response.ok) {
+    throw new Error(
+      `Failed to fetch colormaps chunk: ${response.status} ${response.statusText}`,
+    );
+  }
+  const all = new Uint8Array(await response.arrayBuffer());
+  const expectedBytes = COLORMAP_BIN_NAMES.length * COLORMAP_STRIDE;
+  if (all.length !== expectedBytes) {
+    throw new Error(
+      `colormaps chunk: expected ${expectedBytes} bytes, got ${all.length}`,
+    );
+  }
+  for (let i = 0; i < COLORMAP_BIN_NAMES.length; i++) {
+    const name = COLORMAP_BIN_NAMES[i];
+    if (!colormapBytesCache.has(name)) {
+      colormapBytesCache.set(
+        name,
+        all.subarray(i * COLORMAP_STRIDE, (i + 1) * COLORMAP_STRIDE),
+      );
+    }
+  }
+  colormapDataLoaded.dispatch();
 }
 
 /**
@@ -350,39 +167,6 @@ export function getColormapBytes(
   name: ColormapBinName,
 ): Uint8Array | undefined {
   return colormapBytesCache.get(name);
-}
-
-async function fetchJson(url: string): Promise<unknown> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(
-      `Failed to fetch ${url}: ${response.status} ${response.statusText}`,
-    );
-  }
-  return response.json();
-}
-
-async function fetchRange(
-  url: string,
-  range: string,
-): Promise<Uint8Array<ArrayBuffer>> {
-  const response = await fetch(url, { headers: { Range: range } });
-  // 206 Partial Content is the success status for a satisfied Range request.
-  // Some servers will respond 200 with the full body if they don't support
-  // Range — that's a misconfiguration we want to surface explicitly.
-  if (response.status !== 206 && response.status !== 200) {
-    throw new Error(
-      `Failed Range fetch ${url} [${range}]: ${response.status} ${response.statusText}`,
-    );
-  }
-  return new Uint8Array(await response.arrayBuffer());
-}
-
-// Singleton 768-byte all-zero LUT used as the "loading" texture content.
-let zeroLut: Uint8Array | undefined;
-function getZeroLutBytes(): Uint8Array {
-  if (zeroLut === undefined) zeroLut = new Uint8Array(COLORMAP_STRIDE);
-  return zeroLut;
 }
 
 /**
@@ -486,4 +270,12 @@ export class ColormapTexture extends RefCounted {
     }
     super.disposed();
   }
+}
+
+// Singleton 768-byte all-zero LUT used as the first-load "loading"
+// texture content (samples as deterministic black).
+let zeroLut: Uint8Array | undefined;
+function getZeroLutBytes(): Uint8Array {
+  if (zeroLut === undefined) zeroLut = new Uint8Array(COLORMAP_STRIDE);
+  return zeroLut;
 }

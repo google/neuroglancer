@@ -1,10 +1,6 @@
 import path from "node:path";
 import { defineConfig } from "@rspack/cli";
-import {
-  CopyRspackPlugin,
-  HtmlRspackPlugin,
-  ProgressPlugin,
-} from "@rspack/core";
+import { HtmlRspackPlugin, ProgressPlugin } from "@rspack/core";
 import { normalizeConfigurationWithDefine } from "./build_tools/rspack/configuration_with_define.js";
 import packageJson from "./package.json" with { type: "json" };
 
@@ -82,26 +78,6 @@ export default defineConfig((env, args) => {
       new ProgressPlugin(),
       new HtmlRspackPlugin({
         title: "neuroglancer",
-      }),
-      // Copy the Zarr v3 colormap array (zarr.json + chunk file) verbatim
-      // into the output so external Zarr tools can open the deployed asset
-      // and the runtime can fetch it at a stable relative path.
-      new CopyRspackPlugin({
-        patterns: [
-          {
-            from: path.resolve(
-              import.meta.dirname,
-              "src",
-              "webgl",
-              "colormaps.zarr",
-            ),
-            // `to` ends with "/" so rspack treats it as a directory; the
-            // source directory's tree (zarr.json, c/0/0/0) is preserved.
-            to: "colormaps.zarr/",
-            toType: "dir",
-            globOptions: { ignore: ["**/README.md"] },
-          },
-        ],
       }),
     ],
     output: {

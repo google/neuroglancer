@@ -23,7 +23,6 @@ import {
   COLORMAP_NAMES,
   type ColormapName,
   colormapDataLoaded,
-  colormapDisplayName,
   getAllColormapsAsync,
   getColormapBytes,
   getColormapBytesAsync,
@@ -140,7 +139,7 @@ export class ColormapWidget extends RefCounted {
 
       const label = document.createElement("span");
       label.classList.add("neuroglancer-colormap-option-name");
-      label.textContent = colormapDisplayName(name);
+      label.textContent = name;
 
       option.appendChild(optionSwatch);
       option.appendChild(label);
@@ -156,7 +155,7 @@ export class ColormapWidget extends RefCounted {
 
     const syncFromTrackable = () => {
       const name = colormapTrackable.value.colormap;
-      nameLabel.textContent = colormapDisplayName(name);
+      nameLabel.textContent = name;
       renderColormapSwatch(swatch, name);
       for (const [optionName, optionEl] of this.optionElements) {
         optionEl.classList.toggle(
