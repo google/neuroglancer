@@ -18,7 +18,7 @@
   "scripts": {
     "update-conditions": "node ./build_tools/update-conditions.ts",
     "generate-colormaps": "uv run --no-project build_tools/generate_colormaps_zarr.py",
-    "prepare": "node ./build_tools/build-package.ts --inplace --if-not-toplevel",
+    "prepare": "npm run generate-colormaps && node ./build_tools/build-package.ts --inplace --if-not-toplevel",
     "prepack": "node ./build_tools/build-package.ts --inplace",
     "postpack": "node ./build_tools/postpack.ts",
     "prebuild": "npm run generate-colormaps",
