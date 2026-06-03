@@ -115,7 +115,7 @@ def write_names_ts(target: pathlib.Path) -> None:
         "] as const;",
         "",
     ]
-    target.write_text("\n".join(lines))
+    target.write_text("\n".join(lines), encoding="utf-8")
 
 
 def main() -> int:
