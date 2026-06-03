@@ -508,9 +508,9 @@ export class AnnotationLayerView extends Tab {
 
     const helpIcon = makeIcon({
       title:
-        "The left icons allow you to select the type of the annotation. Color and other display settings are available in the 'Rendering' tab. Click for documentation.",
+         "The left icons allow you to select the type of the anotation. Color and other display settings are available in the 'Rendering' tab.",
       svg: svg_help,
-      href: "https://neuroglancer-docs.web.app/user-guide/annotation.html",
+      clickable: false,
     });
     helpIcon.style.marginLeft = "auto";
     mutableControls.appendChild(helpIcon);
@@ -606,7 +606,7 @@ export class AnnotationLayerView extends Tab {
       }
       const targetId = dropRow.dataset.annotationId;
       if (targetId === undefined || targetId === sourceId) return;
-      const source = state.source;
+      const { source } = state;
       if (!(source instanceof AnnotationSource)) return;
       source.reorder(sourceId, targetId, dropPlacement);
     };
