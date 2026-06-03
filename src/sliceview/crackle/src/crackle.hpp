@@ -278,7 +278,11 @@ int decompress(
 	int64_t z_start = -1,
 	int64_t z_end = -1
 ) {
-	const CrackleHeader header(buffer);
+	CrackleHeader header;
+	int err = header.assign_from_buffer(buffer);
+	if (err > 0) {
+		return err;
+	}
 
 	z_start = std::max(std::min(z_start, static_cast<int64_t>(header.sz - 1)), static_cast<int64_t>(0));
 	z_end = z_end < 0 ? static_cast<int64_t>(header.sz) : z_end;
@@ -304,7 +308,7 @@ int decompress(
 
 	std::vector<std::vector<uint8_t>> markov_model = decode_markov_model(header, binary);
 
-	int err = 0;
+	err = 0;
 	auto crack_codes = get_crack_codes(header, binary, z_start, z_end, err);
 	
 	if (err > 0) {
@@ -377,7 +381,11 @@ int decompress(
 		return 3;
 	}
 
-	const CrackleHeader header(buffer);
+	CrackleHeader header;
+	const int err = header.assign_from_buffer(buffer);
+	if (err > 0) {
+		return err;
+	}
 
 	if (output_num_bytes < header.nbytes()) {
 		return 4;
