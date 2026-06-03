@@ -140,11 +140,8 @@
 }
 
 .neuroglancer-layer-list-panel-color-value[data-color="unsupported"] {
-  background-image: linear-gradient(
-      45deg,
-      rgba(128, 128, 128, 1.5) 25%,
-      transparent 25%
-    ),
+  background-image:
+    linear-gradient(45deg, rgba(128, 128, 128, 1.5) 25%, transparent 25%),
     linear-gradient(-45deg, rgba(128, 128, 128, 1.5) 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, rgba(128, 128, 128, 1.5) 75%),
     linear-gradient(-45deg, transparent 75%, rgba(128, 128, 128, 1.5) 75%);
