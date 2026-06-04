@@ -196,6 +196,16 @@ format [compressed segmentation format](/src/sliceview/compressed_segmentation).
 `"data_type"` must be either `"uint32"` or `"uint64"`. The compression block size is specified by
 the `"compressed_segmentation_block_size"` property in the `info` JSON file.
 
+### compresso chunk encoding
+
+The subvolume data for the chunk is encoded using the compresso segmentation format. The decoded voxel dimensions and data width must match the chunk size and `"data_type"` specified in the `info` JSON file. See the [compresso repository](https://github.com/seung-lab/compresso) for more information.
+
+### crackle chunk encoding
+
+The subvolume data for the chunk is encoded using the Crackle segmentation format. The decoded
+voxel dimensions and data width must match the chunk size and `"data_type"` specified in the
+`info` JSON file. See the [crackle repository](https://github.com/seung-lab/crackle) for more information.
+
 # Example `info` files
 
 ```json
