@@ -93,6 +93,13 @@
   visibility: hidden;
 }
 
+/* Suppress text selection while reordering. Firefox in particular starts a
+   (rectangular) selection on alt+drag, which is the gesture used to reorder. */
+.neuroglancer-annotation-list-dragging {
+  user-select: none;
+  -moz-user-select: none;
+}
+
 .neuroglancer-annotation-hover {
   background-color: #333;
 }

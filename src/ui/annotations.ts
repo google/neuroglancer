@@ -600,6 +600,7 @@ export class AnnotationLayerView extends Tab {
       document.removeEventListener("mousemove", onMouseMove, true);
       document.removeEventListener("mouseup", onMouseUp, true);
       document.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("blur", onBlur, true);
       dragState = undefined;
       if (!commit || dropRow === undefined || dropPlacement === undefined) {
         return;
@@ -613,9 +614,13 @@ export class AnnotationLayerView extends Tab {
 
     const onMouseMove = (event: MouseEvent) => {
       if (dragState === undefined) return;
-      const target = (event.target as HTMLElement | null)?.closest(
-        ".neuroglancer-annotation-list-entry",
-      ) as HTMLElement | null;
+      const eventTarget = event.target;
+      const target =
+        eventTarget instanceof Element
+          ? (eventTarget.closest(
+              ".neuroglancer-annotation-list-entry",
+            ) as HTMLElement | null)
+          : null;
       if (
         target === null ||
         target === dragState.sourceRow ||
@@ -663,6 +668,10 @@ export class AnnotationLayerView extends Tab {
       }
     };
 
+    const onBlur = () => {
+      finish(false);
+    };
+
     const onReorderStart = (event: ActionEvent<MouseEvent>) => {
       const row = (event.detail.target as HTMLElement | null)?.closest(
         ".neuroglancer-annotation-list-entry",
@@ -690,6 +699,7 @@ export class AnnotationLayerView extends Tab {
       document.addEventListener("mousemove", onMouseMove, true);
       document.addEventListener("mouseup", onMouseUp, true);
       document.addEventListener("keydown", onKeyDown, true);
+      window.addEventListener("blur", onBlur, true);
     };
 
     const unregister = registerActionListener<MouseEvent>(
