@@ -1,15 +1,47 @@
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import * as json_keys from "#src/layer/segmentation/json_keys.js";
+import { makeCachedDerivedWatchableValue } from "#src/trackable_value.js";
+import { formatScaleWithUnitAsString } from "#src/util/si_units.js";
 import type { LayerControlDefinition } from "#src/widget/layer_control.js";
 import { registerLayerControl } from "#src/widget/layer_control.js";
 import { checkboxLayerControl } from "#src/widget/layer_control_checkbox.js";
 import { enumLayerControl } from "#src/widget/layer_control_enum.js";
 import { rangeLayerControl } from "#src/widget/layer_control_range.js";
-import { renderScaleLayerControl } from "#src/widget/render_scale_widget.js";
+import {
+  renderScaleLayerControl,
+  SpatialSkeletonGridRenderScaleWidget,
+} from "#src/widget/render_scale_widget.js";
 import {
   colorSeedLayerControl,
   fixedColorLayerControl,
 } from "#src/widget/segmentation_color_mode.js";
+
+/**
+ * Best-effort unit label for the layer's spatial coordinate space,
+ * formatted with the appropriate SI prefix (e.g. ``"mm"`` from
+ * (scale=1e-3, unit="m"); ``"nm"`` from (scale=1e-9, unit="m")).
+ *
+ * Used to label the spatial-skeleton grid-resolution widget so a
+ * millimetre-units dataset doesn't read as ``"339 nm"`` because of the
+ * widget's class-level ``unitOfTarget = "nm"`` fallback.  Falls back
+ * to ``"nm"`` (the widget default) when no usable unit information is
+ * available, matching legacy behaviour.
+ *
+ * Picks the first dimension's unit — for typical 3-D spatial layers
+ * (x, y, z all in the same unit), all three would resolve identically.
+ */
+function getLayerSpatialUnit(layer: SegmentationUserLayer): string {
+  const cs = layer.manager.root.coordinateSpace.value;
+  if (!cs.valid || cs.rank === 0) return "nm";
+  const unit = cs.units[0];
+  const scale = cs.scales[0];
+  if (typeof unit !== "string" || unit === "") return "nm";
+  if (!Number.isFinite(scale) || scale <= 0) return unit;
+  return formatScaleWithUnitAsString(scale, unit, {
+    elide1: true,
+    precision: 0,
+  });
+}
 
 export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
   {
@@ -68,12 +100,67 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
     })),
   },
   {
+    label: "Resolution (skeleton grid 2D)",
+    toolJson: json_keys.SKELETON_CROSS_SECTION_RENDER_SCALE_JSON_KEY,
+    isValid: (layer) =>
+      makeCachedDerivedWatchableValue(
+        (levels, hasSpatialSkeletons) =>
+          hasSpatialSkeletons && levels.length > 0,
+        [
+          layer.displayState.spatialSkeletonGridLevels,
+          layer.hasSpatiallyIndexedSkeletonsLayer,
+        ],
+      ),
+    title:
+      "Select the grid size level for spatially indexed skeletons in 2D views",
+    ...renderScaleLayerControl(
+      (layer) => ({
+        histogram: layer.displayState.spatialSkeletonGridRenderScaleHistogram2d,
+        target: layer.displayState.spatialSkeletonGridResolutionTarget2d,
+        unitOfTarget: getLayerSpatialUnit(layer),
+      }),
+      SpatialSkeletonGridRenderScaleWidget,
+    ),
+  },
+  {
+    label: "Resolution (skeleton grid 3D)",
+    toolJson: json_keys.SKELETON_PERSPECTIVE_RENDER_SCALE_JSON_KEY,
+    isValid: (layer) =>
+      makeCachedDerivedWatchableValue(
+        (levels, hasSpatialSkeletons) =>
+          hasSpatialSkeletons && levels.length > 0,
+        [
+          layer.displayState.spatialSkeletonGridLevels,
+          layer.hasSpatiallyIndexedSkeletonsLayer,
+        ],
+      ),
+    title:
+      "Select the grid size level for spatially indexed skeletons in 3D views",
+    ...renderScaleLayerControl(
+      (layer) => ({
+        histogram: layer.displayState.spatialSkeletonGridRenderScaleHistogram3d,
+        target: layer.displayState.spatialSkeletonGridResolutionTarget3d,
+        unitOfTarget: getLayerSpatialUnit(layer),
+      }),
+      SpatialSkeletonGridRenderScaleWidget,
+    ),
+  },
+  {
     label: "Opacity (3d)",
     toolJson: json_keys.OBJECT_ALPHA_JSON_KEY,
     isValid: (layer) => layer.has3dLayer,
     title: "Opacity of meshes and skeletons",
     ...rangeLayerControl((layer) => ({
       value: layer.displayState.objectAlpha,
+    })),
+  },
+  {
+    label: "Hidden Opacity (3d)",
+    toolJson: json_keys.HIDDEN_OPACITY_3D_JSON_KEY,
+    isValid: (layer) => layer.hasSpatiallyIndexedSkeletonsLayer,
+    title: "Opacity of hidden (non-visible) skeleton nodes in 3D views",
+    ...rangeLayerControl((layer) => ({
+      value: layer.displayState.hiddenObjectAlpha,
     })),
   },
   {

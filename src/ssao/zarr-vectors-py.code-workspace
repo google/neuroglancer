@@ -1,0 +1,17 @@
+{
+  "folders": [
+    {
+      "path": "../../../zarr-vectors-py",
+    },
+    {
+      "path": "../..",
+    },
+    {
+      "path": "../../../zarr_vectors",
+    },
+    {
+      "path": "../../../zarr_vectors_playground",
+    },
+  ],
+  "settings": {},
+}

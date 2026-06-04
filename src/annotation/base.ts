@@ -40,6 +40,8 @@ export const ANNOTATION_REFERENCE_DELETE_RPC_ID = "annotation.reference.delete";
 export const ANNOTATION_COMMIT_UPDATE_RPC_ID = "annotation.commit";
 export const ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID = "annotation.commit";
 
+export type AnnotationPyramidMode = "additive" | "replace";
+
 export interface AnnotationGeometryChunkSpecification
   extends SliceViewChunkSpecification {
   /**
@@ -53,6 +55,25 @@ export interface AnnotationGeometryChunkSpecification
    * disable subsampling completely, set `limit` to 0.
    */
   limit: number;
+
+  /**
+   * Controls how `forEachVisibleAnnotationChunk` combines spatial-index
+   * levels of a multi-resolution pyramid.
+   *
+   * - "additive" (default when undefined): each level adds detail.  The
+   *   renderer accumulates levels coarse-to-fine until the screen
+   *   density target is met, with per-chunk subsampling.  This matches
+   *   precomputed annotation behavior.
+   * - "replace": each level is a complete representation of the dataset
+   *   at decreasing fidelity.  The renderer picks the single level
+   *   whose density best matches the target and skips the others
+   *   (image-style level swap).  Use this for metanode pyramids, where
+   *   drawing both a metanode and its children would double-count.
+   *
+   * The value must be identical across every level of a single source
+   * — only `transformedSources[0].source.spec.pyramidMode` is consulted.
+   */
+  pyramidMode?: AnnotationPyramidMode;
 }
 
 export const ANNOTATION_SPATIALLY_INDEXED_RENDER_LAYER_RPC_ID =
@@ -112,14 +133,9 @@ export function forEachVisibleAnnotationChunk<
   const targetNumAnnotations = viewportArea / renderScaleTarget ** 2;
   const physicalDensityTarget = targetNumAnnotations / effectiveVolume;
 
-  // Target density in annotations per physical volume.
-  let totalPhysicalDensity = 0;
-  for (
-    let scaleIndex = transformedSources.length - 1;
-    scaleIndex >= 0 && totalPhysicalDensity < physicalDensityTarget;
-    --scaleIndex
-  ) {
-    const transformedSource = transformedSources[scaleIndex];
+  // Per-level helper: compute the spec's native physical density given
+  // the current slice fraction.
+  const computePerLevelDensity = (transformedSource: Transformed) => {
     const spec = transformedSource.source
       .spec as AnnotationGeometryChunkSpecification;
     const { chunkLayout } = transformedSource;
@@ -135,7 +151,82 @@ export function forEachVisibleAnnotationChunk<
       const b = nonDisplayUpperClipBound[i] - nonDisplayLowerClipBound[i];
       if (Number.isFinite(b)) sliceFraction /= b;
     }
-    const physicalDensity = (limit * sliceFraction) / physicalVolume;
+    return {
+      spec,
+      physicalVolume,
+      sliceFraction,
+      physicalDensity: (limit * sliceFraction) / physicalVolume,
+    };
+  };
+
+  const pyramidMode =
+    (baseSource.source.spec as AnnotationGeometryChunkSpecification)
+      .pyramidMode ?? "additive";
+
+  if (pyramidMode === "replace") {
+    // Image-style single-level selection: pick the level whose pixel
+    // spacing best matches renderScaleTarget on a log scale.  Ties
+    // prefer the coarser level (higher scale index).
+    let bestScaleIndex = -1;
+    let bestLogError = Infinity;
+    let bestPhysicalSpacing = 0;
+    let bestPixelSpacing = 0;
+    for (
+      let scaleIndex = transformedSources.length - 1;
+      scaleIndex >= 0;
+      --scaleIndex
+    ) {
+      const transformedSource = transformedSources[scaleIndex];
+      const { physicalDensity } = computePerLevelDensity(transformedSource);
+      if (physicalDensity <= 0 || !Number.isFinite(physicalDensity)) continue;
+      const pixelSpacing = Math.sqrt(
+        viewportArea / (physicalDensity * effectiveVolume),
+      );
+      const logError = Math.abs(Math.log(pixelSpacing / renderScaleTarget));
+      // Strict-less so that on a tie, the first (coarsest) level seen
+      // wins — matching "prefer coarser on tie".
+      if (logError < bestLogError) {
+        bestLogError = logError;
+        bestScaleIndex = scaleIndex;
+        bestPhysicalSpacing = (1 / physicalDensity) ** (1 / 3);
+        bestPixelSpacing = pixelSpacing;
+      }
+    }
+    if (bestScaleIndex < 0) return;
+    const chosen = transformedSources[bestScaleIndex];
+    let firstChunk = true;
+    forEachVisibleVolumetricChunk(
+      projectionParameters,
+      localPosition,
+      chosen,
+      () => {
+        if (firstChunk) {
+          beginScale(chosen, bestScaleIndex);
+          firstChunk = false;
+        }
+        callback(
+          chosen,
+          bestScaleIndex,
+          /*drawFraction=*/ 1,
+          bestPhysicalSpacing,
+          bestPixelSpacing,
+        );
+      },
+    );
+    return;
+  }
+
+  // Additive (default) mode: accumulate levels coarse-to-fine until the
+  // physical density target is met, subsampling within each level.
+  let totalPhysicalDensity = 0;
+  for (
+    let scaleIndex = transformedSources.length - 1;
+    scaleIndex >= 0 && totalPhysicalDensity < physicalDensityTarget;
+    --scaleIndex
+  ) {
+    const transformedSource = transformedSources[scaleIndex];
+    const { spec, physicalVolume, sliceFraction, physicalDensity } =
+      computePerLevelDensity(transformedSource);
 
     let firstChunk = true;
     const newTotalPhysicalDensity = totalPhysicalDensity + physicalDensity;

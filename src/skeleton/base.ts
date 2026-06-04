@@ -18,6 +18,11 @@ import type { DataType } from "#src/util/data_type.js";
 
 export const SKELETON_LAYER_RPC_ID = "skeleton/SkeletonLayer";
 
+export const SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_RPC_ID =
+  "skeleton/SpatiallyIndexedSkeletonRenderLayer";
+export const SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_UPDATE_SOURCES_RPC_ID =
+  "skeleton/SpatiallyIndexedSkeletonRenderLayer.updateSources";
+
 export interface VertexAttributeInfo {
   dataType: DataType;
   numComponents: number;

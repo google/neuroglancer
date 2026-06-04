@@ -88,6 +88,36 @@ export function getVisibleSegments(state: VisibleSegmentsState) {
     : state.visibleSegments;
 }
 
+export function addSegmentToVisibleSets(
+  state: VisibleSegmentsState,
+  segmentId: bigint,
+  options: {
+    includeTemporary?: boolean;
+  } = {},
+) {
+  state.visibleSegments.add(segmentId);
+  if (options.includeTemporary ?? state.useTemporaryVisibleSegments.value) {
+    state.temporaryVisibleSegments.add(segmentId);
+  }
+}
+
+export function removeSegmentFromVisibleSets(
+  state: VisibleSegmentsState,
+  segmentId: bigint,
+  options: {
+    includeTemporary?: boolean;
+    deselect?: boolean;
+  } = {},
+) {
+  state.visibleSegments.delete(segmentId);
+  if (options.includeTemporary ?? state.useTemporaryVisibleSegments.value) {
+    state.temporaryVisibleSegments.delete(segmentId);
+  }
+  if (options.deselect ?? false) {
+    state.selectedSegments.delete(segmentId);
+  }
+}
+
 export function getSegmentEquivalences(state: VisibleSegmentsState) {
   return state.useTemporarySegmentEquivalences.value
     ? state.temporarySegmentEquivalences

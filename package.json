@@ -185,6 +185,25 @@
       "neuroglancer/datasource/brainmaps:disabled": "./src/util/false.ts",
       "default": "./src/datasource/brainmaps/register_credentials_provider.ts"
     },
+    "#datasource/catmaid/backend": {
+      "neuroglancer/datasource/catmaid:enabled": "./src/datasource/catmaid/backend.ts",
+      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
+      "neuroglancer/datasource/catmaid:disabled": "./src/util/false.ts",
+      "default": "./src/datasource/catmaid/backend.ts"
+    },
+    "#datasource/catmaid/register_default": {
+      "neuroglancer/datasource/catmaid:enabled": "./src/datasource/catmaid/register_default.ts",
+      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
+      "neuroglancer/datasource/catmaid:disabled": "./src/util/false.ts",
+      "default": "./src/datasource/catmaid/register_default.ts"
+    },
+    "#datasource/catmaid/register_credentials_provider": {
+      "neuroglancer/python": "./src/util/false.ts",
+      "neuroglancer/datasource/catmaid:enabled": "./src/datasource/catmaid/register_credentials_provider.ts",
+      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
+      "neuroglancer/datasource/catmaid:disabled": "./src/util/false.ts",
+      "default": "./src/datasource/catmaid/register_credentials_provider.ts"
+    },
     "#datasource/deepzoom/backend": {
       "neuroglancer/datasource/deepzoom:enabled": "./src/datasource/deepzoom/backend.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
@@ -379,6 +398,24 @@
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
       "neuroglancer/datasource/zarr:disabled": "./src/util/false.ts",
       "default": "./src/datasource/zarr/register_default.ts"
+    },
+    "#datasource/zarr-vectors/backend": {
+      "neuroglancer/datasource/zarr-vectors:enabled": "./src/datasource/zarr-vectors/backend.ts",
+      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
+      "neuroglancer/datasource/zarr-vectors:disabled": "./src/util/false.ts",
+      "default": "./src/datasource/zarr-vectors/backend.ts"
+    },
+    "#datasource/zarr-vectors/async_computation": {
+      "neuroglancer/datasource/zarr-vectors:enabled": "./src/datasource/zarr-vectors/async_computation.ts",
+      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
+      "neuroglancer/datasource/zarr-vectors:disabled": "./src/util/false.ts",
+      "default": "./src/datasource/zarr-vectors/async_computation.ts"
+    },
+    "#datasource/zarr-vectors/register_default": {
+      "neuroglancer/datasource/zarr-vectors:enabled": "./src/datasource/zarr-vectors/register_default.ts",
+      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
+      "neuroglancer/datasource/zarr-vectors:disabled": "./src/util/false.ts",
+      "default": "./src/datasource/zarr-vectors/register_default.ts"
     },
     "#kvstore/byte_range/register": {
       "neuroglancer/kvstore/byte_range:enabled": "./src/kvstore/byte_range/register.ts",

@@ -63,6 +63,15 @@ function formatPixelNumber(x: number) {
 export interface RenderScaleWidgetOptions {
   histogram: RenderScaleHistogram;
   target: TrackableValueInterface<number>;
+  /**
+   * Optional unit string appended to formatted target / hover values
+   * in the widget's legend.  When omitted, falls back to the
+   * widget-class default (e.g. "nm" for
+   * `SpatialSkeletonGridRenderScaleWidget`).  Pass a layer-derived
+   * value (e.g. the spatial coordinate-space unit) to label values
+   * correctly when the data isn't in nanometres.
+   */
+  unitOfTarget?: string;
 }
 
 export class RenderScaleWidget extends RefCounted {
@@ -74,7 +83,8 @@ export class RenderScaleWidget extends RefCounted {
   legendSpatialScale = document.createElement("div");
   legendChunks = document.createElement("div");
   protected logScaleOrigin = renderScaleHistogramOrigin;
-  protected unitOfTarget = "px";
+  protected logScaleBinSize = renderScaleHistogramBinSize;
+  unitOfTarget = "px";
   private ctx = this.canvas.getContext("2d")!;
   hoverTarget = new WatchableValue<[number, number] | undefined>(undefined);
   private throttledUpdateView = this.registerCancellable(
@@ -94,8 +104,7 @@ export class RenderScaleWidget extends RefCounted {
     }
     this.hoverTarget.value = undefined;
     const logScaleMax = Math.round(
-      this.logScaleOrigin +
-        numRenderScaleHistogramBins * renderScaleHistogramBinSize,
+      this.logScaleOrigin + numRenderScaleHistogramBins * this.logScaleBinSize,
     );
     const targetValue = clampToInterval(
       [2 ** this.logScaleOrigin, 2 ** (logScaleMax - 1)],
@@ -145,7 +154,11 @@ export class RenderScaleWidget extends RefCounted {
     const getTargetValue = (event: MouseEvent) => {
       const position =
         (event.offsetX / canvas.width) * numRenderScaleHistogramBins;
-      return getRenderScaleFromHistogramOffset(position, this.logScaleOrigin);
+      return getRenderScaleFromHistogramOffset(
+        position,
+        this.logScaleOrigin,
+        this.logScaleBinSize,
+      );
     };
     this.registerEventListener(canvas, "pointermove", (event: MouseEvent) => {
       this.hoverTarget.value = [getTargetValue(event), event.offsetY];
@@ -190,6 +203,16 @@ export class RenderScaleWidget extends RefCounted {
   reset() {
     this.hoverTarget.value = undefined;
     this.target.reset();
+  }
+
+  protected getLegendChunkCounts(
+    totalPresent: number,
+    totalNotPresent: number,
+  ) {
+    return {
+      presentCount: totalPresent,
+      totalCount: totalPresent + totalNotPresent,
+    };
   }
 
   updateView() {
@@ -256,7 +279,11 @@ export class RenderScaleWidget extends RefCounted {
     let hoverSpatialScale: number | undefined = undefined;
     if (hoverValue !== undefined) {
       const i = Math.floor(
-        getRenderScaleHistogramOffset(hoverValue[0], this.logScaleOrigin),
+        getRenderScaleHistogramOffset(
+          hoverValue[0],
+          this.logScaleOrigin,
+          this.logScaleBinSize,
+        ),
       );
       if (i >= 0 && i < numRenderScaleHistogramBins) {
         let sum = 0;
@@ -305,10 +332,10 @@ export class RenderScaleWidget extends RefCounted {
     } else {
       this.legendSpatialScale.textContent = "";
     }
+    const { presentCount: legendPresentCount, totalCount: legendTotalCount } =
+      this.getLegendChunkCounts(totalPresent, totalNotPresent);
 
-    this.legendChunks.textContent = `${totalPresent}/${
-      totalPresent + totalNotPresent
-    }`;
+    this.legendChunks.textContent = `${legendPresentCount}/${legendTotalCount}`;
 
     const spatialScaleColors = sortedSpatialScales.map((spatialScale) => {
       const saturation = spatialScale === hoverSpatialScale ? 0.5 : 1;
@@ -357,7 +384,11 @@ export class RenderScaleWidget extends RefCounted {
       const value = targetValue;
       ctx.fillStyle = "#fff";
       const startOffset = binToCanvasX(
-        getRenderScaleHistogramOffset(value, this.logScaleOrigin),
+        getRenderScaleHistogramOffset(
+          value,
+          this.logScaleOrigin,
+          this.logScaleBinSize,
+        ),
       );
       const lineWidth = 1;
       ctx.fillRect(Math.floor(startOffset), 0, lineWidth, height);
@@ -367,7 +398,11 @@ export class RenderScaleWidget extends RefCounted {
       const value = hoverValue[0];
       ctx.fillStyle = "#888";
       const startOffset = binToCanvasX(
-        getRenderScaleHistogramOffset(value, this.logScaleOrigin),
+        getRenderScaleHistogramOffset(
+          value,
+          this.logScaleOrigin,
+          this.logScaleBinSize,
+        ),
       );
       const lineWidth = 1;
       ctx.fillRect(Math.floor(startOffset), 0, lineWidth, height);
@@ -376,11 +411,62 @@ export class RenderScaleWidget extends RefCounted {
 }
 
 export class VolumeRenderingRenderScaleWidget extends RenderScaleWidget {
-  protected unitOfTarget = "samples";
+  unitOfTarget = "samples";
   protected logScaleOrigin = 1;
 
   getWheelMoveValue(event: WheelEvent) {
     return -event.deltaY;
+  }
+}
+
+export class SpatialSkeletonGridRenderScaleWidget extends RenderScaleWidget {
+  unitOfTarget = "nm";
+
+  updateView() {
+    this.logScaleOrigin = this.histogram.logScaleOrigin;
+    this.logScaleBinSize = this.histogram.logScaleBinSize;
+    super.updateView();
+  }
+
+  protected getLegendChunkCounts(
+    totalPresent: number,
+    totalNotPresent: number,
+  ) {
+    // When hovering, the base class already filtered to the hovered row.
+    if (this.hoverTarget.value !== undefined) {
+      return {
+        presentCount: totalPresent,
+        totalCount: totalPresent + totalNotPresent,
+      };
+    }
+    // When not hovering, show counts only for the row closest to the target spacing.
+    const { histogram, target } = this;
+    const { value: histogramData, spatialScales } = histogram;
+    let closestScale: number | undefined;
+    let closestLogDist = Infinity;
+    const logTarget = Math.log2(target.value);
+    for (const scale of spatialScales.keys()) {
+      const dist = Math.abs(Math.log2(scale) - logTarget);
+      if (dist < closestLogDist) {
+        closestLogDist = dist;
+        closestScale = scale;
+      }
+    }
+    if (closestScale === undefined) {
+      return {
+        presentCount: totalPresent,
+        totalCount: totalPresent + totalNotPresent,
+      };
+    }
+    const row = spatialScales.get(closestScale)!;
+    const base = 2 * row * numRenderScaleHistogramBins;
+    let present = 0;
+    let notPresent = 0;
+    for (let bin = 0; bin < numRenderScaleHistogramBins; ++bin) {
+      present += histogramData[base + bin];
+      notPresent += histogramData[base + bin + numRenderScaleHistogramBins];
+    }
+    return { presentCount: present, totalCount: present + notPresent };
   }
 }
 
@@ -404,10 +490,23 @@ export function renderScaleLayerControl<
 ): LayerControlFactory<LayerType, RenderScaleWidget> {
   return {
     makeControl: (layer, context) => {
-      const { histogram, target } = getter(layer);
+      const options = getter(layer);
+      const { histogram, target } = options;
       const control = context.registerDisposer(
         new widgetClass(histogram, target),
       );
+      if (options.unitOfTarget !== undefined) {
+        // Public-property assignment overrides the widget-class
+        // default (e.g. "nm" baked into
+        // `SpatialSkeletonGridRenderScaleWidget`).  Used to label the
+        // legend values with the layer's actual spatial unit so a
+        // millimetre-data layer doesn't read as "339 nm".  The
+        // following `updateView()` re-runs the label-formatting code
+        // with the new unit; the constructor's initial paint already
+        // ran with the default before we got here.
+        control.unitOfTarget = options.unitOfTarget;
+        control.updateView();
+      }
       return { control, controlElement: control.element };
     },
     activateTool: (activation, control) => {

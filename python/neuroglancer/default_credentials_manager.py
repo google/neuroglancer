@@ -14,6 +14,7 @@
 
 from . import (
     boss_credentials,
+    catmaid_credentials,
     credentials_provider,
     dvid_credentials,
     google_credentials,
@@ -42,6 +43,13 @@ default_credentials_manager.register(
 default_credentials_manager.register(
     "DVID",
     lambda parameters: dvid_credentials.get_tokenbased_application_default_credentials_provider(
+        parameters
+    ),
+)
+
+default_credentials_manager.register(
+    "CATMAID",
+    lambda parameters: catmaid_credentials.CatmaidAnonymousCredentialsProvider(
         parameters
     ),
 )
