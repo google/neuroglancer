@@ -213,6 +213,13 @@ compresso
 Each chunk is encoded in `Compresso format
 <https://vcg.seas.harvard.edu/publications/compresso-efficient-compression-of-segmentation-data-for-connectomics>`__.
 
+crackle
+~~~~~~~
+
+Each chunk is encoded in `crackle format
+<https://github.com/seung-lab/crackle>`__.
+
+
 2-d image format encodings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
