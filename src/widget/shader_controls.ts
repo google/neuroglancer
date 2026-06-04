@@ -60,7 +60,7 @@ export interface ShaderControlsOptions {
   toolId?: string;
   // Toggle controlling whether inactive controls are hidden. Owned and
   // persisted by the layer; when omitted a non-persisted toggle is created.
-  hideInactiveControls?: TrackableBoolean;
+  hideInactiveShaderControls?: TrackableBoolean;
 }
 
 function getShaderLayerControlFactory<LayerType extends UserLayer>(
@@ -174,7 +174,7 @@ export class ShaderControls extends Tab {
   private controlDisposer: RefCounted | undefined = undefined;
   private controlsContainer: HTMLDivElement;
   private hiddenCountElement: HTMLSpanElement;
-  private hideInactiveControls: TrackableBoolean;
+  private hideInactiveShaderControls: TrackableBoolean;
   private toolId: string;
   constructor(
     public state: ShaderControlState,
@@ -187,8 +187,8 @@ export class ShaderControls extends Tab {
     this.toolId = toolId;
     // The layer owns and persists this toggle; fall back to a non-persisted
     // one if a caller doesn't supply it.
-    const hideInactiveControls = (this.hideInactiveControls =
-      options.hideInactiveControls ?? new TrackableBoolean(false));
+    const hideInactiveShaderControls = (this.hideInactiveShaderControls =
+      options.hideInactiveShaderControls ?? new TrackableBoolean(false));
     const { element } = this;
     element.style.display = "contents";
 
@@ -203,7 +203,7 @@ export class ShaderControls extends Tab {
       " uniforms were eliminated by the GLSL compiler, e.g. controls only" +
       " referenced inside an `if (checkbox)` branch that's currently false).";
     const checkbox = this.registerDisposer(
-      new TrackableBooleanCheckbox(hideInactiveControls),
+      new TrackableBooleanCheckbox(hideInactiveShaderControls),
     );
     hideInactiveControl.appendChild(checkbox.element);
     hideInactiveControl.appendChild(
@@ -229,7 +229,7 @@ export class ShaderControls extends Tab {
     );
     this.registerDisposer(controls.changed.add(scheduleUpdate));
     this.registerDisposer(state.activeControls.changed.add(scheduleUpdate));
-    this.registerDisposer(hideInactiveControls.changed.add(scheduleUpdate));
+    this.registerDisposer(hideInactiveShaderControls.changed.add(scheduleUpdate));
     this.updateControls();
   }
 
@@ -244,7 +244,7 @@ export class ShaderControls extends Tab {
       shaderControlState: this.state,
       legendShaderOptions: this.options.legendShaderOptions,
     });
-    const hideInactive = this.hideInactiveControls.value;
+    const hideInactive = this.hideInactiveShaderControls.value;
     const activeControls = this.state.activeControls.value;
     let hiddenCount = 0;
     for (const name of this.state.state.keys()) {
