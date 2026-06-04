@@ -83,6 +83,12 @@ import { MultipleScaleBarTextures } from "#src/widget/scale_bar.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { SharedObject } from "#src/worker_rpc.js";
 
+// Turn on to see each of the offscreen textures
+// render order is from top left to bottom right
+// picking will not work as expected in a subdivision
+// of the full panel, pretend you are picking from the full panel
+const DEBUG_OFFSCREEN_TEXTURES = false;
+
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
   enableAdaptiveDownsampling: WatchableValueInterface<boolean>;
@@ -1419,6 +1425,17 @@ export class PerspectivePanel extends RenderedDataPanel {
     }
     this.offscreenFramebuffer.unbind();
 
+    if (DEBUG_OFFSCREEN_TEXTURES) {
+      const numTextures = OffscreenTextures.NUM_TEXTURES;
+      for (let i = 0; i < numTextures; i++) {
+        const texture = this.offscreenFramebuffer.colorBuffers[i].texture;
+        if (texture) {
+          this.setSubdividedGLClippedViewport(i, numTextures);
+          this.offscreenCopyHelper.draw(texture);
+        }
+      }
+      return true;
+    }
     // Draw the texture over the whole viewport.
     this.setGLClippedViewport();
     this.offscreenCopyHelper.draw(
