@@ -50,7 +50,7 @@ import { Tab } from "#src/widget/tab_view.js";
 const SHADER_JSON_KEY = "shader";
 const SHADER_CONTROLS_JSON_KEY = "shaderControls";
 const CODE_VISIBLE_KEY = "codeVisible";
-const hide_inactive_shader_controls_JSON_KEY = "hideInactiveShaderControls";
+const HIDE_INACTIVE_SHADER_CONTROLS_JSON_KEY = "hideInactiveShaderControls";
 
 export class SingleMeshUserLayer extends UserLayer {
   displayState = new SingleMeshDisplayState();
@@ -86,7 +86,7 @@ export class SingleMeshUserLayer extends UserLayer {
     super.restoreState(specification);
     this.codeVisible.restoreState(specification[CODE_VISIBLE_KEY]);
     this.hideInactiveShaderControls.restoreState(
-      specification[hide_inactive_shader_controls_JSON_KEY],
+      specification[HIDE_INACTIVE_SHADER_CONTROLS_JSON_KEY],
     );
     this.displayState.fragmentMain.restoreState(specification[SHADER_JSON_KEY]);
     this.displayState.shaderControlState.restoreState(
@@ -130,7 +130,7 @@ export class SingleMeshUserLayer extends UserLayer {
     x[SHADER_JSON_KEY] = this.displayState.fragmentMain.toJSON();
     x[SHADER_CONTROLS_JSON_KEY] = this.displayState.shaderControlState.toJSON();
     x[CODE_VISIBLE_KEY] = this.codeVisible.toJSON();
-    x[hide_inactive_shader_controls_JSON_KEY] = this.hideInactiveShaderControls.toJSON();
+    x[HIDE_INACTIVE_SHADER_CONTROLS_JSON_KEY] = this.hideInactiveShaderControls.toJSON();
     return x;
   }
 

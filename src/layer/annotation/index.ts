@@ -156,7 +156,7 @@ const LINKED_SEGMENTATION_LAYER_JSON_KEY = "linkedSegmentationLayer";
 const FILTER_BY_SEGMENTATION_JSON_KEY = "filterBySegmentation";
 const IGNORE_NULL_SEGMENT_FILTER_JSON_KEY = "ignoreNullSegmentFilter";
 const CODE_VISIBLE_KEY = "codeVisible";
-const hide_inactive_shader_controls_JSON_KEY = "hideInactiveShaderControls";
+const HIDE_INACTIVE_SHADER_CONTROLS_JSON_KEY = "hideInactiveShaderControls";
 
 class LinkedSegmentationLayers extends RefCounted {
   changed = new NullarySignal();
@@ -460,7 +460,7 @@ export class AnnotationUserLayer extends Base {
     this.linkedSegmentationLayers.restoreState(specification);
     this.codeVisible.restoreState(specification[CODE_VISIBLE_KEY]);
     this.hideInactiveShaderControls.restoreState(
-      specification[hide_inactive_shader_controls_JSON_KEY],
+      specification[HIDE_INACTIVE_SHADER_CONTROLS_JSON_KEY],
     );
     this.localAnnotationsJson = specification[ANNOTATIONS_JSON_KEY];
     const properties = verifyOptionalObjectProperty(
@@ -743,7 +743,7 @@ export class AnnotationUserLayer extends Base {
     x[CROSS_SECTION_RENDER_SCALE_JSON_KEY] =
       this.annotationCrossSectionRenderScaleTarget.toJSON();
     x[CODE_VISIBLE_KEY] = this.codeVisible.toJSON();
-    x[hide_inactive_shader_controls_JSON_KEY] = this.hideInactiveShaderControls.toJSON();
+    x[HIDE_INACTIVE_SHADER_CONTROLS_JSON_KEY] = this.hideInactiveShaderControls.toJSON();
     x[PROJECTION_RENDER_SCALE_JSON_KEY] =
       this.annotationProjectionRenderScaleTarget.toJSON();
     if (this.localAnnotations !== undefined) {
