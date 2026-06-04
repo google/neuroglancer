@@ -207,7 +207,7 @@ export class ShaderControls extends Tab {
     );
     hideInactiveControl.appendChild(checkbox.element);
     hideInactiveControl.appendChild(
-      document.createTextNode("Hide inactive controls"),
+      document.createTextNode("Hide inactive shader controls"),
     );
     // Trailing "(X hidden)" annotation, updated by `updateControls()`.
     const hiddenCountElement = (this.hiddenCountElement =
