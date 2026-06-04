@@ -155,6 +155,18 @@ export class EraserTool extends Tool<Viewer> {
       const bounds = mouseState.pose?.position.coordinateSpace.value.bounds;
       if (!bounds) return;
 
+      // Only erase when the eraser center is inside the volume. Without this a
+      // stroke dragged past the edge clamps onto the boundary and smears a line
+      // of edge voxels.
+      for (let i = 0; i < 3; i++) {
+        if (
+          position[i] < bounds.lowerBounds[i] ||
+          position[i] >= bounds.upperBounds[i]
+        ) {
+          return;
+        }
+      }
+
       // Stamp one filled eraser circle centered at `center` (spatial XYZ).
       const stampCircle = (center: vec3) => {
         for (let dx = -xRange; dx <= xRange; dx++) {
