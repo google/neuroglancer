@@ -15,6 +15,7 @@
  */
 
 import { debounce } from "lodash-es";
+import "#src/widget/shader_controls.css";
 import type { DisplayContext } from "#src/display_context.js";
 import type { UserLayer, UserLayerConstructor } from "#src/layer/index.js";
 import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
@@ -180,33 +181,29 @@ export class ShaderControls extends Tab {
     const { element } = this;
     element.style.display = "contents";
 
-    // Header row with the "Hide inactive controls" toggle. Built once and
-    // never torn down by `updateControls()`, so its UI state is stable
-    // across shader recompiles.
-    const header = document.createElement("label");
-    header.className = "neuroglancer-shader-controls-hide-inactive";
-    header.style.display = "flex";
-    header.style.alignItems = "center";
-    header.style.gap = "4px";
-    header.style.fontSize = "smaller";
+    // "Hide inactive controls" toggle. Built once and never torn down by
+    // `updateControls()`, so its UI state is stable across shader recompiles.
+    // The tooltip lives on the label so hovering the text shows it too.
+    const hideInactiveControl = document.createElement("label");
+    hideInactiveControl.className =
+      "neuroglancer-shader-controls-hide-inactive";
+    hideInactiveControl.title =
+      "Hide #uicontrols that have no effect on the current render (their" +
+      " uniforms were eliminated by the GLSL compiler, e.g. controls only" +
+      " referenced inside an `if (checkbox)` branch that's currently false).";
     const checkbox = this.registerDisposer(
-      new TrackableBooleanCheckbox(state.hideInactiveControls, {
-        enabledTitle:
-          "Show all #uicontrols (including ones with no effect on the current render).",
-        disabledTitle:
-          "Hide #uicontrols whose uniforms are eliminated by the GLSL compiler" +
-          " for the current shader (e.g. controls only referenced inside an" +
-          " `if (checkbox)` branch that's currently false).",
-      }),
+      new TrackableBooleanCheckbox(state.hideInactiveControls),
     );
-    header.appendChild(checkbox.element);
-    header.appendChild(document.createTextNode("Hide inactive controls"));
+    hideInactiveControl.appendChild(checkbox.element);
+    hideInactiveControl.appendChild(
+      document.createTextNode("Hide inactive controls"),
+    );
     // Trailing "(X hidden)" annotation, updated by `updateControls()`.
     const hiddenCountElement = (this.hiddenCountElement =
       document.createElement("span"));
     hiddenCountElement.className = "neuroglancer-shader-controls-hidden-count";
-    header.appendChild(hiddenCountElement);
-    element.appendChild(header);
+    hideInactiveControl.appendChild(hiddenCountElement);
+    element.appendChild(hideInactiveControl);
 
     // Separate container so the rebuild loop only tears down the controls,
     // not the header.
@@ -228,10 +225,10 @@ export class ShaderControls extends Tab {
   }
 
   updateControls() {
-    const container = this.controlsContainer;
+    const { controlsContainer } = this;
     if (this.controlDisposer !== undefined) {
       this.controlDisposer.dispose();
-      removeChildren(container);
+      removeChildren(controlsContainer);
     }
     const controlDisposer = (this.controlDisposer = new RefCounted());
     const layerShaderControlsGetter = () => ({
@@ -254,7 +251,7 @@ export class ShaderControls extends Tab {
         ++hiddenCount;
         continue;
       }
-      container.appendChild(
+      controlsContainer.appendChild(
         addLayerControlToOptionsTab(
           controlDisposer,
           this.layer,
