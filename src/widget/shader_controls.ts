@@ -229,7 +229,9 @@ export class ShaderControls extends Tab {
     );
     this.registerDisposer(controls.changed.add(scheduleUpdate));
     this.registerDisposer(state.activeControls.changed.add(scheduleUpdate));
-    this.registerDisposer(hideInactiveShaderControls.changed.add(scheduleUpdate));
+    this.registerDisposer(
+      hideInactiveShaderControls.changed.add(scheduleUpdate),
+    );
     this.updateControls();
   }
 
