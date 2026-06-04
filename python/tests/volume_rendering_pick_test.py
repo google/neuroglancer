@@ -116,7 +116,7 @@ def test_volume_rendering_picking_does_not_occlude_mesh(webdriver):
     assert action_state is not None
 
     image_pick = action_state.selected_values.get("image")
-    assert image_pick is not None, (
-        "Image volume was not picked when it is in front of the mesh"
-    )
+    assert (
+        image_pick is not None
+    ), "Image volume was not picked when it is in front of the mesh"
     # We don't assert the value because currently volume rendering reports 0
