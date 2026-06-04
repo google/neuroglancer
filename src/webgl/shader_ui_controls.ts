@@ -1502,13 +1502,11 @@ export class ShaderControlState
         this.controls.value = result.controls;
       }
     }
-    // The active-controls set was derived from the previous shader and no
-    // longer matches the new control names; clear it so the UI shows
-    // everything until the next shader links.
+    // The active-controls set was derived from the previous shader. Forget the
+    // last reported program so `reportLinkedShader` recomputes it on the next
+    // link, rather than clearing `activeControls` here: linking happens fast
+    // enough that clearing would just flicker the controls in and back out.
     this.lastReportedProgram = undefined;
-    if (this.activeControls.value !== undefined) {
-      this.activeControls.value = undefined;
-    }
     this.parseResultChanged.dispatch();
   }
 
