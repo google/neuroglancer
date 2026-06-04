@@ -47,6 +47,9 @@ The root value must be a JSON object with the following members:
     specified as `[[x, y, z]]`.
   - `"encoding"`: Specifies the [encoding of the chunk data](#chunk-encoding). Must be a string
     value equal (case-insensitively) to the name of one of the supported `VolumeChunkEncoding`
+    values specified in [base.ts](base.ts), including [`"raw"`](#raw-chunk-encoding),
+    [`"jpeg"`](#jpeg-chunk-encoding),
+    [`"compressed_segmentation"`](#compressed_segmentation-chunk-encoding), `"png"`, `"compresso"`,
     values specified in [base.ts](base.ts). May be one of [`"raw"`](#raw-chunk-encoding),
     [`"jpeg"`](#jpeg-chunk-encoding), [`"compressed_segmentation"`](#compressed_segmentation-chunk-encoding), `"png"`, [`"compresso"`](#compresso-chunk-encoding),
     `"jxl"`, and [`"crackle"`](#crackle-chunk-encoding).
