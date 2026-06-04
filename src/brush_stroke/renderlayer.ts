@@ -61,7 +61,11 @@ interface AttachmentState {
 export class BrushStrokeLayer extends RefCounted {
   public gpuBrushHashTable: GPUHashTable<any>;
   public gpuSegmentStatedColorHashTable: GPUHashTable<any> | undefined;
+  // (highlight overlay only) the live paint/erase overlay, so the highlight
+  // can yield to in-progress edits voxel-by-voxel instead of masking them.
+  public gpuEditHashTable: GPUHashTable<any> | undefined;
   public brushHashTableManager = new HashMapShaderManager("brushStroke");
+  public editOverlayHashTableManager = new HashMapShaderManager("editOverlay");
   public segmentColorShaderManager = new SegmentColorShaderManager(
     "segmentColorHash",
   );
@@ -77,12 +81,29 @@ export class BrushStrokeLayer extends RefCounted {
     public chunkManager: ChunkManager,
     public brushHashTable: BrushHashTable,
     public displayState: SegmentationDisplayState,
+    // When true, this layer is a transient *highlight* overlay: present voxels
+    // are drawn in their segment color brightened toward white (matching
+    // neuroglancer's native hover-highlight look), to highlight one instance
+    // (a connected component that shares its class value with siblings). The
+    // hash table stores the class id as the value so the color resolves.
+    // Painting overlays leave this false.
+    public highlight = false,
+    // (highlight overlay only) the painting layer's brush/erase hash table. An
+    // edit there always wins over the highlight: an erased voxel (value 0) must
+    // show background, not the brightened color — render priority, not a
+    // CPU-side suppression hack.
+    public editHashTable?: BrushHashTable,
   ) {
     super();
     // Create GPU hash table for brush strokes
     this.gpuBrushHashTable = this.registerDisposer(
       GPUHashTable.get(this.chunkManager.gl, brushHashTable),
     );
+    if (editHashTable !== undefined) {
+      this.gpuEditHashTable = this.registerDisposer(
+        GPUHashTable.get(this.chunkManager.gl, editHashTable),
+      );
+    }
   }
 
   get gl() {
@@ -109,7 +130,7 @@ function BrushStrokeRenderLayer<
         this,
         this.gl,
         {
-          memoizeKey: "brushStroke",
+          memoizeKey: base.highlight ? "highlightStroke" : "brushStroke",
           parameters: constantWatchableValue(undefined),
           defineShader: (builder: ShaderBuilder) => {
             this.defineShader(builder);
@@ -123,6 +144,70 @@ function BrushStrokeRenderLayer<
     }
 
     defineShader(builder: ShaderBuilder) {
+      if (this.base.highlight) {
+        // Highlight overlay: draw present voxels in their *segment* color
+        // brightened toward white — matching neuroglancer's native
+        // hover-highlight look. The hash stores the class id as the value, so
+        // the color resolves the same way the canonical layer does. No
+        // visibility/blend uniforms; alpha-blended on top in draw().
+        this.base.brushHashTableManager.defineShader(builder);
+        this.base.segmentColorShaderManager.defineShader(builder);
+        this.base.segmentStatedColorShaderManager.defineShader(builder);
+        // The live paint/erase overlay, so an in-progress edit overrides the
+        // highlight at that voxel (see the discard in fragment main).
+        const hasEditOverlay = this.base.editHashTable !== undefined;
+        if (hasEditOverlay) {
+          this.base.editOverlayHashTableManager.defineShader(builder);
+        }
+        builder.addUniform("highp mat4", "uViewMatrix");
+        builder.addUniform("highp mat4", "uProjectionMatrix");
+        builder.addVarying("highp vec2", "vScreenPosition");
+        builder.setVertexMain(`
+          vec2 positions[6] = vec2[6](
+            vec2(-1.0,-1.0), vec2(1.0,-1.0), vec2(1.0,1.0),
+            vec2(-1.0,-1.0), vec2(1.0,1.0), vec2(-1.0,1.0));
+          gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);
+          vScreenPosition = positions[gl_VertexID];
+        `);
+        builder.setFragmentMain(`
+          vec4 viewPos = inverse(uProjectionMatrix) * vec4(vScreenPosition, 0.0, 1.0);
+          if (viewPos.w != 0.0) viewPos /= viewPos.w;
+          vec3 worldPos = (inverse(uViewMatrix) * viewPos).xyz;
+          ivec3 voxelPos = ivec3(round(worldPos));
+          if (voxelPos.x < 0 || voxelPos.y < 0 || voxelPos.z < 0) discard;
+          uint x1 = uint(voxelPos.x), y1 = uint(voxelPos.y), z1 = uint(voxelPos.z);
+          uint h1 = ((x1 * 73u) * 1271u) ^ ((y1 * 513u) * 1345u) ^ ((z1 * 421u) * 675u);
+          uint h2 = ((x1 * 127u) * 337u) ^ ((y1 * 111u) * 887u) ^ ((z1 * 269u) * 325u);
+          uint64_t key;
+          key.value[0] = h1;
+          key.value[1] = h2;
+          ${
+            hasEditOverlay
+              ? `// A pending paint/erase at this voxel owns it — let the edit
+             // overlay render it (erase → background, paint → its color)
+             // instead of masking with the highlight.
+             uint64_t editVal;
+             if (editOverlay_get(key, editVal)) { discard; }`
+              : ""
+          }
+          uint64_t val;
+          if (brushStroke_get(key, val)) {
+            vec4 rgba;
+            vec3 segColor;
+            if (${this.base.segmentStatedColorShaderManager.getFunctionName}(val, rgba)) {
+              segColor = rgba.rgb;
+            } else {
+              segColor = segmentColorHash(val);
+            }
+            // Brighten toward white (the native "selected/hovered" look).
+            vec3 hi = mix(segColor, vec3(1.0, 1.0, 1.0), 0.5);
+            emit(vec4(hi, 0.85), 0u);
+          } else {
+            discard;
+          }
+        `);
+        return;
+      }
       // Add opacity uniforms to match parent segmentation layer
       builder.addUniform("highp float", "uSelectedAlpha");
       builder.addUniform("highp float", "uNotSelectedAlpha");
@@ -281,6 +366,39 @@ function BrushStrokeRenderLayer<
       // Initialize brush hash table for both views
       brushHashTableManager.enable(gl, shader, gpuBrushHashTable);
 
+      if (this.base.highlight) {
+        // Resolve segment colors the same way the canonical layer does (the
+        // hash stores the class id), then the shader brightens them.
+        const colorGroupState = displayState.segmentationColorGroupState.value;
+        segmentColorShaderManager.enable(
+          gl, shader, colorGroupState.segmentColorHash.value,
+        );
+        const statedColors = displayState.useTempSegmentStatedColors2d.value
+          ? displayState.tempSegmentStatedColors2d.value
+          : displayState.segmentStatedColors.value;
+        if (statedColors.size > 0) {
+          let t = this.base.gpuSegmentStatedColorHashTable;
+          if (t === undefined || t.hashTable !== statedColors.hashTable) {
+            t?.dispose();
+            this.base.gpuSegmentStatedColorHashTable = t = GPUHashTable.get(
+              gl, statedColors.hashTable,
+            );
+          }
+          this.base.segmentStatedColorShaderManager.enable(gl, shader, t);
+        }
+        if (this.base.gpuEditHashTable !== undefined) {
+          this.base.editOverlayHashTableManager.enable(
+            gl, shader, this.base.gpuEditHashTable,
+          );
+        }
+        const sp = renderContext.sliceView.projectionParameters.value;
+        gl.uniformMatrix4fv(shader.uniform("uViewMatrix"), false, sp.viewMatrix);
+        gl.uniformMatrix4fv(
+          shader.uniform("uProjectionMatrix"), false, sp.projectionMat,
+        );
+        return;
+      }
+
       // Initialize segment color shader
       const colorGroupState = displayState.segmentationColorGroupState.value;
       segmentColorShaderManager.enable(
@@ -376,6 +494,15 @@ function BrushStrokeRenderLayer<
 
       shader.bind();
       this.initializeShader(shader, renderContext);
+
+      if (this.base.highlight) {
+        // Alpha-blend the brightened segment color on top of the slice.
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        gl.disable(gl.BLEND);
+        return;
+      }
 
       // Set up seamless blending with segmentation layer
       const layerCount = renderContext.sliceView.visibleLayerList.length;

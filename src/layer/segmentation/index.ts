@@ -531,7 +531,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   selectedAlpha = trackableAlphaValue(0.5);
   saturation = trackableAlphaValue(1.0);
   notSelectedAlpha = trackableAlphaValue(0);
-  hoverHighlight = new TrackableBoolean(true, true);
+  hoverHighlight = new TrackableBoolean(false, false);
   silhouetteRendering = new TrackableValue<number>(
     0,
     verifyFiniteNonNegativeFloat,
@@ -590,7 +590,9 @@ export class SegmentationUserLayer extends Base {
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
   codeVisible = new TrackableBoolean(true);
   brushHashTable = new BrushHashTable();
-  brushStrokeLayer: BrushStrokeLayer | null = null; // Reference to brush stroke layer for triggering redraws
+  brushStrokeLayer: BrushStrokeLayer | null = null;
+  highlightHashTable = new BrushHashTable();
+  highlightStrokeLayer: BrushStrokeLayer | null = null;
 
   graphConnection = new WatchableValue<
     SegmentationGraphSourceConnection | undefined
@@ -911,6 +913,23 @@ export class SegmentationUserLayer extends Base {
 
             // Clean up the base layer
             brushStrokeLayer.dispose();
+
+            // Per-instance highlight overlay (drawn on top, fixed color).
+            const highlightStrokeLayer = new BrushStrokeLayer(
+              this.manager.chunkManager,
+              this.highlightHashTable,
+              this.displayState,
+              true, // highlight overlay: brighten the segment color
+              this.brushHashTable, // edit overlay wins per-voxel over highlight
+            );
+            this.highlightStrokeLayer = highlightStrokeLayer;
+            loadedSubsource.addRenderLayer(
+              new SliceViewBrushStrokeLayer(
+                highlightStrokeLayer.addRef(),
+                this.sliceViewRenderScaleHistogram,
+              ),
+            );
+            highlightStrokeLayer.dispose();
           });
         }
       } else {
@@ -980,7 +999,7 @@ export class SegmentationUserLayer extends Base {
     if (
       layerSpec[json_keys.EQUIVALENCES_JSON_KEY] !== undefined &&
       explicitSpecs.find((spec) => spec.url === localEquivalencesUrl) ===
-        undefined
+      undefined
     ) {
       specs.push({
         url: localEquivalencesUrl,
