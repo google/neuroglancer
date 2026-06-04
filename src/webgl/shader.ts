@@ -16,6 +16,8 @@
 
 import type { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
+import type { ColormapBinName } from "#src/webgl/colormaps.js";
+import { ColormapTexture } from "#src/webgl/colormaps.js";
 import type { GL } from "#src/webgl/context.js";
 import type {
   ControlPointTexture,
@@ -33,6 +35,18 @@ export interface ShaderErrorMessage {
   file?: number;
   line?: number;
   message: string;
+}
+
+/**
+ * Back-compat colormap free-function (e.g. `colormapJet`, `colormapCubehelix`)
+ * referenced directly by a user's shader. Each entry triggers emission of a
+ * hidden sampler + wrapper bound to the named colormap. Populated on each
+ * compiled `ShaderProgram` by `addControlsToBuilder` and consumed by
+ * `setControlsInShader` to bind the texture per draw.
+ */
+export interface CompatColormap {
+  funcName: string;
+  name: ColormapBinName;
 }
 
 /**
@@ -173,6 +187,11 @@ export class ShaderProgram extends RefCounted {
     any,
     ControlPointTexture
   >();
+  colormapTextures: Map<any, ColormapTexture> = new Map<any, ColormapTexture>();
+  // Set once at compile time by `addControlsToBuilder` via an initializer; the
+  // empty default covers shaders that don't reference the legacy free
+  // functions (the overwhelming majority).
+  compatColormaps: readonly CompatColormap[] = [];
 
   constructor(
     public gl: GL,
@@ -290,6 +309,35 @@ export class ShaderProgram extends RefCounted {
     }
   }
 
+  /**
+   * Binds the colormap texture associated with `symbol` to its allocated
+   * texture unit and uploads `colormapName`'s LUT if cached, or kicks off
+   * a fetch if not. Lazily creates the ColormapTexture on first use.
+   *
+   * Returns `{ ready: false }` only when no colormap has ever been
+   * uploaded for this symbol AND the requested colormap isn't yet cached;
+   * the caller should skip its draw in that case. On every subsequent
+   * draw the texture stays bound (either to the requested or to the
+   * previously-uploaded colormap as a toggle-fallback).
+   */
+  bindAndUpdateColormapTexture(
+    symbol: symbol | string,
+    colormapName: ColormapBinName,
+  ): { ready: boolean } {
+    const textureUnit = this.textureUnits.get(symbol);
+    if (textureUnit === undefined) {
+      throw new Error(
+        `Invalid colormap texture unit symbol: ${String(symbol)}`,
+      );
+    }
+    let texture = this.colormapTextures.get(symbol);
+    if (texture === undefined) {
+      texture = this.registerDisposer(new ColormapTexture(this.gl));
+      this.colormapTextures.set(symbol, texture);
+    }
+    return texture.bindAndUpload(textureUnit, colormapName);
+  }
+
   disposed() {
     const { gl } = this;
     gl.deleteShader(this.vertexShader);
@@ -302,6 +350,7 @@ export class ShaderProgram extends RefCounted {
     this.attributes = <any>undefined;
     this.uniforms = <any>undefined;
     this.transferFunctionTextures = <any>undefined;
+    this.colormapTextures = <any>undefined;
   }
 }
 

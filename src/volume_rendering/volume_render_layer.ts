@@ -76,7 +76,6 @@ import {
 } from "#src/webgl/bounding_box.js";
 import type { GLBuffer } from "#src/webgl/buffer.js";
 import { getMemoizedBuffer } from "#src/webgl/buffer.js";
-import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
 import type {
   ParameterizedContextDependentShaderGetter,
   ParameterizedShaderGetterResult,
@@ -523,7 +522,6 @@ void main() {
 }
 `);
           }
-          builder.addFragmentCode(glsl_COLORMAPS);
           addControlsToBuilder(shaderBuilderState, builder);
           builder.addFragmentCode(
             "\n#define main userMain\n" +

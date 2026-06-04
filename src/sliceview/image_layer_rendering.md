@@ -191,6 +191,58 @@ The following parameters are supported:
 - `defaultColor`: Optional. The default color for new control points added via the UI control.
   Defaults to `#ffffff`, and must be specified as a hex string if provided `#rrggbb`.
 
+### `colormap` controls
+
+The `colormap` control type exposes a named colormap as a pure function `vec3(float)`, with a dropdown picker and gradient swatch in the UI. It does not know about image data, ranges, or channels — pair it with an `invlerp` (or any other source of a `[0, 1]` float) to map data into a color.
+
+Directive syntax:
+
+```glsl
+#uicontrol colormap <name>
+#uicontrol colormap <name> colormap(default="<colormap>")
+```
+
+The following parameters are supported:
+
+- `default`: Optional. The initial colormap to apply. Must be one of: `"grayscale"` (default), `"viridis"`, `"plasma"`, `"cividis"`, `"magma"`, `"coolwarm"`, `"rdbu"`, `"turbo"`, `"cubehelix"`.
+
+> **Note**: Changing the colormap in the UI recompiles the shader (the colormap is a compile-time constant).
+
+This directive makes the following shader function available:
+
+```glsl
+// Maps a normalized float [0, 1] → RGB color
+vec3 <name>(float t);
+```
+
+**Example — pair with `invlerp` for an image layer:**
+
+```glsl
+#uicontrol invlerp normalized
+#uicontrol colormap cmap colormap(default="viridis")
+void main() {
+  emitRGB(cmap(normalized()));
+}
+```
+
+**Example — volume rendering aware:**
+
+```glsl
+#uicontrol invlerp normalized
+#uicontrol colormap cmap colormap(default="magma")
+void main() {
+  float t = normalized();
+  vec3 color = cmap(t);
+  if (VOLUME_RENDERING) {
+    emitRGBA(vec4(color, t));
+  } else {
+    emitRGB(color);
+  }
+}
+```
+
+Because the colormap directive has no dependency on image data, the same function is also available in annotation shaders, segmentation shaders, and anywhere else `#uicontrol` directives are supported.
+
 ## API
 
 ### Retrieving voxel channel value

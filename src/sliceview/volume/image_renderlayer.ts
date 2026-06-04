@@ -22,7 +22,6 @@ import type { TrackableAlphaValue } from "#src/trackable_alpha.js";
 import type { TrackableBlendModeValue } from "#src/trackable_blend.js";
 import { BLEND_FUNCTIONS, BLEND_MODES } from "#src/trackable_blend.js";
 import { WatchableValue } from "#src/trackable_value.js";
-import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
 import type { WatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import {
   makeTrackableFragmentMain,
@@ -79,7 +78,6 @@ void emitTransparent() {
 void emitIntensity(float value) {
 }
 `);
-  builder.addFragmentCode(glsl_COLORMAPS);
   addControlsToBuilder(shaderBuilderState, builder);
   builder.setFragmentMainFunction(
     shaderCodeWithLineDirective(shaderBuilderState.parseResult.code),
