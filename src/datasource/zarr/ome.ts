@@ -731,9 +731,9 @@ export function parseOmeMetadata(
   attrs: any,
   zarrVersion: number,
 ): OmeMetadata | undefined {
-  const ome = attrs.ome;
-  const multiscales = ome == undefined ? attrs.multiscales : ome.multiscales; // >0.4
-  const omero = attrs.omero;
+  const { ome } = attrs;
+  const metadata = ome ?? attrs; // 0.5+ nests under `ome`; 0.4 keeps fields at root
+  const { multiscales, omero } = metadata;
 
   if (!Array.isArray(multiscales)) return undefined;
   const errors: string[] = [];
@@ -747,7 +747,7 @@ export function parseOmeMetadata(
       return undefined;
     }
 
-    const version = ome == undefined ? multiscale.version : ome.version; // >0.4
+    const version = ome?.version ?? multiscale.version; // 0.5+ moved version onto `ome`
 
     if (version === undefined) return undefined;
     if (!SUPPORTED_OME_MULTISCALE_VERSIONS.has(version)) {
