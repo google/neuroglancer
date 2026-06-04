@@ -1318,11 +1318,6 @@ export function getFallbackBuilderState(
   };
 }
 
-// JSON key under which `hideInactiveControls` is serialized inside the
-// shaderControlState object. The double-underscore prefix avoids collisions
-// with #uicontrol names (which by convention start with a letter).
-const HIDE_INACTIVE_JSON_KEY = "__hideInactiveControls";
-
 export class ShaderControlState
   extends RefCounted
   implements Trackable, WatchableValueInterface<ShaderControlMap>
@@ -1338,8 +1333,6 @@ export class ShaderControlState
   // for the most recently rendered shader. `undefined` means "not yet known"
   // (no shader has linked yet); UI treats that as "show everything".
   activeControls = new WatchableValue<Set<string> | undefined>(undefined);
-  // When true, the controls panel hides any control not in `activeControls`.
-  hideInactiveControls = new TrackableBoolean(false);
 
   private fragmentMainGeneration = -1;
   private dataContextGeneration = -1;
@@ -1366,9 +1359,6 @@ export class ShaderControlState
     );
     this.registerDisposer(
       this.dataContext.changed.add(() => this.handleFragmentMainChanged()),
-    );
-    this.registerDisposer(
-      this.hideInactiveControls.changed.add(this.changed.dispatch),
     );
     this.handleFragmentMainChanged();
     const self = this;
@@ -1600,11 +1590,6 @@ export class ShaderControlState
     if (value === undefined) return;
     const { state } = this;
     verifyObject(value);
-    if (Object.prototype.hasOwnProperty.call(value, HIDE_INACTIVE_JSON_KEY)) {
-      this.hideInactiveControls.restoreState(value[HIDE_INACTIVE_JSON_KEY]);
-    } else {
-      this.hideInactiveControls.reset();
-    }
     const controls = this.controls.value;
     if (controls === undefined) {
       this.unparsedJson = value;
@@ -1626,7 +1611,6 @@ export class ShaderControlState
   }
 
   reset() {
-    this.hideInactiveControls.reset();
     for (const controlState of this.state.values()) {
       controlState.trackable.reset();
     }
@@ -1642,11 +1626,6 @@ export class ShaderControlState
     if (unparsedJson !== undefined) return unparsedJson;
     const obj: any = {};
     let empty = true;
-    const hideInactiveJson = this.hideInactiveControls.toJSON();
-    if (hideInactiveJson !== undefined) {
-      obj[HIDE_INACTIVE_JSON_KEY] = hideInactiveJson;
-      empty = false;
-    }
     for (const [key, value] of state) {
       const valueJson = value.trackable.toJSON();
       if (valueJson !== undefined) {

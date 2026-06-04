@@ -156,6 +156,7 @@ const LINKED_SEGMENTATION_LAYER_JSON_KEY = "linkedSegmentationLayer";
 const FILTER_BY_SEGMENTATION_JSON_KEY = "filterBySegmentation";
 const IGNORE_NULL_SEGMENT_FILTER_JSON_KEY = "ignoreNullSegmentFilter";
 const CODE_VISIBLE_KEY = "codeVisible";
+const HIDE_INACTIVE_CONTROLS_JSON_KEY = "hideInactiveControls";
 
 class LinkedSegmentationLayers extends RefCounted {
   changed = new NullarySignal();
@@ -401,6 +402,7 @@ const Base = UserLayerWithAnnotationsMixin(UserLayer);
 export class AnnotationUserLayer extends Base {
   localAnnotations: LocalAnnotationSource | undefined;
   codeVisible = new TrackableBoolean(true);
+  hideInactiveControls = new TrackableBoolean(false);
   private localAnnotationProperties: WatchableValue<AnnotationPropertySpec[]> =
     new WatchableValue([]);
   private localAnnotationRelationships: string[];
@@ -430,6 +432,7 @@ export class AnnotationUserLayer extends Base {
       this.specificationChanged.dispatch,
     );
     this.codeVisible.changed.add(this.specificationChanged.dispatch);
+    this.hideInactiveControls.changed.add(this.specificationChanged.dispatch);
     this.annotationDisplayState.ignoreNullSegmentFilter.changed.add(
       this.specificationChanged.dispatch,
     );
@@ -456,6 +459,9 @@ export class AnnotationUserLayer extends Base {
     super.restoreState(specification);
     this.linkedSegmentationLayers.restoreState(specification);
     this.codeVisible.restoreState(specification[CODE_VISIBLE_KEY]);
+    this.hideInactiveControls.restoreState(
+      specification[HIDE_INACTIVE_CONTROLS_JSON_KEY],
+    );
     this.localAnnotationsJson = specification[ANNOTATIONS_JSON_KEY];
     const properties = verifyOptionalObjectProperty(
       specification,
@@ -737,6 +743,7 @@ export class AnnotationUserLayer extends Base {
     x[CROSS_SECTION_RENDER_SCALE_JSON_KEY] =
       this.annotationCrossSectionRenderScaleTarget.toJSON();
     x[CODE_VISIBLE_KEY] = this.codeVisible.toJSON();
+    x[HIDE_INACTIVE_CONTROLS_JSON_KEY] = this.hideInactiveControls.toJSON();
     x[PROJECTION_RENDER_SCALE_JSON_KEY] =
       this.annotationProjectionRenderScaleTarget.toJSON();
     if (this.localAnnotations !== undefined) {
@@ -858,7 +865,10 @@ class RenderingOptionsTab extends Tab {
           layer.annotationDisplayState.shaderControls,
           this.layer.manager.root.display,
           this.layer,
-          { visibility: this.visibility },
+          {
+            visibility: this.visibility,
+            hideInactiveControls: layer.hideInactiveControls,
+          },
         ),
       ).element,
     );

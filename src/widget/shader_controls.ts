@@ -18,7 +18,10 @@ import { debounce } from "lodash-es";
 import "#src/widget/shader_controls.css";
 import type { DisplayContext } from "#src/display_context.js";
 import type { UserLayer, UserLayerConstructor } from "#src/layer/index.js";
-import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
+import {
+  TrackableBoolean,
+  TrackableBooleanCheckbox,
+} from "#src/trackable_boolean.js";
 import { registerTool } from "#src/ui/tool.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeChildren } from "#src/util/dom.js";
@@ -55,6 +58,9 @@ export interface ShaderControlsOptions {
   legendShaderOptions?: LegendShaderOptions;
   visibility?: WatchableVisibilityPriority;
   toolId?: string;
+  // Toggle controlling whether inactive controls are hidden. Owned and
+  // persisted by the layer; when omitted a non-persisted toggle is created.
+  hideInactiveControls?: TrackableBoolean;
 }
 
 function getShaderLayerControlFactory<LayerType extends UserLayer>(
@@ -168,6 +174,7 @@ export class ShaderControls extends Tab {
   private controlDisposer: RefCounted | undefined = undefined;
   private controlsContainer: HTMLDivElement;
   private hiddenCountElement: HTMLSpanElement;
+  private hideInactiveControls: TrackableBoolean;
   private toolId: string;
   constructor(
     public state: ShaderControlState,
@@ -178,6 +185,10 @@ export class ShaderControls extends Tab {
     super(options.visibility);
     const { toolId = SHADER_CONTROL_TOOL_ID } = options;
     this.toolId = toolId;
+    // The layer owns and persists this toggle; fall back to a non-persisted
+    // one if a caller doesn't supply it.
+    const hideInactiveControls = (this.hideInactiveControls =
+      options.hideInactiveControls ?? new TrackableBoolean(false));
     const { element } = this;
     element.style.display = "contents";
 
@@ -192,7 +203,7 @@ export class ShaderControls extends Tab {
       " uniforms were eliminated by the GLSL compiler, e.g. controls only" +
       " referenced inside an `if (checkbox)` branch that's currently false).";
     const checkbox = this.registerDisposer(
-      new TrackableBooleanCheckbox(state.hideInactiveControls),
+      new TrackableBooleanCheckbox(hideInactiveControls),
     );
     hideInactiveControl.appendChild(checkbox.element);
     hideInactiveControl.appendChild(
@@ -218,9 +229,7 @@ export class ShaderControls extends Tab {
     );
     this.registerDisposer(controls.changed.add(scheduleUpdate));
     this.registerDisposer(state.activeControls.changed.add(scheduleUpdate));
-    this.registerDisposer(
-      state.hideInactiveControls.changed.add(scheduleUpdate),
-    );
+    this.registerDisposer(hideInactiveControls.changed.add(scheduleUpdate));
     this.updateControls();
   }
 
@@ -235,7 +244,7 @@ export class ShaderControls extends Tab {
       shaderControlState: this.state,
       legendShaderOptions: this.options.legendShaderOptions,
     });
-    const hideInactive = this.state.hideInactiveControls.value;
+    const hideInactive = this.hideInactiveControls.value;
     const activeControls = this.state.activeControls.value;
     let hiddenCount = 0;
     for (const name of this.state.state.keys()) {

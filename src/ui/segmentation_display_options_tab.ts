@@ -112,6 +112,9 @@ export class DisplayOptionsTab extends Tab {
                 {
                   visibility: this.visibility,
                   toolId: SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID,
+                  hideInactiveControls:
+                    layer.displayState.skeletonRenderingOptions
+                      .hideInactiveControls,
                 },
               ),
             ).element,
