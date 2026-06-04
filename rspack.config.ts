@@ -110,7 +110,8 @@ export default defineConfig((env, args) => {
       NEUROGLANCER_BRAINMAPS_CLIENT_ID: JSON.stringify(
         "639403125587-4k5hgdfumtrvur8v48e3pr7oo91d765k.apps.googleusercontent.com",
       ),
-
+      // NEUROGLANCER_USE_ACCORDIONS: false,
+      // NEUROGLANCER_ACCORDION_DEFAULT_EXPANDED: true,
       // NEUROGLANCER_CREDIT_LINK: JSON.stringify({url: '...', text: '...'}),
       // NEUROGLANCER_DEFAULT_STATE_FRAGMENT: JSON.stringify('gs://bucket/state.json'),
       // NEUROGLANCER_SHOW_LAYER_BAR_EXTRA_BUTTONS: true,

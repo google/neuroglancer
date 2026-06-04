@@ -37,6 +37,7 @@ export interface LayerControlLabelOptions<
   title?: string;
   toolDescription?: string;
   toolJson: any;
+  sectionKey?: string;
   isValid?: (layer: LayerType) => WatchableValueInterface<boolean>;
 }
 

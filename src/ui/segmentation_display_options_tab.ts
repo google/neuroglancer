@@ -17,8 +17,14 @@
 import { buildShaderPropertyList } from "#src/layer/annotation/shader_ui_property_list.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import { SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID } from "#src/layer/segmentation/json_keys.js";
-import { LAYER_CONTROLS } from "#src/layer/segmentation/layer_controls.js";
+import {
+  APPEARANCE_SECTION_JSON_KEY,
+  LAYER_CONTROLS,
+  VISIBILITY_SECTION_JSON_KEY,
+  SKELETON_SECTION_JSON_KEY,
+} from "#src/layer/segmentation/layer_controls.js";
 import { Overlay } from "#src/overlay.js";
+import { AccordionTab } from "#src/widget/accordion.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 import { addLayerControlToOptionsTab } from "#src/widget/layer_control.js";
 import { LinkedLayerGroupWidget } from "#src/widget/linked_layer.js";
@@ -27,7 +33,6 @@ import {
   ShaderCodeWidget,
 } from "#src/widget/shader_code_widget.js";
 import { ShaderControls } from "#src/widget/shader_controls.js";
-import { Tab } from "#src/widget/tab_view.js";
 
 function makeSkeletonShaderCodeWidget(layer: SegmentationUserLayer) {
   return new ShaderCodeWidget({
@@ -38,9 +43,9 @@ function makeSkeletonShaderCodeWidget(layer: SegmentationUserLayer) {
   });
 }
 
-export class DisplayOptionsTab extends Tab {
+export class DisplayOptionsTab extends AccordionTab {
   constructor(public layer: SegmentationUserLayer) {
-    super();
+    super(layer.renderingAccordionState);
     const { element } = this;
     element.classList.add("neuroglancer-segmentation-rendering-tab");
 
@@ -50,7 +55,7 @@ export class DisplayOptionsTab extends Tab {
         new LinkedLayerGroupWidget(layer.displayState.linkedSegmentationGroup),
       );
       widget.label.textContent = "Linked to: ";
-      element.appendChild(widget.element);
+      this.appendChild(widget.element, VISIBILITY_SECTION_JSON_KEY);
     }
 
     // Linked segmentation control
@@ -61,12 +66,13 @@ export class DisplayOptionsTab extends Tab {
         ),
       );
       widget.label.textContent = "Colors linked to: ";
-      element.appendChild(widget.element);
+      this.appendChild(widget.element, APPEARANCE_SECTION_JSON_KEY);
     }
 
     for (const control of LAYER_CONTROLS) {
-      element.appendChild(
+      this.appendChild(
         addLayerControlToOptionsTab(this, layer, this.visibility, control),
+        control.sectionKey,
       );
     }
 
@@ -121,7 +127,23 @@ export class DisplayOptionsTab extends Tab {
         this.visibility,
       ),
     );
-    element.appendChild(skeletonControls.element);
+    this.appendChild(
+      skeletonControls.element,
+      SKELETON_SECTION_JSON_KEY,
+      !this.layer.hasSkeletonsLayer.value,
+    );
+    this.setSectionHidden(
+      SKELETON_SECTION_JSON_KEY,
+      !this.layer.hasSkeletonsLayer.value,
+    );
+    this.registerDisposer(
+      this.layer.hasSkeletonsLayer.changed.add(() => {
+        this.setSectionHidden(
+          SKELETON_SECTION_JSON_KEY,
+          !this.layer.hasSkeletonsLayer.value,
+        );
+      }),
+    );
   }
 }
 

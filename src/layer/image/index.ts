@@ -79,6 +79,7 @@ import {
   setControlsInShader,
   ShaderControlState,
 } from "#src/webgl/shader_ui_controls.js";
+import { AccordionState, AccordionTab } from "#src/widget/accordion.js";
 import { ChannelDimensionsWidget } from "#src/widget/channel_dimensions_widget.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
@@ -102,7 +103,6 @@ import {
   registerLayerShaderControlsTool,
   ShaderControls,
 } from "#src/widget/shader_controls.js";
-import { Tab } from "#src/widget/tab_view.js";
 
 const OPACITY_JSON_KEY = "opacity";
 const BLEND_JSON_KEY = "blend";
@@ -114,6 +114,10 @@ const CHANNEL_DIMENSIONS_JSON_KEY = "channelDimensions";
 const VOLUME_RENDERING_JSON_KEY = "volumeRendering";
 const VOLUME_RENDERING_GAIN_JSON_KEY = "volumeRenderingGain";
 const VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY = "volumeRenderingDepthSamples";
+const RENDERING_ACCORDION_JSON_KEY = "renderingAccordion";
+const SLICE_SECTION_JSON_KEY = "sliceExpanded";
+const VOLUME_RENDERING_SECTION_JSON_KEY = "volumeRenderingExpanded";
+const SHADER_SECTION_JSON_KEY = "shaderExpanded";
 
 export interface ImageLayerSelectionState extends UserLayerSelectionState {
   value: any;
@@ -156,6 +160,28 @@ export class ImageUserLayer extends Base {
     ),
   );
   volumeRenderingMode = trackableShaderModeValue();
+
+  renderingAccordionState = this.registerDisposer(
+    new AccordionState({
+      accordionJsonKey: RENDERING_ACCORDION_JSON_KEY,
+      sections: [
+        {
+          jsonKey: SLICE_SECTION_JSON_KEY,
+          displayName: "Slice 2D",
+        },
+        {
+          jsonKey: VOLUME_RENDERING_SECTION_JSON_KEY,
+          displayName: "Volume rendering",
+        },
+        {
+          jsonKey: SHADER_SECTION_JSON_KEY,
+          displayName: "Shader controls",
+          defaultExpanded: true,
+          isDefaultKey: true,
+        },
+      ],
+    }),
+  );
 
   shaderControlState = this.registerDisposer(
     new ShaderControlState(
@@ -219,10 +245,13 @@ export class ImageUserLayer extends Base {
     this.volumeRenderingDepthSamplesTarget.changed.add(
       this.specificationChanged.dispatch,
     );
+    this.renderingAccordionState.specificationChanged.add(
+      this.specificationChanged.dispatch,
+    );
     this.tabs.add("rendering", {
       label: "Rendering",
       order: -100,
-      getter: () => new RenderingOptionsTab(this),
+      getter: () => new RenderingOptionsTab(this, this.renderingAccordionState),
     });
     this.tabs.default = "rendering";
   }
@@ -339,6 +368,13 @@ export class ImageUserLayer extends Base {
           volumeRenderingDepthSamplesTarget,
         ),
     );
+    verifyOptionalObjectProperty(
+      specification,
+      RENDERING_ACCORDION_JSON_KEY,
+      (accordionState) => {
+        this.renderingAccordionState.restoreState(accordionState);
+      },
+    );
   }
   toJSON() {
     const x = super.toJSON();
@@ -354,6 +390,7 @@ export class ImageUserLayer extends Base {
     x[VOLUME_RENDERING_GAIN_JSON_KEY] = this.volumeRenderingGain.toJSON();
     x[VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY] =
       this.volumeRenderingDepthSamplesTarget.toJSON();
+    x[RENDERING_ACCORDION_JSON_KEY] = this.renderingAccordionState.toJSON();
     return x;
   }
 
@@ -470,6 +507,7 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
   {
     label: "Resolution (slice)",
     toolJson: CROSS_SECTION_RENDER_SCALE_JSON_KEY,
+    sectionKey: SLICE_SECTION_JSON_KEY,
     ...renderScaleLayerControl((layer) => ({
       histogram: layer.sliceViewRenderScaleHistogram,
       target: layer.sliceViewRenderScaleTarget,
@@ -478,21 +516,25 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
   {
     label: "Blending (slice)",
     toolJson: BLEND_JSON_KEY,
+    sectionKey: SLICE_SECTION_JSON_KEY,
     ...enumLayerControl((layer) => layer.blendMode),
   },
   {
     label: "Opacity (slice)",
     toolJson: OPACITY_JSON_KEY,
+    sectionKey: SLICE_SECTION_JSON_KEY,
     ...rangeLayerControl((layer) => ({ value: layer.opacity })),
   },
   {
     label: "Volume rendering (experimental)",
     toolJson: VOLUME_RENDERING_JSON_KEY,
+    sectionKey: VOLUME_RENDERING_SECTION_JSON_KEY,
     ...enumLayerControl((layer) => layer.volumeRenderingMode),
   },
   {
     label: "Gain (3D)",
     toolJson: VOLUME_RENDERING_GAIN_JSON_KEY,
+    sectionKey: VOLUME_RENDERING_SECTION_JSON_KEY,
     isValid: (layer) =>
       makeCachedDerivedWatchableValue(
         (volumeRenderingMode) =>
@@ -507,6 +549,7 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
   {
     label: "Resolution (3D)",
     toolJson: VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY,
+    sectionKey: VOLUME_RENDERING_SECTION_JSON_KEY,
     isValid: (layer) =>
       makeCachedDerivedWatchableValue(
         (volumeRenderingMode) =>
@@ -527,21 +570,25 @@ for (const control of LAYER_CONTROLS) {
   registerLayerControl(ImageUserLayer, control);
 }
 
-class RenderingOptionsTab extends Tab {
+class RenderingOptionsTab extends AccordionTab {
   codeWidget: ShaderCodeWidget;
-  constructor(public layer: ImageUserLayer) {
-    super();
+  constructor(
+    public layer: ImageUserLayer,
+    protected accordionState: AccordionState,
+  ) {
+    super(accordionState);
     const { element } = this;
     this.codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
     element.classList.add("neuroglancer-image-dropdown");
 
     for (const control of LAYER_CONTROLS) {
-      element.appendChild(
+      this.appendChild(
         addLayerControlToOptionsTab(this, layer, this.visibility, control),
+        control.sectionKey,
       );
     }
 
-    element.appendChild(
+    this.appendChild(
       makeShaderCodeWidgetTopRow(
         this.layer,
         this.codeWidget,
@@ -553,14 +600,14 @@ class RenderingOptionsTab extends Tab {
         "neuroglancer-image-dropdown-top-row",
       ),
     );
-    element.appendChild(
+    this.appendChild(
       this.registerDisposer(
         new ChannelDimensionsWidget(layer.channelCoordinateSpaceCombiner),
       ).element,
     );
 
-    element.appendChild(this.codeWidget.element);
-    element.appendChild(
+    this.appendChild(this.codeWidget.element);
+    this.appendChild(
       this.registerDisposer(
         new ShaderControls(
           layer.shaderControlState,
