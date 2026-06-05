@@ -1098,7 +1098,7 @@ class AddNodeCommand implements SpatialSkeletonCommand {
       {
         childMode: "none",
         invalidateSourceCells: false,
-        moveView: true,
+        moveView: false,
       },
     );
     StatusMessage.showTemporaryMessage(
