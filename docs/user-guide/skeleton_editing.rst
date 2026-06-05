@@ -12,7 +12,7 @@ Supported Sources
 Skeleton editing is currently only supported on CATMAID data sources. See the
 CATMAID documentation to set up a CATMAID server. At minimum you will need:
 
-- CATMAID ``2026.05.06.dev12+g...`` or later by git-describe semantics.
+- CATMAID ``2026.05.06.dev11+g...`` or later by git-describe semantics.
 - A CATMAID project
 - A linked project stack
 - ``AnonymousUser`` permissions to read and edit the data on that project
