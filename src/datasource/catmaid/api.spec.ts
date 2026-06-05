@@ -17,6 +17,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  CATMAID_MIN_SUPPORTED_GIT_DESCRIBE_VERSION,
   CatmaidClient,
   getCatmaidSpatialSkeletonGridCellBounds,
   makeCatmaidNodeSourceState,
@@ -69,8 +70,8 @@ function getFetchInit(fetchMock: FetchMock, callIndex = 0) {
 describe("CatmaidClient skeleton editing methods", () => {
   it("accepts supported CATMAID server git-described versions", async () => {
     for (const version of [
-      "2026.05.06.dev12+g24ed227e31",
-      "2026.05.06.dev13+gabcdef123",
+      "2026.05.06.dev11+g24ed227e31",
+      "2026.05.06.dev12+gabcdef123",
       "2026.05.07.dev0+gabcdef123",
     ]) {
       const client = new CatmaidClient("https://example.invalid", 1);
@@ -85,27 +86,25 @@ describe("CatmaidClient skeleton editing methods", () => {
   });
 
   it("rejects unsupported CATMAID server git-described versions", async () => {
-    for (const { response, version } of [
+    for (const { response } of [
       {
-        response: { SERVER_VERSION: "2026.05.06.dev11+gabcdef123" },
-        version: "2026.05.06.dev11+gabcdef123",
+        response: { SERVER_VERSION: "2026.05.06.dev10+gabcdef123" },
       },
       {
         response: { SERVER_VERSION: "2026.05.05.dev999+gabcdef123" },
-        version: "2026.05.05.dev999+gabcdef123",
       },
-      { response: {}, version: "unknown" },
+      { response: {} },
       {
         response: { SERVER_VERSION: "2026.05.06-12-gabcdef123" },
-        version: "2026.05.06-12-gabcdef123",
       },
     ]) {
       const client = new CatmaidClient("https://example.invalid", 1);
       const fetchServerEndpointMock = vi.fn().mockResolvedValue(response);
       (client as any).fetchServerEndpoint = fetchServerEndpointMock;
 
+      const version = response.SERVER_VERSION ?? "unknown";
       await expect(client.validateServerVersion()).rejects.toThrow(
-        `CATMAID server https://example.invalid version ${version} is not supported. Version 2026.05.06.dev12+g... or later by git-describe semantics is required for compact-detail with_edition_times support.`,
+        `CATMAID server https://example.invalid version ${version} is not supported. Version ${CATMAID_MIN_SUPPORTED_GIT_DESCRIBE_VERSION} or later by git-describe semantics is required for compact-detail with_edition_times support.`,
       );
       expect(fetchServerEndpointMock).toHaveBeenCalledWith("version");
     }
