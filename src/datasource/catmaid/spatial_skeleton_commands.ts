@@ -1852,7 +1852,10 @@ class SplitCommand implements SpatialSkeletonCommand {
       this.stableSegmentId,
     );
     if (resolvedNode.node.parentNodeId === undefined) {
-      throw new Error("Cannot split at the root node.");
+      StatusMessage.showTemporaryMessage(
+        "Cannot split at the root node.",
+      );
+      return;
     }
     let result: CatmaidSpatialSkeletonSplitResult;
     try {
