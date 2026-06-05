@@ -2846,6 +2846,12 @@ export class SegmentationUserLayer extends Base {
       descriptionElement.rows = 3;
       descriptionElement.placeholder = "Description";
       descriptionElement.value = descriptionText;
+      descriptionElement.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          descriptionElement.blur();
+        }
+      });
       descriptionElement.addEventListener("change", () => {
         if (editSource === undefined || cachedNodeInfo === undefined) {
           return;
@@ -2873,7 +2879,6 @@ export class SegmentationUserLayer extends Base {
           } catch (error) {
             const message =
               error instanceof Error ? error.message : String(error);
-            descriptionElement.value = descriptionText;
             StatusMessage.showTemporaryMessage(
               `Failed to update description: ${message}`,
             );
