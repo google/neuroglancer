@@ -35,6 +35,12 @@ Neuroglancer
 
 .. toctree::
    :hidden:
+   :caption: Gallery
+
+   gallery/index
+
+.. toctree::
+   :hidden:
    :caption: Governance
 
    governance/governance

@@ -232,9 +232,11 @@ function defineMaxProjectionPickCopyShader(builder: ShaderBuilder) {
   builder.addOutputBuffer("highp vec4", "out_z", 1);
   builder.addOutputBuffer("highp vec4", "out_pickId", 2);
   builder.setFragmentMain(`
+vec4 depth = getValue0();
 out_color = vec4(0.0);
-out_z = getValue0();
+out_z = depth;
 out_pickId = getValue1();
+gl_FragDepth = 1.0 - depth.r;
 `);
 }
 
