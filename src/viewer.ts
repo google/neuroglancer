@@ -52,6 +52,7 @@ import {
   TrackableDataSelectionState,
   UserLayer,
 } from "#src/layer/index.js";
+import { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import { LayerGroupViewer } from "#src/layer_group_viewer.js";
 import { RootLayoutContainer } from "#src/layer_groups_layout.js";
 import {
@@ -1119,6 +1120,24 @@ export class Viewer extends RefCounted implements ViewerState {
       }
       const userLayer = selectedLayer.layer;
       if (userLayer === null || userLayer.tool.value === undefined) {
+        if (userLayer instanceof SegmentationUserLayer) {
+          const editDisabledReason =
+            userLayer.getSpatialSkeletonActionsDisabledReason();
+          if (editDisabledReason === undefined) {
+            StatusMessage.showTemporaryMessage(
+              `Activate the edit mode tool to place skeletons in layer ${JSON.stringify(
+                selectedLayer.name,
+              )}`,
+            );
+          } else {
+            StatusMessage.showTemporaryMessage(
+              `The selected layer (${JSON.stringify(
+                selectedLayer.name,
+              )}) does not have an active annotation tool or support editable skeletons (${editDisabledReason}).`,
+            );
+          }
+          return;
+        }
         StatusMessage.showTemporaryMessage(
           `The selected layer (${JSON.stringify(
             selectedLayer.name,
