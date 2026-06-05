@@ -30,7 +30,7 @@ let _cachedPickRadius = -1;
 let _cachedPickOffsetSequence: Uint32Array | undefined;
 
 /**
- * Sequence of offsets into C order (pickDiamater, pickDiamater) array in order of increasing
+ * Sequence of offsets into C order (pickDiameter, pickDiameter) array in order of increasing
  * distance from center.
  */
 export function getPickOffsetSequence(pickRadius: number) {
