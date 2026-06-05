@@ -17,6 +17,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  CATMAID_MIN_SUPPORTED_GIT_DESCRIBE_VERSION,
   CatmaidClient,
   getCatmaidSpatialSkeletonGridCellBounds,
   makeCatmaidNodeSourceState,
@@ -67,6 +68,48 @@ function getFetchInit(fetchMock: FetchMock, callIndex = 0) {
 }
 
 describe("CatmaidClient skeleton editing methods", () => {
+  it("accepts supported CATMAID server git-described versions", async () => {
+    for (const version of [
+      "2026.05.06.dev11+g24ed227e31",
+      "2026.05.06.dev12+gabcdef123",
+      "2026.05.07.dev0+gabcdef123",
+    ]) {
+      const client = new CatmaidClient("https://example.invalid", 1);
+      const fetchServerEndpointMock = vi
+        .fn()
+        .mockResolvedValue({ SERVER_VERSION: version });
+      (client as any).fetchServerEndpoint = fetchServerEndpointMock;
+
+      await expect(client.validateServerVersion()).resolves.toBeUndefined();
+      expect(fetchServerEndpointMock).toHaveBeenCalledWith("version");
+    }
+  });
+
+  it("rejects unsupported CATMAID server git-described versions", async () => {
+    for (const { response } of [
+      {
+        response: { SERVER_VERSION: "2026.05.06.dev10+gabcdef123" },
+      },
+      {
+        response: { SERVER_VERSION: "2026.05.05.dev999+gabcdef123" },
+      },
+      { response: {} },
+      {
+        response: { SERVER_VERSION: "2026.05.06-12-gabcdef123" },
+      },
+    ]) {
+      const client = new CatmaidClient("https://example.invalid", 1);
+      const fetchServerEndpointMock = vi.fn().mockResolvedValue(response);
+      (client as any).fetchServerEndpoint = fetchServerEndpointMock;
+
+      const version = response.SERVER_VERSION ?? "unknown";
+      await expect(client.validateServerVersion()).rejects.toThrow(
+        `CATMAID server https://example.invalid version ${version} is not supported. Version ${CATMAID_MIN_SUPPORTED_GIT_DESCRIBE_VERSION} or later by git-describe semantics is required for compact-detail with_edition_times support.`,
+      );
+      expect(fetchServerEndpointMock).toHaveBeenCalledWith("version");
+    }
+  });
+
   it("does not cache transient metadata discovery failures as null", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -300,82 +343,58 @@ describe("CatmaidClient skeleton editing methods", () => {
     );
   });
 
-  it("parses live compact-detail history rows and current label maps", async () => {
+  it("parses compact-detail rows with edition times and labels in one request", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce([
+    const fetchMock = vi.fn().mockResolvedValue([
+      [
         [
-          [
-            22107946,
-            null,
-            2,
-            23697030.0,
-            15055839.0,
-            16651262.0,
-            2000.0,
-            5,
-            "2026-03-29T10:15:00Z",
-            "2026-03-29T10:15:00Z",
-          ],
-          [
-            22107946,
-            null,
-            2,
-            23697030.0,
-            15055839.0,
-            16651262.0,
-            2000.0,
-            5,
-            "2026-03-28T08:00:00Z",
-            "2026-03-29T10:15:00Z",
-          ],
-          [
-            22107955,
-            22107954,
-            2,
-            23705874.0,
-            15093672.0,
-            16682375.0,
-            2000.0,
-            5,
-            "2026-03-29T10:16:00Z",
-            "2026-03-29T10:15:00Z",
-          ],
-          [
-            22107959,
-            22107958,
-            2,
-            23704520.0,
-            15085237.0,
-            16708998.0,
-            2000.0,
-            5,
-            "2026-03-29T10:17:00Z",
-            "2026-03-29T10:16:00Z",
-          ],
+          22107946,
+          null,
+          2,
+          23697030.0,
+          15055839.0,
+          16651262.0,
+          2000.0,
+          5,
+          "2026-03-29T10:15:00Z",
         ],
-        [],
-        {},
-        [],
-        [],
-      ])
-      .mockResolvedValueOnce([
-        [],
-        [],
-        {
-          "afonso reviewed it": [22107946],
-          "test 123 4": [
-            [22107955, "2026-03-29 10:16:00.000000+00:00"],
-            [22107955, "2026-03-29 10:15:30.000000+00:00"],
-          ],
-          "stale description": [[22107955, "2026-03-29 10:15:45.000000+00:00"]],
-          ends: [[22107959, "2026-03-29 10:17:00.000000+00:00"]],
-        },
-        [],
-        [],
-      ]);
-    (client as any).fetch = fetchMock;
+        [
+          22107955,
+          22107954,
+          2,
+          23705874.0,
+          15093672.0,
+          16682375.0,
+          2000.0,
+          5,
+          "2026-03-29T10:16:00Z",
+        ],
+        [
+          22107959,
+          22107958,
+          2,
+          23704520.0,
+          15085237.0,
+          16708998.0,
+          2000.0,
+          5,
+          "2026-03-29T10:17:00Z",
+        ],
+      ],
+      [],
+      {
+        "afonso reviewed it": [22107946],
+        "test 123 4": [
+          [22107955, "2026-03-29 10:16:00.000000+00:00"],
+          [22107955, "2026-03-29 10:15:30.000000+00:00"],
+        ],
+        "stale description": [[22107955, "2026-03-29 10:15:45.000000+00:00"]],
+        ends: [[22107959, "2026-03-29 10:17:00.000000+00:00"]],
+      },
+      [],
+      [],
+    ]);
+    (client as any).fetchProjectEndpoint = fetchMock;
 
     await expect(client.getSkeleton(2)).resolves.toEqual([
       {
@@ -412,98 +431,39 @@ describe("CatmaidClient skeleton editing methods", () => {
         sourceState: testSourceState("2026-03-29T10:17:00Z"),
       },
     ]);
-    expect(getFetchPath(fetchMock, 0)).toBe(
-      "skeletons/2/compact-detail?with_tags=true&with_history=true",
-    );
-    expect(getFetchPath(fetchMock, 1)).toBe(
-      "skeletons/2/compact-detail?with_tags=true",
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(getFetchPath(fetchMock)).toBe(
+      "skeletons/2/compact-detail?with_tags=true&with_edition_times=true",
     );
   });
 
-  it("ignores historical compact-detail labels that are not current", async () => {
+  it("parses compact-detail rows without local edition-time validation", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce([
-        [
-          [
-            23218380,
-            null,
-            1,
-            24233266,
-            13917594,
-            15605623,
-            0,
-            5,
-            "2026-05-06 20:17:31.181383+00:00",
-            "2026-04-20 14:56:29.593124+00:00",
-            1,
-          ],
-        ],
+      .mockResolvedValue([
+        [[22107946, null, 2, 23697030.0, 15055839.0, 16651262.0, 2000.0, 5]],
         [],
-        {
-          ends: [[23218380, "2026-04-22 15:11:58.824455+00:00"]],
-        },
+        {},
         [],
         [],
-      ])
-      .mockResolvedValueOnce([[], [], {}, [], []]);
-    (client as any).fetch = fetchMock;
+      ]);
+    (client as any).fetchProjectEndpoint = fetchMock;
 
-    await expect(client.getSkeleton(2974940)).resolves.toEqual([
+    await expect(client.getSkeleton(2)).resolves.toEqual([
       {
-        nodeId: 23218380,
+        nodeId: 22107946,
         parentNodeId: undefined,
-        position: new Float32Array([24233266, 13917594, 15605623]),
-        segmentId: 2974940,
-        radius: 0,
+        position: new Float32Array([23697030, 15055839, 16651262]),
+        segmentId: 2,
+        radius: 2000,
         confidence: 100,
         description: undefined,
         isTrueEnd: false,
-        sourceState: testSourceState("2026-05-06 20:17:31.181383+00:00"),
+        sourceState: undefined,
       },
     ]);
-  });
-
-  it("ignores zero-width history rows when compact-detail includes ordering", async () => {
-    const client = new CatmaidClient("https://example.invalid", 1);
-    const fetchMock = vi.fn().mockResolvedValue([
-      [
-        [
-          11422971,
-          11422970,
-          2,
-          24313028.0,
-          14983333.0,
-          6761820.5,
-          2000.0,
-          5,
-          "2026-04-14 08:56:49.985049+00:00",
-          "2026-04-14 08:56:49.985049+00:00",
-          2,
-        ],
-        [
-          11422972,
-          11422971,
-          2,
-          24318870.0,
-          14984255.0,
-          6765134.0,
-          2000.0,
-          5,
-          "2026-04-14 08:56:49.985049+00:00",
-          "2026-04-14 08:56:49.985049+00:00",
-          2,
-        ],
-      ],
-      [],
-      {},
-      [],
-      [],
-    ]);
-    (client as any).fetch = fetchMock;
-
-    await expect(client.getSkeleton(1140285)).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("merges skeletons using from/to treenode ids", async () => {
@@ -513,7 +473,7 @@ describe("CatmaidClient skeleton editing methods", () => {
       deleted_skeleton_id: 21,
       stable_annotation_swap: false,
     });
-    (client as any).fetch = fetchMock;
+    (client as any).fetchProjectEndpoint = fetchMock;
 
     await expect(
       client.mergeSkeletons(101, 202, {
@@ -554,7 +514,7 @@ describe("CatmaidClient skeleton editing methods", () => {
       [],
       [],
     ]);
-    (client as any).fetch = fetchMock;
+    (client as any).fetchProjectEndpoint = fetchMock;
 
     await expect(
       client.fetchNodes({
@@ -588,7 +548,7 @@ describe("CatmaidClient skeleton editing methods", () => {
   it("passes the CATMAID source-associated lod to node/list", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi.fn().mockResolvedValue([[], [], {}, false, [], []]);
-    (client as any).fetch = fetchMock;
+    (client as any).fetchProjectEndpoint = fetchMock;
 
     await client.fetchNodes(
       {
@@ -615,7 +575,7 @@ describe("CatmaidClient skeleton editing methods", () => {
   it("rejects CATMAID node-list bounds with fewer than three coordinates", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi.fn();
-    (client as any).fetch = fetchMock;
+    (client as any).fetchProjectEndpoint = fetchMock;
 
     await expect(
       client.fetchNodes({
@@ -634,7 +594,7 @@ describe("CatmaidClient skeleton editing methods", () => {
       y: 2,
       z: 3,
     });
-    (client as any).fetch = fetchMock;
+    (client as any).fetchProjectEndpoint = fetchMock;
 
     await expect(client.getSkeletonRootNode(17)).resolves.toEqual({
       nodeId: 303,
@@ -647,7 +607,7 @@ describe("CatmaidClient skeleton editing methods", () => {
   it("rejects merge state when the provided node ids do not match the request", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi.fn();
-    (client as any).fetch = fetchMock;
+    (client as any).fetchProjectEndpoint = fetchMock;
 
     await expect(
       client.mergeSkeletons(101, 202, {
@@ -668,7 +628,7 @@ describe("CatmaidClient skeleton editing methods", () => {
       edition_time: "2026-03-29T12:00:00Z",
       parent_edition_time: "2026-03-29T12:00:01Z",
     });
-    (client as any).fetch = fetchMock;
+    (client as any).fetchProjectEndpoint = fetchMock;
 
     await expect(
       client.addNode(13, 1, 2, 3, 7, {
@@ -696,7 +656,7 @@ describe("CatmaidClient skeleton editing methods", () => {
       skeleton_id: 13,
       edition_time: "2026-03-29T12:00:00Z",
     });
-    (client as any).fetch = fetchMock;
+    (client as any).fetchProjectEndpoint = fetchMock;
 
     await expect(client.addNode(13, 1, 2, 3)).resolves.toEqual({
       nodeId: 88,
@@ -722,7 +682,7 @@ describe("CatmaidClient skeleton editing methods", () => {
         [12, "2026-03-29T12:01:03Z"],
       ],
     });
-    (client as any).fetch = fetchMock;
+    (client as any).fetchProjectEndpoint = fetchMock;
 
     await expect(
       client.insertNode(13, 1, 2, 3, 7, [11, 12], {
@@ -766,14 +726,12 @@ describe("CatmaidClient skeleton editing methods", () => {
 
   it("reroots skeletons using treenode ids", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({ newroot: 202, skeleton_id: 17 })
-      .mockResolvedValueOnce([
-        [201, 200, 1, 2, 3, 5, 2000, 13, 1711711711.25, 9],
-        [202, 201, 4, 5, 6, 5, 2000, 13, 1711711712.5, 9],
-      ]);
-    (client as any).fetch = fetchMock;
+    const fetchMock = vi.fn().mockResolvedValue({
+      newroot: 202,
+      skeleton_id: 17,
+      edition_time: "2026-03-29T12:08:00Z",
+    });
+    (client as any).fetchProjectEndpoint = fetchMock;
 
     await expect(
       client.rerootSkeleton(202, {
@@ -798,18 +756,18 @@ describe("CatmaidClient skeleton editing methods", () => {
     ).resolves.toEqual({
       nodeSourceStateUpdates: [
         {
-          nodeId: 201,
-          sourceState: testSourceState("2024-03-29T11:28:31.250Z"),
+          nodeId: 202,
+          sourceState: testSourceState("2026-03-29T12:08:00Z"),
         },
         {
-          nodeId: 202,
-          sourceState: testSourceState("2024-03-29T11:28:32.500Z"),
+          nodeId: 201,
+          sourceState: testSourceState("2026-03-29T12:08:00Z"),
         },
       ],
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const requestBody = getFetchBody(fetchMock, 0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const requestBody = getFetchBody(fetchMock);
     expect(getFetchPath(fetchMock)).toBe("skeleton/reroot");
     expect(requestBody.get("treenode_id")).toBe("202");
     expect(requestBody.get("state")).toBe(
@@ -823,16 +781,12 @@ describe("CatmaidClient skeleton editing methods", () => {
         links: [],
       }),
     );
-    expect(getFetchPath(fetchMock, 1)).toBe("treenodes/compact-detail");
-    expect(getFetchBody(fetchMock, 1).toString()).toBe(
-      "treenode_ids%5B0%5D=201&treenode_ids%5B1%5D=202",
-    );
   });
 
   it("rejects reroot state when the parent neighborhood is incomplete", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi.fn();
-    (client as any).fetch = fetchMock;
+    (client as any).fetchProjectEndpoint = fetchMock;
 
     await expect(
       client.rerootSkeleton(202, {
@@ -856,7 +810,7 @@ describe("CatmaidClient skeleton editing methods", () => {
       existing_skeleton_id: 17,
       new_skeleton_id: 21,
     });
-    (client as any).fetch = fetchMock;
+    (client as any).fetchProjectEndpoint = fetchMock;
 
     await expect(
       client.splitSkeleton(202, {
@@ -890,15 +844,13 @@ describe("CatmaidClient skeleton editing methods", () => {
     );
   });
 
-  it("rejects reroot when the follow-up revision refresh is incomplete", async () => {
+  it("rejects reroot when the response is missing edition_time", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({ newroot: 202, skeleton_id: 17 })
-      .mockResolvedValueOnce([
-        [201, 200, 1, 2, 3, 5, 2000, 13, 1711711711.25, 9],
-      ]);
-    (client as any).fetch = fetchMock;
+    const fetchMock = vi.fn().mockResolvedValue({
+      newroot: 202,
+      skeleton_id: 17,
+    });
+    (client as any).fetchProjectEndpoint = fetchMock;
 
     await expect(
       client.rerootSkeleton(202, {
@@ -917,8 +869,9 @@ describe("CatmaidClient skeleton editing methods", () => {
         ],
       }),
     ).rejects.toThrow(
-      "CATMAID treenodes/compact-detail did not return revision metadata for node(s) 202.",
+      "CATMAID skeleton/reroot did not return the new root edition_time.",
     );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("moves nodes using node revision state and returns the updated revision", async () => {
@@ -928,7 +881,7 @@ describe("CatmaidClient skeleton editing methods", () => {
       old_treenodes: [[42, "2026-03-29T12:10:00Z", 1, 2, 3]],
       old_connectors: [],
     });
-    (client as any).fetch = fetchMock;
+    (client as any).fetchProjectEndpoint = fetchMock;
 
     await expect(
       client.moveNode(42, 10, 11, 12, {
@@ -955,7 +908,7 @@ describe("CatmaidClient skeleton editing methods", () => {
         [13, "2026-03-29T12:20:01Z"],
       ],
     });
-    (client as any).fetch = fetchMock;
+    (client as any).fetchProjectEndpoint = fetchMock;
 
     await expect(
       client.deleteNode(11, {
@@ -1001,7 +954,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValue({ edition_time: "2026-03-29T13:00:00Z" });
-    (client as any).fetch = fetchMock;
+    (client as any).fetchProjectEndpoint = fetchMock;
 
     await expect(
       client.updateDescription(11, "updated description"),
@@ -1021,7 +974,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValue({ edition_time: "2026-03-29T13:05:00Z" });
-    (client as any).fetch = fetchMock;
+    (client as any).fetchProjectEndpoint = fetchMock;
 
     await expect(
       client.updateDescription(11, "updated description\nends", {
@@ -1043,7 +996,7 @@ describe("CatmaidClient skeleton editing methods", () => {
       .fn()
       .mockResolvedValueOnce({ edition_time: "2026-03-29T13:10:00Z" })
       .mockResolvedValueOnce({ edition_time: "2026-03-29T13:11:00Z" });
-    (client as any).fetch = fetchMock;
+    (client as any).fetchProjectEndpoint = fetchMock;
 
     await expect(client.toggleTrueEnd(11, true)).resolves.toEqual({
       sourceState: testSourceState("2026-03-29T13:10:00Z"),
@@ -1066,7 +1019,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     const fetchMock = vi.fn().mockResolvedValue({
       updated_partners: { "11": { edition_time: "2026-03-29T13:20:00Z" } },
     });
-    (client as any).fetch = fetchMock;
+    (client as any).fetchProjectEndpoint = fetchMock;
 
     await expect(
       client.updateConfidence(11, 75, {

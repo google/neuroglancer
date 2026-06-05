@@ -352,6 +352,12 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
       credentialsProvider,
     );
 
+    await options.registry.chunkManager.memoize.getAsync(
+      { type: "catmaid:version", baseUrl },
+      options,
+      () => client.validateServerVersion(),
+    );
+
     // Fetch metadata-derived values through the generic source interface.
     const [spatialIndexMetadata, cacheProvider, skeletonIds] =
       await Promise.all([

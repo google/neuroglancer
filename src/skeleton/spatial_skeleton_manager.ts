@@ -863,20 +863,16 @@ export class SpatialSkeletonState extends RefCounted {
       const fetchedNodes = await skeletonSource.getSkeleton(segmentId, {
         signal: abortController.signal,
       });
-      const dedupedNodes = new Map<number, SpatiallyIndexedSkeletonNode>();
+      const normalizedNodes: SpatiallyIndexedSkeletonNode[] = [];
       for (const fetchedNode of fetchedNodes) {
         const mappedNode = normalizeSpatiallyIndexedSkeletonNode(
           fetchedNode,
           segmentId,
         );
         if (mappedNode === undefined) continue;
-        if (!dedupedNodes.has(mappedNode.nodeId)) {
-          dedupedNodes.set(mappedNode.nodeId, mappedNode);
-        }
+        normalizedNodes.push(mappedNode);
       }
-      const normalizedNodes = [...dedupedNodes.values()].sort(
-        (a, b) => a.nodeId - b.nodeId,
-      );
+      normalizedNodes.sort((a, b) => a.nodeId - b.nodeId);
       if (
         this.fullSkeletonCacheGeneration === fetchVersion &&
         pendingFetch.promise !== undefined &&
