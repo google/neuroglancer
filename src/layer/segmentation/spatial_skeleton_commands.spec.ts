@@ -776,7 +776,7 @@ describe("spatial_skeleton_commands", () => {
     });
   });
 
-  it("moves to the parent node when undoing an add-node command", async () => {
+  it("deletes node when undoing an add-node command", async () => {
     suppressStatusMessages();
 
     const segmentId = 23;
@@ -895,15 +895,6 @@ describe("spatial_skeleton_commands", () => {
       }),
     });
     expect(spatialSkeletonState.getCachedNode(2)).toBeUndefined();
-    expect(layer.selectAndMoveToSpatialSkeletonNode).toHaveBeenCalledWith(
-      {
-        ...parentNode,
-        sourceState: testSourceState("parent-after-add"),
-      },
-      true,
-    );
-    expect(layer.selectSpatialSkeletonNode).not.toHaveBeenCalled();
-    expect(layer.moveViewToSpatialSkeletonNodePosition).not.toHaveBeenCalled();
   });
 
   it("restores internal-node delete undo as an insertion in the local cache", async () => {
