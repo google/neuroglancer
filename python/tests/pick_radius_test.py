@@ -44,7 +44,9 @@ def setup_viewer(viewer: neuroglancer.Viewer) -> None:
         )
 
 
-def check_pick(webdriver: neuroglancer.webdriver.Webdriver, offset_x: int) -> bool:
+def check_pick(
+    webdriver: neuroglancer.webdriver.Webdriver, offset_x: int, offset_y: int = 0
+) -> bool:
     event = threading.Event()
     result: list[neuroglancer.viewer_config_state.ActionState | None] = [None]
 
@@ -62,8 +64,8 @@ def check_pick(webdriver: neuroglancer.webdriver.Webdriver, offset_x: int) -> bo
 
     chain = webdriver.action_chain()
     chain.move_to_element(webdriver.root_element)
-    if offset_x != 0:
-        chain.move_by_offset(offset_x, 0)
+    if offset_x != 0 or offset_y != 0:
+        chain.move_by_offset(offset_x, offset_y)
     chain.click()
     chain.perform()
 
@@ -116,3 +118,24 @@ def test_pick_radius(webdriver: neuroglancer.webdriver.Webdriver) -> None:
     # horizontal offset whose radius-1 pick window no longer overlaps that
     # footprint.
     assert check_pick(webdriver, 4) is False
+
+
+def test_pick_y_border_offset(webdriver: neuroglancer.webdriver.Webdriver) -> None:
+    """Regression test for the Y-coordinate border sign fix.
+
+    rendered_data_panel.ts previously used ``+ element.clientTop`` instead of
+    ``- element.clientTop`` when converting the mouse Y position to panel-content
+    coordinates.
+    """
+    setup_viewer(webdriver.viewer)
+    with webdriver.viewer.config_state.txn() as s:
+        s.pick_radius = 1
+    webdriver.sync()
+
+    # 3 px +/-centre: with pick_radius=1 should pass as the 2D pickable footprint is 5px tall.
+    # At 3px, we are 1px outside the pickable footprint, but still within the radius.
+    # However at 4px, we are outside the pickable footprint and beyond the radius.
+    assert check_pick(webdriver, 0, 3) is True
+    assert check_pick(webdriver, 0, 4) is False
+    assert check_pick(webdriver, 0, -3) is True
+    assert check_pick(webdriver, 0, -4) is False
