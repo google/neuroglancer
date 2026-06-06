@@ -82,6 +82,7 @@ import {
   observeWatchable,
   TrackableValue,
 } from "#src/trackable_value.js";
+import { CommandPalette } from "#src/ui/command_palette.js";
 import {
   LayerArchiveCountWidget,
   LayerListPanel,
@@ -1138,6 +1139,17 @@ export class Viewer extends RefCounted implements ViewerState {
       this.showPerspectiveSliceViews.toggle(),
     );
     this.bindAction("toggle-show-statistics", () => this.showStatistics());
+
+    this.bindAction("open-command-palette", () => {
+      const prevFocused = document.activeElement;
+      const dispatchTarget =
+        prevFocused instanceof HTMLElement && this.element.contains(prevFocused)
+          ? prevFocused
+          : this.element;
+      new CommandPalette(this, dispatchTarget);
+    });
+    this.bindAction("edit-json-state", () => this.editJsonState());
+    this.bindAction("screenshot", () => this.showScreenshotDialog());
   }
 
   toggleHelpPanel() {
