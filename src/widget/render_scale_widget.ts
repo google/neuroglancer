@@ -72,6 +72,13 @@ export interface RenderScaleWidgetOptions {
    * correctly when the data isn't in nanometres.
    */
   unitOfTarget?: string;
+  /**
+   * Called when the user manually changes the target (click/drag, wheel,
+   * or reset).  Lets a layer turn off any automatic target derivation so
+   * the manual choice sticks — e.g. disabling auto spatial-skeleton grid
+   * level selection.
+   */
+  onManualTarget?: () => void;
 }
 
 export class RenderScaleWidget extends RefCounted {
@@ -85,6 +92,8 @@ export class RenderScaleWidget extends RefCounted {
   protected logScaleOrigin = renderScaleHistogramOrigin;
   protected logScaleBinSize = renderScaleHistogramBinSize;
   unitOfTarget = "px";
+  /** See {@link RenderScaleWidgetOptions.onManualTarget}. */
+  onManualTarget: (() => void) | undefined = undefined;
   private ctx = this.canvas.getContext("2d")!;
   hoverTarget = new WatchableValue<[number, number] | undefined>(undefined);
   private throttledUpdateView = this.registerCancellable(
@@ -111,6 +120,7 @@ export class RenderScaleWidget extends RefCounted {
       this.target.value * 2 ** Math.sign(deltaY),
     ) as number;
     this.target.value = targetValue;
+    this.onManualTarget?.();
     event.preventDefault();
   }
 
@@ -171,6 +181,7 @@ export class RenderScaleWidget extends RefCounted {
     this.registerDisposer(
       registerActionListener<MouseEvent>(canvas, "set", (actionEvent) => {
         this.target.value = getTargetValue(actionEvent.detail);
+        this.onManualTarget?.();
       }),
     );
 
@@ -426,6 +437,18 @@ export class SpatialSkeletonGridRenderScaleWidget extends RenderScaleWidget {
     this.logScaleOrigin = this.histogram.logScaleOrigin;
     this.logScaleBinSize = this.histogram.logScaleBinSize;
     super.updateView();
+    // The grid resolution target is a physical spatial scale (meters), not
+    // a pixel/sample count — show it as a scale instead of the base
+    // class's "<number> <unitOfTarget>" rendering.
+    const hoverValue = this.hoverTarget.value;
+    const value = hoverValue === undefined ? this.target.value : hoverValue[0];
+    if (Number.isFinite(value) && value > 0) {
+      this.legendRenderScale.textContent = formatScaleWithUnitAsString(
+        value,
+        "m",
+        { precision: 2, elide1: false },
+      );
+    }
   }
 
   protected getLegendChunkCounts(
@@ -506,6 +529,9 @@ export function renderScaleLayerControl<
         // ran with the default before we got here.
         control.unitOfTarget = options.unitOfTarget;
         control.updateView();
+      }
+      if (options.onManualTarget !== undefined) {
+        control.onManualTarget = options.onManualTarget;
       }
       return { control, controlElement: control.element };
     },

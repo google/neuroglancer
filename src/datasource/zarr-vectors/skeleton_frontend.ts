@@ -132,12 +132,14 @@ function zvWebglDataType(dt: DataType): number {
  * 0), then synthesised `tangent` (streamline / polyline only), then
  * user-declared attributes in declaration order.
  *
- * Deviates from `SpatiallyIndexedSkeletonSource`'s baked-in
- * `[position, segment]` shape: we have no per-vertex segment-ID column
- * in the on-disk format, so the render layer's `segmentAttributeIndex`
- * ends up `undefined` and the per-segment colouring shader path is
- * gracefully skipped (TODO in `skeleton/frontend.ts:344-349` already
- * anticipates this).
+ * Extends `SpatiallyIndexedSkeletonSource`'s baked-in `[position,
+ * segment]` shape: we keep a `"segment"` column (so the render layer's
+ * `segmentAttributeIndex` resolves and per-segment colouring works) but
+ * also slot in a synthesised `tangent` (streamline / polyline / graph /
+ * skeleton) and the user-declared attributes.  The on-disk format has no
+ * *per-vertex* segment column, so the backend synthesises one from the
+ * per-fragment `fragment_attributes/segment_id` (truncated to uint32),
+ * falling back to the fragment's chunk-local index.
  */
 function buildZvSpatialVertexAttributes(parameters: {
   attributeNames: string[];
@@ -172,6 +174,20 @@ function buildZvSpatialVertexAttributes(parameters: {
       glslDataType: getShaderType(dt, 1),
     });
   }
+  // Synthesised per-vertex `"segment"` column (last slot — mirrors the
+  // backend's `download()` packing).  Naming it `"segment"` is what makes
+  // the render layer wire `segmentAttributeIndex` and colour each fragment
+  // by its owning segment via `segmentColorHash`, exactly like the built-in
+  // `[position, segment]` shape of `SpatiallyIndexedSkeletonSource`.  The
+  // backend always synthesises this column (per-fragment `segment_id`, or
+  // the fragment's chunk-local index as a fallback), so it is unconditional.
+  out.push({
+    name: "segment",
+    dataType: DataType.UINT32,
+    numComponents: 1,
+    webglDataType: WebGL2RenderingContext.UNSIGNED_INT,
+    glslDataType: "uint",
+  });
   return out;
 }
 
@@ -194,12 +210,12 @@ export class ZarrVectorsSpatiallyIndexedSkeletonSource extends WithParameters(
   constructor(...args: ConstructorParameters<typeof SpatiallyIndexedSkeletonSource>) {
     super(...args);
     // `SpatiallyIndexedSkeletonSource`'s constructor bakes in
-    // `[position, segment]` for `vertexAttributes`.  zarr-vectors stores
-    // have no per-vertex segment column, but they may carry a
-    // synthesised tangent plus user-declared per-vertex attributes — so
-    // we replace the baked-in shape with one that matches what the
-    // backend's `download()` actually packs into `chunk.vertexAttributes`
-    // (mirroring `skeleton_backend.ts:ZarrVectorsSpatiallyIndexedSkeletonSourceBackend`).
+    // `[position, segment]` for `vertexAttributes`.  We replace it with a
+    // shape that matches what the backend's `download()` actually packs
+    // into `chunk.vertexAttributes`: position, then a synthesised tangent
+    // (streamline / polyline / graph / skeleton), then user-declared
+    // attributes, then a synthesised `"segment"` column last (mirroring
+    // `skeleton_backend.ts:ZarrVectorsSpatiallyIndexedSkeletonSourceBackend`).
     this.vertexAttributes = buildZvSpatialVertexAttributes(this.parameters);
   }
 
@@ -350,6 +366,13 @@ export class ZarrVectorsMultiscaleSpatiallyIndexedSkeletonSource extends Multisc
    * adjacent levels collapse into one widget entry.
    */
   readonly perLevelChunkShape: Float32Array[];
+  /**
+   * Meters per coordinate unit, per axis (from the store's NGFF
+   * scale + unit).  Used to report grid sizes in physical meters so the
+   * resolution widget + auto-LOD picker are unit-consistent regardless of
+   * the global coordinate space's voxel size.
+   */
+  readonly metersPerUnit: Float64Array;
   /** World-space lower bound of the data; can be negative. */
   readonly lowerBounds: Float32Array;
   /** World-space upper bound of the data. */
@@ -368,10 +391,15 @@ export class ZarrVectorsMultiscaleSpatiallyIndexedSkeletonSource extends Multisc
    * different.
    */
   override getSpatialSkeletonGridSizes(): { x: number; y: number; z: number }[] {
+    // Report in physical meters (chunk_shape × meters-per-unit) so the
+    // resolution widget reads in real units and the auto-LOD target
+    // (also meters) compares correctly, independent of the global
+    // coordinate space's voxel size.
+    const m = this.metersPerUnit;
     return this.perLevelChunkShape.map((cs) => ({
-      x: cs[0],
-      y: cs[1],
-      z: cs[2],
+      x: cs[0] * m[0],
+      y: cs[1] * m[1],
+      z: cs[2] * m[2],
     }));
   }
 
@@ -399,6 +427,7 @@ export class ZarrVectorsMultiscaleSpatiallyIndexedSkeletonSource extends Multisc
     options: {
       levels: ReadonlyArray<ZarrVectorsSkeletonSpatialLevel>;
       perLevelChunkShape: Float32Array[];
+      metersPerUnit: Float64Array;
       lowerBounds: Float32Array;
       upperBounds: Float32Array;
     },
@@ -406,6 +435,7 @@ export class ZarrVectorsMultiscaleSpatiallyIndexedSkeletonSource extends Multisc
     super(chunkManager);
     this.levels = options.levels;
     this.perLevelChunkShape = options.perLevelChunkShape;
+    this.metersPerUnit = options.metersPerUnit;
     this.lowerBounds = options.lowerBounds;
     this.upperBounds = options.upperBounds;
   }

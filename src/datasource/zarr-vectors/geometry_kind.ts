@@ -103,8 +103,12 @@ export const KIND_CAPABILITIES: Record<
     defaultFragmentMain: undefined,
   },
   skeleton: {
+    // Synthesise per-vertex tangents from edge adjacency so shaders can
+    // `prop_tangent()` (colour-by-direction).  Branch points get the
+    // central difference of their first two neighbours; the default
+    // shader stays segment-coloured (tangent is opt-in, not auto-applied).
     hasWalkOrderTangent: false,
-    hasEdgeAdjacencyTangent: false,
+    hasEdgeAdjacencyTangent: true,
     defaultFragmentMain: undefined,
   },
   graph: {

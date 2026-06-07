@@ -361,7 +361,7 @@ describe("buildSkeletonChunk", () => {
     }
   });
 
-  it("produces a skeleton chunk with both implicit + explicit edges and no tangents", () => {
+  it("produces a skeleton chunk with both implicit + explicit edges and edge-adjacency tangents", () => {
     // 5 vertices, one fragment, three implicit edges (0,1),(1,2),(2,3),
     // (3,4), plus one explicit branch (1,4) — total 5 edges.
     const positions = new Float32Array(15);
@@ -378,7 +378,9 @@ describe("buildSkeletonChunk", () => {
     });
     expect(chunk.numEdges).toBe(5);
     expect(Array.from(chunk.edges)).toEqual([0, 1, 1, 2, 2, 3, 3, 4, 1, 4]);
-    expect(chunk.tangents).toBeUndefined();
+    // Skeletons now synthesise edge-adjacency tangents (prop_tangent()).
+    expect(chunk.tangents).toBeDefined();
+    expect(chunk.tangents!.length).toBe(5 * 3);
   });
 
   it("produces an explicit-only chunk with no implicit edges", () => {
@@ -541,7 +543,7 @@ describe("recomputeTangentsForBridges", () => {
     expect(result).toBe(chunk);
   });
 
-  it("returns input unchanged for skeleton geometry (no tangents)", () => {
+  it("returns input unchanged for skeleton geometry (no walk-order bridge fixup)", () => {
     const chunk = buildSkeletonChunk({
       rank: 3,
       positions: new Float32Array([0, 0, 0, 1, 0, 0]),
@@ -553,11 +555,16 @@ describe("recomputeTangentsForBridges", () => {
       geometryKind: "skeleton",
       vertexAttributes: [Uint32Array.from([0, 0])],
     });
-    expect(chunk.tangents).toBeUndefined();
+    // Skeletons now carry edge-adjacency tangents (here both vertices are
+    // isolated → zero tangents); bridge recompute sets the bridge-pair
+    // tangent to the connecting direction (0→1 = +x).
+    expect(chunk.tangents).toBeDefined();
     const result = recomputeTangentsForBridges(chunk, [
       { predecessorLocalIdx: 0, successorLocalIdx: 1 },
     ]);
-    expect(result).toBe(chunk);
+    expect(result.tangents).toBeDefined();
+    expect(result.tangents!.length).toBe(2 * 3);
+    expect(result.tangents![0]).toBeCloseTo(1);
   });
 
   it("handles diagonal bridges (non-axis-aligned tangents)", () => {
@@ -825,7 +832,7 @@ describe("appendGhostVertices", () => {
     expect(Array.from(result.tangents!.slice(-3))).toEqual([0, 0, 0]);
   });
 
-  it("works for skeleton geometry (no tangents present)", () => {
+  it("works for skeleton geometry (edge-adjacency tangents extended for ghost)", () => {
     const positions = new Float32Array([0, 0, 0, 1, 0, 0, 2, 0, 0]);
     const chunk = buildSkeletonChunk({
       rank: 3,
@@ -835,7 +842,7 @@ describe("appendGhostVertices", () => {
       geometryKind: "skeleton",
       vertexAttributes: [Uint32Array.from([1, 2, 3])],
     });
-    expect(chunk.tangents).toBeUndefined();
+    expect(chunk.tangents).toBeDefined();
     const result = appendGhostVertices(chunk, [
       {
         position: Float32Array.from([3, 0, 0]),
@@ -843,11 +850,35 @@ describe("appendGhostVertices", () => {
         bridgeFromLocalVertex: 2,
       },
     ]);
-    expect(result.tangents).toBeUndefined();
+    expect(result.tangents).toBeDefined();
+    expect(result.tangents!.length).toBe(4 * 3);
     expect(result.numVertices).toBe(4);
     expect(Array.from(result.vertexAttributes[0] as Uint32Array)).toEqual([
       1, 2, 3, 99,
     ]);
+  });
+
+  it("ghost inherits its host endpoint's segment id (bridge stays one colour)", () => {
+    const positions = new Float32Array([0, 0, 0, 1, 0, 0, 2, 0, 0]);
+    const chunk = buildSkeletonChunk({
+      rank: 3,
+      positions,
+      fragmentIndex: buildFragmentIndex([{ range: { start: 0, count: 3 } }]),
+      linksConvention: "implicit_sequential_with_branches",
+      geometryKind: "skeleton",
+      vertexAttributes: [],
+      segmentIds: Uint32Array.from([42, 42, 42]),
+    });
+    const result = appendGhostVertices(chunk, [
+      {
+        position: Float32Array.from([3, 0, 0]),
+        attributes: [],
+        bridgeFromLocalVertex: 2,
+      },
+    ]);
+    expect(result.segmentIds).toBeDefined();
+    // Ghost (index 3) copies host vertex 2's segment id (42).
+    expect(Array.from(result.segmentIds!)).toEqual([42, 42, 42, 42]);
   });
 
   it("preserves attribute dtype (uint8 host → uint8 output)", () => {

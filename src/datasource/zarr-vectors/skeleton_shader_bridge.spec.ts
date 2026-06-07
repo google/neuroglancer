@@ -34,13 +34,13 @@ describe("buildVertexAttributeMap — `prop_<name>()` shader bridge", () => {
     expect(Array.from(map.keys())).toEqual(["tangent"]);
   });
 
-  it("omits tangent for skeleton geometry (branching breaks direction-at-vertex)", () => {
+  it("prepends tangent for skeleton geometry (edge-adjacency tangent → prop_tangent())", () => {
     const map = buildVertexAttributeMap({
       attributeNames: [],
       attributeDtypes: [],
       geometryKind: "skeleton",
     });
-    expect(Array.from(map.keys())).toEqual([]);
+    expect(Array.from(map.keys())).toEqual(["tangent"]);
   });
 
   it("prepends tangent for graph geometry (edge-adjacency tangent algorithm)", () => {
@@ -98,7 +98,7 @@ describe("buildVertexAttributeMap — `prop_<name>()` shader bridge", () => {
     }> = [
       { kind: "streamline", expectedKeys: ["tangent", "u", "v"] },
       { kind: "polyline", expectedKeys: ["tangent", "u", "v"] },
-      { kind: "skeleton", expectedKeys: ["u", "v"] },
+      { kind: "skeleton", expectedKeys: ["tangent", "u", "v"] },
       { kind: "graph", expectedKeys: ["tangent", "u", "v"] },
     ];
     for (const { kind, expectedKeys } of cases) {

@@ -272,6 +272,58 @@ function buildCoordinateSpaceFromMultiscales(
   });
 }
 
+/**
+ * Read the per-level NGFF ``translation`` transform (datasets[0]) as a
+ * length-``rank`` offset in coordinate units, or ``undefined`` when
+ * absent / all-zero.  zarr-vectors skeleton stores written with a
+ * coordinate shift (chunk-grid alignment) record the world offset here
+ * so the layer renders at absolute coordinates.
+ */
+function extractNgffTranslation(
+  multiscales: any,
+  rank: number,
+): Float64Array | undefined {
+  const entry = Array.isArray(multiscales) ? multiscales[0] : undefined;
+  const dataset = entry?.datasets?.[0];
+  const t = dataset?.coordinateTransformations?.find(
+    (x: any) => x?.type === "translation",
+  );
+  const arr = t?.translation;
+  if (!Array.isArray(arr)) return undefined;
+  const out = new Float64Array(rank);
+  let nonzero = false;
+  for (let i = 0; i < rank; ++i) {
+    const v = arr[i] !== undefined ? Number(arr[i]) : 0;
+    out[i] = v;
+    if (v !== 0) nonzero = true;
+  }
+  return nonzero ? out : undefined;
+}
+
+/**
+ * Identity transform plus a per-axis ``translation`` in the source
+ * coordinate units (translation lives in the last column of the
+ * column-major homogeneous matrix).  Maps stored positions to world
+ * positions, e.g. shifted skeleton vertices back to absolute coords.
+ */
+function makeTranslatedTransform(
+  inputSpace: ReturnType<typeof makeCoordinateSpace>,
+  translation: Float64Array,
+) {
+  const rank = inputSpace.rank;
+  const transform = matrix.createIdentity(Float64Array, rank + 1);
+  for (let i = 0; i < rank; ++i) {
+    transform[rank * (rank + 1) + i] = Number(translation[i]);
+  }
+  return {
+    rank,
+    sourceRank: rank,
+    inputSpace,
+    outputSpace: inputSpace,
+    transform,
+  };
+}
+
 async function listAttributeNames(
   sharedKvStoreContext: SharedKvStoreContext,
   levelUrl: string,
@@ -990,6 +1042,12 @@ function getAnnotationDataSource(
 interface SkeletonMetadata {
   rank: number;
   coordinateSpace: ReturnType<typeof makeCoordinateSpace>;
+  /**
+   * NGFF world translation (coordinate units), or undefined.  Applied to
+   * the model transform so stored (grid-aligned, shifted) vertices render
+   * at absolute world coordinates.
+   */
+  translation?: Float64Array;
   /** Parameters for the per-segment (pass-2) chunk source. */
   pass2Params: ZarrVectorsObjectKeyedSkeletonSourceParameters;
   /**
@@ -1334,6 +1392,7 @@ async function buildSkeletonMetadata(
   return {
     rank,
     coordinateSpace,
+    translation: extractNgffTranslation(rootAttrs.multiscales, rank),
     pass2Params,
     pass1Levels,
     spatialGrid,
@@ -1381,6 +1440,7 @@ function getSkeletonDataSource(
           {
             levels: metadata.pass1Levels,
             perLevelChunkShape: metadata.spatialGrid.perLevelChunkShape,
+            metersPerUnit: Float64Array.from(metadata.coordinateSpace.scales),
             lowerBounds: metadata.spatialGrid.lowerBounds,
             upperBounds: metadata.spatialGrid.upperBounds,
           },
@@ -1421,7 +1481,10 @@ function getSkeletonDataSource(
   }
 
   return {
-    modelTransform: makeIdentityTransform(metadata.coordinateSpace),
+    modelTransform:
+      metadata.translation !== undefined
+        ? makeTranslatedTransform(metadata.coordinateSpace, metadata.translation)
+        : makeIdentityTransform(metadata.coordinateSpace),
     subsources,
   };
 }

@@ -202,6 +202,26 @@ describe("readCrossChunkLinks", () => {
     expect(dataFetched).toBe(false);
   });
 
+  it("tolerates a linkless table that omits sid_ndim (coarsest pyramid level)", async () => {
+    // The writer only stamps `sid_ndim` when it writes records, so a
+    // coarse level with zero surviving cross-chunk links has none.  A
+    // linkless table needs no sid_ndim, so this must not throw.
+    const meta = jsonBytes({
+      attributes: { link_width: 2, num_links: 0 },
+    });
+    const kvStoreRead = async (
+      subpath: string,
+    ): Promise<Uint8Array | undefined> =>
+      subpath === "cross_chunk_links/0/zarr.json" ? meta : undefined;
+    const table = await readCrossChunkLinks(
+      { kvStoreRead },
+      new AbortController().signal,
+    );
+    expect(table?.records).toEqual([]);
+    expect(table?.linkWidth).toBe(2);
+    expect(table?.sidNdim).toBe(0);
+  });
+
   it("respects the delta argument when forming subpaths", async () => {
     const calls: string[] = [];
     const kvStoreRead = async (

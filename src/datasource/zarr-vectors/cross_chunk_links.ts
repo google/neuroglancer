@@ -163,23 +163,33 @@ export async function readCrossChunkLinks(
     );
   }
   const linkWidth = Number(attrs.link_width);
-  const sidNdim = Number(attrs.sid_ndim);
   const numLinks = Number(attrs.num_links ?? 0);
   if (!Number.isInteger(linkWidth) || linkWidth < 1) {
     throw new Error(
       `cross_chunk_links/${delta}: invalid link_width ${attrs.link_width}`,
     );
   }
+
+  // A linkless table needs no `sid_ndim` (there are no chunk-coord tuples
+  // to decode).  Coarse pyramid levels with zero cross-chunk links never
+  // get `sid_ndim` stamped — the writer only stamps it when it writes
+  // records — so tolerate its absence here and return an empty table.
+  const sidNdimRaw = Number(attrs.sid_ndim);
+  if (numLinks === 0) {
+    return {
+      linkWidth,
+      sidNdim: Number.isInteger(sidNdimRaw) && sidNdimRaw >= 1 ? sidNdimRaw : 0,
+      records: [],
+    };
+  }
+  const sidNdim = sidNdimRaw;
   if (!Number.isInteger(sidNdim) || sidNdim < 1) {
     throw new Error(
       `cross_chunk_links/${delta}: invalid sid_ndim ${attrs.sid_ndim}`,
     );
   }
 
-  // 2. Raw byte blob.  Absent / zero-byte blob → empty table.
-  if (numLinks === 0) {
-    return { linkWidth, sidNdim, records: [] };
-  }
+  // 2. Raw byte blob.
   const blob = await kvStoreRead(`${base}/data/c/0`, signal);
   if (blob === undefined || blob.byteLength === 0) {
     return { linkWidth, sidNdim, records: [] };

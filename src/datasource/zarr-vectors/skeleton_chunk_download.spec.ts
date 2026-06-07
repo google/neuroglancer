@@ -47,6 +47,34 @@ function uint16LinksBlob(edges: number[]): Uint8Array {
   return new Uint8Array(arr.buffer);
 }
 
+/**
+ * Build a ZVFG blob with two contiguous range fragments:
+ * fragment 0 = `[0, count0)`, fragment 1 = `[count0, count0 + count1)`.
+ */
+function twoRangeFragmentsBlob(count0: number, count1: number): Uint8Array {
+  // 16 header + 8 bitmap + 2*16 range table + 4 CSR offsets (E=0).
+  const buf = new ArrayBuffer(16 + 8 + 32 + 4);
+  const view = new DataView(buf);
+  view.setUint32(0, FRAGMENT_INDEX_MAGIC, true);
+  view.setUint16(4, FRAGMENT_INDEX_VERSION, true);
+  view.setUint16(6, 0, true);
+  view.setUint32(8, 2, true); // F = 2
+  view.setUint32(12, 2, true); // R = 2
+  new Uint8Array(buf)[16] = 0x03; // bitmap bits 0 and 1 set
+  view.setBigInt64(24, 0n, true); // frag 0 start
+  view.setBigInt64(32, BigInt(count0), true); // frag 0 count
+  view.setBigInt64(40, BigInt(count0), true); // frag 1 start
+  view.setBigInt64(48, BigInt(count1), true); // frag 1 count
+  view.setUint32(56, 0, true); // csr_offsets[0] = 0 (E=0)
+  return new Uint8Array(buf);
+}
+
+/** Pack uint64 per-fragment segment ids into a fragment-attribute blob. */
+function uint64SegmentIdBlob(ids: bigint[]): Uint8Array {
+  const arr = new BigUint64Array(ids);
+  return new Uint8Array(arr.buffer);
+}
+
 /** Build a kvStore stub from a path → bytes map (any missing path → undefined). */
 function makeKvStore(
   map: Record<string, Uint8Array | undefined>,
@@ -177,8 +205,9 @@ describe("downloadSkeletonChunk — orchestrator", () => {
     );
     expect(chunk!.numEdges).toBe(5); // 4 sequential + 1 branch
     expect(Array.from(chunk!.edges)).toEqual([0, 1, 1, 2, 2, 3, 3, 4, 1, 4]);
-    // Skeletons don't precompute tangents.
-    expect(chunk!.tangents).toBeUndefined();
+    // Skeletons synthesise edge-adjacency tangents (prop_tangent()).
+    expect(chunk!.tangents).toBeDefined();
+    expect(chunk!.tangents!.length).toBe(5 * 3);
   });
 
   it("downloads an explicit-only graph chunk with int32 link dtype", async () => {
@@ -323,6 +352,59 @@ describe("downloadSkeletonChunk — orchestrator", () => {
         new AbortController().signal,
       ),
     ).rejects.toThrow(/length mismatch/i);
+  });
+
+  it("synthesises a per-vertex segment column from fragment_attributes/segment_id (uint32-truncated)", async () => {
+    // Two fragments: frag 0 owns vertices 0..1, frag 1 owns vertices 2..4.
+    // segment_id holds a flywire-scale uint64 whose low 32 bits are what
+    // the render layer colours by.
+    const id0 = 720575940612786691n;
+    const id1 = 720575940606327461n;
+    const kvStoreRead = makeKvStore({
+      "vertices/0.0.0/c/0": verticesBlob([0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0]),
+      "vertex_fragments/0.0.0/c/0": twoRangeFragmentsBlob(2, 3),
+      "fragment_attributes/segment_id/0.0.0/c/0": uint64SegmentIdBlob([id0, id1]),
+    });
+    const chunk = await downloadSkeletonChunk(
+      {
+        chunkKey: "0.0.0",
+        rank: 3,
+        linkDtype: "uint16",
+        attributeNames: [],
+        attributeDtypes: [],
+        linksConvention: "implicit_sequential_with_branches",
+        geometryKind: "skeleton",
+        kvStoreRead,
+      },
+      new AbortController().signal,
+    );
+    const lo0 = Number(id0 & 0xffffffffn) >>> 0;
+    const lo1 = Number(id1 & 0xffffffffn) >>> 0;
+    expect(chunk!.segmentIds).toBeDefined();
+    expect(Array.from(chunk!.segmentIds!)).toEqual([lo0, lo0, lo1, lo1, lo1]);
+  });
+
+  it("falls back to the fragment's chunk-local index when segment_id is absent", async () => {
+    const kvStoreRead = makeKvStore({
+      "vertices/0.0.0/c/0": verticesBlob([0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0]),
+      "vertex_fragments/0.0.0/c/0": twoRangeFragmentsBlob(2, 3),
+      // no fragment_attributes/segment_id blob
+    });
+    const chunk = await downloadSkeletonChunk(
+      {
+        chunkKey: "0.0.0",
+        rank: 3,
+        linkDtype: "uint16",
+        attributeNames: [],
+        attributeDtypes: [],
+        linksConvention: "implicit_sequential_with_branches",
+        geometryKind: "skeleton",
+        kvStoreRead,
+      },
+      new AbortController().signal,
+    );
+    // Fragment 0 → id 0 for its 2 vertices; fragment 1 → id 1 for its 3.
+    expect(Array.from(chunk!.segmentIds!)).toEqual([0, 0, 1, 1, 1]);
   });
 });
 

@@ -443,14 +443,19 @@ export class ZarrVectorsSpatiallyIndexedSkeletonSourceBackend extends WithParame
     chunk.vertexPositions = withBridges.positions;
     chunk.indices = withBridges.edges;
     // Order: synthesised tangent first (streamline/polyline only), then
-    // user-declared attributes in declaration order.  The frontend
-    // shader bridge mirrors this ordering when generating
-    // `prop_<name>()` macros.
+    // user-declared attributes in declaration order, then the synthesised
+    // per-vertex `"segment"` column last.  The frontend
+    // (`buildZvSpatialVertexAttributes`) mirrors this exact ordering so
+    // texture-unit indices line up and the render layer's
+    // `findIndex(name === "segment")` resolves `segmentAttributeIndex`.
     const attrs: (Float32Array | Uint8Array | Uint16Array | Uint32Array | Int8Array | Int16Array | Int32Array)[] = [];
     if (withBridges.tangents !== undefined) {
       attrs.push(withBridges.tangents);
     }
     for (const a of withBridges.vertexAttributes) attrs.push(a);
+    if (withBridges.segmentIds !== undefined) {
+      attrs.push(withBridges.segmentIds);
+    }
     chunk.vertexAttributes = attrs;
   }
 }
@@ -502,6 +507,61 @@ export class ZarrVectorsObjectKeyedSkeletonSourceBackend extends WithParameters(
    */
   private crossChunkLinks_: CrossChunkLinksTable | null | undefined;
 
+  /**
+   * Cached ``object_attributes/segment_id`` array (uint64, dense-OID
+   * order → sorted ascending) mapping the dense object index ↔ the
+   * original (e.g. flywire) segment id.  ``null`` = no such attribute
+   * (selected id IS the dense index — identity); ``undefined`` = not yet
+   * probed.
+   */
+  private segmentIds_: BigUint64Array | null | undefined;
+
+  /**
+   * Resolve a selected segment id to its dense object index.  When the
+   * store carries ``object_attributes/segment_id`` (standard object-index
+   * convention) binary-search the sorted ids; otherwise the id IS the
+   * dense index.  Returns ``undefined`` when the id is absent.
+   */
+  private async resolveObjectIndex(
+    objectId: number | bigint,
+    numObjects: number,
+    kvStoreRead: (
+      subpath: string,
+      signal: AbortSignal,
+    ) => Promise<Uint8Array | undefined>,
+    signal: AbortSignal,
+  ): Promise<number | undefined> {
+    if (this.segmentIds_ === undefined) {
+      const bytes = await kvStoreRead(
+        "object_attributes/segment_id/data/c/0",
+        signal,
+      );
+      if (bytes === undefined || bytes.byteLength < numObjects * 8) {
+        this.segmentIds_ = null;
+      } else {
+        const copy = bytes.slice(0, numObjects * 8);
+        this.segmentIds_ = new BigUint64Array(copy.buffer);
+      }
+    }
+    const ids = this.segmentIds_;
+    const target = BigInt(objectId);
+    if (ids === null) {
+      return target >= 0n && target < BigInt(numObjects)
+        ? Number(target)
+        : undefined;
+    }
+    let lo = 0;
+    let hi = ids.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const v = ids[mid];
+      if (v === target) return mid;
+      if (v < target) lo = mid + 1;
+      else hi = mid - 1;
+    }
+    return undefined;
+  }
+
   private async getCrossChunkLinks(
     kvStoreRead: (
       subpath: string,
@@ -542,8 +602,27 @@ export class ZarrVectorsObjectKeyedSkeletonSourceBackend extends WithParameters(
 
     const crossChunkLinks = await this.getCrossChunkLinks(kvStoreRead, signal);
 
-    const aggregated = await downloadSegmentSkeleton(
+    // Map the selected segment id (e.g. a flywire uint64) to the dense
+    // object index via object_attributes/segment_id before the manifest
+    // lookup.  Out-of-store ids yield an empty skeleton.
+    const resolvedOid = await this.resolveObjectIndex(
       chunk.objectId,
+      numObjects,
+      kvStoreRead,
+      signal,
+    );
+    if (resolvedOid === undefined) {
+      chunk.vertexPositions = new Float32Array(0);
+      chunk.indices = new Uint32Array(0);
+      chunk.vertexAttributes = attributeNames.map(() => new Float32Array(0));
+      if (hasSynthesisedTangent(geometryKind as ZarrVectorsSkeletonGeometryKind)) {
+        chunk.vertexAttributes = [new Float32Array(0), ...chunk.vertexAttributes];
+      }
+      return;
+    }
+
+    const aggregated = await downloadSegmentSkeleton(
+      resolvedOid,
       {
         manifestReader: {
           numObjects,

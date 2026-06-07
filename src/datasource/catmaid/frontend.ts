@@ -223,7 +223,15 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
   }
 
   getSpatialSkeletonGridSizes(): SpatialSkeletonGridSize[] {
-    return this.gridLevels.map(({ size }) => size);
+    // Report grid sizes in physical meters (nm × meters-per-nm) so the
+    // resolution widget + auto-LOD target are unit-consistent (the
+    // widget formats the spatial scale as meters).
+    const [mx, my, mz] = this.coordinateScaleFactorsInMeters;
+    return this.gridLevels.map(({ size }) => ({
+      x: size.x * mx,
+      y: size.y * my,
+      z: size.z * mz,
+    }));
   }
 
   getPerspectiveSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] {

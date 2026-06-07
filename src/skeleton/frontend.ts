@@ -973,6 +973,7 @@ void emitDefault() {
     nodeShader: ShaderProgram | null,
     skeletonGpuGeometry: SkeletonGPUGeometry,
     projectionParameters: { width: number; height: number },
+    renderMode: SkeletonRenderMode = SkeletonRenderMode.LINES_AND_POINTS,
   ) {
     // Bind vertex attribute textures to be used across edge and node shaders
     // The edge shader and node shader share the same texture unit for each attribute
@@ -1012,8 +1013,9 @@ void emitDefault() {
       gl.disableVertexAttribArray(aVertexIndex);
     }
 
-    // Draw nodes if in line and node mode
-    if (nodeShader !== null) {
+    // Draw node dots only in "lines and points" mode — in "lines" mode
+    // the user wants line segments only.
+    if (nodeShader !== null && renderMode !== SkeletonRenderMode.LINES) {
       nodeShader.bind();
       initializeCircleShader(nodeShader, projectionParameters, {
         featherWidthInPixels: this.targetIsSliceView ? 1.0 : 0.0,
@@ -1399,6 +1401,7 @@ export class SkeletonLayer extends RefCounted implements SkeletonShaderContext {
           nodeShader,
           skeleton,
           renderContext.projectionParameters,
+          renderOptions.mode.value,
         );
       },
     );
@@ -2064,6 +2067,7 @@ function maybeUpdateAutoSpatialSkeletonGridResolutionTarget(
     width: number;
     height: number;
     globalPosition?: Float32Array;
+    displayDimensionRenderInfo?: { displayDimensionScales: Float64Array };
   },
   localPosition: Float32Array,
   view: "2d" | "3d",
@@ -2100,19 +2104,81 @@ function maybeUpdateAutoSpatialSkeletonGridResolutionTarget(
     reference,
   );
   if (!Number.isFinite(pixelSize) || pixelSize <= 0) return;
-  const next = pixelSize * AUTO_SPATIAL_SKELETON_GRID_DETAIL_CUTOFF;
-  // Only write when the value actually changes by more than 0.1%;
-  // TrackableValue's `value` setter dispatches `changed` regardless
-  // of equality, which triggers a chain of re-evaluations (level
-  // pick → grid level index → render-layer re-attach).
+  // `pixelSize` is in global coordinate units; grid spacings are reported
+  // in physical meters, so convert to meters/pixel via the display
+  // dimension scales (meters per global unit).  Use the finest axis to
+  // match the `min()` convention used for grid spacing.
+  let metersPerUnit = 1;
+  const ddScales = projectionParameters.displayDimensionRenderInfo?.displayDimensionScales;
+  if (ddScales !== undefined && ddScales.length > 0) {
+    metersPerUnit = Infinity;
+    for (let i = 0; i < ddScales.length; ++i) {
+      const s = ddScales[i];
+      if (Number.isFinite(s) && s > 0) metersPerUnit = Math.min(metersPerUnit, s);
+    }
+    if (!Number.isFinite(metersPerUnit)) metersPerUnit = 1;
+  }
+  // Camera-only target (no user bias yet).
+  const autoUnbiased =
+    pixelSize * metersPerUnit * AUTO_SPATIAL_SKELETON_GRID_DETAIL_CUTOFF;
+
+  // The multiplicative detail `bias` (set when the user clicks/drags the
+  // widget) lives in the *persistent* displayState so the calibration
+  // survives a page refresh; the `lastAuto` value we wrote last frame is
+  // transient and stays in a WeakMap keyed by the target.  A manual
+  // interaction changes `target.value` away from `lastAuto`; we interpret
+  // that as "make this zoom map to the level I picked" and fold it into
+  // `bias`, so zoom keeps driving the level afterwards (the click rebiases
+  // the offset, it does NOT freeze the target).
+  const biasWatchable =
+    view === "3d"
+      ? displayState.spatialSkeletonGridResolutionBias3d
+      : displayState.spatialSkeletonGridResolutionBias2d;
+  let st = autoSpatialSkeletonBias.get(target);
+  if (st === undefined) {
+    st = { lastAuto: undefined };
+    autoSpatialSkeletonBias.set(target, st);
+  }
+  let bias =
+    biasWatchable !== undefined && Number.isFinite(biasWatchable.value) && biasWatchable.value > 0
+      ? biasWatchable.value
+      : 1;
+  const cur = target.value as number;
   if (
-    Math.abs((target.value as number) - next) <
-    Math.max(target.value as number, next) * 1e-3
+    st.lastAuto !== undefined &&
+    Math.abs(cur - st.lastAuto) > Math.max(st.lastAuto, 1e-30) * 1e-6 &&
+    autoUnbiased > 0 &&
+    Number.isFinite(cur) &&
+    cur > 0
   ) {
+    bias = cur / autoUnbiased;
+    if (biasWatchable !== undefined && biasWatchable.value !== bias) {
+      biasWatchable.value = bias;
+    }
+  }
+  const next = autoUnbiased * bias;
+  // Only write when the value changes by more than 0.1% — the setter
+  // dispatches `changed` unconditionally (level pick → re-attach chain).
+  if (
+    st.lastAuto !== undefined &&
+    Math.abs(cur - next) < Math.max(cur, next) * 1e-3
+  ) {
+    st.lastAuto = next;
     return;
   }
   target.value = next;
+  st.lastAuto = next;
 }
+
+// Transient per-resolution-target auto-LOD state: the last auto-written
+// target value, used to detect manual widget interaction frame-to-frame.
+// The persistent detail `bias` lives in displayState (see
+// `spatialSkeletonGridResolutionBias{2d,3d}`), not here.  Keyed weakly by
+// the target.
+const autoSpatialSkeletonBias = new WeakMap<
+  WatchableValueInterface<number>,
+  { lastAuto: number | undefined }
+>();
 
 // Tracks chunk keys already counted for a given histogram within a single frame,
 // preventing the same chunk from being counted multiple times when it falls within
@@ -2206,6 +2272,20 @@ export interface SpatiallyIndexedSkeletonLayerDisplayState
     value: number;
   };
   spatialSkeletonGridResolutionTarget3d?: WatchableValueInterface<number> & {
+    value: number;
+  };
+  /**
+   * Persistent multiplicative detail bias applied on top of the
+   * camera-derived auto target (1 = pure camera).  Clicking/dragging the
+   * render-scale widget folds the manual offset into this value so the
+   * calibration survives a page refresh (the camera-derived target itself
+   * is recomputed every frame and is not meaningful to persist).  Paired
+   * with the `auto*` flags below.
+   */
+  spatialSkeletonGridResolutionBias2d?: WatchableValueInterface<number> & {
+    value: number;
+  };
+  spatialSkeletonGridResolutionBias3d?: WatchableValueInterface<number> & {
     value: number;
   };
   /**
@@ -3190,6 +3270,7 @@ export class SpatiallyIndexedSkeletonLayer
     lineWidth: number,
     pointDiameter: number,
     visibleChunks: VisibleChunk[],
+    renderMode: SkeletonRenderMode = SkeletonRenderMode.LINES_AND_POINTS,
   ) {
     if (visibleChunks.length === 0) return;
     const hasExcludedSegments =
@@ -3287,6 +3368,7 @@ export class SpatiallyIndexedSkeletonLayer
         nodeShader,
         chunk,
         renderContext.projectionParameters,
+        renderMode,
       );
     }
     this.endSkeletonRenderPass(
@@ -3305,6 +3387,7 @@ export class SpatiallyIndexedSkeletonLayer
     modelMatrix: mat4,
     lineWidth: number,
     pointDiameter: number,
+    renderMode: SkeletonRenderMode = SkeletonRenderMode.LINES_AND_POINTS,
   ) {
     const overlayChunk = this.resolveSourceBackedOverlayChunk();
     if (overlayChunk === undefined) return;
@@ -3373,6 +3456,7 @@ export class SpatiallyIndexedSkeletonLayer
       nodeShader,
       overlayChunk,
       renderContext.projectionParameters,
+      renderMode,
     );
     this.endSkeletonRenderPass(
       renderHelper,
@@ -3414,6 +3498,7 @@ export class SpatiallyIndexedSkeletonLayer
       lineWidth,
       pointDiameter,
       visibleChunks,
+      renderOptions.mode.value,
     );
     this.drawInspectionOverlayPass(
       renderContext,
@@ -3422,6 +3507,7 @@ export class SpatiallyIndexedSkeletonLayer
       modelMatrix,
       lineWidth,
       pointDiameter,
+      renderOptions.mode.value,
     );
   }
 

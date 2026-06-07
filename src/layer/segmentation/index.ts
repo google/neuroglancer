@@ -199,6 +199,7 @@ import {
   parseArray,
   parseUint64,
   verifyFiniteNonNegativeFloat,
+  verifyFinitePositiveFloat,
   verifyNonnegativeInt,
   verifyObjectAsMap,
   verifyOptionalObjectProperty,
@@ -848,6 +849,20 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
     verifyFiniteNonNegativeFloat,
     1,
   );
+  // Persistent detail bias (1 = pure camera) folded in when the user
+  // adjusts the render-scale widget under auto-LOD; persisted so the
+  // calibration survives a refresh (the camera-derived target itself is
+  // recomputed every frame, so it isn't meaningful to persist alone).
+  spatialSkeletonGridResolutionBias2d = new TrackableValue<number>(
+    1,
+    verifyFinitePositiveFloat,
+    1,
+  );
+  spatialSkeletonGridResolutionBias3d = new TrackableValue<number>(
+    1,
+    verifyFinitePositiveFloat,
+    1,
+  );
   // When true, the render layer overwrites
   // `spatialSkeletonGridResolutionTarget{2d,3d}` every frame with a
   // value derived from the current camera projection: world-units-per-
@@ -1351,6 +1366,12 @@ export class SegmentationUserLayer extends Base {
       this.specificationChanged.dispatch,
     );
     this.displayState.spatialSkeletonGridResolutionTarget3d.changed.add(
+      this.specificationChanged.dispatch,
+    );
+    this.displayState.spatialSkeletonGridResolutionBias2d.changed.add(
+      this.specificationChanged.dispatch,
+    );
+    this.displayState.spatialSkeletonGridResolutionBias3d.changed.add(
       this.specificationChanged.dispatch,
     );
     this.displayState.hoverHighlight.changed.add(
@@ -2072,6 +2093,12 @@ export class SegmentationUserLayer extends Base {
     this.displayState.spatialSkeletonGridResolutionTarget3d.restoreState(
       specification[json_keys.SKELETON_PERSPECTIVE_RENDER_SCALE_JSON_KEY],
     );
+    this.displayState.spatialSkeletonGridResolutionBias2d.restoreState(
+      specification[json_keys.SPATIAL_SKELETON_GRID_BIAS_2D_JSON_KEY],
+    );
+    this.displayState.spatialSkeletonGridResolutionBias3d.restoreState(
+      specification[json_keys.SPATIAL_SKELETON_GRID_BIAS_3D_JSON_KEY],
+    );
     this.displayState.baseSegmentColoring.restoreState(
       specification[json_keys.BASE_SEGMENT_COLORING_JSON_KEY],
     );
@@ -2145,6 +2172,10 @@ export class SegmentationUserLayer extends Base {
       this.displayState.spatialSkeletonGridResolutionTarget2d.toJSON();
     x[json_keys.SKELETON_PERSPECTIVE_RENDER_SCALE_JSON_KEY] =
       this.displayState.spatialSkeletonGridResolutionTarget3d.toJSON();
+    x[json_keys.SPATIAL_SKELETON_GRID_BIAS_2D_JSON_KEY] =
+      this.displayState.spatialSkeletonGridResolutionBias2d.toJSON();
+    x[json_keys.SPATIAL_SKELETON_GRID_BIAS_3D_JSON_KEY] =
+      this.displayState.spatialSkeletonGridResolutionBias3d.toJSON();
     x[json_keys.HOVER_HIGHLIGHT_JSON_KEY] =
       this.displayState.hoverHighlight.toJSON();
     x[json_keys.BASE_SEGMENT_COLORING_JSON_KEY] =

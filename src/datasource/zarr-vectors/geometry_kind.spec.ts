@@ -51,18 +51,20 @@ describe("KIND_CAPABILITIES table invariants", () => {
     expect(KIND_CAPABILITIES.graph.defaultFragmentMain).toBeUndefined();
   });
 
-  it("streamline / polyline / graph synthesise tangents; skeleton does not", () => {
+  it("streamline / polyline / graph / skeleton all synthesise tangents", () => {
     expect(hasSynthesisedTangent("streamline")).toBe(true);
     expect(hasSynthesisedTangent("polyline")).toBe(true);
     expect(hasSynthesisedTangent("graph")).toBe(true);
-    expect(hasSynthesisedTangent("skeleton")).toBe(false);
+    // Skeletons opt into edge-adjacency tangents so shaders can
+    // `prop_tangent()` (colour-by-direction).
+    expect(hasSynthesisedTangent("skeleton")).toBe(true);
   });
 
-  it("streamline / polyline use walk-order; graph uses edge-adjacency", () => {
+  it("streamline / polyline use walk-order; graph + skeleton use edge-adjacency", () => {
     expect(KIND_CAPABILITIES.streamline.hasWalkOrderTangent).toBe(true);
     expect(KIND_CAPABILITIES.polyline.hasWalkOrderTangent).toBe(true);
     expect(KIND_CAPABILITIES.graph.hasEdgeAdjacencyTangent).toBe(true);
     expect(KIND_CAPABILITIES.skeleton.hasWalkOrderTangent).toBe(false);
-    expect(KIND_CAPABILITIES.skeleton.hasEdgeAdjacencyTangent).toBe(false);
+    expect(KIND_CAPABILITIES.skeleton.hasEdgeAdjacencyTangent).toBe(true);
   });
 });

@@ -68,6 +68,13 @@ export type AttributeTypedArray =
  *   for skeletons (no canonical "direction").
  * - `vertexAttributes` is parallel to the caller's `attributeNames`,
  *   already reinterpreted to its declared dtype.
+ * - `segmentIds` is a synthesised per-vertex `(numVertices,)` uint32 column
+ *   used by the spatially-indexed render layer's `"segment"` attribute to
+ *   colour each fragment by its owning segment (via `segmentColorHash`).
+ *   Derived from the per-fragment `fragment_attributes/segment_id` column
+ *   (truncated to 32 bits) when present, else the fragment's index within
+ *   the chunk — see `downloadSkeletonChunk`.  Absent for chunks that don't
+ *   synthesise it (e.g. empty chunks).
  * - `fragmentIndex` is retained so pass 2 can extract just the fragments
  *   named by a per-object manifest entry without re-decoding bytes.
  */
@@ -79,6 +86,7 @@ export interface SkeletonChunk {
   readonly edges: Uint32Array;
   readonly tangents?: Float32Array;
   readonly vertexAttributes: AttributeTypedArray[];
+  readonly segmentIds?: Uint32Array;
   readonly fragmentIndex: FragmentIndex;
 }
 
@@ -344,6 +352,8 @@ export function buildSkeletonChunk(args: {
   linksConvention: LinksConvention;
   geometryKind: SkeletonGeometryKind;
   vertexAttributes: AttributeTypedArray[];
+  /** Synthesised per-vertex uint32 segment column (see {@link SkeletonChunk.segmentIds}). */
+  segmentIds?: Uint32Array;
 }): SkeletonChunk {
   const {
     rank,
@@ -353,6 +363,7 @@ export function buildSkeletonChunk(args: {
     linksConvention,
     geometryKind,
     vertexAttributes,
+    segmentIds,
   } = args;
 
   const numVertices = positions.length / rank;
@@ -424,6 +435,7 @@ export function buildSkeletonChunk(args: {
     edges,
     tangents,
     vertexAttributes,
+    segmentIds,
     fragmentIndex,
   };
 }
@@ -624,7 +636,7 @@ export function appendGhostVertices(
 ): SkeletonChunk {
   if (ghosts.length === 0) return chunk;
 
-  const { rank, numVertices, positions, edges, tangents, vertexAttributes } =
+  const { rank, numVertices, positions, edges, tangents, vertexAttributes, segmentIds } =
     chunk;
   const numGhosts = ghosts.length;
   const newNumVertices = numVertices + numGhosts;
@@ -721,6 +733,18 @@ export function appendGhostVertices(
     newVertexAttributes.push(dst);
   }
 
+  // Segment ids (if present): each ghost is the far end of a bridge that
+  // connects the SAME segment, so it inherits its host endpoint's id.
+  // Keeps the bridge edge a single colour across the chunk boundary.
+  let newSegmentIds: Uint32Array | undefined;
+  if (segmentIds !== undefined) {
+    newSegmentIds = new Uint32Array(newNumVertices);
+    newSegmentIds.set(segmentIds, 0);
+    for (let g = 0; g < numGhosts; ++g) {
+      newSegmentIds[numVertices + g] = segmentIds[ghosts[g].bridgeFromLocalVertex];
+    }
+  }
+
   // Edges: append one bridge edge per ghost — (hostLocalIdx, ghostIdx).
   const newNumEdges = (edges.length >> 1) + numGhosts;
   const newEdges = new Uint32Array(newNumEdges * 2);
@@ -739,6 +763,7 @@ export function appendGhostVertices(
     edges: newEdges,
     tangents: newTangents,
     vertexAttributes: newVertexAttributes,
+    segmentIds: newSegmentIds,
     fragmentIndex: chunk.fragmentIndex,
   };
 }
