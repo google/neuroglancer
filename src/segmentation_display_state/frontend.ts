@@ -930,6 +930,13 @@ export interface SegmentationDisplayStateWithAlpha
   extends SegmentationDisplayState {
   objectAlpha: TrackableAlphaValue;
   hiddenObjectAlpha: TrackableAlphaValue;
+  // Cross-section (2D) opacities, used by spatially-indexed skeletons in
+  // slice views so 2D opacity is controlled independently of the 3D
+  // `objectAlpha`/`hiddenObjectAlpha`.  Optional: only the segmentation
+  // user layer provides them; mesh-only consumers of this interface omit
+  // them.
+  selectedAlpha?: TrackableAlphaValue;
+  notSelectedAlpha?: TrackableAlphaValue;
 }
 
 export interface SegmentationDisplayState3D
@@ -1006,6 +1013,20 @@ export function registerRedrawWhenSegmentationDisplayStateWithAlphaChanged(
       renderLayer.redrawNeeded.dispatch,
     ),
   );
+  // Cross-section opacities drive the slice-view dense skeleton; redraw on
+  // change too (optional — absent for mesh-only display states).
+  if (displayState.selectedAlpha !== undefined) {
+    renderLayer.registerDisposer(
+      displayState.selectedAlpha.changed.add(renderLayer.redrawNeeded.dispatch),
+    );
+  }
+  if (displayState.notSelectedAlpha !== undefined) {
+    renderLayer.registerDisposer(
+      displayState.notSelectedAlpha.changed.add(
+        renderLayer.redrawNeeded.dispatch,
+      ),
+    );
+  }
 }
 
 export function registerRedrawWhenSegmentationDisplayState3DChanged(

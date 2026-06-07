@@ -2295,11 +2295,20 @@ export class SegmentationUserLayer extends Base {
       pickedSpatialSkeleton.nodeId,
     );
     state.nodeId = nodeId === undefined ? undefined : nodeId.toString();
-    // Picked fragment's global segment id is a full uint64 (bigint); surface
-    // it as the selection value exactly like a picked voxel's segment id.
-    const segmentId = pickedSpatialSkeleton.segmentIdU64;
-    if (typeof segmentId === "bigint" && segmentId > 0n) {
-      state.value = segmentId;
+    // Picked fragment's global segment id, surfaced as the selection value
+    // exactly like a picked voxel's segment id.  Prefer the full uint64
+    // (`segmentIdU64`); fall back to the safe-integer `segmentId` for
+    // callers that only set the numeric field.
+    const u64 = pickedSpatialSkeleton.segmentIdU64;
+    const segNum = pickedSpatialSkeleton.segmentId;
+    if (typeof u64 === "bigint" && u64 > 0n) {
+      state.value = u64;
+    } else if (
+      typeof segNum === "number" &&
+      Number.isSafeInteger(segNum) &&
+      segNum > 0
+    ) {
+      state.value = BigInt(segNum);
     }
   }
 

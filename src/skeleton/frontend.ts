@@ -542,14 +542,21 @@ vec4 getSegmentAppearance(highp uvec2 segmentValue) {
       shader,
       excludedGPUTable ?? this.gpuEmptySegmentsHashTable,
     );
-    gl.uniform1f(
-      shader.uniform("uVisibleAlpha"),
-      this.base.displayState.objectAlpha.value,
-    );
-    gl.uniform1f(
-      shader.uniform("uHiddenAlpha"),
-      this.base.displayState.hiddenObjectAlpha.value,
-    );
+    // 3D (perspective) uses objectAlpha/hiddenObjectAlpha; 2D (slice) uses
+    // the cross-section sliders selectedAlpha ("Opacity (on)") /
+    // notSelectedAlpha ("Opacity (off)") when available, so the dense
+    // skeleton's 2D and 3D opacities are controlled independently.
+    const ds = this.base.displayState;
+    const visibleAlpha =
+      this.targetIsSliceView && ds.selectedAlpha !== undefined
+        ? ds.selectedAlpha.value
+        : ds.objectAlpha.value;
+    const hiddenAlpha =
+      this.targetIsSliceView && ds.notSelectedAlpha !== undefined
+        ? ds.notSelectedAlpha.value
+        : ds.hiddenObjectAlpha.value;
+    gl.uniform1f(shader.uniform("uVisibleAlpha"), visibleAlpha);
+    gl.uniform1f(shader.uniform("uHiddenAlpha"), hiddenAlpha);
 
     const colorGroupState =
       this.base.displayState.segmentationColorGroupState.value;

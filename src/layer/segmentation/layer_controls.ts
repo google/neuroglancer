@@ -66,8 +66,14 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
   {
     label: "Opacity (on)",
     toolJson: json_keys.SELECTED_ALPHA_JSON_KEY,
-    isValid: (layer) => layer.has2dLayer,
-    title: "Opacity in cross-section views of segments that are selected",
+    isValid: (layer) =>
+      makeCachedDerivedWatchableValue(
+        (has2d, hasSpatialSkeletons) => has2d || hasSpatialSkeletons,
+        [layer.has2dLayer, layer.hasSpatiallyIndexedSkeletonsLayer],
+      ),
+    title:
+      "Opacity in cross-section views of selected segments and of dense " +
+      "(spatially-indexed) skeletons",
     ...rangeLayerControl((layer) => ({
       value: layer.displayState.selectedAlpha,
     })),
@@ -75,8 +81,14 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
   {
     label: "Opacity (off)",
     toolJson: json_keys.NOT_SELECTED_ALPHA_JSON_KEY,
-    isValid: (layer) => layer.has2dLayer,
-    title: "Opacity in cross-section views of segments that are not selected",
+    isValid: (layer) =>
+      makeCachedDerivedWatchableValue(
+        (has2d, hasSpatialSkeletons) => has2d || hasSpatialSkeletons,
+        [layer.has2dLayer, layer.hasSpatiallyIndexedSkeletonsLayer],
+      ),
+    title:
+      "Opacity in cross-section views of non-selected segments and of dense " +
+      "(spatially-indexed) skeletons",
     ...rangeLayerControl((layer) => ({
       value: layer.displayState.notSelectedAlpha,
     })),
