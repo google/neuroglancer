@@ -270,6 +270,26 @@ describe("computeTangentsFromEdges", () => {
     }
   });
 
+  it("orients endpoints so no edge has opposing tangents (no mid-edge black)", () => {
+    // Path 0—1—2—3 along x.  Edge-adjacency would give the terminal vertex 3
+    // the backward direction `2→3` = (−1,0,0) while the rest point forward;
+    // a line interpolates its two endpoint tangents, so opposing signs cross
+    // through zero (black) at the midpoint.  Every edge's endpoints must
+    // share a hemisphere (dot >= 0) after sign-orientation.
+    const positions = new Float32Array([0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0]);
+    const edges = new Uint32Array([0, 1, 1, 2, 2, 3]);
+    const t = computeTangentsFromEdges(positions, 3, edges, 4);
+    for (let e = 0; e < edges.length; e += 2) {
+      const a = edges[e];
+      const b = edges[e + 1];
+      const dot =
+        t[a * 3] * t[b * 3] +
+        t[a * 3 + 1] * t[b * 3 + 1] +
+        t[a * 3 + 2] * t[b * 3 + 2];
+      expect(dot).toBeGreaterThanOrEqual(0);
+    }
+  });
+
   it("matches polyline computeTangents on a degree-2 chain (regression)", () => {
     // Bend in xy plane: (0,0,0) → (1,0,0) → (1,1,0).
     const positions = new Float32Array([0, 0, 0, 1, 0, 0, 1, 1, 0]);
@@ -311,6 +331,18 @@ describe("computeTangentsFromEdges", () => {
     // Vertex 1 and 2 (degree-1) point along +x.
     expect(Math.abs(tangents[3])).toBeCloseTo(1, 6);
     expect(Math.abs(tangents[6])).toBeCloseTo(1, 6);
+  });
+
+  it("falls back to a neighbour direction when the central difference cancels", () => {
+    // Vertex 0's first two neighbours (1, 2) are coincident at (1,0,0), so
+    // the central difference `pos[2]-pos[1]` is zero.  Rather than leaving a
+    // black (zero) tangent, fall back to the direction toward a neighbour.
+    const positions = new Float32Array([0, 0, 0, 1, 0, 0, 1, 0, 0]);
+    const edges = new Uint32Array([0, 1, 0, 2]);
+    const tangents = computeTangentsFromEdges(positions, 3, edges, 3);
+    expect(Math.abs(tangents[0])).toBeCloseTo(1, 6); // +x, non-black
+    expect(tangents[1]).toBeCloseTo(0, 6);
+    expect(tangents[2]).toBeCloseTo(0, 6);
   });
 
   it("self-loop edge is ignored", () => {
@@ -819,9 +851,13 @@ describe("appendGhostVertices", () => {
     expect(result.fragmentIndex.numFragments).toBe(1);
   });
 
-  it("zero tangent on coincident host/ghost (boundary-deduplication case)", () => {
+  it("coincident host/ghost inherits the host tangent (no black at chunk boundary)", () => {
     const chunk = streamlineChunk(3);
-    // Ghost coincident with host vertex 2.
+    // Ghost coincident with host vertex 2 — the chunk-boundary duplicate
+    // case.  The zero-length bridge has no direction of its own, so the
+    // ghost inherits the host's tangent (+X here) rather than staying black
+    // under `abs(prop_tangent())`.
+    const hostTangent = Array.from(chunk.tangents!.slice(2 * 3, 2 * 3 + 3));
     const result = appendGhostVertices(chunk, [
       {
         position: Float32Array.from([2, 0, 0]),
@@ -829,7 +865,8 @@ describe("appendGhostVertices", () => {
         bridgeFromLocalVertex: 2,
       },
     ]);
-    expect(Array.from(result.tangents!.slice(-3))).toEqual([0, 0, 0]);
+    expect(Array.from(result.tangents!.slice(-3))).toEqual(hostTangent);
+    expect(hostTangent).toEqual([1, 0, 0]);
   });
 
   it("works for skeleton geometry (edge-adjacency tangents extended for ghost)", () => {
@@ -858,8 +895,10 @@ describe("appendGhostVertices", () => {
     ]);
   });
 
-  it("ghost inherits its host endpoint's segment id (bridge stays one colour)", () => {
+  it("ghost inherits its host endpoint's full uint64 segment id (bridge stays one colour)", () => {
     const positions = new Float32Array([0, 0, 0, 1, 0, 0, 2, 0, 0]);
+    // segmentIds is interleaved [lo, hi] per vertex; use a genuine uint64
+    // (lo=2, hi=1 → 0x1_0000_0002) to confirm BOTH halves are copied.
     const chunk = buildSkeletonChunk({
       rank: 3,
       positions,
@@ -867,7 +906,7 @@ describe("appendGhostVertices", () => {
       linksConvention: "implicit_sequential_with_branches",
       geometryKind: "skeleton",
       vertexAttributes: [],
-      segmentIds: Uint32Array.from([42, 42, 42]),
+      segmentIds: Uint32Array.from([2, 1, 2, 1, 2, 1]),
     });
     const result = appendGhostVertices(chunk, [
       {
@@ -877,8 +916,8 @@ describe("appendGhostVertices", () => {
       },
     ]);
     expect(result.segmentIds).toBeDefined();
-    // Ghost (index 3) copies host vertex 2's segment id (42).
-    expect(Array.from(result.segmentIds!)).toEqual([42, 42, 42, 42]);
+    // Ghost (vertex 3) copies host vertex 2's [lo, hi] = [2, 1].
+    expect(Array.from(result.segmentIds!)).toEqual([2, 1, 2, 1, 2, 1, 2, 1]);
   });
 
   it("preserves attribute dtype (uint8 host → uint8 output)", () => {

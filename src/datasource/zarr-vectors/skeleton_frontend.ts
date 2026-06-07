@@ -177,16 +177,19 @@ function buildZvSpatialVertexAttributes(parameters: {
   // Synthesised per-vertex `"segment"` column (last slot — mirrors the
   // backend's `download()` packing).  Naming it `"segment"` is what makes
   // the render layer wire `segmentAttributeIndex` and colour each fragment
-  // by its owning segment via `segmentColorHash`, exactly like the built-in
-  // `[position, segment]` shape of `SpatiallyIndexedSkeletonSource`.  The
+  // by its owning segment via `segmentColorHash`.  Two uint32 components
+  // (`uvec2`) carry the FULL uint64 flywire id `[lo, hi]`, so dense
+  // fragments colour identically to the flat segmentation's voxels for the
+  // same id (the render layer hashes the full uint64 with the shared
+  // `segmentColorHash`) and a picked fragment surfaces the global id.  The
   // backend always synthesises this column (per-fragment `segment_id`, or
   // the fragment's chunk-local index as a fallback), so it is unconditional.
   out.push({
     name: "segment",
-    dataType: DataType.UINT32,
+    dataType: DataType.UINT64,
     numComponents: 1,
     webglDataType: WebGL2RenderingContext.UNSIGNED_INT,
-    glslDataType: "uint",
+    glslDataType: getShaderType(DataType.UINT64, 1),
   });
   return out;
 }

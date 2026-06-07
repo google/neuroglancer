@@ -68,13 +68,16 @@ export type AttributeTypedArray =
  *   for skeletons (no canonical "direction").
  * - `vertexAttributes` is parallel to the caller's `attributeNames`,
  *   already reinterpreted to its declared dtype.
- * - `segmentIds` is a synthesised per-vertex `(numVertices,)` uint32 column
- *   used by the spatially-indexed render layer's `"segment"` attribute to
- *   colour each fragment by its owning segment (via `segmentColorHash`).
- *   Derived from the per-fragment `fragment_attributes/segment_id` column
- *   (truncated to 32 bits) when present, else the fragment's index within
- *   the chunk — see `downloadSkeletonChunk`.  Absent for chunks that don't
- *   synthesise it (e.g. empty chunks).
+ * - `segmentIds` is a synthesised per-vertex segment column carrying the
+ *   FULL uint64 id as two interleaved uint32 components `[lo, hi]` (length
+ *   `2 * numVertices`), uploaded as a `uvec2` "segment" attribute so the
+ *   spatially-indexed render layer colours each fragment by its owning
+ *   segment via `segmentColorHash` (matching the flat segmentation) and a
+ *   pick surfaces the global id.  Derived from the per-fragment
+ *   `fragment_attributes/segment_id` column when present, else the
+ *   fragment's index within the chunk (`[f, 0]`) — see
+ *   `downloadSkeletonChunk`.  Absent for chunks that don't synthesise it
+ *   (e.g. empty chunks).
  * - `fragmentIndex` is retained so pass 2 can extract just the fragments
  *   named by a per-object manifest entry without re-decoding bytes.
  */
@@ -328,8 +331,63 @@ export function computeTangentsFromEdges(
       out[v * 3] = dx / norm;
       out[v * 3 + 1] = dy / norm;
       out[v * 3 + 2] = dz / norm;
+      continue;
     }
-    // Else: zero — coincident neighbours (degenerate).
+    // Central difference cancelled (the first two neighbours are
+    // coincident).  Any vertex that participates in an edge should still
+    // get a non-black direction under `abs(prop_tangent())`, so fall back
+    // to the direction toward the first non-coincident neighbour.
+    for (let k = 0; k < nbrs.length; ++k) {
+      const nb = nbrs[k];
+      const fx = positions[nb * rank] - positions[v * rank];
+      const fy = positions[nb * rank + 1] - positions[v * rank + 1];
+      const fz = rank === 3 ? positions[nb * rank + 2] - positions[v * rank + 2] : 0;
+      const fnorm = Math.sqrt(fx * fx + fy * fy + fz * fz);
+      if (fnorm > 0) {
+        out[v * 3] = fx / fnorm;
+        out[v * 3 + 1] = fy / fnorm;
+        out[v * 3 + 2] = fz / fnorm;
+        break;
+      }
+    }
+    // Else: every neighbour is coincident — truly degenerate, leave zero.
+  }
+
+  // Sign-orient tangents consistently across each connected component.
+  // Edge-adjacency tangents have an arbitrary per-vertex sign: on a path
+  // A-B-C-D the interior vertices point "forward" but the terminal vertex
+  // computes `C - D` (backward).  A line segment interpolates its two
+  // endpoint tangents, so opposing signs cross through zero at the
+  // midpoint — rendering a black band on every terminal edge under
+  // `abs(prop_tangent())`.  Walk-order tangents avoid this by construction;
+  // here we replicate it with a flood-fill that flips each newly-reached
+  // vertex's tangent to align (dot >= 0) with the vertex it came from, so
+  // no edge has opposing endpoint tangents.  Sign is arbitrary anyway
+  // (the standard shader uses `abs()`), so only consistency matters.
+  const oriented = new Uint8Array(numVertices);
+  const stack: number[] = [];
+  for (let s = 0; s < numVertices; ++s) {
+    if (oriented[s] || adj[s].length === 0) continue;
+    oriented[s] = 1;
+    stack.push(s);
+    while (stack.length > 0) {
+      const u = stack.pop()!;
+      const ux = out[u * 3];
+      const uy = out[u * 3 + 1];
+      const uz = out[u * 3 + 2];
+      for (const w of adj[u]) {
+        if (oriented[w]) continue;
+        oriented[w] = 1;
+        const dot = out[w * 3] * ux + out[w * 3 + 1] * uy + out[w * 3 + 2] * uz;
+        if (dot < 0) {
+          // `0 - x` (not `-x`) so a zero component negates to +0, not -0.
+          out[w * 3] = 0 - out[w * 3];
+          out[w * 3 + 1] = 0 - out[w * 3 + 1];
+          out[w * 3 + 2] = 0 - out[w * 3 + 2];
+        }
+        stack.push(w);
+      }
+    }
   }
   return out;
 }
@@ -705,9 +763,16 @@ export function appendGhostVertices(
         newTangents[out] = dx / norm;
         newTangents[out + 1] = dy / norm;
         newTangents[out + 2] = dz / norm;
+      } else {
+        // Coincident host/ghost — the common chunk-boundary case, where
+        // the writer duplicates the boundary vertex so the bridge has zero
+        // length.  Inherit the host's tangent so the (zero-length) bridge
+        // stub colours continuously with the path instead of rendering
+        // black under `abs(prop_tangent())`.
+        newTangents[out] = newTangents[host * 3];
+        newTangents[out + 1] = newTangents[host * 3 + 1];
+        newTangents[out + 2] = newTangents[host * 3 + 2];
       }
-      // Else: leave zero — coincident host/ghost (boundary_deduplication-
-      // style writers will hit this).
     }
   }
 
@@ -735,13 +800,16 @@ export function appendGhostVertices(
 
   // Segment ids (if present): each ghost is the far end of a bridge that
   // connects the SAME segment, so it inherits its host endpoint's id.
-  // Keeps the bridge edge a single colour across the chunk boundary.
+  // Keeps the bridge edge a single colour across the chunk boundary.  Two
+  // uint32 components per vertex ([lo, hi]) — copy both.
   let newSegmentIds: Uint32Array | undefined;
   if (segmentIds !== undefined) {
-    newSegmentIds = new Uint32Array(newNumVertices);
+    newSegmentIds = new Uint32Array(newNumVertices * 2);
     newSegmentIds.set(segmentIds, 0);
     for (let g = 0; g < numGhosts; ++g) {
-      newSegmentIds[numVertices + g] = segmentIds[ghosts[g].bridgeFromLocalVertex];
+      const host = ghosts[g].bridgeFromLocalVertex;
+      newSegmentIds[(numVertices + g) * 2] = segmentIds[host * 2];
+      newSegmentIds[(numVertices + g) * 2 + 1] = segmentIds[host * 2 + 1];
     }
   }
 

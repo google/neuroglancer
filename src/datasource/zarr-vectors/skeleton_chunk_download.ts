@@ -312,13 +312,16 @@ export async function downloadSkeletonChunk(
   // 5. Per-fragment segment_id → synthesised per-vertex "segment" column.
   // The writer stores one uint64 flywire id per fragment under
   // `fragment_attributes/segment_id/<key>/c/0`.  We expand it to a
-  // per-vertex uint32 column (low 32 bits) so the render layer's
-  // `"segment"` attribute colours each fragment by its owning segment via
-  // `segmentColorHash` — colours stay consistent across chunks and pyramid
-  // levels because the id is intrinsic to the segment.  When the blob is
-  // absent or mis-sized (older stores, or streamline/polyline geometries
-  // that never wrote it), fall back to the fragment's index within the
-  // chunk: still distinct per fragment, just not unified across chunks.
+  // per-vertex column of the FULL uint64, stored interleaved as two uint32
+  // components `[lo, hi, lo, hi, …]` (a `uvec2` on the GPU).  The render
+  // layer hashes the full id with the same `segmentColorHash` as the flat
+  // segmentation, so dense fragments colour identically to that segment's
+  // voxels, and a picked fragment surfaces the global id.  Colours/ids stay
+  // consistent across chunks and pyramid levels because the id is intrinsic
+  // to the segment.  When the blob is absent or mis-sized (older stores, or
+  // streamline/polyline geometries that never wrote it), fall back to the
+  // fragment's index within the chunk: still distinct per fragment, just not
+  // unified across chunks (`[f, 0]`).
   const numFragments = fragmentIndex.numFragments;
   let fragSegIds: BigUint64Array | undefined;
   const segFragBytes = await kvStoreRead(
@@ -336,14 +339,25 @@ export async function downloadSkeletonChunk(
       ),
     );
   }
-  const segmentIds = new Uint32Array(numVertices);
+  // Two uint32 per vertex: [lo, hi].
+  const segmentIds = new Uint32Array(numVertices * 2);
   for (let f = 0; f < numFragments; ++f) {
-    const sid =
-      fragSegIds !== undefined
-        ? Number(fragSegIds[f] & 0xffffffffn) >>> 0
-        : f;
+    let lo: number;
+    let hi: number;
+    if (fragSegIds !== undefined) {
+      const id = fragSegIds[f];
+      lo = Number(id & 0xffffffffn) >>> 0;
+      hi = Number((id >> 32n) & 0xffffffffn) >>> 0;
+    } else {
+      lo = f;
+      hi = 0;
+    }
     const idxs = fragmentIndex.indices(f);
-    for (let k = 0; k < idxs.length; ++k) segmentIds[idxs[k]] = sid;
+    for (let k = 0; k < idxs.length; ++k) {
+      const v = idxs[k];
+      segmentIds[v * 2] = lo;
+      segmentIds[v * 2 + 1] = hi;
+    }
   }
 
   return buildSkeletonChunk({

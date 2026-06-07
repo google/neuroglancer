@@ -16,6 +16,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 
+import { DataType } from "#src/util/data_type.js";
 import { Uint64Set } from "#src/uint64_set.js";
 
 if (!("WebGL2RenderingContext" in globalThis)) {
@@ -39,7 +40,7 @@ const {
 } = await import("#src/skeleton/frontend.js");
 
 describe("resolveSpatiallyIndexedSkeletonSegmentPick", () => {
-  it("returns the node segment id for direct node picks", () => {
+  it("returns the node segment id (bigint) for direct node picks (1-component)", () => {
     const chunk = {
       indices: new Uint32Array([0, 1, 1, 2]),
       numVertices: 3,
@@ -48,7 +49,7 @@ describe("resolveSpatiallyIndexedSkeletonSegmentPick", () => {
 
     expect(
       resolveSpatiallyIndexedSkeletonSegmentPick(chunk, segmentIds, 1, "node"),
-    ).toBe(13);
+    ).toBe(13n);
   });
 
   it("returns the first valid endpoint segment id for direct edge picks", () => {
@@ -60,10 +61,30 @@ describe("resolveSpatiallyIndexedSkeletonSegmentPick", () => {
 
     expect(
       resolveSpatiallyIndexedSkeletonSegmentPick(chunk, segmentIds, 0, "edge"),
-    ).toBe(19);
+    ).toBe(19n);
     expect(
       resolveSpatiallyIndexedSkeletonSegmentPick(chunk, segmentIds, 1, "edge"),
-    ).toBe(19);
+    ).toBe(19n);
+  });
+
+  it("reconstructs a FULL uint64 (>2^32) id from a 2-component [lo,hi] column", () => {
+    // Flywire-scale id 720575940612786691 = lo 0x0DE2_2603, hi 0x0A00_0002.
+    const id = 720575940612786691n;
+    const lo = Number(id & 0xffffffffn) >>> 0;
+    const hi = Number((id >> 32n) & 0xffffffffn) >>> 0;
+    const chunk = {
+      indices: new Uint32Array([0, 1, 1, 2]),
+      numVertices: 3,
+    };
+    // interleaved [lo, hi] per vertex; vertex 1 carries the id.
+    const segmentIds = new Uint32Array([0, 0, lo, hi, 0, 0]);
+    expect(
+      resolveSpatiallyIndexedSkeletonSegmentPick(chunk, segmentIds, 1, "node", 2),
+    ).toBe(id);
+    // edge (0,1): first endpoint (vertex 0) is empty → falls back to vertex 1.
+    expect(
+      resolveSpatiallyIndexedSkeletonSegmentPick(chunk, segmentIds, 0, "edge", 2),
+    ).toBe(id);
   });
 
   it("returns undefined for out-of-range direct picks", () => {
@@ -103,10 +124,16 @@ describe("SpatiallyIndexedSkeletonLayer browse node picks", () => {
       ],
     };
     const layer = Object.create(SpatiallyIndexedSkeletonLayer.prototype);
+    // The pick path locates the "segment" column by attribute index; provide
+    // the [position, segment(uint32)] layout matching the packed bytes above.
+    (layer as any).vertexAttributes = [
+      { name: "position", dataType: DataType.FLOAT32, numComponents: 3 },
+      { name: "segment", dataType: DataType.UINT32, numComponents: 1 },
+    ];
 
     expect((layer as any).resolveNodePickFromChunk(chunk, 1)).toEqual({
       nodeId: 202,
-      segmentId: 17,
+      segmentId: 17n,
       position: new Float32Array([4, 5, 6]),
       sourceState: { revisionToken: "2026-03-29T11:51:00Z" },
     });

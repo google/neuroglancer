@@ -354,12 +354,25 @@ describe("downloadSkeletonChunk — orchestrator", () => {
     ).rejects.toThrow(/length mismatch/i);
   });
 
-  it("synthesises a per-vertex segment column from fragment_attributes/segment_id (uint32-truncated)", async () => {
+  /** Reconstruct the per-vertex uint64 ids from the interleaved [lo,hi] column. */
+  function segmentIdsAsBigint(segmentIds: Uint32Array): bigint[] {
+    const out: bigint[] = [];
+    for (let v = 0; v * 2 + 1 < segmentIds.length; ++v) {
+      out.push(
+        BigInt(segmentIds[v * 2] >>> 0) | (BigInt(segmentIds[v * 2 + 1] >>> 0) << 32n),
+      );
+    }
+    return out;
+  }
+
+  it("synthesises a per-vertex FULL uint64 segment column from fragment_attributes/segment_id", async () => {
     // Two fragments: frag 0 owns vertices 0..1, frag 1 owns vertices 2..4.
-    // segment_id holds a flywire-scale uint64 whose low 32 bits are what
-    // the render layer colours by.
+    // Flywire-scale ids (> 2^32) must survive intact — the high 32 bits are
+    // what made the old uint32-truncated colour differ from the flat
+    // segmentation.
     const id0 = 720575940612786691n;
     const id1 = 720575940606327461n;
+    expect(id0 > 0xffffffffn && id1 > 0xffffffffn).toBe(true); // genuinely uint64
     const kvStoreRead = makeKvStore({
       "vertices/0.0.0/c/0": verticesBlob([0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0]),
       "vertex_fragments/0.0.0/c/0": twoRangeFragmentsBlob(2, 3),
@@ -378,10 +391,9 @@ describe("downloadSkeletonChunk — orchestrator", () => {
       },
       new AbortController().signal,
     );
-    const lo0 = Number(id0 & 0xffffffffn) >>> 0;
-    const lo1 = Number(id1 & 0xffffffffn) >>> 0;
     expect(chunk!.segmentIds).toBeDefined();
-    expect(Array.from(chunk!.segmentIds!)).toEqual([lo0, lo0, lo1, lo1, lo1]);
+    expect(chunk!.segmentIds!.length).toBe(5 * 2); // interleaved [lo, hi]
+    expect(segmentIdsAsBigint(chunk!.segmentIds!)).toEqual([id0, id0, id1, id1, id1]);
   });
 
   it("falls back to the fragment's chunk-local index when segment_id is absent", async () => {
@@ -404,7 +416,7 @@ describe("downloadSkeletonChunk — orchestrator", () => {
       new AbortController().signal,
     );
     // Fragment 0 → id 0 for its 2 vertices; fragment 1 → id 1 for its 3.
-    expect(Array.from(chunk!.segmentIds!)).toEqual([0, 0, 1, 1, 1]);
+    expect(segmentIdsAsBigint(chunk!.segmentIds!)).toEqual([0n, 0n, 1n, 1n, 1n]);
   });
 });
 

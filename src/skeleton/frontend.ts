@@ -405,6 +405,27 @@ void spatialChunkCull() {
     return `vCustom${index}`;
   }
 
+  /**
+   * Emit the vertex-stage assignment of the `uvec2 vSegmentValue` (the full
+   * uint64 segment id) from the segment attribute.  A 1-component uint32
+   * attribute (CATMAID) is zero-extended into the high half; a 2-component
+   * (zarr-vectors `[lo, hi]`) attribute fills both halves.  Caller must have
+   * verified `this.segmentAttributeIndex !== undefined`.
+   */
+  private segmentValueAssignment(vertexIndexExpr: string): string {
+    const i = this.segmentAttributeIndex!;
+    const read = `readAttribute${i}(${vertexIndexExpr})`;
+    // A UINT64 attribute (zarr-vectors full uint64) reads as a `uint64_t`
+    // whose `.value` is the uvec2; a uint32 attribute (CATMAID) reads as a
+    // `uint32_t` → `toRaw(...)` gives a `uint`, zero-extended into the high
+    // half.
+    const rhs =
+      this.vertexAttributes[i].dataType === DataType.UINT64
+        ? `${read}.value`
+        : `uvec2(toRaw(${read}), 0u)`;
+    return `vSegmentValue = ${rhs};\n`;
+  }
+
   edgeShaderGetter;
   nodeShaderGetter;
 
@@ -446,7 +467,10 @@ void spatialChunkCull() {
     if (params.hoverHighlight) {
       builder.addUniform("highp uvec2", "uHoveredSegmentId");
     }
-    builder.addVarying("highp uint", "vSegmentValue", "flat");
+    // Full uint64 segment id as a uvec2 [lo, hi].  A 1-component uint32
+    // segment attribute (CATMAID) is zero-extended into this at the vertex
+    // stage; a 2-component (zarr-vectors) attribute fills both halves.
+    builder.addVarying("highp uvec2", "vSegmentValue", "flat");
 
     const statedColorFragment = params.hasSegmentStatedColors
       ? `
@@ -470,8 +494,8 @@ void spatialChunkCull() {
       : "";
 
     builder.addFragmentCode(`
-uint64_t getSegmentAppearanceId(highp uint segmentValue) {
-  return uint64_t(uvec2(segmentValue, 0u));
+uint64_t getSegmentAppearanceId(highp uvec2 segmentValue) {
+  return uint64_t(segmentValue);
 }
 vec3 getSegmentBaseColor(uint64_t segmentId) {
 ${statedColorFragment}
@@ -490,7 +514,7 @@ float getSegmentLookupAlpha(uint64_t segmentId) {
   bool isVisible = ${this.visibleSegmentsShaderManager.hasFunctionName}(segmentId);
   ${alphaExpression}
 }
-vec4 getSegmentAppearance(highp uint segmentValue) {
+vec4 getSegmentAppearance(highp uvec2 segmentValue) {
   uint64_t segmentId = getSegmentAppearanceId(segmentValue);
   return vec4(getSegmentLookupColor(segmentId), getSegmentLookupAlpha(segmentId));
 }
@@ -669,7 +693,7 @@ highp uint vertexIndex = aVertexIndex.x * (1u - lineEndpointIndex) + aVertexInde
             skeletonParams.dynamicSegmentAppearance &&
             this.segmentAttributeIndex !== undefined
           ) {
-            vertexMain += `vSegmentValue = toRaw(readAttribute${this.segmentAttributeIndex}(aVertexIndex.x));\n`;
+            vertexMain += this.segmentValueAssignment("aVertexIndex.x");
           }
 
           const segmentColorExpression = this.getSegmentColorExpression();
@@ -689,13 +713,13 @@ void emitRGB(vec3 color) {
   vec4 baseColor = segmentColor();
   highp float alpha = baseColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()};
   if (alpha <= 0.0) discard;
-  emit(vec4(color * alpha, alpha), vPickID);
+  ${this.emitColorStatement("color", "alpha")}
 }
 void emitDefault() {
   vec4 baseColor = segmentColor();
   highp float alpha = baseColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()};
   if (alpha <= 0.0) discard;
-  emit(vec4(baseColor.rgb * alpha, alpha), vPickID);
+  ${this.emitColorStatement("baseColor.rgb", "alpha")}
 }
 `);
           } else if (this.segmentColorAttributeIndex === undefined) {
@@ -722,12 +746,12 @@ vec4 segmentColor() {
 }
 void emitRGB(vec3 color) {
   highp float alpha = ${segmentAlphaExpression} * getLineAlpha() * ${this.getCrossSectionFadeFactor()};
-  emit(vec4(color * alpha, alpha), vPickID);
+  ${this.emitColorStatement("color", "alpha")}
 }
 void emitDefault() {
   vec4 baseColor = segmentColor();
   highp float alpha = baseColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()};
-  emit(vec4(baseColor.rgb * alpha, alpha), vPickID);
+  ${this.emitColorStatement("baseColor.rgb", "alpha")}
 }
 `);
           }
@@ -793,7 +817,7 @@ highp vec3 vertexPosition = readAttribute0(vertexIndex);
             skeletonParams.dynamicSegmentAppearance &&
             this.segmentAttributeIndex !== undefined
           ) {
-            vertexMain += `vSegmentValue = toRaw(readAttribute${this.segmentAttributeIndex}(vertexIndex));\n`;
+            vertexMain += this.segmentValueAssignment("vertexIndex");
           }
           vertexMain += `
 emitCircle(
@@ -830,7 +854,7 @@ void emitRGBA(vec4 color) {
   vec4 renderColor = vec4(color.rgb, alpha);
   vec4 borderColor = ${borderColorExpression};
   vec4 circleColor = getCircleColor(renderColor, borderColor);
-  emit(vec4(circleColor.rgb * circleColor.a, circleColor.a), vPickID);
+  ${this.emitColorStatement("circleColor.rgb", "circleColor.a")}
 }
 void emitRGB(vec3 color) {
   emitRGBA(vec4(color, 1.0));
@@ -877,7 +901,7 @@ void emitRGBA(vec4 color) {
   vec4 renderColor = color;
   vec4 borderColor = ${borderColorExpression};
   vec4 circleColor = getCircleColor(renderColor, borderColor);
-  emit(vec4(circleColor.rgb * circleColor.a, circleColor.a), vPickID);
+  ${this.emitColorStatement("circleColor.rgb", "circleColor.a")}
 }
 void emitRGB(vec3 color) {
   emitRGBA(vec4(color, 1.0));
@@ -931,6 +955,18 @@ void emitDefault() {
       return "(clamp(1.0 - 2.0 * abs(0.5 - gl_FragCoord.z), 0.0, 1.0))";
     }
     return "(1.0)";
+  }
+
+  // GLSL statement emitting an (rgb, alpha) color with the alpha convention the
+  // target expects: the 2D slice view blends with straight alpha
+  // (`SRC_ALPHA, ONE_MINUS_SRC_ALPHA`), while the perspective OIT path requires
+  // premultiplied color. Emitting premultiplied into the slice view's straight
+  // blend would multiply rgb by alpha twice, darkening (rather than fading)
+  // colors as the cross-section fade lowers alpha.
+  private emitColorStatement(rgb: string, alpha: string): string {
+    return this.targetIsSliceView
+      ? `emit(vec4(${rgb}, ${alpha}), vPickID);`
+      : `emit(vec4((${rgb}) * (${alpha}), ${alpha}), vPickID);`;
   }
 
   beginLayer(
@@ -2298,38 +2334,42 @@ export interface SpatiallyIndexedSkeletonLayerDisplayState
   autoSpatialSkeletonGridLevel3d?: WatchableValueInterface<boolean>;
 }
 
+/**
+ * Resolve a picked node/edge offset to its owning segment as a full uint64
+ * `bigint`.  `segmentIds` is the interleaved per-vertex segment column with
+ * `segmentComponents` uint32 per vertex (2 = `[lo, hi]` full uint64; 1 = a
+ * uint32 id with implicit high half 0).  Returns `undefined` for an absent /
+ * zero id.
+ */
 export function resolveSpatiallyIndexedSkeletonSegmentPick(
   chunk: { indices: Uint32Array; numVertices: number },
   segmentIds: Uint32Array,
   pickedOffset: number,
   kind: "node" | "edge",
-) {
-  if (pickedOffset < 0) return undefined;
-  if (kind === "node") {
-    if (
-      pickedOffset >= segmentIds.length ||
-      pickedOffset >= chunk.numVertices
-    ) {
+  segmentComponents = 1,
+): bigint | undefined {
+  const readId = (vertex: number): bigint | undefined => {
+    const base = vertex * segmentComponents;
+    if (vertex < 0 || base + segmentComponents > segmentIds.length) {
       return undefined;
     }
-    const segmentId = segmentIds[pickedOffset];
-    return Number.isSafeInteger(segmentId) && segmentId > 0
-      ? segmentId
-      : undefined;
+    const lo = BigInt(segmentIds[base] >>> 0);
+    const hi = segmentComponents >= 2 ? BigInt(segmentIds[base + 1] >>> 0) : 0n;
+    const id = lo | (hi << 32n);
+    return id > 0n ? id : undefined;
+  };
+  if (pickedOffset < 0) return undefined;
+  if (kind === "node") {
+    if (pickedOffset >= chunk.numVertices) return undefined;
+    return readId(pickedOffset);
   }
   const indexOffset = pickedOffset * 2;
   if (indexOffset + 1 >= chunk.indices.length) {
     return undefined;
   }
-  const vertexA = chunk.indices[indexOffset];
-  const vertexB = chunk.indices[indexOffset + 1];
-  let segmentId = segmentIds[vertexA];
-  if (!Number.isSafeInteger(segmentId) || segmentId <= 0) {
-    segmentId = segmentIds[vertexB];
-  }
-  return Number.isSafeInteger(segmentId) && segmentId > 0
-    ? segmentId
-    : undefined;
+  return (
+    readId(chunk.indices[indexOffset]) ?? readId(chunk.indices[indexOffset + 1])
+  );
 }
 
 export class SpatiallyIndexedSkeletonLayer
@@ -2941,18 +2981,31 @@ export class SpatiallyIndexedSkeletonLayer
     chunk: SpatiallyIndexedSkeletonChunk,
   ) {
     const offsets = chunk.vertexAttributeOffsets;
-    if (!offsets || offsets.length < 2) return undefined;
+    if (!offsets || offsets.length < 1) return undefined;
     const positions = new Float32Array(
       chunk.vertexAttributes.buffer,
       chunk.vertexAttributes.byteOffset + offsets[0],
       chunk.numVertices * 3,
     );
+    // Locate the "segment" column by its actual attribute index — the
+    // zarr-vectors layout is [position, tangent, …, segment], so segment is
+    // NOT necessarily offsets[1].  Count the uint32 it occupies per vertex:
+    // a UINT64 attribute (zarr-vectors full uint64) is 2 uint32 [lo, hi]
+    // despite numComponents===1; a UINT32 attribute (CATMAID) is 1 (high
+    // half implicitly 0).
+    const segIdx = this.vertexAttributes.findIndex((a) => a.name === "segment");
+    if (segIdx < 0 || segIdx >= offsets.length) return undefined;
+    const segInfo = this.vertexAttributes[segIdx];
+    const segmentComponents =
+      segInfo.dataType === DataType.UINT64
+        ? 2 * segInfo.numComponents
+        : segInfo.numComponents;
     const segmentIds = new Uint32Array(
       chunk.vertexAttributes.buffer,
-      chunk.vertexAttributes.byteOffset + offsets[1],
-      chunk.numVertices,
+      chunk.vertexAttributes.byteOffset + offsets[segIdx],
+      chunk.numVertices * segmentComponents,
     );
-    return { positions, segmentIds };
+    return { positions, segmentIds, segmentComponents };
   }
 
   resolveSegmentPickFromChunk(
@@ -2969,6 +3022,7 @@ export class SpatiallyIndexedSkeletonLayer
       data.segmentIds,
       pickedOffset,
       kind,
+      data.segmentComponents,
     );
   }
 
@@ -2994,6 +3048,7 @@ export class SpatiallyIndexedSkeletonLayer
       data.segmentIds,
       pickedOffset,
       "node",
+      data.segmentComponents,
     );
     if (segmentId === undefined) {
       return undefined;
@@ -3531,14 +3586,26 @@ export class SpatiallyIndexedSkeletonLayer
 function transformSpatiallyIndexedSkeletonPickedValue(
   pickState: PickState,
 ): bigint | undefined {
-  const pickedSegmentId = pickState.pickedSpatialSkeleton?.segmentId;
-  if (
-    typeof pickedSegmentId === "number" &&
-    Number.isSafeInteger(pickedSegmentId)
-  ) {
-    return BigInt(pickedSegmentId);
-  }
-  return undefined;
+  const u64 = pickState.pickedSpatialSkeleton?.segmentIdU64;
+  return typeof u64 === "bigint" && u64 > 0n ? u64 : undefined;
+}
+
+const MAX_SAFE_SEGMENT_ID = BigInt(Number.MAX_SAFE_INTEGER);
+
+/**
+ * Split a full uint64 segment id into the dual representation stored on
+ * `PickedSpatialSkeletonState`: the `bigint` for the selection widget, and a
+ * safe-integer `number` for the legacy edit/overlay tooling (undefined when
+ * the id exceeds 2⁵³, e.g. flywire ids).
+ */
+function pickedSegmentIdFields(u64: bigint): {
+  segmentIdU64: bigint;
+  segmentId?: number;
+} {
+  return {
+    segmentIdU64: u64,
+    segmentId: u64 <= MAX_SAFE_SEGMENT_ID ? Number(u64) : undefined,
+  };
 }
 
 function updateSpatiallyIndexedSkeletonMouseState(
@@ -3556,14 +3623,15 @@ function updateSpatiallyIndexedSkeletonMouseState(
     ) {
       return;
     }
-    const segmentId = data.segmentIds[pickedOffset];
-    if (!Number.isSafeInteger(segmentId) || segmentId <= 0) {
+    const rawSegmentId = data.segmentIds[pickedOffset];
+    if (!Number.isSafeInteger(rawSegmentId) || rawSegmentId <= 0) {
       return;
     }
-    mouseState.pickedSpatialSkeleton = { segmentId };
+    const segmentId = BigInt(rawSegmentId);
+    mouseState.pickedSpatialSkeleton = pickedSegmentIdFields(segmentId);
     if (
       !getVisibleSegments(base.displayState.segmentationGroupState.value).has(
-        BigInt(segmentId),
+        segmentId,
       )
     ) {
       return;
@@ -3576,7 +3644,7 @@ function updateSpatiallyIndexedSkeletonMouseState(
     );
     mouseState.pickedSpatialSkeleton = {
       nodeId,
-      segmentId,
+      ...pickedSegmentIdFields(segmentId),
       position: new Float32Array(nodePosition),
     };
     const transform = base.displayState.transform.value;
@@ -3593,9 +3661,11 @@ function updateSpatiallyIndexedSkeletonMouseState(
     if (pickedOffset < 0 || pickedOffset >= data.segmentIds.length) {
       return;
     }
-    const segmentId = data.segmentIds[pickedOffset];
-    if (Number.isSafeInteger(segmentId) && segmentId > 0) {
-      mouseState.pickedSpatialSkeleton = { segmentId };
+    const rawSegmentId = data.segmentIds[pickedOffset];
+    if (Number.isSafeInteger(rawSegmentId) && rawSegmentId > 0) {
+      mouseState.pickedSpatialSkeleton = pickedSegmentIdFields(
+        BigInt(rawSegmentId),
+      );
     }
     return;
   }
@@ -3608,7 +3678,7 @@ function updateSpatiallyIndexedSkeletonMouseState(
       if (pickedNode !== undefined) {
         mouseState.pickedSpatialSkeleton = {
           nodeId: pickedNode.nodeId,
-          segmentId: pickedNode.segmentId,
+          ...pickedSegmentIdFields(pickedNode.segmentId),
           position: new Float32Array(pickedNode.position),
           sourceState: pickedNode.sourceState,
         };
@@ -3621,7 +3691,7 @@ function updateSpatiallyIndexedSkeletonMouseState(
       "edge",
     );
     if (segmentId !== undefined) {
-      mouseState.pickedSpatialSkeleton = { segmentId };
+      mouseState.pickedSpatialSkeleton = pickedSegmentIdFields(segmentId);
     }
   }
 }

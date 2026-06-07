@@ -1127,7 +1127,18 @@ export class LayerManager extends RefCounted {
 
 export interface PickedSpatialSkeletonState {
   nodeId?: number;
+  /**
+   * Owning segment id as a safe-integer `number` (used by the spatial
+   * skeleton edit/overlay tooling, which predates uint64 support and gates
+   * on `Number.isSafeInteger`).  `undefined` when the id exceeds 2⁵³.
+   */
   segmentId?: number;
+  /**
+   * Owning segment id as the FULL uint64 (e.g. flywire) `bigint`.  This is
+   * what the dense spatially-indexed pick surfaces to the selection widget
+   * (matching a picked voxel's segment id).
+   */
+  segmentIdU64?: bigint;
   position?: Float32Array;
   sourceState?: SpatialSkeletonSourceState;
 }
