@@ -29,6 +29,7 @@ function makeViewer(
 ): Viewer {
   return {
     inputEventBindings: { global, sliceView, perspectiveView },
+    globalToolBinder: { bindings: new Map(), localBinders: new Set() },
   } as unknown as Viewer;
 }
 
@@ -76,7 +77,12 @@ describe("CommandCatalog.filter", () => {
   // With empty bindings the catalog contains only the two supplemental commands:
   // "Edit JSON State" and "Screenshot".
   function makeCatalog() {
-    return new CommandCatalog(null as unknown as Viewer, []);
+    return new CommandCatalog(
+      {
+        globalToolBinder: { bindings: new Map(), localBinders: new Set() },
+      } as unknown as Viewer,
+      [],
+    );
   }
 
   it("returns all commands for an empty query", () => {
