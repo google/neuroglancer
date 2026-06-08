@@ -1820,6 +1820,7 @@ type SpatiallyIndexedSkeletonSourceEntry =
 interface SpatiallyIndexedSkeletonLayerOptions {
   sources2d?: SpatiallyIndexedSkeletonSourceEntry[];
   selectedNodeId?: WatchableValueInterface<number | undefined>;
+  selectedNodeSegmentId?: WatchableValueInterface<number | undefined>;
   pendingNodePositionVersion?: WatchableValueInterface<number>;
   getPendingNodePosition?: (nodeId: number) => ArrayLike<number> | undefined;
   getCachedNode?: (nodeId: number) => SpatiallyIndexedSkeletonNode | undefined;
@@ -2049,6 +2050,9 @@ export class SpatiallyIndexedSkeletonLayer
   private selectedNodeId:
     | WatchableValueInterface<number | undefined>
     | undefined;
+  private selectedNodeSegmentId:
+    | WatchableValueInterface<number | undefined>
+    | undefined;
   private pendingNodePositionVersion:
     | WatchableValueInterface<number>
     | undefined;
@@ -2137,7 +2141,14 @@ export class SpatiallyIndexedSkeletonLayer
     if (isCacheValid) {
       return this.selectedNodeOutlineColor;
     }
-    const segmentId = this.displayState.segmentSelectionState.baseValue;
+    // Prefer the explicitly-tracked segment ID (correct for all selection paths:
+    // picking, tab, and history navigation). Fall back to the hover-driven
+    // segmentSelectionState only if no tracked segment is available.
+    const trackedSegmentId = this.selectedNodeSegmentId?.value;
+    const segmentId =
+      trackedSegmentId !== undefined
+        ? BigInt(trackedSegmentId)
+        : this.displayState.segmentSelectionState.baseValue;
     if (segmentId === undefined) {
       return SELECTED_NODE_OUTLINE_FALLBACK_COLOR;
     }
@@ -2380,6 +2391,7 @@ export class SpatiallyIndexedSkeletonLayer
       ),
     );
     this.selectedNodeId = options.selectedNodeId;
+    this.selectedNodeSegmentId = options.selectedNodeSegmentId;
     this.pendingNodePositionVersion = options.pendingNodePositionVersion;
     this.getPendingNodePositionOverride = options.getPendingNodePosition;
     this.getCachedNodeInfo = options.getCachedNode;
