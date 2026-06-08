@@ -683,7 +683,7 @@ export class SpatialSkeletonEditTab extends Tab {
       try {
         getSegmentNavigationGraph(segmentId);
         return true;
-      } catch (error) {
+      } catch {
         StatusMessage.showTemporaryMessage(NAVIGATE_FROM_SPATIAL_INDEX_MESSAGE);
         return false;
       }

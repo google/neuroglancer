@@ -55,7 +55,6 @@ describe("buildSpatiallyIndexedSkeletonOverlayGeometry", () => {
         ],
       ],
       {
-        selectedNodeId: 2,
         getPendingNodePosition: (nodeId) =>
           nodeId === 3 ? new Float32Array([70, 80, 90]) : undefined,
       },
@@ -64,7 +63,6 @@ describe("buildSpatiallyIndexedSkeletonOverlayGeometry", () => {
     expect(geometry.numVertices).toBe(3);
     expect([...geometry.nodeIds]).toEqual([1, 2, 3]);
     expect([...geometry.segmentIds]).toEqual([11, 11, 13]);
-    expect([...geometry.selected]).toEqual([0, 1, 0]);
     expect([...geometry.positions]).toEqual([1, 2, 3, 4, 5, 6, 70, 80, 90]);
     expect([...geometry.indices]).toEqual([1, 0]);
     expect([...geometry.pickEdgeSegmentIds]).toEqual([11]);

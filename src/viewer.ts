@@ -1172,14 +1172,13 @@ export class Viewer extends RefCounted implements ViewerState {
       openPalette = new CommandPalette(this, dispatchTarget);
     };
     this.bindAction("open-command-palette", openCommandPalette);
-    // Document-level capture fires before bubble handlers, ensuring F1 works
-    // even when focus is inside a tool's input element outside viewer.element.
+    // Document-level capture to ensure that the command palette opens even when focus is inside a tool's input element outside viewer.element.
     this.registerDisposer(
       registerEventListener(
         document,
         "keydown",
         (event: KeyboardEvent) => {
-          if (event.code === "F1") {
+          if (event.code === "KeyP" && event.ctrlKey) {
             event.preventDefault();
             openCommandPalette();
           }

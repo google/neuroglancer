@@ -347,50 +347,6 @@ export function setOneDimensionalTextureData(
   );
 }
 
-function getOneDimensionalTextureRowCapacity(gl: GL, numElements: number) {
-  const minX = Math.ceil(numElements / gl.maxTextureSize);
-  return 1 << Math.ceil(Math.log2(Math.max(minX, 1)));
-}
-
-export function updateOneDimensionalTextureElement(
-  gl: GL,
-  texture: WebGLTexture,
-  format: TextureFormat,
-  numElements: number,
-  elementIndex: number,
-  data: TypedArray,
-) {
-  if (elementIndex < 0 || elementIndex >= numElements) {
-    return;
-  }
-  const { arrayConstructor, texelsPerElement, textureFormat, texelType } =
-    format;
-  if (data.constructor !== arrayConstructor) {
-    data = new arrayConstructor(
-      data.buffer,
-      data.byteOffset,
-      data.byteLength / arrayConstructor.BYTES_PER_ELEMENT,
-    );
-  }
-  const elementsPerRow = getOneDimensionalTextureRowCapacity(gl, numElements);
-  const x = (elementIndex % elementsPerRow) * texelsPerElement;
-  const y = Math.floor(elementIndex / elementsPerRow);
-  gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
-  gl.pixelStorei(WebGL2RenderingContext.UNPACK_ALIGNMENT, 1);
-  gl.texSubImage2D(
-    WebGL2RenderingContext.TEXTURE_2D,
-    0,
-    x,
-    y,
-    texelsPerElement,
-    1,
-    textureFormat,
-    texelType,
-    data,
-  );
-  gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
-}
-
 export function setTwoDimensionalTextureData(
   gl: GL,
   format: TextureFormat,
