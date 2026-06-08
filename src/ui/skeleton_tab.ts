@@ -551,7 +551,7 @@ export class SpatialSkeletonEditTab extends Tab {
     const applyRowInteractionState = (
       options: { scrollSelectedIntoView?: boolean } = {},
     ) => {
-      const selectedNodeId = layer.selectedSpatialSkeletonNodeId.value;
+      const selectedNodeId = layer.selectedSpatialSkeletonNodeInfo.value?.nodeId;
       nodesList.forEachRenderedItem((entry, index) => {
         const item = virtualItems[index];
         if (item?.kind !== "node") return;
@@ -706,7 +706,7 @@ export class SpatialSkeletonEditTab extends Tab {
       }
 
       // Extract selected node and segment ID
-      const selectedId = layer.selectedSpatialSkeletonNodeId.value;
+      const selectedId = layer.selectedSpatialSkeletonNodeInfo.value?.nodeId;
       const selectedNode =
         selectedId === undefined
           ? undefined
@@ -1178,7 +1178,7 @@ export class SpatialSkeletonEditTab extends Tab {
       const entry = document.createElement("div");
       entry.className = "neuroglancer-spatial-skeleton-tree-entry";
       entry.dataset.selected = String(
-        node.nodeId === layer.selectedSpatialSkeletonNodeId.value,
+        node.nodeId === layer.selectedSpatialSkeletonNodeInfo.value?.nodeId,
       );
       entry.dataset.viewerHovered = String(node.nodeId === hoveredViewerNodeId);
       entry.dataset.listHovered = String(node.nodeId === hoveredListNodeId);
@@ -1717,7 +1717,7 @@ export class SpatialSkeletonEditTab extends Tab {
       }, layer.displayState.segmentationColorGroupState),
     );
     this.registerDisposer(
-      layer.selectedSpatialSkeletonNodeId.changed.add(() => {
+      layer.selectedSpatialSkeletonNodeInfo.changed.add(() => {
         pendingScrollToSelectedNode = true;
         applyRowInteractionState({ scrollSelectedIntoView: true });
       }),

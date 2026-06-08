@@ -796,12 +796,6 @@ export class SegmentationUserLayer extends Base {
   readonly spatialSkeletonState = this.registerDisposer(
     new SpatialSkeletonState(),
   );
-  readonly selectedSpatialSkeletonNodeId = new WatchableValue<
-    number | undefined
-  >(undefined);
-  readonly selectedSpatialSkeletonNodeSegmentId = new WatchableValue<
-    number | undefined
-  >(undefined);
   readonly selectedSpatialSkeletonNodeInfo = new WatchableValue<
     SelectedSpatialSkeletonNodeInfo | undefined
   >(undefined);
@@ -934,7 +928,6 @@ export class SegmentationUserLayer extends Base {
       position: copyOptionalSpatialSkeletonPosition(selectedNodePosition),
       sourceState,
     };
-    this.selectedSpatialSkeletonNodeSegmentId.value = segmentId;
     this.captureSpatialSkeletonSelectionState(
       (state) => {
         state.nodeId = normalizedNodeId.toString();
@@ -998,7 +991,7 @@ export class SegmentationUserLayer extends Base {
   };
 
   ensureSpatialSkeletonInspectionFromSelection = () => {
-    const selectedNodeId = this.selectedSpatialSkeletonNodeId.value;
+    const selectedNodeId = this.selectedSpatialSkeletonNodeInfo.value?.nodeId;
     const selectedNode =
       selectedNodeId === undefined
         ? undefined
@@ -1034,7 +1027,6 @@ export class SegmentationUserLayer extends Base {
     pin: boolean | "toggle" | "force-unpin" = false,
   ) => {
     this.selectedSpatialSkeletonNodeInfo.value = undefined;
-    this.selectedSpatialSkeletonNodeSegmentId.value = undefined;
     this.captureSpatialSkeletonSelectionState((state) => {
       state.nodeId = undefined;
       state.value = undefined;
@@ -1101,19 +1093,23 @@ export class SegmentationUserLayer extends Base {
       const nextSelectedSegmentId = getSegmentIdFromLayerSelectionValue(
         nextLayerSelectionState,
       );
-      if (this.selectedSpatialSkeletonNodeId.value !== nextSelectedNodeId) {
-        this.selectedSpatialSkeletonNodeId.value = nextSelectedNodeId;
-      }
-      if (this.selectedSpatialSkeletonNodeSegmentId.value !== nextSelectedSegmentId) {
-        this.selectedSpatialSkeletonNodeSegmentId.value = nextSelectedSegmentId;
-      }
       const selectedNodeInfo = this.selectedSpatialSkeletonNodeInfo.value;
-      if (
-        selectedNodeInfo !== undefined &&
-        (selectedNodeInfo.nodeId !== nextSelectedNodeId ||
-          selectedNodeInfo.segmentId !== nextSelectedSegmentId)
+      if (nextSelectedNodeId === undefined) {
+        if (selectedNodeInfo !== undefined) {
+          this.selectedSpatialSkeletonNodeInfo.value = undefined;
+        }
+      } else if (
+        selectedNodeInfo?.nodeId !== nextSelectedNodeId ||
+        selectedNodeInfo?.segmentId !== nextSelectedSegmentId
       ) {
-        this.selectedSpatialSkeletonNodeInfo.value = undefined;
+        // Preserve rich info (position, sourceState) when only the segment ID
+        // changed for the same node; otherwise replace with minimal state so
+        // the render layer always has a valid nodeId+segmentId even after
+        // history navigation where we have no position or sourceState.
+        this.selectedSpatialSkeletonNodeInfo.value =
+          selectedNodeInfo?.nodeId === nextSelectedNodeId
+            ? { ...selectedNodeInfo, segmentId: nextSelectedSegmentId }
+            : { nodeId: nextSelectedNodeId, segmentId: nextSelectedSegmentId };
       }
     };
     this.registerDisposer(
@@ -1606,9 +1602,7 @@ export class SegmentationUserLayer extends Base {
                 displayState,
                 {
                   sources2d: slicePanelSources,
-                  selectedNodeId: this.selectedSpatialSkeletonNodeId,
-                  selectedNodeSegmentId:
-                    this.selectedSpatialSkeletonNodeSegmentId,
+                  selectedNodeInfo: this.selectedSpatialSkeletonNodeInfo,
                   pendingNodePositionVersion:
                     this.spatialSkeletonState.pendingNodePositionVersion,
                   getPendingNodePosition: (nodeId) =>
@@ -1641,9 +1635,7 @@ export class SegmentationUserLayer extends Base {
               mesh,
               displayState,
               {
-                selectedNodeId: this.selectedSpatialSkeletonNodeId,
-                selectedNodeSegmentId:
-                  this.selectedSpatialSkeletonNodeSegmentId,
+                selectedNodeInfo: this.selectedSpatialSkeletonNodeInfo,
                 pendingNodePositionVersion:
                   this.spatialSkeletonState.pendingNodePositionVersion,
                 getPendingNodePosition: (nodeId) =>

@@ -1817,10 +1817,14 @@ export abstract class MultiscaleSpatiallyIndexedSkeletonSource extends Multiscal
 type SpatiallyIndexedSkeletonSourceEntry =
   SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>;
 
+interface SelectedSkeletonNodeInfo {
+  readonly nodeId: number;
+  readonly segmentId?: number;
+}
+
 interface SpatiallyIndexedSkeletonLayerOptions {
   sources2d?: SpatiallyIndexedSkeletonSourceEntry[];
-  selectedNodeId?: WatchableValueInterface<number | undefined>;
-  selectedNodeSegmentId?: WatchableValueInterface<number | undefined>;
+  selectedNodeInfo?: WatchableValueInterface<SelectedSkeletonNodeInfo | undefined>;
   pendingNodePositionVersion?: WatchableValueInterface<number>;
   getPendingNodePosition?: (nodeId: number) => ArrayLike<number> | undefined;
   getCachedNode?: (nodeId: number) => SpatiallyIndexedSkeletonNode | undefined;
@@ -2047,11 +2051,8 @@ export class SpatiallyIndexedSkeletonLayer
         computeTextureFormat(new TextureFormat(), dataType, numComponents),
     ));
   }
-  private selectedNodeId:
-    | WatchableValueInterface<number | undefined>
-    | undefined;
-  private selectedNodeSegmentId:
-    | WatchableValueInterface<number | undefined>
+  private selectedNodeInfo:
+    | WatchableValueInterface<SelectedSkeletonNodeInfo | undefined>
     | undefined;
   private pendingNodePositionVersion:
     | WatchableValueInterface<number>
@@ -2131,28 +2132,21 @@ export class SpatiallyIndexedSkeletonLayer
   }
 
   private getSelectedNodeOutlineColor() {
-    const selectedNodeId = this.selectedNodeId?.value;
-    if (selectedNodeId === undefined) {
+    const nodeInfo = this.selectedNodeInfo?.value;
+    if (nodeInfo === undefined) {
       return SELECTED_NODE_OUTLINE_FALLBACK_COLOR;
     }
     const currentGeneration = this.selectedNodeOutlineColorGeneration;
-    const isCacheValid =
-      this.cachedSelectedNodeOutlineColorGeneration === currentGeneration;
-    if (isCacheValid) {
+    if (this.cachedSelectedNodeOutlineColorGeneration === currentGeneration) {
       return this.selectedNodeOutlineColor;
     }
-    // Prefer the explicitly-tracked segment ID (correct for all selection paths:
-    // picking, tab, and history navigation). Fall back to the hover-driven
-    // segmentSelectionState only if no tracked segment is available.
-    const trackedSegmentId = this.selectedNodeSegmentId?.value;
     const segmentId =
-      trackedSegmentId !== undefined
-        ? BigInt(trackedSegmentId)
+      nodeInfo.segmentId !== undefined
+        ? BigInt(nodeInfo.segmentId)
         : this.displayState.segmentSelectionState.baseValue;
     if (segmentId === undefined) {
       return SELECTED_NODE_OUTLINE_FALLBACK_COLOR;
     }
-
     this.cachedSelectedNodeOutlineColorGeneration = currentGeneration;
     return computeHighVisibilityContrastColor(
       this.selectedNodeOutlineColor,
@@ -2390,8 +2384,7 @@ export class SpatiallyIndexedSkeletonLayer
         this.displayState.transform,
       ),
     );
-    this.selectedNodeId = options.selectedNodeId;
-    this.selectedNodeSegmentId = options.selectedNodeSegmentId;
+    this.selectedNodeInfo = options.selectedNodeInfo;
     this.pendingNodePositionVersion = options.pendingNodePositionVersion;
     this.getPendingNodePositionOverride = options.getPendingNodePosition;
     this.getCachedNodeInfo = options.getCachedNode;
@@ -2499,10 +2492,9 @@ export class SpatiallyIndexedSkeletonLayer
     );
     this.nodeIdAttributeIndex = nodeIdIndex >= 0 ? nodeIdIndex : undefined;
     const requestRedraw = () => this.redrawNeeded.dispatch();
-    const selectedNodeWatchable = this.selectedNodeId;
-    if (selectedNodeWatchable?.changed) {
+    if (this.selectedNodeInfo?.changed) {
       this.registerDisposer(
-        selectedNodeWatchable.changed.add(() => {
+        this.selectedNodeInfo.changed.add(() => {
           invalidateSelectedNodeOutlineColor();
           requestRedraw();
         }),
@@ -2940,7 +2932,7 @@ export class SpatiallyIndexedSkeletonLayer
     );
     gl.uniform1i(
       nodeShader.uniform("uSelectedNodeId"),
-      this.selectedNodeId?.value ?? -1,
+      this.selectedNodeInfo?.value?.nodeId ?? -1,
     );
 
     const chunkOrigin = vec3.create();
@@ -3063,7 +3055,7 @@ export class SpatiallyIndexedSkeletonLayer
     );
     gl.uniform1i(
       nodeShader.uniform("uSelectedNodeId"),
-      this.selectedNodeId?.value ?? -1,
+      this.selectedNodeInfo?.value?.nodeId ?? -1,
     );
 
     if (renderContext.emitPickID) {
