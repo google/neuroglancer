@@ -108,7 +108,7 @@ import {
 import { AutomaticallyFocusedElement } from "#src/util/automatic_focus.js";
 import { TrackableRGB } from "#src/util/color.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
-import { RefCounted } from "#src/util/disposable.js";
+import { RefCounted, registerEventListener } from "#src/util/disposable.js";
 import { removeFromParent } from "#src/util/dom.js";
 import type { ActionEvent } from "#src/util/event_action_map.js";
 import { registerActionListener } from "#src/util/event_action_map.js";
@@ -1140,14 +1140,37 @@ export class Viewer extends RefCounted implements ViewerState {
     );
     this.bindAction("toggle-show-statistics", () => this.showStatistics());
 
-    this.bindAction("open-command-palette", () => {
+    // Guard prevents double-open when both the element-level action listener and
+    // the document capture listener fire for the same keypress.
+    let openPalette: CommandPalette | undefined;
+    const openCommandPalette = () => {
+      if (openPalette !== undefined && !openPalette.wasDisposed) return;
       const prevFocused = document.activeElement;
       const dispatchTarget =
         prevFocused instanceof HTMLElement && this.element.contains(prevFocused)
           ? prevFocused
           : this.element;
-      new CommandPalette(this, dispatchTarget);
-    });
+      openPalette = new CommandPalette(this, dispatchTarget);
+    };
+    this.bindAction("open-command-palette", openCommandPalette);
+    // Document-level capture fires before bubble handlers, ensuring F1 works
+    // even when focus is inside a tool's input element outside viewer.element.
+    this.registerDisposer(
+      registerEventListener(
+        document,
+        "keydown",
+        (event: KeyboardEvent) => {
+          if (event.code === "F1") {
+            event.preventDefault();
+            openCommandPalette();
+          }
+        },
+        { capture: true },
+      ),
+    );
+    this.bindAction("deactivate-active-tool", () =>
+      this.globalToolBinder.deactivate(),
+    );
     this.bindAction("edit-json-state", () => this.editJsonState());
     this.bindAction("screenshot", () => this.showScreenshotDialog());
   }

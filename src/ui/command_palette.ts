@@ -17,6 +17,8 @@
 import "#src/ui/command_palette.css";
 import { UserLayer } from "#src/layer/index.js";
 import { Overlay } from "#src/overlay.js";
+import { getMatchingTools, restoreTool } from "#src/ui/tool.js";
+import { parseToolQuery } from "#src/ui/tool_query.js";
 import type {
   ActionIdentifier,
   EventAction,
@@ -25,11 +27,6 @@ import type {
 import { friendlyEventIdentifier } from "#src/util/event_action_map.js";
 import type { Viewer } from "#src/viewer.js";
 
-/**
- * We automatically collect actions from keyboard bindings on the
- * viewer. However, there may be some actions desired that have no keybinds.
- * Those can be listed here to be included in the command palette.
- */
 const SUPPLEMENTAL_COMMANDS: readonly {
   actionId: ActionIdentifier;
   label: string;
@@ -38,11 +35,10 @@ const SUPPLEMENTAL_COMMANDS: readonly {
   { actionId: "screenshot", label: "Screenshot" },
 ];
 
-// Numeric enum so `typeof result === "number"`
-// reliably distinguishes a skip result from a resolved label string.
+// Numeric enum so `typeof result === "number"` reliably distinguishes a skip
+// result from a resolved label string.
 enum ActionSkipReason {
-  UnoccupiedTool = 0, // tool-X is bound to a key but no tool is assigned to that slot
-  MissingLayer = 1, // layer index is out of range for this binding
+  MissingLayer = 0,
 }
 
 // string           - resolved label; include this entry
@@ -63,6 +59,7 @@ export interface CommandPaletteEntry {
   readonly label: string;
   readonly shortcut: string;
   readonly actionId: ActionIdentifier;
+  readonly execute?: () => void;
 }
 
 function formatKeyStroke(stroke: string): string {
@@ -91,6 +88,144 @@ function isKeyboardEvent(normalizedId: NormalizedEventIdentifier): boolean {
     !normalizedId.includes("touch") &&
     !normalizedId.includes("click")
   );
+}
+
+// Creates a Tool instance from a palette-form JSON object (with optional "layer" field).
+// Caller is responsible for disposing the returned tool.
+function createToolFromJson(viewer: Viewer, toolJson: unknown) {
+  try {
+    const json =
+      typeof toolJson === "object" && toolJson !== null
+        ? (toolJson as Record<string, unknown>)
+        : undefined;
+    const layerName = typeof json?.layer === "string" ? json.layer : undefined;
+    if (layerName !== undefined) {
+      const { layer: _ignored, ...rest } = json!;
+      const managedLayer = viewer.layerManager.getLayerByName(layerName);
+      const userLayer = managedLayer?.layer ?? null;
+      if (userLayer === null) return undefined;
+      return restoreTool(userLayer, rest);
+    }
+    return restoreTool(viewer, toolJson);
+  } catch {
+    return undefined;
+  }
+}
+
+function getToolDescription(viewer: Viewer, toolJson: unknown): string {
+  const tool = createToolFromJson(viewer, toolJson);
+  if (tool === undefined) return toolJsonToLabel(toolJson);
+  const label =
+    tool.context instanceof UserLayer
+      ? `${tool.description} — ${tool.context.managedLayer.name}`
+      : tool.description;
+  tool.dispose();
+  return label;
+}
+
+// Fallback label derived purely from the JSON structure (no instantiation).
+function toolJsonToLabel(toolJson: unknown): string {
+  const json =
+    typeof toolJson === "object" && toolJson !== null
+      ? (toolJson as Record<string, unknown>)
+      : undefined;
+  const typeName =
+    typeof toolJson === "string"
+      ? toolJson
+      : typeof json?.type === "string"
+        ? json.type
+        : undefined;
+  const layerName = typeof json?.layer === "string" ? json.layer : undefined;
+  const base =
+    typeName !== undefined
+      ? typeName
+          .replace(/([A-Z])/g, " $1")
+          .replace(/-./g, (s) => " " + s[1].toUpperCase())
+          .replace(/^./, (s) => s.toUpperCase())
+          .trim()
+      : "Unknown Tool";
+  return layerName !== undefined ? `${base} — ${layerName}` : base;
+}
+
+// Tracks letter keys that were temporarily bound by the palette (viewer → key → tool).
+// WeakMap allows GC if the viewer is destroyed.
+const paletteActivatedKeys = new WeakMap<object, Map<string, object>>();
+
+// Removes any palette-activated temp bindings whose tool is no longer the active tool.
+// Called each time the palette opens or before activating a new unbound tool.
+function sweepPaletteActivatedKeys(viewer: Viewer): void {
+  const tracked = paletteActivatedKeys.get(viewer as object);
+  if (tracked === undefined) return;
+  const activeTool = viewer.globalToolBinder.activeTool_?.tool;
+  for (const [key, trackedTool] of tracked) {
+    const currentTool = viewer.globalToolBinder.bindings.get(key);
+    if (currentTool !== trackedTool) {
+      // Our tool was replaced or removed at this key by something else — stop tracking.
+      tracked.delete(key);
+    } else if (currentTool !== activeTool) {
+      // Our tool is still bound here but no longer active — clean up the temp binding.
+      viewer.globalToolBinder.set(key, undefined);
+      tracked.delete(key);
+    }
+    // currentTool === trackedTool === activeTool: still active, keep tracking.
+  }
+}
+
+function activateUnboundTool(viewer: Viewer, toolJson: unknown): void {
+  const tool = createToolFromJson(viewer, toolJson);
+  if (tool === undefined) return;
+
+  // GlobalToolBinder.set deduplicates by JSON string within a localBinder:
+  // it removes any existing binding with the same serialized tool JSON before
+  // adding the new one.  If the same tool type is already bound to a key
+  // (e.g. the tool appeared as "unbound" in the palette due to a JSON mismatch),
+  // activate that existing key rather than calling set and clobbering the user's binding.
+  const localBinder = tool.localBinder;
+  const existingKey = localBinder.jsonToKey.get(JSON.stringify(tool.toJSON()));
+  if (existingKey !== undefined) {
+    tool.dispose();
+    viewer.globalToolBinder.activate(existingKey);
+    return;
+  }
+
+  // Prefer reusing the active palette-tool's key slot: it will be deactivated
+  // when the new tool activates anyway, so taking a new letter would just cause
+  // the slots to bounce (A → B → A → B …) as each old binding lingers until
+  // the next sweep.
+  const tracked = paletteActivatedKeys.get(viewer as object);
+  const activeTool = viewer.globalToolBinder.activeTool_?.tool;
+  let targetKey: string | undefined;
+  if (tracked !== undefined && activeTool !== undefined) {
+    for (const [key, trackedTool] of tracked) {
+      if (trackedTool === activeTool) {
+        targetKey = key;
+        break;
+      }
+    }
+  }
+
+  if (targetKey === undefined) {
+    // No active palette slot to reuse; sweep stale entries then find a free key.
+    sweepPaletteActivatedKeys(viewer);
+    targetKey = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      .split("")
+      .find((key) => !viewer.globalToolBinder.bindings.has(key));
+    if (targetKey === undefined) {
+      tool.dispose();
+      return;
+    }
+  }
+
+  let newTracked = paletteActivatedKeys.get(viewer as object);
+  if (newTracked === undefined) {
+    newTracked = new Map();
+    paletteActivatedKeys.set(viewer as object, newTracked);
+  }
+  newTracked.delete(targetKey);
+  newTracked.set(targetKey, tool as object);
+
+  viewer.globalToolBinder.set(targetKey, tool);
+  viewer.globalToolBinder.activate(targetKey);
 }
 
 /**
@@ -126,29 +261,90 @@ export function collectActionBindings(
 }
 
 /**
- * Take raw ActionBindings and map them to user-facing CommandPaletteEntries
- * with formatted labels and shortcuts. Actions with no meaningful label
- * (unoccupied tool slots, out-of-range layer indices) are dropped.
+ * Take raw ActionBindings and map them to user-facing CommandPaletteEntries.
+ * All available tools are discovered via getMatchingTools. Unbound tools
+ * are included with an execute callback that temporarily binds them to the
+ * first available letter slot and activates them.
  */
 export class CommandCatalog {
   readonly commands: CommandPaletteEntry[] = [];
 
   constructor(viewer: Viewer, bindings: readonly ActionBinding[]) {
-    for (const { actionId, eventAction } of bindings) {
-      const toolLabel = this.resolveToolLabel(viewer, actionId);
-      if (shouldSkip(toolLabel)) continue;
+    sweepPaletteActivatedKeys(viewer);
 
-      const layerLabel =
-        toolLabel === undefined
-          ? this.resolveLayerLabel(viewer, actionId)
-          : undefined;
+    // "Deactivate Active Tool" goes first so it's always one keystroke away
+    // when a tool is running.
+    if (viewer.globalToolBinder.activeTool_ !== undefined) {
+      this.commands.push({
+        label: "Deactivate Active Tool",
+        shortcut: "",
+        actionId: "deactivate-active-tool",
+      });
+    }
+
+    const shortcutByAction = new Map<ActionIdentifier, string>();
+    for (const { actionId, eventAction } of bindings) {
+      shortcutByAction.set(
+        actionId,
+        formatKeyStroke(
+          friendlyEventIdentifier(eventAction.originalEventIdentifier ?? ""),
+        ),
+      );
+    }
+
+    for (const { actionId, eventAction } of bindings) {
+      if (/^tool-[A-Z]$/.test(actionId)) continue;
+
+      const layerLabel = this.resolveLayerLabel(viewer, actionId);
       if (shouldSkip(layerLabel)) continue;
 
-      const label = toolLabel ?? layerLabel ?? actionIdToLabel(actionId);
+      const label = layerLabel ?? actionIdToLabel(actionId);
       const shortcut = formatKeyStroke(
         friendlyEventIdentifier(eventAction.originalEventIdentifier ?? ""),
       );
       this.commands.push({ label, shortcut, actionId });
+    }
+
+    const toolQueryResult = parseToolQuery("+");
+    if ("query" in toolQueryResult) {
+      const toolMatches = getMatchingTools(
+        viewer.globalToolBinder,
+        toolQueryResult.query,
+      );
+
+      // Build a reverse lookup from palette-JSON key to letter for currently-bound tools.
+      const boundByJsonKey = new Map<string, string>();
+      for (const [letter, tool] of viewer.globalToolBinder.bindings) {
+        const paletteJson = tool.localBinder.convertLocalJSONToPaletteJSON(
+          tool.toJSON(),
+        );
+        boundByJsonKey.set(JSON.stringify(paletteJson), letter);
+      }
+
+      for (const [jsonKey, toolJson] of toolMatches) {
+        const boundLetter = boundByJsonKey.get(jsonKey);
+        if (boundLetter !== undefined) {
+          const actionId: ActionIdentifier = `tool-${boundLetter}`;
+          const tool = viewer.globalToolBinder.bindings.get(boundLetter)!;
+          const label =
+            tool.context instanceof UserLayer
+              ? `${tool.description} — ${tool.context.managedLayer.name}`
+              : tool.description;
+          this.commands.push({
+            label,
+            shortcut: shortcutByAction.get(actionId) ?? "",
+            actionId,
+          });
+        } else {
+          const capturedToolJson = toolJson;
+          this.commands.push({
+            label: getToolDescription(viewer, toolJson),
+            shortcut: "",
+            actionId: `tool-json:${jsonKey}` as ActionIdentifier,
+            execute: () => activateUnboundTool(viewer, capturedToolJson),
+          });
+        }
+      }
     }
 
     for (const { actionId, label } of SUPPLEMENTAL_COMMANDS) {
@@ -156,9 +352,6 @@ export class CommandCatalog {
     }
   }
 
-  /**
-   * Name-based filtering. Prefix matches are ranked before substring matches.
-   */
   filter(searchString: string): readonly CommandPaletteEntry[] {
     if (searchString === "") return this.commands;
 
@@ -173,19 +366,6 @@ export class CommandCatalog {
     }
 
     return [...prefixMatches, ...substringMatches];
-  }
-
-  private resolveToolLabel(
-    viewer: Viewer,
-    actionId: ActionIdentifier,
-  ): ResolvedAction {
-    const toolMatch = actionId.match(/^tool-([A-Z])$/);
-    if (toolMatch === null) return undefined;
-    const tool = viewer.globalToolBinder.bindings.get(toolMatch[1]);
-    if (tool === undefined) return ActionSkipReason.UnoccupiedTool;
-    return tool.context instanceof UserLayer
-      ? `${tool.description} — ${tool.context.managedLayer.name}`
-      : tool.description;
   }
 
   private resolveLayerLabel(
@@ -240,7 +420,7 @@ export class CommandPalette extends Overlay {
       if (this.filteredCommands.length > 0)
         this.run(this.filteredCommands[this.activeIndex]);
     },
-    Escape: () => this.close(),
+    Escape: () => this.closeAndRestoreFocus(),
   };
 
   constructor(
@@ -347,14 +527,29 @@ export class CommandPalette extends Overlay {
     });
   }
 
-  private run(command: CommandPaletteEntry) {
+  // Non-toggle tools register a window bubble-phase keydown handler that
+  // calls preventDefault() on all keys. Restoring focus to the viewer element
+  // before the next keydown ensures F1 bubbles through the viewer's
+  // KeyboardEventBinder and can reopen the palette.
+  private closeAndRestoreFocus() {
+    const target = this.actionDispatchTarget;
     this.close();
-    this.actionDispatchTarget.dispatchEvent(
-      new CustomEvent(`action:${command.actionId}`, {
-        bubbles: true,
-        cancelable: true,
-        detail: {},
-      }),
-    );
+    target.focus({ preventScroll: true });
+  }
+
+  private run(command: CommandPaletteEntry) {
+    this.closeAndRestoreFocus();
+
+    if (command.execute !== undefined) {
+      command.execute();
+    } else {
+      this.actionDispatchTarget.dispatchEvent(
+        new CustomEvent(`action:${command.actionId}`, {
+          bubbles: true,
+          cancelable: true,
+          detail: {},
+        }),
+      );
+    }
   }
 }
