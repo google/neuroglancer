@@ -73,7 +73,7 @@ export const SPATIAL_SKELETON_EDIT_MODE_TOOL_ID = "spatialSkeletonEditMode";
 export const SPATIAL_SKELETON_MERGE_MODE_TOOL_ID = "spatialSkeletonMergeMode";
 export const SPATIAL_SKELETON_SPLIT_MODE_TOOL_ID = "spatialSkeletonSplitMode";
 
-const SPATIAL_SKELETON_EDIT_STATUS_INPUT_EVENT_MAP = EventActionMap.fromObject({
+const SKELETON_EDIT_STATUS_INPUT_EVENT_MAP = EventActionMap.fromObject({
   // Only expose the primary edit actions in the auto-generated subtitle.
   "at:control+mousedown0": "spatial-skeleton-add-node",
   "at:alt+mousedown0": "spatial-skeleton-move-node",
@@ -604,7 +604,7 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
   }
 
   get description() {
-    return "skeleton edit mode";
+    return "Skeleton edit";
   }
 
   private curChunkRank = -1;
@@ -724,7 +724,7 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
     const rawInputEventMapBinder = activation.inputEventMapBinder;
     const { body, header } =
       makeToolActivationStatusMessageWithHeader(activation);
-    header.textContent = "Spatial skeleton edit mode";
+    header.textContent = "Skeleton edit";
     let statusOverride: string | undefined;
     let cachedNodeSummary:
       | ReturnType<typeof this.getSelectedSpatialSkeletonNodeSummary>
@@ -792,7 +792,7 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
     }
 
     this.activateModeWatchable(activation, layer.spatialSkeletonEditMode);
-    activation.bindInputEventMap(SPATIAL_SKELETON_EDIT_STATUS_INPUT_EVENT_MAP);
+    activation.bindInputEventMap(SKELETON_EDIT_STATUS_INPUT_EVENT_MAP);
     rawInputEventMapBinder(
       SPATIAL_SKELETON_EDIT_AUX_INPUT_EVENT_MAP,
       activation,
@@ -1087,7 +1087,7 @@ export class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
   }
 
   get description() {
-    return "skeleton merge mode";
+    return "Skeleton merge";
   }
 
   activate(activation: ToolActivation<this>) {
@@ -1111,7 +1111,7 @@ export class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
     this.activateModeWatchable(activation, this.layer.spatialSkeletonMergeMode);
     const { body, header } =
       makeToolActivationStatusMessageWithHeader(activation);
-    header.textContent = "Spatial skeleton merge mode";
+    header.textContent = "Spatial skeleton merge";
     let pending = false;
     type MergeAnchorSelection = {
       nodeId: number;
@@ -1362,7 +1362,7 @@ export class SpatialSkeletonSplitModeTool extends SpatialSkeletonToolBase {
   }
 
   get description() {
-    return "skeleton split mode";
+    return "Skeleton split";
   }
 
   activate(activation: ToolActivation<this>) {
@@ -1386,7 +1386,7 @@ export class SpatialSkeletonSplitModeTool extends SpatialSkeletonToolBase {
     this.activateModeWatchable(activation, this.layer.spatialSkeletonSplitMode);
     const { body, header } =
       makeToolActivationStatusMessageWithHeader(activation);
-    header.textContent = "Spatial skeleton split mode";
+    header.textContent = "Skeleton split";
     let pending = false;
     let statusOverride: string | undefined;
     let pendingPoint: SpatialSkeletonToolPointInfo | undefined;
@@ -1520,16 +1520,37 @@ export class SpatialSkeletonSplitModeTool extends SpatialSkeletonToolBase {
   }
 }
 
+function makeSpatialSkeletonToolLister(toolId: string) {
+  return (layer: SegmentationUserLayer, onChange?: () => void) => {
+    if (onChange !== undefined) {
+      layer.layersChanged.addOnce(onChange);
+    }
+    if (layer.getSpatiallyIndexedSkeletonLayer() === undefined) {
+      return [];
+    }
+    return [{ type: toolId }];
+  };
+}
+
 export function registerSpatialSkeletonEditModeTool(
   contextType: typeof SegmentationUserLayer,
 ) {
-  registerTool(contextType, SPATIAL_SKELETON_EDIT_MODE_TOOL_ID, (layer) => {
-    return new SpatialSkeletonEditModeTool(layer);
-  });
-  registerTool(contextType, SPATIAL_SKELETON_MERGE_MODE_TOOL_ID, (layer) => {
-    return new SpatialSkeletonMergeModeTool(layer);
-  });
-  registerTool(contextType, SPATIAL_SKELETON_SPLIT_MODE_TOOL_ID, (layer) => {
-    return new SpatialSkeletonSplitModeTool(layer);
-  });
+  registerTool(
+    contextType,
+    SPATIAL_SKELETON_EDIT_MODE_TOOL_ID,
+    (layer) => new SpatialSkeletonEditModeTool(layer),
+    makeSpatialSkeletonToolLister(SPATIAL_SKELETON_EDIT_MODE_TOOL_ID),
+  );
+  registerTool(
+    contextType,
+    SPATIAL_SKELETON_MERGE_MODE_TOOL_ID,
+    (layer) => new SpatialSkeletonMergeModeTool(layer),
+    makeSpatialSkeletonToolLister(SPATIAL_SKELETON_MERGE_MODE_TOOL_ID),
+  );
+  registerTool(
+    contextType,
+    SPATIAL_SKELETON_SPLIT_MODE_TOOL_ID,
+    (layer) => new SpatialSkeletonSplitModeTool(layer),
+    makeSpatialSkeletonToolLister(SPATIAL_SKELETON_SPLIT_MODE_TOOL_ID),
+  );
 }
