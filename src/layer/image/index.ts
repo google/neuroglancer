@@ -142,6 +142,7 @@ export class ImageUserLayer extends Base {
   shaderError = makeWatchableShaderError();
   dataType = new WatchableValue<DataType | undefined>(undefined);
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
+  voxelOverlayRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
   volumeRenderingGain = trackableFiniteFloat(0);
   volumeRenderingChunkResolutionHistogram = new RenderScaleHistogram(
@@ -236,7 +237,7 @@ void main() {
       shaderError: this.shaderError,
       transform: transform,
       renderScaleTarget: this.sliceViewRenderScaleTarget,
-      renderScaleHistogram: this.sliceViewRenderScaleHistogram,
+      renderScaleHistogram: this.voxelOverlayRenderScaleHistogram,
       localPosition: this.localPosition,
       channelCoordinateSpace: this.channelCoordinateSpace,
     });

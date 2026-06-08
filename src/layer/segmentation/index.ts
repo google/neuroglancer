@@ -594,6 +594,7 @@ const Base = UserLayerWithVoxelEditingMixin(
 );
 export class SegmentationUserLayer extends Base {
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
+  voxelOverlayRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
   codeVisible = new TrackableBoolean(true);
 
@@ -626,7 +627,7 @@ export class SegmentationUserLayer extends Base {
       ...this.displayState,
       transform: transform,
       renderScaleTarget: this.sliceViewRenderScaleTarget,
-      renderScaleHistogram: this.sliceViewRenderScaleHistogram,
+      renderScaleHistogram: this.voxelOverlayRenderScaleHistogram,
       localPosition: this.localPosition,
     });
   }
