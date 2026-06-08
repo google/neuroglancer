@@ -606,6 +606,9 @@ class ImageLayer(Layer, _AnnotationLayerOptions):
     shader_controls = shaderControls = wrapped_property(
         "shaderControls", ShaderControls
     )
+    hide_inactive_shader_controls = hideInactiveShaderControls = wrapped_property(
+        "hideInactiveShaderControls", optional(bool, False)
+    )
     opacity = wrapped_property("opacity", optional(float, 0.5))
     blend = wrapped_property("blend", optional(str))
     volume_rendering_mode = volumeRenderingMode = VolumeRendering = volume_rendering = (
@@ -660,6 +663,9 @@ class SkeletonRenderingOptions(JsonObjectWrapper):
     shader = wrapped_property("shader", optional(str))
     shader_controls = shaderControls = wrapped_property(
         "shaderControls", ShaderControls
+    )
+    hide_inactive_shader_controls = hideInactiveShaderControls = wrapped_property(
+        "hideInactiveShaderControls", optional(bool, False)
     )
     mode2d = wrapped_property("mode2d", optional(str))
     line_width2d = lineWidth2d = wrapped_property("lineWidth2d", optional(float, 2))
@@ -1052,6 +1058,9 @@ class SingleMeshLayer(Layer):
     vertex_attribute_names = vertexAttributeNames = wrapped_property(
         "vertexAttributeNames", optional(typed_list(optional(str)))
     )
+    hide_inactive_shader_controls = hideInactiveShaderControls = wrapped_property(
+        "hideInactiveShaderControls", optional(bool, False)
+    )
 
 
 def _factory_new(
@@ -1207,6 +1216,9 @@ class AnnotationLayer(Layer, _AnnotationLayerOptions):
     shader = wrapped_property("shader", str)
     shader_controls = shaderControls = wrapped_property(
         "shaderControls", ShaderControls
+    )
+    hide_inactive_shader_controls = hideInactiveShaderControls = wrapped_property(
+        "hideInactiveShaderControls", optional(bool, False)
     )
 
     @staticmethod

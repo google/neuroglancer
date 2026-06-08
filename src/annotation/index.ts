@@ -1370,6 +1370,7 @@ export interface AnnotationSourceSignals {
   childUpdated: Signal<(annotation: Annotation) => void>;
   childCommitted: Signal<(annotationId: string) => void>;
   childDeleted: Signal<(annotationId: string) => void>;
+  childrenReordered: NullarySignal;
 }
 
 export class AnnotationSource
@@ -1383,6 +1384,7 @@ export class AnnotationSource
   childUpdated = new Signal<(annotation: Annotation) => void>();
   childCommitted = new Signal<(annotationId: string) => void>();
   childDeleted = new Signal<(annotationId: string) => void>();
+  childrenReordered = new NullarySignal();
 
   public pending = new Set<AnnotationId>();
 
@@ -1452,6 +1454,44 @@ export class AnnotationSource
     reference.changed.dispatch();
     this.changed.dispatch();
     this.childUpdated.dispatch(annotation);
+  }
+
+  // Moves the annotation with id `sourceId` so it sits immediately before
+  // (placement === "before") or after (placement === "after") `targetId`,
+  // preserving the relative order of all other annotations. Returns true if
+  // the order actually changed.
+  reorder(
+    sourceId: AnnotationId,
+    targetId: AnnotationId,
+    placement: "before" | "after",
+  ): boolean {
+    this.ensureUpdated();
+    if (sourceId === targetId) return false;
+    const { annotationMap } = this;
+    if (!annotationMap.has(sourceId) || !annotationMap.has(targetId)) {
+      return false;
+    }
+    const ids = Array.from(annotationMap.keys());
+    const fromIndex = ids.indexOf(sourceId);
+    ids.splice(fromIndex, 1);
+    let targetIndex = ids.indexOf(targetId);
+    if (placement === "after") targetIndex += 1;
+    ids.splice(targetIndex, 0, sourceId);
+    // No-op if order is unchanged.
+    const changed = !Array.from(annotationMap.keys()).every(
+      (id, i) => id === ids[i],
+    );
+    if (!changed) return false;
+    const entries = ids.map(
+      (id) => [id, annotationMap.get(id)!] as [AnnotationId, Annotation],
+    );
+    annotationMap.clear();
+    for (const [id, annotation] of entries) {
+      annotationMap.set(id, annotation);
+    }
+    this.changed.dispatch();
+    this.childrenReordered.dispatch();
+    return true;
   }
 
   [Symbol.iterator]() {
