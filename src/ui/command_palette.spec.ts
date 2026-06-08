@@ -38,7 +38,9 @@ describe("collectActionBindings", () => {
     const map = new EventActionMap();
     map.set("keya", "some-action");
     const bindings = collectActionBindings(makeViewer(map));
-    expect(bindings.map((binding) => binding.actionId)).toContain("some-action");
+    expect(bindings.map((binding) => binding.actionId)).toContain(
+      "some-action",
+    );
   });
 
   it("excludes mouse and wheel events", () => {

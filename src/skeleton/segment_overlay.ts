@@ -27,21 +27,19 @@ let gpuScratchCapacity = 0; // in vertices
 
 // Layout per capacity-slot (cap = gpuScratchCapacity):
 //   [0,       cap*4)  — segmentIds  (Uint32, 4 B/vertex)
-//   [cap*4,   cap*8)  — selected    (Float32, 4 B/vertex)
-//   [cap*8,   cap*16) — edgeIndices (Uint32 pairs, 8 B/vertex max)
-//   [cap*16,  cap*20) — edgeSegIds  (Uint32, 4 B/vertex max)
+//   [cap*4,   cap*12) — edgeIndices (Uint32 pairs, 8 B/vertex max)
+//   [cap*12,  cap*16) — edgeSegIds  (Uint32, 4 B/vertex max)
 function ensureGpuScratch(numVertices: number) {
   if (numVertices > gpuScratchCapacity) {
     const cap = Math.max(numVertices, gpuScratchCapacity * 2, 64);
-    gpuScratchBuffer = new ArrayBuffer(cap * 20);
+    gpuScratchBuffer = new ArrayBuffer(cap * 16);
     gpuScratchCapacity = cap;
   }
   const cap = gpuScratchCapacity;
   return {
     segmentIds: new Uint32Array(gpuScratchBuffer, 0, numVertices),
-    selected: new Float32Array(gpuScratchBuffer, cap * 4, numVertices),
-    edgeIndices: new Uint32Array(gpuScratchBuffer, cap * 8, numVertices * 2),
-    edgeSegIds: new Uint32Array(gpuScratchBuffer, cap * 16, numVertices),
+    edgeIndices: new Uint32Array(gpuScratchBuffer, cap * 4, numVertices * 2),
+    edgeSegIds: new Uint32Array(gpuScratchBuffer, cap * 12, numVertices),
   };
 }
 
@@ -55,7 +53,6 @@ export interface SpatiallyIndexedSkeletonOverlayNodeLike {
 export interface SpatiallyIndexedSkeletonOverlayGeometry {
   positions: Float32Array;
   segmentIds: Uint32Array;
-  selected: Float32Array;
   nodeIds: Int32Array;
   pickSegmentIds: Uint32Array;
   pickEdgeSegmentIds: Uint32Array;
@@ -66,11 +63,10 @@ export interface SpatiallyIndexedSkeletonOverlayGeometry {
 export function buildSpatiallyIndexedSkeletonOverlayGeometry(
   segmentNodeSets: readonly (readonly SpatiallyIndexedSkeletonOverlayNodeLike[])[],
   options: {
-    selectedNodeId?: number;
     getPendingNodePosition?: (nodeId: number) => ArrayLike<number> | undefined;
   } = {},
 ): SpatiallyIndexedSkeletonOverlayGeometry {
-  const { selectedNodeId, getPendingNodePosition } = options;
+  const { getPendingNodePosition } = options;
   const nodeIndex = new Map<number, number>();
   const orderedNodes: SpatiallyIndexedSkeletonOverlayNodeLike[] = [];
 
@@ -94,7 +90,7 @@ export function buildSpatiallyIndexedSkeletonOverlayGeometry(
   // valid until SkeletonOverlayChunk uploads them to the GPU (synchronous), after
   // which this buffer is safe to reuse on the next build.
   const scratch = ensureGpuScratch(numVertices);
-  const { segmentIds, selected, edgeIndices, edgeSegIds } = scratch;
+  const { segmentIds, edgeIndices, edgeSegIds } = scratch;
 
   orderedNodes.forEach((node, index) => {
     const position = getPendingNodePosition?.(node.nodeId) ?? node.position;
@@ -105,8 +101,6 @@ export function buildSpatiallyIndexedSkeletonOverlayGeometry(
     segmentIds[index] = Math.max(0, Math.round(Number(node.segmentId)));
     pickSegmentIds[index] = segmentIds[index];
     nodeIds[index] = Math.round(Number(node.nodeId));
-    selected[index] =
-      selectedNodeId !== undefined && node.nodeId === selectedNodeId ? 1 : 0;
   });
 
   let edgeCount = 0;
@@ -133,7 +127,6 @@ export function buildSpatiallyIndexedSkeletonOverlayGeometry(
     positions,
     // Subarray views into the scratch: consumed immediately by GPU upload.
     segmentIds: segmentIds.subarray(0, numVertices),
-    selected: selected.subarray(0, numVertices),
     nodeIds,
     pickSegmentIds,
     // Compact copy: CPU-retained by SkeletonOverlayChunk for edge picking.
