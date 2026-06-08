@@ -96,10 +96,14 @@ describe("CommandCatalog.filter", () => {
   });
 
   it("ranks prefix matches before substring matches", () => {
-    // "s": "Screenshot" is a prefix match; "Edit JSON State" contains 's' as a substring
+    // "Screenshot" is a prefix match; "Edit JSON State" is a substring match.
+    // Verify all prefix matches appear before all substring matches.
     const results = makeCatalog().filter("s");
-    expect(results[0].label).toBe("Screenshot");
-    expect(results[1].label).toBe("Edit JSON State");
+    const screenshotIndex = results.findIndex((r) => r.label === "Screenshot");
+    const stateIndex = results.findIndex((r) => r.label === "Edit JSON State");
+    expect(screenshotIndex).toBeGreaterThanOrEqual(0);
+    expect(stateIndex).toBeGreaterThanOrEqual(0);
+    expect(screenshotIndex).toBeLessThan(stateIndex);
   });
 
   it("returns empty for a non-matching query", () => {

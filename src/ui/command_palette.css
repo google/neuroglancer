@@ -66,3 +66,15 @@
   padding: 8px;
   color: #888;
 }
+
+.neuroglancer-command-palette-picker-header {
+  padding: 4px 8px;
+  color: #aaa;
+  font-size: 12px;
+  cursor: pointer;
+  border-bottom: 1px solid #333;
+}
+
+.neuroglancer-command-palette-picker-header:hover {
+  color: #fff;
+}
