@@ -306,6 +306,11 @@ export class CommandPalette extends Overlay {
       { capture: true },
     );
 
+    // Tools register keydown on window (bubble); stop propagation here after searchInput receives the event.
+    this.content.addEventListener("keydown", (event) => {
+      event.stopPropagation();
+    });
+
     this.render();
     searchInput.focus();
   }
