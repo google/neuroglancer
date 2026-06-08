@@ -147,6 +147,17 @@ function toolJsonToLabel(toolJson: unknown): string {
   return layerName !== undefined ? `${base} — ${layerName}` : base;
 }
 
+function isToolLayerVisible(viewer: Viewer, toolJson: unknown): boolean {
+  const json =
+    typeof toolJson === "object" && toolJson !== null
+      ? (toolJson as Record<string, unknown>)
+      : undefined;
+  const layerName = typeof json?.layer === "string" ? json.layer : undefined;
+  if (layerName === undefined) return true;
+  const managedLayer = viewer.layerManager.getLayerByName(layerName);
+  return managedLayer !== undefined && managedLayer.visible;
+}
+
 // Tracks letter keys that were temporarily bound by the palette (viewer → key → tool).
 // WeakMap allows GC if the viewer is destroyed.
 const paletteActivatedKeys = new WeakMap<object, Map<string, object>>();
@@ -322,6 +333,7 @@ export class CommandCatalog {
       }
 
       for (const [jsonKey, toolJson] of toolMatches) {
+        if (!isToolLayerVisible(viewer, toolJson)) continue;
         const boundLetter = boundByJsonKey.get(jsonKey);
         if (boundLetter !== undefined) {
           const actionId: ActionIdentifier = `tool-${boundLetter}`;
