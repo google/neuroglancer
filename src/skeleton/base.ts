@@ -28,7 +28,7 @@ import type {
 import { forEachVisibleVolumetricChunk } from "#src/sliceview/base.js";
 import type { DataType } from "#src/util/data_type.js";
 import {
-  getViewFrustrumVolume,
+  getViewFrustumVolume,
   mat3,
   mat3FromMat4,
   prod3,
@@ -110,8 +110,8 @@ export function getSpatialSkeletonSourceDensityContext<
     mat3.determinant(mat3FromMat4(tempMat3, viewMatrix)),
   );
   const canonicalToPhysicalScale = prod3(voxelPhysicalScales);
-  const viewFrustrumVolume =
-    (getViewFrustrumVolume(projectionMat) / viewDet) * canonicalToPhysicalScale;
+  const viewFrustumVolume =
+    (getViewFrustumVolume(projectionMat) / viewDet) * canonicalToPhysicalScale;
 
   const sourceDensityInputs = transformedSources.map((tsource, index) => {
     const spec = tsource.source
@@ -135,7 +135,7 @@ export function getSpatialSkeletonSourceDensityContext<
     sourceVolume *= upperClipDisplayBound[i] - lowerClipDisplayBound[i];
   }
 
-  const effectiveVolume = Math.min(sourceVolume, viewFrustrumVolume);
+  const effectiveVolume = Math.min(sourceVolume, viewFrustumVolume);
   const viewportArea = width * height;
   const targetNumNodes = viewportArea / spacingTarget ** 2;
   const physicalDensityTarget = targetNumNodes / effectiveVolume;
