@@ -41,7 +41,10 @@ import {
   initializeLineShader,
 } from "#src/webgl/lines.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
-import { defineVectorArrayVertexShaderInput } from "#src/webgl/shader_lib.js";
+import {
+  defineVectorArrayVertexShaderInput,
+  glsl_modelToPixels,
+} from "#src/webgl/shader_lib.js";
 import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 
 const FULL_OBJECT_PICK_OFFSET = 0;
@@ -89,6 +92,16 @@ class RenderHelper extends AnnotationRenderHelper {
       this.defineShader(builder);
       defineLineShader(builder);
       builder.addVarying(`highp float[${rank}]`, "vModelPosition");
+      builder.addVertexCode(glsl_modelToPixels);
+      builder.addVertexCode(`
+float modelToPixels(float value) {
+  vec2 lineOffset = getLineOffset();
+  highp vec3 vertexA = projectModelVectorToSubspace(getVertexPosition0());
+  highp vec3 vertexB = projectModelVectorToSubspace(getVertexPosition1());
+  highp vec3 vertex = mix(vertexA, vertexB, lineOffset.x);
+  return value * modelToPixels(vertex, uProjection, uModelView, 1.0 / uLineParams.x);
+}
+`);
       builder.addVertexCode(`
 float ng_LineWidth;
 `);
@@ -150,6 +163,15 @@ void setLineEndpointMarkerColor(vec4 startColor, vec4 endColor) {
 }
 void setLineEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {
   vBorderColor = mix(startColor, endColor, float(getEndpointIndex()));
+}
+`);
+      builder.addVertexCode(glsl_modelToPixels);
+      builder.addVertexCode(`
+float modelToPixels(float value) {
+  highp vec3 vertexA = projectModelVectorToSubspace(getVertexPosition0());
+  highp vec3 vertexB = projectModelVectorToSubspace(getVertexPosition1());
+  highp vec3 vertex = mix(vertexA, vertexB, float(getEndpointIndex()));
+  return value * modelToPixels(vertex, uProjection, uModelView, 1.0 / uCircleParams.x);
 }
 `);
       builder.setVertexMain(`
