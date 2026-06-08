@@ -664,7 +664,7 @@ describe("spatial_skeleton_edit_tool", () => {
     };
     const tool = {
       layer: {
-        selectedSpatialSkeletonNodeId: { value: undefined },
+        selectedSpatialSkeletonNodeInfo: { value: undefined },
         spatialSkeletonState: {
           mergeAnchorNodeId: { value: 101 },
         },
@@ -736,11 +736,7 @@ describe("spatial_skeleton_edit_tool", () => {
         },
       },
       spatialSkeletonMergeMode: makeModeWatchable(),
-      selectedSpatialSkeletonNodeId: {
-        value: selectedNode.nodeId,
-        changed: makeChangedSignal(),
-      },
-      selectedSpatialSkeletonNodeInfo: { value: selectedNode },
+      selectedSpatialSkeletonNodeInfo: { value: selectedNode, changed: makeChangedSignal() },
       spatialSkeletonState: {
         mergeAnchorNodeId,
         getCachedNode: vi.fn(),
@@ -834,11 +830,10 @@ describe("spatial_skeleton_edit_tool", () => {
         },
       },
       spatialSkeletonMergeMode: makeModeWatchable(),
-      selectedSpatialSkeletonNodeId: {
-        value: selectedNode.nodeId as number | undefined,
+      selectedSpatialSkeletonNodeInfo: {
+        value: selectedNode as typeof selectedNode | undefined,
         changed: selectedNodeChanged,
       },
-      selectedSpatialSkeletonNodeInfo: { value: selectedNode },
       spatialSkeletonState: {
         mergeAnchorNodeId,
         getCachedNode: vi.fn(),
@@ -884,7 +879,7 @@ describe("spatial_skeleton_edit_tool", () => {
           metaKey: false,
         },
       });
-      layer.selectedSpatialSkeletonNodeId.value = undefined;
+      layer.selectedSpatialSkeletonNodeInfo.value = undefined;
       selectedNodeChanged.dispatch();
 
       expect(selectSegment).toHaveBeenCalledWith(17n, true);
@@ -924,7 +919,6 @@ describe("spatial_skeleton_edit_tool", () => {
         },
       },
       spatialSkeletonSplitMode: makeModeWatchable(),
-      selectedSpatialSkeletonNodeId: { value: selectedNode.nodeId },
       selectedSpatialSkeletonNodeInfo: { value: selectedNode },
       spatialSkeletonState: {
         commandHistory: new SpatialSkeletonCommandHistory(),
