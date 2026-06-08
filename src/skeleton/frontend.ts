@@ -2174,20 +2174,15 @@ export class SpatiallyIndexedSkeletonLayer
     if (isCacheValid) {
       return this.selectedNodeOutlineColor;
     }
-    const segmentId = this.getCachedNodeSnapshot(selectedNodeId)?.segmentId;
-    const normalizedSegmentId = Math.round(Number(segmentId));
-    if (
-      !Number.isSafeInteger(normalizedSegmentId) ||
-      normalizedSegmentId <= 0
-    ) {
-      this.cachedSelectedNodeOutlineColorGeneration = currentGeneration;
-      this.selectedNodeOutlineColor.set(SELECTED_NODE_OUTLINE_FALLBACK_COLOR);
+    const segmentId = this.displayState.segmentSelectionState.baseValue;
+    if (segmentId === undefined) {
       return SELECTED_NODE_OUTLINE_FALLBACK_COLOR;
     }
+
     this.cachedSelectedNodeOutlineColorGeneration = currentGeneration;
     return computeHighVisibilityContrastColor(
       this.selectedNodeOutlineColor,
-      getBaseObjectColor(this.displayState, BigInt(normalizedSegmentId)),
+      getBaseObjectColor(this.displayState, segmentId),
     );
   }
 
