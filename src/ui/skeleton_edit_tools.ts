@@ -991,6 +991,7 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
           return;
         }
         let moved = false;
+        let finished = false;
         this.dragModelSpacePosition.set(nodeInfo.position);
         vec3.set(
           this.dragGlobalAnchorPosition,
@@ -1046,6 +1047,8 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
             this.dragModelSpacePosition.set(modelPosition);
           },
           (_finishEvent) => {
+            if (finished) return;
+            finished = true;
             clearCachedNodeSummary();
             setReadyStatus();
             if (!dragStarted) {
