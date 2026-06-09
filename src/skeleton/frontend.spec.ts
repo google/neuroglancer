@@ -181,7 +181,7 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
     const layer = Object.assign(
       Object.create(SpatiallyIndexedSkeletonLayer.prototype),
       {
-        selectedNodeId,
+        selectedNodeInfo: { value: { nodeId: 101 } },
         selectedNodeOutlineColor: vec3.create(),
         selectedNodeOutlineColorGeneration: 0,
         cachedSelectedNodeOutlineColorGeneration: -1,
@@ -222,7 +222,7 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
     const layer = Object.assign(
       Object.create(SpatiallyIndexedSkeletonLayer.prototype),
       {
-        selectedNodeId: { value: 101 },
+        selectedNodeInfo: { value: { nodeId: 101 } },
         selectedNodeOutlineColor: vec3.create(),
         selectedNodeOutlineColorGeneration: 0,
         cachedSelectedNodeOutlineColorGeneration: -1,
