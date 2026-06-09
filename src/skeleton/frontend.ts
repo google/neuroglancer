@@ -87,6 +87,7 @@ import {
   getSpatiallyIndexedSkeletonGridIndex,
   getSpatiallyIndexedSkeletonSourceView,
   selectSpatiallyIndexedSkeletonEntriesForView,
+  selectSpatiallyIndexedSkeletonEntriesForViewWithFallback,
   type SpatiallyIndexedSkeletonView,
 } from "#src/skeleton/source_selection.js";
 import {
@@ -2025,39 +2026,70 @@ function getSpatialSkeletonGridSpacing(
 }
 
 /**
- * World units per screen pixel at `worldPoint`, derived from a
- * model-view-projection matrix and viewport dimensions.  Same
- * formulation the multiscale-mesh renderer uses to pick per-fragment
- * LOD ({@link getDesiredMultiscaleMeshChunks} in
- * `src/mesh/multiscale.ts:154-202`): take the maximum of x-, y-, and
- * z-axis screen-space scale factors, divide the point's w-component
- * by that scaleFactor to get world-units-per-screen-pixel.
+ * Physical units (meters) per screen pixel at `worldPoint`, derived from a
+ * model-view-projection matrix and viewport dimensions with axis-aware
+ * conversion from world units to meters.
  *
- * Returns `+Infinity` for a behind-camera or invalid `w` so callers
- * fall back to the largest available level.
+ * This is the same MVP-based formulation used by multiscale mesh LOD, but
+ * adjusted for anisotropic coordinate systems (e.g. 4,4,40): each axis scale
+ * is converted to pixels-per-meter before taking the max scale factor.
+ *
+ * Returns `+Infinity` for a behind-camera or invalid `w` so callers fall back
+ * to the largest available level.
  */
-function computeWorldUnitsPerScreenPixel(
+function computePhysicalUnitsPerScreenPixel(
   modelViewProjection: mat4,
   viewportWidth: number,
   viewportHeight: number,
   worldPoint: Float32Array,
+  displayDimensionScales?: Float64Array,
 ): number {
   const m = modelViewProjection;
   // Column-major mat4 indices.
-  const m00 = m[0], m10 = m[1];
-  const m01 = m[4], m11 = m[5];
-  const m02 = m[8], m12 = m[9];
-  const m30 = m[3], m31 = m[7], m32 = m[11], m33 = m[15];
-  const w = m30 * worldPoint[0] + m31 * worldPoint[1] + m32 * worldPoint[2] + m33;
+  const m00 = m[0],
+    m10 = m[1];
+  const m01 = m[4],
+    m11 = m[5];
+  const m02 = m[8],
+    m12 = m[9];
+  const m30 = m[3],
+    m31 = m[7],
+    m32 = m[11],
+    m33 = m[15];
+  const w =
+    m30 * worldPoint[0] + m31 * worldPoint[1] + m32 * worldPoint[2] + m33;
   if (!Number.isFinite(w) || w <= 0) return Number.POSITIVE_INFINITY;
+
+  const sx =
+    displayDimensionScales !== undefined &&
+    displayDimensionScales.length > 0 &&
+    Number.isFinite(displayDimensionScales[0]) &&
+    displayDimensionScales[0] > 0
+      ? displayDimensionScales[0]
+      : 1;
+  const sy =
+    displayDimensionScales !== undefined &&
+    displayDimensionScales.length > 1 &&
+    Number.isFinite(displayDimensionScales[1]) &&
+    displayDimensionScales[1] > 0
+      ? displayDimensionScales[1]
+      : sx;
+  const sz =
+    displayDimensionScales !== undefined &&
+    displayDimensionScales.length > 2 &&
+    Number.isFinite(displayDimensionScales[2]) &&
+    displayDimensionScales[2] > 0
+      ? displayDimensionScales[2]
+      : sy;
+
   const xScale = Math.sqrt(
-    (m00 * viewportWidth) ** 2 + (m10 * viewportHeight) ** 2,
+    ((m00 / sx) * viewportWidth) ** 2 + ((m10 / sx) * viewportHeight) ** 2,
   );
   const yScale = Math.sqrt(
-    (m01 * viewportWidth) ** 2 + (m11 * viewportHeight) ** 2,
+    ((m01 / sy) * viewportWidth) ** 2 + ((m11 / sy) * viewportHeight) ** 2,
   );
   const zScale = Math.sqrt(
-    (m02 * viewportWidth) ** 2 + (m12 * viewportHeight) ** 2,
+    ((m02 / sz) * viewportWidth) ** 2 + ((m12 / sz) * viewportHeight) ** 2,
   );
   const scaleFactor = Math.max(xScale, yScale, zScale);
   if (!Number.isFinite(scaleFactor) || scaleFactor <= 0) {
@@ -2079,6 +2111,9 @@ function computeWorldUnitsPerScreenPixel(
  * tunable in [src/mesh/multiscale.ts:202](src/mesh/multiscale.ts#L202).
  */
 const AUTO_SPATIAL_SKELETON_GRID_DETAIL_CUTOFF = 200;
+// Limit auto-target movement per update to avoid jumping across multiple
+// pyramid levels in a single zoom step (especially in anisotropic spaces).
+const AUTO_SPATIAL_SKELETON_GRID_MAX_OCTAVE_STEP = 0.5;
 
 /**
  * If `displayState.autoSpatialSkeletonGridLevel{view}` is enabled,
@@ -2140,30 +2175,16 @@ function maybeUpdateAutoSpatialSkeletonGridResolutionTarget(
   } else {
     reference = new Float32Array(3); // origin fallback
   }
-  const pixelSize = computeWorldUnitsPerScreenPixel(
+  const pixelSize = computePhysicalUnitsPerScreenPixel(
     projectionParameters.viewProjectionMat,
     projectionParameters.width,
     projectionParameters.height,
     reference,
+    projectionParameters.displayDimensionRenderInfo?.displayDimensionScales,
   );
   if (!Number.isFinite(pixelSize) || pixelSize <= 0) return;
-  // `pixelSize` is in global coordinate units; grid spacings are reported
-  // in physical meters, so convert to meters/pixel via the display
-  // dimension scales (meters per global unit).  Use the finest axis to
-  // match the `min()` convention used for grid spacing.
-  let metersPerUnit = 1;
-  const ddScales = projectionParameters.displayDimensionRenderInfo?.displayDimensionScales;
-  if (ddScales !== undefined && ddScales.length > 0) {
-    metersPerUnit = Infinity;
-    for (let i = 0; i < ddScales.length; ++i) {
-      const s = ddScales[i];
-      if (Number.isFinite(s) && s > 0) metersPerUnit = Math.min(metersPerUnit, s);
-    }
-    if (!Number.isFinite(metersPerUnit)) metersPerUnit = 1;
-  }
   // Camera-only target (no user bias yet).
-  const autoUnbiased =
-    pixelSize * metersPerUnit * AUTO_SPATIAL_SKELETON_GRID_DETAIL_CUTOFF;
+  const autoUnbiased = pixelSize * AUTO_SPATIAL_SKELETON_GRID_DETAIL_CUTOFF;
 
   // The multiplicative detail `bias` (set when the user clicks/drags the
   // widget) lives in the *persistent* displayState so the calibration
@@ -2183,7 +2204,9 @@ function maybeUpdateAutoSpatialSkeletonGridResolutionTarget(
     autoSpatialSkeletonBias.set(target, st);
   }
   let bias =
-    biasWatchable !== undefined && Number.isFinite(biasWatchable.value) && biasWatchable.value > 0
+    biasWatchable !== undefined &&
+    Number.isFinite(biasWatchable.value) &&
+    biasWatchable.value > 0
       ? biasWatchable.value
       : 1;
   const cur = target.value as number;
@@ -2200,17 +2223,31 @@ function maybeUpdateAutoSpatialSkeletonGridResolutionTarget(
     }
   }
   const next = autoUnbiased * bias;
+  let stabilizedNext = next;
+  if (
+    st.lastAuto !== undefined &&
+    Number.isFinite(st.lastAuto) &&
+    st.lastAuto > 0 &&
+    Number.isFinite(stabilizedNext) &&
+    stabilizedNext > 0
+  ) {
+    const maxFactor = 2 ** AUTO_SPATIAL_SKELETON_GRID_MAX_OCTAVE_STEP;
+    const upper = st.lastAuto * maxFactor;
+    const lower = st.lastAuto / maxFactor;
+    if (stabilizedNext > upper) stabilizedNext = upper;
+    if (stabilizedNext < lower) stabilizedNext = lower;
+  }
   // Only write when the value changes by more than 0.1% — the setter
   // dispatches `changed` unconditionally (level pick → re-attach chain).
   if (
     st.lastAuto !== undefined &&
-    Math.abs(cur - next) < Math.max(cur, next) * 1e-3
+    Math.abs(cur - stabilizedNext) < Math.max(cur, stabilizedNext) * 1e-3
   ) {
-    st.lastAuto = next;
+    st.lastAuto = stabilizedNext;
     return;
   }
-  target.value = next;
-  st.lastAuto = next;
+  target.value = stabilizedNext;
+  st.lastAuto = stabilizedNext;
 }
 
 // Transient per-resolution-target auto-LOD state: the last auto-written
@@ -2886,6 +2923,13 @@ export class SpatiallyIndexedSkeletonLayer
       SharedWatchableValue.makeFromExisting(rpc, this.gridLevel2d),
     );
 
+    const skeletonGridResolutionTarget3dWatchable = this.registerDisposer(
+      SharedWatchableValue.makeFromExisting(
+        rpc,
+        displayState.spatialSkeletonGridResolutionTarget3d!,
+      ),
+    );
+
     sharedObject.initializeCounterpart(rpc, {
       chunkManager: chunkManager.rpcId,
       localPosition: this.registerDisposer(
@@ -2896,6 +2940,8 @@ export class SpatiallyIndexedSkeletonLayer
       skeletonGridLevel: skeletonGridLevelWatchable.rpcId,
       skeletonLod2d: skeletonLod2dWatchable.rpcId,
       skeletonGridLevel2d: skeletonGridLevel2dWatchable.rpcId,
+      skeletonGridResolutionTarget3d:
+        skeletonGridResolutionTarget3dWatchable.rpcId,
     });
     this.backend = sharedObject;
     this.gpuBrowseExcludedSegmentsHashTable = this.registerDisposer(
@@ -2922,6 +2968,121 @@ export class SpatiallyIndexedSkeletonLayer
       getSpatiallyIndexedSkeletonSourceView,
       getSpatiallyIndexedSkeletonGridIndex,
     );
+  }
+
+  private selectSourcesForViewAndGridWithFallback(
+    view: SpatiallyIndexedSkeletonView,
+    gridLevel: number | undefined,
+  ) {
+    return selectSpatiallyIndexedSkeletonEntriesForViewWithFallback(
+      this.getSources(view),
+      view,
+      gridLevel,
+      getSpatiallyIndexedSkeletonSourceView,
+      getSpatiallyIndexedSkeletonGridIndex,
+    );
+  }
+
+  private getChunkSpacing(chunkLayout: ChunkLayout): number {
+    const { size } = chunkLayout;
+    return Math.max(Math.min(size[0], size[1], size[2]), 1e-6);
+  }
+
+  private getChunkCenterWorld(
+    chunkLayout: ChunkLayout,
+    positionInChunks: Float32Array,
+    out: Float32Array,
+  ) {
+    out[0] = (positionInChunks[0] + 0.5) * chunkLayout.size[0];
+    out[1] = (positionInChunks[1] + 0.5) * chunkLayout.size[1];
+    out[2] = (positionInChunks[2] + 0.5) * chunkLayout.size[2];
+    vec3.transformMat4(out as vec3, out as vec3, chunkLayout.transform);
+  }
+
+  private getChunkGridPositionForWorldPoint(
+    tsource: TransformedSource,
+    worldPoint: Float32Array,
+    out: Float32Array,
+  ): boolean {
+    const localPoint = vec3.create();
+    tsource.chunkLayout.globalToLocalSpatial(localPoint, worldPoint as vec3);
+    const { size } = tsource.chunkLayout;
+    const { lowerChunkBound, upperChunkBound } = (
+      tsource.source as SpatiallyIndexedSkeletonSource
+    ).spec;
+    for (let i = 0; i < 3; ++i) {
+      const dimSize = size[i];
+      if (!Number.isFinite(dimSize) || dimSize <= 0) {
+        return false;
+      }
+      const chunkCoord = Math.floor(localPoint[i] / dimSize);
+      if (
+        Number.isFinite(lowerChunkBound[i]) &&
+        Number.isFinite(upperChunkBound[i]) &&
+        (chunkCoord < lowerChunkBound[i] || chunkCoord >= upperChunkBound[i])
+      ) {
+        return false;
+      }
+      out[i] = chunkCoord;
+    }
+    return true;
+  }
+
+  private getMetersPerUnit(projectionParameters: ProjectionParameters): number {
+    const ddScales =
+      projectionParameters.displayDimensionRenderInfo?.displayDimensionScales;
+    if (ddScales === undefined || ddScales.length === 0) {
+      return 1;
+    }
+    let metersPerUnit = Infinity;
+    for (let i = 0; i < ddScales.length; ++i) {
+      const s = ddScales[i];
+      if (Number.isFinite(s) && s > 0) {
+        metersPerUnit = Math.min(metersPerUnit, s);
+      }
+    }
+    return Number.isFinite(metersPerUnit) ? metersPerUnit : 1;
+  }
+
+  private getReferencePixelSize(
+    projectionParameters: ProjectionParameters,
+  ): number {
+    let reference: Float32Array | undefined;
+    if (projectionParameters.globalPosition !== undefined) {
+      reference = projectionParameters.globalPosition;
+    } else if (this.localPosition.value.length >= 3) {
+      reference = this.localPosition.value;
+    } else {
+      reference = new Float32Array(3);
+    }
+    const pixelSize = computePhysicalUnitsPerScreenPixel(
+      projectionParameters.viewProjectionMat,
+      projectionParameters.width,
+      projectionParameters.height,
+      reference,
+      projectionParameters.displayDimensionRenderInfo?.displayDimensionScales,
+    );
+    return Number.isFinite(pixelSize) && pixelSize > 0 ? pixelSize : 1;
+  }
+
+  private getArbitrationTargetSpacingMeters3d(
+    projectionParameters: ProjectionParameters,
+  ): number {
+    const target =
+      this.displayState.spatialSkeletonGridResolutionTarget3d?.value;
+    if (Number.isFinite(target) && target !== undefined && target > 0) {
+      return target;
+    }
+    return this.getMetersPerUnit(projectionParameters);
+  }
+
+  // Quantize spacing to quarter-octave bins so tiny camera rotations do not
+  // globally thrash chunk-level arbitration decisions.
+  private quantizeSpacingForArbitration(spacing: number): number {
+    const clamped = Math.max(spacing, 1e-12);
+    const log2Spacing = Math.log2(clamped);
+    const quantizedLog = Math.round(log2Spacing * 4) / 4;
+    return 2 ** quantizedLog;
   }
 
   private getCachedNodeSnapshot(nodeId: number) {
@@ -3083,12 +3244,138 @@ export class SpatiallyIndexedSkeletonLayer
       chunkLayout: ChunkLayout,
     ) => boolean | void,
   ) {
-    const selectedSourceIds = new Set(
-      this.selectSourcesForViewAndGrid(view, gridLevel).map((s) =>
-        getObjectId(s.chunkSource),
-      ),
+    const selectedSources =
+      view === "3d"
+        ? this.selectSourcesForViewAndGridWithFallback(view, gridLevel)
+        : this.selectSourcesForViewAndGrid(view, gridLevel);
+    const selectedSourceIds = new Set<string>(
+      selectedSources.map((s) => getObjectId(s.chunkSource)),
     );
     const lodSuffix = `:${lod}`;
+
+    if (view === "3d" && selectedSources.length > 1) {
+      const transformedBySourceId = new Map<string, TransformedSource>();
+      for (const scales of transformedSources) {
+        for (const tsource of scales) {
+          transformedBySourceId.set(getObjectId(tsource.source), tsource);
+        }
+      }
+      const metersPerUnit = this.getMetersPerUnit(projectionParameters);
+      const arbitrationCandidates = selectedSources
+        .map((source, fallbackRank) => {
+          const sourceId = getObjectId(source.chunkSource);
+          const transformed = transformedBySourceId.get(sourceId);
+          if (transformed === undefined) return undefined;
+          const spacing = this.getChunkSpacing(transformed.chunkLayout);
+          return {
+            fallbackRank,
+            sourceId,
+            transformed,
+            spacing,
+            spacingMeters: spacing * metersPerUnit,
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== undefined);
+      if (arbitrationCandidates.length > 1) {
+        const anchor = arbitrationCandidates.reduce((best, candidate) =>
+          candidate.spacingMeters < best.spacingMeters ? candidate : best,
+        );
+        const worldCenter = new Float32Array(3);
+        const candidateChunkPosition = new Float32Array(3);
+        const targetSpacingMeters =
+          this.getArbitrationTargetSpacingMeters3d(projectionParameters);
+        const referencePixelSize =
+          this.getReferencePixelSize(projectionParameters);
+        const emittedChunkSlots = new Set<string>();
+        let shouldContinue = true;
+        forEachVisibleVolumetricChunk(
+          projectionParameters,
+          this.localPosition.value,
+          anchor.transformed,
+          (anchorPositionInChunks) => {
+            if (!shouldContinue) return;
+            this.getChunkCenterWorld(
+              anchor.transformed.chunkLayout,
+              anchorPositionInChunks,
+              worldCenter,
+            );
+            const chunkPixelSize = computePhysicalUnitsPerScreenPixel(
+              projectionParameters.viewProjectionMat,
+              projectionParameters.width,
+              projectionParameters.height,
+              worldCenter,
+              projectionParameters.displayDimensionRenderInfo
+                ?.displayDimensionScales,
+            );
+            const desiredSpacingRaw =
+              Number.isFinite(chunkPixelSize) && chunkPixelSize > 0
+                ? targetSpacingMeters * (chunkPixelSize / referencePixelSize)
+                : targetSpacingMeters;
+            const desiredSpacing =
+              this.quantizeSpacingForArbitration(desiredSpacingRaw);
+            const orderedCandidates = [...arbitrationCandidates].sort(
+              (a, b) => {
+                const da = Math.abs(a.spacingMeters - desiredSpacing);
+                const db = Math.abs(b.spacingMeters - desiredSpacing);
+                if (da !== db) return da - db;
+                return a.fallbackRank - b.fallbackRank;
+              },
+            );
+
+            let selected:
+              | {
+                  candidate: (typeof orderedCandidates)[number];
+                  chunkKey: string;
+                  state: ChunkState | undefined;
+                }
+              | undefined;
+            for (const candidate of orderedCandidates) {
+              if (
+                !this.getChunkGridPositionForWorldPoint(
+                  candidate.transformed,
+                  worldCenter,
+                  candidateChunkPosition,
+                )
+              ) {
+                continue;
+              }
+              const chunkKey = `${candidateChunkPosition.join()}${lodSuffix}`;
+              const chunk = (
+                candidate.transformed.source as SpatiallyIndexedSkeletonSource
+              ).chunks.get(chunkKey);
+              const state = chunk?.state;
+              if (state === ChunkState.GPU_MEMORY) {
+                selected = { candidate, chunkKey, state };
+                break;
+              }
+              if (selected === undefined) {
+                selected = { candidate, chunkKey, state };
+              }
+            }
+            if (selected === undefined) {
+              return;
+            }
+            const emitKey = `${selected.candidate.sourceId}|${selected.chunkKey}`;
+            if (emittedChunkSlots.has(emitKey)) {
+              return;
+            }
+            emittedChunkSlots.add(emitKey);
+            if (
+              callback(
+                selected.chunkKey,
+                selected.candidate.transformed
+                  .source as SpatiallyIndexedSkeletonSource,
+                selected.candidate.transformed.chunkLayout,
+              ) === false
+            ) {
+              shouldContinue = false;
+            }
+          },
+        );
+        return;
+      }
+    }
+
     let shouldContinue = true;
     for (const scales of transformedSources) {
       for (const tsource of scales) {

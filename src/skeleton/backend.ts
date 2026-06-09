@@ -53,7 +53,7 @@ import {
 } from "#src/skeleton/chunk_serialization.js";
 import {
   getSpatiallyIndexedSkeletonGridIndex,
-  selectSpatiallyIndexedSkeletonEntriesByGrid,
+  selectSpatiallyIndexedSkeletonEntriesByGridWithFallback,
 } from "#src/skeleton/source_selection.js";
 import {
   BASE_PRIORITY,
@@ -71,6 +71,7 @@ import {
 import type { TypedNumberArray } from "#src/util/array.js";
 import type { Endianness } from "#src/util/endian.js";
 import { vec3 } from "#src/util/geom.js";
+import { getObjectId } from "#src/util/object_id.js";
 import {
   getBasePriority,
   getPriorityTier,
@@ -90,6 +91,128 @@ const SPATIALLY_INDEXED_SKELETON_LOD_DEBOUNCE_MS = 300;
 const tempCenter = vec3.create();
 const tempChunkSize = vec3.create();
 const tempCenterDataPosition = vec3.create();
+const tempArbitrationChunkCenterWorld = vec3.create();
+const tempArbitrationCandidateChunkPos = vec3.create();
+const tempArbitrationLocalPoint = vec3.create();
+
+function getChunkSpacing(size: Float32Array): number {
+  return Math.max(Math.min(size[0], size[1], size[2]), 1e-6);
+}
+
+function computePhysicalUnitsPerScreenPixelAtPoint(
+  modelViewProjection: Float32Array,
+  viewportWidth: number,
+  viewportHeight: number,
+  worldPoint: Float32Array,
+  displayDimensionScales?: Float64Array,
+): number {
+  const m = modelViewProjection;
+  const m00 = m[0],
+    m10 = m[1];
+  const m01 = m[4],
+    m11 = m[5];
+  const m02 = m[8],
+    m12 = m[9];
+  const m30 = m[3],
+    m31 = m[7],
+    m32 = m[11],
+    m33 = m[15];
+  const w =
+    m30 * worldPoint[0] + m31 * worldPoint[1] + m32 * worldPoint[2] + m33;
+  if (!Number.isFinite(w) || w <= 0) return Number.POSITIVE_INFINITY;
+
+  const sx =
+    displayDimensionScales !== undefined &&
+    displayDimensionScales.length > 0 &&
+    Number.isFinite(displayDimensionScales[0]) &&
+    displayDimensionScales[0] > 0
+      ? displayDimensionScales[0]
+      : 1;
+  const sy =
+    displayDimensionScales !== undefined &&
+    displayDimensionScales.length > 1 &&
+    Number.isFinite(displayDimensionScales[1]) &&
+    displayDimensionScales[1] > 0
+      ? displayDimensionScales[1]
+      : sx;
+  const sz =
+    displayDimensionScales !== undefined &&
+    displayDimensionScales.length > 2 &&
+    Number.isFinite(displayDimensionScales[2]) &&
+    displayDimensionScales[2] > 0
+      ? displayDimensionScales[2]
+      : sy;
+
+  const xScale = Math.sqrt(
+    ((m00 / sx) * viewportWidth) ** 2 + ((m10 / sx) * viewportHeight) ** 2,
+  );
+  const yScale = Math.sqrt(
+    ((m01 / sy) * viewportWidth) ** 2 + ((m11 / sy) * viewportHeight) ** 2,
+  );
+  const zScale = Math.sqrt(
+    ((m02 / sz) * viewportWidth) ** 2 + ((m12 / sz) * viewportHeight) ** 2,
+  );
+  const scaleFactor = Math.max(xScale, yScale, zScale);
+  if (!Number.isFinite(scaleFactor) || scaleFactor <= 0) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return w / scaleFactor;
+}
+
+function getChunkGridPositionForWorldPoint(
+  tsource: TransformedSource<
+    SpatiallyIndexedSkeletonRenderLayerBackend,
+    SpatiallyIndexedSkeletonSourceBackend
+  >,
+  worldPoint: Float32Array,
+  out: Float32Array,
+): boolean {
+  tsource.chunkLayout.globalToLocalSpatial(
+    tempArbitrationLocalPoint,
+    worldPoint as vec3,
+  );
+  const { size } = tsource.chunkLayout;
+  const { lowerChunkBound, upperChunkBound } = tsource.source.spec;
+  for (let i = 0; i < 3; ++i) {
+    const dimSize = size[i];
+    if (!Number.isFinite(dimSize) || dimSize <= 0) return false;
+    const chunkCoord = Math.floor(tempArbitrationLocalPoint[i] / dimSize);
+    if (
+      Number.isFinite(lowerChunkBound[i]) &&
+      Number.isFinite(upperChunkBound[i]) &&
+      (chunkCoord < lowerChunkBound[i] || chunkCoord >= upperChunkBound[i])
+    ) {
+      return false;
+    }
+    out[i] = chunkCoord;
+  }
+  return true;
+}
+
+function getMetersPerUnit(projectionParameters: {
+  displayDimensionRenderInfo?: { displayDimensionScales?: Float64Array };
+}): number {
+  const ddScales =
+    projectionParameters.displayDimensionRenderInfo?.displayDimensionScales;
+  if (ddScales === undefined || ddScales.length === 0) {
+    return 1;
+  }
+  let metersPerUnit = Infinity;
+  for (let i = 0; i < ddScales.length; ++i) {
+    const s = ddScales[i];
+    if (Number.isFinite(s) && s > 0) {
+      metersPerUnit = Math.min(metersPerUnit, s);
+    }
+  }
+  return Number.isFinite(metersPerUnit) ? metersPerUnit : 1;
+}
+
+function quantizeSpacingForArbitration(spacing: number): number {
+  const clamped = Math.max(spacing, 1e-12);
+  const log2Spacing = Math.log2(clamped);
+  const quantizedLog = Math.round(log2Spacing * 4) / 4;
+  return 2 ** quantizedLog;
+}
 
 export function getSpatiallyIndexedSkeletonChunkPriority(
   localCenter: Float32Array,
@@ -388,6 +511,7 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
   skeletonGridLevel: SharedWatchableValue<number>;
   skeletonLod2d: SharedWatchableValue<number>;
   skeletonGridLevel2d: SharedWatchableValue<number>;
+  skeletonGridResolutionTarget3d: SharedWatchableValue<number>;
   private pendingLodCleanup = false;
 
   constructor(rpc: RPC, options: any) {
@@ -398,6 +522,9 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
     this.skeletonGridLevel = rpc.get(options.skeletonGridLevel);
     this.skeletonLod2d = rpc.get(options.skeletonLod2d);
     this.skeletonGridLevel2d = rpc.get(options.skeletonGridLevel2d);
+    this.skeletonGridResolutionTarget3d = rpc.get(
+      options.skeletonGridResolutionTarget3d,
+    );
     const scheduleUpdateChunkPriorities = () =>
       this.chunkManager.scheduleUpdateChunkPriorities();
     this.registerDisposer(
@@ -411,6 +538,11 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
     );
     this.registerDisposer(
       this.skeletonGridLevel2d.changed.add(scheduleUpdateChunkPriorities),
+    );
+    this.registerDisposer(
+      this.skeletonGridResolutionTarget3d.changed.add(
+        scheduleUpdateChunkPriorities,
+      ),
     );
 
     // Debounce LOD changes to avoid making requests for every slider value
@@ -565,7 +697,7 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
               getSpatiallyIndexedSkeletonGridIndex(scale) !== undefined,
           )
         ) {
-          return selectSpatiallyIndexedSkeletonEntriesByGrid(
+          return selectSpatiallyIndexedSkeletonEntriesByGridWithFallback(
             scales.map((tsource, scaleIndex) => ({ tsource, scaleIndex })),
             skeletonGridLevel,
             ({ tsource }) => getSpatiallyIndexedSkeletonGridIndex(tsource),
@@ -636,6 +768,195 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
 
       const lodValue = (is2dView ? this.skeletonLod2d : this.skeletonLod).value;
       for (const scales of transformedSources) {
+        if (
+          !is2dView &&
+          scales.length > 1 &&
+          scales.every(
+            (scale) =>
+              getSpatiallyIndexedSkeletonGridIndex(scale) !== undefined,
+          )
+        ) {
+          const orderedCandidates =
+            selectSpatiallyIndexedSkeletonEntriesByGridWithFallback(
+              scales.map((tsource, scaleIndex) => ({ tsource, scaleIndex })),
+              skeletonGridLevel,
+              ({ tsource }) => getSpatiallyIndexedSkeletonGridIndex(tsource),
+            );
+          if (orderedCandidates.length > 0) {
+            const metersPerUnit = getMetersPerUnit(projectionParameters);
+            const spacingMeters = (candidate: {
+              tsource: TransformedSource<
+                SpatiallyIndexedSkeletonRenderLayerBackend,
+                SpatiallyIndexedSkeletonSourceBackend
+              >;
+            }) =>
+              getChunkSpacing(candidate.tsource.chunkLayout.size) *
+              metersPerUnit;
+            const anchor = orderedCandidates.reduce((best, candidate) =>
+              spacingMeters(candidate) < spacingMeters(best) ? candidate : best,
+            );
+            const targetSpacingMeters =
+              Number.isFinite(this.skeletonGridResolutionTarget3d.value) &&
+              this.skeletonGridResolutionTarget3d.value > 0
+                ? this.skeletonGridResolutionTarget3d.value
+                : spacingMeters(anchor);
+            const refPoint =
+              projectionParameters.globalPosition.length >= 3
+                ? projectionParameters.globalPosition
+                : this.localPosition.value;
+            const referencePixelSizeRaw =
+              computePhysicalUnitsPerScreenPixelAtPoint(
+                projectionParameters.viewProjectionMat,
+                projectionParameters.width,
+                projectionParameters.height,
+                refPoint,
+                projectionParameters.displayDimensionRenderInfo
+                  ?.displayDimensionScales,
+              );
+            const referencePixelSize =
+              Number.isFinite(referencePixelSizeRaw) &&
+              referencePixelSizeRaw > 0
+                ? referencePixelSizeRaw
+                : 1;
+
+            const emitted = new Set<string>();
+            forEachVisibleVolumetricChunk(
+              projectionParameters,
+              this.localPosition.value,
+              anchor.tsource,
+              (anchorPosInChunks) => {
+                tempArbitrationChunkCenterWorld[0] =
+                  (anchorPosInChunks[0] + 0.5) *
+                  anchor.tsource.chunkLayout.size[0];
+                tempArbitrationChunkCenterWorld[1] =
+                  (anchorPosInChunks[1] + 0.5) *
+                  anchor.tsource.chunkLayout.size[1];
+                tempArbitrationChunkCenterWorld[2] =
+                  (anchorPosInChunks[2] + 0.5) *
+                  anchor.tsource.chunkLayout.size[2];
+                vec3.transformMat4(
+                  tempArbitrationChunkCenterWorld,
+                  tempArbitrationChunkCenterWorld,
+                  anchor.tsource.chunkLayout.transform,
+                );
+
+                const chunkPixelSize =
+                  computePhysicalUnitsPerScreenPixelAtPoint(
+                    projectionParameters.viewProjectionMat,
+                    projectionParameters.width,
+                    projectionParameters.height,
+                    tempArbitrationChunkCenterWorld,
+                    projectionParameters.displayDimensionRenderInfo
+                      ?.displayDimensionScales,
+                  );
+                const desiredSpacingRaw =
+                  Number.isFinite(chunkPixelSize) && chunkPixelSize > 0
+                    ? targetSpacingMeters *
+                      (chunkPixelSize / referencePixelSize)
+                    : targetSpacingMeters;
+                const desiredSpacing =
+                  quantizeSpacingForArbitration(desiredSpacingRaw);
+
+                const candidatesByDesired = [...orderedCandidates].sort(
+                  (a, b) => {
+                    const da = Math.abs(spacingMeters(a) - desiredSpacing);
+                    const db = Math.abs(spacingMeters(b) - desiredSpacing);
+                    if (da !== db) return da - db;
+                    return a.scaleIndex - b.scaleIndex;
+                  },
+                );
+
+                let selected:
+                  | {
+                      tsource: TransformedSource<
+                        SpatiallyIndexedSkeletonRenderLayerBackend,
+                        SpatiallyIndexedSkeletonSourceBackend
+                      >;
+                      scaleIndex: number;
+                      position: Float32Array;
+                      key: string;
+                    }
+                  | undefined;
+                for (const candidate of candidatesByDesired) {
+                  if (
+                    !getChunkGridPositionForWorldPoint(
+                      candidate.tsource,
+                      tempArbitrationChunkCenterWorld,
+                      tempArbitrationCandidateChunkPos,
+                    )
+                  ) {
+                    continue;
+                  }
+                  const key = `${tempArbitrationCandidateChunkPos.join()}:${lodValue}`;
+                  const state = candidate.tsource.source.chunks.get(key)?.state;
+                  // A failed candidate should not block fallback to the next
+                  // ranked level, but loaded/system/queued candidates remain
+                  // valid so target levels are still actively requested.
+                  if (state === ChunkState.FAILED) {
+                    continue;
+                  }
+                  const pos = vec3.fromValues(
+                    tempArbitrationCandidateChunkPos[0],
+                    tempArbitrationCandidateChunkPos[1],
+                    tempArbitrationCandidateChunkPos[2],
+                  );
+                  selected = {
+                    tsource: candidate.tsource,
+                    scaleIndex: candidate.scaleIndex,
+                    position: pos,
+                    key,
+                  };
+                  break;
+                }
+                if (selected === undefined) {
+                  return;
+                }
+                const emitKey = `${getObjectId(selected.tsource.source)}|${selected.key}`;
+                if (emitted.has(emitKey)) {
+                  return;
+                }
+                emitted.add(emitKey);
+
+                const source = selected.tsource.source;
+                source.currentLod = lodValue;
+                source.currentRequestGeneration = currentGeneration;
+                source.currentRequestOwner =
+                  SpatiallyIndexedSkeletonChunkRequestOwner.VIEW_3D;
+
+                const { chunkLayout } = selected.tsource;
+                chunkLayout.globalToLocalSpatial(
+                  localCenter,
+                  centerDataPosition,
+                );
+                const { size, finiteRank } = chunkLayout;
+                vec3.copy(chunkSize, size);
+                for (let i = finiteRank; i < 3; ++i) {
+                  chunkSize[i] = 0;
+                  localCenter[i] = 0;
+                }
+
+                const chunk = source.getChunk(selected.position);
+                ++this.numVisibleChunksNeeded;
+                if (chunk.state === ChunkState.GPU_MEMORY) {
+                  ++this.numVisibleChunksAvailable;
+                }
+                chunkManager.requestChunk(
+                  chunk,
+                  priorityTier,
+                  getSpatiallyIndexedSkeletonRenderPriority(
+                    basePriority,
+                    selected.scaleIndex,
+                    localCenter,
+                    chunkSize,
+                    selected.position,
+                  ),
+                );
+              },
+            );
+            continue;
+          }
+        }
+
         const selectedScales = selectScales(scales);
         for (const { tsource, scaleIndex } of selectedScales) {
           const source =

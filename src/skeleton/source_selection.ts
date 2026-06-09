@@ -92,6 +92,69 @@ export function selectSpatiallyIndexedSkeletonEntriesByGrid<T>(
   return [exactMatch ?? closestMatch!];
 }
 
+/**
+ * Selects entries in deterministic priority order for a target grid level.
+ *
+ * Priority order:
+ * 1. Exact/closest match to `gridLevel` (same behavior as
+ *    `selectSpatiallyIndexedSkeletonEntriesByGrid`).
+ * 2. Finer levels (smaller grid index) from nearest to finest.
+ * 3. Coarser levels (larger grid index) from nearest to coarsest.
+ *
+ * This ordering supports graceful fallback when preferred coarser levels are
+ * unavailable while keeping behavior deterministic across frames.
+ */
+export function selectSpatiallyIndexedSkeletonEntriesByGridWithFallback<T>(
+  entries: readonly T[],
+  gridLevel: number | undefined,
+  getGridIndex: (entry: T) => number | undefined,
+) {
+  if (entries.length === 0 || gridLevel === undefined) {
+    return [...entries];
+  }
+
+  const indexedEntries: Array<{ entry: T; gridIndex: number; order: number }> =
+    [];
+  for (let i = 0; i < entries.length; ++i) {
+    const entry = entries[i];
+    const gridIndex = getGridIndex(entry);
+    if (gridIndex === undefined) {
+      return [...entries];
+    }
+    indexedEntries.push({ entry, gridIndex, order: i });
+  }
+
+  let preferred = indexedEntries[0]!;
+  let bestDistance = Math.abs(preferred.gridIndex - gridLevel);
+  for (let i = 1; i < indexedEntries.length; ++i) {
+    const candidate = indexedEntries[i]!;
+    const distance = Math.abs(candidate.gridIndex - gridLevel);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      preferred = candidate;
+    }
+  }
+
+  const finer = indexedEntries
+    .filter((x) => x.gridIndex < preferred.gridIndex)
+    .sort((a, b) => {
+      const da = preferred.gridIndex - a.gridIndex;
+      const db = preferred.gridIndex - b.gridIndex;
+      if (da !== db) return da - db;
+      return a.order - b.order;
+    });
+  const coarser = indexedEntries
+    .filter((x) => x.gridIndex > preferred.gridIndex)
+    .sort((a, b) => {
+      const da = a.gridIndex - preferred.gridIndex;
+      const db = b.gridIndex - preferred.gridIndex;
+      if (da !== db) return da - db;
+      return a.order - b.order;
+    });
+
+  return [preferred, ...finer, ...coarser].map((x) => x.entry);
+}
+
 export function filterSpatiallyIndexedSkeletonEntriesByView<T>(
   entries: readonly T[],
   view: SpatiallyIndexedSkeletonView,
@@ -116,6 +179,25 @@ export function selectSpatiallyIndexedSkeletonEntriesForView<T>(
     getView,
   );
   return selectSpatiallyIndexedSkeletonEntriesByGrid(
+    viewFiltered,
+    gridLevel,
+    getGridIndex,
+  );
+}
+
+export function selectSpatiallyIndexedSkeletonEntriesForViewWithFallback<T>(
+  entries: readonly T[],
+  view: SpatiallyIndexedSkeletonView,
+  gridLevel: number | undefined,
+  getView: (entry: T) => string | undefined,
+  getGridIndex: (entry: T) => number | undefined,
+) {
+  const viewFiltered = filterSpatiallyIndexedSkeletonEntriesByView(
+    entries,
+    view,
+    getView,
+  );
+  return selectSpatiallyIndexedSkeletonEntriesByGridWithFallback(
     viewFiltered,
     gridLevel,
     getGridIndex,

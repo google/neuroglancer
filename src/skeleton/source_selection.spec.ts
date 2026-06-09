@@ -16,7 +16,11 @@
 
 import { describe, expect, it } from "vitest";
 
-import { selectSpatiallyIndexedSkeletonEntriesByGrid } from "#src/skeleton/source_selection.js";
+import {
+  selectSpatiallyIndexedSkeletonEntriesByGrid,
+  selectSpatiallyIndexedSkeletonEntriesByGridWithFallback,
+  selectSpatiallyIndexedSkeletonEntriesForViewWithFallback,
+} from "#src/skeleton/source_selection.js";
 
 describe("skeleton/source_selection", () => {
   it("returns the exact grid match when available", () => {
@@ -61,5 +65,69 @@ describe("skeleton/source_selection", () => {
         (entry) => entry.gridIndex,
       ),
     ).toEqual(entries);
+  });
+
+  it("returns preferred level followed by finer then coarser fallback levels", () => {
+    const entries = [
+      { id: "finest", gridIndex: 0 },
+      { id: "finer", gridIndex: 1 },
+      { id: "preferred", gridIndex: 2 },
+      { id: "coarser", gridIndex: 3 },
+    ];
+    expect(
+      selectSpatiallyIndexedSkeletonEntriesByGridWithFallback(
+        entries,
+        2,
+        (entry) => entry.gridIndex,
+      ).map((entry) => entry.id),
+    ).toEqual(["preferred", "finer", "finest", "coarser"]);
+  });
+
+  it("falls back to the nearest finer level first when target is coarser", () => {
+    const entries = [
+      { id: "finest", gridIndex: 0 },
+      { id: "fine", gridIndex: 1 },
+      { id: "medium", gridIndex: 2 },
+      { id: "coarse", gridIndex: 3 },
+    ];
+    expect(
+      selectSpatiallyIndexedSkeletonEntriesByGridWithFallback(
+        entries,
+        3,
+        (entry) => entry.gridIndex,
+      ).map((entry) => entry.id),
+    ).toEqual(["coarse", "medium", "fine", "finest"]);
+  });
+
+  it("returns all entries unchanged when any entry lacks grid index", () => {
+    const entries = [
+      { id: "a", gridIndex: 0 },
+      { id: "b" },
+      { id: "c", gridIndex: 2 },
+    ];
+    expect(
+      selectSpatiallyIndexedSkeletonEntriesByGridWithFallback(
+        entries,
+        1,
+        (entry) => entry.gridIndex,
+      ),
+    ).toEqual(entries);
+  });
+
+  it("applies view filtering before fallback ordering", () => {
+    const entries = [
+      { id: "a2d", gridIndex: 0, view: "2d" },
+      { id: "b3d", gridIndex: 2, view: "3d" },
+      { id: "c3d", gridIndex: 1, view: "3d" },
+    ];
+    expect(
+      selectSpatiallyIndexedSkeletonEntriesForViewWithFallback(
+        entries,
+        "3d",
+        2,
+        (entry) => entry.view,
+        (entry) => entry.gridIndex,
+      ).map((entry) => entry.id),
+    ).toEqual(["b3d", "c3d"]);
   });
 });
