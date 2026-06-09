@@ -55,10 +55,12 @@ import {
 import { downloadSegmentSkeleton } from "#src/datasource/zarr-vectors/skeleton_segment_download.js";
 import { WithSharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
 import { joinBaseUrlAndPath } from "#src/kvstore/url.js";
-import {
+import type {
   SkeletonChunk,
-  SkeletonSource,
   SpatiallyIndexedSkeletonChunk,
+} from "#src/skeleton/backend.js";
+import {
+  SkeletonSource,
   SpatiallyIndexedSkeletonSourceBackend,
 } from "#src/skeleton/backend.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
@@ -103,7 +105,9 @@ async function maybeDecompress(
 function makeKvStoreRead(
   baseUrl: string,
   sharedKvStoreContext: {
-    kvStoreContext: { read: (url: string, options: { signal: AbortSignal }) => Promise<any> };
+    kvStoreContext: {
+      read: (url: string, options: { signal: AbortSignal }) => Promise<any>;
+    };
   },
 ) {
   return async (
@@ -359,12 +363,16 @@ export class ZarrVectorsSpatiallyIndexedSkeletonSourceBackend extends WithParame
     let withBridges = decoded;
     const table = await this.getCrossChunkLinks(kvStoreRead, signal);
     if (table !== undefined) {
-      const { ghostRequests, intraChunkEdges, intraChunkBridges, ghostIsPredecessor } =
-        this.buildBridgeRequests(
-          table,
-          chunkGridPosition,
-          decoded.numVertices,
-        );
+      const {
+        ghostRequests,
+        intraChunkEdges,
+        intraChunkBridges,
+        ghostIsPredecessor,
+      } = this.buildBridgeRequests(
+        table,
+        chunkGridPosition,
+        decoded.numVertices,
+      );
       // Intra-chunk bridges first: both endpoints already live in the
       // chunk's vertex texture, so we just append flat (a, b) pairs to
       // the edges array.  Affects coarser pyramid levels where the
@@ -413,7 +421,8 @@ export class ZarrVectorsSpatiallyIndexedSkeletonSourceBackend extends WithParame
             // preserving, so this is monotonic.
             while (
               requestCursor < ghostRequests.length &&
-              ghostRequests[requestCursor].hostLocalVertex !== ghost.bridgeFromLocalVertex
+              ghostRequests[requestCursor].hostLocalVertex !==
+                ghost.bridgeFromLocalVertex
             ) {
               requestCursor++;
             }
@@ -448,7 +457,15 @@ export class ZarrVectorsSpatiallyIndexedSkeletonSourceBackend extends WithParame
     // (`buildZvSpatialVertexAttributes`) mirrors this exact ordering so
     // texture-unit indices line up and the render layer's
     // `findIndex(name === "segment")` resolves `segmentAttributeIndex`.
-    const attrs: (Float32Array | Uint8Array | Uint16Array | Uint32Array | Int8Array | Int16Array | Int32Array)[] = [];
+    const attrs: (
+      | Float32Array
+      | Uint8Array
+      | Uint16Array
+      | Uint32Array
+      | Int8Array
+      | Int16Array
+      | Int32Array
+    )[] = [];
     if (withBridges.tangents !== undefined) {
       attrs.push(withBridges.tangents);
     }
@@ -615,8 +632,13 @@ export class ZarrVectorsObjectKeyedSkeletonSourceBackend extends WithParameters(
       chunk.vertexPositions = new Float32Array(0);
       chunk.indices = new Uint32Array(0);
       chunk.vertexAttributes = attributeNames.map(() => new Float32Array(0));
-      if (hasSynthesisedTangent(geometryKind as ZarrVectorsSkeletonGeometryKind)) {
-        chunk.vertexAttributes = [new Float32Array(0), ...chunk.vertexAttributes];
+      if (
+        hasSynthesisedTangent(geometryKind as ZarrVectorsSkeletonGeometryKind)
+      ) {
+        chunk.vertexAttributes = [
+          new Float32Array(0),
+          ...chunk.vertexAttributes,
+        ];
       }
       return;
     }
@@ -652,8 +674,13 @@ export class ZarrVectorsObjectKeyedSkeletonSourceBackend extends WithParameters(
       // across passes even when an OID has no geometry.  See
       // `hasSynthesisedTangent` in `geometry_kind.ts` for the canonical
       // per-kind capability table.
-      if (hasSynthesisedTangent(geometryKind as ZarrVectorsSkeletonGeometryKind)) {
-        chunk.vertexAttributes = [new Float32Array(0), ...chunk.vertexAttributes];
+      if (
+        hasSynthesisedTangent(geometryKind as ZarrVectorsSkeletonGeometryKind)
+      ) {
+        chunk.vertexAttributes = [
+          new Float32Array(0),
+          ...chunk.vertexAttributes,
+        ];
       }
       return;
     }
@@ -675,7 +702,9 @@ export class ZarrVectorsObjectKeyedSkeletonSourceBackend extends WithParameters(
 async function readManifestArrayShape(
   baseUrl: string,
   sharedKvStoreContext: {
-    kvStoreContext: { read: (url: string, options: { signal: AbortSignal }) => Promise<any> };
+    kvStoreContext: {
+      read: (url: string, options: { signal: AbortSignal }) => Promise<any>;
+    };
   },
   signal: AbortSignal,
 ): Promise<{ numObjects: number; chunkSize: number }> {
@@ -683,9 +712,12 @@ async function readManifestArrayShape(
     baseUrl,
     "object_index/manifests/zarr.json",
   );
-  const response = await sharedKvStoreContext.kvStoreContext.read(arrayMetaUrl, {
-    signal,
-  });
+  const response = await sharedKvStoreContext.kvStoreContext.read(
+    arrayMetaUrl,
+    {
+      signal,
+    },
+  );
   if (response === undefined) {
     throw new Error(
       "zarr-vectors object-keyed skeleton: missing object_index/manifests/zarr.json",
@@ -697,7 +729,11 @@ async function readManifestArrayShape(
   const meta = JSON.parse(text);
   const shape = meta.shape;
   const chunkGrid = meta?.chunk_grid;
-  if (!Array.isArray(shape) || shape.length !== 1 || typeof shape[0] !== "number") {
+  if (
+    !Array.isArray(shape) ||
+    shape.length !== 1 ||
+    typeof shape[0] !== "number"
+  ) {
     throw new Error(
       "zarr-vectors object_index/manifests: shape must be a 1-D array of one integer",
     );
