@@ -186,6 +186,12 @@ export interface SegmentationDisplayState {
   segmentSelectionState: SegmentSelectionState;
   saturation: TrackableAlphaValue;
   hoverHighlight: WatchableValueInterface<boolean>;
+  // Focus highlight: when set, every segment EXCEPT this one renders at
+  // `focusDim` × its alpha — "dim everything else" for a selected instance.
+  // Independent of visibleSegments (which the hide feature owns), so the two
+  // compose. Optional so non-layer implementers of this interface needn't set it.
+  focusedSegment?: WatchableValueInterface<bigint | null>;
+  focusDim?: WatchableValueInterface<number>;
   baseSegmentColoring: WatchableValueInterface<boolean>;
   baseSegmentHighlighting: WatchableValueInterface<boolean>;
   segmentationGroupState: WatchableValueInterface<SegmentationGroupState>;

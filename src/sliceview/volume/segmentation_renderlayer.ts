@@ -93,6 +93,7 @@ interface ShaderParameters {
 
 const HAS_SELECTED_SEGMENT_FLAG = 1;
 const SHOW_ALL_SEGMENTS_FLAG = 2;
+const HAS_FOCUSED_SEGMENT_FLAG = 4;
 
 export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderParameters> {
   public readonly segmentationGroupState: SegmentationGroupState;
@@ -228,6 +229,16 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
     this.registerDisposer(
       displayState.ignoreNullVisibleSet.changed.add(this.redrawNeeded.dispatch),
     );
+    if (displayState.focusedSegment) {
+      this.registerDisposer(
+        displayState.focusedSegment.changed.add(this.redrawNeeded.dispatch),
+      );
+    }
+    if (displayState.focusDim) {
+      this.registerDisposer(
+        displayState.focusDim.changed.add(this.redrawNeeded.dispatch),
+      );
+    }
     const sources = this.multiscaleSource.getSources({
       multiscaleToViewTransform: matrix.createIdentity(
         Float32Array,
@@ -337,6 +348,8 @@ uint64_t getMappedObjectId(uint64_t value) {
 `);
     }
     builder.addUniform("highp uvec2", "uSelectedSegment");
+    builder.addUniform("highp uvec2", "uFocusedSegment");
+    builder.addUniform("highp float", "uFocusDim");
     builder.addUniform("highp uint", "uFlags");
     builder.addUniform("highp float", "uSelectedAlpha");
     builder.addUniform("highp float", "uNotSelectedAlpha");
@@ -419,6 +432,9 @@ uint64_t getMappedObjectId(uint64_t value) {
   if (rgba.a > 0.0) {
     alpha = rgba.a;
   }
+  if ((uFlags & ${HAS_FOCUSED_SEGMENT_FLAG}u) != 0u && uFocusedSegment != valueForHighlight.value) {
+    alpha *= uFocusDim;
+  }
   emit(vec4(mix(vec3(1.0,1.0,1.0), vec3(rgba), saturation), alpha));
 `;
     builder.setFragmentMain(fragmentMain);
@@ -472,6 +488,23 @@ uint64_t getMappedObjectId(uint64_t value) {
       shader.uniform("uSelectedSegment"),
       selectedSegmentLow,
       selectedSegmentHigh,
+    );
+    const focusedSegment = displayState.focusedSegment?.value ?? null;
+    let focusedSegmentLow = 0;
+    let focusedSegmentHigh = 0;
+    if (focusedSegment != null) {
+      focusedSegmentLow = Number(focusedSegment & 0xffffffffn);
+      focusedSegmentHigh = Number(focusedSegment >> 32n);
+      flags |= HAS_FOCUSED_SEGMENT_FLAG;
+    }
+    gl.uniform2ui(
+      shader.uniform("uFocusedSegment"),
+      focusedSegmentLow,
+      focusedSegmentHigh,
+    );
+    gl.uniform1f(
+      shader.uniform("uFocusDim"),
+      displayState.focusDim?.value ?? 0.15,
     );
     if (visibleSegments.hashTable.size === 0 && ignoreNullSegmentSet) {
       flags |= SHOW_ALL_SEGMENTS_FLAG;

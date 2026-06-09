@@ -529,6 +529,9 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   saturation = trackableAlphaValue(1.0);
   notSelectedAlpha = trackableAlphaValue(0);
   hoverHighlight = new TrackableBoolean(false, false);
+  // Focus highlight (dim-everything-else)
+  focusedSegment = new WatchableValue<bigint | null>(null);
+  focusDim = trackableAlphaValue(0.5);
   silhouetteRendering = new TrackableValue<number>(
     0,
     verifyFiniteNonNegativeFloat,
