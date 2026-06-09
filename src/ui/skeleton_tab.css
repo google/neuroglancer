@@ -1,0 +1,430 @@
+/**
+ * @license
+ * Copyright 2026 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.neuroglancer-skeleton-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.1em 0.2em;
+  width: 100%;
+}
+
+.neuroglancer-skeleton-toolbar
+  .neuroglancer-tool-button
+  + .neuroglancer-tool-button {
+  margin-left: 0.35em;
+}
+
+.neuroglancer-skeleton-toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  gap: 0.1em;
+}
+
+.neuroglancer-skeleton-nav-tools {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  flex: 0 0 auto;
+  justify-content: flex-start;
+  gap: 0.1em;
+}
+
+.neuroglancer-skeleton-icon-button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.neuroglancer-skeleton-icon-button .neuroglancer-icon {
+  min-width: 14px;
+  min-height: 14px;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.neuroglancer-skeleton-icon-button:hover .neuroglancer-icon {
+  background-color: #db4437;
+}
+
+.neuroglancer-skeleton-icon-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.neuroglancer-skeleton-icon-button:disabled .neuroglancer-icon {
+  background-color: transparent;
+}
+
+.neuroglancer-skeleton-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  overflow-y: auto;
+}
+
+.neuroglancer-skeleton-section {
+  --neuroglancer-skeleton-actions-width: 44px;
+  --neuroglancer-skeleton-type-width: 21px;
+  border: 1px solid #2f2f2f;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.neuroglancer-skeleton-filter {
+  box-sizing: border-box;
+  margin: 0 0.4em;
+  width: calc(100% - 0.8em);
+  background: #050505;
+  border: 1px solid #2f2f2f;
+  color: #dedede;
+  font-family: monospace;
+  padding: 0.32em 0.45em;
+}
+
+.neuroglancer-skeleton-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45em;
+  margin: 0.35em 0.4em 0;
+  color: #c6c6c6;
+  font-size: small;
+}
+
+.neuroglancer-skeleton-filter-label {
+  flex: 0 0 auto;
+}
+
+.neuroglancer-skeleton-navigation-bar {
+  display: flex;
+  align-items: center;
+  padding: 0.35em 0.4em 0 0.4em;
+}
+
+.neuroglancer-skeleton-segment-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.neuroglancer-skeleton-node-ratio {
+  color: #adadad;
+  white-space: nowrap;
+}
+
+.neuroglancer-skeleton-filter-select {
+  box-sizing: border-box;
+  margin: 0;
+  flex: 1 1 auto;
+  width: auto;
+  background: #050505;
+  border: 1px solid #2f2f2f;
+  color: #dedede;
+  font: inherit;
+  padding: 0.32em 0.45em;
+}
+
+.neuroglancer-skeleton-filter-select:focus-visible {
+  outline: 1px solid #6ca4ff;
+  outline-offset: -1px;
+}
+
+.neuroglancer-skeleton-summary-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5em;
+  padding: 0.25em 0.4em 0.25em 0.4em;
+}
+
+.neuroglancer-skeleton-summary {
+  font-size: small;
+  color: #c6c6c6;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.neuroglancer-skeleton-tree {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  background: #050505;
+  border-top: 1px solid #1e1e1e;
+}
+
+.neuroglancer-skeleton-list-header,
+.neuroglancer-skeleton-tree-row {
+  display: grid;
+  grid-template-columns:
+    var(--neuroglancer-skeleton-actions-width)
+    var(--neuroglancer-skeleton-type-width)
+    minmax(58px, 104px)
+    minmax(0, 1fr);
+  align-items: center;
+  column-gap: 3px;
+  padding: 0 4px;
+}
+
+.neuroglancer-skeleton-list-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  min-height: 1.7em;
+  background: #3a3a3a;
+  color: #f0f0f0;
+  font-family: monospace;
+  font-size: 11px;
+  text-transform: lowercase;
+}
+
+.neuroglancer-skeleton-list-header-spacer {
+  display: block;
+}
+
+.neuroglancer-skeleton-list-header-actions {
+  width: var(--neuroglancer-skeleton-actions-width);
+}
+
+.neuroglancer-skeleton-list-header-type {
+  width: var(--neuroglancer-skeleton-type-width);
+}
+
+.neuroglancer-skeleton-list-header-cell {
+  min-width: 0;
+}
+
+.neuroglancer-skeleton-tree-entry {
+  display: flex;
+  flex-direction: column;
+}
+
+.neuroglancer-skeleton-tree-row {
+  min-height: 1.6em;
+  color: #d2d2d2;
+  font-family: monospace;
+  font-size: small;
+  background: #050505;
+  transition: background-color 0.12s ease-in-out;
+}
+
+.neuroglancer-skeleton-tree-row[role="button"] {
+  cursor: pointer;
+}
+
+.neuroglancer-skeleton-tree-row[role="button"]:focus-visible {
+  outline: 1px solid #6ca4ff;
+  outline-offset: -1px;
+}
+
+.neuroglancer-skeleton-tree-entry[data-selected="true"]
+  .neuroglancer-skeleton-tree-row {
+  background: #242d3c;
+}
+
+.neuroglancer-skeleton-tree-entry[data-viewer-hovered="true"]
+  .neuroglancer-skeleton-tree-row:not([data-node-type="root"]) {
+  background: #18253a;
+}
+
+.neuroglancer-skeleton-tree-entry[data-viewer-hovered="true"]
+  .neuroglancer-skeleton-tree-row[data-node-type="root"] {
+  background: #364257;
+}
+
+.neuroglancer-skeleton-tree-row[data-node-type="root"] {
+  background: #2e2e2e;
+}
+
+.neuroglancer-skeleton-tree-entry[data-selected="true"]
+  .neuroglancer-skeleton-tree-row[data-node-type="root"] {
+  background: #394558;
+}
+
+.neuroglancer-skeleton-tree-entry[data-selected="true"][data-viewer-hovered="true"]
+  .neuroglancer-skeleton-tree-row {
+  background: #294067;
+}
+
+.neuroglancer-skeleton-tree-entry[data-selected="true"][data-viewer-hovered="true"]
+  .neuroglancer-skeleton-tree-row[data-node-type="root"] {
+  background: #3f5471;
+}
+
+.neuroglancer-skeleton-segment-row {
+  min-height: 1.75em;
+  background: #2e2e2e;
+  color: #f0f0f0;
+}
+
+.neuroglancer-skeleton-segment-meta-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75em;
+  min-width: 0;
+}
+
+.neuroglancer-skeleton-tree-entry:not(
+    [data-selected="true"]
+  )[data-list-hovered="true"]
+  .neuroglancer-skeleton-tree-row:not([data-node-type="root"]) {
+  background: #121212;
+}
+
+.neuroglancer-skeleton-tree-entry:hover .neuroglancer-skeleton-segment-row {
+  background: #2e2e2e;
+}
+
+.neuroglancer-skeleton-node-id {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.neuroglancer-skeleton-node-coordinate-cell {
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.neuroglancer-skeleton-node-coordinates {
+  overflow: hidden;
+  color: #d7d7d7;
+}
+
+.neuroglancer-skeleton-coordinates-flex {
+  display: flex;
+  flex-direction: row;
+}
+
+.neuroglancer-skeleton-coord-dim {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.neuroglancer-skeleton-node-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #a7a7a7;
+  font-size: 11px;
+}
+
+.neuroglancer-skeleton-node-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1em;
+  width: var(--neuroglancer-skeleton-actions-width);
+  visibility: hidden;
+  pointer-events: none;
+  justify-content: flex-start;
+}
+
+.neuroglancer-skeleton-tree-entry[data-list-hovered="true"]
+  .neuroglancer-skeleton-node-actions,
+.neuroglancer-skeleton-tree-entry:focus-within
+  .neuroglancer-skeleton-node-actions {
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.neuroglancer-skeleton-node-type,
+.neuroglancer-skeleton-node-type-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--neuroglancer-skeleton-type-width);
+  min-height: 1.4em;
+  color: #cfcfcf;
+}
+
+.neuroglancer-skeleton-node-type-toggle {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.neuroglancer-skeleton-node-type .neuroglancer-icon,
+.neuroglancer-skeleton-node-type-toggle .neuroglancer-icon {
+  min-width: 14px;
+  min-height: 14px;
+}
+
+.neuroglancer-skeleton-node-type-toggle:hover .neuroglancer-icon {
+  background-color: #3a3a3a;
+}
+
+.neuroglancer-skeleton-node-type-toggle:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.neuroglancer-skeleton-node-type-toggle:disabled .neuroglancer-icon {
+  background-color: transparent;
+}
+
+.neuroglancer-skeleton-node-action {
+  border: 1px solid #2f2f2f;
+  background: #0d0d0d;
+  color: inherit;
+  padding: 0;
+  cursor: pointer;
+  width: 1.5em;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.neuroglancer-skeleton-node-action .neuroglancer-icon {
+  min-width: 14px;
+  min-height: 14px;
+}
+
+.neuroglancer-skeleton-node-action:hover .neuroglancer-icon {
+  background-color: #db4437;
+}
+
+.neuroglancer-skeleton-node-action:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.neuroglancer-skeleton-node-action:disabled .neuroglancer-icon {
+  background-color: transparent;
+}
+
+.neuroglancer-skeleton-node-segment-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.2em;
+  padding: 0 0.35em;
+  font-weight: 600;
+}

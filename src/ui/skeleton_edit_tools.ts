@@ -144,28 +144,28 @@ function renderSpatialSkeletonToolStatus(
   },
 ) {
   removeChildren(body);
-  body.classList.add("neuroglancer-spatial-skeleton-tool-status");
+  body.classList.add("neuroglancer-skeleton-tool-status");
   const message = document.createElement("span");
-  message.className = "neuroglancer-spatial-skeleton-tool-status-message";
+  message.className = "neuroglancer-skeleton-tool-status-message";
   message.textContent = options.message;
   body.appendChild(message);
   if (options.point === undefined) {
     return;
   }
   const point = document.createElement("span");
-  point.className = "neuroglancer-spatial-skeleton-tool-status-point";
+  point.className = "neuroglancer-skeleton-tool-status-point";
   for (const field of getSpatialSkeletonToolPointStatusFields(options.point)) {
     const fieldElement = document.createElement("span");
     fieldElement.className =
-      "neuroglancer-spatial-skeleton-tool-status-point-field";
+      "neuroglancer-skeleton-tool-status-point-field";
     const label = document.createElement("span");
     label.className =
-      "neuroglancer-spatial-skeleton-tool-status-point-field-label";
+      "neuroglancer-skeleton-tool-status-point-field-label";
     label.textContent = field.label;
     fieldElement.appendChild(label);
     const value = document.createElement("span");
     value.className =
-      "neuroglancer-spatial-skeleton-tool-status-point-field-value";
+      "neuroglancer-skeleton-tool-status-point-field-value";
     value.textContent = field.value;
     fieldElement.appendChild(value);
     point.appendChild(fieldElement);

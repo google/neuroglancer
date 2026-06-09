@@ -14,19 +14,19 @@
  * limitations under the License.
  */
 
-.neuroglancer-spatial-skeleton-tool-status {
+.neuroglancer-skeleton-tool-status {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem;
 }
 
-.neuroglancer-spatial-skeleton-tool-status-message {
+.neuroglancer-skeleton-tool-status-message {
   display: inline-flex;
   align-items: center;
 }
 
-.neuroglancer-spatial-skeleton-tool-status-point {
+.neuroglancer-skeleton-tool-status-point {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
@@ -34,14 +34,14 @@
   color: #e6cb57;
 }
 
-.neuroglancer-spatial-skeleton-tool-status-point-field {
+.neuroglancer-skeleton-tool-status-point-field {
   display: inline-flex;
   align-items: center;
   gap: 0.2rem;
   font-weight: 600;
 }
 
-.neuroglancer-spatial-skeleton-tool-status-point-field-label,
-.neuroglancer-spatial-skeleton-tool-status-point-field-value {
+.neuroglancer-skeleton-tool-status-point-field-label,
+.neuroglancer-skeleton-tool-status-point-field-value {
   color: inherit;
 }

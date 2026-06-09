@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import "#src/ui/skeleton_tab.css";
 import svg_arrow_left from "ikonate/icons/arrow-left.svg?raw";
 import svg_arrow_right from "ikonate/icons/arrow-right.svg?raw";
 import svg_bin from "ikonate/icons/bin.svg?raw";
@@ -165,11 +166,11 @@ export class SpatialSkeletonEditTab extends Tab {
   constructor(public layer: SegmentationUserLayer) {
     super();
     const { element } = this;
-    element.classList.add("neuroglancer-spatial-skeleton-tab");
+    element.classList.add("neuroglancer-skeleton-tab");
 
     const toolbox = document.createElement("div");
     toolbox.className =
-      "neuroglancer-segmentation-toolbox neuroglancer-spatial-skeleton-toolbar";
+      "neuroglancer-segmentation-toolbox neuroglancer-skeleton-toolbar";
     toolbox.appendChild(
       makeToolButton(this, layer.toolBinder, {
         toolJson: SPATIAL_SKELETON_EDIT_MODE_TOOL_ID,
@@ -192,7 +193,7 @@ export class SpatialSkeletonEditTab extends Tab {
       }),
     );
     const toolbarActions = document.createElement("div");
-    toolbarActions.className = "neuroglancer-spatial-skeleton-toolbar-actions";
+    toolbarActions.className = "neuroglancer-skeleton-toolbar-actions";
 
     const makeIconButton = (
       parent: HTMLElement,
@@ -201,7 +202,7 @@ export class SpatialSkeletonEditTab extends Tab {
       onClick: () => void,
     ) => {
       const button = document.createElement("button");
-      button.className = "neuroglancer-spatial-skeleton-icon-button";
+      button.className = "neuroglancer-skeleton-icon-button";
       button.type = "button";
       button.title = title;
       button.setAttribute("aria-label", title);
@@ -233,14 +234,14 @@ export class SpatialSkeletonEditTab extends Tab {
     toolbox.appendChild(toolbarActions);
 
     const navTools = document.createElement("div");
-    navTools.className = "neuroglancer-spatial-skeleton-nav-tools";
+    navTools.className = "neuroglancer-skeleton-nav-tools";
 
     const nodesSection = document.createElement("div");
-    nodesSection.className = "neuroglancer-spatial-skeleton-section";
+    nodesSection.className = "neuroglancer-skeleton-section";
     const filterInput = document.createElement("input");
     filterInput.type = "text";
     filterInput.placeholder = "Enter node ID or description";
-    filterInput.className = "neuroglancer-spatial-skeleton-filter";
+    filterInput.className = "neuroglancer-skeleton-filter";
     const nodeQuery = layer.displayState.spatialSkeletonNodeQuery;
     const nodeFilterTypeModel = layer.displayState.spatialSkeletonNodeFilter;
     filterInput.value = nodeQuery.value;
@@ -249,7 +250,7 @@ export class SpatialSkeletonEditTab extends Tab {
     );
     nodeFilterTypeWidget.element.classList.add(
       "neuroglancer-layer-control-control",
-      "neuroglancer-spatial-skeleton-filter-select",
+      "neuroglancer-skeleton-filter-select",
     );
     nodeFilterTypeWidget.element.title = "Filter loaded nodes by node type";
     nodeFilterTypeWidget.element.setAttribute(
@@ -264,20 +265,18 @@ export class SpatialSkeletonEditTab extends Tab {
       );
     }
     const nodeFilterTypeRow = document.createElement("label");
-    nodeFilterTypeRow.className = "neuroglancer-spatial-skeleton-filter-row";
+    nodeFilterTypeRow.className = "neuroglancer-skeleton-filter-row";
     const nodeFilterTypeLabel = document.createElement("span");
-    nodeFilterTypeLabel.className =
-      "neuroglancer-spatial-skeleton-filter-label";
+    nodeFilterTypeLabel.className = "neuroglancer-skeleton-filter-label";
     nodeFilterTypeLabel.textContent = "Filter";
     nodeFilterTypeRow.appendChild(nodeFilterTypeLabel);
     nodeFilterTypeRow.appendChild(nodeFilterTypeWidget.element);
     const nodesNavigationBar = document.createElement("div");
-    nodesNavigationBar.className =
-      "neuroglancer-spatial-skeleton-navigation-bar";
+    nodesNavigationBar.className = "neuroglancer-skeleton-navigation-bar";
     const nodesSummaryBar = document.createElement("div");
-    nodesSummaryBar.className = "neuroglancer-spatial-skeleton-summary-bar";
+    nodesSummaryBar.className = "neuroglancer-skeleton-summary-bar";
     const nodesSummary = document.createElement("div");
-    nodesSummary.className = "neuroglancer-spatial-skeleton-summary";
+    nodesSummary.className = "neuroglancer-skeleton-summary";
     let virtualItems: SpatialSkeletonListItem[] = [];
     let renderVirtualListItem = (
       _item: SpatialSkeletonListItem | undefined,
@@ -293,7 +292,7 @@ export class SpatialSkeletonEditTab extends Tab {
     const nodesList = this.registerDisposer(
       new VirtualList({ source: virtualListSource }),
     );
-    nodesList.element.className = "neuroglancer-spatial-skeleton-tree";
+    nodesList.element.className = "neuroglancer-skeleton-tree";
     nodesSection.appendChild(filterInput);
     nodesSection.appendChild(nodeFilterTypeRow);
     nodesNavigationBar.appendChild(navTools);
@@ -551,7 +550,8 @@ export class SpatialSkeletonEditTab extends Tab {
     const applyRowInteractionState = (
       options: { scrollSelectedIntoView?: boolean } = {},
     ) => {
-      const selectedNodeId = layer.selectedSpatialSkeletonNodeInfo.value?.nodeId;
+      const selectedNodeId =
+        layer.selectedSpatialSkeletonNodeInfo.value?.nodeId;
       nodesList.forEachRenderedItem((entry, index) => {
         const item = virtualItems[index];
         if (item?.kind !== "node") return;
@@ -1036,7 +1036,7 @@ export class SpatialSkeletonEditTab extends Tab {
       disabled: boolean,
     ) => {
       const button = document.createElement("button");
-      button.className = "neuroglancer-spatial-skeleton-node-action";
+      button.className = "neuroglancer-skeleton-node-action";
       button.type = "button";
       button.title = title;
       button.disabled = disabled;
@@ -1093,22 +1093,22 @@ export class SpatialSkeletonEditTab extends Tab {
 
     const makeListHeader = () => {
       const listHeader = document.createElement("div");
-      listHeader.className = "neuroglancer-spatial-skeleton-list-header";
+      listHeader.className = "neuroglancer-skeleton-list-header";
       const headerActionsSpacer = document.createElement("span");
       headerActionsSpacer.className =
-        "neuroglancer-spatial-skeleton-list-header-spacer neuroglancer-spatial-skeleton-list-header-actions";
+        "neuroglancer-skeleton-list-header-spacer neuroglancer-skeleton-list-header-actions";
       const headerTypeSpacer = document.createElement("span");
       headerTypeSpacer.className =
-        "neuroglancer-spatial-skeleton-list-header-spacer neuroglancer-spatial-skeleton-list-header-type";
+        "neuroglancer-skeleton-list-header-spacer neuroglancer-skeleton-list-header-type";
       const headerId = document.createElement("span");
-      headerId.className = "neuroglancer-spatial-skeleton-list-header-cell";
+      headerId.className = "neuroglancer-skeleton-list-header-cell";
       headerId.textContent = "id";
       const headerCoordinates = document.createElement("span");
       headerCoordinates.className =
-        "neuroglancer-spatial-skeleton-list-header-cell neuroglancer-spatial-skeleton-coordinates-flex";
+        "neuroglancer-skeleton-list-header-cell neuroglancer-skeleton-coordinates-flex";
       for (const dimLabel of getCoordinateDimensionHeaders()) {
         const dimSpan = document.createElement("span");
-        dimSpan.className = "neuroglancer-spatial-skeleton-coord-dim";
+        dimSpan.className = "neuroglancer-skeleton-coord-dim";
         dimSpan.textContent = dimLabel;
         headerCoordinates.appendChild(dimSpan);
       }
@@ -1129,20 +1129,20 @@ export class SpatialSkeletonEditTab extends Tab {
     const makeSegmentEntry = (segmentState: SegmentDisplayState) => {
       const segmentEntry = document.createElement("div");
       segmentEntry.className =
-        "neuroglancer-spatial-skeleton-tree-entry neuroglancer-spatial-skeleton-segment-entry";
+        "neuroglancer-skeleton-tree-entry neuroglancer-skeleton-segment-entry";
       const segmentRow = document.createElement("div");
       segmentRow.className =
-        "neuroglancer-spatial-skeleton-tree-row neuroglancer-spatial-skeleton-segment-row";
+        "neuroglancer-skeleton-tree-row neuroglancer-skeleton-segment-row";
       const segmentActionsSpacer = document.createElement("span");
       segmentActionsSpacer.className =
-        "neuroglancer-spatial-skeleton-list-header-spacer neuroglancer-spatial-skeleton-list-header-actions";
+        "neuroglancer-skeleton-list-header-spacer neuroglancer-skeleton-list-header-actions";
       const segmentTypeSpacer = document.createElement("span");
       segmentTypeSpacer.className =
-        "neuroglancer-spatial-skeleton-list-header-spacer neuroglancer-spatial-skeleton-list-header-type";
+        "neuroglancer-skeleton-list-header-spacer neuroglancer-skeleton-list-header-type";
       const segmentIdCell = document.createElement("span");
-      segmentIdCell.className = "neuroglancer-spatial-skeleton-node-id";
+      segmentIdCell.className = "neuroglancer-skeleton-node-id";
       const segmentChip = document.createElement("span");
-      segmentChip.className = "neuroglancer-spatial-skeleton-node-segment-chip";
+      segmentChip.className = "neuroglancer-skeleton-node-segment-chip";
       const segmentChipColors = getSegmentChipColors(segmentState.segmentId);
       segmentChip.textContent = String(segmentState.segmentId);
       segmentChip.style.backgroundColor = segmentChipColors.background;
@@ -1152,15 +1152,14 @@ export class SpatialSkeletonEditTab extends Tab {
       segmentIdCell.appendChild(segmentChip);
       const segmentMeta = document.createElement("div");
       segmentMeta.className =
-        "neuroglancer-spatial-skeleton-node-coordinate-cell neuroglancer-spatial-skeleton-segment-meta";
+        "neuroglancer-skeleton-node-coordinate-cell neuroglancer-skeleton-segment-meta";
       const segmentMetaLine = document.createElement("div");
-      segmentMetaLine.className =
-        "neuroglancer-spatial-skeleton-segment-meta-line";
+      segmentMetaLine.className = "neuroglancer-skeleton-segment-meta-line";
       const segmentName = document.createElement("span");
-      segmentName.className = "neuroglancer-spatial-skeleton-segment-name";
+      segmentName.className = "neuroglancer-skeleton-segment-name";
       segmentName.textContent = segmentState.segmentLabel ?? "";
       const segmentRatio = document.createElement("span");
-      segmentRatio.className = "neuroglancer-spatial-skeleton-segment-ratio";
+      segmentRatio.className = "neuroglancer-skeleton-node-ratio";
       segmentRatio.textContent = `${segmentState.displayedNodeCount}/${segmentState.totalNodeCount}`;
       segmentMetaLine.appendChild(segmentName);
       segmentMetaLine.appendChild(segmentRatio);
@@ -1176,7 +1175,7 @@ export class SpatialSkeletonEditTab extends Tab {
     const makeNodeEntry = (rowInfo: SpatialSkeletonSegmentRenderRow) => {
       const { node, type, isLeaf } = rowInfo;
       const entry = document.createElement("div");
-      entry.className = "neuroglancer-spatial-skeleton-tree-entry";
+      entry.className = "neuroglancer-skeleton-tree-entry";
       entry.dataset.selected = String(
         node.nodeId === layer.selectedSpatialSkeletonNodeInfo.value?.nodeId,
       );
@@ -1190,7 +1189,7 @@ export class SpatialSkeletonEditTab extends Tab {
       });
 
       const row = document.createElement("div");
-      row.className = "neuroglancer-spatial-skeleton-tree-row";
+      row.className = "neuroglancer-skeleton-tree-row";
       row.dataset.nodeType = type;
       if (inspectionAllowed) {
         row.tabIndex = 0;
@@ -1202,7 +1201,7 @@ export class SpatialSkeletonEditTab extends Tab {
           if (
             target instanceof HTMLElement &&
             target.closest(
-              ".neuroglancer-spatial-skeleton-node-actions, .neuroglancer-spatial-skeleton-node-type-toggle",
+              ".neuroglancer-skeleton-node-actions, .neuroglancer-skeleton-node-type-toggle",
             ) !== null
           ) {
             return;
@@ -1221,7 +1220,7 @@ export class SpatialSkeletonEditTab extends Tab {
           if (
             target instanceof HTMLElement &&
             target.closest(
-              ".neuroglancer-spatial-skeleton-node-actions, .neuroglancer-spatial-skeleton-node-type-toggle",
+              ".neuroglancer-skeleton-node-actions, .neuroglancer-skeleton-node-type-toggle",
             ) !== null
           ) {
             return;
@@ -1283,8 +1282,8 @@ export class SpatialSkeletonEditTab extends Tab {
           : document.createElement("span");
       typeIcon.className =
         isLeaf || nodeIsTrueEnd
-          ? "neuroglancer-spatial-skeleton-node-type-toggle"
-          : "neuroglancer-spatial-skeleton-node-type";
+          ? "neuroglancer-skeleton-node-type-toggle"
+          : "neuroglancer-skeleton-node-type";
       typeIcon.title = typeButtonTitle;
       if (typeIcon instanceof HTMLButtonElement) {
         typeIcon.type = "button";
@@ -1304,18 +1303,17 @@ export class SpatialSkeletonEditTab extends Tab {
       );
 
       const idCell = document.createElement("span");
-      idCell.className = "neuroglancer-spatial-skeleton-node-id";
+      idCell.className = "neuroglancer-skeleton-node-id";
       idCell.textContent = String(node.nodeId);
 
       const coordinatesCell = document.createElement("div");
-      coordinatesCell.className =
-        "neuroglancer-spatial-skeleton-node-coordinate-cell";
+      coordinatesCell.className = "neuroglancer-skeleton-node-coordinate-cell";
       const coordinatesLine = document.createElement("div");
       coordinatesLine.className =
-        "neuroglancer-spatial-skeleton-node-coordinates neuroglancer-spatial-skeleton-coordinates-flex";
+        "neuroglancer-skeleton-node-coordinates neuroglancer-skeleton-coordinates-flex";
       for (const val of formatNodeCoordinates(node.position)) {
         const valSpan = document.createElement("span");
-        valSpan.className = "neuroglancer-spatial-skeleton-coord-dim";
+        valSpan.className = "neuroglancer-skeleton-coord-dim";
         valSpan.textContent = val;
         coordinatesLine.appendChild(valSpan);
       }
@@ -1323,14 +1321,13 @@ export class SpatialSkeletonEditTab extends Tab {
       const description = getNodeDescriptionText(node);
       if (description !== undefined) {
         const descriptionLine = document.createElement("div");
-        descriptionLine.className =
-          "neuroglancer-spatial-skeleton-node-description";
+        descriptionLine.className = "neuroglancer-skeleton-node-description";
         descriptionLine.textContent = description;
         coordinatesCell.appendChild(descriptionLine);
       }
 
       const actions = document.createElement("div");
-      actions.className = "neuroglancer-spatial-skeleton-node-actions";
+      actions.className = "neuroglancer-skeleton-node-actions";
       let rerootActionTitle =
         node.parentNodeId === undefined ? "already root" : "set as root";
       if (pendingRerootNodes.has(node.nodeId)) {
@@ -1369,7 +1366,7 @@ export class SpatialSkeletonEditTab extends Tab {
 
     const makeEmptyEntry = (text: string) => {
       const empty = document.createElement("div");
-      empty.className = "neuroglancer-spatial-skeleton-summary";
+      empty.className = "neuroglancer-skeleton-summary";
       empty.textContent = text;
       return empty;
     };
