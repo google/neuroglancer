@@ -3179,13 +3179,6 @@ function updateSpatiallyIndexedSkeletonMouseState(
       return;
     }
     mouseState.pickedSpatialSkeleton = { segmentId };
-    if (
-      !getVisibleSegments(base.displayState.segmentationGroupState.value).has(
-        BigInt(segmentId),
-      )
-    ) {
-      return;
-    }
     const nodeId = data.nodeIds[pickedOffset];
     if (!Number.isSafeInteger(nodeId) || nodeId <= 0) return;
     const nodePosition = data.nodePositions.subarray(
