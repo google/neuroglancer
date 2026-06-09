@@ -23,6 +23,7 @@ import {
 } from "#src/layer/segmentation/selection.js";
 import {
   executeSpatialSkeletonAddNode,
+  executeSpatialSkeletonDeleteNode,
   executeSpatialSkeletonMerge,
   executeSpatialSkeletonMoveNode,
   executeSpatialSkeletonSplit,
@@ -79,6 +80,11 @@ const SKELETON_EDIT_STATUS_INPUT_EVENT_MAP = EventActionMap.fromObject({
   "at:alt+mousedown0": "spatial-skeleton-move-node",
   "at:control+mousedown2": {
     action: "spatial-skeleton-pin-node",
+    stopPropagation: true,
+    preventDefault: true,
+  },
+  "at:control+alt+mousedown2": {
+    action: "spatial-skeleton-delete-node",
     stopPropagation: true,
     preventDefault: true,
   },
@@ -1079,6 +1085,45 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
             );
           },
         );
+      },
+    );
+
+    activation.bindAction(
+      "spatial-skeleton-delete-node",
+      (event: ActionEvent<MouseEvent>) => {
+        event.stopPropagation();
+        event.detail.preventDefault();
+        const disabledReason = layer.getSpatialSkeletonActionsDisabledReason(
+          SpatialSkeletonActions.deleteNodes,
+        );
+        if (disabledReason !== undefined) {
+          StatusMessage.showTemporaryMessage(disabledReason);
+          return;
+        }
+        const skeletonLayer = this.getActiveSpatiallyIndexedSkeletonLayer();
+        if (skeletonLayer === undefined) {
+          StatusMessage.showTemporaryMessage(
+            "No spatially indexed skeleton source is currently loaded.",
+          );
+          return;
+        }
+        const pickedNode = this.getPickedSpatialSkeletonNode();
+        if (pickedNode === undefined) {
+          return;
+        }
+        const nodeInfo = skeletonLayer.getNode(pickedNode.nodeId);
+        if (nodeInfo === undefined) {
+          StatusMessage.showTemporaryMessage(
+            `Unable to resolve node ${pickedNode.nodeId} for deletion.`,
+          );
+          return;
+        }
+        void layer
+          .getSpatialSkeletonDeleteOperationContext(nodeInfo)
+          .then(() => executeSpatialSkeletonDeleteNode(layer, nodeInfo))
+          .catch((error) => {
+            showSpatialSkeletonActionError("delete node", error);
+          });
       },
     );
   }
