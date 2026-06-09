@@ -2194,6 +2194,20 @@ export class SpatiallyIndexedSkeletonLayer
     return true;
   }
 
+  unsuppressBrowseSegment(segmentId: number) {
+    const normalizedSegmentId = Math.round(Number(segmentId));
+    if (
+      !Number.isSafeInteger(normalizedSegmentId) ||
+      normalizedSegmentId <= 0 ||
+      !this.suppressedBrowseSegmentIds.has(normalizedSegmentId)
+    ) {
+      return false;
+    }
+    this.suppressedBrowseSegmentIds.delete(normalizedSegmentId);
+    this.redrawNeeded.dispatch();
+    return true;
+  }
+
   private getOverlayRenderSegmentIds() {
     return mergeSpatiallyIndexedSkeletonOverlaySegmentIds(
       this.getActiveEditableSegmentIds(),

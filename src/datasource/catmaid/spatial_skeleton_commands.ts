@@ -787,6 +787,7 @@ function applyCreatedNodeToCache(
     );
   }
   ensureVisibleSegment(layer, newNode.segmentId);
+  skeletonLayer.unsuppressBrowseSegment(newNode.segmentId);
   if (options.selectSegment ?? true) {
     selectSegment(layer, newNode.segmentId, options.pinSegment);
   }
@@ -915,6 +916,13 @@ async function commitAndApplyDeleteNode(
   );
   if (options.invalidateSourceCells) {
     invalidateDeletedNodeSourceCells(resolvedNode.skeletonLayer, deleteContext);
+  }
+  const remainingNodes =
+    layer.spatialSkeletonState.getCachedSegmentNodes(
+      resolvedNode.node.segmentId,
+    ) ?? [];
+  if (remainingNodes.length === 0) {
+    resolvedNode.skeletonLayer.suppressBrowseSegment(resolvedNode.node.segmentId);
   }
   return { resolvedNode };
 }
@@ -1853,6 +1861,10 @@ class SplitCommand implements SpatialSkeletonCommand {
       [existingSkeletonId, newSkeletonId],
       collectUniqueNodePositions(getSplitAffectedNodes(resolvedNode)),
     );
+    resolvedNode.skeletonLayer.unsuppressBrowseSegment(existingSkeletonId);
+    resolvedNode.skeletonLayer.unsuppressBrowseSegment(newSkeletonId);
+    resolvedNode.skeletonLayer.retainOverlaySegment(existingSkeletonId);
+    resolvedNode.skeletonLayer.retainOverlaySegment(newSkeletonId);
     StatusMessage.showTemporaryMessage(
       `${statusPrefix} skeleton ${existingSkeletonId}. New skeleton: ${newSkeletonId}.`,
     );
@@ -1932,6 +1944,7 @@ class SplitCommand implements SpatialSkeletonCommand {
         formerParent,
       ),
     );
+    splitNode.skeletonLayer.retainOverlaySegment(resultSkeletonId);
     StatusMessage.showTemporaryMessage(
       `${statusPrefix} split at node ${splitNode.node.nodeId}.`,
     );
@@ -2126,6 +2139,7 @@ class MergeCommand implements SpatialSkeletonCommand {
       [resultSkeletonId, deletedSkeletonId],
       getMergeAffectedPositions(result.deletedSegmentId, firstNode, secondNode),
     );
+    firstNode.skeletonLayer.retainOverlaySegment(resultSkeletonId);
     const swapSuffix = result.directionAdjusted
       ? " Merge direction was adjusted by the active source."
       : "";
@@ -2223,6 +2237,9 @@ class MergeCommand implements SpatialSkeletonCommand {
           `Only the split completed. ${formatErrorMessage(error)}`;
       }
     }
+    attachedNode.skeletonLayer.unsuppressBrowseSegment(restoredSegmentId);
+    attachedNode.skeletonLayer.retainOverlaySegment(survivingSegmentId);
+    attachedNode.skeletonLayer.retainOverlaySegment(restoredSegmentId);
     this.layer.selectSpatialSkeletonNode(
       attachedNode.node.nodeId,
       this.layer.manager.root.selectionState.pin.value,
