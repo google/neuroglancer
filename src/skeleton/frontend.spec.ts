@@ -16,8 +16,8 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import { DataType } from "#src/util/data_type.js";
 import { Uint64Set } from "#src/uint64_set.js";
+import { DataType } from "#src/util/data_type.js";
 
 if (!("WebGL2RenderingContext" in globalThis)) {
   Object.defineProperty(globalThis, "WebGL2RenderingContext", {
@@ -79,11 +79,23 @@ describe("resolveSpatiallyIndexedSkeletonSegmentPick", () => {
     // interleaved [lo, hi] per vertex; vertex 1 carries the id.
     const segmentIds = new Uint32Array([0, 0, lo, hi, 0, 0]);
     expect(
-      resolveSpatiallyIndexedSkeletonSegmentPick(chunk, segmentIds, 1, "node", 2),
+      resolveSpatiallyIndexedSkeletonSegmentPick(
+        chunk,
+        segmentIds,
+        1,
+        "node",
+        2,
+      ),
     ).toBe(id);
     // edge (0,1): first endpoint (vertex 0) is empty → falls back to vertex 1.
     expect(
-      resolveSpatiallyIndexedSkeletonSegmentPick(chunk, segmentIds, 0, "edge", 2),
+      resolveSpatiallyIndexedSkeletonSegmentPick(
+        chunk,
+        segmentIds,
+        0,
+        "edge",
+        2,
+      ),
     ).toBe(id);
   });
 

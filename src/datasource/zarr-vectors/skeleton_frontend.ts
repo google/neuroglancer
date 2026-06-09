@@ -29,22 +29,21 @@
  * shape so the file compiles in isolation.
  */
 
-import type { Borrowed } from "#src/util/disposable.js";
+import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import { WithParameters } from "#src/chunk_manager/frontend.js";
 import {
   ZarrVectorsObjectKeyedSkeletonSourceParameters,
   ZarrVectorsSpatiallyIndexedSkeletonSourceParameters,
   type ZarrVectorsAttributeDtype,
   type ZarrVectorsSkeletonGeometryKind,
 } from "#src/datasource/zarr-vectors/base.js";
-import type { ChunkManager } from "#src/chunk_manager/frontend.js";
-import { WithParameters } from "#src/chunk_manager/frontend.js";
-import { buildVertexAttributeMap } from "#src/datasource/zarr-vectors/skeleton_shader_bridge.js";
 import {
   KIND_CAPABILITIES,
   hasSynthesisedTangent,
 } from "#src/datasource/zarr-vectors/geometry_kind.js";
-import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
+import { buildVertexAttributeMap } from "#src/datasource/zarr-vectors/skeleton_shader_bridge.js";
 import { WithSharedKvStoreContext } from "#src/kvstore/chunk_source_frontend.js";
+import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
 import type { VertexAttributeInfo } from "#src/skeleton/base.js";
 import {
   MultiscaleSpatiallyIndexedSkeletonSource,
@@ -53,11 +52,12 @@ import {
   SpatiallyIndexedSkeletonSource,
   type SpatiallyIndexedSkeletonChunkSpecification,
 } from "#src/skeleton/frontend.js";
-import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
-import { makeSliceViewChunkSpecification } from "#src/sliceview/base.js";
 import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
+import { makeSliceViewChunkSpecification } from "#src/sliceview/base.js";
+import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
 import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
 import { DataType } from "#src/util/data_type.js";
+import type { Borrowed } from "#src/util/disposable.js";
 import { mat4, vec3 } from "#src/util/geom.js";
 import { getShaderType } from "#src/webgl/shader_lib.js";
 import {
@@ -210,7 +210,9 @@ export class ZarrVectorsSpatiallyIndexedSkeletonSource extends WithParameters(
 ) {
   private zvAttributeTextureFormats_?: TextureFormat[];
 
-  constructor(...args: ConstructorParameters<typeof SpatiallyIndexedSkeletonSource>) {
+  constructor(
+    ...args: ConstructorParameters<typeof SpatiallyIndexedSkeletonSource>
+  ) {
     super(...args);
     // `SpatiallyIndexedSkeletonSource`'s constructor bakes in
     // `[position, segment]` for `vertexAttributes`.  We replace it with a
@@ -393,7 +395,11 @@ export class ZarrVectorsMultiscaleSpatiallyIndexedSkeletonSource extends Multisc
    * ``chunk_scale_factors`` so each level's chunk_shape is monotonically
    * different.
    */
-  override getSpatialSkeletonGridSizes(): { x: number; y: number; z: number }[] {
+  override getSpatialSkeletonGridSizes(): {
+    x: number;
+    y: number;
+    z: number;
+  }[] {
     // Report in physical meters (chunk_shape × meters-per-unit) so the
     // resolution widget reads in real units and the auto-LOD target
     // (also meters) compares correctly, independent of the global
