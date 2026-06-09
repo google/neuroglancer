@@ -299,19 +299,18 @@ describe("SpatiallyIndexedSkeletonLayer targeted source invalidation", () => {
 });
 
 describe("SpatiallyIndexedSkeletonLayer browse exclusions", () => {
-  it("includes suppressed browse segments even when no overlay segment is loaded", () => {
+  it("includes edited segments in browse exclusions regardless of cache state", () => {
     const layer = Object.assign(
       Object.create(SpatiallyIndexedSkeletonLayer.prototype),
       {
-        suppressedBrowseSegmentIds: new Set<number>(),
+        editedSegmentIds: new Set<number>(),
         browseExcludedSegments: new Uint64Set(),
         browseExcludedSegmentsKey: undefined,
         redrawNeeded: { dispatch: vi.fn() },
-        getLoadedOverlaySegmentIds: () => [],
       },
     );
 
-    expect(layer.suppressBrowseSegment(29)).toBe(true);
+    expect(layer.markSegmentEdited(29)).toBe(true);
     expect(layer.redrawNeeded.dispatch).toHaveBeenCalledTimes(1);
 
     const excludedSegments = (layer as any).getBrowsePassExcludedSegments();

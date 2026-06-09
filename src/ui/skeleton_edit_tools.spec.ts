@@ -564,7 +564,8 @@ describe("spatial_skeleton_edit_tool", () => {
         if (nodeId === secondNode.nodeId) return secondNode;
         return undefined;
       }),
-      suppressBrowseSegment: vi.fn(),
+      markSegmentEdited: vi.fn(),
+      retainOverlaySegment: vi.fn(),
       invalidateSourceCellsForPositions: vi.fn(),
     };
     const commandHistory = new SpatialSkeletonCommandHistory();
@@ -634,7 +635,7 @@ describe("spatial_skeleton_edit_tool", () => {
       segmentId: 17,
     });
     expect(deleteSegmentColor).toHaveBeenCalledWith(11n);
-    expect(skeletonLayer.suppressBrowseSegment).toHaveBeenCalledWith(11);
+    expect(skeletonLayer.markSegmentEdited).toHaveBeenCalledWith(11);
     expect(markSpatialSkeletonNodeDataChanged).toHaveBeenCalledWith({
       invalidateFullSkeletonCache: false,
     });

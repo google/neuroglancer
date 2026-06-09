@@ -2195,7 +2195,7 @@ export class SegmentationUserLayer extends Base {
         : undefined;
     const nodeInfo = completeNodeInfo ?? previewNodeInfo;
     const container = document.createElement("div");
-    container.classList.add("neuroglancer-spatial-skeleton-selection");
+    container.classList.add("neuroglancer-selection-details-skeleton");
     parent.appendChild(container);
 
     const appendValue = (label: string, value: string | HTMLElement) => {
@@ -2223,7 +2223,7 @@ export class SegmentationUserLayer extends Base {
       );
       const segmentIdChip = document.createElement("span");
       segmentIdChip.className =
-        "neuroglancer-spatial-skeleton-node-segment-chip";
+        "neuroglancer-selection-details-skeleton-segment-chip";
       segmentIdChip.textContent = `${segmentId}`;
       segmentIdChip.style.backgroundColor = segmentChipColors.background;
       segmentIdChip.style.color = segmentChipColors.foreground;
@@ -2282,7 +2282,7 @@ export class SegmentationUserLayer extends Base {
             nodeType,
           });
     const summaryRow = document.createElement("div");
-    summaryRow.classList.add("neuroglancer-spatial-skeleton-selection-summary");
+    summaryRow.classList.add("neuroglancer-selection-details-skeleton-summary");
     container.appendChild(summaryRow);
 
     const editSource = getEditableSpatiallyIndexedSkeletonSource(skeletonLayer);
@@ -2301,7 +2301,7 @@ export class SegmentationUserLayer extends Base {
               );
     const rerootButton = document.createElement("button");
     rerootButton.type = "button";
-    rerootButton.className = "neuroglancer-spatial-skeleton-selection-action";
+    rerootButton.className = "neuroglancer-selection-details-skeleton-action";
     rerootButton.disabled = rerootDisabledReason !== undefined;
     rerootButton.title = rerootDisabledReason ?? "Set as root";
     rerootButton.appendChild(
@@ -2347,7 +2347,7 @@ export class SegmentationUserLayer extends Base {
               );
     const deleteButton = document.createElement("button");
     deleteButton.type = "button";
-    deleteButton.className = "neuroglancer-spatial-skeleton-selection-action";
+    deleteButton.className = "neuroglancer-selection-details-skeleton-action";
     deleteButton.disabled = deleteDisabledReason !== undefined;
     deleteButton.title = deleteDisabledReason ?? "Delete node";
     deleteButton.appendChild(
@@ -2378,7 +2378,7 @@ export class SegmentationUserLayer extends Base {
     summaryRow.appendChild(deleteButton);
 
     const icon = document.createElement("span");
-    icon.className = "neuroglancer-spatial-skeleton-selection-summary-icon";
+    icon.className = "neuroglancer-selection-details-skeleton-summary-icon";
     const nodeTypeIconTitle =
       iconFilterType !== undefined
         ? getSpatialSkeletonNodeFilterLabel(iconFilterType)
@@ -2429,7 +2429,7 @@ export class SegmentationUserLayer extends Base {
     );
     const summaryCoordinates = document.createElement("span");
     summaryCoordinates.className =
-      "neuroglancer-spatial-skeleton-selection-summary-coordinates";
+      "neuroglancer-selection-details-skeleton-summary-coordinates";
     summaryCoordinates.textContent = position.displayText;
     summaryCoordinates.title = position.fullText;
     summaryRow.appendChild(summaryCoordinates);
@@ -2449,8 +2449,8 @@ export class SegmentationUserLayer extends Base {
       let committedTrueEnd = nodeHasTrueEnd;
       let leafTypeSavePending = false;
       const leafTypeEditor = document.createElement("div");
-      leafTypeEditor.className = "neuroglancer-spatial-skeleton-leaf-type";
-      const leafTypeRadioName = `neuroglancer-spatial-skeleton-leaf-type-${segmentId}-${fullNodeInfo.nodeId}`;
+      leafTypeEditor.className = "neuroglancer-selection-details-skeleton-leaf-type";
+      const leafTypeRadioName = `neuroglancer-selection-details-skeleton-leaf-type-${segmentId}-${fullNodeInfo.nodeId}`;
       const leafTypeOptionElements: HTMLLabelElement[] = [];
       const makeLeafTypeOption = (options: {
         label: string;
@@ -2458,15 +2458,15 @@ export class SegmentationUserLayer extends Base {
         trueEnd: boolean;
       }) => {
         const option = document.createElement("label");
-        option.className = "neuroglancer-spatial-skeleton-leaf-type-option";
+        option.className = "neuroglancer-selection-details-skeleton-leaf-type-option";
         const input = document.createElement("input");
         input.type = "radio";
         input.name = leafTypeRadioName;
         input.value = options.trueEnd ? "trueEnd" : "virtualEnd";
         input.className =
-          "neuroglancer-spatial-skeleton-leaf-type-option-input";
+          "neuroglancer-selection-details-skeleton-leaf-type-option-input";
         const icon = document.createElement("span");
-        icon.className = "neuroglancer-spatial-skeleton-leaf-type-option-icon";
+        icon.className = "neuroglancer-selection-details-skeleton-leaf-type-option-icon";
         icon.appendChild(
           makeIcon({
             svg: options.svg,
@@ -2475,7 +2475,7 @@ export class SegmentationUserLayer extends Base {
           }),
         );
         const text = document.createElement("span");
-        text.className = "neuroglancer-spatial-skeleton-leaf-type-option-text";
+        text.className = "neuroglancer-selection-details-skeleton-leaf-type-option-text";
         text.textContent = options.label;
         option.appendChild(input);
         option.appendChild(icon);
@@ -2509,7 +2509,7 @@ export class SegmentationUserLayer extends Base {
         }
         for (const option of leafTypeOptionElements) {
           option.classList.toggle(
-            "neuroglancer-spatial-skeleton-leaf-type-option-disabled",
+            "neuroglancer-selection-details-skeleton-leaf-type-option-disabled",
             !editable,
           );
           if (disabledReason !== undefined) {
@@ -2585,7 +2585,7 @@ export class SegmentationUserLayer extends Base {
       disabledReason: string | undefined,
     ) => {
       input.classList.toggle(
-        "neuroglancer-spatial-skeleton-properties-input-invalid",
+        "neuroglancer-selection-details-skeleton-properties-input-invalid",
         !valid,
       );
       if (disabledReason !== undefined) {
@@ -2639,7 +2639,7 @@ export class SegmentationUserLayer extends Base {
     } else {
       let committedRadius = fullNodeInfo.radius ?? 0;
       const radiusInput = document.createElement("input");
-      radiusInput.className = "neuroglancer-spatial-skeleton-properties-input";
+      radiusInput.className = "neuroglancer-selection-details-skeleton-properties-input";
       radiusInput.type = "number";
       radiusInput.step = "any";
       radiusInput.value = formatSpatialSkeletonEditableNumber(
@@ -2744,7 +2744,7 @@ export class SegmentationUserLayer extends Base {
       );
       const confidenceControl = document.createElement("select");
       confidenceControl.className =
-        "neuroglancer-spatial-skeleton-properties-input";
+        "neuroglancer-selection-details-skeleton-properties-input";
       for (const value of confidenceSelectValues) {
         const option = document.createElement("option");
         option.value = value.toString();
@@ -2845,7 +2845,7 @@ export class SegmentationUserLayer extends Base {
     if (descriptionEditingDisabledReason === undefined) {
       const descriptionElement = document.createElement("textarea");
       descriptionElement.classList.add(
-        "neuroglancer-spatial-skeleton-selection-description",
+        "neuroglancer-selection-details-skeleton-description",
       );
       descriptionElement.rows = 3;
       descriptionElement.placeholder = "Description";
@@ -2895,7 +2895,7 @@ export class SegmentationUserLayer extends Base {
     } else if (descriptionText.length > 0) {
       const descriptionElement = document.createElement("div");
       descriptionElement.classList.add(
-        "neuroglancer-spatial-skeleton-selection-description",
+        "neuroglancer-selection-details-skeleton-description",
       );
       descriptionElement.textContent = descriptionText;
       descriptionElement.title = descriptionEditingDisabledReason;

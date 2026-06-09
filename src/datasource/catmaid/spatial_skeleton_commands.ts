@@ -916,6 +916,13 @@ async function commitAndApplyDeleteNode(
   if (options.invalidateSourceCells) {
     invalidateDeletedNodeSourceCells(resolvedNode.skeletonLayer, deleteContext);
   }
+  const remainingNodes =
+    layer.spatialSkeletonState.getCachedSegmentNodes(
+      resolvedNode.node.segmentId,
+    ) ?? [];
+  if (remainingNodes.length === 0) {
+    resolvedNode.skeletonLayer.markSegmentEdited(resolvedNode.node.segmentId);
+  }
   return { resolvedNode };
 }
 
@@ -1853,6 +1860,8 @@ class SplitCommand implements SpatialSkeletonCommand {
       [existingSkeletonId, newSkeletonId],
       collectUniqueNodePositions(getSplitAffectedNodes(resolvedNode)),
     );
+    resolvedNode.skeletonLayer.retainOverlaySegment(existingSkeletonId);
+    resolvedNode.skeletonLayer.retainOverlaySegment(newSkeletonId);
     StatusMessage.showTemporaryMessage(
       `${statusPrefix} skeleton ${existingSkeletonId}. New skeleton: ${newSkeletonId}.`,
     );
@@ -1914,7 +1923,7 @@ class SplitCommand implements SpatialSkeletonCommand {
       this.layer.displayState.segmentStatedColors.value.delete(
         BigInt(deletedSkeletonId),
       );
-      splitNode.skeletonLayer.suppressBrowseSegment(deletedSkeletonId);
+      splitNode.skeletonLayer.markSegmentEdited(deletedSkeletonId);
     }
     this.layer.selectSpatialSkeletonNode(
       splitNode.node.nodeId,
@@ -1932,6 +1941,7 @@ class SplitCommand implements SpatialSkeletonCommand {
         formerParent,
       ),
     );
+    splitNode.skeletonLayer.retainOverlaySegment(resultSkeletonId);
     StatusMessage.showTemporaryMessage(
       `${statusPrefix} split at node ${splitNode.node.nodeId}.`,
     );
@@ -2118,7 +2128,7 @@ class MergeCommand implements SpatialSkeletonCommand {
       BigInt(deletedSkeletonId),
     );
     if (deletedSkeletonId !== resultSkeletonId) {
-      firstNode.skeletonLayer.suppressBrowseSegment(deletedSkeletonId);
+      firstNode.skeletonLayer.markSegmentEdited(deletedSkeletonId);
     }
     this.layer.clearSpatialSkeletonMergeAnchor();
     await refreshTopologySegments(
@@ -2126,6 +2136,7 @@ class MergeCommand implements SpatialSkeletonCommand {
       [resultSkeletonId, deletedSkeletonId],
       getMergeAffectedPositions(result.deletedSegmentId, firstNode, secondNode),
     );
+    firstNode.skeletonLayer.retainOverlaySegment(resultSkeletonId);
     const swapSuffix = result.directionAdjusted
       ? " Merge direction was adjusted by the active source."
       : "";
@@ -2223,6 +2234,8 @@ class MergeCommand implements SpatialSkeletonCommand {
           `Only the split completed. ${formatErrorMessage(error)}`;
       }
     }
+    attachedNode.skeletonLayer.retainOverlaySegment(survivingSegmentId);
+    attachedNode.skeletonLayer.retainOverlaySegment(restoredSegmentId);
     this.layer.selectSpatialSkeletonNode(
       attachedNode.node.nodeId,
       this.layer.manager.root.selectionState.pin.value,

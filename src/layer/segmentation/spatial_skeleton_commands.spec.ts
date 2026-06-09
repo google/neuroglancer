@@ -1247,7 +1247,8 @@ describe("spatial_skeleton_commands", () => {
       source: skeletonSource,
       getNode: vi.fn((nodeId: number) => cacheByNode.get(nodeId)),
       invalidateSourceCellsForPositions: vi.fn(),
-      suppressBrowseSegment: vi.fn(),
+      markSegmentEdited: vi.fn(),
+      retainOverlaySegment: vi.fn(),
     };
     const layer = {
       displayState: makeDisplayState([originalSegmentId]),
@@ -1386,7 +1387,8 @@ describe("spatial_skeleton_commands", () => {
       source: skeletonSource,
       getNode: vi.fn((nodeId: number) => cacheByNode.get(nodeId)),
       invalidateSourceCellsForPositions: vi.fn(),
-      suppressBrowseSegment: vi.fn(),
+      markSegmentEdited: vi.fn(),
+      retainOverlaySegment: vi.fn(),
     };
     const layer = {
       displayState: {
@@ -1437,7 +1439,7 @@ describe("spatial_skeleton_commands", () => {
       segmentId: originalSegmentId,
     });
 
-    skeletonLayer.suppressBrowseSegment.mockClear();
+    skeletonLayer.markSegmentEdited.mockClear();
     deleteSegmentColor.mockClear();
     layer.selectSpatialSkeletonNode.mockClear();
     layer.markSpatialSkeletonNodeDataChanged.mockClear();
@@ -1458,7 +1460,7 @@ describe("spatial_skeleton_commands", () => {
       }),
     );
     expect(deleteSegmentColor).toHaveBeenCalledWith(BigInt(splitSegmentId));
-    expect(skeletonLayer.suppressBrowseSegment).toHaveBeenCalledWith(
+    expect(skeletonLayer.markSegmentEdited).toHaveBeenCalledWith(
       splitSegmentId,
     );
     expect(layer.selectSpatialSkeletonNode).toHaveBeenCalledWith(
@@ -1607,7 +1609,8 @@ describe("spatial_skeleton_commands", () => {
       source: skeletonSource,
       getNode: vi.fn((nodeId: number) => cacheByNode.get(nodeId)),
       invalidateSourceCellsForPositions: vi.fn(),
-      suppressBrowseSegment: vi.fn(),
+      markSegmentEdited: vi.fn(),
+      retainOverlaySegment: vi.fn(),
     };
     const layer = {
       displayState: {
@@ -1860,7 +1863,8 @@ describe("spatial_skeleton_commands", () => {
       source: skeletonSource,
       getNode: vi.fn((nodeId: number) => cacheByNode.get(nodeId)),
       invalidateSourceCellsForPositions: vi.fn(),
-      suppressBrowseSegment: vi.fn(),
+      markSegmentEdited: vi.fn(),
+      retainOverlaySegment: vi.fn(),
     };
     const layer = {
       displayState: {
@@ -2150,7 +2154,8 @@ describe("spatial_skeleton_commands", () => {
       source: skeletonSource,
       getNode: vi.fn((nodeId: number) => cacheByNode.get(nodeId)),
       invalidateSourceCellsForPositions: vi.fn(),
-      suppressBrowseSegment: vi.fn(),
+      markSegmentEdited: vi.fn(),
+      retainOverlaySegment: vi.fn(),
     };
     const layer = {
       displayState: {
@@ -2349,7 +2354,8 @@ describe("spatial_skeleton_commands", () => {
       source: skeletonSource,
       getNode: vi.fn((nodeId: number) => cacheByNode.get(nodeId)),
       invalidateSourceCellsForPositions: vi.fn(),
-      suppressBrowseSegment: vi.fn(),
+      markSegmentEdited: vi.fn(),
+      retainOverlaySegment: vi.fn(),
     };
     const layer = {
       displayState: {
@@ -2509,7 +2515,8 @@ describe("spatial_skeleton_commands", () => {
       source: skeletonSource,
       getNode: vi.fn((nodeId: number) => cacheByNode.get(nodeId)),
       invalidateSourceCellsForPositions: vi.fn(),
-      suppressBrowseSegment: vi.fn(),
+      markSegmentEdited: vi.fn(),
+      retainOverlaySegment: vi.fn(),
     };
     const layer = {
       displayState: makeDisplayState([firstSegmentId, secondSegmentId]),
@@ -2603,7 +2610,8 @@ describe("spatial_skeleton_commands", () => {
         if (nodeId === secondNode.nodeId) return secondNode;
         return undefined;
       }),
-      suppressBrowseSegment: vi.fn(),
+      markSegmentEdited: vi.fn(),
+      retainOverlaySegment: vi.fn(),
       invalidateSourceCellsForPositions: vi.fn(),
     };
     const layer = {
