@@ -1861,9 +1861,9 @@ function setControlInShader(
   stringLiteralIds?: ReadonlyMap<string, number>,
 ) {
   const uName = uniformName(name);
-  const uniform = shader.uniform(uName);
   switch (control.type) {
     case "slider": {
+      const uniform = shader.uniform(uName);
       switch (control.valueType) {
         case "int":
         case "uint":
@@ -1875,7 +1875,7 @@ function setControlInShader(
       break;
     }
     case "color":
-      gl.uniform3fv(uniform, value);
+      gl.uniform3fv(shader.uniform(uName), value);
       break;
     case "imageInvlerp":
       enableLerpShaderFunction(shader, uName, control.dataType, value.range);
@@ -1894,6 +1894,7 @@ function setControlInShader(
       // Value is hard-coded in shader.
       break;
     case "select": {
+      const uniform = shader.uniform(uName);
       switch (control.valueType) {
         case "string_t":
           gl.uniform1ui(uniform, stringLiteralIds?.get(value as string) ?? 0);

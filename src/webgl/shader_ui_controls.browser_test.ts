@@ -1493,4 +1493,49 @@ void main() {
       }
     });
   });
+
+  it("sets invlerp uniforms", () => {
+    const code = `
+#uicontrol invlerp normalized
+void main() {
+  outputValue = normalized() == 1.0 ? 1u : 0u;
+}
+`;
+    fragmentShaderTest({}, { outputValue: "uint" }, (tester) => {
+      const shaderControlState = new ShaderControlState(
+        constantWatchableValue(code),
+        constantWatchableValue({
+          imageData: { dataType: DataType.UINT8, channelRank: 0 },
+        }),
+      );
+      try {
+        const parseResult = shaderControlState.parseResult.value;
+        tester.builder.addFragmentCode(`
+uint getDataValue() {
+  return 42u;
+}
+`);
+        addControlsToBuilder(
+          getFallbackBuilderState(parseResult),
+          tester.builder,
+        );
+        tester.builder.setFragmentMainFunction(parseResult.code);
+        tester.build();
+        tester.shader.bind();
+        shaderControlState.restoreState({ normalized: { range: [0, 42] } });
+        expect(() => {
+          setControlsInShader(
+            tester.gl,
+            tester.shader,
+            shaderControlState,
+            parseResult,
+          );
+        }).not.toThrow();
+        tester.execute();
+        expect(tester.values.outputValue).toEqual(1);
+      } finally {
+        shaderControlState.dispose();
+      }
+    });
+  });
 });
