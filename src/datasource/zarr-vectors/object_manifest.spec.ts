@@ -100,7 +100,10 @@ describe("decodeObjectManifest — v0.6 manifest-block layout", () => {
     );
     const decoded = decodeObjectManifest(blob, 3);
     expect(decoded).toEqual([
-      { chunkCoords: [1, 2, 3], fragmentRef: { mode: "single", fragmentIndex: 7 } },
+      {
+        chunkCoords: [1, 2, 3],
+        fragmentRef: { mode: "single", fragmentIndex: 7 },
+      },
     ]);
   });
 
@@ -133,7 +136,9 @@ describe("decodeObjectManifest — v0.6 manifest-block layout", () => {
     expect(decoded[0].chunkCoords).toEqual([9, 9, 9]);
     expect(decoded[0].fragmentRef.mode).toBe("explicit");
     if (decoded[0].fragmentRef.mode === "explicit") {
-      expect(Array.from(decoded[0].fragmentRef.indices)).toEqual([100, 7, 42, 200]);
+      expect(Array.from(decoded[0].fragmentRef.indices)).toEqual([
+        100, 7, 42, 200,
+      ]);
     }
   });
 
@@ -154,9 +159,16 @@ describe("decodeObjectManifest — v0.6 manifest-block layout", () => {
     const decoded = decodeObjectManifest(blob, 3);
     expect(decoded.length).toBe(3);
     expect(decoded[0].chunkCoords).toEqual([0, 0, 0]);
-    expect(decoded[0].fragmentRef).toEqual({ mode: "single", fragmentIndex: 2 });
+    expect(decoded[0].fragmentRef).toEqual({
+      mode: "single",
+      fragmentIndex: 2,
+    });
     expect(decoded[1].chunkCoords).toEqual([1, 0, 0]);
-    expect(decoded[1].fragmentRef).toEqual({ mode: "range", start: 0, count: 4 });
+    expect(decoded[1].fragmentRef).toEqual({
+      mode: "range",
+      start: 0,
+      count: 4,
+    });
     expect(decoded[2].chunkCoords).toEqual([1, 1, 0]);
     expect(decoded[2].fragmentRef.mode).toBe("explicit");
     if (decoded[2].fragmentRef.mode === "explicit") {
@@ -223,10 +235,12 @@ describe("decodeObjectManifest — v0.6 manifest-block layout", () => {
       [{ chunkCoords: [0, 0, 0], ref: { mode: "range", start: 0, count: 4 } }],
       3,
     );
-    expect(() => decodeObjectManifest(blob.slice(0, blob.byteLength - 4), 3)).toThrow(
-      /truncated/i,
+    expect(() =>
+      decodeObjectManifest(blob.slice(0, blob.byteLength - 4), 3),
+    ).toThrow(/truncated/i);
+    expect(() => decodeObjectManifest(blob.slice(0, 2), 3)).toThrow(
+      /too short/i,
     );
-    expect(() => decodeObjectManifest(blob.slice(0, 2), 3)).toThrow(/too short/i);
   });
 
   it("rejects trailing bytes after the declared number of blocks", () => {

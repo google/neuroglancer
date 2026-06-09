@@ -139,9 +139,7 @@ describe("decodeFragments — v1 fragment-index layout", () => {
     // Indices materialised:
     expect(Array.from(fi.indices(0))).toEqual([0, 1, 2, 3]);
     expect(Array.from(fi.indices(1))).toEqual([12, 7, 19]);
-    expect(Array.from(fi.indices(2))).toEqual([
-      20, 21, 22, 23, 24, 25, 26, 27,
-    ]);
+    expect(Array.from(fi.indices(2))).toEqual([20, 21, 22, 23, 24, 25, 26, 27]);
 
     // .indicesView on an explicit fragment is zero-copy BigInt64Array.
     const view = fi.indicesView(1);
@@ -166,33 +164,39 @@ describe("decodeFragments — v1 fragment-index layout", () => {
 
   it("rejects an unsupported version", () => {
     const blob = buildBlob(1, [true], [{ start: 0, count: 1 }], [0], []);
-    new DataView(
-      blob.buffer,
-      blob.byteOffset,
-      blob.byteLength,
-    ).setUint16(4, 99, true);
+    new DataView(blob.buffer, blob.byteOffset, blob.byteLength).setUint16(
+      4,
+      99,
+      true,
+    );
     expect(() => decodeFragments(blob)).toThrow(/version/i);
   });
 
   it("rejects flags != 0", () => {
     const blob = buildBlob(1, [true], [{ start: 0, count: 1 }], [0], []);
-    new DataView(
-      blob.buffer,
-      blob.byteOffset,
-      blob.byteLength,
-    ).setUint16(6, 0x0001, true);
+    new DataView(blob.buffer, blob.byteOffset, blob.byteLength).setUint16(
+      6,
+      0x0001,
+      true,
+    );
     expect(() => decodeFragments(blob)).toThrow(/flags/i);
   });
 
   it("rejects a header/bitmap popcount mismatch", () => {
     // F=2, claim R=2 in the header but only set 1 bit in the bitmap.
-    const blob = buildBlob(2, [true, false], [{ start: 0, count: 1 }], [0, 0], []);
+    const blob = buildBlob(
+      2,
+      [true, false],
+      [{ start: 0, count: 1 }],
+      [0, 0],
+      [],
+    );
     // Manually corrupt the header so R disagrees with the bitmap.
-    new DataView(
-      blob.buffer,
-      blob.byteOffset,
-      blob.byteLength,
-    ).setUint32(12, 2, true);
+    new DataView(blob.buffer, blob.byteOffset, blob.byteLength).setUint32(
+      12,
+      2,
+      true,
+    );
     expect(() => decodeFragments(blob)).toThrow(/mismatch/i);
   });
 
@@ -218,7 +222,13 @@ describe("decodeFragments — v1 fragment-index layout", () => {
   it("ignores spurious high bits in the last bitmap byte (F not divisible by 8)", () => {
     // F=3, only bit 0 set legally; set bit 7 too (which would invalidate
     // the popcount if we naively counted it).
-    const blob = buildBlob(3, [true, false, false], [{ start: 0, count: 1 }], [0, 0, 0], []);
+    const blob = buildBlob(
+      3,
+      [true, false, false],
+      [{ start: 0, count: 1 }],
+      [0, 0, 0],
+      [],
+    );
     blob[16] |= 0b10000000; // bit 7 in the bitmap byte
     // Header says R=1, bitmap legal bits sum to 1 even though byte popcount=2.
     expect(() => decodeFragments(blob)).not.toThrow();

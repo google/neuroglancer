@@ -18,24 +18,22 @@
 
 import type { CrossChunkLinksTable } from "#src/datasource/zarr-vectors/cross_chunk_links.js";
 import { hasSynthesisedTangent } from "#src/datasource/zarr-vectors/geometry_kind.js";
-import {
-  resolveFragmentRef,
-} from "#src/datasource/zarr-vectors/object_manifest.js";
+import { resolveFragmentRef } from "#src/datasource/zarr-vectors/object_manifest.js";
 import {
   readObjectManifest,
   type ObjectManifestReaderOptions,
 } from "#src/datasource/zarr-vectors/object_manifest_reader.js";
-import {
-  downloadSkeletonChunk,
-  type AttributeDtype,
-  type LinkDtype,
-} from "#src/datasource/zarr-vectors/skeleton_chunk_download.js";
 import type {
   AttributeTypedArray,
   LinksConvention,
   SkeletonChunk,
   SkeletonGeometryKind,
 } from "#src/datasource/zarr-vectors/skeleton_chunk.js";
+import {
+  downloadSkeletonChunk,
+  type AttributeDtype,
+  type LinkDtype,
+} from "#src/datasource/zarr-vectors/skeleton_chunk_download.js";
 
 /**
  * The merged geometry for one object.  Shapes match the per-segment
@@ -148,7 +146,7 @@ export function filterChunkByFragments(
     // attribute) — the higher-level zarr-vectors writer paths don't
     // currently emit multi-component vertex attributes via the
     // ZarrVectorsAttributeDtype enum, so a 1:1 element copy suffices.
-    const Ctor = (src.constructor as new (n: number) => AttributeTypedArray);
+    const Ctor = src.constructor as new (n: number) => AttributeTypedArray;
     const dst = new Ctor(numOwned);
     for (let i = 0; i < numOwned; ++i) dst[i] = src[owned[i]] as never;
     filteredAttrs.push(dst);
@@ -286,8 +284,10 @@ export function collectOwnedCrossChunkEdges(
     const aInfo = ownedChunks.get(aKey);
     const bInfo = ownedChunks.get(bKey);
     if (aInfo === undefined || bInfo === undefined) continue;
-    if (a.vertexIndex < 0 || a.vertexIndex >= aInfo.vertexRemap.length) continue;
-    if (b.vertexIndex < 0 || b.vertexIndex >= bInfo.vertexRemap.length) continue;
+    if (a.vertexIndex < 0 || a.vertexIndex >= aInfo.vertexRemap.length)
+      continue;
+    if (b.vertexIndex < 0 || b.vertexIndex >= bInfo.vertexRemap.length)
+      continue;
     const aRemap = aInfo.vertexRemap[a.vertexIndex];
     const bRemap = bInfo.vertexRemap[b.vertexIndex];
     if (aRemap < 0 || bRemap < 0) continue;
@@ -514,14 +514,17 @@ export async function downloadSegmentSkeleton(
     if (parts.length === 0 || totalLen === 0) {
       merged = new Float32Array(0);
     } else {
-      const Ctor = parts[0].constructor as new (n: number) => AttributeTypedArray;
+      const Ctor = parts[0].constructor as new (
+        n: number,
+      ) => AttributeTypedArray;
       merged = new Ctor(totalLen);
       let cursor = 0;
       for (const p of parts) {
-        (merged as unknown as { set: (a: ArrayLike<number>, o: number) => void }).set(
-          p as unknown as ArrayLike<number>,
-          cursor,
-        );
+        (
+          merged as unknown as {
+            set: (a: ArrayLike<number>, o: number) => void;
+          }
+        ).set(p as unknown as ArrayLike<number>, cursor);
         cursor += p.length;
       }
     }

@@ -126,16 +126,12 @@ export function readVlenBytesElement(
   let offset = HEADER_BYTES;
   for (let i = 0; i < n; ++i) {
     if (view.byteLength < offset + PER_ELEMENT_HEADER_BYTES) {
-      throw new Error(
-        `vlen-bytes chunk truncated at element ${i} header`,
-      );
+      throw new Error(`vlen-bytes chunk truncated at element ${i} header`);
     }
     const length = view.getUint32(offset, true);
     offset += PER_ELEMENT_HEADER_BYTES;
     if (view.byteLength < offset + length) {
-      throw new Error(
-        `vlen-bytes chunk truncated in element ${i} payload`,
-      );
+      throw new Error(`vlen-bytes chunk truncated in element ${i} payload`);
     }
     if (i === elementIndex) {
       return u8.subarray(offset, offset + length);

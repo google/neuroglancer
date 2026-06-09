@@ -181,7 +181,9 @@ export class FragmentIndex {
  * Parse a v1 fragment-index blob.  Throws on malformed input (bad magic,
  * unsupported version/flags, truncated payload, popcount mismatch).
  */
-export function decodeFragments(raw: ArrayBufferView | ArrayBuffer): FragmentIndex {
+export function decodeFragments(
+  raw: ArrayBufferView | ArrayBuffer,
+): FragmentIndex {
   const view =
     raw instanceof ArrayBuffer
       ? new DataView(raw)

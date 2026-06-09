@@ -120,7 +120,7 @@ describe("decodeVlenBytesChunk — zarr v3 vlen-bytes codec", () => {
 
 describe("readVlenBytesElement — direct indexing", () => {
   const blob = buildBlob([
-    new Uint8Array([0x41]),       // 'A'
+    new Uint8Array([0x41]), // 'A'
     new Uint8Array([0x42, 0x43]), // 'BC'
     new Uint8Array(0),
     new Uint8Array([0x44, 0x45, 0x46, 0x47]), // 'DEFG'

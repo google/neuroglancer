@@ -72,7 +72,15 @@ describe("buildVertexAttributeMap — `prop_<name>()` shader bridge", () => {
   it("maps every zarr-vectors attribute dtype to a neuroglancer DataType", () => {
     const map = buildVertexAttributeMap({
       attributeNames: ["a", "b", "c", "d", "e", "f", "g"],
-      attributeDtypes: ["float32", "uint8", "uint16", "uint32", "int8", "int16", "int32"],
+      attributeDtypes: [
+        "float32",
+        "uint8",
+        "uint16",
+        "uint32",
+        "int8",
+        "int16",
+        "int32",
+      ],
       geometryKind: "skeleton",
     });
     expect(map.get("a")!.dataType).toBe(DataType.FLOAT32);

@@ -466,7 +466,9 @@ export async function fetchGhostVertices(
   if (requests.length === 0) return [];
 
   // 1. Group by neighbor chunk key — one fetch per unique key per file.
-  const uniqueKeys = Array.from(new Set(requests.map((r) => r.neighborChunkKey)));
+  const uniqueKeys = Array.from(
+    new Set(requests.map((r) => r.neighborChunkKey)),
+  );
 
   // 2. Fetch positions + each attribute for each unique key in parallel.
   type NeighborBlobs = {
@@ -505,7 +507,11 @@ export async function fetchGhostVertices(
       const sliced =
         bytes === undefined
           ? undefined
-          : sliceAttributeFromBytes(bytes, req.neighborLocalVertex, attributeDtypes[i]);
+          : sliceAttributeFromBytes(
+              bytes,
+              req.neighborLocalVertex,
+              attributeDtypes[i],
+            );
       if (sliced === undefined) {
         // Zero-fill missing attribute — mirrors `downloadSkeletonChunk`
         // behavior for chunk-local attributes (pyramid levels without

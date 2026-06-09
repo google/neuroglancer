@@ -6,15 +6,14 @@
  */
 
 import { describe, expect, it } from "vitest";
+import type { CrossChunkLinksTable } from "#src/datasource/zarr-vectors/cross_chunk_links.js";
 import {
   FRAGMENT_INDEX_MAGIC,
   FRAGMENT_INDEX_VERSION,
   FragmentIndex,
 } from "#src/datasource/zarr-vectors/fragment_index.js";
 import { MANIFEST_MODE_SINGLE } from "#src/datasource/zarr-vectors/object_manifest.js";
-import {
-  buildSkeletonChunk,
-} from "#src/datasource/zarr-vectors/skeleton_chunk.js";
+import { buildSkeletonChunk } from "#src/datasource/zarr-vectors/skeleton_chunk.js";
 import {
   collectOwnedCrossChunkEdges,
   deriveImplicitSequentialCrossChunkEdges,
@@ -22,7 +21,6 @@ import {
   filterChunkByFragments,
   type OrderedManifestBlock,
 } from "#src/datasource/zarr-vectors/skeleton_segment_download.js";
-import type { CrossChunkLinksTable } from "#src/datasource/zarr-vectors/cross_chunk_links.js";
 
 // ---------------------------------------------------------------------------
 // Test fixtures
@@ -31,8 +29,7 @@ import type { CrossChunkLinksTable } from "#src/datasource/zarr-vectors/cross_ch
 /** Build a FragmentIndex from a list of range / explicit fragments. */
 function buildFragmentIndex(
   fragments: Array<
-    | { range: { start: number; count: number } }
-    | { explicit: number[] }
+    { range: { start: number; count: number } } | { explicit: number[] }
   >,
 ): FragmentIndex {
   const f = fragments.length;
@@ -66,8 +63,7 @@ function buildFragmentIndex(
  */
 function packFragmentIndexBlob(
   fragments: Array<
-    | { range: { start: number; count: number } }
-    | { explicit: number[] }
+    { range: { start: number; count: number } } | { explicit: number[] }
   >,
 ): Uint8Array {
   const f = fragments.length;
@@ -78,7 +74,8 @@ function packFragmentIndexBlob(
   const bitmapRaw = (f + 7) >> 3;
   const bitmapPadded = (bitmapRaw + 7) & ~7;
   let csrIndexCount = 0;
-  for (const frag of fragments) if ("explicit" in frag) csrIndexCount += frag.explicit.length;
+  for (const frag of fragments)
+    if ("explicit" in frag) csrIndexCount += frag.explicit.length;
 
   const total = 16 + bitmapPadded + r * 16 + (e + 1) * 4 + csrIndexCount * 8;
   const buf = new ArrayBuffer(total);
@@ -183,8 +180,7 @@ describe("filterChunkByFragments", () => {
   it("keeps just the named fragment's vertices and sequential edges", () => {
     // Two fragments [0..3) and [3..6).  Filter to fragment 0 only.
     const positions = new Float32Array([
-      0, 0, 0, 1, 0, 0, 2, 0, 0,
-      10, 0, 0, 11, 0, 0, 12, 0, 0,
+      0, 0, 0, 1, 0, 0, 2, 0, 0, 10, 0, 0, 11, 0, 0, 12, 0, 0,
     ]);
     const fi = buildFragmentIndex([
       { range: { start: 0, count: 3 } },
@@ -211,8 +207,7 @@ describe("filterChunkByFragments", () => {
 
   it("keeps both fragments and their edges when filter selects both", () => {
     const positions = new Float32Array([
-      0, 0, 0, 1, 0, 0, 2, 0, 0,
-      10, 0, 0, 11, 0, 0, 12, 0, 0,
+      0, 0, 0, 1, 0, 0, 2, 0, 0, 10, 0, 0, 11, 0, 0, 12, 0, 0,
     ]);
     const fi = buildFragmentIndex([
       { range: { start: 0, count: 3 } },
@@ -260,8 +255,7 @@ describe("filterChunkByFragments", () => {
     // bridging them.  Filter to fragment 0 only: the bridge edge has
     // one endpoint (5) outside the owned set → dropped.
     const positions = new Float32Array([
-      0, 0, 0, 1, 0, 0, 2, 0, 0,
-      10, 0, 0, 11, 0, 0, 12, 0, 0,
+      0, 0, 0, 1, 0, 0, 2, 0, 0, 10, 0, 0, 11, 0, 0, 12, 0, 0,
     ]);
     const fi = buildFragmentIndex([
       { range: { start: 0, count: 3 } },
@@ -332,9 +326,7 @@ describe("filterChunkByFragments", () => {
     // Two explicit fragments sharing vertex 2.  Filter to both — vertex
     // 2 should appear once in the output, with edges from both
     // fragments referring to it.
-    const positions = new Float32Array([
-      0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0,
-    ]);
+    const positions = new Float32Array([0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0]);
     const fi = buildFragmentIndex([
       { explicit: [0, 1, 2] },
       { explicit: [2, 3] },
@@ -347,10 +339,7 @@ describe("filterChunkByFragments", () => {
       geometryKind: "streamline",
       vertexAttributes: [],
     });
-    const filtered = filterChunkByFragments(
-      chunk,
-      new Uint32Array([0, 1]),
-    );
+    const filtered = filterChunkByFragments(chunk, new Uint32Array([0, 1]));
     // Output has 4 unique vertices, walked in first-occurrence order.
     expect(filtered.positions.length / 3).toBe(4);
     // Edges from frag 0 ((0,1),(1,2)) + frag 1 ((2,3)) — all remapped.
@@ -415,9 +404,7 @@ describe("downloadSegmentSkeleton", () => {
     // Object 0 spans two chunks: [0,0,0] frag 0 (2 verts) and
     // [1,0,0] frag 0 (3 verts).  Output should have 5 vertices and 3
     // total edges, with chunk-2's edges offset by 2.
-    const manifestBytes = new Uint8Array(
-      4 + (8 * 3 + 1 + 8) * 2,
-    );
+    const manifestBytes = new Uint8Array(4 + (8 * 3 + 1 + 8) * 2);
     const manifestView = new DataView(manifestBytes.buffer);
     manifestView.setUint32(0, 2, true); // num_blocks
     let off = 4;
@@ -440,9 +427,7 @@ describe("downloadSegmentSkeleton", () => {
     manifestView.setBigInt64(off, 0n, true);
 
     const manifestChunk = buildVlenBytesChunk([manifestBytes]);
-    const fragBlob = packFragmentIndexBlob([
-      { range: { start: 0, count: 2 } },
-    ]);
+    const fragBlob = packFragmentIndexBlob([{ range: { start: 0, count: 2 } }]);
     const fragBlob3 = packFragmentIndexBlob([
       { range: { start: 0, count: 3 } },
     ]);
@@ -512,9 +497,7 @@ describe("downloadSegmentSkeleton", () => {
 
   it("skips chunks whose vertex blob is absent (sparse chunk presence)", async () => {
     // Manifest names two chunks; only one of them has a vertex blob.
-    const manifestBytes = new Uint8Array(
-      4 + (8 * 3 + 1 + 8) * 2,
-    );
+    const manifestBytes = new Uint8Array(4 + (8 * 3 + 1 + 8) * 2);
     const manifestView = new DataView(manifestBytes.buffer);
     manifestView.setUint32(0, 2, true);
     let off = 4;
@@ -534,9 +517,7 @@ describe("downloadSegmentSkeleton", () => {
     off += 1;
     manifestView.setBigInt64(off, 0n, true);
 
-    const fragBlob = packFragmentIndexBlob([
-      { range: { start: 0, count: 2 } },
-    ]);
+    const fragBlob = packFragmentIndexBlob([{ range: { start: 0, count: 2 } }]);
     const kvStoreRead = makeKvStore({
       "object_index/manifests/c/0": buildVlenBytesChunk([manifestBytes]),
       "vertices/0.0.0/c/0": verticesBlob([0, 0, 0, 1, 0, 0]),
@@ -599,9 +580,7 @@ describe("downloadSegmentSkeleton", () => {
 describe("collectOwnedCrossChunkEdges", () => {
   function table(
     linkWidth: number,
-    records: Array<
-      Array<{ chunkCoords: number[]; vertexIndex: number }>
-    >,
+    records: Array<Array<{ chunkCoords: number[]; vertexIndex: number }>>,
     sidNdim = 3,
   ): CrossChunkLinksTable {
     return {
@@ -734,8 +713,10 @@ describe("collectOwnedCrossChunkEdges", () => {
       ["2.0.0", chunk([0], 3)],
     ]);
     expect(Array.from(collectOwnedCrossChunkEdges(t, owned))).toEqual([
-      0, 1, // record 0 → merged (0, 1)
-      2, 3, // record 1 → merged (2, 3)
+      0,
+      1, // record 0 → merged (0, 1)
+      2,
+      3, // record 1 → merged (2, 3)
     ]);
   });
 });
@@ -769,9 +750,9 @@ describe("deriveImplicitSequentialCrossChunkEdges", () => {
       block("0.0.0", [0, 1], 0, 0, 1),
       block("1.0.0", [0, 1, 2], 2, 0, 2),
     ];
-    expect(Array.from(deriveImplicitSequentialCrossChunkEdges(blocks))).toEqual([
-      1, 2,
-    ]);
+    expect(Array.from(deriveImplicitSequentialCrossChunkEdges(blocks))).toEqual(
+      [1, 2],
+    );
   });
 
   it("emits N-1 bridge edges for an N-chunk streamline", () => {
@@ -780,10 +761,14 @@ describe("deriveImplicitSequentialCrossChunkEdges", () => {
       block("1.0.0", [0, 1, 2], 2, 0, 2), // merged 2..4
       block("2.0.0", [0, 1], 5, 0, 1), // merged 5..6
     ];
-    expect(Array.from(deriveImplicitSequentialCrossChunkEdges(blocks))).toEqual([
-      1, 2, // bridge A→B
-      4, 5, // bridge B→C
-    ]);
+    expect(Array.from(deriveImplicitSequentialCrossChunkEdges(blocks))).toEqual(
+      [
+        1,
+        2, // bridge A→B
+        4,
+        5, // bridge B→C
+      ],
+    );
   });
 
   it("bridges consecutive fragments even within the same chunk", () => {
@@ -795,9 +780,9 @@ describe("deriveImplicitSequentialCrossChunkEdges", () => {
       block("0.0.0", [0, 1], 0, 0, 1), // merged 0..1
       block("0.0.0", [0, 1, 2], 2, 0, 2), // merged 2..4 (different filtered output)
     ];
-    expect(Array.from(deriveImplicitSequentialCrossChunkEdges(blocks))).toEqual([
-      1, 2,
-    ]);
+    expect(Array.from(deriveImplicitSequentialCrossChunkEdges(blocks))).toEqual(
+      [1, 2],
+    );
   });
 
   it("skips bridges where either side is a multi-fragment block (firstLocal/lastLocal = -1)", () => {
@@ -834,8 +819,8 @@ describe("deriveImplicitSequentialCrossChunkEdges", () => {
       block("0.0.0", [42], 100, 0, 0), // last vert: local 0, remap[0]=42, offset 100 → merged 142
       block("1.0.0", [7], 200, 0, 0), // first vert: remap[0]=7, offset 200 → merged 207
     ];
-    expect(Array.from(deriveImplicitSequentialCrossChunkEdges(blocks))).toEqual([
-      142, 207,
-    ]);
+    expect(Array.from(deriveImplicitSequentialCrossChunkEdges(blocks))).toEqual(
+      [142, 207],
+    );
   });
 });

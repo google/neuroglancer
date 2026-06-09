@@ -75,7 +75,9 @@ export function decodeObjectManifest(
   sidNdim: number,
 ): ManifestBlock[] {
   if (sidNdim < 1) {
-    throw new Error(`decodeObjectManifest: sid_ndim must be >= 1, got ${sidNdim}`);
+    throw new Error(
+      `decodeObjectManifest: sid_ndim must be >= 1, got ${sidNdim}`,
+    );
   }
 
   const u8 =
@@ -85,9 +87,7 @@ export function decodeObjectManifest(
   const view = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
 
   if (view.byteLength < 4) {
-    throw new Error(
-      `Manifest blob too short: ${view.byteLength} < 4 (header)`,
-    );
+    throw new Error(`Manifest blob too short: ${view.byteLength} < 4 (header)`);
   }
 
   const numBlocks = view.getUint32(0, /* littleEndian */ true);

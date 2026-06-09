@@ -30,9 +30,7 @@ import {
   decodeObjectManifest,
   type ManifestBlock,
 } from "#src/datasource/zarr-vectors/object_manifest.js";
-import {
-  readVlenBytesElement,
-} from "#src/datasource/zarr-vectors/vlen_bytes.js";
+import { readVlenBytesElement } from "#src/datasource/zarr-vectors/vlen_bytes.js";
 
 export interface ObjectManifestReaderOptions {
   /** Total number of objects in the store (manifests array shape[0]). */
@@ -67,7 +65,9 @@ export async function readObjectManifest(
 ): Promise<ManifestBlock[] | undefined> {
   const { numObjects, chunkSize, sidNdim, kvStoreRead } = options;
   if (chunkSize <= 0) {
-    throw new Error(`readObjectManifest: chunkSize must be > 0, got ${chunkSize}`);
+    throw new Error(
+      `readObjectManifest: chunkSize must be > 0, got ${chunkSize}`,
+    );
   }
   const oidNum = typeof oid === "bigint" ? Number(oid) : oid;
   if (!Number.isInteger(oidNum) || oidNum < 0) {

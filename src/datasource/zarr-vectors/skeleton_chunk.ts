@@ -25,7 +25,7 @@
  * backend that downloads the underlying byte blobs.
  */
 
-import { FragmentIndex } from "#src/datasource/zarr-vectors/fragment_index.js";
+import type { FragmentIndex } from "#src/datasource/zarr-vectors/fragment_index.js";
 import type { ZarrVectorsGeometryKind } from "#src/datasource/zarr-vectors/geometry_kind.js";
 import { KIND_CAPABILITIES } from "#src/datasource/zarr-vectors/geometry_kind.js";
 
@@ -185,7 +185,9 @@ export function computeTangents(
   fi: FragmentIndex,
 ): Float32Array {
   if (rank !== 2 && rank !== 3) {
-    throw new Error(`computeTangents: rank ${rank} not supported (expected 2 or 3)`);
+    throw new Error(
+      `computeTangents: rank ${rank} not supported (expected 2 or 3)`,
+    );
   }
   const numVertices = positions.length / rank;
   if (!Number.isInteger(numVertices)) {
@@ -231,8 +233,7 @@ export function computeTangents(
       }
       // Tangent direction = next - prev (un-normalised), then unit-normalise.
       const dx = positions[next * rank] - positions[prev * rank];
-      const dy =
-        positions[next * rank + 1] - positions[prev * rank + 1];
+      const dy = positions[next * rank + 1] - positions[prev * rank + 1];
       const dz =
         rank === 3
           ? positions[next * rank + 2] - positions[prev * rank + 2]
@@ -323,9 +324,7 @@ export function computeTangentsFromEdges(
     const dx = positions[bIdx * rank] - positions[aIdx * rank];
     const dy = positions[bIdx * rank + 1] - positions[aIdx * rank + 1];
     const dz =
-      rank === 3
-        ? positions[bIdx * rank + 2] - positions[aIdx * rank + 2]
-        : 0;
+      rank === 3 ? positions[bIdx * rank + 2] - positions[aIdx * rank + 2] : 0;
     const norm = Math.sqrt(dx * dx + dy * dy + dz * dz);
     if (norm > 0) {
       out[v * 3] = dx / norm;
@@ -341,7 +340,8 @@ export function computeTangentsFromEdges(
       const nb = nbrs[k];
       const fx = positions[nb * rank] - positions[v * rank];
       const fy = positions[nb * rank + 1] - positions[v * rank + 1];
-      const fz = rank === 3 ? positions[nb * rank + 2] - positions[v * rank + 2] : 0;
+      const fz =
+        rank === 3 ? positions[nb * rank + 2] - positions[v * rank + 2] : 0;
       const fnorm = Math.sqrt(fx * fx + fy * fy + fz * fz);
       if (fnorm > 0) {
         out[v * 3] = fx / fnorm;
@@ -547,7 +547,8 @@ export function recomputeTangentsForBridges(
     if (p < 0 || p >= numVertices || s < 0 || s >= numVertices) continue;
     const dx = positions[s * rank] - positions[p * rank];
     const dy = positions[s * rank + 1] - positions[p * rank + 1];
-    const dz = rank === 3 ? positions[s * rank + 2] - positions[p * rank + 2] : 0;
+    const dz =
+      rank === 3 ? positions[s * rank + 2] - positions[p * rank + 2] : 0;
     // Step direction `p → s` contributes to BOTH endpoints' forward-walk
     // tangent (predecessor sees `s` ahead; successor sees `p` behind).
     accum[p * 3] += dx;
@@ -694,14 +695,24 @@ export function appendGhostVertices(
 ): SkeletonChunk {
   if (ghosts.length === 0) return chunk;
 
-  const { rank, numVertices, positions, edges, tangents, vertexAttributes, segmentIds } =
-    chunk;
+  const {
+    rank,
+    numVertices,
+    positions,
+    edges,
+    tangents,
+    vertexAttributes,
+    segmentIds,
+  } = chunk;
   const numGhosts = ghosts.length;
   const newNumVertices = numVertices + numGhosts;
 
   // Validate inputs early — easier to debug than a downstream texture-
   // upload mismatch.
-  if (vertexAttributes.length === 0 && ghosts.some((g) => g.attributes.length > 0)) {
+  if (
+    vertexAttributes.length === 0 &&
+    ghosts.some((g) => g.attributes.length > 0)
+  ) {
     throw new Error(
       `appendGhostVertices: host chunk has 0 attributes but ghost ` +
         `supplied ${ghosts[0].attributes.length}`,
@@ -792,8 +803,9 @@ export function appendGhostVertices(
       const ghostAttr = ghosts[g].attributes[a];
       // Single-element ghost attribute — first slot of the typed-array.
       // Spec note: callers populate ghost.attributes[a].length === 1.
-      (dst as unknown as { [k: number]: number })[numVertices + g] =
-        (ghostAttr as unknown as { [k: number]: number })[0];
+      (dst as unknown as { [k: number]: number })[numVertices + g] = (
+        ghostAttr as unknown as { [k: number]: number }
+      )[0];
     }
     newVertexAttributes.push(dst);
   }

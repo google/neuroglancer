@@ -6,9 +6,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import {
-  MANIFEST_MODE_SINGLE,
-} from "#src/datasource/zarr-vectors/object_manifest.js";
+import { MANIFEST_MODE_SINGLE } from "#src/datasource/zarr-vectors/object_manifest.js";
 import { readObjectManifest } from "#src/datasource/zarr-vectors/object_manifest_reader.js";
 
 /**

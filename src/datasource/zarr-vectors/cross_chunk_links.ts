@@ -86,17 +86,12 @@ export function decodeCrossChunkLinks(
     );
   }
   if (sidNdim < 1) {
-    throw new Error(
-      `cross_chunk_links: sid_ndim must be >= 1; got ${sidNdim}`,
-    );
+    throw new Error(`cross_chunk_links: sid_ndim must be >= 1; got ${sidNdim}`);
   }
   // BigInt64 view onto the bytes; each int64 is one chunk coord or one
   // vertex index.  Realigned to a fresh buffer if the caller's bytes
   // aren't 8-byte aligned at offset 0.
-  const aligned =
-    bytes.byteOffset % 8 === 0
-      ? bytes
-      : new Uint8Array(bytes); // copy realigns
+  const aligned = bytes.byteOffset % 8 === 0 ? bytes : new Uint8Array(bytes); // copy realigns
   const i64 = new BigInt64Array(
     aligned.buffer,
     aligned.byteOffset,

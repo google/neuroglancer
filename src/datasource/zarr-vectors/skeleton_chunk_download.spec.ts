@@ -186,7 +186,9 @@ describe("downloadSkeletonChunk — orchestrator", () => {
     // 5 vertices, single fragment.  Sequential edges plus a branch (1,4)
     // stored in links/0 as uint16.
     const kvStoreRead = makeKvStore({
-      "vertices/0.0.0/c/0": verticesBlob([0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0]),
+      "vertices/0.0.0/c/0": verticesBlob([
+        0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0,
+      ]),
       "vertex_fragments/0.0.0/c/0": singleRangeFragmentBlob(5),
       "links/0/0.0.0/c/0": uint16LinksBlob([1, 4]),
     });
@@ -359,7 +361,8 @@ describe("downloadSkeletonChunk — orchestrator", () => {
     const out: bigint[] = [];
     for (let v = 0; v * 2 + 1 < segmentIds.length; ++v) {
       out.push(
-        BigInt(segmentIds[v * 2] >>> 0) | (BigInt(segmentIds[v * 2 + 1] >>> 0) << 32n),
+        BigInt(segmentIds[v * 2] >>> 0) |
+          (BigInt(segmentIds[v * 2 + 1] >>> 0) << 32n),
       );
     }
     return out;
@@ -374,9 +377,14 @@ describe("downloadSkeletonChunk — orchestrator", () => {
     const id1 = 720575940606327461n;
     expect(id0 > 0xffffffffn && id1 > 0xffffffffn).toBe(true); // genuinely uint64
     const kvStoreRead = makeKvStore({
-      "vertices/0.0.0/c/0": verticesBlob([0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0]),
+      "vertices/0.0.0/c/0": verticesBlob([
+        0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0,
+      ]),
       "vertex_fragments/0.0.0/c/0": twoRangeFragmentsBlob(2, 3),
-      "fragment_attributes/segment_id/0.0.0/c/0": uint64SegmentIdBlob([id0, id1]),
+      "fragment_attributes/segment_id/0.0.0/c/0": uint64SegmentIdBlob([
+        id0,
+        id1,
+      ]),
     });
     const chunk = await downloadSkeletonChunk(
       {
@@ -393,12 +401,20 @@ describe("downloadSkeletonChunk — orchestrator", () => {
     );
     expect(chunk!.segmentIds).toBeDefined();
     expect(chunk!.segmentIds!.length).toBe(5 * 2); // interleaved [lo, hi]
-    expect(segmentIdsAsBigint(chunk!.segmentIds!)).toEqual([id0, id0, id1, id1, id1]);
+    expect(segmentIdsAsBigint(chunk!.segmentIds!)).toEqual([
+      id0,
+      id0,
+      id1,
+      id1,
+      id1,
+    ]);
   });
 
   it("falls back to the fragment's chunk-local index when segment_id is absent", async () => {
     const kvStoreRead = makeKvStore({
-      "vertices/0.0.0/c/0": verticesBlob([0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0]),
+      "vertices/0.0.0/c/0": verticesBlob([
+        0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0,
+      ]),
       "vertex_fragments/0.0.0/c/0": twoRangeFragmentsBlob(2, 3),
       // no fragment_attributes/segment_id blob
     });
@@ -416,7 +432,13 @@ describe("downloadSkeletonChunk — orchestrator", () => {
       new AbortController().signal,
     );
     // Fragment 0 → id 0 for its 2 vertices; fragment 1 → id 1 for its 3.
-    expect(segmentIdsAsBigint(chunk!.segmentIds!)).toEqual([0n, 0n, 1n, 1n, 1n]);
+    expect(segmentIdsAsBigint(chunk!.segmentIds!)).toEqual([
+      0n,
+      0n,
+      1n,
+      1n,
+      1n,
+    ]);
   });
 });
 
@@ -425,15 +447,29 @@ describe("downloadSkeletonChunk — link dtype matrix", () => {
   // should produce identical chunk-local Uint32Array output.
   const cases: Array<{ dtype: LinkDtype; blob: () => Uint8Array }> = [
     { dtype: "uint8", blob: () => new Uint8Array([0, 1, 1, 2]) },
-    { dtype: "uint16", blob: () => new Uint8Array(new Uint16Array([0, 1, 1, 2]).buffer) },
-    { dtype: "uint32", blob: () => new Uint8Array(new Uint32Array([0, 1, 1, 2]).buffer) },
-    { dtype: "int8", blob: () => new Uint8Array(new Int8Array([0, 1, 1, 2]).buffer) },
-    { dtype: "int16", blob: () => new Uint8Array(new Int16Array([0, 1, 1, 2]).buffer) },
-    { dtype: "int32", blob: () => new Uint8Array(new Int32Array([0, 1, 1, 2]).buffer) },
+    {
+      dtype: "uint16",
+      blob: () => new Uint8Array(new Uint16Array([0, 1, 1, 2]).buffer),
+    },
+    {
+      dtype: "uint32",
+      blob: () => new Uint8Array(new Uint32Array([0, 1, 1, 2]).buffer),
+    },
+    {
+      dtype: "int8",
+      blob: () => new Uint8Array(new Int8Array([0, 1, 1, 2]).buffer),
+    },
+    {
+      dtype: "int16",
+      blob: () => new Uint8Array(new Int16Array([0, 1, 1, 2]).buffer),
+    },
+    {
+      dtype: "int32",
+      blob: () => new Uint8Array(new Int32Array([0, 1, 1, 2]).buffer),
+    },
     {
       dtype: "int64",
-      blob: () =>
-        new Uint8Array(new BigInt64Array([0n, 1n, 1n, 2n]).buffer),
+      blob: () => new Uint8Array(new BigInt64Array([0n, 1n, 1n, 2n]).buffer),
     },
   ];
   for (const { dtype, blob } of cases) {
@@ -494,11 +530,7 @@ describe("fetchGhostVertices", () => {
   it("slices one neighbor vertex + attribute into a ghost record", async () => {
     // Neighbor chunk has 3 vertices.  Request vertex index 1.
     const kvStoreRead = makeKvStore({
-      "vertices/1.0.0/c/0": verticesBlob([
-        10, 20, 30,
-        11, 21, 31,
-        12, 22, 32,
-      ]),
+      "vertices/1.0.0/c/0": verticesBlob([10, 20, 30, 11, 21, 31, 12, 22, 32]),
       "vertex_attributes/fa/1.0.0/c/0": new Uint8Array(
         new Float32Array([0.1, 0.5, 0.9]).buffer,
       ),
@@ -654,8 +686,16 @@ describe("fetchGhostVertices", () => {
       "vertices/1.0.0/c/0": verticesBlob([4, 5, 6]),
     });
     const requests: GhostVertexRequest[] = [
-      { hostLocalVertex: 10, neighborChunkKey: "1.0.0", neighborLocalVertex: 0 },
-      { hostLocalVertex: 20, neighborChunkKey: "0.0.0", neighborLocalVertex: 0 },
+      {
+        hostLocalVertex: 10,
+        neighborChunkKey: "1.0.0",
+        neighborLocalVertex: 0,
+      },
+      {
+        hostLocalVertex: 20,
+        neighborChunkKey: "0.0.0",
+        neighborLocalVertex: 0,
+      },
     ];
     const ghosts = await fetchGhostVertices(
       requests,

@@ -76,11 +76,7 @@ describe("decodeCrossChunkLinks", () => {
   });
 
   it("handles link_width=3 (triangle face record)", () => {
-    const bytes = int64Bytes([
-      0, 0, 0, 1,
-      1, 0, 0, 2,
-      0, 1, 0, 3,
-    ]);
+    const bytes = int64Bytes([0, 0, 0, 1, 1, 0, 0, 2, 0, 1, 0, 3]);
     const records = decodeCrossChunkLinks(bytes, 3, 3);
     expect(records).toHaveLength(1);
     expect(records[0].endpoints).toHaveLength(3);

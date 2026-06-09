@@ -33,9 +33,7 @@ describe("KIND_CAPABILITIES table invariants", () => {
     // ambiguous; both false is fine (skeletons).
     for (const kind of ALL_KINDS) {
       const c = KIND_CAPABILITIES[kind];
-      expect(
-        c.hasWalkOrderTangent && c.hasEdgeAdjacencyTangent,
-      ).toBe(false);
+      expect(c.hasWalkOrderTangent && c.hasEdgeAdjacencyTangent).toBe(false);
     }
   });
 

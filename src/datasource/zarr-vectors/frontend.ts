@@ -753,7 +753,8 @@ async function buildObjectAttributePropertyMap(
       type: "number",
       dataType: s.dataType,
       description: undefined,
-      values: compactValues as unknown as InlineSegmentNumericalProperty["values"],
+      values:
+        compactValues as unknown as InlineSegmentNumericalProperty["values"],
       bounds: [min, max],
     };
     properties.push(numerical);
@@ -1211,7 +1212,10 @@ async function buildSkeletonMetadata(
   // are read in addition to the implicit sequential ones synthesised
   // from fragment ranges.
   const linksConventionRaw = zv.links_convention;
-  let linksConvention: "implicit_sequential" | "implicit_sequential_with_branches" | "explicit";
+  let linksConvention:
+    | "implicit_sequential"
+    | "implicit_sequential_with_branches"
+    | "explicit";
   if (linksConventionRaw === undefined) {
     // Spec default per geometry: streamline / polyline → implicit_sequential,
     // skeleton → implicit_sequential_with_branches, graph → explicit.
@@ -1239,7 +1243,13 @@ async function buildSkeletonMetadata(
   // convention has explicit edges.  Default to int64 (universally safe)
   // when no links array exists.
   let linkDtype:
-    | "uint8" | "uint16" | "uint32" | "int8" | "int16" | "int32" | "int64";
+    | "uint8"
+    | "uint16"
+    | "uint32"
+    | "int8"
+    | "int16"
+    | "int32"
+    | "int64";
   if (linksConvention === "implicit_sequential") {
     linkDtype = "int64";
   } else {
@@ -1255,9 +1265,7 @@ async function buildSkeletonMetadata(
       linksZarrJson = undefined;
     }
     const raw =
-      linksZarrJson?.attributes?.dtype ??
-      linksZarrJson?.data_type ??
-      "int64";
+      linksZarrJson?.attributes?.dtype ?? linksZarrJson?.data_type ?? "int64";
     if (
       raw !== "uint8" &&
       raw !== "uint16" &&
@@ -1288,7 +1296,9 @@ async function buildSkeletonMetadata(
   // vec3 position texture format (`skeleton/frontend.ts:1706-1709`); 2-D
   // or higher-rank stores fall back to pass-2 only.
   let pass1Levels:
-    | ReadonlyArray<{ parameters: ZarrVectorsSpatiallyIndexedSkeletonSourceParameters }>
+    | ReadonlyArray<{
+        parameters: ZarrVectorsSpatiallyIndexedSkeletonSourceParameters;
+      }>
     | undefined;
   let spatialGrid:
     | {
@@ -1300,7 +1310,9 @@ async function buildSkeletonMetadata(
   if (rank === 3) {
     const chunkShape = zv.chunk_shape;
     if (!Array.isArray(chunkShape) || chunkShape.length !== rank) {
-      throw new Error(`zarr-vectors store: 'chunk_shape' must have rank ${rank}`);
+      throw new Error(
+        `zarr-vectors store: 'chunk_shape' must have rank ${rank}`,
+      );
     }
     // Root chunk_shape is the default per-level chunk size.  When a
     // level stamps its own ``zarr_vectors_level.chunk_shape`` on disk
@@ -1329,7 +1341,8 @@ async function buildSkeletonMetadata(
             `zarr-vectors level ${JSON.stringify(levelPath)} metadata`,
             options,
           );
-          const override = levelJson?.attributes?.zarr_vectors_level?.chunk_shape;
+          const override =
+            levelJson?.attributes?.zarr_vectors_level?.chunk_shape;
           if (Array.isArray(override) && override.length === rank) {
             const arr = new Float32Array(rank);
             for (let i = 0; i < rank; ++i) arr[i] = Number(override[i]);
@@ -1344,8 +1357,9 @@ async function buildSkeletonMetadata(
 
     // Per-level parameter blobs.  Each level gets its own chunkShape
     // (may differ when the writer used ``chunk_scale_factors``).
-    const levels: { parameters: ZarrVectorsSpatiallyIndexedSkeletonSourceParameters }[] =
-      [];
+    const levels: {
+      parameters: ZarrVectorsSpatiallyIndexedSkeletonSourceParameters;
+    }[] = [];
     for (let k = 0; k < levelPaths.length; ++k) {
       const levelUrl = kvstoreEnsureDirectoryPipelineUrl(
         pipelineUrlJoin(storeUrl, levelPaths[k]),
@@ -1429,7 +1443,10 @@ function getSkeletonDataSource(
 ): DataSource {
   const subsources: DataSource["subsources"] = [];
 
-  if (metadata.pass1Levels !== undefined && metadata.spatialGrid !== undefined) {
+  if (
+    metadata.pass1Levels !== undefined &&
+    metadata.spatialGrid !== undefined
+  ) {
     subsources.push({
       id: "skeleton-spatial",
       default: true,
@@ -1483,7 +1500,10 @@ function getSkeletonDataSource(
   return {
     modelTransform:
       metadata.translation !== undefined
-        ? makeTranslatedTransform(metadata.coordinateSpace, metadata.translation)
+        ? makeTranslatedTransform(
+            metadata.coordinateSpace,
+            metadata.translation,
+          )
         : makeIdentityTransform(metadata.coordinateSpace),
     subsources,
   };

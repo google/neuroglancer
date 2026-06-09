@@ -35,6 +35,8 @@ registerProvider(new KvStoreBasedDataSourceLegacyUrlAdapter(provider));
 // URL form as the main scheme but with `zarr-vectors-pointcloud:`.
 const pointCloudProvider = new ZarrVectorsPointCloudDataSource();
 registerKvStoreBasedDataProvider(pointCloudProvider);
-registerProvider(new KvStoreBasedDataSourceLegacyUrlAdapter(pointCloudProvider));
+registerProvider(
+  new KvStoreBasedDataSourceLegacyUrlAdapter(pointCloudProvider),
+);
 
 registerAutoDetect(dataSourceAutoDetectRegistry);

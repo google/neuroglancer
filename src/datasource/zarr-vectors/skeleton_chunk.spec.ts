@@ -26,8 +26,7 @@ import {
  */
 function buildFragmentIndex(
   fragments: Array<
-    | { range: { start: number; count: number } }
-    | { explicit: number[] }
+    { range: { start: number; count: number } } | { explicit: number[] }
   >,
 ): FragmentIndex {
   const f = fragments.length;
@@ -86,8 +85,14 @@ describe("synthesizeSequentialEdges", () => {
     ]);
     const edges = Array.from(synthesizeSequentialEdges(fi));
     expect(edges).toEqual([
-      0, 1, 1, 2, // first fragment
-      3, 4, 4, 5, // second fragment, NO (2,3) bridge
+      0,
+      1,
+      1,
+      2, // first fragment
+      3,
+      4,
+      4,
+      5, // second fragment, NO (2,3) bridge
     ]);
   });
 
@@ -144,11 +149,7 @@ describe("computeTangents", () => {
   it("returns a constant tangent along a straight-line streamline", () => {
     // 5 vertices marching +X by 1 each step.  All tangents should be (1, 0, 0).
     const positions = new Float32Array([
-      0, 0, 0,
-      1, 0, 0,
-      2, 0, 0,
-      3, 0, 0,
-      4, 0, 0,
+      0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0,
     ]);
     const fi = buildFragmentIndex([{ range: { start: 0, count: 5 } }]);
     const t = computeTangents(positions, 3, fi);
@@ -165,14 +166,11 @@ describe("computeTangents", () => {
     // cross fragment boundaries.
     const positions = new Float32Array([
       // +X fragment, vertices 0..1
-      0, 0, 0,
-      1, 0, 0,
+      0, 0, 0, 1, 0, 0,
       // +Y fragment, vertices 2..3
-      0, 0, 0,
-      0, 1, 0,
+      0, 0, 0, 0, 1, 0,
       // +Z fragment, vertices 4..5
-      0, 0, 0,
-      0, 0, 1,
+      0, 0, 0, 0, 0, 1,
     ]);
     const fi = buildFragmentIndex([
       { range: { start: 0, count: 2 } },
@@ -234,12 +232,7 @@ describe("computeTangents", () => {
     // Two range fragments [0..2) and [2..4) — adjacent vertices 1 and 2
     // are spatially distant but in different fragments, so the tangent
     // at vertex 1 must use vertex 0 as the back-neighbour, NOT vertex 2.
-    const positions = new Float32Array([
-      0, 0, 0,
-      1, 0, 0,
-      10, 0, 0,
-      11, 0, 0,
-    ]);
+    const positions = new Float32Array([0, 0, 0, 1, 0, 0, 10, 0, 0, 11, 0, 0]);
     const fi = buildFragmentIndex([
       { range: { start: 0, count: 2 } },
       { range: { start: 2, count: 2 } },
@@ -306,10 +299,18 @@ describe("computeTangentsFromEdges", () => {
   it("Y-junction picks central-diff of first two neighbours at the branch", () => {
     // Vertices: center=0 at origin, arms 1=+x, 2=+y, 3=+z.
     const positions = new Float32Array([
-      0, 0, 0, // 0 (branch)
-      1, 0, 0, // 1
-      0, 1, 0, // 2
-      0, 0, 1, // 3
+      0,
+      0,
+      0, // 0 (branch)
+      1,
+      0,
+      0, // 1
+      0,
+      1,
+      0, // 2
+      0,
+      0,
+      1, // 3
     ]);
     // First two neighbours of vertex 0 are 1 (+x) and 2 (+y).
     const edges = new Uint32Array([0, 1, 0, 2, 0, 3]);
@@ -433,12 +434,7 @@ describe("buildSkeletonChunk", () => {
 
   it("produces a graph chunk with explicit edges and edge-adjacency tangents", () => {
     // 4 vertices on a Y junction: center=0 at origin, arms 1=+x, 2=+y, 3=+z.
-    const positions = new Float32Array([
-      0, 0, 0,
-      1, 0, 0,
-      0, 1, 0,
-      0, 0, 1,
-    ]);
+    const positions = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]);
     const fi = buildFragmentIndex([{ range: { start: 0, count: 4 } }]);
     const chunk = buildSkeletonChunk({
       rank: 3,
@@ -521,7 +517,9 @@ describe("buildSkeletonChunk", () => {
 // ---------------------------------------------------------------------------
 
 describe("recomputeTangentsForBridges", () => {
-  function coarseChunk(positions: number[]): ReturnType<typeof buildSkeletonChunk> {
+  function coarseChunk(
+    positions: number[],
+  ): ReturnType<typeof buildSkeletonChunk> {
     // Coarser-pyramid-level layout: one metavertex per fragment.
     // computeTangents will assign zero tangents to all of them.
     const n = positions.length / 3;
@@ -724,7 +722,9 @@ describe("appendIntraChunkEdges", () => {
 // ---------------------------------------------------------------------------
 
 describe("appendGhostVertices", () => {
-  function streamlineChunk(numVerts: number): ReturnType<typeof buildSkeletonChunk> {
+  function streamlineChunk(
+    numVerts: number,
+  ): ReturnType<typeof buildSkeletonChunk> {
     const positions = new Float32Array(numVerts * 3);
     for (let i = 0; i < numVerts; ++i) {
       positions[i * 3] = i;
@@ -734,10 +734,14 @@ describe("appendGhostVertices", () => {
     return buildSkeletonChunk({
       rank: 3,
       positions,
-      fragmentIndex: buildFragmentIndex([{ range: { start: 0, count: numVerts } }]),
+      fragmentIndex: buildFragmentIndex([
+        { range: { start: 0, count: numVerts } },
+      ]),
       linksConvention: "implicit_sequential",
       geometryKind: "streamline",
-      vertexAttributes: [Float32Array.from({ length: numVerts }, (_, i) => i + 1)],
+      vertexAttributes: [
+        Float32Array.from({ length: numVerts }, (_, i) => i + 1),
+      ],
     });
   }
 
@@ -761,10 +765,18 @@ describe("appendGhostVertices", () => {
     ]);
     expect(result.numVertices).toBe(4);
     expect(Array.from(result.positions)).toEqual([
-      0, 0, 0, // host vert 0
-      1, 0, 0, // host vert 1
-      2, 0, 0, // host vert 2
-      3, 0, 0, // ghost
+      0,
+      0,
+      0, // host vert 0
+      1,
+      0,
+      0, // host vert 1
+      2,
+      0,
+      0, // host vert 2
+      3,
+      0,
+      0, // ghost
     ]);
     expect(result.numEdges).toBe(3); // 2 intra-fragment + 1 bridge
     // Bridge edge appended at the end: (host vert 2, ghost vert 3).
