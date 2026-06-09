@@ -50,6 +50,7 @@ import type {
   WatchableValueInterface,
 } from "#src/trackable_value.js";
 import {
+  constantWatchableValue,
   makeCachedDerivedWatchableValue,
   registerNested,
 } from "#src/trackable_value.js";
@@ -71,7 +72,9 @@ import {
   trackableShaderModeValue,
 } from "#src/volume_rendering/trackable_volume_rendering_mode.js";
 import {
+  drawBoxEdges,
   drawBoxes,
+  glsl_getBoxEdgeVertexPosition,
   glsl_getBoxFaceVertexPosition,
 } from "#src/webgl/bounding_box.js";
 import type { GLBuffer } from "#src/webgl/buffer.js";
@@ -79,11 +82,13 @@ import { getMemoizedBuffer } from "#src/webgl/buffer.js";
 import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
 import type {
   ParameterizedContextDependentShaderGetter,
+  ParameterizedEmitterDependentShaderGetter,
   ParameterizedShaderGetterResult,
   WatchableShaderError,
 } from "#src/webgl/dynamic_shader.js";
 import {
   parameterizedContextDependentShaderGetter,
+  parameterizedEmitterDependentShaderGetter,
   shaderCodeWithLineDirective,
 } from "#src/webgl/dynamic_shader.js";
 import type {
@@ -224,7 +229,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   private dataHistogramSpecifications: HistogramSpecifications;
 
   private shaderGetter: ParameterizedContextDependentShaderGetter<
-    { emitter: ShaderModule; chunkFormat: ChunkFormat; wireFrame: boolean },
+    { emitter: ShaderModule; chunkFormat: ChunkFormat },
     ShaderControlsBuilderState,
     VolumeRenderingShaderParameters
   >;
@@ -234,6 +239,8 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
     ShaderControlsBuilderState,
     VolumeRenderingShaderParameters
   >;
+
+  private wireframeShaderGetter: ParameterizedEmitterDependentShaderGetter<undefined>;
 
   get gl() {
     return this.multiscaleSource.chunkManager.gl;
@@ -306,13 +313,13 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
       {
         memoizeKey: "VolumeRenderingRenderLayer",
         parameters: options.shaderControlState.builderState,
-        getContextKey: ({ emitter, chunkFormat, wireFrame }) =>
-          `${getObjectId(emitter)}:${chunkFormat.shaderKey}:${wireFrame}`,
+        getContextKey: ({ emitter, chunkFormat }) =>
+          `${getObjectId(emitter)}:${chunkFormat.shaderKey}`,
         shaderError: options.shaderError,
         extraParameters: extraParameters,
         defineShader: (
           builder,
-          { emitter, chunkFormat, wireFrame },
+          { emitter, chunkFormat },
           shaderBuilderState,
           shaderParametersState,
         ) => {
@@ -391,7 +398,6 @@ void emitRGBA(vec4 rgba) {
 
           // Chunk size in voxels.
           builder.addUniform("highp vec3", "uChunkDataSize");
-          builder.addUniform("highp float", "uChunkNumber");
 
           builder.addUniform("highp vec3", "uLowerClipBound");
           builder.addUniform("highp vec3", "uUpperClipBound");
@@ -450,24 +456,7 @@ vec2 computeUVFromClipSpace(vec4 clipSpacePosition) {
 }
 `,
           ]);
-          if (wireFrame) {
-            let glsl_emitWireframe = `
-  emit(outputColor, 0u);
-`;
-            if (isProjectionMode(shaderParametersState.mode)) {
-              glsl_emitWireframe = `
-  emit(outputColor, 1.0, uChunkNumber, uPickId);
-            `;
-            }
-            builder.setFragmentMainFunction(`
-void main() {
-  outputColor = vec4(uChunkNumber, uChunkNumber, uChunkNumber, 1.0);
-  emitIntensity(uChunkNumber);
-  ${glsl_emitWireframe}
-}
-`);
-          } else {
-            builder.setFragmentMainFunction(`
+          builder.setFragmentMainFunction(`
 void main() {
   vec2 normalizedPosition = vNormalizedPosition.xy / vNormalizedPosition.w;
   vec4 nearPointH = uInvModelViewProjectionMatrix * vec4(normalizedPosition, -1.0, 1.0);
@@ -522,7 +511,6 @@ void main() {
   ${glsl_finalEmit}
 }
 `);
-          }
           builder.addFragmentCode(glsl_COLORMAPS);
           addControlsToBuilder(shaderBuilderState, builder);
           builder.addFragmentCode(
@@ -640,6 +628,28 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
         },
       },
     );
+    this.wireframeShaderGetter = parameterizedEmitterDependentShaderGetter(
+      this,
+      this.gl,
+      {
+        memoizeKey: "VolumeRenderingRenderLayerWireframe",
+        parameters: constantWatchableValue(undefined),
+        defineShader: (builder, _parameters, _extraParameters) => {
+          builder.addUniform("highp mat4", "uModelViewProjectionMatrix");
+          builder.addUniform("highp vec3", "uTranslation");
+          builder.addUniform("highp vec3", "uChunkDataSize");
+          builder.addUniform("highp vec3", "uLowerClipBound");
+          builder.addUniform("highp vec3", "uUpperClipBound");
+          builder.addVertexCode(glsl_getBoxEdgeVertexPosition);
+          builder.setVertexMain(`
+vec3 boxVertex = getBoxEdgeVertexPosition(gl_VertexID);
+vec3 position = max(uLowerClipBound, min(uUpperClipBound, uTranslation + boxVertex * uChunkDataSize));
+gl_Position = uModelViewProjectionMatrix * vec4(position, 1.0);
+`);
+          builder.setFragmentMain(`emit(vec4(0.0, 1.0, 1.0, 1.0), 0u);`);
+        },
+      },
+    );
 
     this.vertexIdHelper = this.registerDisposer(VertexIdHelper.get(this.gl));
 
@@ -753,6 +763,10 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       ShaderControlsBuilderState,
       VolumeRenderingShaderParameters
     >;
+    const wireframeShader =
+      renderContext.wireFrame && !isProjectionMode(this.mode.value)
+        ? this.wireframeShaderGetter(renderContext.emitter).shader
+        : undefined;
     // Size of chunk (in voxels) in the "display" subspace of the chunk coordinate space.
     const chunkDataDisplaySize = vec3.create();
 
@@ -765,10 +779,9 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       this.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber,
     );
 
-    const restoreDrawingBuffersAndState = () => {
-      const performedSecondPassForPicking =
-        !isProjectionMode(this.mode.value) &&
-        !renderContext.isContinuousCameraMotionInProgress;
+    const restoreDrawingBuffersAndState = (
+      performedSecondPassForPicking: boolean,
+    ) => {
       // If the layer is in projection mode or the second pass for picking has been performed,
       // the max projection state is needed
       // the max projection buffer is not bound, because it is immediately read back
@@ -836,14 +849,12 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
     let presentCount = 0;
     let notPresentCount = 0;
     let chunkDataSize: Uint32Array | undefined;
-    let chunkNumber = 1;
 
     const chunkRank = this.multiscaleSource.rank;
     const chunkPosition = vec3.create();
 
     const needToDrawHistogram =
       this.getDataHistogramCount() > 0 &&
-      !renderContext.wireFrame &&
       !renderContext.sliceViewsPresent &&
       (!renderContext.isContinuousCameraMotionInProgress ||
         renderContext.force3DHistogramForAutoRange);
@@ -898,7 +909,6 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           shaderResult = this.shaderGetter({
             emitter: renderContext.emitter,
             chunkFormat: chunkFormat!,
-            wireFrame: renderContext.wireFrame,
           });
           shader = shaderResult.shader;
           if (shader !== null) {
@@ -969,11 +979,6 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
             fixedPositionWithinChunk,
             chunkTransform: { channelToChunkDimensionIndices },
           } = transformedSource;
-          if (renderContext.wireFrame) {
-            const normChunkNumber = chunkNumber / chunks.size;
-            gl.uniform1f(shader.uniform("uChunkNumber"), normChunkNumber);
-            ++chunkNumber;
-          }
           if (newChunkDataSize !== chunkDataSize) {
             chunkDataSize = newChunkDataSize;
 
@@ -1010,7 +1015,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
             );
           }
           // Save information for possible repasses through the data
-          if (needToDrawHistogram || needPickingPass) {
+          if (needToDrawHistogram || needPickingPass || wireframeShader) {
             chunkInfoForMultipass.push({
               chunk,
               fixedPositionWithinChunk,
@@ -1037,6 +1042,37 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       },
     );
     endShader();
+    if (wireframeShader) {
+      wireframeShader.bind();
+      if (shaderSetupUniforms) {
+        gl.uniformMatrix4fv(
+          wireframeShader.uniform("uModelViewProjectionMatrix"),
+          false,
+          shaderSetupUniforms.uModelViewProjectionMatrix,
+        );
+        gl.uniform3fv(
+          wireframeShader.uniform("uLowerClipBound"),
+          shaderSetupUniforms.uLowerClipBound,
+        );
+        gl.uniform3fv(
+          wireframeShader.uniform("uUpperClipBound"),
+          shaderSetupUniforms.uUpperClipBound,
+        );
+      }
+
+      for (let i = 0; i < presentCount; ++i) {
+        const uniforms = shaderUniformsForSecondPass[i];
+        gl.uniform3fv(
+          wireframeShader.uniform("uTranslation"),
+          uniforms.uTranslation,
+        );
+        gl.uniform3fv(
+          wireframeShader.uniform("uChunkDataSize"),
+          uniforms.uChunkDataSize,
+        );
+        drawBoxEdges(gl, 1, 1);
+      }
+    }
 
     shader = null;
     prevChunkFormat = null;
@@ -1068,7 +1104,6 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           shaderResult = this.shaderGetter({
             emitter: renderContext.emitter,
             chunkFormat: chunkFormat!,
-            wireFrame: renderContext.wireFrame,
           });
           shader = shaderResult.shader;
           if (shader !== null && shaderSetupUniforms !== undefined) {
@@ -1260,7 +1295,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       endHistogramShader();
     }
     if (needPickingPass || needToDrawHistogram) {
-      restoreDrawingBuffersAndState();
+      restoreDrawingBuffersAndState(needPickingPass);
     }
   }
 
