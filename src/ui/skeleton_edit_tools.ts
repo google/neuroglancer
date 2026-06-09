@@ -1024,6 +1024,7 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
               )
                 return;
               dragStarted = true;
+              skeletonLayer.markSegmentEdited(nodeInfo.segmentId);
             }
             dragPanel.translateDataPointByViewportPixels(
               this.dragGlobalPosition,

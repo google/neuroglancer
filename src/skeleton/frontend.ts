@@ -2071,7 +2071,7 @@ export class SpatiallyIndexedSkeletonLayer
   private browseExcludedSegments = new Uint64Set();
   private gpuBrowseExcludedSegmentsHashTable: GPUHashTable<HashSetUint64>;
   private browseExcludedSegmentsKey: string | undefined;
-  private suppressedBrowseSegmentIds = new Set<number>();
+  private readonly editedSegmentIds = new Set<number>();
   private retainedOverlaySegmentIds: number[] = [];
   private maxRetainedOverlaySegments: number;
   private readonly selectedNodeOutlineColor = vec3.clone(
@@ -2159,6 +2159,7 @@ export class SpatiallyIndexedSkeletonLayer
   }
 
   retainOverlaySegment(segmentId: number) {
+    this.markSegmentEdited(segmentId);
     const nextRetainedOverlaySegmentIds =
       retainSpatiallyIndexedSkeletonOverlaySegment(
         this.retainedOverlaySegmentIds,
@@ -2180,30 +2181,16 @@ export class SpatiallyIndexedSkeletonLayer
     return true;
   }
 
-  suppressBrowseSegment(segmentId: number) {
+  markSegmentEdited(segmentId: number) {
     const normalizedSegmentId = Math.round(Number(segmentId));
     if (
       !Number.isSafeInteger(normalizedSegmentId) ||
       normalizedSegmentId <= 0 ||
-      this.suppressedBrowseSegmentIds.has(normalizedSegmentId)
+      this.editedSegmentIds.has(normalizedSegmentId)
     ) {
       return false;
     }
-    this.suppressedBrowseSegmentIds.add(normalizedSegmentId);
-    this.redrawNeeded.dispatch();
-    return true;
-  }
-
-  unsuppressBrowseSegment(segmentId: number) {
-    const normalizedSegmentId = Math.round(Number(segmentId));
-    if (
-      !Number.isSafeInteger(normalizedSegmentId) ||
-      normalizedSegmentId <= 0 ||
-      !this.suppressedBrowseSegmentIds.has(normalizedSegmentId)
-    ) {
-      return false;
-    }
-    this.suppressedBrowseSegmentIds.delete(normalizedSegmentId);
+    this.editedSegmentIds.add(normalizedSegmentId);
     this.redrawNeeded.dispatch();
     return true;
   }
@@ -2215,41 +2202,8 @@ export class SpatiallyIndexedSkeletonLayer
     );
   }
 
-  private getLoadedOverlaySegmentIds(
-    segmentIds: readonly number[] = this.getOverlayRenderSegmentIds(),
-  ) {
-    if (this.inspectionState === undefined) {
-      return [];
-    }
-    return segmentIds.filter(
-      (segmentId) =>
-        this.inspectionState?.getCachedSegmentNodes(segmentId) !== undefined,
-    );
-  }
-
   private getNormalizedBrowsePassExcludedSegmentIds() {
-    const segmentIds = new Set<number>();
-    for (const segmentId of this.getLoadedOverlaySegmentIds()) {
-      const normalizedSegmentId = Math.round(Number(segmentId));
-      if (
-        !Number.isSafeInteger(normalizedSegmentId) ||
-        normalizedSegmentId <= 0
-      ) {
-        continue;
-      }
-      segmentIds.add(normalizedSegmentId);
-    }
-    for (const segmentId of this.suppressedBrowseSegmentIds) {
-      const normalizedSegmentId = Math.round(Number(segmentId));
-      if (
-        !Number.isSafeInteger(normalizedSegmentId) ||
-        normalizedSegmentId <= 0
-      ) {
-        continue;
-      }
-      segmentIds.add(normalizedSegmentId);
-    }
-    return [...segmentIds].sort((a, b) => a - b);
+    return [...this.editedSegmentIds].sort((a, b) => a - b);
   }
 
   private getBrowsePassExcludedSegments() {

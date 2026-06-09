@@ -787,7 +787,6 @@ function applyCreatedNodeToCache(
     );
   }
   ensureVisibleSegment(layer, newNode.segmentId);
-  skeletonLayer.unsuppressBrowseSegment(newNode.segmentId);
   if (options.selectSegment ?? true) {
     selectSegment(layer, newNode.segmentId, options.pinSegment);
   }
@@ -922,7 +921,7 @@ async function commitAndApplyDeleteNode(
       resolvedNode.node.segmentId,
     ) ?? [];
   if (remainingNodes.length === 0) {
-    resolvedNode.skeletonLayer.suppressBrowseSegment(resolvedNode.node.segmentId);
+    resolvedNode.skeletonLayer.markSegmentEdited(resolvedNode.node.segmentId);
   }
   return { resolvedNode };
 }
@@ -1861,8 +1860,6 @@ class SplitCommand implements SpatialSkeletonCommand {
       [existingSkeletonId, newSkeletonId],
       collectUniqueNodePositions(getSplitAffectedNodes(resolvedNode)),
     );
-    resolvedNode.skeletonLayer.unsuppressBrowseSegment(existingSkeletonId);
-    resolvedNode.skeletonLayer.unsuppressBrowseSegment(newSkeletonId);
     resolvedNode.skeletonLayer.retainOverlaySegment(existingSkeletonId);
     resolvedNode.skeletonLayer.retainOverlaySegment(newSkeletonId);
     StatusMessage.showTemporaryMessage(
@@ -1926,7 +1923,7 @@ class SplitCommand implements SpatialSkeletonCommand {
       this.layer.displayState.segmentStatedColors.value.delete(
         BigInt(deletedSkeletonId),
       );
-      splitNode.skeletonLayer.suppressBrowseSegment(deletedSkeletonId);
+      splitNode.skeletonLayer.markSegmentEdited(deletedSkeletonId);
     }
     this.layer.selectSpatialSkeletonNode(
       splitNode.node.nodeId,
@@ -2131,7 +2128,7 @@ class MergeCommand implements SpatialSkeletonCommand {
       BigInt(deletedSkeletonId),
     );
     if (deletedSkeletonId !== resultSkeletonId) {
-      firstNode.skeletonLayer.suppressBrowseSegment(deletedSkeletonId);
+      firstNode.skeletonLayer.markSegmentEdited(deletedSkeletonId);
     }
     this.layer.clearSpatialSkeletonMergeAnchor();
     await refreshTopologySegments(
@@ -2237,7 +2234,6 @@ class MergeCommand implements SpatialSkeletonCommand {
           `Only the split completed. ${formatErrorMessage(error)}`;
       }
     }
-    attachedNode.skeletonLayer.unsuppressBrowseSegment(restoredSegmentId);
     attachedNode.skeletonLayer.retainOverlaySegment(survivingSegmentId);
     attachedNode.skeletonLayer.retainOverlaySegment(restoredSegmentId);
     this.layer.selectSpatialSkeletonNode(
