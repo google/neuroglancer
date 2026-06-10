@@ -17,10 +17,7 @@
 import "#src/layer/segmentation/style.css";
 
 import { BrushHashTable } from "#src/brush_stroke/index.js";
-import {
-  BrushStrokeLayer,
-  SliceViewBrushStrokeLayer,
-} from "#src/brush_stroke/renderlayer.js";
+import { BrushStrokeLayer } from "#src/brush_stroke/renderlayer.js";
 import type { CoordinateTransformSpecification } from "#src/coordinate_transform.js";
 import { emptyValidCoordinateSpace } from "#src/coordinate_transform.js";
 import type { DataSourceSpecification } from "#src/datasource/index.js";
@@ -591,8 +588,6 @@ export class SegmentationUserLayer extends Base {
   codeVisible = new TrackableBoolean(true);
   brushHashTable = new BrushHashTable();
   brushStrokeLayer: BrushStrokeLayer | null = null;
-  highlightHashTable = new BrushHashTable();
-  highlightStrokeLayer: BrushStrokeLayer | null = null;
 
   graphConnection = new WatchableValue<
     SegmentationGraphSourceConnection | undefined
@@ -893,43 +888,24 @@ export class SegmentationUserLayer extends Base {
             "Not supported on non-root linked segmentation layers",
           );
         } else {
-          loadedSubsource.activate(() => {
-            // Create brush stroke render layers
+          loadedSubsource.activate((refCounted) => {
+            // Optimistic paint has no dedicated render layer: in 2D the
+            // canonical SegmentationRenderLayer's brush hijack draws painted
+            // voxels through its own shader (so they get the layer opacity + the
+            // focused-instance highlight and stay in lock-step with disk data),
+            // and in 3D the perspective panel reads this BrushStrokeLayer
+            // directly. We just keep the BrushStrokeLayer alive as the
+            // brush-data + redraw hub; repaints on edits come from
+            // brushHashTable.changed, wired in SegmentationRenderLayer.
             const brushStrokeLayer = new BrushStrokeLayer(
-              this.manager.chunkManager,
               this.brushHashTable,
-              this.displayState, // Pass display state for segment color computation
-            );
-
-            // Store reference for triggering redraws from brush tool
-            this.brushStrokeLayer = brushStrokeLayer;
-
-            // Add slice view brush stroke layer
-            const sliceViewRenderLayer = new SliceViewBrushStrokeLayer(
-              brushStrokeLayer.addRef(),
-              this.sliceViewRenderScaleHistogram,
-            );
-            loadedSubsource.addRenderLayer(sliceViewRenderLayer);
-
-            // Clean up the base layer
-            brushStrokeLayer.dispose();
-
-            // Per-instance highlight overlay (drawn on top, fixed color).
-            const highlightStrokeLayer = new BrushStrokeLayer(
-              this.manager.chunkManager,
-              this.highlightHashTable,
               this.displayState,
-              true, // highlight overlay: brighten the segment color
-              this.brushHashTable, // edit overlay wins per-voxel over highlight
             );
-            this.highlightStrokeLayer = highlightStrokeLayer;
-            loadedSubsource.addRenderLayer(
-              new SliceViewBrushStrokeLayer(
-                highlightStrokeLayer.addRef(),
-                this.sliceViewRenderScaleHistogram,
-              ),
-            );
-            highlightStrokeLayer.dispose();
+            this.brushStrokeLayer = brushStrokeLayer;
+            refCounted.registerDisposer(brushStrokeLayer);
+            refCounted.registerDisposer(() => {
+              this.brushStrokeLayer = null;
+            });
           });
         }
       } else {
