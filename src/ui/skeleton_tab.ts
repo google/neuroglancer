@@ -156,10 +156,10 @@ const NODE_TYPE_ICONS: Record<SpatialSkeletonDisplayNodeType, string> = {
 };
 
 const NODE_TYPE_LABELS: Record<SpatialSkeletonDisplayNodeType, string> = {
-  [SpatialSkeletonDisplayNodeType.ROOT]: "root",
-  [SpatialSkeletonDisplayNodeType.BRANCH_START]: "branch start",
-  [SpatialSkeletonDisplayNodeType.REGULAR]: "regular",
-  [SpatialSkeletonDisplayNodeType.VIRTUAL_END]: "virtual end",
+  [SpatialSkeletonDisplayNodeType.ROOT]: "Root",
+  [SpatialSkeletonDisplayNodeType.BRANCH_START]: "Branch point",
+  [SpatialSkeletonDisplayNodeType.REGULAR]: "Node",
+  [SpatialSkeletonDisplayNodeType.VIRTUAL_END]: "Virtual end",
 };
 
 export class SpatialSkeletonEditTab extends Tab {
@@ -888,7 +888,7 @@ export class SpatialSkeletonEditTab extends Tab {
     const goBranchStartButton = makeIconButton(
       navTools,
       svg_chevrons_left,
-      "Go to start of the branch",
+      "Go to start of branch",
       () => {
         const selectedNode = getSelectedNavigationContext();
         if (selectedNode === undefined) return;
@@ -910,7 +910,7 @@ export class SpatialSkeletonEditTab extends Tab {
     const goTreeEndButton = makeIconButton(
       navTools,
       svg_chevrons_right,
-      "Go to end of the branch",
+      "Go to end of branch",
       () => {
         const selectedNode = getSelectedNavigationContext();
         if (selectedNode === undefined) return;
@@ -1012,7 +1012,7 @@ export class SpatialSkeletonEditTab extends Tab {
     const goUnfinishedBranchButton = makeIconButton(
       navTools,
       svg_chevron_right,
-      "Go to unfinished node",
+      "Go to nearest unfinished leaf node",
       () => {
         goToClosestUnfinishedBranch();
       },
@@ -1268,23 +1268,24 @@ export class SpatialSkeletonEditTab extends Tab {
             : NODE_TYPE_ICONS[type];
       const typeIconTitle =
         iconFilterType !== undefined
-          ? getSpatialSkeletonNodeFilterLabel(iconFilterType).toLowerCase()
+          ? getSpatialSkeletonNodeFilterLabel(iconFilterType)
           : NODE_TYPE_LABELS[type];
       const typeButtonPending = pendingTrueEndNodes.has(node.nodeId);
       const typeButtonTitle = typeButtonPending
         ? nodeIsTrueEnd
-          ? "removing true end"
-          : "setting true end"
+          ? "Removing true end"
+          : "Setting true end"
         : typeIconTitle;
-      const typeIcon =
-        isLeaf || nodeIsTrueEnd
-          ? document.createElement("button")
-          : document.createElement("span");
-      typeIcon.className =
-        isLeaf || nodeIsTrueEnd
-          ? "neuroglancer-skeleton-node-type-toggle"
-          : "neuroglancer-skeleton-node-type";
-      typeIcon.title = typeButtonTitle;
+      const canChangeType = isLeaf || nodeIsTrueEnd;
+      const typeIcon = canChangeType
+        ? document.createElement("button")
+        : document.createElement("span");
+      typeIcon.className = `neuroglancer-skeleton-node-type${canChangeType ? "-toggle" : ""}`;
+      const toggleToName = nodeIsTrueEnd ? "Virtual end" : "True end";
+      const fullTitle =
+        typeButtonTitle +
+        (canChangeType ? ` (click to toggle to ${toggleToName})` : "");
+      typeIcon.title = fullTitle;
       if (typeIcon instanceof HTMLButtonElement) {
         typeIcon.type = "button";
         typeIcon.disabled = !trueEndEditingAllowed || typeButtonPending;
@@ -1297,7 +1298,7 @@ export class SpatialSkeletonEditTab extends Tab {
       typeIcon.appendChild(
         makeIcon({
           svg: typeIconSvg,
-          title: typeButtonTitle,
+          title: fullTitle,
           clickable: false,
         }),
       );
@@ -1329,9 +1330,9 @@ export class SpatialSkeletonEditTab extends Tab {
       const actions = document.createElement("div");
       actions.className = "neuroglancer-skeleton-node-actions";
       let rerootActionTitle =
-        node.parentNodeId === undefined ? "already root" : "set as root";
+        node.parentNodeId === undefined ? "Already root" : "Set as root";
       if (pendingRerootNodes.has(node.nodeId)) {
-        rerootActionTitle = "setting root";
+        rerootActionTitle = "Setting root";
       }
       actions.appendChild(
         makeRowActionButton(
@@ -1343,9 +1344,9 @@ export class SpatialSkeletonEditTab extends Tab {
             node.parentNodeId === undefined,
         ),
       );
-      let deleteActionTitle = "delete node";
+      let deleteActionTitle = "Delete node";
       if (pendingDeleteNodes.has(node.nodeId)) {
-        deleteActionTitle = "deleting node";
+        deleteActionTitle = "Deleting node";
       }
       actions.appendChild(
         makeRowActionButton(
