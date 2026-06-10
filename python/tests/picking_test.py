@@ -202,14 +202,14 @@ def test_pick_2d_oob_clear(webdriver: neuroglancer.webdriver.Webdriver) -> None:
         s.layers["a"].annotations.append(
             neuroglancer.PointAnnotation(id="oob", point=[500, 0, 0])
         )
-        s.position = [20, 0, 0]
+        s.position = [30, 0, 0]
     webdriver.sync()
 
     # We move to see the oob point and can pick it
     assert check_pick(webdriver, 400, 0, "oob") is True
 
     with webdriver.viewer.txn() as s:
-        s.position = [10, 0, 0]
+        s.position = [0, 0, 0]
     webdriver.sync()
 
     # When the oob point is no longer visible, we shouldn't be able to pick it anymore
