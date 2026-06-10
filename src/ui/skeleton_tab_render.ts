@@ -109,14 +109,12 @@ export function buildSpatialSkeletonSegmentRenderState(
     if (info === undefined) return false;
     const { node, type, isLeaf, description } = info;
     return (
-      (options.nodeFilterType === SpatialSkeletonNodeFilterType.NONE ||
-        matchesSpatialSkeletonNodeFilter(options.nodeFilterType, {
-          isLeaf,
-          nodeHasDescription: hasNonEmptyNodeDescription(description),
-          nodeIsTrueEnd: node.isTrueEnd ?? false,
-          nodeType: type,
-        })) &&
-      nodeMatchesFilter(node, options.filterText, description)
+      matchesSpatialSkeletonNodeFilter(options.nodeFilterType, {
+        isLeaf,
+        nodeHasDescription: hasNonEmptyNodeDescription(description),
+        nodeIsTrueEnd: node.isTrueEnd ?? false,
+        nodeType: type,
+      }) && nodeMatchesFilter(node, options.filterText, description)
     );
   };
 
@@ -147,11 +145,12 @@ export function buildSpatialSkeletonSegmentRenderState(
   }
 
   // Stage 2: among matched nodes, plain regular chain nodes are collapsed from the
-  // display list when no filter is active. An active filter means the user explicitly
-  // searched for something, so every match should be shown.
+  // display list under the Default filter with no search text. Any other filter
+  // or active search text means the user explicitly narrowed the view, so every
+  // match is shown including regular chain nodes.
   const hasActiveFilter =
     options.filterText.length > 0 ||
-    options.nodeFilterType !== SpatialSkeletonNodeFilterType.NONE;
+    options.nodeFilterType !== SpatialSkeletonNodeFilterType.DEFAULT;
 
   const isCollapsedFromDisplay = (nodeId: number): boolean => {
     if (hasActiveFilter) return false;

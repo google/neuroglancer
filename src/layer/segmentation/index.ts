@@ -718,7 +718,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   spatialSkeletonNodeQuery = new TrackableValue<string>("", verifyString);
   spatialSkeletonNodeFilter = new TrackableEnum(
     SpatialSkeletonNodeFilterType,
-    SpatialSkeletonNodeFilterType.NONE,
+    SpatialSkeletonNodeFilterType.DEFAULT,
   );
   ignoreNullVisibleSet = new TrackableBoolean(true, true);
   skeletonRenderingOptions = new SkeletonRenderingOptions();

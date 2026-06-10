@@ -24,6 +24,7 @@ export enum SpatialSkeletonDisplayNodeType {
 }
 
 export enum SpatialSkeletonNodeFilterType {
+  DEFAULT,
   NONE,
   LEAF,
   VIRTUAL_END,
@@ -55,6 +56,8 @@ export function getSpatialSkeletonNodeFilterLabel(
   filterType: SpatialSkeletonNodeFilterType,
 ) {
   switch (filterType) {
+    case SpatialSkeletonNodeFilterType.DEFAULT:
+      return "Default";
     case SpatialSkeletonNodeFilterType.NONE:
       return "None";
     case SpatialSkeletonNodeFilterType.LEAF:
@@ -78,6 +81,7 @@ export function matchesSpatialSkeletonNodeFilter(
   },
 ) {
   switch (filterType) {
+    case SpatialSkeletonNodeFilterType.DEFAULT:
     case SpatialSkeletonNodeFilterType.NONE:
       return true;
     case SpatialSkeletonNodeFilterType.LEAF:
