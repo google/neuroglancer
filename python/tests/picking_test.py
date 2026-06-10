@@ -198,18 +198,26 @@ def test_pick_2d_oob_clear(webdriver: neuroglancer.webdriver.Webdriver) -> None:
     with webdriver.viewer.config_state.txn() as s:
         s.pick_radius = 100
 
+    # The geometry below must be derived from the actual panel size.
+    # Hard-coded coordinates can leave the "out of bounds"
+    # point still inside a wide panel, or legitimately pickable.
+    panel_half_width = webdriver.driver.execute_script("return window.innerWidth") // 2
+    oob_point_x = panel_half_width + 200
+    visible_position_x = oob_point_x - (panel_half_width - 70)
+    click_offset_x = panel_half_width - 140
+
     with webdriver.viewer.txn() as s:
         s.layers["a"].annotations.append(
-            neuroglancer.PointAnnotation(id="oob", point=[500, 0, 0])
+            neuroglancer.PointAnnotation(id="oob", point=[oob_point_x, 0, 0])
         )
-        s.position = [30, 0, 0]
+        s.position = [visible_position_x, 0, 0]
     webdriver.sync()
 
     # We move to see the oob point and can pick it
-    assert check_pick(webdriver, 400, 0, "oob") is True
+    assert check_pick(webdriver, click_offset_x, 0, "oob") is True
 
     with webdriver.viewer.txn() as s:
-        s.position = [0, 0, 0]
+        s.position = [visible_position_x - 140, 0]
     webdriver.sync()
 
     # When the oob point is no longer visible, we shouldn't be able to pick it anymore
