@@ -34,6 +34,7 @@ import type {
 import { registerRedrawWhenSegmentationDisplayStateChanged } from "#src/segmentation_display_state/frontend.js";
 import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
 import type {
+  FrontendTransformedSource,
   SliceView,
   SliceViewSingleResolutionSource,
 } from "#src/sliceview/frontend.js";
@@ -119,6 +120,9 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
   // shares the underlying GPU resource across consumers.
   private brushHashTableManager = new HashMapShaderManager("brushStroke");
   private gpuBrushHashTable: GPUHashTable<HashMapUint64> | undefined;
+  // Running min of per-source physical voxel size (meters) → the finest
+  // (level-0) base, used to derive the brush-overlay downsample factor.
+  private brushFinestVoxelSize: Float32Array | undefined;
 
   constructor(
     multiscaleSource: MultiscaleVolumeChunkSource,
@@ -288,14 +292,22 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
       // surprises at half-integer slice positions.
       builder.addVarying("highp vec3", "vBrushWorldPos");
       builder.addVertexMain("vBrushWorldPos = position;");
+      // `vBrushWorldPos` is the vertex position in THIS source's voxel grid,
+      // which equals full-res only at level 0. The brush hash is keyed in
+      // full-res (model) voxels, so convert per source before hashing:
+      //   fullResVoxel = position * scale
+      // scale = the source's downsample factor relative to level 0 (1, 2, … 16),
+      // set per-source in `setupSourceUniforms`. Without this, the eraser's
+      // segment-suppression (which runs in THIS shader, unlike paint which
+      // rides the separate overlay quad) misses at every coarse zoom.
+      builder.addUniform("highp vec3", "uBrushSourceScale");
     }
     const brushLookup = hasBrushOverlay
       ? `
       {
-        // floor(x) to derive the integer voxel index from the fragment's
-        // world position, matching the CPU brush hash (getBrushKey does
-        // coord >>> 0).
-        uvec3 brushVoxel = uvec3(floor(vBrushWorldPos));
+        // Integer full-res voxel index under this fragment, matching the CPU
+        // brush hash (getBrushKey does coord >>> 0). See uBrushSourceScale.
+        uvec3 brushVoxel = uvec3(floor(vBrushWorldPos * uBrushSourceScale));
         uint x1 = brushVoxel.x;
         uint y1 = brushVoxel.y;
         uint z1 = brushVoxel.z;
@@ -589,6 +601,41 @@ uint64_t getMappedObjectId(uint64_t value) {
       this.segmentStatedColorShaderManager.disable(gl, shader);
     }
     super.endSlice(sliceView, shader, parameters);
+  }
+
+  override setupSourceUniforms(
+    gl: WebGL2RenderingContext,
+    shader: ShaderProgram,
+    transformedSource: FrontendTransformedSource,
+  ) {
+    if (this.gpuBrushHashTable === undefined) return;
+    // `effectiveVoxelSize` is the source's PHYSICAL voxel size (meters), not a
+    // dimensionless factor. The brush hash is keyed in level-0 voxel indices,
+    // so the conversion factor is the RATIO to the finest level:
+    //   factor = effectiveVoxelSize_L / effectiveVoxelSize_0  (1, 2, 4, … 16)
+    // Sources are visited finest-first, so a running min captures the level-0
+    // base on the first source. (Assumes isotropic display axes.)
+    //
+    // No offset is needed: `vBrushWorldPos` is the raw source-voxel position,
+    // and the level's OME translation (the pyramid's (f-1)/2) plus
+    // neuroglancer's -scale/2 corner correction are already baked into the
+    // projection, so `position * factor` points at the same full-res voxel
+    // level 0 sees.
+    const v = transformedSource.effectiveVoxelSize;
+    let base = this.brushFinestVoxelSize;
+    if (base === undefined) {
+      base = this.brushFinestVoxelSize = Float32Array.from(v.subarray(0, 3));
+    } else {
+      for (let i = 0; i < 3; i++) {
+        if (v[i] > 0 && v[i] < base[i]) base[i] = v[i];
+      }
+    }
+    gl.uniform3f(
+      shader.uniform("uBrushSourceScale"),
+      base[0] > 0 ? v[0] / base[0] : 1,
+      base[1] > 0 ? v[1] / base[1] : 1,
+      base[2] > 0 ? v[2] / base[2] : 1,
+    );
   }
 
   override getValueAt(globalPosition: Float32Array) {

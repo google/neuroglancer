@@ -550,6 +550,19 @@ void main() {
     parameters;
   }
 
+  // Per-source hook, called once per visible source with that source's shader
+  // bound. Lets a subclass set uniforms that depend on the source's resolution
+  // (e.g. the brush-overlay full-res voxel conversion). No-op unless overridden.
+  setupSourceUniforms(
+    gl: WebGL2RenderingContext,
+    shader: ShaderProgram,
+    transformedSource: FrontendTransformedSource,
+  ) {
+    gl;
+    shader;
+    transformedSource;
+  }
+
   draw(renderContext: SliceViewRenderContext) {
     const { sliceView } = renderContext;
     const layerInfo = sliceView.visibleLayers.get(this)!;
@@ -635,6 +648,7 @@ void main() {
         transformedSource,
         chunkLayout,
       );
+      this.setupSourceUniforms(gl, shader, transformedSource);
       if (chunkFormat !== null) {
         chunkFormat.beginSource(gl, shader);
       }

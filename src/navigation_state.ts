@@ -244,6 +244,7 @@ export class Position extends RefCounted {
     const prevCoordinates = this.coordinates_;
     const { ids, scales: newScales } = coordinateSpace;
     const { ids: prevDimensionIds, scales: oldScales } = prevCoordinateSpace;
+    const { voxelCenterAtIntegerCoordinates } = coordinateSpace.bounds;
     for (let newDim = 0; newDim < rank; ++newDim) {
       const newDimId = ids[newDim];
       const oldDim = prevDimensionIds.indexOf(newDimId);
@@ -255,6 +256,17 @@ export class Position extends RefCounted {
       } else {
         newCoordinates[newDim] =
           prevCoordinates[oldDim] * (oldScales[oldDim] / newScales[newDim]);
+      }
+      // Re-snap to the voxel center. Rescaling by a scale ratio (or taking
+      // the bounding-box center) generally lands between voxels; leaving the
+      // position fractional makes the rendered cross-section sit between two
+      // integer slices, so a brush stroke (which rounds to the nearest voxel)
+      // can commit to a different z than the slice the user believes they are
+      // on. Match the initial-load snap above.
+      if (voxelCenterAtIntegerCoordinates[newDim]) {
+        newCoordinates[newDim] = Math.round(newCoordinates[newDim]);
+      } else {
+        newCoordinates[newDim] = Math.floor(newCoordinates[newDim]) + 0.5;
       }
     }
     this.coordinates_ = newCoordinates;
