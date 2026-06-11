@@ -40,10 +40,6 @@ import {
 
 const emptyParsePreprocessing = { stringLiteralIds: new Map<string, number>() };
 
-function addShaderStringTypeDefinition(code: string) {
-  return code;
-}
-
 describe("stripComments", () => {
   it("handles code without comments", () => {
     const code = `int val;
@@ -139,7 +135,7 @@ void main() {
 `;
     expect(parseShaderUiControls(code)).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(code),
+      code: code,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map(),
@@ -161,7 +157,7 @@ void main() {
 `;
     expect(parseShaderUiControls(code)).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -197,7 +193,7 @@ void main() {
 `;
     expect(parseShaderUiControls(code)).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -220,7 +216,7 @@ void main() {
 `;
     expect(parseShaderUiControls(code)).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [
         {
@@ -247,7 +243,7 @@ void main() {
 `;
     expect(parseShaderUiControls(code)).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -281,7 +277,7 @@ void main() {
       }),
     ).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -319,7 +315,7 @@ void main() {
       }),
     ).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -357,7 +353,7 @@ void main() {
       }),
     ).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -395,7 +391,7 @@ void main() {
       }),
     ).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -433,7 +429,7 @@ void main() {
       }),
     ).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -471,7 +467,7 @@ void main() {
       }),
     ).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -513,7 +509,7 @@ void main() {
       }),
     ).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -556,7 +552,7 @@ void main() {
       }),
     ).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -599,7 +595,7 @@ void main() {
       }),
     ).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -642,7 +638,7 @@ void main() {
       }),
     ).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -681,7 +677,7 @@ void main() {
       }),
     ).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -719,7 +715,7 @@ void main() {
       }),
     ).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -757,7 +753,7 @@ void main() {
       }),
     ).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -795,7 +791,7 @@ void main() {
       }),
     ).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -836,7 +832,7 @@ void main() {
       }),
     ).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -877,7 +873,7 @@ void main() {
       }),
     ).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -926,7 +922,7 @@ void main() {
       }),
     ).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -973,7 +969,7 @@ void main() {
       }),
     ).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -1126,7 +1122,7 @@ void main() {
 `;
     expect(parseShaderUiControls(code)).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -1156,7 +1152,7 @@ void main() {
 `;
     expect(parseShaderUiControls(code)).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
@@ -1260,7 +1256,7 @@ void main() {
 `;
     expect(parseShaderUiControls(code)).toEqual({
       source: code,
-      code: addShaderStringTypeDefinition(newCode),
+      code: newCode,
       preprocessing: emptyParsePreprocessing,
       errors: [],
       controls: new Map([
