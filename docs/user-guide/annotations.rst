@@ -372,22 +372,15 @@ active on the selected layer:
 
 .. _annotation-custom-hotkeys:
 
-Custom hotkeys (advanced)
+Custom hotkeys
 -------------------------
 
 Mainline neuroglancer does **not** include built-in hotkeys for
 cycling through annotations (for example, "next annotation" /
-"previous annotation"). To get this behaviour, users must add custom
-bindings.
-
-This is done by overriding ``inputEventBindings`` in the viewer JSON
-state, which lets you map additional key combinations to existing
-actions. See the JSON API documentation for the binding format and
-the list of available actions.
+"previous annotation"). 
 
 Forks or downstream deployments of neuroglancer may bundle additional
-default bindings for annotation navigation; the workflow above is
-required only on mainline.
+default bindings for annotation navigation.
 
 .. _linked-segmentations:
 
