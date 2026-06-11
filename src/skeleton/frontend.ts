@@ -955,9 +955,10 @@ void emitDefault() {
   drawSkeletons(
     gl: GL,
     edgeShader: ShaderProgram,
-    nodeShader: ShaderProgram | null,
+    nodeShader: ShaderProgram,
     skeletonGpuGeometry: SkeletonGPUGeometry,
     projectionParameters: { width: number; height: number },
+    drawNodes: boolean,
   ) {
     // Bind vertex attribute textures to be used across edge and node shaders
     // The edge shader and node shader share the same texture unit for each attribute
@@ -998,7 +999,7 @@ void emitDefault() {
     }
 
     // Draw nodes if in line and node mode
-    if (nodeShader !== null) {
+    if (drawNodes) {
       nodeShader.bind();
       initializeCircleShader(nodeShader, projectionParameters, {
         featherWidthInPixels: this.targetIsSliceView ? 1.0 : 0.0,
@@ -1330,6 +1331,9 @@ export class SkeletonLayer extends RefCounted implements SkeletonShaderContext {
 
     const { shaderControlState } = this.displayState.skeletonRenderingOptions;
 
+    const drawNodes =
+      renderOptions.mode.value === SkeletonRenderMode.LINES_AND_POINTS;
+
     edgeShader.bind();
     renderHelper.beginLayer(gl, edgeShader, renderContext, modelMatrix);
     renderHelper.setPickInstanceStride(gl, edgeShader, 0);
@@ -1340,17 +1344,23 @@ export class SkeletonLayer extends RefCounted implements SkeletonShaderContext {
       edgeShaderParameters.parseResult.controls,
     );
     gl.uniform1f(edgeShader.uniform("uLineWidth"), lineWidth!);
-
-    nodeShader.bind();
-    renderHelper.beginLayer(gl, nodeShader, renderContext, modelMatrix);
-    gl.uniform1f(nodeShader.uniform("uNodeDiameter"), pointDiameter);
-    renderHelper.setPickInstanceStride(gl, nodeShader, 0);
-    setControlsInShader(
-      gl,
-      nodeShader,
-      shaderControlState,
-      nodeShaderParameters.parseResult.controls,
+    gl.uniform1f(
+      edgeShader.uniform("uLineEndpointClipRadius"),
+      drawNodes ? pointDiameter / 2 : 0,
     );
+
+    if (drawNodes) {
+      nodeShader.bind();
+      renderHelper.beginLayer(gl, nodeShader, renderContext, modelMatrix);
+      gl.uniform1f(nodeShader.uniform("uNodeDiameter"), pointDiameter);
+      renderHelper.setPickInstanceStride(gl, nodeShader, 0);
+      setControlsInShader(
+        gl,
+        nodeShader,
+        shaderControlState,
+        nodeShaderParameters.parseResult.controls,
+      );
+    }
 
     const skeletons = source.chunks;
 
@@ -1371,14 +1381,18 @@ export class SkeletonLayer extends RefCounted implements SkeletonShaderContext {
         if (color !== undefined) {
           edgeShader.bind();
           renderHelper.setColor(gl, edgeShader, color);
-          nodeShader.bind();
-          renderHelper.setColor(gl, nodeShader, color);
+          if (drawNodes) {
+            nodeShader.bind();
+            renderHelper.setColor(gl, nodeShader, color);
+          }
         }
         if (pickIndex !== undefined) {
           edgeShader.bind();
           renderHelper.setPickID(gl, edgeShader, pickIndex);
-          nodeShader.bind();
-          renderHelper.setPickID(gl, nodeShader, pickIndex);
+          if (drawNodes) {
+            nodeShader.bind();
+            renderHelper.setPickID(gl, nodeShader, pickIndex);
+          }
         }
         renderHelper.drawSkeletons(
           gl,
@@ -1386,6 +1400,7 @@ export class SkeletonLayer extends RefCounted implements SkeletonShaderContext {
           nodeShader,
           skeleton,
           renderContext.projectionParameters,
+          drawNodes,
         );
       },
     );
@@ -2786,6 +2801,7 @@ export class SpatiallyIndexedSkeletonLayer
     modelMatrix: mat4,
     lineWidth: number,
     pointDiameter: number,
+    renderMode: SkeletonRenderMode,
     excludedGPUTable?: GPUHashTable<HashSetUint64>,
   ):
     | {
@@ -2811,6 +2827,7 @@ export class SpatiallyIndexedSkeletonLayer
       nodeShaderResult;
     if (edgeShader === null || nodeShader === null) return undefined;
 
+    const drawNodes = renderMode === SkeletonRenderMode.LINES_AND_POINTS;
     const { shaderControlState } = this.displayState.skeletonRenderingOptions;
 
     edgeShader.bind();
@@ -2818,7 +2835,7 @@ export class SpatiallyIndexedSkeletonLayer
     gl.uniform1f(edgeShader.uniform("uLineWidth"), lineWidth);
     gl.uniform1f(
       edgeShader.uniform("uLineEndpointClipRadius"),
-      pointDiameter / 2,
+      drawNodes ? pointDiameter / 2 : 0,
     );
     renderHelper.setPickInstanceStride(gl, edgeShader, 0);
     setControlsInShader(
@@ -2835,25 +2852,32 @@ export class SpatiallyIndexedSkeletonLayer
       excludedGPUTable,
     );
 
-    nodeShader.bind();
-    renderHelper.beginLayer(gl, nodeShader, renderContext, modelMatrix);
-    gl.uniform1f(nodeShader.uniform("uNodeDiameter"), pointDiameter);
-    renderHelper.setPickInstanceStride(gl, nodeShader, 0);
-    setControlsInShader(
+    if (drawNodes) {
+      nodeShader.bind();
+      renderHelper.beginLayer(gl, nodeShader, renderContext, modelMatrix);
+      gl.uniform1f(nodeShader.uniform("uNodeDiameter"), pointDiameter);
+      renderHelper.setPickInstanceStride(gl, nodeShader, 0);
+      setControlsInShader(
+        gl,
+        nodeShader,
+        shaderControlState,
+        nodeShaderParameters.parseResult.controls,
+      );
+      renderHelper.setColor(gl, nodeShader, kOneVec4);
+      renderHelper.maybeEnableDynamicSegmentAppearance(
+        gl,
+        nodeShader,
+        skeletonParams,
+        excludedGPUTable,
+      );
+    }
+
+    return {
       gl,
-      nodeShader,
-      shaderControlState,
-      nodeShaderParameters.parseResult.controls,
-    );
-    renderHelper.setColor(gl, nodeShader, kOneVec4);
-    renderHelper.maybeEnableDynamicSegmentAppearance(
-      gl,
+      edgeShader,
       nodeShader,
       skeletonParams,
-      excludedGPUTable,
-    );
-
-    return { gl, edgeShader, nodeShader, skeletonParams };
+    };
   }
 
   private endSkeletonRenderPass(
@@ -2862,17 +2886,20 @@ export class SpatiallyIndexedSkeletonLayer
     edgeShader: ShaderProgram,
     nodeShader: ShaderProgram,
     skeletonParams: SkeletonShaderParameters,
+    drawNodes: boolean,
   ) {
     renderHelper.maybeDisableDynamicSegmentAppearance(
       gl,
       edgeShader,
       skeletonParams,
     );
-    renderHelper.maybeDisableDynamicSegmentAppearance(
-      gl,
-      nodeShader,
-      skeletonParams,
-    );
+    if (drawNodes) {
+      renderHelper.maybeDisableDynamicSegmentAppearance(
+        gl,
+        nodeShader,
+        skeletonParams,
+      );
+    }
     renderHelper.endLayer(gl, edgeShader, nodeShader);
   }
 
@@ -2883,6 +2910,7 @@ export class SpatiallyIndexedSkeletonLayer
     modelMatrix: mat4,
     lineWidth: number,
     pointDiameter: number,
+    renderMode: SkeletonRenderMode,
     visibleChunks: VisibleChunk[],
   ) {
     if (visibleChunks.length === 0) return;
@@ -2894,20 +2922,24 @@ export class SpatiallyIndexedSkeletonLayer
       modelMatrix,
       lineWidth,
       pointDiameter,
+      renderMode,
       hasExcludedSegments ? this.gpuBrowseExcludedSegmentsHashTable : undefined,
     );
     if (passState === undefined) return;
     const { gl, edgeShader, nodeShader, skeletonParams } = passState;
+    const drawNodes = renderMode === SkeletonRenderMode.LINES_AND_POINTS;
 
-    nodeShader.bind();
-    gl.uniform3fv(
-      nodeShader.uniform("uSelectedNodeOutlineColor"),
-      this.getSelectedNodeOutlineColor(),
-    );
-    gl.uniform1i(
-      nodeShader.uniform("uSelectedNodeId"),
-      this.selectedNodeInfo?.value?.nodeId ?? -1,
-    );
+    if (drawNodes) {
+      nodeShader.bind();
+      gl.uniform3fv(
+        nodeShader.uniform("uSelectedNodeOutlineColor"),
+        this.getSelectedNodeOutlineColor(),
+      );
+      gl.uniform1i(
+        nodeShader.uniform("uSelectedNodeId"),
+        this.selectedNodeInfo?.value?.nodeId ?? -1,
+      );
+    }
 
     const chunkOrigin = vec3.create();
     const chunkBound = vec3.create();
@@ -2917,8 +2949,10 @@ export class SpatiallyIndexedSkeletonLayer
         vec3.add(chunkBound, chunkOrigin, chunkLayout.size);
         edgeShader.bind();
         renderHelper.setChunkBounds(gl, edgeShader, chunkOrigin, chunkBound);
-        nodeShader.bind();
-        renderHelper.setChunkBounds(gl, nodeShader, chunkOrigin, chunkBound);
+        if (drawNodes) {
+          nodeShader.bind();
+          renderHelper.setChunkBounds(gl, nodeShader, chunkOrigin, chunkBound);
+        }
       }
       if (renderContext.emitPickID) {
         let edgePickId = 0;
@@ -2937,7 +2971,7 @@ export class SpatiallyIndexedSkeletonLayer
           );
           edgePickStride = 1;
         }
-        if (chunk.numVertices > 0) {
+        if (chunk.numVertices > 0 && drawNodes) {
           nodePickId = renderContext.pickIDs.register(
             layer,
             chunk.numVertices,
@@ -2952,11 +2986,16 @@ export class SpatiallyIndexedSkeletonLayer
         edgeShader.bind();
         renderHelper.setPickID(gl, edgeShader, edgePickId);
         renderHelper.setPickInstanceStride(gl, edgeShader, edgePickStride);
-        nodeShader.bind();
-        renderHelper.setPickID(gl, nodeShader, nodePickId);
-        renderHelper.setPickInstanceStride(gl, nodeShader, nodePickStride);
+        if (drawNodes) {
+          nodeShader.bind();
+          renderHelper.setPickID(gl, nodeShader, nodePickId);
+          renderHelper.setPickInstanceStride(gl, nodeShader, nodePickStride);
+        }
       }
+
       // Render each chunk with different node/edge colors for debugging
+      // this is kept in addition to the wireframe because of cross
+      // chunk edge double drawing issues
       if (DEBUG_SPATIAL_SKELETON_CHUNKS) {
         const chunkKey = `${chunk.chunkGridPosition[0]},${chunk.chunkGridPosition[1]},${chunk.chunkGridPosition[2]}`;
         let randomColor = tempChunkKeyToColorMap.get(chunkKey);
@@ -2973,11 +3012,13 @@ export class SpatiallyIndexedSkeletonLayer
           tempChunkKeyToColorMap.set(chunkKey, randomColor);
         }
         if (skeletonParams.hasSegmentDefaultColor) {
-          nodeShader.bind();
-          gl.uniform3fv(
-            nodeShader.uniform("uSegmentDefaultColor"),
-            randomColor,
-          );
+          if (drawNodes) {
+            nodeShader.bind();
+            gl.uniform3fv(
+              nodeShader.uniform("uSegmentDefaultColor"),
+              randomColor,
+            );
+          }
           edgeShader.bind();
           gl.uniform3fv(
             edgeShader.uniform("uSegmentDefaultColor"),
@@ -2985,12 +3026,14 @@ export class SpatiallyIndexedSkeletonLayer
           );
         }
       }
+
       renderHelper.drawSkeletons(
         gl,
         edgeShader,
         nodeShader,
         chunk,
         renderContext.projectionParameters,
+        drawNodes,
       );
     }
     this.endSkeletonRenderPass(
@@ -2999,6 +3042,7 @@ export class SpatiallyIndexedSkeletonLayer
       edgeShader,
       nodeShader,
       skeletonParams,
+      drawNodes,
     );
   }
 
@@ -3009,6 +3053,7 @@ export class SpatiallyIndexedSkeletonLayer
     modelMatrix: mat4,
     lineWidth: number,
     pointDiameter: number,
+    renderMode: SkeletonRenderMode,
   ) {
     const overlayChunk = this.resolveSourceBackedOverlayChunk();
     if (overlayChunk === undefined) return;
@@ -3018,19 +3063,23 @@ export class SpatiallyIndexedSkeletonLayer
       modelMatrix,
       lineWidth,
       pointDiameter,
+      renderMode,
     );
     if (passState === undefined) return;
     const { gl, edgeShader, nodeShader, skeletonParams } = passState;
+    const drawNodes = renderMode === SkeletonRenderMode.LINES_AND_POINTS;
 
-    nodeShader.bind();
-    gl.uniform3fv(
-      nodeShader.uniform("uSelectedNodeOutlineColor"),
-      this.getSelectedNodeOutlineColor(),
-    );
-    gl.uniform1i(
-      nodeShader.uniform("uSelectedNodeId"),
-      this.selectedNodeInfo?.value?.nodeId ?? -1,
-    );
+    if (drawNodes) {
+      nodeShader.bind();
+      gl.uniform3fv(
+        nodeShader.uniform("uSelectedNodeOutlineColor"),
+        this.getSelectedNodeOutlineColor(),
+      );
+      gl.uniform1i(
+        nodeShader.uniform("uSelectedNodeId"),
+        this.selectedNodeInfo?.value?.nodeId ?? -1,
+      );
+    }
 
     if (renderContext.emitPickID) {
       const edgePickId =
@@ -3055,30 +3104,32 @@ export class SpatiallyIndexedSkeletonLayer
         edgePickId === 0 ? 0 : 1,
       );
 
-      const nodePickId =
-        overlayChunk.numVertices > 0 &&
-        overlayChunk.pickNodeIds !== undefined &&
-        overlayChunk.pickNodePositions !== undefined &&
-        overlayChunk.pickSegmentIds !== undefined
-          ? renderContext.pickIDs.register(
-              layer,
-              overlayChunk.numVertices,
-              0n,
-              {
-                kind: "node",
-                nodeIds: overlayChunk.pickNodeIds,
-                nodePositions: overlayChunk.pickNodePositions,
-                segmentIds: overlayChunk.pickSegmentIds,
-              } satisfies SpatiallyIndexedSkeletonPickData,
-            )
-          : 0;
-      nodeShader.bind();
-      renderHelper.setPickID(gl, nodeShader, nodePickId);
-      renderHelper.setPickInstanceStride(
-        gl,
-        nodeShader,
-        nodePickId === 0 ? 0 : 1,
-      );
+      if (drawNodes) {
+        const nodePickId =
+          overlayChunk.numVertices > 0 &&
+          overlayChunk.pickNodeIds !== undefined &&
+          overlayChunk.pickNodePositions !== undefined &&
+          overlayChunk.pickSegmentIds !== undefined
+            ? renderContext.pickIDs.register(
+                layer,
+                overlayChunk.numVertices,
+                0n,
+                {
+                  kind: "node",
+                  nodeIds: overlayChunk.pickNodeIds,
+                  nodePositions: overlayChunk.pickNodePositions,
+                  segmentIds: overlayChunk.pickSegmentIds,
+                } satisfies SpatiallyIndexedSkeletonPickData,
+              )
+            : 0;
+        nodeShader.bind();
+        renderHelper.setPickID(gl, nodeShader, nodePickId);
+        renderHelper.setPickInstanceStride(
+          gl,
+          nodeShader,
+          nodePickId === 0 ? 0 : 1,
+        );
+      }
     }
 
     renderHelper.drawSkeletons(
@@ -3087,6 +3138,7 @@ export class SpatiallyIndexedSkeletonLayer
       nodeShader,
       overlayChunk,
       renderContext.projectionParameters,
+      drawNodes,
     );
     this.endSkeletonRenderPass(
       renderHelper,
@@ -3094,6 +3146,7 @@ export class SpatiallyIndexedSkeletonLayer
       edgeShader,
       nodeShader,
       skeletonParams,
+      drawNodes,
     );
   }
 
@@ -3127,6 +3180,7 @@ export class SpatiallyIndexedSkeletonLayer
       modelMatrix,
       lineWidth,
       pointDiameter,
+      renderOptions.mode.value,
       visibleChunks,
     );
     this.drawInspectionOverlayPass(
@@ -3136,6 +3190,7 @@ export class SpatiallyIndexedSkeletonLayer
       modelMatrix,
       lineWidth,
       pointDiameter,
+      renderOptions.mode.value,
     );
   }
 
