@@ -42,7 +42,7 @@ export interface LayerControlLabelOptions<
 
 export interface LayerControlFactory<
   LayerType extends UserLayer,
-  ControlType = unknown,
+  ControlType = any,
 > {
   makeControl: (
     layer: LayerType,
@@ -65,7 +65,7 @@ export interface LayerControlFactory<
 
 export interface LayerControlDefinition<
   LayerType extends UserLayer,
-  ControlType = unknown,
+  ControlType = any,
 > extends LayerControlLabelOptions<LayerType>,
     LayerControlFactory<LayerType, ControlType> {}
 

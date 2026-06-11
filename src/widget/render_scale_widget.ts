@@ -74,6 +74,7 @@ export class RenderScaleWidget extends RefCounted {
   legendSpatialScale = document.createElement("div");
   legendChunks = document.createElement("div");
   protected logScaleOrigin = renderScaleHistogramOrigin;
+  protected logScaleBinSize = renderScaleHistogramBinSize;
   protected unitOfTarget = "px";
   private ctx = this.canvas.getContext("2d")!;
   hoverTarget = new WatchableValue<[number, number] | undefined>(undefined);
@@ -94,8 +95,7 @@ export class RenderScaleWidget extends RefCounted {
     }
     this.hoverTarget.value = undefined;
     const logScaleMax = Math.round(
-      this.logScaleOrigin +
-        numRenderScaleHistogramBins * renderScaleHistogramBinSize,
+      this.logScaleOrigin + numRenderScaleHistogramBins * this.logScaleBinSize,
     );
     const targetValue = clampToInterval(
       [2 ** this.logScaleOrigin, 2 ** (logScaleMax - 1)],
@@ -145,7 +145,11 @@ export class RenderScaleWidget extends RefCounted {
     const getTargetValue = (event: MouseEvent) => {
       const position =
         (event.offsetX / canvas.width) * numRenderScaleHistogramBins;
-      return getRenderScaleFromHistogramOffset(position, this.logScaleOrigin);
+      return getRenderScaleFromHistogramOffset(
+        position,
+        this.logScaleOrigin,
+        this.logScaleBinSize,
+      );
     };
     this.registerEventListener(canvas, "pointermove", (event: MouseEvent) => {
       this.hoverTarget.value = [getTargetValue(event), event.offsetY];
@@ -190,6 +194,16 @@ export class RenderScaleWidget extends RefCounted {
   reset() {
     this.hoverTarget.value = undefined;
     this.target.reset();
+  }
+
+  protected getLegendChunkCounts(
+    totalPresent: number,
+    totalNotPresent: number,
+  ) {
+    return {
+      presentCount: totalPresent,
+      totalCount: totalPresent + totalNotPresent,
+    };
   }
 
   updateView() {
@@ -256,7 +270,11 @@ export class RenderScaleWidget extends RefCounted {
     let hoverSpatialScale: number | undefined = undefined;
     if (hoverValue !== undefined) {
       const i = Math.floor(
-        getRenderScaleHistogramOffset(hoverValue[0], this.logScaleOrigin),
+        getRenderScaleHistogramOffset(
+          hoverValue[0],
+          this.logScaleOrigin,
+          this.logScaleBinSize,
+        ),
       );
       if (i >= 0 && i < numRenderScaleHistogramBins) {
         let sum = 0;
@@ -305,10 +323,10 @@ export class RenderScaleWidget extends RefCounted {
     } else {
       this.legendSpatialScale.textContent = "";
     }
+    const { presentCount: legendPresentCount, totalCount: legendTotalCount } =
+      this.getLegendChunkCounts(totalPresent, totalNotPresent);
 
-    this.legendChunks.textContent = `${totalPresent}/${
-      totalPresent + totalNotPresent
-    }`;
+    this.legendChunks.textContent = `${legendPresentCount}/${legendTotalCount}`;
 
     const spatialScaleColors = sortedSpatialScales.map((spatialScale) => {
       const saturation = spatialScale === hoverSpatialScale ? 0.5 : 1;
@@ -357,7 +375,11 @@ export class RenderScaleWidget extends RefCounted {
       const value = targetValue;
       ctx.fillStyle = "#fff";
       const startOffset = binToCanvasX(
-        getRenderScaleHistogramOffset(value, this.logScaleOrigin),
+        getRenderScaleHistogramOffset(
+          value,
+          this.logScaleOrigin,
+          this.logScaleBinSize,
+        ),
       );
       const lineWidth = 1;
       ctx.fillRect(Math.floor(startOffset), 0, lineWidth, height);
@@ -367,7 +389,11 @@ export class RenderScaleWidget extends RefCounted {
       const value = hoverValue[0];
       ctx.fillStyle = "#888";
       const startOffset = binToCanvasX(
-        getRenderScaleHistogramOffset(value, this.logScaleOrigin),
+        getRenderScaleHistogramOffset(
+          value,
+          this.logScaleOrigin,
+          this.logScaleBinSize,
+        ),
       );
       const lineWidth = 1;
       ctx.fillRect(Math.floor(startOffset), 0, lineWidth, height);

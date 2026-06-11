@@ -37,6 +37,10 @@ export function defineLineShader(builder: ShaderBuilder, rounded = false) {
   builder.addVarying("highp float", "vLineCoord");
   // max(1e-6, featherWidth) / (lineWidth + featherWidth)
   builder.addVarying("highp float", "vLineFeatherFraction");
+  builder.addVarying("highp float", "vLineOffsetX");
+  builder.addVarying("highp float", "vEdgeLengthInPixels");
+  builder.addVarying("highp float", "vHalfTotalLineWidth");
+  builder.addUniform("highp float", "uLineEndpointClipRadius");
   if (rounded) {
     // Fraction of total line length used by each endpoint.
     builder.addVarying("highp float", "vEndpointFraction");
@@ -85,6 +89,9 @@ void emitLine(vec4 vertexAClip, vec4 vertexBClip, float lineWidthInPixels
                      })
                   * totalLineWidth * uLineParams.xy;
   vLineCoord = lineOffset.y;
+  vLineOffsetX = lineOffset.x;
+  vEdgeLengthInPixels = linePixelLength;
+  vHalfTotalLineWidth = totalLineWidth * 0.5;
   ${
     rounded
       ? "vEndpointFraction = totalLineWidth / (linePixelLength + totalLineWidth * 2.0);"
@@ -126,6 +133,11 @@ vec4 getRoundedLineColor(vec4 interiorColor, vec4 borderColor) {
 
   builder.addFragmentCode(`
 float getLineAlpha() {
+  if (uLineEndpointClipRadius > 0.0) {
+    float distFromA = length(vec2(vLineOffsetX * vEdgeLengthInPixels, vLineCoord * vHalfTotalLineWidth));
+    float distFromB = length(vec2((1.0 - vLineOffsetX) * vEdgeLengthInPixels, vLineCoord * vHalfTotalLineWidth));
+    if (distFromA < uLineEndpointClipRadius || distFromB < uLineEndpointClipRadius) discard;
+  }
   return clamp((1.0 - abs(vLineCoord)) / vLineFeatherFraction, 0.0, 1.0);
 }
 `);

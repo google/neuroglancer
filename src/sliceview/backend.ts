@@ -78,6 +78,9 @@ class SliceViewCounterpartBase extends SliceViewBase<
   SliceViewChunkSourceBackend,
   SliceViewRenderLayerBackend
 > {
+  protected invalidateVisibleSourcesBound = () =>
+    this.invalidateVisibleSources();
+
   constructor(rpc: RPC, options: any) {
     super(rpc.get(options.projectionParameters));
     this.initializeSharedObject(rpc, options.id);
@@ -158,6 +161,7 @@ export class SliceViewBackend extends SliceViewIntermediateBase {
         ++i
       ) {
         const tsource = visibleSources[i];
+        layer.prepareChunkSourceForRequest(tsource.source);
         const prefetchOffsets = chunkManager.queueManager.enablePrefetch.value
           ? getPrefetchChunkOffsets(this.velocityEstimator, tsource)
           : [];
@@ -244,7 +248,10 @@ export class SliceViewBackend extends SliceViewIntermediateBase {
     const layerInfo = visibleLayers.get(layer)!;
     visibleLayers.delete(layer);
     disposeTransformedSources(layerInfo.allSources);
-    layer.renderScaleTarget.changed.remove(this.invalidateVisibleSources);
+    layer.renderScaleTarget.changed.remove(this.invalidateVisibleSourcesBound);
+    for (const watchable of layer.visibleSourcesInvalidation) {
+      watchable.changed.remove(this.invalidateVisibleSourcesBound);
+    }
     layer.localPosition.changed.remove(this.handleLayerChanged);
     this.invalidateVisibleSources();
   }
@@ -268,6 +275,9 @@ export class SliceViewBackend extends SliceViewIntermediateBase {
       layer.renderScaleTarget.changed.add(() =>
         this.invalidateVisibleSources(),
       );
+      for (const watchable of layer.visibleSourcesInvalidation) {
+        watchable.changed.add(this.invalidateVisibleSourcesBound);
+      }
       layer.localPosition.changed.add(this.handleLayerChanged);
     } else {
       disposeTransformedSources(layerInfo.allSources);
@@ -413,6 +423,7 @@ export class SliceViewRenderLayerBackend
 {
   declare rpcId: number;
   renderScaleTarget: SharedWatchableValue<number>;
+  visibleSourcesInvalidation: SharedWatchableValue<unknown>[];
   localPosition: WatchableValueInterface<Float32Array>;
 
   numVisibleChunksNeeded: number;
@@ -424,12 +435,19 @@ export class SliceViewRenderLayerBackend
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.renderScaleTarget = rpc.get(options.renderScaleTarget);
+    this.visibleSourcesInvalidation = (
+      options.visibleSourcesInvalidation ?? []
+    ).map((id: number) => rpc.get(id));
     this.localPosition = rpc.get(options.localPosition);
     this.numVisibleChunksNeeded = 0;
     this.numVisibleChunksAvailable = 0;
     this.numPrefetchChunksAvailable = 0;
     this.numPrefetchChunksNeeded = 0;
     this.chunkManagerGeneration = -1;
+  }
+
+  prepareChunkSourceForRequest(_source: SliceViewChunkSourceBackend) {
+    // Override in subclasses to set per-request source state (e.g. LOD).
   }
 
   filterVisibleSources(
