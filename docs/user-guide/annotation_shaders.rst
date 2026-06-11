@@ -4,9 +4,7 @@ As with other elements of neuroglancer, one can write custom
 GLSL code to control the way annotations are rendered on the
 screen.  Technical documentation about how to set control
 different aspects of the annotations  
-`Can be found here <https://github.com/google/neuroglancer/blob/master/src/annotation/rendering.md>`_
-
-.
+`Can be found here <https://github.com/google/neuroglancer/blob/master/src/annotation/rendering.md>`_.
 
 This guide is a more gentle introduction to GLSL that will
 guide you through developing your first annotation shader code,
