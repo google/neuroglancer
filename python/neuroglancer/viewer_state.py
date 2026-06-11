@@ -649,6 +649,7 @@ def _linked_segmentation_color_group_value(x):
 
 @export
 class SkeletonNodeFilterType(enum.StrEnum):
+    DEFAULT = "default"
     NONE = "none"
     LEAF = "leaf"
     VIRTUAL_END = "virtual_end"

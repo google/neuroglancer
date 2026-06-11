@@ -121,7 +121,7 @@ describe("spatial skeleton edit tab render state", () => {
 
     const state = buildSpatialSkeletonSegmentRenderState(20380, graph, {
       filterText: "",
-      nodeFilterType: SpatialSkeletonNodeFilterType.NONE,
+      nodeFilterType: SpatialSkeletonNodeFilterType.DEFAULT,
       getNodeDescription() {
         return undefined;
       },
@@ -131,6 +131,26 @@ describe("spatial skeleton edit tab render state", () => {
     expect(state.displayedNodeCount).toBe(2);
     expect(state.branchCount).toBe(1);
     expect(state.rows.map((row) => row.node.nodeId)).toEqual([10, 12]);
+  });
+
+  it("shows all nodes including regular chain nodes when filter is None", () => {
+    const graph = buildSpatiallyIndexedSkeletonNavigationGraph([
+      makeNode(10, undefined),
+      makeNode(11, 10),
+      makeNode(12, 11),
+    ]);
+
+    const state = buildSpatialSkeletonSegmentRenderState(20380, graph, {
+      filterText: "",
+      nodeFilterType: SpatialSkeletonNodeFilterType.NONE,
+      getNodeDescription() {
+        return undefined;
+      },
+    });
+
+    expect(state.matchedNodeCount).toBe(3);
+    expect(state.displayedNodeCount).toBe(3);
+    expect(state.rows.map((row) => row.node.nodeId)).toEqual([10, 11, 12]);
   });
 
   it("treats node-type-only matches as disconnected visible branches", () => {
@@ -198,7 +218,7 @@ describe("spatial skeleton edit tab virtual list items", () => {
     const segmentState = {
       ...buildSpatialSkeletonSegmentRenderState(20380, graph, {
         filterText: "",
-        nodeFilterType: SpatialSkeletonNodeFilterType.NONE,
+        nodeFilterType: SpatialSkeletonNodeFilterType.DEFAULT,
         getNodeDescription() {
           return undefined;
         },

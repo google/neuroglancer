@@ -92,6 +92,20 @@ describe("skeleton node types", () => {
 
     expect(
       matchesSpatialSkeletonNodeFilter(
+        SpatialSkeletonNodeFilterType.DEFAULT,
+        rootLeaf,
+      ),
+    ).toBe(true);
+    expect(
+      matchesSpatialSkeletonNodeFilter(SpatialSkeletonNodeFilterType.DEFAULT, {
+        isLeaf: false,
+        nodeHasDescription: false,
+        nodeIsTrueEnd: false,
+        nodeType: SpatialSkeletonDisplayNodeType.REGULAR,
+      }),
+    ).toBe(true);
+    expect(
+      matchesSpatialSkeletonNodeFilter(
         SpatialSkeletonNodeFilterType.LEAF,
         rootLeaf,
       ),
