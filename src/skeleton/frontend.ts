@@ -992,10 +992,6 @@ void emitDefault() {
         projectionParameters,
         this.targetIsSliceView ? 1.0 : 0.0,
       );
-      gl.uniform3fv(
-        edgeShader.uniform("uSegmentDefaultColor"),
-        [1.0, 1.0, 1.0],
-      );
       drawLines(gl, 1, skeletonGpuGeometry.numIndices / 2);
       gl.vertexAttribDivisor(aVertexIndex, 0);
       gl.disableVertexAttribArray(aVertexIndex);
@@ -1007,7 +1003,7 @@ void emitDefault() {
       initializeCircleShader(nodeShader, projectionParameters, {
         featherWidthInPixels: this.targetIsSliceView ? 1.0 : 0.0,
       });
-      drawCircles(nodeShader.gl, 2, skeletonGpuGeometry.numVertices);
+      drawCircles(nodeShader.gl, 1, skeletonGpuGeometry.numVertices);
     }
   }
 
@@ -1828,7 +1824,9 @@ interface SelectedSkeletonNodeInfo {
 
 interface SpatiallyIndexedSkeletonLayerOptions {
   sources2d?: SpatiallyIndexedSkeletonSourceEntry[];
-  selectedNodeInfo?: WatchableValueInterface<SelectedSkeletonNodeInfo | undefined>;
+  selectedNodeInfo?: WatchableValueInterface<
+    SelectedSkeletonNodeInfo | undefined
+  >;
   pendingNodePositionVersion?: WatchableValueInterface<number>;
   getPendingNodePosition?: (nodeId: number) => ArrayLike<number> | undefined;
   getCachedNode?: (nodeId: number) => SpatiallyIndexedSkeletonNode | undefined;
