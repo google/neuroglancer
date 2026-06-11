@@ -992,6 +992,10 @@ void emitDefault() {
         projectionParameters,
         this.targetIsSliceView ? 1.0 : 0.0,
       );
+      gl.uniform3fv(
+        edgeShader.uniform("uSegmentDefaultColor"),
+        [1.0, 1.0, 1.0],
+      );
       drawLines(gl, 1, skeletonGpuGeometry.numIndices / 2);
       gl.vertexAttribDivisor(aVertexIndex, 0);
       gl.disableVertexAttribArray(aVertexIndex);
@@ -2814,6 +2818,10 @@ export class SpatiallyIndexedSkeletonLayer
     edgeShader.bind();
     renderHelper.beginLayer(gl, edgeShader, renderContext, modelMatrix);
     gl.uniform1f(edgeShader.uniform("uLineWidth"), lineWidth);
+    gl.uniform1f(
+      edgeShader.uniform("uLineEndpointClipRadius"),
+      pointDiameter / 2,
+    );
     renderHelper.setPickInstanceStride(gl, edgeShader, 0);
     setControlsInShader(
       gl,
