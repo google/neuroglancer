@@ -920,7 +920,9 @@ async function commitAndApplyDeleteNode(
     layer.spatialSkeletonState.getCachedSegmentNodes(
       resolvedNode.node.segmentId,
     ) ?? [];
-  if (remainingNodes.length === 0) {
+  if (remainingNodes.length > 0) {
+    resolvedNode.skeletonLayer.retainOverlaySegment(resolvedNode.node.segmentId);
+  } else {
     resolvedNode.skeletonLayer.markSegmentEdited(resolvedNode.node.segmentId);
   }
   return { resolvedNode };

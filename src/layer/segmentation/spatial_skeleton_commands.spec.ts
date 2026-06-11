@@ -1064,6 +1064,7 @@ describe("spatial_skeleton_commands", () => {
       firstChildNode.position,
       secondChildNode.position,
     ]);
+    expect(skeletonLayer.retainOverlaySegment).toHaveBeenCalledWith(segmentId);
     expect(
       spatialSkeletonState.getCachedNode(firstChildNode.nodeId)?.parentNodeId,
     ).toBe(rootNode.nodeId);
