@@ -1429,7 +1429,8 @@ export class SpatialSkeletonEditTab extends Tab {
         segmentState === undefined ||
         segmentState.totalNodeCount === 0 ||
         (getFilterText().length === 0 &&
-          nodeFilterTypeModel.value === SpatialSkeletonNodeFilterType.NONE)
+          (nodeFilterTypeModel.value === SpatialSkeletonNodeFilterType.DEFAULT ||
+            nodeFilterTypeModel.value === SpatialSkeletonNodeFilterType.NONE))
       ) {
         return "No loaded nodes.";
       }
