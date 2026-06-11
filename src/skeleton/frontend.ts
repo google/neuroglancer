@@ -379,7 +379,7 @@ void emitDefault() {
       initializeCircleShader(nodeShader, projectionParameters, {
         featherWidthInPixels: this.targetIsSliceView ? 1.0 : 0.0,
       });
-      drawCircles(nodeShader.gl, 2, skeletonChunk.numVertices);
+      drawCircles(nodeShader.gl, 1, skeletonChunk.numVertices);
     }
   }
 
