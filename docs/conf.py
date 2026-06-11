@@ -43,10 +43,6 @@ html_favicon = "_templates/logo.svg"
 
 templates_path = ["_templates"]
 
-# Non-image media (videos, etc.) referenced from raw HTML need an explicit
-# copy step — Sphinx only auto-copies files referenced via `.. image::`.
-# Anything under `docs/_static/` is mirrored to `dist/docs/_static/`.
-html_static_path = ["_static"]
 
 
 # Don't include "View page source" links, since they aren't very helpful,
