@@ -44,7 +44,6 @@ html_favicon = "_templates/logo.svg"
 templates_path = ["_templates"]
 
 
-
 # Don't include "View page source" links, since they aren't very helpful,
 # especially for generated pages.
 html_show_sourcelink = True
