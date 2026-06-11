@@ -22,9 +22,6 @@ To create a new annotation layer:
     :guilabel:`+` button at the right end of the layer bar at the top
     of the viewer.
 
-.. image:: ../images/annotation_plus.png
-   :alt: The + button at the right end of the layer bar
-
 2. In the layer type picker, choose :guilabel:`annotation` (abbreviated
    ``ann``). Then type local://annotations as the source to make a
    local annotation layer.
@@ -34,13 +31,6 @@ shortcut: ctrl+click :si-icon:`material/mouse-left-click-outline` the
 
 3. A new, empty local annotation layer is added to the layer bar and
    its side panel opens.
-
-.. raw:: html
-
-   <video src="../_static/new_annotation_layer.mp4"
-          autoplay loop muted playsinline
-          style="max-width: 100%; border-radius: 4px;">
-   </video>
 
 .. _annotations-tab:
 
@@ -140,9 +130,6 @@ the dataset to find the place where you want to annotate.
 
 Working with polylines
 ----------------------
-
-.. image:: ../images/polyline.png
-   :alt: The + button at the right end of the layer bar
 
 The polyline tool builds up an annotation one point at a time. To
 finish a polyline, hit :kbd:`Enter` or **click the last point a second
@@ -282,39 +269,27 @@ expressed in physical units if the dimensions rendered has them. (for
 example, nm = nanometers, um=microns, mm=millimeters, etc).
 
 You may need to adjust the depth range to get rendering behavior that
-you desire. For example, in the example movie below, we are annotating
-some cell body locations in an Electron Microscopy dataset that has
-40nm thick sections in Z.
+you desire. For example, consider annotating cell body locations in an
+Electron Microscopy dataset that has 40nm thick sections in Z.
 
-.. raw:: html
+With a depth range of 10nm, annotations are visible only in the precise
+section where they were placed. If you relax the depth range to 120nm and
+move through sections, annotations fade out after a few sections. Setting
+it back to 40nm makes annotations visible only in the annotated section.
 
-   <video src="../_static/annotation_depth_range.mp4"
-          autoplay loop muted playsinline
-          style="max-width: 100%; border-radius: 4px;">
-   </video>
+If the "zoom-relative" button is checked, neuroglancer adjusts the
+depth range to scale up as you zoom out and scale down as you zoom in.
+When zoomed out and flipping through sections, annotations appear
+'farther' away in Z than when zoomed in. For some applications this
+is natural, as images downsample as you zoom out — annotations then
+render at a similar relative depth to the voxels used for the current view.
 
-When we first add some point annotations the depth range was 10nm,
-so we only see our annotations in the precise section we annotated. That
-might be useful, but perhaps you want to know that an annotation was
-nearby in Z. If we relax the depth range to 120n, and then move
-through the sections again, you can see that the annotations fade out
-after a few sections. If we set it back to 40nm, we again only see it
-in the section we annotated. However, if the "zoom-relative" button is
-checked, neuroglancer will adjust the depth-range to scale up as you
-zoom out, and scale down as you zoom in. This means that if we zoom
-out and flip through sections you can see the annotations 'farther'
-away in Z than you did when zoomed in. For some applications this 
-is natural, as images downsample as you zoom out, this behavior
-makes the annotations render at a similar relative "depths" to the
-size of the voxels being used to render the current view. 
-
-However for some applications this is unintuitive. For example,
-in this application, we might want to be able to easily see if
-you have already annotated a cell no matter what the zoom is.
-Disabling the "zoom-relative" option, and setting the depth-range
-to the approximate radius of the object you are annotating
-(say 5 microns for a cell) will make annotations fade in and out
-on that length scale, no matter the zoom.
+However for some applications this is unintuitive. For example, if you
+want to easily see whether a cell has already been annotated regardless
+of zoom level, disable the "zoom-relative" option and set the depth range
+to the approximate radius of the object you are annotating (say 5 microns
+for a cell). Annotations will then fade in and out on that length scale,
+no matter the zoom.
 
 .. _annotation-keyboard-shortcuts:
 
@@ -425,17 +400,9 @@ through named **relationships**. The default relationship is named
 linked segmentation layer, the segment's ID is captured on the
 annotation as a **related ID** for that relationship.
 
-.. raw:: html
-
-   <video src="../_static/linked_annotations.mp4"
-          autoplay loop muted playsinline
-          style="max-width: 100%; border-radius: 4px;">
-   </video>
-
-As shown in the video above, in order to link an annotation to 
-a segmentation, you have to select the segmentation layer from the 
-dropdown next to the segments relationship control. Once selected,
-any annotations you make will capture the segment ID underneath 
+To link an annotation to a segmentation, select the segmentation layer
+from the dropdown next to the segments relationship control. Once
+selected, any annotations you make will capture the segment ID underneath
 the annotation, in either 2d or 3d.  
 
 Once annotations have related IDs, then checking the box next to
