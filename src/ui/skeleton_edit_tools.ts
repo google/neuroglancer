@@ -276,10 +276,6 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     ).has(BigInt(Math.round(segmentId)));
   }
 
-  protected describeVisibleSegmentRequirement(segmentId: number) {
-    return `Only visible skeletons are editable. Make skeleton ${segmentId} visible in Seg tab or by double-clicking it in the viewer.`;
-  }
-
   protected togglePickedSpatialSkeletonVisibility() {
     const pickedSegmentId = this.getPickedSpatialSkeletonSegment();
     if (pickedSegmentId === undefined) {
@@ -526,13 +522,6 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     activation.bindAction(
       "spatial-skeleton-clear-node-selection",
       (event: ActionEvent<MouseEvent>) => {
-        if (
-          event.detail.button !== 2 ||
-          !event.detail.ctrlKey ||
-          !event.detail.shiftKey
-        ) {
-          return;
-        }
         event.stopPropagation();
         event.detail.preventDefault();
         const pinnedSelection = this.layer.manager.root.selectionState.value;
@@ -551,13 +540,6 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
           if (hasMergeAnchor) {
             this.layer.clearSpatialSkeletonMergeAnchor();
           }
-          StatusMessage.showTemporaryMessage(
-            hasMergeAnchor
-              ? hasSpatialSkeletonSelection
-                ? "Spatial skeleton selection and merge anchor cleared."
-                : "Spatial skeleton merge anchor cleared."
-              : "Spatial skeleton node selection cleared.",
-          );
           return;
         }
         this.layer.manager.root.selectionState.unpin();
@@ -1173,10 +1155,7 @@ export class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
     const skeletonLayer = this.getActiveSpatiallyIndexedSkeletonLayer();
     const selectedNode =
       this.getSelectedSpatialSkeletonNodeForTool(skeletonLayer);
-    if (
-      selectedNode?.segmentId !== undefined &&
-      this.isSpatialSkeletonSegmentVisible(selectedNode.segmentId)
-    ) {
+    if (selectedNode !== undefined) {
       anchorSelection = selectedNode;
       this.layer.selectSpatialSkeletonNode(
         selectedNode.nodeId,
@@ -1260,16 +1239,7 @@ export class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
     );
     activation.bindAction(
       "spatial-skeleton-pick-node",
-      (event: ActionEvent<MouseEvent>) => {
-        if (
-          event.detail.button !== 2 ||
-          !event.detail.ctrlKey ||
-          event.detail.shiftKey ||
-          event.detail.altKey ||
-          event.detail.metaKey
-        ) {
-          return;
-        }
+      (_event: ActionEvent<MouseEvent>) => {
         if (pending) return;
         const disabledReason =
           this.layer.getSpatialSkeletonActionsDisabledReason(
@@ -1307,12 +1277,6 @@ export class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
           anchorNode === undefined ||
           anchorNode.nodeId === pickedNode.nodeId
         ) {
-          if (!pickedNode.visible) {
-            StatusMessage.showTemporaryMessage(
-              "Pick the first merge anchor from a visible segment.",
-            );
-            return;
-          }
           this.pinSegmentByNumber(pickedNode.segmentId);
           anchorSelection = {
             nodeId: pickedNode.nodeId,
@@ -1330,12 +1294,6 @@ export class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
           return;
         }
         if (anchorNode.segmentId === pickedNode.segmentId) {
-          if (!pickedNode.visible) {
-            StatusMessage.showTemporaryMessage(
-              "Pick the first merge anchor from a visible segment.",
-            );
-            return;
-          }
           this.pinSegmentByNumber(pickedNode.segmentId);
           anchorSelection = {
             nodeId: pickedNode.nodeId,
@@ -1365,6 +1323,13 @@ export class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
         ) {
           StatusMessage.showTemporaryMessage(
             "Unable to resolve both merge segments.",
+          );
+          return;
+        }
+        if (!this.isSpatialSkeletonSegmentVisible(firstNode.segmentId)) {
+          StatusMessage.showTemporaryMessage(
+            `The first node selected for a merge operation must be from a visible skeleton. Make skeleton ${firstNode.segmentId} visible in the Seg tab or by double-clicking it in the viewer.`,
+            3000,
           );
           return;
         }
@@ -1525,16 +1490,7 @@ export class SpatialSkeletonSplitModeTool extends SpatialSkeletonToolBase {
     }
     activation.bindAction(
       "spatial-skeleton-pick-node",
-      (event: ActionEvent<MouseEvent>) => {
-        if (
-          event.detail.button !== 2 ||
-          !event.detail.ctrlKey ||
-          event.detail.shiftKey ||
-          event.detail.altKey ||
-          event.detail.metaKey
-        ) {
-          return;
-        }
+      (_event: ActionEvent<MouseEvent>) => {
         if (pending) return;
         const disabledReason =
           this.layer.getSpatialSkeletonActionsDisabledReason(
