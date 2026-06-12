@@ -92,11 +92,6 @@ const SKELETON_EDIT_STATUS_INPUT_EVENT_MAP = EventActionMap.fromObject({
 });
 
 const SPATIAL_SKELETON_EDIT_AUX_INPUT_EVENT_MAP = EventActionMap.fromObject({
-  "at:dblclick0": {
-    action: "spatial-skeleton-toggle-visible",
-    stopPropagation: true,
-    preventDefault: true,
-  },
   "at:shift+control+mousedown2": {
     action: "spatial-skeleton-clear-node-selection",
     stopPropagation: true,
@@ -113,11 +108,6 @@ const SPATIAL_SKELETON_PICK_INPUT_EVENT_MAP = EventActionMap.fromObject({
 });
 
 const SPATIAL_SKELETON_PICK_AUX_INPUT_EVENT_MAP = EventActionMap.fromObject({
-  "at:dblclick0": {
-    action: "spatial-skeleton-toggle-visible",
-    stopPropagation: true,
-    preventDefault: true,
-  },
   "at:shift+control+mousedown2": {
     action: "spatial-skeleton-clear-node-selection",
     stopPropagation: true,
@@ -275,51 +265,6 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     return getVisibleSegments(
       this.layer.displayState.segmentationGroupState.value,
     ).has(BigInt(Math.round(segmentId)));
-  }
-
-  protected togglePickedSpatialSkeletonVisibility() {
-    const pickedSegmentId = this.getPickedSpatialSkeletonSegment();
-    if (pickedSegmentId === undefined) {
-      return false;
-    }
-    const skeletonLayer = this.layer.getSpatiallyIndexedSkeletonLayer();
-    const isVisible = this.isSpatialSkeletonSegmentVisible(pickedSegmentId);
-    if (isVisible) {
-      this.removeVisibleSegmentByNumber(pickedSegmentId, { deselect: true });
-      const cachedSegmentIds = new Set<number>(
-        [
-          ...getVisibleSegments(
-            this.layer.displayState.segmentationGroupState.value,
-          ).keys(),
-        ]
-          .map((segmentId) => Number(segmentId))
-          .filter(
-            (segmentId) => Number.isSafeInteger(segmentId) && segmentId > 0,
-          ),
-      );
-      for (const retainedSegmentId of skeletonLayer?.getRetainedOverlaySegmentIds() ??
-        []) {
-        cachedSegmentIds.add(retainedSegmentId);
-      }
-      this.layer.spatialSkeletonState.evictInactiveSegmentNodes(
-        cachedSegmentIds,
-      );
-      return true;
-    }
-    this.ensureSegmentVisibleByNumber(pickedSegmentId);
-    this.selectSegmentByNumber(pickedSegmentId);
-    return true;
-  }
-
-  protected bindVisibilityToggleAction(activation: ToolActivation<this>) {
-    activation.bindAction(
-      "spatial-skeleton-toggle-visible",
-      (event: ActionEvent<MouseEvent>) => {
-        event.stopPropagation();
-        event.detail.preventDefault();
-        this.togglePickedSpatialSkeletonVisibility();
-      },
-    );
   }
 
   protected resolvePickedNodeForAction(
@@ -762,7 +707,6 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
       showNodeSelectionMessage: false,
     });
     this.bindClearSelectionAction(activation);
-    this.bindVisibilityToggleAction(activation);
     updateInteractionStatus();
     activation.registerDisposer(() => {
       layer.spatialSkeletonState.clearPendingNodePositions();
@@ -1200,7 +1144,6 @@ export class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
       activation,
     );
     this.bindClearSelectionAction(activation);
-    this.bindVisibilityToggleAction(activation);
     this.registerAutoCancelOnDisabled(
       activation,
       SpatialSkeletonActions.mergeSkeletons,
@@ -1467,7 +1410,6 @@ export class SpatialSkeletonSplitModeTool extends SpatialSkeletonToolBase {
       activation,
     );
     this.bindClearSelectionAction(activation);
-    this.bindVisibilityToggleAction(activation);
     this.registerAutoCancelOnDisabled(
       activation,
       SpatialSkeletonActions.splitSkeletons,
