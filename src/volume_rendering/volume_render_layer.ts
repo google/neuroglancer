@@ -100,7 +100,11 @@ import {
   enableLerpShaderFunction,
 } from "#src/webgl/lerp.js";
 import type { ShaderModule, ShaderProgram } from "#src/webgl/shader.js";
-import { getShaderType, glsl_simpleFloatHash } from "#src/webgl/shader_lib.js";
+import {
+  getShaderType,
+  glsl_simpleFloatHash,
+  glsl_string,
+} from "#src/webgl/shader_lib.js";
 import type {
   ShaderControlsBuilderState,
   ShaderControlState,
@@ -513,6 +517,7 @@ void main() {
 `);
           builder.addFragmentCode(glsl_COLORMAPS);
           addControlsToBuilder(shaderBuilderState, builder);
+          builder.addFragmentCode(glsl_string);
           builder.addFragmentCode(
             "\n#define main userMain\n" +
               shaderCodeWithLineDirective(shaderBuilderState.parseResult.code) +
@@ -918,7 +923,7 @@ gl_Position = uModelViewProjectionMatrix * vec4(position, 1.0);
                 gl,
                 shader,
                 this.shaderControlState,
-                shaderResult.parameters.parseResult.controls,
+                shaderResult.parameters.parseResult,
               );
               this.bindDepthBufferTexture(renderContext, shader);
               chunkFormat.beginDrawing(gl, shader);
@@ -1113,7 +1118,7 @@ gl_Position = uModelViewProjectionMatrix * vec4(position, 1.0);
                 gl,
                 shader,
                 this.shaderControlState,
-                shaderResult.parameters.parseResult.controls,
+                shaderResult.parameters.parseResult,
               );
               this.bindDepthBufferTexture(renderContext, shader);
               this.setShaderUniforms(shader, shaderSetupUniforms);

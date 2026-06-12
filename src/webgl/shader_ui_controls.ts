@@ -41,6 +41,7 @@ import {
   parseFixedLengthArray,
   verifyFiniteFloat,
   verifyInt,
+  verifyNonnegativeInt,
   verifyObject,
   verifyOptionalObjectProperty,
   verifyString,
@@ -70,6 +71,10 @@ import {
   activeControlsEqual,
   computeActiveControls,
 } from "#src/webgl/shader_control_reachability.js";
+import {
+  preprocessStrings,
+  type ShaderStringLiteralIdMap,
+} from "#src/webgl/shader_source_string_preprocessing.js";
 import type { TransferFunctionParameters } from "#src/widget/transfer_function.js";
 import {
   defineTransferFunctionShader,
@@ -116,6 +121,22 @@ export interface ShaderCheckboxControl {
   default: boolean;
 }
 
+export type ShaderSelectValueType = "string_t" | "int" | "uint" | "float";
+
+export type ShaderSelectValue = string | number;
+
+export interface ShaderSelectOption {
+  value: ShaderSelectValue;
+  label?: string;
+}
+
+export interface ShaderSelectControl {
+  type: "select";
+  valueType: ShaderSelectValueType;
+  options: ShaderSelectOption[];
+  default: ShaderSelectValue;
+}
+
 export interface ShaderTransferFunctionControl {
   type: "transferFunction";
   dataType: DataType;
@@ -128,6 +149,7 @@ export type ShaderUiControl =
   | ShaderImageInvlerpControl
   | ShaderPropertyInvlerpControl
   | ShaderCheckboxControl
+  | ShaderSelectControl
   | ShaderTransferFunctionControl;
 
 export interface ShaderControlParseError {
@@ -140,7 +162,8 @@ export interface ShaderControlsParseResult {
   source: string;
   // Source code with comments stripped and UI controls replaced by appropriate text.
   code: string;
-  controls: Map<string, ShaderUiControl>;
+  controls: Controls;
+  preprocessing: { stringLiteralIds: ShaderStringLiteralIdMap };
   errors: ShaderControlParseError[];
 }
 
@@ -376,6 +399,167 @@ function parseCheckboxDirective(
       valueType,
       default: defaultValue,
     } as ShaderCheckboxControl,
+    errors: undefined,
+  };
+}
+
+function isShaderSelectValueType(
+  valueType: string,
+): valueType is ShaderSelectValueType {
+  return (
+    valueType === "string_t" ||
+    valueType === "int" ||
+    valueType === "uint" ||
+    valueType === "float"
+  );
+}
+
+function verifyShaderSelectValue(
+  valueType: ShaderSelectValueType,
+  value: unknown,
+): ShaderSelectValue {
+  switch (valueType) {
+    case "string_t":
+      return verifyString(value);
+    case "int":
+      return verifyInt(value);
+    case "uint":
+      return verifyNonnegativeInt(value);
+    case "float":
+      return verifyFiniteFloat(value);
+  }
+}
+
+function parseSelectOptions(
+  valueType: ShaderSelectValueType,
+  value: unknown,
+): {
+  options: ShaderSelectOption[] | undefined;
+  errors: string[];
+} {
+  const parseOption = (optionValue: unknown, label?: string) => {
+    try {
+      return { value: verifyShaderSelectValue(valueType, optionValue), label };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `${error}`;
+      throw new Error(
+        label === undefined
+          ? `Invalid option value: ${message}`
+          : `Invalid option value for ${JSON.stringify(label)}: ${message}`,
+      );
+    }
+  };
+
+  try {
+    let options: ShaderSelectOption[];
+    if (Array.isArray(value)) {
+      options = value.map((optionValue) => parseOption(optionValue));
+    } else if (typeof value === "object" && value !== null) {
+      options = Object.entries(verifyObject(value)).map(
+        ([label, optionValue]) => parseOption(optionValue, label),
+      );
+    } else {
+      return {
+        options: undefined,
+        errors: [
+          `Expected options argument to be an array of ${valueType} values or an object mapping labels to ${valueType} values`,
+        ],
+      };
+    }
+    if (options.length === 0) {
+      return {
+        options: undefined,
+        errors: ["Expected options argument to contain at least one option"],
+      };
+    }
+    const seenValues = new Set<ShaderSelectValue>();
+    for (const option of options) {
+      if (seenValues.has(option.value)) {
+        return {
+          options: undefined,
+          errors: [`Duplicate option value: ${JSON.stringify(option.value)}`],
+        };
+      }
+      seenValues.add(option.value);
+    }
+    return { options, errors: [] };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : `${error}`;
+    return {
+      options: undefined,
+      errors: [message],
+    };
+  }
+}
+
+function formatShaderSelectValue(value: ShaderSelectValue) {
+  return typeof value === "string" ? value : `${value}`;
+}
+
+export function getShaderSelectOptionLabel(option: ShaderSelectOption) {
+  const valueText = formatShaderSelectValue(option.value);
+  if (option.label === undefined || option.label === valueText) {
+    return valueText;
+  }
+  return `${option.label} (${valueText})`;
+}
+
+function parseSelectDirective(
+  valueType: string,
+  parameters: DirectiveParameters,
+): DirectiveParseResult {
+  const errors: string[] = [];
+  if (!isShaderSelectValueType(valueType)) {
+    errors.push("type must be one of string_t, int, uint, or float");
+  }
+  let options: ShaderSelectOption[] | undefined;
+  let defaultValue: ShaderSelectValue | undefined;
+  for (const [key, value] of parameters) {
+    if (key === "options") {
+      if (isShaderSelectValueType(valueType)) {
+        const result = parseSelectOptions(valueType, value);
+        errors.push(...result.errors);
+        options = result.options;
+      }
+    } else if (key === "default") {
+      if (isShaderSelectValueType(valueType)) {
+        try {
+          defaultValue = verifyShaderSelectValue(valueType, value);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : `${error}`;
+          errors.push(`Invalid default value: ${message}`);
+        }
+      }
+    } else {
+      errors.push(`Invalid parameter: ${key}`);
+    }
+  }
+  if (!parameters.has("options")) {
+    errors.push("options must be specified");
+  }
+  if (options === undefined) {
+    return { errors };
+  }
+  let resolvedDefaultValue = options[0].value;
+  if (defaultValue !== undefined) {
+    if (!options.some((option) => option.value === defaultValue)) {
+      errors.push(
+        `default value ${JSON.stringify(defaultValue)} must match one of the options`,
+      );
+    } else {
+      resolvedDefaultValue = defaultValue;
+    }
+  }
+  if (errors.length > 0) {
+    return { errors };
+  }
+  return {
+    control: {
+      type: "select",
+      valueType,
+      options,
+      default: resolvedDefaultValue,
+    } as ShaderSelectControl,
     errors: undefined,
   };
 }
@@ -691,6 +875,7 @@ const controlParsers = new Map<
   ["color", parseColorDirective],
   ["invlerp", parseInvlerpDirective],
   ["checkbox", parseCheckboxDirective],
+  ["select", parseSelectDirective],
   ["transferFunction", parseTransferFunctionDirective],
 ]);
 
@@ -757,7 +942,14 @@ export function parseShaderUiControls(
       return "";
     },
   );
-  return { source: code, code: newCode, errors, controls };
+  const preprocessed = preprocessStrings(newCode);
+  return {
+    source: code,
+    code: preprocessed.code,
+    controls,
+    preprocessing: { stringLiteralIds: preprocessed.stringLiteralIds },
+    errors,
+  };
 }
 
 export type Controls = Map<string, ShaderUiControl>;
@@ -826,6 +1018,19 @@ float ${uName}() {
         );
         break;
       }
+      case "select": {
+        let code: string;
+        if (control.valueType === "string_t") {
+          builder.addUniform("highp uint", uName);
+          code = `#define ${name} string_t(${uName})\n`;
+        } else {
+          builder.addUniform(`highp ${control.valueType}`, uName);
+          code = `#define ${name} ${uName}\n`;
+        }
+        builder.addVertexCode(code);
+        builder.addFragmentCode(code);
+        break;
+      }
       default: {
         builder.addUniform(`highp ${control.valueType}`, uName);
         builder.addVertexCode(`#define ${name} ${uName}\n`);
@@ -847,8 +1052,10 @@ function replaceBigintAndMap(_key: string, value: unknown) {
 }
 
 function encodeControls(controls: Controls | undefined) {
-  if (controls === undefined) return undefined;
-  return JSON.stringify(Object.fromEntries(controls), replaceBigintAndMap);
+  return JSON.stringify(
+    Object.fromEntries(controls ?? []),
+    replaceBigintAndMap,
+  );
 }
 
 export class WatchableShaderUiControls
@@ -1036,7 +1243,6 @@ function parseTransferFunctionControlPoints(
   dataType: DataType,
 ) {
   const parsedPoints = parseArray(controlPointsDefinition, (x) => {
-    // Validate input length and types
     const allowedInput =
       dataType === DataType.UINT64
         ? typeof x[0] === "string" || typeof x[0] === "number"
@@ -1054,7 +1260,6 @@ function parseTransferFunctionControlPoints(
       );
     }
     const inputValue = parseDataTypeValue(dataType, x[0]);
-
     if (x[1].length !== 7 || x[1][0] !== "#") {
       throw new Error(
         `Expected #RRGGBB, but received: ${JSON.stringify(x[1])}`,
@@ -1135,8 +1340,6 @@ export class TrackableTransferFunctionParameters extends TrackableValue<Transfer
     public dataType: DataType,
     public defaultValue: TransferFunctionParameters,
   ) {
-    // Create a copy of the default value to enable detecting changes
-    // to the control points in the trackable value.
     const defaultValueCopy = copyTransferFunctionParameters(defaultValue);
     super(defaultValueCopy, (obj) =>
       parseTransferFunctionParameters(obj, dataType, defaultValueCopy),
@@ -1151,36 +1354,37 @@ export class TrackableTransferFunctionParameters extends TrackableValue<Transfer
       return inputValue;
     }
 
-    return controlPoints.map((x) => [
-      inputToJson(x.inputValue),
-      serializeColor(
-        vec3.fromValues(
-          x.outputColor[0] / 255,
-          x.outputColor[1] / 255,
-          x.outputColor[2] / 255,
-        ),
-      ),
-      x.outputColor[3] / 255,
+    function colorToJson(color: vec4) {
+      return `#${[0, 1, 2]
+        .map((i) => color[i].toString(16).padStart(2, "0"))
+        .join("")}`;
+    }
+
+    return controlPoints.map((controlPoint) => [
+      inputToJson(controlPoint.inputValue),
+      colorToJson(controlPoint.outputColor),
+      controlPoint.outputColor[3] / 255,
     ]);
   }
 
   toJSON() {
     const {
-      value: { channel, sortedControlPoints, defaultColor, window },
       dataType,
+      value: { sortedControlPoints, channel, defaultColor, window },
       defaultValue,
     } = this;
+    const channelJson = arraysEqual(defaultValue.channel, channel)
+      ? undefined
+      : channel;
+    const defaultColorJson =
+      serializeColor(defaultColor) === serializeColor(defaultValue.defaultColor)
+        ? undefined
+        : serializeColor(defaultColor);
     const windowJson = dataTypeIntervalToJson(
       window,
       dataType,
       defaultValue.window,
     );
-    const channelJson = arraysEqual(defaultValue.channel, channel)
-      ? undefined
-      : channel;
-    const colorJson = arraysEqual(defaultValue.defaultColor, defaultColor)
-      ? undefined
-      : serializeColor(defaultColor);
     const controlPointsJson = arraysEqualWithPredicate(
       defaultValue.sortedControlPoints.controlPoints,
       sortedControlPoints.controlPoints,
@@ -1192,17 +1396,17 @@ export class TrackableTransferFunctionParameters extends TrackableValue<Transfer
       : this.controlPointsToJson(sortedControlPoints.controlPoints, dataType);
     if (
       channelJson === undefined &&
-      colorJson === undefined &&
-      controlPointsJson === undefined &&
-      windowJson === undefined
+      defaultColorJson === undefined &&
+      windowJson === undefined &&
+      controlPointsJson === undefined
     ) {
       return undefined;
     }
     return {
       channel: channelJson,
-      defaultColor: colorJson,
-      controlPoints: controlPointsJson,
+      defaultColor: defaultColorJson,
       window: windowJson,
+      controlPoints: controlPointsJson,
     };
   }
 }
@@ -1264,6 +1468,25 @@ function getControlTrackable(control: ShaderUiControl): {
         trackable: new TrackableBoolean(control.default),
         getBuilderValue: (value) => ({ value }),
       };
+    case "select": {
+      const { options, valueType } = control;
+      const optionValues = options.map((option) => option.value);
+      return {
+        trackable: new TrackableValue<ShaderSelectValue>(
+          control.default,
+          (x) => {
+            const value = verifyShaderSelectValue(valueType, x);
+            if (!optionValues.includes(value)) {
+              throw new Error(
+                `${JSON.stringify(value)} is not one of the valid options ${JSON.stringify(optionValues)}`,
+              );
+            }
+            return value;
+          },
+        ),
+        getBuilderValue: () => null,
+      };
+    }
     case "transferFunction":
       return {
         trackable: new TrackableTransferFunctionParameters(
@@ -1476,6 +1699,7 @@ export class ShaderControlState
         source: "",
         code: "",
         controls: new Map(),
+        preprocessing: { stringLiteralIds: new Map() },
         errors: [{ line: 0, message: "Loading" }],
       };
       this.parseErrors_ = [];
@@ -1644,11 +1868,12 @@ function setControlInShader(
   name: string,
   control: ShaderUiControl,
   value: any,
+  stringLiteralIds?: ReadonlyMap<string, number>,
 ) {
   const uName = uniformName(name);
-  const uniform = shader.uniform(uName);
   switch (control.type) {
-    case "slider":
+    case "slider": {
+      const uniform = shader.uniform(uName);
       switch (control.valueType) {
         case "int":
         case "uint":
@@ -1658,8 +1883,9 @@ function setControlInShader(
           gl.uniform1f(uniform, value);
       }
       break;
+    }
     case "color":
-      gl.uniform3fv(uniform, value);
+      gl.uniform3fv(shader.uniform(uName), value);
       break;
     case "imageInvlerp":
       enableLerpShaderFunction(shader, uName, control.dataType, value.range);
@@ -1677,6 +1903,24 @@ function setControlInShader(
     case "checkbox":
       // Value is hard-coded in shader.
       break;
+    case "select": {
+      const uniform = shader.uniform(uName);
+      switch (control.valueType) {
+        case "string_t":
+          gl.uniform1ui(uniform, stringLiteralIds?.get(value as string) ?? 0);
+          break;
+        case "int":
+          gl.uniform1i(uniform, value);
+          break;
+        case "uint":
+          gl.uniform1ui(uniform, value);
+          break;
+        case "float":
+          gl.uniform1f(uniform, value);
+          break;
+      }
+      break;
+    }
     case "transferFunction":
       enableTransferFunctionShader(
         shader,
@@ -1691,13 +1935,17 @@ export function setControlsInShader(
   gl: GL,
   shader: ShaderProgram,
   shaderControlState: ShaderControlState,
-  controls: Controls,
+  parseResult: ShaderControlsParseResult,
 ) {
   // Each renderer calls this once per draw, so it's the natural place to
   // record which controls survived link-time DCE for the current shader.
   // The call is idempotent for the same program — no GL roundtrip beyond
   // the initial computation.
   shaderControlState.reportLinkedShader(shader);
+  const {
+    controls,
+    preprocessing: { stringLiteralIds },
+  } = parseResult;
   const { state } = shaderControlState;
   if (shaderControlState.controls.value === controls) {
     // Case when shader doesn't have any errors.
@@ -1708,6 +1956,7 @@ export function setControlsInShader(
         name,
         controlState.control,
         controlState.trackable.value,
+        stringLiteralIds,
       );
     }
   } else {
@@ -1720,7 +1969,7 @@ export function setControlsInShader(
         JSON.stringify(controlState.control) === JSON.stringify(control)
           ? controlState.trackable.value
           : control.default;
-      setControlInShader(gl, shader, name, control, value);
+      setControlInShader(gl, shader, name, control, value, stringLiteralIds);
     }
   }
 }

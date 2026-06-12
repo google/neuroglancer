@@ -29,6 +29,7 @@ import {
   shaderCodeWithLineDirective,
 } from "#src/webgl/dynamic_shader.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
+import { glsl_string } from "#src/webgl/shader_lib.js";
 import type {
   ShaderControlsBuilderState,
   ShaderControlState,
@@ -81,6 +82,7 @@ void emitIntensity(float value) {
 `);
   builder.addFragmentCode(glsl_COLORMAPS);
   addControlsToBuilder(shaderBuilderState, builder);
+  builder.addFragmentCode(glsl_string);
   builder.setFragmentMainFunction(
     shaderCodeWithLineDirective(shaderBuilderState.parseResult.code),
   );
@@ -143,7 +145,7 @@ export class ImageRenderLayer extends SliceViewVolumeRenderLayer<ShaderControlsB
       gl,
       shader,
       this.shaderControlState,
-      parameters.parseResult.controls,
+      parameters.parseResult,
     );
   }
 
