@@ -1204,6 +1204,17 @@ void main() {
     expect(result.errors[0].message).toContain("contain at least one option");
   });
 
+  it("errors when options have duplicate values", () => {
+    const code = `
+#uicontrol string_t myMode select(options={"First": "x", "Second": "x"})
+void main() {
+}
+`;
+    const result = parseShaderUiControls(code);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors[0].message).toContain('Duplicate option value: "x"');
+  });
+
   it("errors when options is not an array or object", () => {
     const code = `
 #uicontrol string_t myMode select(options="bad")

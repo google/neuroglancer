@@ -472,6 +472,18 @@ function parseSelectOptions(
         errors: ["Expected options argument to contain at least one option"],
       };
     }
+    const seenValues = new Set<ShaderSelectValue>();
+    for (const option of options) {
+      if (seenValues.has(option.value)) {
+        return {
+          options: undefined,
+          errors: [
+            `Duplicate option value: ${JSON.stringify(option.value)}`,
+          ],
+        };
+      }
+      seenValues.add(option.value);
+    }
     return { options, errors: [] };
   } catch (error) {
     const message = error instanceof Error ? error.message : `${error}`;
