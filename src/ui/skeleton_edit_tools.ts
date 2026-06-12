@@ -54,7 +54,8 @@ import type { SpatialSkeletonToolPointInfo } from "#src/ui/skeleton_edit_tool_me
 import {
   SPATIAL_SKELETON_SPLIT_BANNER_MESSAGE,
   getSpatialSkeletonEditBannerMessage,
-  getSpatialSkeletonMergeBannerMessage,
+  SPATIAL_SKELETON_MERGE_BANNER_MESSAGE,
+  SPATIAL_SKELETON_MERGE_SELECTED_BANNER_MESSAGE,
   getSpatialSkeletonToolPointStatusFields,
   SPATIAL_SKELETON_MOVING_NODE_MESSAGE,
 } from "#src/ui/skeleton_edit_tool_messages.js";
@@ -1175,15 +1176,13 @@ export class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
         anchorSelection = undefined;
         return undefined;
       }
-      if (anchorSelection?.nodeId === nodeId) {
-        return anchorSelection;
-      }
       const cachedNode =
         this.getActiveSpatiallyIndexedSkeletonLayer()?.getNode(nodeId) ??
         this.layer.spatialSkeletonState.getCachedNode(nodeId);
       if (
         anchorSelection?.nodeId === nodeId &&
-        anchorSelection.segmentId === cachedNode?.segmentId
+        (cachedNode === undefined ||
+          anchorSelection.segmentId === cachedNode.segmentId)
       ) {
         return anchorSelection;
       }
@@ -1198,9 +1197,19 @@ export class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
     };
     const renderStatus = () => {
       const anchorNode = getAnchorNode();
+      let mergeStatus: string;
+      if (anchorNode === undefined) {
+        mergeStatus = SPATIAL_SKELETON_MERGE_BANNER_MESSAGE;
+      } else if (
+        anchorNode.segmentId !== undefined &&
+        !this.isSpatialSkeletonSegmentVisible(anchorNode.segmentId)
+      ) {
+        mergeStatus = `Make this segment visible, then select a 2nd node to merge with`;
+      } else {
+        mergeStatus = SPATIAL_SKELETON_MERGE_SELECTED_BANNER_MESSAGE;
+      }
       renderSpatialSkeletonToolStatus(body, {
-        message:
-          statusOverride ?? getSpatialSkeletonMergeBannerMessage(anchorNode),
+        message: statusOverride ?? mergeStatus,
         point: anchorNode,
       });
     };
@@ -1226,6 +1235,11 @@ export class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
     );
     activation.registerDisposer(
       this.layer.spatialSkeletonState.mergeAnchorNodeId.changed.add(
+        renderStatus,
+      ),
+    );
+    activation.registerDisposer(
+      this.layer.displayState.segmentationGroupState.value.visibleSegments.changed.add(
         renderStatus,
       ),
     );
