@@ -28,3 +28,8 @@ export const ANCHOR_SEGMENT_JSON_KEY = "anchorSegment";
 export const SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID =
   "skeletonShaderControl";
 export const SHADER_CONTROLS_JSON_KEY = "shaderControls";
+export const VOLUME_RENDERING_JSON_KEY = "volumeRendering";
+export const VOLUME_RENDERING_GAIN_JSON_KEY = "volumeRenderingGain";
+export const VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY =
+  "volumeRenderingDepthSamples";
+export const VOLUME_RENDERING_OPACITY_3D_JSON_KEY = "volumeRenderingOpacity3d";

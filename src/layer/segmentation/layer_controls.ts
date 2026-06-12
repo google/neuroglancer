@@ -1,11 +1,16 @@
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import * as json_keys from "#src/layer/segmentation/json_keys.js";
+import { makeCachedDerivedWatchableValue } from "#src/trackable_value.js";
+import { VolumeRenderingModes } from "#src/volume_rendering/trackable_volume_rendering_mode.js";
 import type { LayerControlDefinition } from "#src/widget/layer_control.js";
 import { registerLayerControl } from "#src/widget/layer_control.js";
 import { checkboxLayerControl } from "#src/widget/layer_control_checkbox.js";
 import { enumLayerControl } from "#src/widget/layer_control_enum.js";
 import { rangeLayerControl } from "#src/widget/layer_control_range.js";
-import { renderScaleLayerControl } from "#src/widget/render_scale_widget.js";
+import {
+  renderScaleLayerControl,
+  VolumeRenderingRenderScaleWidget,
+} from "#src/widget/render_scale_widget.js";
 import {
   colorSeedLayerControl,
   fixedColorLayerControl,
@@ -110,6 +115,57 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
     toolJson: json_keys.HOVER_HIGHLIGHT_JSON_KEY,
     title: "Highlight the segment under the mouse pointer",
     ...checkboxLayerControl((layer) => layer.displayState.hoverHighlight),
+  },
+  {
+    label: "Volume rendering (experimental)",
+    toolJson: json_keys.VOLUME_RENDERING_JSON_KEY,
+    isValid: (layer) => layer.has2dLayer,
+    title:
+      "Render the segmentation volumetrically in the 3D view (no meshes required)",
+    ...enumLayerControl((layer) => layer.volumeRenderingMode),
+  },
+  {
+    label: "Opacity (3D volume)",
+    toolJson: json_keys.VOLUME_RENDERING_OPACITY_3D_JSON_KEY,
+    isValid: (layer) =>
+      makeCachedDerivedWatchableValue(
+        (mode) => mode === VolumeRenderingModes.ON,
+        [layer.volumeRenderingMode],
+      ),
+    title: "Opacity applied to every visible voxel in volumetric rendering",
+    ...rangeLayerControl((layer) => ({
+      value: layer.volumeRenderingOpacity3d,
+    })),
+  },
+  {
+    label: "Gain (3D volume)",
+    toolJson: json_keys.VOLUME_RENDERING_GAIN_JSON_KEY,
+    isValid: (layer) =>
+      makeCachedDerivedWatchableValue(
+        (mode) => mode === VolumeRenderingModes.ON,
+        [layer.volumeRenderingMode],
+      ),
+    title: "Exponential brightness multiplier for volumetric rendering",
+    ...rangeLayerControl((layer) => ({
+      value: layer.volumeRenderingGain,
+      options: { min: -10.0, max: 10.0, step: 0.1 },
+    })),
+  },
+  {
+    label: "Resolution (3D volume)",
+    toolJson: json_keys.VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY,
+    isValid: (layer) =>
+      makeCachedDerivedWatchableValue(
+        (mode) => mode !== VolumeRenderingModes.OFF,
+        [layer.volumeRenderingMode],
+      ),
+    ...renderScaleLayerControl(
+      (layer) => ({
+        histogram: layer.volumeRenderingChunkResolutionHistogram,
+        target: layer.volumeRenderingDepthSamplesTarget,
+      }),
+      VolumeRenderingRenderScaleWidget,
+    ),
   },
   ...getViewSpecificSkeletonRenderingControl("2d"),
   ...getViewSpecificSkeletonRenderingControl("3d"),

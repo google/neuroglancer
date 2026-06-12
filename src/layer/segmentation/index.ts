@@ -102,11 +102,22 @@ import {
   makeCachedDerivedWatchableValue,
   makeCachedLazyDerivedWatchableValue,
   observeWatchable,
+  registerNested,
   registerNestedSync,
   TrackableValue,
   WatchableValue,
 } from "#src/trackable_value.js";
+import { trackableFiniteFloat } from "#src/trackable_finite_float.js";
 import { UserLayerWithAnnotationsMixin } from "#src/ui/annotations.js";
+import {
+  getVolumeRenderingDepthSamplesBoundsLogScale,
+  VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE,
+} from "#src/volume_rendering/volume_render_layer.js";
+import { SegmentationVolumeRenderingRenderLayer } from "#src/volume_rendering/segmentation_volume_render_layer.js";
+import {
+  trackableShaderModeValue,
+  VolumeRenderingModes,
+} from "#src/volume_rendering/trackable_volume_rendering_mode.js";
 import { SegmentDisplayTab } from "#src/ui/segment_list.js";
 import { registerSegmentSelectTools } from "#src/ui/segment_select_tools.js";
 import { registerSegmentSplitMergeTools } from "#src/ui/segment_split_merge_tools.js";
@@ -740,10 +751,36 @@ interface SegmentationActionContext extends LayerActionContext {
 }
 
 const Base = UserLayerWithAnnotationsMixin(UserLayer);
+const [
+  volumeRenderingDepthSamplesOriginLogScale,
+  volumeRenderingDepthSamplesMaxLogScale,
+] = getVolumeRenderingDepthSamplesBoundsLogScale();
+
 export class SegmentationUserLayer extends Base {
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
   codeVisible = new TrackableBoolean(true);
+
+  // Volumetric (ray-marched) rendering of the segmentation volume in the 3D
+  // view. Only OFF and ON are meaningful for segmentation (projection modes are
+  // not applicable to categorical IDs).
+  volumeRenderingMode = trackableShaderModeValue();
+  volumeRenderingGain = trackableFiniteFloat(0);
+  // Dedicated linear [0, 1] opacity for volumetric segmentation rendering,
+  // distinct from the exponential `volumeRenderingGain`.
+  volumeRenderingOpacity3d = trackableAlphaValue(1.0);
+  volumeRenderingChunkResolutionHistogram = new RenderScaleHistogram(
+    volumeRenderingDepthSamplesOriginLogScale,
+  );
+  volumeRenderingDepthSamplesTarget = trackableRenderScaleTarget(
+    VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE,
+    2 ** volumeRenderingDepthSamplesOriginLogScale,
+    2 ** volumeRenderingDepthSamplesMaxLogScale - 1,
+  );
+  // Segmentation volumes have no channel dimension.
+  private volumeRenderingChannelCoordinateSpace = new WatchableValue(
+    emptyValidCoordinateSpace,
+  );
 
   graphConnection = new WatchableValue<
     SegmentationGraphSourceConnection | undefined
@@ -855,6 +892,14 @@ export class SegmentationUserLayer extends Base {
     this.displayState.segmentColorShaderControlState.changed.add(
       this.specificationChanged.dispatch,
     );
+    this.volumeRenderingMode.changed.add(this.specificationChanged.dispatch);
+    this.volumeRenderingGain.changed.add(this.specificationChanged.dispatch);
+    this.volumeRenderingOpacity3d.changed.add(
+      this.specificationChanged.dispatch,
+    );
+    this.volumeRenderingDepthSamplesTarget.changed.add(
+      this.specificationChanged.dispatch,
+    );
     this.tabs.add("rendering", {
       label: "Render",
       order: -100,
@@ -940,19 +985,46 @@ export class SegmentationUserLayer extends Base {
             continue;
         }
         hasVolume = true;
-        loadedSubsource.activate(
-          () =>
-            loadedSubsource.addRenderLayer(
-              new SegmentationRenderLayer(volume, {
-                ...this.displayState,
-                transform: loadedSubsource.getRenderLayerTransform(),
-                renderScaleTarget: this.sliceViewRenderScaleTarget,
-                renderScaleHistogram: this.sliceViewRenderScaleHistogram,
-                localPosition: this.localPosition,
-              }),
-            ),
-          this.displayState.segmentationGroupState.value,
-        );
+        loadedSubsource.activate((context) => {
+          const sliceViewDisplayState = {
+            ...this.displayState,
+            transform: loadedSubsource.getRenderLayerTransform(),
+            renderScaleTarget: this.sliceViewRenderScaleTarget,
+            renderScaleHistogram: this.sliceViewRenderScaleHistogram,
+            localPosition: this.localPosition,
+          };
+          loadedSubsource.addRenderLayer(
+            new SegmentationRenderLayer(volume, sliceViewDisplayState),
+          );
+          const volumeRenderLayer = context.registerDisposer(
+            new SegmentationVolumeRenderingRenderLayer({
+              gain: this.volumeRenderingGain,
+              multiscaleSource: volume,
+              shaderError: this.displayState.shaderError,
+              transform: loadedSubsource.getRenderLayerTransform(),
+              depthSamplesTarget: this.volumeRenderingDepthSamplesTarget,
+              chunkResolutionHistogram:
+                this.volumeRenderingChunkResolutionHistogram,
+              localPosition: this.localPosition,
+              channelCoordinateSpace:
+                this.volumeRenderingChannelCoordinateSpace,
+              mode: this.volumeRenderingMode,
+              segmentationDisplayState: sliceViewDisplayState,
+              opacity3d: this.volumeRenderingOpacity3d,
+            }),
+          );
+          context.registerDisposer(
+            loadedSubsource.messages.addChild(volumeRenderLayer.messages),
+          );
+          context.registerDisposer(
+            registerNested((context, mode) => {
+              if (mode === VolumeRenderingModes.OFF) return;
+              context.registerDisposer(
+                this.addRenderLayer(volumeRenderLayer.addRef()),
+              );
+            }, this.volumeRenderingMode),
+          );
+        }, this.displayState.segmentationGroupState.value);
       } else if (mesh !== undefined) {
         loadedSubsource.activate(() => {
           const displayState = {
@@ -1184,6 +1256,18 @@ export class SegmentationUserLayer extends Base {
     this.sliceViewRenderScaleTarget.restoreState(
       specification[json_keys.CROSS_SECTION_RENDER_SCALE_JSON_KEY],
     );
+    this.volumeRenderingMode.restoreState(
+      specification[json_keys.VOLUME_RENDERING_JSON_KEY],
+    );
+    this.volumeRenderingGain.restoreState(
+      specification[json_keys.VOLUME_RENDERING_GAIN_JSON_KEY],
+    );
+    this.volumeRenderingOpacity3d.restoreState(
+      specification[json_keys.VOLUME_RENDERING_OPACITY_3D_JSON_KEY],
+    );
+    this.volumeRenderingDepthSamplesTarget.restoreState(
+      specification[json_keys.VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY],
+    );
     const linkedSegmentationGroupName = verifyOptionalObjectProperty(
       specification,
       json_keys.LINKED_SEGMENTATION_GROUP_JSON_KEY,
@@ -1238,6 +1322,13 @@ export class SegmentationUserLayer extends Base {
       this.displayState.renderScaleTarget.toJSON();
     x[json_keys.CROSS_SECTION_RENDER_SCALE_JSON_KEY] =
       this.sliceViewRenderScaleTarget.toJSON();
+    x[json_keys.VOLUME_RENDERING_JSON_KEY] = this.volumeRenderingMode.toJSON();
+    x[json_keys.VOLUME_RENDERING_GAIN_JSON_KEY] =
+      this.volumeRenderingGain.toJSON();
+    x[json_keys.VOLUME_RENDERING_OPACITY_3D_JSON_KEY] =
+      this.volumeRenderingOpacity3d.toJSON();
+    x[json_keys.VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY] =
+      this.volumeRenderingDepthSamplesTarget.toJSON();
     x[json_keys.SEGMENT_COLOR_SHADER_JSON_KEY] =
       this.displayState.fragmentSegmentColor.toJSON();
 

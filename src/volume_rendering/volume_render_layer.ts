@@ -77,6 +77,7 @@ import {
 import type { GLBuffer } from "#src/webgl/buffer.js";
 import { getMemoizedBuffer } from "#src/webgl/buffer.js";
 import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
+import type { GL } from "#src/webgl/context.js";
 import type {
   ParameterizedContextDependentShaderGetter,
   ParameterizedShaderGetterResult,
@@ -94,7 +95,11 @@ import {
   defineInvlerpShaderFunction,
   enableLerpShaderFunction,
 } from "#src/webgl/lerp.js";
-import type { ShaderModule, ShaderProgram } from "#src/webgl/shader.js";
+import type {
+  ShaderBuilder,
+  ShaderModule,
+  ShaderProgram,
+} from "#src/webgl/shader.js";
 import { getShaderType, glsl_simpleFloatHash } from "#src/webgl/shader_lib.js";
 import type {
   ShaderControlsBuilderState,
@@ -149,7 +154,7 @@ export interface VolumeRenderingRenderLayerOptions {
   mode: TrackableVolumeRenderingModeValue;
 }
 
-interface VolumeRenderingShaderParameters {
+export interface VolumeRenderingShaderParameters {
   numChannelDimensions: number;
   mode: VolumeRenderingModes;
 }
@@ -306,8 +311,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
       {
         memoizeKey: "VolumeRenderingRenderLayer",
         parameters: options.shaderControlState.builderState,
-        getContextKey: ({ emitter, chunkFormat, wireFrame }) =>
-          `${getObjectId(emitter)}:${chunkFormat.shaderKey}:${wireFrame}`,
+        getContextKey: (context) => this.getShaderContextKey(context),
         shaderError: options.shaderError,
         extraParameters: extraParameters,
         defineShader: (
@@ -523,12 +527,10 @@ void main() {
 }
 `);
           }
-          builder.addFragmentCode(glsl_COLORMAPS);
-          addControlsToBuilder(shaderBuilderState, builder);
-          builder.addFragmentCode(
-            "\n#define main userMain\n" +
-              shaderCodeWithLineDirective(shaderBuilderState.parseResult.code) +
-              "\n#undef main\n",
+          this.defineUserMain(
+            builder,
+            shaderBuilderState,
+            shaderParametersState,
           );
         },
       },
@@ -680,6 +682,67 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
     this.backend = sharedObject;
   }
 
+  /**
+   * Memoization key for the ray-marching shader. Subclasses may append
+   * additional state that, when changed, should trigger shader recompilation.
+   */
+  protected getShaderContextKey(context: {
+    emitter: ShaderModule;
+    chunkFormat: ChunkFormat;
+    wireFrame: boolean;
+  }): string {
+    const { emitter, chunkFormat, wireFrame } = context;
+    return `${getObjectId(emitter)}:${chunkFormat.shaderKey}:${wireFrame}`;
+  }
+
+  /**
+   * Emits the GLSL that defines `userMain()` (the per-sample body invoked once
+   * per ray step). The default implementation injects the user-editable image
+   * shader from `shaderControlState`. Subclasses may override to emit a
+   * different coloring/emission scheme.
+   */
+  protected defineUserMain(
+    builder: ShaderBuilder,
+    shaderBuilderState: ShaderControlsBuilderState,
+    _shaderParametersState: VolumeRenderingShaderParameters,
+  ) {
+    builder.addFragmentCode(glsl_COLORMAPS);
+    addControlsToBuilder(shaderBuilderState, builder);
+    builder.addFragmentCode(
+      "\n#define main userMain\n" +
+        shaderCodeWithLineDirective(shaderBuilderState.parseResult.code) +
+        "\n#undef main\n",
+    );
+  }
+
+  /**
+   * Binds per-draw shader controls/uniforms. Called once each time the shader
+   * is (re)bound (i.e. when the chunk format changes). The default implementation
+   * binds the image shader UI controls. Subclasses may override to bind their own
+   * controls and GPU resources (e.g. segment color hash tables).
+   */
+  protected bindShaderControls(
+    gl: GL,
+    shader: ShaderProgram,
+    shaderResult: ParameterizedShaderGetterResult<
+      ShaderControlsBuilderState,
+      VolumeRenderingShaderParameters
+    >,
+  ) {
+    setControlsInShader(
+      gl,
+      shader,
+      this.shaderControlState,
+      shaderResult.parameters.parseResult.controls,
+    );
+  }
+
+  /**
+   * Tears down any resources bound by {@link bindShaderControls}. Called before
+   * a shader is unbound. The default implementation does nothing.
+   */
+  protected endShaderControls(_gl: GL, _shader: ShaderProgram) {}
+
   get dataType() {
     return this.multiscaleSource.dataType;
   }
@@ -788,6 +851,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
 
     const endShader = () => {
       if (shader === null) return;
+      this.endShaderControls(gl, shader);
       shader.unbindTransferFunctionTextures();
       if (prevChunkFormat !== null) {
         prevChunkFormat!.endDrawing(gl, shader);
@@ -904,12 +968,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           if (shader !== null) {
             shader.bind();
             if (chunkFormat !== null) {
-              setControlsInShader(
-                gl,
-                shader,
-                this.shaderControlState,
-                shaderResult.parameters.parseResult.controls,
-              );
+              this.bindShaderControls(gl, shader, shaderResult);
               this.bindDepthBufferTexture(renderContext, shader);
               chunkFormat.beginDrawing(gl, shader);
               chunkFormat.beginSource(gl, shader);
@@ -1051,6 +1110,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
 
       const endPickingPassShader = () => {
         if (shader === null) return;
+        this.endShaderControls(gl, shader);
         shader.unbindTransferFunctionTextures();
         if (prevChunkFormat !== null) {
           prevChunkFormat!.endDrawing(gl, shader);
@@ -1074,12 +1134,7 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
           if (shader !== null && shaderSetupUniforms !== undefined) {
             shader.bind();
             if (chunkFormat !== null && chunkFormat !== undefined) {
-              setControlsInShader(
-                gl,
-                shader,
-                this.shaderControlState,
-                shaderResult.parameters.parseResult.controls,
-              );
+              this.bindShaderControls(gl, shader, shaderResult);
               this.bindDepthBufferTexture(renderContext, shader);
               this.setShaderUniforms(shader, shaderSetupUniforms);
               chunkFormat.beginDrawing(gl, shader);
