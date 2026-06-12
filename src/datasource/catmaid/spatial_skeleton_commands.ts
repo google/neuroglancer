@@ -1810,8 +1810,7 @@ class SplitCommand implements SpatialSkeletonCommand {
       this.stableSegmentId,
     );
     if (resolvedNode.node.parentNodeId === undefined) {
-      StatusMessage.showTemporaryMessage("Cannot split at the root node.");
-      return;
+      throw new Error("Cannot split at the root node.");
     }
     let result: CatmaidSpatialSkeletonSplitResult;
     try {
@@ -2729,6 +2728,9 @@ export class CatmaidSpatialSkeletonEditCommands {
       throw new Error(
         `Node ${node.nodeId} is not available in the inspected skeleton cache.`,
       );
+    }
+    if (splitNode.parentNodeId === undefined) {
+      throw new Error("Cannot split at the root node.");
     }
     const commandMappings = layer.spatialSkeletonState.commandHistory.mappings;
     return new SplitCommand(
