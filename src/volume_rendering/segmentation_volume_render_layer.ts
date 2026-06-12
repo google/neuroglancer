@@ -219,6 +219,12 @@ ${
     emitTransparent();
     return;
   }
+  // Mark this sample as pickable. In the max-projection picking pass this makes
+  // the picked depth lock onto the front-most visible voxel (the strict ">"
+  // comparison keeps the first/nearest sample), so right-clicking the volume
+  // navigates to the segment surface under the cursor. This is a no-op in the
+  // normal (OIT) rendering pass.
+  emitIntensity(1.0);
   vec4 rgba = segmentColorUserShader(${valueForColor});
   float alpha = uOpacity3d;
   if (rgba.a >= 0.0) {
