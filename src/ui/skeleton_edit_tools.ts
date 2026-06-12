@@ -341,13 +341,6 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     activation.bindAction(
       "spatial-skeleton-pin-node",
       (event: ActionEvent<MouseEvent>) => {
-        if (
-          event.detail.button !== 2 ||
-          !event.detail.ctrlKey ||
-          event.detail.shiftKey
-        ) {
-          return;
-        }
         event.stopPropagation();
         event.detail.preventDefault();
         const skeletonLayer = this.getActiveSpatiallyIndexedSkeletonLayer();
@@ -453,9 +446,8 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
       SegmentationUserLayer["getSpatialSkeletonActionsDisabledReason"]
     >[0],
   ): boolean {
-    const reason = this.layer.getSpatialSkeletonActionsDisabledReason(
-      requiredAction,
-    );
+    const reason =
+      this.layer.getSpatialSkeletonActionsDisabledReason(requiredAction);
     if (reason !== undefined) {
       StatusMessage.showTemporaryMessage(reason);
       queueMicrotask(() => activation.cancel());
@@ -667,10 +659,7 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
 
     this.activateModeWatchable(activation, layer.spatialSkeletonEditMode);
     activation.bindInputEventMap(SKELETON_EDIT_STATUS_INPUT_EVENT_MAP);
-    rawInputEventMapBinder(
-      SPATIAL_SKELETON_AUX_INPUT_EVENT_MAP,
-      activation,
-    );
+    rawInputEventMapBinder(SPATIAL_SKELETON_AUX_INPUT_EVENT_MAP, activation);
     this.bindPinnedSelectionAction(activation, {
       showNodeSelectionMessage: false,
     });
@@ -710,15 +699,6 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
     activation.bindAction(
       "spatial-skeleton-add-node",
       (event: ActionEvent<MouseEvent>) => {
-        if (
-          event.detail.button !== 0 ||
-          !event.detail.ctrlKey ||
-          event.detail.shiftKey ||
-          event.detail.altKey ||
-          event.detail.metaKey
-        ) {
-          return;
-        }
         event.stopPropagation();
         event.detail.preventDefault();
         const disabledReason = layer.getSpatialSkeletonActionsDisabledReason(
@@ -1099,10 +1079,7 @@ export class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
     };
     setReadyStatus();
     activation.bindInputEventMap(SPATIAL_SKELETON_PICK_INPUT_EVENT_MAP);
-    rawInputEventMapBinder(
-      SPATIAL_SKELETON_AUX_INPUT_EVENT_MAP,
-      activation,
-    );
+    rawInputEventMapBinder(SPATIAL_SKELETON_AUX_INPUT_EVENT_MAP, activation);
     this.bindClearSelectionAction(activation);
     this.registerAutoCancelOnDisabled(
       activation,
@@ -1341,10 +1318,7 @@ export class SpatialSkeletonSplitModeTool extends SpatialSkeletonToolBase {
     };
     setReadyStatus();
     activation.bindInputEventMap(SPATIAL_SKELETON_PICK_INPUT_EVENT_MAP);
-    rawInputEventMapBinder(
-      SPATIAL_SKELETON_AUX_INPUT_EVENT_MAP,
-      activation,
-    );
+    rawInputEventMapBinder(SPATIAL_SKELETON_AUX_INPUT_EVENT_MAP, activation);
     this.bindClearSelectionAction(activation);
     this.registerAutoCancelOnDisabled(
       activation,
