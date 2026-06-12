@@ -111,6 +111,7 @@ export interface LayerGroupViewerOptions {
   showLayerPanel: WatchableValueInterface<boolean>;
   showViewerMenu: boolean;
   showLayerHoverValues: WatchableValueInterface<boolean>;
+  showAllPlotBounds?: WatchableValueInterface<boolean>;
 }
 
 export const viewerDragType = "neuroglancer-layer-group-viewer";
@@ -541,6 +542,7 @@ export class LayerGroupViewer extends RefCounted {
         this,
         () => this.layout.toJSON(),
         this.options.showLayerHoverValues,
+        this.options.showAllPlotBounds,
       ));
       if (options.showViewerMenu) {
         layerPanel.registerDisposer(makeViewerMenu(layerPanel.element, this));

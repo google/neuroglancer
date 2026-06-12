@@ -1391,7 +1391,7 @@ export class TrackableDataSelectionState
   captureSingleLayerState<T extends UserLayer>(
     userLayer: Borrowed<T>,
     capture: (state: T["selectionState"]) => boolean,
-    pin: boolean | "toggle" = true,
+    pin: boolean | "toggle" | "force-unpin" = true,
   ) {
     if (pin === false && (!this.location.visible || this.pin.value)) return;
     const state = {} as UserLayerSelectionState;
@@ -1402,6 +1402,8 @@ export class TrackableDataSelectionState
         this.pin.value = true;
       } else if (pin === "toggle") {
         this.pin.value = !this.pin.value;
+      } else if (pin === "force-unpin") {
+        this.pin.value = false;
       }
       this.value = {
         layers: [{ layer: userLayer, state }],
@@ -1451,10 +1453,11 @@ export class TrackableDataSelectionState
   select() {
     const { pin } = this;
     this.location.visible = true;
-    pin.value = !pin.value;
-    if (pin.value) {
-      this.capture();
-    }
+    pin.value = true;
+    this.capture();
+  }
+  unpin() {
+    this.pin.value = false;
   }
   capture(canRetain = false) {
     const newValue = capturePersistentViewerSelectionState(

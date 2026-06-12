@@ -1,0 +1,112 @@
+{
+  "zarr_format": 3,
+  "node_type": "group",
+  "attributes": {
+    "ome": {
+      "version": "0.6.dev1",
+      "multiscales": [
+        {
+          "coordinateSystems": [
+            {
+              "name": "world",
+              "axes": [
+                {
+                  "name": "z",
+                  "type": "space",
+                  "unit": "micrometer"
+                },
+                {
+                  "name": "y",
+                  "type": "space",
+                  "unit": "micrometer"
+                },
+                {
+                  "name": "x",
+                  "type": "space",
+                  "unit": "micrometer"
+                }
+              ]
+            },
+            {
+              "name": "physical",
+              "axes": [
+                {
+                  "name": "z",
+                  "type": "space",
+                  "unit": "micrometer"
+                },
+                {
+                  "name": "y",
+                  "type": "space",
+                  "unit": "micrometer"
+                },
+                {
+                  "name": "x",
+                  "type": "space",
+                  "unit": "micrometer"
+                }
+              ]
+            }
+          ],
+          "datasets": [
+            {
+              "path": "array",
+              "coordinateTransformations": [
+                {
+                  "type": "sequence",
+                  "input": "array",
+                  "output": "physical",
+                  "transformations": [
+                    {
+                      "type": "scale",
+                      "scale": [
+                        2,
+                        0.5,
+                        0.25
+                      ]
+                    },
+                    {
+                      "type": "translation",
+                      "translation": [
+                        0,
+                        0,
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "coordinateTransformations": [
+            {
+              "type": "affine",
+              "input": "physical",
+              "output": "world",
+              "affine": [
+                [
+                  -0.7071,
+                  -0.7071,
+                  0,
+                  0
+                ],
+                [
+                  0.7071,
+                  -0.7071,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  1,
+                  0
+                ]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

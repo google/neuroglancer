@@ -28,7 +28,7 @@ const EXPECTED_XML_NAMESPACE_URIS = [
 function isValidListObjectsResponse(documentElement: Element): boolean {
   return (
     EXPECTED_XML_NAMESPACE_URIS.includes(documentElement.namespaceURI!) &&
-    documentElement.tagName === "ListBucketResult"
+    documentElement.localName === "ListBucketResult"
   );
 }
 
@@ -76,35 +76,39 @@ export async function getS3BucketListing(
       );
     }
     const namespaceURI = documentElement.namespaceURI!;
-    const namespaceResolver: XPathNSResolver = () => namespaceURI;
-    const commonPrefixNodes = doc.evaluate(
-      "//CommonPrefixes/Prefix",
-      doc,
-      namespaceResolver,
-      XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE,
-      null,
-    );
     const directories: string[] = [];
-    for (let i = 0, n = commonPrefixNodes.snapshotLength; i < n; ++i) {
-      let name = commonPrefixNodes.snapshotItem(i)!.textContent;
-      if (name === null) continue;
-      name = decodeURIComponent(name);
-      // Exclude delimiter from end of `name`.
-      directories.push(name.substring(0, name.length - delimiter.length));
+    const commonPrefixes = documentElement.getElementsByTagNameNS(
+      namespaceURI,
+      "CommonPrefixes",
+    );
+    for (let i = 0; i < commonPrefixes.length; ++i) {
+      const commonPrefix = commonPrefixes.item(i)!;
+      const prefixNodes = commonPrefix.getElementsByTagNameNS(
+        namespaceURI,
+        "Prefix",
+      );
+      for (let j = 0; j < prefixNodes.length; ++j) {
+        let name = prefixNodes.item(j)!.textContent;
+        if (name === null) continue;
+        name = decodeURIComponent(name);
+        // Exclude delimiter from end of `name`.
+        directories.push(name.substring(0, name.length - delimiter.length));
+      }
     }
 
     const entries: ListEntry[] = [];
-    const contents = doc.evaluate(
-      "//Contents/Key",
-      doc,
-      namespaceResolver,
-      XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE,
-      null,
+    const contentNodes = documentElement.getElementsByTagNameNS(
+      namespaceURI,
+      "Contents",
     );
-    for (let i = 0, n = contents.snapshotLength; i < n; ++i) {
-      const name = contents.snapshotItem(i)!.textContent;
-      if (name === null) continue;
-      entries.push({ key: decodeURIComponent(name) });
+    for (let i = 0; i < contentNodes.length; ++i) {
+      const contentNode = contentNodes.item(i)!;
+      const keyNodes = contentNode.getElementsByTagNameNS(namespaceURI, "Key");
+      for (let j = 0; j < keyNodes.length; ++j) {
+        const name = keyNodes.item(j)!.textContent;
+        if (name === null) continue;
+        entries.push({ key: decodeURIComponent(name) });
+      }
     }
     return { directories, entries };
   } catch (e) {

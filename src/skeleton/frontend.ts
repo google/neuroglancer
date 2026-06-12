@@ -46,6 +46,7 @@ import {
   TrackableValue,
   WatchableValue,
 } from "#src/trackable_value.js";
+import { TrackableBoolean } from "#src/trackable_boolean.js";
 import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { mat4 } from "#src/util/geom.js";
@@ -480,6 +481,7 @@ export class SkeletonRenderingOptions implements Trackable {
   shader = makeTrackableFragmentMain(DEFAULT_FRAGMENT_MAIN);
   shaderError = makeWatchableShaderError();
   shaderControlState = new ShaderControlState(this.shader);
+  hideInactiveShaderControls = new TrackableBoolean(false);
   params2d: ViewSpecificSkeletonRenderingOptions = {
     mode: new TrackableSkeletonRenderMode(SkeletonRenderMode.LINES_AND_POINTS),
     lineWidth: new TrackableSkeletonLineWidth(2),
@@ -493,6 +495,7 @@ export class SkeletonRenderingOptions implements Trackable {
     const { compound } = this;
     compound.add("shader", this.shader);
     compound.add("shaderControls", this.shaderControlState);
+    compound.add("hideInactiveShaderControls", this.hideInactiveShaderControls);
     compound.add("mode2d", this.params2d.mode);
     compound.add("lineWidth2d", this.params2d.lineWidth);
     compound.add("mode3d", this.params3d.mode);

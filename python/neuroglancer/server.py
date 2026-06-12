@@ -44,9 +44,7 @@ SKELETON_PATH_REGEX = r"^/neuroglancer/skeleton/(?P<key>[^/]+)/(?P<object_id>[0-
 
 MESH_PATH_REGEX = r"^/neuroglancer/mesh/(?P<key>[^/]+)/(?P<object_id>[0-9]+)$"
 
-STATIC_PATH_REGEX = (
-    r"^/v/(?P<viewer_token>[^/]+)/(?P<path>(?:[@a-zA-Z0-9_\-][@a-zA-Z0-9_\-./]*)?)$"
-)
+STATIC_PATH_REGEX = r"^/v/(?P<viewer_token>[^/]+)/(?P<path>(?:[a-zA-Z0-9_@\-][a-zA-Z0-9_@\-.]*(?:/[a-zA-Z0-9_@\-][a-zA-Z0-9_@\-.]*)*)?)$"
 
 ACTION_PATH_REGEX = r"^/action/(?P<viewer_token>[^/]+)$"
 

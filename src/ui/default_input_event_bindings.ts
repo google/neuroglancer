@@ -58,6 +58,7 @@ export function getDefaultSelectBindings() {
   if (defaultSelectBindings === undefined) {
     defaultSelectBindings = EventActionMap.fromObject({
       "control+mousedown2": "select-position",
+      "shift+control+mousedown2": "unpin-selected-position",
     });
   }
   return defaultSelectBindings;
@@ -70,6 +71,7 @@ export function getDefaultAnnotationListBindings() {
       {
         click0: "pin-annotation",
         mousedown2: "move-to-annotation",
+        "alt+mousedown0": "reorder-annotation",
       },
       { parents: [[getDefaultSelectBindings(), 0]] },
     );

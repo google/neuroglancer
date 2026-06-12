@@ -50,10 +50,12 @@ import { Tab } from "#src/widget/tab_view.js";
 const SHADER_JSON_KEY = "shader";
 const SHADER_CONTROLS_JSON_KEY = "shaderControls";
 const CODE_VISIBLE_KEY = "codeVisible";
+const HIDE_INACTIVE_SHADER_CONTROLS_JSON_KEY = "hideInactiveShaderControls";
 
 export class SingleMeshUserLayer extends UserLayer {
   displayState = new SingleMeshDisplayState();
   codeVisible = new TrackableBoolean(true);
+  hideInactiveShaderControls = new TrackableBoolean(false);
 
   vertexAttributes = new WatchableValue<VertexAttributeInfo[] | undefined>(
     undefined,
@@ -61,6 +63,9 @@ export class SingleMeshUserLayer extends UserLayer {
   constructor(public managedLayer: Borrowed<ManagedUserLayer>) {
     super(managedLayer);
     this.codeVisible.changed.add(this.specificationChanged.dispatch);
+    this.hideInactiveShaderControls.changed.add(
+      this.specificationChanged.dispatch,
+    );
     this.registerDisposer(
       this.displayState.shaderControlState.changed.add(
         this.specificationChanged.dispatch,
@@ -82,6 +87,9 @@ export class SingleMeshUserLayer extends UserLayer {
   restoreState(specification: any) {
     super.restoreState(specification);
     this.codeVisible.restoreState(specification[CODE_VISIBLE_KEY]);
+    this.hideInactiveShaderControls.restoreState(
+      specification[HIDE_INACTIVE_SHADER_CONTROLS_JSON_KEY],
+    );
     this.displayState.fragmentMain.restoreState(specification[SHADER_JSON_KEY]);
     this.displayState.shaderControlState.restoreState(
       specification[SHADER_CONTROLS_JSON_KEY],
@@ -124,6 +132,8 @@ export class SingleMeshUserLayer extends UserLayer {
     x[SHADER_JSON_KEY] = this.displayState.fragmentMain.toJSON();
     x[SHADER_CONTROLS_JSON_KEY] = this.displayState.shaderControlState.toJSON();
     x[CODE_VISIBLE_KEY] = this.codeVisible.toJSON();
+    x[HIDE_INACTIVE_SHADER_CONTROLS_JSON_KEY] =
+      this.hideInactiveShaderControls.toJSON();
     return x;
   }
 
@@ -232,7 +242,10 @@ class DisplayOptionsTab extends Tab {
           layer.displayState.shaderControlState,
           this.layer.manager.root.display,
           this.layer,
-          { visibility: this.visibility },
+          {
+            visibility: this.visibility,
+            hideInactiveShaderControls: layer.hideInactiveShaderControls,
+          },
         ),
       ).element,
     );

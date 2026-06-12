@@ -160,9 +160,9 @@ class WebdriverBase:
         return self.driver.find_element("xpath", "//body")
 
     def action_chain(self):
-        import selenium.webdriver.common.action_chains
+        import selenium.webdriver
 
-        return selenium.webdriver.common.action_chains.ActionChains(self.driver)
+        return selenium.webdriver.ActionChains(self.driver)
 
 
 class Webdriver(WebdriverBase):
