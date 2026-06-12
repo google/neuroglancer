@@ -184,8 +184,7 @@ function updateFixedCurPositionInChunks<
 ): boolean {
   const { curPositionInChunks, fixedPositionWithinChunk } = tsource;
   const { nonDisplayLowerClipBound, nonDisplayUpperClipBound } = tsource;
-  const { rank, chunkDataSize, lowerChunkBound, upperChunkBound } =
-    tsource.source.spec;
+  const { rank, chunkDataSize } = tsource.source.spec;
   if (
     !getChunkPositionFromCombinedGlobalLocalPositions(
       curPositionInChunks,
@@ -219,12 +218,19 @@ function updateFixedCurPositionInChunks<
       return false;
     }
     const chunkSize = chunkDataSize[chunkDim];
-    // Given that clip bounds are already tested above, clamp chunk index to its
-    // bounds, to ensure floating-point imprecision does not result in an
-    // out-of-bounds index.
+    // Given that clip bounds are already tested above, clamp the chunk index to
+    // the range implied by those clip bounds, to ensure floating-point
+    // imprecision does not result in an out-of-bounds index. The clip bounds
+    // are used because they are expressed in the same coordinate frame as `x`.
+    const lowerChunkLimit = Math.floor(
+      nonDisplayLowerClipBound[chunkDim] / chunkSize,
+    );
+    const upperChunkLimit = Math.ceil(
+      nonDisplayUpperClipBound[chunkDim] / chunkSize,
+    );
     const chunk = (curPositionInChunks[chunkDim] = Math.min(
-      upperChunkBound[chunkDim] - 1,
-      Math.max(lowerChunkBound[chunkDim], Math.floor(x / chunkSize)),
+      upperChunkLimit - 1,
+      Math.max(lowerChunkLimit, Math.floor(x / chunkSize)),
     ));
     fixedPositionWithinChunk[chunkDim] = x - chunk * chunkSize;
   }
