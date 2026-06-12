@@ -23,11 +23,7 @@ import {
 } from "#src/layer/segmentation/selection.js";
 import { getChunkPositionFromCombinedGlobalLocalPositions } from "#src/render_coordinate_transform.js";
 import { RenderedDataPanel } from "#src/rendered_data_panel.js";
-import {
-  addSegmentToVisibleSets,
-  getVisibleSegments,
-  removeSegmentFromVisibleSets,
-} from "#src/segmentation_display_state/base.js";
+import { getVisibleSegments } from "#src/segmentation_display_state/base.js";
 import { SpatialSkeletonActions } from "#src/skeleton/actions.js";
 import type {
   SpatialSkeletonSourceState,
@@ -239,49 +235,10 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     this.layer.selectSegment(BigInt(Math.round(value)), true);
   }
 
-  protected ensureSegmentVisibleByNumber(value: number) {
-    if (!Number.isFinite(value)) return;
-    addSegmentToVisibleSets(
-      this.layer.displayState.segmentationGroupState.value,
-      BigInt(Math.round(value)),
-    );
-  }
-
-  protected removeVisibleSegmentByNumber(
-    value: number,
-    options: {
-      deselect?: boolean;
-    } = {},
-  ) {
-    if (!Number.isFinite(value)) return;
-    removeSegmentFromVisibleSets(
-      this.layer.displayState.segmentationGroupState.value,
-      BigInt(Math.round(value)),
-      options,
-    );
-  }
-
   protected isSpatialSkeletonSegmentVisible(segmentId: number) {
     return getVisibleSegments(
       this.layer.displayState.segmentationGroupState.value,
     ).has(BigInt(Math.round(segmentId)));
-  }
-
-  protected resolvePickedNodeForAction(
-    skeletonLayer: SpatiallyIndexedSkeletonLayer,
-  ) {
-    const pickedNode = this.resolvePickedNodeSelection(skeletonLayer);
-    if (pickedNode === undefined) {
-      return undefined;
-    }
-    if (pickedNode.segmentId !== undefined) {
-      this.selectSegmentByNumber(pickedNode.segmentId);
-    }
-    this.layer.selectSpatialSkeletonNode(pickedNode.nodeId, false, pickedNode);
-    return {
-      nodeId: pickedNode.nodeId,
-      segmentId: pickedNode.segmentId,
-    };
   }
 
   protected resolvePickedNodeSelection(
