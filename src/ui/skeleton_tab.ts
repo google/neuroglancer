@@ -32,13 +32,6 @@ import svg_undo from "ikonate/icons/undo.svg?raw";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import { getSegmentIdFromLayerSelectionValue } from "#src/layer/segmentation/selection.js";
 import {
-  executeSpatialSkeletonDeleteNode,
-  executeSpatialSkeletonNodeTrueEndUpdate,
-  redoSpatialSkeletonCommand,
-  showSpatialSkeletonActionError,
-  undoSpatialSkeletonCommand,
-} from "#src/layer/segmentation/spatial_skeleton_commands.js";
-import {
   getSegmentEquivalences,
   getVisibleSegments,
 } from "#src/segmentation_display_state/base.js";
@@ -67,6 +60,13 @@ import {
   SpatialSkeletonDisplayNodeType,
   SpatialSkeletonNodeFilterType,
 } from "#src/skeleton/node_types.js";
+import {
+  executeSpatialSkeletonDeleteNode,
+  executeSpatialSkeletonNodeTrueEndUpdate,
+  redoSpatialSkeletonCommand,
+  showSpatialSkeletonActionError,
+  undoSpatialSkeletonCommand,
+} from "#src/skeleton/spatial_skeleton_commands.js";
 import { StatusMessage } from "#src/status.js";
 import { observeWatchable, registerNested } from "#src/trackable_value.js";
 import {
@@ -1429,7 +1429,8 @@ export class SpatialSkeletonEditTab extends Tab {
         segmentState === undefined ||
         segmentState.totalNodeCount === 0 ||
         (getFilterText().length === 0 &&
-          (nodeFilterTypeModel.value === SpatialSkeletonNodeFilterType.DEFAULT ||
+          (nodeFilterTypeModel.value ===
+            SpatialSkeletonNodeFilterType.DEFAULT ||
             nodeFilterTypeModel.value === SpatialSkeletonNodeFilterType.NONE))
       ) {
         return "No loaded nodes.";

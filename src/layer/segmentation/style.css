@@ -312,7 +312,8 @@
   justify-content: center;
 }
 
-.neuroglancer-selection-details-skeleton-leaf-type-option-icon .neuroglancer-icon {
+.neuroglancer-selection-details-skeleton-leaf-type-option-icon
+  .neuroglancer-icon {
   min-width: 14px;
   min-height: 14px;
 }

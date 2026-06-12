@@ -921,7 +921,9 @@ async function commitAndApplyDeleteNode(
       resolvedNode.node.segmentId,
     ) ?? [];
   if (remainingNodes.length > 0) {
-    resolvedNode.skeletonLayer.retainOverlaySegment(resolvedNode.node.segmentId);
+    resolvedNode.skeletonLayer.retainOverlaySegment(
+      resolvedNode.node.segmentId,
+    );
   } else {
     resolvedNode.skeletonLayer.markSegmentEdited(resolvedNode.node.segmentId);
   }
@@ -2132,7 +2134,6 @@ class MergeCommand implements SpatialSkeletonCommand {
     if (deletedSkeletonId !== resultSkeletonId) {
       firstNode.skeletonLayer.markSegmentEdited(deletedSkeletonId);
     }
-    this.layer.clearSpatialSkeletonMergeAnchor();
     await refreshTopologySegments(
       this.layer,
       [resultSkeletonId, deletedSkeletonId],

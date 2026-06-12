@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import {
   SpatialSkeletonActions,
   type SpatialSkeletonAction,
@@ -32,6 +31,7 @@ import { getSpatialSkeletonActionErrorMessage } from "#src/skeleton/edit_errors.
 import {
   getEditableSpatiallyIndexedSkeletonSource,
   getSpatialSkeletonEditCommandFactoryForAction,
+  type SpatialSkeletonLayerContext,
 } from "#src/skeleton/spatial_skeleton_manager.js";
 import { StatusMessage } from "#src/status.js";
 
@@ -40,7 +40,7 @@ interface SpatialSkeletonSourceAccess {
 }
 
 function getEditSource(
-  layer: SegmentationUserLayer,
+  layer: SpatialSkeletonLayerContext,
 ): EditableSpatiallyIndexedSkeletonSource {
   const source = getEditableSpatiallyIndexedSkeletonSource(
     layer.getSpatiallyIndexedSkeletonLayer(),
@@ -63,7 +63,7 @@ export function getSpatialSkeletonEditCommandFactory(
 }
 
 function executeCommand(
-  layer: SegmentationUserLayer,
+  layer: SpatialSkeletonLayerContext,
   command: SpatialSkeletonCommand,
 ) {
   return layer.spatialSkeletonState.commandHistory.execute(command);
@@ -88,7 +88,7 @@ export function showSpatialSkeletonActionError(action: string, error: unknown) {
 }
 
 function createSpatialSkeletonCommand(
-  layer: SegmentationUserLayer,
+  layer: SpatialSkeletonLayerContext,
   action: SpatialSkeletonAction,
   payload: SpatialSkeletonCommandPayload,
   unsupportedMessage: string,
@@ -101,7 +101,10 @@ function createSpatialSkeletonCommand(
   if (commandFactory === undefined) {
     throw new Error(unsupportedMessage);
   }
-  return commandFactory.createCommand(layer, payload);
+  // The concrete createCommand implementations expect the full layer type; the
+  // cast is safe because in practice layer always satisfies those requirements.
+
+  return commandFactory.createCommand(layer as any, payload);
 }
 
 interface SpatialSkeletonExecutionMetadata {
@@ -198,7 +201,7 @@ const spatialSkeletonExecutionMetadata = new Map<
 ]);
 
 function executeSpatialSkeletonAction(
-  layer: SegmentationUserLayer,
+  layer: SpatialSkeletonLayerContext,
   action: SpatialSkeletonAction,
   payload: SpatialSkeletonCommandPayload,
 ) {
@@ -219,7 +222,7 @@ function executeSpatialSkeletonAction(
 }
 
 export function executeSpatialSkeletonAddNode(
-  layer: SegmentationUserLayer,
+  layer: SpatialSkeletonLayerContext,
   options: SpatialSkeletonCommandPayload,
 ) {
   return executeSpatialSkeletonAction(
@@ -230,7 +233,7 @@ export function executeSpatialSkeletonAddNode(
 }
 
 export function executeSpatialSkeletonInsertNode(
-  layer: SegmentationUserLayer,
+  layer: SpatialSkeletonLayerContext,
   options: SpatialSkeletonCommandPayload,
 ) {
   return executeSpatialSkeletonAction(
@@ -241,7 +244,7 @@ export function executeSpatialSkeletonInsertNode(
 }
 
 export function executeSpatialSkeletonMoveNode(
-  layer: SegmentationUserLayer,
+  layer: SpatialSkeletonLayerContext,
   options: SpatialSkeletonCommandPayload,
 ) {
   return executeSpatialSkeletonAction(
@@ -252,7 +255,7 @@ export function executeSpatialSkeletonMoveNode(
 }
 
 export function executeSpatialSkeletonDeleteNode(
-  layer: SegmentationUserLayer,
+  layer: SpatialSkeletonLayerContext,
   node: SpatiallyIndexedSkeletonNode,
 ) {
   return executeSpatialSkeletonAction(
@@ -263,7 +266,7 @@ export function executeSpatialSkeletonDeleteNode(
 }
 
 export function executeSpatialSkeletonNodeDescriptionUpdate(
-  layer: SegmentationUserLayer,
+  layer: SpatialSkeletonLayerContext,
   options: SpatialSkeletonCommandPayload,
 ) {
   return executeSpatialSkeletonAction(
@@ -274,7 +277,7 @@ export function executeSpatialSkeletonNodeDescriptionUpdate(
 }
 
 export function executeSpatialSkeletonNodeTrueEndUpdate(
-  layer: SegmentationUserLayer,
+  layer: SpatialSkeletonLayerContext,
   options: SpatialSkeletonCommandPayload,
 ) {
   return executeSpatialSkeletonAction(
@@ -285,7 +288,7 @@ export function executeSpatialSkeletonNodeTrueEndUpdate(
 }
 
 export function executeSpatialSkeletonNodeRadiusUpdate(
-  layer: SegmentationUserLayer,
+  layer: SpatialSkeletonLayerContext,
   options: SpatialSkeletonCommandPayload,
 ) {
   return executeSpatialSkeletonAction(
@@ -296,7 +299,7 @@ export function executeSpatialSkeletonNodeRadiusUpdate(
 }
 
 export function executeSpatialSkeletonNodeConfidenceUpdate(
-  layer: SegmentationUserLayer,
+  layer: SpatialSkeletonLayerContext,
   options: SpatialSkeletonCommandPayload,
 ) {
   return executeSpatialSkeletonAction(
@@ -307,7 +310,7 @@ export function executeSpatialSkeletonNodeConfidenceUpdate(
 }
 
 export function executeSpatialSkeletonReroot(
-  layer: SegmentationUserLayer,
+  layer: SpatialSkeletonLayerContext,
   node: SpatialSkeletonCommandPayload,
 ) {
   return executeSpatialSkeletonAction(
@@ -318,7 +321,7 @@ export function executeSpatialSkeletonReroot(
 }
 
 export function executeSpatialSkeletonSplit(
-  layer: SegmentationUserLayer,
+  layer: SpatialSkeletonLayerContext,
   node: SpatialSkeletonCommandPayload,
 ) {
   return executeSpatialSkeletonAction(
@@ -329,7 +332,7 @@ export function executeSpatialSkeletonSplit(
 }
 
 export function executeSpatialSkeletonMerge(
-  layer: SegmentationUserLayer,
+  layer: SpatialSkeletonLayerContext,
   firstNode: SpatialSkeletonCommandPayload,
   secondNode: SpatialSkeletonCommandPayload,
 ) {
@@ -340,7 +343,9 @@ export function executeSpatialSkeletonMerge(
   );
 }
 
-export async function undoSpatialSkeletonCommand(layer: SegmentationUserLayer) {
+export async function undoSpatialSkeletonCommand(
+  layer: SpatialSkeletonLayerContext,
+) {
   const changed = await layer.spatialSkeletonState.commandHistory.undo();
   if (!changed) {
     return false;
@@ -348,7 +353,9 @@ export async function undoSpatialSkeletonCommand(layer: SegmentationUserLayer) {
   return true;
 }
 
-export async function redoSpatialSkeletonCommand(layer: SegmentationUserLayer) {
+export async function redoSpatialSkeletonCommand(
+  layer: SpatialSkeletonLayerContext,
+) {
   const changed = await layer.spatialSkeletonState.commandHistory.redo();
   if (!changed) {
     return false;
