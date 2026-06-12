@@ -32,6 +32,7 @@ import { SpatialSkeletonCommandHistory } from "#src/skeleton/command_history.js"
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/frontend.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { RefCounted } from "#src/util/disposable.js";
+import { PromiseConcurrencyLimiter } from "#src/util/promise_concurrency_limiter.js";
 
 interface SpatialSkeletonSourceAccess {
   source: unknown;
@@ -228,6 +229,12 @@ function cloneSpatiallyIndexedSkeletonNode(
   };
 }
 
+/**
+ * Full-segment skeleton fetches bypass the chunk queue manager, so they are
+ * capped separately at min(this, the concurrentDownloads viewer setting).
+ */
+const MAX_CONCURRENT_FULL_SEGMENT_NODE_FETCHES = 8;
+
 export class SpatialSkeletonState extends RefCounted {
   readonly commandHistory = this.registerDisposer(
     new SpatialSkeletonCommandHistory(),
@@ -254,6 +261,18 @@ export class SpatialSkeletonState extends RefCounted {
       abortController: AbortController;
     }
   >();
+  private fullSegmentNodeFetchLimitLayer:
+    | SpatiallyIndexedSkeletonLayer
+    | undefined;
+  private fullSegmentNodeFetchLimiter = new PromiseConcurrencyLimiter(() => {
+    const itemLimit =
+      this.fullSegmentNodeFetchLimitLayer?.chunkManager?.chunkQueueManager
+        ?.capacities?.download?.itemLimit?.value;
+    return Math.min(
+      MAX_CONCURRENT_FULL_SEGMENT_NODE_FETCHES,
+      itemLimit ?? Number.POSITIVE_INFINITY,
+    );
+  });
   private cachedNodesById = new Map<number, SpatiallyIndexedSkeletonNode>();
 
   setNodeRadius(nodeId: number, radius: number) {
@@ -859,38 +878,44 @@ export class SpatialSkeletonState extends RefCounted {
     const pendingFetch: {
       promise?: Promise<SpatiallyIndexedSkeletonNode[]>;
     } = {};
-    const fetchPromise = (async () => {
-      const fetchedNodes = await skeletonSource.getSkeleton(segmentId, {
-        signal: abortController.signal,
-      });
-      const normalizedNodes: SpatiallyIndexedSkeletonNode[] = [];
-      for (const fetchedNode of fetchedNodes) {
-        const mappedNode = normalizeSpatiallyIndexedSkeletonNode(
-          fetchedNode,
-          segmentId,
-        );
-        if (mappedNode === undefined) continue;
-        normalizedNodes.push(mappedNode);
-      }
-      normalizedNodes.sort((a, b) => a.nodeId - b.nodeId);
-      if (
-        this.fullSkeletonCacheGeneration === fetchVersion &&
-        pendingFetch.promise !== undefined &&
-        this.pendingFullSegmentNodeFetches.get(segmentId)?.promise ===
+    this.fullSegmentNodeFetchLimitLayer = skeletonLayer;
+    const fetchPromise = this.fullSegmentNodeFetchLimiter
+      .run(
+        async () => {
+          const fetchedNodes = await skeletonSource.getSkeleton(segmentId, {
+            signal: abortController.signal,
+          });
+          const normalizedNodes: SpatiallyIndexedSkeletonNode[] = [];
+          for (const fetchedNode of fetchedNodes) {
+            const mappedNode = normalizeSpatiallyIndexedSkeletonNode(
+              fetchedNode,
+              segmentId,
+            );
+            if (mappedNode === undefined) continue;
+            normalizedNodes.push(mappedNode);
+          }
+          normalizedNodes.sort((a, b) => a.nodeId - b.nodeId);
+          if (
+            this.fullSkeletonCacheGeneration === fetchVersion &&
+            pendingFetch.promise !== undefined &&
+            this.pendingFullSegmentNodeFetches.get(segmentId)?.promise ===
+              pendingFetch.promise
+          ) {
+            this.replaceCachedSegmentNodes(segmentId, normalizedNodes);
+            this.markNodeDataChanged({ invalidateFullSkeletonCache: false });
+          }
+          return normalizedNodes;
+        },
+        { signal: abortController.signal },
+      )
+      .finally(() => {
+        if (
+          this.pendingFullSegmentNodeFetches.get(segmentId)?.promise ===
           pendingFetch.promise
-      ) {
-        this.replaceCachedSegmentNodes(segmentId, normalizedNodes);
-        this.markNodeDataChanged({ invalidateFullSkeletonCache: false });
-      }
-      return normalizedNodes;
-    })().finally(() => {
-      if (
-        this.pendingFullSegmentNodeFetches.get(segmentId)?.promise ===
-        pendingFetch.promise
-      ) {
-        this.pendingFullSegmentNodeFetches.delete(segmentId);
-      }
-    });
+        ) {
+          this.pendingFullSegmentNodeFetches.delete(segmentId);
+        }
+      });
     pendingFetch.promise = fetchPromise;
     this.pendingFullSegmentNodeFetches.set(segmentId, {
       promise: fetchPromise,
