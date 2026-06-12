@@ -1181,6 +1181,12 @@ export class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
       const cachedNode =
         this.getActiveSpatiallyIndexedSkeletonLayer()?.getNode(nodeId) ??
         this.layer.spatialSkeletonState.getCachedNode(nodeId);
+      if (
+        anchorSelection?.nodeId === nodeId &&
+        anchorSelection.segmentId === cachedNode?.segmentId
+      ) {
+        return anchorSelection;
+      }
       const anchorNode = {
         nodeId,
         segmentId: cachedNode?.segmentId,
