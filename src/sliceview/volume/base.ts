@@ -153,6 +153,22 @@ export function makeVolumeChunkSpecification(
   };
 }
 
+export function computeChunkGridPosition(
+  chunkGridPosition: Float32Array,
+  positionWithinChunk: Uint32Array,
+  voxelCoord: Float32Array,
+  chunkDataSize: Uint32Array | Float32Array,
+) {
+  const rank = chunkGridPosition.length;
+  for (let i = 0; i < rank; ++i) {
+    const voxel = voxelCoord[i];
+    const size = chunkDataSize[i];
+    const chunkIndex = Math.floor(voxel / size);
+    chunkGridPosition[i] = chunkIndex;
+    positionWithinChunk[i] = Math.floor(voxel - size * chunkIndex);
+  }
+}
+
 function shouldTranscodeToCompressedSegmentation(
   options: VolumeChunkSpecificationDefaultCompressionOptions &
     VolumeChunkSpecificationOptions &
@@ -310,3 +326,5 @@ export interface VolumeChunkSource extends SliceViewChunkSource {
 }
 
 export const VOLUME_RPC_ID = "volume";
+export const IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID =
+  "sliceview/volume/InMemoryChunkSource";

@@ -85,6 +85,7 @@ import { LayerToolBinder, SelectedLegacyTool } from "#src/ui/tool.js";
 import { gatherUpdate } from "#src/util/array.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { invokeDisposers, RefCounted } from "#src/util/disposable.js";
+import type { vec3 } from "#src/util/geom.js";
 import {
   emptyToUndefined,
   parseArray,
@@ -1137,6 +1138,7 @@ export class MouseSelectionState implements PickState {
   unsnappedPosition: Float32Array = kEmptyFloat32Vec;
   active = false;
   displayDimensions: DisplayDimensions | undefined = undefined;
+  planeNormal: vec3 | undefined = undefined;
   pickedRenderLayer: RenderLayer | null = null;
   pickedValue = 0n;
   pickedOffset = 0;

@@ -17,9 +17,9 @@
 import type { SharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
 import type { DriverListOptions, ListResponse } from "#src/kvstore/index.js";
 import { proxyList } from "#src/kvstore/proxy.js";
-import { ReadableS3KvStore } from "#src/kvstore/s3/common.js";
+import { S3KvStoreBase } from "#src/kvstore/s3/common.js";
 
-export class S3KvStore extends ReadableS3KvStore<SharedKvStoreContextCounterpart> {
+export class S3KvStore extends S3KvStoreBase<SharedKvStoreContextCounterpart> {
   list(prefix: string, options: DriverListOptions): Promise<ListResponse> {
     return proxyList(this.sharedKvStoreContext, this.getUrl(prefix), options);
   }

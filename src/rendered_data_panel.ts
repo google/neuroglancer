@@ -41,6 +41,7 @@ import { KeyboardEventBinder } from "#src/util/keyboard_bindings.js";
 import * as matrix from "#src/util/matrix.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
+import { Signal } from "#src/util/signal.js";
 import type {
   TouchPinchInfo,
   TouchTranslateInfo,
@@ -177,6 +178,9 @@ export abstract class RenderedDataPanel extends RenderedPanel {
    * issued.
    */
   pickRequestPending = false;
+
+  private overlay_canvas: HTMLCanvasElement;
+  private overlay_context: CanvasRenderingContext2D;
 
   private mouseStateForcer = () => this.blockOnPickRequest();
   protected isMovingToMousePosition: boolean = false;
@@ -858,6 +862,52 @@ export abstract class RenderedDataPanel extends RenderedPanel {
           this.zoomByMouse(ratio);
         }
       },
+    );
+
+    this.overlay_canvas = document.createElement("canvas");
+    this.overlay_canvas.style.position = "absolute";
+    this.overlay_canvas.style.top = "0";
+    this.overlay_canvas.style.left = "0";
+    this.overlay_canvas.style.width = "100%";
+    this.overlay_canvas.style.height = "100%";
+    this.overlay_canvas.style.pointerEvents = "none";
+    this.overlay_canvas.style.zIndex = "10";
+    this.element.appendChild(this.overlay_canvas);
+    this.overlay_context = this.overlay_canvas.getContext("2d")!;
+
+    this.boundsUpdated.add(() => {
+      this.overlay_canvas.width = this.renderViewport.logicalWidth;
+      this.overlay_canvas.height = this.renderViewport.logicalHeight;
+    });
+  }
+
+  overlayDraw = new Signal<
+    (
+      ctx: CanvasRenderingContext2D,
+      width: number,
+      height: number,
+      panel: RenderedDataPanel,
+    ) => void
+  >();
+
+  scheduleOverlayRedraw() {
+    if (this.visible) {
+      requestAnimationFrame(this.drawOverlayInternal.bind(this));
+    }
+  }
+
+  private drawOverlayInternal() {
+    this.overlay_context.clearRect(
+      0,
+      0,
+      this.renderViewport.logicalWidth,
+      this.renderViewport.logicalHeight,
+    );
+    this.overlayDraw.dispatch(
+      this.overlay_context,
+      this.renderViewport.logicalWidth,
+      this.renderViewport.logicalHeight,
+      this,
     );
   }
 
