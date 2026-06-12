@@ -1363,6 +1363,7 @@ export class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
             showSpatialSkeletonActionError("merge skeletons", error);
           } finally {
             pending = false;
+            this.layer.setSpatialSkeletonMergeAnchor(secondNode.nodeId);
             setReadyStatus();
           }
         })();
