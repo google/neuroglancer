@@ -286,26 +286,6 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     const isVisible = this.isSpatialSkeletonSegmentVisible(pickedSegmentId);
     if (isVisible) {
       this.removeVisibleSegmentByNumber(pickedSegmentId, { deselect: true });
-      const selectedNodeId =
-        this.layer.selectedSpatialSkeletonNodeInfo.value?.nodeId;
-      const selectedNode =
-        selectedNodeId === undefined
-          ? undefined
-          : skeletonLayer?.getNode(selectedNodeId);
-      if (selectedNode?.segmentId === pickedSegmentId) {
-        this.layer.clearSpatialSkeletonNodeSelection(false);
-      }
-      const mergeAnchorNodeId =
-        this.layer.spatialSkeletonState.mergeAnchorNodeId.value;
-      const anchorSegmentId =
-        mergeAnchorNodeId === undefined
-          ? undefined
-          : (skeletonLayer?.getNode(mergeAnchorNodeId)?.segmentId ??
-            this.layer.spatialSkeletonState.getCachedNode(mergeAnchorNodeId)
-              ?.segmentId);
-      if (anchorSegmentId === pickedSegmentId) {
-        this.layer.clearSpatialSkeletonMergeAnchor();
-      }
       const cachedSegmentIds = new Set<number>(
         [
           ...getVisibleSegments(
@@ -324,16 +304,10 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
       this.layer.spatialSkeletonState.evictInactiveSegmentNodes(
         cachedSegmentIds,
       );
-      StatusMessage.showTemporaryMessage(
-        `Removed skeleton ${pickedSegmentId} from visible/editable skeletons.`,
-      );
       return true;
     }
     this.ensureSegmentVisibleByNumber(pickedSegmentId);
     this.selectSegmentByNumber(pickedSegmentId);
-    StatusMessage.showTemporaryMessage(
-      `Made skeleton ${pickedSegmentId} visible/editable.`,
-    );
     return true;
   }
 
@@ -341,7 +315,6 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     activation.bindAction(
       "spatial-skeleton-toggle-visible",
       (event: ActionEvent<MouseEvent>) => {
-        if (event.detail.button !== 0) return;
         event.stopPropagation();
         event.detail.preventDefault();
         this.togglePickedSpatialSkeletonVisibility();
