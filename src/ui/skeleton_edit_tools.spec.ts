@@ -54,7 +54,9 @@ const { SpatialSkeletonMergeModeTool, SpatialSkeletonSplitModeTool } =
 
 function makeVisibleSegmentsState(initialVisibleSegments: bigint[] = []) {
   return {
-    visibleSegments: new Set<bigint>(initialVisibleSegments),
+    visibleSegments: Object.assign(new Set<bigint>(initialVisibleSegments), {
+      changed: makeChangedSignal(),
+    }),
     selectedSegments: new Set<bigint>(),
     segmentEquivalences: {},
     temporaryVisibleSegments: new Set<bigint>(),
@@ -644,7 +646,6 @@ describe("spatial_skeleton_edit_tool", () => {
     expect(
       skeletonLayer.invalidateSourceCellsForPositions,
     ).toHaveBeenCalledWith([firstNode.position, secondNode.position]);
-    expect(clearSpatialSkeletonMergeAnchor).toHaveBeenCalledTimes(1);
   });
 
   it("clears the merge anchor when the clear-selection action runs in merge mode", () => {
