@@ -477,9 +477,7 @@ function parseSelectOptions(
       if (seenValues.has(option.value)) {
         return {
           options: undefined,
-          errors: [
-            `Duplicate option value: ${JSON.stringify(option.value)}`,
-          ],
+          errors: [`Duplicate option value: ${JSON.stringify(option.value)}`],
         };
       }
       seenValues.add(option.value);
