@@ -898,4 +898,105 @@ describe("skeleton/spatial_skeleton_manager", () => {
     expect(state.getCachedSegmentNodes(1)).toBeUndefined();
     expect(state.getCachedNode(1)).toBeUndefined();
   });
+
+  function makeLimiterTestLayer(itemLimit?: number) {
+    const resolvers: Array<
+      (
+        value: Array<{
+          nodeId: number;
+          parentNodeId?: number;
+          position: Float32Array;
+          segmentId: number;
+          isTrueEnd: boolean;
+        }>,
+      ) => void
+    > = [];
+    const getSkeleton = vi.fn(
+      (_segmentId: number, options?: { signal?: AbortSignal }) =>
+        new Promise<
+          Array<{
+            nodeId: number;
+            parentNodeId?: number;
+            position: Float32Array;
+            segmentId: number;
+            isTrueEnd: boolean;
+          }>
+        >((resolve, reject) => {
+          resolvers.push(resolve);
+          options?.signal?.addEventListener(
+            "abort",
+            () => reject(options.signal?.reason),
+            { once: true },
+          );
+        }),
+    );
+    const skeletonLayer = {
+      source: {
+        readonly: false,
+        listSkeletons: async () => [],
+        getSkeleton,
+        fetchNodes: async () => [],
+        getSpatialIndexMetadata: async () => null,
+      },
+      ...(itemLimit === undefined
+        ? {}
+        : {
+            chunkManager: {
+              chunkQueueManager: {
+                capacities: { download: { itemLimit: { value: itemLimit } } },
+              },
+            },
+          }),
+    } as any;
+    return { skeletonLayer, getSkeleton, resolvers };
+  }
+
+  it("caps concurrent full segment fetches at the download item limit", async () => {
+    const state = new SpatialSkeletonState();
+    const { skeletonLayer, getSkeleton, resolvers } = makeLimiterTestLayer(2);
+
+    const pending = [11, 12, 13, 14].map((segmentId) =>
+      state.getFullSegmentNodes(skeletonLayer, segmentId),
+    );
+
+    expect(getSkeleton).toHaveBeenCalledTimes(2);
+    resolvers[0]([]);
+    await pending[0];
+    expect(getSkeleton).toHaveBeenCalledTimes(3);
+    resolvers[1]([]);
+    resolvers[2]([]);
+    await Promise.all([pending[1], pending[2]]);
+    expect(getSkeleton).toHaveBeenCalledTimes(4);
+    resolvers[3]([]);
+    await pending[3];
+  });
+
+  it("caps concurrent full segment fetches when no chunk manager is available", () => {
+    const state = new SpatialSkeletonState();
+    const { skeletonLayer, getSkeleton } = makeLimiterTestLayer();
+
+    for (let segmentId = 1; segmentId <= 10; ++segmentId) {
+      void state
+        .getFullSegmentNodes(skeletonLayer, segmentId)
+        .catch(() => undefined);
+    }
+
+    expect(getSkeleton).toHaveBeenCalledTimes(8);
+  });
+
+  it("never starts a queued full segment fetch that is evicted first", async () => {
+    const state = new SpatialSkeletonState();
+    const { skeletonLayer, getSkeleton, resolvers } = makeLimiterTestLayer(1);
+
+    const first = state.getFullSegmentNodes(skeletonLayer, 11);
+    const queued = state.getFullSegmentNodes(skeletonLayer, 12);
+    expect(getSkeleton).toHaveBeenCalledTimes(1);
+
+    expect(state.evictInactiveSegmentNodes([11])).toBe(false);
+    await expect(queued).rejects.toMatchObject({ name: "AbortError" });
+
+    resolvers[0]([]);
+    await first;
+    expect(getSkeleton).toHaveBeenCalledTimes(1);
+  });
 });
