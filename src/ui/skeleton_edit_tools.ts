@@ -1098,14 +1098,20 @@ export class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
     );
     activation.registerDisposer(
       this.layer.selectedSpatialSkeletonNodeInfo.changed.add(() => {
-        if (
-          this.layer.selectedSpatialSkeletonNodeInfo.value?.nodeId ===
-            undefined &&
-          this.layer.spatialSkeletonState.mergeAnchorNodeId.value !== undefined
-        ) {
-          anchorSelection = undefined;
-          this.layer.clearSpatialSkeletonMergeAnchor();
+        const selectedNodeId =
+          this.layer.selectedSpatialSkeletonNodeInfo.value?.nodeId;
+        if (selectedNodeId === undefined) {
+          if (
+            this.layer.spatialSkeletonState.mergeAnchorNodeId.value !==
+            undefined
+          ) {
+            anchorSelection = undefined;
+            this.layer.clearSpatialSkeletonMergeAnchor();
+          }
           return;
+        }
+        if (this.layer.spatialSkeletonState.commandHistory.isBusy.value) {
+          this.layer.setSpatialSkeletonMergeAnchor(selectedNodeId);
         }
         renderStatus();
       }),
