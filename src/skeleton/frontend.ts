@@ -1824,7 +1824,9 @@ interface SelectedSkeletonNodeInfo {
 
 interface SpatiallyIndexedSkeletonLayerOptions {
   sources2d?: SpatiallyIndexedSkeletonSourceEntry[];
-  selectedNodeInfo?: WatchableValueInterface<SelectedSkeletonNodeInfo | undefined>;
+  selectedNodeInfo?: WatchableValueInterface<
+    SelectedSkeletonNodeInfo | undefined
+  >;
   pendingNodePositionVersion?: WatchableValueInterface<number>;
   getPendingNodePosition?: (nodeId: number) => ArrayLike<number> | undefined;
   getCachedNode?: (nodeId: number) => SpatiallyIndexedSkeletonNode | undefined;

@@ -19,15 +19,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeCatmaidNodeSourceState } from "#src/datasource/catmaid/api.js";
 import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
 import {
-  executeSpatialSkeletonAddNode,
-  executeSpatialSkeletonMerge,
-} from "#src/layer/segmentation/spatial_skeleton_commands.js";
-import {
   SpatialSkeletonActions,
   type SpatialSkeletonAction,
 } from "#src/skeleton/actions.js";
 import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
 import { SpatialSkeletonCommandHistory } from "#src/skeleton/command_history.js";
+import {
+  executeSpatialSkeletonAddNode,
+  executeSpatialSkeletonMerge,
+} from "#src/skeleton/spatial_skeleton_commands.js";
 import { StatusMessage } from "#src/status.js";
 
 if (!("WebGL2RenderingContext" in globalThis)) {
@@ -737,7 +737,10 @@ describe("spatial_skeleton_edit_tool", () => {
         },
       },
       spatialSkeletonMergeMode: makeModeWatchable(),
-      selectedSpatialSkeletonNodeInfo: { value: selectedNode, changed: makeChangedSignal() },
+      selectedSpatialSkeletonNodeInfo: {
+        value: selectedNode,
+        changed: makeChangedSignal(),
+      },
       spatialSkeletonState: {
         mergeAnchorNodeId,
         getCachedNode: vi.fn(),

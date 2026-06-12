@@ -911,3 +911,8 @@ export class SpatialSkeletonState extends RefCounted {
     this.cachedNodesById.clear();
   }
 }
+
+export interface SpatialSkeletonLayerContext {
+  getSpatiallyIndexedSkeletonLayer(): SpatiallyIndexedSkeletonLayer | undefined;
+  readonly spatialSkeletonState: SpatialSkeletonState;
+}

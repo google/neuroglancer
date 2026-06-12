@@ -21,14 +21,6 @@ import {
   getSegmentIdFromLayerSelectionValue,
   hasSpatialSkeletonNodeSelection,
 } from "#src/layer/segmentation/selection.js";
-import {
-  executeSpatialSkeletonAddNode,
-  executeSpatialSkeletonDeleteNode,
-  executeSpatialSkeletonMerge,
-  executeSpatialSkeletonMoveNode,
-  executeSpatialSkeletonSplit,
-  showSpatialSkeletonActionError,
-} from "#src/layer/segmentation/spatial_skeleton_commands.js";
 import { getChunkPositionFromCombinedGlobalLocalPositions } from "#src/render_coordinate_transform.js";
 import { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import {
@@ -49,6 +41,14 @@ import {
   PerspectiveViewSpatiallyIndexedSkeletonLayer,
   SliceViewPanelSpatiallyIndexedSkeletonLayer,
 } from "#src/skeleton/frontend.js";
+import {
+  executeSpatialSkeletonAddNode,
+  executeSpatialSkeletonDeleteNode,
+  executeSpatialSkeletonMerge,
+  executeSpatialSkeletonMoveNode,
+  executeSpatialSkeletonSplit,
+  showSpatialSkeletonActionError,
+} from "#src/skeleton/spatial_skeleton_commands.js";
 import { StatusMessage } from "#src/status.js";
 import type { SpatialSkeletonToolPointInfo } from "#src/ui/skeleton_edit_tool_messages.js";
 import {
@@ -156,16 +156,13 @@ function renderSpatialSkeletonToolStatus(
   point.className = "neuroglancer-skeleton-tool-status-point";
   for (const field of getSpatialSkeletonToolPointStatusFields(options.point)) {
     const fieldElement = document.createElement("span");
-    fieldElement.className =
-      "neuroglancer-skeleton-tool-status-point-field";
+    fieldElement.className = "neuroglancer-skeleton-tool-status-point-field";
     const label = document.createElement("span");
-    label.className =
-      "neuroglancer-skeleton-tool-status-point-field-label";
+    label.className = "neuroglancer-skeleton-tool-status-point-field-label";
     label.textContent = field.label;
     fieldElement.appendChild(label);
     const value = document.createElement("span");
-    value.className =
-      "neuroglancer-skeleton-tool-status-point-field-value";
+    value.className = "neuroglancer-skeleton-tool-status-point-field-value";
     value.textContent = field.value;
     fieldElement.appendChild(value);
     point.appendChild(fieldElement);
@@ -292,7 +289,8 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     const isVisible = this.isSpatialSkeletonSegmentVisible(pickedSegmentId);
     if (isVisible) {
       this.removeVisibleSegmentByNumber(pickedSegmentId, { deselect: true });
-      const selectedNodeId = this.layer.selectedSpatialSkeletonNodeInfo.value?.nodeId;
+      const selectedNodeId =
+        this.layer.selectedSpatialSkeletonNodeInfo.value?.nodeId;
       const selectedNode =
         selectedNodeId === undefined
           ? undefined
@@ -539,7 +537,8 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
         event.detail.preventDefault();
         const pinnedSelection = this.layer.manager.root.selectionState.value;
         const hasSpatialSkeletonSelection =
-          this.layer.selectedSpatialSkeletonNodeInfo.value?.nodeId !== undefined ||
+          this.layer.selectedSpatialSkeletonNodeInfo.value?.nodeId !==
+            undefined ||
           (pinnedSelection?.layers.some(
             ({ layer, state }) =>
               layer === this.layer && hasSpatialSkeletonNodeSelection(state),
@@ -868,7 +867,8 @@ export class SpatialSkeletonEditModeTool extends SpatialSkeletonToolBase {
           );
           return;
         }
-        const selectedParentNodeId = layer.selectedSpatialSkeletonNodeInfo.value?.nodeId;
+        const selectedParentNodeId =
+          layer.selectedSpatialSkeletonNodeInfo.value?.nodeId;
         const addNodeBlockedReason = this.getAddNodeBlockedReason(
           skeletonLayer,
           selectedParentNodeId,
@@ -1247,7 +1247,8 @@ export class SpatialSkeletonMergeModeTool extends SpatialSkeletonToolBase {
     activation.registerDisposer(
       this.layer.selectedSpatialSkeletonNodeInfo.changed.add(() => {
         if (
-          this.layer.selectedSpatialSkeletonNodeInfo.value?.nodeId === undefined &&
+          this.layer.selectedSpatialSkeletonNodeInfo.value?.nodeId ===
+            undefined &&
           this.layer.spatialSkeletonState.mergeAnchorNodeId.value !== undefined
         ) {
           anchorSelection = undefined;

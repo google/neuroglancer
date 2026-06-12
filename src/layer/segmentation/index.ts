@@ -52,15 +52,6 @@ import {
   SpatialSkeletonHoverState,
 } from "#src/layer/segmentation/selection.js";
 import {
-  executeSpatialSkeletonDeleteNode,
-  executeSpatialSkeletonNodeConfidenceUpdate,
-  executeSpatialSkeletonNodeDescriptionUpdate,
-  executeSpatialSkeletonNodeRadiusUpdate,
-  executeSpatialSkeletonReroot,
-  executeSpatialSkeletonNodeTrueEndUpdate,
-  showSpatialSkeletonActionError,
-} from "#src/layer/segmentation/spatial_skeleton_commands.js";
-import {
   MeshLayer,
   MeshSource,
   MultiscaleMeshLayer,
@@ -138,6 +129,15 @@ import {
   SpatialSkeletonDisplayNodeType,
   SpatialSkeletonNodeFilterType,
 } from "#src/skeleton/node_types.js";
+import {
+  executeSpatialSkeletonDeleteNode,
+  executeSpatialSkeletonNodeConfidenceUpdate,
+  executeSpatialSkeletonNodeDescriptionUpdate,
+  executeSpatialSkeletonNodeRadiusUpdate,
+  executeSpatialSkeletonReroot,
+  executeSpatialSkeletonNodeTrueEndUpdate,
+  showSpatialSkeletonActionError,
+} from "#src/skeleton/spatial_skeleton_commands.js";
 import {
   editableSpatiallyIndexedSkeletonSourceSupportsAction,
   getEditableSpatiallyIndexedSkeletonSource,
@@ -2449,7 +2449,8 @@ export class SegmentationUserLayer extends Base {
       let committedTrueEnd = nodeHasTrueEnd;
       let leafTypeSavePending = false;
       const leafTypeEditor = document.createElement("div");
-      leafTypeEditor.className = "neuroglancer-selection-details-skeleton-leaf-type";
+      leafTypeEditor.className =
+        "neuroglancer-selection-details-skeleton-leaf-type";
       const leafTypeRadioName = `neuroglancer-selection-details-skeleton-leaf-type-${segmentId}-${fullNodeInfo.nodeId}`;
       const leafTypeOptionElements: HTMLLabelElement[] = [];
       const makeLeafTypeOption = (options: {
@@ -2458,7 +2459,8 @@ export class SegmentationUserLayer extends Base {
         trueEnd: boolean;
       }) => {
         const option = document.createElement("label");
-        option.className = "neuroglancer-selection-details-skeleton-leaf-type-option";
+        option.className =
+          "neuroglancer-selection-details-skeleton-leaf-type-option";
         const input = document.createElement("input");
         input.type = "radio";
         input.name = leafTypeRadioName;
@@ -2466,7 +2468,8 @@ export class SegmentationUserLayer extends Base {
         input.className =
           "neuroglancer-selection-details-skeleton-leaf-type-option-input";
         const icon = document.createElement("span");
-        icon.className = "neuroglancer-selection-details-skeleton-leaf-type-option-icon";
+        icon.className =
+          "neuroglancer-selection-details-skeleton-leaf-type-option-icon";
         icon.appendChild(
           makeIcon({
             svg: options.svg,
@@ -2475,7 +2478,8 @@ export class SegmentationUserLayer extends Base {
           }),
         );
         const text = document.createElement("span");
-        text.className = "neuroglancer-selection-details-skeleton-leaf-type-option-text";
+        text.className =
+          "neuroglancer-selection-details-skeleton-leaf-type-option-text";
         text.textContent = options.label;
         option.appendChild(input);
         option.appendChild(icon);
@@ -2639,7 +2643,8 @@ export class SegmentationUserLayer extends Base {
     } else {
       let committedRadius = fullNodeInfo.radius ?? 0;
       const radiusInput = document.createElement("input");
-      radiusInput.className = "neuroglancer-selection-details-skeleton-properties-input";
+      radiusInput.className =
+        "neuroglancer-selection-details-skeleton-properties-input";
       radiusInput.type = "number";
       radiusInput.step = "any";
       radiusInput.value = formatSpatialSkeletonEditableNumber(
