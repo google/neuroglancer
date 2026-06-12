@@ -17,7 +17,7 @@
 import type { CoordinateSpaceCombiner } from "#src/coordinate_transform.js";
 import type { UserLayer } from "#src/layer/index.js";
 import { Position } from "#src/navigation_state.js";
-import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { type WatchableValueInterface } from "#src/trackable_value.js";
 import { arraysEqual } from "#src/util/array.js";
 import type { DataType } from "#src/util/data_type.js";
 import type { HistogramSpecifications } from "#src/webgl/empirical_cdf.js";

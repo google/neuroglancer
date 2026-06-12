@@ -96,6 +96,7 @@ function getShaderLayerControlFactory<LayerType extends UserLayer>(
     case "propertyInvlerp": {
       return propertyInvlerpLayerControl(() => ({
         properties: control.properties,
+        values: control.values,
         watchableValue: controlState.trackable,
         histogramSpecifications: shaderControlState.histogramSpecifications,
         histogramIndex: calculateHistogramIndex(),

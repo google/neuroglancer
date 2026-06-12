@@ -15,19 +15,49 @@
  */
 
 import { hashCombine } from "#src/gpu_hash/hash_function.js";
-import type { HashTableBase } from "#src/gpu_hash/hash_table.js";
-import type { GPUHashTable } from "#src/gpu_hash/shader.js";
+import { HashMapUint64, type HashTableBase } from "#src/gpu_hash/hash_table.js";
 import {
+  GPUHashTable,
   glsl_hashCombine,
   HashMapShaderManager,
 } from "#src/gpu_hash/shader.js";
+import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
+import type { PreprocessedSegmentPropertyMap } from "#src/segmentation_display_state/property_map.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import {
+  AggregateWatchableValue,
+  makeCachedDerivedWatchableValue,
+  makeCachedLazyDerivedWatchableValue,
+  WatchableValue,
+} from "#src/trackable_value.js";
+import type { Uint64Map } from "#src/uint64_map.js";
+import type { TypedNumberArray } from "#src/util/array.js";
 import { hsvToRgb } from "#src/util/colorspace.js";
+import { DataType } from "#src/util/data_type.js";
+import { RefCounted } from "#src/util/disposable.js";
 import { getRandomUint32 } from "#src/util/random.js";
 import { NullarySignal } from "#src/util/signal.js";
 import type { Trackable } from "#src/util/trackable.js";
+import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
 import type { GL } from "#src/webgl/context.js";
+import { shaderCodeWithLineDirective } from "#src/webgl/dynamic_shader.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import { glsl_hsvToRgb, glsl_uint64 } from "#src/webgl/shader_lib.js";
+import type {
+  Controls,
+  ShaderControlParseError,
+} from "#src/webgl/shader_ui_controls.js";
+import {
+  addControlsToBuilder,
+  setControlsInShader,
+} from "#src/webgl/shader_ui_controls.js";
+import {
+  computeTextureFormat,
+  getSamplerPrefixForDataType,
+  OneDimensionalTextureAccessHelper,
+  setOneDimensionalTextureData,
+  TextureFormat,
+} from "#src/webgl/texture_access.js";
 
 const NUM_COMPONENTS = 2;
 
@@ -38,12 +68,15 @@ export class SegmentColorShaderManager {
     this.seedName = prefix + "_seed";
   }
 
-  defineShader(builder: ShaderBuilder) {
+  defineShader(builder: ShaderBuilder, fragment = true) {
+    const addCode = fragment
+      ? builder.addFragmentCode.bind(builder)
+      : builder.addVertexCode.bind(builder);
     const { seedName } = this;
     builder.addUniform("highp uint", seedName);
-    builder.addFragmentCode(glsl_uint64);
-    builder.addFragmentCode(glsl_hashCombine);
-    builder.addFragmentCode(glsl_hsvToRgb);
+    addCode(glsl_uint64);
+    addCode(glsl_hashCombine);
+    addCode(glsl_hsvToRgb);
     let s = `
 vec3 ${this.prefix}(uint64_t x) {
   uint h = hashCombine(${seedName}, x);
@@ -60,7 +93,7 @@ vec3 ${this.prefix}(uint64_t x) {
   return hsvToRgb(hsv);
 }
 `;
-    builder.addFragmentCode(s);
+    addCode(s);
   }
 
   enable(gl: GL, shader: ShaderProgram, segmentColorHash: number) {
@@ -144,8 +177,11 @@ export class SegmentStatedColorShaderManager {
 
   constructor(public prefix: string) {}
 
-  defineShader(builder: ShaderBuilder) {
-    this.hashMapShaderManager.defineShader(builder);
+  defineShader(builder: ShaderBuilder, fragment = true) {
+    const addCode = fragment
+      ? builder.addFragmentCode.bind(builder)
+      : builder.addVertexCode.bind(builder);
+    this.hashMapShaderManager.defineShader(builder, fragment);
     const s = `
 bool ${this.getFunctionName}(uint64_t x, out vec4 value) {
   uint64_t uint64Value;
@@ -160,7 +196,7 @@ bool ${this.getFunctionName}(uint64_t x, out vec4 value) {
   return false;
 }
 `;
-    builder.addFragmentCode(s);
+    addCode(s);
   }
 
   get getFunctionName() {
@@ -177,5 +213,562 @@ bool ${this.getFunctionName}(uint64_t x, out vec4 value) {
 
   disable(gl: GL, shader: ShaderProgram) {
     this.hashMapShaderManager.disable(gl, shader);
+  }
+}
+
+interface SegmentPropertyShaderData {
+  accessHelper: OneDimensionalTextureAccessHelper;
+  texture: WebGLTexture;
+  stale: boolean;
+  dataType: DataType;
+}
+
+export interface SegmentationColorUserShaderManagerParameters {
+  userCode: string;
+  hasSegmentDefaultColor: boolean;
+  hasSegmentStatedColors: boolean;
+}
+
+export class SegmentColorUserShaderManager extends RefCounted {
+  protected segmentColorShaderManager = new SegmentColorShaderManager(
+    "segmentColorHash",
+  );
+  protected hashMapManager = new HashMapShaderManager("SegmentToPropertyIndex");
+  protected segmentStatedColorShaderManager =
+    new SegmentStatedColorShaderManager("segmentStatedColor");
+
+  private gpuSegmentStatedColorHashTable:
+    | GPUHashTable<HashMapUint64>
+    | undefined;
+
+  private userCode = new WatchableValue<string>("");
+
+  public shaderParameters: AggregateWatchableValue<SegmentationColorUserShaderManagerParameters>;
+  public usedProperties: WatchableValueInterface<Set<string>>;
+
+  private segmentPropertyIndexMap = new HashMapUint64();
+  private segmentPropertyShaderData = new Map<
+    string,
+    SegmentPropertyShaderData
+  >();
+
+  constructor(
+    private displayState: SegmentationDisplayState,
+    private gl: GL,
+    public debugId: string = "",
+  ) {
+    super();
+    this.shaderParameters = this.registerDisposer(
+      new AggregateWatchableValue((refCounted) => ({
+        userCode: this.userCode,
+        hasSegmentDefaultColor: refCounted.registerDisposer(
+          makeCachedDerivedWatchableValue(
+            (segmentDefaultColor) => {
+              return segmentDefaultColor !== undefined;
+            },
+            [displayState.segmentDefaultColor],
+          ),
+        ),
+        hasSegmentStatedColors: refCounted.registerDisposer(
+          makeCachedDerivedWatchableValue(
+            (segmentStatedColors: Uint64Map) => {
+              return segmentStatedColors.size !== 0;
+            },
+            [displayState.segmentStatedColors],
+          ),
+        ),
+      })),
+    );
+
+    // TODO, I can make this lazy if we use this value to trigger defineShader
+    this.usedProperties = this.registerDisposer(
+      makeCachedLazyDerivedWatchableValue(
+        ({ referencedProperties }, { code }, segmentPropertyMap) => {
+          // console.log("updating usedProperties", this.debugId);
+          const tagRegex = /tag\("([^()]+)"\)/g;
+          const numericRegex = /prop\("([^()]+)"\)/g;
+          const stringRegex = /stringPropertyEquals\("([^()]+)", "([^()]+)"\)/g;
+          const tagPropertyNames = new Set(
+            code.matchAll(tagRegex).map((m) => m[1]),
+          );
+          const numericPropertyNames = new Set([
+            ...referencedProperties,
+            ...code.matchAll(numericRegex).map((m) => m[1]),
+          ]);
+          const stringPropertyNames = new Set(
+            code.matchAll(stringRegex).map((m) => m[1]),
+          );
+          const shaderUsesProperties =
+            tagPropertyNames.size > 0 ||
+            numericPropertyNames.size > 0 ||
+            stringPropertyNames.size > 0;
+          for (const [_, data] of this.segmentPropertyShaderData) {
+            data.stale = true;
+          }
+          const { segmentPropertyIndexMap } = this;
+          const {
+            parseErrors: { value: parseErrors },
+          } = this.displayState.segmentColorShaderControlState;
+          const addErrorIfNotFound = (error: ShaderControlParseError) => {
+            if (
+              parseErrors.findIndex(
+                (x) => x.message === error.message && x.line === error.line,
+              ) === -1
+            ) {
+              parseErrors.push(error);
+            }
+          };
+
+          if (
+            segmentPropertyMap &&
+            segmentPropertyMap.segmentPropertyMap.inlineProperties
+          ) {
+            // TODO do we want to do this if we don't use properties?
+            if (segmentPropertyIndexMap.size === 0) {
+              // console.log("initializing segmentPropertyIndexMap");
+              // initialize segmentPropertyIndexMap
+              const { inlineProperties } =
+                segmentPropertyMap.segmentPropertyMap;
+              for (let i = 0; i < inlineProperties.ids.length; i++) {
+                const id = inlineProperties.ids[i];
+                segmentPropertyIndexMap.set(id, BigInt(i));
+              }
+            }
+            if (shaderUsesProperties) {
+              for (const tag of tagPropertyNames) {
+                const shaderIdentifier = this.tagPropertyToShaderData(
+                  tag,
+                  segmentPropertyMap,
+                );
+                if (shaderIdentifier) {
+                  code = code.replaceAll(
+                    `tag("${tag}")`,
+                    `${shaderIdentifier} == 1u`,
+                  );
+                } else {
+                  addErrorIfNotFound({
+                    message: `Tag "${tag}" not found in segment properties.`,
+                    line: 0,
+                  });
+                  code = code.replaceAll(`tag("${tag}")`, `false`);
+                }
+              }
+              for (const propName of numericPropertyNames) {
+                const shaderIdentifier = this.numericPropertyToShaderData(
+                  propName,
+                  segmentPropertyMap,
+                );
+                if (shaderIdentifier) {
+                  code = code.replaceAll(
+                    `prop("${propName}")`,
+                    shaderIdentifier,
+                  );
+                } else {
+                  addErrorIfNotFound({
+                    message: `Numeric property "${propName}" not found in segment properties.`,
+                    line: 0,
+                  });
+                  code = code.replaceAll(`prop("${propName}")`, `0`);
+                }
+              }
+              for (const string of stringPropertyNames) {
+                const res = this.stringPropertyToShaderData(
+                  string,
+                  segmentPropertyMap,
+                );
+                if (res) {
+                  const { shaderIdentifier, stringToIndex } = res;
+                  for (const [val, idx] of Object.entries(stringToIndex)) {
+                    const codeToReplace = `stringPropertyEquals("${string}", "${val}")`;
+                    code = code.replaceAll(
+                      codeToReplace,
+                      `(${shaderIdentifier} == ${idx}u)`,
+                    );
+                  }
+                } else {
+                  addErrorIfNotFound({
+                    message: `String property "${string}" not found in segment properties.`,
+                    line: 0,
+                  });
+                }
+                // replace comparisons that have invalid string property identifiers or values with false
+                const pattern = new RegExp(
+                  String.raw`stringPropertyEquals\("${string}", "[^()]+"\)`,
+                  "g",
+                );
+                code = code.replaceAll(pattern, "false");
+              }
+            }
+          }
+
+          // if trying to use property values but property data has not loaded, disable user shader
+          // todo is this an instance where fallback parameters make sense?
+          if (shaderUsesProperties && segmentPropertyIndexMap.size === 0) {
+            addErrorIfNotFound({
+              message: "Segment properties have not been loaded.",
+              line: 0,
+            });
+            code = "";
+          }
+          this.userCode.value = code;
+          // release unused textures
+          for (const [id, { texture, stale }] of this
+            .segmentPropertyShaderData) {
+            if (stale) {
+              gl.deleteTexture(texture);
+              this.segmentPropertyShaderData.delete(id);
+            }
+          }
+          // TEMP can we make this more useful?
+          return new Set(this.segmentPropertyShaderData.keys());
+        },
+        this.displayState.segmentColorShaderControlState.builderState,
+        this.displayState.segmentColorShaderControlState.parseResult,
+        this.displayState.segmentationGroupState.value.segmentPropertyMap,
+        // ,
+        // (a, b) => a.size === b.size && a.isSubsetOf(b), // cache equality check
+      ),
+    );
+
+    this.usedProperties.changed.add(() => {
+      // console.log("this.usedProperties changed", this.usedProperties.value);
+    });
+  }
+
+  private updateShaderData(
+    identifier: string,
+    values: TypedNumberArray<ArrayBuffer>,
+    dataType: DataType,
+  ) {
+    if (this.segmentPropertyShaderData.has(identifier)) {
+      this.segmentPropertyShaderData.get(identifier)!.stale = false;
+    } else {
+      this.segmentPropertyShaderData.set(
+        identifier,
+        createSegmentPropertyShaderData(identifier, values, this.gl, dataType),
+      );
+    }
+  }
+
+  private stringPropertyToShaderData(
+    identifier: string,
+    segmentPropertyMap: PreprocessedSegmentPropertyMap,
+  ) {
+    const { strings } = segmentPropertyMap;
+    const propertyIdx = strings.findIndex((p) => p.id === identifier);
+    if (propertyIdx === -1) return; // TODO should we output an error to the user?
+    const property = strings[propertyIdx];
+    const propertyShaderIdentifier = `string${propertyIdx}`;
+    const stringToIndex = Object.fromEntries(
+      [...new Set(property.values)].map((s, i) => [s, i]),
+    );
+    this.updateShaderData(
+      propertyShaderIdentifier,
+      new Uint8Array(property.values.map((x) => stringToIndex[x])),
+      DataType.UINT8,
+    );
+    return {
+      shaderIdentifier: propertyShaderIdentifier,
+      stringToIndex,
+    };
+  }
+
+  private tagPropertyToShaderData(
+    tag: string,
+    segmentPropertyMap: PreprocessedSegmentPropertyMap,
+  ) {
+    const { tags } = segmentPropertyMap;
+    if (!tags) return;
+    const { values } = tags;
+    const tagIdx = tags.tags.indexOf(tag);
+    if (tagIdx === -1) return; // TODO should we output an error to the user?
+    const propertyShaderIdentifier = `tag${tagIdx}`;
+    const codeUnit = String.fromCharCode(tagIdx);
+    const valuesForTag = values.map((x) => (x.includes(codeUnit) ? 1 : 0));
+    this.updateShaderData(
+      propertyShaderIdentifier,
+      new Uint8Array(valuesForTag),
+      DataType.UINT8,
+    );
+    return propertyShaderIdentifier;
+  }
+
+  private numericPropertyToShaderData(
+    identifier: string,
+    segmentPropertyMap: PreprocessedSegmentPropertyMap,
+  ) {
+    const { numericalProperties } = segmentPropertyMap;
+    const propertyIdx = numericalProperties.findIndex(
+      (p) => p.id === identifier,
+    );
+    if (propertyIdx === -1) return; // TODO should we output an error to the user?
+    const property = numericalProperties[propertyIdx];
+    const propertyShaderIdentifier = `numerical${propertyIdx}`;
+    this.updateShaderData(
+      propertyShaderIdentifier,
+      property.values,
+      property.dataType,
+    );
+    return propertyShaderIdentifier;
+  }
+
+  private getMappedIdColor(builder: ShaderBuilder, fragment: boolean) {
+    const {
+      shaderParameters: { value: shaderParameters },
+    } = this;
+    const { hasSegmentStatedColors, hasSegmentDefaultColor } = shaderParameters;
+    let getMappedIdColor = `vec4 getMappedIdColor(uint64_t value, out bool isStated) {
+`;
+    if (hasSegmentStatedColors) {
+      this.segmentStatedColorShaderManager.defineShader(builder, fragment);
+      getMappedIdColor += `
+  vec4 rgba;
+  if (${this.segmentStatedColorShaderManager.getFunctionName}(value, rgba)) {
+    isStated = true;
+    return rgba;
+  }
+`;
+    }
+    if (hasSegmentDefaultColor) {
+      builder.addUniform("highp vec4", "uSegmentDefaultColor");
+      getMappedIdColor += `  return uSegmentDefaultColor;
+`;
+    } else {
+      this.segmentColorShaderManager.defineShader(builder, fragment);
+      getMappedIdColor += `  return vec4(segmentColorHash(value), -1.0);
+`;
+    }
+    getMappedIdColor += `
+}
+`;
+    return getMappedIdColor;
+  }
+
+  defineShader(builder: ShaderBuilder, fragment: boolean) {
+    addControlsToBuilder(
+      this.displayState.segmentColorShaderControlState.builderState.value,
+      builder,
+      fragment,
+    );
+    builder.addUniform("highp float", "uSaturation");
+    builder.addUniform("bool", "uHasSelectedSegment");
+    builder.addUniform("highp uvec2", "uSelectedSegment");
+    const addCode = fragment
+      ? builder.addFragmentCode.bind(builder)
+      : builder.addVertexCode.bind(builder);
+    const { hashMapManager } = this;
+    hashMapManager.defineShader(builder, fragment);
+    addCode(this.getMappedIdColor(builder, fragment));
+    if (this.userCode.value) {
+      addCode(glsl_COLORMAPS);
+      for (const [identifier, { accessHelper, dataType }] of this
+        .segmentPropertyShaderData) {
+        builder.addTextureSampler(
+          `${getSamplerPrefixForDataType(dataType)}sampler2D`,
+          `${identifier}_sampler`,
+          Symbol.for(identifier),
+        );
+        accessHelper.defineShader(builder);
+        addCode(
+          accessHelper.getAccessor(
+            `${identifier}_read`,
+            `${identifier}_sampler`,
+            dataType,
+          ),
+        );
+        addCode(
+          `highp ${getShaderOutputType(dataType)} ${identifier};`,
+          /*beginning=*/ true,
+        );
+      }
+      const loadSegmentPropertiesCode = `
+bool loadSegmentProperties(uint64_t id) {
+  uint64_t propertyIndex_64;
+  if (!${hashMapManager.getFunctionName}(id, propertyIndex_64)) {
+    return false;
+  }
+  uint propertyIndex = propertyIndex_64.value[0];
+ ${Array.from(this.segmentPropertyShaderData, ([identifier, { dataType }]) => {
+   return `
+  ${identifier} = ${identifier}_read(propertyIndex)${dataType === DataType.FLOAT32 ? "" : ".value"};
+`;
+ }).join("\n")}
+  return true;
+}`;
+      addCode(loadSegmentPropertiesCode);
+      addCode(shaderCodeWithLineDirective(this.userCode.value));
+      if (this.userCode.value.includes("vec3 segmentColor(")) {
+        addCode(`
+vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
+  return vec4(segmentColor(color.rgb, hasProperties, isStated), color.a);
+}`);
+      }
+    }
+    addCode(`
+vec4 segmentColorUserShader(uint64_t segmentId, float adjustment) {
+  float alpha = -1.0; // negative = undefined
+  bool isStated = false;
+  vec4 color = getMappedIdColor(segmentId, isStated);
+  color.a = alpha; // TODO can mapped color include alpha?
+  float saturation = uSaturation;
+  if (uHasSelectedSegment && uSelectedSegment == segmentId.value) {
+    if (saturation > adjustment) {
+      saturation -= adjustment;
+    } else {
+      saturation += adjustment;
+    }
+  }
+${
+  this.userCode.value
+    ? `
+  bool hasProperties = loadSegmentProperties(segmentId);
+  color = segmentColor(color, hasProperties, isStated);
+`
+    : ""
+}
+  return vec4(mix(vec3(1.0,1.0,1.0), vec3(color), saturation), color.a);
+}`);
+    addCode(`
+  vec4 segmentColorUserShader(uint64_t segmentId) {
+    return segmentColorUserShader(segmentId, 0.5);
+  }
+`);
+  }
+
+  enable(gl: GL, shader: ShaderProgram, controls: Controls) {
+    const { displayState } = this;
+    let selectedSegmentLow = 0;
+    let selectedSegmentHigh = 0;
+    const { segmentSelectionState } = this.displayState;
+    const hasSelectedSegment =
+      segmentSelectionState.hasSelectedSegment &&
+      displayState.hoverHighlight.value;
+    gl.uniform1ui(
+      shader.uniform("uHasSelectedSegment"),
+      hasSelectedSegment ? 1 : 0,
+    );
+    if (hasSelectedSegment) {
+      const seg = displayState.baseSegmentHighlighting.value
+        ? segmentSelectionState.baseSelectedSegment
+        : segmentSelectionState.selectedSegment;
+      selectedSegmentLow = Number(seg & 0xffffffffn);
+      selectedSegmentHigh = Number(seg >> 32n);
+      // only update when we have a selected segment since we ignore when uHasSelectedSegment is false
+      gl.uniform2ui(
+        shader.uniform("uSelectedSegment"),
+        selectedSegmentLow,
+        selectedSegmentHigh,
+      );
+    }
+    gl.uniform1f(shader.uniform("uSaturation"), displayState.saturation.value);
+    const { hasSegmentDefaultColor, hasSegmentStatedColors } =
+      this.shaderParameters.value;
+    if (hasSegmentDefaultColor) {
+      const {
+        segmentDefaultColor: { value: segmentDefaultColor },
+      } = displayState;
+      if (segmentDefaultColor) {
+        const [r, g, b] = segmentDefaultColor;
+        gl.uniform4f(shader.uniform("uSegmentDefaultColor"), r, g, b, -1.0);
+        // TODO, override with displayState.tempSegmentDefaultColor2d.value in segemntation_renderlayer
+      }
+    } else {
+      const {
+        segmentColorHash: { value: segmentColorHash },
+      } = displayState;
+      this.segmentColorShaderManager.enable(gl, shader, segmentColorHash);
+    }
+    setControlsInShader(
+      gl,
+      shader,
+      this.displayState.segmentColorShaderControlState,
+      controls,
+    );
+    this.hashMapManager.enable(
+      gl,
+      shader,
+      GPUHashTable.get(this.gl, this.segmentPropertyIndexMap),
+    );
+    for (const [identifier, { texture }] of this.segmentPropertyShaderData) {
+      const textureUnit = shader.textureUnit(Symbol.for(identifier));
+      gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + textureUnit);
+      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
+    }
+    if (hasSegmentStatedColors) {
+      const segmentStatedColors = displayState.useTempSegmentStatedColors2d
+        .value
+        ? displayState.tempSegmentStatedColors2d.value
+        : displayState.segmentStatedColors.value;
+      let { gpuSegmentStatedColorHashTable } = this;
+      if (
+        gpuSegmentStatedColorHashTable === undefined ||
+        gpuSegmentStatedColorHashTable.hashTable !==
+          segmentStatedColors.hashTable
+      ) {
+        gpuSegmentStatedColorHashTable?.dispose();
+        this.gpuSegmentStatedColorHashTable = gpuSegmentStatedColorHashTable =
+          GPUHashTable.get(gl, segmentStatedColors.hashTable);
+      }
+      this.segmentStatedColorShaderManager.enable(
+        gl,
+        shader,
+        gpuSegmentStatedColorHashTable,
+      );
+    }
+  }
+
+  disable(gl: GL, shader: ShaderProgram) {
+    this.hashMapManager.disable(gl, shader);
+    const { hasSegmentStatedColors } = this.shaderParameters.value;
+    if (hasSegmentStatedColors) {
+      this.segmentStatedColorShaderManager.disable(gl, shader);
+    }
+  }
+}
+
+function createSegmentPropertyShaderData(
+  identifier: string,
+  values: TypedNumberArray<ArrayBuffer>,
+  gl: GL,
+  dataType: DataType,
+) {
+  const texture = gl.createTexture();
+  // for now, immediately load the data into the texture
+  {
+    const textureFormat = computeTextureFormat(
+      new TextureFormat(),
+      dataType,
+      1,
+    );
+    gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + gl.tempTextureUnit);
+    gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
+    setOneDimensionalTextureData(gl, textureFormat, values);
+    gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
+  }
+
+  return {
+    accessHelper: new OneDimensionalTextureAccessHelper(
+      `segmentproperty_${identifier}`,
+    ),
+    texture,
+    stale: false,
+    dataType,
+  } satisfies SegmentPropertyShaderData;
+}
+
+function getShaderOutputType(ioType: DataType): string {
+  switch (ioType) {
+    case DataType.UINT8:
+    case DataType.UINT16:
+    case DataType.UINT32:
+      return "uint";
+    case DataType.INT8:
+    case DataType.INT16:
+    case DataType.INT32:
+      return "int";
+    case DataType.FLOAT32:
+      return "float";
+    case DataType.UINT64:
+      return "uint64_t";
   }
 }

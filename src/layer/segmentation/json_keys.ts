@@ -14,6 +14,7 @@ export const COLOR_SEED_JSON_KEY = "colorSeed";
 export const SEGMENT_STATED_COLORS_JSON_KEY = "segmentColors";
 export const MESH_RENDER_SCALE_JSON_KEY = "meshRenderScale";
 export const CROSS_SECTION_RENDER_SCALE_JSON_KEY = "crossSectionRenderScale";
+export const SEGMENT_COLOR_SHADER_JSON_KEY = "segmentColorShader";
 export const SKELETON_RENDERING_JSON_KEY = "skeletonRendering";
 export const SKELETON_SHADER_JSON_KEY = "skeletonShader";
 export const SKELETON_CODE_VISIBLE_KEY = "codeVisible";
@@ -26,3 +27,9 @@ export const SEGMENT_DEFAULT_COLOR_JSON_KEY = "segmentDefaultColor";
 export const ANCHOR_SEGMENT_JSON_KEY = "anchorSegment";
 export const SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID =
   "skeletonShaderControl";
+export const SHADER_CONTROLS_JSON_KEY = "shaderControls";
+export const VOLUME_RENDERING_JSON_KEY = "volumeRendering";
+export const VOLUME_RENDERING_GAIN_JSON_KEY = "volumeRenderingGain";
+export const VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY =
+  "volumeRenderingDepthSamples";
+export const VOLUME_RENDERING_OPACITY_3D_JSON_KEY = "volumeRenderingOpacity3d";

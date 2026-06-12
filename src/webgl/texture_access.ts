@@ -612,3 +612,37 @@ void ${this.readTextureValue}(highp ${samplerPrefix}sampler${this.textureDims}D 
     ];
   }
 }
+
+export function create1DTexture(gl: GL, data: Float32Array) {
+  const texture = gl.createTexture();
+  // for now, immediately load the data into the texture
+  {
+    const format = computeTextureFormat(
+      new TextureFormat(),
+      DataType.FLOAT32,
+      1,
+    );
+    gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + gl.tempTextureUnit);
+    gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
+    {
+      const { textureInternalFormat, textureFormat, texelType } = format;
+
+      // const padded = maybePadArray(data, requiredSize);
+      gl.pixelStorei(WebGL2RenderingContext.UNPACK_ALIGNMENT, 1);
+      setRawTextureParameters(gl);
+      gl.texImage2D(
+        WebGL2RenderingContext.TEXTURE_2D,
+        /*level=*/ 0,
+        textureInternalFormat,
+        /*width=*/ data.length,
+        /*height=*/ 1,
+        /*border=*/ 0,
+        textureFormat,
+        texelType,
+        data,
+      );
+    }
+    gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
+  }
+  return texture;
+}
