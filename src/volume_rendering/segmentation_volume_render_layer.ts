@@ -146,7 +146,6 @@ export class SegmentationVolumeRenderingRenderLayer extends VolumeRenderingRende
   protected getShaderContextKey(context: {
     emitter: ShaderModule;
     chunkFormat: ChunkFormat;
-    wireFrame: boolean;
   }): string {
     const { value: colorParams } =
       this.segmentationDisplayState.segmentationColorUserShader

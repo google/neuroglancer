@@ -1256,17 +1256,31 @@ export class SegmentationUserLayer extends Base {
     this.sliceViewRenderScaleTarget.restoreState(
       specification[json_keys.CROSS_SECTION_RENDER_SCALE_JSON_KEY],
     );
-    this.volumeRenderingMode.restoreState(
-      specification[json_keys.VOLUME_RENDERING_JSON_KEY],
+    verifyOptionalObjectProperty(
+      specification,
+      json_keys.VOLUME_RENDERING_JSON_KEY,
+      (volumeRenderingMode) =>
+        this.volumeRenderingMode.restoreState(volumeRenderingMode),
     );
-    this.volumeRenderingGain.restoreState(
-      specification[json_keys.VOLUME_RENDERING_GAIN_JSON_KEY],
+    verifyOptionalObjectProperty(
+      specification,
+      json_keys.VOLUME_RENDERING_GAIN_JSON_KEY,
+      (volumeRenderingGain) =>
+        this.volumeRenderingGain.restoreState(volumeRenderingGain),
     );
-    this.volumeRenderingOpacity3d.restoreState(
-      specification[json_keys.VOLUME_RENDERING_OPACITY_3D_JSON_KEY],
+    verifyOptionalObjectProperty(
+      specification,
+      json_keys.VOLUME_RENDERING_OPACITY_3D_JSON_KEY,
+      (volumeRenderingOpacity3d) =>
+        this.volumeRenderingOpacity3d.restoreState(volumeRenderingOpacity3d),
     );
-    this.volumeRenderingDepthSamplesTarget.restoreState(
-      specification[json_keys.VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY],
+    verifyOptionalObjectProperty(
+      specification,
+      json_keys.VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY,
+      (volumeRenderingDepthSamplesTarget) =>
+        this.volumeRenderingDepthSamplesTarget.restoreState(
+          volumeRenderingDepthSamplesTarget,
+        ),
     );
     const linkedSegmentationGroupName = verifyOptionalObjectProperty(
       specification,
