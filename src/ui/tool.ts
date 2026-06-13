@@ -242,6 +242,17 @@ export function registerTool<Context extends object>(
   tools.set(type, { getter, lister });
 }
 
+export function unregisterTool<Context extends object>(
+  contextType: AnyConstructor<Context>,
+  type: string,
+) {
+  const { prototype } = contextType;
+  const tools = toolsForPrototype.get(prototype);
+  if (tools) {
+    tools.delete(type);
+  }
+}
+
 export class SelectedLegacyTool
   extends RefCounted
   implements TrackableValueInterface<LegacyTool | undefined>
