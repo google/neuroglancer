@@ -258,6 +258,11 @@
   margin-bottom: 2px;
 }
 
+.neuroglancer-annotation-schema-enum-keybind {
+  flex-shrink: 0;
+  align-self: center;
+}
+
 .neuroglancer-annotation-schema-enum-entry
   .neuroglancer-annotation-schema-default-value-input {
   line-height: 18px;
