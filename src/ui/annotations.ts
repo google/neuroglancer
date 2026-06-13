@@ -30,6 +30,7 @@ import type {
   Annotation,
   AnnotationId,
   AnnotationNumericPropertySpec,
+  AnnotationPropertySpec,
   AnnotationReference,
   AxisAlignedBoundingBox,
   Ellipsoid,
@@ -349,6 +350,13 @@ export class AnnotationLayerView extends Tab {
       refCounted.registerDisposer(
         state.transform.changed.add(this.forceUpdateView),
       );
+      refCounted.registerDisposer(
+        source.properties.changed.add(() => {
+          this.updatePropertyColumnSelector();
+          ++this.curColumnConfigGeneration;
+          this.forceUpdateView();
+        }),
+      );
       newAttachedAnnotationStates.set(state, {
         refCounted,
         annotations: [],
@@ -359,6 +367,7 @@ export class AnnotationLayerView extends Tab {
     this.attachedAnnotationStates = newAttachedAnnotationStates;
     attachedAnnotationStates.clear();
     this.updateCoordinateSpace();
+    this.updatePropertyColumnSelector();
     this.forceUpdateView();
   }
 
@@ -373,6 +382,16 @@ export class AnnotationLayerView extends Tab {
   private prevCoordinateSpaceGeneration = -1;
   private columnWidths: number[] = [];
   private gridTemplate = "";
+  // Property column state
+  private shownPropertyIds = new Set<string>();
+  private sortState: { propertyId: string; order: "asc" | "desc" } | undefined =
+    undefined;
+  private curColumnConfigGeneration = 0;
+  private prevColumnConfigGeneration = -1;
+  private numDimColumns = 0;
+  private shownPropertySpecs: readonly AnnotationPropertySpec[] = [];
+  private idToFlatIndex = new Map<string, number>();
+  private propertyColumnSelectorRow = document.createElement("div");
 
   private updateCoordinateSpace() {
     const localCoordinateSpace = this.layer.localCoordinateSpace.value;
@@ -537,6 +556,10 @@ export class AnnotationLayerView extends Tab {
 
     toolbox.appendChild(mutableControls);
     this.element.appendChild(toolbox);
+    this.propertyColumnSelectorRow.classList.add(
+      "neuroglancer-annotation-column-selector",
+    );
+    this.element.appendChild(this.propertyColumnSelectorRow);
 
     this.element.appendChild(this.headerRow);
     const { virtualList } = this;
@@ -575,6 +598,9 @@ export class AnnotationLayerView extends Tab {
     this.updateAttachedAnnotationLayerStates();
     this.updateSelectionView();
     this.setupListReorder();
+    this.registerDisposer(() => {
+      this.layer.annotationListOrder = undefined;
+    });
   }
 
   private findStateForAnnotationId(
@@ -738,13 +764,19 @@ export class AnnotationLayerView extends Tab {
     id: AnnotationId,
     scrollIntoView = false,
   ): HTMLElement | undefined {
+    if (this.idToFlatIndex.size > 0) {
+      const listIndex = this.idToFlatIndex.get(id);
+      if (listIndex === undefined) return undefined;
+      if (scrollIntoView) this.virtualList.scrollItemIntoView(listIndex);
+      return this.virtualList.getItemElement(listIndex);
+    }
     const attached = this.attachedAnnotationStates.get(state);
     if (attached === undefined) return undefined;
     const index = attached.idToIndex.get(id);
     if (index === undefined) return undefined;
     const listIndex = attached.listOffset + index;
     if (scrollIntoView) {
-      this.virtualList.scrollItemIntoView(index);
+      this.virtualList.scrollItemIntoView(listIndex);
     }
     return this.virtualList.getItemElement(listIndex);
   }
@@ -840,6 +872,8 @@ export class AnnotationLayerView extends Tab {
       gridTemplate,
       globalDimensionIndices,
       localDimensionIndices,
+      shownPropertySpecs,
+      numDimColumns,
     } = this;
     const [element, elementColumnWidths] = makeAnnotationListElement(
       layer,
@@ -848,6 +882,9 @@ export class AnnotationLayerView extends Tab {
       gridTemplate,
       globalDimensionIndices,
       localDimensionIndices,
+      shownPropertySpecs.length > 0
+        ? { specs: shownPropertySpecs, dimColumnCount: numDimColumns }
+        : undefined,
     );
     for (const [column, width] of elementColumnWidths.entries()) {
       this.setColumnWidth(column, width);
@@ -878,12 +915,115 @@ export class AnnotationLayerView extends Tab {
     );
   }
 
+  private getAllPropertySpecs(): AnnotationPropertySpec[] {
+    const seen = new Set<string>();
+    const result: AnnotationPropertySpec[] = [];
+    for (const [state] of this.attachedAnnotationStates) {
+      for (const prop of state.source.properties.value) {
+        if (
+          !seen.has(prop.identifier) &&
+          prop.type !== "rgb" &&
+          prop.type !== "rgba"
+        ) {
+          seen.add(prop.identifier);
+          result.push(prop);
+        }
+      }
+    }
+    return result;
+  }
+
+  private updatePropertyColumnSelector() {
+    const allProps = this.getAllPropertySpecs();
+    const { propertyColumnSelectorRow, shownPropertyIds } = this;
+    removeChildren(propertyColumnSelectorRow);
+    if (allProps.length === 0) {
+      propertyColumnSelectorRow.style.display = "none";
+      return;
+    }
+    propertyColumnSelectorRow.style.display = "";
+    for (const prop of allProps) {
+      const chip = document.createElement("button");
+      chip.textContent = prop.identifier;
+      if (prop.description) chip.title = prop.description;
+      chip.dataset.active = String(shownPropertyIds.has(prop.identifier));
+      chip.classList.add("neuroglancer-annotation-column-chip");
+      chip.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (shownPropertyIds.has(prop.identifier)) {
+          shownPropertyIds.delete(prop.identifier);
+          if (this.sortState?.propertyId === prop.identifier) {
+            this.sortState = undefined;
+          }
+        } else {
+          shownPropertyIds.add(prop.identifier);
+        }
+        ++this.curColumnConfigGeneration;
+        this.forceUpdateView();
+        // Re-render selector so chip active state reflects new set.
+        this.updatePropertyColumnSelector();
+      });
+      propertyColumnSelectorRow.appendChild(chip);
+    }
+  }
+
+  private createPropertyColumnHeader(
+    spec: AnnotationPropertySpec,
+  ): HTMLDivElement {
+    const header = document.createElement("div");
+    header.classList.add("neuroglancer-annotation-property-header");
+    const name = document.createElement("span");
+    name.classList.add("neuroglancer-annotation-property-header-name");
+    name.textContent = spec.identifier;
+    if (spec.description) name.title = spec.description;
+    header.appendChild(name);
+    const makeBtn = (
+      arrow: string,
+      titleText: string,
+      clickOrder: "asc" | "desc",
+    ) => {
+      const btn = document.createElement("button");
+      btn.textContent = arrow;
+      btn.title = titleText;
+      btn.classList.add("neuroglancer-annotation-property-sort-btn");
+      if (
+        this.sortState?.propertyId === spec.identifier &&
+        this.sortState.order === clickOrder
+      ) {
+        btn.dataset.active = "true";
+      }
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (
+          this.sortState?.propertyId === spec.identifier &&
+          this.sortState.order === clickOrder
+        ) {
+          this.sortState = undefined;
+        } else {
+          this.sortState = { propertyId: spec.identifier, order: clickOrder };
+        }
+        ++this.curColumnConfigGeneration;
+        this.forceUpdateView();
+      });
+      return btn;
+    };
+    header.appendChild(
+      makeBtn("▲", `Sort ${spec.identifier} ascending`, "asc"),
+    );
+    header.appendChild(
+      makeBtn("▼", `Sort ${spec.identifier} descending`, "desc"),
+    );
+    return header;
+  }
+
   private updateView() {
     if (!this.visible) {
       return;
     }
     if (
-      this.curCoordinateSpaceGeneration !== this.prevCoordinateSpaceGeneration
+      this.curCoordinateSpaceGeneration !==
+        this.prevCoordinateSpaceGeneration ||
+      this.curColumnConfigGeneration !== this.prevColumnConfigGeneration
     ) {
       this.updated = false;
       const { columnWidths } = this;
@@ -935,11 +1075,41 @@ export class AnnotationLayerView extends Tab {
       for (const localDim of this.localDimensionIndices) {
         addDimension(localCoordinateSpace, localDim);
       }
+      this.numDimColumns = i;
+
+      // Property column headers for each toggled-on property.
+      const shownPropertySpecs: AnnotationPropertySpec[] = [];
+      for (const propId of this.shownPropertyIds) {
+        let spec: AnnotationPropertySpec | undefined;
+        for (const [state] of this.attachedAnnotationStates) {
+          const found = state.source.properties.value.find(
+            (p) => p.identifier === propId,
+          );
+          if (found !== undefined) {
+            spec = found;
+            break;
+          }
+        }
+        if (spec === undefined || spec.type === "rgb" || spec.type === "rgba") {
+          continue;
+        }
+        const propColIdx = shownPropertySpecs.length;
+        shownPropertySpecs.push(spec);
+        const propHeader = this.createPropertyColumnHeader(spec);
+        propHeader.style.gridColumn = `prop ${propColIdx + 1}`;
+        headerRow.appendChild(propHeader);
+        const colIdx = this.numDimColumns + propColIdx;
+        this.setColumnWidth(colIdx, spec.identifier.length + 2);
+        gridTemplate += ` [prop] var(--neuroglancer-column-${colIdx}-width)`;
+      }
+      this.shownPropertySpecs = shownPropertySpecs;
+
       headerRow.appendChild(deletePlaceholder);
       gridTemplate += " [delete] 2ch";
       this.gridTemplate = gridTemplate;
       headerRow.style.gridTemplateColumns = gridTemplate;
       this.prevCoordinateSpaceGeneration = this.curCoordinateSpaceGeneration;
+      this.prevColumnConfigGeneration = this.curColumnConfigGeneration;
     }
     if (this.updated) {
       return;
@@ -963,6 +1133,38 @@ export class AnnotationLayerView extends Tab {
         listElements.push({ state, annotation });
       }
     }
+    // Sort by active property sort state.
+    if (this.sortState !== undefined) {
+      const { propertyId, order } = this.sortState;
+      const sign = order === "asc" ? 1 : -1;
+      listElements.sort(
+        ({ annotation: a, state: sa }, { annotation: b, state: sb }) => {
+          const propsA = sa.source.properties.value;
+          const propsB = sb.source.properties.value;
+          const idxA = propsA.findIndex((p) => p.identifier === propertyId);
+          const idxB = propsB.findIndex((p) => p.identifier === propertyId);
+          const valA =
+            idxA >= 0 && idxA < a.properties.length
+              ? (a.properties[idxA] as number)
+              : undefined;
+          const valB =
+            idxB >= 0 && idxB < b.properties.length
+              ? (b.properties[idxB] as number)
+              : undefined;
+          if (valA === undefined && valB === undefined) return 0;
+          if (valA === undefined) return sign; // undefined sorts to end
+          if (valB === undefined) return -sign;
+          return (valA - valB) * sign;
+        },
+      );
+      // Build a flat id→index map for getRenderedAnnotationListElement.
+      this.idToFlatIndex.clear();
+      for (let k = 0; k < listElements.length; k++) {
+        this.idToFlatIndex.set(listElements[k].annotation.id, k);
+      }
+    } else {
+      this.idToFlatIndex.clear();
+    }
     const oldLength = this.virtualListSource.length;
     this.updateListLength();
     this.virtualListSource.changed!.dispatch([
@@ -973,6 +1175,7 @@ export class AnnotationLayerView extends Tab {
       },
     ]);
     this.mutableControls.style.display = isMutable ? "contents" : "none";
+    this.layer.annotationListOrder = this.listElements;
     this.resetOnUpdate();
   }
 
@@ -991,6 +1194,10 @@ export class AnnotationLayerView extends Tab {
   ) {
     if (!this.visible) {
       this.updated = false;
+      return;
+    }
+    if (this.sortState !== undefined) {
+      this.forceUpdateView();
       return;
     }
     if (!this.updated) {
@@ -1020,6 +1227,10 @@ export class AnnotationLayerView extends Tab {
       this.updated = false;
       return;
     }
+    if (this.sortState !== undefined) {
+      this.forceUpdateView();
+      return;
+    }
     if (!this.updated) {
       this.updateView();
       return;
@@ -1045,6 +1256,10 @@ export class AnnotationLayerView extends Tab {
   ) {
     if (!this.visible) {
       this.updated = false;
+      return;
+    }
+    if (this.sortState !== undefined) {
+      this.forceUpdateView();
       return;
     }
     if (!this.updated) {
@@ -1957,6 +2172,11 @@ export function UserLayerWithAnnotationsMixin<
     annotationProjectionRenderScaleTarget = trackableRenderScaleTarget(8);
     allowDependentAnnotationViewUpdate = new TrackableBoolean(true);
     static supportColorPickerInAnnotationTab = true;
+    // Set by AnnotationLayerView after each list rebuild; used by changeSelectedIndex
+    // to step through annotations in the sorted display order rather than source order.
+    annotationListOrder:
+      | ReadonlyArray<{ state: AnnotationLayerState; annotation: Annotation }>
+      | undefined = undefined;
 
     constructor(...args: any[]) {
       super(...args);
@@ -2061,6 +2281,24 @@ export function UserLayerWithAnnotationsMixin<
       const context = this.getSelectedAnnotationContext();
       if (context === undefined) return;
       const { annotationId } = context;
+
+      // When the annotation list view has a sort active it publishes its
+      // ordered list here so navigation follows the display order.
+      const { annotationListOrder } = this;
+      if (annotationListOrder !== undefined && annotationListOrder.length > 0) {
+        const idx = annotationListOrder.findIndex(
+          (x) => x.annotation.id === annotationId,
+        );
+        if (idx === -1) return;
+        const nextIdx = idx + offset;
+        if (nextIdx < 0 || nextIdx >= annotationListOrder.length) return;
+        const { annotation, state } = annotationListOrder[nextIdx];
+        this.selectAnnotation(state, annotation.id, true);
+        moveToAnnotation(this, annotation, state);
+        return;
+      }
+
+      // Fallback: step through source order across all annotation layer states.
       let annotationLayerState = context.annotationLayerState;
       let annotationLayerStateIndex =
         this.annotationStates.states.indexOf(annotationLayerState);
@@ -2526,7 +2764,7 @@ export function UserLayerWithAnnotationsMixin<
                         }
                         select.value = String(value);
                         select.addEventListener("change", () => {
-                          changeFunction(select.value);
+                          changeFunction(Number(select.value));
                         });
                         valueElement = select;
                       } else {
@@ -2798,6 +3036,23 @@ type UserLayerWithAnnotationsClass = ReturnType<
 export type UserLayerWithAnnotations =
   InstanceType<UserLayerWithAnnotationsClass>;
 
+// Compact per-cell formatter for the annotation list: enum → label only,
+// bool → +/–, float → 4 sig-figs, int → string.  Color properties excluded.
+function formatPropertyForList(
+  spec: AnnotationPropertySpec,
+  value: number,
+): string {
+  if (spec.type === "bool") return value ? "+" : "–";
+  if (spec.type === "rgb" || spec.type === "rgba") return "";
+  const numSpec = spec as AnnotationNumericPropertySpec;
+  if (numSpec.enumValues !== undefined) {
+    const idx = numSpec.enumValues.indexOf(value);
+    if (idx !== -1) return numSpec.enumLabels![idx];
+  }
+  if (spec.type === "float32") return value.toPrecision(4);
+  return String(value);
+}
+
 export function makeAnnotationListElement(
   layer: UserLayerWithAnnotations,
   annotation: Annotation,
@@ -2805,6 +3060,10 @@ export function makeAnnotationListElement(
   gridTemplate: string,
   globalDimensionIndices: number[],
   localDimensionIndices: number[],
+  propertyColumns?: {
+    specs: readonly AnnotationPropertySpec[];
+    dimColumnCount: number;
+  },
 ): [HTMLDivElement, number[]] {
   const chunkTransform = state.chunkTransform.value as ChunkTransformParameters;
   const element = document.createElement("div");
@@ -2882,6 +3141,32 @@ export function makeAnnotationListElement(
       maybeAddDeleteButton();
     },
   );
+  if (propertyColumns !== undefined && propertyColumns.specs.length > 0) {
+    const { specs, dimColumnCount } = propertyColumns;
+    const sourceProps = state.source.properties.value;
+    for (let j = 0; j < specs.length; j++) {
+      const spec = specs[j];
+      const propIdx = sourceProps.findIndex(
+        (p) => p.identifier === spec.identifier,
+      );
+      const propCell = document.createElement("div");
+      propCell.classList.add("neuroglancer-annotation-list-property-value");
+      propCell.style.gridColumn = `prop ${j + 1}`;
+      propCell.style.gridRow = "1";
+      if (propIdx >= 0 && propIdx < annotation.properties.length) {
+        const text = formatPropertyForList(
+          spec,
+          annotation.properties[propIdx] as number,
+        );
+        propCell.textContent = text;
+        columnWidths[dimColumnCount + j] = Math.max(
+          columnWidths[dimColumnCount + j] || 0,
+          text.length,
+        );
+      }
+      element.appendChild(propCell);
+    }
+  }
   if (annotation.description) {
     ++numRows;
     const description = document.createElement("div");
