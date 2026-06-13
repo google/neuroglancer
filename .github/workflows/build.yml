@@ -222,8 +222,12 @@ jobs:
           CIBW_BUILD: ${{ matrix.cibw_build }}
           # cryptography>=49 dropped macOS x86_64 wheels (48.x shipped universal2),
           # forcing a source build that can't cross-compile openssl on the arm64
-          # runner. Pin <49 only for the x86_64 test install; other platforms use current.
-          CIBW_TEST_REQUIRES: ${{ matrix.wheel_identifier == 'macos_x86_64' && 'cryptography<49' || '' }}
+          # runner. A uv constraint caps the transitive google-auth -> cryptography
+          # resolve during the wheel install (CIBW_TEST_REQUIRES can't, since it is
+          # installed separately). Scoped to the x86_64 test env via UV_CONSTRAINT;
+          # empty for other entries (uv treats empty as unset) and never passed into
+          # the Linux container, so all other jobs are unaffected.
+          UV_CONSTRAINT: ${{ matrix.wheel_identifier == 'macos_x86_64' && format('{0}/python/build_tools/macos-x86_64-test-constraints.txt', github.workspace) || '' }}
       - name: Upload wheels as artifacts
         uses: actions/upload-artifact@v7
         with:
