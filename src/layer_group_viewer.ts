@@ -104,6 +104,9 @@ export interface LayerGroupViewerState {
   crossSectionBackgroundColor: TrackableRGB;
   perspectiveViewBackgroundColor: TrackableRGB;
   hideCrossSectionBackground3D: TrackableBoolean;
+  ssao: WatchableValueInterface<boolean>;
+  ssaoIntensity: WatchableValueInterface<number>;
+  ssaoRadius: WatchableValueInterface<number>;
   pickRadius: TrackableValue<number>;
 }
 
@@ -390,6 +393,15 @@ export class LayerGroupViewer extends RefCounted {
   }
   get scaleBarOptions() {
     return this.viewerState.scaleBarOptions;
+  }
+  get ssao() {
+    return this.viewerState.ssao;
+  }
+  get ssaoIntensity() {
+    return this.viewerState.ssaoIntensity;
+  }
+  get ssaoRadius() {
+    return this.viewerState.ssaoRadius;
   }
   layerPanel: LayerBar | undefined;
   layout: DataPanelLayoutContainer;

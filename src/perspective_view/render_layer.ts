@@ -52,6 +52,11 @@ export interface PerspectiveViewRenderContext
   alreadyEmittedPickID: boolean;
 
   /**
+   * Specifies whether the emitter writes view-space normals (SSAO pass).
+   */
+  emitNormals: boolean;
+
+  /**
    * Specifies the ID of the depth frame buffer texture to query during rendering.
    */
   depthBufferTexture?: WebGLTexture | null;
