@@ -24,6 +24,7 @@ import type {
   TopLevelLayerListSpecification,
 } from "#src/layer/index.js";
 import { deleteLayer } from "#src/layer/index.js";
+import type { TrackableBoolean } from "#src/trackable_boolean.js";
 import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
 import type { DropLayers } from "#src/ui/layer_drag_and_drop.js";
 import {
@@ -338,11 +339,36 @@ export class LayerListPanel extends SidePanel {
     sidePanelManager: SidePanelManager,
     public manager: TopLevelLayerListSpecification,
     public state: LayerListPanelState,
+    public hideLayerPanel: TrackableBoolean,
+    public showLayerPanel?: TrackableBoolean,
   ) {
     super(sidePanelManager, state.location);
     const { itemContainer, layerDropZone } = this;
-    const { titleElement } = this.addTitleBar({ title: "" });
+    const { titleElement, titleBar } = this.addTitleBar({ title: "" });
     this.titleElement = titleElement!;
+
+    // Add layer panel toggle button to title bar
+    // Only show toggle button when showLayerPanel configuration is enabled
+    if (this.showLayerPanel?.value) {
+      const toggleButton = new CheckboxIcon(this.hideLayerPanel, {
+        svg: svg_eye,
+        backgroundScheme: "dark",
+        enableTitle: "Hide layer panel",
+        disableTitle: "Show layer panel",
+      });
+      toggleButton.element.style.order = "50"; // Position before close button (order: 100)
+      titleBar.appendChild(toggleButton.element);
+      this.registerDisposer(toggleButton);
+
+      // Watch for showLayerPanel configuration changes and hide/show button accordingly
+      this.registerDisposer(
+        this.showLayerPanel.changed.add(() => {
+          toggleButton.element.style.display = this.showLayerPanel!.value
+            ? ""
+            : "none";
+        }),
+      );
+    }
     itemContainer.classList.add("neuroglancer-layer-list-panel-items");
     this.addBody(itemContainer);
     layerDropZone.style.flex = "1";
