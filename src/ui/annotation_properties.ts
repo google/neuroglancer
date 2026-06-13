@@ -32,6 +32,29 @@ import { makeIcon } from "#src/widget/icon.js";
 export type AnnotationColorKey = AnnotationColorPropertySpec["type"];
 export type AnnotationPropertyType = AnnotationPropertySpec["type"];
 
+export const SET_ENUM_PROPERTY_TOOL_ID = "setEnumProperty";
+
+// Deterministic, locale-independent tool id for the keybindable tool that sets
+// an annotation's enum property to a specific value.  Defined here (a neutral
+// leaf module) so that both the tool registration in
+// `src/layer/annotation/index.ts` and the schema-editor keybind button in
+// `src/ui/annotation_schema_tab.ts` produce identical ids, letting bindings
+// round-trip through saved state.
+export function setEnumPropertyToolJson(
+  propertyIdentifier: string,
+  enumValue: number,
+) {
+  return `${SET_ENUM_PROPERTY_TOOL_ID}_${propertyIdentifier}_${String(enumValue)}`;
+}
+
+export const TOGGLE_BOOL_PROPERTY_TOOL_ID = "toggleBoolProperty";
+
+// Deterministic tool id for the keybindable tool that toggles a boolean
+// annotation property on the currently-selected annotation.
+export function toggleBoolPropertyToolJson(propertyIdentifier: string) {
+  return `${TOGGLE_BOOL_PROPERTY_TOOL_ID}_${propertyIdentifier}`;
+}
+
 export const ANNOTATION_TYPES: AnnotationPropertyType[] = [
   "bool",
   "rgb",
