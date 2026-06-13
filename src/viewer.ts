@@ -1103,6 +1103,21 @@ export class Viewer extends RefCounted implements ViewerState {
       });
     }
 
+    const sendEventToSelectedLayer = (type: string) => {
+      const selectedLayer = this.selectedLayer.layer?.layer;
+      if (selectedLayer) {
+        selectedLayer.dispatchLayerEvent(type);
+      }
+    };
+
+    this.bindAction("select-previous", () => {
+      sendEventToSelectedLayer("select-previous");
+    });
+
+    this.bindAction("select-next", () => {
+      sendEventToSelectedLayer("select-next");
+    });
+
     this.bindAction("help", () => this.toggleHelpPanel());
 
     for (let i = 1; i <= 9; ++i) {
