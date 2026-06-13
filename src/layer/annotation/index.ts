@@ -108,6 +108,8 @@ import { Tab } from "#src/widget/tab_view.js";
 const POINTS_JSON_KEY = "points";
 const ANNOTATIONS_JSON_KEY = "annotations";
 const ANNOTATION_PROPERTIES_JSON_KEY = "annotationProperties";
+const ANNOTATION_LIST_COLUMNS_KEY = "annotationListColumns";
+const ANNOTATION_LIST_SORT_KEY = "annotationListSort";
 const ANNOTATION_RELATIONSHIPS_JSON_KEY = "annotationRelationships";
 const CROSS_SECTION_RENDER_SCALE_JSON_KEY = "crossSectionAnnotationSpacing";
 const PROJECTION_RENDER_SCALE_JSON_KEY = "projectionAnnotationSpacing";
@@ -708,6 +710,26 @@ export class AnnotationUserLayer extends Base {
     this.annotationDisplayState.shaderControls.restoreState(
       specification[SHADER_CONTROLS_JSON_KEY],
     );
+    const shownColumns = verifyOptionalObjectProperty(
+      specification,
+      ANNOTATION_LIST_COLUMNS_KEY,
+      verifyStringArray,
+    );
+    if (shownColumns !== undefined) {
+      this.annotationListShownColumns.value = shownColumns;
+    }
+    const sortJson = verifyOptionalObjectProperty(
+      specification,
+      ANNOTATION_LIST_SORT_KEY,
+      verifyObject,
+    );
+    if (sortJson !== undefined) {
+      const propertyId = verifyString(sortJson["propertyId"]);
+      const order = verifyString(sortJson["order"]);
+      if (order === "asc" || order === "desc") {
+        this.annotationListSortState.value = { propertyId, order };
+      }
+    }
   }
 
   getLegacyDataSourceSpecifications(
@@ -983,6 +1005,14 @@ export class AnnotationUserLayer extends Base {
     x[SHADER_CONTROLS_JSON_KEY] =
       this.annotationDisplayState.shaderControls.toJSON();
     Object.assign(x, this.linkedSegmentationLayers.toJSON());
+    const shownColumns = this.annotationListShownColumns.value;
+    if (shownColumns.length > 0) {
+      x[ANNOTATION_LIST_COLUMNS_KEY] = shownColumns;
+    }
+    const sortState = this.annotationListSortState.value;
+    if (sortState !== null) {
+      x[ANNOTATION_LIST_SORT_KEY] = sortState;
+    }
     return x;
   }
 

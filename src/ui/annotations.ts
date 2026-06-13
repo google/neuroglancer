@@ -594,6 +594,14 @@ export class AnnotationLayerView extends Tab {
         this.updateView();
       }),
     );
+    // Initialize column/sort state from persisted layer values.
+    for (const id of this.layer.annotationListShownColumns.value) {
+      this.shownPropertyIds.add(id);
+    }
+    const persistedSort = this.layer.annotationListSortState.value;
+    if (persistedSort !== null) {
+      this.sortState = persistedSort;
+    }
     this.updateCoordinateSpace();
     this.updateAttachedAnnotationLayerStates();
     this.updateSelectionView();
@@ -958,6 +966,8 @@ export class AnnotationLayerView extends Tab {
         } else {
           shownPropertyIds.add(prop.identifier);
         }
+        this.layer.annotationListShownColumns.value = [...shownPropertyIds];
+        this.layer.annotationListSortState.value = this.sortState ?? null;
         ++this.curColumnConfigGeneration;
         this.forceUpdateView();
         // Re-render selector so chip active state reflects new set.
@@ -1002,6 +1012,7 @@ export class AnnotationLayerView extends Tab {
         } else {
           this.sortState = { propertyId: spec.identifier, order: clickOrder };
         }
+        this.layer.annotationListSortState.value = this.sortState ?? null;
         ++this.curColumnConfigGeneration;
         this.forceUpdateView();
       });
@@ -2177,6 +2188,14 @@ export function UserLayerWithAnnotationsMixin<
     annotationListOrder:
       | ReadonlyArray<{ state: AnnotationLayerState; annotation: Annotation }>
       | undefined = undefined;
+    // Persisted column-selector and sort state for the annotation list view.
+    // Written by AnnotationLayerView on every user interaction; serialized by
+    // AnnotationUserLayer.toJSON / restoreState.
+    annotationListShownColumns = new WatchableValue<string[]>([]);
+    annotationListSortState = new WatchableValue<{
+      propertyId: string;
+      order: "asc" | "desc";
+    } | null>(null);
 
     constructor(...args: any[]) {
       super(...args);
@@ -2187,6 +2206,12 @@ export function UserLayerWithAnnotationsMixin<
         this.specificationChanged.dispatch,
       );
       this.annotationDisplayState.shaderControls.changed.add(
+        this.specificationChanged.dispatch,
+      );
+      this.annotationListShownColumns.changed.add(
+        this.specificationChanged.dispatch,
+      );
+      this.annotationListSortState.changed.add(
         this.specificationChanged.dispatch,
       );
       this.tabs.add("annotations", {
