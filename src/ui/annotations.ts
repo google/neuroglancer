@@ -382,6 +382,21 @@ export class AnnotationLayerView extends Tab {
         refCounted.registerDisposer(
           source.childrenReordered.add(this.forceUpdateView),
         );
+      } else if (source instanceof MultiscaleAnnotationSource) {
+        // Non-local source: the list can show the currently-loaded (rendered)
+        // annotations when the user opts in.  Rebuild (debounced) as the set of
+        // loaded chunks changes, but only while the toggle is on and visible.
+        const debouncedRefresh = animationFrameDebounce(() => {
+          if (this.visible && this.layer.listLoadedAnnotations.value) {
+            this.forceUpdateView();
+          }
+        });
+        refCounted.registerDisposer(
+          source.chunkManager.chunkQueueManager.visibleChunksChanged.add(
+            debouncedRefresh,
+          ),
+        );
+        refCounted.registerDisposer(debouncedRefresh.cancel);
       }
       refCounted.registerDisposer(
         state.transform.changed.add(this.forceUpdateView),
@@ -2961,6 +2976,10 @@ export function UserLayerWithAnnotationsMixin<
       order: "asc" | "desc";
     } | null>(null);
     annotationListQuery = new WatchableValue<string>("");
+    // When enabled, the annotation list also shows the currently-rendered
+    // annotations decoded from non-local (e.g. precomputed) sources.  Off by
+    // default so rendering performance is unaffected unless the user opts in.
+    listLoadedAnnotations = new TrackableBoolean(false);
 
     constructor(...args: any[]) {
       super(...args);
@@ -2980,6 +2999,7 @@ export function UserLayerWithAnnotationsMixin<
         this.specificationChanged.dispatch,
       );
       this.annotationListQuery.changed.add(this.specificationChanged.dispatch);
+      this.listLoadedAnnotations.changed.add(this.specificationChanged.dispatch);
       this.tabs.add("annotations", {
         label: "Annotations",
         order: 10,
