@@ -20,7 +20,7 @@
 
 import svg_help from "ikonate/icons/help.svg?raw";
 import "#src/ui/annotations.css";
-import { throttle } from "lodash-es";
+import { debounce, throttle } from "lodash-es";
 import {
   AnnotationDisplayState,
   AnnotationLayerState,
@@ -30,6 +30,7 @@ import type {
   Annotation,
   AnnotationId,
   AnnotationNumericPropertySpec,
+  AnnotationPropertySpec,
   AnnotationReference,
   AxisAlignedBoundingBox,
   Ellipsoid,
@@ -126,6 +127,33 @@ import { makeMoveToButton } from "#src/widget/move_to_button.js";
 import { Tab } from "#src/widget/tab_view.js";
 import type { VirtualListSource } from "#src/widget/virtual_list.js";
 import { VirtualList } from "#src/widget/virtual_list.js";
+import type {
+  AnnotationBoolConstraint,
+  AnnotationEnumConstraint,
+  AnnotationFilterQuery,
+  AnnotationQueryItem,
+  AnnotationQueryResult,
+  AnnotationQuerySchema,
+} from "#src/annotation/annotation_query.js";
+import {
+  buildAnnotationQueryItems,
+  buildAnnotationQuerySchema,
+  executeAnnotationQuery,
+  makeAnnotationNumericalDataSource,
+  parseAnnotationQuery,
+  unparseAnnotationQuery,
+} from "#src/annotation/annotation_query.js";
+import type { NumericalPropertyConstraint } from "#src/segmentation_display_state/property_map.js";
+import type {
+  IncludeExcludeChip,
+  NumericalSummaryDataSource,
+  NumericalSummaryQuery,
+  NumericalSummaryQueryResult,
+} from "#src/ui/property_summary.js";
+import {
+  NumericalPropertiesSummary,
+  renderIncludeExcludeChips,
+} from "#src/ui/property_summary.js";
 
 export class MergedAnnotationStates
   extends RefCounted
@@ -216,6 +244,26 @@ function setLayerPosition(
   layer.setLayerPosition(chunkTransform.modelTransform, layerPosition);
 }
 
+const moveToAnnotation = (
+  layer: UserLayer,
+  annotation: Annotation,
+  state: AnnotationLayerState,
+) => {
+  const chunkTransform = state.chunkTransform.value as ChunkTransformParameters;
+  const { layerRank } = chunkTransform;
+  const chunkPosition = new Float32Array(layerRank);
+  const layerPosition = new Float32Array(layerRank);
+  getCenterPosition(chunkPosition, annotation);
+  matrix.transformPoint(
+    layerPosition,
+    chunkTransform.chunkToLayerTransform,
+    layerRank + 1,
+    chunkPosition,
+    layerRank,
+  );
+  setLayerPosition(layer, chunkTransform, layerPosition);
+};
+
 function visitTransformedAnnotationGeometry(
   annotation: Annotation,
   chunkTransform: ChunkTransformParameters,
@@ -267,7 +315,10 @@ export class AnnotationLayerView extends Tab {
     render: (index: number) => this.render(index),
     changed: new Signal<(splices: ArraySpliceOp[]) => void>(),
   };
-  private virtualList = new VirtualList({ source: this.virtualListSource });
+  private virtualList = new VirtualList({
+    source: this.virtualListSource,
+    horizontalScroll: true,
+  });
   private listElements: {
     state: AnnotationLayerState;
     annotation: Annotation;
@@ -329,6 +380,12 @@ export class AnnotationLayerView extends Tab {
       refCounted.registerDisposer(
         state.transform.changed.add(this.forceUpdateView),
       );
+      refCounted.registerDisposer(
+        source.properties.changed.add(() => {
+          ++this.curColumnConfigGeneration;
+          this.forceUpdateView();
+        }),
+      );
       newAttachedAnnotationStates.set(state, {
         refCounted,
         annotations: [],
@@ -353,6 +410,33 @@ export class AnnotationLayerView extends Tab {
   private prevCoordinateSpaceGeneration = -1;
   private columnWidths: number[] = [];
   private gridTemplate = "";
+  // Property column state
+  private shownPropertyIds = new Set<string>();
+  private sortState: { propertyId: string; order: "asc" | "desc" } | undefined =
+    undefined;
+  private curColumnConfigGeneration = 0;
+  private prevColumnConfigGeneration = -1;
+  private numDimColumns = 0;
+  private shownPropertySpecs: readonly AnnotationPropertySpec[] = [];
+  private idToFlatIndex = new Map<string, number>();
+  private annotationQueryText = new WatchableValue<string>("");
+  private queryInput!: HTMLInputElement;
+  private annotationNumericalConstraints: NumericalPropertyConstraint[] = [];
+  private annotationEnumConstraints: AnnotationEnumConstraint[] = [];
+  private annotationBoolConstraints: AnnotationBoolConstraint[] = [];
+  private annotationQueryResult = new WatchableValue<AnnotationQueryResult | undefined>(
+    undefined,
+  );
+  private annotationQueryItems: AnnotationQueryItem[] = [];
+  private annotationQuerySchema: AnnotationQuerySchema = buildAnnotationQuerySchema([]);
+  private annotationQuerySchemaKey = "";
+  private queryStatisticsElement = document.createElement("div");
+  private categoricalSummaryContainer = document.createElement("div");
+  private categoricalDetailsOpen = false;
+  private numericalSummaryContainer = document.createElement("div");
+  private numericalPropertiesSummary: NumericalPropertiesSummary | undefined;
+  private numericalDataSource: NumericalSummaryDataSource | undefined;
+  private numericalBoundsInitialized = false;
 
   private updateCoordinateSpace() {
     const localCoordinateSpace = this.layer.localCoordinateSpace.value;
@@ -517,10 +601,56 @@ export class AnnotationLayerView extends Tab {
 
     toolbox.appendChild(mutableControls);
     this.element.appendChild(toolbox);
+    // Query input
+    const queryInputContainer = document.createElement("div");
+    queryInputContainer.classList.add("neuroglancer-annotation-query-container");
+    const queryInput = (this.queryInput = document.createElement("input"));
+    queryInput.type = "text";
+    queryInput.classList.add("neuroglancer-annotation-query");
+    queryInput.placeholder =
+      "Filter: text, /regexp/, #bool, #enum=label, prop<N, <sort, |col";
+    queryInput.autocomplete = "off";
+    queryInput.spellcheck = false;
+    queryInputContainer.appendChild(queryInput);
+    this.element.appendChild(queryInputContainer);
 
-    this.element.appendChild(this.headerRow);
+    this.queryStatisticsElement.classList.add(
+      "neuroglancer-annotation-query-statistics",
+    );
+    this.queryStatisticsElement.style.display = "none";
+    this.element.appendChild(this.queryStatisticsElement);
+
+    this.categoricalSummaryContainer.classList.add(
+      "neuroglancer-annotation-numerical-summary",
+    );
+    this.categoricalSummaryContainer.style.display = "none";
+    this.element.appendChild(this.categoricalSummaryContainer);
+
+    this.numericalSummaryContainer.classList.add(
+      "neuroglancer-annotation-numerical-summary",
+    );
+    this.numericalSummaryContainer.style.display = "none";
+    this.element.appendChild(this.numericalSummaryContainer);
+
+    const debouncedQuery = this.registerCancellable(
+      debounce(() => {
+        this.forceUpdateView();
+      }, 200),
+    );
+    queryInput.addEventListener("input", () => {
+      this.annotationQueryText.value = queryInput.value;
+      debouncedQuery();
+    });
+
+    // Ensure NumericalPropertiesSummary is disposed on cleanup.
+    this.registerDisposer(() => {
+      this.numericalPropertiesSummary?.dispose();
+      this.numericalPropertiesSummary = undefined;
+    });
+
     const { virtualList } = this;
     virtualList.element.classList.add("neuroglancer-annotation-list");
+    virtualList.header.appendChild(this.headerRow);
     this.element.appendChild(virtualList.element);
     this.virtualList.element.addEventListener("mouseleave", () => {
       this.displayState.hoverState.value = undefined;
@@ -551,10 +681,32 @@ export class AnnotationLayerView extends Tab {
         this.updateView();
       }),
     );
+    // Initialize column/sort/query state from persisted layer values.
+    for (const id of this.layer.annotationListShownColumns.value) {
+      this.shownPropertyIds.add(id);
+    }
+    const persistedSort = this.layer.annotationListSortState.value;
+    if (persistedSort !== null) {
+      this.sortState = persistedSort;
+    }
+    const persistedQuery = this.layer.annotationListQuery.value;
+    if (persistedQuery !== "") {
+      this.annotationQueryText.value = persistedQuery;
+      this.queryInput.value = persistedQuery;
+    }
+    // Keep layer.annotationListQuery in sync whenever the text box changes.
+    this.registerDisposer(
+      this.annotationQueryText.changed.add(() => {
+        this.layer.annotationListQuery.value = this.annotationQueryText.value;
+      }),
+    );
     this.updateCoordinateSpace();
     this.updateAttachedAnnotationLayerStates();
     this.updateSelectionView();
     this.setupListReorder();
+    this.registerDisposer(() => {
+      this.layer.annotationListOrder = undefined;
+    });
   }
 
   private findStateForAnnotationId(
@@ -718,13 +870,19 @@ export class AnnotationLayerView extends Tab {
     id: AnnotationId,
     scrollIntoView = false,
   ): HTMLElement | undefined {
+    if (this.idToFlatIndex.size > 0) {
+      const listIndex = this.idToFlatIndex.get(id);
+      if (listIndex === undefined) return undefined;
+      if (scrollIntoView) this.virtualList.scrollItemIntoView(listIndex);
+      return this.virtualList.getItemElement(listIndex);
+    }
     const attached = this.attachedAnnotationStates.get(state);
     if (attached === undefined) return undefined;
     const index = attached.idToIndex.get(id);
     if (index === undefined) return undefined;
     const listIndex = attached.listOffset + index;
     if (scrollIntoView) {
-      this.virtualList.scrollItemIntoView(index);
+      this.virtualList.scrollItemIntoView(listIndex);
     }
     return this.virtualList.getItemElement(listIndex);
   }
@@ -820,6 +978,8 @@ export class AnnotationLayerView extends Tab {
       gridTemplate,
       globalDimensionIndices,
       localDimensionIndices,
+      shownPropertySpecs,
+      numDimColumns,
     } = this;
     const [element, elementColumnWidths] = makeAnnotationListElement(
       layer,
@@ -828,6 +988,9 @@ export class AnnotationLayerView extends Tab {
       gridTemplate,
       globalDimensionIndices,
       localDimensionIndices,
+      shownPropertySpecs.length > 0
+        ? { specs: shownPropertySpecs, dimColumnCount: numDimColumns }
+        : undefined,
     );
     for (const [column, width] of elementColumnWidths.entries()) {
       this.setColumnWidth(column, width);
@@ -858,12 +1021,376 @@ export class AnnotationLayerView extends Tab {
     );
   }
 
+  private getAllPropertySpecs(): AnnotationPropertySpec[] {
+    const seen = new Set<string>();
+    const result: AnnotationPropertySpec[] = [];
+    for (const [state] of this.attachedAnnotationStates) {
+      for (const prop of state.source.properties.value) {
+        if (
+          !seen.has(prop.identifier) &&
+          prop.type !== "rgb" &&
+          prop.type !== "rgba"
+        ) {
+          seen.add(prop.identifier);
+          result.push(prop);
+        }
+      }
+    }
+    return result;
+  }
+
+  private togglePropertyColumn(fieldId: string) {
+    const { shownPropertyIds } = this;
+    if (shownPropertyIds.has(fieldId)) {
+      shownPropertyIds.delete(fieldId);
+      if (this.sortState?.propertyId === fieldId) {
+        this.sortState = undefined;
+        this.layer.annotationListSortState.value = null;
+      }
+    } else {
+      shownPropertyIds.add(fieldId);
+    }
+    this.layer.annotationListShownColumns.value = [...shownPropertyIds];
+    ++this.curColumnConfigGeneration;
+    this.forceUpdateView();
+  }
+
+  private createPropertyColumnHeader(
+    spec: AnnotationPropertySpec,
+  ): HTMLDivElement {
+    const header = document.createElement("div");
+    header.classList.add("neuroglancer-annotation-property-header");
+    const name = document.createElement("span");
+    name.classList.add("neuroglancer-annotation-property-header-name");
+    name.textContent = spec.identifier;
+    if (spec.description) name.title = spec.description;
+    header.appendChild(name);
+    const curOrder =
+      this.sortState?.propertyId === spec.identifier
+        ? this.sortState.order
+        : undefined;
+    const sortBtn = document.createElement("button");
+    sortBtn.classList.add("neuroglancer-annotation-property-sort-btn");
+    sortBtn.textContent =
+      curOrder === "asc" ? "▲" : curOrder === "desc" ? "▼" : "↕";
+    sortBtn.title =
+      curOrder === "asc"
+        ? `Sort ${spec.identifier} descending (click again to clear)`
+        : curOrder === "desc"
+          ? `Clear sort on ${spec.identifier}`
+          : `Sort ${spec.identifier} ascending`;
+    if (curOrder !== undefined) sortBtn.dataset.active = "true";
+    sortBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const cur =
+        this.sortState?.propertyId === spec.identifier
+          ? this.sortState.order
+          : undefined;
+      if (cur === undefined) {
+        this.sortState = { propertyId: spec.identifier, order: "asc" };
+      } else if (cur === "asc") {
+        this.sortState = { propertyId: spec.identifier, order: "desc" };
+      } else {
+        this.sortState = undefined;
+      }
+      this.layer.annotationListSortState.value = this.sortState ?? null;
+      this.writeCurrentStateToQueryText({
+        sortBy: this.sortState
+          ? [
+              {
+                fieldId: this.sortState.propertyId,
+                order: this.sortState.order === "asc" ? ("<" as const) : (">" as const),
+              },
+            ]
+          : [],
+      });
+      ++this.curColumnConfigGeneration;
+      this.forceUpdateView();
+    });
+    header.appendChild(sortBtn);
+    return header;
+  }
+
+  private rebuildNumericalSummary() {
+    this.numericalPropertiesSummary?.dispose();
+    this.numericalPropertiesSummary = undefined;
+    removeChildren(this.numericalSummaryContainer);
+    if (this.annotationQuerySchema.numericProps.length === 0) {
+      this.numericalSummaryContainer.style.display = "none";
+      return;
+    }
+    const dataSource = makeAnnotationNumericalDataSource(
+      this.annotationQuerySchema,
+      () => this.annotationQueryItems,
+    );
+    this.numericalDataSource = dataSource;
+    this.numericalBoundsInitialized = false;
+    const summary = new NumericalPropertiesSummary(
+      dataSource,
+      this.annotationQueryResult as unknown as WatchableValueInterface<NumericalSummaryQueryResult | undefined>,
+      this.setNumericalSummaryQuery,
+    );
+    this.numericalPropertiesSummary = summary;
+    if (summary.listElement !== undefined) {
+      this.numericalSummaryContainer.appendChild(summary.listElement);
+      this.numericalSummaryContainer.style.display = "";
+    }
+  }
+
+  private syncNumericalBounds() {
+    const { numericalDataSource, numericalPropertiesSummary } = this;
+    if (!numericalDataSource || !numericalPropertiesSummary) return;
+    const items = this.annotationQueryItems;
+    const { properties } = numericalDataSource;
+    const windowWatchable = numericalPropertiesSummary.bounds.window;
+    let windowUpdated = false;
+    for (let i = 0; i < properties.length; i++) {
+      const prop = properties[i];
+      let min = Infinity;
+      let max = -Infinity;
+      for (const item of items) {
+        const v = item.values.get(prop.id);
+        if (typeof v === "number") {
+          if (v < min) min = v;
+          if (v > max) max = v;
+        }
+      }
+      if (!isFinite(min) || !isFinite(max)) continue;
+      // Expand max slightly so the last bin is fully visible.
+      const newBounds = [min, max] as [number, number];
+      prop.bounds = newBounds;
+      if (!this.numericalBoundsInitialized) {
+        windowWatchable.value[i] = newBounds;
+        windowUpdated = true;
+      }
+    }
+    if (!this.numericalBoundsInitialized && windowUpdated) {
+      this.numericalBoundsInitialized = true;
+      windowWatchable.changed.dispatch();
+    }
+  }
+
+  /**
+   * Write the effective filter/sort state back to the text query box so GUI
+   * interactions are visible to the user (mirrors segment-properties behaviour).
+   * `overrides` replaces specific fields; all others come from the last result's
+   * query (preserving prefix/regexp and any already-written constraints).
+   */
+  private writeCurrentStateToQueryText(
+    overrides: Partial<AnnotationFilterQuery>,
+  ) {
+    const lastQuery = this.annotationQueryResult.value?.query as
+      | AnnotationFilterQuery
+      | undefined;
+    const q: AnnotationFilterQuery = {
+      prefix: lastQuery?.prefix,
+      regexp: lastQuery?.regexp,
+      numericalConstraints: lastQuery?.numericalConstraints ?? [],
+      enumConstraints: lastQuery?.enumConstraints ?? [],
+      boolConstraints: lastQuery?.boolConstraints ?? [],
+      sortBy: lastQuery?.sortBy ?? [],
+      includeColumns: [],
+      ...overrides,
+    };
+    const text = unparseAnnotationQuery(q);
+    this.queryInput.value = text;
+    this.annotationQueryText.value = text;
+    // After writing all state into text, the separate GUI constraint arrays are
+    // no longer needed — the text parse will reconstruct them in updateView().
+    this.annotationNumericalConstraints = [];
+    this.annotationEnumConstraints = [];
+    this.annotationBoolConstraints = [];
+  }
+
+  private setNumericalSummaryQuery = (query: NumericalSummaryQuery) => {
+    // Write sort + numerical constraints to the text box (visual feedback +
+    // single source of truth, matching segment-properties behaviour).
+    this.writeCurrentStateToQueryText({
+      numericalConstraints: query.numericalConstraints,
+      sortBy: query.sortBy,
+    });
+    // Merge includeColumns: keep non-numeric shown columns, update numeric ones.
+    const numericIds = new Set(
+      this.annotationQuerySchema.numericProps.map((p) => p.identifier),
+    );
+    const newShown = new Set<string>();
+    for (const id of this.shownPropertyIds) {
+      if (!numericIds.has(id)) newShown.add(id);
+    }
+    for (const id of query.includeColumns) {
+      newShown.add(id);
+    }
+    this.shownPropertyIds = newShown;
+    this.layer.annotationListShownColumns.value = [...newShown];
+    // Sync sortBy → sortState (first non-index/description sort).
+    const firstSort = query.sortBy.find(
+      (s) => s.fieldId !== "index" && s.fieldId !== "description",
+    );
+    this.sortState =
+      firstSort !== undefined
+        ? {
+            propertyId: firstSort.fieldId,
+            order: firstSort.order === "<" ? "asc" : "desc",
+          }
+        : undefined;
+    this.layer.annotationListSortState.value = this.sortState ?? null;
+    ++this.curColumnConfigGeneration;
+    this.forceUpdateView();
+  };
+
+  private updateQueryStatistics(result: AnnotationQueryResult) {
+    const { queryStatisticsElement } = this;
+    removeChildren(queryStatisticsElement);
+    const schema = this.annotationQuerySchema;
+    const hasProps =
+      schema.enumProps.length > 0 || schema.boolProps.length > 0;
+    if (result.total === 0 && !hasProps) {
+      queryStatisticsElement.style.display = "none";
+      return;
+    }
+    queryStatisticsElement.style.display = "";
+    if (result.count < result.total) {
+      const countEl = document.createElement("div");
+      countEl.classList.add("neuroglancer-annotation-query-count");
+      countEl.textContent = `${result.count} / ${result.total} annotations`;
+      queryStatisticsElement.appendChild(countEl);
+    }
+    if (!hasProps) return;
+    const items = this.annotationQueryItems;
+    const indices = result.indices!;
+    const chips: IncludeExcludeChip[] = [];
+    const lastQuery = this.annotationQueryResult.value?.query as
+      | AnnotationFilterQuery
+      | undefined;
+    for (const prop of schema.enumProps) {
+      const constraint = lastQuery?.enumConstraints.find(
+        (c) => c.fieldId === prop.identifier,
+      );
+      const counts = new Map<number, number>();
+      for (let j = 0; j < indices.length; ++j) {
+        const v = items[indices[j]].values.get(prop.identifier);
+        if (typeof v === "number") counts.set(v, (counts.get(v) ?? 0) + 1);
+      }
+      for (let vi = 0; vi < prop.enumValues.length; ++vi) {
+        const val = prop.enumValues[vi];
+        const label = prop.enumLabels[vi];
+        const count = counts.get(val) ?? 0;
+        const fieldId = prop.identifier;
+        const isConstrained =
+          (constraint?.include.includes(val) ?? false) ||
+          (constraint?.exclude.includes(val) ?? false);
+        if (count === 0 && !isConstrained) continue;
+        chips.push({
+          key: `${fieldId}=${val}`,
+          headerLabel: fieldId,
+          label: `=${label}`,
+          headerActive: this.shownPropertyIds.has(fieldId),
+          onHeaderClick: () => this.togglePropertyColumn(fieldId),
+          count,
+          totalCount: result.count,
+          included: constraint?.include.includes(val) ?? false,
+          excluded: constraint?.exclude.includes(val) ?? false,
+          onToggle: (target, value) => {
+            const curEnumConstraints =
+              (this.annotationQueryResult.value?.query as AnnotationFilterQuery | undefined)
+                ?.enumConstraints ?? [];
+            const existing = curEnumConstraints.find((c) => c.fieldId === fieldId);
+            let newInc = existing?.include ?? [];
+            let newExc = existing?.exclude ?? [];
+            if (target === "include") {
+              newInc = value ? [...newInc, val] : newInc.filter((v) => v !== val);
+              if (value) newExc = newExc.filter((v) => v !== val);
+            } else {
+              newExc = value ? [...newExc, val] : newExc.filter((v) => v !== val);
+              if (value) newInc = newInc.filter((v) => v !== val);
+            }
+            let newEnumConstraints: AnnotationEnumConstraint[];
+            if (newInc.length === 0 && newExc.length === 0) {
+              newEnumConstraints = curEnumConstraints.filter((c) => c.fieldId !== fieldId);
+            } else {
+              newEnumConstraints = [
+                ...curEnumConstraints.filter((c) => c.fieldId !== fieldId),
+                { fieldId, include: newInc, exclude: newExc },
+              ];
+            }
+            this.writeCurrentStateToQueryText({ enumConstraints: newEnumConstraints });
+            this.forceUpdateView();
+          },
+        });
+      }
+    }
+    for (const prop of schema.boolProps) {
+      const constraint = lastQuery?.boolConstraints.find(
+        (c) => c.fieldId === prop.identifier,
+      );
+      let trueCount = 0;
+      let falseCount = 0;
+      for (let j = 0; j < indices.length; ++j) {
+        const v = items[indices[j]].values.get(prop.identifier);
+        if (v === true) ++trueCount;
+        else if (v === false) ++falseCount;
+      }
+      const fieldId = prop.identifier;
+      chips.push({
+        key: `${fieldId}`,
+        headerLabel: fieldId,
+        label: "",
+        headerActive: this.shownPropertyIds.has(fieldId),
+        onHeaderClick: () => this.togglePropertyColumn(fieldId),
+        count: trueCount,
+        totalCount: result.count,
+        included: constraint?.value === true,
+        excluded: constraint?.value === false,
+        onToggle: (target, value) => {
+          const curBoolConstraints =
+            (this.annotationQueryResult.value?.query as AnnotationFilterQuery | undefined)
+              ?.boolConstraints ?? [];
+          let newBoolConstraints: AnnotationBoolConstraint[];
+          if (value) {
+            const boolValue = target === "include";
+            newBoolConstraints = [
+              ...curBoolConstraints.filter((c) => c.fieldId !== fieldId),
+              { fieldId, value: boolValue },
+            ];
+          } else {
+            newBoolConstraints = curBoolConstraints.filter((c) => c.fieldId !== fieldId);
+          }
+          this.writeCurrentStateToQueryText({ boolConstraints: newBoolConstraints });
+          this.forceUpdateView();
+        },
+      });
+    }
+    const chipsEl = renderIncludeExcludeChips(chips);
+    const { categoricalSummaryContainer } = this;
+    removeChildren(categoricalSummaryContainer);
+    if (chipsEl !== undefined) {
+      const numCategorical = schema.enumProps.length + schema.boolProps.length;
+      const details = document.createElement("details");
+      details.classList.add("neuroglancer-segment-query-result-numerical-list");
+      details.open = this.categoricalDetailsOpen;
+      details.addEventListener("toggle", () => {
+        this.categoricalDetailsOpen = details.open;
+      });
+      const summary = document.createElement("summary");
+      summary.textContent = `${numCategorical} categorical propert${numCategorical > 1 ? "ies" : "y"}`;
+      details.appendChild(summary);
+      details.appendChild(chipsEl);
+      categoricalSummaryContainer.appendChild(details);
+      categoricalSummaryContainer.style.display = "";
+    } else {
+      categoricalSummaryContainer.style.display = "none";
+    }
+  }
+
   private updateView() {
     if (!this.visible) {
       return;
     }
     if (
-      this.curCoordinateSpaceGeneration !== this.prevCoordinateSpaceGeneration
+      this.curCoordinateSpaceGeneration !==
+        this.prevCoordinateSpaceGeneration ||
+      this.curColumnConfigGeneration !== this.prevColumnConfigGeneration
     ) {
       this.updated = false;
       const { columnWidths } = this;
@@ -915,11 +1442,41 @@ export class AnnotationLayerView extends Tab {
       for (const localDim of this.localDimensionIndices) {
         addDimension(localCoordinateSpace, localDim);
       }
+      this.numDimColumns = i;
+
+      // Property column headers for each toggled-on property.
+      const shownPropertySpecs: AnnotationPropertySpec[] = [];
+      for (const propId of this.shownPropertyIds) {
+        let spec: AnnotationPropertySpec | undefined;
+        for (const [state] of this.attachedAnnotationStates) {
+          const found = state.source.properties.value.find(
+            (p) => p.identifier === propId,
+          );
+          if (found !== undefined) {
+            spec = found;
+            break;
+          }
+        }
+        if (spec === undefined || spec.type === "rgb" || spec.type === "rgba") {
+          continue;
+        }
+        const propColIdx = shownPropertySpecs.length;
+        shownPropertySpecs.push(spec);
+        const propHeader = this.createPropertyColumnHeader(spec);
+        propHeader.style.gridColumn = `prop ${propColIdx + 1}`;
+        headerRow.appendChild(propHeader);
+        const colIdx = this.numDimColumns + propColIdx;
+        this.setColumnWidth(colIdx, spec.identifier.length + 2);
+        gridTemplate += ` [prop] var(--neuroglancer-column-${colIdx}-width)`;
+      }
+      this.shownPropertySpecs = shownPropertySpecs;
+
       headerRow.appendChild(deletePlaceholder);
       gridTemplate += " [delete] 2ch";
       this.gridTemplate = gridTemplate;
       headerRow.style.gridTemplateColumns = gridTemplate;
       this.prevCoordinateSpaceGeneration = this.curCoordinateSpaceGeneration;
+      this.prevColumnConfigGeneration = this.curColumnConfigGeneration;
     }
     if (this.updated) {
       return;
@@ -943,8 +1500,96 @@ export class AnnotationLayerView extends Tab {
         listElements.push({ state, annotation });
       }
     }
+    // Build annotation query schema (rebuild when property specs change).
+    const allSpecs = this.getAllPropertySpecs();
+    const schemaKey = allSpecs.map((s) => `${s.identifier}:${s.type}`).join(",");
+    if (schemaKey !== this.annotationQuerySchemaKey) {
+      this.annotationQuerySchemaKey = schemaKey;
+      this.annotationQuerySchema = buildAnnotationQuerySchema(allSpecs);
+      this.rebuildNumericalSummary();
+    }
+    this.annotationQueryItems = buildAnnotationQueryItems(
+      listElements.map(({ annotation, state }) => ({
+        annotation: {
+          description: annotation.description ?? undefined,
+          properties: annotation.properties,
+        },
+        propSpecs: state.source.properties.value as AnnotationPropertySpec[],
+      })),
+    );
+    this.syncNumericalBounds();
+    // Parse text query for filter/sort tokens.
+    const queryText = this.annotationQueryText.value;
+    let parsedTextQuery: AnnotationFilterQuery | undefined;
+    if (queryText.trim() !== "") {
+      const parsed = parseAnnotationQuery(this.annotationQuerySchema, queryText);
+      if (!("errors" in parsed)) parsedTextQuery = parsed;
+    }
+    // Build effective query: merge text constraints + GUI constraints + sort + columns.
+    const sortBy =
+      parsedTextQuery?.sortBy ??
+      (this.sortState !== undefined
+        ? [
+            {
+              fieldId: this.sortState.propertyId,
+              order: this.sortState.order === "asc" ? ("<" as const) : (">" as const),
+            },
+          ]
+        : [{ fieldId: "index", order: "<" as const }]);
+    const effectiveQuery: AnnotationFilterQuery = {
+      prefix: parsedTextQuery?.prefix,
+      regexp: parsedTextQuery?.regexp,
+      numericalConstraints: mergeAnnotationConstraints(
+        parsedTextQuery?.numericalConstraints ?? [],
+        this.annotationNumericalConstraints,
+      ),
+      enumConstraints: mergeAnnotationConstraints(
+        parsedTextQuery?.enumConstraints ?? [],
+        this.annotationEnumConstraints,
+      ),
+      boolConstraints: mergeAnnotationConstraints(
+        parsedTextQuery?.boolConstraints ?? [],
+        this.annotationBoolConstraints,
+      ),
+      sortBy,
+      includeColumns: [...this.shownPropertyIds],
+    };
+    const queryResult = executeAnnotationQuery(this.annotationQueryItems, effectiveQuery);
+    this.annotationQueryResult.value = queryResult;
+    // Reorder listElements according to query result.
+    const { indices } = queryResult;
+    const savedElements = listElements.slice();
+    listElements.length = 0;
+    for (let k = 0; k < indices!.length; ++k) {
+      listElements.push(savedElements[indices![k]]);
+    }
+    // Update viewport rendering filter: only show query-matching annotations in 3D/2D views.
+    {
+      const filteredIds =
+        queryResult.count < queryResult.total
+          ? new Set(listElements.map((el) => el.annotation.id))
+          : null;
+      for (const [state] of this.attachedAnnotationStates) {
+        state.displayState.filteredAnnotationIds.value = filteredIds;
+      }
+    }
+    // Build idToFlatIndex only when sorting or filtering is active.
+    this.idToFlatIndex.clear();
+    const isQueryOrSortActive =
+      queryResult.count < queryResult.total ||
+      sortBy.some((s) => s.fieldId !== "index") ||
+      queryText.trim() !== "";
+    if (isQueryOrSortActive) {
+      for (let k = 0; k < listElements.length; k++) {
+        this.idToFlatIndex.set(listElements[k].annotation.id, k);
+      }
+    }
     const oldLength = this.virtualListSource.length;
-    this.updateListLength();
+    if (queryResult.count < queryResult.total) {
+      this.virtualListSource.length = listElements.length;
+    } else {
+      this.updateListLength();
+    }
     this.virtualListSource.changed!.dispatch([
       {
         retainCount: 0,
@@ -952,7 +1597,9 @@ export class AnnotationLayerView extends Tab {
         insertCount: listElements.length,
       },
     ]);
+    this.updateQueryStatistics(queryResult);
     this.mutableControls.style.display = isMutable ? "contents" : "none";
+    this.layer.annotationListOrder = this.listElements;
     this.resetOnUpdate();
   }
 
@@ -965,12 +1612,46 @@ export class AnnotationLayerView extends Tab {
     this.virtualListSource.length = length;
   }
 
+  private get isAnnotationQueryOrSortActive(): boolean {
+    return (
+      this.sortState !== undefined ||
+      this.annotationQueryText.value.trim() !== "" ||
+      this.annotationNumericalConstraints.length > 0 ||
+      this.annotationEnumConstraints.length > 0 ||
+      this.annotationBoolConstraints.length > 0
+    );
+  }
+
+  private refreshAnnotationQueryStats() {
+    const lastResult = this.annotationQueryResult.value;
+    if (lastResult === undefined) return;
+    this.annotationQueryItems = buildAnnotationQueryItems(
+      this.listElements.map(({ annotation, state }) => ({
+        annotation: {
+          description: annotation.description ?? undefined,
+          properties: annotation.properties,
+        },
+        propSpecs: state.source.properties.value as AnnotationPropertySpec[],
+      })),
+    );
+    const queryResult = executeAnnotationQuery(
+      this.annotationQueryItems,
+      lastResult.query as AnnotationFilterQuery,
+    );
+    this.annotationQueryResult.value = queryResult;
+    this.updateQueryStatistics(queryResult);
+  }
+
   private addAnnotationElement(
     annotation: Annotation,
     state: AnnotationLayerState,
   ) {
     if (!this.visible) {
       this.updated = false;
+      return;
+    }
+    if (this.isAnnotationQueryOrSortActive) {
+      this.forceUpdateView();
       return;
     }
     if (!this.updated) {
@@ -989,6 +1670,7 @@ export class AnnotationLayerView extends Tab {
         { retainCount: spliceStart, deleteCount: 0, insertCount: 1 },
       ]);
     }
+    this.refreshAnnotationQueryStats();
     this.resetOnUpdate();
   }
 
@@ -998,6 +1680,10 @@ export class AnnotationLayerView extends Tab {
   ) {
     if (!this.visible) {
       this.updated = false;
+      return;
+    }
+    if (this.isAnnotationQueryOrSortActive) {
+      this.forceUpdateView();
       return;
     }
     if (!this.updated) {
@@ -1016,6 +1702,7 @@ export class AnnotationLayerView extends Tab {
         ]);
       }
     }
+    this.refreshAnnotationQueryStats();
     this.resetOnUpdate();
   }
 
@@ -1025,6 +1712,10 @@ export class AnnotationLayerView extends Tab {
   ) {
     if (!this.visible) {
       this.updated = false;
+      return;
+    }
+    if (this.isAnnotationQueryOrSortActive) {
+      this.forceUpdateView();
       return;
     }
     if (!this.updated) {
@@ -1050,6 +1741,7 @@ export class AnnotationLayerView extends Tab {
         ]);
       }
     }
+    this.refreshAnnotationQueryStats();
     this.resetOnUpdate();
   }
 
@@ -1937,6 +2629,20 @@ export function UserLayerWithAnnotationsMixin<
     annotationProjectionRenderScaleTarget = trackableRenderScaleTarget(8);
     allowDependentAnnotationViewUpdate = new TrackableBoolean(true);
     static supportColorPickerInAnnotationTab = true;
+    // Set by AnnotationLayerView after each list rebuild; used by changeSelectedIndex
+    // to step through annotations in the sorted display order rather than source order.
+    annotationListOrder:
+      | ReadonlyArray<{ state: AnnotationLayerState; annotation: Annotation }>
+      | undefined = undefined;
+    // Persisted column-selector and sort state for the annotation list view.
+    // Written by AnnotationLayerView on every user interaction; serialized by
+    // AnnotationUserLayer.toJSON / restoreState.
+    annotationListShownColumns = new WatchableValue<string[]>([]);
+    annotationListSortState = new WatchableValue<{
+      propertyId: string;
+      order: "asc" | "desc";
+    } | null>(null);
+    annotationListQuery = new WatchableValue<string>("");
 
     constructor(...args: any[]) {
       super(...args);
@@ -1947,6 +2653,15 @@ export function UserLayerWithAnnotationsMixin<
         this.specificationChanged.dispatch,
       );
       this.annotationDisplayState.shaderControls.changed.add(
+        this.specificationChanged.dispatch,
+      );
+      this.annotationListShownColumns.changed.add(
+        this.specificationChanged.dispatch,
+      );
+      this.annotationListSortState.changed.add(
+        this.specificationChanged.dispatch,
+      );
+      this.annotationListQuery.changed.add(
         this.specificationChanged.dispatch,
       );
       this.tabs.add("annotations", {
@@ -1998,10 +2713,94 @@ export function UserLayerWithAnnotationsMixin<
           this.annotationDisplayState.hoverState.value = undefined;
         }),
       );
+      this.registerDisposer(
+        this.registerLayerEvent("select-previous", () => {
+          this.changeSelectedIndex(-1);
+        }),
+      );
+      this.registerDisposer(
+        this.registerLayerEvent("select-next", () => {
+          this.changeSelectedIndex(1);
+        }),
+      );
     }
 
     initializeAnnotationLayerViewTab(tab: AnnotationLayerView) {
       tab;
+    }
+
+    // Returns the currently pinned/iterated selected annotation for this layer
+    // (the one navigated to via select-next/select-previous), or undefined.
+    getSelectedAnnotationContext():
+      | { annotationLayerState: AnnotationLayerState; annotationId: string }
+      | undefined {
+      const selectionState = this.manager.root.selectionState.value;
+      if (selectionState === undefined) return undefined;
+      const layerSelectionState = selectionState.layers.find(
+        (s) => s.layer === this,
+      )?.state;
+      if (layerSelectionState === undefined) return undefined;
+      const { annotationId } = layerSelectionState;
+      if (annotationId === undefined) return undefined;
+      const annotationLayerState = this.annotationStates.states.find(
+        (x) =>
+          x.sourceIndex === layerSelectionState.annotationSourceIndex &&
+          (layerSelectionState.annotationSubsource === undefined ||
+            x.subsourceId === layerSelectionState.annotationSubsource),
+      );
+      if (annotationLayerState === undefined) return undefined;
+      return { annotationLayerState, annotationId };
+    }
+
+    changeSelectedIndex(offset: number) {
+      const context = this.getSelectedAnnotationContext();
+      if (context === undefined) return;
+      const { annotationId } = context;
+
+      // When the annotation list view has a sort active it publishes its
+      // ordered list here so navigation follows the display order.
+      const { annotationListOrder } = this;
+      if (annotationListOrder !== undefined && annotationListOrder.length > 0) {
+        const idx = annotationListOrder.findIndex(
+          (x) => x.annotation.id === annotationId,
+        );
+        if (idx === -1) return;
+        const nextIdx = idx + offset;
+        if (nextIdx < 0 || nextIdx >= annotationListOrder.length) return;
+        const { annotation, state } = annotationListOrder[nextIdx];
+        this.selectAnnotation(state, annotation.id, true);
+        moveToAnnotation(this, annotation, state);
+        return;
+      }
+
+      // Fallback: step through source order across all annotation layer states.
+      let annotationLayerState = context.annotationLayerState;
+      let annotationLayerStateIndex =
+        this.annotationStates.states.indexOf(annotationLayerState);
+      let { source } = annotationLayerState;
+      let annotations = Array.from(source);
+      let index = annotations.findIndex((x) => x.id === annotationId);
+      while (true) {
+        index = index + offset;
+        if (index === -1) {
+          // this only happens if offset is negative
+          annotationLayerStateIndex -= 1;
+        } else if (index === annotations.length) {
+          // this only happens if offset is positive
+          annotationLayerStateIndex += 1;
+        } else {
+          const annotation = annotations[index];
+          this.selectAnnotation(annotationLayerState, annotation.id, true);
+          moveToAnnotation(this, annotation, annotationLayerState);
+          return;
+        }
+        annotationLayerState =
+          this.annotationStates.states[annotationLayerStateIndex];
+        if (annotationLayerState === undefined) return;
+        source = annotationLayerState.source;
+        annotations = Array.from(source);
+        index = index === -1 ? annotations.length : 0;
+      }
     }
 
     restoreState(specification: any) {
@@ -2440,7 +3239,7 @@ export function UserLayerWithAnnotationsMixin<
                         }
                         select.value = String(value);
                         select.addEventListener("change", () => {
-                          changeFunction(select.value);
+                          changeFunction(Number(select.value));
                         });
                         valueElement = select;
                       } else {
@@ -2712,6 +3511,34 @@ type UserLayerWithAnnotationsClass = ReturnType<
 export type UserLayerWithAnnotations =
   InstanceType<UserLayerWithAnnotationsClass>;
 
+function mergeAnnotationConstraints<T extends { fieldId: string }>(
+  textConstraints: T[],
+  guiConstraints: T[],
+): T[] {
+  const result = [...textConstraints];
+  for (const c of guiConstraints) {
+    if (!result.some((tc) => tc.fieldId === c.fieldId)) result.push(c);
+  }
+  return result;
+}
+
+// Compact per-cell formatter for the annotation list: enum → label only,
+// bool → +/–, float → 4 sig-figs, int → string.  Color properties excluded.
+function formatPropertyForList(
+  spec: AnnotationPropertySpec,
+  value: number,
+): string {
+  if (spec.type === "bool") return value ? "+" : "–";
+  if (spec.type === "rgb" || spec.type === "rgba") return "";
+  const numSpec = spec as AnnotationNumericPropertySpec;
+  if (numSpec.enumValues !== undefined) {
+    const idx = numSpec.enumValues.indexOf(value);
+    if (idx !== -1) return numSpec.enumLabels![idx];
+  }
+  if (spec.type === "float32") return value.toPrecision(4);
+  return String(value);
+}
+
 export function makeAnnotationListElement(
   layer: UserLayerWithAnnotations,
   annotation: Annotation,
@@ -2719,6 +3546,10 @@ export function makeAnnotationListElement(
   gridTemplate: string,
   globalDimensionIndices: number[],
   localDimensionIndices: number[],
+  propertyColumns?: {
+    specs: readonly AnnotationPropertySpec[];
+    dimColumnCount: number;
+  },
 ): [HTMLDivElement, number[]] {
   const chunkTransform = state.chunkTransform.value as ChunkTransformParameters;
   const element = document.createElement("div");
@@ -2796,6 +3627,32 @@ export function makeAnnotationListElement(
       maybeAddDeleteButton();
     },
   );
+  if (propertyColumns !== undefined && propertyColumns.specs.length > 0) {
+    const { specs, dimColumnCount } = propertyColumns;
+    const sourceProps = state.source.properties.value;
+    for (let j = 0; j < specs.length; j++) {
+      const spec = specs[j];
+      const propIdx = sourceProps.findIndex(
+        (p) => p.identifier === spec.identifier,
+      );
+      const propCell = document.createElement("div");
+      propCell.classList.add("neuroglancer-annotation-list-property-value");
+      propCell.style.gridColumn = `prop ${j + 1}`;
+      propCell.style.gridRow = "1";
+      if (propIdx >= 0 && propIdx < annotation.properties.length) {
+        const text = formatPropertyForList(
+          spec,
+          annotation.properties[propIdx] as number,
+        );
+        propCell.textContent = text;
+        columnWidths[dimColumnCount + j] = Math.max(
+          columnWidths[dimColumnCount + j] || 0,
+          text.length,
+        );
+      }
+      element.appendChild(propCell);
+    }
+  }
   if (annotation.description) {
     ++numRows;
     const description = document.createElement("div");

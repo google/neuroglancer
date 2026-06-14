@@ -112,6 +112,50 @@
   background-color: #969;
 }
 
+/* Property column headers */
+.neuroglancer-annotation-property-header {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.neuroglancer-annotation-property-header-name {
+  font-size: 0.85em;
+  color: rgba(255, 255, 255, 0.6);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.neuroglancer-annotation-property-sort-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  padding: 0 1px;
+  font-size: 9px;
+  line-height: 1;
+}
+
+.neuroglancer-annotation-property-sort-btn:hover {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.neuroglancer-annotation-property-sort-btn[data-active="true"] {
+  color: #4e9ac0;
+}
+
+/* Per-annotation property value cells in the annotation list */
+.neuroglancer-annotation-list-property-value {
+  font-family: monospace;
+  font-size: 0.9em;
+  text-align: right;
+  color: rgba(255, 255, 255, 0.6);
+  padding-right: 4px;
+}
+
 .neuroglancer-annotation-dragging {
   opacity: 0.5;
 }
@@ -349,4 +393,62 @@ input.neuroglancer-segment-list-entry-id {
 
 .neuroglancer-related-segment-list-header-checkbox {
   min-width: 17px;
+}
+
+/* Query input */
+.neuroglancer-annotation-query-container {
+  padding: 3px 4px;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.neuroglancer-annotation-query {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid #555;
+  color: #ccc;
+  padding: 2px 4px;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.neuroglancer-annotation-query:focus {
+  outline: none;
+  border-color: #4e9ac0;
+}
+
+/* Query statistics: count/total and enum/bool chip grid */
+.neuroglancer-annotation-query-statistics {
+  padding: 2px 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.neuroglancer-annotation-query-count {
+  padding: 1px 0;
+}
+
+/* Numerical properties summary container */
+.neuroglancer-annotation-numerical-summary {
+  border-bottom: 1px solid #2a2a2a;
+}
+
+/* Inline enum/bool value chips shown in the description row */
+.neuroglancer-annotation-inline-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 2px;
+}
+
+.neuroglancer-annotation-inline-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 2px;
+  padding: 0 4px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: default;
+  white-space: nowrap;
 }

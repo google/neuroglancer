@@ -354,6 +354,11 @@ export class AnnotationLayer extends RefCounted {
     this.registerDisposer(
       this.transform.changed.add(this.redrawNeeded.dispatch),
     );
+    this.registerDisposer(
+      this.state.displayState.filteredAnnotationIds.changed.add(
+        this.handleChangeAffectingBuffer,
+      ),
+    );
   }
 
   get gl() {
@@ -372,11 +377,19 @@ export class AnnotationLayer extends RefCounted {
           );
         }
         this.generation = generation;
+        const segFilt = segmentationFilter(this.segmentationStates.value);
+        const filteredIds =
+          this.state.displayState.filteredAnnotationIds.value;
+        const filter =
+          filteredIds !== null || segFilt !== undefined
+            ? (annotation: AnnotationBase) => {
+                if (filteredIds !== null && !filteredIds.has(annotation.id))
+                  return false;
+                return segFilt === undefined || segFilt(annotation);
+              }
+            : undefined;
         const serializedAnnotations = (this.serializedAnnotations =
-          serializeAnnotationSet(
-            source,
-            segmentationFilter(this.segmentationStates.value),
-          ));
+          serializeAnnotationSet(source, filter));
         buffer.setData(this.serializedAnnotations.data);
         this.numPickIds = computeNumPickIds(serializedAnnotations);
       }

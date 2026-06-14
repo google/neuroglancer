@@ -182,6 +182,7 @@ export class AnnotationDisplayState extends RefCounted {
     this.ignoreNullSegmentFilter,
   );
   hoverState = new AnnotationHoverState(undefined);
+  filteredAnnotationIds = new WatchableValue<ReadonlySet<string> | null>(null);
 }
 
 export class AnnotationLayerState extends RefCounted {
