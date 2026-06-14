@@ -89,6 +89,7 @@ export interface AnnotationQuerySchema {
 export function buildAnnotationQuerySchema(
   specs: AnnotationPropertySpec[],
   coordDims?: Array<{ id: string; description?: string }>,
+  typeProp?: AnnotationEnumPropSchema,
 ): AnnotationQuerySchema {
   const numericProps: AnnotationNumericPropSchema[] = [];
   const enumProps: AnnotationEnumPropSchema[] = [];
@@ -126,12 +127,17 @@ export function buildAnnotationQuerySchema(
       });
     }
   }
+  const usedIds = new Set([
+    ...numericProps.map((p) => p.identifier),
+    ...enumProps.map((p) => p.identifier),
+    ...boolProps.map((p) => p.identifier),
+  ]);
+  // Prepend the synthetic annotation-type enum so it appears first in the chips.
+  if (typeProp !== undefined && !usedIds.has(typeProp.identifier)) {
+    enumProps.unshift(typeProp);
+    usedIds.add(typeProp.identifier);
+  }
   if (coordDims !== undefined) {
-    const usedIds = new Set([
-      ...numericProps.map((p) => p.identifier),
-      ...enumProps.map((p) => p.identifier),
-      ...boolProps.map((p) => p.identifier),
-    ]);
     for (const coord of coordDims) {
       if (!usedIds.has(coord.id)) {
         numericProps.push({
@@ -183,15 +189,20 @@ export function buildAnnotationQueryItems(
     coordValues?: Map<string, number>;
     /** Per-dimension [min, max] extent for filtering and sorting. */
     coordBounds?: Map<string, [number, number]>;
+    /** Raw AnnotationType value (0–4) stored under the "type" field. */
+    annotationType?: number;
   }>,
 ): AnnotationQueryItem[] {
   return listElements.map(
-    ({ annotation, propSpecs, coordValues, coordBounds }) => {
+    ({ annotation, propSpecs, coordValues, coordBounds, annotationType }) => {
       const values = new Map<string, number | boolean>();
       if (coordValues !== undefined) {
         for (const [id, v] of coordValues) {
           values.set(id, v);
         }
+      }
+      if (annotationType !== undefined) {
+        values.set("type", annotationType);
       }
       for (let i = 0; i < propSpecs.length; ++i) {
         const spec = propSpecs[i];

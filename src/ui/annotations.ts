@@ -1434,14 +1434,66 @@ export class AnnotationLayerView extends Tab {
       const { columnWidths } = this;
       columnWidths.length = 0;
       const { headerRow } = this;
-      const symbolPlaceholder = document.createElement("div");
-      symbolPlaceholder.style.gridColumn = "symbol";
-
       const deletePlaceholder = document.createElement("div");
       deletePlaceholder.style.gridColumn = "delete";
 
       removeChildren(headerRow);
-      headerRow.appendChild(symbolPlaceholder);
+
+      // Symbol column header: cycling sort button for annotation type.
+      const TYPE_FIELD = "type";
+      const typeOrder =
+        this.sortState?.propertyId === TYPE_FIELD
+          ? this.sortState.order
+          : undefined;
+      const symbolHeader = document.createElement("div");
+      symbolHeader.style.gridColumn = "symbol";
+      symbolHeader.style.display = "flex";
+      symbolHeader.style.alignItems = "center";
+      symbolHeader.style.justifyContent = "center";
+      const typeSortBtn = document.createElement("button");
+      typeSortBtn.classList.add("neuroglancer-annotation-property-sort-btn");
+      typeSortBtn.textContent =
+        typeOrder === "asc" ? "▲" : typeOrder === "desc" ? "▼" : "↕";
+      typeSortBtn.title =
+        typeOrder === "asc"
+          ? "Sort by type descending"
+          : typeOrder === "desc"
+            ? "Clear sort by type"
+            : "Sort by type ascending";
+      if (typeOrder !== undefined) typeSortBtn.dataset.active = "true";
+      typeSortBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const cur =
+          this.sortState?.propertyId === TYPE_FIELD
+            ? this.sortState.order
+            : undefined;
+        if (cur === undefined) {
+          this.sortState = { propertyId: TYPE_FIELD, order: "asc" };
+        } else if (cur === "asc") {
+          this.sortState = { propertyId: TYPE_FIELD, order: "desc" };
+        } else {
+          this.sortState = undefined;
+        }
+        this.layer.annotationListSortState.value = this.sortState ?? null;
+        this.writeCurrentStateToQueryText({
+          sortBy: this.sortState
+            ? [
+                {
+                  fieldId: TYPE_FIELD,
+                  order:
+                    this.sortState.order === "asc"
+                      ? ("<" as const)
+                      : (">" as const),
+                },
+              ]
+            : [],
+        });
+        ++this.curColumnConfigGeneration;
+        this.forceUpdateView();
+      });
+      symbolHeader.appendChild(typeSortBtn);
+      headerRow.appendChild(symbolHeader);
       let i = 0;
       let gridTemplate = "[symbol] 2ch";
       const addDimension = (
@@ -1612,6 +1664,11 @@ export class AnnotationLayerView extends Tab {
       this.annotationQuerySchema = buildAnnotationQuerySchema(
         allSpecs,
         coordDims,
+        {
+          identifier: "type",
+          enumValues: [0, 1, 2, 3, 4],
+          enumLabels: ["point", "line", "bbox", "ellipsoid", "polyline"],
+        },
       );
       this.rebuildNumericalSummary();
     }
@@ -1684,6 +1741,7 @@ export class AnnotationLayerView extends Tab {
           propSpecs: state.source.properties.value as AnnotationPropertySpec[],
           coordValues,
           coordBounds,
+          annotationType: annotation.type,
         };
       }),
     );
