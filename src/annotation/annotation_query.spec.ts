@@ -105,7 +105,9 @@ describe("buildAnnotationQuerySchema", () => {
 
   it("sets bounds from spec min/max", () => {
     const schema = makeSchema();
-    const scoreProp = schema.numericProps.find((p) => p.identifier === "score")!;
+    const scoreProp = schema.numericProps.find(
+      (p) => p.identifier === "score",
+    )!;
     expect(scoreProp.bounds).toEqual([0, 1]);
     expect(scoreProp.dataType).toBe(DataType.FLOAT32);
   });
@@ -119,7 +121,12 @@ describe("buildAnnotationQuerySchema", () => {
 
   it("skips rgb/rgba specs", () => {
     const schema = buildAnnotationQuerySchema([
-      { type: "rgb", identifier: "color", description: undefined, default: 0 } as any,
+      {
+        type: "rgb",
+        identifier: "color",
+        description: undefined,
+        default: 0,
+      } as any,
       FLOAT_SPEC as any,
     ]);
     expect(schema.numericProps.map((p) => p.identifier)).toEqual(["score"]);
@@ -198,7 +205,7 @@ describe("parseAnnotationQuery", () => {
   it("parses numeric less-than constraint", () => {
     const q = parseAnnotationQuery(schema, "score<0.8") as any;
     expect(q.numericalConstraints[0].fieldId).toBe("score");
-    expect((q.numericalConstraints[0].bounds[1] as number)).toBeLessThan(0.8);
+    expect(q.numericalConstraints[0].bounds[1] as number).toBeLessThan(0.8);
   });
 
   it("parses numeric equal constraint", () => {
@@ -265,7 +272,13 @@ describe("executeAnnotationQuery", () => {
     { description: "apple", score: 0.9, count: 1, status: 0, verified: true },
     { description: "banana", score: 0.5, count: 2, status: 1, verified: false },
     { description: "cherry", score: 0.3, count: 3, status: 2, verified: true },
-    { description: "apricot", score: 0.7, count: 4, status: 0, verified: false },
+    {
+      description: "apricot",
+      score: 0.7,
+      count: 4,
+      status: 0,
+      verified: false,
+    },
   ]);
 
   it("returns all indices when query has no constraints", () => {
@@ -327,14 +340,18 @@ describe("executeAnnotationQuery", () => {
   it("sorts by property ascending", () => {
     const q = parseAnnotationQuery(schema, "<count") as any;
     const result = executeAnnotationQuery(items, q);
-    const counts = Array.from(result.indices!).map((i) => items[i].values.get("count") as number);
+    const counts = Array.from(result.indices!).map(
+      (i) => items[i].values.get("count") as number,
+    );
     expect(counts).toEqual([1, 2, 3, 4]);
   });
 
   it("sorts by property descending", () => {
     const q = parseAnnotationQuery(schema, ">score") as any;
     const result = executeAnnotationQuery(items, q);
-    const scores = Array.from(result.indices!).map((i) => items[i].values.get("score") as number);
+    const scores = Array.from(result.indices!).map(
+      (i) => items[i].values.get("score") as number,
+    );
     // descending: 0.9, 0.7, 0.5, 0.3
     expect(scores[0]).toBeGreaterThan(scores[1]);
     expect(scores[1]).toBeGreaterThan(scores[2]);
@@ -402,19 +419,28 @@ describe("unparseAnnotationQuery", () => {
 
   it("round-trips sort order", () => {
     const q = parseAnnotationQuery(schema, ">score") as any;
-    const reparsed = parseAnnotationQuery(schema, unparseAnnotationQuery(q)) as any;
+    const reparsed = parseAnnotationQuery(
+      schema,
+      unparseAnnotationQuery(q),
+    ) as any;
     expect(reparsed.sortBy[0]).toEqual({ fieldId: "score", order: ">" });
   });
 
   it("round-trips enum constraint", () => {
     const q = parseAnnotationQuery(schema, "#status=active") as any;
-    const reparsed = parseAnnotationQuery(schema, unparseAnnotationQuery(q)) as any;
+    const reparsed = parseAnnotationQuery(
+      schema,
+      unparseAnnotationQuery(q),
+    ) as any;
     expect(reparsed.enumConstraints[0].include).toEqual([1]);
   });
 
   it("round-trips bool constraint", () => {
     const q = parseAnnotationQuery(schema, "-#verified") as any;
-    const reparsed = parseAnnotationQuery(schema, unparseAnnotationQuery(q)) as any;
+    const reparsed = parseAnnotationQuery(
+      schema,
+      unparseAnnotationQuery(q),
+    ) as any;
     expect(reparsed.boolConstraints[0].value).toBe(false);
   });
 });
@@ -425,11 +451,7 @@ describe("unparseAnnotationQuery", () => {
 
 describe("makeAnnotationNumericalDataSource", () => {
   const schema = makeSchema();
-  const items = makeItems([
-    { score: 0.2 },
-    { score: 0.5 },
-    { score: 0.8 },
-  ]);
+  const items = makeItems([{ score: 0.2 }, { score: 0.5 }, { score: 0.8 }]);
 
   it("exposes numericProps as properties", () => {
     const ds = makeAnnotationNumericalDataSource(schema, () => items);
@@ -440,7 +462,10 @@ describe("makeAnnotationNumericalDataSource", () => {
     const ds = makeAnnotationNumericalDataSource(schema, () => items);
     const q = parseAnnotationQuery(schema, "") as any;
     const result = executeAnnotationQuery(items, q);
-    const windowBounds: [number, number][] = [[0, 1], [-2147483648, 2147483647]];
+    const windowBounds: [number, number][] = [
+      [0, 1],
+      [-2147483648, 2147483647],
+    ];
     const histograms: any[] = [];
     ds.updateHistograms(result, histograms, windowBounds as any);
     expect(histograms.length).toBe(2);
@@ -454,7 +479,9 @@ describe("makeAnnotationNumericalDataSource", () => {
 
   it("clears histograms when queryResult is undefined", () => {
     const ds = makeAnnotationNumericalDataSource(schema, () => items);
-    const histograms: any[] = [{ window: [0, 1], histogram: new Uint32Array(258) }];
+    const histograms: any[] = [
+      { window: [0, 1], histogram: new Uint32Array(258) },
+    ];
     const windowBounds = [[0, 1]];
     ds.updateHistograms(undefined as any, histograms, windowBounds as any);
     expect(histograms.length).toBe(0);

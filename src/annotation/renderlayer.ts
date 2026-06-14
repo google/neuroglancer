@@ -378,8 +378,7 @@ export class AnnotationLayer extends RefCounted {
         }
         this.generation = generation;
         const segFilt = segmentationFilter(this.segmentationStates.value);
-        const filteredIds =
-          this.state.displayState.filteredAnnotationIds.value;
+        const filteredIds = this.state.displayState.filteredAnnotationIds.value;
         const filter =
           filteredIds !== null || segFilt !== undefined
             ? (annotation: AnnotationBase) => {

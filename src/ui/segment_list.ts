@@ -679,7 +679,9 @@ class SegmentListGroupQuery extends SegmentListGroupBase {
     const numericalPropertySummaries = this.registerDisposer(
       new NumericalPropertiesSummary(
         segmentDataSource,
-        listSource.queryResult as unknown as WatchableValueInterface<NumericalSummaryQueryResult | undefined>,
+        listSource.queryResult as unknown as WatchableValueInterface<
+          NumericalSummaryQueryResult | undefined
+        >,
         setQuery as unknown as (q: NumericalSummaryQuery) => void,
       ),
     );
@@ -717,7 +719,9 @@ class SegmentListGroupQuery extends SegmentListGroupBase {
           const { label, sortIcon, id } = headerLabel;
           label.addEventListener("click", () => {
             toggleSortOrder(
-              listSource.queryResult.value?.query as NumericalSummaryQuery | undefined,
+              listSource.queryResult.value?.query as
+                | NumericalSummaryQuery
+                | undefined,
               setQuery as unknown as (q: NumericalSummaryQuery) => void,
               id,
             );
@@ -762,10 +766,7 @@ class SegmentListGroupQuery extends SegmentListGroupBase {
       if (tagSummary !== undefined) {
         queryStatisticsContainer.appendChild(tagSummary);
       }
-      if (
-        segmentDataSource.properties.length > 0 ||
-        tagSummary !== undefined
-      ) {
+      if (segmentDataSource.properties.length > 0 || tagSummary !== undefined) {
         queryStatisticsSeparator.style.display = "";
       }
     }, listSource.queryResult);

@@ -36,7 +36,7 @@ import type {
   NumericalSummaryQuery,
   NumericalSummaryQueryResult,
 } from "#src/ui/property_summary.js";
-import type { DataType } from "#src/util/data_type.js";
+import { DataType } from "#src/util/data_type.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
   clampToInterval,
@@ -81,9 +81,14 @@ export interface AnnotationQuerySchema {
   boolProps: AnnotationBoolPropSchema[];
 }
 
-/** Build a query schema from a deduplicated list of annotation property specs. */
+/**
+ * Build a query schema from a deduplicated list of annotation property specs.
+ * @param coordDims  Optional coordinate dimensions to add as float32 numeric props.
+ *                   Skipped if their id conflicts with an existing property identifier.
+ */
 export function buildAnnotationQuerySchema(
   specs: AnnotationPropertySpec[],
+  coordDims?: Array<{ id: string; description?: string }>,
 ): AnnotationQuerySchema {
   const numericProps: AnnotationNumericPropSchema[] = [];
   const enumProps: AnnotationEnumPropSchema[] = [];
@@ -92,7 +97,10 @@ export function buildAnnotationQuerySchema(
   for (const spec of specs) {
     if (spec.type === "rgb" || spec.type === "rgba") continue;
     if (spec.type === "bool") {
-      boolProps.push({ identifier: spec.identifier, description: spec.description ?? undefined });
+      boolProps.push({
+        identifier: spec.identifier,
+        description: spec.description ?? undefined,
+      });
       continue;
     }
     const numSpec = spec as AnnotationNumericPropertySpec;
@@ -118,6 +126,24 @@ export function buildAnnotationQuerySchema(
       });
     }
   }
+  if (coordDims !== undefined) {
+    const usedIds = new Set([
+      ...numericProps.map((p) => p.identifier),
+      ...enumProps.map((p) => p.identifier),
+      ...boolProps.map((p) => p.identifier),
+    ]);
+    for (const coord of coordDims) {
+      if (!usedIds.has(coord.id)) {
+        numericProps.push({
+          identifier: coord.id,
+          dataType: DataType.FLOAT32,
+          bounds: defaultDataTypeRange[DataType.FLOAT32] as DataTypeInterval,
+          description: coord.description,
+        });
+        usedIds.add(coord.id);
+      }
+    }
+  }
   return { numericProps, enumProps, boolProps };
 }
 
@@ -130,38 +156,57 @@ export function buildAnnotationQuerySchema(
  * Values are keyed by property identifier:
  *  - numeric/enum → number (NaN if not present for that annotation)
  *  - bool         → boolean (absent if not present)
+ *  - coord dims   → midpoint of the annotation's spatial extent for that dim
  */
 export interface AnnotationQueryItem {
   description: string;
   values: Map<string, number | boolean>;
+  /**
+   * Spatial [min, max] extent per coordinate dimension.
+   * Used for range-overlap filtering and direction-dependent sorting:
+   *   ascending  → sort by min (smallest-start first)
+   *   descending → sort by max (largest-end first)
+   */
+  coordBounds?: Map<string, [number, number]>;
 }
 
 /**
  * Build AnnotationQueryItems from a flat annotation list.
  *
- * @param listElements  Pairs of (annotation, source properties array).
+ * @param listElements  Pairs of (annotation, source properties array, optional coord data).
  */
 export function buildAnnotationQueryItems(
   listElements: Array<{
     annotation: { description?: string; properties: any[] };
     propSpecs: AnnotationPropertySpec[];
+    /** Per-dimension midpoint value for use in histograms. */
+    coordValues?: Map<string, number>;
+    /** Per-dimension [min, max] extent for filtering and sorting. */
+    coordBounds?: Map<string, [number, number]>;
   }>,
 ): AnnotationQueryItem[] {
-  return listElements.map(({ annotation, propSpecs }) => {
-    const values = new Map<string, number | boolean>();
-    for (let i = 0; i < propSpecs.length; ++i) {
-      const spec = propSpecs[i];
-      if (spec.type === "rgb" || spec.type === "rgba") continue;
-      const raw = annotation.properties[i];
-      if (raw === undefined || raw === null) continue;
-      if (spec.type === "bool") {
-        values.set(spec.identifier, Boolean(raw));
-      } else {
-        values.set(spec.identifier, Number(raw));
+  return listElements.map(
+    ({ annotation, propSpecs, coordValues, coordBounds }) => {
+      const values = new Map<string, number | boolean>();
+      if (coordValues !== undefined) {
+        for (const [id, v] of coordValues) {
+          values.set(id, v);
+        }
       }
-    }
-    return { description: annotation.description ?? "", values };
-  });
+      for (let i = 0; i < propSpecs.length; ++i) {
+        const spec = propSpecs[i];
+        if (spec.type === "rgb" || spec.type === "rgba") continue;
+        const raw = annotation.properties[i];
+        if (raw === undefined || raw === null) continue;
+        if (spec.type === "bool") {
+          values.set(spec.identifier, Boolean(raw));
+        } else {
+          values.set(spec.identifier, Number(raw));
+        }
+      }
+      return { description: annotation.description ?? "", values, coordBounds };
+    },
+  );
 }
 
 // ============================================================================
@@ -249,9 +294,15 @@ export function parseAnnotationQuery(
   const parsed = emptyQuery();
   const errors: QueryParseError[] = [];
 
-  const allNumericIds = new Set(schema.numericProps.map((p) => p.identifier.toLowerCase()));
-  const allEnumIds = new Set(schema.enumProps.map((p) => p.identifier.toLowerCase()));
-  const allBoolIds = new Set(schema.boolProps.map((p) => p.identifier.toLowerCase()));
+  const allNumericIds = new Set(
+    schema.numericProps.map((p) => p.identifier.toLowerCase()),
+  );
+  const allEnumIds = new Set(
+    schema.enumProps.map((p) => p.identifier.toLowerCase()),
+  );
+  const allBoolIds = new Set(
+    schema.boolProps.map((p) => p.identifier.toLowerCase()),
+  );
   const allFieldIds = new Set([...allNumericIds, ...allEnumIds, ...allBoolIds]);
 
   const tokens = tokenize(queryText);
@@ -272,9 +323,10 @@ export function parseAnnotationQuery(
         });
         continue;
       }
-      const canonId = fieldId === "description" || fieldId === "index"
-        ? fieldId
-        : findCanonicalId(fieldId, schema);
+      const canonId =
+        fieldId === "description" || fieldId === "index"
+          ? fieldId
+          : findCanonicalId(fieldId, schema);
       if (parsed.sortBy.find((s) => s.fieldId === canonId)) {
         errors.push({
           begin: startIndex + 1,
@@ -327,9 +379,10 @@ export function parseAnnotationQuery(
         });
         continue;
       }
-      const pattern = word.endsWith("/") && word.length > 1
-        ? word.slice(1, -1)
-        : word.slice(1);
+      const pattern =
+        word.endsWith("/") && word.length > 1
+          ? word.slice(1, -1)
+          : word.slice(1);
       try {
         parsed.regexp = new RegExp(pattern, "i");
       } catch {
@@ -343,7 +396,9 @@ export function parseAnnotationQuery(
     }
 
     // Enum/bool constraint: #prop[=label] or -#prop[=label]
-    const enumBoolMatch = word.match(/^(-?)#([a-zA-Z][a-zA-Z0-9_]*)(?:=(.*))?$/);
+    const enumBoolMatch = word.match(
+      /^(-?)#([a-zA-Z][a-zA-Z0-9_]*)(?:=(.*))?$/,
+    );
     if (enumBoolMatch !== null) {
       const negate = enumBoolMatch[1] === "-";
       const rawId = enumBoolMatch[2].toLowerCase();
@@ -360,7 +415,9 @@ export function parseAnnotationQuery(
           continue;
         }
         const canonId = findCanonicalId(rawId, schema);
-        let constraint = parsed.boolConstraints.find((c) => c.fieldId === canonId);
+        let constraint = parsed.boolConstraints.find(
+          (c) => c.fieldId === canonId,
+        );
         if (constraint === undefined) {
           constraint = { fieldId: canonId, value: undefined };
           parsed.boolConstraints.push(constraint);
@@ -405,7 +462,9 @@ export function parseAnnotationQuery(
           rawEnumValue = num;
         }
 
-        let constraint = parsed.enumConstraints.find((c) => c.fieldId === canonId);
+        let constraint = parsed.enumConstraints.find(
+          (c) => c.fieldId === canonId,
+        );
         if (constraint === undefined) {
           constraint = { fieldId: canonId, include: [], exclude: [] };
           parsed.enumConstraints.push(constraint);
@@ -451,7 +510,10 @@ export function parseAnnotationQuery(
       const canonId = numericSchema.identifier;
       let value: number;
       try {
-        value = parseDataTypeValue(numericSchema.dataType, numericMatch[3]) as number;
+        value = parseDataTypeValue(
+          numericSchema.dataType,
+          numericMatch[3],
+        ) as number;
       } catch (e: any) {
         errors.push({
           begin: startIndex + numericMatch[1].length + numericMatch[2].length,
@@ -467,13 +529,23 @@ export function parseAnnotationQuery(
         constraint = { fieldId: canonId, bounds: numericSchema.bounds };
         parsed.numericalConstraints.push(constraint);
       }
-      const origMin = clampToInterval(numericSchema.bounds, constraint.bounds[0]) as number;
-      const origMax = clampToInterval(numericSchema.bounds, constraint.bounds[1]) as number;
+      const origMin = clampToInterval(
+        numericSchema.bounds,
+        constraint.bounds[0],
+      ) as number;
+      const origMax = clampToInterval(
+        numericSchema.bounds,
+        constraint.bounds[1],
+      ) as number;
       let newMin = origMin;
       let newMax = origMax;
       switch (op) {
         case "<":
-          newMax = dataTypeValueNextAfter(numericSchema.dataType, value, -1) as number;
+          newMax = dataTypeValueNextAfter(
+            numericSchema.dataType,
+            value,
+            -1,
+          ) as number;
           break;
         case "<=":
           newMax = value;
@@ -485,7 +557,11 @@ export function parseAnnotationQuery(
           newMin = value;
           break;
         case ">":
-          newMin = dataTypeValueNextAfter(numericSchema.dataType, value, +1) as number;
+          newMin = dataTypeValueNextAfter(
+            numericSchema.dataType,
+            value,
+            +1,
+          ) as number;
           break;
       }
       newMin = dataTypeCompare(origMin, newMin) > 0 ? origMin : newMin;
@@ -511,7 +587,8 @@ export function parseAnnotationQuery(
       });
       continue;
     }
-    parsed.prefix = parsed.prefix !== undefined ? `${parsed.prefix} ${word}` : word;
+    parsed.prefix =
+      parsed.prefix !== undefined ? `${parsed.prefix} ${word}` : word;
   }
 
   if (errors.length > 0) {
@@ -524,7 +601,10 @@ export function parseAnnotationQuery(
 }
 
 /** Convert an AnnotationFilterQuery back to a query string. */
-export function unparseAnnotationQuery(query: AnnotationFilterQuery): string {
+export function unparseAnnotationQuery(
+  query: AnnotationFilterQuery,
+  schemaBoundsMap?: ReadonlyMap<string, readonly [number, number]>,
+): string {
   const parts: string[] = [];
   for (const { fieldId, order } of query.sortBy) {
     if (fieldId !== "index" || order !== "<") {
@@ -537,8 +617,14 @@ export function unparseAnnotationQuery(query: AnnotationFilterQuery): string {
     }
   }
   for (const c of query.numericalConstraints) {
-    parts.push(`${c.fieldId}>=${c.bounds[0]}`);
-    parts.push(`${c.fieldId}<=${c.bounds[1]}`);
+    const sb = schemaBoundsMap?.get(c.fieldId);
+    const [lo, hi] = c.bounds as [number, number];
+    if (sb === undefined || lo > sb[0]) {
+      parts.push(`${c.fieldId}>=${lo}`);
+    }
+    if (sb === undefined || hi < sb[1]) {
+      parts.push(`${c.fieldId}<=${hi}`);
+    }
   }
   for (const c of query.enumConstraints) {
     for (const v of c.include) parts.push(`#${c.fieldId}=${v}`);
@@ -561,7 +647,9 @@ export function unparseAnnotationQuery(query: AnnotationFilterQuery): string {
 // Query executor
 // ============================================================================
 
-function makeIndicesArray(length: number): Uint32Array | Uint16Array | Uint8Array {
+function makeIndicesArray(
+  length: number,
+): Uint32Array | Uint16Array | Uint8Array {
   if (length <= 0xff) return new Uint8Array(length);
   if (length <= 0xffff) return new Uint16Array(length);
   return new Uint32Array(length);
@@ -579,6 +667,7 @@ function makeIndicesArray(length: number): Uint32Array | Uint16Array | Uint8Arra
 export function executeAnnotationQuery(
   items: AnnotationQueryItem[],
   query: AnnotationFilterQuery,
+  coordFieldIds?: ReadonlySet<string>,
 ): AnnotationQueryResult {
   const n = items.length;
   const allIndices = new Uint32Array(n);
@@ -591,7 +680,8 @@ export function executeAnnotationQuery(
     const lower = prefix !== undefined ? prefix.toLowerCase() : undefined;
     indices = filterIndices(indices, (i) => {
       const desc = items[i].description;
-      if (lower !== undefined && !desc.toLowerCase().startsWith(lower)) return false;
+      if (lower !== undefined && !desc.toLowerCase().startsWith(lower))
+        return false;
       if (regexp !== undefined && regexp.test(desc) === false) return false;
       return true;
     });
@@ -623,7 +713,11 @@ export function executeAnnotationQuery(
 
   // 4. Numeric constraints — build intermediateIndicesMask and filter
   let intermediateIndices: Uint32Array | Uint16Array | Uint8Array | undefined;
-  let intermediateIndicesMask: Uint32Array | Uint16Array | Uint8Array | undefined;
+  let intermediateIndicesMask:
+    | Uint32Array
+    | Uint16Array
+    | Uint8Array
+    | undefined;
   const { numericalConstraints } = query;
   if (numericalConstraints.length > 0) {
     const numConstraints = numericalConstraints.length;
@@ -633,9 +727,19 @@ export function executeAnnotationQuery(
       const { fieldId, bounds } = numericalConstraints[ci];
       const [lo, hi] = bounds as [number, number];
       const bit = 2 ** ci;
+      const isCoord = coordFieldIds?.has(fieldId) ?? false;
       for (let j = 0; j < indices.length; ++j) {
-        const v = items[indices[j]].values.get(fieldId);
-        if (typeof v === "number" && v >= lo && v <= hi) {
+        const item = items[indices[j]];
+        let passes: boolean;
+        if (isCoord) {
+          const cb = item.coordBounds?.get(fieldId);
+          // Overlap: annotation covers [cb[0], cb[1]], filter window is [lo, hi].
+          passes = cb !== undefined ? cb[0] <= hi && cb[1] >= lo : false;
+        } else {
+          const v = item.values.get(fieldId);
+          passes = typeof v === "number" && v >= lo && v <= hi;
+        }
+        if (passes) {
           (mask as Uint32Array)[j] |= bit;
         }
       }
@@ -653,7 +757,12 @@ export function executeAnnotationQuery(
   }
 
   // 5. Sort
-  const finalIndices = sortAnnotationIndices(indices, items, query.sortBy);
+  const finalIndices = sortAnnotationIndices(
+    indices,
+    items,
+    query.sortBy,
+    coordFieldIds,
+  );
 
   // 6. Compute enum/bool stats from final result
   const enumStats = new Map<string, Map<number, number>>();
@@ -669,7 +778,10 @@ export function executeAnnotationQuery(
     }
     enumStats.set(fieldId, counts);
   }
-  const boolStats = new Map<string, { trueCount: number; falseCount: number }>();
+  const boolStats = new Map<
+    string,
+    { trueCount: number; falseCount: number }
+  >();
   for (const { fieldId } of query.boolConstraints) {
     let trueCount = 0;
     let falseCount = 0;
@@ -685,7 +797,11 @@ export function executeAnnotationQuery(
     query,
     indices: finalIndices,
     intermediateIndices,
-    intermediateIndicesMask: intermediateIndicesMask as Uint32Array | Uint16Array | Uint8Array | undefined,
+    intermediateIndicesMask: intermediateIndicesMask as
+      | Uint32Array
+      | Uint16Array
+      | Uint8Array
+      | undefined,
     count: finalIndices.length,
     total: n,
     errors: [],
@@ -710,11 +826,18 @@ function sortAnnotationIndices(
   indices: Uint32Array | Uint16Array | Uint8Array,
   items: AnnotationQueryItem[],
   sortBy: SortBy[],
+  coordFieldIds?: ReadonlySet<string>,
 ): Uint32Array {
   // Make a mutable copy of indices as Uint32Array for sort.
-  const arr = indices instanceof Uint32Array ? indices.slice() : new Uint32Array(indices);
+  const arr =
+    indices instanceof Uint32Array ? indices.slice() : new Uint32Array(indices);
 
-  if (sortBy.length === 0 || (sortBy.length === 1 && sortBy[0].fieldId === "index" && sortBy[0].order === "<")) {
+  if (
+    sortBy.length === 0 ||
+    (sortBy.length === 1 &&
+      sortBy[0].fieldId === "index" &&
+      sortBy[0].order === "<")
+  ) {
     // Default: preserve original order (sort by index ascending).
     return arr;
   }
@@ -741,15 +864,27 @@ function sortAnnotationIndices(
     return new Uint32Array(arrCopy);
   }
 
-  // Sort by property value.
+  // Sort by property or coordinate value.
+  const isCoord = coordFieldIds?.has(fieldId) ?? false;
+  const useMax = isCoord && order === ">";
   const arrCopy = Array.from(arr);
   arrCopy.sort((a, b) => {
-    const va = items[a].values.get(fieldId);
-    const vb = items[b].values.get(fieldId);
-    const toNum = (v: number | boolean | undefined) =>
-      typeof v === "number" ? v : typeof v === "boolean" ? (v ? 1 : 0) : NaN;
-    const na = toNum(va);
-    const nb = toNum(vb);
+    let na: number, nb: number;
+    if (isCoord) {
+      // Ascending: sort by minimum extent (smallest-start first).
+      // Descending: sort by maximum extent (largest-end first).
+      const aRange = items[a].coordBounds?.get(fieldId);
+      const bRange = items[b].coordBounds?.get(fieldId);
+      na = aRange !== undefined ? (useMax ? aRange[1] : aRange[0]) : NaN;
+      nb = bRange !== undefined ? (useMax ? bRange[1] : bRange[0]) : NaN;
+    } else {
+      const va = items[a].values.get(fieldId);
+      const vb = items[b].values.get(fieldId);
+      const toNum = (v: number | boolean | undefined) =>
+        typeof v === "number" ? v : typeof v === "boolean" ? (v ? 1 : 0) : NaN;
+      na = toNum(va);
+      nb = toNum(vb);
+    }
     // Missing values sort to end.
     if (isNaN(na) && isNaN(nb)) return a - b;
     if (isNaN(na)) return 1;
@@ -782,12 +917,14 @@ export function makeAnnotationNumericalDataSource(
   }
   const cache: AnnotationHistogramCache[] = [];
 
-  const properties: NumericalSummaryProperty[] = schema.numericProps.map((p) => ({
-    id: p.identifier,
-    dataType: p.dataType,
-    bounds: p.bounds,
-    description: p.description,
-  }));
+  const properties: NumericalSummaryProperty[] = schema.numericProps.map(
+    (p) => ({
+      id: p.identifier,
+      dataType: p.dataType,
+      bounds: p.bounds,
+      description: p.description,
+    }),
+  );
 
   return {
     properties,
@@ -849,24 +986,30 @@ function computeAnnotationPropertyHistogram(
       const v = items[indices[j]].values.get(propId);
       if (typeof v === "number" && !Number.isNaN(v)) {
         ++histogram[
-          ((Math.min(numBins - 1, Math.max(-1, (v - min) * multiplier)) + 1) >>> 0)
+          (Math.min(numBins - 1, Math.max(-1, (v - min) * multiplier)) + 1) >>>
+            0
         ];
       }
     }
   } else {
     // Constrained: compute marginal histogram from intermediateIndices.
     const { intermediateIndices, intermediateIndicesMask } = queryResult;
-    if (intermediateIndices === undefined || intermediateIndicesMask === undefined) {
+    if (
+      intermediateIndices === undefined ||
+      intermediateIndicesMask === undefined
+    ) {
       return { window, histogram };
     }
     const numConstraints = numericalConstraints.length;
-    const requiredBits = (2 ** numConstraints - 1) - 2 ** constraintIndex;
+    const requiredBits = 2 ** numConstraints - 1 - 2 ** constraintIndex;
     for (let j = 0; j < intermediateIndices.length; ++j) {
       if ((intermediateIndicesMask[j] & requiredBits) === requiredBits) {
         const v = items[intermediateIndices[j]].values.get(propId);
         if (typeof v === "number" && !Number.isNaN(v)) {
           ++histogram[
-            ((Math.min(numBins - 1, Math.max(-1, (v - min) * multiplier)) + 1) >>> 0)
+            (Math.min(numBins - 1, Math.max(-1, (v - min) * multiplier)) +
+              1) >>>
+              0
           ];
         }
       }
@@ -898,7 +1041,10 @@ function tokenize(text: string): Token[] {
   return tokens;
 }
 
-function findCanonicalId(lowerCaseId: string, schema: AnnotationQuerySchema): string {
+function findCanonicalId(
+  lowerCaseId: string,
+  schema: AnnotationQuerySchema,
+): string {
   for (const p of schema.numericProps) {
     if (p.identifier.toLowerCase() === lowerCaseId) return p.identifier;
   }

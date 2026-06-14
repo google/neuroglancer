@@ -438,7 +438,11 @@ export class NumericalPropertiesSummary extends RefCounted {
     listElement.style.display = "";
     const { properties } = this;
     for (let i = 0, n = properties.length; i < n; ++i) {
-      this.updatePropertySummaryRendering(i, properties[i], propertyHistograms[i]);
+      this.updatePropertySummaryRendering(
+        i,
+        properties[i],
+        propertyHistograms[i],
+      );
     }
   }
 
@@ -486,14 +490,21 @@ export class NumericalPropertiesSummary extends RefCounted {
           if (existingBounds === undefined) return;
           try {
             const value = parseDataTypeValue(property.dataType, e.value);
-            this.setBound(boundType, endpointIndex, propertyIndex, value as number);
+            this.setBound(
+              boundType,
+              endpointIndex,
+              propertyIndex,
+              value as number,
+            );
             this.bounds[boundType].changed.dispatch();
           } catch {
             // Ignore invalid input.
           }
           updateInputBoundValue(
             e,
-            this.bounds[boundType].value[propertyIndex][endpointIndex] as number,
+            this.bounds[boundType].value[propertyIndex][
+              endpointIndex
+            ] as number,
           );
         });
         return e;
@@ -781,7 +792,9 @@ export function renderIncludeExcludeChips(
       tagArea.style.gridColumn = "tag";
       tagArea.style.whiteSpace = "nowrap";
       const headerBtn = document.createElement("button");
-      headerBtn.classList.add("neuroglancer-segment-query-result-tag-header-btn");
+      headerBtn.classList.add(
+        "neuroglancer-segment-query-result-tag-header-btn",
+      );
       headerBtn.textContent = chip.headerLabel;
       headerBtn.dataset.active = chip.headerActive ? "true" : "false";
       if (chip.desc) headerBtn.title = chip.desc;
