@@ -1055,6 +1055,7 @@ export class MultiscaleAnnotationSource
     annotations: Annotation[];
     totalLoaded: number;
     truncated: boolean;
+    totalLoadedIsLowerBound: boolean;
   } {
     const annotations: Annotation[] = [];
     const seen = new Set<AnnotationId>();
@@ -1125,6 +1126,7 @@ export class MultiscaleAnnotationSource
       annotations,
       totalLoaded,
       truncated: scanExceeded || annotations.length < totalLoaded,
+      totalLoadedIsLowerBound: scanExceeded,
     };
   }
 

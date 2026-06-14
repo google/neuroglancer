@@ -447,6 +447,13 @@ input.neuroglancer-segment-list-entry-id {
   border-bottom: 1px solid #2a2a2a;
 }
 
+.neuroglancer-annotation-loaded-notice {
+  padding: 2px 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.72);
+  border-bottom: 1px solid #2a2a2a;
+}
+
 /* Inline enum/bool value chips shown in the description row */
 .neuroglancer-annotation-inline-chips {
   display: flex;
