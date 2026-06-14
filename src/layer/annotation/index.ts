@@ -110,6 +110,7 @@ const ANNOTATIONS_JSON_KEY = "annotations";
 const ANNOTATION_PROPERTIES_JSON_KEY = "annotationProperties";
 const ANNOTATION_LIST_COLUMNS_KEY = "annotationListColumns";
 const ANNOTATION_LIST_SORT_KEY = "annotationListSort";
+const ANNOTATION_LIST_QUERY_KEY = "annotationListQuery";
 const ANNOTATION_RELATIONSHIPS_JSON_KEY = "annotationRelationships";
 const CROSS_SECTION_RENDER_SCALE_JSON_KEY = "crossSectionAnnotationSpacing";
 const PROJECTION_RENDER_SCALE_JSON_KEY = "projectionAnnotationSpacing";
@@ -730,6 +731,14 @@ export class AnnotationUserLayer extends Base {
         this.annotationListSortState.value = { propertyId, order };
       }
     }
+    const queryText = verifyOptionalObjectProperty(
+      specification,
+      ANNOTATION_LIST_QUERY_KEY,
+      verifyString,
+    );
+    if (queryText !== undefined) {
+      this.annotationListQuery.value = queryText;
+    }
   }
 
   getLegacyDataSourceSpecifications(
@@ -1012,6 +1021,10 @@ export class AnnotationUserLayer extends Base {
     const sortState = this.annotationListSortState.value;
     if (sortState !== null) {
       x[ANNOTATION_LIST_SORT_KEY] = sortState;
+    }
+    const queryText = this.annotationListQuery.value;
+    if (queryText !== "") {
+      x[ANNOTATION_LIST_QUERY_KEY] = queryText;
     }
     return x;
   }

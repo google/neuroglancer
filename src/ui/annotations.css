@@ -112,36 +112,6 @@
   background-color: #969;
 }
 
-/* Property column selector row — chips that toggle a property column on/off */
-.neuroglancer-annotation-column-selector {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 3px 4px;
-  border-bottom: 1px solid #2a2a2a;
-}
-
-.neuroglancer-annotation-column-chip {
-  background: transparent;
-  border: 1px solid #555;
-  color: rgba(255, 255, 255, 0.45);
-  padding: 1px 6px;
-  cursor: pointer;
-  font-size: 11px;
-  border-radius: 2px;
-  line-height: 1.4;
-}
-
-.neuroglancer-annotation-column-chip:hover {
-  border-color: rgba(255, 255, 255, 0.6);
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.neuroglancer-annotation-column-chip[data-active="true"] {
-  border-color: #4e9ac0;
-  color: #4e9ac0;
-}
-
 /* Property column headers */
 .neuroglancer-annotation-property-header {
   display: flex;
@@ -423,4 +393,62 @@ input.neuroglancer-segment-list-entry-id {
 
 .neuroglancer-related-segment-list-header-checkbox {
   min-width: 17px;
+}
+
+/* Query input */
+.neuroglancer-annotation-query-container {
+  padding: 3px 4px;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.neuroglancer-annotation-query {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid #555;
+  color: #ccc;
+  padding: 2px 4px;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.neuroglancer-annotation-query:focus {
+  outline: none;
+  border-color: #4e9ac0;
+}
+
+/* Query statistics: count/total and enum/bool chip grid */
+.neuroglancer-annotation-query-statistics {
+  padding: 2px 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.neuroglancer-annotation-query-count {
+  padding: 1px 0;
+}
+
+/* Numerical properties summary container */
+.neuroglancer-annotation-numerical-summary {
+  border-bottom: 1px solid #2a2a2a;
+}
+
+/* Inline enum/bool value chips shown in the description row */
+.neuroglancer-annotation-inline-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 2px;
+}
+
+.neuroglancer-annotation-inline-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 2px;
+  padding: 0 4px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: default;
+  white-space: nowrap;
 }
