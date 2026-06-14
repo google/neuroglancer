@@ -55,6 +55,8 @@ export interface AnnotationNumericPropSchema {
   dataType: DataType;
   bounds: DataTypeInterval;
   description?: string;
+  /** SI base unit for derived/computed properties (e.g. "m", "s", "m^3"). */
+  baseUnit?: string;
 }
 
 export interface AnnotationEnumPropSchema {
@@ -90,6 +92,7 @@ export function buildAnnotationQuerySchema(
   specs: AnnotationPropertySpec[],
   coordDims?: Array<{ id: string; description?: string }>,
   typeProp?: AnnotationEnumPropSchema,
+  derivedProps?: AnnotationNumericPropSchema[],
 ): AnnotationQuerySchema {
   const numericProps: AnnotationNumericPropSchema[] = [];
   const enumProps: AnnotationEnumPropSchema[] = [];
@@ -150,6 +153,15 @@ export function buildAnnotationQuerySchema(
       }
     }
   }
+  // Append derived (computed) geometric properties (length, volume, ...).
+  if (derivedProps !== undefined) {
+    for (const prop of derivedProps) {
+      if (!usedIds.has(prop.identifier)) {
+        numericProps.push(prop);
+        usedIds.add(prop.identifier);
+      }
+    }
+  }
   return { numericProps, enumProps, boolProps };
 }
 
@@ -191,13 +203,27 @@ export function buildAnnotationQueryItems(
     coordBounds?: Map<string, [number, number]>;
     /** Raw AnnotationType value (0–4) stored under the "type" field. */
     annotationType?: number;
+    /** Derived/computed geometric property values (NaN where not applicable). */
+    derivedValues?: Map<string, number>;
   }>,
 ): AnnotationQueryItem[] {
   return listElements.map(
-    ({ annotation, propSpecs, coordValues, coordBounds, annotationType }) => {
+    ({
+      annotation,
+      propSpecs,
+      coordValues,
+      coordBounds,
+      annotationType,
+      derivedValues,
+    }) => {
       const values = new Map<string, number | boolean>();
       if (coordValues !== undefined) {
         for (const [id, v] of coordValues) {
+          values.set(id, v);
+        }
+      }
+      if (derivedValues !== undefined) {
+        for (const [id, v] of derivedValues) {
           values.set(id, v);
         }
       }

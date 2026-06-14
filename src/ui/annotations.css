@@ -438,6 +438,15 @@ input.neuroglancer-segment-list-entry-id {
   border-bottom: 1px solid #2a2a2a;
 }
 
+/* Warning shown when measurable annotations exist but dimensions lack units */
+.neuroglancer-annotation-derived-warning {
+  padding: 2px 4px;
+  font-size: 11px;
+  color: #e0b020;
+  cursor: help;
+  border-bottom: 1px solid #2a2a2a;
+}
+
 /* Inline enum/bool value chips shown in the description row */
 .neuroglancer-annotation-inline-chips {
   display: flex;

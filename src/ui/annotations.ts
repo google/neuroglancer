@@ -144,6 +144,11 @@ import {
   parseAnnotationQuery,
   unparseAnnotationQuery,
 } from "#src/annotation/annotation_query.js";
+import type { DerivedAnalysisResult } from "#src/annotation/annotation_derived_properties.js";
+import {
+  analyzeDerivedProperties,
+  prettyUnit,
+} from "#src/annotation/annotation_derived_properties.js";
 import type { NumericalPropertyConstraint } from "#src/segmentation_display_state/property_map.js";
 import type {
   IncludeExcludeChip,
@@ -418,7 +423,7 @@ export class AnnotationLayerView extends Tab {
   private curColumnConfigGeneration = 0;
   private prevColumnConfigGeneration = -1;
   private numDimColumns = 0;
-  private shownPropertySpecs: readonly AnnotationPropertySpec[] = [];
+  private shownColumns: readonly AnnotationListColumn[] = [];
   private idToFlatIndex = new Map<string, number>();
   private annotationQueryText = new WatchableValue<string>("");
   private queryInput!: HTMLInputElement;
@@ -433,10 +438,12 @@ export class AnnotationLayerView extends Tab {
     buildAnnotationQuerySchema([]);
   private annotationQuerySchemaKey = "";
   private coordDimNames: string[] = [];
+  private derivedAnalysis: DerivedAnalysisResult | undefined;
   private queryStatisticsElement = document.createElement("div");
   private categoricalSummaryContainer = document.createElement("div");
   private categoricalDetailsOpen = false;
   private numericalSummaryContainer = document.createElement("div");
+  private derivedWarningElement = document.createElement("div");
   private numericalPropertiesSummary: NumericalPropertiesSummary | undefined;
   private numericalDataSource: NumericalSummaryDataSource | undefined;
   private numericalBoundsInitialized = false;
@@ -636,6 +643,12 @@ export class AnnotationLayerView extends Tab {
     );
     this.numericalSummaryContainer.style.display = "none";
     this.element.appendChild(this.numericalSummaryContainer);
+    this.derivedWarningElement.classList.add(
+      "neuroglancer-annotation-derived-warning",
+    );
+    this.derivedWarningElement.textContent = "⚠ measurements unavailable";
+    this.derivedWarningElement.style.display = "none";
+    this.element.appendChild(this.derivedWarningElement);
 
     const debouncedQuery = this.registerCancellable(
       debounce(() => {
@@ -983,9 +996,18 @@ export class AnnotationLayerView extends Tab {
       gridTemplate,
       globalDimensionIndices,
       localDimensionIndices,
-      shownPropertySpecs,
+      shownColumns,
       numDimColumns,
     } = this;
+    // Fill per-annotation derived values into the (shared) column descriptors.
+    const derivedValues = this.derivedAnalysis?.valuesByAnnotationId.get(
+      annotation.id,
+    );
+    const columns = shownColumns.map((c) =>
+      c.baseUnit !== undefined
+        ? { ...c, derivedValue: derivedValues?.get(c.identifier) }
+        : c,
+    );
     const [element, elementColumnWidths] = makeAnnotationListElement(
       layer,
       annotation,
@@ -993,8 +1015,8 @@ export class AnnotationLayerView extends Tab {
       gridTemplate,
       globalDimensionIndices,
       localDimensionIndices,
-      shownPropertySpecs.length > 0
-        ? { specs: shownPropertySpecs, dimColumnCount: numDimColumns }
+      columns.length > 0
+        ? { columns, dimColumnCount: numDimColumns }
         : undefined,
     );
     for (const [column, width] of elementColumnWidths.entries()) {
@@ -1061,17 +1083,19 @@ export class AnnotationLayerView extends Tab {
   }
 
   private createPropertyColumnHeader(
-    spec: AnnotationPropertySpec,
+    identifier: string,
+    label: string = identifier,
+    description?: string,
   ): HTMLDivElement {
     const header = document.createElement("div");
     header.classList.add("neuroglancer-annotation-property-header");
     const name = document.createElement("span");
     name.classList.add("neuroglancer-annotation-property-header-name");
-    name.textContent = spec.identifier;
-    if (spec.description) name.title = spec.description;
+    name.textContent = label;
+    if (description) name.title = description;
     header.appendChild(name);
     const curOrder =
-      this.sortState?.propertyId === spec.identifier
+      this.sortState?.propertyId === identifier
         ? this.sortState.order
         : undefined;
     const sortBtn = document.createElement("button");
@@ -1080,22 +1104,22 @@ export class AnnotationLayerView extends Tab {
       curOrder === "asc" ? "▲" : curOrder === "desc" ? "▼" : "↕";
     sortBtn.title =
       curOrder === "asc"
-        ? `Sort ${spec.identifier} descending (click again to clear)`
+        ? `Sort ${identifier} descending (click again to clear)`
         : curOrder === "desc"
-          ? `Clear sort on ${spec.identifier}`
-          : `Sort ${spec.identifier} ascending`;
+          ? `Clear sort on ${identifier}`
+          : `Sort ${identifier} ascending`;
     if (curOrder !== undefined) sortBtn.dataset.active = "true";
     sortBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       e.preventDefault();
       const cur =
-        this.sortState?.propertyId === spec.identifier
+        this.sortState?.propertyId === identifier
           ? this.sortState.order
           : undefined;
       if (cur === undefined) {
-        this.sortState = { propertyId: spec.identifier, order: "asc" };
+        this.sortState = { propertyId: identifier, order: "asc" };
       } else if (cur === "asc") {
-        this.sortState = { propertyId: spec.identifier, order: "desc" };
+        this.sortState = { propertyId: identifier, order: "desc" };
       } else {
         this.sortState = undefined;
       }
@@ -1148,6 +1172,17 @@ export class AnnotationLayerView extends Tab {
     }
   }
 
+  private updateDerivedWarning(warning: string | undefined) {
+    const el = this.derivedWarningElement;
+    if (warning === undefined) {
+      el.style.display = "none";
+      el.title = "";
+    } else {
+      el.style.display = "";
+      el.title = warning;
+    }
+  }
+
   private syncNumericalBounds() {
     const { numericalDataSource, numericalPropertiesSummary } = this;
     if (!numericalDataSource || !numericalPropertiesSummary) return;
@@ -1161,7 +1196,7 @@ export class AnnotationLayerView extends Tab {
       let max = -Infinity;
       for (const item of items) {
         const v = item.values.get(prop.id);
-        if (typeof v === "number") {
+        if (typeof v === "number" && !Number.isNaN(v)) {
           if (v < min) min = v;
           if (v > max) max = v;
         }
@@ -1583,8 +1618,8 @@ export class AnnotationLayerView extends Tab {
       }
       this.numDimColumns = i;
 
-      // Property column headers for each toggled-on property.
-      const shownPropertySpecs: AnnotationPropertySpec[] = [];
+      // Property column headers for each toggled-on property (stored or derived).
+      const shownColumns: AnnotationListColumn[] = [];
       for (const propId of this.shownPropertyIds) {
         let spec: AnnotationPropertySpec | undefined;
         for (const [state] of this.attachedAnnotationStates) {
@@ -1596,19 +1631,37 @@ export class AnnotationLayerView extends Tab {
             break;
           }
         }
-        if (spec === undefined || spec.type === "rgb" || spec.type === "rgba") {
-          continue;
+        let column: AnnotationListColumn | undefined;
+        let label = propId;
+        let description: string | undefined;
+        if (spec !== undefined) {
+          if (spec.type === "rgb" || spec.type === "rgba") continue;
+          column = { identifier: propId, spec };
+          description = spec.description ?? undefined;
+        } else {
+          // Derived (computed) geometric property.
+          const derived = this.derivedAnalysis?.schemas.find(
+            (s) => s.identifier === propId,
+          );
+          if (derived === undefined) continue;
+          column = { identifier: propId, baseUnit: derived.baseUnit ?? "" };
+          label = `${propId} (${prettyUnit(derived.baseUnit ?? "")})`;
+          description = derived.description;
         }
-        const propColIdx = shownPropertySpecs.length;
-        shownPropertySpecs.push(spec);
-        const propHeader = this.createPropertyColumnHeader(spec);
+        const propColIdx = shownColumns.length;
+        shownColumns.push(column);
+        const propHeader = this.createPropertyColumnHeader(
+          propId,
+          label,
+          description,
+        );
         propHeader.style.gridColumn = `prop ${propColIdx + 1}`;
         headerRow.appendChild(propHeader);
         const colIdx = this.numDimColumns + propColIdx;
-        this.setColumnWidth(colIdx, spec.identifier.length + 2);
+        this.setColumnWidth(colIdx, label.length + 2);
         gridTemplate += ` [prop] var(--neuroglancer-column-${colIdx}-width)`;
       }
-      this.shownPropertySpecs = shownPropertySpecs;
+      this.shownColumns = shownColumns;
 
       headerRow.appendChild(deletePlaceholder);
       gridTemplate += " [delete] 2ch";
@@ -1649,10 +1702,29 @@ export class AnnotationLayerView extends Tab {
     const localCoordNames = this.localDimensionIndices.map(
       (i) => localCoordSpace.names[i],
     );
+    // Compute derived geometric properties (length, volume, ...) live from the
+    // loaded annotations' geometry, taking the coordinate transform into account.
+    this.derivedAnalysis = analyzeDerivedProperties({
+      annotations: listElements.flatMap(({ state, annotation }) => {
+        const chunkTransform = state.chunkTransform.value;
+        if (chunkTransform.error !== undefined) return [];
+        return [{ id: annotation.id, annotation, chunkTransform }];
+      }),
+      globalCoordinateSpace: globalCoordSpace,
+      localCoordinateSpace: localCoordSpace,
+      globalDimensionIndices: this.globalDimensionIndices,
+      localDimensionIndices: this.localDimensionIndices,
+    });
+    const derivedSchemas = this.derivedAnalysis.schemas;
+    this.updateDerivedWarning(this.derivedAnalysis.warning);
+    // Publish to the shared display state so the selection-details panel (rendered
+    // by the layer, not this view) can show the same derived metrics.
+    this.displayState.derivedProperties = this.derivedAnalysis;
     const schemaKey = [
       ...allSpecs.map((s) => `${s.identifier}:${s.type}`),
       ...globalCoordNames.map((n) => `g:${n}`),
       ...localCoordNames.map((n) => `l:${n}`),
+      ...derivedSchemas.map((s) => `d:${s.identifier}:${s.baseUnit}`),
     ].join(",");
     if (schemaKey !== this.annotationQuerySchemaKey) {
       this.annotationQuerySchemaKey = schemaKey;
@@ -1669,8 +1741,12 @@ export class AnnotationLayerView extends Tab {
           enumValues: [0, 1, 2, 3, 4],
           enumLabels: ["point", "line", "bbox", "ellipsoid", "polyline"],
         },
+        derivedSchemas,
       );
       this.rebuildNumericalSummary();
+      // Derived schema set changed (relevance / units): refresh column headers
+      // on the next pass so shown derived columns get correct unit labels.
+      ++this.curColumnConfigGeneration;
     }
     this.annotationQueryItems = buildAnnotationQueryItems(
       listElements.map(({ annotation, state }) => {
@@ -1742,6 +1818,9 @@ export class AnnotationLayerView extends Tab {
           coordValues,
           coordBounds,
           annotationType: annotation.type,
+          derivedValues: this.derivedAnalysis?.valuesByAnnotationId.get(
+            annotation.id,
+          ),
         };
       }),
     );
@@ -3510,6 +3589,41 @@ export function UserLayerWithAnnotationsMixin<
                   parent.appendChild(label);
                 }
 
+                // Derived (computed) geometric properties: show only those that
+                // apply to this annotation (finite value); skip NaN/non-applicable.
+                const derivedAnalysis = annotationLayer.displayState.derivedProperties;
+                if (
+                  derivedAnalysis !== undefined &&
+                  derivedAnalysis.schemas.length > 0 &&
+                  chunkTransform.error === undefined
+                ) {
+                  const derivedValues = derivedAnalysis.computeForAnnotation(
+                    annotation,
+                    chunkTransform,
+                  );
+                  for (const schema of derivedAnalysis.schemas) {
+                    const value = derivedValues.get(schema.identifier);
+                    if (value === undefined || !Number.isFinite(value)) continue;
+                    const baseUnit = schema.baseUnit ?? "";
+                    const row = document.createElement("div");
+                    row.classList.add("neuroglancer-annotation-property");
+                    const nameEl = document.createElement("span");
+                    nameEl.classList.add(
+                      "neuroglancer-annotation-property-label",
+                    );
+                    nameEl.textContent = `${schema.identifier} (${prettyUnit(baseUnit)})`;
+                    if (schema.description) nameEl.title = schema.description;
+                    row.appendChild(nameEl);
+                    const valueEl = document.createElement("span");
+                    valueEl.classList.add(
+                      "neuroglancer-annotation-property-value",
+                    );
+                    valueEl.textContent = formatDerivedValue(value, baseUnit);
+                    row.appendChild(valueEl);
+                    parent.appendChild(row);
+                  }
+                }
+
                 const { relatedSegments } = annotation;
                 for (let i = 0, count = relationships.length; i < count; ++i) {
                   const related =
@@ -3767,6 +3881,7 @@ function formatPropertyForList(
 ): string {
   if (spec.type === "bool") return value ? "+" : "–";
   if (spec.type === "rgb" || spec.type === "rgba") return "";
+  if (Number.isNaN(value)) return "NA";
   const numSpec = spec as AnnotationNumericPropertySpec;
   if (numSpec.enumValues !== undefined) {
     const idx = numSpec.enumValues.indexOf(value);
@@ -3774,6 +3889,39 @@ function formatPropertyForList(
   }
   if (spec.type === "float32") return value.toPrecision(4);
   return String(value);
+}
+
+/**
+ * Format a derived (computed) property value in SI base units.  Linear units
+ * (m, s) get an SI prefix; compound units (m^2, m^3) are shown in base units
+ * with the pretty unit appended.  NaN (not applicable) renders as "NA".
+ */
+function formatDerivedValue(
+  value: number | undefined,
+  baseUnit: string,
+): string {
+  if (value === undefined || Number.isNaN(value)) return "NA";
+  if (baseUnit === "m" || baseUnit === "s") {
+    if (value === 0) return `0 ${baseUnit}`;
+    // SI prefix selection uses log10, which is NaN for negative values; pick the
+    // prefix from the magnitude and re-apply the sign (delta_{dim} is signed).
+    const sign = value < 0 ? "-" : "";
+    return (
+      sign + formatScaleWithUnitAsString(Math.abs(value), baseUnit, { precision: 4 })
+    );
+  }
+  return `${value.toPrecision(4)} ${prettyUnit(baseUnit)}`;
+}
+
+/** A column shown in the annotation list: a stored property or a derived metric. */
+export interface AnnotationListColumn {
+  identifier: string;
+  /** Stored property spec (value read from annotation.properties). */
+  spec?: AnnotationPropertySpec;
+  /** SI base unit for a derived column (value read from derivedValues). */
+  baseUnit?: string;
+  /** Derived value for this annotation, in SI base units (NaN/undefined → NA). */
+  derivedValue?: number;
 }
 
 export function makeAnnotationListElement(
@@ -3784,7 +3932,7 @@ export function makeAnnotationListElement(
   globalDimensionIndices: number[],
   localDimensionIndices: number[],
   propertyColumns?: {
-    specs: readonly AnnotationPropertySpec[];
+    columns: readonly AnnotationListColumn[];
     dimColumnCount: number;
   },
 ): [HTMLDivElement, number[]] {
@@ -3864,23 +4012,31 @@ export function makeAnnotationListElement(
       maybeAddDeleteButton();
     },
   );
-  if (propertyColumns !== undefined && propertyColumns.specs.length > 0) {
-    const { specs, dimColumnCount } = propertyColumns;
+  if (propertyColumns !== undefined && propertyColumns.columns.length > 0) {
+    const { columns, dimColumnCount } = propertyColumns;
     const sourceProps = state.source.properties.value;
-    for (let j = 0; j < specs.length; j++) {
-      const spec = specs[j];
-      const propIdx = sourceProps.findIndex(
-        (p) => p.identifier === spec.identifier,
-      );
+    for (let j = 0; j < columns.length; j++) {
+      const column = columns[j];
       const propCell = document.createElement("div");
       propCell.classList.add("neuroglancer-annotation-list-property-value");
       propCell.style.gridColumn = `prop ${j + 1}`;
       propCell.style.gridRow = "1";
-      if (propIdx >= 0 && propIdx < annotation.properties.length) {
-        const text = formatPropertyForList(
-          spec,
-          annotation.properties[propIdx] as number,
+      let text: string | undefined;
+      if (column.baseUnit !== undefined) {
+        // Derived (computed) property: value provided on the column descriptor.
+        text = formatDerivedValue(column.derivedValue, column.baseUnit);
+      } else if (column.spec !== undefined) {
+        const propIdx = sourceProps.findIndex(
+          (p) => p.identifier === column.identifier,
         );
+        if (propIdx >= 0 && propIdx < annotation.properties.length) {
+          text = formatPropertyForList(
+            column.spec,
+            annotation.properties[propIdx] as number,
+          );
+        }
+      }
+      if (text !== undefined) {
         propCell.textContent = text;
         columnWidths[dimColumnCount + j] = Math.max(
           columnWidths[dimColumnCount + j] || 0,
