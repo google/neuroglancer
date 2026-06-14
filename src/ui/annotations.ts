@@ -666,7 +666,7 @@ export class AnnotationLayerView extends Tab {
       const label = this.listLoadedAnnotationsLabel;
       label.appendChild(
         document.createTextNode(
-          "List rendered annotations (decodes visible subset for search/sort; may cost CPU)",
+          "List rendered annotations",
         ),
       );
       label.title =
