@@ -183,6 +183,7 @@ function getCenterPosition(center: Float32Array, annotation: Annotation) {
       center.set(annotation.point);
       break;
     case AnnotationType.ELLIPSOID:
+    case AnnotationType.ORIENTED_BOUNDING_BOX:
       center.set(annotation.center);
       break;
   }
