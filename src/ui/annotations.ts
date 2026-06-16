@@ -508,9 +508,9 @@ export class AnnotationLayerView extends Tab {
 
     const helpIcon = makeIcon({
       title:
-        "The left icons allow you to select the type of the anotation. Color and other display settings are available in the 'Rendering' tab.",
+        "The left icons allow you to select the type of the annotation. Color and other display settings are available in the 'Rendering' tab. Click for documentation.",
       svg: svg_help,
-      clickable: false,
+      href: "https://neuroglancer-docs.web.app/user-guide/annotation.html",
     });
     helpIcon.style.marginLeft = "auto";
     mutableControls.appendChild(helpIcon);

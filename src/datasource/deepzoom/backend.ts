@@ -81,7 +81,7 @@ export class DeepzoomImageTileSource extends WithParameters(
     const [x, y] = chunk.chunkGridPosition;
     const ox = x === 0 ? 0 : overlap;
     const oy = y === 0 ? 0 : overlap;
-    const path = `${this.tileKvStore.path}/${x}_${y}.${parameters.format}`;
+    const path = `${this.tileKvStore.path}${x}_${y}.${parameters.format}`;
     const response = await this.tileKvStore.store.read(path, {
       signal,
     });

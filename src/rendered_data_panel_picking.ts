@@ -30,7 +30,7 @@ let _cachedPickRadius = -1;
 let _cachedPickOffsetSequence: Uint32Array | undefined;
 
 /**
- * Sequence of offsets into C order (pickDiamater, pickDiamater) array in order of increasing
+ * Sequence of offsets into C order (pickDiameter, pickDiameter) array in order of increasing
  * distance from center.
  */
 export function getPickOffsetSequence(pickRadius: number) {
@@ -106,14 +106,21 @@ export function clearOutOfBoundsPickData(
   }
 }
 
-export function getCenteredPickWindowCoordinate(
-  glWindowCoordinate: number,
-  relativeCoordinate: number,
-  pickRadius: number,
-) {
-  return glWindowCoordinate + relativeCoordinate - pickRadius + 0.5;
-}
-
+/**
+ * Returns the nearest valid pick sample from a pick window.
+ *
+ * Samples are checked in `pickOffsetSequence` order, which is typically sorted by increasing
+ * distance from the center of the pick window. For slice views, the pick value itself determines
+ * whether a sample is valid. For perspective views, `depthBaseOffset` enables depth-buffer based
+ * validity, while `pickBaseOffset` identifies the matching object-pick payload for the same sample.
+ *
+ * @param data Pick window data containing a C order (pickDiameter, pickDiameter) array.
+ * @param pickOffsetSequence Offsets into the pick window to check, in priority order.
+ * @param pickRadius Radius of the pick window.
+ * @param options.depthBaseOffset Optional base offset of depth values in `data`.
+ * @param options.pickBaseOffset Optional base offset of pick values in `data`.
+ * @param options.stride Stride between consecutive elements of the pick window array.
+ */
 export function resolveNearestPanelPickSample(
   data: ArrayLike<number>,
   pickOffsetSequence: ArrayLike<number>,

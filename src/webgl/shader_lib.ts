@@ -44,6 +44,12 @@ vec3 hsvToRgb(vec3 c) {
 }
 `;
 
+export const glsl_string = `
+struct string_t {
+  highp uint value;
+};
+`;
+
 export const glsl_uint64 = `
 struct uint64_t {
   highp uvec2 value;
