@@ -12,10 +12,13 @@ Topics
   to segmentation layers.
 - :doc:`annotation_shaders` — writing custom GLSL shader code to drive
   the visual appearance of annotations from their properties.
+- :doc:`segmentation_shaders` — writing custom GLSL shader code to color
+  segmentation layers from segment ids and segment properties.
 
 .. toctree::
-   :hidden:
+  :hidden:
 
-   navigation
-   annotations
-   annotation_shaders
+  navigation
+  annotations
+  annotation_shaders
+  segmentation_shaders
