@@ -43,6 +43,14 @@ export class CatmaidCompleteSkeletonSourceParameters extends SkeletonSourceParam
   static RPC_ID = "catmaid/CompleteSkeletonSource";
 }
 
+export function getCatmaidLodForSpatialIndexLevel(
+  gridIndex: number,
+  gridLevelCount: number,
+) {
+  const lastGridIndex = gridLevelCount - 1;
+  return lastGridIndex === 0 ? 1 : gridIndex / lastGridIndex;
+}
+
 export function makeCatmaidClient(
   parameters: CatmaidDataSourceParameters,
   credentialsProvider?: CredentialsProvider<CatmaidToken>,

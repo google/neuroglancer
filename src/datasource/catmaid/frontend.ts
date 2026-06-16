@@ -36,6 +36,7 @@ import {
   CatmaidSkeletonSourceParameters,
   CatmaidCompleteSkeletonSourceParameters,
   CatmaidDataSourceParameters,
+  getCatmaidLodForSpatialIndexLevel,
   makeCatmaidClient,
   makeCatmaidSkeletonMetadata,
 } from "#src/datasource/catmaid/base.js";
@@ -237,12 +238,14 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
     const sources: SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] =
       [];
 
-    const lastGridIndex = this.gridLevels.length - 1;
     for (const [
       gridIndex,
       { size: gridCellSize, limit },
     ] of this.gridLevels.entries()) {
-      const catmaidLod = lastGridIndex === 0 ? 0 : gridIndex / lastGridIndex;
+      const catmaidLod = getCatmaidLodForSpatialIndexLevel(
+        gridIndex,
+        this.gridLevels.length,
+      );
       const chunkDataSize = Uint32Array.from([
         gridCellSize.x,
         gridCellSize.y,
