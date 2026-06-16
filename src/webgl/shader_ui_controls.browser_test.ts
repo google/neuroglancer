@@ -15,7 +15,14 @@
  */
 
 import { expect, describe, it } from "vitest";
-import { constantWatchableValue } from "#src/trackable_value.js";
+import {
+  PreprocessedSegmentPropertyMap,
+  SegmentPropertyMap,
+} from "#src/segmentation_display_state/property_map.js";
+import {
+  constantWatchableValue,
+  WatchableValue,
+} from "#src/trackable_value.js";
 import { DataType } from "#src/util/data_type.js";
 import { vec3, vec4 } from "#src/util/geom.js";
 import { defaultDataTypeRange } from "#src/util/lerp.js";
@@ -27,6 +34,7 @@ import {
   getFallbackBuilderState,
   setControlsInShader,
   ShaderControlState,
+  type ShaderDataContext,
   TrackableTransferFunctionParameters,
   parseShaderUiControls,
   parseTransferFunctionParameters,
@@ -1105,6 +1113,341 @@ void main() {
       window: undefined,
       controlPoints: undefined,
     });
+  });
+});
+
+describe("ShaderControlState property controls", () => {
+  const makeSegmentPropertyMap = () =>
+    new PreprocessedSegmentPropertyMap(
+      new SegmentPropertyMap({
+        inlineProperties: {
+          ids: new BigUint64Array([1n]),
+          properties: [
+            {
+              id: "tags",
+              type: "tags",
+              tags: ["red", "blue"],
+              tagDescriptions: ["red", "blue"],
+              values: ["\u0000"],
+            },
+            {
+              id: "score",
+              type: "number",
+              dataType: DataType.UINT8,
+              values: new Uint8Array([1]),
+              description: "score",
+              bounds: [0, 1],
+            },
+            {
+              id: "name",
+              type: "string",
+              values: ["alpha"],
+            },
+          ],
+        },
+      }),
+    );
+
+  const getSelectedPropertyValue = (shaderControlState: ShaderControlState) =>
+    shaderControlState.state.get("selected")!.trackable.value;
+
+  it("uses fallback data context while real data context is loading", () => {
+    const code = `
+void main() {
+}
+`;
+    const fragmentMain = new WatchableValue(code);
+    const dataContext = new WatchableValue<ShaderDataContext | null>(null);
+    const shaderControlState = new ShaderControlState(
+      fragmentMain,
+      dataContext,
+      undefined,
+      {},
+    );
+    try {
+      expect(shaderControlState.parseResult.value).toEqual({
+        source: code,
+        code,
+        controls: new Map(),
+        preprocessing: emptyParsePreprocessing,
+        errors: [],
+      });
+      expect(shaderControlState.builderState.value.parseResult.source).toBe(
+        code,
+      );
+    } finally {
+      shaderControlState.dispose();
+    }
+  });
+
+  it("does not report fallback errors for metadata-dependent controls", () => {
+    const code = `
+#uicontrol property selected
+void main() {
+}
+`;
+    const fragmentMain = new WatchableValue(code);
+    const dataContext = new WatchableValue<ShaderDataContext | null>(null);
+    const shaderControlState = new ShaderControlState(
+      fragmentMain,
+      dataContext,
+      undefined,
+      {},
+    );
+    try {
+      expect(shaderControlState.parseErrors.value).toEqual([]);
+      expect(shaderControlState.parseResult.value.source).toBe("");
+      expect(shaderControlState.state.size).toBe(0);
+
+      dataContext.value = { segmentPropertyMap: makeSegmentPropertyMap() };
+      expect(shaderControlState.parseErrors.value).toEqual([]);
+      expect(shaderControlState.parseResult.value.source).toBe(code);
+      expect(getSelectedPropertyValue(shaderControlState)).toEqual({
+        type: "tag",
+        id: "red",
+      });
+    } finally {
+      shaderControlState.dispose();
+    }
+  });
+
+  it("can use a fallback shader while metadata-dependent controls are loading", () => {
+    const code = `
+#uicontrol property selected
+void main() {
+}
+`;
+    const fallbackCode = `
+void main() {
+}
+`;
+    const fragmentMain = new WatchableValue(code);
+    const dataContext = new WatchableValue<ShaderDataContext | null>(null);
+    const shaderControlState = new ShaderControlState(
+      fragmentMain,
+      dataContext,
+      undefined,
+      {},
+      fallbackCode,
+    );
+    try {
+      expect(shaderControlState.parseErrors.value).toEqual([]);
+      expect(shaderControlState.parseResult.value.source).toBe(fallbackCode);
+      expect(shaderControlState.builderState.value.builderValues).toEqual({});
+      expect(shaderControlState.builderState.value.segmentProperties).toEqual(
+        [],
+      );
+      expect(shaderControlState.state.size).toBe(0);
+
+      dataContext.value = { segmentPropertyMap: makeSegmentPropertyMap() };
+      expect(shaderControlState.parseErrors.value).toEqual([]);
+      expect(shaderControlState.parseResult.value.source).toBe(code);
+      expect(getSelectedPropertyValue(shaderControlState)).toEqual({
+        type: "tag",
+        id: "red",
+      });
+    } finally {
+      shaderControlState.dispose();
+    }
+  });
+
+  it("tracks annotation property invlerp controls as referenced properties", () => {
+    const code = `
+#uicontrol invlerp normalized(property="score")
+void main() {
+}
+`;
+    const fragmentMain = new WatchableValue(code);
+    const dataContext = new WatchableValue<ShaderDataContext | null>({
+      properties: new Map([["score", DataType.UINT8]]),
+    });
+    const shaderControlState = new ShaderControlState(
+      fragmentMain,
+      dataContext,
+    );
+    try {
+      expect(
+        shaderControlState.builderState.value.referencedProperties,
+      ).toEqual(["score"]);
+      expect(shaderControlState.builderState.value.segmentProperties).toEqual(
+        [],
+      );
+    } finally {
+      shaderControlState.dispose();
+    }
+  });
+
+  it("tracks segment property invlerp controls as segment properties", () => {
+    const code = `
+#uicontrol invlerp normalized(property="score")
+void main() {
+}
+`;
+    const fragmentMain = new WatchableValue(code);
+    const segmentPropertyMap = makeSegmentPropertyMap();
+    const dataContext = new WatchableValue<ShaderDataContext | null>({
+      properties: new Map([["score", DataType.UINT8]]),
+      values: new Map([["score", new Uint8Array([1])]]),
+      shaderName: () => "numerical0",
+      segmentPropertyMap,
+    });
+    const shaderControlState = new ShaderControlState(
+      fragmentMain,
+      dataContext,
+    );
+    try {
+      expect(
+        shaderControlState.builderState.value.referencedProperties,
+      ).toEqual([]);
+      expect(shaderControlState.builderState.value.segmentProperties).toEqual([
+        { type: "numerical", id: "score" },
+      ]);
+    } finally {
+      shaderControlState.dispose();
+    }
+  });
+
+  it("defaults to first property when created", () => {
+    const unfilteredCode = `
+#uicontrol property selected
+void main() {
+}
+`;
+    const fragmentMain = new WatchableValue(unfilteredCode);
+    const dataContext = new WatchableValue<ShaderDataContext | null>({
+      segmentPropertyMap: makeSegmentPropertyMap(),
+    });
+    const shaderControlState = new ShaderControlState(
+      fragmentMain,
+      dataContext,
+    );
+    try {
+      expect(getSelectedPropertyValue(shaderControlState)).toEqual({
+        type: "tag",
+        id: "red",
+      });
+      expect(shaderControlState.builderState.value.segmentProperties).toEqual([
+        { type: "tag", id: "red" },
+      ]);
+    } finally {
+      shaderControlState.dispose();
+    }
+  });
+
+  it("defaults to first property allowed by type filter when created", () => {
+    const numericalFilteredCode = `
+#uicontrol property selected(type="number")
+void main() {
+}
+`;
+    const fragmentMain = new WatchableValue(numericalFilteredCode);
+    const dataContext = new WatchableValue<ShaderDataContext | null>({
+      segmentPropertyMap: makeSegmentPropertyMap(),
+    });
+    const shaderControlState = new ShaderControlState(
+      fragmentMain,
+      dataContext,
+    );
+    try {
+      expect(getSelectedPropertyValue(shaderControlState)).toEqual({
+        type: "numerical",
+        id: "score",
+      });
+      expect(shaderControlState.builderState.value.segmentProperties).toEqual([
+        { type: "numerical", id: "score" },
+      ]);
+    } finally {
+      shaderControlState.dispose();
+    }
+  });
+
+  it("preserves selected tag when adding and removing property type filter", () => {
+    const unfilteredCode = `
+#uicontrol property selected
+void main() {
+}
+`;
+    const tagFilteredCode = `
+#uicontrol property selected(type="tag")
+void main() {
+}
+`;
+    const fragmentMain = new WatchableValue(unfilteredCode);
+    const dataContext = new WatchableValue<ShaderDataContext | null>({
+      segmentPropertyMap: makeSegmentPropertyMap(),
+    });
+    const shaderControlState = new ShaderControlState(
+      fragmentMain,
+      dataContext,
+    );
+    try {
+      shaderControlState.state.get("selected")!.trackable.value = {
+        type: "tag",
+        id: "red",
+      };
+      expect(getSelectedPropertyValue(shaderControlState)).toEqual({
+        type: "tag",
+        id: "red",
+      });
+
+      fragmentMain.value = tagFilteredCode;
+      expect(getSelectedPropertyValue(shaderControlState)).toEqual({
+        type: "tag",
+        id: "red",
+      });
+      expect(shaderControlState.builderState.value.segmentProperties).toEqual([
+        { type: "tag", id: "red" },
+      ]);
+
+      fragmentMain.value = unfilteredCode;
+      expect(getSelectedPropertyValue(shaderControlState)).toEqual({
+        type: "tag",
+        id: "red",
+      });
+      expect(shaderControlState.builderState.value.segmentProperties).toEqual([
+        { type: "tag", id: "red" },
+      ]);
+    } finally {
+      shaderControlState.dispose();
+    }
+  });
+
+  it("defaults to first valid property when preserved value is filtered out", () => {
+    const unfilteredCode = `
+#uicontrol property selected
+void main() {
+}
+`;
+    const tagFilteredCode = `
+#uicontrol property selected(type="tag")
+void main() {
+}
+`;
+    const fragmentMain = new WatchableValue(unfilteredCode);
+    const dataContext = new WatchableValue<ShaderDataContext | null>({
+      segmentPropertyMap: makeSegmentPropertyMap(),
+    });
+    const shaderControlState = new ShaderControlState(
+      fragmentMain,
+      dataContext,
+    );
+    try {
+      shaderControlState.state.get("selected")!.trackable.value = {
+        type: "numerical",
+        id: "score",
+      };
+
+      fragmentMain.value = tagFilteredCode;
+      expect(getSelectedPropertyValue(shaderControlState)).toEqual({
+        type: "tag",
+        id: "red",
+      });
+      expect(shaderControlState.builderState.value.segmentProperties).toEqual([
+        { type: "tag", id: "red" },
+      ]);
+    } finally {
+      shaderControlState.dispose();
+    }
   });
 });
 

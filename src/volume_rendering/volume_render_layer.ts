@@ -812,7 +812,7 @@ gl_Position = uModelViewProjectionMatrix * vec4(position, 1.0);
       if (prevChunkFormat !== null) {
         prevChunkFormat!.endDrawing(gl, shader);
       }
-      const depthTextureUnit = shader.textureUnit(depthSamplerTextureUnit);
+      const depthTextureUnit = shader.textureUnit(depthSamplerTextureUnit)!;
       gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + depthTextureUnit);
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
       if (presentCount !== 0 || notPresentCount !== 0) {
@@ -1315,7 +1315,7 @@ gl_Position = uModelViewProjectionMatrix * vec4(position, 1.0);
       renderContext.depthBufferTexture !== undefined &&
       renderContext.depthBufferTexture !== null
     ) {
-      const depthTextureUnit = shader.textureUnit(depthSamplerTextureUnit);
+      const depthTextureUnit = shader.textureUnit(depthSamplerTextureUnit)!;
       gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + depthTextureUnit);
       gl.bindTexture(
         WebGL2RenderingContext.TEXTURE_2D,
