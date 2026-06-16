@@ -23,13 +23,12 @@ import type {
   FramePickingData,
   RenderedDataViewerState,
 } from "#src/rendered_data_panel.js";
+import { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import {
-  getCenteredPickWindowCoordinate,
   getPickDiameter,
   getPickOffsetSequence,
-  RenderedDataPanel,
   resolveNearestPanelPickSample,
-} from "#src/rendered_data_panel.js";
+} from "#src/rendered_data_panel_picking.js";
 import type { SliceView } from "#src/sliceview/frontend.js";
 import { SliceViewRenderHelper } from "#src/sliceview/frontend.js";
 import type {
@@ -483,18 +482,10 @@ export class SliceViewPanel extends RenderedDataPanel {
       relativeY: number,
       position: Float32Array,
     ) => {
-      const x = getCenteredPickWindowCoordinate(
-        glWindowX,
-        relativeX,
-        pickRadius,
-      );
-      const y = getCenteredPickWindowCoordinate(
-        glWindowY,
-        relativeY,
-        pickRadius,
-      );
-      tempVec3[0] = (2.0 * x) / viewportWidth - 1.0;
-      tempVec3[1] = (2.0 * y) / viewportHeight - 1.0;
+      tempVec3[0] =
+        (2.0 * (glWindowX + relativeX - pickRadius)) / viewportWidth - 1.0;
+      tempVec3[1] =
+        (2.0 * (glWindowY + relativeY - pickRadius)) / viewportHeight - 1.0;
       tempVec3[2] = 0;
       vec3.transformMat4(tempVec3, tempVec3, pickingData.invTransform);
       position.set(voxelCoordinates);

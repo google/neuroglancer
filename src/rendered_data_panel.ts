@@ -117,15 +117,6 @@ export class PickRequest {
 
 const pickRequestInterval = 30;
 
-export {
-  clearOutOfBoundsPickData,
-  getCenteredPickWindowCoordinate,
-  getPickDiameter,
-  getPickOffsetSequence,
-  resolveNearestPanelPickSample,
-  type ResolvedPanelPickSample,
-} from "#src/rendered_data_panel_picking.js";
-
 export abstract class RenderedDataPanel extends RenderedPanel {
   /**
    * Current mouse position within the viewport, or -1 if the mouse is not in the viewport.

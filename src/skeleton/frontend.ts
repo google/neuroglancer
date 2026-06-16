@@ -163,6 +163,7 @@ import { ShaderBuilder } from "#src/webgl/shader.js";
 import {
   dataTypeShaderDefinition,
   getShaderType,
+  glsl_string,
 } from "#src/webgl/shader_lib.js";
 import type { ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
 import {
@@ -377,6 +378,7 @@ void spatialChunkCull() {
     }
     builder.setVertexMain(vertexMain);
     addControlsToBuilder(shaderBuilderState, builder);
+    builder.addFragmentCode(glsl_string);
     builder.addFragmentCode(`void userMain();\n`);
     builder.addFragmentCode(
       "#define main userMain\n" +
@@ -1341,7 +1343,7 @@ export class SkeletonLayer extends RefCounted implements SkeletonShaderContext {
       gl,
       edgeShader,
       shaderControlState,
-      edgeShaderParameters.parseResult.controls,
+      edgeShaderParameters.parseResult,
     );
     gl.uniform1f(edgeShader.uniform("uLineWidth"), lineWidth!);
     gl.uniform1f(
@@ -1358,7 +1360,7 @@ export class SkeletonLayer extends RefCounted implements SkeletonShaderContext {
         gl,
         nodeShader,
         shaderControlState,
-        nodeShaderParameters.parseResult.controls,
+        nodeShaderParameters.parseResult,
       );
     }
 
@@ -2842,7 +2844,7 @@ export class SpatiallyIndexedSkeletonLayer
       gl,
       edgeShader,
       shaderControlState,
-      edgeShaderParameters.parseResult.controls,
+      edgeShaderParameters.parseResult,
     );
     renderHelper.setColor(gl, edgeShader, kOneVec4);
     renderHelper.maybeEnableDynamicSegmentAppearance(
@@ -2861,7 +2863,7 @@ export class SpatiallyIndexedSkeletonLayer
         gl,
         nodeShader,
         shaderControlState,
-        nodeShaderParameters.parseResult.controls,
+        nodeShaderParameters.parseResult,
       );
       renderHelper.setColor(gl, nodeShader, kOneVec4);
       renderHelper.maybeEnableDynamicSegmentAppearance(
