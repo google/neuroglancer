@@ -47,6 +47,7 @@ import {
 import { channelInvlerpLayerControl } from "#src/widget/layer_control_channel_invlerp.js";
 import { checkboxLayerControl } from "#src/widget/layer_control_checkbox.js";
 import { colorLayerControl } from "#src/widget/layer_control_color.js";
+import { propertyLayerControl } from "#src/widget/layer_control_property.js";
 import { propertyInvlerpLayerControl } from "#src/widget/layer_control_property_invlerp.js";
 import { rangeLayerControl } from "#src/widget/layer_control_range.js";
 import { selectLayerControl } from "#src/widget/layer_control_select.js";
@@ -70,7 +71,7 @@ export interface ShaderControlsOptions {
 function getShaderLayerControlFactory<LayerType extends UserLayer>(
   layerShaderControls: LayerShaderControls,
   controlId: string,
-): LayerControlFactory<LayerType> | undefined {
+): LayerControlFactory<LayerType, any> | undefined {
   const { shaderControlState } = layerShaderControls;
   const controlState = shaderControlState.state.get(controlId);
   if (controlState === undefined) return undefined;
@@ -108,6 +109,7 @@ function getShaderLayerControlFactory<LayerType extends UserLayer>(
     case "propertyInvlerp": {
       return propertyInvlerpLayerControl(() => ({
         properties: control.properties,
+        values: control.values,
         watchableValue: controlState.trackable,
         histogramSpecifications: shaderControlState.histogramSpecifications,
         histogramIndex: calculateHistogramIndex(),
@@ -123,6 +125,12 @@ function getShaderLayerControlFactory<LayerType extends UserLayer>(
         defaultChannel: control.default.channel,
         histogramSpecifications: shaderControlState.histogramSpecifications,
         histogramIndex: calculateHistogramIndex(),
+      }));
+    }
+    case "property": {
+      return propertyLayerControl(() => ({
+        segmentProperties: control.segmentProperties,
+        watchableValue: controlState.trackable,
       }));
     }
   }
@@ -161,20 +169,20 @@ function getShaderLayerControlDefinition<LayerType extends UserLayer>(
   getter: (layer: LayerType) => LayerShaderControls,
   toolId: string,
   controlId: string,
-): LayerControlDefinition<LayerType> {
+): LayerControlDefinition<LayerType, any> {
   return {
     label: controlId,
     toolJson: shaderControlToolJson(controlId, toolId),
     makeControl: (layer, context, options) => {
       const layerShaderControls = getter(layer);
-      return getShaderLayerControlFactory(
+      return getShaderLayerControlFactory<LayerType>(
         layerShaderControls,
         controlId,
       )!.makeControl(layer, context, options);
     },
     activateTool: (activation, control) => {
       const layerShaderControls = getter(activation.tool.layer);
-      return getShaderLayerControlFactory(
+      return getShaderLayerControlFactory<LayerType>(
         layerShaderControls,
         controlId,
       )!.activateTool(activation, control);
