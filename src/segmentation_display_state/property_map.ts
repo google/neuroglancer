@@ -27,7 +27,7 @@ import type {
 import { mergeSequences } from "#src/util/array.js";
 import { bigintCompare } from "#src/util/bigint.js";
 import { DataType } from "#src/util/data_type.js";
-import type { Borrowed } from "#src/util/disposable.js";
+import { type Borrowed } from "#src/util/disposable.js";
 import { murmurHash3_x86_32Hash64Bits_Bigint } from "#src/util/hash.js";
 import { parseUint64 } from "#src/util/json.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
@@ -180,6 +180,7 @@ export class PreprocessedSegmentPropertyMap {
   tags: InlineSegmentTagsProperty | undefined;
   labels: InlineSegmentStringProperty | undefined;
   numericalProperties: InlineSegmentNumericalProperty[];
+  strings: InlineSegmentStringProperty[];
 
   getSegmentInlineIndex(id: bigint): number {
     const { inlineIdToIndex } = this;
@@ -195,6 +196,23 @@ export class PreprocessedSegmentPropertyMap {
     const { inlineProperties } = segmentPropertyMap;
     if (inlineProperties !== undefined) {
       this.inlineIdToIndex = makeUint64PermutationHashMap(inlineProperties.ids);
+
+      const hasStringProperty = inlineProperties.properties.some(
+        (p) => p.type === "string",
+      );
+      if (!hasStringProperty) {
+        const numIds = inlineProperties.ids.length;
+        const categories = ["neuron", "glia", "synapse", "unknown"];
+        inlineProperties.properties.push({
+          id: "debug_category",
+          type: "string",
+          description: "Debug injected string property",
+          values: Array.from(
+            { length: numIds },
+            (_, i) => categories[i % categories.length],
+          ),
+        });
+      }
     }
     this.tags = inlineProperties?.properties.find((p) => p.type === "tags") as
       | InlineSegmentTagsProperty
@@ -205,6 +223,9 @@ export class PreprocessedSegmentPropertyMap {
     this.numericalProperties = (inlineProperties?.properties.filter(
       (p) => p.type === "number",
     ) ?? []) as InlineSegmentNumericalProperty[];
+    this.strings = (inlineProperties?.properties.filter(
+      (p) => p.type === "string",
+    ) ?? []) as InlineSegmentStringProperty[];
   }
 
   getSegmentLabel(id: bigint): string | undefined {
@@ -295,7 +316,7 @@ function remapNumericalProperty(
   numMerged: number,
   toMerged: Uint32Array,
 ): InlineSegmentNumericalProperty {
-  const values = new Float32Array(numMerged);
+  const values = property.values.slice(0, numMerged);
   values.fill(Number.NaN);
   remapArray(property.values, values, toMerged);
   return { ...property, values };
@@ -1078,7 +1099,7 @@ function updatePropertyHistogram(
   const { values } = property;
   const [min, max] = bounds as [number, number];
   const multiplier = max <= min ? 0 : numBins / (max - min);
-  const histogram = new Uint32Array(numBins + 2);
+  const histogram = new Uint32Array(numBins + 2); // TODO here we have 258 entries, are the texture ones 256?
   const { numericalConstraints } = queryResult!.query as FilterQuery;
   const constraintIndex = numericalConstraints.findIndex(
     (c) => c.fieldId === property.id,

@@ -16,7 +16,11 @@
 
 import type { UserLayer } from "#src/layer/index.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
-import { makeCachedDerivedWatchableValue } from "#src/trackable_value.js";
+import {
+  makeCachedDerivedWatchableValue,
+  makeCachedLazyDerivedWatchableValue,
+} from "#src/trackable_value.js";
+import type { TypedNumberArray } from "#src/util/array.js";
 import { DataType } from "#src/util/data_type.js";
 import {
   convertDataTypeInterval,
@@ -40,6 +44,7 @@ export function propertyInvlerpLayerControl<LayerType extends UserLayer>(
   getter: (layer: LayerType) => {
     watchableValue: WatchableValueInterface<PropertyInvlerpParameters>;
     properties: PropertiesSpecification;
+    values?: Map<string, TypedNumberArray<ArrayBuffer>>;
     histogramSpecifications: HistogramSpecifications;
     histogramIndex: number;
     legendShaderOptions: LegendShaderOptions | undefined;
@@ -50,6 +55,7 @@ export function propertyInvlerpLayerControl<LayerType extends UserLayer>(
       const {
         watchableValue,
         properties,
+        values,
         histogramSpecifications,
         legendShaderOptions,
         histogramIndex,
@@ -93,26 +99,41 @@ export function propertyInvlerpLayerControl<LayerType extends UserLayer>(
         updateView();
         options.labelContainer.appendChild(propertySelectElement);
       }
-      const derivedWatchableValue = {
-        changed: watchableValue.changed,
-        get value(): InvlerpParameters {
-          let { dataType, window, range } = watchableValue.value;
-          if (range === undefined) {
-            range = defaultDataTypeRange[dataType];
-          }
-          return {
-            window: normalizeDataTypeInterval(window ?? range),
-            range,
-          };
-        },
-        set value(newValue: InvlerpParameters) {
-          const { window, range } = newValue;
-          watchableValue.value = { ...watchableValue.value, window, range };
-        },
-      };
+      const derivedWatchableValue: WatchableValueInterface<InvlerpParameters> =
+        {
+          changed: watchableValue.changed,
+          get value() {
+            let { dataType, window, range } = watchableValue.value;
+            if (range === undefined) {
+              range = defaultDataTypeRange[dataType];
+            }
+            return {
+              window: normalizeDataTypeInterval(window ?? range),
+              range,
+            };
+          },
+          set value(newValue: InvlerpParameters) {
+            const { window, range } = newValue;
+            watchableValue.value = { ...watchableValue.value, window, range };
+          },
+        };
+
       const derivedDataTypeWatchable = makeCachedDerivedWatchableValue(
         (p) => p.dataType,
         [watchableValue],
+      );
+      const derivedPropertyWatchable = makeCachedDerivedWatchableValue(
+        (p) => p.property,
+        [watchableValue],
+      );
+      const derivedValuesWatchable = makeCachedLazyDerivedWatchableValue(
+        (property) => {
+          if (values) {
+            return values.get(property);
+          }
+          return undefined;
+        },
+        derivedPropertyWatchable,
       );
       const control = context.registerDisposer(
         new VariableDataTypeInvlerpWidget(
@@ -123,6 +144,7 @@ export function propertyInvlerpLayerControl<LayerType extends UserLayer>(
           histogramSpecifications,
           histogramIndex,
           legendShaderOptions,
+          derivedValuesWatchable,
         ),
       );
       return { control, controlElement: control.element };
