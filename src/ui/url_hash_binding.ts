@@ -14,18 +14,17 @@
  * limitations under the License.
  */
 
-import { debounce } from "lodash-es";
-import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
+import { dynamicDebounce } from "#src/util/debounce.js";
 import { RefCounted } from "#src/util/disposable.js";
 import {
   bigintToStringJsonReplacer,
   urlSafeParse,
   verifyObject,
 } from "#src/util/json.js";
-import type { Trackable } from "#src/util/trackable.js";
 import { getCachedJson } from "#src/util/trackable.js";
+import type { Viewer } from "#src/viewer.js";
 
 /**
  * @file Implements a binding between a Trackable value and the URL hash state.
@@ -68,25 +67,97 @@ export class UrlHashBinding extends RefCounted {
 
   private defaultFragment: string;
 
+  get root() {
+    return this.viewer.state;
+  }
+
+  get sharedKvStoreContext() {
+    return this.viewer.dataSourceProvider.sharedKvStoreContext;
+  }
+
+  urlHashRateLimit = new WatchableValue(200);
+
   constructor(
-    public root: Trackable,
-    public sharedKvStoreContext: SharedKvStoreContext,
+    public viewer: Viewer,
+    // public root: Trackable,
+    // public sharedKvStoreContext: SharedKvStoreContext,
     options: UrlHashBindingOptions = {},
   ) {
     super();
-    const { updateDelayMilliseconds = 200, defaultFragment = "{}" } = options;
+    const { defaultFragment = "{}" } = options;
     this.registerEventListener(window, "hashchange", () =>
       this.updateFromUrlHash(),
     );
-    const throttledSetUrlHash = debounce(
-      () => this.setUrlHash(),
-      updateDelayMilliseconds,
-      { maxWait: updateDelayMilliseconds * 2 },
+    const throttledSetUrlHash = this.registerDisposer(
+      dynamicDebounce(
+        () => this.setUrlHash(),
+        this.urlHashRateLimit,
+        (wait) => ({ maxWait: wait }),
+      ),
     );
-    this.registerDisposer(root.changed.add(throttledSetUrlHash));
-    this.registerDisposer(() => throttledSetUrlHash.cancel());
+    this.registerDisposer(this.root.changed.add(throttledSetUrlHash));
+    // try to update the url before the user might attempt to be copying it
+    window.addEventListener("blur", () => {
+      throttledSetUrlHash.flush();
+    });
+    // mouseleave works better (occurs earlier) than blur
+    document.addEventListener("mouseleave", () => {
+      throttledSetUrlHash.flush();
+    });
+    // update url for the select url shortcut (ctrl+l/cmd+l)
+    // select url triggers the blur event, but for chrome, it occurs too late for the url to be updated
+    // alo testing out ctrl+s/cmd+s to update url
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "l") {
+        throttledSetUrlHash.flush();
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key === "s") {
+        event.preventDefault();
+        throttledSetUrlHash.flush();
+      }
+    });
     this.defaultFragment = defaultFragment;
+    this.viewer.urlHashRateLimit.changed.add(this.updateRateLimit);
+
+    this.registerDisposer(
+      this.viewer.saveStateSession.changed.add(() => {
+        throttledSetUrlHash.flush();
+      }),
+    );
+
+    window.addEventListener("beforeunload", () => {
+      if (!this.viewer.saveStateSession.value) return;
+      const cacheState = getCachedJson(this.root);
+      const stateString = JSON.stringify(
+        cacheState.value,
+        bigintToStringJsonReplacer,
+      );
+      window.sessionStorage.setItem("state", stateString);
+    });
   }
+
+  updateRateLimit = () => {
+    const debugEl =
+      document.body.querySelector("#debug-url-rate") ??
+      document.body.appendChild(document.createElement("div"));
+    debugEl.id = "debug-url-rate";
+
+    const userFunc = this.viewer.urlHashRateLimit.value;
+    const safeFunc = /^[xelogmaxin ,*/+\-\d()]*$/;
+    if (safeFunc.test(userFunc)) {
+      const translatedFunc = userFunc
+        .replaceAll("log", "Math.log")
+        .replaceAll("min", "Math.min")
+        .replaceAll("max", "Math.max")
+        .replaceAll("e", "Math.E");
+      this.urlHashRateLimit.value = eval(
+        `'use strict';(x) => ${translatedFunc}`,
+      )(this.prevStateString?.length ?? 0);
+      debugEl.textContent = `URL rate: ${(this.urlHashRateLimit.value / 1000).toFixed(1)} s (state size (x)=${this.prevStateString?.length ?? 0}, f=${this.viewer.urlHashRateLimit.value})`;
+    } else {
+      debugEl.textContent = `URL rate: INVALID FUNCTION (${userFunc})`;
+    }
+  };
 
   /**
    * Sets the URL hash to match the current state.
@@ -101,6 +172,8 @@ export class UrlHashBinding extends RefCounted {
       );
       if (stateString !== this.prevStateString) {
         this.prevStateString = stateString;
+        this.updateRateLimit();
+        StatusMessage.showTemporaryMessage(`URL updated! (debug)`);
         if (decodeURIComponent(stateString) === "{}") {
           history.replaceState(null, "", "#");
         } else {
@@ -115,6 +188,8 @@ export class UrlHashBinding extends RefCounted {
    * on the URL hash, then this should be called immediately after construction.
    */
   updateFromUrlHash() {
+    const sessionStateString = window.sessionStorage.getItem("state");
+    window.sessionStorage.removeItem("state");
     try {
       let s = location.href.replace(/^[^#]+/, "");
       if (s === "" || s === "#" || s === "#!") {
@@ -137,6 +212,12 @@ export class UrlHashBinding extends RefCounted {
             errorPrefix: "Error loading state:",
           },
         );
+      } else if (sessionStateString) {
+        const json = JSON.parse(sessionStateString);
+        this.prevStateString = encodeFragment(json);
+        verifyObject(json);
+        this.root.reset();
+        this.root.restoreState(json);
       } else if (s.startsWith("#!+")) {
         s = s.slice(3);
         // Firefox always %-encodes the URL even if it is not typed that way.
