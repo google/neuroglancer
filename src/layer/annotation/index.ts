@@ -155,6 +155,7 @@ interface LinkedSegmentationLayer {
 const LINKED_SEGMENTATION_LAYER_JSON_KEY = "linkedSegmentationLayer";
 const FILTER_BY_SEGMENTATION_JSON_KEY = "filterBySegmentation";
 const IGNORE_NULL_SEGMENT_FILTER_JSON_KEY = "ignoreNullSegmentFilter";
+const CLIP_DIMENSIONS_WEIGHT_JSON_KEY = "clipDimensionsWeight";
 const CODE_VISIBLE_KEY = "codeVisible";
 const HIDE_INACTIVE_SHADER_CONTROLS_JSON_KEY = "hideInactiveShaderControls";
 
@@ -438,6 +439,9 @@ export class AnnotationUserLayer extends Base {
     this.annotationDisplayState.ignoreNullSegmentFilter.changed.add(
       this.specificationChanged.dispatch,
     );
+    this.annotationDisplayState.clipDimensionsWeight.changed.add(
+      this.specificationChanged.dispatch,
+    );
     this.annotationCrossSectionRenderScaleTarget.changed.add(
       this.specificationChanged.dispatch,
     );
@@ -487,6 +491,9 @@ export class AnnotationUserLayer extends Base {
     );
     this.annotationDisplayState.ignoreNullSegmentFilter.restoreState(
       specification[IGNORE_NULL_SEGMENT_FILTER_JSON_KEY],
+    );
+    this.annotationDisplayState.clipDimensionsWeight.restoreState(
+      specification[CLIP_DIMENSIONS_WEIGHT_JSON_KEY],
     );
     this.annotationDisplayState.shader.restoreState(
       specification[SHADER_JSON_KEY],
@@ -765,6 +772,8 @@ export class AnnotationUserLayer extends Base {
         : localAnnotationRelationships;
     x[IGNORE_NULL_SEGMENT_FILTER_JSON_KEY] =
       this.annotationDisplayState.ignoreNullSegmentFilter.toJSON();
+    x[CLIP_DIMENSIONS_WEIGHT_JSON_KEY] =
+      this.annotationDisplayState.clipDimensionsWeight.toJSON();
     x[SHADER_JSON_KEY] = this.annotationDisplayState.shader.toJSON();
     x[SHADER_CONTROLS_JSON_KEY] =
       this.annotationDisplayState.shaderControls.toJSON();
