@@ -4,6 +4,7 @@ import "#kvstore/gcs/register";
 import "#kvstore/gzip/register";
 import "#kvstore/http/register_backend";
 import "#kvstore/icechunk/register_backend";
+import "#kvstore/kvstack/register";
 import "#kvstore/middleauth/register_backend";
 import "#kvstore/ngauth/register";
 import "#kvstore/ocdbt/register_backend";
