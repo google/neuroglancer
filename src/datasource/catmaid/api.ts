@@ -253,6 +253,7 @@ export const CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES = [
 ] as const;
 
 const CATMAID_TRUE_END_LABEL = "ends";
+const CATMAID_ENCODED_DESCRIPTION_LABEL_PREFIX = "neuroglancer-description:v1:";
 const CATMAID_CLOSED_END_LABEL_PATTERNS = [
   /^uncertain continuation$/i,
   /^not a branch$/i,
@@ -324,6 +325,27 @@ interface ParsedCatmaidNodeLabel {
   time?: number;
 }
 
+function decodeCatmaidDescriptionLabel(label: string): string | undefined {
+  const trimmed = label.trim();
+  if (!trimmed.startsWith(CATMAID_ENCODED_DESCRIPTION_LABEL_PREFIX)) {
+    return undefined;
+  }
+  try {
+    const decoded = decodeURIComponent(
+      trimmed.substring(CATMAID_ENCODED_DESCRIPTION_LABEL_PREFIX.length),
+    ).trim();
+    return decoded.length === 0 ? undefined : decoded;
+  } catch {
+    return undefined;
+  }
+}
+
+function makeCatmaidEncodedDescriptionLabel(description: string) {
+  return `${CATMAID_ENCODED_DESCRIPTION_LABEL_PREFIX}${encodeURIComponent(
+    description,
+  )}`;
+}
+
 function normalizeCatmaidDescription(
   labels: readonly ParsedCatmaidNodeLabel[] | undefined,
 ): string | undefined {
@@ -350,9 +372,19 @@ function normalizeCatmaidDescription(
             ({ time }) => time === latestTime,
           );
         })();
-  return currentDescriptionLabels.length === 0
+  if (currentDescriptionLabels.length === 0) {
+    return undefined;
+  }
+  const decodedDescriptionLabels = currentDescriptionLabels
+    .map(({ label }) => decodeCatmaidDescriptionLabel(label))
+    .filter((label): label is string => label !== undefined);
+  const visibleDescriptionLabels =
+    decodedDescriptionLabels.length === 0
+      ? currentDescriptionLabels.map(({ label }) => label)
+      : decodedDescriptionLabels;
+  return visibleDescriptionLabels.length === 0
     ? undefined
-    : currentDescriptionLabels.map(({ label }) => label).join("\n");
+    : visibleDescriptionLabels.join("\n");
 }
 
 function parseCatmaidLabelNodeReference(entry: unknown):
@@ -1854,13 +1886,38 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     return normalizedLabels;
   }
 
-  private buildDescriptionLabels(description: string) {
-    return this.normalizeNodeLabels(
-      description
-        .split(/\r?\n/)
-        .map((label) => label.trim())
-        .filter((label) => label.length > 0 && !isCatmaidClosedEndLabel(label)),
-    );
+  private normalizeDescriptionLabels(description: string) {
+    const normalizedLabels: string[] = [];
+    const seen = new Set<string>();
+    for (const label of description.split(/\r?\n/)) {
+      const trimmed = label.trim();
+      if (trimmed.length === 0 || isCatmaidClosedEndLabel(trimmed)) continue;
+      const key = trimmed.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      normalizedLabels.push(trimmed);
+    }
+    return normalizedLabels;
+  }
+
+  private buildDescriptionUpdate(description: string) {
+    const normalizedDescriptionLabels =
+      this.normalizeDescriptionLabels(description);
+    if (normalizedDescriptionLabels.length === 0) {
+      return { labels: [], description: undefined };
+    }
+    const normalizedDescription = normalizedDescriptionLabels.join("\n");
+    const requiresEncodedDescription =
+      normalizedDescription.includes(",") ||
+      normalizedDescriptionLabels.some((label) =>
+        label.startsWith(CATMAID_ENCODED_DESCRIPTION_LABEL_PREFIX),
+      );
+    return {
+      labels: requiresEncodedDescription
+        ? [makeCatmaidEncodedDescriptionLabel(normalizedDescription)]
+        : normalizedDescriptionLabels,
+      description: normalizedDescription,
+    };
   }
 
   private async replaceNodeLabels(nodeId: number, labels: readonly string[]) {
@@ -1907,18 +1964,17 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     description: string,
     options: CatmaidDescriptionUpdateOptions = {},
   ): Promise<CatmaidDescriptionUpdateResult> {
-    const normalizedLabels = this.buildDescriptionLabels(description);
+    const descriptionUpdate = this.buildDescriptionUpdate(description);
     const labels =
       options.isTrueEnd === true
-        ? [...normalizedLabels, CATMAID_TRUE_END_LABEL]
-        : normalizedLabels;
+        ? [...descriptionUpdate.labels, CATMAID_TRUE_END_LABEL]
+        : descriptionUpdate.labels;
     const response = await this.replaceNodeLabels(nodeId, labels);
     return {
       ...getCatmaidSingleNodeRevisionResult(
         normalizeCatmaidRevisionToken(response?.edition_time),
       ),
-      description:
-        normalizedLabels.length === 0 ? undefined : normalizedLabels.join("\n"),
+      description: descriptionUpdate.description,
     };
   }
 
