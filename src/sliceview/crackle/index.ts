@@ -57,7 +57,7 @@ async function loadCrackleModule() {
 }
 
 // not a full implementation of read header, just the parts we need
-function readHeader(buffer: Uint8Array<ArrayBuffer>): {
+export function readHeader(buffer: Uint8Array<ArrayBuffer>): {
   sx: number;
   sy: number;
   sz: number;
