@@ -709,7 +709,7 @@ describe("spatial_skeleton_commands", () => {
       sourceState: testSourceState("before"),
     };
     const updateDescription = vi.fn().mockResolvedValue({
-      description: "after",
+      description: "after, comma",
       sourceState: testSourceState("after"),
     });
     const toggleTrueEnd = vi.fn();
@@ -759,15 +759,15 @@ describe("spatial_skeleton_commands", () => {
 
     await executeSpatialSkeletonNodeDescriptionUpdate(layer as any, {
       node: cachedNode,
-      nextDescription: "after",
+      nextDescription: "after, comma",
     });
 
-    expect(updateDescription).toHaveBeenCalledWith(17, "after", {
+    expect(updateDescription).toHaveBeenCalledWith(17, "after, comma", {
       isTrueEnd: true,
     });
     expect(toggleTrueEnd).not.toHaveBeenCalled();
     expect(cachedNode).toMatchObject({
-      description: "after",
+      description: "after, comma",
       isTrueEnd: true,
       sourceState: testSourceState("after"),
     });

@@ -437,6 +437,116 @@ describe("CatmaidClient skeleton editing methods", () => {
     );
   });
 
+  it("parses raw comma labels from compact-detail as descriptions", async () => {
+    const client = new CatmaidClient("https://example.invalid", 1);
+    const fetchMock = vi.fn().mockResolvedValue([
+      [
+        [
+          22107946,
+          null,
+          2,
+          23697030.0,
+          15055839.0,
+          16651262.0,
+          2000.0,
+          5,
+          "2026-03-29T10:15:00Z",
+        ],
+      ],
+      [],
+      {
+        "left, branch": [[22107946, "2026-03-29 10:15:00.000000+00:00"]],
+      },
+      [],
+      [],
+    ]);
+    (client as any).fetchProjectEndpoint = fetchMock;
+
+    await expect(client.getSkeleton(2)).resolves.toEqual([
+      {
+        nodeId: 22107946,
+        parentNodeId: undefined,
+        position: new Float32Array([23697030, 15055839, 16651262]),
+        segmentId: 2,
+        radius: 2000,
+        confidence: 100,
+        description: "left, branch",
+        isTrueEnd: false,
+        sourceState: testSourceState("2026-03-29T10:15:00Z"),
+      },
+    ]);
+  });
+
+  it("decodes compact-detail sentinel labels without treating them as true ends", async () => {
+    const client = new CatmaidClient("https://example.invalid", 1);
+    const fetchMock = vi.fn().mockResolvedValue([
+      [
+        [
+          22107946,
+          null,
+          2,
+          23697030.0,
+          15055839.0,
+          16651262.0,
+          2000.0,
+          5,
+          "2026-03-29T10:15:00Z",
+        ],
+        [
+          22107955,
+          22107946,
+          2,
+          23705874.0,
+          15093672.0,
+          16682375.0,
+          2000.0,
+          5,
+          "2026-03-29T10:16:00Z",
+        ],
+      ],
+      [],
+      {
+        "plain stale description": [
+          [22107946, "2026-03-29 10:14:00.000000+00:00"],
+        ],
+        "plain duplicate": [[22107955, "2026-03-29 10:16:00.000000+00:00"]],
+        "neuroglancer-description:v1:left%2C%20branch": [
+          [22107946, "2026-03-29 10:15:00.000000+00:00"],
+          [22107955, "2026-03-29 10:16:00.000000+00:00"],
+        ],
+        ends: [[22107955, "2026-03-29 10:16:00.000000+00:00"]],
+      },
+      [],
+      [],
+    ]);
+    (client as any).fetchProjectEndpoint = fetchMock;
+
+    await expect(client.getSkeleton(2)).resolves.toEqual([
+      {
+        nodeId: 22107946,
+        parentNodeId: undefined,
+        position: new Float32Array([23697030, 15055839, 16651262]),
+        segmentId: 2,
+        radius: 2000,
+        confidence: 100,
+        description: "left, branch",
+        isTrueEnd: false,
+        sourceState: testSourceState("2026-03-29T10:15:00Z"),
+      },
+      {
+        nodeId: 22107955,
+        parentNodeId: 22107946,
+        position: new Float32Array([23705874, 15093672, 16682375]),
+        segmentId: 2,
+        radius: 2000,
+        confidence: 100,
+        description: "left, branch",
+        isTrueEnd: true,
+        sourceState: testSourceState("2026-03-29T10:16:00Z"),
+      },
+    ]);
+  });
+
   it("parses compact-detail rows without local edition-time validation", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi
@@ -969,6 +1079,48 @@ describe("CatmaidClient skeleton editing methods", () => {
     expect(requestBody.get("delete_existing")).toBe("true");
   });
 
+  it("encodes comma descriptions as one comma-free CATMAID label", async () => {
+    const client = new CatmaidClient("https://example.invalid", 1);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ edition_time: "2026-03-29T13:01:00Z" });
+    (client as any).fetchProjectEndpoint = fetchMock;
+
+    await expect(
+      client.updateDescription(11, " left, branch \n LEFT, BRANCH \n ends "),
+    ).resolves.toEqual({
+      description: "left, branch",
+      sourceState: testSourceState("2026-03-29T13:01:00Z"),
+    });
+
+    const requestBody = getFetchBody(fetchMock);
+    expect(requestBody.get("tags")).toBe(
+      "neuroglancer-description:v1:left%2C%20branch",
+    );
+    expect(requestBody.get("tags")).not.toContain(",");
+    expect(requestBody.get("delete_existing")).toBe("true");
+  });
+
+  it("encodes sentinel-prefixed descriptions even without commas", async () => {
+    const client = new CatmaidClient("https://example.invalid", 1);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ edition_time: "2026-03-29T13:02:00Z" });
+    (client as any).fetchProjectEndpoint = fetchMock;
+
+    await expect(
+      client.updateDescription(11, "neuroglancer-description:v1:left"),
+    ).resolves.toEqual({
+      description: "neuroglancer-description:v1:left",
+      sourceState: testSourceState("2026-03-29T13:02:00Z"),
+    });
+
+    const requestBody = getFetchBody(fetchMock);
+    expect(requestBody.get("tags")).toBe(
+      "neuroglancer-description:v1:neuroglancer-description%3Av1%3Aleft",
+    );
+  });
+
   it("preserves true-end labels while replacing description labels", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi
@@ -987,6 +1139,29 @@ describe("CatmaidClient skeleton editing methods", () => {
 
     const requestBody = getFetchBody(fetchMock);
     expect(requestBody.get("tags")).toBe("updated description,ends");
+    expect(requestBody.get("delete_existing")).toBe("true");
+  });
+
+  it("preserves true-end labels while replacing comma descriptions", async () => {
+    const client = new CatmaidClient("https://example.invalid", 1);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ edition_time: "2026-03-29T13:06:00Z" });
+    (client as any).fetchProjectEndpoint = fetchMock;
+
+    await expect(
+      client.updateDescription(11, "left, branch\nends", {
+        isTrueEnd: true,
+      }),
+    ).resolves.toEqual({
+      description: "left, branch",
+      sourceState: testSourceState("2026-03-29T13:06:00Z"),
+    });
+
+    const requestBody = getFetchBody(fetchMock);
+    expect(requestBody.get("tags")).toBe(
+      "neuroglancer-description:v1:left%2C%20branch,ends",
+    );
     expect(requestBody.get("delete_existing")).toBe("true");
   });
 
