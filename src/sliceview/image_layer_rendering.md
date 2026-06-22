@@ -2,7 +2,7 @@
 
 The rendering of image layers is fully customizable by specifying GLSL fragment
 shader code for computing an RGBA output value for each pixel of the viewport
-based on the the single- or multi-channel values associated with the
+based on the single- or multi-channel values associated with the
 corresponding voxel.
 
 The fragment shader code can be entered interactively from the side panel for an image layer, or
@@ -86,6 +86,43 @@ The `checkbox` control type specifies a checkbox. Directive syntax:
 
 The default is `false` if not specified. The variable `<name>` is defined at _compile time_ as
 either `false` or `true` according to the state of the checkbox.
+
+### `select` controls
+
+The `select` control type specifies a dropdown for choosing one value from a fixed set. Directive syntax:
+
+```glsl
+#uicontrol string_t <name> select(options={"Label": "value"}, default="value")
+#uicontrol int <name> select(options={"Label": 1}, default=1)
+#uicontrol uint <name> select(options={"Label": 1}, default=1)
+#uicontrol float <name> select(options={"Label": 1.0}, default=1.0)
+```
+
+The `<type>` must be `string_t`, `int`, `uint`, or `float`. The `options` parameter is required and
+may be specified either as an array of values, or as an object mapping display labels to values. The
+option values must be unique. The `default` parameter indicates the initial value and is optional;
+if not specified, defaults to the first option value.
+
+For `string_t` controls, the selected value can be compared against a quoted string literal in the
+shader:
+
+```glsl
+#uicontrol string_t mode select(options=["gray", "jet"], default="gray")
+```
+
+Labels can also be specified separately from values:
+
+```glsl
+#uicontrol string_t mode select(options={"Grayscale": "gray", "Jet": "jet"}, default="gray")
+void main() {
+  float value = toNormalized(getDataValue());
+  if (mode == "jet") {
+    emitRGB(colormapJet(value));
+  } else {
+    emitGrayscale(value);
+  }
+}
+```
 
 ### `invlerp` controls
 
@@ -195,11 +232,11 @@ The following parameters are supported:
 
 ### Retrieving voxel channel value
 
-The raw value for a given channel is obtained by calling the `getDataValue` or `getInterpolated` function:
+The raw value for a given channel is obtained by calling the `getDataValue` or `getInterpolatedDataValue` function:
 
 ```glsl
 T getDataValue(int channelIndex...);
-T getInterpolated(int channelIndex...);
+T getInterpolatedDataValue(int channelIndex...);
 ```
 
 The type `T` is `{u,}int{8,16,32}_t`, `uint64_t`, or `float` depending on the data source. The
@@ -208,7 +245,7 @@ backward compatibility, if there are no channel dimensions, a single unused `cha
 may still be specified.
 
 The `getDataValue` function returns the nearest value without interpolation, while the
-`getInterpolated` function uses trilinear interpolation.
+`getInterpolatedDataValue` function uses trilinear interpolation.
 
 Note that only `float` is a builtin GLSL type. The remaining types are defined as simple structs in order to avoid ambiguity regarding the nature of the value:
 
@@ -305,7 +342,25 @@ If a discontinuous color mapping is applied to a volume that is stored or retrie
 
 ### Examples
 
-The default shader, that displays the first channel as a grayscale intensity:
+The default shader, which displays the first channel as a grayscale intensity using the `invlerp` ui control for easier editing of contrast limits and channels:
+
+```glsl
+#uicontrol invlerp normalized
+void main () {
+  emitGrayscale(normalized());
+}
+```
+
+Trilinear interpolation on the data with an `invlerp` ui control, displaying the first channel as a grayscale intensity:
+
+```glsl
+#uicontrol invlerp normalized
+void main () {
+  emitGrayscale(normalized(getInterpolatedDataValue()));
+}
+```
+
+Display the first channel as a grayscale intensity using `toNormalized` to map the full data range to [0,1]:
 
 ```glsl
 void main () {

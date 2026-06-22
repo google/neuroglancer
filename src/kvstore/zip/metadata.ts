@@ -219,7 +219,7 @@ async function findEndOfCentralDirectory(
   if (entryCount === 0xffff || centralDirectoryOffset === 0xffffffff) {
     return await readZip64CentralDirectory(
       reader,
-      eocdrOffset,
+      readStart + eocdrOffset,
       commentBytes,
       options,
     );
@@ -239,12 +239,12 @@ const END_OF_CENTRAL_DIRECTORY_LOCATOR_SIGNATURE = 0x07064b50;
 
 async function readZip64CentralDirectory(
   reader: Reader,
-  offset: number,
+  eocdrOffset: number,
   commentBytes: Uint8Array<ArrayBuffer>,
   progressOptions: Partial<ProgressOptions>,
 ) {
   // ZIP64 Zip64 end of central directory locator
-  const zip64EocdlOffset = offset - 20;
+  const zip64EocdlOffset = eocdrOffset - 20;
   const eocdl = await reader(zip64EocdlOffset, 20, progressOptions);
 
   const eocdlDv = new DataView(

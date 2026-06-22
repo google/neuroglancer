@@ -35,13 +35,12 @@ import type {
   FramePickingData,
   RenderedDataViewerState,
 } from "#src/rendered_data_panel.js";
+import { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import {
-  clearOutOfBoundsPickData,
-  pickDiameter,
-  pickOffsetSequence,
-  pickRadius,
-  RenderedDataPanel,
-} from "#src/rendered_data_panel.js";
+  getPickDiameter,
+  getPickOffsetSequence,
+  resolveNearestPanelPickSample,
+} from "#src/rendered_data_panel_picking.js";
 import {
   DerivedProjectionParameters,
   SharedProjectionParameters,
@@ -233,9 +232,11 @@ function defineMaxProjectionPickCopyShader(builder: ShaderBuilder) {
   builder.addOutputBuffer("highp vec4", "out_z", 1);
   builder.addOutputBuffer("highp vec4", "out_pickId", 2);
   builder.setFragmentMain(`
+vec4 depth = getValue0();
 out_color = vec4(0.0);
-out_z = getValue0();
+out_z = depth;
 out_pickId = getValue1();
+gl_FragDepth = 1.0 - depth.r;
 `);
 }
 
@@ -297,7 +298,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   private frameRateCalculator = new DownsamplingBasedOnFrameRateCalculator(
     6 /* numberOfStoredFrameDeltas */,
     8 /* maxDownsamplingFactor */,
-    8 /* desiredFrameTimingMs */,
+    33 /* desiredFrameTimingMs */,
     60 /* downsamplingPersistenceDurationInFrames */,
   );
   private isContinuousCameraMotionInProgress = false;
@@ -687,8 +688,9 @@ export class PerspectivePanel extends RenderedDataPanel {
     return depthArray;
   }
 
-  issuePickRequest(glWindowX: number, glWindowY: number) {
+  issuePickRequest(glWindowX: number, glWindowY: number, pickRadius: number) {
     const { offscreenFramebuffer } = this;
+    const pickDiameter = getPickDiameter(pickRadius);
     offscreenFramebuffer.readPixelFloat32IntoBuffer(
       OffscreenTextures.Z,
       glWindowX - pickRadius,
@@ -712,67 +714,60 @@ export class PerspectivePanel extends RenderedDataPanel {
     glWindowY: number,
     data: Float32Array,
     pickingData: FramePickingData,
+    pickRadius: number,
   ) {
     const { mouseState } = this.viewer;
     mouseState.pickedRenderLayer = null;
-    clearOutOfBoundsPickData(
+    const pickDiameter = getPickDiameter(pickRadius);
+    const pickOffsetSequence = getPickOffsetSequence(pickRadius);
+    const resolvedPick = resolveNearestPanelPickSample(
       data,
-      0,
-      4,
-      glWindowX,
-      glWindowY,
-      pickingData.viewportWidth,
-      pickingData.viewportHeight,
+      pickOffsetSequence,
+      pickRadius,
+      {
+        depthBaseOffset: 0,
+        pickBaseOffset: 4 * pickDiameter * pickDiameter,
+      },
     );
-    const numOffsets = pickOffsetSequence.length;
-    for (let i = 0; i < numOffsets; ++i) {
-      const offset = pickOffsetSequence[i];
-      const zValue = data[4 * offset];
-      if (zValue === 0) continue;
-      const relativeX = offset % pickDiameter;
-      const relativeY = (offset - relativeX) / pickDiameter;
-      const glWindowZ = 1.0 - zValue;
-      tempVec3[0] =
-        (2.0 * (glWindowX + relativeX - pickRadius)) /
-          pickingData.viewportWidth -
-        1.0;
-      tempVec3[1] =
-        (2.0 * (glWindowY + relativeY - pickRadius)) /
-          pickingData.viewportHeight -
-        1.0;
-      tempVec3[2] = 2.0 * glWindowZ - 1.0;
-      vec3.transformMat4(tempVec3, tempVec3, pickingData.invTransform);
-      let { position: mousePosition, unsnappedPosition } = mouseState;
-      const { value: voxelCoordinates } = this.navigationState.position;
-      const rank = voxelCoordinates.length;
-      if (mousePosition.length !== rank) {
-        mousePosition = mouseState.position = new Float32Array(rank);
-      }
-      if (unsnappedPosition.length !== rank) {
-        unsnappedPosition = mouseState.unsnappedPosition = new Float32Array(
-          rank,
-        );
-      }
-      mousePosition.set(voxelCoordinates);
-      mouseState.coordinateSpace = this.navigationState.coordinateSpace.value;
-      const displayDimensions =
-        this.navigationState.pose.displayDimensions.value;
-      const { displayDimensionIndices } = displayDimensions;
-      for (
-        let i = 0, spatialRank = displayDimensionIndices.length;
-        i < spatialRank;
-        ++i
-      ) {
-        mousePosition[displayDimensionIndices[i]] = tempVec3[i];
-      }
-      unsnappedPosition.set(mousePosition);
-      const pickValue = data[4 * pickDiameter * pickDiameter + 4 * offset];
-      pickingData.pickIDs.setMouseState(mouseState, pickValue);
-      mouseState.displayDimensions = displayDimensions;
-      mouseState.setActive(true);
+    if (resolvedPick === undefined || resolvedPick.depthValue === undefined) {
+      mouseState.setActive(false);
       return;
     }
-    mouseState.setActive(false);
+    const glWindowZ = 1.0 - resolvedPick.depthValue;
+    tempVec3[0] =
+      (2.0 * (glWindowX + resolvedPick.relativeX - pickRadius)) /
+        pickingData.viewportWidth -
+      1.0;
+    tempVec3[1] =
+      (2.0 * (glWindowY + resolvedPick.relativeY - pickRadius)) /
+        pickingData.viewportHeight -
+      1.0;
+    tempVec3[2] = 2.0 * glWindowZ - 1.0;
+    vec3.transformMat4(tempVec3, tempVec3, pickingData.invTransform);
+    let { position: mousePosition, unsnappedPosition } = mouseState;
+    const { value: voxelCoordinates } = this.navigationState.position;
+    const rank = voxelCoordinates.length;
+    if (mousePosition.length !== rank) {
+      mousePosition = mouseState.position = new Float32Array(rank);
+    }
+    if (unsnappedPosition.length !== rank) {
+      unsnappedPosition = mouseState.unsnappedPosition = new Float32Array(rank);
+    }
+    mousePosition.set(voxelCoordinates);
+    mouseState.coordinateSpace = this.navigationState.coordinateSpace.value;
+    const displayDimensions = this.navigationState.pose.displayDimensions.value;
+    const { displayDimensionIndices } = displayDimensions;
+    for (
+      let i = 0, spatialRank = displayDimensionIndices.length;
+      i < spatialRank;
+      ++i
+    ) {
+      mousePosition[displayDimensionIndices[i]] = tempVec3[i];
+    }
+    unsnappedPosition.set(mousePosition);
+    pickingData.pickIDs.setMouseState(mouseState, resolvedPick.pickValue);
+    mouseState.displayDimensions = displayDimensions;
+    mouseState.setActive(true);
   }
 
   translateDataPointByViewportPixels(

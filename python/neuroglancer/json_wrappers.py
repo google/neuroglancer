@@ -14,6 +14,7 @@
 """Facilities for converting JSON <-> Python objects"""
 
 import collections
+import collections.abc
 import copy
 import inspect
 import numbers
@@ -611,6 +612,23 @@ def typed_list(wrapped_type: Callable[[Any], T], validator=None) -> type[List[T]
     _map_type_annotation(_List, wrapped_type, lambda t: List[t])  # type: ignore[valid-type]
 
     return _List
+
+
+def number_or_string_or_array(value):
+    """A type that accepts numbers, strings, or arrays of numbers/strings."""
+    try:
+        return number_or_string(value)
+    except TypeError:
+        if not (isinstance(value, np.ndarray) or isinstance(value, list)):
+            raise TypeError
+        for v in value:
+            number_or_string(v)
+        return value
+
+
+_set_type_annotation(
+    number_or_string_or_array, numbers.Real | str | List[numbers.Real | str]
+)
 
 
 def number_or_string(value):

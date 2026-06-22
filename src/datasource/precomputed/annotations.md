@@ -43,7 +43,7 @@ members:
   units specified by `dimensions`). All annotation geometry should be contained within the bounding
   box defined by `lower_bound` and `upper_bound`.
 - `"annotation_type"`: Indicates the annotation geometry type. Must be one of `"POINT"`, `"LINE"`,
-  `"AXIS_ALIGNED_BOUNDING_BOX"`, `"ELLIPSOID"`.
+  `"AXIS_ALIGNED_BOUNDING_BOX"`, `"ELLIPSOID"`, or `"POLYLINE"`.
 - `"properties"`: Array of JSON objects, each with the following members:
   - `"id"`: String value specifying unique identifier for the property. Must match the regular expression `/^[a-z][a-zA-Z0-9_]*$/`.
   - `"type"`: String value specifying the property type. Must be one of: `rgb` (represented as 3
@@ -62,7 +62,7 @@ members:
     May also be a relative path `"/"`-separated path, optionally containing `".."` components, which
     is interpreted relative to the parent directory of the `"info"` file.
   - `"sharding"`: Optional. If specified, must be a [sharding
-    specification](./sharding.md#sharding-specification), and indicates that the [sharded uint64
+    specification](./sharded.md#sharding-specification), and indicates that the [sharded uint64
     index format](#sharded-uint64-index) is used. Otherwise, the [unsharded uint64 index
     format](#unsharded-uint64-index) is used.
 - `"by_id"`: JSON object specifying the location and format of the [annotation id index](#annotation-id-index), with the following members:
@@ -70,7 +70,7 @@ members:
     path `"/"`-separated path, optionally containing `".."` components, which is interpreted
     relative to the parent directory of the `"info"` file.
   - `"sharding"`: Optional. If specified, must be a [sharding
-    specification](./sharding.md#sharding-specification), and indicates that the [sharded uint64
+    specification](./sharded.md#sharding-specification), and indicates that the [sharded uint64
     index format](#sharded-uint64-index) index format is used. Otherwise, the [unsharded uint64
     index format](#unsharded-uint64-index) index format is used.
 - `"spatial"`: Array of JSON objects specifying the spatial index levels from coarse to fine, each
@@ -79,7 +79,7 @@ members:
     path `"/"`-separated path, optionally containing `".."` components, which is interpreted
     relative to the parent directory of the `"info"` file.
   - `"sharding"`: Optional. If specified, must be a [sharding
-    specification](./sharding.md#sharding-specification), and indicates that the [sharded spatial
+    specification](./sharded.md#sharding-specification), and indicates that the [sharded spatial
     index format](#sharded-spatial-index) index format is used. Otherwise, the [unsharded spatial
     index](#unsharded-spatial-index) format is used.
   - `"grid_shape"`: Array of `rank` positive integers specifying the number of cells along each grid dimension for this spatial index level.
@@ -109,6 +109,7 @@ Within the annotation id index, each annotation is encoded in the following bina
   - For `"LINE"` type, the first endpoint position followed by the second endpoint position.
   - For `"AXIS_ALIGNED_BOUNDING_BOX"` type, the first position followed by the second position.
   - For `"ELLIPSOID"` type, the center position followed by the radii vector.
+  - For `"POLYLINE"` type, the number of points as a uint32le value, followed by the position of each point as float32le.
 - For each property of type `uint32`, `int32`, or `float32`: the value encoded as a little endian value.
 - For each property of type `uint16` or `int16`: the value encoded as a little endian value.
 - For each property of type `uint8`, `int8`, `rgb`, or `rgba`: the encoded value.
@@ -186,7 +187,7 @@ The spatial index levels should be computed as follows:
   - Define `maxCount(level)` to be the maximum over all `cell` positions of the size of
     `remaining_annotations(level, cell)`.
   - For each `cell`:
-    - Compute a subset `emitted(level, cell)` of `remaining_annotations(0, cell)` where each
+    - Compute a subset `emitted(level, cell)` of `remaining_annotations(level, cell)` where each
       annotation is chosen uniformly at random with probability `min(1, limit / maxCount(level))`.
     - This spatial index level maps `cell` to the list of annotations in `emitted(level, cell)`.
       The annotations are encoded in the [multiple annotation

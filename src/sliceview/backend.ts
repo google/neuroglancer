@@ -27,6 +27,7 @@ import {
   withChunkManager,
 } from "#src/chunk_manager/backend.js";
 import { ChunkPriorityTier, ChunkState } from "#src/chunk_manager/base.js";
+import type { DisplayDimensionRenderInfo } from "#src/navigation_state.js";
 import type { SharedWatchableValue } from "#src/shared_watchable_value.js";
 import type {
   MultiscaleVolumetricDataRenderLayer,
@@ -64,7 +65,6 @@ import {
   registerSharedObject,
   SharedObjectCounterpart,
 } from "#src/worker_rpc.js";
-import type { DisplayDimensionRenderInfo } from "src/navigation_state";
 
 export const BASE_PRIORITY = -1e12;
 export const SCALE_PRIORITY_MULTIPLIER = 1e9;

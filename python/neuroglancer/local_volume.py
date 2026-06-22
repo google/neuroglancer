@@ -21,7 +21,7 @@ import numpy as np
 try:
     import tensorstore as ts
 except ImportError:
-    ts = None
+    ts = None  # type: ignore[assignment]
 
 from . import downsample, downsample_scales, trackable_state
 from .chunks import encode_jpeg, encode_npz, encode_raw

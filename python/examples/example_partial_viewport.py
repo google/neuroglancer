@@ -72,16 +72,16 @@ if __name__ == "__main__":
     viewer.actions.add("viewport-add-prefetch", _add_prefetch)
     viewer.actions.add("viewport-remove-prefetch", _remove_prefetch)
 
-    with viewer.config_state.txn() as s:
-        s.input_event_bindings.viewer["keyh"] = "viewport-translate-left"
-        s.input_event_bindings.viewer["keyl"] = "viewport-translate-right"
-        s.input_event_bindings.viewer["keyj"] = "viewport-translate-down"
-        s.input_event_bindings.viewer["keyk"] = "viewport-translate-up"
-        s.input_event_bindings.viewer["keyt"] = "viewport-add-prefetch"
-        s.input_event_bindings.viewer["keyg"] = "viewport-remove-prefetch"
-        s.input_event_bindings.viewer["shift+keyu"] = "viewport-shrink-height"
-        s.input_event_bindings.viewer["shift+keyi"] = "viewport-enlarge-height"
-        s.input_event_bindings.viewer["shift+keyy"] = "viewport-shrink-width"
-        s.input_event_bindings.viewer["shift+keyo"] = "viewport-enlarge-width"
+    with viewer.config_state.txn() as cs:
+        cs.input_event_bindings.viewer["keyh"] = "viewport-translate-left"
+        cs.input_event_bindings.viewer["keyl"] = "viewport-translate-right"
+        cs.input_event_bindings.viewer["keyj"] = "viewport-translate-down"
+        cs.input_event_bindings.viewer["keyk"] = "viewport-translate-up"
+        cs.input_event_bindings.viewer["keyt"] = "viewport-add-prefetch"
+        cs.input_event_bindings.viewer["keyg"] = "viewport-remove-prefetch"
+        cs.input_event_bindings.viewer["shift+keyu"] = "viewport-shrink-height"
+        cs.input_event_bindings.viewer["shift+keyi"] = "viewport-enlarge-height"
+        cs.input_event_bindings.viewer["shift+keyy"] = "viewport-shrink-width"
+        cs.input_event_bindings.viewer["shift+keyo"] = "viewport-enlarge-width"
 
     print(viewer)

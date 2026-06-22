@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { buildShaderPropertyList } from "#src/layer/annotation/shader_ui_property_list.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import { SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID } from "#src/layer/segmentation/json_keys.js";
 import { LAYER_CONTROLS } from "#src/layer/segmentation/layer_controls.js";
@@ -73,6 +74,18 @@ export class DisplayOptionsTab extends Tab {
         layer.hasSkeletonsLayer,
         (hasSkeletonsLayer, parent, refCounted) => {
           if (!hasSkeletonsLayer) return;
+          const skeletonLayer = layer.getSkeletonLayer()!;
+          if (skeletonLayer.vertexAttributes.length > 1) {
+            buildShaderPropertyList(
+              skeletonLayer.vertexAttributes.slice(1).map((x) => {
+                return {
+                  type: x.glslDataType,
+                  identifier: x.name,
+                };
+              }),
+              parent,
+            );
+          }
           const codeWidget = refCounted.registerDisposer(
             makeSkeletonShaderCodeWidget(this.layer),
           );
@@ -98,6 +111,9 @@ export class DisplayOptionsTab extends Tab {
                 {
                   visibility: this.visibility,
                   toolId: SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID,
+                  hideInactiveShaderControls:
+                    layer.displayState.skeletonRenderingOptions
+                      .hideInactiveShaderControls,
                 },
               ),
             ).element,

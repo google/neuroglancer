@@ -421,6 +421,7 @@ function getCommonViewerState(viewer: Viewer) {
     crossSectionBackgroundColor: viewer.crossSectionBackgroundColor,
     perspectiveViewBackgroundColor: viewer.perspectiveViewBackgroundColor,
     hideCrossSectionBackground3D: viewer.hideCrossSectionBackground3D,
+    pickRadius: viewer.uiConfiguration.pickRadius,
   };
 }
 
@@ -765,6 +766,7 @@ function makeComponent(container: LayoutComponentContainer, spec: any) {
           showLayerPanel: viewer.uiControlVisibility.showLayerPanel,
           showViewerMenu: true,
           showLayerHoverValues: viewer.uiControlVisibility.showLayerHoverValues,
+          showAllPlotBounds: viewer.uiConfiguration.showAllDimensionPlotBounds,
         },
       );
       try {

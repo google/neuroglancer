@@ -92,13 +92,13 @@ class AnnotationMap(typing.Generic[K, V]):
         """Checks if a given key is present."""
         if self._kvstore is None:
             raise KeyError("required index kind not available")
-        return self._key_encoder(key) in self._kvstore
+        return self._key_encoder(key) in self._kvstore  # type: ignore[operator]
 
-    def get(self, key: K, batch: ts.Batch | None = None) -> ts.Future:
+    def get(self, key: K, batch: ts.Batch | None = None) -> ts.Future[V | None]:
         """Reads a given key, returning a Future."""
         if self._kvstore is None:
             raise KeyError("required index kind not available")
-        promise, future = ts.Promise.new()
+        promise, future = ts.Promise[V | None].new()
 
         def done_callback(future):
             try:
@@ -156,11 +156,18 @@ def _decode_ellipsoid_annotation(geom, rank: int, props, segments, id: str):
     )
 
 
+def _decode_polyline_annotation(geom, rank: int, props, segments, id: str):
+    return viewer_state.PolyLineAnnotation(
+        points=geom.reshape((-1, rank)), props=props, segments=segments, id=id
+    )
+
+
 _ANNOTATION_TYPE_CONSTRUCTORS = {
     "point": _decode_point_annotation,
     "line": _decode_line_annotation,
     "axis_aligned_bounding_box": _decode_axis_aligned_bounding_box_annotation,
     "ellipsoid": _decode_ellipsoid_annotation,
+    "polyline": _decode_polyline_annotation,
 }
 
 
@@ -197,12 +204,71 @@ def _ellipsoid_check_bounds(annotation, lower_bound, upper_bound):
     return _bbox_check_bounds(center - radii, center + radii, lower_bound, upper_bound)
 
 
+def _polyline_check_bounds(annotation, lower_bound, upper_bound):
+    points = annotation.points
+    min_pt = np.min(points, axis=0)
+    max_pt = np.max(points, axis=0)
+    return _bbox_check_bounds(min_pt, max_pt, lower_bound, upper_bound)
+
+
 _ANNOTATION_TYPE_CHECK_BOUNDS = {
     "point": _point_check_bounds,
     "line": _line_check_bounds,
     "axis_aligned_bounding_box": _axis_aligned_bounding_box_check_bounds,
     "ellipsoid": _ellipsoid_check_bounds,
+    "polyline": _polyline_check_bounds,
 }
+
+
+def _get_possibly_sharded_kvstore(
+    context: ts.Context, base_spec: ts.KvStore.Spec, metadata: dict[str, typing.Any]
+) -> ts.KvStore:
+    if "sharding" in metadata:
+        return ts.KvStore.open(
+            {
+                "driver": "neuroglancer_uint64_sharded",
+                "base": base_spec,
+                "metadata": metadata["sharding"],
+            },
+            context=context,
+        ).result()
+    return ts.KvStore.open(base_spec, context=context).result()
+
+
+def _get_uint64_map_args(
+    context: ts.Context,
+    base_spec: ts.KvStore.Spec,
+    metadata: typing.Any,
+    value_decoder: typing.Callable[[K, bytes], V],
+    staleness_bound: float,
+):
+    return dict(
+        kvstore=_get_possibly_sharded_kvstore(
+            context=context, base_spec=base_spec, metadata=metadata
+        ),
+        metadata=metadata,
+        key_encoder=_get_uint64_key_encoder(metadata),
+        value_decoder=value_decoder,
+        staleness_bound=staleness_bound,
+    )
+
+
+def _get_uint64_map(
+    context: ts.Context,
+    base_spec: ts.KvStore.Spec,
+    metadata: typing.Any,
+    value_decoder: typing.Callable[[K, bytes], V],
+    staleness_bound: float,
+) -> AnnotationMap[K, V]:
+    return AnnotationMap(
+        **_get_uint64_map_args(
+            context=context,
+            base_spec=base_spec,
+            metadata=metadata,
+            value_decoder=value_decoder,
+            staleness_bound=staleness_bound,
+        )
+    )
 
 
 class AnnotationReader:
@@ -331,18 +397,38 @@ class AnnotationReader:
             viewer_state.AnnotationPropertySpec(prop)
             for prop in self.metadata.get("properties", [])
         ]
-        self._dtype = write_annotations._get_dtype_for_geometry(
-            self.annotation_type, self.coordinate_space.rank
-        ) + write_annotations._get_dtype_for_properties(self.properties)
+        self._property_dtype = write_annotations._get_dtype_for_properties(
+            self.properties
+        )
+        self._dtype = (
+            write_annotations._get_dtype_for_geometry(
+                self.annotation_type, self.coordinate_space.rank
+            )
+            + self._property_dtype
+        )
         self.spatial = [
             self._get_child_spatial_map(spatial_metadata)
             for spatial_metadata in self.metadata.get("spatial", [])
         ]
 
+    def _get_dtype(self, encoded: bytes) -> np.dtype:
+        """Returns the dtype for the encoded annotation."""
+        if self.annotation_type == "polyline":
+            num_points_value = np.frombuffer(encoded, dtype="<u4", count=1)[0]
+            num_points = ("num_points", "<u4")
+            geometry = (
+                "geometry",
+                "<f4",
+                (num_points_value * self.coordinate_space.rank,),
+            )
+            return np.dtype([num_points, geometry] + self._property_dtype)
+        return self._dtype
+
     def _decode_single_annotation(
         self, annotation_id: int, encoded: bytes
     ) -> viewer_state.Annotation:
-        decoded = np.frombuffer(encoded, dtype=self._dtype, count=1)[0]
+        dtype = self._get_dtype(encoded)
+        decoded = np.frombuffer(encoded, dtype=dtype, count=1)[0]
         geom = decoded["geometry"]
         props = [decoded[f"property{i}"] for i in range(len(self.properties))]
         offset = decoded.nbytes
@@ -363,8 +449,22 @@ class AnnotationReader:
     ) -> list[viewer_state.Annotation]:
         count = np.frombuffer(encoded, dtype="<u8", count=1)[0]
         offset = 8
-        decoded = np.frombuffer(encoded, dtype=self._dtype, count=count, offset=offset)
-        offset += decoded.nbytes
+        if self.annotation_type == "polyline":
+            decoded_parts = []
+            for _ in range(count):
+                encoded_subset = encoded[offset:]
+                dtype = self._get_dtype(encoded_subset)
+                decoded_polyline = np.frombuffer(encoded_subset, dtype=dtype, count=1)[
+                    0
+                ]
+                decoded_parts.append(decoded_polyline)
+                offset += decoded_polyline.nbytes
+            decoded = np.array(decoded_parts, dtype=object)
+        else:
+            decoded = np.frombuffer(
+                encoded, dtype=self._dtype, count=count, offset=offset
+            )
+            offset += decoded.nbytes
         ids = np.frombuffer(encoded, dtype="<u8", count=count, offset=offset)
         offset += ids.nbytes
         if offset != len(encoded):
@@ -385,31 +485,33 @@ class AnnotationReader:
             for annotation_i in range(count)
         ]
 
-    def _get_child_kvstore(self, metadata: typing.Any) -> ts.KvStore | None:
+    def _get_child_kvstore_spec(self, metadata: typing.Any) -> ts.KvStore.Spec | None:
         if metadata is None:
             return None
         base_spec = self.base_spec.copy()
         base_spec.path += metadata["key"] + "/"
-        if "sharding" in metadata:
-            return ts.KvStore.open(
-                {
-                    "driver": "neuroglancer_uint64_sharded",
-                    "base": base_spec,
-                    "metadata": metadata["sharding"],
-                },
-                context=self._context,
-            ).result()
-        return ts.KvStore.open(base_spec, context=self._context).result()
+        return base_spec
+
+    def _get_child_kvstore(self, metadata: typing.Any) -> ts.KvStore | None:
+        child_spec = self._get_child_kvstore_spec(metadata)
+        if child_spec is None:
+            return None
+        return _get_possibly_sharded_kvstore(
+            context=self._context, base_spec=child_spec, metadata=metadata
+        )
 
     def _get_child_uint64_map(
         self, metadata: typing.Any, value_decoder: typing.Callable[[K, bytes], V]
     ):
-        return AnnotationMap(
-            kvstore=self._get_child_kvstore(metadata),
+        child_spec = self._get_child_kvstore_spec(metadata)
+        if child_spec is None:
+            return None
+        return _get_uint64_map(
+            context=self._context,
+            base_spec=child_spec,
             metadata=metadata,
-            key_encoder=_get_uint64_key_encoder(metadata),
-            value_decoder=value_decoder,
             staleness_bound=self.staleness_bound,
+            value_decoder=value_decoder,
         )
 
     def _get_child_spatial_map(self, metadata):
@@ -426,7 +528,7 @@ class AnnotationReader:
         *,
         lower_bound: typing.Sequence[float] | None = None,
         upper_bound: typing.Sequence[float] | None = None,
-        min_spatial_index_level=0,
+        max_spatial_index_level: int | None = None,
         limit: int | None = None,
         max_parallelism: int = 128,
     ) -> typing.Iterator[viewer_state.Annotation]:
@@ -437,9 +539,9 @@ class AnnotationReader:
               If not specified, defaults to `.lower_bound`.
           upper_bound: Upper bound within `.coordinate_space`.
               If not specified, defaults to `.upper_bound`.
-          min_spatial_index_level: Minimum spatial index level to use.
-          limit: Maximum number of iterations to return.
-
+          max_spatial_index_level: Maximum (finest) spatial index level to use.
+          limit: Maximum number of annotations to return.
+          max_parallelism: Maximum number of concurrent requests.
         Group:
           I/O
         """
@@ -498,7 +600,14 @@ class AnnotationReader:
                 (spatial_index.get(coords), req_lower_bound, req_upper_bound)
             )
 
-        for level in range(len(self.spatial) - 1, min_spatial_index_level - 1, -1):
+        if max_spatial_index_level is None:
+            max_spatial_index_level = len(self.spatial) - 1
+        else:
+            max_spatial_index_level = min(
+                max_spatial_index_level, len(self.spatial) - 1
+            )
+
+        for level in range(max_spatial_index_level + 1):
             if limit is not None and count >= limit:
                 return
             spatial_index = self.spatial[level]

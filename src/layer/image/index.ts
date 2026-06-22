@@ -108,6 +108,7 @@ const BLEND_JSON_KEY = "blend";
 const SHADER_JSON_KEY = "shader";
 const CODE_VISIBLE_KEY = "codeVisible";
 const SHADER_CONTROLS_JSON_KEY = "shaderControls";
+const HIDE_INACTIVE_SHADER_CONTROLS_JSON_KEY = "hideInactiveShaderControls";
 const CROSS_SECTION_RENDER_SCALE_JSON_KEY = "crossSectionRenderScale";
 const CHANNEL_DIMENSIONS_JSON_KEY = "channelDimensions";
 const VOLUME_RENDERING_JSON_KEY = "volumeRendering";
@@ -127,6 +128,7 @@ export class ImageUserLayer extends Base {
   opacity = trackableAlphaValue(0.5);
   blendMode = trackableBlendModeValue();
   codeVisible = new TrackableBoolean(true);
+  hideInactiveShaderControls = new TrackableBoolean(false);
   fragmentMain = getTrackableFragmentMain();
   shaderError = makeWatchableShaderError();
   dataType = new WatchableValue<DataType | undefined>(undefined);
@@ -208,6 +210,9 @@ export class ImageUserLayer extends Base {
     this.blendMode.changed.add(this.specificationChanged.dispatch);
     this.opacity.changed.add(this.specificationChanged.dispatch);
     this.codeVisible.changed.add(this.specificationChanged.dispatch);
+    this.hideInactiveShaderControls.changed.add(
+      this.specificationChanged.dispatch,
+    );
     this.volumeRenderingGain.changed.add(this.specificationChanged.dispatch);
     this.fragmentMain.changed.add(this.specificationChanged.dispatch);
     this.shaderControlState.changed.add(this.specificationChanged.dispatch);
@@ -298,6 +303,9 @@ export class ImageUserLayer extends Base {
     super.restoreState(specification);
     this.opacity.restoreState(specification[OPACITY_JSON_KEY]);
     this.codeVisible.restoreState(specification[CODE_VISIBLE_KEY]);
+    this.hideInactiveShaderControls.restoreState(
+      specification[HIDE_INACTIVE_SHADER_CONTROLS_JSON_KEY],
+    );
     verifyOptionalObjectProperty(specification, BLEND_JSON_KEY, (blendValue) =>
       this.blendMode.restoreState(blendValue),
     );
@@ -344,6 +352,8 @@ export class ImageUserLayer extends Base {
     x[OPACITY_JSON_KEY] = this.opacity.toJSON();
     x[BLEND_JSON_KEY] = this.blendMode.toJSON();
     x[CODE_VISIBLE_KEY] = this.codeVisible.toJSON();
+    x[HIDE_INACTIVE_SHADER_CONTROLS_JSON_KEY] =
+      this.hideInactiveShaderControls.toJSON();
     x[SHADER_JSON_KEY] = this.fragmentMain.toJSON();
     x[SHADER_CONTROLS_JSON_KEY] = this.shaderControlState.toJSON();
     x[CROSS_SECTION_RENDER_SCALE_JSON_KEY] =
@@ -447,7 +457,7 @@ export class ImageUserLayer extends Base {
           this.manager.root.display.gl,
           shader,
           this.shaderControlState,
-          shaderResult.parameters.parseResult.controls,
+          shaderResult.parameters.parseResult,
         );
       },
     };
@@ -568,6 +578,7 @@ class RenderingOptionsTab extends Tab {
           {
             visibility: this.visibility,
             legendShaderOptions: this.layer.getLegendShaderOptions(),
+            hideInactiveShaderControls: layer.hideInactiveShaderControls,
           },
         ),
       ).element,

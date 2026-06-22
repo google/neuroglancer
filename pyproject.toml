@@ -1,16 +1,15 @@
 [project]
 name = "neuroglancer"
-requires-python = ">= 3.10"
+requires-python = ">= 3.11"
 dynamic = ["version"]
 description = "Python integration for neuroglancer, a WebGL-based viewer for volumetric data"
 readme = "README.md"
 authors = [
   { name = "Jeremy Maitin-Shepard", email = "jbms@google.com" },
 ]
-license = { file = "LICENSE" }
+license = "Apache-2.0"
 classifiers = [
   "Development Status :: 5 - Production/Stable",
-  "License :: OSI Approved :: Apache Software License",
   "Topic :: Software Development :: Libraries",
 ]
 dependencies = [
@@ -27,6 +26,9 @@ dependencies = [
 webdriver = [
   "selenium>=4",
 ]
+osteoid = [
+  "osteoid>=0.6.0",
+]
 
 [project.urls]
 Repository = "https://github.com/google/neuroglancer"
@@ -39,7 +41,7 @@ requires = [
   "wheel",
   "setuptools_scm>=8.1.0",
   "numpy>=2",
-  "nodejs-wheel>=22",
+  "nodejs-wheel>=22.18",
 ]
 build-backend = "setuptools.build_meta"
 
@@ -84,9 +86,9 @@ module = [
   "numcodecs",
   "google",
   "google.*",
+  "osteoid",
   "zarr",
   "zarrita",
-  "tensorstore",
   "dask",
   "dask.*",
   "scipy",
@@ -100,18 +102,21 @@ ignore_missing_imports = true
 dev = [
   "requests>=2.32.3",
   "selenium>=4",
-  "tensorstore>=0.1.71",
+  "tensorstore>=0.1.80",
+  "pandas-stubs>=2.2.3.241126",
+  "types-atomicwrites>=1.4.5.1",
+  "types-pillow>=10.2.0.20240822",
+  "types-requests>=2.32.0.20241016",
+  "types-setuptools>=75.8.0.20250110",
 ]
 ruff = [
   "ruff==0.3.2",
 ]
 mypy = [
   "mypy>=1.14.1",
-  "pandas-stubs>=2.2.3.241126",
-  "types-atomicwrites>=1.4.5.1",
-  "types-pillow>=10.2.0.20240822",
-  "types-requests>=2.32.0.20241016",
-  "types-setuptools>=75.8.0.20250110",
+]
+ty = [
+  "ty",
 ]
 test = [
   "pytest>=6.1.2",
@@ -124,11 +129,14 @@ docs = [
   "numpy>=2.2.2",
   "pyyaml>=6.0.2",
   "sphinx>=7.4.0,<8.2",
-  "sphinx-immaterial[black,json]>=0.12.0",
+  "sphinx-immaterial[black,json]>=0.13.8",
   "tensorstore>=0.1.71",
 ]
 cibuildwheel = [
   "cibuildwheel>=2.22.0",
+]
+vitest = [
+  "moto[s3,server]>=5.0.28",
 ]
 
 [tool.uv]
@@ -139,3 +147,6 @@ default-groups = ["dev", "ruff", "mypy", "test", "docs"]
 testpaths = [
   "python/tests",
 ]
+
+[tool.ty.src]
+include = ["python"]

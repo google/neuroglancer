@@ -64,10 +64,11 @@ import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
 import type { SliceViewerState } from "#src/sliceview/panel.js";
 import { SliceViewRenderLayer } from "#src/sliceview/renderlayer.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { extractScalesFromAffineMatrix } from "#src/util/affine.js";
 import type { Borrowed, Disposer, Owned } from "#src/util/disposable.js";
 import { invokeDisposers, RefCounted } from "#src/util/disposable.js";
 import type { vec4 } from "#src/util/geom.js";
-import { kOneVec, kZeroVec4, mat4, vec3 } from "#src/util/geom.js";
+import { kZeroVec4, mat4, vec3 } from "#src/util/geom.js";
 import { MessageList, MessageSeverity } from "#src/util/message_list.js";
 import { getObjectId } from "#src/util/object_id.js";
 import type { ProgressOptions } from "#src/util/progress_listener.js";
@@ -1061,17 +1062,14 @@ export function getVolumetricTransformedSources(
         chunkDisplayTransform.displaySubspaceModelMatrix,
         numChunkDisplayDims,
       );
-      // This is an approximation of the voxel size (exact only for permutation/scaling
-      // transforms).  It would be better to model the voxel as an ellipsiod and find the
-      // lengths of the axes.
-      const effectiveVoxelSize = chunkLayout.localSpatialVectorToGlobal(
-        vec3.create(),
-        /*baseVoxelSize=*/ kOneVec,
+      const effectiveVoxelSizeValues = extractScalesFromAffineMatrix(
+        chunkLayout.transform,
+        displayRank,
+        globalScales,
       );
+      const effectiveVoxelSize = vec3.create();
       for (let i = 0; i < displayRank; ++i) {
-        effectiveVoxelSize[i] = Math.abs(
-          effectiveVoxelSize[i] * globalScales[i],
-        );
+        effectiveVoxelSize[i] = effectiveVoxelSizeValues[i];
       }
       effectiveVoxelSize.fill(1, displayRank);
       return {

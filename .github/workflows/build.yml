@@ -15,35 +15,42 @@ on:
         required: false
         default: false
 
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   client:
     strategy:
       matrix:
         os:
           - "ubuntu-latest"
-          - "windows-latest"
+          - "windows-2025-vs2026"
           - "macos-latest"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # Need full history to determine version number.
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22.x
+          node-version: 24.x
           cache: "npm"
           cache-dependency-path: |
             package-lock.json
       # uv required for javascript tests
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           enable-cache: false
       # go needed for fake_gcs_server used by the javascript tests
       - name: Setup go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: "stable"
+          cache: false
       - run: npm ci
       - run: npm run format:fix
       - name: Check for dirty working directory
@@ -60,8 +67,6 @@ jobs:
       - name: Build Python client bundles
         run: npm run build-python -- --no-typecheck --no-lint
       - run: npm run build-package
-      - run: npm publish --dry-run
-        working-directory: dist/package
       - name: Run JavaScript tests (including WebGL)
         run: npm test
         if: ${{ runner.os != 'macOS' }}
@@ -71,41 +76,47 @@ jobs:
       - name: Run JavaScript benchmarks
         run: npm run benchmark
       - name: Upload NPM package as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: npm-package
           path: dist/package
         if: ${{ runner.os == 'Linux' }}
       - name: Upload client as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: client
           path: dist/client
         if: ${{ runner.os == 'Linux' }}
+      - name: Upload Python client static as artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: python-client-static
+          path: python/neuroglancer/static/client
+        if: ${{ runner.os == 'Linux' }}
   example-project-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
         with:
           version: 10
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22.x
+          node-version: 24.x
           cache: "pnpm"
           cache-dependency-path: |
             examples/**/pnpm-lock.yaml
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22.x
+          node-version: 24.x
           cache: "npm"
           cache-dependency-path: |
             package-lock.json
       - run: npm ci
       - run: npm run example-project-test -- --reporter=html
       - name: Upload report and built clients
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
           name: example-project-test-results
@@ -122,31 +133,28 @@ jobs:
     strategy:
       matrix:
         python-version:
-          - "3.9"
-          - "3.12"
+          - "3.11"
+          - "3.13"
         os:
           - "ubuntu-latest"
-          - "windows-latest"
+          - "windows-2025-vs2026"
           - "macos-latest"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # Need full history to determine version number.
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22.x
-      - uses: astral-sh/setup-uv@v5
+          node-version: 24.x
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           enable-cache: false
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
           python-version: ${{ matrix.python-version }}
       - uses: ./.github/actions/setup-firefox
       - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
+        uses: mxschmitt/action-tmate@c0afd6f790e3a5564914980036ebf83216678101 # v3.23
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}
       - run: uvx nox -s lint format mypy
       - name: Check for dirty working directory
@@ -168,7 +176,7 @@ jobs:
           - os: "ubuntu-latest"
             cibw_build: "*"
             wheel_identifier: "linux"
-          - os: "windows-latest"
+          - os: "windows-2025-vs2026"
             cibw_build: "*"
             wheel_identifier: "windows"
           - os: "macos-14"
@@ -179,21 +187,18 @@ jobs:
             wheel_identifier: "macos_arm64"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # Need full history to determine version number.
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22.x
+          node-version: 24.x
           cache: "npm"
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           enable-cache: false
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.x
+          version: "0.11.6"
       - name: Get uv cache dir
         id: uv-cache
         run: |
@@ -216,7 +221,7 @@ jobs:
           CIBW_BEFORE_ALL_LINUX: /project/python/build_tools/cibuildwheel_linux_cache_setup.sh /host${{ steps.uv-cache.outputs.dir }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
       - name: Upload wheels as artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python-wheels-${{ matrix.wheel_identifier }}
           path: |
@@ -226,14 +231,10 @@ jobs:
   docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           enable-cache: false
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.12
       - name: Setup Graphviz
         uses: ts-graphviz/setup-graphviz@b1de5da23ed0a6d14e0aeee8ed52fdd87af2363c # v2.0.2
         with:
@@ -241,79 +242,130 @@ jobs:
       - name: Build docs
         run: uvx nox -s docs
       - name: Upload docs as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: docs
           path: |
             dist/docs
 
-  publish-package:
-    # Only publish package on push to tag or default branch.
-    if: ${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/master') }}
+  publish:
+    # Only publish package on push to tag.
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-latest
     needs:
       - "client"
       - "python-build-package"
-      - "docs"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Use Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 22.x
+          node-version: 24.x
           registry-url: "https://registry.npmjs.org"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: python-wheels-*
           path: dist
           merge-multiple: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: npm-package
           path: npm-package
-      # - name: Publish to PyPI (test server)
-      #   uses: pypa/gh-action-pypi-publish@54b39fb9371c0b3a6f9f14bb8a67394defc7a806 # 2020-09-25
-      #   with:
-      #     user: __token__
-      #     password: ${{ secrets.pypi_test_token }}
       - name: Publish to PyPI (main server)
-        uses: pypa/gh-action-pypi-publish@54b39fb9371c0b3a6f9f14bb8a67394defc7a806 # 2020-09-25
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
         with:
           user: __token__
           password: ${{ secrets.pypi_token }}
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
       - name: Publish to NPM registry
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
         run: npm publish
         working-directory: npm-package
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      # Download dist/client after publishing to PyPI, because PyPI publish
-      # action fails if dist/client directory is present.
-      - uses: actions/download-artifact@v4
+
+  deploy:
+    # Only deploy on push to master branch.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+    runs-on: ubuntu-latest
+    needs:
+      - "client"
+      - "docs"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v8
         with:
           name: client
           path: dist/client
+      - uses: actions/download-artifact@v8
+        with:
+          name: python-client-static
+          path: python/neuroglancer/static/client
       - name: Publish client to Firebase hosting
-        uses: FirebaseExtended/action-hosting-deploy@v0
+        uses: FirebaseExtended/action-hosting-deploy@e2eda2e106cfa35cdbcf4ac9ddaf6c4756df2c8c # v0.10.0
         with:
           firebaseServiceAccount: "${{ secrets.FIREBASE_HOSTING_SERVICE_ACCOUNT_KEY }}"
           projectId: neuroglancer-demo
           channelId: live
           target: app
-      # Download dist/docs after publishing to PyPI, because PyPI publish
-      # action fails if dist/docs directory is present.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: docs
           path: dist/docs
       - name: Publish docs to Firebase hosting
-        uses: FirebaseExtended/action-hosting-deploy@v0
+        uses: FirebaseExtended/action-hosting-deploy@e2eda2e106cfa35cdbcf4ac9ddaf6c4756df2c8c # v0.10.0
         with:
           firebaseServiceAccount: "${{ secrets.FIREBASE_HOSTING_SERVICE_ACCOUNT_KEY }}"
           projectId: neuroglancer-demo
           channelId: live
           target: docs
+      - name: Prepare App Engine deployment
+        run: |
+          mkdir appengine-deploy
+          mkdir appengine-deploy/public
+          mkdir appengine-deploy/public/python
+          cp -r dist/client/* appengine-deploy/public/
+          cp -r python/neuroglancer/static/client/* appengine-deploy/public/python/
+          cat > appengine-deploy/public/fafb.html <<EOF
+          <html>
+          <head><title>neuroglancer</title></head>
+          <body>
+          Redirecting to https://fafb-dot-neuroglancer-demo.appspot.com
+          <script>
+          window.location.href = "https://fafb-dot-neuroglancer-demo.appspot.com/" + (window.location.search || "") + (window.location.hash || "");
+          </script>
+          </body>
+          </html>
+          EOF
+          cat > appengine-deploy/app.yaml <<EOF
+          runtime: python312
+          automatic_scaling:
+            max_instances: 20
+          handlers:
+          - url: /(.+)
+            static_files: public/\1
+            upload: public/(.*)
+
+          - url: /
+            static_files: public/index.html
+            upload: public/index.html
+          EOF
+        shell: bash
+      - id: "auth"
+        name: "Authenticate to Google Cloud"
+        uses: "google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093"
+        with:
+          credentials_json: "${{ secrets.FIREBASE_HOSTING_SERVICE_ACCOUNT_KEY }}"
+      - id: "deploy-appengine"
+        name: "Deploy to App Engine"
+        uses: "google-github-actions/deploy-appengine@54d5fc7167ec790eb0233905e3cef384221b4619"
+        with:
+          working_directory: "appengine-deploy"
+          deliverables: "app.yaml"
+          project_id: "neuroglancer-demo"
+          promote: true
+      - name: Cleanup old App Engine versions
+        run: |
+          gcloud app versions list --format="value(version.id)" --sort-by="~version.createTime" --project neuroglancer-demo | grep '^[0-9]\{8\}t[0-9]\{6\}$' | tail -n +6 | xargs -r gcloud app versions delete --quiet --project neuroglancer-demo
+        shell: bash
 
   ngauth:
     strategy:
@@ -322,9 +374,9 @@ jobs:
           - ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Setup go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: ngauth_server/go.mod
           cache-dependency-path: ngauth_server/go.sum
@@ -338,7 +390,7 @@ jobs:
           - ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: ./src/mesh/draco/build.sh
       - run: ./src/sliceview/compresso/build.sh
       - run: ./src/sliceview/png/build.sh

@@ -19,7 +19,7 @@ export enum FrameTimingMethod {
   MEAN = 1,
   MAX = 2,
 }
-
+const DEBUG_ADAPTIVE_FRAMERATE = false;
 interface QueryInfo {
   glQuery: WebGLQuery;
   frameNumber: number;
@@ -173,6 +173,8 @@ export class DownsamplingBasedOnFrameRateCalculator {
   private frameDeltas: number[] = [];
   private downsamplingRates: Map<number, number> = new Map();
   private frameCount = 0;
+  /** Cache of last logged applied factor to avoid noisy logs when DEBUG_ADAPTIVE_FRAMERATE */
+  private lastLoggedFactor: number | null = null;
 
   /**
    * @param numberOfStoredFrameDeltas The number of frame deltas to store. Oldest frame deltas are removed. Must be at least 1.
@@ -183,7 +185,7 @@ export class DownsamplingBasedOnFrameRateCalculator {
   constructor(
     public numberOfStoredFrameDeltas: number = 10,
     private maxDownsamplingFactor: number = 8,
-    private desiredFrameTimingMs = 1000 / 60,
+    private desiredFrameTimingMs = 1000 / 30,
     private downsamplingPersistenceDurationInFrames = 15,
   ) {
     this.validateConstructorArguments();
@@ -296,9 +298,23 @@ export class DownsamplingBasedOnFrameRateCalculator {
       Math.pow(2, Math.round(Math.log2(downsampleFactorBasedOnFramerate))),
       this.maxDownsamplingFactor,
     );
-    return this.updateMaxTrackedDownsamplingRate(
+    const applied = this.updateMaxTrackedDownsamplingRate(
       downsampleFactorBasedOnFramerate,
     );
+    if (DEBUG_ADAPTIVE_FRAMERATE) {
+      // Only log when the applied factor actually changes compared to previous frame.
+      if (this.lastLoggedFactor !== applied) {
+        const methodName = FrameTimingMethod[method];
+        console.log(
+          `[Downsampling] factor=${applied} (raw=${downsampleFactorBasedOnFramerate}) ` +
+            `frameTime=${calculatedFrameTime.toFixed(2)}ms ` +
+            `target=${this.desiredFrameTimingMs.toFixed(2)}ms method=${methodName} ` +
+            `frames=${this.frameCount}`,
+        );
+        this.lastLoggedFactor = applied;
+      }
+    }
+    return applied;
   }
 
   getFrameDeltas(): number[] {

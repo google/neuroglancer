@@ -658,7 +658,14 @@ export function getDataSource(
         credentailsProvider,
         progressOptions,
       );
-      const repositoryInfo = serverInfo.getNode(nodeKey);
+
+      // To support special nodes like "<UUID>:master" (which  means "the most distant unlocked
+      // descendant of <UUID>"), use only "<UUID>" for the validity lookup, below.  If it is
+      // valid, then DVID itself will resolve the part after the ":".
+      const i = nodeKey.indexOf(":");
+      const nodeKeyForLookup = i !== -1 ? nodeKey.slice(0, i) : nodeKey;
+
+      const repositoryInfo = serverInfo.getNode(nodeKeyForLookup);
       if (repositoryInfo === undefined) {
         throw new Error(`Invalid node: ${JSON.stringify(nodeKey)}.`);
       }

@@ -64,7 +64,10 @@ such as the following:
                "*"
            ],
            "ExposeHeaders": [
-               "*"
+               "ETag",
+               "Content-Range",
+               "Content-Encoding",
+               "Content-Length"
            ],
            "MaxAgeSeconds": 3000
        }

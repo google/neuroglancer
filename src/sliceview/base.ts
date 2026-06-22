@@ -28,8 +28,8 @@ import type {
 import { DATA_TYPE_BYTES, DataType } from "#src/util/data_type.js";
 import type { Disposable } from "#src/util/disposable.js";
 import {
-  getFrustrumPlanes,
-  getViewFrustrumDepthRange,
+  getFrustumPlanes,
+  getViewFrustumDepthRange,
   isAABBIntersectingPlane,
   isAABBVisible,
   mat4,
@@ -727,6 +727,9 @@ export function* filterVisibleSources(
   };
   let scaleIndex = sources.length - 1;
   let prevVoxelSize: vec3 | undefined;
+  if (DEBUG_VISIBLE_SOURCES) {
+    console.log(`Filtering ${sources.length} visible sources`);
+  }
   while (true) {
     const transformedSource = sources[scaleIndex];
     if (
@@ -736,14 +739,27 @@ export function* filterVisibleSources(
         prevVoxelSize,
       )
     ) {
+      if (DEBUG_VISIBLE_SOURCES) {
+        console.log(
+          `  Stopping at ${scaleIndex} because can't improve on prev voxel size: effectiveVoxelSize=${transformedSource.effectiveVoxelSize} prevVoxelSize=${prevVoxelSize}`,
+        );
+      }
       break;
     }
     yield transformedSource;
 
-    if (
-      scaleIndex === 0 ||
-      !canImproveOnVoxelSize(transformedSource.effectiveVoxelSize)
-    ) {
+    if (scaleIndex === 0) {
+      if (DEBUG_VISIBLE_SOURCES) {
+        console.log(`  Stopping because scaleIndex=0`);
+      }
+      break;
+    }
+    if (!canImproveOnVoxelSize(transformedSource.effectiveVoxelSize)) {
+      if (DEBUG_VISIBLE_SOURCES) {
+        console.log(
+          `Stopping at at ${scaleIndex} because can't improve on voxel size ${transformedSource.effectiveVoxelSize}`,
+        );
+      }
       break;
     }
     prevVoxelSize = transformedSource.effectiveVoxelSize;
@@ -793,7 +809,7 @@ const tempVisibleVolumetricChunkUpper = new Float32Array(3);
 const tempVisibleVolumetricModelViewProjection = mat4.create();
 const tempVisibleVolumetricClippingPlanes = new Float32Array(24);
 
-function forEachVolumetricChunkWithinFrustrum<
+function forEachVolumetricChunkWithinFrustum<
   RLayer extends MultiscaleVolumetricDataRenderLayer,
 >(
   clippingPlanes: Float32Array,
@@ -897,12 +913,12 @@ export function forEachVisibleVolumetricChunk<
   }
 
   const clippingPlanes = tempVisibleVolumetricClippingPlanes;
-  getFrustrumPlanes(clippingPlanes, modelViewProjection);
+  getFrustumPlanes(clippingPlanes, modelViewProjection);
   const lower = tempVisibleVolumetricChunkLower;
   const upper = tempVisibleVolumetricChunkUpper;
   lower.fill(Number.NEGATIVE_INFINITY);
   upper.fill(Number.POSITIVE_INFINITY);
-  forEachVolumetricChunkWithinFrustrum(
+  forEachVolumetricChunkWithinFrustum(
     clippingPlanes,
     transformedSource,
     callback,
@@ -998,7 +1014,7 @@ export function forEachPlaneIntersectingVolumetricChunk<
     console.log("modelViewProjection", modelViewProjection.join(","));
     console.log(`lower=${lower.join(",")}, upper=${upper.join(",")}`);
   }
-  forEachVolumetricChunkWithinFrustrum(
+  forEachVolumetricChunkWithinFrustum(
     clippingPlanes,
     transformedSource,
     callback,
@@ -1025,7 +1041,7 @@ export function getNormalizedChunkLayout(
   );
   tempChunkLayout.detTransform = chunkLayout.detTransform;
   const { invViewMatrix, width, height } = projectionParameters;
-  const depth = getViewFrustrumDepthRange(projectionParameters.projectionMat);
+  const depth = getViewFrustumDepthRange(projectionParameters.projectionMat);
   for (let chunkRenderDim = finiteRank; chunkRenderDim < 3; ++chunkRenderDim) {
     // we want to ensure chunk [0] fully covers the viewport
     const offset = invViewMatrix[12 + chunkRenderDim];

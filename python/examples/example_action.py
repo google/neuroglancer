@@ -22,9 +22,9 @@ if __name__ == "__main__":
         print(f"  Layer selected values: {s.selected_values}")
 
     viewer.actions.add("my-action", my_action)
-    with viewer.config_state.txn() as s:
-        s.input_event_bindings.viewer["keyt"] = "my-action"
-        s.status_messages["hello"] = "Welcome to this example"
+    with viewer.config_state.txn() as cs:
+        cs.input_event_bindings.viewer["keyt"] = "my-action"
+        cs.status_messages["hello"] = "Welcome to this example"
 
     print(viewer)
     webbrowser.open_new(viewer.get_viewer_url())

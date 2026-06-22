@@ -53,6 +53,7 @@ import {
 import type { RenderLayerRole } from "#src/renderlayer.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type {
+  TrackableValue,
   WatchableSet,
   WatchableValueInterface,
 } from "#src/trackable_value.js";
@@ -103,12 +104,14 @@ export interface LayerGroupViewerState {
   crossSectionBackgroundColor: TrackableRGB;
   perspectiveViewBackgroundColor: TrackableRGB;
   hideCrossSectionBackground3D: TrackableBoolean;
+  pickRadius: TrackableValue<number>;
 }
 
 export interface LayerGroupViewerOptions {
   showLayerPanel: WatchableValueInterface<boolean>;
   showViewerMenu: boolean;
   showLayerHoverValues: WatchableValueInterface<boolean>;
+  showAllPlotBounds?: WatchableValueInterface<boolean>;
 }
 
 export const viewerDragType = "neuroglancer-layer-group-viewer";
@@ -373,6 +376,9 @@ export class LayerGroupViewer extends RefCounted {
   get visibility() {
     return this.viewerState.visibility;
   }
+  get pickRadius() {
+    return this.viewerState.pickRadius;
+  }
   get visibleLayerRoles() {
     return this.viewerState.visibleLayerRoles;
   }
@@ -536,6 +542,7 @@ export class LayerGroupViewer extends RefCounted {
         this,
         () => this.layout.toJSON(),
         this.options.showLayerHoverValues,
+        this.options.showAllPlotBounds,
       ));
       if (options.showViewerMenu) {
         layerPanel.registerDisposer(makeViewerMenu(layerPanel.element, this));

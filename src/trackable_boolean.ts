@@ -57,13 +57,18 @@ export class TrackableBoolean implements Trackable {
   }
 }
 
+/**
+ * @param model: A watchable value that is used to track the checkbox state.
+ * @param options.enabledTitle: Optional title to show when the checkbox is checked.
+ * @param options.disabledTitle: Optional title to show when the checkbox is unchecked.
+ */
 export class TrackableBooleanCheckbox extends RefCounted {
   element = document.createElement("input");
   constructor(
     public model: WatchableValueInterface<boolean>,
     options: {
-      enableTitle?: string;
-      disableTitle?: string;
+      enabledTitle?: string;
+      disabledTitle?: string;
     } = {},
   ) {
     super();
@@ -74,11 +79,11 @@ export class TrackableBooleanCheckbox extends RefCounted {
       const value = this.model.value;
       this.element.checked = value;
       if (
-        options.enableTitle !== undefined ||
-        options.disableTitle !== undefined
+        options.enabledTitle !== undefined ||
+        options.disabledTitle !== undefined
       ) {
         this.element.title =
-          (value ? options.enableTitle : options.disableTitle) ?? "";
+          (value ? options.enabledTitle : options.disabledTitle) ?? "";
       }
     };
 
