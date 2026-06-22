@@ -1930,137 +1930,37 @@ export class AnnotationLayerView extends Tab {
     this.virtualListSource.length = length;
   }
 
-  private get isAnnotationQueryOrSortActive(): boolean {
-    return (
-      this.sortState !== undefined ||
-      this.annotationQueryText.value.trim() !== "" ||
-      this.annotationNumericalConstraints.length > 0 ||
-      this.annotationEnumConstraints.length > 0 ||
-      this.annotationBoolConstraints.length > 0
-    );
-  }
-
-  private refreshAnnotationQueryStats() {
-    const lastResult = this.annotationQueryResult.value;
-    if (lastResult === undefined) return;
-    this.annotationQueryItems = buildAnnotationQueryItems(
-      this.listElements.map(({ annotation, state }) => ({
-        annotation: {
-          description: annotation.description ?? undefined,
-          properties: annotation.properties,
-        },
-        propSpecs: state.source.properties.value as AnnotationPropertySpec[],
-      })),
-    );
-    const queryResult = executeAnnotationQuery(
-      this.annotationQueryItems,
-      lastResult.query as AnnotationFilterQuery,
-    );
-    this.annotationQueryResult.value = queryResult;
-    this.updateQueryStatistics(queryResult);
-  }
-
   private addAnnotationElement(
-    annotation: Annotation,
-    state: AnnotationLayerState,
+    _annotation: Annotation,
+    _state: AnnotationLayerState,
   ) {
     if (!this.visible) {
       this.updated = false;
       return;
     }
-    if (this.isAnnotationQueryOrSortActive) {
-      this.forceUpdateView();
-      return;
-    }
-    if (!this.updated) {
-      this.updateView();
-      return;
-    }
-    const info = this.attachedAnnotationStates.get(state);
-    if (info !== undefined) {
-      const index = info.annotations.length;
-      info.annotations.push(annotation);
-      info.idToIndex.set(annotation.id, index);
-      const spliceStart = info.listOffset + index;
-      this.listElements.splice(spliceStart, 0, { state, annotation });
-      this.updateListLength();
-      this.virtualListSource.changed!.dispatch([
-        { retainCount: spliceStart, deleteCount: 0, insertCount: 1 },
-      ]);
-    }
-    this.refreshAnnotationQueryStats();
-    this.resetOnUpdate();
+    this.forceUpdateView();
   }
 
   private updateAnnotationElement(
-    annotation: Annotation,
-    state: AnnotationLayerState,
+    _annotation: Annotation,
+    _state: AnnotationLayerState,
   ) {
     if (!this.visible) {
       this.updated = false;
       return;
     }
-    if (this.isAnnotationQueryOrSortActive) {
-      this.forceUpdateView();
-      return;
-    }
-    if (!this.updated) {
-      this.updateView();
-      return;
-    }
-    const info = this.attachedAnnotationStates.get(state);
-    if (info !== undefined) {
-      const index = info.idToIndex.get(annotation.id);
-      if (index !== undefined) {
-        const updateStart = info.listOffset + index;
-        info.annotations[index] = annotation;
-        this.listElements[updateStart].annotation = annotation;
-        this.virtualListSource.changed!.dispatch([
-          { retainCount: updateStart, deleteCount: 1, insertCount: 1 },
-        ]);
-      }
-    }
-    this.refreshAnnotationQueryStats();
-    this.resetOnUpdate();
+    this.forceUpdateView();
   }
 
   private deleteAnnotationElement(
-    annotationId: string,
-    state: AnnotationLayerState,
+    _annotationId: string,
+    _state: AnnotationLayerState,
   ) {
     if (!this.visible) {
       this.updated = false;
       return;
     }
-    if (this.isAnnotationQueryOrSortActive) {
-      this.forceUpdateView();
-      return;
-    }
-    if (!this.updated) {
-      this.updateView();
-      return;
-    }
-    const info = this.attachedAnnotationStates.get(state);
-    if (info !== undefined) {
-      const { idToIndex } = info;
-      const index = idToIndex.get(annotationId);
-      if (index !== undefined) {
-        const spliceStart = info.listOffset + index;
-        const { annotations } = info;
-        annotations.splice(index, 1);
-        idToIndex.delete(annotationId);
-        for (let i = index, length = annotations.length; i < length; ++i) {
-          idToIndex.set(annotations[i].id, i);
-        }
-        this.listElements.splice(spliceStart, 1);
-        this.updateListLength();
-        this.virtualListSource.changed!.dispatch([
-          { retainCount: spliceStart, deleteCount: 1, insertCount: 0 },
-        ]);
-      }
-    }
-    this.refreshAnnotationQueryStats();
-    this.resetOnUpdate();
+    this.forceUpdateView();
   }
 
   private resetOnUpdate() {
