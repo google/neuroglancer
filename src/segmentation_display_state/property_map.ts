@@ -150,6 +150,7 @@ function queryUint64PermutationHashMap(
   values: BigUint64Array,
   x: bigint,
 ): number {
+  if (table.length === 0) return -1;
   let hashCode = murmurHash3_x86_32Hash64Bits_Bigint(/*seed=*/ 0, x);
   const mask = table.length - 1;
   while (true) {

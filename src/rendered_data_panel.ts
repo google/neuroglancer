@@ -21,6 +21,7 @@ import type { Annotation } from "#src/annotation/index.js";
 import { getAnnotationTypeRenderHandler } from "#src/annotation/type_handler.js";
 import type { DisplayContext } from "#src/display_context.js";
 import { RenderedPanel } from "#src/display_context.js";
+import { hasSpatialSkeletonNodeSelection } from "#src/layer/segmentation/selection.js";
 import type { NavigationState } from "#src/navigation_state.js";
 import { PickIDManager } from "#src/object_picking.js";
 import {
@@ -31,6 +32,7 @@ import {
   clearOutOfBoundsPickData,
   getPickDiameter,
 } from "#src/rendered_data_panel_picking.js";
+import type { SpatialSkeletonSourceState } from "#src/skeleton/api.js";
 import { StatusMessage } from "#src/status.js";
 import type { TrackableValue } from "#src/trackable_value.js";
 import { AutomaticallyFocusedElement } from "#src/util/automatic_focus.js";
@@ -56,6 +58,40 @@ import type { ViewerState } from "#src/viewer_state.js";
 declare let NEUROGLANCER_SHOW_OBJECT_SELECTION_TOOLTIP: boolean | undefined;
 
 const tempVec3 = vec3.create();
+
+interface SpatialSkeletonSelectableLayer {
+  selectSpatialSkeletonNode: (
+    nodeId: number,
+    pin: boolean | "toggle" | "force-unpin",
+    options?: {
+      segmentId?: number;
+      position?: ArrayLike<number>;
+      sourceState?: SpatialSkeletonSourceState;
+    },
+  ) => void;
+  clearSpatialSkeletonNodeSelection: (
+    pin: boolean | "toggle" | "force-unpin",
+  ) => void;
+}
+
+function isSpatialSkeletonSelectableLayer(
+  layer: unknown,
+): layer is SpatialSkeletonSelectableLayer {
+  return (
+    typeof layer === "object" &&
+    layer !== null &&
+    "selectSpatialSkeletonNode" in layer &&
+    typeof layer.selectSpatialSkeletonNode === "function" &&
+    "clearSpatialSkeletonNodeSelection" in layer &&
+    typeof layer.clearSpatialSkeletonNodeSelection === "function"
+  );
+}
+
+function isSpatialSkeletonNodeSelectionValue(state: unknown) {
+  return hasSpatialSkeletonNodeSelection(
+    state as { nodeId?: unknown } | undefined,
+  );
+}
 
 export interface RenderedDataViewerState extends ViewerState {
   inputEventMap: EventActionMap;
@@ -466,11 +502,78 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       /*capture=*/ true,
     );
 
+    const getPickedSpatialSkeletonLayerSelection = () => {
+      const { mouseState } = this.viewer;
+      if (!mouseState.updateUnconditionally()) {
+        return undefined;
+      }
+      const pickedSpatialSkeleton = mouseState.pickedSpatialSkeleton;
+      const pickedNodeId = pickedSpatialSkeleton?.nodeId;
+      if (
+        typeof pickedNodeId !== "number" ||
+        !Number.isSafeInteger(pickedNodeId) ||
+        pickedNodeId <= 0
+      ) {
+        return undefined;
+      }
+      const pickedLayer = mouseState.pickedRenderLayer?.userLayer;
+      if (!isSpatialSkeletonSelectableLayer(pickedLayer)) {
+        return undefined;
+      }
+      const pickedSegmentId = pickedSpatialSkeleton?.segmentId;
+      return {
+        layer: pickedLayer,
+        nodeId: pickedNodeId,
+        segmentId:
+          typeof pickedSegmentId === "number" &&
+          Number.isSafeInteger(pickedSegmentId) &&
+          pickedSegmentId > 0
+            ? pickedSegmentId
+            : undefined,
+        position: pickedSpatialSkeleton?.position ?? mouseState.position,
+        sourceState: pickedSpatialSkeleton?.sourceState,
+      };
+    };
+
+    const clearPinnedSpatialSkeletonSelection = () => {
+      const selectionValue = this.viewer.selectionDetailsState.value;
+      if (selectionValue === undefined) {
+        return false;
+      }
+      for (const { layer, state } of selectionValue.layers) {
+        if (
+          !isSpatialSkeletonSelectableLayer(layer) ||
+          !isSpatialSkeletonNodeSelectionValue(state)
+        ) {
+          continue;
+        }
+        layer.clearSpatialSkeletonNodeSelection("force-unpin");
+        return true;
+      }
+      return false;
+    };
+
     registerActionListener(element, "select-position", () => {
+      const pickedSelection = getPickedSpatialSkeletonLayerSelection();
+      if (pickedSelection !== undefined) {
+        pickedSelection.layer.selectSpatialSkeletonNode(
+          pickedSelection.nodeId,
+          true,
+          {
+            segmentId: pickedSelection.segmentId,
+            position: pickedSelection.position,
+            sourceState: pickedSelection.sourceState,
+          },
+        );
+        return;
+      }
       this.viewer.selectionDetailsState.select();
     });
 
     registerActionListener(element, "unpin-selected-position", () => {
+      if (clearPinnedSpatialSkeletonSelection()) {
+        return;
+      }
       this.viewer.selectionDetailsState.unpin();
     });
 

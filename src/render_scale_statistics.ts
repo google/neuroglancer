@@ -26,15 +26,17 @@ export const renderScaleHistogramOrigin = -4;
 export function getRenderScaleHistogramOffset(
   renderScale: number,
   origin: number = renderScaleHistogramOrigin,
+  binSize: number = renderScaleHistogramBinSize,
 ): number {
-  return (Math.log2(renderScale) - origin) / renderScaleHistogramBinSize;
+  return (Math.log2(renderScale) - origin) / binSize;
 }
 
 export function getRenderScaleFromHistogramOffset(
   offset: number,
   origin: number = renderScaleHistogramOrigin,
+  binSize: number = renderScaleHistogramBinSize,
 ): number {
-  return 2 ** (offset * renderScaleHistogramBinSize + origin);
+  return 2 ** (offset * binSize + origin);
 }
 
 export function trackableRenderScaleTarget(
@@ -62,9 +64,14 @@ export class RenderScaleHistogram {
   visibility = new VisibilityPriorityAggregator();
   changed = new NullarySignal();
   logScaleOrigin: number;
+  logScaleBinSize: number;
 
-  constructor(origin: number = renderScaleHistogramOrigin) {
+  constructor(
+    origin: number = renderScaleHistogramOrigin,
+    binSize: number = renderScaleHistogramBinSize,
+  ) {
     this.logScaleOrigin = origin;
+    this.logScaleBinSize = binSize;
   }
 
   /**
@@ -142,7 +149,11 @@ export class RenderScaleHistogram {
         Math.max(
           0,
           Math.round(
-            getRenderScaleHistogramOffset(renderScale, this.logScaleOrigin),
+            getRenderScaleHistogramOffset(
+              renderScale,
+              this.logScaleOrigin,
+              this.logScaleBinSize,
+            ),
           ),
         ),
         numRenderScaleHistogramBins - 1,

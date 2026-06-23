@@ -52,6 +52,7 @@ import {
   TrackableDataSelectionState,
   UserLayer,
 } from "#src/layer/index.js";
+import { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import { LayerGroupViewer } from "#src/layer_group_viewer.js";
 import { RootLayoutContainer } from "#src/layer_groups_layout.js";
 import {
@@ -82,6 +83,7 @@ import {
   observeWatchable,
   TrackableValue,
 } from "#src/trackable_value.js";
+import { CommandPalette } from "#src/ui/command_palette.js";
 import {
   LayerArchiveCountWidget,
   LayerListPanel,
@@ -107,7 +109,7 @@ import {
 import { AutomaticallyFocusedElement } from "#src/util/automatic_focus.js";
 import { TrackableRGB } from "#src/util/color.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
-import { RefCounted } from "#src/util/disposable.js";
+import { RefCounted, registerEventListener } from "#src/util/disposable.js";
 import { removeFromParent } from "#src/util/dom.js";
 import type { ActionEvent } from "#src/util/event_action_map.js";
 import { registerActionListener } from "#src/util/event_action_map.js";
@@ -1119,6 +1121,24 @@ export class Viewer extends RefCounted implements ViewerState {
       }
       const userLayer = selectedLayer.layer;
       if (userLayer === null || userLayer.tool.value === undefined) {
+        if (userLayer instanceof SegmentationUserLayer) {
+          const editDisabledReason =
+            userLayer.getSpatialSkeletonActionsDisabledReason();
+          if (editDisabledReason === undefined) {
+            StatusMessage.showTemporaryMessage(
+              `Activate the edit mode tool to place skeletons in layer ${JSON.stringify(
+                selectedLayer.name,
+              )}`,
+            );
+          } else {
+            StatusMessage.showTemporaryMessage(
+              `The selected layer (${JSON.stringify(
+                selectedLayer.name,
+              )}) does not have an active annotation tool or support editable skeletons (${editDisabledReason}).`,
+            );
+          }
+          return;
+        }
         StatusMessage.showTemporaryMessage(
           `The selected layer (${JSON.stringify(
             selectedLayer.name,
@@ -1138,6 +1158,39 @@ export class Viewer extends RefCounted implements ViewerState {
       this.showPerspectiveSliceViews.toggle(),
     );
     this.bindAction("toggle-show-statistics", () => this.showStatistics());
+
+    // Guard prevents double-open when both the element-level action listener and
+    // the document capture listener fire for the same keypress.
+    let openPalette: CommandPalette | undefined;
+    const openCommandPalette = () => {
+      if (openPalette !== undefined && !openPalette.wasDisposed) return;
+      const prevFocused = document.activeElement;
+      const dispatchTarget =
+        prevFocused instanceof HTMLElement && this.element.contains(prevFocused)
+          ? prevFocused
+          : this.element;
+      openPalette = new CommandPalette(this, dispatchTarget);
+    };
+    this.bindAction("open-command-palette", openCommandPalette);
+    // Document-level capture to ensure that the command palette opens even when focus is inside a tool's input element outside viewer.element.
+    this.registerDisposer(
+      registerEventListener(
+        document,
+        "keydown",
+        (event: KeyboardEvent) => {
+          if (event.code === "KeyP" && event.ctrlKey) {
+            event.preventDefault();
+            openCommandPalette();
+          }
+        },
+        { capture: true },
+      ),
+    );
+    this.bindAction("deactivate-active-tool", () =>
+      this.globalToolBinder.deactivate(),
+    );
+    this.bindAction("edit-json-state", () => this.editJsonState());
+    this.bindAction("screenshot", () => this.showScreenshotDialog());
   }
 
   toggleHelpPanel() {

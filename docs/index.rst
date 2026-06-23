@@ -48,4 +48,3 @@ Neuroglancer
 Neuroglancer is a WebGL-based viewer for volumetric data.  It is capable of
 displaying arbitrary (non axis-aligned) cross-sectional views of volumetric
 data, as well as 3-D meshes and line-segment based models (skeletons).
-

@@ -152,13 +152,23 @@ export function srgbGammaExpand(value: number) {
 // https://www.w3.org/TR/WCAG20/#relativeluminancedef
 //
 // @param color sRGB color
-export function getRelativeLuminance(color: vec3 | vec4) {
-  const [r, g, b] = color;
+export function getRelativeLuminance(color: ArrayLike<number>) {
   return (
-    0.2126 * srgbGammaExpand(r) +
-    0.7152 * srgbGammaExpand(g) +
-    0.0722 * srgbGammaExpand(b)
+    0.2126 * srgbGammaExpand(color[0]) +
+    0.7152 * srgbGammaExpand(color[1]) +
+    0.0722 * srgbGammaExpand(color[2])
   );
+}
+
+export function getContrastRatio(
+  colorA: ArrayLike<number>,
+  colorB: ArrayLike<number>,
+) {
+  const luminanceA = getRelativeLuminance(colorA);
+  const luminanceB = getRelativeLuminance(colorB);
+  const darker = Math.min(luminanceA, luminanceB);
+  const lighter = Math.max(luminanceA, luminanceB);
+  return (lighter + 0.05) / (darker + 0.05);
 }
 
 // Determines whether a white background would provide higher contrast than a black background for
@@ -170,6 +180,26 @@ export function getRelativeLuminance(color: vec3 | vec4) {
 // https://stackoverflow.com/a/3943023
 export function useWhiteBackground(foregroundColor: vec3 | vec4) {
   return getRelativeLuminance(foregroundColor) <= 0.179;
+}
+
+const yellowHighlight = vec3.fromValues(1, 0.95, 0.35);
+const redHighlight = vec3.fromValues(1, 0, 0);
+const YELLOW_HIGHLIGHT_CONTRAST_BIAS = 1.2;
+
+export function computeHighVisibilityContrastColor<T extends Float32Array>(
+  out: T,
+  sourceColor: ArrayLike<number>,
+) {
+  const yellowContrast = getContrastRatio(yellowHighlight, sourceColor);
+  const redContrast = getContrastRatio(redHighlight, sourceColor);
+  const color =
+    redContrast > yellowContrast * YELLOW_HIGHLIGHT_CONTRAST_BIAS
+      ? redHighlight
+      : yellowHighlight;
+  out[0] = color[0];
+  out[1] = color[1];
+  out[2] = color[2];
+  return out;
 }
 
 export class TrackableRGB extends WatchableValue<vec3> {

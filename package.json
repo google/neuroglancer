@@ -185,6 +185,25 @@
       "neuroglancer/datasource/brainmaps:disabled": "./src/util/false.ts",
       "default": "./src/datasource/brainmaps/register_credentials_provider.ts"
     },
+    "#datasource/catmaid/backend": {
+      "neuroglancer/datasource/catmaid:enabled": "./src/datasource/catmaid/backend.ts",
+      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
+      "neuroglancer/datasource/catmaid:disabled": "./src/util/false.ts",
+      "default": "./src/datasource/catmaid/backend.ts"
+    },
+    "#datasource/catmaid/register_default": {
+      "neuroglancer/datasource/catmaid:enabled": "./src/datasource/catmaid/register_default.ts",
+      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
+      "neuroglancer/datasource/catmaid:disabled": "./src/util/false.ts",
+      "default": "./src/datasource/catmaid/register_default.ts"
+    },
+    "#datasource/catmaid/register_credentials_provider": {
+      "neuroglancer/python": "./src/util/false.ts",
+      "neuroglancer/datasource/catmaid:enabled": "./src/datasource/catmaid/register_credentials_provider.ts",
+      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
+      "neuroglancer/datasource/catmaid:disabled": "./src/util/false.ts",
+      "default": "./src/datasource/catmaid/register_credentials_provider.ts"
+    },
     "#datasource/deepzoom/backend": {
       "neuroglancer/datasource/deepzoom:enabled": "./src/datasource/deepzoom/backend.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
