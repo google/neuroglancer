@@ -72,6 +72,7 @@ import {
 import {
   ElementVisibilityFromTrackableBoolean,
   TrackableBoolean,
+  TrackableBooleanCheckbox,
 } from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
@@ -160,6 +161,8 @@ import {
   NumericalPropertiesSummary,
   renderIncludeExcludeChips,
 } from "#src/ui/property_summary.js";
+
+const MULTISCALE_LIST_CAP = 5000;
 
 export class MergedAnnotationStates
   extends RefCounted
@@ -382,6 +385,21 @@ export class AnnotationLayerView extends Tab {
         refCounted.registerDisposer(
           source.childrenReordered.add(this.forceUpdateView),
         );
+      } else if (source instanceof MultiscaleAnnotationSource) {
+        // Non-local source: the list can show the currently-loaded (rendered)
+        // annotations when the user opts in.  Rebuild (debounced) as the set of
+        // loaded chunks changes, but only while the toggle is on and visible.
+        const debouncedRefresh = animationFrameDebounce(() => {
+          if (this.visible && this.layer.listLoadedAnnotations.value) {
+            this.forceUpdateView();
+          }
+        });
+        refCounted.registerDisposer(
+          source.chunkManager.chunkQueueManager.visibleChunksChanged.add(
+            debouncedRefresh,
+          ),
+        );
+        refCounted.registerDisposer(debouncedRefresh.cancel);
       }
       refCounted.registerDisposer(
         state.transform.changed.add(this.forceUpdateView),
@@ -401,6 +419,7 @@ export class AnnotationLayerView extends Tab {
     }
     this.attachedAnnotationStates = newAttachedAnnotationStates;
     attachedAnnotationStates.clear();
+    this.updateListLoadedAnnotationsToggleVisibility();
     this.updateCoordinateSpace();
     this.forceUpdateView();
   }
@@ -444,9 +463,25 @@ export class AnnotationLayerView extends Tab {
   private categoricalDetailsOpen = false;
   private numericalSummaryContainer = document.createElement("div");
   private derivedWarningElement = document.createElement("div");
+  private loadedNoticeElement = document.createElement("div");
+  private listLoadedAnnotationsLabel = document.createElement("label");
+  private loadedAnnotationCounts = {
+    shown: 0,
+    total: 0,
+    totalIsLowerBound: false,
+  };
   private numericalPropertiesSummary: NumericalPropertiesSummary | undefined;
   private numericalDataSource: NumericalSummaryDataSource | undefined;
   private numericalBoundsInitialized = false;
+
+  private updateListLoadedAnnotationsToggleVisibility() {
+    const hasNonLocalSource = this.annotationStates.states.some(
+      (state) => !(state.source instanceof AnnotationSource),
+    );
+    this.listLoadedAnnotationsLabel.style.display = hasNonLocalSource
+      ? ""
+      : "none";
+  }
 
   private updateCoordinateSpace() {
     const localCoordinateSpace = this.layer.localCoordinateSpace.value;
@@ -624,6 +659,22 @@ export class AnnotationLayerView extends Tab {
     queryInput.autocomplete = "off";
     queryInput.spellcheck = false;
     queryInputContainer.appendChild(queryInput);
+    {
+      const checkbox = this.registerDisposer(
+        new TrackableBooleanCheckbox(this.layer.listLoadedAnnotations),
+      );
+      const label = this.listLoadedAnnotationsLabel;
+      label.appendChild(
+        document.createTextNode(
+          "List rendered annotations",
+        ),
+      );
+      label.title =
+        "Shows currently-rendered annotations from non-local sources by decoding loaded chunk data.";
+      label.appendChild(checkbox.element);
+      label.style.display = "none";
+      queryInputContainer.appendChild(label);
+    }
     this.element.appendChild(queryInputContainer);
 
     this.queryStatisticsElement.classList.add(
@@ -649,6 +700,11 @@ export class AnnotationLayerView extends Tab {
     this.derivedWarningElement.textContent = "⚠ measurements unavailable";
     this.derivedWarningElement.style.display = "none";
     this.element.appendChild(this.derivedWarningElement);
+    this.loadedNoticeElement.classList.add(
+      "neuroglancer-annotation-loaded-notice",
+    );
+    this.loadedNoticeElement.style.display = "none";
+    this.element.appendChild(this.loadedNoticeElement);
 
     const debouncedQuery = this.registerCancellable(
       debounce(() => {
@@ -718,8 +774,12 @@ export class AnnotationLayerView extends Tab {
         this.layer.annotationListQuery.value = this.annotationQueryText.value;
       }),
     );
+    this.registerDisposer(
+      this.layer.listLoadedAnnotations.changed.add(this.forceUpdateView),
+    );
     this.updateCoordinateSpace();
     this.updateAttachedAnnotationLayerStates();
+    this.updateListLoadedAnnotationsToggleVisibility();
     this.updateSelectionView();
     this.setupListReorder();
     this.registerDisposer(() => {
@@ -1675,13 +1735,31 @@ export class AnnotationLayerView extends Tab {
     }
 
     let isMutable = false;
+    this.loadedAnnotationCounts.shown = 0;
+    this.loadedAnnotationCounts.total = 0;
+    this.loadedAnnotationCounts.totalIsLowerBound = false;
     const { listElements } = this;
     listElements.length = 0;
     for (const [state, info] of this.attachedAnnotationStates) {
-      if (!state.source.readonly) isMutable = true;
       if (state.chunkTransform.value.error !== undefined) continue;
       const { source } = state;
-      const annotations = Array.from(source);
+      let annotations: Annotation[];
+      if (source instanceof AnnotationSource) {
+        annotations = Array.from(source);
+        if (!source.readonly) isMutable = true;
+      } else if (
+        source instanceof MultiscaleAnnotationSource &&
+        this.layer.listLoadedAnnotations.value
+      ) {
+        const loaded = source.getLoadedAnnotations(MULTISCALE_LIST_CAP);
+        annotations = loaded.annotations;
+        this.loadedAnnotationCounts.shown += loaded.annotations.length;
+        this.loadedAnnotationCounts.total += loaded.totalLoaded;
+        this.loadedAnnotationCounts.totalIsLowerBound ||=
+          loaded.totalLoadedIsLowerBound;
+      } else {
+        annotations = [];
+      }
       info.annotations = annotations;
       const { idToIndex } = info;
       idToIndex.clear();
@@ -1915,6 +1993,20 @@ export class AnnotationLayerView extends Tab {
         insertCount: listElements.length,
       },
     ]);
+    {
+      const { shown, total, totalIsLowerBound } = this.loadedAnnotationCounts;
+      const showNotice =
+        this.layer.listLoadedAnnotations.value &&
+        (total > shown || (totalIsLowerBound && total > 0));
+      if (showNotice) {
+        const totalText = totalIsLowerBound ? `>=${total}` : `${total}`;
+        this.loadedNoticeElement.textContent =
+          `Showing first ${shown} of ${totalText} loaded annotations - narrow the view or filter to see specific ones.`;
+        this.loadedNoticeElement.style.display = "";
+      } else {
+        this.loadedNoticeElement.style.display = "none";
+      }
+    }
     this.updateQueryStatistics(queryResult);
     this.mutableControls.style.display = isMutable ? "contents" : "none";
     this.layer.annotationListOrder = this.listElements;
@@ -2861,6 +2953,10 @@ export function UserLayerWithAnnotationsMixin<
       order: "asc" | "desc";
     } | null>(null);
     annotationListQuery = new WatchableValue<string>("");
+    // When enabled, the annotation list also shows the currently-rendered
+    // annotations decoded from non-local (e.g. precomputed) sources.  Off by
+    // default so rendering performance is unaffected unless the user opts in.
+    listLoadedAnnotations = new TrackableBoolean(false);
 
     constructor(...args: any[]) {
       super(...args);
@@ -2880,6 +2976,7 @@ export function UserLayerWithAnnotationsMixin<
         this.specificationChanged.dispatch,
       );
       this.annotationListQuery.changed.add(this.specificationChanged.dispatch);
+      this.listLoadedAnnotations.changed.add(this.specificationChanged.dispatch);
       this.tabs.add("annotations", {
         label: "Annotations",
         order: 10,
@@ -3850,7 +3947,8 @@ export function makeAnnotationListElement(
   let deleteButton: HTMLElement | undefined;
 
   const maybeAddDeleteButton = () => {
-    if (state.source.readonly) return;
+    if (!(state.source instanceof AnnotationSource) || state.source.readonly)
+      return;
     if (deleteButton !== undefined) return;
     deleteButton = makeDeleteButton({
       title: "Delete annotation",
