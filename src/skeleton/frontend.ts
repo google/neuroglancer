@@ -339,7 +339,6 @@ void emitDefault() {
     nodeShader: ShaderProgram,
     skeletonChunk: SkeletonChunk,
     projectionParameters: { width: number; height: number },
-    drawNodes: boolean,
   ) {
     const { vertexAttributes } = this;
     const numAttributes = vertexAttributes.length;
@@ -375,7 +374,10 @@ void emitDefault() {
       gl.disableVertexAttribArray(aVertexIndex);
     }
 
-    if (drawNodes) {
+    // Draw nodes - this is performed also in line render mode
+    // so that there are no visible gaps between the edges
+    // as the point size is set to the line width
+    {
       nodeShader.bind();
       initializeCircleShader(nodeShader, projectionParameters, {
         featherWidthInPixels: this.targetIsSliceView ? 1.0 : 0.0,
@@ -636,7 +638,6 @@ export class SkeletonLayer extends RefCounted {
           nodeShader,
           skeleton,
           renderContext.projectionParameters,
-          renderOptions.mode.value === SkeletonRenderMode.LINES_AND_POINTS,
         );
       },
     );
