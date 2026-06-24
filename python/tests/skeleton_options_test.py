@@ -36,26 +36,23 @@ class SkeletonSource(neuroglancer.skeleton.SkeletonSource):
 def test_skeleton_options(webdriver):
     with webdriver.viewer.txn() as s:
         s.dimensions = dimensions
+        s.position = [0, 0, 0]
         s.layout = "xy"
         s.layers.append(
             name="a",
             layer=neuroglancer.SegmentationLayer(
                 source=SkeletonSource(),
                 segments=[1],
-                skeleton_rendering=neuroglancer.SkeletonRenderingOptions(
-                    mode3d="lines_and_points",
-                    line_width2d=100,
-                    line_width3d=100,
-                    shader_controls={"color": "#f00"},
-                    shader="""
+            ),
+        )
+        s.layers[0].skeleton_rendering.line_width2d = 100
+        s.layers[0].skeleton_rendering.shader = """
 #uicontrol vec3 color color(default="white")
 void main () {
   emitRGB(color);
 }
-""",
-                ),
-            ),
-        )
+"""
+        s.layers[0].skeleton_rendering.shader_controls["color"] = "#f00"
         s.show_axis_lines = False
     screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
     np.testing.assert_array_equal(
