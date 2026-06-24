@@ -32,7 +32,10 @@ import type {
   ParameterizedEmitterDependentShaderOptions,
   ParameterizedShaderGetterResult,
 } from "#src/webgl/dynamic_shader.js";
-import type { ShaderControlState } from "#src/webgl/shader_ui_controls.js";
+import {
+  getShaderSelectOptionLabel,
+  type ShaderControlState,
+} from "#src/webgl/shader_ui_controls.js";
 import type {
   LayerControlDefinition,
   LayerControlFactory,
@@ -46,6 +49,7 @@ import { checkboxLayerControl } from "#src/widget/layer_control_checkbox.js";
 import { colorLayerControl } from "#src/widget/layer_control_color.js";
 import { propertyInvlerpLayerControl } from "#src/widget/layer_control_property_invlerp.js";
 import { rangeLayerControl } from "#src/widget/layer_control_range.js";
+import { selectLayerControl } from "#src/widget/layer_control_select.js";
 import { Tab } from "#src/widget/tab_view.js";
 import { transferFunctionLayerControl } from "#src/widget/transfer_function.js";
 
@@ -81,6 +85,14 @@ function getShaderLayerControlFactory<LayerType extends UserLayer>(
       return colorLayerControl(() => controlState.trackable);
     case "checkbox":
       return checkboxLayerControl(() => controlState.trackable);
+    case "select":
+      return selectLayerControl(() => ({
+        value: controlState.trackable,
+        options: control.options.map((option) => ({
+          value: option.value,
+          label: getShaderSelectOptionLabel(option),
+        })),
+      }));
     case "imageInvlerp": {
       return channelInvlerpLayerControl(() => ({
         dataType: control.dataType,
