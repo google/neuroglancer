@@ -160,7 +160,7 @@ test("crackle: random volume", async () => {
 
   const npy = await load("testdata/codec/crackle/random.npy");
 
-  const gt = npy.data;
+  const gt = npy.data as Uint8Array;
 
   expect(decoded.length).toBe(gt.length);
 
@@ -169,7 +169,7 @@ test("crackle: random volume", async () => {
   }
 });
 
-async function run_connectomics_volume(filename) {
+async function run_connectomics_volume(filename: string) {
   const compressed = new Uint8Array(readFileSync(filename));
 
   const header = readHeader(compressed);
@@ -183,7 +183,7 @@ async function run_connectomics_volume(filename) {
 
   const npy = await load("testdata/codec/crackle/pinky40.npy");
 
-  const gt = npy.data;
+  const gt = npy.data as Uint32Array;
 
   expect(decoded.length).toBe(gt.length);
 
