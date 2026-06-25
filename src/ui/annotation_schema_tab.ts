@@ -59,10 +59,13 @@ import {
   makeReadonlyColorProperty,
   isEnumType,
   createTextAreaElement,
+  setEnumPropertyToolJson,
+  toggleBoolPropertyToolJson,
 } from "#src/ui/annotation_properties.js";
 import type { UserLayerWithAnnotations } from "#src/ui/annotations.js";
 import type { NumberDisplayConfig } from "#src/ui/bounded_number_input.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
+import { makeToolButton } from "#src/ui/tool.js";
 import { arraysEqual } from "#src/util/array.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import {
@@ -545,6 +548,16 @@ class AnnotationUIProperty extends RefCounted {
     container.appendChild(checkbox);
     if (!this.readonly) {
       this.registerEventListener(checkbox, "change", changeFunction);
+      const toolButton = makeToolButton(
+        this,
+        this.parentView.layer.toolBinder,
+        {
+          toolJson: toggleBoolPropertyToolJson(oldProperty.identifier),
+          title: `Bind a key to toggle the selected annotation's ${oldProperty.identifier}`,
+        },
+      );
+      toolButton.classList.add("neuroglancer-annotation-schema-enum-keybind");
+      container.appendChild(toolButton);
     }
 
     return [checkbox];
@@ -730,6 +743,20 @@ class AnnotationUIProperty extends RefCounted {
     enumRow.appendChild(valueInput);
 
     if (!this.readonly) {
+      // Keybind affordance: bind a key so that pressing it while iterating the
+      // annotation list sets the selected annotation's property to this enum
+      // value (and advances to the next annotation).
+      const toolButton = makeToolButton(
+        this,
+        this.parentView.layer.toolBinder,
+        {
+          toolJson: setEnumPropertyToolJson(oldProperty.identifier, value),
+          title: `Bind a key to set the selected annotation's ${oldProperty.identifier} to "${label}"`,
+        },
+      );
+      toolButton.classList.add("neuroglancer-annotation-schema-enum-keybind");
+      enumRow.appendChild(toolButton);
+
       const deleteIcon = this.createEnumDeleteIcon(enumIndex, oldProperty);
       enumRow.appendChild(deleteIcon);
     }
