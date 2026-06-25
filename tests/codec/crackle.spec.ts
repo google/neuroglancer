@@ -131,18 +131,18 @@ test("crackle: ones decodes to all ones", async () => {
 
   compressed = new Uint8Array(readFileSync("testdata/codec/crackle/ones2.ckl"));
   decoded = await decompressCrackle(compressed);
-  let view = new Uint16Array(decoded.buffer);
-  expect(view.every((x) => x === 1)).toBe(true);
+  const view16 = new Uint16Array(decoded.buffer);
+  expect(view16.every((x) => x === 1)).toBe(true);
 
   compressed = new Uint8Array(readFileSync("testdata/codec/crackle/ones4.ckl"));
   decoded = await decompressCrackle(compressed);
-  view = new Uint32Array(decoded.buffer);
-  expect(view.every((x) => x === 1)).toBe(true);
+  const view32 = new Uint32Array(decoded.buffer);
+  expect(view32.every((x) => x === 1)).toBe(true);
 
   compressed = new Uint8Array(readFileSync("testdata/codec/crackle/ones8.ckl"));
   decoded = await decompressCrackle(compressed);
-  view = new BigUint64Array(decoded.buffer);
-  expect(view.every((x) => x === 1n)).toBe(true);
+  const view64 = new BigUint64Array(decoded.buffer);
+  expect(view64.every((x) => x === 1n)).toBe(true);
 });
 
 test("crackle: random volume", async () => {
