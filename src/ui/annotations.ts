@@ -90,7 +90,11 @@ import {
 } from "#src/ui/annotation_properties.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { getDefaultAnnotationListBindings } from "#src/ui/default_input_event_bindings.js";
-import { LegacyTool, makeToolButton, registerLegacyTool } from "#src/ui/tool.js";
+import {
+  LegacyTool,
+  makeToolButton,
+  registerLegacyTool,
+} from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { arraysEqual, type ArraySpliceOp } from "#src/util/array.js";
 import { setClipboard } from "#src/util/clipboard.js";
