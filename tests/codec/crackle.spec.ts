@@ -24,43 +24,46 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 beforeAll(() => {
-  vi.stubGlobal("fetch", vi.fn(async (input: any) => {
-    const fs = await import("node:fs/promises");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: any) => {
+      const fs = await import("node:fs/promises");
 
-    const url = input?.toString?.() ?? String(input);
+      const url = input?.toString?.() ?? String(input);
 
-    if (url.includes("libcrackle.wasm")) {
-      const filePath = path.resolve(
-        __dirname,
-        "../../src/sliceview/crackle/libcrackle.wasm",
-      );
+      if (url.includes("libcrackle.wasm")) {
+        const filePath = path.resolve(
+          __dirname,
+          "../../src/sliceview/crackle/libcrackle.wasm",
+        );
 
-      const data = await fs.readFile(filePath);
+        const data = await fs.readFile(filePath);
 
-      return {
-        ok: true,
-        status: 200,
-        arrayBuffer: async () =>
-          data.buffer.slice(
-            data.byteOffset,
-            data.byteOffset + data.byteLength,
-          ),
-      } as any;
-    }
+        return {
+          ok: true,
+          status: 200,
+          arrayBuffer: async () =>
+            data.buffer.slice(
+              data.byteOffset,
+              data.byteOffset + data.byteLength,
+            ),
+        } as any;
+      }
 
-    if (url.includes(".npy")) {
-      const filename = path.basename(url);
-      const buf = readFileSync(`testdata/codec/crackle/${filename}`);
+      if (url.includes(".npy")) {
+        const filename = path.basename(url);
+        const buf = readFileSync(`testdata/codec/crackle/${filename}`);
 
-      return {
-        ok: true,
-        arrayBuffer: async () =>
-          buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
-      } as any;
-    }
+        return {
+          ok: true,
+          arrayBuffer: async () =>
+            buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
+        } as any;
+      }
 
-    throw new Error(`Unexpected fetch: ${url}`);
-  }));
+      throw new Error(`Unexpected fetch: ${url}`);
+    }),
+  );
 });
 
 test("crackle: zeros decodes to all zeros", async () => {
@@ -126,23 +129,17 @@ test("crackle: ones decodes to all ones", async () => {
 
   expect(decoded.every((x) => x === 1)).toBe(true);
 
-  compressed = new Uint8Array(
-    readFileSync("testdata/codec/crackle/ones2.ckl"),
-  );
+  compressed = new Uint8Array(readFileSync("testdata/codec/crackle/ones2.ckl"));
   decoded = await decompressCrackle(compressed);
   let view = new Uint16Array(decoded.buffer);
   expect(view.every((x) => x === 1)).toBe(true);
 
-  compressed = new Uint8Array(
-    readFileSync("testdata/codec/crackle/ones4.ckl"),
-  );
+  compressed = new Uint8Array(readFileSync("testdata/codec/crackle/ones4.ckl"));
   decoded = await decompressCrackle(compressed);
   view = new Uint32Array(decoded.buffer);
   expect(view.every((x) => x === 1)).toBe(true);
 
-  compressed = new Uint8Array(
-    readFileSync("testdata/codec/crackle/ones8.ckl"),
-  );
+  compressed = new Uint8Array(readFileSync("testdata/codec/crackle/ones8.ckl"));
   decoded = await decompressCrackle(compressed);
   view = new BigUint64Array(decoded.buffer);
   expect(view.every((x) => x === 1n)).toBe(true);
@@ -173,9 +170,7 @@ test("crackle: random volume", async () => {
 });
 
 async function run_connectomics_volume(filename) {
- const compressed = new Uint8Array(
-    readFileSync(filename),
-  );
+  const compressed = new Uint8Array(readFileSync(filename));
 
   let header = readHeader(compressed);
   expect(header.dataWidth).toBe(4);
@@ -202,13 +197,13 @@ test("crackle: connectomics volume (flat)", async () => {
 });
 
 test("crackle: connectomics volume (flat,m4)", async () => {
-  await run_connectomics_volume("testdata/codec/crackle/pinky40_m4.ckl")
+  await run_connectomics_volume("testdata/codec/crackle/pinky40_m4.ckl");
 });
 
 test("crackle: connectomics volume (pins)", async () => {
-  await run_connectomics_volume("testdata/codec/crackle/pinky40_pins.ckl")
+  await run_connectomics_volume("testdata/codec/crackle/pinky40_pins.ckl");
 });
 
 test("crackle: connectomics volume (pins,m4)", async () => {
-  await run_connectomics_volume("testdata/codec/crackle/pinky40_m4pins.ckl")
+  await run_connectomics_volume("testdata/codec/crackle/pinky40_m4pins.ckl");
 });
