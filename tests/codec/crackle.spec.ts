@@ -16,8 +16,8 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, test, vi, beforeAll } from "vitest";
 import { load } from "npyjs";
+import { expect, test, vi, beforeAll } from "vitest";
 import { readHeader, decompressCrackle } from "#src/sliceview/crackle/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
