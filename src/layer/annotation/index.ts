@@ -67,7 +67,11 @@ import type {
   AnnotationLayerView,
   MergedAnnotationStates,
 } from "#src/ui/annotations.js";
-import { UserLayerWithAnnotationsMixin } from "#src/ui/annotations.js";
+import {
+  SELECT_NEXT_ANNOTATION_TOOL_ID,
+  SELECT_PREVIOUS_ANNOTATION_TOOL_ID,
+  UserLayerWithAnnotationsMixin,
+} from "#src/ui/annotations.js";
 import type { ToolActivation } from "#src/ui/tool.js";
 import { LayerTool, registerTool, unregisterTool } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
@@ -523,6 +527,35 @@ class ToggleBoolPropertyTool extends LayerTool<AnnotationUserLayer> {
 }
 
 const Base = UserLayerWithAnnotationsMixin(UserLayer);
+
+// A keybindable tool that selects the previous annotation in the iteration order.
+class SelectPreviousAnnotationTool extends LayerTool<AnnotationUserLayer> {
+  activate(activation: ToolActivation<this>) {
+    this.layer.changeSelectedIndex(-1);
+    activation.cancel();
+  }
+  toJSON() {
+    return SELECT_PREVIOUS_ANNOTATION_TOOL_ID;
+  }
+  get description() {
+    return "select previous annotation";
+  }
+}
+
+// A keybindable tool that selects the next annotation in the iteration order.
+class SelectNextAnnotationTool extends LayerTool<AnnotationUserLayer> {
+  activate(activation: ToolActivation<this>) {
+    this.layer.changeSelectedIndex(1);
+    activation.cancel();
+  }
+  toJSON() {
+    return SELECT_NEXT_ANNOTATION_TOOL_ID;
+  }
+  get description() {
+    return "select next annotation";
+  }
+}
+
 export class AnnotationUserLayer extends Base {
   localAnnotations: LocalAnnotationSource | undefined;
   codeVisible = new TrackableBoolean(true);
@@ -1127,6 +1160,18 @@ for (const control of Object.values(LAYER_CONTROLS)) {
 
 registerLayerType(AnnotationUserLayer);
 registerLayerType(AnnotationUserLayer, "pointAnnotation");
+
+registerTool(
+  AnnotationUserLayer,
+  SELECT_PREVIOUS_ANNOTATION_TOOL_ID,
+  (layer) => new SelectPreviousAnnotationTool(layer),
+);
+registerTool(
+  AnnotationUserLayer,
+  SELECT_NEXT_ANNOTATION_TOOL_ID,
+  (layer) => new SelectNextAnnotationTool(layer),
+);
+
 registerLayerTypeDetector((subsource) => {
   if (subsource.local === LocalDataSource.annotations) {
     return { layerConstructor: AnnotationUserLayer, priority: 100 };
