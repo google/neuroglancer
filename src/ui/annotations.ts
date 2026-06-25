@@ -90,7 +90,7 @@ import {
 } from "#src/ui/annotation_properties.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { getDefaultAnnotationListBindings } from "#src/ui/default_input_event_bindings.js";
-import { LegacyTool, registerLegacyTool } from "#src/ui/tool.js";
+import { LegacyTool, makeToolButton, registerLegacyTool } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { arraysEqual, type ArraySpliceOp } from "#src/util/array.js";
 import { setClipboard } from "#src/util/clipboard.js";
@@ -269,6 +269,9 @@ interface AnnotationLayerViewAttachedState {
   idToIndex: Map<AnnotationId, number>;
   listOffset: number;
 }
+
+export const SELECT_PREVIOUS_ANNOTATION_TOOL_ID = "selectPreviousAnnotation";
+export const SELECT_NEXT_ANNOTATION_TOOL_ID = "selectNextAnnotation";
 
 export class AnnotationLayerView extends Tab {
   private previousSelectedState:
@@ -536,6 +539,24 @@ export class AnnotationLayerView extends Tab {
     mutableControls.appendChild(helpIcon);
 
     toolbox.appendChild(mutableControls);
+
+    const navRow = document.createElement("div");
+    navRow.className = "neuroglancer-annotation-nav-toolbar";
+    navRow.appendChild(
+      makeToolButton(this, layer.toolBinder, {
+        toolJson: SELECT_PREVIOUS_ANNOTATION_TOOL_ID,
+        label: "\u25c0 Prev",
+        title: "Select previous annotation (click to bind key)",
+      }),
+    );
+    navRow.appendChild(
+      makeToolButton(this, layer.toolBinder, {
+        toolJson: SELECT_NEXT_ANNOTATION_TOOL_ID,
+        label: "Next \u25b6",
+        title: "Select next annotation (click to bind key)",
+      }),
+    );
+    toolbox.appendChild(navRow);
     this.element.appendChild(toolbox);
 
     this.element.appendChild(this.headerRow);
@@ -2016,16 +2037,6 @@ export function UserLayerWithAnnotationsMixin<
             }
           }
           this.annotationDisplayState.hoverState.value = undefined;
-        }),
-      );
-      this.registerDisposer(
-        this.registerLayerEvent("select-previous", () => {
-          this.changeSelectedIndex(-1);
-        }),
-      );
-      this.registerDisposer(
-        this.registerLayerEvent("select-next", () => {
-          this.changeSelectedIndex(1);
         }),
       );
     }
