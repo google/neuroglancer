@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 import { readFileSync } from "node:fs";
-import { load } from "npyjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { readHeader, decompressCrackle } from "#src/sliceview/crackle/index.js";
 import { expect, test, vi, beforeAll } from "vitest";
+import { load } from "npyjs";
+import { readHeader, decompressCrackle } from "#src/sliceview/crackle/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
