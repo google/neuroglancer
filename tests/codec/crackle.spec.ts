@@ -150,7 +150,7 @@ test("crackle: random volume", async () => {
     readFileSync("testdata/codec/crackle/random.ckl"),
   );
 
-  let header = readHeader(compressed);
+  const header = readHeader(compressed);
   expect(header.dataWidth).toBe(1);
   expect(header.sx).toBe(32);
   expect(header.sy).toBe(32);
@@ -172,7 +172,7 @@ test("crackle: random volume", async () => {
 async function run_connectomics_volume(filename) {
   const compressed = new Uint8Array(readFileSync(filename));
 
-  let header = readHeader(compressed);
+  const header = readHeader(compressed);
   expect(header.dataWidth).toBe(4);
   expect(header.sx).toBe(32);
   expect(header.sy).toBe(32);
