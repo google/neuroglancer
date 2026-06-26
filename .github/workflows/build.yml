@@ -229,6 +229,9 @@ jobs:
           CIBW_ENVIRONMENT_MACOS: |
             OPENSSL_DIR=$(brew --prefix openssl)
             PKG_CONFIG_PATH=$(brew --prefix openssl)/lib/pkgconfig:$PKG_CONFIG_PATH
+            LDFLAGS="-L$(brew --prefix openssl)/lib"
+            CPPFLAGS="-I$(brew --prefix openssl)/include"
+            LD_LIBRARY_PATH="$(brew --prefix openssl)/lib:$LD_LIBRARY_PATH"
           CIBW_BUILD: ${{ matrix.cibw_build }}
       - name: Upload wheels as artifacts
         uses: actions/upload-artifact@v7
