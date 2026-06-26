@@ -141,6 +141,11 @@ vitest = [
 
 [tool.uv]
 required-version = ">=0.6.2"
+# cryptography>=49 dropped macOS x86_64 wheels (48.x shipped universal2),
+# forcing a source build that cross-compiles openssl on the arm64 CI runner.
+# Capping the build-time constraint keeps <49 in uv.lock (dev/CI only);
+# it does not affect published package metadata or downstream users.
+build-constraint-dependencies = ["cryptography<49; sys_platform == 'darwin' and platform_machine == 'x86_64'"]
 default-groups = ["dev", "ruff", "mypy", "test", "docs"]
 
 [tool.pytest.ini_options]
