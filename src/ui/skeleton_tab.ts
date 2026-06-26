@@ -164,16 +164,6 @@ export class SpatialSkeletonEditTab extends Tab {
     const { element } = this;
     element.classList.add("neuroglancer-skeleton-tab");
 
-    const toolbox = document.createElement("div");
-    toolbox.className =
-      "neuroglancer-segmentation-toolbox neuroglancer-skeleton-toolbar";
-    toolbox.appendChild(
-      makeToolButton(this, layer.toolBinder, {
-        toolJson: SPATIAL_SKELETON_EDIT_MODE_TOOL_ID,
-        label: "Edit",
-        title: "Toggle skeleton edit mode",
-      }),
-    );
     const toolbarActions = document.createElement("div");
     toolbarActions.className = "neuroglancer-skeleton-toolbar-actions";
 
@@ -213,8 +203,6 @@ export class SpatialSkeletonEditTab extends Tab {
         }
       })();
     });
-    toolbox.appendChild(toolbarActions);
-
     const navTools = document.createElement("div");
     navTools.className = "neuroglancer-skeleton-nav-tools";
 
@@ -275,9 +263,17 @@ export class SpatialSkeletonEditTab extends Tab {
       new VirtualList({ source: virtualListSource }),
     );
     nodesList.element.className = "neuroglancer-skeleton-tree";
+    nodeFilterTypeRow.appendChild(
+      makeToolButton(this, layer.toolBinder, {
+        toolJson: SPATIAL_SKELETON_EDIT_MODE_TOOL_ID,
+        label: "Edit",
+        title: "Toggle skeleton edit mode",
+      }),
+    );
     nodesSection.appendChild(filterInput);
     nodesSection.appendChild(nodeFilterTypeRow);
     nodesNavigationBar.appendChild(navTools);
+    nodesNavigationBar.appendChild(toolbarActions);
     nodesSection.appendChild(nodesNavigationBar);
     nodesSummaryBar.appendChild(nodesSummary);
     nodesSection.appendChild(nodesSummaryBar);
@@ -999,8 +995,6 @@ export class SpatialSkeletonEditTab extends Tab {
         goToClosestUnfinishedBranch();
       },
     );
-    element.insertBefore(toolbox, nodesSection);
-
     const gatedControls = [
       goRootButton,
       goBranchStartButton,
