@@ -41,9 +41,16 @@ export const SPATIAL_SKELETON_EDIT_SELECTED_BANNER_MESSAGE =
   "Move node or append to selected node";
 export const SPATIAL_SKELETON_MERGE_BANNER_MESSAGE = "Select 2 nodes to merge";
 export const SPATIAL_SKELETON_MERGE_SELECTED_BANNER_MESSAGE =
-  "Select 2nd node from a different skeleton to merge with";
+  "Select 2nd node from a different skeleton to merge with · release m to exit";
 export const SPATIAL_SKELETON_SPLIT_BANNER_MESSAGE = "Select 1 node to split";
 export const SPATIAL_SKELETON_MOVING_NODE_MESSAGE = "Moving node";
+
+export const SPATIAL_SKELETON_DEFAULT_BANNER_MESSAGE =
+  "Click node to select · drag to move · hold m to merge · s to split · hold n to create · ctrl+click to add";
+export const SPATIAL_SKELETON_DEFAULT_SELECTED_BANNER_MESSAGE =
+  "Node selected · drag to move · ctrl+click to add child · hold m to merge · s to split · hold n to create";
+export const SPATIAL_SKELETON_CREATE_BANNER_MESSAGE =
+  "Click to place a new skeleton · release n to exit";
 
 export function formatSpatialSkeletonToolPoint(
   point: SpatialSkeletonToolPointInfo,
@@ -100,8 +107,8 @@ export function getSpatialSkeletonEditBannerMessage(
   selectedPoint: SpatialSkeletonToolPointInfo | undefined,
 ) {
   return selectedPoint === undefined
-    ? SPATIAL_SKELETON_EDIT_BANNER_MESSAGE
-    : SPATIAL_SKELETON_EDIT_SELECTED_BANNER_MESSAGE;
+    ? SPATIAL_SKELETON_DEFAULT_BANNER_MESSAGE
+    : SPATIAL_SKELETON_DEFAULT_SELECTED_BANNER_MESSAGE;
 }
 
 export function getSpatialSkeletonMergeBannerMessage(

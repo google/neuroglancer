@@ -69,11 +69,7 @@ import {
 } from "#src/skeleton/spatial_skeleton_commands.js";
 import { StatusMessage } from "#src/status.js";
 import { observeWatchable, registerNested } from "#src/trackable_value.js";
-import {
-  SPATIAL_SKELETON_EDIT_MODE_TOOL_ID,
-  SPATIAL_SKELETON_MERGE_MODE_TOOL_ID,
-  SPATIAL_SKELETON_SPLIT_MODE_TOOL_ID,
-} from "#src/ui/skeleton_edit_tools.js";
+import { SPATIAL_SKELETON_EDIT_MODE_TOOL_ID } from "#src/ui/skeleton_edit_tools.js";
 import {
   buildSpatialSkeletonSegmentRenderState,
   type SpatialSkeletonSegmentRenderRow,
@@ -175,21 +171,7 @@ export class SpatialSkeletonEditTab extends Tab {
       makeToolButton(this, layer.toolBinder, {
         toolJson: SPATIAL_SKELETON_EDIT_MODE_TOOL_ID,
         label: "Edit",
-        title: "Toggle skeleton node edit mode",
-      }),
-    );
-    toolbox.appendChild(
-      makeToolButton(this, layer.toolBinder, {
-        toolJson: SPATIAL_SKELETON_MERGE_MODE_TOOL_ID,
-        label: "Merge",
-        title: "Toggle skeleton merge mode",
-      }),
-    );
-    toolbox.appendChild(
-      makeToolButton(this, layer.toolBinder, {
-        toolJson: SPATIAL_SKELETON_SPLIT_MODE_TOOL_ID,
-        label: "Split",
-        title: "Toggle skeleton split mode",
+        title: "Toggle skeleton edit mode",
       }),
     );
     const toolbarActions = document.createElement("div");

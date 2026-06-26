@@ -45,3 +45,36 @@
 .neuroglancer-skeleton-tool-status-point-field-value {
   color: inherit;
 }
+
+/* Per-mode cursor indicators — driven by data-skeleton-edit-mode on the panel element */
+
+/* Shift held: left-click will translate (perspective) or rotate (slice) via NG's
+   default shift+mousedown0 binding, not grab a skeleton node. */
+.neuroglancer-rendered-data-panel[data-skeleton-edit-mode="shift"] {
+  cursor: move;
+}
+
+.neuroglancer-rendered-data-panel[data-skeleton-edit-mode="add"] {
+  cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'><line x1='16' y1='1' x2='16' y2='13' stroke='white' stroke-width='3'/><line x1='16' y1='19' x2='16' y2='31' stroke='white' stroke-width='3'/><line x1='1' y1='16' x2='13' y2='16' stroke='white' stroke-width='3'/><line x1='19' y1='16' x2='31' y2='16' stroke='white' stroke-width='3'/><line x1='16' y1='1' x2='16' y2='13' stroke='%23333' stroke-width='1.5'/><line x1='16' y1='19' x2='16' y2='31' stroke='%23333' stroke-width='1.5'/><line x1='1' y1='16' x2='13' y2='16' stroke='%23333' stroke-width='1.5'/><line x1='19' y1='16' x2='31' y2='16' stroke='%23333' stroke-width='1.5'/><rect x='18' y='2' width='12' height='12' rx='2' fill='%233b82f6'/><text x='21' y='12' font-size='10' font-family='monospace' font-weight='bold' fill='white'>+</text></svg>") 16 16, crosshair;
+}
+
+.neuroglancer-rendered-data-panel[data-skeleton-edit-mode="merge"] {
+  cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'><line x1='16' y1='1' x2='16' y2='13' stroke='white' stroke-width='3'/><line x1='16' y1='19' x2='16' y2='31' stroke='white' stroke-width='3'/><line x1='1' y1='16' x2='13' y2='16' stroke='white' stroke-width='3'/><line x1='19' y1='16' x2='31' y2='16' stroke='white' stroke-width='3'/><line x1='16' y1='1' x2='16' y2='13' stroke='%23333' stroke-width='1.5'/><line x1='16' y1='19' x2='16' y2='31' stroke='%23333' stroke-width='1.5'/><line x1='1' y1='16' x2='13' y2='16' stroke='%23333' stroke-width='1.5'/><line x1='19' y1='16' x2='31' y2='16' stroke='%23333' stroke-width='1.5'/><rect x='18' y='2' width='12' height='12' rx='2' fill='%23f97316'/><text x='20' y='12' font-size='9' font-family='monospace' font-weight='bold' fill='white'>M</text></svg>") 16 16, crosshair;
+}
+
+.neuroglancer-rendered-data-panel[data-skeleton-edit-mode="create"] {
+  cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'><line x1='16' y1='1' x2='16' y2='13' stroke='white' stroke-width='3'/><line x1='16' y1='19' x2='16' y2='31' stroke='white' stroke-width='3'/><line x1='1' y1='16' x2='13' y2='16' stroke='white' stroke-width='3'/><line x1='19' y1='16' x2='31' y2='16' stroke='white' stroke-width='3'/><line x1='16' y1='1' x2='16' y2='13' stroke='%23333' stroke-width='1.5'/><line x1='16' y1='19' x2='16' y2='31' stroke='%23333' stroke-width='1.5'/><line x1='1' y1='16' x2='13' y2='16' stroke='%23333' stroke-width='1.5'/><line x1='19' y1='16' x2='31' y2='16' stroke='%23333' stroke-width='1.5'/><rect x='18' y='2' width='12' height='12' rx='2' fill='%2322c55e'/><text x='19' y='12' font-size='9' font-family='monospace' font-weight='bold' fill='white'>N</text></svg>") 16 16, crosshair;
+}
+
+/* Transient press-state cursors — driven by data-skeleton-press-mode on the panel element */
+.neuroglancer-rendered-data-panel[data-skeleton-press-mode="rotate"] {
+  cursor: move;
+}
+
+.neuroglancer-rendered-data-panel[data-skeleton-press-mode="pan"] {
+  cursor: grab;
+}
+
+.neuroglancer-rendered-data-panel[data-skeleton-press-mode="move"] {
+  cursor: grabbing;
+}
