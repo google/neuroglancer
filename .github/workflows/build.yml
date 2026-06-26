@@ -203,6 +203,11 @@ jobs:
         id: uv-cache
         run: |
           echo "dir=$(uv cache dir)" >> "$GITHUB_OUTPUT"
+      - name: Install Rust targets for macOS
+        if: ${{ runner.os == 'macOS' }}
+        run: |
+          rustup target add x86_64-apple-darwin
+          rustup target add aarch64-apple-darwin
       - run: npm ci
       - run: |
           build_info="{'tag':'$(git describe --always --tags)', 'url':'https://github.com/google/neuroglancer/commit/$(git rev-parse HEAD)', 'timestamp':'$(date)'}"
@@ -219,6 +224,18 @@ jobs:
           # On Linux, share uv cache with manylinux docker containers
           CIBW_ENVIRONMENT_LINUX: UV_CACHE_DIR=/host${{ steps.uv-cache.outputs.dir }}
           CIBW_BEFORE_ALL_LINUX: /project/python/build_tools/cibuildwheel_linux_cache_setup.sh /host${{ steps.uv-cache.outputs.dir }}
+          # On MacOS, cryptography requires openssl headers
+          CIBW_BEFORE_ALL_MACOS: |
+            brew install openssl
+            brew link openssl --force
+            echo "$(brew --prefix openssl)/bin" >> $GITHUB_PATH
+          CIBW_ENVIRONMENT_MACOS: |
+            OPENSSL_DIR=$(brew --prefix openssl)
+            PKG_CONFIG_PATH=$(brew --prefix openssl)/lib/pkgconfig:$PKG_CONFIG_PATH
+            LDFLAGS="-L$(brew --prefix openssl)/lib"
+            CPPFLAGS="-I$(brew --prefix openssl)/include"
+            LD_LIBRARY_PATH="$(brew --prefix openssl)/lib:$LD_LIBRARY_PATH"
+            OPENSSL_STATIC=1
           CIBW_BUILD: ${{ matrix.cibw_build }}
       - name: Upload wheels as artifacts
         uses: actions/upload-artifact@v7
@@ -395,5 +412,6 @@ jobs:
       - run: ./src/sliceview/compresso/build.sh
       - run: ./src/sliceview/png/build.sh
       - run: ./src/sliceview/jxl/build.sh
+      - run: ./src/sliceview/crackle/build.sh
       # Check that there are no differences.
       - run: git diff --exit-code
