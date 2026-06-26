@@ -69,7 +69,7 @@ function executeCommand(
   return layer.spatialSkeletonState.commandHistory.execute(command);
 }
 
-function executeCommandWithPendingMessage<T>(
+async function executeCommandWithPendingMessage<T>(
   promise: Promise<T>,
   message: string,
 ) {
