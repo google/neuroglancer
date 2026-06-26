@@ -184,6 +184,9 @@ def cibuildwheel(session: nox.Session):
             "CIBW_BUILD_FRONTEND": "build[uv]",
             "CIBW_ARCHS_MACOS": "x86_64 arm64",
             "CIBW_SKIP": "*_i686 *-win32 *-musllinux* cp314*",
+            # Skip testing x86_64 macOS wheels: the arm64 runner can't cross-compile
+            # cryptography (a Rust/openssl dependency) for x86_64 during the test install.
+            "CIBW_TEST_SKIP": "*-macosx_x86_64",
             "CIBW_TEST_GROUPS": "test",
             "CIBW_TEST_COMMAND": "python -m pytest {project}/python/tests -vv -s --skip-browser-tests",
             "CIBW_MANYLINUX_X86_64_IMAGE": "manylinux_2_28",
