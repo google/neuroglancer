@@ -2133,7 +2133,7 @@ export function setControlsInShader(
   shader: ShaderProgram,
   shaderControlState: ShaderControlState,
   parseResult: ShaderControlsParseResult,
-) : boolean {
+): boolean {
   // Each renderer calls this once per draw, so it's the natural place to
   // record which controls survived link-time DCE for the current shader.
   // The call is idempotent for the same program — no GL roundtrip beyond
