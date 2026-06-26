@@ -915,9 +915,11 @@ class AnnotationUIProperty extends RefCounted {
       input = this.createNumberInput(inputValue as number, config, readonly);
     } else if (config.type === "text") {
       input = createTextAreaElement(inputValue as string, readonly);
+      input.addEventListener("focus", () => input!.select());
     } else {
       input = document.createElement("input");
       input.type = config.type;
+      input.addEventListener("focus", () => input!.select());
     }
 
     this.setCommonInputAttributes(inputValue, input!, config, readonly);
