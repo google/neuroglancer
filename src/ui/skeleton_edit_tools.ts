@@ -1137,7 +1137,8 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
   }
 
   private onSplitAction() {
-    // splitKeyHeld prevents re-entry on key-repeat while s is held.
+    // splitKeyHeld makes split a one-shot per keydown — browser key-repeat
+    // would otherwise fire it continuously while s is held.
     if (this.splitKeyHeld || this.dragInProgress || this.pending || this.currentMode !== SkeletonEditMode.Default) return;
     this.splitKeyHeld = true;
     const disabledReason = this.layer.getSpatialSkeletonActionsDisabledReason(
@@ -1172,9 +1173,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     event.stopPropagation();
     event.detail.preventDefault();
 
-    // Exit any sub-mode so state stays consistent.
-    if (this.currentMode === SkeletonEditMode.Merge) this.exitMerge();
-    if (this.currentMode === SkeletonEditMode.Create) this.exitCreate();
+    if (this.currentMode !== SkeletonEditMode.Default) return;
 
     const disabledReason = this.layer.getSpatialSkeletonActionsDisabledReason(
       SpatialSkeletonActions.addNodes,
