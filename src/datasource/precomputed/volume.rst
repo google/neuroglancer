@@ -218,7 +218,7 @@ Each chunk is encoded in `Compresso format
 crackle
 ~~~~~~~~
 
-Each chunk is encoded in Crackle segmentation format. The decoded voxel
+Each chunk is encoded in `Crackle segmentation format <https://github.com/seung-lab/crackle>`_. The decoded voxel
 dimensions and data width must match the chunk size and
 :json:schema:`~PrecomputedVolume.data_type` specified in the ``info`` JSON
 file.
