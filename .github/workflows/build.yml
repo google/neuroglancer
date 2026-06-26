@@ -203,6 +203,11 @@ jobs:
         id: uv-cache
         run: |
           echo "dir=$(uv cache dir)" >> "$GITHUB_OUTPUT"
+      - name: Install Rust targets for macOS
+        if: ${{ runner.os == 'macOS' }}
+        run: |
+          rustup target add x86_64-apple-darwin
+          rustup target add aarch64-apple-darwin
       - run: npm ci
       - run: |
           build_info="{'tag':'$(git describe --always --tags)', 'url':'https://github.com/google/neuroglancer/commit/$(git rev-parse HEAD)', 'timestamp':'$(date)'}"
