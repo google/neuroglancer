@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import type { SpatialSkeletonAction } from "#src/skeleton/actions.js";
 import type {
   EditableSpatiallyIndexedSkeletonSource,
   SpatialSkeletonConfidenceConfiguration,
@@ -29,6 +28,7 @@ import {
   SPATIAL_SKELETON_EDIT_COMMAND_METADATA,
 } from "#src/skeleton/command_factories.js";
 import { SpatialSkeletonCommandHistory } from "#src/skeleton/command_history.js";
+import type { SpatialSkeletonAction } from "#src/skeleton/command_protocol.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/frontend.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { RefCounted } from "#src/util/disposable.js";

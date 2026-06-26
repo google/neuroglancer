@@ -36,11 +36,18 @@ import {
   getVisibleSegments,
 } from "#src/segmentation_display_state/base.js";
 import { getBaseObjectColor } from "#src/segmentation_display_state/frontend.js";
+import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
 import {
   SpatialSkeletonActions,
   type SpatialSkeletonAction,
-} from "#src/skeleton/actions.js";
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+} from "#src/skeleton/command_protocol.js";
+import {
+  executeSpatialSkeletonDeleteNode,
+  executeSpatialSkeletonNodeTrueEndUpdate,
+  redoSpatialSkeletonCommand,
+  showSpatialSkeletonActionError,
+  undoSpatialSkeletonCommand,
+} from "#src/skeleton/commands.js";
 import {
   buildSpatiallyIndexedSkeletonNavigationGraph,
   getBranchEnd as getBranchEndFromGraph,
@@ -60,13 +67,6 @@ import {
   SpatialSkeletonDisplayNodeType,
   SpatialSkeletonNodeFilterType,
 } from "#src/skeleton/node_types.js";
-import {
-  executeSpatialSkeletonDeleteNode,
-  executeSpatialSkeletonNodeTrueEndUpdate,
-  redoSpatialSkeletonCommand,
-  showSpatialSkeletonActionError,
-  undoSpatialSkeletonCommand,
-} from "#src/skeleton/spatial_skeleton_commands.js";
 import { StatusMessage } from "#src/status.js";
 import { observeWatchable, registerNested } from "#src/trackable_value.js";
 import { SPATIAL_SKELETON_EDIT_MODE_TOOL_ID } from "#src/ui/skeleton_edit_tools.js";

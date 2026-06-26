@@ -72,3 +72,29 @@ export function getSpatialSkeletonActionSupportLabel(
       return "skeleton splitting";
   }
 }
+
+export interface SpatialSkeletonCommandContext {
+  readonly mappings: {
+    resolveNodeId(nodeId: number | undefined): number | undefined;
+    resolveSegmentId(segmentId: number | undefined): number | undefined;
+    getStableNodeId(nodeId: number | undefined): number | undefined;
+    getStableSegmentId(segmentId: number | undefined): number | undefined;
+    getStableOrCurrentNodeId(nodeId: number | undefined): number | undefined;
+    getStableOrCurrentSegmentId(segmentId: number | undefined): number | undefined;
+    remapNodeId(
+      originalNodeId: number | undefined,
+      currentNodeId: number,
+    ): boolean;
+    remapSegmentId(
+      originalSegmentId: number | undefined,
+      currentSegmentId: number,
+    ): boolean;
+  };
+}
+
+export interface SpatialSkeletonCommand {
+  readonly label: string;
+  execute(context: SpatialSkeletonCommandContext): Promise<void>;
+  undo(context: SpatialSkeletonCommandContext): Promise<void>;
+  redo?(context: SpatialSkeletonCommandContext): Promise<void>;
+}

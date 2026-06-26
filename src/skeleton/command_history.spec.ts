@@ -16,10 +16,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import {
-  SpatialSkeletonCommandHistory,
-  type SpatialSkeletonCommand,
-} from "#src/skeleton/command_history.js";
+import { SpatialSkeletonCommandHistory } from "#src/skeleton/command_history.js";
+import { type SpatialSkeletonCommand } from "#src/skeleton/command_protocol.js";
 
 function deferred() {
   let resolve: (() => void) | undefined;

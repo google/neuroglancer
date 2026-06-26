@@ -18,16 +18,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { makeCatmaidNodeSourceState } from "#src/datasource/catmaid/api.js";
 import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
-import {
-  SpatialSkeletonActions,
-  type SpatialSkeletonAction,
-} from "#src/skeleton/actions.js";
 import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
 import { SpatialSkeletonCommandHistory } from "#src/skeleton/command_history.js";
 import {
+  SpatialSkeletonActions,
+  type SpatialSkeletonAction,
+} from "#src/skeleton/command_protocol.js";
+import {
   executeSpatialSkeletonAddNode,
   executeSpatialSkeletonMerge,
-} from "#src/skeleton/spatial_skeleton_commands.js";
+} from "#src/skeleton/commands.js";
 import { StatusMessage } from "#src/status.js";
 
 if (!("WebGL2RenderingContext" in globalThis)) {

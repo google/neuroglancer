@@ -25,11 +25,19 @@ import { PerspectivePanel } from "#src/perspective_view/panel.js";
 import { getChunkPositionFromCombinedGlobalLocalPositions } from "#src/render_coordinate_transform.js";
 import { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import { getVisibleSegments } from "#src/segmentation_display_state/base.js";
-import { SpatialSkeletonActions } from "#src/skeleton/actions.js";
 import type {
   SpatialSkeletonSourceState,
   SpatialSkeletonVector,
 } from "#src/skeleton/api.js";
+import { SpatialSkeletonActions } from "#src/skeleton/command_protocol.js";
+import {
+  executeSpatialSkeletonAddNode,
+  executeSpatialSkeletonDeleteNode,
+  executeSpatialSkeletonMerge,
+  executeSpatialSkeletonMoveNode,
+  executeSpatialSkeletonSplit,
+  showSpatialSkeletonActionError,
+} from "#src/skeleton/commands.js";
 import {
   type SpatiallyIndexedSkeletonLayer,
   setSpatialSkeletonModesToLinesAndPoints,
@@ -38,14 +46,6 @@ import {
   PerspectiveViewSpatiallyIndexedSkeletonLayer,
   SliceViewPanelSpatiallyIndexedSkeletonLayer,
 } from "#src/skeleton/frontend.js";
-import {
-  executeSpatialSkeletonAddNode,
-  executeSpatialSkeletonDeleteNode,
-  executeSpatialSkeletonMerge,
-  executeSpatialSkeletonMoveNode,
-  executeSpatialSkeletonSplit,
-  showSpatialSkeletonActionError,
-} from "#src/skeleton/spatial_skeleton_commands.js";
 import { StatusMessage } from "#src/status.js";
 import type { SpatialSkeletonToolPointInfo } from "#src/ui/skeleton_edit_tool_messages.js";
 import {

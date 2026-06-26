@@ -52,20 +52,18 @@ import {
   addSegmentToVisibleSets,
   removeSegmentFromVisibleSets,
 } from "#src/segmentation_display_state/base.js";
-import {
-  SpatialSkeletonActions,
-  type SpatialSkeletonAction,
-} from "#src/skeleton/actions.js";
 import type {
   SpatiallyIndexedSkeletonNode,
   SpatialSkeletonSourceState,
   SpatialSkeletonVector,
 } from "#src/skeleton/api.js";
 import type { SpatialSkeletonEditCommandFactory } from "#src/skeleton/command_factories.js";
-import type {
-  SpatialSkeletonCommand,
-  SpatialSkeletonCommandContext,
-} from "#src/skeleton/command_history.js";
+import {
+  SpatialSkeletonActions,
+  type SpatialSkeletonAction,
+  type SpatialSkeletonCommand,
+  type SpatialSkeletonCommandContext,
+} from "#src/skeleton/command_protocol.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/frontend.js";
 import {
   findSpatiallyIndexedSkeletonNode,

@@ -16,7 +16,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import { SpatialSkeletonActions } from "#src/skeleton/actions.js";
+import { SpatialSkeletonActions } from "#src/skeleton/command_protocol.js";
 import {
   buildSpatiallyIndexedSkeletonNavigationGraph,
   getFlatListNodeIds,
