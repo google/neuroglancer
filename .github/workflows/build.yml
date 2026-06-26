@@ -225,7 +225,9 @@ jobs:
           CIBW_ENVIRONMENT_LINUX: UV_CACHE_DIR=/host${{ steps.uv-cache.outputs.dir }}
           CIBW_BEFORE_ALL_LINUX: /project/python/build_tools/cibuildwheel_linux_cache_setup.sh /host${{ steps.uv-cache.outputs.dir }}
           # On MacOS, cryptography requires openssl headers
-          CIBW_BEFORE_ALL_MACOS: brew install openssl
+          CIBW_BEFORE_ALL_MACOS: |
+            brew install openssl
+            brew link openssl --force
           CIBW_ENVIRONMENT_MACOS: |
             OPENSSL_DIR=$(brew --prefix openssl)
             PKG_CONFIG_PATH=$(brew --prefix openssl)/lib/pkgconfig:$PKG_CONFIG_PATH
