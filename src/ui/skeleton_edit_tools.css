@@ -66,6 +66,10 @@
   cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'><line x1='16' y1='1' x2='16' y2='13' stroke='white' stroke-width='3'/><line x1='16' y1='19' x2='16' y2='31' stroke='white' stroke-width='3'/><line x1='1' y1='16' x2='13' y2='16' stroke='white' stroke-width='3'/><line x1='19' y1='16' x2='31' y2='16' stroke='white' stroke-width='3'/><line x1='16' y1='1' x2='16' y2='13' stroke='%23333' stroke-width='1.5'/><line x1='16' y1='19' x2='16' y2='31' stroke='%23333' stroke-width='1.5'/><line x1='1' y1='16' x2='13' y2='16' stroke='%23333' stroke-width='1.5'/><line x1='19' y1='16' x2='31' y2='16' stroke='%23333' stroke-width='1.5'/><rect x='18' y='2' width='12' height='12' rx='2' fill='%2322c55e'/><text x='19' y='12' font-size='9' font-family='monospace' font-weight='bold' fill='white'>N</text></svg>") 16 16, crosshair;
 }
 
+.neuroglancer-rendered-data-panel[data-skeleton-edit-mode="split"] {
+  cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'><line x1='16' y1='1' x2='16' y2='13' stroke='white' stroke-width='3'/><line x1='16' y1='19' x2='16' y2='31' stroke='white' stroke-width='3'/><line x1='1' y1='16' x2='13' y2='16' stroke='white' stroke-width='3'/><line x1='19' y1='16' x2='31' y2='16' stroke='white' stroke-width='3'/><line x1='16' y1='1' x2='16' y2='13' stroke='%23333' stroke-width='1.5'/><line x1='16' y1='19' x2='16' y2='31' stroke='%23333' stroke-width='1.5'/><line x1='1' y1='16' x2='13' y2='16' stroke='%23333' stroke-width='1.5'/><line x1='19' y1='16' x2='31' y2='16' stroke='%23333' stroke-width='1.5'/><rect x='18' y='2' width='12' height='12' rx='2' fill='%23ef4444'/><text x='20' y='12' font-size='9' font-family='monospace' font-weight='bold' fill='white'>S</text></svg>") 16 16, crosshair;
+}
+
 /* Transient press-state cursors — driven by data-skeleton-press-mode on the panel element */
 .neuroglancer-rendered-data-panel[data-skeleton-press-mode="rotate"] {
   cursor: move;
