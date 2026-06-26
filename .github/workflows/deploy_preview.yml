@@ -45,7 +45,7 @@ jobs:
           echo "pr-id=${PR_ID}" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-      - uses: FirebaseExtended/action-hosting-deploy@e2eda2e106cfa35cdbcf4ac9ddaf6c4756df2c8c # v0.10.0
+      - uses: FirebaseExtended/action-hosting-deploy@500ac625ca2dd40cbd15f7659af953801858032a # v0.11.0
         id: deploy
         with:
           repoToken: "${{ secrets.GITHUB_TOKEN }}"
