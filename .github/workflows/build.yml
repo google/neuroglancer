@@ -228,6 +228,7 @@ jobs:
           CIBW_BEFORE_ALL_MACOS: |
             brew install openssl
             brew link openssl --force
+            echo "$(brew --prefix openssl)/bin" >> $GITHUB_PATH
           CIBW_ENVIRONMENT_MACOS: |
             OPENSSL_DIR=$(brew --prefix openssl)
             PKG_CONFIG_PATH=$(brew --prefix openssl)/lib/pkgconfig:$PKG_CONFIG_PATH
