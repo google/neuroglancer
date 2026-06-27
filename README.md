@@ -103,6 +103,8 @@ The "frontend" UI thread handles user actions and rendering, while the "backend"
 - [Compressed segmentation format](src/sliceview/compressed_segmentation/README.md)
 - [Data chunk management](src/chunk_manager/)
 - [On-GPU hashing](src/gpu_hash/)
+- [Volume rendering](src/volume_rendering/)
+- [Screen-space ambient occlusion (SSAO) rendering](src/ssao/)
 
 # Building
 
