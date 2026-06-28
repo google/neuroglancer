@@ -25,6 +25,7 @@ import type {
   NormalizedEventIdentifier,
 } from "#src/util/event_action_map.js";
 import { friendlyEventIdentifier } from "#src/util/event_action_map.js";
+import { isMacPlatform } from "#src/util/platform.js";
 import type { Viewer } from "#src/viewer.js";
 
 const SUPPLEMENTAL_COMMANDS: readonly {
@@ -49,9 +50,13 @@ export interface CommandPaletteEntry {
 }
 
 function formatKeyStroke(stroke: string): string {
+  const mac = isMacPlatform();
   return stroke
     .split("+")
     .map((part) => {
+      if (mac && part === "control") return "⌘";
+      if (mac && part === "alt") return "⌥";
+      if (mac && part === "shift") return "⇧";
       if (part.startsWith("key")) return part.substring(3);
       if (part.startsWith("digit")) return part.substring(5);
       if (part.startsWith("arrow")) return part.substring(5);

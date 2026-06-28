@@ -80,7 +80,9 @@ export interface SpatialSkeletonCommandContext {
     getStableNodeId(nodeId: number | undefined): number | undefined;
     getStableSegmentId(segmentId: number | undefined): number | undefined;
     getStableOrCurrentNodeId(nodeId: number | undefined): number | undefined;
-    getStableOrCurrentSegmentId(segmentId: number | undefined): number | undefined;
+    getStableOrCurrentSegmentId(
+      segmentId: number | undefined,
+    ): number | undefined;
     remapNodeId(
       originalNodeId: number | undefined,
       currentNodeId: number,

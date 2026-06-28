@@ -317,6 +317,10 @@ export class GlobalToolBinder extends RefCounted {
     super();
   }
 
+  bindInputEventMap(inputEventMap: EventActionMap, context: RefCounted) {
+    this.inputEventMapBinder(inputEventMap, context);
+  }
+
   get(key: string): Borrowed<Tool> | undefined {
     return this.bindings.get(key);
   }

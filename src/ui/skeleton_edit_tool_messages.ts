@@ -46,11 +46,13 @@ export const SPATIAL_SKELETON_SPLIT_BANNER_MESSAGE = "Select 1 node to split";
 export const SPATIAL_SKELETON_MOVING_NODE_MESSAGE = "Moving node";
 
 export const SPATIAL_SKELETON_DEFAULT_BANNER_MESSAGE =
-  "Click node to select · drag to move · hold m to merge · s to split · hold n to create · ctrl+click to add";
+  "Click node to select · drag to move · hold m to merge · hold s to split · hold n for new skeleton · shift+click to create";
 export const SPATIAL_SKELETON_DEFAULT_SELECTED_BANNER_MESSAGE =
-  "Node selected · drag to move · ctrl+click to add child · hold m to merge · s to split · hold n to create";
+  "Node selected · drag to move · shift+click to create · hold m to merge · hold s to split · hold n for new skeleton";
 export const SPATIAL_SKELETON_CREATE_BANNER_MESSAGE =
   "Click to place a new skeleton · release n to exit";
+export const SPATIAL_SKELETON_HIDDEN_SELECTED_BANNER_MESSAGE =
+  "Node selected from hidden skeleton · double-click to show it before moving or creating";
 
 export function formatSpatialSkeletonToolPoint(
   point: SpatialSkeletonToolPointInfo,

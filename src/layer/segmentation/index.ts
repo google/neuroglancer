@@ -2295,12 +2295,14 @@ export class SegmentationUserLayer extends Base {
           ? "Load the active skeleton in the Skeleton tab before rerooting from Selection."
           : fullNodeInfo.parentNodeId === undefined
             ? "Selected node is already root."
-            : this.getSpatialSkeletonActionsDisabledReason(
-                SpatialSkeletonActions.reroot,
-                {
-                  requireVisibleChunks: false,
-                },
-              );
+            : (fullNodeInfo.isTrueEnd ?? false)
+              ? "True end nodes cannot be set as root. Clear the true end state first."
+              : this.getSpatialSkeletonActionsDisabledReason(
+                  SpatialSkeletonActions.reroot,
+                  {
+                    requireVisibleChunks: false,
+                  },
+                );
     const rerootButton = document.createElement("button");
     rerootButton.type = "button";
     rerootButton.className = "neuroglancer-selection-details-skeleton-action";
@@ -2319,7 +2321,8 @@ export class SegmentationUserLayer extends Base {
         rerootButton.disabled ||
         rerootPending ||
         completeNodeInfo === undefined ||
-        completeNodeInfo.parentNodeId === undefined
+        completeNodeInfo.parentNodeId === undefined ||
+        (completeNodeInfo.isTrueEnd ?? false)
       ) {
         return;
       }
