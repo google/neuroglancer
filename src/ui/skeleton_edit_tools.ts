@@ -696,6 +696,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
 
   private enterSplit() {
     this.currentMode = SkeletonEditMode.Split;
+    this.layer.spatialSkeletonSplitMode.value = true;
     this.updateModeAttribute();
     this.renderStatus();
   }
@@ -703,6 +704,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
   private exitSplit() {
     if (this.currentMode !== SkeletonEditMode.Split) return;
     this.currentMode = SkeletonEditMode.Default;
+    this.layer.spatialSkeletonSplitMode.value = false;
     this.updateModeAttribute();
     this.clearStatus();
   }
@@ -1313,6 +1315,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       this.statusBody = undefined;
       this.setModeAttribute(undefined);
       layer.spatialSkeletonMergeMode.value = false;
+      layer.spatialSkeletonSplitMode.value = false;
       layer.spatialSkeletonState.clearPendingNodePositions();
     });
 
