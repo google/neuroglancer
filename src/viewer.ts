@@ -72,6 +72,17 @@ import {
 import { overlaysOpen } from "#src/overlay.js";
 import { ScreenshotHandler } from "#src/python_integration/screenshots.js";
 import { allRenderLayerRoles, RenderLayerRole } from "#src/renderlayer.js";
+import {
+  SKELETON_CYCLE_BRANCHES,
+  SKELETON_GO_BRANCH_END,
+  SKELETON_GO_BRANCH_START,
+  SKELETON_GO_CHILD,
+  SKELETON_GO_PARENT,
+  SKELETON_GO_ROOT,
+  SKELETON_GO_UNFINISHED,
+  SKELETON_REDO,
+  SKELETON_UNDO,
+} from "#src/skeleton/actions.js";
 import { StatusMessage } from "#src/status.js";
 import {
   ElementVisibilityFromTrackableBoolean,
@@ -1068,6 +1079,22 @@ export class Viewer extends RefCounted implements ViewerState {
    */
   private registerActionListeners() {
     for (const action of ["recolor", "clear-segments"]) {
+      this.bindAction(action, () => {
+        this.layerManager.invokeAction(action);
+      });
+    }
+
+    for (const action of [
+      SKELETON_GO_ROOT,
+      SKELETON_GO_PARENT,
+      SKELETON_GO_CHILD,
+      SKELETON_GO_BRANCH_START,
+      SKELETON_GO_BRANCH_END,
+      SKELETON_CYCLE_BRANCHES,
+      SKELETON_GO_UNFINISHED,
+      SKELETON_UNDO,
+      SKELETON_REDO,
+    ]) {
       this.bindAction(action, () => {
         this.layerManager.invokeAction(action);
       });
