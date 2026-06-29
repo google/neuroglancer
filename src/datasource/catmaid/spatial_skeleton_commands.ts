@@ -553,6 +553,7 @@ interface ResolvedSpatialSkeletonEditNodeContext {
 }
 
 type CatmaidSkeletonRootNodeSource = Pick<CatmaidClient, "getSkeletonRootNode">;
+type CatmaidSkeletonSourceStateRefresh = Pick<CatmaidClient, "getSkeleton">;
 
 function collectUniqueNodePositions(
   ...nodeSets: readonly (readonly (
@@ -637,6 +638,42 @@ function getCatmaidSkeletonRootNodeSource(
   return typeof skeletonSource?.getSkeletonRootNode === "function"
     ? (skeletonSource as CatmaidSkeletonRootNodeSource)
     : undefined;
+}
+
+async function getFreshRerootSourceStateUpdates(
+  skeletonSource: CatmaidSkeletonSourceStateRefresh,
+  segmentId: number,
+  nodeIds: readonly number[],
+): Promise<readonly CatmaidSpatialSkeletonNodeSourceStateUpdate[]> {
+  const refreshedNodes = await skeletonSource.getSkeleton(segmentId);
+  const refreshedNodeById = new Map(
+    refreshedNodes.map((node) => [node.nodeId, node]),
+  );
+  const seen = new Set<number>();
+  const updates: CatmaidSpatialSkeletonNodeSourceStateUpdate[] = [];
+  for (const nodeId of nodeIds) {
+    if (seen.has(nodeId)) continue;
+    seen.add(nodeId);
+    const sourceState = refreshedNodeById.get(nodeId)?.sourceState;
+    if (sourceState === undefined) {
+      throw new Error(
+        `CATMAID reroot refresh did not return revision state for node ${nodeId}.`,
+      );
+    }
+    updates.push({ nodeId, sourceState });
+  }
+  return updates;
+}
+
+class CatmaidRerootSourceStateRefreshError extends Error {
+  constructor(readonly cause: unknown) {
+    super(
+      cause instanceof Error
+        ? cause.message
+        : "CATMAID reroot source-state refresh failed.",
+    );
+    this.name = "CatmaidRerootSourceStateRefreshError";
+  }
 }
 
 function getResolvedNodeContextForEdit(
@@ -1737,10 +1774,27 @@ class RerootCommand implements SpatialSkeletonCommand {
     if (resolvedNode.node.parentNodeId === undefined) {
       return;
     }
-    const result = await this.editOperations.commitReroot({
-      node: resolvedNode.node,
-      segmentNodes: resolvedNode.segmentNodes,
-    });
+    let result: CatmaidSpatialSkeletonRerootResult;
+    try {
+      result = await this.editOperations.commitReroot({
+        node: resolvedNode.node,
+        segmentNodes: resolvedNode.segmentNodes,
+      });
+    } catch (error) {
+      if (!(error instanceof CatmaidRerootSourceStateRefreshError)) {
+        throw error;
+      }
+      resolvedNode.skeletonLayer.invalidateSourceCellsForPositions(
+        collectUniqueNodePositions(resolvedNode.segmentNodes),
+      );
+      this.layer.spatialSkeletonState.invalidateCachedSegments([
+        resolvedNode.node.segmentId,
+      ]);
+      this.layer.markSpatialSkeletonNodeDataChanged({
+        invalidateFullSkeletonCache: false,
+      });
+      throw error;
+    }
     this.layer.spatialSkeletonState.rerootCachedSegment(
       resolvedNode.node.nodeId,
     );
@@ -2465,10 +2519,34 @@ export class CatmaidSpatialSkeletonEditCommands {
   private commitReroot(
     request: CatmaidSpatialSkeletonRerootRequest,
   ): Promise<CatmaidSpatialSkeletonRerootResult> {
-    return this.client.rerootSkeleton(
+    return this.commitRerootAndRefreshSourceStates(request);
+  }
+
+  private async commitRerootAndRefreshSourceStates(
+    request: CatmaidSpatialSkeletonRerootRequest,
+  ): Promise<CatmaidSpatialSkeletonRerootResult> {
+    const affectedNodeIds = getSpatiallyIndexedSkeletonPathToRoot(
+      request.segmentNodes,
+      request.node,
+    ).map((node) => node.nodeId);
+    const result = await this.client.rerootSkeleton(
       request.node.nodeId,
       buildCatmaidRerootEditContext(request.node, request.segmentNodes),
     );
+    let nodeSourceStateUpdates: readonly CatmaidSpatialSkeletonNodeSourceStateUpdate[];
+    try {
+      nodeSourceStateUpdates = await getFreshRerootSourceStateUpdates(
+        this.client,
+        request.node.segmentId,
+        affectedNodeIds,
+      );
+    } catch (error) {
+      throw new CatmaidRerootSourceStateRefreshError(error);
+    }
+    return {
+      ...result,
+      nodeSourceStateUpdates,
+    };
   }
 
   private commitDescription(
