@@ -1183,30 +1183,6 @@ function isCatmaidServerVersionSupported(version: string | undefined) {
   );
 }
 
-function makeCatmaidNodeRevisionUpdates(
-  nodes: readonly CatmaidEditParentContext[] | undefined,
-  revisionToken: string,
-): readonly CatmaidSkeletonNodeSourceStateUpdate[] {
-  if (nodes === undefined) {
-    return [];
-  }
-  const sourceState = { revisionToken };
-  const seen = new Set<number>();
-  const revisionUpdates: CatmaidSkeletonNodeSourceStateUpdate[] = [];
-  for (const node of nodes) {
-    const nodeId = Number(node.nodeId);
-    if (!Number.isFinite(nodeId)) continue;
-    const normalizedNodeId = Math.round(nodeId);
-    if (seen.has(normalizedNodeId)) continue;
-    seen.add(normalizedNodeId);
-    revisionUpdates.push({
-      nodeId: normalizedNodeId,
-      sourceState,
-    });
-  }
-  return revisionUpdates;
-}
-
 function fetchWithCatmaidCredentials(
   credentialsProvider: CredentialsProvider<CatmaidToken>,
   input: string,
@@ -1691,18 +1667,12 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
       method: "POST",
       body,
     });
-    const revisionToken = normalizeCatmaidRevisionToken(response?.edition_time);
-    if (revisionToken === undefined) {
+    if (Number(response?.newroot) !== nodeId) {
       throw new Error(
-        "CATMAID skeleton/reroot did not return the new root edition_time.",
+        "CATMAID skeleton/reroot did not return the requested new root.",
       );
     }
-    return {
-      nodeSourceStateUpdates: makeCatmaidNodeRevisionUpdates(
-        editContext?.nodes,
-        revisionToken,
-      ),
-    };
+    return {};
   }
 
   async deleteNode(
