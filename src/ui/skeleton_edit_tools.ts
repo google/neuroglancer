@@ -1416,13 +1416,27 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
         // Ctrl+middle: translate in 3D (EventActionMap control+mousedown1 → translate-via-mouse-drag),
         // translate in 2D (intercepted here, same as plain middle).
         if (event.button === 1) {
-          if (!(panel instanceof PerspectivePanel)) {
+          if (panel instanceof PerspectivePanel) {
+            panel.element.dataset.skeletonPressMode = "rotate";
+            const onMouseUp = () => {
+              delete panel.element.dataset.skeletonPressMode;
+              window.removeEventListener("mouseup", onMouseUp);
+            };
+            window.addEventListener("mouseup", onMouseUp);
+          } else {
             event.stopPropagation();
             event.preventDefault();
-            startRelativeMouseDrag(event, (_dragEvent, deltaX, deltaY) => {
-              panel.context.flagContinuousCameraMotion();
-              panel.translateByViewportPixels(deltaX, deltaY);
-            });
+            panel.element.dataset.skeletonPressMode = "pan";
+            startRelativeMouseDrag(
+              event,
+              (_dragEvent, deltaX, deltaY) => {
+                panel.context.flagContinuousCameraMotion();
+                panel.translateByViewportPixels(deltaX, deltaY);
+              },
+              () => {
+                delete panel.element.dataset.skeletonPressMode;
+              },
+            );
           }
           return;
         }
