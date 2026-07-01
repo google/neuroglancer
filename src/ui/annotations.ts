@@ -90,7 +90,11 @@ import {
 } from "#src/ui/annotation_properties.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { getDefaultAnnotationListBindings } from "#src/ui/default_input_event_bindings.js";
-import { LegacyTool, registerLegacyTool } from "#src/ui/tool.js";
+import {
+  LegacyTool,
+  makeToolButton,
+  registerLegacyTool,
+} from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { arraysEqual, type ArraySpliceOp } from "#src/util/array.js";
 import { setClipboard } from "#src/util/clipboard.js";
@@ -216,6 +220,26 @@ function setLayerPosition(
   layer.setLayerPosition(chunkTransform.modelTransform, layerPosition);
 }
 
+const moveToAnnotation = (
+  layer: UserLayer,
+  annotation: Annotation,
+  state: AnnotationLayerState,
+) => {
+  const chunkTransform = state.chunkTransform.value as ChunkTransformParameters;
+  const { layerRank } = chunkTransform;
+  const chunkPosition = new Float32Array(layerRank);
+  const layerPosition = new Float32Array(layerRank);
+  getCenterPosition(chunkPosition, annotation);
+  matrix.transformPoint(
+    layerPosition,
+    chunkTransform.chunkToLayerTransform,
+    layerRank + 1,
+    chunkPosition,
+    layerRank,
+  );
+  setLayerPosition(layer, chunkTransform, layerPosition);
+};
+
 function visitTransformedAnnotationGeometry(
   annotation: Annotation,
   chunkTransform: ChunkTransformParameters,
@@ -249,6 +273,9 @@ interface AnnotationLayerViewAttachedState {
   idToIndex: Map<AnnotationId, number>;
   listOffset: number;
 }
+
+export const SELECT_PREVIOUS_ANNOTATION_TOOL_ID = "selectPreviousAnnotation";
+export const SELECT_NEXT_ANNOTATION_TOOL_ID = "selectNextAnnotation";
 
 export class AnnotationLayerView extends Tab {
   private previousSelectedState:
@@ -516,6 +543,24 @@ export class AnnotationLayerView extends Tab {
     mutableControls.appendChild(helpIcon);
 
     toolbox.appendChild(mutableControls);
+
+    const navRow = document.createElement("div");
+    navRow.className = "neuroglancer-annotation-nav-toolbar";
+    navRow.appendChild(
+      makeToolButton(this, layer.toolBinder, {
+        toolJson: SELECT_PREVIOUS_ANNOTATION_TOOL_ID,
+        label: "\u25c0 Prev",
+        title: "Select previous annotation (click to bind key)",
+      }),
+    );
+    navRow.appendChild(
+      makeToolButton(this, layer.toolBinder, {
+        toolJson: SELECT_NEXT_ANNOTATION_TOOL_ID,
+        label: "Next \u25b6",
+        title: "Select next annotation (click to bind key)",
+      }),
+    );
+    toolbox.appendChild(navRow);
     this.element.appendChild(toolbox);
 
     this.element.appendChild(this.headerRow);
@@ -2002,6 +2047,62 @@ export function UserLayerWithAnnotationsMixin<
 
     initializeAnnotationLayerViewTab(tab: AnnotationLayerView) {
       tab;
+    }
+
+    // Returns the currently pinned/iterated selected annotation for this layer
+    // (the one navigated to via select-next/select-previous), or undefined.
+    getSelectedAnnotationContext():
+      | { annotationLayerState: AnnotationLayerState; annotationId: string }
+      | undefined {
+      const selectionState = this.manager.root.selectionState.value;
+      if (selectionState === undefined) return undefined;
+      const layerSelectionState = selectionState.layers.find(
+        (s) => s.layer === this,
+      )?.state;
+      if (layerSelectionState === undefined) return undefined;
+      const { annotationId } = layerSelectionState;
+      if (annotationId === undefined) return undefined;
+      const annotationLayerState = this.annotationStates.states.find(
+        (x) =>
+          x.sourceIndex === layerSelectionState.annotationSourceIndex &&
+          (layerSelectionState.annotationSubsource === undefined ||
+            x.subsourceId === layerSelectionState.annotationSubsource),
+      );
+      if (annotationLayerState === undefined) return undefined;
+      return { annotationLayerState, annotationId };
+    }
+
+    changeSelectedIndex(offset: number) {
+      const context = this.getSelectedAnnotationContext();
+      if (context === undefined) return;
+      const { annotationId } = context;
+      let annotationLayerState = context.annotationLayerState;
+      let annotationLayerStateIndex =
+        this.annotationStates.states.indexOf(annotationLayerState);
+      let { source } = annotationLayerState;
+      let annotations = Array.from(source);
+      let index = annotations.findIndex((x) => x.id === annotationId);
+      while (true) {
+        index = index + offset;
+        if (index === -1) {
+          // this only happens if offset is negative
+          annotationLayerStateIndex -= 1;
+        } else if (index === annotations.length) {
+          // this only happens if offset is positive
+          annotationLayerStateIndex += 1;
+        } else {
+          const annotation = annotations[index];
+          this.selectAnnotation(annotationLayerState, annotation.id, true);
+          moveToAnnotation(this, annotation, annotationLayerState);
+          return;
+        }
+        annotationLayerState =
+          this.annotationStates.states[annotationLayerStateIndex];
+        if (annotationLayerState === undefined) return;
+        source = annotationLayerState.source;
+        annotations = Array.from(source);
+        index = index === -1 ? annotations.length : 0;
+      }
     }
 
     restoreState(specification: any) {
