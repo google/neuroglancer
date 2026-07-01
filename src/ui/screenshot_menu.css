@@ -34,23 +34,23 @@
   outline: 0;
 }
 
-.neuroglancer-screenshot-dialog {
+.neuroglancer-screenshot {
   width: 48.75rem;
-  padding: 0;
   margin: 1.25rem auto;
   position: relative;
   transform: none;
   left: auto;
   top: auto;
-  border-radius: 0.5rem;
   font-family: sans-serif;
 }
 
-.neuroglancer-screenshot-main-body-container {
+.neuroglancer-screenshot-body {
   height: auto;
   max-height: calc(100vh - 200px);
   overflow-y: auto;
   overflow-x: hidden;
+  display: block;
+  padding: 0;
 }
 
 .neuroglancer-screenshot-title {
@@ -73,12 +73,8 @@
 }
 
 /* Div at the top which contains the close */
-.neuroglancer-screenshot-close {
-  border-bottom: 1px solid var(--gray50);
-  display: flex;
-  align-items: center;
-  padding: 0.75rem 1rem;
-  gap: 10px;
+.neuroglancer-screenshot-header {
+  padding: 1.5rem 1rem;
 }
 
 /* Filename input menu */
@@ -185,12 +181,6 @@
   padding: 0;
 }
 
-.neuroglancer-screenshot-close-button {
-  margin-left: auto;
-  background-color: transparent;
-  border: 0;
-}
-
 /* Screenshot resolution table - voxel resolution, panel resolution */
 .neuroglancer-screenshot-size-text {
   margin: 0.75rem 0 0.75rem 0;
@@ -218,8 +208,8 @@
 }
 
 .neuroglancer-screenshot-resolution-preview-container {
-  border-top: 1px solid var(--gray50);
-  border-bottom: 1px solid var(--gray50);
+  border-top: 1px solid #ccc;
+  border-bottom: 1px solid #ccc;
   background: var(--gray500);
   width: 100%;
   padding: 1rem 1rem 0.5rem 1rem;
@@ -265,11 +255,17 @@
   outline: 0;
   border: 0;
   cursor: pointer;
-  height: 1rem;
   margin-left: auto;
   position: relative;
-  width: 33.33%;
   justify-content: flex-end;
+}
+
+.neuroglancer-screenshot-copy-icon:hover svg {
+  stroke: var(--gray600);
+}
+
+.neuroglancer-screenshot-copy-icon:hover {
+  background-color: var(--gray300);
 }
 
 .neuroglancer-screenshot-dimension {
@@ -320,41 +316,45 @@
 }
 
 /* Icons in the dialog */
-.neuroglancer-screenshot-dialog .neuroglancer-icon svg {
-  stroke: rgba(20, 20, 21, 0.4);
+.neuroglancer-screenshot-tooltip svg,
+.neuroglancer-screenshot-copy-icon svg {
+  stroke: var(--gray400);
   width: 1rem;
   height: 1rem;
 }
 
-.neuroglancer-screenshot-dialog .neuroglancer-icon {
-  width: 1rem;
-  height: 1rem;
-  min-width: inherit;
-  min-height: inherit;
+.neuroglancer-screenshot-tooltip {
   padding: 0;
+  width: 1rem;
+  height: 1rem;
+  min-height: inherit;
+  cursor: auto;
 }
 
-.neuroglancer-screenshot-dialog .neuroglancer-icon:hover {
+.neuroglancer-screenshot-tooltip:hover {
   background: none;
 }
 
+.neuroglancer-screenshot-tooltip:hover svg {
+  stroke: var(--gray600);
+}
+
 /* Footer with progress and buttons */
-.neuroglancer-screenshot-footer-container {
+.neuroglancer-screenshot-footer {
   margin: 0;
   display: flex;
   padding: 0.75rem 1rem;
-  border-top: 1px solid var(--gray50);
 }
 
 .neuroglancer-screenshot-progress-text {
   margin: 0;
   flex: 1;
   font-weight: 590;
-  cursor: pointer;
   padding: 0;
   font-size: 0.813rem;
   align-self: center;
   color: var(--primary700);
+  cursor: wait;
 }
 
 .neuroglancer-screenshot-footer-button {
@@ -366,6 +366,11 @@
   font-weight: 590;
   color: var(--gray800);
   margin: 0 0 0 0.25rem;
+  cursor: pointer;
+}
+
+.neuroglancer-screenshot-footer-button:hover {
+  color: var(--gray600);
 }
 
 .neuroglancer-screenshot-footer-button:disabled {
