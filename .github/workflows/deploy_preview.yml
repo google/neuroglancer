@@ -31,6 +31,9 @@ jobs:
                 target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
             });
       - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24.18.0"
       - uses: actions/download-artifact@v8
         with:
           name: client
