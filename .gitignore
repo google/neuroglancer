@@ -26,3 +26,7 @@ tsconfig.tsbuildinfo
 -/docs/python/api/index.rst
 /docs/python/api/*.rst
 /.vite
+# Generated at build time by build_tools/generate_colormaps_zarr.py
+# (run via the `generate-colormaps` npm script + pre* hooks).
+/src/webgl/colormaps.zarr/
+/src/webgl/colormap_names_generated.ts
