@@ -1,16 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  SPATIAL_SKELETON_EDIT_BANNER_MESSAGE,
-  SPATIAL_SKELETON_EDIT_SELECTED_BANNER_MESSAGE,
-  SPATIAL_SKELETON_MERGE_BANNER_MESSAGE,
-  SPATIAL_SKELETON_MERGE_SELECTED_BANNER_MESSAGE,
-  SPATIAL_SKELETON_SPLIT_BANNER_MESSAGE,
+  SPATIAL_SKELETON_ROTATE_PAN_HINT,
   formatSpatialSkeletonToolPoint,
+  getSpatialSkeletonCreateIdleStatusText,
+  getSpatialSkeletonCreatingStatusText,
+  getSpatialSkeletonDefaultStatusText,
+  getSpatialSkeletonMergeStatusText,
+  getSpatialSkeletonMergingStatusText,
+  getSpatialSkeletonMovingStatusText,
+  getSpatialSkeletonSplitIdleStatusText,
+  getSpatialSkeletonSplittingStatusText,
   getSpatialSkeletonToolPointSummaryRow,
   getSpatialSkeletonToolPointStatusFields,
-  getSpatialSkeletonEditBannerMessage,
-  getSpatialSkeletonMergeBannerMessage,
 } from "#src/ui/skeleton_edit_tool_messages.js";
 
 describe("spatial_skeleton_tool_messages", () => {
@@ -48,27 +50,164 @@ describe("spatial_skeleton_tool_messages", () => {
     });
   });
 
-  it("switches edit banner copy when a node is selected", () => {
-    expect(getSpatialSkeletonEditBannerMessage(undefined)).toBe(
-      SPATIAL_SKELETON_EDIT_BANNER_MESSAGE,
-    );
-    expect(
-      getSpatialSkeletonEditBannerMessage({ nodeId: 8, segmentId: 12 }),
-    ).toBe(SPATIAL_SKELETON_EDIT_SELECTED_BANNER_MESSAGE);
+  describe("getSpatialSkeletonDefaultStatusText", () => {
+    it("no selection", () => {
+      expect(getSpatialSkeletonDefaultStatusText("none", false)).toEqual({
+        status: "No selection",
+        actions: `Click to select · drag to move · hold m to merge · hold s to split · hold n for new skeleton · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+      });
+    });
+
+    it("selected, visible skeleton", () => {
+      expect(
+        getSpatialSkeletonDefaultStatusText("selected-visible", false),
+      ).toEqual({
+        status: "Node selected",
+        actions: `Click to select · drag to move · shift+click to add node · hold m to merge · hold s to split · hold n for new skeleton · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+      });
+    });
+
+    it("selected, visible skeleton, shift held", () => {
+      expect(
+        getSpatialSkeletonDefaultStatusText("selected-visible", true),
+      ).toEqual({
+        status: "Ready to place new node",
+        actions: `Click to select · drag to move · shift+click to add node · hold m to merge · hold s to split · hold n for new skeleton · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+      });
+    });
+
+    it("selected, non-visible skeleton", () => {
+      expect(
+        getSpatialSkeletonDefaultStatusText("selected-hidden", false),
+      ).toEqual({
+        status: "Node selected from non-visible skeleton",
+        actions: `Double-click skeleton to show it · hold m to merge · hold s to split · hold n for new skeleton · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+      });
+    });
+
+    it("selected, non-visible skeleton, shift held — unaffected by shift", () => {
+      expect(
+        getSpatialSkeletonDefaultStatusText("selected-hidden", true),
+      ).toEqual({
+        status: "Node selected from non-visible skeleton",
+        actions: `Double-click skeleton to show it · hold m to merge · hold s to split · hold n for new skeleton · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+      });
+    });
   });
 
-  it("switches merge banner copy after the first point is selected", () => {
-    expect(getSpatialSkeletonMergeBannerMessage(undefined)).toBe(
-      SPATIAL_SKELETON_MERGE_BANNER_MESSAGE,
-    );
-    expect(
-      getSpatialSkeletonMergeBannerMessage({ nodeId: 8, segmentId: 12 }),
-    ).toBe(SPATIAL_SKELETON_MERGE_SELECTED_BANNER_MESSAGE);
+  it("returns a static moving-node status", () => {
+    expect(getSpatialSkeletonMovingStatusText()).toEqual({
+      status: "Moving node",
+      actions: SPATIAL_SKELETON_ROTATE_PAN_HINT,
+    });
   });
 
-  it("keeps the split banner copy stable", () => {
-    expect(SPATIAL_SKELETON_SPLIT_BANNER_MESSAGE).toBe(
-      "Select 1 node to split",
-    );
+  describe("getSpatialSkeletonMergeStatusText", () => {
+    it("no from node, key held", () => {
+      expect(getSpatialSkeletonMergeStatusText("no-from-node", true)).toEqual(
+        {
+          status: "Merge · no selected nodes",
+          actions: `Click a node to set as from node · release m to exit merge · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+        },
+      );
+    });
+
+    it("no from node, key not held", () => {
+      expect(getSpatialSkeletonMergeStatusText("no-from-node", false)).toEqual(
+        {
+          status: "Merge · no selected nodes",
+          actions: `Click a node to set as from node · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+        },
+      );
+    });
+
+    it("from node selected on a visible skeleton, key held", () => {
+      expect(
+        getSpatialSkeletonMergeStatusText("from-node-visible", true),
+      ).toEqual({
+        status: "Merge · from node selected",
+        actions: `Click a 2nd node on a different skeleton to merge · release m to exit merge · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+      });
+    });
+
+    it("from node selected on a visible skeleton, key not held", () => {
+      expect(
+        getSpatialSkeletonMergeStatusText("from-node-visible", false),
+      ).toEqual({
+        status: "Merge · from node selected",
+        actions: `Click a 2nd node on a different skeleton to merge · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+      });
+    });
+
+    it("from node on a non-visible skeleton, key held", () => {
+      expect(
+        getSpatialSkeletonMergeStatusText("from-node-hidden", true),
+      ).toEqual({
+        status: "Merge · from node on non-visible skeleton",
+        actions: `Double-click skeleton to show it · release m to exit merge · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+      });
+    });
+
+    it("from node on a non-visible skeleton, key not held", () => {
+      expect(
+        getSpatialSkeletonMergeStatusText("from-node-hidden", false),
+      ).toEqual({
+        status: "Merge · from node on non-visible skeleton",
+        actions: `Double-click skeleton to show it · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+      });
+    });
+  });
+
+  it("returns a static merging status", () => {
+    expect(getSpatialSkeletonMergingStatusText()).toEqual({
+      status: "Merge · merging nodes…",
+      actions: SPATIAL_SKELETON_ROTATE_PAN_HINT,
+    });
+  });
+
+  describe("getSpatialSkeletonSplitIdleStatusText", () => {
+    it("key held", () => {
+      expect(getSpatialSkeletonSplitIdleStatusText(true)).toEqual({
+        status: "Split · no selected nodes",
+        actions: `Click a node to split · release s to exit split · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+      });
+    });
+
+    it("key not held", () => {
+      expect(getSpatialSkeletonSplitIdleStatusText(false)).toEqual({
+        status: "Split · no selected nodes",
+        actions: `Click a node to split · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+      });
+    });
+  });
+
+  it("returns a static splitting status", () => {
+    expect(getSpatialSkeletonSplittingStatusText()).toEqual({
+      status: "Split · splitting node…",
+      actions: SPATIAL_SKELETON_ROTATE_PAN_HINT,
+    });
+  });
+
+  describe("getSpatialSkeletonCreateIdleStatusText", () => {
+    it("key held", () => {
+      expect(getSpatialSkeletonCreateIdleStatusText(true)).toEqual({
+        status: "Create · ready to place",
+        actions: `Click to place a new skeleton · release n to exit create · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+      });
+    });
+
+    it("key not held", () => {
+      expect(getSpatialSkeletonCreateIdleStatusText(false)).toEqual({
+        status: "Create · ready to place",
+        actions: `Click to place a new skeleton · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+      });
+    });
+  });
+
+  it("returns a static creating status", () => {
+    expect(getSpatialSkeletonCreatingStatusText()).toEqual({
+      status: "Create · creating skeleton…",
+      actions: SPATIAL_SKELETON_ROTATE_PAN_HINT,
+    });
   });
 });

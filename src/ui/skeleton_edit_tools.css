@@ -16,34 +16,46 @@
 
 .neuroglancer-skeleton-tool-status {
   display: flex;
-  flex-wrap: wrap;
+  flex: 1;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.75rem;
+  min-width: 0;
 }
 
-.neuroglancer-skeleton-tool-status-message {
-  display: inline-flex;
-  align-items: center;
+/* Sits right after the divider, immediately beside the tool name in the
+   header, sized to its own content (not flex-grow) rather than stretching
+   across the bar. */
+.neuroglancer-skeleton-tool-status-divider {
+  flex: 0 0 auto;
+  color: #6b6c6f;
+  line-height: 1.25rem;
 }
 
-.neuroglancer-skeleton-tool-status-point {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.55rem;
-  color: #e6cb57;
+.neuroglancer-skeleton-tool-status-text {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.25rem;
 }
 
-.neuroglancer-skeleton-tool-status-point-field {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-  font-weight: 600;
-}
-
-.neuroglancer-skeleton-tool-status-point-field-label,
-.neuroglancer-skeleton-tool-status-point-field-value {
-  color: inherit;
+/* margin-left: auto consumes all remaining space on the main axis before
+   justify-content is applied, so the actions list is pushed to the far
+   right regardless of the status text's width or the parent's
+   justify-content (neuroglass-theme.css sets justify-content: flex-end on
+   this same element via a higher-specificity nested rule). */
+.neuroglancer-skeleton-tool-status-actions {
+  flex: 0 1 auto;
+  margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #999ca0;
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  text-align: right;
 }
 
 /* Per-mode cursor indicators — driven by data-skeleton-edit-mode on the panel element */

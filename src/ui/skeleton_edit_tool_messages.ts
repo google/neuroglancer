@@ -35,25 +35,6 @@ export interface SpatialSkeletonToolStatusField {
   value: string;
 }
 
-export const SPATIAL_SKELETON_EDIT_BANNER_MESSAGE =
-  "Move nodes, select a node to append or click to start a new skeleton";
-export const SPATIAL_SKELETON_EDIT_SELECTED_BANNER_MESSAGE =
-  "Move node or append to selected node";
-export const SPATIAL_SKELETON_MERGE_BANNER_MESSAGE = "Select 2 nodes to merge";
-export const SPATIAL_SKELETON_MERGE_SELECTED_BANNER_MESSAGE =
-  "Select 2nd node from a different skeleton to merge with · release m to exit";
-export const SPATIAL_SKELETON_SPLIT_BANNER_MESSAGE = "Select 1 node to split";
-export const SPATIAL_SKELETON_MOVING_NODE_MESSAGE = "Moving node";
-
-export const SPATIAL_SKELETON_DEFAULT_BANNER_MESSAGE =
-  "Click node to select · drag to move · hold m to merge · hold s to split · hold n for new skeleton · shift+click to create";
-export const SPATIAL_SKELETON_DEFAULT_SELECTED_BANNER_MESSAGE =
-  "Node selected · drag to move · shift+click to create · hold m to merge · hold s to split · hold n for new skeleton";
-export const SPATIAL_SKELETON_CREATE_BANNER_MESSAGE =
-  "Click to place a new skeleton · release n to exit";
-export const SPATIAL_SKELETON_HIDDEN_SELECTED_BANNER_MESSAGE =
-  "Node selected from hidden skeleton · double-click to show it before moving or creating";
-
 export function formatSpatialSkeletonToolPoint(
   point: SpatialSkeletonToolPointInfo,
 ) {
@@ -105,18 +86,153 @@ export function getSpatialSkeletonToolPointStatusFields(
   return fields;
 }
 
-export function getSpatialSkeletonEditBannerMessage(
-  selectedPoint: SpatialSkeletonToolPointInfo | undefined,
-) {
-  return selectedPoint === undefined
-    ? SPATIAL_SKELETON_DEFAULT_BANNER_MESSAGE
-    : SPATIAL_SKELETON_DEFAULT_SELECTED_BANNER_MESSAGE;
+// --- Name / status / actions message system ---
+//
+// The tool's status bar is split into three parts: a name (rendered by the
+// caller via a fixed header, see SPATIAL_SKELETON_EDIT_TOOL_NAME), a short
+// `status` describing what's currently true, and a short `actions` list
+// describing what's currently doable. Keeping these separate (rather than
+// one long banner string) avoids mixing state with instructions, and lets
+// the no-selection default state stop advertising actions that don't apply
+// yet (e.g. shift+click, which requires an existing selection).
+//
+// User-facing copy says "from node" rather than "merge anchor" — the
+// internal name (mergeAnchorNodeId, etc.) is unaffected.
+
+export interface SpatialSkeletonToolStatusText {
+  status: string;
+  actions: string;
 }
 
-export function getSpatialSkeletonMergeBannerMessage(
-  selectedPoint: SpatialSkeletonToolPointInfo | undefined,
+export const SPATIAL_SKELETON_EDIT_TOOL_NAME = "Skeleton editing";
+export const SPATIAL_SKELETON_ROTATE_PAN_HINT = "middle-click to rotate/pan";
+
+export type SpatialSkeletonDefaultSelectionState =
+  | "none"
+  | "selected-visible"
+  | "selected-hidden";
+
+export function getSpatialSkeletonDefaultStatusText(
+  state: SpatialSkeletonDefaultSelectionState,
+  shiftHeld: boolean,
+): SpatialSkeletonToolStatusText {
+  switch (state) {
+    case "none":
+      return {
+        status: "No selection",
+        actions: `Click to select · drag to move · hold m to merge · hold s to split · hold n for new skeleton · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+      };
+    case "selected-visible":
+      return {
+        status: shiftHeld ? "Ready to place new node" : "Node selected",
+        actions: `Click to select · drag to move · shift+click to add node · hold m to merge · hold s to split · hold n for new skeleton · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+      };
+    case "selected-hidden":
+      return {
+        status: "Node selected from non-visible skeleton",
+        actions: `Double-click skeleton to show it · hold m to merge · hold s to split · hold n for new skeleton · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+      };
+  }
+}
+
+export function getSpatialSkeletonMovingStatusText(): SpatialSkeletonToolStatusText {
+  return { status: "Moving node", actions: SPATIAL_SKELETON_ROTATE_PAN_HINT };
+}
+
+export type SpatialSkeletonMergeState =
+  | "no-from-node"
+  | "from-node-visible"
+  | "from-node-hidden";
+
+function withExitHint(
+  action: string,
+  canExitWithKey: boolean,
+  exitHint: string,
 ) {
-  return selectedPoint === undefined
-    ? SPATIAL_SKELETON_MERGE_BANNER_MESSAGE
-    : SPATIAL_SKELETON_MERGE_SELECTED_BANNER_MESSAGE;
+  return canExitWithKey
+    ? `${action} · ${exitHint} · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`
+    : `${action} · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`;
+}
+
+export function getSpatialSkeletonMergeStatusText(
+  state: SpatialSkeletonMergeState,
+  canExitWithKey: boolean,
+): SpatialSkeletonToolStatusText {
+  const exitHint = "release m to exit merge";
+  switch (state) {
+    case "no-from-node":
+      return {
+        status: "Merge · no selected nodes",
+        actions: withExitHint(
+          "Click a node to set as from node",
+          canExitWithKey,
+          exitHint,
+        ),
+      };
+    case "from-node-visible":
+      return {
+        status: "Merge · from node selected",
+        actions: withExitHint(
+          "Click a 2nd node on a different skeleton to merge",
+          canExitWithKey,
+          exitHint,
+        ),
+      };
+    case "from-node-hidden":
+      return {
+        status: "Merge · from node on non-visible skeleton",
+        actions: withExitHint(
+          "Double-click skeleton to show it",
+          canExitWithKey,
+          exitHint,
+        ),
+      };
+  }
+}
+
+export function getSpatialSkeletonMergingStatusText(): SpatialSkeletonToolStatusText {
+  return {
+    status: "Merge · merging nodes…",
+    actions: SPATIAL_SKELETON_ROTATE_PAN_HINT,
+  };
+}
+
+export function getSpatialSkeletonSplitIdleStatusText(
+  canExitWithKey: boolean,
+): SpatialSkeletonToolStatusText {
+  return {
+    status: "Split · no selected nodes",
+    actions: withExitHint(
+      "Click a node to split",
+      canExitWithKey,
+      "release s to exit split",
+    ),
+  };
+}
+
+export function getSpatialSkeletonSplittingStatusText(): SpatialSkeletonToolStatusText {
+  return {
+    status: "Split · splitting node…",
+    actions: SPATIAL_SKELETON_ROTATE_PAN_HINT,
+  };
+}
+
+export function getSpatialSkeletonCreateIdleStatusText(
+  canExitWithKey: boolean,
+): SpatialSkeletonToolStatusText {
+  return {
+    status: "Create · ready to place",
+    actions: withExitHint(
+      "Click to place a new skeleton",
+      canExitWithKey,
+      "release n to exit create",
+    ),
+  };
+}
+
+export function getSpatialSkeletonCreatingStatusText(): SpatialSkeletonToolStatusText {
+  return {
+    status: "Create · creating skeleton…",
+    actions: SPATIAL_SKELETON_ROTATE_PAN_HINT,
+  };
 }
