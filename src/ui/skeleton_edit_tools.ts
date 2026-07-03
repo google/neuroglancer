@@ -98,14 +98,19 @@ const enum SkeletonEditMode {
   Split = 3,
 }
 
-// In edit mode, left click is selection-only — it never rotates or pans.
-// Navigation (rotate in perspective, pan in slice) is handled exclusively by
-// middle mouse (mousedown1).  mousedown0 is therefore handled only via the
+// In edit mode, plain left click is selection-only — it never rotates or
+// pans. Navigation (rotate in perspective, pan in slice) is handled by
+// middle mouse (mousedown1), plus trackpad-friendly aliases on the
+// navigation modifier + left mouse (control+mousedown0 on most platforms,
+// cmd+mousedown0 on Mac — see hasNavigationModifier below): the modifier
+// alone mirrors plain middle-click, and modifier+shift mirrors
+// control+middle-click. mousedown0 is therefore handled only via the
 // capture-phase DOM listeners in activate(); it is not in the EventActionMap.
 //
-// mousedown1 → rotate-via-mouse-drag covers perspective panels via the
-// EventActionMap.  Slice panels intercept middle mouse in the capture listener
-// and call translateByViewportPixels directly, consuming the event before
+// mousedown1 / control?+mousedown0 → rotate-via-mouse-drag covers perspective
+// panels via the EventActionMap. Slice panels intercept middle mouse and the
+// navigation-modifier chords in the capture listener and call
+// translateByViewportPixels directly, consuming the event before
 // MouseEventBinder can dispatch this action.
 //
 // Default bindings are defined in getDefaultSkeletonEditToolBindings() /
@@ -122,6 +127,11 @@ const DRAG_START_DISTANCE_PX = 2;
 const MERGE_EXIT_KEY_CODE = "KeyM";
 const SPLIT_EXIT_KEY_CODE = "KeyS";
 const CREATE_EXIT_KEY_CODE = "KeyN";
+
+function hasNavigationModifier(event: { ctrlKey: boolean; metaKey: boolean }) {
+  // TODO replace by mac check
+  return event.metaKey || event.ctrlKey;
+}
 
 function waitForNextAnimationFrame() {
   return new Promise<void>((resolve) => {
@@ -517,13 +527,16 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
   private splitKeyHeld = false;
   // Modifier-held state drives cursor indicators and blocks node actions.
   private shiftHeld = false;
+  // Navigation modifier (ctrl, or cmd on Mac — see hasNavigationModifier).
+  // While held, the shift-driven "add node" cursor/status must be
+  // suppressed, since modifier+shift now means pan, not add-node.
+  private ctrlHeld = false;
   // Physical key codes currently held down — used only to decide whether the
   // status actions text should show a "release <key> to exit" hint. Merge/
   // split/create can also be entered via a synthetic dispatched action (no
   // physical keydown), in which case that hint would be misleading.
   private heldPhysicalKeyCodes = new Set<string>();
-  private statusOverride: SpatialSkeletonToolStatusText | undefined =
-    undefined;
+  private statusOverride: SpatialSkeletonToolStatusText | undefined = undefined;
   // Set at activation start; cleared by the activation disposer to prevent
   // post-deactivation UI writes.
   private statusBody: HTMLElement | undefined = undefined;
@@ -552,7 +565,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       this.setModeAttribute("create");
     } else if (this.currentMode === SkeletonEditMode.Split) {
       this.setModeAttribute("split");
-    } else if (this.shiftHeld) {
+    } else if (this.shiftHeld && !this.ctrlHeld) {
       this.setModeAttribute("add");
     } else {
       this.setModeAttribute(undefined);
@@ -571,9 +584,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     if (this.currentMode === SkeletonEditMode.Merge) {
       const anchorNodeId =
         this.layer.spatialSkeletonState.mergeAnchorNodeId.value;
-      const canExitWithKey = this.heldPhysicalKeyCodes.has(
-        MERGE_EXIT_KEY_CODE,
-      );
+      const canExitWithKey = this.heldPhysicalKeyCodes.has(MERGE_EXIT_KEY_CODE);
       if (anchorNodeId !== undefined) {
         const cachedNode =
           this.getActiveSpatiallyIndexedSkeletonLayer()?.getNode(
@@ -628,7 +639,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
           : isHidden
             ? "selected-hidden"
             : "selected-visible",
-        this.shiftHeld,
+        this.shiftHeld && !this.ctrlHeld,
       ),
     );
   }
@@ -644,13 +655,20 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
 
   // --- Modifier tracking ---
 
-  // Sync shiftHeld from the logical modifier flag on any event that carries it.
-  // This mirrors what NG's EventActionMap does via getEventModifierMask, so
-  // OS-level modifier rebindings are transparent — we never inspect key codes.
-  private syncModifiers(event: { shiftKey: boolean }) {
+  // Sync shiftHeld/ctrlHeld from the logical modifier flags on any event
+  // that carries them. This mirrors what NG's EventActionMap does via
+  // getEventModifierMask, so OS-level modifier rebindings are transparent —
+  // we never inspect key codes.
+  private syncModifiers(event: {
+    shiftKey: boolean;
+    ctrlKey: boolean;
+    metaKey: boolean;
+  }) {
     const isShift = event.shiftKey;
-    if (this.shiftHeld === isShift) return;
+    const isCtrl = hasNavigationModifier(event);
+    if (this.shiftHeld === isShift && this.ctrlHeld === isCtrl) return;
     this.shiftHeld = isShift;
+    this.ctrlHeld = isCtrl;
     this.updateModeAttribute();
     this.renderStatus();
   }
@@ -1282,6 +1300,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     this.mergeKeyHeld = false;
     this.splitKeyHeld = false;
     this.shiftHeld = false;
+    this.ctrlHeld = false;
     this.heldPhysicalKeyCodes = new Set();
     this.statusOverride = undefined;
 
@@ -1397,6 +1416,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       this.mergeKeyHeld = false;
       this.splitKeyHeld = false;
       this.shiftHeld = false;
+      this.ctrlHeld = false;
       this.heldPhysicalKeyCodes = new Set();
       this.exitMerge();
       this.exitCreate();
@@ -1417,9 +1437,11 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     // 10. Per-panel capture listeners — closures per panel; body delegates to class methods.
     // Left click (mousedown0) is handled here rather than in the EventActionMap so that
     // we can consume off-node clicks without accidentally shadowing EventActionMap actions
-    // at lower priority.  All left clicks are now owned by the edit tool — they either
-    // select a node or do nothing.  Navigation (rotate/pan) belongs exclusively to middle
-    // mouse and is handled via the EventActionMap + the slice-panel path below.
+    // at lower priority.  All plain/shift left clicks are owned by the edit tool — they
+    // either select a node, add a node, or do nothing.  Navigation (rotate/pan) belongs to
+    // middle mouse and to the navigation-modifier + left-click aliases below (for trackpad
+    // users without a reliable middle-click), handled via the EventActionMap + the
+    // slice-panel path below.
     for (const panel of layer.manager.root.display.panels) {
       if (!(panel instanceof RenderedDataPanel)) continue;
       const captureMousedown = (event: MouseEvent) => {
@@ -1428,6 +1450,42 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
         // Ctrl+middle: translate in 3D (EventActionMap control+mousedown1 → translate-via-mouse-drag),
         // translate in 2D (intercepted here, same as plain middle).
         if (event.button === 1) {
+          if (panel instanceof PerspectivePanel) {
+            panel.element.dataset.skeletonPressMode = "rotate";
+            const onMouseUp = () => {
+              delete panel.element.dataset.skeletonPressMode;
+              window.removeEventListener("mouseup", onMouseUp);
+            };
+            window.addEventListener("mouseup", onMouseUp);
+          } else {
+            event.stopPropagation();
+            event.preventDefault();
+            panel.element.dataset.skeletonPressMode = "pan";
+            startRelativeMouseDrag(
+              event,
+              (_dragEvent, deltaX, deltaY) => {
+                panel.context.flagContinuousCameraMotion();
+                panel.translateByViewportPixels(deltaX, deltaY);
+              },
+              () => {
+                delete panel.element.dataset.skeletonPressMode;
+              },
+            );
+          }
+          return;
+        }
+
+        // Trackpad-friendly aliases for the middle-mouse scheme above.
+        // Navigation modifier + left (plain): rotate in 3D (EventActionMap
+        // control+mousedown0 → rotate-via-mouse-drag), pan in 2D
+        // (intercepted here) — mirrors plain middle mouse.
+        // Navigation modifier + shift + left: translate in 3D
+        // (EventActionMap control+shift+mousedown0 → translate-via-mouse-drag),
+        // pan in 2D (intercepted here, same as above) — mirrors ctrl+middle
+        // mouse. Checked before the shift guard below so it takes priority
+        // over the shift+mousedown0 add-node chord; hasNavigationModifier is
+        // the discriminator (add-node never has the modifier held).
+        if (event.button === 0 && hasNavigationModifier(event)) {
           if (panel instanceof PerspectivePanel) {
             panel.element.dataset.skeletonPressMode = "rotate";
             const onMouseUp = () => {

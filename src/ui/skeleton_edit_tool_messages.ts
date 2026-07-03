@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import { isMacPlatform } from "#src/util/platform.js";
+
 export interface SpatialSkeletonToolPointInfo {
   nodeId: number;
   segmentId?: number;
@@ -105,7 +107,9 @@ export interface SpatialSkeletonToolStatusText {
 }
 
 export const SPATIAL_SKELETON_EDIT_TOOL_NAME = "Skeleton editing";
-export const SPATIAL_SKELETON_ROTATE_PAN_HINT = "middle-click to rotate/pan";
+export const SPATIAL_SKELETON_ROTATE_PAN_HINT = `middle-click or ${
+  isMacPlatform() ? "cmd" : "ctrl"
+}+click to rotate/pan`;
 
 export type SpatialSkeletonDefaultSelectionState =
   | "none"

@@ -246,6 +246,13 @@ export function getDefaultSkeletonEditToolBindings() {
     defaultSkeletonEditToolBindings = EventActionMap.fromObject({
       "at:mousedown1": "rotate-via-mouse-drag",
       "at:control+mousedown1": "translate-via-mouse-drag",
+      // Trackpad-friendly aliases for the middle-mouse scheme above: on
+      // perspective panels these dispatch here; on slice panels they're
+      // intercepted directly in the capture-phase listener in
+      // skeleton_edit_tools.ts before they can bubble to this map (mirrors
+      // how mousedown1 is handled for slice panels).
+      "at:control+mousedown0": "rotate-via-mouse-drag",
+      "at:control+shift+mousedown0": "translate-via-mouse-drag",
       "at:shift+mousedown0": SKELETON_ADD_NODE,
       "at:keym": SKELETON_ENTER_MERGE_MODE,
       "at:keys": SKELETON_ENTER_SPLIT_MODE,
