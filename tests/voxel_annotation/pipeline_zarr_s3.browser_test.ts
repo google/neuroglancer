@@ -243,6 +243,376 @@ test("Pipeline: Zarr V3 (UINT64) Brush", async () => {
   }, "Verify painted chunk (UINT64)");
 });
 
+test("Pipeline: Repaint over existing chunk data (Zarr V3 UINT64)", async () => {
+  const BUCKET = "test-v3-repaint";
+  const zarrJson = JSON.stringify({
+    zarr_format: 3,
+    node_type: "array",
+    shape: [64, 64, 64],
+    data_type: "uint64",
+    chunk_grid: {
+      name: "regular",
+      configuration: { chunk_shape: [32, 32, 32] },
+    },
+    chunk_key_encoding: {
+      name: "default",
+      configuration: { separator: "/" },
+    },
+    codecs: [{ name: "bytes", configuration: { endian: "little" } }],
+    fill_value: 0,
+    attributes: {},
+  });
+
+  storage.set(
+    `${BUCKET}/data.zarr/zarr.json`,
+    <ArrayBuffer>new TextEncoder().encode(zarrJson).buffer,
+  );
+
+  // Pre-seed the chunk with existing data: the brush must merge into it, not
+  // replace it (regression test for edits only working on empty chunks).
+  const existingVal = 7n;
+  const existing = new BigUint64Array(32 * 32 * 32).fill(existingVal);
+  const chunkKey = `${BUCKET}/data.zarr/c/0/0/0`;
+  storage.set(chunkKey, existing.buffer.slice(0) as ArrayBuffer);
+
+  const layer = makeLayer(viewer!.layerSpecification, "volume", {
+    type: "segmentation",
+    source: {
+      url: `s3+http://localhost:9000/${BUCKET}/data.zarr|zarr3:`,
+      subsources: { default: { enabled: true, writingEnabled: true } },
+      enableDefaultSubsources: false,
+    },
+  });
+  viewer!.layerSpecification.add(layer);
+
+  const { context } = await waitForEditingContext();
+
+  const paintVal = 123n;
+  await context.dispatchBrushStroke(
+    [new Float32Array([16, 16, 16])],
+    2,
+    (_) => paintVal,
+    0 /* DISK */,
+    {
+      u: new Float32Array([1, 0, 0]),
+      v: new Float32Array([0, 1, 0]),
+    },
+  );
+
+  await poll(() => {
+    const data = storage.get(chunkKey);
+    if (!data) return false;
+    const arr = new BigUint64Array(data);
+    return (
+      arr.some((v) => v === paintVal) && arr.some((v) => v === existingVal)
+    );
+  }, "Verify stroke applied AND pre-existing data preserved");
+});
+
+test("Pipeline: Repaint over existing gzip-compressed chunk (Zarr V3 UINT64)", async () => {
+  const BUCKET = "test-v3-repaint-gzip";
+  const zarrJson = JSON.stringify({
+    zarr_format: 3,
+    node_type: "array",
+    shape: [64, 64, 64],
+    data_type: "uint64",
+    chunk_grid: {
+      name: "regular",
+      configuration: { chunk_shape: [32, 32, 32] },
+    },
+    chunk_key_encoding: {
+      name: "default",
+      configuration: { separator: "/" },
+    },
+    codecs: [
+      { name: "bytes", configuration: { endian: "little" } },
+      { name: "gzip", configuration: { level: 1 } },
+    ],
+    fill_value: 0,
+    attributes: {},
+  });
+
+  storage.set(
+    `${BUCKET}/data.zarr/zarr.json`,
+    <ArrayBuffer>new TextEncoder().encode(zarrJson).buffer,
+  );
+
+  const gzip = async (data: ArrayBuffer): Promise<ArrayBuffer> => {
+    const cs = new CompressionStream("gzip");
+    const writer = cs.writable.getWriter();
+    void writer.write(new Uint8Array(data));
+    void writer.close();
+    return await new Response(cs.readable).arrayBuffer();
+  };
+  const gunzip = async (data: ArrayBuffer): Promise<ArrayBuffer> => {
+    const ds = new DecompressionStream("gzip");
+    const writer = ds.writable.getWriter();
+    void writer.write(new Uint8Array(data));
+    void writer.close();
+    return await new Response(ds.readable).arrayBuffer();
+  };
+
+  const existingVal = 7n;
+  const existing = new BigUint64Array(32 * 32 * 32).fill(existingVal);
+  const chunkKey = `${BUCKET}/data.zarr/c/0/0/0`;
+  storage.set(chunkKey, await gzip(existing.buffer as ArrayBuffer));
+
+  const layer = makeLayer(viewer!.layerSpecification, "volume", {
+    type: "segmentation",
+    source: {
+      url: `s3+http://localhost:9000/${BUCKET}/data.zarr|zarr3:`,
+      subsources: { default: { enabled: true, writingEnabled: true } },
+      enableDefaultSubsources: false,
+    },
+  });
+  viewer!.layerSpecification.add(layer);
+
+  const { context } = await waitForEditingContext();
+
+  const paintVal = 123n;
+  await context.dispatchBrushStroke(
+    [new Float32Array([16, 16, 16])],
+    2,
+    (_) => paintVal,
+    0 /* DISK */,
+    {
+      u: new Float32Array([1, 0, 0]),
+      v: new Float32Array([0, 1, 0]),
+    },
+  );
+
+  await poll(async () => {
+    const data = storage.get(chunkKey);
+    if (!data) return false;
+    const arr = new BigUint64Array(await gunzip(data));
+    return (
+      arr.some((v) => v === paintVal) && arr.some((v) => v === existingVal)
+    );
+  }, "Verify gzip repaint applied AND pre-existing data preserved");
+});
+
+test("Pipeline: Repaint over dense large-label segmentation data (Zarr V3 UINT64)", async () => {
+  const BUCKET = "test-v3-repaint-dense";
+  const zarrJson = JSON.stringify({
+    zarr_format: 3,
+    node_type: "array",
+    shape: [64, 64, 64],
+    data_type: "uint64",
+    chunk_grid: {
+      name: "regular",
+      configuration: { chunk_shape: [32, 32, 32] },
+    },
+    chunk_key_encoding: {
+      name: "default",
+      configuration: { separator: "/" },
+    },
+    codecs: [
+      { name: "bytes", configuration: { endian: "little" } },
+      { name: "gzip", configuration: { level: 1 } },
+    ],
+    fill_value: 0,
+    attributes: {},
+  });
+
+  storage.set(
+    `${BUCKET}/data.zarr/zarr.json`,
+    <ArrayBuffer>new TextEncoder().encode(zarrJson).buffer,
+  );
+
+  const gzip = async (data: ArrayBuffer): Promise<ArrayBuffer> => {
+    const cs = new CompressionStream("gzip");
+    const writer = cs.writable.getWriter();
+    void writer.write(new Uint8Array(data));
+    void writer.close();
+    return await new Response(cs.readable).arrayBuffer();
+  };
+  const gunzip = async (data: ArrayBuffer): Promise<ArrayBuffer> => {
+    const ds = new DecompressionStream("gzip");
+    const writer = ds.writable.getWriter();
+    void writer.write(new Uint8Array(data));
+    void writer.close();
+    return await new Response(ds.readable).arrayBuffer();
+  };
+
+  // Worst case for the compressed-segmentation in-memory transcode: every
+  // voxel a distinct large (>2^63) label, as produced by real segmentation
+  // pipelines — unlike the small uniform values of the other tests.
+  const existing = new BigUint64Array(32 * 32 * 32);
+  for (let i = 0; i < existing.length; ++i) {
+    existing[i] = 0x8000000000000000n + BigInt(i);
+  }
+  const sentinel = existing[0];
+  const chunkKey = `${BUCKET}/data.zarr/c/0/0/0`;
+  storage.set(chunkKey, await gzip(existing.buffer as ArrayBuffer));
+
+  const layer = makeLayer(viewer!.layerSpecification, "volume", {
+    type: "segmentation",
+    source: {
+      url: `s3+http://localhost:9000/${BUCKET}/data.zarr|zarr3:`,
+      subsources: { default: { enabled: true, writingEnabled: true } },
+      enableDefaultSubsources: false,
+    },
+  });
+  viewer!.layerSpecification.add(layer);
+
+  const { context } = await waitForEditingContext();
+
+  const paintVal = 0x9999999999999999n;
+  await context.dispatchBrushStroke(
+    [new Float32Array([16, 16, 16])],
+    2,
+    (_) => paintVal,
+    0 /* DISK */,
+    {
+      u: new Float32Array([1, 0, 0]),
+      v: new Float32Array([0, 1, 0]),
+    },
+  );
+
+  await poll(async () => {
+    const data = storage.get(chunkKey);
+    if (!data) return false;
+    const arr = new BigUint64Array(await gunzip(data));
+    return arr.some((v) => v === paintVal) && arr[0] === sentinel;
+  }, "Verify dense-label repaint applied AND existing labels preserved");
+});
+
+test("Pipeline: Multiscale repaint with NON-EMPTY downsample parent (OME zarr3)", async () => {
+  const BUCKET = "test-v3-multiscale";
+  const groupJson = JSON.stringify({
+    zarr_format: 3,
+    node_type: "group",
+    attributes: {
+      multiscales: [
+        {
+          version: "0.5",
+          axes: [
+            { name: "x", type: "space", unit: "nanometer" },
+            { name: "y", type: "space", unit: "nanometer" },
+            { name: "z", type: "space", unit: "nanometer" },
+          ],
+          datasets: [
+            {
+              path: "s0",
+              coordinateTransformations: [
+                { type: "scale", scale: [32, 32, 32] },
+              ],
+            },
+            {
+              path: "s1",
+              coordinateTransformations: [
+                { type: "scale", scale: [64, 64, 64] },
+              ],
+            },
+          ],
+          name: "test-multiscale",
+        },
+      ],
+    },
+  });
+  const arrayJson = (shape: number) =>
+    JSON.stringify({
+      zarr_format: 3,
+      node_type: "array",
+      shape: [shape, shape, shape],
+      data_type: "uint64",
+      chunk_grid: {
+        name: "regular",
+        configuration: { chunk_shape: [32, 32, 32] },
+      },
+      chunk_key_encoding: {
+        name: "default",
+        configuration: { separator: "/" },
+      },
+      codecs: [
+        { name: "bytes", configuration: { endian: "little" } },
+        { name: "gzip", configuration: { level: 1 } },
+      ],
+      fill_value: 0,
+      attributes: {},
+    });
+
+  storage.set(
+    `${BUCKET}/data.zarr/zarr.json`,
+    <ArrayBuffer>new TextEncoder().encode(groupJson).buffer,
+  );
+  storage.set(
+    `${BUCKET}/data.zarr/s0/zarr.json`,
+    <ArrayBuffer>new TextEncoder().encode(arrayJson(64)).buffer,
+  );
+  storage.set(
+    `${BUCKET}/data.zarr/s1/zarr.json`,
+    <ArrayBuffer>new TextEncoder().encode(arrayJson(32)).buffer,
+  );
+
+  const gzip = async (data: ArrayBuffer): Promise<ArrayBuffer> => {
+    const cs = new CompressionStream("gzip");
+    const writer = cs.writable.getWriter();
+    void writer.write(new Uint8Array(data));
+    void writer.close();
+    return await new Response(cs.readable).arrayBuffer();
+  };
+  const gunzip = async (data: ArrayBuffer): Promise<ArrayBuffer> => {
+    const ds = new DecompressionStream("gzip");
+    const writer = ds.writable.getWriter();
+    void writer.write(new Uint8Array(data));
+    void writer.close();
+    return await new Response(ds.readable).arrayBuffer();
+  };
+
+  // Both the edited chunk AND its downsample parent pre-exist with data —
+  // replicating painting over pipeline-produced regions (the untested case;
+  // blank regions have empty parents).
+  const existingVal = 7n;
+  const parentVal = 9n;
+  const child = new BigUint64Array(32 * 32 * 32).fill(existingVal);
+  const parent = new BigUint64Array(32 * 32 * 32).fill(parentVal);
+  const childKey = `${BUCKET}/data.zarr/s0/c/0/0/0`;
+  const parentKey = `${BUCKET}/data.zarr/s1/c/0/0/0`;
+  storage.set(childKey, await gzip(child.buffer as ArrayBuffer));
+  storage.set(parentKey, await gzip(parent.buffer as ArrayBuffer));
+
+  const layer = makeLayer(viewer!.layerSpecification, "volume", {
+    type: "segmentation",
+    source: {
+      url: `s3+http://localhost:9000/${BUCKET}/data.zarr|zarr3:`,
+      subsources: { default: { enabled: true, writingEnabled: true } },
+      enableDefaultSubsources: false,
+    },
+  });
+  viewer!.layerSpecification.add(layer);
+
+  const { context } = await waitForEditingContext();
+
+  const paintVal = 123n;
+  await context.dispatchBrushStroke(
+    [new Float32Array([16, 16, 16])],
+    4,
+    (_) => paintVal,
+    1 /* SPHERE */,
+    {
+      u: new Float32Array([1, 0, 0]),
+      v: new Float32Array([0, 1, 0]),
+    },
+  );
+
+  await poll(async () => {
+    const data = storage.get(childKey);
+    if (!data) return false;
+    const arr = new BigUint64Array(await gunzip(data));
+    return (
+      arr.some((v) => v === paintVal) && arr.some((v) => v === existingVal)
+    );
+  }, "Verify s0 stroke applied AND existing s0 data preserved");
+
+  await poll(async () => {
+    const data = storage.get(parentKey);
+    if (!data) return false;
+    const arr = new BigUint64Array(await gunzip(data));
+    return arr.some((v) => v === paintVal) && arr.some((v) => v === parentVal);
+  }, "Verify s1 downsample applied AND existing s1 data preserved");
+});
+
 test("Pipeline: Zarr V2 (UINT32) with Slash Separator", async () => {
   const BUCKET = "test-v2-sep";
   const zarray = JSON.stringify({
