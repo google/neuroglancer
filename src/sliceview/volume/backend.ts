@@ -165,6 +165,12 @@ export class VolumeChunkSource
   declare spec: VolumeChunkSpecification;
   tempChunkDataSize: Uint32Array;
   tempChunkPosition: Float32Array;
+
+  // Set by the voxel-edit controller on sources it writes to. Chunk downloads
+  // must then revalidate with the server (`cache: "no-cache"`): the browser's
+  // heuristic freshness for responses without Cache-Control can otherwise
+  // serve stale cached chunks — hiding freshly written edits — for hours.
+  requireRevalidatedReads = false;
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     const rank = this.spec.rank;

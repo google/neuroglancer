@@ -459,6 +459,11 @@ export class VoxelEditController extends SharedObject {
           `VoxelEditBackend: failed to resolve VolumeChunkSource for LOD ${res.lodIndex}`,
         );
       }
+      // This session writes to these sources: their reads must revalidate with
+      // the server instead of trusting the browser's heuristic HTTP cache,
+      // which would otherwise serve pre-edit chunks (strokes visually vanish
+      // even though the store was written).
+      resolved.requireRevalidatedReads = true;
       this.sources.set(res.lodIndex, resolved);
     }
 

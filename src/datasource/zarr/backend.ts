@@ -94,7 +94,10 @@ export class ZarrVolumeChunkSource extends WithParameters(
     const { chunkKvStore } = this;
     const response = await chunkKvStore.kvStore.read(
       chunkKvStore.getChunkKey(chunkGridPosition, baseKey),
-      { signal },
+      {
+        signal,
+        cacheMode: this.requireRevalidatedReads ? "no-cache" : undefined,
+      },
     );
     if (response !== undefined) {
       const decoded = await decodeArray(

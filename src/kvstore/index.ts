@@ -38,6 +38,11 @@ export interface ReadResponse {
 export interface DriverReadOptions extends Partial<ProgressOptions> {
   byteRange?: ByteRangeRequest;
   throwIfMissing?: boolean;
+  // Fetch cache mode for HTTP-backed stores. Use "no-cache" for data that may
+  // be mutated by this or another session: the browser's heuristic freshness
+  // (no Cache-Control header) can otherwise serve stale content for hours
+  // without revalidating.
+  cacheMode?: RequestCache;
 }
 
 export class NotFoundError extends Error {
