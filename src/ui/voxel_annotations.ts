@@ -255,7 +255,9 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
       return;
     }
     const seed = this.getPoint(this.mouseState);
-    const basis = this.getBasis();
+    // getBasis is only meaningful after a successful getPoint (which records
+    // the slice normal it reads).
+    const basis = seed ? this.getBasis() : undefined;
     if (!seed || !basis) {
       StatusMessage.showTemporaryMessage(
         "Unable to retrieve mouse position. Please try again.",
@@ -443,6 +445,14 @@ export class VoxelBrushTool extends BaseVoxelTool {
 
   private startDrawing(mouseState: MouseSelectionState) {
     if (this.isDrawing) return;
+    // getPoint must run before the stroke snapshot below: it also records the
+    // slice normal that getBasis() reads.
+    const start = this.getPoint(mouseState);
+    if (!start) {
+      throw new Error(
+        "startDrawing: could not compute a starting voxel position from mouse",
+      );
+    }
     this.isDrawing = true;
     this.accumulatedCenters = [];
     this.activeStroke = {
@@ -455,13 +465,6 @@ export class VoxelBrushTool extends BaseVoxelTool {
           ? this.layer.getVoxelPaintValue(false)(false)
           : undefined,
     };
-
-    const start = this.getPoint(mouseState);
-    if (!start) {
-      throw new Error(
-        "startDrawing: could not compute a starting voxel position from mouse",
-      );
-    }
 
     this.paintPoints([new Float32Array([start[0], start[1], start[2]])]);
     this.lastPoint = start;
