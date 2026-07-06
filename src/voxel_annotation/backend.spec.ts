@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ChunkState } from "#src/chunk_manager/base.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { DATA_TYPE_ARRAY_CONSTRUCTOR, DataType } from "#src/util/data_type.js";
 import { mat4 } from "#src/util/geom.js";
+import { HttpError } from "#src/util/http_request.js";
 import { VoxelEditController } from "#src/voxel_annotation/backend.js";
 import {
   makeVoxChunkKey,
@@ -22,6 +22,7 @@ const mockQueueManager = {
   scheduleUpdate: vi.fn(),
   moveChunkToFrontend: vi.fn(),
   markRecentlyUsed: vi.fn(),
+  invalidateCachedChunks: vi.fn(),
   gl: {},
 };
 
@@ -560,35 +561,20 @@ describe("VoxelEditController: Downsampling Integration", () => {
   let grandParentSource: any;
 
   const setupIntegration = (numLevels: number = 2) => {
+    // Chunk data is injected through the mock server storage (the download
+    // path) rather than by stubbing `getChunk`: edit-path reads now download
+    // into isolated chunks and never consult `getChunk`.
     childSource = createMockSource();
-    vi.spyOn(childSource, "getChunk").mockImplementation(
-      (pos: Float32Array) => ({
-        data: new Uint32Array(8).fill(1),
-        chunkDataSize: MOCK_SPEC.chunkDataSize,
-        chunkGridPosition: pos,
-        state: ChunkState.SYSTEM_MEMORY,
-      }),
+    childSource.serverStorage.set(
+      "0,0,0",
+      new Uint8Array(8).fill(1).buffer, // dataType 0 = UINT8
     );
 
     parentSource = createMockSource();
-    vi.spyOn(parentSource, "getChunk").mockImplementation(
-      (pos: Float32Array) => ({
-        data: new Uint32Array(8).fill(0),
-        chunkDataSize: MOCK_SPEC.chunkDataSize,
-        chunkGridPosition: pos,
-        state: ChunkState.SYSTEM_MEMORY,
-      }),
-    );
+    // Parent/grandparent are absent from server storage: applyEdits creates
+    // them as empty (zero-filled) chunks, matching the old zero-filled stubs.
 
     grandParentSource = createMockSource();
-    vi.spyOn(grandParentSource, "getChunk").mockImplementation(
-      (pos: Float32Array) => ({
-        data: new Uint32Array(8).fill(0),
-        chunkDataSize: MOCK_SPEC.chunkDataSize,
-        chunkGridPosition: pos,
-        state: ChunkState.SYSTEM_MEMORY,
-      }),
-    );
 
     (mockRpc.get as any).mockImplementation((id: number) => {
       if (id === 0) return mockChunkManager;
@@ -624,7 +610,7 @@ describe("VoxelEditController: Downsampling Integration", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(childSource.getChunk).toHaveBeenCalled();
+    expect(childSource.download).toHaveBeenCalled();
 
     expect(parentSource.applyEdits).toHaveBeenCalledWith(
       "0,0,0",
@@ -645,11 +631,10 @@ describe("VoxelEditController: Downsampling Integration", () => {
   it("Recursive Propagation: L0 -> L1 -> L2", async () => {
     setupIntegration(3);
 
+    // After the L0->L1 write, the L1 chunk must read back as 1s so the L1->L2
+    // step propagates. Simulate by publishing it to the mock server storage.
     parentSource.applyEdits.mockImplementation(async () => {
-      parentSource.getChunk.mockReturnValue({
-        data: new Uint32Array(8).fill(1),
-        chunkDataSize: MOCK_SPEC.chunkDataSize,
-      });
+      parentSource.serverStorage.set("0,0,0", new Uint8Array(8).fill(1).buffer);
     });
 
     const key = makeVoxChunkKey("0,0,0", 0);
@@ -684,9 +669,8 @@ describe("VoxelEditController: Downsampling Integration", () => {
   it("Lazy Loading: Downloads child chunk if missing", async () => {
     setupIntegration(2);
 
-    const emptyChunk = { data: null, chunkDataSize: MOCK_SPEC.chunkDataSize };
-    childSource.getChunk.mockReturnValue(emptyChunk);
-
+    // Chunk absent from server storage; the isolated-chunk download fills it.
+    childSource.serverStorage.delete("0,0,0");
     childSource.download.mockImplementation(async (chunk: any) => {
       chunk.data = new Uint32Array(8).fill(1);
     });
@@ -704,10 +688,6 @@ describe("VoxelEditController: Downsampling Integration", () => {
     setupIntegration(2);
     const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    childSource.getChunk.mockReturnValue({
-      data: null,
-      chunkDataSize: MOCK_SPEC.chunkDataSize,
-    });
     childSource.download.mockRejectedValue(new Error("Network Error"));
 
     const key = makeVoxChunkKey("0,0,0", 0);
@@ -1430,5 +1410,61 @@ describe("VoxelEditController: Tool Operations", () => {
     const indices = (mockSource.applyEdits as any).mock.calls[0][1];
     expect(indices.length).toBeLessThan(100);
     expect(indices.length).toBeGreaterThan(50);
+  });
+});
+
+describe("VolumeChunkSource.applyEdits: unreadable stored chunk", () => {
+  it("treats a corrupt (undecodable) chunk as empty and repairs it on write", async () => {
+    const source = createMockSource();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    (source.download as any).mockRejectedValue(
+      new Error("Raw-format chunk is 0 bytes, but 8 * 1 = 8 bytes expected."),
+    );
+
+    const change = await source.applyEdits("0,0,0", [3], [7n]);
+
+    expect(source.writeChunk).toHaveBeenCalled();
+    const written = new Uint8Array(source.serverStorage.get("0,0,0")!);
+    expect(Array.from(written)).toEqual([0, 0, 0, 7, 0, 0, 0, 0]);
+    expect(Number((change.oldValues as any)[0])).toBe(0);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("propagates transient (network) failures without writing", async () => {
+    const source = createMockSource();
+    (source.download as any).mockRejectedValue(
+      new HttpError("http://store/chunk", 503, "Service Unavailable"),
+    );
+
+    await expect(source.applyEdits("0,0,0", [3], [7n])).rejects.toThrow(
+      "HTTP error 503",
+    );
+    expect(source.writeChunk).not.toHaveBeenCalled();
+  });
+
+  it("fails closed on unrecognized read errors instead of repairing", async () => {
+    const source = createMockSource();
+    (source.download as any).mockRejectedValue(
+      new Error("some wrapped kvstore failure"),
+    );
+
+    await expect(source.applyEdits("0,0,0", [3], [7n])).rejects.toThrow(
+      "some wrapped kvstore failure",
+    );
+    expect(source.writeChunk).not.toHaveBeenCalled();
+  });
+
+  it("invalidates the shared backend cache entry after a successful write", async () => {
+    const source = createMockSource();
+    mockQueueManager.invalidateCachedChunks.mockClear();
+    source.serverStorage.set("0,0,0", new Uint8Array(8).fill(2).buffer);
+
+    await source.applyEdits("0,0,0", [3], [7n]);
+
+    expect(mockQueueManager.invalidateCachedChunks).toHaveBeenCalledWith(
+      source,
+      ["0,0,0"],
+    );
   });
 });

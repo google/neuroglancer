@@ -216,14 +216,16 @@ class BackendVoxelAccessor {
     cy: number,
     cz: number,
   ): Promise<ChunkContext> {
+    // Same pattern as `applyEdits`: only use the shared cache entry when its
+    // data is already resident (synchronous read, safe). Otherwise download
+    // into an isolated chunk the queue manager cannot dispose mid-download.
     let chunk = this.source.chunks.get(key) as VolumeChunk | undefined;
-    if (!chunk) {
-      chunk = this.source.getChunk(
-        new Float32Array([cx, cy, cz]),
-      ) as VolumeChunk;
-    }
-
-    if (chunk.state > ChunkState.SYSTEM_MEMORY_WORKER || !chunk.data) {
+    if (
+      chunk === undefined ||
+      chunk.state > ChunkState.SYSTEM_MEMORY_WORKER ||
+      !chunk.data
+    ) {
+      chunk = this.source.getIsolatedChunk(new Float32Array([cx, cy, cz]));
       try {
         await this.source.download(chunk, new AbortController().signal);
       } catch {

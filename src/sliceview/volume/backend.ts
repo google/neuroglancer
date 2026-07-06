@@ -148,6 +148,16 @@ export function computeChunkBounds(
   return chunkPosition;
 }
 
+// Recognizes deterministic decode failures proving the stored bytes themselves
+// are corrupt (e.g. the empty-body objects written by an earlier bug). Only
+// these may be repaired by overwriting the stored chunk. Any UNRECOGNIZED
+// error is treated as potentially transient (network, server, cancellation,
+// codec OOM, wrapped kvstore errors) and must fail the edit instead: repairing
+// on a false positive would durably overwrite valid data (fail-closed).
+function isCorruptStoredChunkError(e: unknown): boolean {
+  return e instanceof Error && /Raw-format chunk is \d+ bytes/.test(e.message);
+}
+
 export class VolumeChunkSource
   extends SliceViewChunkSourceBackend
   implements VolumeChunkSourceInterface
@@ -164,6 +174,23 @@ export class VolumeChunkSource
 
   computeChunkBounds(chunk: VolumeChunk) {
     return computeChunkBounds(this, chunk);
+  }
+
+  /**
+   * Returns a chunk for `chunkGridPosition` that is NOT registered in the shared
+   * chunk cache. The queue manager never sees it, so concurrent invalidation or
+   * eviction cannot dispose it (`chunk.source = null`) while an edit-path
+   * download or write is in flight on it. Discard after use; it must never be
+   * added to `this.chunks`.
+   */
+  getIsolatedChunk(chunkGridPosition: Float32Array): VolumeChunk {
+    const chunk = new (this.chunkConstructor as new () => VolumeChunk)();
+    chunk.source = this;
+    chunk.initializeVolumeChunk(
+      chunkGridPosition.join(),
+      chunkGridPosition as vec3,
+    );
+    return chunk;
   }
 
   // Override in data source backends to actually persist the chunk.
@@ -190,10 +217,36 @@ export class VolumeChunkSource
       throw new Error(`applyEdits: invalid chunk key ${chunkKey}`);
     }
 
-    const chunk = this.getChunk(chunkGridPosition) as VolumeChunk;
-    if (chunk.state > ChunkState.SYSTEM_MEMORY_WORKER || !chunk.data) {
-      const ac = new AbortController();
-      await this.download(chunk, ac.signal);
+    // The whole read-modify-write runs on an isolated chunk the queue manager
+    // cannot see: mutating or encoding a shared cache entry races with
+    // concurrent invalidation (dispose nulls `chunk.source` mid-download) and
+    // with promotion/serialization (the buffer transfer to the frontend
+    // detaches it mid-write). If the shared entry has resident data, copy it
+    // synchronously (a detached source buffer makes `slice()` throw, failing
+    // the edit loudly instead of writing garbage); otherwise download. The
+    // shared entry itself is invalidated after the successful write below.
+    const resident = this.chunks.get(chunkKey) as VolumeChunk | undefined;
+    const chunk = this.getIsolatedChunk(chunkGridPosition);
+    if (
+      resident !== undefined &&
+      resident.state <= ChunkState.SYSTEM_MEMORY_WORKER &&
+      resident.data
+    ) {
+      chunk.chunkDataSize = resident.chunkDataSize;
+      chunk.data = (resident.data as TypedArray).slice();
+    } else {
+      try {
+        await this.download(chunk, new AbortController().signal);
+      } catch (e) {
+        if (!isCorruptStoredChunkError(e)) throw e;
+        // The stored object itself is corrupt: treat the chunk as absent so
+        // the edit proceeds on fill data and the write below repairs it.
+        console.warn(
+          `applyEdits: stored chunk ${chunkKey} is unreadable; ` +
+            `treating it as empty and repairing it on write.`,
+          e,
+        );
+      }
     }
 
     if (!chunk.chunkDataSize) {
@@ -319,6 +372,15 @@ export class VolumeChunkSource
     for (let i = 0; i < maxRetries; i++) {
       try {
         await this.writeChunk(chunk);
+        // The edit was written from an isolated chunk, so the shared cache
+        // entry (if any) still holds pre-edit data — or has a pre-edit
+        // download in flight that would otherwise later land as "fresh" and
+        // even be reused by the next edit, durably erasing this write.
+        // Invalidate it backend-side: routing through the frontend RPC would
+        // miss chunks the frontend does not hold (e.g. still DOWNLOADING).
+        const { queueManager } = this.chunkManager;
+        queueManager.invalidateCachedChunks(this, [chunkKey]);
+        queueManager.scheduleUpdate();
         return {
           indices: indicesCopy,
           oldValues: oldValuesArray,
