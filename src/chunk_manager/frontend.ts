@@ -258,8 +258,25 @@ export class ChunkQueueManager extends SharedObject {
         let chunk: Chunk;
         const key = update.id;
         if (update.new) {
+          // After a lazy invalidation the previous chunk is still present;
+          // free its GPU texture right before it is replaced so the swap
+          // happens in a single tick with no intermediate frame. Inert in
+          // every non-lazy flow, where the key is absent here.
+          const existing = source.chunks.get(key);
+          if (
+            existing !== undefined &&
+            existing.state === ChunkState.GPU_MEMORY
+          ) {
+            existing.freeGPUMemory(this.gl);
+          }
           chunk = source.getChunk(update);
           source.addChunk(key, chunk);
+          // A real refetch arrived for this key: arm its fresh-chunk listeners so
+          // they fire on this chunk's GPU arrival (below), not on some unrelated
+          // GPU transition of the stale chunk this one replaced.
+          if (source.freshChunkListeners?.has(key)) {
+            (source.pendingFreshChunkGpu ??= new Set()).add(key);
+          }
         } else {
           chunk = source.chunks.get(key)!;
         }
@@ -290,6 +307,25 @@ export class ChunkQueueManager extends SharedObject {
               for (const requester of requesters) {
                 requester(chunk);
               }
+            }
+          }
+        }
+        // Fire one-shot listeners only once the refetched chunk is actually on
+        // the GPU (displayed). Gating on `pendingFreshChunkGpu` — armed above when
+        // the `update.new` for this key arrived — rather than on GPU_MEMORY alone
+        // ensures we fire for the fresh chunk, not for an eviction/re-promotion of
+        // the stale chunk it replaced (which would drop the overlay before the
+        // real data is rendered, re-introducing the upload-latency flicker).
+        if (
+          newState === ChunkState.GPU_MEMORY &&
+          source.pendingFreshChunkGpu?.has(key)
+        ) {
+          source.pendingFreshChunkGpu.delete(key);
+          const freshListeners = source.freshChunkListeners?.get(key);
+          if (freshListeners !== undefined) {
+            source.freshChunkListeners!.delete(key);
+            for (const listener of freshListeners) {
+              listener();
             }
           }
         }
@@ -433,6 +469,31 @@ export class ChunkSource extends SharedObject {
 
   chunkRequesters: Map<string, ChunkRequesterState[]> | undefined;
 
+  // One-shot listeners fired when fresh data (a `new` update) arrives for a key.
+  // Unlike `chunkRequesters`, these only fire on a real refetch, not on any
+  // `<= SYSTEM_MEMORY` transition (e.g. GPU eviction).
+  freshChunkListeners: Map<string, (() => void)[]> | undefined;
+
+  // Keys for which a real refetch (`update.new`) has been observed and whose
+  // `freshChunkListeners` must fire on the *next* GPU_MEMORY arrival. Arming only
+  // after `update.new` is what makes the firing specific to the refetched chunk:
+  // an eviction/re-promotion of the stale, lazily kept chunk never sets this, so
+  // it cannot fire the swap before the fresh data is actually rendered.
+  pendingFreshChunkGpu: Set<string> | undefined;
+
+  onNextFreshChunk(key: string, listener: () => void): void {
+    let listeners = this.freshChunkListeners;
+    if (listeners === undefined) {
+      listeners = this.freshChunkListeners = new Map();
+    }
+    const entry = listeners.get(key);
+    if (entry === undefined) {
+      listeners.set(key, [listener]);
+    } else {
+      entry.push(listener);
+    }
+  }
+
   /**
    * If set to true, chunk updates will be applied to this source immediately, rather than queueing
    * them.  Sources that dynamically update chunks and need to ensure a consistent order of
@@ -462,15 +523,24 @@ export class ChunkSource extends SharedObject {
       chunk.freeGPUMemory(this.gl);
     }
     this.chunks.delete(key);
+    // The chunk is gone, so any fresh-chunk listener waiting on its GPU arrival
+    // will never fire — drop it (and its captured closure) instead of leaking.
+    this.freshChunkListeners?.delete(key);
+    this.pendingFreshChunkGpu?.delete(key);
   }
 
-  invalidateChunks(keys: string[]): void {
+  invalidateChunks(keys: string[], options?: { lazy?: boolean }): void {
+    // When `lazy` is set, the existing GPU chunk is kept on display; the
+    // refetched data swaps it in place via `applyChunkUpdate`, avoiding the
+    // lower-resolution fallback flicker. The backend cache is invalidated
+    // either way.
+    const lazy = options?.lazy ?? false;
     const validKeys: string[] = [];
     for (const key of keys) {
       const chunk = this.chunks.get(key);
       if (chunk) {
         validKeys.push(key);
-        this.deleteChunk(key);
+        if (!lazy) this.deleteChunk(key);
       }
     }
 

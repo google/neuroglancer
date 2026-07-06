@@ -618,13 +618,13 @@ describe("VoxelEditController: Downsampling Integration", () => {
       expect.arrayContaining([1n]),
     );
 
-    expect((controller as any).callChunkReload).toHaveBeenCalledWith([
-      makeVoxChunkKey("0,0,0", 1),
-    ]);
-
+    // The real parent is reloaded lazily; when it reaches the GPU it clears the
+    // originating LOD-0 overlay (swap-on-arrival), passed as a { real -> overlay }
+    // map. The old eager preview-clear call no longer exists.
     expect((controller as any).callChunkReload).toHaveBeenCalledWith(
-      [makeVoxChunkKey("0,0,0", 0), makeVoxChunkKey("0,0,0", 1)],
-      true, // isForPreviewChunks
+      [makeVoxChunkKey("0,0,0", 1)],
+      false, // isForPreviewChunks
+      { [makeVoxChunkKey("0,0,0", 1)]: makeVoxChunkKey("0,0,0", 0) },
     );
   });
 

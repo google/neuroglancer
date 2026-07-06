@@ -527,7 +527,11 @@ export class VoxelEditController extends SharedObject {
     }
   }
 
-  callChunkReload(voxChunkKeys: string[], isForPreviewChunks: boolean) {
+  callChunkReload(
+    voxChunkKeys: string[],
+    isForPreviewChunks: boolean,
+    overlayKeysToClear?: Record<string, string>,
+  ) {
     if (!Array.isArray(voxChunkKeys) || voxChunkKeys.length === 0) return;
     const multiscaleSource = isForPreviewChunks
       ? this.host.previewSource
@@ -548,6 +552,61 @@ export class VoxelEditController extends SharedObject {
 
     const chunksToInvalidateBySource = new Map<VolumeChunkSource, string[]>();
 
+    if (!isForPreviewChunks) {
+      // Real chunks: invalidate lazily so the current GPU chunk stays on screen,
+      // and clear the matching overlay chunk only once the refetched real data
+      // has actually arrived on the GPU (swap-on-arrival), never on a timer.
+      //
+      // The overlay to clear defaults to the same key/LOD (max-res edits). For
+      // downsampled parents the backend passes the originating LOD-0 key, so the
+      // visible (forced LOD-0) overlay is cleared as soon as the real chunk of
+      // whatever LOD is on screen arrives. A never-swapped overlay simply stays
+      // displayed (correct) at worst leaking a little memory — far better than a
+      // timer that would clear it with nothing to show.
+      const previewSources = this.host.previewSource?.getSources(
+        this.getIdentitySliceViewSourceOptions(),
+      )[0];
+      for (const voxKey of voxChunkKeys) {
+        const parsed = parseVoxChunkKey(voxKey);
+        if (!parsed) continue;
+        const source = sources[parsed.lodIndex]?.chunkSource as
+          | VolumeChunkSource
+          | undefined;
+        if (!source) continue;
+        const { chunkKey } = parsed;
+
+        const overlayParsed = parseVoxChunkKey(
+          overlayKeysToClear?.[voxKey] ?? voxKey,
+        );
+        const overlaySource = overlayParsed
+          ? (previewSources?.[overlayParsed.lodIndex]?.chunkSource as
+              | InMemoryVolumeChunkSource
+              | undefined)
+          : undefined;
+        if (overlaySource) {
+          const overlayChunkKey = overlayParsed!.chunkKey;
+          source.onNextFreshChunk(chunkKey, () =>
+            overlaySource.invalidateChunks([overlayChunkKey]),
+          );
+        }
+        let arr = chunksToInvalidateBySource.get(source);
+        if (!arr) {
+          arr = [];
+          chunksToInvalidateBySource.set(source, arr);
+        }
+        arr.push(chunkKey);
+      }
+
+      for (const [source, keys] of chunksToInvalidateBySource.entries()) {
+        if (keys.length > 0) {
+          source.invalidateChunks(keys, { lazy: true });
+        }
+      }
+      return;
+    }
+
+    // Preview chunks: clear the optimistic overlay immediately (write-failure
+    // rollback, and downsampled-overlay cleanup).
     for (const voxKey of voxChunkKeys) {
       const parsed = parseVoxChunkKey(voxKey);
       if (!parsed) continue;
@@ -605,7 +664,11 @@ export class VoxelEditController extends SharedObject {
 registerRPC(VOX_RELOAD_CHUNKS_RPC_ID, function (x: any) {
   const obj = this.get(x.rpcId) as VoxelEditController;
   const keys: string[] = Array.isArray(x.voxChunkKeys) ? x.voxChunkKeys : [];
-  obj.callChunkReload(keys, x.isForPreviewChunks);
+  const overlayKeys: Record<string, string> | undefined =
+    x.overlayKeysToClear !== null && typeof x.overlayKeysToClear === "object"
+      ? x.overlayKeysToClear
+      : undefined;
+  obj.callChunkReload(keys, x.isForPreviewChunks, overlayKeys);
 });
 
 registerRPC(VOX_EDIT_FAILURE_RPC_ID, function (x: any) {

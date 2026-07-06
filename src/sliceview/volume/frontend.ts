@@ -305,23 +305,25 @@ export class InMemoryVolumeChunkSource extends VolumeChunkSource {
     this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
   }
 
-  invalidateChunks(keys: string[]): void {
-    const update = () => {
-      const validKeys: string[] = [];
-      for (const key of keys) {
-        const chunk = this.chunks.get(key);
-        if (chunk) {
-          validKeys.push(key);
-          this.deleteChunk(key);
-        }
+  invalidateChunks(keys: string[], _options?: { lazy?: boolean }): void {
+    // Signature matches the base `ChunkSource.invalidateChunks`, but `lazy` does
+    // not apply here: an in-memory source has no backend refetch to swap in, so
+    // there is nothing to keep the stale chunk on screen for. Deletion is always
+    // immediate; the crossfade with the real data is timed by the caller (overlay
+    // dropped on real-chunk arrival via onNextFreshChunk, or as a rollback on
+    // write failure), not by a blind delay here.
+    const validKeys: string[] = [];
+    for (const key of keys) {
+      const chunk = this.chunks.get(key);
+      if (chunk) {
+        validKeys.push(key);
+        this.deleteChunk(key);
       }
+    }
 
-      if (validKeys.length > 0) {
-        this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
-      }
-    };
-    // adding a small delay to avoid flickering due to the base source taking some time to download the new data
-    setTimeout(update, 100);
+    if (validKeys.length > 0) {
+      this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
+    }
   }
 
   applyLocalEdits(edits: Map<string, LocalVolumeEdit>): void {

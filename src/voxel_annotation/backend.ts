@@ -580,9 +580,10 @@ export class VoxelEditController extends SharedObject {
         if (failedVoxChunkKeys.includes(voxKey)) continue;
         this.enqueueDownsample(voxKey);
       }
-    } else {
-      this.callChunkReload(editsByVoxKey.keys().toArray(), true);
     }
+    // The overlay is cleared by the swap-on-arrival registered in the real
+    // callChunkReload above (not here): on the no-downsampling path the max-res
+    // overlay is dropped when the refetched real chunk arrives.
 
     this.updatePendingCount();
   }
@@ -623,11 +624,22 @@ export class VoxelEditController extends SharedObject {
     }, this.commitDebounceDelayMs) as unknown as number;
   }
 
-  callChunkReload(voxChunkKeys: string[], isForPreviewChunks = false) {
+  // `overlayKeysToClear[realKey]` is the overlay vox key (LOD 0) to drop once the
+  // real chunk `realKey` reaches the GPU. A real key absent from the map defaults
+  // to itself on the frontend; downsampled parents map to the originating LOD-0
+  // key so the visible (forced LOD-0) overlay is cleared as soon as any covering
+  // real LOD arrives. Using a keyed map (not parallel arrays) keeps real and
+  // overlay keys aligned regardless of ordering or partial population.
+  callChunkReload(
+    voxChunkKeys: string[],
+    isForPreviewChunks = false,
+    overlayKeysToClear?: Record<string, string>,
+  ) {
     this.rpc?.invoke(VOX_RELOAD_CHUNKS_RPC_ID, {
       rpcId: this.rpcId,
       voxChunkKeys: voxChunkKeys,
       isForPreviewChunks,
+      overlayKeysToClear,
     });
   }
 
@@ -679,19 +691,16 @@ export class VoxelEditController extends SharedObject {
   }
 
   private async processDownsampleChain(key: string): Promise<void> {
-    const allModifiedKeys = new Array<string>();
     let currentKey: string | null = key;
 
     while (currentKey !== null) {
-      allModifiedKeys.push(currentKey);
-      currentKey = await this.downsampleStep(currentKey);
+      currentKey = await this.downsampleStep(currentKey, key);
     }
 
-    const pendingKeys = new Set(this.pendingEdits.map((e) => e.key));
-    const keysToReload = allModifiedKeys.filter(
-      (k) => !pendingKeys.has(k) && !this.downsampleChunkLocks.has(k),
-    );
-    if (keysToReload.length > 0) this.callChunkReload(keysToReload, true);
+    // Note: the overlay is no longer cleared eagerly here. Each parent's real
+    // reload (above) drops the originating LOD-0 overlay once it reaches the
+    // GPU, so the visible overlay is never removed before its replacement is
+    // rendered — even when zoomed out.
     this.updatePendingCount();
   }
 
@@ -729,7 +738,10 @@ export class VoxelEditController extends SharedObject {
    * Performs a single downsampling step from a child chunk to its parent.
    * @returns The key of the parent chunk that was updated, or null if the cascade should stop.
    */
-  private async downsampleStep(childKey: string): Promise<string | null> {
+  private async downsampleStep(
+    childKey: string,
+    originKey: string,
+  ): Promise<string | null> {
     const childInfo = parseVoxChunkKey(childKey);
     if (childInfo === null) {
       console.error(`[Downsample] Invalid child key format: ${childKey}`);
@@ -780,7 +792,9 @@ export class VoxelEditController extends SharedObject {
           update.indices,
           update.values,
         );
-        this.callChunkReload([parentKey]);
+        // Reload the real parent lazily; when it reaches the GPU, clear the
+        // originating LOD-0 overlay (the visible one when zoomed out).
+        this.callChunkReload([parentKey], false, { [parentKey]: originKey });
         const parentAccessor = this.getAccessor(parentRes.lodIndex);
         parentAccessor.invalidate(parentInfo.chunkKey);
       } catch (e) {
