@@ -134,6 +134,16 @@ export class ZarrVolumeChunkSource extends WithParameters(
       const numElements =
         chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2];
       const { dataType } = this.spec;
+      // A zero-length compressed buffer for a non-empty chunk means the
+      // underlying ArrayBuffer was detached (transferred to the frontend).
+      // Proceeding would silently decode to a full-size zero-filled array and
+      // durably overwrite the stored chunk with zeros.
+      if (compressedData.length === 0 && numElements > 0) {
+        throw new Error(
+          "ZarrVolumeChunkSource.writeChunk: refusing to write chunk from a " +
+            "zero-length (detached?) compressed buffer.",
+        );
+      }
       const baseOffset = compressedData.length > 0 ? compressedData[0] : 0;
 
       if (dataType === DataType.UINT32) {
@@ -161,6 +171,25 @@ export class ZarrVolumeChunkSource extends WithParameters(
         }
         dataToWrite = uncompressedData;
       }
+    }
+
+    // Never write a body whose element count does not match the chunk. A
+    // zero-length view here means the underlying buffer was detached (its
+    // ArrayBuffer transferred to the frontend); writing it would durably
+    // corrupt the stored object (e.g. a 20-byte gzip of an empty stream).
+    const writeChunkDataSize = chunk.chunkDataSize;
+    if (!writeChunkDataSize) {
+      throw new Error("ZarrVolumeChunkSource.writeChunk: unknown chunk size");
+    }
+    const expectedElements = writeChunkDataSize.reduce((a, b) => a * b, 1);
+    const actualElements = (dataToWrite as unknown as { length: number })
+      .length;
+    if (expectedElements === 0 || actualElements !== expectedElements) {
+      throw new Error(
+        `ZarrVolumeChunkSource.writeChunk: refusing to write chunk with ` +
+          `${actualElements} elements (expected ${expectedElements}); ` +
+          `buffer detached or chunk size invalid.`,
+      );
     }
 
     const encoded = await encodeArray(
