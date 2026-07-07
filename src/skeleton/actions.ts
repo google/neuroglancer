@@ -42,5 +42,5 @@ export const SKELETON_ENTER_MERGE_MODE = "skeleton-enter-merge-mode";
 export const SKELETON_ENTER_SPLIT_MODE = "skeleton-enter-split-mode";
 export const SKELETON_ENTER_CREATE = "skeleton-enter-create";
 export const SKELETON_PIN_NODE = "skeleton-pin-node";
-export const SKELETON_DELETE_NODE = "skeleton-delete-node";
+export const SKELETON_ENTER_DELETE_MODE = "skeleton-enter-delete-mode";
 export const SKELETON_CLEAR_SELECTION = "skeleton-clear-node-selection";

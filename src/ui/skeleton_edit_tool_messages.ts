@@ -124,17 +124,17 @@ export function getSpatialSkeletonDefaultStatusText(
     case "none":
       return {
         status: "No selection",
-        actions: `Click to select · drag to move · hold m to merge · hold s to split · hold n for new skeleton · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+        actions: `Click to select · drag to move · hold m to merge · hold s to split · hold n for new skeleton · hold d to delete · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
       };
     case "selected-visible":
       return {
         status: shiftHeld ? "Ready to place new node" : "Node selected",
-        actions: `Click to select · drag to move · shift+click to add node · hold m to merge · hold s to split · hold n for new skeleton · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+        actions: `Click to select · drag to move · shift+click to add node · hold m to merge · hold s to split · hold n for new skeleton · hold d to delete · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
       };
     case "selected-hidden":
       return {
         status: "Node selected from non-visible skeleton",
-        actions: `Double-click skeleton to show it · hold m to merge · hold s to split · hold n for new skeleton · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+        actions: `Double-click skeleton to show it · hold m to merge · hold s to split · hold n for new skeleton · hold d to delete · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
       };
   }
 }
@@ -217,6 +217,26 @@ export function getSpatialSkeletonSplitIdleStatusText(
 export function getSpatialSkeletonSplittingStatusText(): SpatialSkeletonToolStatusText {
   return {
     status: "Split · splitting node…",
+    actions: SPATIAL_SKELETON_ROTATE_PAN_HINT,
+  };
+}
+
+export function getSpatialSkeletonDeleteIdleStatusText(
+  canExitWithKey: boolean,
+): SpatialSkeletonToolStatusText {
+  return {
+    status: "Delete · no selected nodes",
+    actions: withExitHint(
+      "Click a node to delete",
+      canExitWithKey,
+      "release d to exit delete",
+    ),
+  };
+}
+
+export function getSpatialSkeletonDeletingStatusText(): SpatialSkeletonToolStatusText {
+  return {
+    status: "Delete · deleting node…",
     actions: SPATIAL_SKELETON_ROTATE_PAN_HINT,
   };
 }

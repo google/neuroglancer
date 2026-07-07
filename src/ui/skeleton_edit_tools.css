@@ -84,6 +84,12 @@
     crosshair;
 }
 
+.neuroglancer-rendered-data-panel[data-skeleton-edit-mode="delete"] {
+  cursor:
+    url("./images/metacell/delete_cursor.svg") 20 20,
+    crosshair;
+}
+
 /* Transient press-state cursors — driven by data-skeleton-press-mode on the panel element */
 .neuroglancer-rendered-data-panel[data-skeleton-press-mode="rotate"] {
   cursor: move;

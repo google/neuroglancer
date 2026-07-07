@@ -6,6 +6,8 @@ import {
   getSpatialSkeletonCreateIdleStatusText,
   getSpatialSkeletonCreatingStatusText,
   getSpatialSkeletonDefaultStatusText,
+  getSpatialSkeletonDeleteIdleStatusText,
+  getSpatialSkeletonDeletingStatusText,
   getSpatialSkeletonMergeStatusText,
   getSpatialSkeletonMergingStatusText,
   getSpatialSkeletonMovingStatusText,
@@ -54,7 +56,7 @@ describe("spatial_skeleton_tool_messages", () => {
     it("no selection", () => {
       expect(getSpatialSkeletonDefaultStatusText("none", false)).toEqual({
         status: "No selection",
-        actions: `Click to select · drag to move · hold m to merge · hold s to split · hold n for new skeleton · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+        actions: `Click to select · drag to move · hold m to merge · hold s to split · hold n for new skeleton · hold d to delete · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
       });
     });
 
@@ -63,7 +65,7 @@ describe("spatial_skeleton_tool_messages", () => {
         getSpatialSkeletonDefaultStatusText("selected-visible", false),
       ).toEqual({
         status: "Node selected",
-        actions: `Click to select · drag to move · shift+click to add node · hold m to merge · hold s to split · hold n for new skeleton · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+        actions: `Click to select · drag to move · shift+click to add node · hold m to merge · hold s to split · hold n for new skeleton · hold d to delete · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
       });
     });
 
@@ -72,7 +74,7 @@ describe("spatial_skeleton_tool_messages", () => {
         getSpatialSkeletonDefaultStatusText("selected-visible", true),
       ).toEqual({
         status: "Ready to place new node",
-        actions: `Click to select · drag to move · shift+click to add node · hold m to merge · hold s to split · hold n for new skeleton · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+        actions: `Click to select · drag to move · shift+click to add node · hold m to merge · hold s to split · hold n for new skeleton · hold d to delete · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
       });
     });
 
@@ -81,7 +83,7 @@ describe("spatial_skeleton_tool_messages", () => {
         getSpatialSkeletonDefaultStatusText("selected-hidden", false),
       ).toEqual({
         status: "Node selected from non-visible skeleton",
-        actions: `Double-click skeleton to show it · hold m to merge · hold s to split · hold n for new skeleton · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+        actions: `Double-click skeleton to show it · hold m to merge · hold s to split · hold n for new skeleton · hold d to delete · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
       });
     });
 
@@ -90,7 +92,7 @@ describe("spatial_skeleton_tool_messages", () => {
         getSpatialSkeletonDefaultStatusText("selected-hidden", true),
       ).toEqual({
         status: "Node selected from non-visible skeleton",
-        actions: `Double-click skeleton to show it · hold m to merge · hold s to split · hold n for new skeleton · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+        actions: `Double-click skeleton to show it · hold m to merge · hold s to split · hold n for new skeleton · hold d to delete · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
       });
     });
   });
@@ -104,21 +106,17 @@ describe("spatial_skeleton_tool_messages", () => {
 
   describe("getSpatialSkeletonMergeStatusText", () => {
     it("no from node, key held", () => {
-      expect(getSpatialSkeletonMergeStatusText("no-from-node", true)).toEqual(
-        {
-          status: "Merge · no selected nodes",
-          actions: `Click a node to set as from node · release m to exit merge · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
-        },
-      );
+      expect(getSpatialSkeletonMergeStatusText("no-from-node", true)).toEqual({
+        status: "Merge · no selected nodes",
+        actions: `Click a node to set as from node · release m to exit merge · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+      });
     });
 
     it("no from node, key not held", () => {
-      expect(getSpatialSkeletonMergeStatusText("no-from-node", false)).toEqual(
-        {
-          status: "Merge · no selected nodes",
-          actions: `Click a node to set as from node · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
-        },
-      );
+      expect(getSpatialSkeletonMergeStatusText("no-from-node", false)).toEqual({
+        status: "Merge · no selected nodes",
+        actions: `Click a node to set as from node · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+      });
     });
 
     it("from node selected on a visible skeleton, key held", () => {
@@ -184,6 +182,29 @@ describe("spatial_skeleton_tool_messages", () => {
   it("returns a static splitting status", () => {
     expect(getSpatialSkeletonSplittingStatusText()).toEqual({
       status: "Split · splitting node…",
+      actions: SPATIAL_SKELETON_ROTATE_PAN_HINT,
+    });
+  });
+
+  describe("getSpatialSkeletonDeleteIdleStatusText", () => {
+    it("key held", () => {
+      expect(getSpatialSkeletonDeleteIdleStatusText(true)).toEqual({
+        status: "Delete · no selected nodes",
+        actions: `Click a node to delete · release d to exit delete · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+      });
+    });
+
+    it("key not held", () => {
+      expect(getSpatialSkeletonDeleteIdleStatusText(false)).toEqual({
+        status: "Delete · no selected nodes",
+        actions: `Click a node to delete · ${SPATIAL_SKELETON_ROTATE_PAN_HINT}`,
+      });
+    });
+  });
+
+  it("returns a static deleting status", () => {
+    expect(getSpatialSkeletonDeletingStatusText()).toEqual({
+      status: "Delete · deleting node…",
       actions: SPATIAL_SKELETON_ROTATE_PAN_HINT,
     });
   });

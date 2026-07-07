@@ -60,7 +60,7 @@ export default defineConfig((env, args) => {
         // emits a separate fetched file regardless of size, which caused the
         // custom cursor to only appear starting from the second activation.
         {
-          test: /src[\\/]ui[\\/]images[\\/]metacell[\\/](add_node_cursor|merge_cursor|new_skeleton_cursor|split_cursor|drag_cursor)\.svg$/,
+          test: /src[\\/]ui[\\/]images[\\/]metacell[\\/](add_node_cursor|merge_cursor|new_skeleton_cursor|split_cursor|delete_cursor|drag_cursor)\.svg$/,
           type: "asset/inline",
         },
         // Needed for .html assets used for auth redirect pages for the

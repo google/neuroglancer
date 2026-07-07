@@ -28,8 +28,8 @@ import { getVisibleSegments } from "#src/segmentation_display_state/base.js";
 import {
   SKELETON_ADD_NODE,
   SKELETON_CLEAR_SELECTION,
-  SKELETON_DELETE_NODE,
   SKELETON_ENTER_CREATE,
+  SKELETON_ENTER_DELETE_MODE,
   SKELETON_ENTER_MERGE_MODE,
   SKELETON_ENTER_SPLIT_MODE,
   SKELETON_PIN_NODE,
@@ -70,6 +70,8 @@ import {
   getSpatialSkeletonCreateIdleStatusText,
   getSpatialSkeletonCreatingStatusText,
   getSpatialSkeletonDefaultStatusText,
+  getSpatialSkeletonDeleteIdleStatusText,
+  getSpatialSkeletonDeletingStatusText,
   getSpatialSkeletonMergeStatusText,
   getSpatialSkeletonMergingStatusText,
   getSpatialSkeletonMovingStatusText,
@@ -96,6 +98,7 @@ const enum SkeletonEditMode {
   Merge = 1,
   Create = 2,
   Split = 3,
+  Delete = 4,
 }
 
 // In edit mode, plain left click is selection-only — it never rotates or
@@ -127,6 +130,7 @@ const DRAG_START_DISTANCE_PX = 2;
 const MERGE_EXIT_KEY_CODE = "KeyM";
 const SPLIT_EXIT_KEY_CODE = "KeyS";
 const CREATE_EXIT_KEY_CODE = "KeyN";
+const DELETE_EXIT_KEY_CODE = "KeyD";
 
 function hasNavigationModifier(event: { ctrlKey: boolean; metaKey: boolean }) {
   // TODO replace by mac check
@@ -525,6 +529,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
   // One-shot guards: prevent repeated fires while a key is held down.
   private mergeKeyHeld = false;
   private splitKeyHeld = false;
+  private deleteKeyHeld = false;
   // Modifier-held state drives cursor indicators and blocks node actions.
   private shiftHeld = false;
   // Navigation modifier (ctrl, or cmd on Mac — see hasNavigationModifier).
@@ -565,6 +570,8 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       this.setModeAttribute("create");
     } else if (this.currentMode === SkeletonEditMode.Split) {
       this.setModeAttribute("split");
+    } else if (this.currentMode === SkeletonEditMode.Delete) {
+      this.setModeAttribute("delete");
     } else if (this.shiftHeld && !this.ctrlHeld) {
       this.setModeAttribute("add");
     } else {
@@ -622,6 +629,15 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
         body,
         getSpatialSkeletonCreateIdleStatusText(
           this.heldPhysicalKeyCodes.has(CREATE_EXIT_KEY_CODE),
+        ),
+      );
+      return;
+    }
+    if (this.currentMode === SkeletonEditMode.Delete) {
+      renderSpatialSkeletonToolStatus(
+        body,
+        getSpatialSkeletonDeleteIdleStatusText(
+          this.heldPhysicalKeyCodes.has(DELETE_EXIT_KEY_CODE),
         ),
       );
       return;
@@ -729,6 +745,19 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     if (this.currentMode !== SkeletonEditMode.Split) return;
     this.currentMode = SkeletonEditMode.Default;
     this.layer.spatialSkeletonSplitMode.value = false;
+    this.updateModeAttribute();
+    this.clearStatus();
+  }
+
+  private enterDelete() {
+    this.currentMode = SkeletonEditMode.Delete;
+    this.updateModeAttribute();
+    this.renderStatus();
+  }
+
+  private exitDelete() {
+    if (this.currentMode !== SkeletonEditMode.Delete) return;
+    this.currentMode = SkeletonEditMode.Default;
     this.updateModeAttribute();
     this.clearStatus();
   }
@@ -1155,6 +1184,33 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     this.enterSplit();
   }
 
+  // Delete (d): enters delete mode — click a node to delete it.
+  private onEnterDeleteModeAction() {
+    if (
+      this.deleteKeyHeld ||
+      this.dragInProgress ||
+      this.pending ||
+      this.currentMode !== SkeletonEditMode.Default
+    )
+      return;
+    this.deleteKeyHeld = true;
+    const disabledReason = this.layer.getSpatialSkeletonActionsDisabledReason(
+      SpatialSkeletonActions.deleteNodes,
+    );
+    if (disabledReason !== undefined) {
+      StatusMessage.showTemporaryMessage(disabledReason);
+      return;
+    }
+    const skeletonLayer = this.getActiveSpatiallyIndexedSkeletonLayer();
+    if (skeletonLayer === undefined) {
+      StatusMessage.showTemporaryMessage(
+        "No spatially indexed skeleton source is currently loaded.",
+      );
+      return;
+    }
+    this.enterDelete();
+  }
+
   private onAddNodeAction(event: ActionEvent<MouseEvent>) {
     event.stopPropagation();
     event.detail.preventDefault();
@@ -1252,9 +1308,10 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     );
   }
 
-  private onDeleteNodeAction(event: ActionEvent<MouseEvent>) {
-    event.stopPropagation();
-    event.detail.preventDefault();
+  private handleDeletePick() {
+    // Caller (capture listener) already called stopPropagation/preventDefault.
+    if (this.pending) return;
+
     const disabledReason = this.layer.getSpatialSkeletonActionsDisabledReason(
       SpatialSkeletonActions.deleteNodes,
     );
@@ -1271,6 +1328,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     }
     const pickedNode = this.getPickedSpatialSkeletonNode();
     if (pickedNode === undefined) {
+      StatusMessage.showTemporaryMessage("Click a skeleton node to delete.");
       return;
     }
     const nodeInfo = skeletonLayer.getNode(pickedNode.nodeId);
@@ -1280,11 +1338,17 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       );
       return;
     }
+    this.pending = true;
+    this.setStatus(getSpatialSkeletonDeletingStatusText());
     void this.layer
       .getSpatialSkeletonDeleteOperationContext(nodeInfo)
       .then(() => executeSpatialSkeletonDeleteNode(this.layer, nodeInfo))
       .catch((error) => {
         showSpatialSkeletonActionError("delete node", error);
+      })
+      .finally(() => {
+        this.pending = false;
+        this.renderStatus();
       });
   }
 
@@ -1299,6 +1363,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     this.createPlacedThisHold = false;
     this.mergeKeyHeld = false;
     this.splitKeyHeld = false;
+    this.deleteKeyHeld = false;
     this.shiftHeld = false;
     this.ctrlHeld = false;
     this.heldPhysicalKeyCodes = new Set();
@@ -1407,6 +1472,10 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
         this.splitKeyHeld = false;
         this.exitSplit();
       }
+      if (event.code === DELETE_EXIT_KEY_CODE) {
+        this.deleteKeyHeld = false;
+        this.exitDelete();
+      }
       this.syncModifiers(event);
     };
     // mousemove catches modifiers pressed/released while keyboard focus is
@@ -1415,12 +1484,14 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     const onBlur = () => {
       this.mergeKeyHeld = false;
       this.splitKeyHeld = false;
+      this.deleteKeyHeld = false;
       this.shiftHeld = false;
       this.ctrlHeld = false;
       this.heldPhysicalKeyCodes = new Set();
       this.exitMerge();
       this.exitCreate();
       this.exitSplit();
+      this.exitDelete();
       this.updateModeAttribute();
     };
     window.addEventListener("keydown", onKeyDown);
@@ -1532,6 +1603,12 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
           this.handleCreatePlace();
           return;
         }
+        if (this.currentMode === SkeletonEditMode.Delete) {
+          event.stopPropagation();
+          event.preventDefault();
+          this.handleDeletePick();
+          return;
+        }
         // Default mode: only consume if hovering a node.
         this.handleDefaultMousedown(event, panel);
       };
@@ -1558,8 +1635,8 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     activation.bindAction(SKELETON_ADD_NODE, (event) =>
       this.onAddNodeAction(event as ActionEvent<MouseEvent>),
     );
-    activation.bindAction(SKELETON_DELETE_NODE, (event) =>
-      this.onDeleteNodeAction(event as ActionEvent<MouseEvent>),
+    activation.bindAction(SKELETON_ENTER_DELETE_MODE, () =>
+      this.onEnterDeleteModeAction(),
     );
     activation.bindAction(SKELETON_TOGGLE_TRUE_END, () => {
       const skeletonLayer = this.getActiveSpatiallyIndexedSkeletonLayer();
