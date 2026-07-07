@@ -2068,6 +2068,7 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
   ): Promise<CatmaidSplitResult> {
     const body = new URLSearchParams({
       treenode_id: nodeId.toString(),
+      downstream_annotation_map: JSON.stringify({}),
     });
     appendCatmaidState(
       body,
