@@ -276,6 +276,13 @@ export class SliceViewPanel extends RenderedDataPanel {
         }
       }),
     );
+    this.registerDisposer(
+      viewer.mouseState.changed.add(() => {
+        // The picking indicator is a DOM overlay; moving the cursor only
+        // repositions it and never triggers a canvas redraw.
+        this.updatePickingIndicator();
+      }),
+    );
   }
 
   translateByViewportPixels(deltaX: number, deltaY: number): void {
@@ -530,6 +537,36 @@ export class SliceViewPanel extends RenderedDataPanel {
       return;
     }
     setStateFromRelative(pickRadius, pickRadius, 0);
+  }
+
+  protected computePickingIndicatorPosition() {
+    const { mouseState } = this.viewer;
+    if (!mouseState.active) return undefined;
+    const {
+      viewProjectionMat,
+      logicalWidth,
+      logicalHeight,
+      displayDimensionRenderInfo: { displayDimensionIndices },
+    } = this.sliceView.projectionParameters.value;
+    const displayPos = tempVec3;
+    displayPos[0] =
+      displayDimensionIndices[0] >= 0
+        ? mouseState.position[displayDimensionIndices[0]]
+        : 0;
+    displayPos[1] =
+      displayDimensionIndices[1] >= 0
+        ? mouseState.position[displayDimensionIndices[1]]
+        : 0;
+    displayPos[2] =
+      displayDimensionIndices[2] >= 0
+        ? mouseState.position[displayDimensionIndices[2]]
+        : 0;
+    vec3.transformMat4(displayPos, displayPos, viewProjectionMat);
+    if (displayPos[2] < -1 || displayPos[2] > 1) return undefined;
+    return {
+      x: (displayPos[0] * 0.5 + 0.5) * logicalWidth,
+      y: (1 - (displayPos[1] * 0.5 + 0.5)) * logicalHeight,
+    };
   }
 
   /**

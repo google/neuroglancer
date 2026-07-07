@@ -117,6 +117,10 @@ export class PickRequest {
 
 const pickRequestInterval = 30;
 
+// Base diameter (CSS px) of the picking-indicator ring.  In the perspective view
+// this is scaled by depth (see `computePickingIndicatorPosition`).
+const PICKING_INDICATOR_DIAMETER = 14;
+
 export abstract class RenderedDataPanel extends RenderedPanel {
   /**
    * Current mouse position within the viewport, or -1 if the mouse is not in the viewport.
@@ -364,6 +368,9 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       newPickingData.frameNumber = -1;
       return;
     }
+    // Keep the picking-indicator overlay in sync with the newly-rendered view
+    // (e.g. after a camera move the picked position projects to a new location).
+    this.updatePickingIndicator();
     // For the new frame, allow new pick requests regardless of interval since last request.
     this.nextPickRequestTime = 0;
     if (this.mouseX >= 0) {
@@ -372,6 +379,67 @@ export abstract class RenderedDataPanel extends RenderedPanel {
   }
 
   abstract drawWithPicking(pickingData: FramePickingData): boolean;
+
+  /**
+   * DOM element overlaying this panel that shows the picking indicator (a ring
+   * at the cursor's picked position).  It is a plain DOM element rather than a
+   * GL draw so that moving the cursor only repositions it and never triggers a
+   * canvas redraw.
+   */
+  private pickingIndicatorElement = this.createPickingIndicatorElement();
+
+  private createPickingIndicatorElement(): HTMLElement {
+    const el = document.createElement("div");
+    el.className = "neuroglancer-picking-indicator";
+    // A white ring bordered by black on both sides for contrast on any
+    // background.  Size and position are set in `updatePickingIndicator` (the
+    // size may vary with depth), so only the appearance is set here.
+    const s = el.style;
+    s.position = "absolute";
+    s.left = "0";
+    s.top = "0";
+    s.boxSizing = "border-box";
+    s.borderRadius = "50%";
+    s.border = "2px solid rgba(255, 255, 255, 0.92)";
+    s.boxShadow =
+      "0 0 0 1px rgba(0, 0, 0, 0.92), inset 0 0 0 1px rgba(0, 0, 0, 0.92)";
+    s.pointerEvents = "none";
+    s.zIndex = "10";
+    s.willChange = "transform";
+    s.display = "none";
+    this.element.appendChild(el);
+    return el;
+  }
+
+  /**
+   * Returns the picking indicator center in this panel's logical CSS pixels, or
+   * `undefined` if the indicator should be hidden.  `scale` (default 1) scales
+   * the ring diameter to convey depth; panels without a depth cue omit it.
+   * Implemented per panel using its own projection.
+   */
+  protected abstract computePickingIndicatorPosition():
+    | { x: number; y: number; scale?: number }
+    | undefined;
+
+  /**
+   * Repositions/resizes (or hides) the picking-indicator overlay for the current
+   * mouse selection.  Cheap DOM-only update; does not touch the canvas.
+   */
+  updatePickingIndicator() {
+    const el = this.pickingIndicatorElement;
+    const pos = this.visible
+      ? this.computePickingIndicatorPosition()
+      : undefined;
+    if (pos === undefined) {
+      if (el.style.display !== "none") el.style.display = "none";
+      return;
+    }
+    const size = PICKING_INDICATOR_DIAMETER * (pos.scale ?? 1);
+    el.style.display = "";
+    el.style.width = `${size}px`;
+    el.style.height = `${size}px`;
+    el.style.transform = `translate(${pos.x - size / 2}px, ${pos.y - size / 2}px)`;
+  }
 
   private nextPickRequestTime = 0;
   private pendingPickRequestTimerId = -1;
