@@ -1075,6 +1075,8 @@ export class SegmentationUserLayer extends Base {
   readonly spatialSkeletonEditMode = this.spatialSkeletonState.editMode;
   readonly spatialSkeletonMergeMode = this.spatialSkeletonState.mergeMode;
   readonly spatialSkeletonSplitMode = this.spatialSkeletonState.splitMode;
+  readonly spatialSkeletonSuppressSelectedNodeHighlight =
+    this.spatialSkeletonState.suppressSelectedNodeHighlight;
   readonly spatialSkeletonNodeDataVersion =
     this.spatialSkeletonState.nodeDataVersion;
 
@@ -1626,6 +1628,8 @@ export class SegmentationUserLayer extends Base {
                 {
                   sources2d: slicePanelSources,
                   selectedNodeInfo: this.selectedSpatialSkeletonNodeInfo,
+                  suppressSelectedNodeHighlight:
+                    this.spatialSkeletonState.suppressSelectedNodeHighlight,
                   hoveredNodeInfo: this.hoveredSpatialSkeletonNodeInfo,
                   pendingNodePositionVersion:
                     this.spatialSkeletonState.pendingNodePositionVersion,
@@ -1660,6 +1664,8 @@ export class SegmentationUserLayer extends Base {
               displayState,
               {
                 selectedNodeInfo: this.selectedSpatialSkeletonNodeInfo,
+                suppressSelectedNodeHighlight:
+                  this.spatialSkeletonState.suppressSelectedNodeHighlight,
                 hoveredNodeInfo: this.hoveredSpatialSkeletonNodeInfo,
                 pendingNodePositionVersion:
                   this.spatialSkeletonState.pendingNodePositionVersion,

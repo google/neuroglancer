@@ -704,6 +704,11 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       this.layer.selectSpatialSkeletonNode(anchorNode.nodeId, true, anchorNode);
       this.layer.setSpatialSkeletonMergeAnchor(anchorNode.nodeId);
     }
+    // In merge mode the selected-node highlight is only shown once a from node
+    // has been picked (the first click). When entered with an explicit anchor,
+    // that first pick has effectively already happened.
+    this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value =
+      anchorNode === undefined;
     this.layer.spatialSkeletonMergeMode.value = true;
     this.currentMode = SkeletonEditMode.Merge;
     this.updateModeAttribute();
@@ -714,6 +719,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     if (this.currentMode !== SkeletonEditMode.Merge) return;
     this.layer.clearSpatialSkeletonMergeAnchor();
     this.layer.spatialSkeletonMergeMode.value = false;
+    this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value = false;
     this.currentMode = SkeletonEditMode.Default;
     this.updateModeAttribute();
     this.clearStatus();
@@ -737,6 +743,9 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
   private enterSplit() {
     this.currentMode = SkeletonEditMode.Split;
     this.layer.spatialSkeletonSplitMode.value = true;
+    // In split mode the selected-node highlight stays hidden until the user
+    // clicks a node to split (or exits back to default mode).
+    this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value = true;
     this.updateModeAttribute();
     this.renderStatus();
   }
@@ -745,6 +754,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     if (this.currentMode !== SkeletonEditMode.Split) return;
     this.currentMode = SkeletonEditMode.Default;
     this.layer.spatialSkeletonSplitMode.value = false;
+    this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value = false;
     this.updateModeAttribute();
     this.clearStatus();
   }
@@ -913,6 +923,8 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
   }) {
     this.pinSegmentByNumber(pickedNode.segmentId);
     this.layer.selectSpatialSkeletonNode(pickedNode.nodeId, true, pickedNode);
+    // A node was clicked: reveal the selected-node highlight for it.
+    this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value = false;
     this.pending = true;
     this.setStatus(getSpatialSkeletonSplittingStatusText());
     void (async () => {
@@ -979,6 +991,8 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     }
     this.layer.selectSpatialSkeletonNode(pickedNode.nodeId, true, pickedNode);
     this.layer.setSpatialSkeletonMergeAnchor(pickedNode.nodeId);
+    // First click made: reveal the selected-node highlight for the from node.
+    this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value = false;
     this.renderStatus();
   }
 
@@ -1368,6 +1382,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     this.ctrlHeld = false;
     this.heldPhysicalKeyCodes = new Set();
     this.statusOverride = undefined;
+    layer.spatialSkeletonSuppressSelectedNodeHighlight.value = false;
 
     // 2. Create status UI.
     const { body, header } =
@@ -1404,6 +1419,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       this.setModeAttribute(undefined);
       layer.spatialSkeletonMergeMode.value = false;
       layer.spatialSkeletonSplitMode.value = false;
+      layer.spatialSkeletonSuppressSelectedNodeHighlight.value = false;
       layer.spatialSkeletonState.clearPendingNodePositions();
     });
 

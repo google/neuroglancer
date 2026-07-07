@@ -1877,6 +1877,9 @@ interface SpatiallyIndexedSkeletonLayerOptions {
   selectedNodeInfo?: WatchableValueInterface<
     SelectedSkeletonNodeInfo | undefined
   >;
+  // When true, the selected-node highlight is hidden even though a node may be
+  // selected (used while entering merge/split modes).
+  suppressSelectedNodeHighlight?: WatchableValueInterface<boolean>;
   hoveredNodeInfo?: WatchableValueInterface<
     SelectedSkeletonNodeInfo | undefined
   >;
@@ -2108,6 +2111,9 @@ export class SpatiallyIndexedSkeletonLayer
   }
   private selectedNodeInfo:
     | WatchableValueInterface<SelectedSkeletonNodeInfo | undefined>
+    | undefined;
+  private suppressSelectedNodeHighlight:
+    | WatchableValueInterface<boolean>
     | undefined;
   private hoveredNodeInfo:
     | WatchableValueInterface<SelectedSkeletonNodeInfo | undefined>
@@ -2457,6 +2463,7 @@ export class SpatiallyIndexedSkeletonLayer
       ),
     );
     this.selectedNodeInfo = options.selectedNodeInfo;
+    this.suppressSelectedNodeHighlight = options.suppressSelectedNodeHighlight;
     this.hoveredNodeInfo = options.hoveredNodeInfo;
     this.pendingNodePositionVersion = options.pendingNodePositionVersion;
     this.getPendingNodePositionOverride = options.getPendingNodePosition;
@@ -2571,6 +2578,11 @@ export class SpatiallyIndexedSkeletonLayer
           invalidateNodeOutlineColors();
           requestRedraw();
         }),
+      );
+    }
+    if (this.suppressSelectedNodeHighlight?.changed) {
+      this.registerDisposer(
+        this.suppressSelectedNodeHighlight.changed.add(requestRedraw),
       );
     }
     if (this.hoveredNodeInfo?.changed) {
@@ -3023,7 +3035,7 @@ export class SpatiallyIndexedSkeletonLayer
     );
     gl.uniform1i(
       nodeShader.uniform("uSelectedNodeId"),
-      this.selectedNodeInfo?.value?.nodeId ?? -1,
+      this.getHighlightedSelectedNodeId(),
     );
     gl.uniform3fv(
       nodeShader.uniform("uHighlightedNodeOutlineColor"),
@@ -3159,7 +3171,7 @@ export class SpatiallyIndexedSkeletonLayer
     );
     gl.uniform1i(
       nodeShader.uniform("uSelectedNodeId"),
-      this.selectedNodeInfo?.value?.nodeId ?? -1,
+      this.getHighlightedSelectedNodeId(),
     );
     gl.uniform3fv(
       nodeShader.uniform("uHighlightedNodeOutlineColor"),

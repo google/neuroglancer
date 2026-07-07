@@ -166,25 +166,17 @@ export function getSpatialSkeletonMergeStatusText(
   switch (state) {
     case "no-from-node":
       return {
-        status: "Merge · no selected nodes",
-        actions: withExitHint(
-          "Click a node to set as from node",
-          canExitWithKey,
-          exitHint,
-        ),
+        status: "Merge · click a node to merge from",
+        actions: withExitHint("Click to select node", canExitWithKey, exitHint),
       };
     case "from-node-visible":
       return {
-        status: "Merge · from node selected",
-        actions: withExitHint(
-          "Click a 2nd node on a different skeleton to merge",
-          canExitWithKey,
-          exitHint,
-        ),
+        status: "Merge · click a node to merge to",
+        actions: withExitHint("Click to select node", canExitWithKey, exitHint),
       };
     case "from-node-hidden":
       return {
-        status: "Merge · from node on non-visible skeleton",
+        status: "Merge · make the from-node skeleton visible",
         actions: withExitHint(
           "Double-click skeleton to show it",
           canExitWithKey,
@@ -205,9 +197,9 @@ export function getSpatialSkeletonSplitIdleStatusText(
   canExitWithKey: boolean,
 ): SpatialSkeletonToolStatusText {
   return {
-    status: "Split · no selected nodes",
+    status: "Split · click a node to form the root of a new skeleton",
     actions: withExitHint(
-      "Click a node to split",
+      "Click to select node",
       canExitWithKey,
       "release s to exit split",
     ),
