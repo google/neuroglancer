@@ -295,12 +295,14 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
   localPosition: SharedWatchableValue<Float32Array>;
   skeletonSpacingTarget: SharedWatchableValue<number>;
   skeletonSpacingTarget2d: SharedWatchableValue<number>;
+  hiddenSkeletonsVisible: SharedWatchableValue<boolean>;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.skeletonSpacingTarget = rpc.get(options.skeletonSpacingTarget);
     this.skeletonSpacingTarget2d = rpc.get(options.skeletonSpacingTarget2d);
     this.localPosition = rpc.get(options.localPosition);
+    this.hiddenSkeletonsVisible = rpc.get(options.hiddenSkeletonsVisible);
     const scheduleUpdateChunkPriorities = () =>
       this.chunkManager.scheduleUpdateChunkPriorities();
     this.registerDisposer(
@@ -311,6 +313,9 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
     );
     this.registerDisposer(
       this.skeletonSpacingTarget2d.changed.add(scheduleUpdateChunkPriorities),
+    );
+    this.registerDisposer(
+      this.hiddenSkeletonsVisible.changed.add(scheduleUpdateChunkPriorities),
     );
     this.registerDisposer(
       this.chunkManager.recomputeChunkPriorities.add(() =>
@@ -343,6 +348,9 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
   }
 
   private recomputeChunkPriorities() {
+    if (!this.hiddenSkeletonsVisible.value) {
+      return;
+    }
     this.chunkManager.registerLayer(this);
     for (const attachment of this.attachments.values()) {
       const { view } = attachment;

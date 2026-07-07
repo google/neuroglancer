@@ -110,6 +110,7 @@ import { SliceViewPanelRenderLayer } from "#src/sliceview/renderlayer.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
+  makeCachedDerivedWatchableValue,
   makeCachedLazyDerivedWatchableValue,
   TrackableValue,
   WatchableValue,
@@ -2630,6 +2631,18 @@ export class SpatiallyIndexedSkeletonLayer
       ),
     );
 
+    const hiddenSkeletonsVisibleWatchable = this.registerDisposer(
+      SharedWatchableValue.makeFromExisting(
+        rpc,
+        this.registerDisposer(
+          makeCachedDerivedWatchableValue(
+            (alpha) => alpha > 0,
+            [this.displayState.hiddenObjectAlpha],
+          ),
+        ),
+      ),
+    );
+
     sharedObject.initializeCounterpart(rpc, {
       chunkManager: chunkManager.rpcId,
       localPosition: this.registerDisposer(
@@ -2637,6 +2650,7 @@ export class SpatiallyIndexedSkeletonLayer
       ).rpcId,
       skeletonSpacingTarget: skeletonSpacingTargetWatchable.rpcId,
       skeletonSpacingTarget2d: skeletonSpacingTarget2dWatchable.rpcId,
+      hiddenSkeletonsVisible: hiddenSkeletonsVisibleWatchable.rpcId,
     });
     this.backend = sharedObject;
     this.gpuBrowseExcludedSegmentsHashTable = this.registerDisposer(
