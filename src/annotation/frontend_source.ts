@@ -856,6 +856,7 @@ export class MultiscaleAnnotationSource
           }
           break;
         case AnnotationType.POLYLINE:
+        case AnnotationType.RULER:
           for (const point of annotation.points) {
             for (let i = 0; i < rank; ++i) {
               tempLower[i] = Math.min(point[i], tempLower[i]);

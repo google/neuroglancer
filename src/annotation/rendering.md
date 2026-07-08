@@ -190,6 +190,10 @@ void setPolyEndpointMarkerSize(float startSize, float endSize);
 void setPolyEndpointMarkerBorderWidth(float startSize, float endSize);
 ```
 
+#### Ruler annotations
+
+Ruler annotations share the polyline geometry and are rendered identically to polylines (line segments with endpoint markers), using the same shader API. A ruler is a distinct annotation type whose description is automatically maintained as the total physical length of the path (the sum of its segment lengths). It is created with the ruler tool and, apart from the auto-updated description, behaves like a polyline for rendering purposes.
+
 #### Bounding box annotations
 
 ```glsl

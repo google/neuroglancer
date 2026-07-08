@@ -26,3 +26,8 @@ tsconfig.tsbuildinfo
 -/docs/python/api/index.rst
 /docs/python/api/*.rst
 /.vite
+
+# Agent and workflow tooling (not part of the project)
+/.claude/
+/.specify/
+/specs/

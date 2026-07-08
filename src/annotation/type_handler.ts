@@ -17,11 +17,12 @@
 import type {
   Annotation,
   AnnotationPropertySpec,
+  AnnotationType,
 } from "#src/annotation/index.js";
 import {
-  AnnotationType,
   annotationTypeHandlers,
   getPropertyOffsets,
+  isPolylineLikeAnnotationType,
   propertyTypeDataType,
 } from "#src/annotation/index.js";
 import type { AnnotationLayer } from "#src/annotation/renderlayer.js";
@@ -388,7 +389,7 @@ export abstract class AnnotationRenderHelper extends AnnotationRenderHelperBase 
 vec3 defaultColor() { return uColor; }
 highp uint getPickBaseOffset() { return uint(gl_InstanceID) * ${this.pickIdsPerInstance}u; }
 `);
-        if (this.annotationType !== AnnotationType.POLYLINE) {
+        if (!isPolylineLikeAnnotationType(this.annotationType)) {
           builder.addVertexCode(`
 uint getNumRelatedInstances() { return 0u; }
 `);
@@ -812,7 +813,7 @@ interface AnnotationRenderHelperConstructor {
   ): AnnotationRenderHelper;
 }
 
-interface AnnotationTypeRenderHandler<T extends Annotation> {
+export interface AnnotationTypeRenderHandler<T extends Annotation> {
   defineShaderNoOpSetters: (builder: ShaderBuilder) => void;
   perspectiveViewRenderHelper: AnnotationRenderHelperConstructor;
   sliceViewRenderHelper: AnnotationRenderHelperConstructor;

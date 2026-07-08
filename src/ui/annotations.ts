@@ -35,6 +35,7 @@ import type {
   Ellipsoid,
   Line,
   PolyLine,
+  Ruler,
 } from "#src/annotation/index.js";
 import {
   AnnotationPropertySerializer,
@@ -55,7 +56,10 @@ import {
 import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import type { MouseSelectionState, UserLayer } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
-import type { ChunkTransformParameters } from "#src/render_coordinate_transform.js";
+import type {
+  ChunkTransformParameters,
+  RenderLayerTransform,
+} from "#src/render_coordinate_transform.js";
 import { getChunkPositionFromCombinedGlobalLocalPositions } from "#src/render_coordinate_transform.js";
 import {
   RenderScaleHistogram,
@@ -112,8 +116,10 @@ import * as matrix from "#src/util/matrix.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { nearlyEqual } from "#src/util/number.js";
 import { numberToStringFixed } from "#src/util/number_to_string.js";
+import { computeRulerLengthNm } from "#src/util/ruler_length.js";
 import { formatScaleWithUnitAsString } from "#src/util/si_units.js";
 import { NullarySignal, Signal } from "#src/util/signal.js";
+import { formatLength } from "#src/util/spatial_units.js";
 import * as vector from "#src/util/vector.js";
 import { makeAddButton } from "#src/widget/add_button.js";
 import { ColorWidget } from "#src/widget/color.js";
@@ -194,6 +200,7 @@ function getCenterPosition(center: Float32Array, annotation: Annotation) {
       vector.scale(center, center, 0.5);
       break;
     case AnnotationType.POLYLINE:
+    case AnnotationType.RULER:
       // Return the first line of the polyline
       vector.add(center, annotation.points[0], annotation.points[1]);
       vector.scale(center, center, 0.5);
@@ -505,6 +512,15 @@ export class AnnotationLayerView extends Tab {
       },
     });
     mutableControls.appendChild(polylineButton);
+
+    const rulerButton = makeIcon({
+      text: annotationTypeHandlers[AnnotationType.RULER].icon,
+      title: "Annotate ruler",
+      onClick: () => {
+        this.layer.tool.value = new PlaceRulerTool(this.layer, {});
+      },
+    });
+    mutableControls.appendChild(rulerButton);
 
     const helpIcon = makeIcon({
       title:
@@ -1123,6 +1139,7 @@ const ANNOTATE_LINE_TOOL_ID = "annotateLine";
 const ANNOTATE_BOUNDING_BOX_TOOL_ID = "annotateBoundingBox";
 const ANNOTATE_ELLIPSOID_TOOL_ID = "annotateSphere";
 const ANNOTATE_POLYLINE_TOOL_ID = "annotatePolyline";
+const ANNOTATE_RULER_TOOL_ID = "annotateRuler";
 
 export class PlacePointTool extends PlaceAnnotationTool {
   trigger(mouseState: MouseSelectionState) {
@@ -1642,6 +1659,111 @@ class PlacePolylineTool extends MultiStepAnnotationTool {
   }
 }
 
+/**
+ * Builds a per-annotation-dimension physical scale array (nanometers per unit)
+ * for the given annotation layer. A dimension whose unit is not length (meters)
+ * contributes 0 so it does not affect the measured length. Returns undefined if
+ * the layer transform is not yet resolved.
+ */
+function getAnnotationScalesNm(
+  annotationLayer: AnnotationLayerState,
+  layer: UserLayerWithAnnotations,
+): Float64Array | undefined {
+  const transformValue = annotationLayer.transform.value;
+  if (transformValue.error !== undefined) return undefined;
+  const transform: RenderLayerTransform = transformValue;
+  const scaleNm = new Float64Array(transform.rank);
+  const assign = (
+    coordinateSpace: CoordinateSpace,
+    spaceDim: number,
+    renderDim: number,
+  ) => {
+    if (renderDim < 0 || renderDim >= scaleNm.length) return;
+    if (coordinateSpace.units[spaceDim] === "m") {
+      scaleNm[renderDim] = coordinateSpace.scales[spaceDim] * 1e9;
+    }
+  };
+  const globalCoordinateSpace = layer.manager.root.coordinateSpace.value;
+  const { globalToRenderLayerDimensions } = transform;
+  for (let g = 0; g < globalToRenderLayerDimensions.length; ++g) {
+    assign(globalCoordinateSpace, g, globalToRenderLayerDimensions[g]);
+  }
+  const localCoordinateSpace = layer.localCoordinateSpace.value;
+  const { localToRenderLayerDimensions } = transform;
+  for (let l = 0; l < localToRenderLayerDimensions.length; ++l) {
+    assign(localCoordinateSpace, l, localToRenderLayerDimensions[l]);
+  }
+  return scaleNm;
+}
+
+/**
+ * Computes the total physical length of the given ruler points formatted with
+ * value and unit (e.g. "1.23 µm"), or undefined if the physical scale is not yet
+ * resolved.
+ */
+function formatRulerLength(
+  points: readonly Float32Array[],
+  annotationLayer: AnnotationLayerState,
+  layer: UserLayerWithAnnotations,
+): string | undefined {
+  const scaleNm = getAnnotationScalesNm(annotationLayer, layer);
+  if (scaleNm === undefined) return undefined;
+  return formatLength(computeRulerLengthNm(points, scaleNm));
+}
+
+/**
+ * A ruler is a polyline whose total physical length is shown as a read-only
+ * "Length" row in the selection panel (see the length row added where the
+ * annotation properties are rendered). The tool reuses the polyline placement
+ * behavior; only the annotation type differs.
+ */
+class PlaceRulerTool extends PlacePolylineTool {
+  get description() {
+    return "annotate ruler";
+  }
+
+  private toRuler(annotation: PolyLine | Ruler): Ruler {
+    const ruler = annotation as Ruler;
+    ruler.type = AnnotationType.RULER;
+    return ruler;
+  }
+
+  getInitialAnnotation(
+    mouseState: MouseSelectionState,
+    annotationLayer: AnnotationLayerState,
+  ): Annotation {
+    const annotation = super.getInitialAnnotation(
+      mouseState,
+      annotationLayer,
+    ) as PolyLine;
+    return this.toRuler(annotation);
+  }
+
+  getUpdatedAnnotation(
+    oldAnnotation: PolyLine,
+    mouseState: MouseSelectionState,
+    annotationLayer: AnnotationLayerState,
+    triggered: boolean,
+  ) {
+    const result = super.getUpdatedAnnotation(
+      oldAnnotation,
+      mouseState,
+      annotationLayer,
+      triggered,
+    );
+    // The runtime type is RULER; cast to satisfy the PolyLine-typed slot
+    // inherited from PlacePolylineTool.
+    result.newAnnotation = this.toRuler(
+      result.newAnnotation as PolyLine,
+    ) as unknown as PolyLine;
+    return result;
+  }
+
+  toJSON() {
+    return ANNOTATE_RULER_TOOL_ID;
+  }
+}
+
 class PlaceEllipsoidTool extends TwoStepAnnotationTool {
   getInitialAnnotation(
     mouseState: MouseSelectionState,
@@ -1716,6 +1838,11 @@ registerLegacyTool(
   ANNOTATE_POLYLINE_TOOL_ID,
   (layer, options) =>
     new PlacePolylineTool(<UserLayerWithAnnotations>layer, options),
+);
+registerLegacyTool(
+  ANNOTATE_RULER_TOOL_ID,
+  (layer, options) =>
+    new PlaceRulerTool(<UserLayerWithAnnotations>layer, options),
 );
 
 const newRelatedSegmentKeyMap = EventActionMap.fromObject({
@@ -2275,6 +2402,54 @@ export function UserLayerWithAnnotationsMixin<
                 idValueElement.textContent = reference.id;
                 label.appendChild(idValueElement);
                 parent.appendChild(label);
+
+                // For rulers, show the total physical length (value + unit) as a
+                // read-only property row, alongside the other computed properties.
+                if (annotation.type === AnnotationType.RULER) {
+                  // While the ruler is still being placed (pending), the last
+                  // point tracks the cursor; exclude it so the length reflects
+                  // only the points the user has actually clicked.
+                  const source = annotationLayer.source;
+                  const isBeingPlaced =
+                    source instanceof AnnotationSource &&
+                    source.pending.has(annotation.id);
+                  const measuredPoints = isBeingPlaced
+                    ? annotation.points.slice(0, -1)
+                    : annotation.points;
+                  const lengthText = formatRulerLength(
+                    measuredPoints,
+                    annotationLayer,
+                    this,
+                  );
+                  if (lengthText !== undefined) {
+                    const lengthRow = document.createElement("div");
+                    lengthRow.classList.add("neuroglancer-annotation-property");
+                    const nameWrapper = document.createElement("span");
+                    nameWrapper.classList.add(
+                      "neuroglancer-annotation-property-name-wrapper",
+                    );
+                    nameWrapper.appendChild(
+                      makeDescriptionIcon(
+                        "Total physical length of the ruler " +
+                          "(sum of the lengths of its segments)",
+                      ),
+                    );
+                    const lengthLabel = document.createElement("span");
+                    lengthLabel.classList.add(
+                      "neuroglancer-annotation-property-label",
+                    );
+                    lengthLabel.textContent = "Length";
+                    nameWrapper.appendChild(lengthLabel);
+                    lengthRow.appendChild(nameWrapper);
+                    const lengthValue = document.createElement("span");
+                    lengthValue.classList.add(
+                      "neuroglancer-annotation-property-value",
+                    );
+                    lengthValue.textContent = lengthText;
+                    lengthRow.appendChild(lengthValue);
+                    parent.appendChild(lengthRow);
+                  }
+                }
 
                 for (let i = 0, count = allProperties.length; i < count; ++i) {
                   const property = allProperties[i];

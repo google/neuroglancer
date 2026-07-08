@@ -80,6 +80,7 @@ export enum AnnotationType {
   AXIS_ALIGNED_BOUNDING_BOX = 2,
   ELLIPSOID = 3,
   POLYLINE = 4,
+  RULER = 5,
 }
 
 export const annotationTypes = [
@@ -88,7 +89,17 @@ export const annotationTypes = [
   AnnotationType.AXIS_ALIGNED_BOUNDING_BOX,
   AnnotationType.ELLIPSOID,
   AnnotationType.POLYLINE,
+  AnnotationType.RULER,
 ];
+
+/**
+ * A ruler shares the polyline geometry (an ordered list of points forming
+ * connected segments) and is rendered/serialized identically. Wherever the
+ * polyline geometry requires special handling, rulers must be treated the same.
+ */
+export function isPolylineLikeAnnotationType(type: AnnotationType): boolean {
+  return type === AnnotationType.POLYLINE || type === AnnotationType.RULER;
+}
 
 export interface AnnotationPropertySpecBase {
   identifier: string;
@@ -757,12 +768,18 @@ export interface PolyLine extends AnnotationBase {
   type: AnnotationType.POLYLINE;
 }
 
+export interface Ruler extends AnnotationBase {
+  points: Float32Array[];
+  type: AnnotationType.RULER;
+}
+
 export type Annotation =
   | Line
   | Point
   | AxisAlignedBoundingBox
   | Ellipsoid
-  | PolyLine;
+  | PolyLine
+  | Ruler;
 
 export interface AnnotationTypeHandler<T extends Annotation = Annotation> {
   icon: string;
@@ -881,77 +898,20 @@ function deserializeManyFloatVectors(
   return dataOffset;
 }
 
-export const annotationTypeHandlers: Record<
-  AnnotationType,
-  AnnotationTypeHandler
-> = {
-  [AnnotationType.LINE]: {
-    icon: "ꕹ",
-    description: "Line",
-    toJSON(annotation: Line) {
-      return {
-        pointA: Array.from(annotation.pointA),
-        pointB: Array.from(annotation.pointB),
-      };
-    },
-    restoreState(annotation: Line, obj: any, rank: number) {
-      annotation.pointA = verifyObjectProperty(obj, "pointA", (x) =>
-        parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat),
-      );
-      annotation.pointB = verifyObjectProperty(obj, "pointB", (x) =>
-        parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat),
-      );
-    },
-    serializedBytes(rank: number) {
-      return 2 * 4 * rank;
-    },
-    serialize(
-      buffer: DataView,
-      offset: number,
-      isLittleEndian: boolean,
-      rank: number,
-      annotation: Line,
-    ) {
-      serializeTwoFloatVectors(
-        buffer,
-        offset,
-        isLittleEndian,
-        rank,
-        annotation.pointA,
-        annotation.pointB,
-      );
-    },
-    deserialize: (
-      buffer: DataView,
-      offset: number,
-      isLittleEndian: boolean,
-      rank: number,
-      id: string,
-    ): Line => {
-      const pointA = new Float32Array(rank);
-      const pointB = new Float32Array(rank);
-      deserializeTwoFloatVectors(
-        buffer,
-        offset,
-        isLittleEndian,
-        rank,
-        pointA,
-        pointB,
-      );
-      return { type: AnnotationType.LINE, pointA, pointB, id, properties: [] };
-    },
-    visitGeometry(annotation: Line, callback) {
-      callback(annotation.pointA, false);
-      callback(annotation.pointB, false);
-    },
-    defaultProperties(annotation: Line) {
-      annotation;
-      return { properties: [], values: [] };
-    },
-  },
-  [AnnotationType.POLYLINE]: {
-    icon: "⤤",
-    description: "Polyline",
+/**
+ * Builds an annotation type handler for a polyline-like geometry (an ordered
+ * list of points). Used for both POLYLINE and RULER, which share identical
+ * geometry, serialization, and rendering; only the icon/description and the
+ * concrete annotation type differ.
+ */
+function makePolylineLikeAnnotationTypeHandler(
+  annotationType: AnnotationType.POLYLINE | AnnotationType.RULER,
+  icon: string,
+  description: string,
+): AnnotationTypeHandler<PolyLine> {
+  return {
+    icon,
+    description,
     toJSON(annotation: PolyLine) {
       return {
         points: annotation.points.map((point) => Array.from(point)),
@@ -1059,7 +1019,7 @@ export const annotationTypeHandlers: Record<
         }
       }
 
-      return { type: AnnotationType.POLYLINE, points, id, properties: [] };
+      return { type: annotationType, points, id, properties: [] } as PolyLine;
     },
     visitGeometry(annotation: PolyLine, callback) {
       for (const point of annotation.points) {
@@ -1079,7 +1039,87 @@ export const annotationTypeHandlers: Record<
         values: [annotation.points.length],
       };
     },
+  };
+}
+
+export const annotationTypeHandlers: Record<
+  AnnotationType,
+  AnnotationTypeHandler
+> = {
+  [AnnotationType.LINE]: {
+    icon: "ꕹ",
+    description: "Line",
+    toJSON(annotation: Line) {
+      return {
+        pointA: Array.from(annotation.pointA),
+        pointB: Array.from(annotation.pointB),
+      };
+    },
+    restoreState(annotation: Line, obj: any, rank: number) {
+      annotation.pointA = verifyObjectProperty(obj, "pointA", (x) =>
+        parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat),
+      );
+      annotation.pointB = verifyObjectProperty(obj, "pointB", (x) =>
+        parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat),
+      );
+    },
+    serializedBytes(rank: number) {
+      return 2 * 4 * rank;
+    },
+    serialize(
+      buffer: DataView,
+      offset: number,
+      isLittleEndian: boolean,
+      rank: number,
+      annotation: Line,
+    ) {
+      serializeTwoFloatVectors(
+        buffer,
+        offset,
+        isLittleEndian,
+        rank,
+        annotation.pointA,
+        annotation.pointB,
+      );
+    },
+    deserialize: (
+      buffer: DataView,
+      offset: number,
+      isLittleEndian: boolean,
+      rank: number,
+      id: string,
+    ): Line => {
+      const pointA = new Float32Array(rank);
+      const pointB = new Float32Array(rank);
+      deserializeTwoFloatVectors(
+        buffer,
+        offset,
+        isLittleEndian,
+        rank,
+        pointA,
+        pointB,
+      );
+      return { type: AnnotationType.LINE, pointA, pointB, id, properties: [] };
+    },
+    visitGeometry(annotation: Line, callback) {
+      callback(annotation.pointA, false);
+      callback(annotation.pointB, false);
+    },
+    defaultProperties(annotation: Line) {
+      annotation;
+      return { properties: [], values: [] };
+    },
   },
+  [AnnotationType.POLYLINE]: makePolylineLikeAnnotationTypeHandler(
+    AnnotationType.POLYLINE,
+    "⤤",
+    "Polyline",
+  ),
+  [AnnotationType.RULER]: makePolylineLikeAnnotationTypeHandler(
+    AnnotationType.RULER,
+    "{",
+    "Ruler",
+  ),
   [AnnotationType.POINT]: {
     icon: "⚬",
     description: "Point",
@@ -1761,6 +1801,7 @@ export class LocalAnnotationSource extends AnnotationSource {
           annotation.pointB = mapVector(annotation.pointB);
           break;
         case AnnotationType.POLYLINE:
+        case AnnotationType.RULER:
           annotation.points = annotation.points.map(mapVector);
           break;
         case AnnotationType.ELLIPSOID:
@@ -1827,7 +1868,7 @@ function serializeAnnotations(
     typeToOffset[annotationType] = totalBytes;
     const annotations: Annotation[] = allAnnotations[annotationType];
     const count = annotations.length;
-    if (annotationType === AnnotationType.POLYLINE) {
+    if (isPolylineLikeAnnotationType(annotationType)) {
       typeToSize[annotationType] = 0;
       for (const annotation of annotations) {
         const polyLinePairs = (annotation as PolyLine).points.length - 1;
@@ -1866,7 +1907,7 @@ function serializeAnnotations(
       const annotation = annotations[i];
       // Polylines need to be serialized per pair of points
       // Similar to if they stored each pair of points as a child Line annotation
-      if (annotationType === AnnotationType.POLYLINE) {
+      if (isPolylineLikeAnnotationType(annotationType)) {
         const polyline = annotation as PolyLine;
         serialize(
           dataView,
@@ -1908,7 +1949,7 @@ function serializeAnnotations(
         );
       }
     }
-    if (annotationType !== AnnotationType.POLYLINE) {
+    if (!isPolylineLikeAnnotationType(annotationType)) {
       typeToSize[annotationType] = annotations.length;
     }
   }
@@ -1929,7 +1970,8 @@ export class AnnotationSerializer {
     AxisAlignedBoundingBox[],
     Ellipsoid[],
     PolyLine[],
-  ] = [[], [], [], [], []];
+    Ruler[],
+  ] = [[], [], [], [], [], []];
   constructor(public propertySerializers: AnnotationPropertySerializer[]) {}
   add(annotation: Annotation) {
     (<Annotation[]>this.annotations[annotation.type]).push(annotation);
