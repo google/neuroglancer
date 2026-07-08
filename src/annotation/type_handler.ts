@@ -17,9 +17,9 @@
 import type {
   Annotation,
   AnnotationPropertySpec,
-  AnnotationType,
 } from "#src/annotation/index.js";
 import {
+  AnnotationType,
   annotationTypeHandlers,
   getPropertyOffsets,
   isPolylineLikeAnnotationType,
@@ -557,6 +557,16 @@ void userMain();
           renderHandler,
         ] of annotationTypeRenderHandlers) {
           if (annotationType === this.annotationType) continue;
+          // Polyline and ruler share a single setter namespace (setPoly*). The
+          // real implementations are supplied by defineShader for whichever
+          // polyline-like type is being compiled, so never add the (colliding)
+          // no-op versions when compiling a polyline-like shader, and otherwise
+          // add them at most once (via POLYLINE) rather than for every
+          // polyline-like type.
+          if (isPolylineLikeAnnotationType(annotationType)) {
+            if (isPolylineLikeAnnotationType(this.annotationType)) continue;
+            if (annotationType !== AnnotationType.POLYLINE) continue;
+          }
           renderHandler.defineShaderNoOpSetters(builder);
         }
         defineShader(builder);
