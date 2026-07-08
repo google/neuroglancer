@@ -18,7 +18,7 @@
  * @file Support for rendering polyline annotations.
  */
 
-import type { PolyLine, Ruler } from "#src/annotation/index.js";
+import type { Angle, PolyLine, Ruler } from "#src/annotation/index.js";
 import { AnnotationType } from "#src/annotation/index.js";
 import type {
   AnnotationRenderContext,
@@ -351,4 +351,10 @@ registerAnnotationTypeRenderHandler<PolyLine>(
 registerAnnotationTypeRenderHandler<Ruler>(
   AnnotationType.RULER,
   polylineRenderHandler as unknown as AnnotationTypeRenderHandler<Ruler>,
+);
+
+// An angle shares the polyline geometry and is rendered identically.
+registerAnnotationTypeRenderHandler<Angle>(
+  AnnotationType.ANGLE,
+  polylineRenderHandler as unknown as AnnotationTypeRenderHandler<Angle>,
 );

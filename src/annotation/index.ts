@@ -81,6 +81,7 @@ export enum AnnotationType {
   ELLIPSOID = 3,
   POLYLINE = 4,
   RULER = 5,
+  ANGLE = 6,
 }
 
 export const annotationTypes = [
@@ -90,15 +91,21 @@ export const annotationTypes = [
   AnnotationType.ELLIPSOID,
   AnnotationType.POLYLINE,
   AnnotationType.RULER,
+  AnnotationType.ANGLE,
 ];
 
 /**
- * A ruler shares the polyline geometry (an ordered list of points forming
- * connected segments) and is rendered/serialized identically. Wherever the
- * polyline geometry requires special handling, rulers must be treated the same.
+ * Rulers and angles share the polyline geometry (an ordered list of points
+ * forming connected segments) and are rendered/serialized identically. Wherever
+ * the polyline geometry requires special handling, these types must be treated
+ * the same.
  */
 export function isPolylineLikeAnnotationType(type: AnnotationType): boolean {
-  return type === AnnotationType.POLYLINE || type === AnnotationType.RULER;
+  return (
+    type === AnnotationType.POLYLINE ||
+    type === AnnotationType.RULER ||
+    type === AnnotationType.ANGLE
+  );
 }
 
 export interface AnnotationPropertySpecBase {
@@ -773,13 +780,19 @@ export interface Ruler extends AnnotationBase {
   type: AnnotationType.RULER;
 }
 
+export interface Angle extends AnnotationBase {
+  points: Float32Array[];
+  type: AnnotationType.ANGLE;
+}
+
 export type Annotation =
   | Line
   | Point
   | AxisAlignedBoundingBox
   | Ellipsoid
   | PolyLine
-  | Ruler;
+  | Ruler
+  | Angle;
 
 export interface AnnotationTypeHandler<T extends Annotation = Annotation> {
   icon: string;
@@ -900,12 +913,15 @@ function deserializeManyFloatVectors(
 
 /**
  * Builds an annotation type handler for a polyline-like geometry (an ordered
- * list of points). Used for both POLYLINE and RULER, which share identical
+ * list of points). Used for POLYLINE, RULER, and ANGLE, which share identical
  * geometry, serialization, and rendering; only the icon/description and the
  * concrete annotation type differ.
  */
 function makePolylineLikeAnnotationTypeHandler(
-  annotationType: AnnotationType.POLYLINE | AnnotationType.RULER,
+  annotationType:
+    | AnnotationType.POLYLINE
+    | AnnotationType.RULER
+    | AnnotationType.ANGLE,
   icon: string,
   description: string,
 ): AnnotationTypeHandler<PolyLine> {
@@ -1119,6 +1135,11 @@ export const annotationTypeHandlers: Record<
     AnnotationType.RULER,
     "{",
     "Ruler",
+  ),
+  [AnnotationType.ANGLE]: makePolylineLikeAnnotationTypeHandler(
+    AnnotationType.ANGLE,
+    "∡",
+    "Angle",
   ),
   [AnnotationType.POINT]: {
     icon: "⚬",
@@ -1802,6 +1823,7 @@ export class LocalAnnotationSource extends AnnotationSource {
           break;
         case AnnotationType.POLYLINE:
         case AnnotationType.RULER:
+        case AnnotationType.ANGLE:
           annotation.points = annotation.points.map(mapVector);
           break;
         case AnnotationType.ELLIPSOID:
@@ -1971,7 +1993,8 @@ export class AnnotationSerializer {
     Ellipsoid[],
     PolyLine[],
     Ruler[],
-  ] = [[], [], [], [], [], []];
+    Angle[],
+  ] = [[], [], [], [], [], [], []];
   constructor(public propertySerializers: AnnotationPropertySerializer[]) {}
   add(annotation: Annotation) {
     (<Annotation[]>this.annotations[annotation.type]).push(annotation);

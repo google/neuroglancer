@@ -28,6 +28,7 @@ import {
 import { MultiscaleAnnotationSource } from "#src/annotation/frontend_source.js";
 import type {
   Annotation,
+  Angle,
   AnnotationId,
   AnnotationNumericPropertySpec,
   AnnotationReference,
@@ -95,6 +96,7 @@ import {
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { getDefaultAnnotationListBindings } from "#src/ui/default_input_event_bindings.js";
 import { LegacyTool, registerLegacyTool } from "#src/ui/tool.js";
+import { computeVertexAnglesDegrees } from "#src/util/angle_measurement.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { arraysEqual, type ArraySpliceOp } from "#src/util/array.js";
 import { setClipboard } from "#src/util/clipboard.js";
@@ -201,6 +203,7 @@ function getCenterPosition(center: Float32Array, annotation: Annotation) {
       break;
     case AnnotationType.POLYLINE:
     case AnnotationType.RULER:
+    case AnnotationType.ANGLE:
       // Return the first line of the polyline
       vector.add(center, annotation.points[0], annotation.points[1]);
       vector.scale(center, center, 0.5);
@@ -521,6 +524,15 @@ export class AnnotationLayerView extends Tab {
       },
     });
     mutableControls.appendChild(rulerButton);
+
+    const angleButton = makeIcon({
+      text: annotationTypeHandlers[AnnotationType.ANGLE].icon,
+      title: "Annotate angle",
+      onClick: () => {
+        this.layer.tool.value = new PlaceAngleTool(this.layer, {});
+      },
+    });
+    mutableControls.appendChild(angleButton);
 
     const helpIcon = makeIcon({
       title:
@@ -1140,6 +1152,7 @@ const ANNOTATE_BOUNDING_BOX_TOOL_ID = "annotateBoundingBox";
 const ANNOTATE_ELLIPSOID_TOOL_ID = "annotateSphere";
 const ANNOTATE_POLYLINE_TOOL_ID = "annotatePolyline";
 const ANNOTATE_RULER_TOOL_ID = "annotateRuler";
+const ANNOTATE_ANGLE_TOOL_ID = "annotateAngle";
 
 export class PlacePointTool extends PlaceAnnotationTool {
   trigger(mouseState: MouseSelectionState) {
@@ -1764,6 +1777,74 @@ class PlaceRulerTool extends PlacePolylineTool {
   }
 }
 
+/**
+ * Computes the interior-vertex angles (degrees) of the given angle points, or
+ * undefined if the physical scale is not yet resolved. Entry `i` corresponds to
+ * interior vertex `i+1`; a NaN entry marks a degenerate vertex.
+ */
+function computeAngleDegrees(
+  points: readonly Float32Array[],
+  annotationLayer: AnnotationLayerState,
+  layer: UserLayerWithAnnotations,
+): number[] | undefined {
+  const scaleNm = getAnnotationScalesNm(annotationLayer, layer);
+  if (scaleNm === undefined) return undefined;
+  return computeVertexAnglesDegrees(points, scaleNm);
+}
+
+/**
+ * An angle is a polyline whose interior-vertex angles are shown as read-only
+ * "Angle #N" rows in the selection panel (see the angle rows added where the
+ * annotation properties are rendered). The tool reuses the polyline placement
+ * behavior; only the annotation type differs.
+ */
+class PlaceAngleTool extends PlacePolylineTool {
+  get description() {
+    return "annotate angle";
+  }
+
+  private toAngle(annotation: PolyLine | Angle): Angle {
+    const angle = annotation as Angle;
+    angle.type = AnnotationType.ANGLE;
+    return angle;
+  }
+
+  getInitialAnnotation(
+    mouseState: MouseSelectionState,
+    annotationLayer: AnnotationLayerState,
+  ): Annotation {
+    const annotation = super.getInitialAnnotation(
+      mouseState,
+      annotationLayer,
+    ) as PolyLine;
+    return this.toAngle(annotation);
+  }
+
+  getUpdatedAnnotation(
+    oldAnnotation: PolyLine,
+    mouseState: MouseSelectionState,
+    annotationLayer: AnnotationLayerState,
+    triggered: boolean,
+  ) {
+    const result = super.getUpdatedAnnotation(
+      oldAnnotation,
+      mouseState,
+      annotationLayer,
+      triggered,
+    );
+    // The runtime type is ANGLE; cast to satisfy the PolyLine-typed slot
+    // inherited from PlacePolylineTool.
+    result.newAnnotation = this.toAngle(
+      result.newAnnotation as PolyLine,
+    ) as unknown as PolyLine;
+    return result;
+  }
+
+  toJSON() {
+    return ANNOTATE_ANGLE_TOOL_ID;
+  }
+}
+
 class PlaceEllipsoidTool extends TwoStepAnnotationTool {
   getInitialAnnotation(
     mouseState: MouseSelectionState,
@@ -1843,6 +1924,11 @@ registerLegacyTool(
   ANNOTATE_RULER_TOOL_ID,
   (layer, options) =>
     new PlaceRulerTool(<UserLayerWithAnnotations>layer, options),
+);
+registerLegacyTool(
+  ANNOTATE_ANGLE_TOOL_ID,
+  (layer, options) =>
+    new PlaceAngleTool(<UserLayerWithAnnotations>layer, options),
 );
 
 const newRelatedSegmentKeyMap = EventActionMap.fromObject({
@@ -2448,6 +2534,60 @@ export function UserLayerWithAnnotationsMixin<
                     lengthValue.textContent = lengthText;
                     lengthRow.appendChild(lengthValue);
                     parent.appendChild(lengthRow);
+                  }
+                }
+
+                if (annotation.type === AnnotationType.ANGLE) {
+                  // While the angle is still being placed (pending), the last
+                  // point tracks the cursor; exclude it so the angles reflect
+                  // only the points the user has actually clicked.
+                  const source = annotationLayer.source;
+                  const isBeingPlaced =
+                    source instanceof AnnotationSource &&
+                    source.pending.has(annotation.id);
+                  const measuredPoints = isBeingPlaced
+                    ? annotation.points.slice(0, -1)
+                    : annotation.points;
+                  const angles = computeAngleDegrees(
+                    measuredPoints,
+                    annotationLayer,
+                    this,
+                  );
+                  if (angles !== undefined) {
+                    // One row per interior vertex, labeled "Angle #1", "Angle #2",
+                    // …; degenerate (NaN) vertices are skipped.
+                    for (let v = 0; v < angles.length; ++v) {
+                      const angle = angles[v];
+                      if (!Number.isFinite(angle)) continue;
+                      const angleRow = document.createElement("div");
+                      angleRow.classList.add(
+                        "neuroglancer-annotation-property",
+                      );
+                      const nameWrapper = document.createElement("span");
+                      nameWrapper.classList.add(
+                        "neuroglancer-annotation-property-name-wrapper",
+                      );
+                      nameWrapper.appendChild(
+                        makeDescriptionIcon(
+                          "Interior angle at this vertex, between its two " +
+                            "adjoining segments (physical space)",
+                        ),
+                      );
+                      const angleLabel = document.createElement("span");
+                      angleLabel.classList.add(
+                        "neuroglancer-annotation-property-label",
+                      );
+                      angleLabel.textContent = `Angle #${v + 1}`;
+                      nameWrapper.appendChild(angleLabel);
+                      angleRow.appendChild(nameWrapper);
+                      const angleValue = document.createElement("span");
+                      angleValue.classList.add(
+                        "neuroglancer-annotation-property-value",
+                      );
+                      angleValue.textContent = `${angle.toFixed(1)}°`;
+                      angleRow.appendChild(angleValue);
+                      parent.appendChild(angleRow);
+                    }
                   }
                 }
 
