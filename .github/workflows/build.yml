@@ -61,6 +61,7 @@ jobs:
         run: uvx nox -s test -- --skip-browser-tests
         if: ${{ runner.os != 'Linux' }}
       - name: Run python tests (include browser tests)
+        timeout-minutes: 3
         run: uvx nox -s test_xvfb -- --browser firefox --timeout=120
         if: ${{ runner.os == 'Linux' }}
       # Verify that editable install works
