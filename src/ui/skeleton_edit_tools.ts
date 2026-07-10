@@ -293,44 +293,6 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     };
   }
 
-  protected getSelectedSpatialSkeletonNodeForTool(
-    skeletonLayer: SpatiallyIndexedSkeletonLayer | undefined,
-  ):
-    | {
-        nodeId: number;
-        segmentId?: number;
-        position?: SpatialSkeletonVector;
-        sourceState?: SpatialSkeletonSourceState;
-      }
-    | undefined {
-    const nodeId = this.layer.selectedSpatialSkeletonNodeInfo.value?.nodeId;
-    if (
-      typeof nodeId !== "number" ||
-      !Number.isSafeInteger(nodeId) ||
-      nodeId <= 0
-    ) {
-      return undefined;
-    }
-    const resolvedNodeInfo =
-      skeletonLayer?.getNode(nodeId) ??
-      this.layer.spatialSkeletonState.getCachedNode(nodeId);
-    const selectedNodeInfo = this.layer.selectedSpatialSkeletonNodeInfo.value;
-    const layerSelectionState =
-      this.layer.manager.root.selectionState.value?.layers.find(
-        (entry) => entry.layer === this.layer,
-      )?.state;
-    return {
-      nodeId,
-      segmentId:
-        resolvedNodeInfo?.segmentId ??
-        selectedNodeInfo?.segmentId ??
-        getSegmentIdFromLayerSelectionValue(layerSelectionState),
-      position: resolvedNodeInfo?.position ?? selectedNodeInfo?.position,
-      sourceState:
-        resolvedNodeInfo?.sourceState ?? selectedNodeInfo?.sourceState,
-    };
-  }
-
   protected getSelectedSpatialSkeletonNodeSummary() {
     const nodeId = this.layer.selectedSpatialSkeletonNodeInfo.value?.nodeId;
     if (nodeId === undefined) {
@@ -689,15 +651,13 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
 
   // --- Mode transitions ---
 
-  // Return merge to its "waiting for the first pick" state: no anchor, no
-  // pinned selection, and the selected-node highlight hidden. Used both when
-  // entering merge (so a stale anchor from a previous, possibly interrupted
-  // merge can never carry over) and after a merge completes (so we never
-  // linger in a limbo state with a stale anchor). Merge mode itself is left
-  // untouched.
+  // Return merge to its "waiting for the first pick" state: no active anchor
+  // and the selected-node highlight hidden. Used both when entering merge and
+  // after a merge completes. The node selection itself is preserved (only its
+  // highlight is suppressed) — merge never clears the selection, it only hides
+  // it. Merge mode itself is left untouched.
   private resetMergeToFreshState() {
     this.layer.clearSpatialSkeletonMergeAnchor();
-    this.layer.clearSpatialSkeletonNodeSelection("force-unpin");
     this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value = true;
     // Drop any transient override so the idle "click a node to merge from"
     // prompt shows again — the tool stays held, so it just waits for the next
@@ -716,27 +676,13 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     this.renderStatus();
   }
 
-  private enterMerge(anchorNode?: {
-    nodeId: number;
-    segmentId?: number;
-    position?: SpatialSkeletonVector;
-    sourceState?: SpatialSkeletonSourceState;
-  }) {
-    if (anchorNode !== undefined) {
-      if (anchorNode.segmentId !== undefined) {
-        this.pinSegmentByNumber(anchorNode.segmentId);
-      }
-      this.layer.selectSpatialSkeletonNode(anchorNode.nodeId, true, anchorNode);
-      this.layer.setSpatialSkeletonMergeAnchor(anchorNode.nodeId);
-      // Entered with an explicit anchor: the first pick has effectively already
-      // happened, so reveal the selected-node highlight for the from node.
-      this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value = false;
-    } else {
-      // Keyboard flow (hold M): always start from a clean slate. Clearing here
-      // guarantees merge activation can never begin with an old anchor set —
-      // e.g. after holding M through a completed merge without releasing.
-      this.resetMergeToFreshState();
-    }
+  private enterMerge() {
+    // Merge always starts without an active anchor — it can never begin with a
+    // pre-set anchor. The anchor is set solely by the first in-mode pick
+    // (handleMergeFirstPick), which also sets the selected node. Entering merge
+    // preserves the current node selection and only hides its highlight, so the
+    // selection reappears if the user exits merge without picking.
+    this.resetMergeToFreshState();
     this.layer.spatialSkeletonMergeMode.value = true;
     this.currentMode = SkeletonEditMode.Merge;
     this.updateModeAttribute();
@@ -1130,11 +1076,15 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
         showSpatialSkeletonActionError("merge skeletons", error);
       } finally {
         this.pending = false;
-        // Keep merge mode active (the user may still be holding M), but clear
-        // the anchor + pinned selection and hide the highlight so we never
-        // linger in a limbo state with a stale anchor. The next click starts a
-        // fresh merge. Applies on both success and error.
-        this.resetMergeToFreshState();
+        // If the user released M while the merge was in flight, exitMerge has
+        // already left merge mode and restored the highlight — do not re-hide
+        // it here (that would leave the selection permanently hidden). Only
+        // reset when still in merge mode: clear the anchor and re-hide the
+        // highlight (the selection is kept) so the next click starts a fresh
+        // merge. Applies on both success and error.
+        if (this.currentMode === SkeletonEditMode.Merge) {
+          this.resetMergeToFreshState();
+        }
       }
     })();
   }
