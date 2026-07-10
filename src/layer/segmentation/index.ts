@@ -194,6 +194,7 @@ import { registerSegmentSelectTools } from "#src/ui/segment_select_tools.js";
 import { registerSegmentSplitMergeTools } from "#src/ui/segment_split_merge_tools.js";
 import { DisplayOptionsTab } from "#src/ui/segmentation_display_options_tab.js";
 import { registerSpatialSkeletonEditModeTool } from "#src/ui/skeleton_edit_tools.js";
+import { maybeRegisterSpatialSkeletonOptimisticEditQueueTab } from "#src/ui/skeleton_optimistic_edit_queue_tab.js";
 import { SpatialSkeletonEditTab } from "#src/ui/skeleton_tab.js";
 import { Uint64Map } from "#src/uint64_map.js";
 import { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
@@ -816,6 +817,7 @@ export class SegmentationUserLayer extends Base {
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
   codeVisible = new TrackableBoolean(true);
+  optimisticSkeletonEdits = new TrackableBoolean(true, true);
   readonly spatialSkeletonState = this.registerDisposer(
     new SpatialSkeletonState(),
   );
@@ -1201,6 +1203,9 @@ export class SegmentationUserLayer extends Base {
     this.displayState.silhouetteRendering.changed.add(
       this.specificationChanged.dispatch,
     );
+    this.optimisticSkeletonEdits.changed.add(
+      this.specificationChanged.dispatch,
+    );
     this.anchorSegment.changed.add(this.specificationChanged.dispatch);
     this.sliceViewRenderScaleTarget.changed.add(
       this.specificationChanged.dispatch,
@@ -1250,6 +1255,10 @@ export class SegmentationUserLayer extends Base {
       getter: () => new SpatialSkeletonEditTab(this),
       hidden: hideSpatialSkeletonEditTab,
     });
+    maybeRegisterSpatialSkeletonOptimisticEditQueueTab(
+      this,
+      hideSpatialSkeletonEditTab,
+    );
     const hideGraphTab = this.registerDisposer(
       makeCachedDerivedWatchableValue(
         (x) => x === undefined,
@@ -1473,6 +1482,19 @@ export class SegmentationUserLayer extends Base {
       this.spatialSkeletonState.commandHistory.isBusy.value
     ) {
       return "Wait for the current skeleton edit to finish.";
+    }
+    if (
+      !ignoreCommandBusy &&
+      this.spatialSkeletonState.hasUnconfirmedOptimisticEdits() &&
+      requirements.some(
+        (action) =>
+          isSpatialSkeletonEditAction(action) &&
+          action !== SpatialSkeletonActions.addNodes &&
+          action !== SpatialSkeletonActions.moveNodes &&
+          action !== SpatialSkeletonActions.deleteNodes,
+      )
+    ) {
+      return "Wait for pending optimistic skeleton edits to finish.";
     }
     if (
       requireVisibleChunks &&
@@ -1911,6 +1933,9 @@ export class SegmentationUserLayer extends Base {
     this.displayState.ignoreNullVisibleSet.restoreState(
       specification[json_keys.IGNORE_NULL_VISIBLE_SET_JSON_KEY],
     );
+    this.optimisticSkeletonEdits.restoreState(
+      specification[json_keys.OPTIMISTIC_SKELETON_EDITS_JSON_KEY],
+    );
 
     const { skeletonRenderingOptions } = this.displayState;
     skeletonRenderingOptions.restoreState(
@@ -1981,6 +2006,8 @@ export class SegmentationUserLayer extends Base {
       this.displayState.baseSegmentColoring.toJSON();
     x[json_keys.IGNORE_NULL_VISIBLE_SET_JSON_KEY] =
       this.displayState.ignoreNullVisibleSet.toJSON();
+    x[json_keys.OPTIMISTIC_SKELETON_EDITS_JSON_KEY] =
+      this.optimisticSkeletonEdits.toJSON();
     x[json_keys.MESH_SILHOUETTE_RENDERING_JSON_KEY] =
       this.displayState.silhouetteRendering.toJSON();
     x[json_keys.ANCHOR_SEGMENT_JSON_KEY] = this.anchorSegment

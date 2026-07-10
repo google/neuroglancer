@@ -196,6 +196,16 @@ With the Edit tool active:
 - **Start a new skeleton** — :kbd:`Control`-click with no node selected to add a
   root node with no parent.
 
+For CATMAID sources, adding child nodes is optimistic by default: the node is
+previewed locally before CATMAID confirms it. If CATMAID rejects the request,
+the preview is rolled back. Starting a new skeleton uses the normal
+command-history path because CATMAID does not perform parent state checks for
+that request. The **Source** tab includes a **Use CATMAID state checks** checkbox
+below the source URL for the non-optimistic mode that sends CATMAID revision
+state and waits for server confirmation. The **Skeleton** tab shows a compact
+optimistic edit queue debug panel while optimistic mode is enabled or queued
+actions are present.
+
 Merge Tool
 ~~~~~~~~~~
 

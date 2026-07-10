@@ -41,6 +41,8 @@ export interface CatmaidSpatialSkeletonAddNodeRequest {
   segmentId: number;
   position: SpatialSkeletonVector;
   parentNode?: SpatiallyIndexedSkeletonNode;
+  nocheck?: boolean;
+  signal?: AbortSignal;
 }
 
 export type CatmaidSpatialSkeletonAddNodeResult = CatmaidAddNodeResult;
@@ -57,6 +59,7 @@ export type CatmaidSpatialSkeletonInsertNodeResult = CatmaidInsertNodeResult;
 export interface CatmaidSpatialSkeletonMoveNodeRequest {
   node: SpatiallyIndexedSkeletonNode;
   position: SpatialSkeletonVector;
+  nocheck?: boolean;
 }
 
 export type CatmaidSpatialSkeletonNodeSourceStateResult =
@@ -66,6 +69,7 @@ export interface CatmaidSpatialSkeletonDeleteNodeRequest {
   node: SpatiallyIndexedSkeletonNode;
   childNodes: readonly SpatiallyIndexedSkeletonNode[];
   segmentNodes: readonly SpatiallyIndexedSkeletonNode[];
+  nocheck?: boolean;
 }
 
 export type CatmaidSpatialSkeletonDeleteNodeResult = CatmaidDeleteNodeResult;

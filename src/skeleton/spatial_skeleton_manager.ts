@@ -38,6 +38,45 @@ interface SpatialSkeletonSourceAccess {
   source: unknown;
 }
 
+export interface SpatialSkeletonOptimisticEditState {
+  hasUnconfirmedOptimisticEdits(): boolean;
+  canUndoOptimisticEdit(): boolean;
+  undoLatestOptimisticEdit(): Promise<boolean>;
+}
+
+export function isSpatialSkeletonOptimisticEditState(
+  value: unknown,
+): value is SpatialSkeletonOptimisticEditState {
+  return (
+    hasFunction(value, "hasUnconfirmedOptimisticEdits") &&
+    hasFunction(value, "canUndoOptimisticEdit") &&
+    hasFunction(value, "undoLatestOptimisticEdit")
+  );
+}
+
+export interface SpatialSkeletonOptimisticEditQueue {
+  canUndo(): boolean;
+  clear?(): boolean;
+  dispose?(): boolean;
+  hasUnconfirmedActions(): boolean;
+  undoLatest(): Promise<boolean>;
+
+  // Debug/inspection hooks used by the optimistic edit queue widget.
+  clearSettled?(): boolean;
+  getDebugSnapshot?(): readonly SpatialSkeletonOptimisticEditDebugEntry[];
+}
+
+export interface SpatialSkeletonOptimisticEditDebugEntry {
+  readonly operationId?: number;
+  readonly kind: string;
+  readonly status: string;
+  readonly tempNodeId?: number;
+  readonly parentNodeId?: number;
+  readonly parentTempNodeId?: number;
+  readonly nodeId?: number;
+  readonly segmentId?: number;
+}
+
 function hasFunction<T extends string>(
   value: unknown,
   property: T,
@@ -235,7 +274,10 @@ function cloneSpatiallyIndexedSkeletonNode(
  */
 const MAX_CONCURRENT_FULL_SEGMENT_NODE_FETCHES = 8;
 
-export class SpatialSkeletonState extends RefCounted {
+export class SpatialSkeletonState
+  extends RefCounted
+  implements SpatialSkeletonOptimisticEditState
+{
   readonly commandHistory = this.registerDisposer(
     new SpatialSkeletonCommandHistory(),
   );
@@ -252,6 +294,7 @@ export class SpatialSkeletonState extends RefCounted {
   readonly suppressSelectedNodeHighlight = new WatchableValue(false);
   readonly nodeDataVersion = new WatchableValue(0);
   readonly pendingNodePositionVersion = new WatchableValue(0);
+  readonly optimisticEditQueueVersion = new WatchableValue(0);
 
   private pendingNodePositions = new Map<number, Float32Array>();
   private fullSkeletonCacheGeneration = 0;
@@ -279,6 +322,43 @@ export class SpatialSkeletonState extends RefCounted {
     );
   });
   private cachedNodesById = new Map<number, SpatiallyIndexedSkeletonNode>();
+  private optimisticEditQueue?: SpatialSkeletonOptimisticEditQueue;
+
+  setOptimisticEditQueue(
+    optimisticEditQueue: SpatialSkeletonOptimisticEditQueue | undefined,
+  ) {
+    if (this.optimisticEditQueue === optimisticEditQueue) {
+      return false;
+    }
+    this.optimisticEditQueue = optimisticEditQueue;
+    this.notifyOptimisticEditQueueChanged();
+    return true;
+  }
+
+  notifyOptimisticEditQueueChanged() {
+    this.optimisticEditQueueVersion.value =
+      this.optimisticEditQueueVersion.value + 1;
+  }
+
+  hasUnconfirmedOptimisticEdits() {
+    return this.optimisticEditQueue?.hasUnconfirmedActions() ?? false;
+  }
+
+  getOptimisticEditQueueDebugSnapshot() {
+    return this.optimisticEditQueue?.getDebugSnapshot?.() ?? [];
+  }
+
+  clearSettledOptimisticEdits() {
+    return this.optimisticEditQueue?.clearSettled?.() ?? false;
+  }
+
+  canUndoOptimisticEdit() {
+    return this.optimisticEditQueue?.canUndo() ?? false;
+  }
+
+  undoLatestOptimisticEdit() {
+    return this.optimisticEditQueue?.undoLatest() ?? Promise.resolve(false);
+  }
 
   setNodeRadius(nodeId: number, radius: number) {
     const normalizedNodeId = this.normalizeNodeId(nodeId);
@@ -414,6 +494,48 @@ export class SpatialSkeletonState extends RefCounted {
     this.clearFullSkeletonCache();
     this.nodeDataVersion.value = this.nodeDataVersion.value + 1;
     return true;
+  }
+
+  clearRuntimeState() {
+    const optimisticQueue = this.optimisticEditQueue;
+    const optimisticQueueChanged =
+      optimisticQueue?.dispose?.() ?? optimisticQueue?.clear?.() ?? false;
+    if (this.optimisticEditQueue !== undefined) {
+      this.optimisticEditQueue = undefined;
+      this.notifyOptimisticEditQueueChanged();
+    }
+    const cacheChanged =
+      this.fullSegmentNodeCache.size !== 0 ||
+      this.pendingFullSegmentNodeFetches.size !== 0 ||
+      this.cachedNodesById.size !== 0;
+    const pendingChanged = this.clearPendingNodePositions();
+    const mergeAnchorChanged = this.clearMergeAnchor();
+    let modeChanged = false;
+    if (this.editMode.value) {
+      this.editMode.value = false;
+      modeChanged = true;
+    }
+    if (this.mergeMode.value) {
+      this.mergeMode.value = false;
+      modeChanged = true;
+    }
+    if (this.splitMode.value) {
+      this.splitMode.value = false;
+      modeChanged = true;
+    }
+    const historyChanged = this.commandHistory.clear();
+    if (cacheChanged) {
+      this.clearFullSkeletonCache();
+      this.nodeDataVersion.value = this.nodeDataVersion.value + 1;
+    }
+    return (
+      cacheChanged ||
+      pendingChanged ||
+      optimisticQueueChanged ||
+      mergeAnchorChanged ||
+      modeChanged ||
+      historyChanged
+    );
   }
 
   markNodeDataChanged(options: { invalidateFullSkeletonCache?: boolean } = {}) {

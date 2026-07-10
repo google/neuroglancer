@@ -119,6 +119,15 @@ export interface CatmaidDescriptionUpdateOptions {
   isTrueEnd?: boolean;
 }
 
+export interface CatmaidAddNodeOptions {
+  nocheck?: boolean;
+  signal?: AbortSignal;
+}
+
+export interface CatmaidMoveNodeOptions {
+  nocheck?: boolean;
+}
+
 export type CatmaidDeleteNodeResult = CatmaidSkeletonEditResult;
 
 export type CatmaidRerootResult = CatmaidSkeletonEditResult;
@@ -145,6 +154,7 @@ export interface CatmaidSpatialSkeletonEditApi {
     z: number,
     parentId?: number,
     editContext?: CatmaidEditContext,
+    options?: CatmaidAddNodeOptions,
   ): Promise<CatmaidAddNodeResult>;
   deleteNode(
     nodeId: number,
@@ -156,6 +166,7 @@ export interface CatmaidSpatialSkeletonEditApi {
     y: number,
     z: number,
     editContext?: CatmaidEditContext,
+    options?: CatmaidMoveNodeOptions,
   ): Promise<CatmaidNodeSourceStateResult>;
   splitSkeleton(
     nodeId: number,
@@ -203,6 +214,7 @@ export interface CatmaidSpatialSkeletonEditApi {
 interface CatmaidDeleteNodeOptions {
   childNodeIds?: readonly number[];
   editContext?: CatmaidEditContext;
+  nocheck?: boolean;
 }
 
 class CatmaidNotFoundError extends Error {
@@ -1624,13 +1636,18 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     y: number,
     z: number,
     editContext?: CatmaidEditContext,
+    options: CatmaidMoveNodeOptions = {},
   ): Promise<CatmaidNodeSourceStateResult> {
     const body = new URLSearchParams();
     appendNodeUpdateRows(body, "t", [[nodeId, x, y, z]]);
-    appendCatmaidState(
-      body,
-      buildCatmaidMultiNodeState("move-node", editContext, [nodeId]),
-    );
+    if (options.nocheck === true) {
+      appendCatmaidState(body, { nocheck: true });
+    } else {
+      appendCatmaidState(
+        body,
+        buildCatmaidMultiNodeState("move-node", editContext, [nodeId]),
+      );
+    }
 
     const response = await this.fetchProjectEndpoint(`node/update`, {
       method: "POST",
@@ -1691,13 +1708,17 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     const body = new URLSearchParams({
       treenode_id: nodeId.toString(),
     });
-    appendCatmaidState(
-      body,
-      buildCatmaidNeighborhoodState("delete-node", editContext, {
-        expectedNodeId: nodeId,
-        expectedChildIds: normalizedChildIds,
-      }),
-    );
+    if (options.nocheck === true) {
+      appendCatmaidState(body, { nocheck: true });
+    } else {
+      appendCatmaidState(
+        body,
+        buildCatmaidNeighborhoodState("delete-node", editContext, {
+          expectedNodeId: nodeId,
+          expectedChildIds: normalizedChildIds,
+        }),
+      );
+    }
     const response = await this.fetchProjectEndpoint(`treenode/delete`, {
       method: "POST",
       body: body,
@@ -1717,6 +1738,7 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     z: number,
     parentId?: number,
     editContext?: CatmaidEditContext,
+    options: CatmaidAddNodeOptions = {},
   ): Promise<CatmaidAddNodeResult> {
     const body = new URLSearchParams({
       x: x.toString(),
@@ -1727,11 +1749,16 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     if (Number.isSafeInteger(skeletonId) && skeletonId > 0) {
       body.append("skeleton_id", skeletonId.toString());
     }
-    appendCatmaidState(body, buildCatmaidAddNodeState(parentId, editContext));
+    if (options.nocheck === true) {
+      appendCatmaidState(body, { nocheck: true });
+    } else {
+      appendCatmaidState(body, buildCatmaidAddNodeState(parentId, editContext));
+    }
 
     const res = await this.fetchProjectEndpoint(`treenode/create`, {
       method: "POST",
       body: body,
+      signal: options.signal,
     });
     const treenodeId = Number(res?.treenode_id);
     const nextSkeletonId = Number(res?.skeleton_id);

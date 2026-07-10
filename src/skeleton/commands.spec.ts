@@ -112,9 +112,13 @@ function makeCatmaidClient(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function makeCatmaidEditCommands(client = makeCatmaidClient()) {
+function makeCatmaidEditCommands(
+  client = makeCatmaidClient(),
+  options: { optimisticSkeletonEdits?: boolean } = {},
+) {
   return new CatmaidSpatialSkeletonEditCommands({
     getClient: () => client as any,
+    getOptimisticSkeletonEdits: () => options.optimisticSkeletonEdits === true,
   });
 }
 
@@ -165,6 +169,9 @@ function suppressStatusMessages() {
   vi.spyOn(StatusMessage, "showMessage").mockImplementation(
     (_message: string) => fakeStatusMessage,
   );
+  vi.spyOn(StatusMessage, "showErrorMessage").mockImplementation(
+    (_message: string) => fakeStatusMessage,
+  );
 }
 
 function makeDisplayState(visibleSegmentIds: readonly number[]) {
@@ -200,6 +207,117 @@ function makePinnedManager() {
       },
     },
   };
+}
+
+function makeOptimisticAddNodeTestLayer(options: {
+  addNode?: ReturnType<typeof vi.fn>;
+  deleteNode?: ReturnType<typeof vi.fn>;
+  insertNode?: ReturnType<typeof vi.fn>;
+  moveNode?: ReturnType<typeof vi.fn>;
+  initialNodes: readonly SpatiallyIndexedSkeletonNode[];
+  segmentId: number;
+}) {
+  const spatialSkeletonState = new SpatialSkeletonState();
+  for (const node of options.initialNodes) {
+    spatialSkeletonState.upsertCachedNode(node, {
+      allowUncachedSegment:
+        spatialSkeletonState.getCachedSegmentNodes(node.segmentId) ===
+        undefined,
+    });
+  }
+  const client = makeCatmaidClient({
+    addNode: options.addNode ?? vi.fn(),
+    deleteNode: options.deleteNode ?? vi.fn(),
+    insertNode: options.insertNode ?? vi.fn(),
+    moveNode: options.moveNode ?? vi.fn(),
+  });
+  const commands = makeCatmaidEditCommands(client, {
+    optimisticSkeletonEdits: true,
+  });
+  const skeletonSource = {
+    ...makeEditableSkeletonSource(),
+    addNodesCommand: commands.addNodesCommand,
+    deleteNodesCommand: commands.deleteNodesCommand,
+    moveNodesCommand: commands.moveNodesCommand,
+  };
+  const skeletonLayer = {
+    source: skeletonSource,
+    getNode: vi.fn((nodeId: number) =>
+      spatialSkeletonState.getCachedNode(nodeId),
+    ),
+    retainOverlaySegment: vi.fn(),
+    invalidateSourceCellsForPositions: vi.fn(),
+  };
+  const selectedSpatialSkeletonNodeInfo = {
+    value: undefined as
+      | {
+          nodeId: number;
+          segmentId?: number;
+          position?: ArrayLike<number>;
+        }
+      | undefined,
+  };
+  const layer = {
+    displayState: makeDisplayState([options.segmentId]),
+    manager: makePinnedManager(),
+    selectedSpatialSkeletonNodeInfo,
+    spatialSkeletonState,
+    getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
+    getCachedSpatialSkeletonSegmentNodesForEdit: (requestedSegmentId: number) =>
+      spatialSkeletonState.getCachedSegmentNodes(requestedSegmentId) ?? [],
+    async getSpatialSkeletonDeleteOperationContext(
+      node: SpatiallyIndexedSkeletonNode,
+    ) {
+      const segmentNodes =
+        spatialSkeletonState.getCachedSegmentNodes(node.segmentId) ?? [];
+      const currentNode = findSpatiallyIndexedSkeletonNode(
+        segmentNodes,
+        node.nodeId,
+      );
+      if (currentNode === undefined) {
+        throw new Error(`Unable to resolve cached node ${node.nodeId}.`);
+      }
+      const childNodes = getSpatiallyIndexedSkeletonDirectChildren(
+        segmentNodes,
+        currentNode.nodeId,
+      );
+      return {
+        node: currentNode,
+        parentNode: getSpatiallyIndexedSkeletonNodeParent(
+          segmentNodes,
+          currentNode,
+        ),
+        childNodes,
+      };
+    },
+    selectSegment: vi.fn(),
+    selectAndMoveToSpatialSkeletonNode: vi.fn(),
+    selectSpatialSkeletonNode: vi.fn(
+      (
+        nodeId: number,
+        _pin: boolean,
+        nodeInfo?: { segmentId?: number; position?: ArrayLike<number> },
+      ) => {
+        selectedSpatialSkeletonNodeInfo.value = {
+          nodeId,
+          segmentId: nodeInfo?.segmentId,
+          position: nodeInfo?.position,
+        };
+      },
+    ),
+    clearSpatialSkeletonNodeSelection: vi.fn(() => {
+      selectedSpatialSkeletonNodeInfo.value = undefined;
+    }),
+    moveViewToSpatialSkeletonNodePosition: vi.fn(),
+    markSpatialSkeletonNodeDataChanged: vi.fn(),
+  };
+  return { client, layer, skeletonLayer, spatialSkeletonState };
+}
+
+async function waitForMicrotasks(count = 3) {
+  for (let i = 0; i < count; ++i) {
+    await Promise.resolve();
+  }
 }
 
 describe("spatial_skeleton_commands", () => {
@@ -254,6 +372,41 @@ describe("spatial_skeleton_commands", () => {
     expect(execute).toHaveBeenCalledTimes(1);
     expect(undo).toHaveBeenCalledTimes(1);
     expect(redo).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks redo while optimistic skeleton edits are unconfirmed", async () => {
+    const fakeStatusMessage = {
+      dispose() {},
+    } as unknown as StatusMessage;
+    const showTemporaryMessage = vi
+      .spyOn(StatusMessage, "showTemporaryMessage")
+      .mockReturnValue(fakeStatusMessage);
+    const spatialSkeletonState = new SpatialSkeletonState();
+    const redo = vi.fn();
+    const command = {
+      label: "Redo target",
+      execute: vi.fn(),
+      undo: vi.fn(),
+      redo,
+    };
+    await spatialSkeletonState.commandHistory.execute(command);
+    await spatialSkeletonState.commandHistory.undo();
+    spatialSkeletonState.setOptimisticEditQueue({
+      canUndo: () => false,
+      hasUnconfirmedActions: () => true,
+      undoLatest: () => Promise.resolve(false),
+    });
+    const layer = {
+      spatialSkeletonState,
+    };
+
+    await expect(redoSpatialSkeletonCommand(layer as any)).resolves.toBe(false);
+
+    expect(redo).not.toHaveBeenCalled();
+    expect(spatialSkeletonState.commandHistory.canRedo.value).toBe(true);
+    expect(showTemporaryMessage).toHaveBeenCalledWith(
+      "Wait for pending optimistic skeleton edits to finish.",
+    );
   });
 
   it("does not treat a source with an invalid command factory as editable", () => {
@@ -679,6 +832,7 @@ describe("spatial_skeleton_commands", () => {
       expect.objectContaining({
         node: expect.objectContaining({ nodeId: 17 }),
       }),
+      { nocheck: undefined },
     );
     expect(skeletonLayer.retainOverlaySegment).toHaveBeenCalledWith(23);
     expect(moveCachedNode).toHaveBeenCalledWith(
@@ -893,8 +1047,1458 @@ describe("spatial_skeleton_commands", () => {
         node: expect.objectContaining({ nodeId: 2 }),
         parent: expect.objectContaining({ nodeId: parentNode.nodeId }),
       }),
+      nocheck: undefined,
     });
     expect(spatialSkeletonState.getCachedNode(2)).toBeUndefined();
+  });
+
+  it("removes a pending optimistic add-node preview without sending it", async () => {
+    suppressStatusMessages();
+    const showTemporaryMessage = vi.mocked(StatusMessage.showTemporaryMessage);
+
+    const segmentId = 23;
+    const parentNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 1,
+      segmentId,
+      position: new Float32Array([4, 5, 6]),
+      isTrueEnd: false,
+      sourceState: testSourceState("parent-before-add"),
+    };
+    let resolveFirstAdd:
+      | ((value: {
+          nodeId: number;
+          segmentId: number;
+          sourceState: ReturnType<typeof testSourceState>;
+          parentSourceState: ReturnType<typeof testSourceState>;
+        }) => void)
+      | undefined;
+    const firstAddPromise = new Promise<any>((resolve) => {
+      resolveFirstAdd = resolve;
+    });
+    const addNode = vi.fn(() => firstAddPromise);
+    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+      addNode,
+      initialNodes: [parentNode],
+      segmentId,
+    });
+
+    await executeSpatialSkeletonAddNode(layer as any, {
+      skeletonId: segmentId,
+      parentNodeId: parentNode.nodeId,
+      positionInModelSpace: new Float32Array([7, 8, 9]),
+    });
+    await waitForMicrotasks();
+    await executeSpatialSkeletonAddNode(layer as any, {
+      skeletonId: segmentId,
+      parentNodeId: parentNode.nodeId,
+      positionInModelSpace: new Float32Array([10, 11, 12]),
+    });
+    await waitForMicrotasks();
+
+    expect(addNode).toHaveBeenCalledTimes(1);
+    expect(
+      spatialSkeletonState
+        .getCachedSegmentNodes(segmentId)!
+        .filter((node) => node.nodeId >= 1_000_000_000),
+    ).toHaveLength(2);
+
+    await undoSpatialSkeletonCommand(layer as any);
+
+    expect(showTemporaryMessage).not.toHaveBeenCalled();
+    expect(addNode).toHaveBeenCalledTimes(1);
+    expect(
+      spatialSkeletonState
+        .getCachedSegmentNodes(segmentId)!
+        .filter((node) => node.nodeId >= 1_000_000_000),
+    ).toHaveLength(1);
+
+    resolveFirstAdd!({
+      nodeId: 2,
+      segmentId,
+      sourceState: testSourceState("node-after-add"),
+      parentSourceState: testSourceState("parent-after-add"),
+    });
+    await waitForMicrotasks(5);
+  });
+
+  it("compensates when an in-flight optimistic add-node undo later commits", async () => {
+    suppressStatusMessages();
+    const showTemporaryMessage = vi.mocked(StatusMessage.showTemporaryMessage);
+
+    const segmentId = 23;
+    const parentNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 1,
+      segmentId,
+      position: new Float32Array([4, 5, 6]),
+      isTrueEnd: false,
+      sourceState: testSourceState("parent-before-add"),
+    };
+    let resolveAdd:
+      | ((value: {
+          nodeId: number;
+          segmentId: number;
+          sourceState: ReturnType<typeof testSourceState>;
+          parentSourceState: ReturnType<typeof testSourceState>;
+        }) => void)
+      | undefined;
+    const addPromise = new Promise<any>((resolve) => {
+      resolveAdd = resolve;
+    });
+    const addNode = vi.fn(() => addPromise);
+    const deleteNode = vi.fn().mockResolvedValue({
+      nodeSourceStateUpdates: [
+        {
+          nodeId: parentNode.nodeId,
+          sourceState: testSourceState("parent-after-compensation"),
+        },
+      ],
+    });
+    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+      addNode,
+      deleteNode,
+      initialNodes: [parentNode],
+      segmentId,
+    });
+
+    await executeSpatialSkeletonAddNode(layer as any, {
+      skeletonId: segmentId,
+      parentNodeId: parentNode.nodeId,
+      positionInModelSpace: new Float32Array([7, 8, 9]),
+    });
+    await waitForMicrotasks();
+    expect(addNode).toHaveBeenCalledTimes(1);
+    const requestOptions = (
+      addNode.mock.calls[0] as unknown[] | undefined
+    )?.[6] as { signal?: AbortSignal } | undefined;
+    expect(requestOptions?.signal).toBeUndefined();
+
+    await undoSpatialSkeletonCommand(layer as any);
+    expect(requestOptions?.signal).toBeUndefined();
+    expect(
+      spatialSkeletonState
+        .getCachedSegmentNodes(segmentId)!
+        .some((node) => node.nodeId >= 1_000_000_000),
+    ).toBe(false);
+
+    resolveAdd!({
+      nodeId: 2,
+      segmentId,
+      sourceState: testSourceState("node-after-add"),
+      parentSourceState: testSourceState("parent-after-add"),
+    });
+    await waitForMicrotasks(5);
+
+    expect(deleteNode).toHaveBeenCalledWith(2, {
+      childNodeIds: [],
+      editContext: expect.objectContaining({
+        node: expect.objectContaining({ nodeId: 2 }),
+        parent: expect.objectContaining({ nodeId: parentNode.nodeId }),
+      }),
+      nocheck: true,
+    });
+    expect(showTemporaryMessage).not.toHaveBeenCalled();
+    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(false);
+  });
+
+  it("disposes the optimistic queue on runtime clear and ignores late cache mutations", async () => {
+    suppressStatusMessages();
+
+    const segmentId = 23;
+    const parentNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 1,
+      segmentId,
+      position: new Float32Array([4, 5, 6]),
+      isTrueEnd: false,
+      sourceState: testSourceState("parent-before-add"),
+    };
+    let resolveFirstAdd:
+      | ((value: {
+          nodeId: number;
+          segmentId: number;
+          sourceState: ReturnType<typeof testSourceState>;
+          parentSourceState: ReturnType<typeof testSourceState>;
+        }) => void)
+      | undefined;
+    const firstAddPromise = new Promise<any>((resolve) => {
+      resolveFirstAdd = resolve;
+    });
+    const addNode = vi
+      .fn()
+      .mockReturnValueOnce(firstAddPromise)
+      .mockResolvedValueOnce({
+        nodeId: 3,
+        segmentId,
+        sourceState: testSourceState("second-node-after-add"),
+        parentSourceState: testSourceState("parent-after-second-add"),
+      });
+    const deleteNode = vi.fn().mockResolvedValue({
+      nodeSourceStateUpdates: [
+        {
+          nodeId: parentNode.nodeId,
+          sourceState: testSourceState("parent-after-first-compensation"),
+        },
+      ],
+    });
+    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+      addNode,
+      deleteNode,
+      initialNodes: [parentNode],
+      segmentId,
+    });
+
+    await executeSpatialSkeletonAddNode(layer as any, {
+      skeletonId: segmentId,
+      parentNodeId: parentNode.nodeId,
+      positionInModelSpace: new Float32Array([7, 8, 9]),
+    });
+    await waitForMicrotasks();
+
+    expect(addNode).toHaveBeenCalledTimes(1);
+    expect(
+      spatialSkeletonState
+        .getCachedSegmentNodes(segmentId)!
+        .some((node) => node.nodeId >= 1_000_000_000),
+    ).toBe(true);
+
+    expect(spatialSkeletonState.clearRuntimeState()).toBe(true);
+    spatialSkeletonState.upsertCachedNode(parentNode, {
+      allowUncachedSegment: true,
+    });
+
+    await executeSpatialSkeletonAddNode(layer as any, {
+      skeletonId: segmentId,
+      parentNodeId: parentNode.nodeId,
+      positionInModelSpace: new Float32Array([10, 11, 12]),
+    });
+    await waitForMicrotasks(5);
+
+    expect(addNode).toHaveBeenCalledTimes(2);
+    expect(spatialSkeletonState.getCachedNode(3)).toMatchObject({
+      nodeId: 3,
+      parentNodeId: parentNode.nodeId,
+    });
+
+    layer.markSpatialSkeletonNodeDataChanged.mockClear();
+
+    resolveFirstAdd!({
+      nodeId: 2,
+      segmentId,
+      sourceState: testSourceState("first-node-after-add"),
+      parentSourceState: testSourceState("parent-after-first-add"),
+    });
+    await waitForMicrotasks(5);
+
+    expect(deleteNode).toHaveBeenCalledWith(2, {
+      childNodeIds: [],
+      editContext: expect.objectContaining({
+        node: expect.objectContaining({ nodeId: 2 }),
+        parent: expect.objectContaining({ nodeId: parentNode.nodeId }),
+      }),
+      nocheck: true,
+    });
+    expect(spatialSkeletonState.getCachedNode(2)).toBeUndefined();
+    expect(spatialSkeletonState.getCachedNode(3)).toMatchObject({
+      nodeId: 3,
+      parentNodeId: parentNode.nodeId,
+    });
+    expect(layer.markSpatialSkeletonNodeDataChanged).not.toHaveBeenCalled();
+  });
+
+  it("warns without aborting or rolling back when an in-flight optimistic edit takes too long", async () => {
+    vi.useFakeTimers();
+    try {
+      suppressStatusMessages();
+      const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
+
+      const segmentId = 23;
+      const parentNode: SpatiallyIndexedSkeletonNode = {
+        nodeId: 1,
+        segmentId,
+        position: new Float32Array([4, 5, 6]),
+        isTrueEnd: false,
+        sourceState: testSourceState("parent-before-add"),
+      };
+      let resolveAdd:
+        | ((value: {
+            nodeId: number;
+            segmentId: number;
+            sourceState: ReturnType<typeof testSourceState>;
+            parentSourceState: ReturnType<typeof testSourceState>;
+          }) => void)
+        | undefined;
+      const addPromise = new Promise<any>((resolve) => {
+        resolveAdd = resolve;
+      });
+      const addNode = vi.fn(() => addPromise);
+      const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+        addNode,
+        initialNodes: [parentNode],
+        segmentId,
+      });
+
+      await executeSpatialSkeletonAddNode(layer as any, {
+        skeletonId: segmentId,
+        parentNodeId: parentNode.nodeId,
+        positionInModelSpace: new Float32Array([7, 8, 9]),
+      });
+      await waitForMicrotasks();
+
+      const requestOptions = (
+        addNode.mock.calls[0] as unknown[] | undefined
+      )?.[6] as { signal?: AbortSignal } | undefined;
+      expect(requestOptions?.signal).toBeUndefined();
+      expect(spatialSkeletonState.hasUnconfirmedOptimisticEdits()).toBe(true);
+
+      vi.advanceTimersByTime(30_000);
+
+      expect(showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining("has not confirmed"),
+      );
+      expect(spatialSkeletonState.hasUnconfirmedOptimisticEdits()).toBe(true);
+      expect(spatialSkeletonState.getCachedSegmentNodes(segmentId)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ nodeId: Number.MAX_SAFE_INTEGER }),
+        ]),
+      );
+
+      resolveAdd!({
+        nodeId: 2,
+        segmentId,
+        sourceState: testSourceState("node-after-add"),
+        parentSourceState: testSourceState("parent-after-add"),
+      });
+      await waitForMicrotasks(5);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("invalidates optimistic preview cache when a temporary id collision is detected", async () => {
+    suppressStatusMessages();
+    const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
+
+    const segmentId = 23;
+    const collisionSegmentId = 29;
+    const parentNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 1,
+      segmentId,
+      position: new Float32Array([4, 5, 6]),
+      isTrueEnd: false,
+      sourceState: testSourceState("parent-before-add"),
+    };
+    let resolveAdd:
+      | ((value: {
+          nodeId: number;
+          segmentId: number;
+          sourceState: ReturnType<typeof testSourceState>;
+          parentSourceState: ReturnType<typeof testSourceState>;
+        }) => void)
+      | undefined;
+    const addPromise = new Promise<any>((resolve) => {
+      resolveAdd = resolve;
+    });
+    const addNode = vi.fn(() => addPromise);
+    const deleteNode = vi.fn().mockResolvedValue({});
+    const { layer, skeletonLayer, spatialSkeletonState } =
+      makeOptimisticAddNodeTestLayer({
+        addNode,
+        deleteNode,
+        initialNodes: [parentNode],
+        segmentId,
+      });
+
+    await executeSpatialSkeletonAddNode(layer as any, {
+      skeletonId: segmentId,
+      parentNodeId: parentNode.nodeId,
+      positionInModelSpace: new Float32Array([7, 8, 9]),
+    });
+    await waitForMicrotasks();
+
+    const optimisticNode = spatialSkeletonState
+      .getCachedSegmentNodes(segmentId)!
+      .find((node) => node.nodeId >= 1_000_000_000);
+    expect(optimisticNode?.nodeId).toBe(Number.MAX_SAFE_INTEGER);
+
+    spatialSkeletonState.upsertCachedNode(
+      {
+        nodeId: optimisticNode!.nodeId,
+        segmentId: collisionSegmentId,
+        parentNodeId: undefined,
+        position: new Float32Array([90, 91, 92]),
+        isTrueEnd: false,
+      },
+      { allowUncachedSegment: true },
+    );
+
+    await undoSpatialSkeletonCommand(layer as any);
+
+    expect(showErrorMessage).toHaveBeenCalledWith(
+      expect.stringContaining("temporary id"),
+    );
+    expect(skeletonLayer.invalidateSourceCellsForPositions).toHaveBeenCalled();
+    expect(
+      spatialSkeletonState.getCachedSegmentNodes(segmentId),
+    ).toBeUndefined();
+    expect(
+      spatialSkeletonState.getCachedSegmentNodes(collisionSegmentId),
+    ).toBeUndefined();
+
+    resolveAdd!({
+      nodeId: 2,
+      segmentId,
+      sourceState: testSourceState("node-after-add"),
+      parentSourceState: testSourceState("parent-after-add"),
+    });
+    await waitForMicrotasks(5);
+  });
+
+  it("rolls back a 3-level optimistic add chain when the root add is rejected", async () => {
+    suppressStatusMessages();
+    const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
+
+    const segmentId = 23;
+    const parentNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 1,
+      segmentId,
+      position: new Float32Array([4, 5, 6]),
+      isTrueEnd: false,
+      sourceState: testSourceState("parent-before-add"),
+    };
+    let rejectFirstAdd: ((error: Error) => void) | undefined;
+    const firstAddPromise = new Promise<any>((_resolve, reject) => {
+      rejectFirstAdd = reject;
+    });
+    const addNode = vi.fn(() => firstAddPromise);
+    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+      addNode,
+      initialNodes: [parentNode],
+      segmentId,
+    });
+
+    await executeSpatialSkeletonAddNode(layer as any, {
+      skeletonId: segmentId,
+      parentNodeId: parentNode.nodeId,
+      positionInModelSpace: new Float32Array([7, 8, 9]),
+    });
+    await waitForMicrotasks();
+
+    const optimisticParent = spatialSkeletonState
+      .getCachedSegmentNodes(segmentId)!
+      .find((node) => node.nodeId >= 1_000_000_000);
+    expect(optimisticParent).toBeDefined();
+
+    await executeSpatialSkeletonAddNode(layer as any, {
+      skeletonId: segmentId,
+      parentNodeId: optimisticParent!.nodeId,
+      positionInModelSpace: new Float32Array([10, 11, 12]),
+    });
+    await waitForMicrotasks();
+
+    const optimisticChild = spatialSkeletonState
+      .getCachedSegmentNodes(segmentId)!
+      .find((node) => node.parentNodeId === optimisticParent!.nodeId);
+    expect(optimisticChild).toBeDefined();
+
+    await executeSpatialSkeletonAddNode(layer as any, {
+      skeletonId: segmentId,
+      parentNodeId: optimisticChild!.nodeId,
+      positionInModelSpace: new Float32Array([13, 14, 15]),
+    });
+    await waitForMicrotasks();
+
+    expect(addNode).toHaveBeenCalledTimes(1);
+    expect(
+      spatialSkeletonState
+        .getCachedSegmentNodes(segmentId)!
+        .filter((node) => node.nodeId >= 1_000_000_000),
+    ).toHaveLength(3);
+
+    rejectFirstAdd!(new Error("server rejected"));
+    await waitForMicrotasks(5);
+
+    expect(showErrorMessage).toHaveBeenCalledWith(
+      expect.stringContaining("CATMAID rejected node creation"),
+    );
+    expect(addNode).toHaveBeenCalledTimes(1);
+    expect(
+      spatialSkeletonState
+        .getCachedSegmentNodes(segmentId)!
+        .some((node) => node.nodeId >= 1_000_000_000),
+    ).toBe(false);
+  });
+
+  it("rolls back a move queued against a pending optimistic add when the add is rejected", async () => {
+    suppressStatusMessages();
+
+    const segmentId = 23;
+    const parentNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 1,
+      segmentId,
+      position: new Float32Array([4, 5, 6]),
+      isTrueEnd: false,
+      sourceState: testSourceState("parent-before-add"),
+    };
+    let rejectAdd: ((error: Error) => void) | undefined;
+    const addPromise = new Promise<any>((_resolve, reject) => {
+      rejectAdd = reject;
+    });
+    const addNode = vi.fn(() => addPromise);
+    const moveNode = vi.fn();
+    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+      addNode,
+      moveNode,
+      initialNodes: [parentNode],
+      segmentId,
+    });
+
+    await executeSpatialSkeletonAddNode(layer as any, {
+      skeletonId: segmentId,
+      parentNodeId: parentNode.nodeId,
+      positionInModelSpace: new Float32Array([7, 8, 9]),
+    });
+    await waitForMicrotasks();
+
+    const optimisticNode = spatialSkeletonState
+      .getCachedSegmentNodes(segmentId)!
+      .find((node) => node.nodeId >= 1_000_000_000);
+    expect(optimisticNode).toBeDefined();
+
+    await executeSpatialSkeletonMoveNode(layer as any, {
+      node: optimisticNode!,
+      nextPositionInModelSpace: new Float32Array([10, 11, 12]),
+    });
+    await waitForMicrotasks();
+
+    expect(moveNode).not.toHaveBeenCalled();
+    expect(
+      Array.from(
+        spatialSkeletonState.getCachedNode(optimisticNode!.nodeId)!.position,
+      ),
+    ).toEqual([10, 11, 12]);
+
+    rejectAdd!(new Error("server rejected"));
+    await waitForMicrotasks(5);
+
+    expect(moveNode).not.toHaveBeenCalled();
+    expect(
+      spatialSkeletonState
+        .getCachedSegmentNodes(segmentId)!
+        .some((node) => node.nodeId >= 1_000_000_000),
+    ).toBe(false);
+  });
+
+  it("rolls back a delete queued against a pending optimistic add when the add is rejected", async () => {
+    suppressStatusMessages();
+
+    const segmentId = 23;
+    const parentNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 1,
+      segmentId,
+      position: new Float32Array([4, 5, 6]),
+      isTrueEnd: false,
+      sourceState: testSourceState("parent-before-add"),
+    };
+    let rejectAdd: ((error: Error) => void) | undefined;
+    const addPromise = new Promise<any>((_resolve, reject) => {
+      rejectAdd = reject;
+    });
+    const addNode = vi.fn(() => addPromise);
+    const deleteNode = vi.fn();
+    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+      addNode,
+      deleteNode,
+      initialNodes: [parentNode],
+      segmentId,
+    });
+
+    await executeSpatialSkeletonAddNode(layer as any, {
+      skeletonId: segmentId,
+      parentNodeId: parentNode.nodeId,
+      positionInModelSpace: new Float32Array([7, 8, 9]),
+    });
+    await waitForMicrotasks();
+
+    const optimisticNode = spatialSkeletonState
+      .getCachedSegmentNodes(segmentId)!
+      .find((node) => node.nodeId >= 1_000_000_000);
+    expect(optimisticNode).toBeDefined();
+
+    await executeSpatialSkeletonDeleteNode(layer as any, optimisticNode!);
+    await waitForMicrotasks();
+
+    expect(deleteNode).not.toHaveBeenCalled();
+    expect(
+      spatialSkeletonState.getCachedNode(optimisticNode!.nodeId),
+    ).toBeUndefined();
+
+    rejectAdd!(new Error("server rejected"));
+    await waitForMicrotasks(5);
+
+    expect(deleteNode).not.toHaveBeenCalled();
+    expect(
+      spatialSkeletonState
+        .getCachedSegmentNodes(segmentId)!
+        .some((node) => node.nodeId >= 1_000_000_000),
+    ).toBe(false);
+  });
+
+  it("records a confirmed optimistic add-node in undo history", async () => {
+    suppressStatusMessages();
+    const showTemporaryMessage = vi.mocked(StatusMessage.showTemporaryMessage);
+
+    const segmentId = 23;
+    const parentNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 1,
+      segmentId,
+      position: new Float32Array([4, 5, 6]),
+      isTrueEnd: false,
+      sourceState: testSourceState("parent-before-add"),
+    };
+    const addNode = vi.fn().mockResolvedValue({
+      nodeId: 2,
+      segmentId,
+      sourceState: testSourceState("node-after-add"),
+      parentSourceState: testSourceState("parent-after-add"),
+    });
+    const deleteNode = vi.fn().mockResolvedValue({
+      nodeSourceStateUpdates: [
+        {
+          nodeId: parentNode.nodeId,
+          sourceState: testSourceState("parent-after-undo"),
+        },
+      ],
+    });
+    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+      addNode,
+      deleteNode,
+      initialNodes: [parentNode],
+      segmentId,
+    });
+
+    await executeSpatialSkeletonAddNode(layer as any, {
+      skeletonId: segmentId,
+      parentNodeId: parentNode.nodeId,
+      positionInModelSpace: new Float32Array([7, 8, 9]),
+    });
+    await waitForMicrotasks(5);
+
+    expect(
+      spatialSkeletonState.getOptimisticEditQueueDebugSnapshot(),
+    ).toHaveLength(0);
+    expect(spatialSkeletonState.getCachedNode(2)).toMatchObject({
+      nodeId: 2,
+      segmentId,
+      parentNodeId: parentNode.nodeId,
+    });
+    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(true);
+    expect(showTemporaryMessage).not.toHaveBeenCalled();
+
+    await undoSpatialSkeletonCommand(layer as any);
+
+    expect(deleteNode).toHaveBeenCalledWith(2, {
+      childNodeIds: [],
+      editContext: expect.objectContaining({
+        node: expect.objectContaining({ nodeId: 2 }),
+        parent: expect.objectContaining({ nodeId: parentNode.nodeId }),
+      }),
+      nocheck: undefined,
+    });
+    expect(spatialSkeletonState.getCachedNode(2)).toBeUndefined();
+  });
+
+  it("uses normal command history for root add-node even when optimistic edits are enabled", async () => {
+    suppressStatusMessages();
+    const showTemporaryMessage = vi.mocked(StatusMessage.showTemporaryMessage);
+
+    const segmentId = 23;
+    const addNode = vi.fn().mockResolvedValue({
+      nodeId: 2,
+      segmentId,
+      sourceState: testSourceState("root-after-add"),
+    });
+    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+      addNode,
+      initialNodes: [],
+      segmentId,
+    });
+
+    await executeSpatialSkeletonAddNode(layer as any, {
+      skeletonId: segmentId,
+      parentNodeId: undefined,
+      positionInModelSpace: new Float32Array([7, 8, 9]),
+    });
+    await waitForMicrotasks(5);
+
+    expect(addNode).toHaveBeenCalledTimes(1);
+    expect((addNode.mock.calls[0] as unknown[])[4]).toBeUndefined();
+    expect(
+      ((addNode.mock.calls[0] as unknown[])[6] as { nocheck?: boolean })
+        ?.nocheck,
+    ).toBeUndefined();
+    expect(
+      spatialSkeletonState.getOptimisticEditQueueDebugSnapshot(),
+    ).toHaveLength(0);
+    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(true);
+    expect(spatialSkeletonState.getCachedNode(2)).toMatchObject({
+      nodeId: 2,
+      segmentId,
+      parentNodeId: undefined,
+    });
+    expect(showTemporaryMessage).toHaveBeenCalledWith(
+      "Added node 2 on segment 23.",
+    );
+  });
+
+  it("auto-purges settled optimistic queue entries without clearing undo history", async () => {
+    suppressStatusMessages();
+
+    const segmentId = 23;
+    const parentNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 1,
+      segmentId,
+      position: new Float32Array([4, 5, 6]),
+      isTrueEnd: false,
+      sourceState: testSourceState("parent-before-add"),
+    };
+    const addNode = vi.fn().mockResolvedValue({
+      nodeId: 2,
+      segmentId,
+      sourceState: testSourceState("node-after-add"),
+      parentSourceState: testSourceState("parent-after-add"),
+    });
+    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+      addNode,
+      initialNodes: [parentNode],
+      segmentId,
+    });
+
+    await executeSpatialSkeletonAddNode(layer as any, {
+      skeletonId: segmentId,
+      parentNodeId: parentNode.nodeId,
+      positionInModelSpace: new Float32Array([7, 8, 9]),
+    });
+    await waitForMicrotasks(5);
+
+    expect(
+      spatialSkeletonState.getOptimisticEditQueueDebugSnapshot(),
+    ).toHaveLength(0);
+    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(true);
+
+    expect(spatialSkeletonState.clearSettledOptimisticEdits()).toBe(false);
+
+    expect(
+      spatialSkeletonState.getOptimisticEditQueueDebugSnapshot(),
+    ).toHaveLength(0);
+    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(true);
+  });
+
+  it("retains committed optimistic dependencies until their pending dependents settle", async () => {
+    suppressStatusMessages();
+
+    const segmentId = 23;
+    const parentNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 1,
+      segmentId,
+      position: new Float32Array([4, 5, 6]),
+      isTrueEnd: false,
+      sourceState: testSourceState("parent-before-add"),
+    };
+    let resolveParentAdd:
+      | ((value: {
+          nodeId: number;
+          segmentId: number;
+          sourceState: ReturnType<typeof testSourceState>;
+          parentSourceState: ReturnType<typeof testSourceState>;
+        }) => void)
+      | undefined;
+    let resolveChildAdd:
+      | ((value: {
+          nodeId: number;
+          segmentId: number;
+          sourceState: ReturnType<typeof testSourceState>;
+          parentSourceState: ReturnType<typeof testSourceState>;
+        }) => void)
+      | undefined;
+    const parentAddPromise = new Promise<any>((resolve) => {
+      resolveParentAdd = resolve;
+    });
+    const childAddPromise = new Promise<any>((resolve) => {
+      resolveChildAdd = resolve;
+    });
+    const addNode = vi
+      .fn()
+      .mockReturnValueOnce(parentAddPromise)
+      .mockReturnValueOnce(childAddPromise);
+    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+      addNode,
+      initialNodes: [parentNode],
+      segmentId,
+    });
+
+    await executeSpatialSkeletonAddNode(layer as any, {
+      skeletonId: segmentId,
+      parentNodeId: parentNode.nodeId,
+      positionInModelSpace: new Float32Array([7, 8, 9]),
+    });
+    await waitForMicrotasks();
+
+    const optimisticParent = spatialSkeletonState
+      .getCachedSegmentNodes(segmentId)!
+      .find((node) => node.nodeId >= 1_000_000_000);
+    expect(optimisticParent).toBeDefined();
+
+    await executeSpatialSkeletonAddNode(layer as any, {
+      skeletonId: segmentId,
+      parentNodeId: optimisticParent!.nodeId,
+      positionInModelSpace: new Float32Array([10, 11, 12]),
+    });
+    await waitForMicrotasks();
+
+    resolveParentAdd!({
+      nodeId: 2,
+      segmentId,
+      sourceState: testSourceState("node-after-parent-add"),
+      parentSourceState: testSourceState("parent-after-parent-add"),
+    });
+    await waitForMicrotasks(10);
+
+    expect(addNode).toHaveBeenCalledTimes(2);
+    expect(spatialSkeletonState.getOptimisticEditQueueDebugSnapshot()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "addNode",
+          nodeId: 2,
+          status: "committed",
+        }),
+        expect.objectContaining({
+          kind: "addNode",
+          status: "inFlight",
+        }),
+      ]),
+    );
+
+    resolveChildAdd!({
+      nodeId: 3,
+      segmentId,
+      sourceState: testSourceState("node-after-child-add"),
+      parentSourceState: testSourceState("parent-after-child-add"),
+    });
+    await waitForMicrotasks(5);
+
+    expect(
+      spatialSkeletonState.getOptimisticEditQueueDebugSnapshot(),
+    ).toHaveLength(0);
+  });
+
+  it("restores a pending delete rollback with a remapped real parent id", async () => {
+    suppressStatusMessages();
+
+    const segmentId = 23;
+    const rootNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 1,
+      segmentId,
+      position: new Float32Array([4, 5, 6]),
+      isTrueEnd: false,
+      sourceState: testSourceState("root-before-add"),
+    };
+    let resolveParentAdd:
+      | ((value: {
+          nodeId: number;
+          segmentId: number;
+          sourceState: ReturnType<typeof testSourceState>;
+          parentSourceState: ReturnType<typeof testSourceState>;
+        }) => void)
+      | undefined;
+    let resolveChildAdd:
+      | ((value: {
+          nodeId: number;
+          segmentId: number;
+          sourceState: ReturnType<typeof testSourceState>;
+          parentSourceState: ReturnType<typeof testSourceState>;
+        }) => void)
+      | undefined;
+    const parentAddPromise = new Promise<any>((resolve) => {
+      resolveParentAdd = resolve;
+    });
+    const childAddPromise = new Promise<any>((resolve) => {
+      resolveChildAdd = resolve;
+    });
+    const addNode = vi
+      .fn()
+      .mockReturnValueOnce(parentAddPromise)
+      .mockReturnValueOnce(childAddPromise);
+    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+      addNode,
+      initialNodes: [rootNode],
+      segmentId,
+    });
+
+    await executeSpatialSkeletonAddNode(layer as any, {
+      skeletonId: segmentId,
+      parentNodeId: rootNode.nodeId,
+      positionInModelSpace: new Float32Array([7, 8, 9]),
+    });
+    await waitForMicrotasks();
+
+    const optimisticParent = spatialSkeletonState
+      .getCachedSegmentNodes(segmentId)!
+      .find((node) => node.nodeId >= 1_000_000_000);
+    expect(optimisticParent).toBeDefined();
+
+    await executeSpatialSkeletonAddNode(layer as any, {
+      skeletonId: segmentId,
+      parentNodeId: optimisticParent!.nodeId,
+      positionInModelSpace: new Float32Array([10, 11, 12]),
+    });
+    await waitForMicrotasks();
+
+    const optimisticChild = spatialSkeletonState
+      .getCachedSegmentNodes(segmentId)!
+      .find((node) => node.parentNodeId === optimisticParent!.nodeId);
+    expect(optimisticChild).toBeDefined();
+
+    await executeSpatialSkeletonDeleteNode(layer as any, optimisticChild!);
+    await waitForMicrotasks();
+
+    resolveParentAdd!({
+      nodeId: 2,
+      segmentId,
+      sourceState: testSourceState("parent-after-add"),
+      parentSourceState: testSourceState("root-after-add"),
+    });
+    await waitForMicrotasks(5);
+
+    await undoSpatialSkeletonCommand(layer as any);
+
+    expect(
+      spatialSkeletonState.getCachedNode(optimisticChild!.nodeId),
+    ).toMatchObject({
+      nodeId: optimisticChild!.nodeId,
+      parentNodeId: 2,
+    });
+
+    resolveChildAdd!({
+      nodeId: 3,
+      segmentId,
+      sourceState: testSourceState("child-after-add"),
+      parentSourceState: testSourceState("parent-after-child-add"),
+    });
+    await waitForMicrotasks(5);
+  });
+
+  it("removes a pending optimistic move-node preview without sending it", async () => {
+    suppressStatusMessages();
+
+    const segmentId = 23;
+    const parentNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 1,
+      segmentId,
+      position: new Float32Array([4, 5, 6]),
+      isTrueEnd: false,
+      sourceState: testSourceState("parent-before"),
+    };
+    let resolveAdd:
+      | ((value: {
+          nodeId: number;
+          segmentId: number;
+          sourceState: ReturnType<typeof testSourceState>;
+          parentSourceState: ReturnType<typeof testSourceState>;
+        }) => void)
+      | undefined;
+    const addPromise = new Promise<any>((resolve) => {
+      resolveAdd = resolve;
+    });
+    const addNode = vi.fn(() => addPromise);
+    const moveNode = vi.fn();
+    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+      addNode,
+      moveNode,
+      initialNodes: [parentNode],
+      segmentId,
+    });
+
+    await executeSpatialSkeletonAddNode(layer as any, {
+      skeletonId: segmentId,
+      parentNodeId: parentNode.nodeId,
+      positionInModelSpace: new Float32Array([7, 8, 9]),
+    });
+    await waitForMicrotasks();
+    await executeSpatialSkeletonMoveNode(layer as any, {
+      node: parentNode,
+      nextPositionInModelSpace: new Float32Array([10, 11, 12]),
+    });
+    await waitForMicrotasks();
+
+    expect(moveNode).not.toHaveBeenCalled();
+    expect(
+      Array.from(
+        spatialSkeletonState.getCachedNode(parentNode.nodeId)!.position,
+      ),
+    ).toEqual([10, 11, 12]);
+
+    await undoSpatialSkeletonCommand(layer as any);
+
+    expect(moveNode).not.toHaveBeenCalled();
+    expect(
+      Array.from(
+        spatialSkeletonState.getCachedNode(parentNode.nodeId)!.position,
+      ),
+    ).toEqual([4, 5, 6]);
+
+    resolveAdd!({
+      nodeId: 2,
+      segmentId,
+      sourceState: testSourceState("node-after-add"),
+      parentSourceState: testSourceState("parent-after-add"),
+    });
+    await waitForMicrotasks(5);
+  });
+
+  it("compensates when an in-flight optimistic move-node undo later commits", async () => {
+    suppressStatusMessages();
+    const showTemporaryMessage = vi.mocked(StatusMessage.showTemporaryMessage);
+
+    const segmentId = 23;
+    const node: SpatiallyIndexedSkeletonNode = {
+      nodeId: 1,
+      segmentId,
+      position: new Float32Array([4, 5, 6]),
+      isTrueEnd: false,
+      sourceState: testSourceState("node-before"),
+    };
+    let resolveMove:
+      | ((value: { sourceState: ReturnType<typeof testSourceState> }) => void)
+      | undefined;
+    const movePromise = new Promise<any>((resolve) => {
+      resolveMove = resolve;
+    });
+    const moveNode = vi
+      .fn()
+      .mockReturnValueOnce(movePromise)
+      .mockResolvedValueOnce({
+        sourceState: testSourceState("node-after-compensation"),
+      });
+    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+      moveNode,
+      initialNodes: [node],
+      segmentId,
+    });
+
+    await executeSpatialSkeletonMoveNode(layer as any, {
+      node,
+      nextPositionInModelSpace: new Float32Array([10, 11, 12]),
+    });
+    await waitForMicrotasks();
+
+    expect(moveNode).toHaveBeenCalledWith(
+      node.nodeId,
+      10,
+      11,
+      12,
+      expect.anything(),
+      { nocheck: true },
+    );
+    expect(
+      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+    ).toEqual([10, 11, 12]);
+
+    await undoSpatialSkeletonCommand(layer as any);
+
+    expect(moveNode).toHaveBeenCalledTimes(1);
+    expect(
+      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+    ).toEqual([4, 5, 6]);
+
+    resolveMove!({ sourceState: testSourceState("node-after-move") });
+    await waitForMicrotasks(5);
+
+    expect(moveNode).toHaveBeenCalledTimes(2);
+    expect(moveNode).toHaveBeenLastCalledWith(
+      node.nodeId,
+      4,
+      5,
+      6,
+      expect.anything(),
+      { nocheck: true },
+    );
+    expect(showTemporaryMessage).not.toHaveBeenCalled();
+    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(false);
+  });
+
+  it("records a confirmed optimistic move-node in undo history", async () => {
+    suppressStatusMessages();
+    const showTemporaryMessage = vi.mocked(StatusMessage.showTemporaryMessage);
+
+    const segmentId = 23;
+    const node: SpatiallyIndexedSkeletonNode = {
+      nodeId: 1,
+      segmentId,
+      position: new Float32Array([4, 5, 6]),
+      isTrueEnd: false,
+      sourceState: testSourceState("node-before"),
+    };
+    const moveNode = vi
+      .fn()
+      .mockResolvedValueOnce({ sourceState: testSourceState("node-after") })
+      .mockResolvedValueOnce({
+        sourceState: testSourceState("node-after-undo"),
+      });
+    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+      moveNode,
+      initialNodes: [node],
+      segmentId,
+    });
+
+    await executeSpatialSkeletonMoveNode(layer as any, {
+      node,
+      nextPositionInModelSpace: new Float32Array([10, 11, 12]),
+    });
+    await waitForMicrotasks(5);
+
+    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(true);
+    expect(
+      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+    ).toEqual([10, 11, 12]);
+    expect(showTemporaryMessage).not.toHaveBeenCalled();
+
+    await undoSpatialSkeletonCommand(layer as any);
+
+    expect(moveNode).toHaveBeenCalledTimes(2);
+    expect(moveNode).toHaveBeenLastCalledWith(
+      node.nodeId,
+      4,
+      5,
+      6,
+      expect.anything(),
+      { nocheck: undefined },
+    );
+    expect(
+      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+    ).toEqual([4, 5, 6]);
+  });
+
+  it("keeps the latest optimistic move preview when an older move commits", async () => {
+    suppressStatusMessages();
+
+    const segmentId = 23;
+    const node: SpatiallyIndexedSkeletonNode = {
+      nodeId: 1,
+      segmentId,
+      position: new Float32Array([4, 5, 6]),
+      isTrueEnd: false,
+      sourceState: testSourceState("node-before"),
+    };
+    let resolveFirstMove:
+      | ((value: { sourceState: ReturnType<typeof testSourceState> }) => void)
+      | undefined;
+    let resolveSecondMove:
+      | ((value: { sourceState: ReturnType<typeof testSourceState> }) => void)
+      | undefined;
+    const firstMovePromise = new Promise<any>((resolve) => {
+      resolveFirstMove = resolve;
+    });
+    const secondMovePromise = new Promise<any>((resolve) => {
+      resolveSecondMove = resolve;
+    });
+    const moveNode = vi
+      .fn()
+      .mockReturnValueOnce(firstMovePromise)
+      .mockReturnValueOnce(secondMovePromise);
+    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+      moveNode,
+      initialNodes: [node],
+      segmentId,
+    });
+
+    await executeSpatialSkeletonMoveNode(layer as any, {
+      node,
+      nextPositionInModelSpace: new Float32Array([10, 11, 12]),
+    });
+    await waitForMicrotasks();
+    expect(
+      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+    ).toEqual([10, 11, 12]);
+
+    await executeSpatialSkeletonMoveNode(layer as any, {
+      node: spatialSkeletonState.getCachedNode(node.nodeId)!,
+      nextPositionInModelSpace: new Float32Array([20, 21, 22]),
+    });
+    await waitForMicrotasks();
+    expect(moveNode).toHaveBeenCalledTimes(1);
+    expect(
+      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+    ).toEqual([20, 21, 22]);
+
+    resolveFirstMove!({ sourceState: testSourceState("after-first") });
+    await waitForMicrotasks(5);
+
+    expect(moveNode).toHaveBeenCalledTimes(2);
+    expect(
+      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+    ).toEqual([20, 21, 22]);
+
+    resolveSecondMove!({ sourceState: testSourceState("after-second") });
+    await waitForMicrotasks(5);
+
+    expect(
+      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+    ).toEqual([20, 21, 22]);
+  });
+
+  it("removes a pending optimistic delete-node preview without sending it", async () => {
+    suppressStatusMessages();
+
+    const segmentId = 23;
+    const rootNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 1,
+      segmentId,
+      position: new Float32Array([1, 2, 3]),
+      isTrueEnd: false,
+      sourceState: testSourceState("root-before"),
+    };
+    const deletedNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 2,
+      segmentId,
+      parentNodeId: rootNode.nodeId,
+      position: new Float32Array([4, 5, 6]),
+      isTrueEnd: false,
+      sourceState: testSourceState("deleted-before"),
+    };
+    const childNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 3,
+      segmentId,
+      parentNodeId: deletedNode.nodeId,
+      position: new Float32Array([7, 8, 9]),
+      isTrueEnd: false,
+      sourceState: testSourceState("child-before"),
+    };
+    let resolveAdd:
+      | ((value: {
+          nodeId: number;
+          segmentId: number;
+          sourceState: ReturnType<typeof testSourceState>;
+          parentSourceState: ReturnType<typeof testSourceState>;
+        }) => void)
+      | undefined;
+    const addPromise = new Promise<any>((resolve) => {
+      resolveAdd = resolve;
+    });
+    const addNode = vi.fn(() => addPromise);
+    const deleteNode = vi.fn();
+    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+      addNode,
+      deleteNode,
+      initialNodes: [rootNode, deletedNode, childNode],
+      segmentId,
+    });
+
+    await executeSpatialSkeletonAddNode(layer as any, {
+      skeletonId: segmentId,
+      parentNodeId: rootNode.nodeId,
+      positionInModelSpace: new Float32Array([10, 11, 12]),
+    });
+    await waitForMicrotasks();
+    await executeSpatialSkeletonDeleteNode(layer as any, deletedNode);
+    await waitForMicrotasks();
+
+    expect(deleteNode).not.toHaveBeenCalled();
+    expect(
+      spatialSkeletonState.getCachedNode(deletedNode.nodeId),
+    ).toBeUndefined();
+    expect(
+      spatialSkeletonState.getCachedNode(childNode.nodeId)?.parentNodeId,
+    ).toBe(rootNode.nodeId);
+
+    await undoSpatialSkeletonCommand(layer as any);
+
+    expect(deleteNode).not.toHaveBeenCalled();
+    expect(
+      spatialSkeletonState.getCachedNode(deletedNode.nodeId),
+    ).toMatchObject({
+      nodeId: deletedNode.nodeId,
+      parentNodeId: rootNode.nodeId,
+    });
+    expect(
+      spatialSkeletonState.getCachedNode(childNode.nodeId)?.parentNodeId,
+    ).toBe(deletedNode.nodeId);
+
+    resolveAdd!({
+      nodeId: 4,
+      segmentId,
+      sourceState: testSourceState("node-after-add"),
+      parentSourceState: testSourceState("root-after-add"),
+    });
+    await waitForMicrotasks(5);
+  });
+
+  it("compensates when an in-flight optimistic delete-node undo later commits", async () => {
+    suppressStatusMessages();
+    const showTemporaryMessage = vi.mocked(StatusMessage.showTemporaryMessage);
+
+    const segmentId = 23;
+    const rootNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 1,
+      segmentId,
+      position: new Float32Array([1, 2, 3]),
+      isTrueEnd: false,
+      sourceState: testSourceState("root-before"),
+    };
+    const deletedNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 2,
+      segmentId,
+      parentNodeId: rootNode.nodeId,
+      position: new Float32Array([4, 5, 6]),
+      isTrueEnd: false,
+      sourceState: testSourceState("deleted-before"),
+    };
+    let resolveDelete:
+      | ((value: {
+          nodeSourceStateUpdates: {
+            nodeId: number;
+            sourceState: ReturnType<typeof testSourceState>;
+          }[];
+        }) => void)
+      | undefined;
+    const deletePromise = new Promise<any>((resolve) => {
+      resolveDelete = resolve;
+    });
+    const deleteNode = vi.fn().mockReturnValueOnce(deletePromise);
+    const addNode = vi.fn().mockResolvedValue({
+      nodeId: 20,
+      segmentId,
+      sourceState: testSourceState("restored-after-compensation"),
+      parentSourceState: testSourceState("root-after-compensation"),
+    });
+    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+      addNode,
+      deleteNode,
+      initialNodes: [rootNode, deletedNode],
+      segmentId,
+    });
+
+    await executeSpatialSkeletonDeleteNode(layer as any, deletedNode);
+    await waitForMicrotasks();
+
+    expect(deleteNode).toHaveBeenCalledWith(deletedNode.nodeId, {
+      childNodeIds: [],
+      editContext: expect.objectContaining({
+        node: expect.objectContaining({ nodeId: deletedNode.nodeId }),
+        parent: expect.objectContaining({ nodeId: rootNode.nodeId }),
+      }),
+      nocheck: true,
+    });
+    expect(
+      spatialSkeletonState.getCachedNode(deletedNode.nodeId),
+    ).toBeUndefined();
+
+    await undoSpatialSkeletonCommand(layer as any);
+
+    expect(
+      spatialSkeletonState.getCachedNode(deletedNode.nodeId),
+    ).toMatchObject({
+      nodeId: deletedNode.nodeId,
+      parentNodeId: rootNode.nodeId,
+    });
+
+    resolveDelete!({
+      nodeSourceStateUpdates: [
+        {
+          nodeId: rootNode.nodeId,
+          sourceState: testSourceState("root-after-delete"),
+        },
+      ],
+    });
+    await waitForMicrotasks(5);
+
+    expect(addNode).toHaveBeenCalledWith(
+      segmentId,
+      4,
+      5,
+      6,
+      rootNode.nodeId,
+      expect.objectContaining({
+        node: expect.objectContaining({ nodeId: rootNode.nodeId }),
+      }),
+      { nocheck: undefined, signal: undefined },
+    );
+    expect(
+      spatialSkeletonState.getCachedNode(deletedNode.nodeId),
+    ).toBeUndefined();
+    expect(spatialSkeletonState.getCachedNode(20)).toMatchObject({
+      nodeId: 20,
+      parentNodeId: rootNode.nodeId,
+    });
+    expect(showTemporaryMessage).not.toHaveBeenCalled();
+    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(false);
+  });
+
+  it("records a confirmed optimistic delete-node in undo history", async () => {
+    suppressStatusMessages();
+    const showTemporaryMessage = vi.mocked(StatusMessage.showTemporaryMessage);
+
+    const segmentId = 23;
+    const rootNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 1,
+      segmentId,
+      position: new Float32Array([1, 2, 3]),
+      isTrueEnd: false,
+      sourceState: testSourceState("root-before"),
+    };
+    const deletedNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 2,
+      segmentId,
+      parentNodeId: rootNode.nodeId,
+      position: new Float32Array([4, 5, 6]),
+      isTrueEnd: false,
+      sourceState: testSourceState("deleted-before"),
+    };
+    const deleteNode = vi.fn().mockResolvedValue({
+      nodeSourceStateUpdates: [
+        {
+          nodeId: rootNode.nodeId,
+          sourceState: testSourceState("root-after-delete"),
+        },
+      ],
+    });
+    const addNode = vi.fn().mockResolvedValue({
+      nodeId: 20,
+      segmentId,
+      sourceState: testSourceState("restored-after-undo"),
+      parentSourceState: testSourceState("root-after-undo"),
+    });
+    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+      addNode,
+      deleteNode,
+      initialNodes: [rootNode, deletedNode],
+      segmentId,
+    });
+
+    await executeSpatialSkeletonDeleteNode(layer as any, deletedNode);
+    await waitForMicrotasks(5);
+
+    expect(
+      spatialSkeletonState.getCachedNode(deletedNode.nodeId),
+    ).toBeUndefined();
+    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(true);
+    expect(showTemporaryMessage).not.toHaveBeenCalled();
+
+    await undoSpatialSkeletonCommand(layer as any);
+
+    expect(addNode).toHaveBeenCalledWith(
+      segmentId,
+      4,
+      5,
+      6,
+      rootNode.nodeId,
+      expect.objectContaining({
+        node: expect.objectContaining({ nodeId: rootNode.nodeId }),
+      }),
+      { nocheck: undefined, signal: undefined },
+    );
+    expect(spatialSkeletonState.getCachedNode(20)).toMatchObject({
+      nodeId: 20,
+      parentNodeId: rootNode.nodeId,
+    });
   });
 
   it("restores internal-node delete undo as an insertion in the local cache", async () => {

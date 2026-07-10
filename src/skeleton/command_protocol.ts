@@ -97,6 +97,7 @@ export interface SpatialSkeletonCommandContext {
 export interface SpatialSkeletonCommand {
   readonly label: string;
   execute(context: SpatialSkeletonCommandContext): Promise<void>;
+  executeOptimistically?(context: SpatialSkeletonCommandContext): Promise<void>;
   undo(context: SpatialSkeletonCommandContext): Promise<void>;
   redo?(context: SpatialSkeletonCommandContext): Promise<void>;
 }

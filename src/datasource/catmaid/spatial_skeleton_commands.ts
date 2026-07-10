@@ -72,7 +72,10 @@ import {
   getSpatiallyIndexedSkeletonPathToRoot,
   getSpatiallyIndexedSkeletonSubtreeNodes,
 } from "#src/skeleton/node_traversal.js";
-import { getEditableSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial_skeleton_manager.js";
+import {
+  getEditableSpatiallyIndexedSkeletonSource,
+  type SpatialSkeletonOptimisticEditQueue,
+} from "#src/skeleton/spatial_skeleton_manager.js";
 import { StatusMessage } from "#src/status.js";
 import { formatErrorMessage } from "#src/util/error.js";
 
@@ -128,6 +131,7 @@ interface CatmaidSpatialSkeletonMergeCommandPayload {
 
 export interface CatmaidSpatialSkeletonEditCommandContext {
   getClient(): CatmaidClient;
+  getOptimisticSkeletonEdits?(layer: SegmentationUserLayer): boolean;
 }
 
 interface CatmaidSpatialSkeletonEditOperations {
@@ -1011,6 +1015,7 @@ async function restoreNodeAttributes(
   editOperations: CatmaidSpatialSkeletonEditOperations,
   createdNode: SpatiallyIndexedSkeletonNode,
   snapshot: SpatiallyIndexedSkeletonNode,
+  options: { applyLocalState?: boolean } = {},
 ) {
   let nextNode = cloneNodeSnapshot(createdNode);
   if (snapshot.radius !== undefined && snapshot.radius !== nextNode.radius) {
@@ -1048,12 +1053,23 @@ async function restoreNodeAttributes(
       snapshot,
     );
   }
-  layer.spatialSkeletonState.upsertCachedNode(nextNode);
+  if (options.applyLocalState ?? true) {
+    layer.spatialSkeletonState.upsertCachedNode(nextNode);
+  }
   return nextNode;
+}
+
+interface ResolvedCatmaidAddNodeContext {
+  skeletonLayer: SpatiallyIndexedSkeletonLayer;
+  parentNode: SpatiallyIndexedSkeletonNode | undefined;
+  segmentId: number;
 }
 
 class AddNodeCommand implements SpatialSkeletonCommand {
   readonly label = "Add node";
+  readonly executeOptimistically?: (
+    context: SpatialSkeletonCommandContext,
+  ) => Promise<void>;
   private stableNodeId: number | undefined;
   private stableSegmentId: number | undefined;
 
@@ -1063,42 +1079,34 @@ class AddNodeCommand implements SpatialSkeletonCommand {
     private targetSkeletonId: number,
     private positionInModelSpace: Float32Array,
     private editOperations: CatmaidSpatialSkeletonEditOperations,
-  ) {}
-
-  private async addNode(
-    _context: SpatialSkeletonCommandContext,
-    options: {
-      moveView: boolean;
-      pinSegment: boolean;
-      statusPrefix: string;
-    },
+    optimistic = false,
   ) {
-    const { skeletonLayer } = getEditableSkeletonSourceForLayer(this.layer);
-    const currentParentNodeId =
-      this.stableParentNodeId === undefined
-        ? undefined
-        : this.layer.spatialSkeletonState.commandHistory.mappings.resolveNodeId(
-            this.stableParentNodeId,
-          );
-    let parentNode: SpatiallyIndexedSkeletonNode | undefined;
-    let resolvedSkeletonId = this.targetSkeletonId;
-    if (currentParentNodeId !== undefined) {
-      parentNode = (
-        await getResolvedNodeForEdit(
+    if (optimistic && stableParentNodeId !== undefined) {
+      this.executeOptimistically = async (context) => {
+        await getOrCreateCatmaidOptimisticEditQueue(
           this.layer,
-          this.stableParentNodeId!,
-          this.layer.spatialSkeletonState.commandHistory.mappings.getStableOrCurrentSegmentId(
-            this.targetSkeletonId,
-          ),
-        )
-      ).node;
-      resolvedSkeletonId = parentNode.segmentId;
+          this.editOperations,
+        ).enqueueAddNode(this, context, {
+          moveView: true,
+          pinSegment: true,
+          statusPrefix: "Added",
+        });
+      };
     }
-    const result = await this.editOperations.commitAddNode({
-      segmentId: resolvedSkeletonId,
-      position: this.positionInModelSpace,
-      parentNode,
-    });
+  }
+
+  getPositionInModelSpace() {
+    return new Float32Array(this.positionInModelSpace);
+  }
+
+  markOptimisticCommit(stableNodeId: number, stableSegmentId: number) {
+    this.stableNodeId = stableNodeId;
+    this.stableSegmentId = stableSegmentId;
+  }
+
+  private recordCreatedNodeMapping(
+    result: CatmaidSpatialSkeletonAddNodeResult,
+  ) {
     if (this.stableNodeId === undefined) {
       this.stableNodeId = result.nodeId;
     } else {
@@ -1115,6 +1123,73 @@ class AddNodeCommand implements SpatialSkeletonCommand {
         result.segmentId,
       );
     }
+  }
+
+  async resolveAddNodeContext(options: {
+    requireFullParent: boolean;
+  }): Promise<ResolvedCatmaidAddNodeContext> {
+    const { skeletonLayer } = getEditableSkeletonSourceForLayer(this.layer);
+    const commandMappings =
+      this.layer.spatialSkeletonState.commandHistory.mappings;
+    const currentParentNodeId =
+      this.stableParentNodeId === undefined
+        ? undefined
+        : commandMappings.resolveNodeId(this.stableParentNodeId);
+    let parentNode: SpatiallyIndexedSkeletonNode | undefined;
+    let resolvedSkeletonId =
+      commandMappings.resolveSegmentId(this.targetSkeletonId) ??
+      this.targetSkeletonId;
+    if (currentParentNodeId !== undefined) {
+      if (options.requireFullParent) {
+        parentNode = (
+          await getResolvedNodeForEdit(
+            this.layer,
+            this.stableParentNodeId!,
+            commandMappings.getStableOrCurrentSegmentId(this.targetSkeletonId),
+          )
+        ).node;
+      } else {
+        const resolvedNodeContext = getResolvedNodeContextForEdit(
+          this.layer,
+          this.stableParentNodeId!,
+          commandMappings.getStableOrCurrentSegmentId(this.targetSkeletonId),
+        );
+        parentNode =
+          resolvedNodeContext.cachedNode ??
+          resolvedNodeContext.skeletonLayer.getNode(
+            resolvedNodeContext.currentNodeId,
+          );
+      }
+      if (parentNode === undefined) {
+        throw new Error(
+          `Unable to resolve parent node ${currentParentNodeId}.`,
+        );
+      }
+      resolvedSkeletonId = parentNode.segmentId;
+    }
+    return {
+      skeletonLayer,
+      parentNode,
+      segmentId: resolvedSkeletonId,
+    };
+  }
+
+  private async addNode(
+    _context: SpatialSkeletonCommandContext,
+    options: {
+      moveView: boolean;
+      pinSegment: boolean;
+      statusPrefix: string;
+    },
+  ) {
+    const { skeletonLayer, parentNode, segmentId } =
+      await this.resolveAddNodeContext({ requireFullParent: true });
+    const result = await this.editOperations.commitAddNode({
+      segmentId,
+      position: this.positionInModelSpace,
+      parentNode,
+    });
+    this.recordCreatedNodeMapping(result);
     applyCreatedNodeToCache(
       this.layer,
       skeletonLayer,
@@ -1168,6 +1243,1415 @@ class AddNodeCommand implements SpatialSkeletonCommand {
       statusPrefix: "Redid add of",
     });
   }
+}
+
+enum CatmaidOptimisticEditStatus {
+  Pending = "pending",
+  InFlight = "inFlight",
+  CancelRequested = "cancelRequested",
+  Committed = "committed",
+  Failed = "failed",
+  RolledBack = "rolledBack",
+}
+
+type CatmaidOptimisticEditKind = "addNode" | "moveNode" | "deleteNode";
+
+interface CatmaidOptimisticEditEntryBase {
+  readonly operationId: number;
+  readonly kind: CatmaidOptimisticEditKind;
+  readonly dependencies: number[];
+  inFlightWarningTimeout?: ReturnType<typeof setTimeout>;
+  inFlightWarning?: StatusMessage;
+  status: CatmaidOptimisticEditStatus;
+}
+
+interface CatmaidOptimisticAddNodeEntry extends CatmaidOptimisticEditEntryBase {
+  readonly kind: "addNode";
+  readonly command: AddNodeCommand;
+  readonly tempNodeId: number;
+  readonly positionInModelSpace: Float32Array;
+  readonly parentTempNodeId?: number;
+  parentNodeId: number;
+  parentNodeForServer?: SpatiallyIndexedSkeletonNode;
+  result?: CatmaidSpatialSkeletonAddNodeResult;
+}
+
+interface CatmaidOptimisticMoveNodeEntry
+  extends CatmaidOptimisticEditEntryBase {
+  readonly kind: "moveNode";
+  readonly command: MoveNodeCommand;
+  nodeId: number;
+  segmentId: number;
+  nodeForServer: SpatiallyIndexedSkeletonNode;
+  result?: CatmaidSpatialSkeletonNodeSourceStateResult;
+  readonly beforePositionInModelSpace: Float32Array;
+  readonly afterPositionInModelSpace: Float32Array;
+}
+
+interface CatmaidOptimisticDeleteNodeEntry
+  extends CatmaidOptimisticEditEntryBase {
+  readonly kind: "deleteNode";
+  readonly command: DeleteNodeCommand;
+  nodeId: number;
+  segmentId: number;
+  deleteContext: {
+    node: SpatiallyIndexedSkeletonNode;
+    parentNode: SpatiallyIndexedSkeletonNode | undefined;
+    childNodes: readonly SpatiallyIndexedSkeletonNode[];
+  };
+  segmentNodes: readonly SpatiallyIndexedSkeletonNode[];
+  affectedPositions: readonly ArrayLike<number>[];
+  result?: CatmaidSpatialSkeletonDeleteNodeResult;
+}
+
+type CatmaidOptimisticEditEntry =
+  | CatmaidOptimisticAddNodeEntry
+  | CatmaidOptimisticMoveNodeEntry
+  | CatmaidOptimisticDeleteNodeEntry;
+
+const CATMAID_OPTIMISTIC_TEMP_ID_START = Number.MAX_SAFE_INTEGER;
+const CATMAID_OPTIMISTIC_IN_FLIGHT_WARNING_DELAY_MS = 30_000;
+
+const catmaidOptimisticEditQueues = new WeakMap<
+  object,
+  CatmaidOptimisticEditQueue
+>();
+
+function getOrCreateCatmaidOptimisticEditQueue(
+  layer: SegmentationUserLayer,
+  editOperations: CatmaidSpatialSkeletonEditOperations,
+) {
+  const state = layer.spatialSkeletonState;
+  const existingQueue = catmaidOptimisticEditQueues.get(state);
+  if (existingQueue?.usesEditOperations(editOperations)) {
+    state.setOptimisticEditQueue(existingQueue);
+    return existingQueue;
+  }
+  existingQueue?.dispose();
+  const queue = new CatmaidOptimisticEditQueue(layer, editOperations);
+  catmaidOptimisticEditQueues.set(state, queue);
+  state.setOptimisticEditQueue(queue);
+  return queue;
+}
+
+function deleteCatmaidOptimisticEditQueue(
+  layer: SegmentationUserLayer,
+  queue: CatmaidOptimisticEditQueue,
+) {
+  const state = layer.spatialSkeletonState;
+  if (catmaidOptimisticEditQueues.get(state) === queue) {
+    catmaidOptimisticEditQueues.delete(state);
+  }
+}
+
+function positionsEqual(
+  first: ArrayLike<number> | undefined,
+  second: ArrayLike<number>,
+) {
+  if (first === undefined || first.length < 3 || second.length < 3) {
+    return false;
+  }
+  return (
+    first[0] === second[0] && first[1] === second[1] && first[2] === second[2]
+  );
+}
+
+class CatmaidOptimisticEditQueue implements SpatialSkeletonOptimisticEditQueue {
+  private entries: CatmaidOptimisticEditEntry[] = [];
+  private nextOperationId = 1;
+  private nextTempId = CATMAID_OPTIMISTIC_TEMP_ID_START;
+  private draining = false;
+  private disposed = false;
+
+  constructor(
+    private readonly layer: SegmentationUserLayer,
+    private readonly editOperations: CatmaidSpatialSkeletonEditOperations,
+  ) {}
+
+  usesEditOperations(editOperations: CatmaidSpatialSkeletonEditOperations) {
+    return this.editOperations === editOperations;
+  }
+
+  canUndo() {
+    return this.entries.some(
+      (entry) =>
+        entry.status === CatmaidOptimisticEditStatus.Pending ||
+        entry.status === CatmaidOptimisticEditStatus.InFlight,
+    );
+  }
+
+  hasUnconfirmedActions() {
+    return this.entries.some(
+      (entry) =>
+        entry.status === CatmaidOptimisticEditStatus.Pending ||
+        entry.status === CatmaidOptimisticEditStatus.InFlight ||
+        entry.status === CatmaidOptimisticEditStatus.CancelRequested,
+    );
+  }
+
+  getDebugSnapshot() {
+    return this.entries.map((entry) => ({
+      operationId: entry.operationId,
+      kind: entry.kind,
+      status: entry.status,
+      tempNodeId: entry.kind === "addNode" ? entry.tempNodeId : undefined,
+      parentNodeId: entry.kind === "addNode" ? entry.parentNodeId : undefined,
+      parentTempNodeId:
+        entry.kind === "addNode" ? entry.parentTempNodeId : undefined,
+      nodeId: entry.kind === "addNode" ? entry.result?.nodeId : entry.nodeId,
+      segmentId:
+        entry.kind === "addNode"
+          ? (entry.result?.segmentId ??
+            this.layer.spatialSkeletonState.getCachedNode(entry.tempNodeId)
+              ?.segmentId)
+          : entry.segmentId,
+    }));
+  }
+
+  clearSettled() {
+    const changed = this.pruneSettledEntries();
+    if (changed) {
+      this.notifyChanged();
+    }
+    return changed;
+  }
+
+  clear() {
+    const changed = this.rollbackAndCancelForReset();
+    if (changed) {
+      this.notifyChanged();
+    }
+    return changed;
+  }
+
+  dispose() {
+    const changed = this.rollbackAndCancelForReset();
+    this.disposed = true;
+    deleteCatmaidOptimisticEditQueue(this.layer, this);
+    return changed;
+  }
+
+  private pruneSettledEntries() {
+    const dependenciesOfUnsettledEntries = new Set<number>();
+    for (const entry of this.entries) {
+      if (this.isSettled(entry)) continue;
+      for (const dependency of entry.dependencies) {
+        dependenciesOfUnsettledEntries.add(dependency);
+      }
+    }
+    const removedEntries: CatmaidOptimisticEditEntry[] = [];
+    const nextEntries = this.entries.filter((entry) => {
+      const keep =
+        !this.isSettled(entry) ||
+        dependenciesOfUnsettledEntries.has(entry.operationId);
+      if (!keep) {
+        removedEntries.push(entry);
+      }
+      return keep;
+    });
+    if (nextEntries.length === this.entries.length) {
+      return false;
+    }
+    for (const entry of removedEntries) {
+      this.clearInFlightWarning(entry);
+    }
+    this.entries = nextEntries;
+    return true;
+  }
+
+  private rollbackAndCancelForReset() {
+    const changed = this.entries.length !== 0;
+    for (const entry of [...this.entries].reverse()) {
+      this.clearInFlightWarning(entry);
+      if (
+        entry.status === CatmaidOptimisticEditStatus.InFlight ||
+        entry.status === CatmaidOptimisticEditStatus.CancelRequested
+      ) {
+        this.rollbackPreview(entry);
+        entry.status = CatmaidOptimisticEditStatus.CancelRequested;
+      } else if (entry.status === CatmaidOptimisticEditStatus.Pending) {
+        this.rollbackPreview(entry);
+        entry.status = CatmaidOptimisticEditStatus.RolledBack;
+      }
+    }
+    this.entries = this.entries.filter(
+      (entry) => entry.status === CatmaidOptimisticEditStatus.CancelRequested,
+    );
+    return changed;
+  }
+
+  private notifyChanged() {
+    if (this.disposed) {
+      return;
+    }
+    this.layer.spatialSkeletonState.notifyOptimisticEditQueueChanged();
+  }
+
+  private allocateTempId() {
+    while (this.nextTempId > 0) {
+      const tempId = this.nextTempId--;
+      if (
+        this.layer.spatialSkeletonState.getCachedNode(tempId) === undefined &&
+        this.layer.spatialSkeletonState.getCachedSegmentNodes(tempId) ===
+          undefined &&
+        !this.entries.some(
+          (entry) => entry.kind === "addNode" && entry.tempNodeId === tempId,
+        )
+      ) {
+        return tempId;
+      }
+    }
+    throw new Error("Unable to allocate optimistic skeleton edit id.");
+  }
+
+  private findEntryForTempNode(
+    nodeId: number | undefined,
+  ): CatmaidOptimisticAddNodeEntry | undefined {
+    if (nodeId === undefined) return undefined;
+    return this.entries.find(
+      (entry): entry is CatmaidOptimisticAddNodeEntry =>
+        entry.kind === "addNode" &&
+        entry.tempNodeId === nodeId &&
+        entry.status !== CatmaidOptimisticEditStatus.Failed &&
+        entry.status !== CatmaidOptimisticEditStatus.RolledBack,
+    );
+  }
+
+  private isSettled(entry: CatmaidOptimisticEditEntry) {
+    return (
+      entry.status === CatmaidOptimisticEditStatus.Committed ||
+      entry.status === CatmaidOptimisticEditStatus.Failed ||
+      entry.status === CatmaidOptimisticEditStatus.RolledBack
+    );
+  }
+
+  private isActive(entry: CatmaidOptimisticEditEntry) {
+    return !this.isSettled(entry);
+  }
+
+  private startInFlightWarning(entry: CatmaidOptimisticEditEntry) {
+    this.clearInFlightWarning(entry);
+    entry.inFlightWarningTimeout = setTimeout(() => {
+      entry.inFlightWarningTimeout = undefined;
+      if (
+        this.disposed ||
+        entry.status !== CatmaidOptimisticEditStatus.InFlight
+      ) {
+        return;
+      }
+      entry.inFlightWarning = StatusMessage.showErrorMessage(
+        "CATMAID has not confirmed the optimistic skeleton edit yet. Wait for it to finish before continuing.",
+      );
+    }, CATMAID_OPTIMISTIC_IN_FLIGHT_WARNING_DELAY_MS);
+  }
+
+  private clearInFlightWarning(entry: CatmaidOptimisticEditEntry) {
+    if (entry.inFlightWarningTimeout !== undefined) {
+      clearTimeout(entry.inFlightWarningTimeout);
+      entry.inFlightWarningTimeout = undefined;
+    }
+    if (entry.inFlightWarning !== undefined) {
+      entry.inFlightWarning.dispose();
+      entry.inFlightWarning = undefined;
+    }
+  }
+
+  private isDependencyCommitted(operationId: number) {
+    const dependency = this.entries.find(
+      (entry) => entry.operationId === operationId,
+    );
+    // Committed dependency entries must be retained while active dependents
+    // reference them; if one is missing, the dependency is not satisfied.
+    return dependency?.status === CatmaidOptimisticEditStatus.Committed;
+  }
+
+  private getActiveDependenciesForNodes(nodeIds: Iterable<number>) {
+    const nodeIdSet = new Set(nodeIds);
+    const dependencies: number[] = [];
+    for (const entry of this.entries) {
+      if (!this.isActive(entry)) continue;
+      if (this.entryTouchesAnyNode(entry, nodeIdSet)) {
+        dependencies.push(entry.operationId);
+      }
+    }
+    return dependencies;
+  }
+
+  private entryTouchesAnyNode(
+    entry: CatmaidOptimisticEditEntry,
+    nodeIds: ReadonlySet<number>,
+  ) {
+    switch (entry.kind) {
+      case "addNode":
+        return (
+          nodeIds.has(entry.tempNodeId) ||
+          (entry.result !== undefined && nodeIds.has(entry.result.nodeId))
+        );
+      case "moveNode":
+        return nodeIds.has(entry.nodeId);
+      case "deleteNode":
+        return (
+          nodeIds.has(entry.nodeId) ||
+          entry.deleteContext.childNodes.some((child) =>
+            nodeIds.has(child.nodeId),
+          )
+        );
+    }
+  }
+
+  private getExpectedAddNodeSegmentId(
+    entry: CatmaidOptimisticAddNodeEntry,
+    fallbackSegmentId?: number,
+  ) {
+    return (
+      this.layer.spatialSkeletonState.getCachedNode(entry.parentNodeId)
+        ?.segmentId ?? fallbackSegmentId
+    );
+  }
+
+  private hasActiveMoveDependent(entry: CatmaidOptimisticAddNodeEntry) {
+    return this.entries.some(
+      (candidate) =>
+        candidate.kind === "moveNode" &&
+        this.isActive(candidate) &&
+        candidate.dependencies.includes(entry.operationId),
+    );
+  }
+
+  private hasActiveDeleteDependent(entry: CatmaidOptimisticAddNodeEntry) {
+    return this.entries.some(
+      (candidate) =>
+        candidate.kind === "deleteNode" &&
+        this.isActive(candidate) &&
+        candidate.dependencies.includes(entry.operationId),
+    );
+  }
+
+  private previewAddNodeMatchesEntry(
+    entry: CatmaidOptimisticAddNodeEntry,
+    previewNode: SpatiallyIndexedSkeletonNode | undefined,
+    expectedSegmentId?: number,
+  ): previewNode is SpatiallyIndexedSkeletonNode {
+    return (
+      previewNode !== undefined &&
+      previewNode.nodeId === entry.tempNodeId &&
+      previewNode.parentNodeId === entry.parentNodeId &&
+      (positionsEqual(previewNode.position, entry.positionInModelSpace) ||
+        this.hasActiveMoveDependent(entry)) &&
+      (expectedSegmentId === undefined ||
+        previewNode.segmentId === expectedSegmentId)
+    );
+  }
+
+  private handlePreviewCollision(
+    entry: CatmaidOptimisticAddNodeEntry,
+    previewNode: SpatiallyIndexedSkeletonNode | undefined,
+    expectedSegmentId?: number,
+    result?: CatmaidSpatialSkeletonAddNodeResult,
+  ) {
+    const segmentIds = [
+      expectedSegmentId,
+      previewNode?.segmentId,
+      result?.segmentId,
+    ].filter(
+      (segmentId): segmentId is number =>
+        segmentId !== undefined &&
+        Number.isSafeInteger(segmentId) &&
+        segmentId > 0,
+    );
+    if (segmentIds.length !== 0) {
+      this.layer.spatialSkeletonState.invalidateCachedSegments(segmentIds);
+    }
+    skeletonLayerFromLayer(this.layer)?.invalidateSourceCellsForPositions([
+      entry.positionInModelSpace,
+      previewNode?.position,
+    ]);
+    this.layer.markSpatialSkeletonNodeDataChanged({
+      invalidateFullSkeletonCache: false,
+    });
+    StatusMessage.showErrorMessage(
+      `Optimistic skeleton edit temporary id ${entry.tempNodeId} conflicted with loaded skeleton data. The affected skeleton cache was invalidated; refresh the skeleton to sync before continuing.`,
+    );
+  }
+
+  private rollbackPreview(entry: CatmaidOptimisticEditEntry) {
+    switch (entry.kind) {
+      case "addNode":
+        return this.rollbackAddNodePreview(entry);
+      case "moveNode":
+        return this.rollbackMoveNodePreview(entry);
+      case "deleteNode":
+        return this.rollbackDeleteNodePreview(entry);
+    }
+  }
+
+  private rollbackAddNodePreview(entry: CatmaidOptimisticAddNodeEntry) {
+    const previewNode = this.layer.spatialSkeletonState.getCachedNode(
+      entry.tempNodeId,
+    );
+    if (previewNode === undefined) {
+      return false;
+    }
+    const expectedSegmentId = this.getExpectedAddNodeSegmentId(
+      entry,
+      previewNode.segmentId,
+    );
+    if (
+      !this.previewAddNodeMatchesEntry(entry, previewNode, expectedSegmentId)
+    ) {
+      this.handlePreviewCollision(entry, previewNode, expectedSegmentId);
+      return false;
+    }
+    const parentNode =
+      previewNode.parentNodeId === undefined
+        ? undefined
+        : this.layer.spatialSkeletonState.getCachedNode(
+            previewNode.parentNodeId,
+          );
+    this.layer.spatialSkeletonState.removeCachedNode(entry.tempNodeId, {
+      parentNodeId: previewNode.parentNodeId,
+      childNodeIds: [],
+    });
+    const remainingNodes =
+      this.layer.spatialSkeletonState.getCachedSegmentNodes(
+        previewNode.segmentId,
+      ) ?? [];
+    if (remainingNodes.length === 0) {
+      removeVisibleSegment(this.layer, previewNode.segmentId, {
+        deselect: true,
+      });
+    }
+    if (
+      this.layer.selectedSpatialSkeletonNodeInfo.value?.nodeId ===
+      entry.tempNodeId
+    ) {
+      if (parentNode !== undefined) {
+        this.layer.selectSpatialSkeletonNode(
+          parentNode.nodeId,
+          this.layer.manager.root.selectionState.pin.value,
+          {
+            segmentId: parentNode.segmentId,
+            position: parentNode.position,
+          },
+        );
+      } else {
+        this.layer.clearSpatialSkeletonNodeSelection(
+          this.layer.manager.root.selectionState.pin.value,
+        );
+      }
+    }
+    this.layer.markSpatialSkeletonNodeDataChanged({
+      invalidateFullSkeletonCache: false,
+    });
+    return true;
+  }
+
+  private rollbackMoveNodePreview(entry: CatmaidOptimisticMoveNodeEntry) {
+    const cachedNode = this.layer.spatialSkeletonState.getCachedNode(
+      entry.nodeId,
+    );
+    if (cachedNode === undefined) {
+      return false;
+    }
+    this.layer.spatialSkeletonState.moveCachedNode(
+      entry.nodeId,
+      entry.beforePositionInModelSpace,
+    );
+    if (
+      this.layer.selectedSpatialSkeletonNodeInfo.value?.nodeId === entry.nodeId
+    ) {
+      this.layer.selectSpatialSkeletonNode(
+        entry.nodeId,
+        this.layer.manager.root.selectionState.pin.value,
+        {
+          segmentId: cachedNode.segmentId,
+          position: entry.beforePositionInModelSpace,
+        },
+      );
+    }
+    this.layer.markSpatialSkeletonNodeDataChanged({
+      invalidateFullSkeletonCache: false,
+    });
+    return true;
+  }
+
+  private rollbackDeleteNodePreview(entry: CatmaidOptimisticDeleteNodeEntry) {
+    const { node, childNodes } = entry.deleteContext;
+    const restoredNode = {
+      ...node,
+      position: new Float32Array(node.position),
+    };
+    this.layer.spatialSkeletonState.upsertCachedNode(restoredNode, {
+      allowUncachedSegment: true,
+    });
+    for (const childNode of childNodes) {
+      this.layer.spatialSkeletonState.setCachedNodeParent(
+        childNode.nodeId,
+        restoredNode.nodeId,
+      );
+    }
+    ensureVisibleSegment(this.layer, restoredNode.segmentId);
+    this.layer.selectSpatialSkeletonNode(
+      restoredNode.nodeId,
+      this.layer.manager.root.selectionState.pin.value,
+      {
+        segmentId: restoredNode.segmentId,
+        position: restoredNode.position,
+      },
+    );
+    this.layer.markSpatialSkeletonNodeDataChanged({
+      invalidateFullSkeletonCache: false,
+    });
+    return true;
+  }
+
+  private removeRestoredDeletePreview(entry: CatmaidOptimisticDeleteNodeEntry) {
+    applyDeleteNodeToCache(
+      this.layer,
+      entry.deleteContext,
+      { moveView: false },
+      entry.result?.nodeSourceStateUpdates,
+    );
+  }
+
+  private rollbackEntryAndDependents(
+    entry: CatmaidOptimisticEditEntry,
+    status:
+      | CatmaidOptimisticEditStatus.Failed
+      | CatmaidOptimisticEditStatus.RolledBack,
+  ) {
+    const affectedEntries = new Set<CatmaidOptimisticEditEntry>();
+    const visit = (currentEntry: CatmaidOptimisticEditEntry) => {
+      if (affectedEntries.has(currentEntry)) return;
+      affectedEntries.add(currentEntry);
+      for (const candidate of this.entries) {
+        if (this.isSettled(candidate)) {
+          continue;
+        }
+        if (candidate.dependencies.includes(currentEntry.operationId)) {
+          visit(candidate);
+        }
+      }
+    };
+    visit(entry);
+    for (const affectedEntry of [...affectedEntries].reverse()) {
+      this.clearInFlightWarning(affectedEntry);
+      if (
+        affectedEntry.status === CatmaidOptimisticEditStatus.InFlight ||
+        affectedEntry.status === CatmaidOptimisticEditStatus.CancelRequested
+      ) {
+        this.rollbackPreview(affectedEntry);
+        affectedEntry.status = CatmaidOptimisticEditStatus.CancelRequested;
+        continue;
+      }
+      this.rollbackPreview(affectedEntry);
+      affectedEntry.status = status;
+    }
+    this.notifyChanged();
+  }
+
+  private rollbackUnconfirmedDependents(
+    entry: CatmaidOptimisticEditEntry,
+    status:
+      | CatmaidOptimisticEditStatus.Failed
+      | CatmaidOptimisticEditStatus.RolledBack,
+  ) {
+    const affectedEntries = new Set<CatmaidOptimisticEditEntry>();
+    const visit = (currentEntry: CatmaidOptimisticEditEntry) => {
+      for (const candidate of this.entries) {
+        if (
+          this.isSettled(candidate) ||
+          !candidate.dependencies.includes(currentEntry.operationId) ||
+          affectedEntries.has(candidate)
+        ) {
+          continue;
+        }
+        affectedEntries.add(candidate);
+        visit(candidate);
+      }
+    };
+    visit(entry);
+    for (const affectedEntry of [...affectedEntries].reverse()) {
+      this.clearInFlightWarning(affectedEntry);
+      if (
+        affectedEntry.status === CatmaidOptimisticEditStatus.InFlight ||
+        affectedEntry.status === CatmaidOptimisticEditStatus.CancelRequested
+      ) {
+        this.rollbackPreview(affectedEntry);
+        affectedEntry.status = CatmaidOptimisticEditStatus.CancelRequested;
+        continue;
+      }
+      this.rollbackPreview(affectedEntry);
+      affectedEntry.status = status;
+    }
+    if (affectedEntries.size !== 0) {
+      this.notifyChanged();
+    }
+  }
+
+  async undoLatest() {
+    const entry = [...this.entries]
+      .reverse()
+      .find(
+        (candidate) =>
+          candidate.status === CatmaidOptimisticEditStatus.Pending ||
+          candidate.status === CatmaidOptimisticEditStatus.InFlight,
+      );
+    if (entry === undefined) {
+      return false;
+    }
+    if (entry.status === CatmaidOptimisticEditStatus.InFlight) {
+      entry.status = CatmaidOptimisticEditStatus.CancelRequested;
+      this.rollbackEntryAndDependents(
+        entry,
+        CatmaidOptimisticEditStatus.RolledBack,
+      );
+      return true;
+    }
+    this.rollbackEntryAndDependents(
+      entry,
+      CatmaidOptimisticEditStatus.RolledBack,
+    );
+    if (this.pruneSettledEntries()) {
+      this.notifyChanged();
+    }
+    return true;
+  }
+
+  async enqueueAddNode(
+    command: AddNodeCommand,
+    _context: SpatialSkeletonCommandContext,
+    options: {
+      moveView: boolean;
+      pinSegment: boolean;
+      statusPrefix: string;
+    },
+  ) {
+    const { skeletonLayer, parentNode, segmentId } =
+      await command.resolveAddNodeContext({ requireFullParent: false });
+    if (parentNode === undefined) {
+      throw new Error("Optimistic add-node requires a parent node.");
+    }
+    const tempNodeId = this.allocateTempId();
+    const parentEntry = this.findEntryForTempNode(parentNode.nodeId);
+    const positionInModelSpace = command.getPositionInModelSpace();
+    const entry: CatmaidOptimisticAddNodeEntry = {
+      operationId: this.nextOperationId++,
+      kind: "addNode",
+      command,
+      dependencies: parentEntry === undefined ? [] : [parentEntry.operationId],
+      tempNodeId,
+      positionInModelSpace,
+      parentNodeId: parentNode.nodeId,
+      parentTempNodeId: parentEntry?.tempNodeId,
+      status: CatmaidOptimisticEditStatus.Pending,
+    };
+    this.entries.push(entry);
+    applyCreatedNodeToCache(
+      this.layer,
+      skeletonLayer,
+      {
+        nodeId: tempNodeId,
+        segmentId,
+      },
+      parentNode.nodeId,
+      positionInModelSpace,
+      {
+        focusSelection: true,
+        moveView: options.moveView,
+        pinSegment: options.pinSegment,
+        retainOverlaySegment: true,
+      },
+    );
+    this.notifyChanged();
+    void this.drain();
+  }
+
+  async enqueueMoveNode(command: MoveNodeCommand) {
+    const { node, skeletonLayer } = await command.resolveMoveContext();
+    const dependencies = this.getActiveDependenciesForNodes([node.nodeId]);
+    const beforePositionInModelSpace = command.getBeforePositionInModelSpace();
+    const afterPositionInModelSpace = command.getAfterPositionInModelSpace();
+    const entry: CatmaidOptimisticMoveNodeEntry = {
+      operationId: this.nextOperationId++,
+      kind: "moveNode",
+      command,
+      dependencies,
+      nodeId: node.nodeId,
+      segmentId: node.segmentId,
+      nodeForServer: cloneNodeSnapshot(node),
+      beforePositionInModelSpace,
+      afterPositionInModelSpace,
+      status: CatmaidOptimisticEditStatus.Pending,
+    };
+    this.entries.push(entry);
+    skeletonLayer.retainOverlaySegment(node.segmentId);
+    this.layer.spatialSkeletonState.moveCachedNode(
+      node.nodeId,
+      afterPositionInModelSpace,
+    );
+    if (
+      this.layer.selectedSpatialSkeletonNodeInfo.value?.nodeId === node.nodeId
+    ) {
+      this.layer.selectSpatialSkeletonNode(
+        node.nodeId,
+        this.layer.manager.root.selectionState.pin.value,
+        {
+          segmentId: node.segmentId,
+          position: afterPositionInModelSpace,
+        },
+      );
+    }
+    this.layer.markSpatialSkeletonNodeDataChanged({
+      invalidateFullSkeletonCache: false,
+    });
+    this.notifyChanged();
+    void this.drain();
+  }
+
+  async enqueueDeleteNode(command: DeleteNodeCommand) {
+    const { resolvedNode, deleteContext } =
+      await command.resolveDeleteContext();
+    const dependencies = this.getActiveDependenciesForNodes([
+      deleteContext.node.nodeId,
+      ...deleteContext.childNodes.map((child) => child.nodeId),
+    ]);
+    const entry: CatmaidOptimisticDeleteNodeEntry = {
+      operationId: this.nextOperationId++,
+      kind: "deleteNode",
+      command,
+      dependencies,
+      nodeId: deleteContext.node.nodeId,
+      segmentId: deleteContext.node.segmentId,
+      deleteContext: {
+        node: cloneNodeSnapshot(deleteContext.node),
+        parentNode:
+          deleteContext.parentNode === undefined
+            ? undefined
+            : cloneNodeSnapshot(deleteContext.parentNode),
+        childNodes: deleteContext.childNodes.map(cloneNodeSnapshot),
+      },
+      segmentNodes: resolvedNode.segmentNodes.map(cloneNodeSnapshot),
+      affectedPositions: collectUniqueNodePositions(
+        [deleteContext.node],
+        [deleteContext.parentNode],
+        deleteContext.childNodes,
+      ),
+      status: CatmaidOptimisticEditStatus.Pending,
+    };
+    this.entries.push(entry);
+    applyDeleteNodeToCache(this.layer, deleteContext, { moveView: true }, []);
+    const remainingNodes =
+      this.layer.spatialSkeletonState.getCachedSegmentNodes(
+        deleteContext.node.segmentId,
+      ) ?? [];
+    if (remainingNodes.length > 0) {
+      resolvedNode.skeletonLayer.retainOverlaySegment(
+        deleteContext.node.segmentId,
+      );
+    } else {
+      resolvedNode.skeletonLayer.markSegmentEdited(
+        deleteContext.node.segmentId,
+      );
+    }
+    this.notifyChanged();
+    void this.drain();
+  }
+
+  private async drain() {
+    if (this.draining) {
+      return;
+    }
+    this.draining = true;
+    try {
+      while (!this.disposed) {
+        const entry = this.entries.find(
+          (candidate) =>
+            candidate.status === CatmaidOptimisticEditStatus.Pending &&
+            candidate.dependencies.every((operationId) =>
+              this.isDependencyCommitted(operationId),
+            ),
+        );
+        if (entry === undefined) {
+          break;
+        }
+        await this.confirmEntry(entry);
+        this.pruneSettledEntries();
+      }
+    } finally {
+      this.draining = false;
+      this.notifyChanged();
+    }
+  }
+
+  private async confirmEntry(entry: CatmaidOptimisticEditEntry) {
+    entry.status = CatmaidOptimisticEditStatus.InFlight;
+    this.startInFlightWarning(entry);
+    this.notifyChanged();
+    try {
+      switch (entry.kind) {
+        case "addNode":
+          await this.confirmAddNodeEntry(entry);
+          return;
+        case "moveNode":
+          await this.confirmMoveNodeEntry(entry);
+          return;
+        case "deleteNode":
+          await this.confirmDeleteNodeEntry(entry);
+          return;
+      }
+    } finally {
+      this.clearInFlightWarning(entry);
+      this.pruneSettledEntries();
+      this.notifyChanged();
+    }
+  }
+
+  private async confirmAddNodeEntry(entry: CatmaidOptimisticAddNodeEntry) {
+    try {
+      const resolvedContext = await entry.command.resolveAddNodeContext({
+        requireFullParent: false,
+      });
+      if (resolvedContext.parentNode === undefined) {
+        throw new Error("Optimistic add-node requires a parent node.");
+      }
+      entry.parentNodeForServer = resolvedContext.parentNode;
+      const result = await this.editOperations.commitAddNode({
+        segmentId: resolvedContext.segmentId,
+        position: entry.positionInModelSpace,
+        parentNode: resolvedContext.parentNode,
+        nocheck: true,
+      });
+      entry.result = result;
+      if (entry.status === CatmaidOptimisticEditStatus.CancelRequested) {
+        await this.compensateCanceledAddCommit(entry, result);
+        entry.status = CatmaidOptimisticEditStatus.RolledBack;
+        return;
+      }
+      await this.reconcileCommittedAddEntry(
+        entry,
+        resolvedContext.skeletonLayer,
+        resolvedContext.parentNode,
+        result,
+      );
+    } catch (error) {
+      if (entry.status === CatmaidOptimisticEditStatus.CancelRequested) {
+        entry.status = CatmaidOptimisticEditStatus.RolledBack;
+        return;
+      }
+      entry.status = CatmaidOptimisticEditStatus.Failed;
+      this.rollbackEntryAndDependents(
+        entry,
+        CatmaidOptimisticEditStatus.Failed,
+      );
+      StatusMessage.showErrorMessage(
+        `CATMAID rejected node creation. The optimistic preview was removed. ${formatErrorMessage(error)}`,
+      );
+    } finally {
+      this.notifyChanged();
+    }
+  }
+
+  private async confirmMoveNodeEntry(entry: CatmaidOptimisticMoveNodeEntry) {
+    try {
+      const result = await this.editOperations.commitMoveNode({
+        node: entry.nodeForServer,
+        position: entry.afterPositionInModelSpace,
+        nocheck: true,
+      });
+      entry.result = result;
+      if (entry.status === CatmaidOptimisticEditStatus.CancelRequested) {
+        await this.compensateCanceledMoveCommit(entry, result);
+        entry.status = CatmaidOptimisticEditStatus.RolledBack;
+        return;
+      }
+      this.reconcileCommittedMoveEntry(entry, result);
+      entry.status = CatmaidOptimisticEditStatus.Committed;
+      await this.layer.spatialSkeletonState.commandHistory.recordExecuted(
+        entry.command,
+      );
+    } catch (error) {
+      if (entry.status === CatmaidOptimisticEditStatus.CancelRequested) {
+        entry.status = CatmaidOptimisticEditStatus.RolledBack;
+        return;
+      }
+      entry.status = CatmaidOptimisticEditStatus.Failed;
+      this.rollbackEntryAndDependents(
+        entry,
+        CatmaidOptimisticEditStatus.Failed,
+      );
+      StatusMessage.showErrorMessage(
+        `CATMAID rejected node movement. The optimistic preview was removed. ${formatErrorMessage(error)}`,
+      );
+    } finally {
+      this.notifyChanged();
+    }
+  }
+
+  private async confirmDeleteNodeEntry(
+    entry: CatmaidOptimisticDeleteNodeEntry,
+  ) {
+    try {
+      const result = await this.editOperations.commitDeleteNode({
+        node: entry.deleteContext.node,
+        childNodes: entry.deleteContext.childNodes,
+        segmentNodes: entry.segmentNodes,
+        nocheck: true,
+      });
+      entry.result = result;
+      if (entry.status === CatmaidOptimisticEditStatus.CancelRequested) {
+        await this.compensateCanceledDeleteCommit(entry, result);
+        entry.status = CatmaidOptimisticEditStatus.RolledBack;
+        return;
+      }
+      this.reconcileCommittedDeleteEntry(entry, result);
+      entry.status = CatmaidOptimisticEditStatus.Committed;
+      await this.layer.spatialSkeletonState.commandHistory.recordExecuted(
+        entry.command,
+      );
+    } catch (error) {
+      if (entry.status === CatmaidOptimisticEditStatus.CancelRequested) {
+        entry.status = CatmaidOptimisticEditStatus.RolledBack;
+        return;
+      }
+      entry.status = CatmaidOptimisticEditStatus.Failed;
+      this.rollbackEntryAndDependents(
+        entry,
+        CatmaidOptimisticEditStatus.Failed,
+      );
+      StatusMessage.showErrorMessage(
+        `CATMAID rejected node deletion. The optimistic preview was removed. ${formatErrorMessage(error)}`,
+      );
+    } finally {
+      this.notifyChanged();
+    }
+  }
+
+  private async reconcileCommittedAddEntry(
+    entry: CatmaidOptimisticAddNodeEntry,
+    skeletonLayer: SpatiallyIndexedSkeletonLayer,
+    parentNode: SpatiallyIndexedSkeletonNode,
+    result: CatmaidSpatialSkeletonAddNodeResult,
+  ) {
+    const wasSelected =
+      this.layer.selectedSpatialSkeletonNodeInfo.value?.nodeId ===
+      entry.tempNodeId;
+    const expectedSegmentId = parentNode.segmentId;
+    const previewNode = this.layer.spatialSkeletonState.getCachedNode(
+      entry.tempNodeId,
+    );
+    const previewRemovedByDelete =
+      previewNode === undefined && this.hasActiveDeleteDependent(entry);
+    if (
+      previewNode !== undefined &&
+      !this.previewAddNodeMatchesEntry(entry, previewNode, expectedSegmentId)
+    ) {
+      this.handlePreviewCollision(
+        entry,
+        previewNode,
+        expectedSegmentId,
+        result,
+      );
+      entry.status = CatmaidOptimisticEditStatus.Failed;
+      this.rollbackUnconfirmedDependents(
+        entry,
+        CatmaidOptimisticEditStatus.RolledBack,
+      );
+      return;
+    }
+    if (previewNode === undefined && !previewRemovedByDelete) {
+      this.handlePreviewCollision(
+        entry,
+        previewNode,
+        expectedSegmentId,
+        result,
+      );
+      entry.status = CatmaidOptimisticEditStatus.Failed;
+      this.rollbackUnconfirmedDependents(
+        entry,
+        CatmaidOptimisticEditStatus.RolledBack,
+      );
+      return;
+    }
+    this.layer.spatialSkeletonState.commandHistory.mappings.remapNodeId(
+      entry.tempNodeId,
+      result.nodeId,
+    );
+    entry.command.markOptimisticCommit(entry.tempNodeId, result.segmentId);
+    if (result.parentSourceState !== undefined) {
+      this.layer.spatialSkeletonState.setCachedNodeSourceState(
+        parentNode.nodeId,
+        result.parentSourceState,
+      );
+    }
+    const committedNodeSnapshot: SpatiallyIndexedSkeletonNode = {
+      nodeId: result.nodeId,
+      segmentId: result.segmentId,
+      position: new Float32Array(
+        previewNode?.position ?? entry.positionInModelSpace,
+      ),
+      parentNodeId: parentNode.nodeId,
+      isTrueEnd: false,
+      ...(result.sourceState === undefined
+        ? {}
+        : { sourceState: result.sourceState }),
+    };
+    this.remapPendingEntriesForCommittedAdd(
+      entry,
+      parentNode,
+      committedNodeSnapshot,
+    );
+    if (previewNode !== undefined) {
+      this.layer.spatialSkeletonState.removeCachedNode(entry.tempNodeId, {
+        parentNodeId: parentNode.nodeId,
+        childNodeIds: [],
+      });
+      applyCreatedNodeToCache(
+        this.layer,
+        skeletonLayer,
+        {
+          ...result,
+          sourceState: committedNodeSnapshot.sourceState,
+        },
+        parentNode.nodeId,
+        committedNodeSnapshot.position,
+        {
+          focusSelection: wasSelected,
+          markChanged: false,
+          moveView: false,
+          pinSegment: this.layer.manager.root.selectionState.pin.value,
+          retainOverlaySegment: true,
+          selectSegment: wasSelected,
+        },
+      );
+    }
+    this.layer.markSpatialSkeletonNodeDataChanged({
+      invalidateFullSkeletonCache: false,
+    });
+    entry.status = CatmaidOptimisticEditStatus.Committed;
+    await this.layer.spatialSkeletonState.commandHistory.recordExecuted(
+      entry.command,
+    );
+  }
+
+  private remapPendingEntriesForCommittedAdd(
+    entry: CatmaidOptimisticAddNodeEntry,
+    parentNode: SpatiallyIndexedSkeletonNode,
+    committedNode: SpatiallyIndexedSkeletonNode,
+  ) {
+    for (const dependentEntry of this.entries) {
+      if (this.isSettled(dependentEntry)) continue;
+      switch (dependentEntry.kind) {
+        case "addNode":
+          if (dependentEntry.parentTempNodeId === entry.tempNodeId) {
+            dependentEntry.parentNodeId = committedNode.nodeId;
+            this.layer.spatialSkeletonState.setCachedNodeParent(
+              dependentEntry.tempNodeId,
+              committedNode.nodeId,
+            );
+          }
+          break;
+        case "moveNode":
+          if (dependentEntry.nodeId === entry.tempNodeId) {
+            dependentEntry.nodeId = committedNode.nodeId;
+            dependentEntry.segmentId = committedNode.segmentId;
+            dependentEntry.nodeForServer = {
+              ...dependentEntry.nodeForServer,
+              nodeId: committedNode.nodeId,
+              segmentId: committedNode.segmentId,
+              parentNodeId: parentNode.nodeId,
+              sourceState: committedNode.sourceState,
+            };
+          }
+          break;
+        case "deleteNode":
+          this.remapDeleteEntryNode(
+            dependentEntry,
+            entry.tempNodeId,
+            committedNode,
+          );
+          break;
+      }
+    }
+  }
+
+  private remapDeleteEntryNode(
+    entry: CatmaidOptimisticDeleteNodeEntry,
+    tempNodeId: number,
+    committedNode: SpatiallyIndexedSkeletonNode,
+  ) {
+    const remapNode = (node: SpatiallyIndexedSkeletonNode) => {
+      if (node.nodeId === tempNodeId) {
+        return {
+          ...node,
+          nodeId: committedNode.nodeId,
+          segmentId: committedNode.segmentId,
+          parentNodeId: committedNode.parentNodeId,
+          sourceState: committedNode.sourceState,
+        };
+      }
+      if (node.parentNodeId === tempNodeId) {
+        return {
+          ...node,
+          parentNodeId: committedNode.nodeId,
+        };
+      }
+      return node;
+    };
+    entry.deleteContext = {
+      node: remapNode(entry.deleteContext.node),
+      parentNode:
+        entry.deleteContext.parentNode === undefined
+          ? undefined
+          : remapNode(entry.deleteContext.parentNode),
+      childNodes: entry.deleteContext.childNodes.map(remapNode),
+    };
+    entry.segmentNodes = entry.segmentNodes.map(remapNode);
+    if (entry.nodeId === tempNodeId) {
+      entry.nodeId = committedNode.nodeId;
+      entry.segmentId = committedNode.segmentId;
+    }
+  }
+
+  private reconcileCommittedMoveEntry(
+    entry: CatmaidOptimisticMoveNodeEntry,
+    result: CatmaidSpatialSkeletonNodeSourceStateResult,
+  ) {
+    if (this.layer.spatialSkeletonState.getCachedNode(entry.nodeId)) {
+      const hasNewerMovePreview = this.entries.some(
+        (candidate) =>
+          candidate.kind === "moveNode" &&
+          candidate.nodeId === entry.nodeId &&
+          candidate.operationId > entry.operationId &&
+          this.isActive(candidate),
+      );
+      if (!hasNewerMovePreview) {
+        this.layer.spatialSkeletonState.moveCachedNode(
+          entry.nodeId,
+          entry.afterPositionInModelSpace,
+        );
+      }
+      if (result.sourceState !== undefined) {
+        this.layer.spatialSkeletonState.setCachedNodeSourceState(
+          entry.nodeId,
+          result.sourceState,
+        );
+      }
+      this.layer.markSpatialSkeletonNodeDataChanged({
+        invalidateFullSkeletonCache: false,
+      });
+    }
+  }
+
+  private reconcileCommittedDeleteEntry(
+    entry: CatmaidOptimisticDeleteNodeEntry,
+    result: CatmaidSpatialSkeletonDeleteNodeResult,
+  ) {
+    if (result.nodeSourceStateUpdates?.length) {
+      this.layer.spatialSkeletonState.setCachedNodeSourceStates(
+        result.nodeSourceStateUpdates,
+      );
+      this.layer.markSpatialSkeletonNodeDataChanged({
+        invalidateFullSkeletonCache: false,
+      });
+    }
+    skeletonLayerFromLayer(this.layer)?.invalidateSourceCellsForPositions(
+      entry.affectedPositions,
+    );
+  }
+
+  private async compensateCanceledAddCommit(
+    entry: CatmaidOptimisticAddNodeEntry,
+    result: CatmaidSpatialSkeletonAddNodeResult,
+  ) {
+    const parentNode =
+      entry.parentNodeForServer === undefined ||
+      result.parentSourceState === undefined
+        ? entry.parentNodeForServer
+        : {
+            ...entry.parentNodeForServer,
+            sourceState: result.parentSourceState,
+          };
+    const createdNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: result.nodeId,
+      segmentId: result.segmentId,
+      position: new Float32Array(entry.positionInModelSpace),
+      parentNodeId: parentNode?.nodeId,
+      isTrueEnd: false,
+      ...(result.sourceState === undefined
+        ? {}
+        : { sourceState: result.sourceState }),
+    };
+    try {
+      const deleteResult = await this.editOperations.commitDeleteNode({
+        node: createdNode,
+        childNodes: [],
+        segmentNodes:
+          parentNode === undefined ? [createdNode] : [parentNode, createdNode],
+        nocheck: true,
+      });
+      if (!this.disposed && deleteResult.nodeSourceStateUpdates?.length) {
+        this.layer.spatialSkeletonState.setCachedNodeSourceStates(
+          deleteResult.nodeSourceStateUpdates,
+        );
+      }
+    } catch (error) {
+      if (!this.disposed) {
+        skeletonLayerFromLayer(this.layer)?.invalidateSourceCellsForPositions([
+          entry.positionInModelSpace,
+          parentNode?.position,
+        ]);
+        this.layer.spatialSkeletonState.invalidateCachedSegments([
+          result.segmentId,
+        ]);
+        this.layer.markSpatialSkeletonNodeDataChanged({
+          invalidateFullSkeletonCache: false,
+        });
+      }
+      StatusMessage.showErrorMessage(
+        `CATMAID created a node after its optimistic preview was canceled, and automatic cleanup failed. Refresh the skeleton to sync. ${formatErrorMessage(error)}`,
+      );
+    }
+  }
+
+  private async compensateCanceledMoveCommit(
+    entry: CatmaidOptimisticMoveNodeEntry,
+    result: CatmaidSpatialSkeletonNodeSourceStateResult,
+  ) {
+    const nodeForCompensation: SpatiallyIndexedSkeletonNode = {
+      ...entry.nodeForServer,
+      position: new Float32Array(entry.afterPositionInModelSpace),
+      ...(result.sourceState === undefined
+        ? {}
+        : { sourceState: result.sourceState }),
+    };
+    try {
+      const compensationResult = await this.editOperations.commitMoveNode({
+        node: nodeForCompensation,
+        position: entry.beforePositionInModelSpace,
+        nocheck: true,
+      });
+      if (!this.disposed && compensationResult.sourceState !== undefined) {
+        this.layer.spatialSkeletonState.setCachedNodeSourceState(
+          entry.nodeId,
+          compensationResult.sourceState,
+        );
+      }
+    } catch (error) {
+      if (!this.disposed) {
+        await refreshTopologySegments(
+          this.layer,
+          [entry.segmentId],
+          [entry.beforePositionInModelSpace, entry.afterPositionInModelSpace],
+        );
+      }
+      StatusMessage.showErrorMessage(
+        `CATMAID moved a node after its optimistic preview was canceled, and automatic cleanup failed. Refresh the skeleton to sync. ${formatErrorMessage(error)}`,
+      );
+    }
+  }
+
+  private getDeleteCompensationNodeSnapshot(
+    node: SpatiallyIndexedSkeletonNode | undefined,
+    result: CatmaidSpatialSkeletonDeleteNodeResult,
+  ) {
+    if (node === undefined) {
+      return undefined;
+    }
+    const updatedSourceState = result.nodeSourceStateUpdates?.find(
+      (update) => update.nodeId === node.nodeId,
+    )?.sourceState;
+    return updatedSourceState === undefined
+      ? node
+      : {
+          ...node,
+          sourceState: updatedSourceState,
+        };
+  }
+
+  private async restoreCanceledDeleteOnServer(
+    entry: CatmaidOptimisticDeleteNodeEntry,
+    result: CatmaidSpatialSkeletonDeleteNodeResult,
+  ) {
+    const parentNode = this.getDeleteCompensationNodeSnapshot(
+      entry.deleteContext.parentNode,
+      result,
+    );
+    const childNodes = entry.deleteContext.childNodes.map(
+      (childNode) => this.getDeleteCompensationNodeSnapshot(childNode, result)!,
+    );
+    let createResult:
+      | CatmaidSpatialSkeletonAddNodeResult
+      | CatmaidSpatialSkeletonInsertNodeResult;
+    if (childNodes.length === 0) {
+      createResult = await this.editOperations.commitAddNode({
+        segmentId: parentNode?.segmentId ?? entry.segmentId,
+        position: entry.deleteContext.node.position,
+        parentNode,
+      });
+    } else {
+      if (parentNode === undefined) {
+        throw new Error(
+          "Canceled delete compensation is missing the parent node needed for insertion.",
+        );
+      }
+      createResult = await this.editOperations.commitInsertNode({
+        segmentId: parentNode.segmentId,
+        position: entry.deleteContext.node.position,
+        parentNode,
+        childNodes,
+      });
+    }
+    const restoredNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: createResult.nodeId,
+      segmentId: createResult.segmentId,
+      position: new Float32Array(entry.deleteContext.node.position),
+      parentNodeId: parentNode?.nodeId,
+      isTrueEnd: false,
+      ...(createResult.sourceState === undefined
+        ? {}
+        : { sourceState: createResult.sourceState }),
+    };
+    await restoreNodeAttributes(
+      this.layer,
+      this.editOperations,
+      restoredNode,
+      entry.deleteContext.node,
+      { applyLocalState: false },
+    );
+  }
+
+  private async compensateCanceledDeleteCommit(
+    entry: CatmaidOptimisticDeleteNodeEntry,
+    result: CatmaidSpatialSkeletonDeleteNodeResult,
+  ) {
+    entry.result = result;
+    try {
+      if (this.disposed) {
+        await this.restoreCanceledDeleteOnServer(entry, result);
+        return;
+      }
+      this.removeRestoredDeletePreview(entry);
+      await entry.command.restoreDeletedNode("Restored canceled deletion of", {
+        showStatus: false,
+      });
+    } catch (error) {
+      if (!this.disposed) {
+        await refreshTopologySegments(
+          this.layer,
+          [entry.segmentId],
+          entry.affectedPositions,
+        );
+      }
+      StatusMessage.showErrorMessage(
+        `CATMAID deleted a node after its optimistic preview was canceled, and automatic restore failed. Refresh the skeleton to sync. ${formatErrorMessage(error)}`,
+      );
+    }
+  }
+}
+
+function skeletonLayerFromLayer(layer: SegmentationUserLayer) {
+  return layer.getSpatiallyIndexedSkeletonLayer();
 }
 
 class InsertNodeCommand implements SpatialSkeletonCommand {
@@ -1290,6 +2774,9 @@ class InsertNodeCommand implements SpatialSkeletonCommand {
 
 class MoveNodeCommand implements SpatialSkeletonCommand {
   readonly label = "Move node";
+  readonly executeOptimistically?: (
+    context: SpatialSkeletonCommandContext,
+  ) => Promise<void>;
 
   constructor(
     private layer: SegmentationUserLayer,
@@ -1298,17 +2785,39 @@ class MoveNodeCommand implements SpatialSkeletonCommand {
     private beforePositionInModelSpace: Float32Array,
     private afterPositionInModelSpace: Float32Array,
     private editOperations: CatmaidSpatialSkeletonEditOperations,
-  ) {}
+    optimistic = false,
+  ) {
+    if (optimistic) {
+      this.executeOptimistically = async () => {
+        await getOrCreateCatmaidOptimisticEditQueue(
+          this.layer,
+          this.editOperations,
+        ).enqueueMoveNode(this);
+      };
+    }
+  }
+
+  getBeforePositionInModelSpace() {
+    return new Float32Array(this.beforePositionInModelSpace);
+  }
+
+  getAfterPositionInModelSpace() {
+    return new Float32Array(this.afterPositionInModelSpace);
+  }
+
+  resolveMoveContext() {
+    return getResolvedNodeForEdit(
+      this.layer,
+      this.stableNodeId,
+      this.stableSegmentId,
+    );
+  }
 
   private async moveTo(
     positionInModelSpace: Float32Array,
     statusPrefix: string,
   ) {
-    const { node, skeletonLayer } = await getResolvedNodeForEdit(
-      this.layer,
-      this.stableNodeId,
-      this.stableSegmentId,
-    );
+    const { node, skeletonLayer } = await this.resolveMoveContext();
     const result = await this.editOperations.commitMoveNode({
       node,
       position: positionInModelSpace,
@@ -1347,6 +2856,9 @@ class MoveNodeCommand implements SpatialSkeletonCommand {
 
 class DeleteNodeCommand implements SpatialSkeletonCommand {
   readonly label = "Delete node";
+  readonly executeOptimistically?: (
+    context: SpatialSkeletonCommandContext,
+  ) => Promise<void>;
   private stableDeletedNodeId: number;
   private stableSegmentId: number | undefined;
   private stableParentNodeId: number | undefined;
@@ -1358,6 +2870,7 @@ class DeleteNodeCommand implements SpatialSkeletonCommand {
     node: SpatiallyIndexedSkeletonNode,
     childNodes: readonly SpatiallyIndexedSkeletonNode[],
     private editOperations: CatmaidSpatialSkeletonEditOperations,
+    optimistic = false,
   ) {
     const commandMappings = layer.spatialSkeletonState.commandHistory.mappings;
     this.stableDeletedNodeId = commandMappings.getStableOrCurrentNodeId(
@@ -1373,6 +2886,27 @@ class DeleteNodeCommand implements SpatialSkeletonCommand {
       (child) => commandMappings.getStableOrCurrentNodeId(child.nodeId)!,
     );
     this.deletedSnapshot = cloneNodeSnapshot(node);
+    if (optimistic) {
+      this.executeOptimistically = async () => {
+        await getOrCreateCatmaidOptimisticEditQueue(
+          this.layer,
+          this.editOperations,
+        ).enqueueDeleteNode(this);
+      };
+    }
+  }
+
+  async resolveDeleteContext() {
+    const resolvedNode = await getResolvedNodeForEdit(
+      this.layer,
+      this.stableDeletedNodeId,
+      this.stableSegmentId,
+    );
+    const deleteContext =
+      await this.layer.getSpatialSkeletonDeleteOperationContext(
+        resolvedNode.node,
+      );
+    return { resolvedNode, deleteContext };
   }
 
   private async deleteNode(options: {
@@ -1395,7 +2929,10 @@ class DeleteNodeCommand implements SpatialSkeletonCommand {
     );
   }
 
-  private async restoreDeletedNode(statusPrefix: string) {
+  async restoreDeletedNode(
+    statusPrefix: string,
+    options: { showStatus?: boolean } = {},
+  ) {
     const { skeletonLayer } = getEditableSkeletonSourceForLayer(this.layer);
     const currentParentNode =
       this.stableParentNodeId === undefined
@@ -1484,9 +3021,11 @@ class DeleteNodeCommand implements SpatialSkeletonCommand {
     this.layer.markSpatialSkeletonNodeDataChanged({
       invalidateFullSkeletonCache: false,
     });
-    StatusMessage.showTemporaryMessage(
-      `${statusPrefix} node ${restoredNodeWithAttributes.nodeId}.`,
-    );
+    if (options.showStatus ?? true) {
+      StatusMessage.showTemporaryMessage(
+        `${statusPrefix} node ${restoredNodeWithAttributes.nodeId}.`,
+      );
+    }
   }
 
   execute() {
@@ -2473,9 +4012,13 @@ export class CatmaidSpatialSkeletonEditCommands {
       y,
       z,
       request.parentNode?.nodeId,
-      request.parentNode === undefined
+      request.nocheck === true || request.parentNode === undefined
         ? undefined
         : buildCatmaidNodeEditContext(request.parentNode),
+      {
+        nocheck: request.nocheck,
+        signal: request.signal,
+      },
     );
   }
 
@@ -2510,6 +4053,7 @@ export class CatmaidSpatialSkeletonEditCommands {
       y,
       z,
       buildCatmaidNodeEditContext(request.node),
+      { nocheck: request.nocheck },
     );
   }
 
@@ -2522,6 +4066,7 @@ export class CatmaidSpatialSkeletonEditCommands {
         request.node,
         request.segmentNodes,
       ),
+      nocheck: request.nocheck,
     });
   }
 
@@ -2630,6 +4175,7 @@ export class CatmaidSpatialSkeletonEditCommands {
         "add-node position",
       ),
       this.editOperations,
+      this.editContext.getOptimisticSkeletonEdits?.(layer) === true,
     );
   }
 
@@ -2672,6 +4218,7 @@ export class CatmaidSpatialSkeletonEditCommands {
         "move-node target position",
       ),
       this.editOperations,
+      this.editContext.getOptimisticSkeletonEdits?.(layer) === true,
     );
   }
 
@@ -2700,6 +4247,7 @@ export class CatmaidSpatialSkeletonEditCommands {
       refreshedNode,
       childNodes,
       this.editOperations,
+      this.editContext.getOptimisticSkeletonEdits?.(layer) === true,
     );
   }
 

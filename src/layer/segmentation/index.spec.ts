@@ -122,6 +122,7 @@ function makeSpatialSkeletonActionGateLayer(options: {
       commandHistory: {
         isBusy: new WatchableValue(options.commandBusy ?? false),
       },
+      hasUnconfirmedOptimisticEdits: vi.fn(() => false),
     },
     spatialSkeletonVisibleChunksLoaded: new WatchableValue(
       options.visibleChunksLoaded ?? true,
@@ -238,6 +239,43 @@ describe("layer/segmentation spatial skeleton action gating", () => {
         },
       ),
     ).toBeUndefined();
+  });
+
+  it("allows queued optimistic edits and blocks stateful edits while optimistic skeleton edits are unconfirmed", () => {
+    const layer = makeSpatialSkeletonActionGateLayer({
+      source: makeEditableSpatialSkeletonSource({
+        confidenceConfiguration: true,
+        rerootCommand: true,
+      }),
+    });
+    layer.spatialSkeletonState.hasUnconfirmedOptimisticEdits.mockReturnValue(
+      true,
+    );
+
+    for (const action of [
+      SpatialSkeletonActions.addNodes,
+      SpatialSkeletonActions.moveNodes,
+      SpatialSkeletonActions.deleteNodes,
+    ]) {
+      expect(
+        layer.getSpatialSkeletonActionsDisabledReason(action),
+      ).toBeUndefined();
+    }
+
+    for (const action of [
+      SpatialSkeletonActions.insertNodes,
+      SpatialSkeletonActions.mergeSkeletons,
+      SpatialSkeletonActions.splitSkeletons,
+      SpatialSkeletonActions.reroot,
+      SpatialSkeletonActions.editNodeDescription,
+      SpatialSkeletonActions.editNodeTrueEnd,
+      SpatialSkeletonActions.editNodeRadius,
+      SpatialSkeletonActions.editNodeConfidence,
+    ]) {
+      expect(layer.getSpatialSkeletonActionsDisabledReason(action)).toBe(
+        "Wait for pending optimistic skeleton edits to finish.",
+      );
+    }
   });
 
   it("still reports visible chunk loading when requested", () => {

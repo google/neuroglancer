@@ -1755,13 +1755,18 @@ export class SpatialSkeletonEditTab extends Tab {
       const undoLabel = commandHistory.undoLabel.value;
       const redoLabel = commandHistory.redoLabel.value;
       const busy = commandHistory.isBusy.value;
-      undoButton.disabled = busy || !commandHistory.canUndo.value;
+      const canUndoOptimistic =
+        layer.spatialSkeletonState.canUndoOptimisticEdit();
+      undoButton.disabled =
+        busy || (!canUndoOptimistic && !commandHistory.canUndo.value);
       redoButton.disabled = busy || !commandHistory.canRedo.value;
       undoButton.title = busy
         ? "Wait for the current skeleton edit to finish."
-        : undoLabel === undefined
-          ? "Nothing to undo."
-          : `Undo ${undoLabel}`;
+        : canUndoOptimistic
+          ? "Undo pending node creation."
+          : undoLabel === undefined
+            ? "Nothing to undo."
+            : `Undo ${undoLabel}`;
       redoButton.title = busy
         ? "Wait for the current skeleton edit to finish."
         : redoLabel === undefined
@@ -1841,6 +1846,12 @@ export class SpatialSkeletonEditTab extends Tab {
     );
     this.registerDisposer(
       layer.spatialSkeletonState.commandHistory.redoLabel.changed.add(() => {
+        updateHistoryButtons();
+      }),
+    );
+    this.registerDisposer(
+      layer.spatialSkeletonState.optimisticEditQueueVersion.changed.add(() => {
+        updateGateStatus();
         updateHistoryButtons();
       }),
     );
