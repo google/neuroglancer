@@ -116,7 +116,14 @@ export async function decompressCrackle(
   // heap must be referenced after creating bufPtr and imagePtr because
   // memory growth can detatch the buffer.
   const bufPtr = (m.instance.exports.malloc as Function)(buffer.byteLength);
+  if (bufPtr === 0) {
+    throw new Error("crackle: malloc failed for input buffer (out of memory)");
+  }
   const imagePtr = (m.instance.exports.malloc as Function)(nbytes);
+  if (imagePtr === 0) {
+    (m.instance.exports.free as Function)(bufPtr);
+    throw new Error("crackle: malloc failed for output buffer (out of memory)");
+  }
 
   try {
     const heap = new Uint8Array(
