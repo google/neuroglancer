@@ -28,7 +28,6 @@ import {
 import { MultiscaleAnnotationSource } from "#src/annotation/frontend_source.js";
 import type {
   Annotation,
-  Angle,
   AnnotationId,
   AnnotationNumericPropertySpec,
   AnnotationReference,
@@ -36,7 +35,6 @@ import type {
   Ellipsoid,
   Line,
   PolyLine,
-  Ruler,
 } from "#src/annotation/index.js";
 import {
   AnnotationPropertySerializer,
@@ -99,6 +97,7 @@ import { LegacyTool, registerLegacyTool } from "#src/ui/tool.js";
 import { computeVertexAnglesDegrees } from "#src/util/angle_measurement.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { arraysEqual, type ArraySpliceOp } from "#src/util/array.js";
+import { computeAxisExtentsNm } from "#src/util/axis_extents.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import { packColor } from "#src/util/color.js";
 import type { Borrowed } from "#src/util/disposable.js";
@@ -121,7 +120,7 @@ import { numberToStringFixed } from "#src/util/number_to_string.js";
 import { computeRulerLengthNm } from "#src/util/ruler_length.js";
 import { formatScaleWithUnitAsString } from "#src/util/si_units.js";
 import { NullarySignal, Signal } from "#src/util/signal.js";
-import { formatLength } from "#src/util/spatial_units.js";
+import { formatLength, formatVolume } from "#src/util/spatial_units.js";
 import * as vector from "#src/util/vector.js";
 import { makeAddButton } from "#src/widget/add_button.js";
 import { ColorWidget } from "#src/widget/color.js";
@@ -202,8 +201,6 @@ function getCenterPosition(center: Float32Array, annotation: Annotation) {
       vector.scale(center, center, 0.5);
       break;
     case AnnotationType.POLYLINE:
-    case AnnotationType.RULER:
-    case AnnotationType.ANGLE:
       // Return the first line of the polyline
       vector.add(center, annotation.points[0], annotation.points[1]);
       vector.scale(center, center, 0.5);
@@ -515,24 +512,6 @@ export class AnnotationLayerView extends Tab {
       },
     });
     mutableControls.appendChild(polylineButton);
-
-    const rulerButton = makeIcon({
-      text: annotationTypeHandlers[AnnotationType.RULER].icon,
-      title: "Annotate ruler",
-      onClick: () => {
-        this.layer.tool.value = new PlaceRulerTool(this.layer, {});
-      },
-    });
-    mutableControls.appendChild(rulerButton);
-
-    const angleButton = makeIcon({
-      text: annotationTypeHandlers[AnnotationType.ANGLE].icon,
-      title: "Annotate angle",
-      onClick: () => {
-        this.layer.tool.value = new PlaceAngleTool(this.layer, {});
-      },
-    });
-    mutableControls.appendChild(angleButton);
 
     const helpIcon = makeIcon({
       title:
@@ -1151,9 +1130,6 @@ const ANNOTATE_LINE_TOOL_ID = "annotateLine";
 const ANNOTATE_BOUNDING_BOX_TOOL_ID = "annotateBoundingBox";
 const ANNOTATE_ELLIPSOID_TOOL_ID = "annotateSphere";
 const ANNOTATE_POLYLINE_TOOL_ID = "annotatePolyline";
-const ANNOTATE_RULER_TOOL_ID = "annotateRuler";
-const ANNOTATE_ANGLE_TOOL_ID = "annotateAngle";
-
 export class PlacePointTool extends PlaceAnnotationTool {
   trigger(mouseState: MouseSelectionState) {
     const { annotationLayer } = this;
@@ -1678,7 +1654,7 @@ class PlacePolylineTool extends MultiStepAnnotationTool {
  * contributes 0 so it does not affect the measured length. Returns undefined if
  * the layer transform is not yet resolved.
  */
-function getAnnotationScalesNm(
+function getAnnotationPhysicalScales(
   annotationLayer: AnnotationLayerState,
   layer: UserLayerWithAnnotations,
 ): Float64Array | undefined {
@@ -1710,6 +1686,41 @@ function getAnnotationScalesNm(
 }
 
 /**
+ * Returns, for each annotation (render-layer) dimension, the axis name derived
+ * from the coordinate space in the state (Neuroglancer defaults to x, y, z), or
+ * undefined if the layer transform is not yet resolved. Used to label per-axis
+ * measurements (line projected lengths and bounding-box edges).
+ */
+function getAnnotationAxisNames(
+  annotationLayer: AnnotationLayerState,
+  layer: UserLayerWithAnnotations,
+): string[] | undefined {
+  const transformValue = annotationLayer.transform.value;
+  if (transformValue.error !== undefined) return undefined;
+  const transform: RenderLayerTransform = transformValue;
+  const names = new Array<string>(transform.rank).fill("");
+  const assign = (
+    coordinateSpace: CoordinateSpace,
+    spaceDim: number,
+    renderDim: number,
+  ) => {
+    if (renderDim < 0 || renderDim >= names.length) return;
+    names[renderDim] = coordinateSpace.names[spaceDim];
+  };
+  const globalCoordinateSpace = layer.manager.root.coordinateSpace.value;
+  const { globalToRenderLayerDimensions } = transform;
+  for (let g = 0; g < globalToRenderLayerDimensions.length; ++g) {
+    assign(globalCoordinateSpace, g, globalToRenderLayerDimensions[g]);
+  }
+  const localCoordinateSpace = layer.localCoordinateSpace.value;
+  const { localToRenderLayerDimensions } = transform;
+  for (let l = 0; l < localToRenderLayerDimensions.length; ++l) {
+    assign(localCoordinateSpace, l, localToRenderLayerDimensions[l]);
+  }
+  return names;
+}
+
+/**
  * Computes the total physical length of the given ruler points formatted with
  * value and unit (e.g. "1.23 µm"), or undefined if the physical scale is not yet
  * resolved.
@@ -1719,62 +1730,9 @@ function formatRulerLength(
   annotationLayer: AnnotationLayerState,
   layer: UserLayerWithAnnotations,
 ): string | undefined {
-  const scaleNm = getAnnotationScalesNm(annotationLayer, layer);
+  const scaleNm = getAnnotationPhysicalScales(annotationLayer, layer);
   if (scaleNm === undefined) return undefined;
   return formatLength(computeRulerLengthNm(points, scaleNm));
-}
-
-/**
- * A ruler is a polyline whose total physical length is shown as a read-only
- * "Length" row in the selection panel (see the length row added where the
- * annotation properties are rendered). The tool reuses the polyline placement
- * behavior; only the annotation type differs.
- */
-class PlaceRulerTool extends PlacePolylineTool {
-  get description() {
-    return "annotate ruler";
-  }
-
-  private toRuler(annotation: PolyLine | Ruler): Ruler {
-    const ruler = annotation as Ruler;
-    ruler.type = AnnotationType.RULER;
-    return ruler;
-  }
-
-  getInitialAnnotation(
-    mouseState: MouseSelectionState,
-    annotationLayer: AnnotationLayerState,
-  ): Annotation {
-    const annotation = super.getInitialAnnotation(
-      mouseState,
-      annotationLayer,
-    ) as PolyLine;
-    return this.toRuler(annotation);
-  }
-
-  getUpdatedAnnotation(
-    oldAnnotation: PolyLine,
-    mouseState: MouseSelectionState,
-    annotationLayer: AnnotationLayerState,
-    triggered: boolean,
-  ) {
-    const result = super.getUpdatedAnnotation(
-      oldAnnotation,
-      mouseState,
-      annotationLayer,
-      triggered,
-    );
-    // The runtime type is RULER; cast to satisfy the PolyLine-typed slot
-    // inherited from PlacePolylineTool.
-    result.newAnnotation = this.toRuler(
-      result.newAnnotation as PolyLine,
-    ) as unknown as PolyLine;
-    return result;
-  }
-
-  toJSON() {
-    return ANNOTATE_RULER_TOOL_ID;
-  }
 }
 
 /**
@@ -1787,62 +1745,9 @@ function computeAngleDegrees(
   annotationLayer: AnnotationLayerState,
   layer: UserLayerWithAnnotations,
 ): number[] | undefined {
-  const scaleNm = getAnnotationScalesNm(annotationLayer, layer);
+  const scaleNm = getAnnotationPhysicalScales(annotationLayer, layer);
   if (scaleNm === undefined) return undefined;
   return computeVertexAnglesDegrees(points, scaleNm);
-}
-
-/**
- * An angle is a polyline whose interior-vertex angles are shown as read-only
- * "Angle #N" rows in the selection panel (see the angle rows added where the
- * annotation properties are rendered). The tool reuses the polyline placement
- * behavior; only the annotation type differs.
- */
-class PlaceAngleTool extends PlacePolylineTool {
-  get description() {
-    return "annotate angle";
-  }
-
-  private toAngle(annotation: PolyLine | Angle): Angle {
-    const angle = annotation as Angle;
-    angle.type = AnnotationType.ANGLE;
-    return angle;
-  }
-
-  getInitialAnnotation(
-    mouseState: MouseSelectionState,
-    annotationLayer: AnnotationLayerState,
-  ): Annotation {
-    const annotation = super.getInitialAnnotation(
-      mouseState,
-      annotationLayer,
-    ) as PolyLine;
-    return this.toAngle(annotation);
-  }
-
-  getUpdatedAnnotation(
-    oldAnnotation: PolyLine,
-    mouseState: MouseSelectionState,
-    annotationLayer: AnnotationLayerState,
-    triggered: boolean,
-  ) {
-    const result = super.getUpdatedAnnotation(
-      oldAnnotation,
-      mouseState,
-      annotationLayer,
-      triggered,
-    );
-    // The runtime type is ANGLE; cast to satisfy the PolyLine-typed slot
-    // inherited from PlacePolylineTool.
-    result.newAnnotation = this.toAngle(
-      result.newAnnotation as PolyLine,
-    ) as unknown as PolyLine;
-    return result;
-  }
-
-  toJSON() {
-    return ANNOTATE_ANGLE_TOOL_ID;
-  }
 }
 
 class PlaceEllipsoidTool extends TwoStepAnnotationTool {
@@ -1919,16 +1824,6 @@ registerLegacyTool(
   ANNOTATE_POLYLINE_TOOL_ID,
   (layer, options) =>
     new PlacePolylineTool(<UserLayerWithAnnotations>layer, options),
-);
-registerLegacyTool(
-  ANNOTATE_RULER_TOOL_ID,
-  (layer, options) =>
-    new PlaceRulerTool(<UserLayerWithAnnotations>layer, options),
-);
-registerLegacyTool(
-  ANNOTATE_ANGLE_TOOL_ID,
-  (layer, options) =>
-    new PlaceAngleTool(<UserLayerWithAnnotations>layer, options),
 );
 
 const newRelatedSegmentKeyMap = EventActionMap.fromObject({
@@ -2491,10 +2386,74 @@ export function UserLayerWithAnnotationsMixin<
 
                 // For rulers, show the total physical length (value + unit) as a
                 // read-only property row, alongside the other computed properties.
-                if (annotation.type === AnnotationType.RULER) {
-                  // While the ruler is still being placed (pending), the last
-                  // point tracks the cursor; exclude it so the length reflects
-                  // only the points the user has actually clicked.
+                // Read-only measurement rows (matching the property-row style).
+                const addMeasurementRow = (
+                  label: string,
+                  valueText: string,
+                  tooltip: string,
+                ) => {
+                  const row = document.createElement("div");
+                  row.classList.add("neuroglancer-annotation-property");
+                  const nameWrapper = document.createElement("span");
+                  nameWrapper.classList.add(
+                    "neuroglancer-annotation-property-name-wrapper",
+                  );
+                  nameWrapper.appendChild(makeDescriptionIcon(tooltip));
+                  const labelEl = document.createElement("span");
+                  labelEl.classList.add(
+                    "neuroglancer-annotation-property-label",
+                  );
+                  labelEl.textContent = label;
+                  nameWrapper.appendChild(labelEl);
+                  row.appendChild(nameWrapper);
+                  const valueEl = document.createElement("span");
+                  valueEl.classList.add(
+                    "neuroglancer-annotation-property-value",
+                  );
+                  valueEl.textContent = valueText;
+                  row.appendChild(valueEl);
+                  parent.appendChild(row);
+                };
+
+                // Line: total length + projected length along each axis. A line
+                // is two points, so the reading is dynamic (updates as the second
+                // point tracks the cursor during placement).
+                if (annotation.type === AnnotationType.LINE) {
+                  const scaleNm = getAnnotationPhysicalScales(
+                    annotationLayer,
+                    this,
+                  );
+                  if (scaleNm !== undefined) {
+                    const { pointA, pointB } = annotation;
+                    addMeasurementRow(
+                      "Length",
+                      formatLength(
+                        computeRulerLengthNm([pointA, pointB], scaleNm),
+                      ),
+                      "Physical length of the line (distance between its endpoints).",
+                    );
+                    const names = getAnnotationAxisNames(annotationLayer, this);
+                    const extents = computeAxisExtentsNm(
+                      pointA,
+                      pointB,
+                      scaleNm,
+                    );
+                    for (let d = 0; d < extents.length; ++d) {
+                      if (scaleNm[d] === 0) continue; // skip non-length axes
+                      const axis = names?.[d] || `#${d + 1}`;
+                      addMeasurementRow(
+                        `Length (${axis})`,
+                        formatLength(extents[d]),
+                        `Physical length of the line projected onto the ${axis} axis.`,
+                      );
+                    }
+                  }
+                }
+
+                // Polyline: total length + interior angle at each vertex. Not
+                // dynamic — while pending, the trailing preview (cursor) point is
+                // excluded so it reflects only committed points.
+                if (annotation.type === AnnotationType.POLYLINE) {
                   const source = annotationLayer.source;
                   const isBeingPlaced =
                     source instanceof AnnotationSource &&
@@ -2508,85 +2467,67 @@ export function UserLayerWithAnnotationsMixin<
                     this,
                   );
                   if (lengthText !== undefined) {
-                    const lengthRow = document.createElement("div");
-                    lengthRow.classList.add("neuroglancer-annotation-property");
-                    const nameWrapper = document.createElement("span");
-                    nameWrapper.classList.add(
-                      "neuroglancer-annotation-property-name-wrapper",
+                    addMeasurementRow(
+                      "Length",
+                      lengthText,
+                      "Total physical length of the polyline (sum of its segment lengths).",
                     );
-                    nameWrapper.appendChild(
-                      makeDescriptionIcon(
-                        "Total physical length of the ruler " +
-                          "(sum of the lengths of its segments)",
-                      ),
-                    );
-                    const lengthLabel = document.createElement("span");
-                    lengthLabel.classList.add(
-                      "neuroglancer-annotation-property-label",
-                    );
-                    lengthLabel.textContent = "Length";
-                    nameWrapper.appendChild(lengthLabel);
-                    lengthRow.appendChild(nameWrapper);
-                    const lengthValue = document.createElement("span");
-                    lengthValue.classList.add(
-                      "neuroglancer-annotation-property-value",
-                    );
-                    lengthValue.textContent = lengthText;
-                    lengthRow.appendChild(lengthValue);
-                    parent.appendChild(lengthRow);
                   }
-                }
-
-                if (annotation.type === AnnotationType.ANGLE) {
-                  // While the angle is still being placed (pending), the last
-                  // point tracks the cursor; exclude it so the angles reflect
-                  // only the points the user has actually clicked.
-                  const source = annotationLayer.source;
-                  const isBeingPlaced =
-                    source instanceof AnnotationSource &&
-                    source.pending.has(annotation.id);
-                  const measuredPoints = isBeingPlaced
-                    ? annotation.points.slice(0, -1)
-                    : annotation.points;
                   const angles = computeAngleDegrees(
                     measuredPoints,
                     annotationLayer,
                     this,
                   );
                   if (angles !== undefined) {
-                    // One row per interior vertex, labeled "Angle #1", "Angle #2",
-                    // …; degenerate (NaN) vertices are skipped.
                     for (let v = 0; v < angles.length; ++v) {
                       const angle = angles[v];
-                      if (!Number.isFinite(angle)) continue;
-                      const angleRow = document.createElement("div");
-                      angleRow.classList.add(
-                        "neuroglancer-annotation-property",
+                      if (!Number.isFinite(angle)) continue; // skip degenerate
+                      addMeasurementRow(
+                        `Angle #${v + 1}`,
+                        `${angle.toFixed(1)}°`,
+                        "Interior angle at this vertex, between its two adjoining segments (physical space).",
                       );
-                      const nameWrapper = document.createElement("span");
-                      nameWrapper.classList.add(
-                        "neuroglancer-annotation-property-name-wrapper",
+                    }
+                  }
+                }
+
+                // Bounding box: per-axis edge length + volume.
+                if (
+                  annotation.type === AnnotationType.AXIS_ALIGNED_BOUNDING_BOX
+                ) {
+                  const scaleNm = getAnnotationPhysicalScales(
+                    annotationLayer,
+                    this,
+                  );
+                  if (scaleNm !== undefined) {
+                    const { pointA, pointB } = annotation;
+                    const names = getAnnotationAxisNames(annotationLayer, this);
+                    const extents = computeAxisExtentsNm(
+                      pointA,
+                      pointB,
+                      scaleNm,
+                    );
+                    let spatialCount = 0;
+                    let volume = 1;
+                    for (let d = 0; d < extents.length; ++d) {
+                      if (scaleNm[d] === 0) continue; // skip non-length axes
+                      const axis = names?.[d] || `#${d + 1}`;
+                      addMeasurementRow(
+                        `Edge (${axis})`,
+                        formatLength(extents[d]),
+                        `Physical edge length of the bounding box along the ${axis} axis.`,
                       );
-                      nameWrapper.appendChild(
-                        makeDescriptionIcon(
-                          "Interior angle at this vertex, between its two " +
-                            "adjoining segments (physical space)",
-                        ),
+                      volume *= extents[d];
+                      ++spatialCount;
+                    }
+                    // Volume is a cubic quantity; only show it for exactly three
+                    // length dimensions.
+                    if (spatialCount === 3) {
+                      addMeasurementRow(
+                        "Volume",
+                        formatVolume(volume),
+                        "Physical volume of the bounding box (product of its edge lengths).",
                       );
-                      const angleLabel = document.createElement("span");
-                      angleLabel.classList.add(
-                        "neuroglancer-annotation-property-label",
-                      );
-                      angleLabel.textContent = `Angle #${v + 1}`;
-                      nameWrapper.appendChild(angleLabel);
-                      angleRow.appendChild(nameWrapper);
-                      const angleValue = document.createElement("span");
-                      angleValue.classList.add(
-                        "neuroglancer-annotation-property-value",
-                      );
-                      angleValue.textContent = `${angle.toFixed(1)}°`;
-                      angleRow.appendChild(angleValue);
-                      parent.appendChild(angleRow);
                     }
                   }
                 }

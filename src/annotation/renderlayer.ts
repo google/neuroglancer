@@ -46,9 +46,9 @@ import type {
 import {
   AnnotationSerializer,
   AnnotationSource,
+  AnnotationType,
   annotationTypes,
   formatAnnotationPropertyValue,
-  isPolylineLikeAnnotationType,
 } from "#src/annotation/index.js";
 import type {
   AnnotationRenderContext,
@@ -689,7 +689,7 @@ function AnnotationRenderLayer<
           if (hoverValue !== undefined) {
             const index = idMap.get(hoverValue.id);
             if (index !== undefined) {
-              if (isPolylineLikeAnnotationType(annotationType)) {
+              if (annotationType === AnnotationType.POLYLINE) {
                 const cumulativeInstanceCount =
                   typeToInstanceCounts[annotationType][index];
                 selectedIndex =
@@ -705,10 +705,7 @@ function AnnotationRenderLayer<
           count = Math.round(count * drawFraction);
           // Adjust the count slightly if needed to ensure we always
           // Draw a full polyline if present
-          if (
-            drawFraction < 1 &&
-            isPolylineLikeAnnotationType(annotationType)
-          ) {
+          if (drawFraction < 1 && annotationType === AnnotationType.POLYLINE) {
             const typeToInstanceCount =
               serializedAnnotations.typeToInstanceCounts[annotationType];
             const bestIndex = findFirstInSortedArray(
@@ -753,7 +750,7 @@ function AnnotationRenderLayer<
           let partIndex = pickedOffset % pickIdsPerInstance;
           let annotationIndex = Math.floor(pickedOffset / pickIdsPerInstance);
           const annotationInstanceIndex = annotationIndex;
-          if (isPolylineLikeAnnotationType(annotationType)) {
+          if (annotationType === AnnotationType.POLYLINE) {
             const typeToInstanceCount = typeToInstanceCounts[annotationType];
             annotationIndex = findFirstInSortedArray(
               typeToInstanceCount,
