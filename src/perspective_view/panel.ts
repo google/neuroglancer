@@ -581,13 +581,6 @@ export class PerspectivePanel extends RenderedDataPanel {
       viewer.showAxisLines.changed.add(() => this.scheduleRedraw()),
     );
     this.registerDisposer(
-      viewer.mouseState.changed.add(() => {
-        // The picking indicator is a DOM overlay; moving the cursor only
-        // repositions it and never triggers a canvas redraw.
-        this.updatePickingIndicator();
-      }),
-    );
-    this.registerDisposer(
       viewer.crossSectionBackgroundColor.changed.add(() =>
         this.scheduleRedraw(),
       ),
@@ -1518,27 +1511,27 @@ export class PerspectivePanel extends RenderedDataPanel {
     );
   }
 
-  protected computePickingIndicatorPosition() {
-    const { mouseState } = this.viewer;
-    if (!mouseState.active) return undefined;
+  readonly overlayPanelTypes = ["perspective"];
+
+  protected projectGlobalPosition(position: Float32Array) {
     const {
       viewProjectionMat,
       logicalWidth,
       logicalHeight,
       displayDimensionRenderInfo: { displayDimensionIndices },
     } = this.projectionParameters.value;
-    // mouseState.position is in global voxel space; extract display-space components.
+    // `position` is in global voxel space; extract display-space components.
     const px =
       displayDimensionIndices[0] >= 0
-        ? mouseState.position[displayDimensionIndices[0]]
+        ? position[displayDimensionIndices[0]]
         : 0;
     const py =
       displayDimensionIndices[1] >= 0
-        ? mouseState.position[displayDimensionIndices[1]]
+        ? position[displayDimensionIndices[1]]
         : 0;
     const pz =
       displayDimensionIndices[2] >= 0
-        ? mouseState.position[displayDimensionIndices[2]]
+        ? position[displayDimensionIndices[2]]
         : 0;
     const displayPos = tempVec3;
     displayPos[0] = px;

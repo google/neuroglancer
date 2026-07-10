@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import "#src/skeleton/frontend.css";
+
 import { ChunkState, LayerChunkProgressInfo } from "#src/chunk_manager/base.js";
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import {
@@ -30,6 +32,10 @@ import type {
   PickState,
   VisibleLayerInfo,
 } from "#src/layer/index.js";
+import type {
+  PanelOverlayContext,
+  PanelOverlaySource,
+} from "#src/panel_overlay.js";
 import type { PerspectivePanel } from "#src/perspective_view/panel.js";
 import type {
   PerspectiveViewReadyRenderContext,
@@ -56,6 +62,8 @@ import {
   forEachVisibleSegment,
   getVisibleSegments,
   getObjectKey,
+  onTemporaryVisibleSegmentsStateChanged,
+  onVisibleSegmentsStateChanged,
 } from "#src/segmentation_display_state/base.js";
 import type { SegmentationDisplayState3D } from "#src/segmentation_display_state/frontend.js";
 import {
@@ -119,6 +127,7 @@ import {
 import { Uint64Set } from "#src/uint64_set.js";
 import { gatherUpdate } from "#src/util/array.js";
 import {
+  getRelativeLuminance,
   getSaturation,
   pickHighestContrastColor,
   saturateColor,
@@ -196,11 +205,22 @@ const DEFAULT_FRAGMENT_MAIN = `void main() {
   emitDefault();
 }
 `;
-// If use values like 8.0, need to ensure JS keeps the decimal place for GLSL
-const ACTIVE_NODE_BORDER_MIN_WIDTH = 3.5;
-const ACTIVE_NODE_BORDER_MAX_WIDTH = 8.5;
-const ACTIVE_NODE_BORDER_DIAMETER_FRACTION = 0.5;
-const ACTIVE_NODE_OUTLINE_DIAMETER_FRACTION = 0.25;
+const SELECTED_NODE_OUTLINE_FALLBACK_COLOR = vec3.fromValues(1.0, 0.95, 0.35);
+
+// Converts a linear 0..1 RGB triple to a CSS `rgb(...)` string for DOM markers.
+function vec3ToCssColor(color: vec3): string {
+  return `rgb(${Math.round(color[0] * 255)}, ${Math.round(
+    color[1] * 255,
+  )}, ${Math.round(color[2] * 255)})`;
+}
+const SELECTED_NODE_OUTLINE_MIN_WIDTH_2D = "3.5";
+const SELECTED_NODE_OUTLINE_MAX_WIDTH_2D = "8.0";
+const SELECTED_NODE_OUTLINE_MIN_WIDTH_3D = "3.0";
+const SELECTED_NODE_OUTLINE_MAX_WIDTH_3D = "7.0";
+// Fraction of the node diameter used as the highlight outline width before
+// clamping to the min/max above. Nodes are small (~5-6px), so this mostly hits
+// the min for typical nodes and scales up the ring for larger nodes.
+const SELECTED_NODE_OUTLINE_DIAMETER_FRACTION = "0.5";
 
 // Saturation adjustment factor and threshold for the highlighted (hovered) node border: each
 // moves the segment's color away from (>1) or towards (<1) the perceptual-grey
@@ -212,10 +232,7 @@ const ACTIVE_NODE_OUTLINE_DIAMETER_FRACTION = 0.25;
 const HIGHLIGHTED_NODE_BORDER_SATURATION_FACTOR = 0.5;
 const HIGHLIGHTED_NODE_BORDER_SATURATION_THRESHOLD = 0.5;
 
-const SELECTED_NODE_BORDER_OUTLINE_GLSL_COLOR = "1.0, 1.0, 1.0";
-const HIGHLIGHTED_NODE_BORDER_OUTLINE_GLSL_COLOR = "0.0, 0.0, 0.0";
-const ACTIVE_NODE_BORDER_FALLBACK_COLOR = vec3.fromValues(1.0, 0.95, 0.35);
-// Muted colors for the selected (pinned) node
+// Muted colors for the selected (pinned) node -- less vibrant.
 const SELECTED_NODE_HIGHLIGHT_COLORS: readonly vec3[] = [
   vec3.fromValues(0.1, 0.1, 0.1), // near-black
   vec3.fromValues(0.7, 0.67, 0.6), // stone (light warm gray)
@@ -309,7 +326,6 @@ class RenderHelper extends RefCounted {
   private vertexIdHelper;
   private segmentAttributeIndex: number | undefined;
   private segmentColorAttributeIndex: number | undefined;
-  private nodeIdAttributeIndex: number | undefined;
   private visibleSegmentsShaderManager = new HashSetShaderManager(
     "visibleSegments",
   );
@@ -392,7 +408,7 @@ void spatialChunkCull() {
       );
     }
     for (let i = 1; i < numAttributes; ++i) {
-      if (i === this.segmentAttributeIndex || i === this.nodeIdAttributeIndex) {
+      if (i === this.segmentAttributeIndex) {
         continue;
       }
       const info = vertexAttributes[i];
@@ -619,11 +635,6 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
     this.segmentAttributeIndex =
       segmentAttrIndex >= 0 ? segmentAttrIndex : undefined;
     this.segmentColorAttributeIndex = base.segmentColorAttributeIndex;
-    const nodeIdAttrIndex = this.vertexAttributes.findIndex(
-      (x) => x.name === nodeIdAttribute.name,
-    );
-    this.nodeIdAttributeIndex =
-      nodeIdAttrIndex >= 0 ? nodeIdAttrIndex : undefined;
 
     const segmentationGroupState =
       base.displayState.segmentationGroupState.value;
@@ -784,24 +795,6 @@ void emitDefault() {
             /*crossSectionFade=*/ this.targetIsSliceView,
           );
           builder.addUniform("highp float", "uNodeDiameter");
-          let selectedOutlineWidthExpression = "0.0";
-          let borderOutlineWidthExpression = "0.0";
-          if (this.nodeIdAttributeIndex !== undefined) {
-            builder.addUniform("highp vec3", "uSelectedNodeOutlineColor");
-            builder.addUniform("highp int", "uSelectedNodeId");
-            builder.addVarying("highp float", "vSelectedNode", "flat");
-            builder.addUniform("highp vec3", "uHighlightedNodeOutlineColor");
-            builder.addUniform("highp int", "uHighlightedNodeId");
-            builder.addVarying("highp float", "vHighlightedNode", "flat");
-            selectedOutlineWidthExpression = `(max(vSelectedNode, vHighlightedNode) * clamp(${ACTIVE_NODE_BORDER_DIAMETER_FRACTION} * uNodeDiameter, ${ACTIVE_NODE_BORDER_MIN_WIDTH}, ${ACTIVE_NODE_BORDER_MAX_WIDTH}))`;
-            const borderOutlineMinWidth =
-              ACTIVE_NODE_BORDER_MIN_WIDTH *
-              ACTIVE_NODE_OUTLINE_DIAMETER_FRACTION;
-            const borderOutlineMaxWidth =
-              ACTIVE_NODE_BORDER_MAX_WIDTH *
-              ACTIVE_NODE_OUTLINE_DIAMETER_FRACTION;
-            borderOutlineWidthExpression = `(max(vSelectedNode, vHighlightedNode) * clamp(${ACTIVE_NODE_OUTLINE_DIAMETER_FRACTION} * uNodeDiameter, ${borderOutlineMinWidth}, ${borderOutlineMaxWidth}))`;
-          }
           let vertexMain = `
 highp uint vertexIndex = uint(gl_InstanceID);
 highp uint pickOffset = vertexIndex * uPickInstanceStride;
@@ -811,10 +804,6 @@ highp vec3 vertexPosition = readAttribute0(vertexIndex);
           if (skeletonParams.spatialChunkCulling) {
             vertexMain += `vCullPos = vertexPosition;\n`;
           }
-          if (this.nodeIdAttributeIndex !== undefined) {
-            vertexMain += `vSelectedNode = float(readAttribute${this.nodeIdAttributeIndex}(vertexIndex).value == uSelectedNodeId);\n`;
-            vertexMain += `vHighlightedNode = float(readAttribute${this.nodeIdAttributeIndex}(vertexIndex).value == uHighlightedNodeId);\n`;
-          }
           if (
             skeletonParams.dynamicSegmentAppearance &&
             this.segmentAttributeIndex !== undefined
@@ -822,12 +811,7 @@ highp vec3 vertexPosition = readAttribute0(vertexIndex);
             vertexMain += `vSegmentValue = toRaw(readAttribute${this.segmentAttributeIndex}(vertexIndex));\n`;
           }
           vertexMain += `
-emitCircle(
-  uProjection * vec4(vertexPosition, 1.0),
-  uNodeDiameter,
-  ${selectedOutlineWidthExpression},
-  ${borderOutlineWidthExpression}
-);
+emitCircle(uProjection * vec4(vertexPosition, 1.0), uNodeDiameter, 0.0);
 `;
           const segmentColorExpression = this.getSegmentColorExpression();
           if (
@@ -836,17 +820,9 @@ emitCircle(
           ) {
             // Dynamic path (spatial skeletons): per-segment color, visibility,
             // saturation and hover highlight all resolved in the shader via
-            // getSegmentAppearance(). uColor is unused in this path.
+            // getSegmentAppearance(). uColor is unused in this path.  Selected and
+            // hovered node highlights are drawn as DOM overlays, not in-shader.
             const segmentExpression = `vSegmentValue`;
-            const hasNodeIdSelection = this.nodeIdAttributeIndex !== undefined;
-            // Apply the selected outline first, then the hovered outline, so the
-            // hovered color wins when a node is both selected and hovered.
-            const borderColorExpression = hasNodeIdSelection
-              ? `mix(mix(renderColor, vec4(uSelectedNodeOutlineColor, renderColor.a), vSelectedNode), vec4(uHighlightedNodeOutlineColor, renderColor.a), vHighlightedNode)`
-              : "renderColor";
-            const borderOutlineColorExpression = hasNodeIdSelection
-              ? `mix(mix(renderColor, vec4(${SELECTED_NODE_BORDER_OUTLINE_GLSL_COLOR}, renderColor.a), vSelectedNode), vec4(${HIGHLIGHTED_NODE_BORDER_OUTLINE_GLSL_COLOR}, renderColor.a), vHighlightedNode)`
-              : "renderColor";
             builder.addFragmentCode(`
 vec4 segmentColor() {
   return getSegmentAppearance(${segmentExpression});
@@ -856,9 +832,7 @@ void emitRGBA(vec4 color) {
   highp float alpha = color.a * baseColor.a;
   if (alpha <= 0.0) discard;
   vec4 renderColor = vec4(color.rgb, alpha);
-  vec4 borderColor = ${borderColorExpression};
-  vec4 borderOutlineColor = ${borderOutlineColorExpression};
-  vec4 circleColor = getCircleColor(renderColor, borderColor, borderOutlineColor);
+  vec4 circleColor = getCircleColor(renderColor, renderColor);
   emit(vec4(circleColor.rgb * circleColor.a, circleColor.a), vPickID);
 }
 void emitRGB(vec3 color) {
@@ -890,24 +864,13 @@ void emitDefault() {
           } else {
             // Per-vertex color attribute path: color comes from a per-vertex
             // attribute; alpha is taken from the attribute's alpha component.
-            const hasNodeIdSelection = this.nodeIdAttributeIndex !== undefined;
-            // Apply the selected outline first, then the hovered outline, so the
-            // hovered color wins when a node is both selected and hovered.
-            const borderColorExpression = hasNodeIdSelection
-              ? `mix(mix(renderColor, vec4(uSelectedNodeOutlineColor, renderColor.a), vSelectedNode), vec4(uHighlightedNodeOutlineColor, renderColor.a), vHighlightedNode)`
-              : "renderColor";
-            const borderOutlineColorExpression = hasNodeIdSelection
-              ? `mix(mix(renderColor, vec4(${SELECTED_NODE_BORDER_OUTLINE_GLSL_COLOR}, renderColor.a), vSelectedNode), vec4(${HIGHLIGHTED_NODE_BORDER_OUTLINE_GLSL_COLOR}, renderColor.a), vHighlightedNode)`
-              : "renderColor";
             builder.addFragmentCode(`
 vec4 segmentColor() {
   return ${segmentColorExpression};
 }
 void emitRGBA(vec4 color) {
   vec4 renderColor = color;
-  vec4 borderColor = ${borderColorExpression};
-  vec4 borderOutlineColor = ${borderOutlineColorExpression};
-  vec4 circleColor = getCircleColor(renderColor, borderColor, borderOutlineColor);
+  vec4 circleColor = getCircleColor(renderColor, renderColor);
   emit(vec4(circleColor.rgb * circleColor.a, circleColor.a), vPickID);
 }
 void emitRGB(vec3 color) {
@@ -1172,6 +1135,82 @@ function getSkeletonNodeDiameter(
     return Math.max(5, lineWidth * 2);
   }
   return lineWidth;
+}
+
+// A selected/hovered node highlight to draw as a DOM ring overlay.  `diameter`
+// and `borderWidth` are in render-viewport device px (matching the node's
+// on-screen size); the panel converts them to CSS px via `cssPerDevicePixel`.
+interface HighlightMarker {
+  position: Float32Array; // global coordinate space
+  kind: "selected" | "hovered";
+  color: string; // CSS ring color, derived from the node's segment color
+  outlineColor: string; // CSS halo color, contrasting with `color`
+  diameter: number;
+  borderWidth: number;
+}
+
+// Reconciles the ring child elements of an overlay source's per-panel container
+// to `markers`, projecting each via the panel context.  Reuses/pools children.
+function updateSkeletonHighlightOverlay(
+  markers: HighlightMarker[],
+  ctx: PanelOverlayContext,
+) {
+  const { container, cssPerDevicePixel } = ctx;
+  let count = 0;
+  for (const marker of markers) {
+    const pos = ctx.project(marker.position);
+    if (pos === undefined) continue;
+    let element = container.children[count] as HTMLElement | undefined;
+    if (element === undefined) {
+      element = document.createElement("div");
+      element.className = "neuroglancer-skeleton-node-highlight";
+      container.appendChild(element);
+    }
+    ++count;
+    const size = marker.diameter * cssPerDevicePixel;
+    const { style } = element;
+    style.display = "";
+    style.width = `${size}px`;
+    style.height = `${size}px`;
+    style.borderWidth = `${Math.max(1, marker.borderWidth * cssPerDevicePixel)}px`;
+    style.borderColor = marker.color;
+    style.setProperty("--ng-node-highlight-outline", marker.outlineColor);
+    style.opacity = `${pos.opacity ?? 1}`;
+    style.transform = `translate(${pos.x - size / 2}px, ${pos.y - size / 2}px)`;
+  }
+  const { children } = container;
+  for (let i = count; i < children.length; ++i) {
+    (children[i] as HTMLElement).style.display = "none";
+  }
+}
+
+// On-screen size (render-viewport device px) of a node's selection ring,
+// matching the old in-shader outline: a band of `borderWidth` sitting just
+// outside the node, so the outer `diameter` = nodeDiameter + 2 * outline.
+function getSkeletonNodeHighlightRing(
+  renderMode: SkeletonRenderMode,
+  lineWidth: number,
+  targetIsSliceView: boolean,
+): { diameter: number; borderWidth: number } {
+  const nodeDiameter = getSkeletonNodeDiameter(renderMode, lineWidth);
+  const minWidth = Number(
+    targetIsSliceView
+      ? SELECTED_NODE_OUTLINE_MIN_WIDTH_2D
+      : SELECTED_NODE_OUTLINE_MIN_WIDTH_3D,
+  );
+  const maxWidth = Number(
+    targetIsSliceView
+      ? SELECTED_NODE_OUTLINE_MAX_WIDTH_2D
+      : SELECTED_NODE_OUTLINE_MAX_WIDTH_3D,
+  );
+  const outline = Math.min(
+    maxWidth,
+    Math.max(
+      minWidth,
+      Number(SELECTED_NODE_OUTLINE_DIAMETER_FRACTION) * nodeDiameter,
+    ),
+  );
+  return { diameter: nodeDiameter + 2 * outline, borderWidth: outline };
 }
 
 function setMouseStatePositionFromSpatialSkeletonNode(
@@ -1600,14 +1639,6 @@ const segmentAttribute: VertexAttributeRenderInfo = {
   glslDataType: getShaderType(DataType.UINT32, 1),
 };
 
-const nodeIdAttribute: VertexAttributeRenderInfo = {
-  dataType: DataType.INT32,
-  numComponents: 1,
-  name: "nodeId",
-  webglDataType: WebGL2RenderingContext.INT,
-  glslDataType: getShaderType(DataType.INT32, 1),
-};
-
 interface SkeletonChunkBase extends SkeletonGPUGeometry {
   vertexAttributes: Uint8Array;
   vertexAttributeOffsets: Uint32Array;
@@ -1723,31 +1754,6 @@ export class SpatiallyIndexedSkeletonChunk
   copyToGPU(gl: GL) {
     super.copyToGPU(gl);
     uploadSkeletonChunkToGPU(gl, this);
-    // Upload nodeIds as the 3rd vertex attribute texture (index 2).
-    // vertexAttributeOffsets only covers position (0) and segment (1), so we
-    // handle nodeId separately here since it is stored outside the packed buffer.
-    const nodeIdFormat = this.source.attributeTextureFormats[2];
-    if (
-      nodeIdFormat !== undefined &&
-      this.nodeIds.length === this.numVertices &&
-      this.numVertices > 0
-    ) {
-      const texture = gl.createTexture();
-      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
-      setOneDimensionalTextureData(
-        gl,
-        nodeIdFormat,
-        new Uint8Array(
-          this.nodeIds.buffer,
-          this.nodeIds.byteOffset,
-          this.nodeIds.byteLength,
-        ),
-      );
-      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
-      this.vertexAttributeTextures[2] = texture;
-    } else {
-      this.vertexAttributeTextures[2] = null;
-    }
   }
 
   freeGPUMemory(gl: GL) {
@@ -1764,7 +1770,6 @@ type SpatiallyIndexedSkeletonChunkListener = (
 const spatiallyIndexedSkeletonTextureAttributeSpecs = Object.freeze([
   { name: "position", dataType: DataType.FLOAT32, numComponents: 3 },
   { name: "segment", dataType: DataType.UINT32, numComponents: 1 },
-  { name: "nodeId", dataType: DataType.INT32, numComponents: 1 },
 ]);
 
 export class SpatiallyIndexedSkeletonSource extends SliceViewChunkSource<
@@ -1777,11 +1782,7 @@ export class SpatiallyIndexedSkeletonSource extends SliceViewChunkSource<
 
   constructor(chunkManager: ChunkManager, options: any) {
     super(chunkManager, options);
-    this.vertexAttributes = [
-      vertexPositionAttribute,
-      segmentAttribute,
-      nodeIdAttribute,
-    ];
+    this.vertexAttributes = [vertexPositionAttribute, segmentAttribute];
   }
 
   get attributeTextureFormats() {
@@ -1871,6 +1872,7 @@ type SpatiallyIndexedSkeletonSourceEntry =
 interface SelectedSkeletonNodeInfo {
   readonly nodeId: number;
   readonly segmentId?: number;
+  readonly position?: Float32Array;
 }
 
 interface SpatiallyIndexedSkeletonLayerOptions {
@@ -1887,6 +1889,11 @@ interface SpatiallyIndexedSkeletonLayerOptions {
   pendingNodePositionVersion?: WatchableValueInterface<number>;
   getPendingNodePosition?: (nodeId: number) => ArrayLike<number> | undefined;
   getCachedNode?: (nodeId: number) => SpatiallyIndexedSkeletonNode | undefined;
+  // Transforms a node's model-space position into the global coordinate space
+  // used by the panels, so node highlights can be projected to screen.
+  resolveGlobalPosition?: (
+    modelPosition: ArrayLike<number>,
+  ) => Float32Array | undefined;
   inspectionState?: SpatiallyIndexedSkeletonInspectionState;
   maxRetainedOverlaySegments?: number;
 }
@@ -1929,11 +1936,6 @@ class SkeletonOverlayChunk implements SkeletonGPUGeometry {
         geometry.segmentIds.buffer,
         geometry.segmentIds.byteOffset,
         geometry.segmentIds.byteLength,
-      ),
-      new Uint8Array(
-        geometry.nodeIds.buffer,
-        geometry.nodeIds.byteOffset,
-        geometry.nodeIds.byteLength,
       ),
     ];
     const overlayTextures: (WebGLTexture | null)[] =
@@ -2089,7 +2091,6 @@ export class SpatiallyIndexedSkeletonLayer
   redrawNeeded = new NullarySignal();
   vertexAttributes: VertexAttributeRenderInfo[];
   segmentColorAttributeIndex: number | undefined;
-  nodeIdAttributeIndex: number | undefined;
   readonly browsePassLayerView: SkeletonShaderContext;
   readonly skeletonShaderParameters: WatchableValue<SkeletonShaderParameters>;
   readonly browsePassSkeletonShaderParameters: WatchableValueInterface<SkeletonShaderParameters>;
@@ -2128,6 +2129,12 @@ export class SpatiallyIndexedSkeletonLayer
   private getCachedNodeInfo:
     | ((nodeId: number) => SpatiallyIndexedSkeletonNode | undefined)
     | undefined;
+  private resolveGlobalPosition:
+    | ((modelPosition: ArrayLike<number>) => Float32Array | undefined)
+    | undefined;
+  // Fires when the set of highlighted nodes (selected/hovered) changes, so panels
+  // can reposition their DOM node-highlight markers without a full canvas redraw.
+  readonly highlightMarkersChanged = new NullarySignal();
   private inspectionState: SpatiallyIndexedSkeletonInspectionState | undefined;
   private overlayChunk: SkeletonOverlayChunk | undefined;
   private overlayGeometryKey: string | undefined;
@@ -2217,7 +2224,14 @@ export class SpatiallyIndexedSkeletonLayer
     return getBaseObjectColor(this.displayState, segmentId);
   }
 
-  private updateNodeOutlineColors() {
+  // Updates `selectedNodeOutlineColor` and `highlightedNodeOutlineColor` in
+  // place. Each outline is chosen, independently of the other, for high contrast
+  // against its own node's segment color: the selected node uses the muted
+  // palette, and the hovered node uses its own segment color pushed away from
+  // (or, if already very saturated, towards) grey. Because the two are computed
+  // independently, a given segment color always yields the same selected color
+  // and the same hovered color.
+  private updateNodeOutlineColorPair() {
     const currentGeneration = this.nodeOutlineColorGeneration;
     if (this.cachedNodeOutlineColorGeneration === currentGeneration) {
       return;
@@ -2380,8 +2394,8 @@ export class SpatiallyIndexedSkeletonLayer
 
     if (this.overlayChunk !== undefined) {
       if (this.overlayGeometryKey === overlayGeometryKey) {
-        // Geometry unchanged — selection is driven by uSelectedNodeId uniform
-        // at draw time, so no GPU rebuild is needed when selection changes.
+        // Geometry unchanged — selection/hover highlights are DOM overlays, so no
+        // GPU rebuild is needed when selection changes.
         return this.overlayChunk;
       }
     }
@@ -2469,6 +2483,7 @@ export class SpatiallyIndexedSkeletonLayer
     this.pendingNodePositionVersion = options.pendingNodePositionVersion;
     this.getPendingNodePositionOverride = options.getPendingNodePosition;
     this.getCachedNodeInfo = options.getCachedNode;
+    this.resolveGlobalPosition = options.resolveGlobalPosition;
     this.inspectionState = options.inspectionState;
     this.maxRetainedOverlaySegments = Math.max(
       1,
@@ -2568,36 +2583,43 @@ export class SpatiallyIndexedSkeletonLayer
       displayState: this.displayState,
       skeletonShaderParameters: this.browsePassSkeletonShaderParameters,
     };
-    const nodeIdIndex = this.vertexAttributes.findIndex(
-      (x) => x.name === nodeIdAttribute.name,
-    );
-    this.nodeIdAttributeIndex = nodeIdIndex >= 0 ? nodeIdIndex : undefined;
     const requestRedraw = () => this.redrawNeeded.dispatch();
+    // Node highlights are DOM overlays, so a selected/hovered change repositions
+    // the markers without a canvas redraw.
     if (this.selectedNodeInfo?.changed) {
       this.registerDisposer(
         this.selectedNodeInfo.changed.add(() => {
+          // Recompute the marker's contrast color for the new node.
           invalidateNodeOutlineColors();
-          requestRedraw();
+          this.highlightMarkersChanged.dispatch();
         }),
       );
     }
     if (this.suppressSelectedNodeHighlight?.changed) {
       this.registerDisposer(
-        this.suppressSelectedNodeHighlight.changed.add(requestRedraw),
+        // The selected-node ring is a DOM overlay, so toggling suppression must
+        // refresh the markers (not just request a canvas redraw).
+        this.suppressSelectedNodeHighlight.changed.add(() => {
+          this.highlightMarkersChanged.dispatch();
+        }),
       );
     }
     if (this.hoveredNodeInfo?.changed) {
       this.registerDisposer(
         this.hoveredNodeInfo.changed.add(() => {
           invalidateNodeOutlineColors();
-          requestRedraw();
+          this.highlightMarkersChanged.dispatch();
         }),
       );
     }
     const pendingNodePositionVersion = options.pendingNodePositionVersion;
     if (pendingNodePositionVersion?.changed) {
       this.registerDisposer(
-        pendingNodePositionVersion.changed.add(requestRedraw),
+        pendingNodePositionVersion.changed.add(() => {
+          // A node's position moved: redraw geometry and reposition markers.
+          requestRedraw();
+          this.highlightMarkersChanged.dispatch();
+        }),
       );
     }
     const inspectionState = this.inspectionState;
@@ -2606,9 +2628,37 @@ export class SpatiallyIndexedSkeletonLayer
         inspectionState.nodeDataVersion.changed.add(() => {
           invalidateNodeOutlineColors();
           this.redrawNeeded.dispatch();
+          // A highlighted node's cached position may now be available.
+          this.highlightMarkersChanged.dispatch();
         }),
       );
     }
+    // A marker is emitted only when its node's skeleton would be drawn (see
+    // computeHighlightMarkers), so its visibility depends on the object alphas
+    // and the visible-segment set. Refresh the overlay when any of those change.
+    const refreshHighlightVisibility = () => {
+      this.highlightMarkersChanged.dispatch();
+    };
+    this.registerDisposer(
+      this.displayState.objectAlpha.changed.add(refreshHighlightVisibility),
+    );
+    this.registerDisposer(
+      this.displayState.hiddenObjectAlpha.changed.add(
+        refreshHighlightVisibility,
+      ),
+    );
+    const segmentationGroupState =
+      this.displayState.segmentationGroupState.value;
+    onVisibleSegmentsStateChanged(
+      this,
+      segmentationGroupState,
+      refreshHighlightVisibility,
+    );
+    onTemporaryVisibleSegmentsStateChanged(
+      this,
+      segmentationGroupState,
+      refreshHighlightVisibility,
+    );
     // Create backend for perspective view chunk management
     const sharedObject = this.registerDisposer(
       new ChunkRenderLayerFrontend(this.layerChunkProgressInfo),
@@ -2682,6 +2732,95 @@ export class SpatiallyIndexedSkeletonLayer
         Number(pendingPosition[2]),
       ]),
     };
+  }
+
+  /**
+   * Builds highlight markers for the selected/hovered nodes.  `diameter` and
+   * `borderWidth` are the node's on-screen ring size (device px) for the calling
+   * view, so the marker matches the node's size — the old in-shader outline sat
+   * just outside the node with the same thickness.  Positions are resolved from
+   * the stored info (model space) or the node cache, then transformed to global
+   * space; entries whose position is unavailable are omitted.
+   */
+  computeHighlightMarkers(
+    diameter: number,
+    borderWidth: number,
+  ): HighlightMarker[] {
+    const { resolveGlobalPosition } = this;
+    if (resolveGlobalPosition === undefined) return [];
+    // Refresh the per-node contrast colors (selected uses the muted palette,
+    // hovered uses its saturated segment color) so markers match the previous
+    // in-shader outline colors.
+    this.updateNodeOutlineColorPair();
+    // Mirror the shader's per-segment visibility so a ring is never drawn over a
+    // skeleton that isn't rendered: a segment draws at `objectAlpha` when it is
+    // visible/selected and at `hiddenObjectAlpha` otherwise.
+    const visibleSegments = getVisibleSegments(
+      this.displayState.segmentationGroupState.value,
+    );
+    const objectAlpha = this.displayState.objectAlpha.value;
+    const hiddenObjectAlpha = this.displayState.hiddenObjectAlpha.value;
+    const markers: HighlightMarker[] = [];
+    const add = (
+      info: SelectedSkeletonNodeInfo | undefined,
+      kind: HighlightMarker["kind"],
+      color: vec3,
+    ) => {
+      const nodeId = info?.nodeId;
+      if (nodeId === undefined) return;
+      const segmentId = info?.segmentId;
+      if (segmentId !== undefined) {
+        const effectiveAlpha = visibleSegments.has(BigInt(segmentId))
+          ? objectAlpha
+          : hiddenObjectAlpha;
+        if (effectiveAlpha <= 0) return;
+      } else if (objectAlpha <= 0 && hiddenObjectAlpha <= 0) {
+        // Unknown segment: fall back to the whole-layer invisibility test.
+        return;
+      }
+      // Prefer the live cached position (which applies any pending move) so the
+      // marker stays in sync when the node moves; fall back to the position
+      // captured at selection time if the node isn't currently cached.
+      const modelPosition =
+        this.getCachedNodeSnapshot(nodeId)?.position ?? info?.position;
+      if (modelPosition === undefined) return;
+      const global = resolveGlobalPosition(modelPosition);
+      if (global === undefined) return;
+      // Halo contrasts with the ring color: white around a dark ring, black
+      // around a light one (WCAG black/white crossover luminance ~0.179).
+      const outlineColor =
+        getRelativeLuminance(color) < 0.179
+          ? "rgba(255, 255, 255, 0.85)"
+          : "rgba(0, 0, 0, 0.75)";
+      markers.push({
+        position: global,
+        kind,
+        color: vec3ToCssColor(color),
+        outlineColor,
+        diameter,
+        borderWidth,
+      });
+    };
+    const selectedNodeId = this.suppressSelectedNodeHighlight?.value
+      ? undefined
+      : this.selectedNodeInfo?.value?.nodeId;
+    const hoveredNodeId = this.hoveredNodeInfo?.value?.nodeId;
+    // When the same node is both selected and hovered, show only the hovered
+    // marker (as the old shader did — hovered won over selected), avoiding an
+    // overlapping ring.
+    if (selectedNodeId !== undefined && selectedNodeId !== hoveredNodeId) {
+      add(
+        this.selectedNodeInfo?.value,
+        "selected",
+        this.selectedNodeOutlineColor,
+      );
+    }
+    add(
+      this.hoveredNodeInfo?.value,
+      "hovered",
+      this.highlightedNodeOutlineColor,
+    );
+    return markers;
   }
 
   invalidateSourceCellsForPositions(
@@ -3042,23 +3181,6 @@ export class SpatiallyIndexedSkeletonLayer
     const { gl, edgeShader, nodeShader, skeletonParams } = passState;
 
     nodeShader.bind();
-    this.updateNodeOutlineColors();
-    gl.uniform3fv(
-      nodeShader.uniform("uSelectedNodeOutlineColor"),
-      this.selectedNodeOutlineColor,
-    );
-    gl.uniform1i(
-      nodeShader.uniform("uSelectedNodeId"),
-      this.getHighlightedSelectedNodeId(),
-    );
-    gl.uniform3fv(
-      nodeShader.uniform("uHighlightedNodeOutlineColor"),
-      this.highlightedNodeOutlineColor,
-    );
-    gl.uniform1i(
-      nodeShader.uniform("uHighlightedNodeId"),
-      this.hoveredNodeInfo?.value?.nodeId ?? -1,
-    );
 
     const chunkOrigin = vec3.create();
     const chunkBound = vec3.create();
@@ -3178,23 +3300,6 @@ export class SpatiallyIndexedSkeletonLayer
     const { gl, edgeShader, nodeShader, skeletonParams } = passState;
 
     nodeShader.bind();
-    this.updateNodeOutlineColors();
-    gl.uniform3fv(
-      nodeShader.uniform("uSelectedNodeOutlineColor"),
-      this.selectedNodeOutlineColor,
-    );
-    gl.uniform1i(
-      nodeShader.uniform("uSelectedNodeId"),
-      this.getHighlightedSelectedNodeId(),
-    );
-    gl.uniform3fv(
-      nodeShader.uniform("uHighlightedNodeOutlineColor"),
-      this.highlightedNodeOutlineColor,
-    );
-    gl.uniform1i(
-      nodeShader.uniform("uHighlightedNodeId"),
-      this.hoveredNodeInfo?.value?.nodeId ?? -1,
-    );
 
     if (renderContext.emitPickID) {
       const edgePickId =
@@ -3461,7 +3566,10 @@ function attachSpatiallyIndexedSkeletonLayer(
   );
 }
 
-export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveViewRenderLayer {
+export class PerspectiveViewSpatiallyIndexedSkeletonLayer
+  extends PerspectiveViewRenderLayer
+  implements PanelOverlaySource
+{
   private renderHelper: RenderHelper;
   private browseRenderHelper: RenderHelper;
   private renderOptions: ViewSpecificSkeletonRenderingOptions;
@@ -3493,6 +3601,23 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
     );
     const histogram3d = base.displayState.spatialSkeletonSpacingHistogram3d;
     this.registerDisposer(histogram3d.visibility.add(this.visibility));
+  }
+
+  readonly overlayPriority = 0;
+  get overlayUpdateNeeded() {
+    return this.base.highlightMarkersChanged;
+  }
+  updatePanelOverlays(ctx: PanelOverlayContext) {
+    const { renderOptions } = this;
+    const ring = getSkeletonNodeHighlightRing(
+      renderOptions.mode.value,
+      renderOptions.lineWidth.value,
+      /*targetIsSliceView=*/ false,
+    );
+    updateSkeletonHighlightOverlay(
+      this.base.computeHighlightMarkers(ring.diameter, ring.borderWidth),
+      ctx,
+    );
   }
 
   attach(
@@ -3636,7 +3761,10 @@ export class PerspectiveViewSpatiallyIndexedSkeletonLayer extends PerspectiveVie
   }
 }
 
-export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelRenderLayer {
+export class SliceViewPanelSpatiallyIndexedSkeletonLayer
+  extends SliceViewPanelRenderLayer
+  implements PanelOverlaySource
+{
   private renderHelper: RenderHelper;
   private browseRenderHelper: RenderHelper;
   private renderOptions: ViewSpecificSkeletonRenderingOptions;
@@ -3671,6 +3799,23 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
 
   get gl() {
     return this.base.gl;
+  }
+
+  readonly overlayPriority = 0;
+  get overlayUpdateNeeded() {
+    return this.base.highlightMarkersChanged;
+  }
+  updatePanelOverlays(ctx: PanelOverlayContext) {
+    const { renderOptions } = this;
+    const ring = getSkeletonNodeHighlightRing(
+      renderOptions.mode.value,
+      renderOptions.lineWidth.value,
+      /*targetIsSliceView=*/ true,
+    );
+    updateSkeletonHighlightOverlay(
+      this.base.computeHighlightMarkers(ring.diameter, ring.borderWidth),
+      ctx,
+    );
   }
 
   getValueAt(_position: Float32Array) {

@@ -32,6 +32,9 @@ interface SpatialSkeletonViewerHoverMouseStateLike<TRenderLayer> {
 export interface SpatialSkeletonHoverInfo {
   readonly nodeId: number;
   readonly segmentId?: number;
+  // Model-space position of the picked node, carried so the highlight overlay can
+  // still be placed when the node's skeleton is not currently loaded/cached.
+  readonly position?: Float32Array;
 }
 
 interface SpatialSkeletonViewerHoverLayerLike<TRenderLayer> {
@@ -192,7 +195,17 @@ function getSpatialSkeletonHoverInfoFromViewerHover<TRenderLayer>(
   if (nodeId === undefined) return undefined;
   const segmentId = pickedSpatialSkeleton?.segmentId;
   if (segmentId === undefined) return undefined;
-  return segmentId === undefined ? { nodeId } : { nodeId, segmentId };
+  return { nodeId, segmentId, position: pickedSpatialSkeleton?.position };
+}
+
+function positionsEqual(
+  a: Float32Array | undefined,
+  b: Float32Array | undefined,
+) {
+  if (a === b) return true;
+  if (a === undefined || b === undefined || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; ++i) if (a[i] !== b[i]) return false;
+  return true;
 }
 
 function spatialSkeletonHoverInfoEqual(
@@ -201,7 +214,11 @@ function spatialSkeletonHoverInfoEqual(
 ) {
   if (a === b) return true;
   if (a === undefined || b === undefined) return false;
-  return a.nodeId === b.nodeId && a.segmentId === b.segmentId;
+  return (
+    a.nodeId === b.nodeId &&
+    a.segmentId === b.segmentId &&
+    positionsEqual(a.position, b.position)
+  );
 }
 
 export class SpatialSkeletonHoverState extends RefCounted {

@@ -53,6 +53,8 @@ import {
   PlaybackManager,
   Position,
 } from "#src/navigation_state.js";
+import type { PanelOverlaySource } from "#src/panel_overlay.js";
+import { isPanelOverlaySource } from "#src/panel_overlay.js";
 import type { RenderLayerTransform } from "#src/render_coordinate_transform.js";
 import {
   RENDERED_VIEW_ADD_LAYER_RPC_ID,
@@ -1678,6 +1680,21 @@ export function makeRenderedPanelVisibleLayerTracker<
         info.registerDisposer(
           layer.redrawNeeded.add(() => panel.scheduleRedraw()),
         );
+        // Layers that contribute DOM panel overlays (e.g. skeleton
+        // selected/hovered node highlights) are bound to this panel; the binding
+        // (container + update wiring) is scoped to this per-(layer,panel) info.
+        const overlayPanel = panel as Partial<{
+          bindOverlaySource(
+            source: PanelOverlaySource,
+            owner: RefCounted,
+          ): void;
+        }>;
+        if (
+          isPanelOverlaySource(layer) &&
+          typeof overlayPanel.bindOverlaySource === "function"
+        ) {
+          overlayPanel.bindOverlaySource(layer, info);
+        }
         const { backend } = layer;
         if (backend) {
           backend.rpc!.invoke(RENDERED_VIEW_ADD_LAYER_RPC_ID, {

@@ -941,7 +941,16 @@ export class SegmentationUserLayer extends Base {
     const requestedSegmentId =
       options.segmentId ?? selectedNodeInfo?.segmentId ?? undefined;
     const segmentId = normalizeOptionalPositiveSafeInteger(requestedSegmentId);
-    const selectedNodePosition = options.position ?? selectedNodeInfo?.position;
+    const previousSelectedInfo = this.selectedSpatialSkeletonNodeInfo.value;
+    // Keep a model-space position available even when the node isn't currently
+    // cached, so the highlight overlay can still be placed: prefer the explicit
+    // option / cache, else retain the position captured for the same node.
+    const selectedNodePosition =
+      options.position ??
+      selectedNodeInfo?.position ??
+      (previousSelectedInfo?.nodeId === normalizedNodeId
+        ? previousSelectedInfo.position
+        : undefined);
     const selectedGlobalPosition =
       this.getGlobalSelectionPositionFromModelPosition(selectedNodePosition);
     const sourceState = options.sourceState ?? selectedNodeInfo?.sourceState;
@@ -1637,6 +1646,10 @@ export class SegmentationUserLayer extends Base {
                     this.spatialSkeletonState.getPendingNodePosition(nodeId),
                   getCachedNode: (nodeId) =>
                     this.spatialSkeletonState.getCachedNode(nodeId),
+                  resolveGlobalPosition: (modelPosition) =>
+                    this.getGlobalSelectionPositionFromModelPosition(
+                      modelPosition,
+                    ),
                   inspectionState: this.spatialSkeletonState,
                 },
               );
@@ -1673,6 +1686,10 @@ export class SegmentationUserLayer extends Base {
                   this.spatialSkeletonState.getPendingNodePosition(nodeId),
                 getCachedNode: (nodeId) =>
                   this.spatialSkeletonState.getCachedNode(nodeId),
+                resolveGlobalPosition: (modelPosition) =>
+                  this.getGlobalSelectionPositionFromModelPosition(
+                    modelPosition,
+                  ),
                 inspectionState: this.spatialSkeletonState,
               },
             );
