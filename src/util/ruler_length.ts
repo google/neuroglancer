@@ -38,7 +38,7 @@
  * - A zero-length segment (duplicate consecutive point) contributes 0.
  * - Never throws for valid numeric input; returns a finite, non-negative number.
  */
-export function computeRulerLengthNm(
+export function computeRulerPhysicalLength(
   points: readonly ArrayLike<number>[],
   scaleNm: ArrayLike<number>,
 ): number {

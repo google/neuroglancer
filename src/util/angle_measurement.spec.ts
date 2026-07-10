@@ -15,21 +15,21 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { computeVertexAnglesDegrees } from "#src/util/angle_measurement.js";
+import { computeVertexPhysicalAngles } from "#src/util/angle_measurement.js";
 
 const p = (...values: number[]) => Float32Array.from(values);
 
-describe("computeVertexAnglesDegrees", () => {
+describe("computeVertexPhysicalAngles", () => {
   // C1: fewer than three points -> no angles
   it("returns an empty array for fewer than three points", () => {
-    expect(computeVertexAnglesDegrees([], [1, 1])).toEqual([]);
-    expect(computeVertexAnglesDegrees([p(0, 0)], [1, 1])).toEqual([]);
-    expect(computeVertexAnglesDegrees([p(0, 0), p(1, 1)], [1, 1])).toEqual([]);
+    expect(computeVertexPhysicalAngles([], [1, 1])).toEqual([]);
+    expect(computeVertexPhysicalAngles([p(0, 0)], [1, 1])).toEqual([]);
+    expect(computeVertexPhysicalAngles([p(0, 0), p(1, 1)], [1, 1])).toEqual([]);
   });
 
   // C3: right angle at the middle vertex
   it("computes a right angle", () => {
-    const angles = computeVertexAnglesDegrees(
+    const angles = computeVertexPhysicalAngles(
       [p(1, 0), p(0, 0), p(0, 1)],
       [1, 1],
     );
@@ -39,7 +39,7 @@ describe("computeVertexAnglesDegrees", () => {
 
   // C4: collinear points -> straight angle
   it("computes a straight (180) angle for collinear points", () => {
-    const angles = computeVertexAnglesDegrees(
+    const angles = computeVertexPhysicalAngles(
       [p(0, 0), p(1, 0), p(2, 0)],
       [1, 1],
     );
@@ -48,7 +48,7 @@ describe("computeVertexAnglesDegrees", () => {
 
   it("computes an acute angle", () => {
     // Vectors (1,0) and (1,1) from the vertex -> 45 degrees.
-    const angles = computeVertexAnglesDegrees(
+    const angles = computeVertexPhysicalAngles(
       [p(1, 0), p(0, 0), p(1, 1)],
       [1, 1],
     );
@@ -57,7 +57,7 @@ describe("computeVertexAnglesDegrees", () => {
 
   // C2: N points -> N-2 angles
   it("returns one angle per interior vertex (N-2)", () => {
-    const angles = computeVertexAnglesDegrees(
+    const angles = computeVertexPhysicalAngles(
       [p(0, 0), p(1, 0), p(1, 1), p(2, 1)],
       [1, 1],
     );
@@ -68,7 +68,7 @@ describe("computeVertexAnglesDegrees", () => {
 
   // C5: zero-length segment -> NaN at that vertex, others valid
   it("reports NaN for a vertex adjoining a zero-length segment", () => {
-    const angles = computeVertexAnglesDegrees(
+    const angles = computeVertexPhysicalAngles(
       [p(0, 0), p(0, 0), p(1, 0), p(1, 1)],
       [1, 1],
     );
@@ -82,13 +82,13 @@ describe("computeVertexAnglesDegrees", () => {
     // Raw vectors (1,0) and (0,1) are 90 deg. With scale x=1, y=1000 the y arm
     // dominates but the arms remain orthogonal, so still 90 deg; use a skew case
     // to show scale matters: vectors (1,0) and (1,1) are 45 deg at unit scale.
-    const unit = computeVertexAnglesDegrees(
+    const unit = computeVertexPhysicalAngles(
       [p(1, 0), p(0, 0), p(1, 1)],
       [1, 1],
     );
     expect(unit[0]).toBeCloseTo(45, 5);
     // Stretch y by 1000: the (1,1) arm becomes nearly vertical -> angle -> ~90.
-    const stretched = computeVertexAnglesDegrees(
+    const stretched = computeVertexPhysicalAngles(
       [p(1, 0), p(0, 0), p(1, 1)],
       [1, 1000],
     );
@@ -98,7 +98,7 @@ describe("computeVertexAnglesDegrees", () => {
 
   // C7: results within [0, 180], never throws
   it("keeps non-NaN results within 0..180", () => {
-    const angles = computeVertexAnglesDegrees(
+    const angles = computeVertexPhysicalAngles(
       [p(-3, 2), p(5, -1), p(0, 4), p(2, 2)],
       [7, 9],
     );

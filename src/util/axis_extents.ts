@@ -30,7 +30,7 @@
  * - Anisotropic scale -> each extent uses that axis's physical scale.
  * - Returns one entry per dimension; every entry is finite and non-negative.
  */
-export function computeAxisExtentsNm(
+export function computeAxisPhysicalExtents(
   pointA: ArrayLike<number>,
   pointB: ArrayLike<number>,
   scaleNm: ArrayLike<number>,

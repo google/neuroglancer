@@ -37,7 +37,7 @@
  * - A vertex adjoining a zero-length segment -> NaN for that entry.
  * - Every non-NaN entry is within [0, 180]; never throws for valid numeric input.
  */
-export function computeVertexAnglesDegrees(
+export function computeVertexPhysicalAngles(
   points: readonly ArrayLike<number>[],
   scaleNm: ArrayLike<number>,
 ): number[] {

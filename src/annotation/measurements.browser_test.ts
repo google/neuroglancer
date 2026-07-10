@@ -21,9 +21,9 @@ import type {
   PolyLine,
 } from "#src/annotation/index.js";
 import { AnnotationSource, AnnotationType } from "#src/annotation/index.js";
-import { computeVertexAnglesDegrees } from "#src/util/angle_measurement.js";
-import { computeAxisExtentsNm } from "#src/util/axis_extents.js";
-import { computeRulerLengthNm } from "#src/util/ruler_length.js";
+import { computeVertexPhysicalAngles } from "#src/util/angle_measurement.js";
+import { computeAxisPhysicalExtents } from "#src/util/axis_extents.js";
+import { computeRulerPhysicalLength } from "#src/util/ruler_length.js";
 import { formatLength, formatVolume } from "#src/util/spatial_units.js";
 
 describe("built-in annotation measurements", () => {
@@ -31,10 +31,10 @@ describe("built-in annotation measurements", () => {
     const pointA = Float32Array.of(0, 0, 0);
     const pointB = Float32Array.of(3, 4, 0);
     const scaleNm = [10, 10, 10];
-    const length = computeRulerLengthNm([pointA, pointB], scaleNm);
+    const length = computeRulerPhysicalLength([pointA, pointB], scaleNm);
     expect(length).toBeCloseTo(50, 5); // 5 units * 10 nm
     expect(formatLength(length)).toContain("nm");
-    const extents = computeAxisExtentsNm(pointA, pointB, scaleNm);
+    const extents = computeAxisPhysicalExtents(pointA, pointB, scaleNm);
     expect(extents).toEqual([30, 40, 0]);
   });
 
@@ -45,8 +45,8 @@ describe("built-in annotation measurements", () => {
       Float32Array.of(3, 4),
     ];
     const scaleNm = [1, 1];
-    expect(computeRulerLengthNm(points, scaleNm)).toBeCloseTo(7, 5); // 3 + 4
-    const angles = computeVertexAnglesDegrees(points, scaleNm);
+    expect(computeRulerPhysicalLength(points, scaleNm)).toBeCloseTo(7, 5); // 3 + 4
+    const angles = computeVertexPhysicalAngles(points, scaleNm);
     expect(angles).toHaveLength(1);
     expect(angles[0]).toBeCloseTo(90, 5);
   });
@@ -55,7 +55,7 @@ describe("built-in annotation measurements", () => {
     const pointA = Float32Array.of(0, 0, 0);
     const pointB = Float32Array.of(2, 3, 5);
     const scaleNm = [10, 10, 10];
-    const extents = computeAxisExtentsNm(pointA, pointB, scaleNm);
+    const extents = computeAxisPhysicalExtents(pointA, pointB, scaleNm);
     expect(extents).toEqual([20, 30, 50]);
     const volume = extents[0] * extents[1] * extents[2];
     expect(volume).toBeCloseTo(30000, 5);

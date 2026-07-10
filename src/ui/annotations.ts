@@ -94,10 +94,10 @@ import {
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { getDefaultAnnotationListBindings } from "#src/ui/default_input_event_bindings.js";
 import { LegacyTool, registerLegacyTool } from "#src/ui/tool.js";
-import { computeVertexAnglesDegrees } from "#src/util/angle_measurement.js";
+import { computeVertexPhysicalAngles } from "#src/util/angle_measurement.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { arraysEqual, type ArraySpliceOp } from "#src/util/array.js";
-import { computeAxisExtentsNm } from "#src/util/axis_extents.js";
+import { computeAxisPhysicalExtents } from "#src/util/axis_extents.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import { packColor } from "#src/util/color.js";
 import type { Borrowed } from "#src/util/disposable.js";
@@ -117,7 +117,7 @@ import * as matrix from "#src/util/matrix.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { nearlyEqual } from "#src/util/number.js";
 import { numberToStringFixed } from "#src/util/number_to_string.js";
-import { computeRulerLengthNm } from "#src/util/ruler_length.js";
+import { computeRulerPhysicalLength } from "#src/util/ruler_length.js";
 import { formatScaleWithUnitAsString } from "#src/util/si_units.js";
 import { NullarySignal, Signal } from "#src/util/signal.js";
 import { formatLength, formatVolume } from "#src/util/spatial_units.js";
@@ -1732,7 +1732,7 @@ function formatRulerLength(
 ): string | undefined {
   const scaleNm = getAnnotationPhysicalScales(annotationLayer, layer);
   if (scaleNm === undefined) return undefined;
-  return formatLength(computeRulerLengthNm(points, scaleNm));
+  return formatLength(computeRulerPhysicalLength(points, scaleNm));
 }
 
 /**
@@ -1740,14 +1740,14 @@ function formatRulerLength(
  * undefined if the physical scale is not yet resolved. Entry `i` corresponds to
  * interior vertex `i+1`; a NaN entry marks a degenerate vertex.
  */
-function computeAngleDegrees(
+function computeAnnotationPhysicalAngles(
   points: readonly Float32Array[],
   annotationLayer: AnnotationLayerState,
   layer: UserLayerWithAnnotations,
 ): number[] | undefined {
   const scaleNm = getAnnotationPhysicalScales(annotationLayer, layer);
   if (scaleNm === undefined) return undefined;
-  return computeVertexAnglesDegrees(points, scaleNm);
+  return computeVertexPhysicalAngles(points, scaleNm);
 }
 
 class PlaceEllipsoidTool extends TwoStepAnnotationTool {
@@ -2428,12 +2428,12 @@ export function UserLayerWithAnnotationsMixin<
                     addMeasurementRow(
                       "Length",
                       formatLength(
-                        computeRulerLengthNm([pointA, pointB], scaleNm),
+                        computeRulerPhysicalLength([pointA, pointB], scaleNm),
                       ),
                       "Physical length of the line (distance between its endpoints).",
                     );
                     const names = getAnnotationAxisNames(annotationLayer, this);
-                    const extents = computeAxisExtentsNm(
+                    const extents = computeAxisPhysicalExtents(
                       pointA,
                       pointB,
                       scaleNm,
@@ -2473,7 +2473,7 @@ export function UserLayerWithAnnotationsMixin<
                       "Total physical length of the polyline (sum of its segment lengths).",
                     );
                   }
-                  const angles = computeAngleDegrees(
+                  const angles = computeAnnotationPhysicalAngles(
                     measuredPoints,
                     annotationLayer,
                     this,
@@ -2502,7 +2502,7 @@ export function UserLayerWithAnnotationsMixin<
                   if (scaleNm !== undefined) {
                     const { pointA, pointB } = annotation;
                     const names = getAnnotationAxisNames(annotationLayer, this);
-                    const extents = computeAxisExtentsNm(
+                    const extents = computeAxisPhysicalExtents(
                       pointA,
                       pointB,
                       scaleNm,
