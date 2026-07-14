@@ -17,12 +17,12 @@
 import "#src/ui/skeleton_tab.css";
 
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+import { OPTIMISTIC_EDIT_QUEUE_DEBUG } from "#src/skeleton/optimistic_edit_queue_config.js";
 import type { SpatialSkeletonOptimisticEditDebugEntry } from "#src/skeleton/spatial_skeleton_manager.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { Tab } from "#src/widget/tab_view.js";
 
-// Flip this locally when inspecting optimistic queue transitions.
-export const OPTIMISTIC_EDIT_QUEUE_DEBUG = true;
+export { OPTIMISTIC_EDIT_QUEUE_DEBUG } from "#src/skeleton/optimistic_edit_queue_config.js";
 
 function getOptimisticEditQueueEntries(layer: SegmentationUserLayer) {
   return layer.spatialSkeletonState.getOptimisticEditQueueDebugSnapshot();
@@ -147,6 +147,15 @@ export class SpatialSkeletonOptimisticEditQueueTab extends Tab {
       entry.nodeId === undefined
         ? "-"
         : `${entry.nodeId}:${entry.segmentId ?? "-"}`;
+    const dependencies = entry.dependencies?.length
+      ? entry.dependencies.map((operationId) => `#${operationId}`).join(",")
+      : "-";
+    const topology =
+      entry.tempSegmentId === undefined &&
+      entry.secondSegmentId === undefined &&
+      entry.resultSegmentId === undefined
+        ? ""
+        : `  tempSegment ${entry.tempSegmentId ?? "-"}  second ${entry.secondNodeId ?? "-"}:${entry.secondSegmentId ?? "-"}  result ${entry.resultSegmentId ?? "-"}  deleted ${entry.deletedSegmentId ?? "-"}`;
     const order = document.createElement("span");
     order.className = "neuroglancer-skeleton-queue-debug-order";
     order.textContent = `${index + 1}`;
@@ -158,7 +167,7 @@ export class SpatialSkeletonOptimisticEditQueueTab extends Tab {
     action.textContent = `#${entry.operationId ?? "-"} ${entry.kind}`;
     const details = document.createElement("span");
     details.className = "neuroglancer-skeleton-queue-debug-details";
-    details.textContent = `temp ${tempNode}  segment ${segment}  parent ${parent}  server ${server}`;
+    details.textContent = `temp ${tempNode}  segment ${segment}  parent ${parent}  server ${server}  deps ${dependencies}${topology}`;
     row.appendChild(order);
     row.appendChild(status);
     row.appendChild(action);

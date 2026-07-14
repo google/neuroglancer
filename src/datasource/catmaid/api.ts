@@ -128,6 +128,18 @@ export interface CatmaidMoveNodeOptions {
   nocheck?: boolean;
 }
 
+export interface CatmaidMergeSkeletonOptions {
+  nocheck?: boolean;
+}
+
+export interface CatmaidSplitSkeletonOptions {
+  nocheck?: boolean;
+}
+
+export interface CatmaidRerootSkeletonOptions {
+  nocheck?: boolean;
+}
+
 export type CatmaidDeleteNodeResult = CatmaidSkeletonEditResult;
 
 export type CatmaidRerootResult = CatmaidSkeletonEditResult;
@@ -171,11 +183,13 @@ export interface CatmaidSpatialSkeletonEditApi {
   splitSkeleton(
     nodeId: number,
     editContext?: CatmaidEditContext,
+    options?: CatmaidSplitSkeletonOptions,
   ): Promise<CatmaidSplitResult>;
   mergeSkeletons(
     fromNodeId: number,
     toNodeId: number,
     editContext?: CatmaidEditContext,
+    options?: CatmaidMergeSkeletonOptions,
   ): Promise<CatmaidMergeResult>;
   toggleTrueEnd(
     nodeId: number,
@@ -193,6 +207,7 @@ export interface CatmaidSpatialSkeletonEditApi {
   rerootSkeleton(
     nodeId: number,
     editContext?: CatmaidEditContext,
+    options?: CatmaidRerootSkeletonOptions,
   ): Promise<CatmaidRerootResult>;
   updateDescription(
     nodeId: number,
@@ -1670,16 +1685,21 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
   async rerootSkeleton(
     nodeId: number,
     editContext?: CatmaidEditContext,
+    options: CatmaidRerootSkeletonOptions = {},
   ): Promise<CatmaidRerootResult> {
     const body = new URLSearchParams({
       treenode_id: nodeId.toString(),
     });
-    appendCatmaidState(
-      body,
-      buildCatmaidNeighborhoodState("reroot-skeleton", editContext, {
-        expectedNodeId: nodeId,
-      }),
-    );
+    if (options.nocheck === true) {
+      appendCatmaidState(body, { nocheck: true });
+    } else {
+      appendCatmaidState(
+        body,
+        buildCatmaidNeighborhoodState("reroot-skeleton", editContext, {
+          expectedNodeId: nodeId,
+        }),
+      );
+    }
     const response = await this.fetchProjectEndpoint(`skeleton/reroot`, {
       method: "POST",
       body,
@@ -2060,18 +2080,23 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     fromNodeId: number,
     toNodeId: number,
     editContext?: CatmaidEditContext,
+    options: CatmaidMergeSkeletonOptions = {},
   ): Promise<CatmaidMergeResult> {
     const body = new URLSearchParams({
       from_id: fromNodeId.toString(),
       to_id: toNodeId.toString(),
     });
-    appendCatmaidState(
-      body,
-      buildCatmaidMultiNodeState("merge-skeleton", editContext, [
-        fromNodeId,
-        toNodeId,
-      ]),
-    );
+    if (options.nocheck === true) {
+      appendCatmaidState(body, { nocheck: true });
+    } else {
+      appendCatmaidState(
+        body,
+        buildCatmaidMultiNodeState("merge-skeleton", editContext, [
+          fromNodeId,
+          toNodeId,
+        ]),
+      );
+    }
     const response = await this.fetchProjectEndpoint(`skeleton/join`, {
       method: "POST",
       body,
@@ -2092,17 +2117,22 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
   async splitSkeleton(
     nodeId: number,
     editContext?: CatmaidEditContext,
+    options: CatmaidSplitSkeletonOptions = {},
   ): Promise<CatmaidSplitResult> {
     const body = new URLSearchParams({
       treenode_id: nodeId.toString(),
       downstream_annotation_map: JSON.stringify({}),
     });
-    appendCatmaidState(
-      body,
-      buildCatmaidNeighborhoodState("split-skeleton", editContext, {
-        expectedNodeId: nodeId,
-      }),
-    );
+    if (options.nocheck === true) {
+      appendCatmaidState(body, { nocheck: true });
+    } else {
+      appendCatmaidState(
+        body,
+        buildCatmaidNeighborhoodState("split-skeleton", editContext, {
+          expectedNodeId: nodeId,
+        }),
+      );
+    }
     const response = await this.fetchProjectEndpoint(`skeleton/split`, {
       method: "POST",
       body,

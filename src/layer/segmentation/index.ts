@@ -1486,13 +1486,19 @@ export class SegmentationUserLayer extends Base {
     if (
       !ignoreCommandBusy &&
       this.spatialSkeletonState.hasUnconfirmedOptimisticEdits() &&
-      requirements.some(
-        (action) =>
-          isSpatialSkeletonEditAction(action) &&
-          action !== SpatialSkeletonActions.addNodes &&
-          action !== SpatialSkeletonActions.moveNodes &&
-          action !== SpatialSkeletonActions.deleteNodes,
-      )
+      requirements.some((action) => {
+        if (!isSpatialSkeletonEditAction(action)) return false;
+        const state = this.spatialSkeletonState as unknown as {
+          canQueueOptimisticAction?: (action: SpatialSkeletonAction) => boolean;
+        };
+        const legacyQueueSupport =
+          action === SpatialSkeletonActions.addNodes ||
+          action === SpatialSkeletonActions.moveNodes ||
+          action === SpatialSkeletonActions.deleteNodes;
+        const queueSupportsAction =
+          state.canQueueOptimisticAction?.(action) ?? legacyQueueSupport;
+        return !(this.optimisticSkeletonEdits.value && queueSupportsAction);
+      })
     ) {
       return "Wait for pending optimistic skeleton edits to finish.";
     }

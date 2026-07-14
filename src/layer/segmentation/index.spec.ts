@@ -114,6 +114,7 @@ function makeSpatialSkeletonActionGateLayer(options: {
   visibleChunksNeeded?: number;
   visibleChunksAvailable?: number;
   commandBusy?: boolean;
+  canQueueOptimisticAction?: (action: string) => boolean;
 }) {
   return Object.assign(Object.create(SegmentationUserLayer.prototype), {
     getSpatiallyIndexedSkeletonLayer: () =>
@@ -123,7 +124,11 @@ function makeSpatialSkeletonActionGateLayer(options: {
         isBusy: new WatchableValue(options.commandBusy ?? false),
       },
       hasUnconfirmedOptimisticEdits: vi.fn(() => false),
+      ...(options.canQueueOptimisticAction === undefined
+        ? {}
+        : { canQueueOptimisticAction: options.canQueueOptimisticAction }),
     },
+    optimisticSkeletonEdits: new WatchableValue(true),
     spatialSkeletonVisibleChunksLoaded: new WatchableValue(
       options.visibleChunksLoaded ?? true,
     ),
@@ -271,6 +276,68 @@ describe("layer/segmentation spatial skeleton action gating", () => {
       SpatialSkeletonActions.editNodeTrueEnd,
       SpatialSkeletonActions.editNodeRadius,
       SpatialSkeletonActions.editNodeConfidence,
+    ]) {
+      expect(layer.getSpatialSkeletonActionsDisabledReason(action)).toBe(
+        "Wait for pending optimistic skeleton edits to finish.",
+      );
+    }
+  });
+
+  it("allows optimistic merge and split actions when the queue advertises support", () => {
+    const canQueueOptimisticAction = vi.fn(
+      (action: string) =>
+        action === SpatialSkeletonActions.mergeSkeletons ||
+        action === SpatialSkeletonActions.splitSkeletons,
+    );
+    const layer = makeSpatialSkeletonActionGateLayer({
+      source: makeEditableSpatialSkeletonSource({
+        confidenceConfiguration: true,
+        rerootCommand: true,
+      }),
+      canQueueOptimisticAction,
+    });
+    layer.spatialSkeletonState.hasUnconfirmedOptimisticEdits.mockReturnValue(
+      true,
+    );
+
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason(
+        SpatialSkeletonActions.mergeSkeletons,
+      ),
+    ).toBeUndefined();
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason(
+        SpatialSkeletonActions.splitSkeletons,
+      ),
+    ).toBeUndefined();
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason(
+        SpatialSkeletonActions.reroot,
+      ),
+    ).toBe("Wait for pending optimistic skeleton edits to finish.");
+    expect(canQueueOptimisticAction).toHaveBeenCalledWith(
+      SpatialSkeletonActions.mergeSkeletons,
+    );
+    expect(canQueueOptimisticAction).toHaveBeenCalledWith(
+      SpatialSkeletonActions.splitSkeletons,
+    );
+    expect(canQueueOptimisticAction).toHaveBeenCalledWith(
+      SpatialSkeletonActions.reroot,
+    );
+  });
+
+  it("blocks merge and split when optimistic queue support is unavailable", () => {
+    const layer = makeSpatialSkeletonActionGateLayer({
+      source: makeEditableSpatialSkeletonSource(),
+      canQueueOptimisticAction: () => false,
+    });
+    layer.spatialSkeletonState.hasUnconfirmedOptimisticEdits.mockReturnValue(
+      true,
+    );
+
+    for (const action of [
+      SpatialSkeletonActions.mergeSkeletons,
+      SpatialSkeletonActions.splitSkeletons,
     ]) {
       expect(layer.getSpatialSkeletonActionsDisabledReason(action)).toBe(
         "Wait for pending optimistic skeleton edits to finish.",

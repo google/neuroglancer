@@ -77,6 +77,7 @@ export type CatmaidSpatialSkeletonDeleteNodeResult = CatmaidDeleteNodeResult;
 export interface CatmaidSpatialSkeletonSplitRequest {
   node: SpatiallyIndexedSkeletonNode;
   segmentNodes: readonly SpatiallyIndexedSkeletonNode[];
+  nocheck?: boolean;
 }
 
 export type CatmaidSpatialSkeletonSplitResult = CatmaidSplitResult;
@@ -84,6 +85,7 @@ export type CatmaidSpatialSkeletonSplitResult = CatmaidSplitResult;
 export interface CatmaidSpatialSkeletonMergeRequest {
   fromNode: SpatiallyIndexedSkeletonNode;
   toNode: SpatiallyIndexedSkeletonNode;
+  nocheck?: boolean;
 }
 
 export type CatmaidSpatialSkeletonMergeResult = CatmaidMergeResult;
@@ -91,6 +93,7 @@ export type CatmaidSpatialSkeletonMergeResult = CatmaidMergeResult;
 export interface CatmaidSpatialSkeletonRerootRequest {
   node: SpatiallyIndexedSkeletonNode;
   segmentNodes: readonly SpatiallyIndexedSkeletonNode[];
+  nocheck?: boolean;
 }
 
 export type CatmaidSpatialSkeletonRerootResult = CatmaidRerootResult;

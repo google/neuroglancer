@@ -1763,7 +1763,7 @@ export class SpatialSkeletonEditTab extends Tab {
       undoButton.title = busy
         ? "Wait for the current skeleton edit to finish."
         : canUndoOptimistic
-          ? "Undo pending node creation."
+          ? "Undo latest optimistic edit."
           : undoLabel === undefined
             ? "Nothing to undo."
             : `Undo ${undoLabel}`;

@@ -16,6 +16,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 
+import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
 import { SpatialSkeletonActions } from "#src/skeleton/command_protocol.js";
 import {
   buildSpatiallyIndexedSkeletonNavigationGraph,
@@ -312,6 +313,185 @@ describe("skeleton/spatial_skeleton_manager", () => {
     );
   });
 
+  it("atomically repartitions cached segments and restores cloned snapshots", () => {
+    const state = new SpatialSkeletonState();
+    state.replaceCachedSegmentSnapshots(
+      [
+        [
+          11,
+          [
+            {
+              nodeId: 1,
+              segmentId: 11,
+              position: new Float32Array([1, 1, 1]),
+              parentNodeId: undefined,
+            },
+            {
+              nodeId: 2,
+              segmentId: 11,
+              position: new Float32Array([2, 2, 2]),
+              parentNodeId: 1,
+            },
+            {
+              nodeId: 3,
+              segmentId: 11,
+              position: new Float32Array([3, 3, 3]),
+              parentNodeId: 2,
+            },
+          ],
+        ] as const,
+      ],
+      { notify: false },
+    );
+    const original = state.snapshotCachedSegments([11, 17]);
+
+    // A snapshot must not retain mutable node-position storage from the cache.
+    (state.getCachedNode(2)!.position as Float32Array)[0] = 99;
+    expect(original.get(11)?.[1].position).toEqual(new Float32Array([2, 2, 2]));
+
+    const splitRoot = {
+      ...state.getCachedNode(2)!,
+      segmentId: 999,
+      position: new Float32Array([2, 2, 2]),
+      parentNodeId: undefined,
+    };
+    const notificationSnapshots: unknown[] = [];
+    state.nodeDataVersion.changed.add(() => {
+      notificationSnapshots.push({
+        originalNodeIds: state
+          .getCachedSegmentNodes(11)
+          ?.map((node) => node.nodeId),
+        splitNodeIds: state
+          .getCachedSegmentNodes(17)
+          ?.map((node) => node.nodeId),
+        splitRootSegmentId: state.getCachedNode(2)?.segmentId,
+      });
+    });
+
+    expect(
+      state.replaceCachedSegmentSnapshots([
+        [11, [state.getCachedNode(1)!]] as const,
+        [
+          17,
+          [
+            splitRoot,
+            {
+              ...state.getCachedNode(3)!,
+              segmentId: 999,
+            },
+          ],
+        ] as const,
+      ]),
+    ).toBe(true);
+
+    expect(notificationSnapshots).toEqual([
+      {
+        originalNodeIds: [1],
+        splitNodeIds: [2, 3],
+        splitRootSegmentId: 17,
+      },
+    ]);
+    expect(state.getCachedNode(3)).toBe(state.getCachedSegmentNodes(17)?.[1]);
+    expect(state.getCachedNode(2)?.segmentId).toBe(17);
+
+    // Replacement inputs are cloned and cannot mutate the live cache later.
+    splitRoot.position[0] = 123;
+    expect(state.getCachedNode(2)?.position).toEqual(
+      new Float32Array([2, 2, 2]),
+    );
+
+    expect(state.replaceCachedSegmentSnapshots(original)).toBe(true);
+    expect(state.getCachedSegmentNodes(17)).toBeUndefined();
+    expect(state.getCachedNode(2)?.segmentId).toBe(11);
+    expect(state.getCachedNode(2)?.position).toEqual(
+      new Float32Array([2, 2, 2]),
+    );
+  });
+
+  it("distinguishes known-empty and uncached segment snapshots", () => {
+    const state = new SpatialSkeletonState();
+    const uncached = state.snapshotCachedSegments([21]);
+
+    expect(uncached.get(21)).toBeUndefined();
+    expect(
+      state.replaceCachedSegmentSnapshots([[21, []] as const], {
+        notify: false,
+      }),
+    ).toBe(true);
+    expect(state.getCachedSegmentNodes(21)).toEqual([]);
+    expect(state.snapshotCachedSegments([21]).get(21)).toEqual([]);
+
+    expect(
+      state.replaceCachedSegmentSnapshots(uncached, { notify: false }),
+    ).toBe(true);
+    expect(state.getCachedSegmentNodes(21)).toBeUndefined();
+    expect(
+      state.replaceCachedSegmentSnapshots(uncached, { notify: false }),
+    ).toBe(false);
+  });
+
+  it("rejects an inconsistent atomic replacement before changing the cache", () => {
+    const state = new SpatialSkeletonState();
+    state.replaceCachedSegmentSnapshots(
+      [
+        [
+          11,
+          [
+            {
+              nodeId: 1,
+              segmentId: 11,
+              position: new Float32Array([1, 1, 1]),
+            },
+          ],
+        ] as const,
+        [
+          13,
+          [
+            {
+              nodeId: 2,
+              segmentId: 13,
+              position: new Float32Array([2, 2, 2]),
+            },
+          ],
+        ] as const,
+      ],
+      { notify: false },
+    );
+    const before = state.snapshotCachedSegments([11, 13]);
+    const nodeDataVersion = state.nodeDataVersion.value;
+
+    expect(() =>
+      state.replaceCachedSegmentSnapshots([
+        [
+          11,
+          [
+            {
+              nodeId: 3,
+              segmentId: 11,
+              position: new Float32Array([3, 3, 3]),
+            },
+          ],
+        ] as const,
+        [
+          13,
+          [
+            {
+              nodeId: 3,
+              segmentId: 13,
+              position: new Float32Array([4, 4, 4]),
+            },
+          ],
+        ] as const,
+      ]),
+    ).toThrow("node 3 is present in both segment 11 and segment 13");
+
+    expect(state.snapshotCachedSegments([11, 13])).toEqual(before);
+    expect(state.getCachedNode(1)?.segmentId).toBe(11);
+    expect(state.getCachedNode(2)?.segmentId).toBe(13);
+    expect(state.getCachedNode(3)).toBeUndefined();
+    expect(state.nodeDataVersion.value).toBe(nodeDataVersion);
+  });
+
   it("can seed a brand-new cached segment from a local node mutation", () => {
     const state = new SpatialSkeletonState();
 
@@ -499,6 +679,60 @@ describe("skeleton/spatial_skeleton_manager", () => {
     expect(state.getCachedNode(5)).toBeUndefined();
   });
 
+  it("keeps stale cached nodes while a cache-bypassing refresh is pending", async () => {
+    const state = new SpatialSkeletonState();
+    const staleNode = {
+      nodeId: 5,
+      segmentId: 11,
+      position: new Float32Array([1, 2, 3]),
+      parentNodeId: undefined,
+      isTrueEnd: false,
+    };
+    state.replaceCachedSegmentSnapshots([[11, [staleNode]]]);
+    let resolveFetch:
+      | ((value: SpatiallyIndexedSkeletonNode[]) => void)
+      | undefined;
+    const getSkeleton = vi.fn(
+      () =>
+        new Promise<SpatiallyIndexedSkeletonNode[]>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    const skeletonLayer = {
+      source: {
+        readonly: false,
+        listSkeletons: async () => [],
+        getSkeleton,
+        fetchNodes: async () => [],
+        getSpatialIndexMetadata: async () => null,
+      },
+    } as any;
+    let notifications = 0;
+    state.nodeDataVersion.changed.add(() => {
+      notifications += 1;
+    });
+
+    const pending = state.refreshCachedSegments(skeletonLayer, [11]);
+
+    expect(getSkeleton).toHaveBeenCalledTimes(1);
+    expect(state.getCachedSegmentNodes(11)?.[0]?.position).toEqual(
+      new Float32Array([1, 2, 3]),
+    );
+    expect(notifications).toBe(0);
+
+    resolveFetch?.([
+      {
+        ...staleNode,
+        position: new Float32Array([7, 8, 9]),
+      },
+    ]);
+    await expect(pending).resolves.toBe(true);
+    expect(state.getCachedSegmentNodes(11)?.[0]?.position).toEqual(
+      new Float32Array([7, 8, 9]),
+    );
+    expect(notifications).toBe(1);
+  });
+
   it("aborts pending full segment fetches when the cache generation is cleared", async () => {
     const state = new SpatialSkeletonState();
     let receivedSignal: AbortSignal | undefined;
@@ -605,6 +839,116 @@ describe("skeleton/spatial_skeleton_manager", () => {
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
     expect(state.getCachedSegmentNodes(11)).toBeUndefined();
     expect(state.getCachedNode(11)).toBeUndefined();
+  });
+
+  it("retains a pending visual fetch when a command joins it", async () => {
+    const state = new SpatialSkeletonState();
+    let receivedSignal: AbortSignal | undefined;
+    let resolveFetch:
+      | ((nodes: SpatiallyIndexedSkeletonNode[]) => void)
+      | undefined;
+    const getSkeleton = vi.fn(
+      (_segmentId: number, options?: { signal?: AbortSignal }) =>
+        new Promise<SpatiallyIndexedSkeletonNode[]>((resolve, reject) => {
+          receivedSignal = options?.signal;
+          resolveFetch = resolve;
+          options?.signal?.addEventListener(
+            "abort",
+            () => reject(options.signal?.reason),
+            { once: true },
+          );
+        }),
+    );
+    const skeletonLayer = {
+      source: {
+        readonly: false,
+        listSkeletons: async () => [],
+        getSkeleton,
+        fetchNodes: async () => [],
+        getSpatialIndexMetadata: async () => null,
+      },
+    } as any;
+
+    const visualFetch = state.getFullSegmentNodes(skeletonLayer, 11);
+    const commandFetch = state.getFullSegmentNodes(skeletonLayer, 11, {
+      retainWhileInactive: true,
+    });
+
+    expect(getSkeleton).toHaveBeenCalledTimes(1);
+    expect(state.evictInactiveSegmentNodes([])).toBe(false);
+    expect(receivedSignal?.aborted).toBe(false);
+
+    const fetchedNodes: SpatiallyIndexedSkeletonNode[] = [
+      {
+        nodeId: 5,
+        segmentId: 11,
+        position: new Float32Array([1, 2, 3]),
+        isTrueEnd: false,
+      },
+    ];
+    resolveFetch?.(fetchedNodes);
+
+    await expect(visualFetch).resolves.toEqual(fetchedNodes);
+    await expect(commandFetch).resolves.toEqual(fetchedNodes);
+    expect(state.getCachedSegmentNodes(11)?.map((node) => node.nodeId)).toEqual(
+      [5],
+    );
+  });
+
+  it("aborts a pending fetch before atomically replacing its segment", async () => {
+    const state = new SpatialSkeletonState();
+    let receivedSignal: AbortSignal | undefined;
+    const getSkeleton = vi.fn(
+      (_segmentId: number, options?: { signal?: AbortSignal }) =>
+        new Promise<never>((_resolve, reject) => {
+          receivedSignal = options?.signal;
+          options?.signal?.addEventListener(
+            "abort",
+            () => reject(options.signal?.reason),
+            { once: true },
+          );
+        }),
+    );
+    const pending = state.getFullSegmentNodes(
+      {
+        source: {
+          readonly: false,
+          listSkeletons: async () => [],
+          getSkeleton,
+          fetchNodes: async () => [],
+          getSpatialIndexMetadata: async () => null,
+        },
+      } as any,
+      11,
+    );
+    let notifications = 0;
+    state.nodeDataVersion.changed.add(() => {
+      notifications += 1;
+    });
+
+    expect(receivedSignal?.aborted).toBe(false);
+    expect(
+      state.replaceCachedSegmentSnapshots([
+        [
+          11,
+          [
+            {
+              nodeId: 5,
+              segmentId: 11,
+              position: new Float32Array([1, 2, 3]),
+            },
+          ],
+        ] as const,
+      ]),
+    ).toBe(true);
+
+    expect(receivedSignal?.aborted).toBe(true);
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(state.getCachedSegmentNodes(11)?.map((node) => node.nodeId)).toEqual(
+      [5],
+    );
+    expect(state.getCachedNode(5)).toBe(state.getCachedSegmentNodes(11)?.[0]);
+    expect(notifications).toBe(1);
   });
 
   it("notifies node data listeners after caching a fetched full segment", async () => {
