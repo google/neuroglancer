@@ -1672,6 +1672,8 @@ export class SegmentationUserLayer extends Base {
                     this.spatialSkeletonState.pendingNodePositionVersion,
                   getPendingNodePosition: (nodeId) =>
                     this.spatialSkeletonState.getPendingNodePosition(nodeId),
+                  getPendingNodeIds: () =>
+                    this.spatialSkeletonState.getPendingNodeIds(),
                   getCachedNode: (nodeId) =>
                     this.spatialSkeletonState.getCachedNode(nodeId),
                   resolveGlobalPosition: (modelPosition) =>
@@ -1712,6 +1714,8 @@ export class SegmentationUserLayer extends Base {
                   this.spatialSkeletonState.pendingNodePositionVersion,
                 getPendingNodePosition: (nodeId) =>
                   this.spatialSkeletonState.getPendingNodePosition(nodeId),
+                getPendingNodeIds: () =>
+                  this.spatialSkeletonState.getPendingNodeIds(),
                 getCachedNode: (nodeId) =>
                   this.spatialSkeletonState.getCachedNode(nodeId),
                 resolveGlobalPosition: (modelPosition) =>

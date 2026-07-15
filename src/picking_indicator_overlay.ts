@@ -45,9 +45,10 @@ export class PickingIndicatorOverlay implements PanelOverlaySource {
   updatePanelOverlays(ctx: PanelOverlayContext): void {
     const { container } = ctx;
     const { mouseState } = this;
-    const pos = mouseState.active
-      ? ctx.project(mouseState.position)
-      : undefined;
+    const pos =
+      mouseState.active && !mouseState.pickingIndicatorSuppressed
+        ? ctx.project(mouseState.position)
+        : undefined;
     let element = container.firstElementChild as HTMLElement | null;
     if (pos === undefined) {
       if (element !== null) element.style.display = "none";

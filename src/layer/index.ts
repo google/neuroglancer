@@ -1156,6 +1156,10 @@ export class MouseSelectionState implements PickState {
   position: Float32Array = kEmptyFloat32Vec;
   unsnappedPosition: Float32Array = kEmptyFloat32Vec;
   active = false;
+  // When true, the global picking-indicator ring is hidden even though the mouse
+  // state is active. Set during a skeleton node move, where the on-screen node is
+  // driven by the drag preview rather than by picking.
+  pickingIndicatorSuppressed = false;
   displayDimensions: DisplayDimensions | undefined = undefined;
   pickedRenderLayer: RenderLayer | null = null;
   pickedValue = 0n;

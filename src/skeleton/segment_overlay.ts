@@ -58,6 +58,29 @@ export interface SpatiallyIndexedSkeletonOverlayGeometry {
   pickEdgeSegmentIds: Uint32Array;
   indices: Uint32Array;
   numVertices: number;
+  // Maps nodeId to its packed vertex index. Retained by the overlay chunk so a
+  // live node drag can override just the moving vertex's position via a shader
+  // uniform, rather than rebuilding or re-uploading the geometry.
+  nodeIndex: ReadonlyMap<number, number>;
+}
+
+// Writes xyz node positions (one vertex per node, in `orderedNodes` order) into
+// `positions`, applying any pending (dragged) position override so the built
+// texture is correct at build time. Live-drag position changes between builds
+// are applied at render time via a shader uniform, not here.
+function writeSpatiallyIndexedSkeletonOverlayNodePositions(
+  orderedNodes: readonly SpatiallyIndexedSkeletonOverlayNodeLike[],
+  positions: Float32Array,
+  getPendingNodePosition?: (nodeId: number) => ArrayLike<number> | undefined,
+) {
+  for (let index = 0; index < orderedNodes.length; ++index) {
+    const node = orderedNodes[index];
+    const position = getPendingNodePosition?.(node.nodeId) ?? node.position;
+    const baseOffset = index * 3;
+    positions[baseOffset] = Number(position[0] ?? 0);
+    positions[baseOffset + 1] = Number(position[1] ?? 0);
+    positions[baseOffset + 2] = Number(position[2] ?? 0);
+  }
 }
 
 export function buildSpatiallyIndexedSkeletonOverlayGeometry(
@@ -92,12 +115,12 @@ export function buildSpatiallyIndexedSkeletonOverlayGeometry(
   const scratch = ensureGpuScratch(numVertices);
   const { segmentIds, edgeIndices, edgeSegIds } = scratch;
 
+  writeSpatiallyIndexedSkeletonOverlayNodePositions(
+    orderedNodes,
+    positions,
+    getPendingNodePosition,
+  );
   orderedNodes.forEach((node, index) => {
-    const position = getPendingNodePosition?.(node.nodeId) ?? node.position;
-    const baseOffset = index * 3;
-    positions[baseOffset] = Number(position[0] ?? 0);
-    positions[baseOffset + 1] = Number(position[1] ?? 0);
-    positions[baseOffset + 2] = Number(position[2] ?? 0);
     segmentIds[index] = Math.max(0, Math.round(Number(node.segmentId)));
     pickSegmentIds[index] = segmentIds[index];
     nodeIds[index] = Math.round(Number(node.nodeId));
@@ -134,6 +157,7 @@ export function buildSpatiallyIndexedSkeletonOverlayGeometry(
     // Subarray view: consumed immediately by GLBuffer.fromData.
     indices: edgeIndices.subarray(0, edgeCount * 2),
     numVertices,
+    nodeIndex,
   };
 }
 

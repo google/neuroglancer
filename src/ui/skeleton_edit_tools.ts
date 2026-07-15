@@ -810,7 +810,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
             return;
           }
           dragStarted = true;
-          this.dragInProgress = true;
+          this.setNodeMoveActive(true);
           skeletonLayer!.markSegmentEdited(nodeInfo!.segmentId);
           panel.element.dataset.skeletonPressMode = "move";
           this.setStatus(getSpatialSkeletonMovingStatusText());
@@ -846,7 +846,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
         if (finished) return;
         finished = true;
         if (this.dragInProgress) {
-          this.dragInProgress = false;
+          this.setNodeMoveActive(false);
           delete panel.element.dataset.skeletonPressMode;
           this.clearStatus();
         }
@@ -1352,13 +1352,26 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       });
   }
 
+  // Keeps `dragInProgress` and the global picking-indicator suppression in
+  // lockstep. While a node is being moved, the on-screen node is driven by the
+  // drag preview (a shader uniform), not by picking, so the picking-indicator
+  // ring — which tracks the (now stale) pick buffer — is hidden.
+  private setNodeMoveActive(active: boolean) {
+    this.dragInProgress = active;
+    const { mouseState } = this;
+    if (mouseState.pickingIndicatorSuppressed !== active) {
+      mouseState.pickingIndicatorSuppressed = active;
+      mouseState.changed.dispatch();
+    }
+  }
+
   activate(activation: ToolActivation<this>) {
     const { layer } = this;
     const rawInputEventMapBinder = activation.inputEventMapBinder;
 
     // 1. Reset all activation-scoped state.
     this.currentMode = SkeletonEditMode.Default;
-    this.dragInProgress = false;
+    this.setNodeMoveActive(false);
     this.pending = false;
     this.createPlacedThisHold = false;
     this.mergeKeyHeld = false;
