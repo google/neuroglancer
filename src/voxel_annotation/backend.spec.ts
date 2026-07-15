@@ -620,11 +620,71 @@ describe("VoxelEditController: Downsampling Integration", () => {
 
     // The real parent is reloaded lazily; when it reaches the GPU it clears the
     // originating LOD-0 overlay (swap-on-arrival), passed as a { real -> overlay }
-    // map. The old eager preview-clear call no longer exists.
+    // map along with the origin's covered dispatch seq (0 here: no seq-tagged
+    // edit was flushed for the origin). The old eager preview-clear call no
+    // longer exists.
     expect((controller as any).callChunkReload).toHaveBeenCalledWith(
       [makeVoxChunkKey("0,0,0", 1)],
       false, // isForPreviewChunks
       { [makeVoxChunkKey("0,0,0", 1)]: makeVoxChunkKey("0,0,0", 0) },
+      { [makeVoxChunkKey("0,0,0", 1)]: 0 },
+    );
+  });
+
+  it("Coverage echo: flush and cascade reloads carry the max flushed dispatch seq", async () => {
+    setupIntegration(2);
+    const key = makeVoxChunkKey("0,0,0", 0);
+
+    // Two dispatched strokes touch the chunk before the flush runs: the write
+    // covers both, so the echoed coverage must be the max seq (7).
+    controller.commitVoxels([
+      { key, indices: [0], value: 1n, seq: 3 },
+      { key, indices: [1], value: 1n, seq: 7 },
+    ]);
+    await (controller as any).flushPending();
+
+    expect((controller as any).callChunkReload).toHaveBeenCalledWith(
+      [key],
+      false,
+      undefined,
+      { [key]: 7 },
+    );
+
+    // The cascade reload claims the origin's flushed coverage for the parent.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect((controller as any).callChunkReload).toHaveBeenCalledWith(
+      [makeVoxChunkKey("0,0,0", 1)],
+      false,
+      { [makeVoxChunkKey("0,0,0", 1)]: key },
+      { [makeVoxChunkKey("0,0,0", 1)]: 7 },
+    );
+  });
+
+  it("Coverage echo: a chain claims its start-of-chain coverage even if a flush lands mid-chain", async () => {
+    setupIntegration(3);
+    const originKey = makeVoxChunkKey("0,0,0", 0);
+
+    (controller as any).lastFlushedSeq.set(originKey, 1);
+
+    // Mid-chain (during the L0->L1 write), a newer flush of the same origin
+    // completes (seq 5). The data propagated by the running chain derives from
+    // a read made before that write, so the L1->L2 reload must keep claiming
+    // seq 1 — claiming 5 would clear the overlay over a parent lacking those
+    // edits.
+    parentSource.applyEdits.mockImplementation(async () => {
+      parentSource.serverStorage.set("0,0,0", new Uint8Array(8).fill(1).buffer);
+      (controller as any).lastFlushedSeq.set(originKey, 5);
+    });
+
+    (controller as any).enqueueDownsample(originKey);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(grandParentSource.applyEdits).toHaveBeenCalled();
+    expect((controller as any).callChunkReload).toHaveBeenCalledWith(
+      [makeVoxChunkKey("0,0,0", 2)],
+      false,
+      { [makeVoxChunkKey("0,0,0", 2)]: originKey },
+      { [makeVoxChunkKey("0,0,0", 2)]: 1 },
     );
   });
 

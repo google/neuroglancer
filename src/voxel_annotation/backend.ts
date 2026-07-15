@@ -731,10 +731,17 @@ export class VoxelEditController extends SharedObject {
   }
 
   private async processDownsampleChain(key: string): Promise<void> {
+    // Coverage is captured once for the whole chain, before the first child
+    // read: every step propagates data derived from the LOD-0 content read at
+    // chain start, so a flush completing mid-chain (higher seq) is NOT
+    // included in what the later steps write — claiming it would clear the
+    // overlay over a parent that lacks those edits. Under-claiming is safe:
+    // that flush enqueues its own chain, which re-claims with its seq.
+    const chainCoveredSeq = this.lastFlushedSeq.get(key) ?? 0;
     let currentKey: string | null = key;
 
     while (currentKey !== null) {
-      currentKey = await this.downsampleStep(currentKey, key);
+      currentKey = await this.downsampleStep(currentKey, key, chainCoveredSeq);
     }
 
     // Note: the overlay is no longer cleared eagerly here. Each parent's real
@@ -781,25 +788,13 @@ export class VoxelEditController extends SharedObject {
   private async downsampleStep(
     childKey: string,
     originKey: string,
+    originCoveredSeq: number,
   ): Promise<string | null> {
     const childInfo = parseVoxChunkKey(childKey);
     if (childInfo === null) {
       console.error(`[Downsample] Invalid child key format: ${childKey}`);
       return null;
     }
-    const childAccessor = this.getAccessor(childInfo.lodIndex);
-    const childCtx = await childAccessor.getOrLoadChunkContext(
-      childInfo.chunkKey,
-      childInfo.x,
-      childInfo.y,
-      childInfo.z,
-    );
-
-    if (!childCtx.data) {
-      return null;
-    }
-
-    const childChunkData = childCtx.data as Uint32Array | BigUint64Array;
     const childRes = this.resolutions.get(childInfo.lodIndex)!;
 
     const parentInfo = this._getParentChunkInfo(childKey, childRes);
@@ -808,24 +803,44 @@ export class VoxelEditController extends SharedObject {
     }
     const { parentKey, parentSource, parentRes } = parentInfo;
 
-    const childActualSize = [
-      childCtx.maxX - childCtx.minX,
-      childCtx.maxY - childCtx.minY,
-      childCtx.maxZ - childCtx.minZ,
-    ];
-
-    const update = this._calculateParentUpdate(
-      childChunkData,
-      childRes,
-      parentRes,
-      childInfo,
-      childActualSize,
-    );
-    if (update.indices.length === 0) {
-      return parentKey;
-    }
-
+    // The child read and the parent-update computation must run under the
+    // parent lock along with the write: with only the write serialized, two
+    // concurrent chains (e.g. successive flushes of the same origin) can
+    // compute from reads taken at different times and land in the wrong
+    // order, durably overwriting the fresher parent with a stale result.
+    // Inside the lock, the later writer computed from the later read.
     return this.withChunkLock(parentKey, async () => {
+      const childAccessor = this.getAccessor(childInfo.lodIndex);
+      const childCtx = await childAccessor.getOrLoadChunkContext(
+        childInfo.chunkKey,
+        childInfo.x,
+        childInfo.y,
+        childInfo.z,
+      );
+
+      if (!childCtx.data) {
+        return null;
+      }
+
+      const childChunkData = childCtx.data as Uint32Array | BigUint64Array;
+
+      const childActualSize = [
+        childCtx.maxX - childCtx.minX,
+        childCtx.maxY - childCtx.minY,
+        childCtx.maxZ - childCtx.minZ,
+      ];
+
+      const update = this._calculateParentUpdate(
+        childChunkData,
+        childRes,
+        parentRes,
+        childInfo,
+        childActualSize,
+      );
+      if (update.indices.length === 0) {
+        return parentKey;
+      }
+
       try {
         await parentSource.applyEdits(
           parentInfo.chunkKey,
@@ -833,8 +848,14 @@ export class VoxelEditController extends SharedObject {
           update.values,
         );
         // Reload the real parent lazily; when it reaches the GPU, clear the
-        // originating LOD-0 overlay (the visible one when zoomed out).
-        this.callChunkReload([parentKey], false, { [parentKey]: originKey });
+        // originating LOD-0 overlay (the visible one when zoomed out) — if
+        // the propagated data covers every stroke dispatched to the origin.
+        this.callChunkReload(
+          [parentKey],
+          false,
+          { [parentKey]: originKey },
+          { [parentKey]: originCoveredSeq },
+        );
         const parentAccessor = this.getAccessor(parentRes.lodIndex);
         parentAccessor.invalidate(parentInfo.chunkKey);
       } catch (e) {
