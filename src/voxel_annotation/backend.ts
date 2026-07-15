@@ -381,7 +381,14 @@ export class VoxelEditController extends SharedObject {
     value?: bigint;
     values?: ArrayLike<bigint>;
     size?: number[];
+    seq?: number;
   }[] = [];
+
+  // Per LOD-0 vox key: the highest frontend dispatch seq whose edits have been
+  // durably written to that chunk. Echoed in reload messages (including
+  // downsample cascade reloads, keyed by origin) so the frontend can tell
+  // whether the refetched data covers everything its overlay represents.
+  private lastFlushedSeq = new Map<string, number>();
   public pendingOpCount: SharedWatchableValue<number>;
 
   private updatePendingCount() {
@@ -482,12 +489,19 @@ export class VoxelEditController extends SharedObject {
     }
 
     const editsByVoxKey = new Map<string, Map<number, bigint>>();
+    const maxSeqByVoxKey = new Map<string, number>();
 
     for (const edit of edits) {
       let chunkMap = editsByVoxKey.get(edit.key);
       if (!chunkMap) {
         chunkMap = new Map<number, bigint>();
         editsByVoxKey.set(edit.key, chunkMap);
+      }
+      if (edit.seq !== undefined) {
+        maxSeqByVoxKey.set(
+          edit.key,
+          Math.max(maxSeqByVoxKey.get(edit.key) ?? 0, edit.seq),
+        );
       }
 
       const inds = edit.indices as ArrayLike<number>;
@@ -549,6 +563,14 @@ export class VoxelEditController extends SharedObject {
         const accessor = this.getAccessor(parsedKey.lodIndex);
         accessor.invalidate(parsedKey.chunkKey);
 
+        const flushedSeq = maxSeqByVoxKey.get(voxKey);
+        if (flushedSeq !== undefined) {
+          this.lastFlushedSeq.set(
+            voxKey,
+            Math.max(this.lastFlushedSeq.get(voxKey) ?? 0, flushedSeq),
+          );
+        }
+
         newAction.changes.set(voxKey, change);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -558,7 +580,12 @@ export class VoxelEditController extends SharedObject {
       }
     }
 
-    this.callChunkReload(editsByVoxKey.keys().toArray());
+    const flushedKeys = editsByVoxKey.keys().toArray();
+    const coveredSeqs: Record<string, number> = {};
+    for (const voxKey of flushedKeys) {
+      coveredSeqs[voxKey] = this.lastFlushedSeq.get(voxKey) ?? 0;
+    }
+    this.callChunkReload(flushedKeys, false, undefined, coveredSeqs);
 
     if (newAction.changes.size > 0) {
       this.undoStack.push(newAction);
@@ -611,6 +638,7 @@ export class VoxelEditController extends SharedObject {
       value?: bigint;
       values?: ArrayLike<bigint>;
       size?: number[];
+      seq?: number;
     }[],
   ) {
     for (const e of edits) {
@@ -635,16 +663,23 @@ export class VoxelEditController extends SharedObject {
   // key so the visible (forced LOD-0) overlay is cleared as soon as any covering
   // real LOD arrives. Using a keyed map (not parallel arrays) keeps real and
   // overlay keys aligned regardless of ordering or partial population.
+  // `coveredSeqs[realKey]` is the highest frontend dispatch seq whose edits
+  // are guaranteed present in the stored data this reload refetches (for
+  // downsampled parents: the origin chunk's flushed seq at the time the child
+  // was read). The frontend clears the matching overlay only if this covers
+  // the last dispatched stroke that touched it.
   callChunkReload(
     voxChunkKeys: string[],
     isForPreviewChunks = false,
     overlayKeysToClear?: Record<string, string>,
+    coveredSeqs?: Record<string, number>,
   ) {
     this.rpc?.invoke(VOX_RELOAD_CHUNKS_RPC_ID, {
       rpcId: this.rpcId,
       voxChunkKeys: voxChunkKeys,
       isForPreviewChunks,
       overlayKeysToClear,
+      coveredSeqs,
     });
   }
 
@@ -1180,7 +1215,7 @@ export class VoxelEditController extends SharedObject {
   }
 
   private async performBrush(op: BrushOperation): Promise<void> {
-    const { centers, radius, value, shape, basis, filterValue } = op;
+    const { centers, radius, value, shape, basis, filterValue, seq } = op;
     const voxelSize = 1; // Hardcoded LOD 0
     const sourceIndex = 0;
     const accessor = this.getAccessor(sourceIndex);
@@ -1284,15 +1319,22 @@ export class VoxelEditController extends SharedObject {
           result.count,
           value,
           sourceIndex,
+          seq,
         );
       } else {
-        this.processBackendEdits(voxelBuffer, voxelCount, value, sourceIndex);
+        this.processBackendEdits(
+          voxelBuffer,
+          voxelCount,
+          value,
+          sourceIndex,
+          seq,
+        );
       }
     }
   }
 
   private async performFloodFill(op: FloodFillOperation): Promise<void> {
-    const { seed, value: fillValue, maxVoxels, basis, filterValue } = op;
+    const { seed, value: fillValue, maxVoxels, basis, filterValue, seq } = op;
     const sourceIndex = 0;
     const accessor = this.getAccessor(sourceIndex);
 
@@ -1450,6 +1492,7 @@ export class VoxelEditController extends SharedObject {
       result.count,
       fillValue,
       sourceIndex,
+      seq,
     );
   }
 
@@ -1537,6 +1580,7 @@ export class VoxelEditController extends SharedObject {
     voxelCount: number,
     value: bigint,
     lodIndex: number,
+    seq?: number,
   ) {
     const source = this.sources.get(lodIndex);
     if (!source) return;
@@ -1590,7 +1634,7 @@ export class VoxelEditController extends SharedObject {
 
     const backendEdits = [];
     for (const [voxKey, indices] of indicesByVoxKey.entries()) {
-      backendEdits.push({ key: voxKey, indices, value });
+      backendEdits.push({ key: voxKey, indices, value, seq });
     }
     this.commitVoxels(backendEdits);
   }

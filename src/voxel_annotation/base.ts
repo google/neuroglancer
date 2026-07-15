@@ -39,6 +39,11 @@ export enum VoxelOperationType {
 
 export interface VoxelOperationBase {
   type: VoxelOperationType;
+  // Frontend dispatch sequence number. Echoed back per written chunk (as the
+  // max seq the write covers) in reload messages, so the frontend clears an
+  // overlay chunk only once the stored data covers every dispatched stroke
+  // that touched it.
+  seq?: number;
 }
 
 export interface BrushOperation extends VoxelOperationBase {
