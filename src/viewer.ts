@@ -886,16 +886,14 @@ export class Viewer extends RefCounted implements ViewerState {
     }
     {
       const button = makeCopyUrlButton({
-        title: "Copy view URL to clipboard",
+        title: "Copy URL to clipboard",
         onClick: () => {
           const stateString = encodeStateAsFragment(this.state.toJSON());
           const url = new URL(window.location.href);
           url.hash = "#!" + stateString;
           const result = setClipboard(url.href);
           StatusMessage.showTemporaryMessage(
-            result
-              ? "URL copied to clipboard"
-              : "Failed to copy URL"
+            result ? "URL copied to clipboard" : "Failed to copy URL",
           );
         },
       });
