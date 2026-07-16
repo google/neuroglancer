@@ -891,7 +891,12 @@ export class Viewer extends RefCounted implements ViewerState {
           const stateString = encodeStateAsFragment(this.state.toJSON());
           const url = new URL(window.location.href);
           url.hash = "#!" + stateString;
-          setClipboard(url.href);
+          const result = setClipboard(url.href);
+          StatusMessage.showTemporaryMessage(
+            result
+              ? "URL copied to clipboard"
+              : "Failed to copy URL"
+          );
         },
       });
       this.registerDisposer(
