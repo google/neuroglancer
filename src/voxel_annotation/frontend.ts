@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { ChunkState } from "#src/chunk_manager/base.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
 import type {
@@ -59,6 +60,46 @@ export class VoxelEditController extends SharedObject {
   // Monotonic counter identifying each stroke/operation dispatched to the
   // backend.
   private dispatchSeq = 0;
+
+  // Overlay swaps awaiting their refetched real chunk, keyed by real vox
+  // chunk key and resolved by observing visibleChunksChanged: the real
+  // chunk's object identity distinguishes the lazily kept stale chunk
+  // (recorded at arming) from the refetched one, since a `new` chunk update
+  // always builds a fresh Chunk object. A newer reload for the same chunk
+  // overwrites its entry, so the map never grows beyond the set of chunks
+  // awaiting a swap.
+  private pendingOverlaySwaps = new Map<
+    string,
+    {
+      source: VolumeChunkSource;
+      chunkKey: string;
+      staleChunk: unknown;
+      overlaySource: InMemoryVolumeChunkSource;
+      overlayChunkKey: string;
+      coveredSeq: number;
+    }
+  >();
+
+  private processPendingOverlaySwaps(): void {
+    if (this.pendingOverlaySwaps.size === 0) return;
+    for (const [voxKey, swap] of this.pendingOverlaySwaps) {
+      const chunk = swap.source.chunks.get(swap.chunkKey);
+      // Still the stale chunk (or gone): the refetch has not landed yet.
+      if (chunk === undefined || chunk === swap.staleChunk) continue;
+      // Refetched but not yet displayed: keep waiting.
+      if (chunk.state !== ChunkState.GPU_MEMORY) continue;
+      this.pendingOverlaySwaps.delete(voxKey);
+      // The overlay tag is read now, at swap time: a stroke that touched the
+      // chunk since arming raised it above coveredSeq, keeping the overlay on
+      // screen; the covering write's own reload re-arms the swap.
+      if (
+        swap.coveredSeq < swap.overlaySource.getOverlaySeq(swap.overlayChunkKey)
+      ) {
+        continue;
+      }
+      swap.overlaySource.invalidateChunks([swap.overlayChunkKey]);
+    }
+  }
 
   // Allocates a stroke's seq before its first preview. Previews tag the
   // overlay chunks they touch with it and the dispatch carries the same
@@ -125,6 +166,16 @@ export class VoxelEditController extends SharedObject {
       resolutions,
       pendingOpCount: this.pendingOpCount.rpcId,
     });
+
+    // Pending overlay swaps are resolved by observing chunk changes rather
+    // than by hooks inside the chunk manager: the signal fires after every
+    // applied batch of chunk updates, and the check below is a cheap scan of
+    // the (small) pending map.
+    this.registerDisposer(
+      this.host.primarySource.chunkManager.chunkQueueManager.visibleChunksChanged.add(
+        () => this.processPendingOverlaySwaps(),
+      ),
+    );
   }
 
   private async dispatchOperation(operation: VoxelOperation) {
@@ -600,13 +651,15 @@ export class VoxelEditController extends SharedObject {
       const previewSources = this.host.previewSource?.getSources(
         this.getIdentitySliceViewSourceOptions(),
       )[0];
-      // A refetch predating the write we are reloading for may still sit in
-      // the frontend's time-budgeted pending-update queue at this point; the
-      // receipt seq recorded by onNextFreshChunk at arming keeps such an
-      // update from triggering the listeners armed below (they only fire for
-      // data received after arming). Combined with the backend cancelling
-      // in-flight downloads on write, a fired listener's data is always from
-      // a refetch issued after the write it waits for.
+      // Known, accepted race: a refetch predating the write we are reloading
+      // for may still sit in the frontend's pending-update queue at arming
+      // time; its arrival is indistinguishable from the fresh one and can
+      // clear the overlay over pre-write data. The window requires the queue
+      // to lag behind RPC processing (heavy load only), and the backend's
+      // in-flight download cancellation on write guarantees a correct
+      // refetch follows within one round trip, so the effect is a rare,
+      // self-healing flicker — the trade-off for keeping the chunk manager
+      // free of voxel-specific hooks.
       for (const voxKey of voxChunkKeys) {
         const parsed = parseVoxChunkKey(voxKey);
         if (!parsed) continue;
@@ -625,22 +678,22 @@ export class VoxelEditController extends SharedObject {
               | undefined)
           : undefined;
         if (overlaySource) {
-          const overlayChunkKey = overlayParsed!.chunkKey;
           // The backend echoes, per reloaded chunk, the highest stroke seq
           // its write covers. The overlay chunk carries the seq of the last
           // stroke whose preview touched it (including a stroke still under
           // the mouse — its seq is allocated before its first preview), read
-          // at fire time. Clearing only when coverage reaches that tag
-          // guarantees the arriving data contains everything the overlay
+          // when the swap resolves. Clearing only when coverage reaches that
+          // tag guarantees the arriving data contains everything the overlay
           // shows. A skipped clear is re-armed by the covering write's own
           // reload; a stroke that never gets written is rolled back
           // explicitly (rollbackStroke) instead of waited for.
-          const coveredSeq = coveredSeqs?.[voxKey] ?? 0;
-          source.onNextFreshChunk(chunkKey, () => {
-            if (coveredSeq < overlaySource.getOverlaySeq(overlayChunkKey)) {
-              return;
-            }
-            overlaySource.invalidateChunks([overlayChunkKey]);
+          this.pendingOverlaySwaps.set(voxKey, {
+            source,
+            chunkKey,
+            staleChunk: source.chunks.get(chunkKey),
+            overlaySource,
+            overlayChunkKey: overlayParsed!.chunkKey,
+            coveredSeq: coveredSeqs?.[voxKey] ?? 0,
           });
         }
         let arr = chunksToInvalidateBySource.get(source);

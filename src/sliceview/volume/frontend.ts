@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import { ChunkState } from "#src/chunk_manager/base.js";
+import type { Chunk, ChunkManager } from "#src/chunk_manager/frontend.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import type { SliceViewChunkSpecification } from "#src/sliceview/base.js";
 import { DataType } from "#src/sliceview/base.js";
@@ -200,6 +201,18 @@ export class VolumeChunkSource
     this.tempPositionWithinChunk = new Uint32Array(rank);
   }
 
+  addChunk(key: string, chunk: Chunk) {
+    // A `new` chunk update can replace a chunk kept on display by a lazy
+    // invalidation. Free the replaced chunk's texture right before the swap:
+    // it happens in a single tick with no intermediate frame, and the plain
+    // `chunks.set` would otherwise orphan the texture.
+    const existing = this.chunks.get(key);
+    if (existing !== undefined && existing.state === ChunkState.GPU_MEMORY) {
+      existing.freeGPUMemory(this.gl);
+    }
+    super.addChunk(key, chunk);
+  }
+
   static encodeSpec(spec: SliceViewChunkSpecification) {
     const s = spec as VolumeChunkSpecification;
     return {
@@ -336,9 +349,9 @@ export class InMemoryVolumeChunkSource extends VolumeChunkSource {
     // Signature matches the base `ChunkSource.invalidateChunks`, but `lazy` does
     // not apply here: an in-memory source has no backend refetch to swap in, so
     // there is nothing to keep the stale chunk on screen for. Deletion is always
-    // immediate; the crossfade with the real data is timed by the caller (overlay
-    // dropped on real-chunk arrival via onNextFreshChunk, or as a rollback on
-    // write failure), not by a blind delay here.
+    // immediate; the crossfade with the real data is timed by the caller (the
+    // overlay is dropped when its pending swap resolves, or as a rollback on
+    // write failure or an undispatched stroke), not by a blind delay here.
     const validKeys: string[] = [];
     for (const key of keys) {
       const chunk = this.chunks.get(key);

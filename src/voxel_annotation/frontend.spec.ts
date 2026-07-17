@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { ChunkState } from "#src/chunk_manager/base.js";
+import { NullarySignal } from "#src/util/signal.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { makeVoxChunkKey } from "#src/voxel_annotation/base.js";
 import { VoxelEditController } from "#src/voxel_annotation/frontend.js";
@@ -12,25 +14,17 @@ const mockRpc = {
   delete: vi.fn(),
 } as unknown as RPC;
 
-// Real chunk source mock: captures the one-shot fresh-chunk listeners so tests
-// can simulate the refetched chunk reaching the GPU at a chosen moment.
+// Real chunk source mock: `fireFreshChunk` replaces the chunk with a new
+// object in GPU_MEMORY state, like applyChunkUpdate does for an `update.new`
+// followed by its GPU promotion.
 function createRealSourceMock() {
-  const freshChunkListeners = new Map<string, (() => void)[]>();
   return {
     rpcId: 1,
     spec: { chunkDataSize: new Uint32Array([2, 2, 2]) },
+    chunks: new Map<string, { state: ChunkState }>(),
     invalidateChunks: vi.fn(),
-    onNextFreshChunk: vi.fn((key: string, listener: () => void) => {
-      const entry = freshChunkListeners.get(key);
-      if (entry === undefined) freshChunkListeners.set(key, [listener]);
-      else entry.push(listener);
-    }),
-    // Simulates the fresh chunk arriving on the GPU: fires and drops the
-    // armed listeners, like ChunkQueueManager.applyChunkUpdate does.
-    fireFreshChunk(key: string) {
-      const listeners = freshChunkListeners.get(key) ?? [];
-      freshChunkListeners.delete(key);
-      for (const listener of listeners) listener();
+    fireFreshChunk(key: string, state = ChunkState.GPU_MEMORY) {
+      this.chunks.set(key, { state });
     },
   };
 }
@@ -51,17 +45,20 @@ function createOverlaySourceMock() {
   };
 }
 
-describe("VoxelEditController.callChunkReload: overlay clear coverage guard", () => {
+describe("VoxelEditController.callChunkReload: overlay swap observation", () => {
   let realSources: ReturnType<typeof createRealSourceMock>[];
   let overlaySources: ReturnType<typeof createOverlaySourceMock>[];
+  let visibleChunksChanged: NullarySignal;
   let controller: VoxelEditController;
 
   beforeEach(() => {
     vi.clearAllMocks();
     realSources = [createRealSourceMock(), createRealSourceMock()];
     overlaySources = [createOverlaySourceMock(), createOverlaySourceMock()];
+    visibleChunksChanged = new NullarySignal();
     const makeMultiscale = (sources: unknown[]) => ({
       rank: 3,
+      chunkManager: { chunkQueueManager: { visibleChunksChanged } },
       getSources: () => [
         sources.map((chunkSource) => ({
           chunkSource,
@@ -85,9 +82,11 @@ describe("VoxelEditController.callChunkReload: overlay clear coverage guard", ()
     expect(controller.beginStroke()).toBe(3);
   });
 
-  it("clears the overlay when the write covers the stroke that tagged it", () => {
+  it("clears the overlay once the refetched chunk replaces the stale one on the GPU", () => {
     const seq = controller.beginStroke();
     overlaySources[0].setOverlaySeq("0,0,0", seq);
+    // The stale chunk is on display when the reload arrives.
+    realSources[0].fireFreshChunk("0,0,0");
 
     const voxKey = makeVoxChunkKey("0,0,0", 0);
     controller.callChunkReload([voxKey], false, undefined, { [voxKey]: seq });
@@ -95,9 +94,32 @@ describe("VoxelEditController.callChunkReload: overlay clear coverage guard", ()
     expect(realSources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"], {
       lazy: true,
     });
+
+    // Signal fires while the stale chunk is still displayed: no clear.
+    visibleChunksChanged.dispatch();
     expect(overlaySources[0].invalidateChunks).not.toHaveBeenCalled();
 
+    // The refetched chunk (a new object) reaches the GPU.
     realSources[0].fireFreshChunk("0,0,0");
+    visibleChunksChanged.dispatch();
+    expect(overlaySources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
+  });
+
+  it("waits until the refetched chunk actually reaches the GPU", () => {
+    const seq = controller.beginStroke();
+    overlaySources[0].setOverlaySeq("0,0,0", seq);
+
+    const voxKey = makeVoxChunkKey("0,0,0", 0);
+    controller.callChunkReload([voxKey], false, undefined, { [voxKey]: seq });
+
+    // Refetched data arrived in system memory only: keep the overlay.
+    realSources[0].fireFreshChunk("0,0,0", ChunkState.SYSTEM_MEMORY);
+    visibleChunksChanged.dispatch();
+    expect(overlaySources[0].invalidateChunks).not.toHaveBeenCalled();
+
+    // Promotion to the GPU resolves the swap.
+    realSources[0].chunks.get("0,0,0")!.state = ChunkState.GPU_MEMORY;
+    visibleChunksChanged.dispatch();
     expect(overlaySources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
   });
 
@@ -110,26 +132,29 @@ describe("VoxelEditController.callChunkReload: overlay clear coverage guard", ()
     const voxKey = makeVoxChunkKey("0,0,0", 0);
     controller.callChunkReload([voxKey], false, undefined, { [voxKey]: 1 });
     realSources[0].fireFreshChunk("0,0,0");
+    visibleChunksChanged.dispatch();
     expect(overlaySources[0].invalidateChunks).not.toHaveBeenCalled();
 
     // Stroke 2's own flush covers seq 2: its reload performs the clear.
     controller.callChunkReload([voxKey], false, undefined, { [voxKey]: 2 });
     realSources[0].fireFreshChunk("0,0,0");
+    visibleChunksChanged.dispatch();
     expect(overlaySources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
   });
 
-  it("reads the tag at fire time: a stroke touching the chunk after arming blocks the clear", () => {
+  it("reads the tag at swap time: a stroke touching the chunk after arming blocks the clear", () => {
     const seq1 = controller.beginStroke();
     overlaySources[0].setOverlaySeq("0,0,0", seq1);
 
     const voxKey = makeVoxChunkKey("0,0,0", 0);
     controller.callChunkReload([voxKey], false, undefined, { [voxKey]: seq1 });
 
-    // A new stroke's preview touches the chunk between arming and arrival:
+    // A new stroke's preview touches the chunk before the refetch lands:
     // the arriving data cannot contain it.
     const seq2 = controller.beginStroke();
     overlaySources[0].setOverlaySeq("0,0,0", seq2);
     realSources[0].fireFreshChunk("0,0,0");
+    visibleChunksChanged.dispatch();
 
     expect(overlaySources[0].invalidateChunks).not.toHaveBeenCalled();
   });
@@ -141,6 +166,7 @@ describe("VoxelEditController.callChunkReload: overlay clear coverage guard", ()
 
     controller.callChunkReload([makeVoxChunkKey("0,0,0", 0)], false);
     realSources[0].fireFreshChunk("0,0,0");
+    visibleChunksChanged.dispatch();
 
     expect(overlaySources[0].invalidateChunks).not.toHaveBeenCalled();
   });
@@ -148,6 +174,7 @@ describe("VoxelEditController.callChunkReload: overlay clear coverage guard", ()
   it("clears without coverage info when no stroke ever tagged the chunk", () => {
     controller.callChunkReload([makeVoxChunkKey("0,0,0", 0)], false);
     realSources[0].fireFreshChunk("0,0,0");
+    visibleChunksChanged.dispatch();
     expect(overlaySources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
   });
 
@@ -170,6 +197,7 @@ describe("VoxelEditController.callChunkReload: overlay clear coverage guard", ()
       lazy: true,
     });
     realSources[1].fireFreshChunk("0,0,0");
+    visibleChunksChanged.dispatch();
     expect(overlaySources[0].invalidateChunks).not.toHaveBeenCalled();
 
     // Cascade re-run after stroke 2's flush covers seq 2.
@@ -180,14 +208,14 @@ describe("VoxelEditController.callChunkReload: overlay clear coverage guard", ()
       { [parentKey]: 2 },
     );
     realSources[1].fireFreshChunk("0,0,0");
+    visibleChunksChanged.dispatch();
     expect(overlaySources[0].invalidateChunks).toHaveBeenCalledWith(["1,2,3"]);
   });
 
-  it("stale listeners from an earlier flush self-neutralize on a single arrival", () => {
-    // Two reloads armed on the same key before any refetch arrives (covered 1
-    // then 2, tag at 2). Both listeners fire on the single arrival: the stale
-    // one skips, the up-to-date one clears (and drops the tag), leaving the
-    // firing order irrelevant.
+  it("a newer reload overwrites the pending swap for the same chunk", () => {
+    // Two reloads arm before any refetch arrives (covered 1 then 2, tag at
+    // 2): only the newest entry remains, so the single arrival clears once,
+    // with the newest coverage.
     controller.beginStroke();
     const seq2 = controller.beginStroke();
     overlaySources[0].setOverlaySeq("0,0,0", seq2);
@@ -197,6 +225,8 @@ describe("VoxelEditController.callChunkReload: overlay clear coverage guard", ()
     controller.callChunkReload([voxKey], false, undefined, { [voxKey]: 2 });
 
     realSources[0].fireFreshChunk("0,0,0");
+    visibleChunksChanged.dispatch();
+    visibleChunksChanged.dispatch();
     expect(overlaySources[0].invalidateChunks).toHaveBeenCalledTimes(1);
     expect(overlaySources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
   });
