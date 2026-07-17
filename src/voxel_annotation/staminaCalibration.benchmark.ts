@@ -159,7 +159,8 @@ describe("Commit", () => {
 
 describe("Downsample", () => {
   bench(`inputVoxels=${CHUNK_SIZE ** 3}`, async () => {
-    await (controller as any).downsampleStep(makeVoxChunkKey("0,0,0", 0));
+    const originKey = makeVoxChunkKey("0,0,0", 0);
+    await (controller as any).downsampleStep(originKey, originKey, 0);
   });
 });
 

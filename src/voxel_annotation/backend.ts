@@ -580,12 +580,20 @@ export class VoxelEditController extends SharedObject {
       }
     }
 
-    const flushedKeys = editsByVoxKey.keys().toArray();
+    // Failed keys are excluded: their store was not modified, so a real
+    // reload would refetch unchanged data and race with the failure
+    // rollback below.
+    const flushedKeys = editsByVoxKey
+      .keys()
+      .toArray()
+      .filter((voxKey) => !failedVoxChunkKeys.includes(voxKey));
     const coveredSeqs: Record<string, number> = {};
     for (const voxKey of flushedKeys) {
       coveredSeqs[voxKey] = this.lastFlushedSeq.get(voxKey) ?? 0;
     }
-    this.callChunkReload(flushedKeys, false, undefined, coveredSeqs);
+    if (flushedKeys.length > 0) {
+      this.callChunkReload(flushedKeys, false, undefined, coveredSeqs);
+    }
 
     if (newAction.changes.size > 0) {
       this.undoStack.push(newAction);
@@ -1328,6 +1336,8 @@ export class VoxelEditController extends SharedObject {
 
       if (voxelCount === 0) continue;
 
+      let buffer: Int32Array = voxelBuffer;
+      let count = voxelCount;
       if (basis && shape === BrushShape.DISK) {
         const result = this.fillPlaneAliasingGaps(
           voxelBuffer,
@@ -1335,22 +1345,10 @@ export class VoxelEditController extends SharedObject {
           basis,
           center,
         );
-        this.processBackendEdits(
-          result.buffer,
-          result.count,
-          value,
-          sourceIndex,
-          seq,
-        );
-      } else {
-        this.processBackendEdits(
-          voxelBuffer,
-          voxelCount,
-          value,
-          sourceIndex,
-          seq,
-        );
+        buffer = result.buffer;
+        count = result.count;
       }
+      this.processBackendEdits(buffer, count, value, sourceIndex, seq);
     }
   }
 

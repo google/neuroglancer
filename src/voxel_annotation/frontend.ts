@@ -768,18 +768,21 @@ export class VoxelEditController extends SharedObject {
   }
 }
 
+function asRecordOrUndefined<T>(x: unknown): Record<string, T> | undefined {
+  return x !== null && typeof x === "object"
+    ? (x as Record<string, T>)
+    : undefined;
+}
+
 registerRPC(VOX_RELOAD_CHUNKS_RPC_ID, function (x: any) {
   const obj = this.get(x.rpcId) as VoxelEditController;
   const keys: string[] = Array.isArray(x.voxChunkKeys) ? x.voxChunkKeys : [];
-  const overlayKeys: Record<string, string> | undefined =
-    x.overlayKeysToClear !== null && typeof x.overlayKeysToClear === "object"
-      ? x.overlayKeysToClear
-      : undefined;
-  const coveredSeqs: Record<string, number> | undefined =
-    x.coveredSeqs !== null && typeof x.coveredSeqs === "object"
-      ? x.coveredSeqs
-      : undefined;
-  obj.callChunkReload(keys, x.isForPreviewChunks, overlayKeys, coveredSeqs);
+  obj.callChunkReload(
+    keys,
+    x.isForPreviewChunks,
+    asRecordOrUndefined<string>(x.overlayKeysToClear),
+    asRecordOrUndefined<number>(x.coveredSeqs),
+  );
 });
 
 registerRPC(VOX_EDIT_FAILURE_RPC_ID, function (x: any) {
