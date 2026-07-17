@@ -144,11 +144,13 @@ import {
   makeWatchableShaderError,
   parameterizedEmitterDependentShaderGetter,
 } from "#src/webgl/dynamic_shader.js";
+import type { ShaderModule } from "#src/webgl/shader.js";
 import { ShaderControlState } from "#src/webgl/shader_ui_controls.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import { registerLayerShaderControlsTool } from "#src/widget/shader_controls.js";
 
 const MAX_LAYER_BAR_UI_INDICATOR_COLORS = 6;
+const emptySegmentColorShaderModule: ShaderModule = () => {};
 
 export class SegmentationUserLayerGroupState
   extends RefCounted
@@ -671,12 +673,12 @@ vColor = segmentColorUserShader(uint64_t(uID));
     );
   };
 
-  context = () => {}; // TEMP how to get rid of this?
-
   private tempColor = vec4.create();
 
   getShaderSegmentColor = (id: bigint) => {
-    const { shader, parameters } = this.getSegmentColorShader(this.context);
+    const { shader, parameters } = this.getSegmentColorShader(
+      emptySegmentColorShaderModule,
+    );
     if (shader === null) return;
     shader.bind();
     const { gl } = shader;
@@ -697,7 +699,6 @@ vColor = segmentColorUserShader(uint64_t(uID));
     );
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     const data = new Uint8Array(4);
-    // TODO can I read straight to float?
     gl.readPixels(
       0,
       0,
