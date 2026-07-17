@@ -600,17 +600,13 @@ export class VoxelEditController extends SharedObject {
       const previewSources = this.host.previewSource?.getSources(
         this.getIdentitySliceViewSourceOptions(),
       )[0];
-      // Worker chunk updates are queued and applied with a time budget, while
-      // this RPC runs at receipt: a refetch predating the write we are
-      // reloading for may already sit in that queue and would otherwise
-      // trigger the listeners armed below with pre-write data. Apply the
-      // queue now — stale updates can only reach previously armed listeners,
-      // each neutralized by its own coverage check. Combined with the
-      // backend cancelling in-flight downloads on write, the listeners armed
-      // below can only fire for refetches issued after the write.
-      sources
-        .find((s) => s?.chunkSource)
-        ?.chunkSource.chunkManager.chunkQueueManager.flushPendingChunkUpdates();
+      // A refetch predating the write we are reloading for may still sit in
+      // the frontend's time-budgeted pending-update queue at this point; the
+      // receipt seq recorded by onNextFreshChunk at arming keeps such an
+      // update from triggering the listeners armed below (they only fire for
+      // data received after arming). Combined with the backend cancelling
+      // in-flight downloads on write, a fired listener's data is always from
+      // a refetch issued after the write it waits for.
       for (const voxKey of voxChunkKeys) {
         const parsed = parseVoxChunkKey(voxKey);
         if (!parsed) continue;

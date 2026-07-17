@@ -12,10 +12,6 @@ const mockRpc = {
   delete: vi.fn(),
 } as unknown as RPC;
 
-const mockChunkQueueManager = {
-  flushPendingChunkUpdates: vi.fn(),
-};
-
 // Real chunk source mock: captures the one-shot fresh-chunk listeners so tests
 // can simulate the refetched chunk reaching the GPU at a chosen moment.
 function createRealSourceMock() {
@@ -23,7 +19,6 @@ function createRealSourceMock() {
   return {
     rpcId: 1,
     spec: { chunkDataSize: new Uint32Array([2, 2, 2]) },
-    chunkManager: { chunkQueueManager: mockChunkQueueManager },
     invalidateChunks: vi.fn(),
     onNextFreshChunk: vi.fn((key: string, listener: () => void) => {
       const entry = freshChunkListeners.get(key);
@@ -226,21 +221,5 @@ describe("VoxelEditController.callChunkReload: overlay clear coverage guard", ()
     const seq = controller.beginStroke();
     controller.rollbackStroke(seq);
     expect(overlaySources[0].invalidateChunks).not.toHaveBeenCalled();
-  });
-
-  it("drains the pending chunk-update queue before arming any listener", () => {
-    // A refetch predating the write may already sit in the frontend update
-    // queue when the reload RPC arrives; it must be applied before the new
-    // listener exists, so it can only reach older (coverage-guarded)
-    // listeners.
-    controller.callChunkReload([makeVoxChunkKey("0,0,0", 0)], false);
-
-    expect(mockChunkQueueManager.flushPendingChunkUpdates).toHaveBeenCalled();
-    const flushOrder =
-      mockChunkQueueManager.flushPendingChunkUpdates.mock
-        .invocationCallOrder[0];
-    const armOrder =
-      realSources[0].onNextFreshChunk.mock.invocationCallOrder[0];
-    expect(flushOrder).toBeLessThan(armOrder);
   });
 });
