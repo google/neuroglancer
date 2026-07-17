@@ -673,9 +673,8 @@ export class SkeletonLayer extends RefCounted {
     forEachVisibleSegmentToDraw(
       displayState,
       layer,
-      renderContext.emitColor,
       renderContext.emitPickID ? renderContext.pickIDs : undefined,
-      (objectId, _color, pickIndex) => {
+      (objectId, pickIndex) => {
         const key = getObjectKey(objectId);
         const skeleton = skeletons.get(key);
         if (
