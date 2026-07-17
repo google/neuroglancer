@@ -1174,31 +1174,18 @@ export class SegmentationLayerSharedObject extends Base {
 export function forEachVisibleSegmentToDraw(
   displayState: SegmentationDisplayState3D,
   renderLayer: RenderLayer,
-  emitColor: boolean,
   pickIDs: PickIDManager | undefined,
   callback: (
     objectId: bigint,
-    color: vec4 | undefined,
     pickIndex: number | undefined,
     rootObjectId: bigint,
   ) => void,
 ) {
-  emitColor;
-  // const alpha = Math.min(1, displayState.objectAlpha.value);
-  // const baseSegmentColoring = displayState.baseSegmentColoring.value;
   forEachVisibleSegment(
     displayState.segmentationGroupState.value,
     (objectId, rootObjectId) => {
       const pickIndex = pickIDs?.registerUint64(renderLayer, objectId);
-      const color = undefined;
-      // const color = emitColor
-      //   ? getObjectColor(
-      //       displayState,
-      //       baseSegmentColoring ? objectId : rootObjectId,
-      //       alpha,
-      //     )
-      //   : undefined;
-      callback(objectId, color, pickIndex, rootObjectId);
+      callback(objectId, pickIndex, rootObjectId);
     },
   );
 }
