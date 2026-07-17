@@ -558,9 +558,8 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
     forEachVisibleSegmentToDraw(
       displayState,
       this,
-      /*emitColor=*/ false,
       renderContext.emitPickID ? renderContext.pickIDs : undefined,
-      (objectId, _color, pickIndex) => {
+      (objectId, pickIndex) => {
         const key = getObjectKey(objectId);
         const manifestChunk = manifestChunks.get(key);
         ++totalChunks;
@@ -937,9 +936,8 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
     forEachVisibleSegmentToDraw(
       displayState,
       this,
-      /*emitColor=*/ false,
       renderContext.emitPickID ? renderContext.pickIDs : undefined,
-      (objectId, _color, pickIndex) => {
+      (objectId, pickIndex) => {
         const key = getObjectKey(objectId);
         const manifestChunk = chunks.get(key);
         ++totalManifestChunks;

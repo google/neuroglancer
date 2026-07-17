@@ -300,7 +300,6 @@ uint64_t getMappedObjectId(uint64_t value) {
   } else if (!has) {
     alpha = uNotSelectedAlpha;
   }
-  //alpha = 1.0;
 `;
     fragmentMain += `
   vec4 rgba = segmentColorUserShader(valueForColor, has ? 0.5 : 0.75);
