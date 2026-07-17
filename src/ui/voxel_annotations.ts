@@ -21,7 +21,10 @@ import {
   getEditingContext,
   VOXEL_LAYER_CONTROLS,
 } from "#src/layer/voxel_annotation/controls.js";
-import type { UserLayerWithVoxelEditing } from "#src/layer/voxel_annotation/index.js";
+import type {
+  UserLayerWithVoxelEditing,
+  VoxelEditingContext,
+} from "#src/layer/voxel_annotation/index.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import { StatusMessage } from "#src/status.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
@@ -332,6 +335,10 @@ export class VoxelBrushTool extends BaseVoxelTool {
         basis: { u: Float32Array; v: Float32Array };
         value: VoxelValueGetter;
         filterValue: bigint | undefined;
+        seq: number;
+        // Snapshotted so a stroke abandoned without dispatch can always be
+        // rolled back, even if the layer's editing context is gone by then.
+        context: VoxelEditingContext;
       }
     | undefined = undefined;
 
@@ -445,6 +452,10 @@ export class VoxelBrushTool extends BaseVoxelTool {
 
   private startDrawing(mouseState: MouseSelectionState) {
     if (this.isDrawing) return;
+    const editContext = getEditingContext(this.layer);
+    if (editContext === undefined) {
+      throw new Error("editContext is undefined");
+    }
     // getPoint must run before the stroke snapshot below: it also records the
     // slice normal that getBasis() reads.
     const start = this.getPoint(mouseState);
@@ -464,6 +475,8 @@ export class VoxelBrushTool extends BaseVoxelTool {
         this.layer.lockToSelectedValue.value && this.layer.shouldErase()
           ? this.layer.getVoxelPaintValue(false)(false)
           : undefined,
+      seq: editContext.beginStroke(),
+      context: editContext,
     };
 
     this.paintPoints([new Float32Array([start[0], start[1], start[2]])]);
@@ -492,13 +505,21 @@ export class VoxelBrushTool extends BaseVoxelTool {
       this.mouseDisposer = undefined;
     }
 
+    const stroke = this.activeStroke!;
     const centers = this.accumulatedCenters;
     this.accumulatedCenters = [];
-    if (centers.length === 0) return;
+    if (centers.length === 0) {
+      // Nothing to dispatch: whatever the previews tagged must be rolled
+      // back, or it would wait forever for a write that never comes.
+      stroke.context.rollbackStroke(stroke.seq);
+      return;
+    }
 
     const editContext = getEditingContext(this.layer);
-    if (editContext === undefined) return;
-    const stroke = this.activeStroke!;
+    if (editContext === undefined) {
+      stroke.context.rollbackStroke(stroke.seq);
+      return;
+    }
 
     void editContext.dispatchBrushStroke(
       centers,
@@ -506,6 +527,7 @@ export class VoxelBrushTool extends BaseVoxelTool {
       stroke.value,
       stroke.shape,
       stroke.basis,
+      stroke.seq,
       stroke.filterValue,
     );
   }
@@ -527,6 +549,7 @@ export class VoxelBrushTool extends BaseVoxelTool {
       stroke.value,
       stroke.shape,
       stroke.basis,
+      stroke.seq,
       stroke.filterValue,
     );
   }

@@ -289,6 +289,33 @@ export class VolumeChunkSource
 
 @registerSharedObjectOwner(IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID)
 export class InMemoryVolumeChunkSource extends VolumeChunkSource {
+  // Stroke seq of the last local edit that touched each chunk. A reload may
+  // clear a chunk only once its write coverage reaches this seq. Entries live
+  // and die with the chunk (purged in deleteChunk), so the map never outgrows
+  // the set of live overlay chunks.
+  private overlaySeqs = new Map<string, number>();
+
+  setOverlaySeq(key: string, seq: number): void {
+    this.overlaySeqs.set(key, seq);
+  }
+
+  getOverlaySeq(key: string): number {
+    return this.overlaySeqs.get(key) ?? 0;
+  }
+
+  keysWithOverlaySeq(seq: number): string[] {
+    const keys: string[] = [];
+    for (const [key, s] of this.overlaySeqs) {
+      if (s === seq) keys.push(key);
+    }
+    return keys;
+  }
+
+  deleteChunk(key: string) {
+    this.overlaySeqs.delete(key);
+    super.deleteChunk(key);
+  }
+
   constructor(
     chunkManager: ChunkManager,
     options: { spec: VolumeChunkSpecification },

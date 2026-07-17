@@ -154,10 +154,17 @@ test("Pipeline: Zarr V2 (UINT8) Undo/Redo with Brush", async () => {
   const { context } = await waitForEditingContext();
 
   const center = new Float32Array([16, 16, 16]);
-  await context.dispatchBrushStroke([center], 5, (_) => 100n, 0 /* DISK */, {
-    u: new Float32Array([1, 0, 0]),
-    v: new Float32Array([0, 1, 0]),
-  });
+  await context.dispatchBrushStroke(
+    [center],
+    5,
+    (_) => 100n,
+    0 /* DISK */,
+    {
+      u: new Float32Array([1, 0, 0]),
+      v: new Float32Array([0, 1, 0]),
+    },
+    context.beginStroke(),
+  );
 
   const chunkKey = `${BUCKET}/data.zarr/0.0.0`;
 
@@ -231,6 +238,7 @@ test("Pipeline: Zarr V3 (UINT64) Brush", async () => {
       u: new Float32Array([1, 0, 0]),
       v: new Float32Array([0, 1, 0]),
     },
+    context.beginStroke(),
   );
 
   const chunkKey = `${BUCKET}/data.zarr/c/0/0/0`;
@@ -297,6 +305,7 @@ test("Pipeline: Repaint over existing chunk data (Zarr V3 UINT64)", async () => 
       u: new Float32Array([1, 0, 0]),
       v: new Float32Array([0, 1, 0]),
     },
+    context.beginStroke(),
   );
 
   await poll(() => {
@@ -379,6 +388,7 @@ test("Pipeline: Repaint over existing gzip-compressed chunk (Zarr V3 UINT64)", a
       u: new Float32Array([1, 0, 0]),
       v: new Float32Array([0, 1, 0]),
     },
+    context.beginStroke(),
   );
 
   await poll(async () => {
@@ -467,6 +477,7 @@ test("Pipeline: Repaint over dense large-label segmentation data (Zarr V3 UINT64
       u: new Float32Array([1, 0, 0]),
       v: new Float32Array([0, 1, 0]),
     },
+    context.beginStroke(),
   );
 
   await poll(async () => {
@@ -594,6 +605,7 @@ test("Pipeline: Multiscale repaint with NON-EMPTY downsample parent (OME zarr3)"
       u: new Float32Array([1, 0, 0]),
       v: new Float32Array([0, 1, 0]),
     },
+    context.beginStroke(),
   );
 
   await poll(async () => {
@@ -657,6 +669,7 @@ test("Pipeline: Zarr V2 (UINT32) with Slash Separator", async () => {
       u: new Float32Array([1, 0, 0]),
       v: new Float32Array([0, 1, 0]),
     },
+    context.beginStroke(),
   );
 
   const chunkKey = `${BUCKET}/data.zarr/0/0/0`;

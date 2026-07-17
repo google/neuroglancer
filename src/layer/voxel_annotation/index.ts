@@ -221,12 +221,23 @@ export class VoxelEditingContext
     }
   }
 
+  beginStroke(): number {
+    if (!this._controller)
+      throw new Error("Cannot use beginStroke without a controller");
+    return this._controller.beginStroke();
+  }
+
+  rollbackStroke(seq: number): void {
+    this._controller?.rollbackStroke(seq);
+  }
+
   async applyBrushPreview(
     points: Float32Array[],
     radiusCanonical: number,
     value: VoxelValueGetter,
     shape: BrushShape,
     basis: { u: Float32Array; v: Float32Array },
+    seq: number,
     filterValue?: bigint,
   ) {
     if (!this._controller)
@@ -238,6 +249,7 @@ export class VoxelEditingContext
       value,
       shape,
       basis,
+      seq,
       filterValue,
     );
   }
@@ -248,6 +260,7 @@ export class VoxelEditingContext
     value: VoxelValueGetter,
     shape: BrushShape,
     basis: { u: Float32Array; v: Float32Array },
+    seq: number,
     filterValue?: bigint,
   ) {
     if (!this._controller)
@@ -258,16 +271,27 @@ export class VoxelEditingContext
         radiusCanonical,
         filterValue !== undefined,
       ) * centers.length;
-    await this.withCost(cost, () =>
-      this._controller!.dispatchBrushStroke(
-        centers,
-        radiusCanonical,
-        value,
-        shape,
-        basis,
-        filterValue,
-      ),
-    );
+    // The stroke's previews already tagged overlay chunks with `seq`. If the
+    // dispatch does not reach the backend — stamina or permission refusal in
+    // withCost, or an RPC failure — those edits will never be written and no
+    // reload would ever clear them: roll the stroke's overlay chunks back.
+    let dispatched = false;
+    try {
+      await this.withCost(cost, async () => {
+        await this._controller!.dispatchBrushStroke(
+          centers,
+          radiusCanonical,
+          value,
+          shape,
+          basis,
+          seq,
+          filterValue,
+        );
+        dispatched = true;
+      });
+    } finally {
+      if (!dispatched) this._controller.rollbackStroke(seq);
+    }
   }
 
   async floodFillPlane2D(

@@ -40,9 +40,19 @@ function createRealSourceMock() {
   };
 }
 
+// Overlay source mock mirroring InMemoryVolumeChunkSource's stroke-seq tags:
+// invalidateChunks purges the tag, like the real deleteChunk does.
 function createOverlaySourceMock() {
+  const overlaySeqs = new Map<string, number>();
   return {
-    invalidateChunks: vi.fn(),
+    overlaySeqs,
+    setOverlaySeq: (key: string, seq: number) => overlaySeqs.set(key, seq),
+    getOverlaySeq: (key: string) => overlaySeqs.get(key) ?? 0,
+    keysWithOverlaySeq: (seq: number) =>
+      [...overlaySeqs.entries()].filter(([, s]) => s === seq).map(([k]) => k),
+    invalidateChunks: vi.fn((keys: string[]) => {
+      for (const key of keys) overlaySeqs.delete(key);
+    }),
   };
 }
 
@@ -74,14 +84,18 @@ describe("VoxelEditController.callChunkReload: overlay clear coverage guard", ()
     controller = new VoxelEditController(host as any);
   });
 
-  it("clears the overlay when the write covers the last dispatched stroke", () => {
-    // Stroke previewed on "0,0,0" then dispatched as seq 1.
-    controller.notePreviewTouched(["0,0,0"]);
-    expect(controller.takeDispatchSeq()).toBe(1);
+  it("allocates monotonically increasing stroke seqs", () => {
+    expect(controller.beginStroke()).toBe(1);
+    expect(controller.beginStroke()).toBe(2);
+    expect(controller.beginStroke()).toBe(3);
+  });
 
-    // Backend flushes seq 1 and reloads with coveredSeqs = 1.
+  it("clears the overlay when the write covers the stroke that tagged it", () => {
+    const seq = controller.beginStroke();
+    overlaySources[0].setOverlaySeq("0,0,0", seq);
+
     const voxKey = makeVoxChunkKey("0,0,0", 0);
-    controller.callChunkReload([voxKey], false, undefined, { [voxKey]: 1 });
+    controller.callChunkReload([voxKey], false, undefined, { [voxKey]: seq });
 
     expect(realSources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"], {
       lazy: true,
@@ -92,28 +106,10 @@ describe("VoxelEditController.callChunkReload: overlay clear coverage guard", ()
     expect(overlaySources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
   });
 
-  it("skips the clear while a stroke is in progress on the chunk", () => {
-    controller.notePreviewTouched(["0,0,0"]);
-    controller.takeDispatchSeq(); // seq 1 dispatched
-
-    const voxKey = makeVoxChunkKey("0,0,0", 0);
-    controller.callChunkReload([voxKey], false, undefined, { [voxKey]: 1 });
-
-    // A second stroke is being painted over the same chunk (previewed, not
-    // yet dispatched) when the refetch arrives.
-    controller.notePreviewTouched(["0,0,0"]);
-    realSources[0].fireFreshChunk("0,0,0");
-
-    expect(overlaySources[0].invalidateChunks).not.toHaveBeenCalled();
-  });
-
-  it("skips the clear when the write does not cover the last dispatched stroke", () => {
-    // Stroke 1 previewed and dispatched (seq 1); stroke 2 touches the same
-    // chunk and is dispatched (seq 2) before stroke 1's write lands.
-    controller.notePreviewTouched(["0,0,0"]);
-    controller.takeDispatchSeq();
-    controller.notePreviewTouched(["0,0,0"]);
-    controller.takeDispatchSeq();
+  it("skips the clear when the write does not cover the last stroke", () => {
+    controller.beginStroke(); // seq 1, written
+    const seq2 = controller.beginStroke(); // seq 2, dispatched but unwritten
+    overlaySources[0].setOverlaySeq("0,0,0", seq2);
 
     // The reload for stroke 1's flush only covers seq 1 < 2.
     const voxKey = makeVoxChunkKey("0,0,0", 0);
@@ -127,11 +123,26 @@ describe("VoxelEditController.callChunkReload: overlay clear coverage guard", ()
     expect(overlaySources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
   });
 
-  it("skips the clear when a reload carries no coverage but a dispatch touched the chunk", () => {
+  it("reads the tag at fire time: a stroke touching the chunk after arming blocks the clear", () => {
+    const seq1 = controller.beginStroke();
+    overlaySources[0].setOverlaySeq("0,0,0", seq1);
+
+    const voxKey = makeVoxChunkKey("0,0,0", 0);
+    controller.callChunkReload([voxKey], false, undefined, { [voxKey]: seq1 });
+
+    // A new stroke's preview touches the chunk between arming and arrival:
+    // the arriving data cannot contain it.
+    const seq2 = controller.beginStroke();
+    overlaySources[0].setOverlaySeq("0,0,0", seq2);
+    realSources[0].fireFreshChunk("0,0,0");
+
+    expect(overlaySources[0].invalidateChunks).not.toHaveBeenCalled();
+  });
+
+  it("skips the clear when a reload carries no coverage but a stroke tagged the chunk", () => {
     // e.g. an undo/redo reload: without echoed coverage it must not clear an
     // overlay that a dispatched-but-unwritten stroke still owns.
-    controller.notePreviewTouched(["0,0,0"]);
-    controller.takeDispatchSeq();
+    overlaySources[0].setOverlaySeq("0,0,0", controller.beginStroke());
 
     controller.callChunkReload([makeVoxChunkKey("0,0,0", 0)], false);
     realSources[0].fireFreshChunk("0,0,0");
@@ -139,17 +150,16 @@ describe("VoxelEditController.callChunkReload: overlay clear coverage guard", ()
     expect(overlaySources[0].invalidateChunks).not.toHaveBeenCalled();
   });
 
-  it("clears without coverage info when no dispatch ever touched the chunk", () => {
+  it("clears without coverage info when no stroke ever tagged the chunk", () => {
     controller.callChunkReload([makeVoxChunkKey("0,0,0", 0)], false);
     realSources[0].fireFreshChunk("0,0,0");
     expect(overlaySources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
   });
 
   it("guards downsampled-parent reloads with the origin chunk's coverage", () => {
-    controller.notePreviewTouched(["1,2,3"]);
-    controller.takeDispatchSeq(); // seq 1
-    controller.notePreviewTouched(["1,2,3"]);
-    controller.takeDispatchSeq(); // seq 2, not yet written
+    controller.beginStroke(); // seq 1, written
+    const seq2 = controller.beginStroke(); // seq 2, unwritten
+    overlaySources[0].setOverlaySeq("1,2,3", seq2);
 
     const parentKey = makeVoxChunkKey("0,0,0", 1);
     const originKey = makeVoxChunkKey("1,2,3", 0);
@@ -180,20 +190,42 @@ describe("VoxelEditController.callChunkReload: overlay clear coverage guard", ()
 
   it("stale listeners from an earlier flush self-neutralize on a single arrival", () => {
     // Two reloads armed on the same key before any refetch arrives (covered 1
-    // then 2). Both listeners fire on the single arrival: the stale one skips
-    // (covered 1 < required 2), the up-to-date one clears.
-    controller.notePreviewTouched(["0,0,0"]);
-    controller.takeDispatchSeq();
+    // then 2, tag at 2). Both listeners fire on the single arrival: the stale
+    // one skips, the up-to-date one clears (and drops the tag), leaving the
+    // firing order irrelevant.
+    controller.beginStroke();
+    const seq2 = controller.beginStroke();
+    overlaySources[0].setOverlaySeq("0,0,0", seq2);
+
     const voxKey = makeVoxChunkKey("0,0,0", 0);
     controller.callChunkReload([voxKey], false, undefined, { [voxKey]: 1 });
-
-    controller.notePreviewTouched(["0,0,0"]);
-    controller.takeDispatchSeq();
     controller.callChunkReload([voxKey], false, undefined, { [voxKey]: 2 });
 
     realSources[0].fireFreshChunk("0,0,0");
     expect(overlaySources[0].invalidateChunks).toHaveBeenCalledTimes(1);
     expect(overlaySources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
+  });
+
+  it("rollbackStroke drops exactly the overlay chunks tagged by that stroke", () => {
+    const seq1 = controller.beginStroke();
+    overlaySources[0].setOverlaySeq("0,0,0", seq1);
+    const seq2 = controller.beginStroke();
+    overlaySources[0].setOverlaySeq("1,0,0", seq2);
+    overlaySources[0].setOverlaySeq("2,0,0", seq2);
+
+    controller.rollbackStroke(seq2);
+
+    expect(overlaySources[0].invalidateChunks).toHaveBeenCalledTimes(1);
+    const [rolledBack] = overlaySources[0].invalidateChunks.mock.calls[0];
+    expect([...rolledBack].sort()).toEqual(["1,0,0", "2,0,0"]);
+    // The other stroke's chunk is untouched and still tagged.
+    expect(overlaySources[0].getOverlaySeq("0,0,0")).toBe(seq1);
+  });
+
+  it("rollbackStroke with no tagged chunks is a no-op", () => {
+    const seq = controller.beginStroke();
+    controller.rollbackStroke(seq);
+    expect(overlaySources[0].invalidateChunks).not.toHaveBeenCalled();
   });
 
   it("drains the pending chunk-update queue before arming any listener", () => {

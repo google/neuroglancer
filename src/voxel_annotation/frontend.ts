@@ -31,7 +31,6 @@ import type {
   VoxelValueGetter,
 } from "#src/voxel_annotation/base.js";
 import {
-  makeVoxChunkKey,
   BrushShape,
   getDiskStencilKernel,
   getSphereRowRangesKernel,
@@ -57,31 +56,28 @@ export class VoxelEditController extends SharedObject {
   public redoCount = new WatchableValue<number>(0);
   public pendingOpCount: SharedWatchableValue<number>;
 
-  // Monotonic counter identifying each operation dispatched to the backend.
+  // Monotonic counter identifying each stroke/operation dispatched to the
+  // backend.
   private dispatchSeq = 0;
-  // Overlay chunk keys ("x,y,z", LOD 0) touched by previews since the last
-  // dispatch: an in-progress stroke. No overlay clear may run on these — the
-  // corresponding edits are not even dispatched yet.
-  private undispatchedPreviewKeys = new Set<string>();
-  // Per overlay chunk key: seq of the last dispatched operation whose preview
-  // touched it. An overlay chunk may only be cleared by a reload whose write
-  // covers this seq (coveredSeqs echoed by the backend).
-  private lastDispatchedSeq = new Map<string, number>();
 
-  // Called by preview paths for every overlay chunk key they touch.
-  notePreviewTouched(keys: Iterable<string>): void {
-    for (const key of keys) this.undispatchedPreviewKeys.add(key);
+  // Allocates a stroke's seq before its first preview. Previews tag the
+  // overlay chunks they touch with it and the dispatch carries the same
+  // value, so what the overlay shows and what the write covers cannot
+  // diverge.
+  beginStroke(): number {
+    return ++this.dispatchSeq;
   }
 
-  // Called when dispatching an operation: the accumulated previewed keys are
-  // attributed to this new seq and no longer count as in-progress.
-  takeDispatchSeq(): number {
-    const seq = ++this.dispatchSeq;
-    for (const key of this.undispatchedPreviewKeys) {
-      this.lastDispatchedSeq.set(key, seq);
-    }
-    this.undispatchedPreviewKeys.clear();
-    return seq;
+  // Drops the overlay chunks tagged by a stroke whose edits will never be
+  // written (stamina/permission refusal, empty stroke, dispatch failure):
+  // no reload would ever clear them.
+  rollbackStroke(seq: number): void {
+    const overlaySource = this.host.previewSource?.getSources(
+      this.getIdentitySliceViewSourceOptions(),
+    )[0]?.[0]?.chunkSource as InMemoryVolumeChunkSource | undefined;
+    if (overlaySource === undefined) return;
+    const keys = overlaySource.keysWithOverlaySeq(seq);
+    if (keys.length > 0) overlaySource.invalidateChunks(keys);
   }
 
   constructor(private host: VoxelEditControllerHost) {
@@ -173,6 +169,7 @@ export class VoxelEditController extends SharedObject {
     valueGetter: VoxelValueGetter,
     shape: BrushShape,
     basis: { u: Float32Array; v: Float32Array },
+    seq: number,
     filterValue?: bigint,
   ) {
     if (!this.host.previewSource) return;
@@ -369,7 +366,7 @@ export class VoxelEditController extends SharedObject {
 
     if (edits.size > 0) {
       previewSource.applyLocalEdits(edits);
-      this.notePreviewTouched(edits.keys());
+      for (const key of edits.keys()) previewSource.setOverlaySeq(key, seq);
     }
   }
 
@@ -379,13 +376,19 @@ export class VoxelEditController extends SharedObject {
     valueGetter: VoxelValueGetter,
     shape: BrushShape,
     basis: { u: Float32Array; v: Float32Array },
+    seq: number,
     filterValue?: bigint,
   ) {
-    if (centers.length === 0) return;
+    if (centers.length === 0) {
+      // Nothing will be written for this stroke; drop whatever its previews
+      // tagged so the overlay does not wait for a write that never comes.
+      this.rollbackStroke(seq);
+      return;
+    }
     const storageValue = valueGetter(false);
     await this.dispatchOperation({
       type: VoxelOperationType.BRUSH,
-      seq: this.takeDispatchSeq(),
+      seq,
       centers,
       radius: radiusCanonical,
       value: storageValue,
@@ -402,6 +405,7 @@ export class VoxelEditController extends SharedObject {
     basis: { u: Float32Array; v: Float32Array },
     filterValue?: bigint,
   ) {
+    const seq = this.beginStroke();
     const previewValue = fillValueGetter(true);
     const sourcesByScale = this.host.primarySource.getSources(
       this.getIdentitySliceViewSourceOptions(),
@@ -450,6 +454,7 @@ export class VoxelEditController extends SharedObject {
       // to the backend, which will load the chunk itself.
       await this.dispatchOperation({
         type: VoxelOperationType.FLOOD_FILL,
+        seq,
         seed: startPositionCanonical,
         value: fillValueGetter(false),
         maxVoxels,
@@ -483,8 +488,6 @@ export class VoxelEditController extends SharedObject {
       vy = basis.v[1],
       vz = basis.v[2];
 
-    const affectedKeys: string[] = [];
-
     while (queue.length > 0 && filledCount < maxVoxels) {
       if ((filledCount & 63) === 0 && Date.now() - start > MAX_TIME_MS) break;
 
@@ -505,7 +508,6 @@ export class VoxelEditController extends SharedObject {
       if (!entry) {
         entry = { indices: [], value: previewValue };
         edits.set(key, entry);
-        affectedKeys.push(makeVoxChunkKey(key, 0));
       }
       const index = lz * strideZ + ly * strideY + lx;
       entry.indices.push(index);
@@ -536,14 +538,16 @@ export class VoxelEditController extends SharedObject {
 
     if (filledCount > 0) {
       previewChunkSource.applyLocalEdits(edits);
-      this.notePreviewTouched(edits.keys());
+      for (const key of edits.keys()) {
+        previewChunkSource.setOverlaySeq(key, seq);
+      }
     }
 
     const storageValue = fillValueGetter(false);
     try {
       await this.dispatchOperation({
         type: VoxelOperationType.FLOOD_FILL,
-        seq: this.takeDispatchSeq(),
+        seq,
         seed: startPositionCanonical,
         value: storageValue,
         maxVoxels,
@@ -551,9 +555,7 @@ export class VoxelEditController extends SharedObject {
         filterValue,
       });
     } catch (e) {
-      if (affectedKeys.length > 0) {
-        this.callChunkReload(affectedKeys, true);
-      }
+      this.rollbackStroke(seq);
       throw e;
     }
   }
@@ -603,7 +605,7 @@ export class VoxelEditController extends SharedObject {
       // reloading for may already sit in that queue and would otherwise
       // trigger the listeners armed below with pre-write data. Apply the
       // queue now — stale updates can only reach previously armed listeners,
-      // each neutralized by its own generation guard. Combined with the
+      // each neutralized by its own coverage check. Combined with the
       // backend cancelling in-flight downloads on write, the listeners armed
       // below can only fire for refetches issued after the write.
       sources
@@ -628,18 +630,20 @@ export class VoxelEditController extends SharedObject {
           : undefined;
         if (overlaySource) {
           const overlayChunkKey = overlayParsed!.chunkKey;
-          // The backend echoes, per reloaded chunk, the highest dispatch seq
-          // its write covers. Clear the overlay only if the arriving data
-          // covers the last dispatched stroke that touched it AND no stroke
-          // is in progress on it. A skipped clear is always re-armed later:
-          // whatever caused the skip ends up written, and that write's own
-          // reload carries a sufficient coveredSeq. Skipping is always safe:
-          // the overlay on screen is never older than the real chunk below.
+          // The backend echoes, per reloaded chunk, the highest stroke seq
+          // its write covers. The overlay chunk carries the seq of the last
+          // stroke whose preview touched it (including a stroke still under
+          // the mouse — its seq is allocated before its first preview), read
+          // at fire time. Clearing only when coverage reaches that tag
+          // guarantees the arriving data contains everything the overlay
+          // shows. A skipped clear is re-armed by the covering write's own
+          // reload; a stroke that never gets written is rolled back
+          // explicitly (rollbackStroke) instead of waited for.
           const coveredSeq = coveredSeqs?.[voxKey] ?? 0;
           source.onNextFreshChunk(chunkKey, () => {
-            if (this.undispatchedPreviewKeys.has(overlayChunkKey)) return;
-            const requiredSeq = this.lastDispatchedSeq.get(overlayChunkKey);
-            if (requiredSeq !== undefined && coveredSeq < requiredSeq) return;
+            if (coveredSeq < overlaySource.getOverlaySeq(overlayChunkKey)) {
+              return;
+            }
             overlaySource.invalidateChunks([overlayChunkKey]);
           });
         }

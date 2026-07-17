@@ -35,6 +35,7 @@ class MockChunk {
   dispose() {}
 
   updateFromCpuData = vi.fn();
+  freeGPUMemory = vi.fn();
 }
 
 vi.mock("#src/sliceview/volume/registry.js", () => ({
@@ -189,6 +190,31 @@ describe("InMemoryVolumeChunkSource", () => {
     const chunk = source.chunks.get("4,5,6") as unknown as MockChunk;
     expect(chunk.chunkGridPosition).toBe(chunkGridPosition);
     expect(chunk.data[0]).toBe(123n);
+  });
+
+  it("Overlay seqs: default to 0, are set per key and filtered by seq", () => {
+    const source = createSource(DataType.UINT64);
+    expect(source.getOverlaySeq("0,0,0")).toBe(0);
+
+    source.setOverlaySeq("0,0,0", 3);
+    source.setOverlaySeq("1,0,0", 3);
+    source.setOverlaySeq("2,0,0", 4);
+
+    expect(source.getOverlaySeq("0,0,0")).toBe(3);
+    expect(source.keysWithOverlaySeq(3).sort()).toEqual(["0,0,0", "1,0,0"]);
+    expect(source.keysWithOverlaySeq(4)).toEqual(["2,0,0"]);
+    expect(source.keysWithOverlaySeq(5)).toEqual([]);
+  });
+
+  it("Overlay seqs: purged when the chunk is deleted", () => {
+    const source = createSource(DataType.UINT64);
+    source.applyLocalEdits(new Map([["0,0,0", { indices: [0], value: 1n }]]));
+    source.setOverlaySeq("0,0,0", 7);
+
+    source.invalidateChunks(["0,0,0"]);
+
+    expect(source.getOverlaySeq("0,0,0")).toBe(0);
+    expect(source.keysWithOverlaySeq(7)).toEqual([]);
   });
 
   it("Applies contiguous index ranges with typed-array fills", () => {
