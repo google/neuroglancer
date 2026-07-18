@@ -25,5 +25,27 @@
     "bytesPerSample": 4,
     "kind": "f32",
     "value": 0.25
+  },
+  {
+    "file": "gray_u8_4x4.jxl",
+    "width": 4,
+    "height": 4,
+    "channels": 1,
+    "bytesPerSample": 1,
+    "kind": "u8",
+    "lossless": true,
+    "values": [
+      0, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240
+    ]
+  },
+  {
+    "file": "rgb_u8_2x2.jxl",
+    "width": 2,
+    "height": 2,
+    "channels": 3,
+    "bytesPerSample": 1,
+    "kind": "u8",
+    "lossless": true,
+    "values": [255, 0, 0, 0, 255, 0, 0, 0, 255, 10, 20, 30]
   }
 ]

@@ -26,6 +26,7 @@ import {
   decodeArray,
 } from "#src/datasource/zarr/codec/decode.js";
 import "#src/datasource/zarr/codec/gzip/decode.js";
+import "#src/datasource/zarr/codec/reshape/decode.js";
 import "#src/datasource/zarr/codec/sharding_indexed/decode.js";
 import "#src/datasource/zarr/codec/transpose/decode.js";
 import { ChunkKeyEncoding } from "#src/datasource/zarr/metadata/index.js";

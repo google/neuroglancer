@@ -13,11 +13,16 @@ Then run:
 
   npx ts-node build_tools/generate_jxl_fixtures.ts
 
-This creates (by default):
-  sample_gray_128.jxl (1x1 grayscale pixel value 128)
-  sample_gray_200.jxl (1x1 grayscale pixel value 200)
+This creates:
+  gray_u8_128.jxl / gray_u16_40000.jxl / gray_f32_0_25.jxl
+    1x1 single-pixel samples for the uint8/uint16/float32 decode paths.
+  gray_u8_4x4.jxl
+    4x4 grayscale gradient, encoded losslessly (cjxl -d 0). Exercises the
+    reshape -> jpegxl codec chain over real spatial data.
+  rgb_u8_2x2.jxl
+    2x2 three-channel image, encoded losslessly. Exercises channel derivation
+    ([h,w,c]) and exact-value color fidelity (no color-space conversion).
 
-The tests will decode both at 8-bit and 16-bit depths and verify integrity
-and scaling (16-bit value ≈ 8bit * 257).
-
-If fixtures are missing, the related test will skip gracefully.
+The metadata in fixtures.json records the expected decoded values (`values`
+for the lossless multi-sample fixtures). If fixtures are missing, the related
+test skips gracefully.

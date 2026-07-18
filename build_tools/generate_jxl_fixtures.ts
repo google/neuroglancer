@@ -151,6 +151,61 @@ function generate() {
       });
     }
   }
+
+  // Multi-pixel and multi-channel lossless fixtures.  These exercise the
+  // reshape -> jpegxl codec chain over real spatial/channel data and verify
+  // exact-value (color) fidelity.  Encoded with `-d 0` (mathematically
+  // lossless) so the decoded samples equal the source bytes.
+  {
+    const values = [
+      0, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240,
+    ];
+    const src = join(OUT_DIR, "gray_u8_4x4.pgm");
+    writeRawPortableGraymap(src, 4, 4, new Uint8Array(values));
+    const res = spawnSync(
+      "cjxl",
+      [src, join(OUT_DIR, "gray_u8_4x4.jxl"), "-d", "0", "--quiet"],
+      { stdio: "inherit" },
+    );
+    if (res.status !== 0) console.error(`Failed encode ${src}`);
+    metadata.push({
+      file: "gray_u8_4x4.jxl",
+      width: 4,
+      height: 4,
+      channels: 1,
+      bytesPerSample: 1,
+      kind: "u8",
+      lossless: true,
+      values,
+    });
+  }
+  {
+    const values = [255, 0, 0, 0, 255, 0, 0, 0, 255, 10, 20, 30];
+    const header = new TextEncoder().encode(`P6\n2 2\n255\n`);
+    const body = new Uint8Array(values);
+    const out = new Uint8Array(header.length + body.length);
+    out.set(header, 0);
+    out.set(body, header.length);
+    const src = join(OUT_DIR, "rgb_u8_2x2.ppm");
+    writeFileSync(src, out);
+    const res = spawnSync(
+      "cjxl",
+      [src, join(OUT_DIR, "rgb_u8_2x2.jxl"), "-d", "0", "--quiet"],
+      { stdio: "inherit" },
+    );
+    if (res.status !== 0) console.error(`Failed encode ${src}`);
+    metadata.push({
+      file: "rgb_u8_2x2.jxl",
+      width: 2,
+      height: 2,
+      channels: 3,
+      bytesPerSample: 1,
+      kind: "u8",
+      lossless: true,
+      values,
+    });
+  }
+
   writeFileSync(
     join(OUT_DIR, "fixtures.json"),
     JSON.stringify(metadata, null, 2),

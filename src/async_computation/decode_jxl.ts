@@ -20,18 +20,8 @@ import { decompressJxl } from "#src/sliceview/jxl/index.js";
 
 registerAsyncComputation(
   decodeJxl,
-  async (
-    data: Uint8Array,
-    area: number,
-    numComponents: number,
-    bytesPerPixel: number,
-  ) => {
-    const result = await decompressJxl(
-      data,
-      area,
-      numComponents,
-      bytesPerPixel,
-    );
+  async (data: Uint8Array, expectedElements: number, bytesPerPixel: number) => {
+    const result = await decompressJxl(data, expectedElements, bytesPerPixel);
     return { value: result, transfer: [result.uint8Array.buffer] };
   },
 );

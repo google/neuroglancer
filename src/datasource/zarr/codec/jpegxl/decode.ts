@@ -1,93 +1,60 @@
 /**
  * @license
- * Copyright 2025.
+ * Copyright 2025 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 import { decodeJxl } from "#src/async_computation/decode_jxl_request.js";
 import { requestAsyncComputation } from "#src/async_computation/request.js";
 import { registerCodec } from "#src/datasource/zarr/codec/decode.js";
+import type { CodecArrayInfo } from "#src/datasource/zarr/codec/index.js";
 import { CodecKind } from "#src/datasource/zarr/codec/index.js";
 import type { Configuration } from "#src/datasource/zarr/codec/jpegxl/resolve.js";
+import { DATA_TYPE_BYTES } from "#src/util/data_type.js";
 
 registerCodec({
   name: "jpegxl",
-  kind: CodecKind.bytesToBytes,
+  kind: CodecKind.arrayToBytes,
   async decode(
     configuration: Configuration,
-    encoded: Uint8Array,
+    decodedArrayInfo: CodecArrayInfo,
+    encoded: Uint8Array<ArrayBuffer>,
     signal: AbortSignal,
   ) {
-    signal;
-    // Determine bytesPerPixel from bitspersample.
-    let bytesPerPixel: 1 | 2 | 4;
-    switch (configuration.bitspersample) {
-      case 16:
-        bytesPerPixel = 2;
-        break;
-      case 32:
-        bytesPerPixel = 4;
-        break;
-      default:
-        bytesPerPixel = 1;
-        break; // 8-bit or unknown -> assume 1
-    }
-
-    // Infer spatial area (x*y) and numComponents (channels) from chunkShape.
-    if (!configuration.chunkShape || configuration.chunkShape.length < 2) {
-      throw new Error(
-        "jpegxl: missing or invalid chunkShape for area inference",
-      );
-    }
-    const shape = configuration.chunkShape;
-    // Identify trailing non-singleton dims for spatial (x,y[,z]). Take last two as x,y.
-    let x = 1,
-      y = 1,
-      z = 1; // width, height, depth
-    for (let i = shape.length - 1; i >= 0; --i) {
-      if (x === 1) {
-        x = shape[i];
-        continue;
-      }
-      if (z === 1) {
-        z = shape[i];
-        continue;
-      }
-      if (y === 1) {
-        y = shape[i];
-        break;
-      }
-    }
-    const area = x * y * z;
-
-    // Channel inference: first dimension with value 3 or 4 outside of the trailing two spatial dims.
-    let numComponents = 1;
-    for (let i = 0; i < shape.length - 2; ++i) {
-      const v = shape[i];
-      if (v === 3 || v === 4) {
-        numComponents = v;
-        break;
-      }
-    }
-
+    configuration;
+    const { dataType, chunkShape } = decodedArrayInfo;
+    const bytesPerPixel = DATA_TYPE_BYTES[dataType];
+    // The chunk handed to this codec is the native JXL image shape
+    // `[frames, height, width, samples]` (with unit frames/samples axes
+    // dropped).  The decoder derives the spatial/frame/sample split from the
+    // codestream itself, so here we only need the total element count.
+    const expectedElements = chunkShape.reduce((a, b) => a * b, 1);
     const decoded = await requestAsyncComputation(
       decodeJxl,
       signal,
       [encoded.buffer],
       encoded,
-      area,
-      numComponents,
+      expectedElements,
       bytesPerPixel,
     );
-
-    // Validate total bytes against chunkElements if provided.
-    if (configuration.chunkElements && decoded.uint8Array) {
-      const bytesPerVoxel = bytesPerPixel * numComponents;
-      const expectedBytes = configuration.chunkElements * bytesPerVoxel;
-      if (decoded.uint8Array.byteLength !== expectedBytes) {
-        console.warn(
-          `jpegxl: decoded bytes ${decoded.uint8Array.byteLength} != expected ${expectedBytes} (chunkElements=${configuration.chunkElements}, bytesPerVoxel=${bytesPerVoxel}).`,
-        );
-      }
+    const expectedBytes = expectedElements * bytesPerPixel;
+    if (decoded.uint8Array.byteLength !== expectedBytes) {
+      throw new Error(
+        `jpegxl: decoded chunk is ${decoded.uint8Array.byteLength} bytes, but ` +
+          `${expectedElements} elements * ${bytesPerPixel} bytes = ` +
+          `${expectedBytes} bytes are expected for chunk shape ` +
+          `${JSON.stringify(chunkShape)}`,
+      );
     }
     return decoded.uint8Array;
   },

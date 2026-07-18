@@ -91,14 +91,11 @@ function checkHeader(buffer: Uint8Array) {
 
 export async function decompressJxl(
   buffer: Uint8Array,
-  area: number,
-  numComponents: number,
+  expectedElements: number,
   bytesPerPixel: number,
 ): Promise<DecodedImage> {
   const m = await getJxlModulePromise();
   checkHeader(buffer);
-  area ||= 0;
-  numComponents ||= 1;
 
   const jxlImagePtr = (m.exports.malloc as Function)(buffer.byteLength);
   const heap = new Uint8Array((m.exports.memory as WebAssembly.Memory).buffer);
@@ -107,6 +104,7 @@ export async function decompressJxl(
   let imagePtr: number = 0;
   // Will be set after we probe metadata (single probe call now).
   let frameCount = 1;
+  let numComponents = 1;
   let nbytes = 0;
 
   try {
@@ -135,17 +133,25 @@ export async function decompressJxl(
           `jxl: Decoding failed. Width (${width}) and/or height (${height}) invalid.`,
         );
       }
+      // Derive the number of components (channels) from the codestream's
+      // spatial/frame extent.  This resolves the `[f,h,w]` vs `[h,w,c]`
+      // ambiguity without any array-side heuristic: the caller supplies the
+      // total element count and the codestream supplies width*height*frames.
+      const spatialElements = width * height * frameCount;
       if (
-        area !== undefined &&
-        area !== 0 &&
-        width * height * frameCount !== area
+        expectedElements <= 0 ||
+        spatialElements <= 0 ||
+        expectedElements % spatialElements !== 0
       ) {
         throw new Error(
-          `jxl: Expected volume area ${width}x${height}x${frameCount}=${width * height * frameCount} to match area: ${area}.`,
+          `jxl: expected element count ${expectedElements} is not a multiple ` +
+            `of width*height*frames = ${width}*${height}*${frameCount} = ` +
+            `${spatialElements}.`,
         );
       }
+      numComponents = expectedElements / spatialElements;
       // Compute bytes required using probed metadata.
-      nbytes = width * height * frameCount * numComponents * bytesPerPixel;
+      nbytes = expectedElements * bytesPerPixel;
 
       if (bytesPerPixel === 1) {
         imagePtr = (m.exports.decode as Function)(
