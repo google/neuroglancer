@@ -46,6 +46,9 @@ registerCodec({
       encoded,
       expectedElements,
       bytesPerPixel,
+      // The zarr `jpegxl` codec must return samples as stored, including a real
+      // alpha channel for RGBA (S=4) chunks.
+      /*preserveAlpha=*/ true,
     );
     const expectedBytes = expectedElements * bytesPerPixel;
     if (decoded.uint8Array.byteLength !== expectedBytes) {

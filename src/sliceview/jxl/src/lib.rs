@@ -93,8 +93,12 @@ pub fn frames(ptr: *mut u8, input_size: usize, _output_size: usize) -> i32 {
 }
 
 
+/// Decode to uint8 output. `preserve_alpha` controls the RGBA alpha channel:
+/// when nonzero the true alpha from the codestream is returned; when zero (the
+/// default for callers that pass no value) alpha is forced opaque, preserving
+/// the legacy precomputed behavior.
 #[no_mangle]
-pub fn decode(ptr: *mut u8, input_size: usize, output_size: usize) -> *const u8 {
+pub fn decode(ptr: *mut u8, input_size: usize, output_size: usize, preserve_alpha: i32) -> *const u8 {
     if ptr.is_null() || input_size == 0 || output_size == 0 {
         return ptr::null();
     }
@@ -144,7 +148,12 @@ pub fn decode(ptr: *mut u8, input_size: usize, output_size: usize) -> *const u8 
                         let v = (px[c] * 255.0).clamp(0.0, 255.0) as u8;
                         output_buffer.push(v);
                     }
-                    output_buffer.push(255); // opaque alpha
+                    let alpha = if preserve_alpha != 0 {
+                        (px[3] * 255.0).clamp(0.0, 255.0).round() as u8
+                    } else {
+                        255 // opaque alpha (legacy precomputed behavior)
+                    };
+                    output_buffer.push(alpha);
                 }
             }
             _ => return std::ptr::null_mut(),
@@ -162,9 +171,12 @@ pub fn decode(ptr: *mut u8, input_size: usize, output_size: usize) -> *const u8 
 
 /// Extended decode that supports 1-, 2-, or 4-byte per sample output.
 /// 1 => uint8, 2 => uint16 little-endian, 4 => float32 little-endian (linear 0..1).
+/// `preserve_alpha` controls the RGBA alpha channel: nonzero returns the true
+/// alpha from the codestream; zero forces opaque alpha (legacy precomputed
+/// behavior).
 /// Returns a pointer to a heap-allocated buffer of length exactly `output_size` on success or null on failure.
 #[no_mangle]
-pub fn decode_with_bpp(ptr: *mut u8, input_size: usize, output_size: usize, bytes_per_sample: usize) -> *const u8 {
+pub fn decode_with_bpp(ptr: *mut u8, input_size: usize, output_size: usize, bytes_per_sample: usize, preserve_alpha: i32) -> *const u8 {
     if ptr.is_null() || input_size == 0 || output_size == 0 {
         return ptr::null();
     }
@@ -243,20 +255,31 @@ pub fn decode_with_bpp(ptr: *mut u8, input_size: usize, output_size: usize, byte
                             for c in 0..3 { // RGB
                                 let v = (px[c] * 255.0).clamp(0.0, 255.0) as u8; output_buffer.push(v);
                             }
-                            output_buffer.push(255); // alpha
+                            let a = if preserve_alpha != 0 {
+                                (px[3] * 255.0).clamp(0.0, 255.0).round() as u8
+                            } else {
+                                255
+                            };
+                            output_buffer.push(a);
                         }
                         2 => {
                             for c in 0..3 {
                                 let v = (px[c] * 65535.0).clamp(0.0, 65535.0).round() as u16;
                                 output_buffer.extend_from_slice(&v.to_le_bytes());
                             }
-                            output_buffer.extend_from_slice(&0xFFFFu16.to_le_bytes());
+                            let a = if preserve_alpha != 0 {
+                                (px[3] * 65535.0).clamp(0.0, 65535.0).round() as u16
+                            } else {
+                                0xFFFFu16
+                            };
+                            output_buffer.extend_from_slice(&a.to_le_bytes());
                         }
                         4 => {
                             for c in 0..3 {
                                 let f = px[c] as f32; output_buffer.extend_from_slice(&f.to_le_bytes());
                             }
-                            let alpha: f32 = 1.0; output_buffer.extend_from_slice(&alpha.to_le_bytes());
+                            let a: f32 = if preserve_alpha != 0 { px[3] as f32 } else { 1.0 };
+                            output_buffer.extend_from_slice(&a.to_le_bytes());
                         }
                         _ => return ptr::null_mut(),
                     }

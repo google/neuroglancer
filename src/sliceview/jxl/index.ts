@@ -93,6 +93,7 @@ export async function decompressJxl(
   buffer: Uint8Array,
   expectedElements: number,
   bytesPerPixel: number,
+  preserveAlpha: boolean = false,
 ): Promise<DecodedImage> {
   const m = await getJxlModulePromise();
   checkHeader(buffer);
@@ -153,11 +154,13 @@ export async function decompressJxl(
       // Compute bytes required using probed metadata.
       nbytes = expectedElements * bytesPerPixel;
 
+      const preserveAlphaFlag = preserveAlpha ? 1 : 0;
       if (bytesPerPixel === 1) {
         imagePtr = (m.exports.decode as Function)(
           jxlImagePtr,
           buffer.byteLength,
           nbytes,
+          preserveAlphaFlag,
         );
       } else {
         imagePtr = (m.exports.decode_with_bpp as Function)(
@@ -165,6 +168,7 @@ export async function decompressJxl(
           buffer.byteLength,
           nbytes,
           bytesPerPixel,
+          preserveAlphaFlag,
         );
       }
 

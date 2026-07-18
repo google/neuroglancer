@@ -37,6 +37,8 @@ export async function decodeJxlChunk(
     new Uint8Array(response),
     expectedElements,
     1, // bytesPerPixel
+    // Precomputed keeps the legacy behavior of forcing opaque alpha for RGBA.
+    /*preserveAlpha=*/ false,
   );
   await postProcessRawData(chunk, signal, decoded);
 }
