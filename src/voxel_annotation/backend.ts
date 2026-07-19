@@ -731,11 +731,14 @@ export class VoxelEditController extends SharedObject {
   // downsampled parents: the origin chunk's flushed seq at the time the child
   // was read). The frontend clears the matching overlay only if this covers
   // the last dispatched stroke that touched it.
+  // `isRollback` marks a state rollback (undo/redo): the frontend purges the
+  // overlay tags so the swap clears on the first arrival, whatever it covers.
   callChunkReload(
     voxChunkKeys: string[],
     isForPreviewChunks = false,
     overlayKeysToClear?: Record<string, string>,
     coveredSeqs?: Record<string, number>,
+    isRollback = false,
   ) {
     this.rpc?.invoke(VOX_RELOAD_CHUNKS_RPC_ID, {
       rpcId: this.rpcId,
@@ -743,6 +746,7 @@ export class VoxelEditController extends SharedObject {
       isForPreviewChunks,
       overlayKeysToClear,
       coveredSeqs,
+      isRollback,
     });
   }
 
@@ -1294,17 +1298,16 @@ export class VoxelEditController extends SharedObject {
 
     if (chunksToReload.size > 0 && success) {
       const keys = Array.from(chunksToReload);
-      // Coverage can never clear these overlays (undo removes their strokes
-      // from the store): clear explicitly, like the write-failure rollback.
-      // Purging their tags also neutralizes the cascade reloads below.
-      this.callChunkReload(keys, true);
       const hasDownsampling = this.resolutions.size > 1;
       if (hasDownsampling) {
         for (const key of chunksToReload) {
           this.enqueueDownsample(key);
         }
       }
-      this.callChunkReload(keys);
+      // Rollback reload: the overlay keeps showing the undone strokes until
+      // real data arrives. Clearing immediately would reveal older data and
+      // make the stroke blink back when a pre-undo refetch lands.
+      this.callChunkReload(keys, false, undefined, undefined, true);
     }
 
     this.notifyHistoryChanged();

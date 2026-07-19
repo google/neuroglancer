@@ -616,6 +616,7 @@ export class VoxelEditController extends SharedObject {
     isForPreviewChunks: boolean,
     overlayKeysToClear?: Record<string, string>,
     coveredSeqs?: Record<string, number>,
+    isRollback = false,
   ) {
     if (!Array.isArray(voxChunkKeys) || voxChunkKeys.length === 0) return;
     const multiscaleSource = isForPreviewChunks
@@ -687,6 +688,13 @@ export class VoxelEditController extends SharedObject {
           // shows. A skipped clear is re-armed by the covering write's own
           // reload; a stroke that never gets written is rolled back
           // explicitly (rollbackStroke) instead of waited for.
+          if (isRollback) {
+            // Undo/redo: whatever arrives next is the truth — purge the tag
+            // so the swap clears on first arrival. An in-progress stroke's
+            // chunk would lose its preview until its dispatch rewrites it
+            // (Ctrl+Z mid-drag, accepted).
+            overlaySource.clearOverlaySeq(overlayParsed!.chunkKey);
+          }
           this.pendingOverlaySwaps.set(voxKey, {
             source,
             chunkKey,
@@ -782,6 +790,7 @@ registerRPC(VOX_RELOAD_CHUNKS_RPC_ID, function (x: any) {
     x.isForPreviewChunks,
     asRecordOrUndefined<string>(x.overlayKeysToClear),
     asRecordOrUndefined<number>(x.coveredSeqs),
+    x.isRollback === true,
   );
 });
 

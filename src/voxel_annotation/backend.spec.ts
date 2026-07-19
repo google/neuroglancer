@@ -1192,13 +1192,15 @@ describe("VoxelEditController: Undo/Redo", () => {
     const undoCallArgs = mockSource0.applyEdits.mock.calls[0];
     expect(undoCallArgs[2][0]).toBe(10n);
 
-    // Overlays are cleared explicitly (coverage cannot reason about undo),
-    // then the real chunks are reloaded.
+    // A single rollback reload: the frontend purges the overlay tags and the
+    // swap clears on first arrival.
     expect((controller as any).callChunkReload).toHaveBeenCalledWith(
       [key],
+      false,
+      undefined,
+      undefined,
       true,
     );
-    expect((controller as any).callChunkReload).toHaveBeenCalledWith([key]);
     expect(mockRpc.invoke).toHaveBeenCalledWith(
       VOX_EDIT_HISTORY_UPDATE_RPC_ID,
       expect.objectContaining({ undoCount: 0, redoCount: 1 }),
@@ -1220,7 +1222,13 @@ describe("VoxelEditController: Undo/Redo", () => {
     const redoCallArgs = mockSource0.applyEdits.mock.calls[0];
     expect(redoCallArgs[2][0]).toBe(20n);
 
-    expect((controller as any).callChunkReload).toHaveBeenCalledWith([key]);
+    expect((controller as any).callChunkReload).toHaveBeenCalledWith(
+      [key],
+      false,
+      undefined,
+      undefined,
+      true,
+    );
     expect(mockRpc.invoke).toHaveBeenCalledWith(
       VOX_EDIT_HISTORY_UPDATE_RPC_ID,
       expect.objectContaining({ undoCount: 1, redoCount: 0 }),
@@ -1356,6 +1364,10 @@ describe("VoxelEditController: Undo/Redo", () => {
 
     expect((controller as any).callChunkReload).toHaveBeenCalledWith(
       expect.arrayContaining([key1, key2]),
+      false,
+      undefined,
+      undefined,
+      true,
     );
 
     expect((controller as any).undoStack.length).toBe(0);

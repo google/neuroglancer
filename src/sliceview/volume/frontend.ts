@@ -316,6 +316,10 @@ export class InMemoryVolumeChunkSource extends VolumeChunkSource {
     return this.overlaySeqs.get(key) ?? 0;
   }
 
+  clearOverlaySeq(key: string): void {
+    this.overlaySeqs.delete(key);
+  }
+
   keysWithOverlaySeq(seq: number): string[] {
     const keys: string[] = [];
     for (const [key, s] of this.overlaySeqs) {

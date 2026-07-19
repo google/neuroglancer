@@ -39,6 +39,7 @@ function createOverlaySourceMock() {
     getOverlaySeq: (key: string) => overlaySeqs.get(key) ?? 0,
     keysWithOverlaySeq: (seq: number) =>
       [...overlaySeqs.entries()].filter(([, s]) => s === seq).map(([k]) => k),
+    clearOverlaySeq: (key: string) => overlaySeqs.delete(key),
     invalidateChunks: vi.fn((keys: string[]) => {
       for (const key of keys) overlaySeqs.delete(key);
     }),
@@ -210,6 +211,23 @@ describe("VoxelEditController.callChunkReload: overlay swap observation", () => 
     realSources[1].fireFreshChunk("0,0,0");
     visibleChunksChanged.dispatch();
     expect(overlaySources[0].invalidateChunks).toHaveBeenCalledWith(["1,2,3"]);
+  });
+
+  it("a rollback reload clears the overlay on first arrival regardless of tags", () => {
+    // An undone stroke's tag can never be covered by a future write; the
+    // rollback purges it so the swap resolves unconditionally.
+    overlaySources[0].setOverlaySeq("0,0,0", controller.beginStroke());
+
+    const voxKey = makeVoxChunkKey("0,0,0", 0);
+    controller.callChunkReload([voxKey], false, undefined, undefined, true);
+
+    // Not cleared before data arrives: the overlay keeps showing the stroke.
+    visibleChunksChanged.dispatch();
+    expect(overlaySources[0].invalidateChunks).not.toHaveBeenCalled();
+
+    realSources[0].fireFreshChunk("0,0,0");
+    visibleChunksChanged.dispatch();
+    expect(overlaySources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
   });
 
   it("a newer reload overwrites the pending swap for the same chunk", () => {
