@@ -660,6 +660,39 @@ describe("VoxelEditController: Downsampling Integration", () => {
     );
   });
 
+  it("Coverage pruning: lastFlushedSeq entry dropped once the cascade completes", async () => {
+    setupIntegration(2);
+    const key = makeVoxChunkKey("0,0,0", 0);
+
+    controller.commitVoxels([{ key, indices: [0], value: 1n, seq: 3 }]);
+    await (controller as any).flushPending();
+    // Queued for cascade: still readable for the chain-start capture.
+    expect((controller as any).lastFlushedSeq.has(key)).toBe(true);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect((controller as any).lastFlushedSeq.has(key)).toBe(false);
+  });
+
+  it("Coverage pruning: a later flush still covers older overlay tags", async () => {
+    setupIntegration(2);
+    const key = makeVoxChunkKey("0,0,0", 0);
+
+    controller.commitVoxels([{ key, indices: [0], value: 1n, seq: 3 }]);
+    await (controller as any).flushPending();
+    await new Promise((resolve) => setTimeout(resolve, 0)); // cascade done, pruned
+
+    // Dispatch seqs are globally monotonic: the recomputed coverage (7)
+    // exceeds anything an old tag could require.
+    controller.commitVoxels([{ key, indices: [1], value: 1n, seq: 7 }]);
+    await (controller as any).flushPending();
+    expect((controller as any).callChunkReload).toHaveBeenCalledWith(
+      [key],
+      false,
+      undefined,
+      { [key]: 7 },
+    );
+  });
+
   it("Coverage echo: a chain claims its start-of-chain coverage even if a flush lands mid-chain", async () => {
     setupIntegration(3);
     const originKey = makeVoxChunkKey("0,0,0", 0);
@@ -1036,6 +1069,12 @@ describe("VoxelEditController: Undo/Redo", () => {
     const undoCallArgs = mockSource0.applyEdits.mock.calls[0];
     expect(undoCallArgs[2][0]).toBe(10n);
 
+    // Overlays are cleared explicitly (coverage cannot reason about undo),
+    // then the real chunks are reloaded.
+    expect((controller as any).callChunkReload).toHaveBeenCalledWith(
+      [key],
+      true,
+    );
     expect((controller as any).callChunkReload).toHaveBeenCalledWith([key]);
     expect(mockRpc.invoke).toHaveBeenCalledWith(
       VOX_EDIT_HISTORY_UPDATE_RPC_ID,

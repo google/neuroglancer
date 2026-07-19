@@ -388,7 +388,21 @@ export class VoxelEditController extends SharedObject {
   // durably written to that chunk. Echoed in reload messages (including
   // downsample cascade reloads, keyed by origin) so the frontend can tell
   // whether the refetched data covers everything its overlay represents.
+  // Pruned via maybePruneFlushedSeq: bounded by the cascades in flight.
   private lastFlushedSeq = new Map<string, number>();
+
+  // Running cascade chains per origin (a counter: re-enqueueing can put two
+  // chains in flight).
+  private activeChainCounts = new Map<string, number>();
+
+  // A future flush recomputes a higher max (dispatch seqs are globally
+  // monotonic); the only reader early pruning breaks is a cascade capturing
+  // at chain start — hence the two guards.
+  private maybePruneFlushedSeq(key: string): void {
+    if (this.activeChainCounts.has(key)) return;
+    if (this.downsampleQueueSet.has(key)) return;
+    this.lastFlushedSeq.delete(key);
+  }
   public pendingOpCount: SharedWatchableValue<number>;
 
   private updatePendingCount() {
@@ -625,6 +639,11 @@ export class VoxelEditController extends SharedObject {
     // callChunkReload above (not here): on the no-downsampling path the max-res
     // overlay is dropped when the refetched real chunk arrives.
 
+    // With downsampling, the queue guard defers pruning to the chain-end hook.
+    for (const voxKey of editsByVoxKey.keys()) {
+      this.maybePruneFlushedSeq(voxKey);
+    }
+
     this.updatePendingCount();
   }
 
@@ -723,9 +742,17 @@ export class VoxelEditController extends SharedObject {
         const key = this.downsampleQueue.shift() as string;
         this.downsampleQueueSet.delete(key);
         this.activeDownsamples++;
+        this.activeChainCounts.set(
+          key,
+          (this.activeChainCounts.get(key) ?? 0) + 1,
+        );
 
         this.processDownsampleChain(key).finally(() => {
           this.activeDownsamples--;
+          const remaining = (this.activeChainCounts.get(key) ?? 1) - 1;
+          if (remaining <= 0) this.activeChainCounts.delete(key);
+          else this.activeChainCounts.set(key, remaining);
+          this.maybePruneFlushedSeq(key);
           scheduleNext();
         });
       }
@@ -813,10 +840,11 @@ export class VoxelEditController extends SharedObject {
 
     // The child read and the parent-update computation must run under the
     // parent lock along with the write: with only the write serialized, two
-    // concurrent chains (e.g. successive flushes of the same origin) can
-    // compute from reads taken at different times and land in the wrong
-    // order, durably overwriting the fresher parent with a stale result.
-    // Inside the lock, the later writer computed from the later read.
+    // concurrent chains can compute from reads taken at different times and
+    // land in the wrong order, durably overwriting the fresher parent with a
+    // stale result. Serializing the compute alongside is accepted:
+    // applyEdits' network I/O dominates this lock anyway, and parallelism
+    // across distinct parents is unaffected.
     return this.withChunkLock(parentKey, async () => {
       const childAccessor = this.getAccessor(childInfo.lodIndex);
       const childCtx = await childAccessor.getOrLoadChunkContext(
@@ -1210,13 +1238,18 @@ export class VoxelEditController extends SharedObject {
     }
 
     if (chunksToReload.size > 0 && success) {
+      const keys = Array.from(chunksToReload);
+      // Coverage can never clear these overlays (undo removes their strokes
+      // from the store): clear explicitly, like the write-failure rollback.
+      // Purging their tags also neutralizes the cascade reloads below.
+      this.callChunkReload(keys, true);
       const hasDownsampling = this.resolutions.size > 1;
       if (hasDownsampling) {
         for (const key of chunksToReload) {
           this.enqueueDownsample(key);
         }
       }
-      this.callChunkReload(Array.from(chunksToReload));
+      this.callChunkReload(keys);
     }
 
     this.notifyHistoryChanged();
