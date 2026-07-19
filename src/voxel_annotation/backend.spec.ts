@@ -1040,6 +1040,34 @@ describe("VoxelEditController: Undo/Redo", () => {
     (mockRpc.invoke as any).mockClear();
   });
 
+  it("Undo flushes pending edits first, so it targets the latest stroke", async () => {
+    const key = makeVoxChunkKey("0,0,0", 0);
+    const action1 = {
+      changes: new Map([
+        [
+          key,
+          {
+            indices: new Uint32Array([0]),
+            oldValues: new BigUint64Array([0n]),
+            newValues: new BigUint64Array([10n]),
+          },
+        ],
+      ]),
+      timestamp: Date.now(),
+      description: "stroke 1",
+    };
+    (controller as any).undoStack.push(action1);
+
+    // A second stroke is still pending (debounce not fired) when undo runs:
+    // it must be flushed and become the undo target, not stroke 1.
+    controller.commitVoxels([{ key, indices: [1], value: 42n, seq: 2 }]);
+    await controller.undo();
+
+    expect((controller as any).undoStack).toEqual([action1]);
+    expect((controller as any).redoStack.length).toBe(1);
+    expect((controller as any).redoStack[0]).not.toBe(action1);
+  });
+
   it("Successful Undo and Redo Lifecycle", async () => {
     const key = makeVoxChunkKey("0,0,0", 0);
     const editAction = {
@@ -1564,6 +1592,81 @@ describe("VolumeChunkSource.applyEdits: unreadable stored chunk", () => {
     expect(mockQueueManager.invalidateCachedChunks).toHaveBeenCalledWith(
       source,
       ["0,0,0"],
+    );
+  });
+});
+
+describe("BackendVoxelAccessor: mid-flight invalidation", () => {
+  let controller: VoxelEditController;
+  let source: any;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    source = createMockSource();
+    (mockRpc.get as any).mockImplementation((id: number) => {
+      if (id === 0) return mockChunkManager;
+      if (id === 100) return source;
+      if (id === 999) return { value: 0 };
+      return null;
+    });
+    controller = new VoxelEditController(mockRpc, {
+      resolutions: [resConfig(0, [1, 1, 1], [2, 2, 2])],
+      pendingOpCount: 999,
+    });
+  });
+
+  it("a load in flight across a write does not re-cache pre-write data", async () => {
+    source.serverStorage.set("0,0,0", new Uint8Array(8).fill(1).buffer);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    source.download.mockImplementation(async (chunk: any) => {
+      // Snapshot at request time, deliver after the gate: simulates a read
+      // whose response predates a write that lands while it is in flight.
+      const buffer = source.serverStorage.get("0,0,0")!.slice(0);
+      await gate;
+      chunk.data = new Uint8Array(buffer);
+    });
+
+    const accessor = (controller as any).getAccessor(0);
+    const read = accessor.getValue(0, 0, 0);
+
+    source.serverStorage.set("0,0,0", new Uint8Array(8).fill(9).buffer);
+    accessor.invalidate("0,0,0");
+    release();
+
+    expect(await read).toBe(9n);
+    expect(await accessor.getValue(0, 0, 0)).toBe(9n);
+  });
+
+  it("callers keep sharing the in-flight load across an invalidation", async () => {
+    source.serverStorage.set("0,0,0", new Uint8Array(8).fill(1).buffer);
+    const accessor = (controller as any).getAccessor(0);
+    const p1 = accessor.getOrLoadChunkContext("0,0,0", 0, 0, 0);
+    accessor.invalidate("0,0,0");
+    const p2 = accessor.getOrLoadChunkContext("0,0,0", 0, 0, 0);
+    expect(p2).toBe(p1);
+    await p1;
+  });
+
+  it("flood fill flushes pending edits before reading", async () => {
+    const key = makeVoxChunkKey("0,0,0", 0);
+    controller.commitVoxels([{ key, indices: [0], value: 5n, seq: 1 }]);
+
+    // Fill value equals the seed's current value: early return right after
+    // the flush, keeping the test cheap.
+    await (controller as any).performOperation({
+      type: VoxelOperationType.FLOOD_FILL,
+      seq: 2,
+      seed: new Float32Array([0, 0, 0]),
+      value: 5n,
+      maxVoxels: 8,
+      basis: { u: new Float32Array([1, 0, 0]), v: new Float32Array([0, 1, 0]) },
+    });
+
+    expect(source.applyEdits).toHaveBeenCalledWith(
+      "0,0,0",
+      [0],
+      expect.arrayContaining([5n]),
     );
   });
 });

@@ -135,9 +135,15 @@ class BackendVoxelAccessor {
     this.fillValue = typeof fv === "bigint" ? fv : BigInt(fv);
   }
 
+  // Bumped when a key is invalidated while its load is in flight, so the
+  // load reloads instead of re-caching pre-write data. Pruned on settle.
+  private loadGenerations = new Map<string, number>();
+
   public invalidate(key: string) {
+    if (this.pendingLoads.has(key)) {
+      this.loadGenerations.set(key, (this.loadGenerations.get(key) ?? 0) + 1);
+    }
     this.chunkContexts.delete(key);
-    this.pendingLoads.delete(key);
   }
 
   async getValue(x: number, y: number, z: number): Promise<bigint | null> {
@@ -177,18 +183,27 @@ class BackendVoxelAccessor {
     let promise = this.pendingLoads.get(key);
     if (promise) return promise;
 
-    promise = this.loadChunkContext(key, cx, cy, cz).then((ctx) => {
-      if (this.chunkContexts.size >= this.MAX_CACHE_SIZE) {
-        const oldestKey = this.chunkContexts.keys().next().value;
-        if (oldestKey) {
-          this.chunkContexts.delete(oldestKey);
+    promise = (async () => {
+      try {
+        while (true) {
+          const generation = this.loadGenerations.get(key);
+          const ctx = await this.loadChunkContext(key, cx, cy, cz);
+          // Invalidated mid-load: the data may predate the write — reload.
+          if (this.loadGenerations.get(key) !== generation) continue;
+          if (this.chunkContexts.size >= this.MAX_CACHE_SIZE) {
+            const oldestKey = this.chunkContexts.keys().next().value;
+            if (oldestKey) {
+              this.chunkContexts.delete(oldestKey);
+            }
+          }
+          this.chunkContexts.set(key, ctx);
+          return ctx;
         }
+      } finally {
+        this.pendingLoads.delete(key);
+        this.loadGenerations.delete(key);
       }
-
-      this.chunkContexts.set(key, ctx);
-      this.pendingLoads.delete(key);
-      return ctx;
-    });
+    })();
     this.pendingLoads.set(key, promise);
     return promise;
   }
@@ -420,6 +435,23 @@ export class VoxelEditController extends SharedObject {
 
   private commitDebounceTimer: number | undefined;
   private readonly commitDebounceDelayMs: number = 300;
+  private currentFlush: Promise<void> = Promise.resolve();
+
+  // Orders a discrete operation (undo/redo, flood fill) after every edit
+  // committed before it: waits out an in-flight flush, then flushes what is
+  // still pending. The brush path stays free-running (ordered by seq
+  // coverage).
+  private async flushBefore(): Promise<void> {
+    await this.currentFlush;
+    if (this.commitDebounceTimer !== undefined) {
+      clearTimeout(this.commitDebounceTimer);
+      this.commitDebounceTimer = undefined;
+    }
+    if (this.pendingEdits.length > 0) {
+      this.currentFlush = this.flushPending();
+      await this.currentFlush;
+    }
+  }
 
   // Undo/redo history
   private undoStack: EditAction[] = [];
@@ -680,7 +712,7 @@ export class VoxelEditController extends SharedObject {
     if (this.commitDebounceTimer !== undefined)
       clearTimeout(this.commitDebounceTimer);
     this.commitDebounceTimer = setTimeout(() => {
-      void this.flushPending();
+      this.currentFlush = this.flushPending();
     }, this.commitDebounceDelayMs) as unknown as number;
   }
 
@@ -1191,7 +1223,7 @@ export class VoxelEditController extends SharedObject {
     useOldValues: boolean,
     actionDescription: "undo" | "redo",
   ): Promise<void> {
-    await this.flushPending();
+    await this.flushBefore();
 
     if (sourceStack.length === 0) {
       throw new Error(`Nothing to ${actionDescription}.`);
@@ -1386,6 +1418,9 @@ export class VoxelEditController extends SharedObject {
   }
 
   private async performFloodFill(op: FloodFillOperation): Promise<void> {
+    // The fill walk reads the store, which does not see pending edits: flush
+    // them first so a fill right after a stroke sees that stroke.
+    await this.flushBefore();
     const { seed, value: fillValue, maxVoxels, basis, filterValue, seq } = op;
     const sourceIndex = 0;
     const accessor = this.getAccessor(sourceIndex);
