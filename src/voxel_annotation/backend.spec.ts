@@ -1040,6 +1040,101 @@ describe("VoxelEditController: Undo/Redo", () => {
     (mockRpc.invoke as any).mockClear();
   });
 
+  it("A flush triggered during an undo waits for the undo to finish", async () => {
+    const key = makeVoxChunkKey("0,0,0", 0);
+    const order: string[] = [];
+    let releaseUndo!: () => void;
+    const undoGate = new Promise<void>((resolve) => (releaseUndo = resolve));
+    mockSource0.applyEdits.mockImplementation(async () => {
+      if (order.length === 0) {
+        order.push("undo-start");
+        await undoGate;
+        order.push("undo-end");
+      } else {
+        order.push("flush");
+      }
+      return {
+        indices: new Uint32Array([]),
+        oldValues: new BigUint64Array([]),
+        newValues: new BigUint64Array([]),
+      };
+    });
+    (controller as any).undoStack.push({
+      changes: new Map([
+        [
+          key,
+          {
+            indices: new Uint32Array([0]),
+            oldValues: new BigUint64Array([0n]),
+            newValues: new BigUint64Array([10n]),
+          },
+        ],
+      ]),
+      timestamp: Date.now(),
+      description: "stroke",
+    });
+
+    const undoDone = controller.undo();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // A stroke committed mid-undo: its flush must queue behind the undo.
+    controller.commitVoxels([{ key, indices: [1], value: 42n, seq: 2 }]);
+    const flushDone = (controller as any).runExclusive(() =>
+      (controller as any).flushPendingLocked(),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(order).toEqual(["undo-start"]);
+
+    releaseUndo();
+    await undoDone;
+    await flushDone;
+    expect(order).toEqual(["undo-start", "undo-end", "flush"]);
+  });
+
+  it("Concurrent undos are serialized and pop in order", async () => {
+    const key = makeVoxChunkKey("0,0,0", 0);
+    const makeAction = (label: string) => ({
+      changes: new Map([
+        [
+          key,
+          {
+            indices: new Uint32Array([0]),
+            oldValues: new BigUint64Array([0n]),
+            newValues: new BigUint64Array([10n]),
+          },
+        ],
+      ]),
+      timestamp: Date.now(),
+      description: label,
+    });
+    const action1 = makeAction("stroke 1");
+    const action2 = makeAction("stroke 2");
+    (controller as any).undoStack.push(action1, action2);
+
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => (releaseFirst = resolve));
+    let calls = 0;
+    mockSource0.applyEdits.mockImplementation(async () => {
+      if (++calls === 1) await firstGate;
+      return {
+        indices: new Uint32Array([]),
+        oldValues: new BigUint64Array([]),
+        newValues: new BigUint64Array([]),
+      };
+    });
+
+    const undo1 = controller.undo();
+    const undo2 = controller.undo();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // The second undo must not have started while the first is writing.
+    expect(calls).toBe(1);
+
+    releaseFirst();
+    await undo1;
+    await undo2;
+    expect((controller as any).undoStack.length).toBe(0);
+    expect((controller as any).redoStack).toEqual([action2, action1]);
+  });
+
   it("Undo flushes pending edits first, so it targets the latest stroke", async () => {
     const key = makeVoxChunkKey("0,0,0", 0);
     const action1 = {

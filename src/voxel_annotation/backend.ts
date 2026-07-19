@@ -435,22 +435,26 @@ export class VoxelEditController extends SharedObject {
 
   private commitDebounceTimer: number | undefined;
   private readonly commitDebounceDelayMs: number = 300;
-  private currentFlush: Promise<void> = Promise.resolve();
+  // Serializes the LOD-0 writers (debounced flush, undo/redo): two
+  // concurrent applyEdits on the same chunk are isolated read-modify-writes,
+  // so the last one would silently drop the other's voxels. Brush commits
+  // stay a synchronous append; only their flush enters the chain.
+  private opChain: Promise<unknown> = Promise.resolve();
 
-  // Orders a discrete operation (undo/redo, flood fill) after every edit
-  // committed before it: waits out an in-flight flush, then flushes what is
-  // still pending. The brush path stays free-running (ordered by seq
-  // coverage).
-  private async flushBefore(): Promise<void> {
-    await this.currentFlush;
+  private runExclusive<T>(op: () => Promise<T>): Promise<T> {
+    const run = this.opChain.then(op, op);
+    this.opChain = run.catch(() => {});
+    return run;
+  }
+
+  // Flushes edits committed before a discrete operation. Caller must hold
+  // the exclusion chain.
+  private async flushPendingLocked(): Promise<void> {
     if (this.commitDebounceTimer !== undefined) {
       clearTimeout(this.commitDebounceTimer);
       this.commitDebounceTimer = undefined;
     }
-    if (this.pendingEdits.length > 0) {
-      this.currentFlush = this.flushPending();
-      await this.currentFlush;
-    }
+    if (this.pendingEdits.length > 0) await this.flushPending();
   }
 
   // Undo/redo history
@@ -712,7 +716,7 @@ export class VoxelEditController extends SharedObject {
     if (this.commitDebounceTimer !== undefined)
       clearTimeout(this.commitDebounceTimer);
     this.commitDebounceTimer = setTimeout(() => {
-      this.currentFlush = this.flushPending();
+      void this.runExclusive(() => this.flushPending());
     }, this.commitDebounceDelayMs) as unknown as number;
   }
 
@@ -1217,13 +1221,29 @@ export class VoxelEditController extends SharedObject {
     });
   }
 
-  private async performUndoRedo(
+  private performUndoRedo(
     sourceStack: EditAction[],
     targetStack: EditAction[],
     useOldValues: boolean,
     actionDescription: "undo" | "redo",
   ): Promise<void> {
-    await this.flushBefore();
+    return this.runExclusive(() =>
+      this.performUndoRedoLocked(
+        sourceStack,
+        targetStack,
+        useOldValues,
+        actionDescription,
+      ),
+    );
+  }
+
+  private async performUndoRedoLocked(
+    sourceStack: EditAction[],
+    targetStack: EditAction[],
+    useOldValues: boolean,
+    actionDescription: "undo" | "redo",
+  ): Promise<void> {
+    await this.flushPendingLocked();
 
     if (sourceStack.length === 0) {
       throw new Error(`Nothing to ${actionDescription}.`);
@@ -1266,6 +1286,9 @@ export class VoxelEditController extends SharedObject {
     if (success) {
       targetStack.push(action);
     } else {
+      // Known limitation: chunks reverted before the failure stay reverted
+      // while the action returns to the stack (no transactional rollback);
+      // the failure was already surfaced via VOX_EDIT_FAILURE.
       sourceStack.push(action);
     }
 
@@ -1419,8 +1442,9 @@ export class VoxelEditController extends SharedObject {
 
   private async performFloodFill(op: FloodFillOperation): Promise<void> {
     // The fill walk reads the store, which does not see pending edits: flush
-    // them first so a fill right after a stroke sees that stroke.
-    await this.flushBefore();
+    // them first so a fill right after a stroke sees that stroke. The walk
+    // itself stays outside the chain (reads only; its edits flush later).
+    await this.runExclusive(() => this.flushPendingLocked());
     const { seed, value: fillValue, maxVoxels, basis, filterValue, seq } = op;
     const sourceIndex = 0;
     const accessor = this.getAccessor(sourceIndex);
