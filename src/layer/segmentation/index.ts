@@ -427,7 +427,7 @@ class LinkedSegmentationGroupState<
   }
 }
 
-export const DEFAULT_FRAGMENT_SEGMENT_COLOR = `
+export const DEFAULT_USER_MAIN_SEGMENT_COLOR = `
 vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
   return color;
 }
@@ -579,7 +579,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         ),
         undefined,
         {},
-        DEFAULT_FRAGMENT_SEGMENT_COLOR,
+        DEFAULT_USER_MAIN_SEGMENT_COLOR,
       ),
     );
 
@@ -614,7 +614,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   skeletonRenderingOptions = new SkeletonRenderingOptions();
   shaderError = makeWatchableShaderError();
   fragmentSegmentColor = makeTrackableFragmentMain(
-    DEFAULT_FRAGMENT_SEGMENT_COLOR,
+    DEFAULT_USER_MAIN_SEGMENT_COLOR,
   );
 
   renderScaleHistogram = new RenderScaleHistogram();
@@ -651,7 +651,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         encodeParameters: (p) => {
           return `${p.shaderBuilderState.key}/${JSON.stringify(p.segmentColorParameters)}/${JSON.stringify(p.segmentColorProperties.map(encodeSegmentPropertyShaderDefinition))}`;
         },
-        shaderError: this.layer.displayState.shaderError, // TODO can I reuse this?
+        shaderError: this.layer.displayState.shaderError,
         defineShader: (builder, { shaderBuilderState }) => {
           this.offscreenSegmentationColorUserShader.defineShader(
             builder,
