@@ -160,7 +160,6 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
           ),
         ),
         hasHighlightColor: refCounted.registerDisposer(
-          // TODO move to segment color user shader manager? it might only apply to 2d
           makeCachedDerivedWatchableValue(
             (x) => x !== undefined,
             [displayState.highlightColor],
@@ -228,7 +227,7 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
   }
 
   defineShader(builder: ShaderBuilder, parameters: ShaderParameters) {
-    this.hashTableManager.defineShader(builder); // here is where they add the hash table code
+    this.hashTableManager.defineShader(builder);
     this.displayState.segmentationColorUserShader.defineShader(
       builder,
       /*fragment=*/ true,

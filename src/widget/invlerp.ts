@@ -72,7 +72,7 @@ import { getShaderType } from "#src/webgl/shader_lib.js";
 import type { InvlerpParameters } from "#src/webgl/shader_ui_controls.js";
 import { getSquareCornersBuffer } from "#src/webgl/square_corners_buffer.js";
 import { setRawTextureParameters } from "#src/webgl/texture.js";
-import { create1DTexture } from "#src/webgl/texture_access.js";
+import { createFloat32Texture1D } from "#src/webgl/texture_access.js";
 import { makeIcon } from "#src/widget/icon.js";
 import { AutoRangeFinder } from "#src/widget/invlerp_range_finder.js";
 import type { LayerControlTool } from "#src/widget/layer_control.js";
@@ -791,7 +791,7 @@ const createHistogramTextureFromValues = (
     window[1],
     NUM_HISTOGRAM_BINS_IN_RANGE,
   );
-  return create1DTexture(gl, histogram);
+  return createFloat32Texture1D(gl, histogram);
 };
 
 export class InvlerpWidget extends Tab {
