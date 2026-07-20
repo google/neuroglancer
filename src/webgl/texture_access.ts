@@ -613,9 +613,8 @@ void ${this.readTextureValue}(highp ${samplerPrefix}sampler${this.textureDims}D 
   }
 }
 
-export function create1DTexture(gl: GL, data: Float32Array) {
+export function createFloat32Texture1D(gl: GL, data: Float32Array) {
   const texture = gl.createTexture();
-  // for now, immediately load the data into the texture
   {
     const format = computeTextureFormat(
       new TextureFormat(),
@@ -626,8 +625,6 @@ export function create1DTexture(gl: GL, data: Float32Array) {
     gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
     {
       const { textureInternalFormat, textureFormat, texelType } = format;
-
-      // const padded = maybePadArray(data, requiredSize);
       gl.pixelStorei(WebGL2RenderingContext.UNPACK_ALIGNMENT, 1);
       setRawTextureParameters(gl);
       gl.texImage2D(
