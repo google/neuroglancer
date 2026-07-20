@@ -675,7 +675,7 @@ vColor = segmentColorUserShader(uint64_t(uID));
 
   private tempColor = vec4.create();
 
-  getShaderSegmentColor = (id: bigint) => {
+  getShaderBaseSegmentColor = (id: bigint) => {
     const { shader, parameters } = this.getSegmentColorShader(
       emptySegmentColorShaderModule,
     );
@@ -691,6 +691,12 @@ vColor = segmentColorUserShader(uint64_t(uID));
       gl,
       shader,
       parameters.shaderBuilderState,
+      undefined,
+      {
+        segmentDefaultColor: this.segmentDefaultColor.value,
+        segmentStatedColors: this.segmentStatedColors.value,
+        hoverHighlight: false,
+      },
     );
     gl.uniform2ui(
       shader.uniform(`uID`),
