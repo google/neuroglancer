@@ -377,6 +377,7 @@ uint64_t getMappedObjectId(uint64_t value) {
       {
         segmentDefaultColor: activeSegmentDefaultColor,
         segmentStatedColors: activeSegmentStatedColors,
+        hoverHighlight: displayState.hoverHighlight.value,
       },
     );
   }
