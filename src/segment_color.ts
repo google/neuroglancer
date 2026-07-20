@@ -266,6 +266,7 @@ export interface SegmentationColorUserShaderManagerParameters {
 export interface SegmentationColorUserShaderManagerInputs {
   segmentDefaultColor: vec3 | vec4 | undefined;
   segmentStatedColors: Uint64Map;
+  hoverHighlight: boolean;
 }
 
 export class SegmentColorUserShaderManager extends RefCounted {
@@ -348,6 +349,7 @@ export class SegmentColorUserShaderManager extends RefCounted {
     return {
       segmentDefaultColor: this.displayState.segmentDefaultColor.value,
       segmentStatedColors: this.displayState.segmentStatedColors.value,
+      hoverHighlight: this.displayState.hoverHighlight.value,
     };
   }
 
@@ -856,8 +858,7 @@ vec4 segmentColorUserShader(uint64_t segmentId) {
     let selectedSegmentHigh = 0;
     const { segmentSelectionState } = this.displayState;
     const hasSelectedSegment =
-      segmentSelectionState.hasSelectedSegment &&
-      displayState.hoverHighlight.value;
+      segmentSelectionState.hasSelectedSegment && inputs.hoverHighlight;
     gl.uniform1ui(
       shader.uniform("uHasSelectedSegment"),
       hasSelectedSegment ? 1 : 0,
