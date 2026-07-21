@@ -258,6 +258,7 @@
   margin-bottom: 2px;
 }
 
+.neuroglancer-annotation-schema-keybind,
 .neuroglancer-annotation-schema-enum-keybind {
   flex-shrink: 0;
   align-self: center;

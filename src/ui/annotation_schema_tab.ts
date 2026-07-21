@@ -223,14 +223,6 @@ class AnnotationUIProperty extends RefCounted {
     }
     this.spec.default = defaultValue;
   }
-  public updateEnumValues(enumValues: number[]) {
-    const inputs = this.defaultValueElements;
-    for (let i = 0; i < enumValues.length; i++) {
-      // Always comes in pairs: [name, value], so 2*i + 1 is always the value input
-      const input = inputs[2 * i + 1];
-      input.value = numberToStringFixed(enumValues[i], 4);
-    }
-  }
   public updateEnumLabels(
     enumProperty: AnnotationNumericPropertySpec,
     selectElement?: HTMLSelectElement,
@@ -556,7 +548,7 @@ class AnnotationUIProperty extends RefCounted {
           title: `Bind a key to toggle the selected annotation's ${oldProperty.identifier}`,
         },
       );
-      toolButton.classList.add("neuroglancer-annotation-schema-enum-keybind");
+      toolButton.classList.add("neuroglancer-annotation-schema-keybind");
       container.appendChild(toolButton);
     }
 
@@ -745,7 +737,7 @@ class AnnotationUIProperty extends RefCounted {
     if (!this.readonly) {
       // Keybind affordance: bind a key so that pressing it while iterating the
       // annotation list sets the selected annotation's property to this enum
-      // value (and advances to the next annotation).
+      // value.
       const toolButton = makeToolButton(
         this,
         this.parentView.layer.toolBinder,
@@ -1372,15 +1364,17 @@ export class AnnotationSchemaView extends Tab {
           if (checkKeysTrue(sameValues, ["default"])) {
             // The properties are all the same except for the default value
             annotationUIProperty.updateDefaultValue(propertySchema.default);
-          } else if (checkKeysTrue(sameValues, ["enumValues"], ["default"])) {
-            annotationUIProperty.updateEnumValues(
-              (propertySchema as AnnotationNumericPropertySpec).enumValues!,
-            );
           } else if (checkKeysTrue(sameValues, ["enumLabels"], ["default"])) {
             annotationUIProperty.updateEnumLabels(
               propertySchema as AnnotationNumericPropertySpec,
             );
           } else {
+            // Any other change requires rebuilding the row. In particular, the
+            // enum value is embedded in each keybind tool's id, so when a value
+            // changes the row must be recreated to rebuild its keybind buttons
+            // with the currently-registered tool ids; updating the value input
+            // in place would leave the button pointing at a stale, unregistered
+            // tool that can no longer be bound.
             this.annotationUIProperties.set(
               propertySchema.identifier,
               new AnnotationUIProperty(propertySchema, this),

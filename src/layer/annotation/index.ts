@@ -412,9 +412,45 @@ class LinkedSegmentationLayersWidget extends RefCounted {
   }
 }
 
-// A keybindable tool that sets the currently-selected (iterated) annotation's
-// enum property to a specific value, then advances to the next annotation so
-// the user can rapidly classify a list with keystrokes alone.
+// Identifies a keybindable property tool so it can be (re)constructed: either
+// setting an enum property to a specific value, or toggling a bool property.
+type PropertyToolDescriptor =
+  | { kind: "enum"; propertyIdentifier: string; enumValue: number }
+  | { kind: "bool"; propertyIdentifier: string };
+
+// Sets a single property of the currently-selected annotation, computing the
+// new value from the existing one. Shared by the enum-set and bool-toggle
+// tools below.
+function updateSelectedAnnotationProperty(
+  layer: AnnotationUserLayer,
+  propertyIdentifier: string,
+  computeValue: (currentValue: number) => number,
+) {
+  const context = layer.getSelectedAnnotationContext();
+  if (context === undefined) return;
+  const { annotationLayerState, annotationId } = context;
+  const { source } = annotationLayerState;
+  const propertyIndex = source.properties.value.findIndex(
+    (x) => x.identifier === propertyIdentifier,
+  );
+  if (propertyIndex === -1) return;
+  const reference = source.getReference(annotationId);
+  try {
+    const annotation = reference.value;
+    if (annotation != null) {
+      const properties = annotation.properties.slice();
+      properties[propertyIndex] = computeValue(properties[propertyIndex]);
+      source.update(reference, { ...annotation, properties });
+      source.commit(reference);
+    }
+  } finally {
+    reference.dispose();
+  }
+}
+
+// A keybindable tool that sets the currently-selected annotation's enum
+// property to a specific value, so the user can classify a list with
+// keystrokes alone.
 class SetEnumPropertyTool extends LayerTool<AnnotationUserLayer> {
   constructor(
     public propertyIdentifier: string,
@@ -445,29 +481,11 @@ class SetEnumPropertyTool extends LayerTool<AnnotationUserLayer> {
   }
 
   activate(activation: ToolActivation<this>) {
-    const { layer } = this;
-    const context = layer.getSelectedAnnotationContext();
-    if (context !== undefined) {
-      const { annotationLayerState, annotationId } = context;
-      const { source } = annotationLayerState;
-      const propertyIndex = source.properties.value.findIndex(
-        (x) => x.identifier === this.propertyIdentifier,
-      );
-      if (propertyIndex > -1) {
-        const reference = source.getReference(annotationId);
-        try {
-          const annotation = reference.value;
-          if (annotation != null) {
-            const properties = annotation.properties.slice();
-            properties[propertyIndex] = this.enumValue;
-            source.update(reference, { ...annotation, properties });
-            source.commit(reference);
-          }
-        } finally {
-          reference.dispose();
-        }
-      }
-    }
+    updateSelectedAnnotationProperty(
+      this.layer,
+      this.propertyIdentifier,
+      () => this.enumValue,
+    );
     activation.cancel();
   }
 
@@ -481,7 +499,7 @@ class SetEnumPropertyTool extends LayerTool<AnnotationUserLayer> {
 }
 
 // A keybindable tool that toggles a boolean annotation property on the
-// currently-selected (iterated) annotation.
+// currently-selected annotation.
 class ToggleBoolPropertyTool extends LayerTool<AnnotationUserLayer> {
   constructor(
     public propertyIdentifier: string,
@@ -491,29 +509,11 @@ class ToggleBoolPropertyTool extends LayerTool<AnnotationUserLayer> {
   }
 
   activate(activation: ToolActivation<this>) {
-    const { layer } = this;
-    const context = layer.getSelectedAnnotationContext();
-    if (context !== undefined) {
-      const { annotationLayerState, annotationId } = context;
-      const { source } = annotationLayerState;
-      const propertyIndex = source.properties.value.findIndex(
-        (x) => x.identifier === this.propertyIdentifier,
-      );
-      if (propertyIndex > -1) {
-        const reference = source.getReference(annotationId);
-        try {
-          const annotation = reference.value;
-          if (annotation != null) {
-            const properties = annotation.properties.slice();
-            properties[propertyIndex] = properties[propertyIndex] ? 0 : 1;
-            source.update(reference, { ...annotation, properties });
-            source.commit(reference);
-          }
-        } finally {
-          reference.dispose();
-        }
-      }
-    }
+    updateSelectedAnnotationProperty(
+      this.layer,
+      this.propertyIdentifier,
+      (currentValue) => (currentValue ? 0 : 1),
+    );
     activation.cancel();
   }
 
@@ -531,7 +531,7 @@ const Base = UserLayerWithAnnotationsMixin(UserLayer);
 // A keybindable tool that selects the previous annotation in the iteration order.
 class SelectPreviousAnnotationTool extends LayerTool<AnnotationUserLayer> {
   activate(activation: ToolActivation<this>) {
-    this.layer.changeSelectedIndex(-1);
+    this.layer.shiftSelectedIndexBy(-1);
     activation.cancel();
   }
   toJSON() {
@@ -545,7 +545,7 @@ class SelectPreviousAnnotationTool extends LayerTool<AnnotationUserLayer> {
 // A keybindable tool that selects the next annotation in the iteration order.
 class SelectNextAnnotationTool extends LayerTool<AnnotationUserLayer> {
   activate(activation: ToolActivation<this>) {
-    this.layer.changeSelectedIndex(1);
+    this.layer.shiftSelectedIndexBy(1);
     activation.cancel();
   }
   toJSON() {
@@ -564,13 +564,10 @@ export class AnnotationUserLayer extends Base {
     new WatchableValue([]);
   private localAnnotationRelationships: string[];
   private localAnnotationsJson: any = undefined;
-  // Tool ids currently registered for enum property values, keyed by tool id.
-  private registeredEnumTools = new Map<
-    string,
-    { propertyIdentifier: string; enumValue: number }
-  >();
-  // Tool ids currently registered for bool property toggles, keyed by tool id.
-  private registeredBoolTools = new Set<string>();
+  // Keybindable property tools currently registered for this layer, keyed by
+  // tool id. Covers both enum-value setters and bool toggles; the descriptor
+  // records which kind each is so the tool can be reconstructed.
+  private registeredPropertyTools = new Map<string, PropertyToolDescriptor>();
   private pointAnnotationsJson: any = undefined;
   static supportColorPickerInAnnotationTab = false;
 
@@ -621,7 +618,7 @@ export class AnnotationUserLayer extends Base {
     this.tabs.default = "annotations";
     this.registerDisposer(
       this.localAnnotationProperties.changed.add(() => {
-        this.syncEnumPropertyTools();
+        this.syncPropertyTools();
       }),
     );
   }
@@ -630,73 +627,52 @@ export class AnnotationUserLayer extends Base {
   // per bool property so each can be bound to a hotkey in the schema editor.
   // Registers newly-added options and tears down removed ones, including any
   // live keybindings in this layer's tool binder.
-  private syncEnumPropertyTools(
+  private syncPropertyTools(
     properties: readonly AnnotationPropertySpec[] = this
       .localAnnotationProperties.value,
   ) {
-    // --- enum tools ---
-    const desiredEnum = new Map<
-      string,
-      { propertyIdentifier: string; enumValue: number }
-    >();
+    const desired = new Map<string, PropertyToolDescriptor>();
     for (const property of properties) {
       if (
-        !isAnnotationNumericPropertySpec(property) ||
-        property.enumValues === undefined
+        isAnnotationNumericPropertySpec(property) &&
+        property.enumValues !== undefined
       ) {
-        continue;
-      }
-      for (const enumValue of property.enumValues) {
-        desiredEnum.set(
-          setEnumPropertyToolJson(property.identifier, enumValue),
-          { propertyIdentifier: property.identifier, enumValue },
-        );
+        for (const enumValue of property.enumValues) {
+          desired.set(setEnumPropertyToolJson(property.identifier, enumValue), {
+            kind: "enum",
+            propertyIdentifier: property.identifier,
+            enumValue,
+          });
+        }
+      } else if (property.type === "bool") {
+        desired.set(toggleBoolPropertyToolJson(property.identifier), {
+          kind: "bool",
+          propertyIdentifier: property.identifier,
+        });
       }
     }
-    for (const toolId of this.registeredEnumTools.keys()) {
-      if (!desiredEnum.has(toolId)) {
+    // Tear down tools whose property/value no longer exists, including any live
+    // keybinding for them.
+    for (const toolId of this.registeredPropertyTools.keys()) {
+      if (!desired.has(toolId)) {
         this.toolBinder.removeJsonString(JSON.stringify(toolId));
         unregisterTool(AnnotationUserLayer, toolId);
-        this.registeredEnumTools.delete(toolId);
+        this.registeredPropertyTools.delete(toolId);
       }
     }
-    for (const [toolId, { propertyIdentifier, enumValue }] of desiredEnum) {
-      if (!this.registeredEnumTools.has(toolId)) {
-        registerTool(
-          AnnotationUserLayer,
-          toolId,
-          (layer) =>
-            new SetEnumPropertyTool(propertyIdentifier, enumValue, layer),
+    // Register newly-added tools.
+    for (const [toolId, descriptor] of desired) {
+      if (!this.registeredPropertyTools.has(toolId)) {
+        registerTool(AnnotationUserLayer, toolId, (layer) =>
+          descriptor.kind === "enum"
+            ? new SetEnumPropertyTool(
+                descriptor.propertyIdentifier,
+                descriptor.enumValue,
+                layer,
+              )
+            : new ToggleBoolPropertyTool(descriptor.propertyIdentifier, layer),
         );
-        this.registeredEnumTools.set(toolId, { propertyIdentifier, enumValue });
-      }
-    }
-
-    // --- bool tools ---
-    const desiredBool = new Set<string>();
-    for (const property of properties) {
-      if (property.type === "bool") {
-        desiredBool.add(toggleBoolPropertyToolJson(property.identifier));
-      }
-    }
-    for (const toolId of this.registeredBoolTools) {
-      if (!desiredBool.has(toolId)) {
-        this.toolBinder.removeJsonString(JSON.stringify(toolId));
-        unregisterTool(AnnotationUserLayer, toolId);
-        this.registeredBoolTools.delete(toolId);
-      }
-    }
-    for (const toolId of desiredBool) {
-      if (!this.registeredBoolTools.has(toolId)) {
-        const propertyIdentifier = toolId.slice(
-          toggleBoolPropertyToolJson("").length,
-        );
-        registerTool(
-          AnnotationUserLayer,
-          toolId,
-          (layer) => new ToggleBoolPropertyTool(propertyIdentifier, layer),
-        );
-        this.registeredBoolTools.add(toolId);
+        this.registeredPropertyTools.set(toolId, descriptor);
       }
     }
   }
@@ -707,9 +683,10 @@ export class AnnotationUserLayer extends Base {
       ANNOTATION_PROPERTIES_JSON_KEY,
       parseAnnotationPropertySpecs,
     );
-    // Register enum-value tools before `super.restoreState` restores the tool
-    // binder, so that any saved enum keybindings resolve to a registered tool.
-    this.syncEnumPropertyTools(properties ?? []);
+    // Register property tools before `super.restoreState` restores the tool
+    // binder, so that any saved property keybindings resolve to a registered
+    // tool.
+    this.syncPropertyTools(properties ?? []);
     super.restoreState(specification);
     this.linkedSegmentationLayers.restoreState(specification);
     this.codeVisible.restoreState(specification[CODE_VISIBLE_KEY]);

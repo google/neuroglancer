@@ -301,6 +301,7 @@ export class AnnotationLayerView extends Tab {
   }[] = [];
   private updated = false;
   private mutableControls = document.createElement("div");
+  private navRow = document.createElement("div");
   private headerRow = document.createElement("div");
 
   get annotationStates() {
@@ -544,7 +545,7 @@ export class AnnotationLayerView extends Tab {
 
     toolbox.appendChild(mutableControls);
 
-    const navRow = document.createElement("div");
+    const { navRow } = this;
     navRow.className = "neuroglancer-annotation-nav-toolbar";
     navRow.appendChild(
       makeToolButton(this, layer.toolBinder, {
@@ -998,6 +999,9 @@ export class AnnotationLayerView extends Tab {
       },
     ]);
     this.mutableControls.style.display = isMutable ? "contents" : "none";
+    // The prev/next navigation only applies to editable (local) annotation
+    // lists, so hide it for readonly sources such as precomputed annotations.
+    this.navRow.style.display = isMutable ? "" : "none";
     this.resetOnUpdate();
   }
 
@@ -2072,37 +2076,35 @@ export function UserLayerWithAnnotationsMixin<
       return { annotationLayerState, annotationId };
     }
 
-    changeSelectedIndex(offset: number) {
+    // Selects the annotation `offset` positions away from the currently
+    // selected one, treating every attached annotation source as a single flat
+    // list so navigation crosses source boundaries. The target index is clamped
+    // into range, so any integer offset is handled and navigation stops at the
+    // ends of the list.
+    shiftSelectedIndexBy(offset: number) {
       const context = this.getSelectedAnnotationContext();
       if (context === undefined) return;
-      const { annotationId } = context;
-      let annotationLayerState = context.annotationLayerState;
-      let annotationLayerStateIndex =
-        this.annotationStates.states.indexOf(annotationLayerState);
-      let { source } = annotationLayerState;
-      let annotations = Array.from(source);
-      let index = annotations.findIndex((x) => x.id === annotationId);
-      while (true) {
-        index = index + offset;
-        if (index === -1) {
-          // this only happens if offset is negative
-          annotationLayerStateIndex -= 1;
-        } else if (index === annotations.length) {
-          // this only happens if offset is positive
-          annotationLayerStateIndex += 1;
-        } else {
-          const annotation = annotations[index];
-          this.selectAnnotation(annotationLayerState, annotation.id, true);
-          moveToAnnotation(this, annotation, annotationLayerState);
-          return;
-        }
-        annotationLayerState =
-          this.annotationStates.states[annotationLayerStateIndex];
-        if (annotationLayerState === undefined) return;
-        source = annotationLayerState.source;
-        annotations = Array.from(source);
-        index = index === -1 ? annotations.length : 0;
-      }
+      const { annotationLayerState, annotationId } = context;
+
+      const entries = this.annotationStates.states.flatMap((state) =>
+        Array.from(state.source, (annotation) => ({ annotation, state })),
+      );
+      const selectedIndex = entries.findIndex(
+        (entry) =>
+          entry.state === annotationLayerState &&
+          entry.annotation.id === annotationId,
+      );
+      if (selectedIndex === -1) return;
+
+      const targetIndex = Math.max(
+        0,
+        Math.min(entries.length - 1, selectedIndex + offset),
+      );
+      if (targetIndex === selectedIndex) return;
+
+      const { annotation, state } = entries[targetIndex];
+      this.selectAnnotation(state, annotation.id, true);
+      moveToAnnotation(this, annotation, state);
     }
 
     restoreState(specification: any) {

@@ -798,15 +798,14 @@ export function makeToolButton(
 ) {
   const element = document.createElement("div");
   element.classList.add("neuroglancer-tool-button");
-  element.appendChild(
-    context.registerDisposer(
-      new ToolBindingWidget(
-        localBinder,
-        options.toolJson,
-        options.dragElement ?? element,
-      ),
-    ).element,
+  const bindingWidget = context.registerDisposer(
+    new ToolBindingWidget(
+      localBinder,
+      options.toolJson,
+      options.dragElement ?? element,
+    ),
   );
+  element.appendChild(bindingWidget.element);
   const labelElement = document.createElement("div");
   labelElement.classList.add("neuroglancer-tool-button-label");
   const labelText = options.label;
@@ -814,7 +813,13 @@ export function makeToolButton(
     labelElement.textContent = labelText;
   }
   if (options.title) {
-    labelElement.title = options.title;
+    // Combine the caller's description with the key-binding widget's own hint.
+    // The label element never surfaces its title when there is no visible
+    // label, so also apply the combined title to the key-binding widget, which
+    // is the only hover target in that case.
+    const combinedTitle = `${options.title}\n(${bindingWidget.element.title})`;
+    labelElement.title = combinedTitle;
+    bindingWidget.element.title = combinedTitle;
   }
   element.appendChild(labelElement);
   return element;
