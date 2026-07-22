@@ -59,7 +59,7 @@ import type {
 import {
   augmentSegmentId,
   bindSegmentListWidth,
-  getBaseObjectColor,
+  getBaseObjectColors,
   makeSegmentWidget,
   maybeAugmentSegmentId,
   registerCallbackWhenSegmentationDisplayStateChanged,
@@ -659,11 +659,12 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
             shaderBuilderState,
           );
           builder.addAttribute("highp vec4", "aVertexPosition");
-          builder.addUniform("highp uvec2", "uID");
+          builder.addAttribute("highp uvec2", "aID");
           builder.addVarying("highp vec4", "vColor");
           const vertexMain = `
-gl_Position = aVertexPosition;
-vColor = segmentColorUserShader(uint64_t(uID));
+gl_Position = vec4(aVertexPosition.xy, 0.0, 1.0);
+gl_PointSize = 1.0;
+vColor = segmentColorUserShader(uint64_t(aID));
 `;
           builder.addVertexMain(vertexMain);
           builder.addOutputBuffer("vec4", "out_fragColor", 0);
@@ -675,18 +676,48 @@ vColor = segmentColorUserShader(uint64_t(uID));
 
   private tempColor = vec4.create();
 
-  getShaderBaseSegmentColor = (id: bigint) => {
+  getShaderBaseSegmentColors = (
+    ids: readonly bigint[],
+    colors = new Float32Array(ids.length * 4),
+  ) => {
+    const numIds = ids.length;
+    if (numIds === 0) return colors;
     const { shader, parameters } = this.getSegmentColorShader(
       emptySegmentColorShaderModule,
     );
     if (shader === null) return;
     shader.bind();
     const { gl } = shader;
+    const canvas = gl.canvas as OffscreenCanvas;
+    if (canvas.width !== numIds || canvas.height !== 1) {
+      canvas.width = numIds;
+      canvas.height = 1;
+    }
+    gl.viewport(0, 0, numIds, 1);
+
+    const positions = new Float32Array(numIds * 2);
+    const idsData = new Uint32Array(numIds * 2);
+    for (let i = 0; i < numIds; ++i) {
+      const id = ids[i];
+      positions[2 * i] = (2 * (i + 0.5)) / numIds - 1;
+      positions[2 * i + 1] = 0;
+      idsData[2 * i] = Number(id & 0xffffffffn);
+      idsData[2 * i + 1] = Number(id >> 32n);
+    }
     const positionBuffer = GLBuffer.fromData(
       gl,
-      new Float32Array([1, 1, -1, 1, 1, -1, -1, -1]),
+      positions,
+      undefined,
+      WebGL2RenderingContext.STREAM_DRAW,
     );
     positionBuffer.bindToVertexAttrib(shader.attribute("aVertexPosition"), 2);
+    const idBuffer = GLBuffer.fromData(
+      gl,
+      idsData,
+      undefined,
+      WebGL2RenderingContext.STREAM_DRAW,
+    );
+    idBuffer.bindToVertexAttribI(shader.attribute("aID"), 2);
     this.offscreenSegmentationColorUserShader.enable(
       gl,
       shader,
@@ -698,27 +729,29 @@ vColor = segmentColorUserShader(uint64_t(uID));
         hoverHighlight: false,
       },
     );
-    gl.uniform2ui(
-      shader.uniform(`uID`),
-      Number(id & 0xffffffffn),
-      Number(id >> 32n),
-    );
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    const data = new Uint8Array(4);
+    gl.drawArrays(gl.POINTS, 0, numIds);
+    const data = new Uint8Array(4 * numIds);
     gl.readPixels(
       0,
       0,
-      1,
+      numIds,
       1,
       WebGL2RenderingContext.RGBA,
       WebGL2RenderingContext.UNSIGNED_BYTE,
       data,
     );
     for (let i = 0; i < data.length; i++) {
-      this.tempColor[i] = data[i] / 255.0;
+      colors[i] = data[i] / 255.0;
     }
     this.offscreenSegmentationColorUserShader.disable(gl, shader);
-    return this.tempColor;
+    positionBuffer.dispose();
+    idBuffer.dispose();
+    return colors;
+  };
+
+  getShaderBaseSegmentColor = (id: bigint) => {
+    const colors = this.getShaderBaseSegmentColors([id], this.tempColor);
+    return colors === undefined ? undefined : this.tempColor;
   };
 
   linkedSegmentationGroup: LinkedLayerGroup;
@@ -1552,9 +1585,11 @@ export class SegmentationUserLayer extends Base {
     }
 
     const visibleSegments = [...visibleSegmentsSet];
-    const colors = visibleSegments.map((id) => {
-      // here we can do a batch get of colors using the segment color shader instead of one at a time
-      const color = getCssColor(getBaseObjectColor(displayState, id));
+    const baseColors = getBaseObjectColors(displayState, visibleSegments);
+    const colors = visibleSegments.map((id, index) => {
+      const color = getCssColor(
+        baseColors.subarray(4 * index, 4 * index + 4),
+      );
       return { color, id };
     });
 

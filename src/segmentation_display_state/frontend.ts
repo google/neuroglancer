@@ -213,6 +213,10 @@ export interface SegmentationDisplayState {
   filterBySegmentLabel: (id: bigint) => void;
   moveToSegment: (id: bigint) => void;
   getShaderBaseSegmentColor: (id: bigint) => Float32Array | undefined;
+  getShaderBaseSegmentColors: (
+    ids: readonly bigint[],
+    colors?: Float32Array,
+  ) => Float32Array | undefined;
 
   // Indirect properties
   hideSegmentZero: WatchableValueInterface<boolean>;
@@ -412,6 +416,8 @@ const segmentWidgetTemplateWithUnmapped = (() => {
 })();
 
 export type SegmentWidgetTemplate = typeof segmentWidgetTemplate;
+
+type SegmentColorMap = ReadonlyMap<bigint, vec3>;
 
 interface SegmentWidgetWithExtraColumnsTemplate extends SegmentWidgetTemplate {
   numericalPropertyIndices: number[];
@@ -719,7 +725,47 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
     this.updateWithId(container, id);
   }
 
-  private updateWithId(container: HTMLElement, mapped: bigint) {
+  updateMany(containers: Iterable<HTMLElement>) {
+    const { displayState } = this;
+    if (displayState === undefined) return;
+    const updates: { container: HTMLElement; mapped: bigint }[] = [];
+    const ids: bigint[] = [];
+    const seen = new Set<bigint>();
+    const addId = (id: bigint) => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      ids.push(id);
+    };
+    for (const container of containers) {
+      const idString = container.dataset.id;
+      if (idString === undefined) continue;
+      const mapped = BigInt(idString);
+      updates.push({ container, mapped });
+      addId(mapped);
+      const unmappedIdString = container.dataset.unmappedId;
+      if (
+        this.template.unmappedIdIndex !== -1 &&
+        displayState.baseSegmentColoring.value &&
+        unmappedIdString !== undefined
+      ) {
+        addId(BigInt(unmappedIdString));
+      }
+    }
+    const colors = getBaseObjectColors(displayState, ids);
+    const colorMap = new Map<bigint, vec3>();
+    for (let i = 0; i < ids.length; ++i) {
+      colorMap.set(ids[i], colors.subarray(4 * i, 4 * i + 4) as vec3);
+    }
+    for (const { container, mapped } of updates) {
+      this.updateWithId(container, mapped, colorMap);
+    }
+  }
+
+  private updateWithId(
+    container: HTMLElement,
+    mapped: bigint,
+    colorMap?: SegmentColorMap,
+  ) {
     const { children } = container;
     const stickyChildren = children[0].children;
     const { template } = this;
@@ -741,7 +787,9 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
     const idContainer = stickyChildren[
       template.idContainerIndex
     ] as HTMLElement;
-    let color = getBaseObjectColor(this.displayState, mapped) as vec3;
+    const getColor = (id: bigint) =>
+      colorMap?.get(id) ?? (getBaseObjectColor(this.displayState, id) as vec3);
+    let color = getColor(mapped);
     setSegmentIdElementStyle(
       idContainer.children[template.idIndex] as HTMLElement,
       color,
@@ -764,7 +812,7 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
         (unmappedIdString = container.dataset.unmappedId) !== undefined
       ) {
         const unmappedId = BigInt(unmappedIdString);
-        color = getBaseObjectColor(this.displayState, unmappedId) as vec3;
+        color = getColor(unmappedId);
       } else {
         color = kOneVec;
       }
@@ -1065,6 +1113,19 @@ export function getBaseObjectColor(
   }
   const { getShaderBaseSegmentColor } = displayState;
   return getShaderBaseSegmentColor(objectId) ?? color;
+}
+
+export function getBaseObjectColors(
+  displayState: SegmentationDisplayState | undefined | null,
+  objectIds: readonly bigint[],
+  colors = new Float32Array(objectIds.length * 4),
+) {
+  if (displayState == null) {
+    colors.fill(1);
+    return colors;
+  }
+  const { getShaderBaseSegmentColors } = displayState;
+  return getShaderBaseSegmentColors(objectIds, colors) ?? colors;
 }
 
 export function sendVisibleSegmentsState(

@@ -117,18 +117,16 @@ abstract class SegmentListSource
 
   abstract update(): void;
 
-  private updateRendering(element: HTMLElement) {
-    this.segmentWidgetFactory.update(element);
-  }
-
   segmentWidgetFactory: SegmentWidgetWithExtraColumnsFactory;
 
   abstract render(index: number): HTMLDivElement;
 
   updateRenderedItems(list: VirtualList) {
+    const renderedItems: HTMLElement[] = [];
     list.forEachRenderedItem((element) => {
-      this.updateRendering(element);
+      renderedItems.push(element);
     });
+    this.segmentWidgetFactory.updateMany(renderedItems);
   }
 }
 
