@@ -2229,9 +2229,14 @@ export class SpatiallyIndexedSkeletonLayer
   private editedSegmentIdsVersion = 0;
   private cachedBrowseExcludedResult: Uint64Set | undefined;
   private cachedBrowseExcludedVersion = -1;
-  private retainedOverlaySegmentIds: number[] = [];
-  // Bumped whenever `retainedOverlaySegmentIds` is replaced, so the merged
-  // overlay render segment-id list can be cached across frames.
+  // Segment id -> last-touched sequence number; doubles as pool membership
+  // (key) and recency (value).
+  private retainedOverlaySegments: Map<number, number> = new Map();
+  // Shared sequence counter assigned to each touch.
+  private overlaySegmentTouchCounter = 0;
+  // Bumped when the set of keys in `retainedOverlaySegments` changes, so the
+  // merged render segment-id list can be cached across frames. Recency-only
+  // touches don't bump this, since the merged, sorted list is unaffected.
   private retainedOverlaySegmentIdsVersion = 0;
   private cachedOverlayRenderSegmentIds: number[] = [];
   private cachedOverlayRenderVisibleSet: Uint64Set | undefined;
@@ -2277,8 +2282,8 @@ export class SpatiallyIndexedSkeletonLayer
       ++this.editedSegmentIdsVersion;
       changed = true;
     }
-    if (this.retainedOverlaySegmentIds.length !== 0) {
-      this.retainedOverlaySegmentIds = [];
+    if (this.retainedOverlaySegments.size !== 0) {
+      this.retainedOverlaySegments = new Map();
       ++this.retainedOverlaySegmentIdsVersion;
       changed = true;
     }
@@ -2425,46 +2430,69 @@ export class SpatiallyIndexedSkeletonLayer
   }
 
   getRetainedOverlaySegmentIds() {
-    return this.retainedOverlaySegmentIds;
+    return [...this.retainedOverlaySegments.keys()];
   }
 
-  retainOverlaySegment(segmentId: number) {
-    this.markSegmentEdited(segmentId);
-    const nextRetainedOverlaySegmentIds =
-      retainSpatiallyIndexedSkeletonOverlaySegment(
-        this.retainedOverlaySegmentIds,
-        segmentId,
-        { maxRetained: this.maxRetainedOverlaySegments },
-      );
+  /**
+   * Stores `nextRetainedOverlaySegments` and reports whether the set of keys
+   * changed. A recency-only touch still updates the stored map, but only a
+   * membership change bumps `retainedOverlaySegmentIdsVersion` and warrants
+   * a redraw. Shared by `retainOverlaySegment` and `markSegmentEdited`.
+   */
+  private applyRetainedOverlaySegments(
+    nextRetainedOverlaySegments: Map<number, number>,
+  ): boolean {
+    const previousRetainedOverlaySegments = this.retainedOverlaySegments;
+    this.retainedOverlaySegments = nextRetainedOverlaySegments;
     if (
-      nextRetainedOverlaySegmentIds.length ===
-        this.retainedOverlaySegmentIds.length &&
-      nextRetainedOverlaySegmentIds.every(
-        (candidateSegmentId, index) =>
-          candidateSegmentId === this.retainedOverlaySegmentIds[index],
+      nextRetainedOverlaySegments.size ===
+        previousRetainedOverlaySegments.size &&
+      [...nextRetainedOverlaySegments.keys()].every((candidateSegmentId) =>
+        previousRetainedOverlaySegments.has(candidateSegmentId),
       )
     ) {
       return false;
     }
-    this.retainedOverlaySegmentIds = nextRetainedOverlaySegmentIds;
     ++this.retainedOverlaySegmentIdsVersion;
-    this.redrawNeeded.dispatch();
     return true;
+  }
+
+  retainOverlaySegment(segmentId: number) {
+    return this.markSegmentEdited(segmentId);
   }
 
   markSegmentEdited(segmentId: number) {
     const normalizedSegmentId = Math.round(Number(segmentId));
     if (
       !Number.isSafeInteger(normalizedSegmentId) ||
-      normalizedSegmentId <= 0 ||
-      this.editedSegmentIds.has(normalizedSegmentId)
+      normalizedSegmentId <= 0
     ) {
       return false;
     }
-    this.editedSegmentIds.add(normalizedSegmentId);
-    ++this.editedSegmentIdsVersion;
-    this.redrawNeeded.dispatch();
-    return true;
+    let changed = false;
+    if (!this.editedSegmentIds.has(normalizedSegmentId)) {
+      this.editedSegmentIds.add(normalizedSegmentId);
+      ++this.editedSegmentIdsVersion;
+      changed = true;
+    }
+    // Refresh recency on every edit, not just the first, so a segment under
+    // continuous editing doesn't age out of the pool between retains.
+    if (
+      this.applyRetainedOverlaySegments(
+        retainSpatiallyIndexedSkeletonOverlaySegment(
+          this.retainedOverlaySegments,
+          normalizedSegmentId,
+          ++this.overlaySegmentTouchCounter,
+          { maxRetained: this.maxRetainedOverlaySegments },
+        ),
+      )
+    ) {
+      changed = true;
+    }
+    if (changed) {
+      this.redrawNeeded.dispatch();
+    }
+    return changed;
   }
 
   private getOverlayRenderSegmentIds() {
@@ -2485,7 +2513,7 @@ export class SpatiallyIndexedSkeletonLayer
     }
     const result = mergeSpatiallyIndexedSkeletonOverlaySegmentIds(
       this.getActiveEditableSegmentIds(),
-      this.retainedOverlaySegmentIds,
+      [...this.retainedOverlaySegments.keys()],
     );
     this.cachedOverlayRenderVisibleSet = visibleSet;
     this.cachedOverlayRenderVisibleGeneration = visibleGeneration;

@@ -106,27 +106,38 @@ describe("mergeSpatiallyIndexedSkeletonOverlaySegmentIds", () => {
 });
 
 describe("retainSpatiallyIndexedSkeletonOverlaySegment", () => {
-  it("moves retained segments to the most recent position", () => {
-    expect(retainSpatiallyIndexedSkeletonOverlaySegment([2, 4, 6], 4)).toEqual([
-      2, 6, 4,
+  it("sets the touched segment's recency counter", () => {
+    const retained = retainSpatiallyIndexedSkeletonOverlaySegment(
+      new Map([
+        [2, 0],
+        [4, 1],
+        [6, 2],
+      ]),
+      4,
+      10,
+    );
+    expect([...retained.entries()]).toEqual([
+      [2, 0],
+      [4, 10],
+      [6, 2],
     ]);
   });
 
-  it("keeps only the most recent retained segments", () => {
-    const retained: number[] = [];
+  it("keeps only the most recently touched segments", () => {
+    let retained = new Map<number, number>();
     for (
       let segmentId = 1;
       segmentId <= DEFAULT_MAX_RETAINED_OVERLAY_SEGMENTS + 2;
       ++segmentId
     ) {
-      retained.splice(
-        0,
-        retained.length,
-        ...retainSpatiallyIndexedSkeletonOverlaySegment(retained, segmentId),
+      retained = retainSpatiallyIndexedSkeletonOverlaySegment(
+        retained,
+        segmentId,
+        segmentId,
       );
     }
     const firstRetainedSegmentId = 3;
-    expect(retained).toEqual(
+    expect([...retained.keys()].sort((a, b) => a - b)).toEqual(
       Array.from(
         { length: DEFAULT_MAX_RETAINED_OVERLAY_SEGMENTS },
         (_, index) => firstRetainedSegmentId + index,

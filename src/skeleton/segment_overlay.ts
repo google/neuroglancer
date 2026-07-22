@@ -161,7 +161,7 @@ export function buildSpatiallyIndexedSkeletonOverlayGeometry(
   };
 }
 
-export const DEFAULT_MAX_RETAINED_OVERLAY_SEGMENTS = 16;
+export const DEFAULT_MAX_RETAINED_OVERLAY_SEGMENTS = 24;
 
 function normalizeSegmentId(segmentId: number) {
   const normalizedSegmentId = Math.round(Number(segmentId));
@@ -184,29 +184,50 @@ export function mergeSpatiallyIndexedSkeletonOverlaySegmentIds(
   return [...mergedSegmentIds].sort((a, b) => a - b);
 }
 
+/**
+ * Trims to `maxRetained` entries, evicting the oldest (smallest counter)
+ * entries first.
+ */
+function trimRetainedOverlaySegments(
+  retainedSegments: Map<number, number>,
+  maxRetained: number,
+): Map<number, number> {
+  const excess = retainedSegments.size - maxRetained;
+  if (excess <= 0) {
+    return retainedSegments;
+  }
+  const oldestSegmentIdsFirst = [...retainedSegments.entries()]
+    .sort((a, b) => a[1] - b[1])
+    .map(([candidateSegmentId]) => candidateSegmentId);
+  const nextRetainedSegments = new Map(retainedSegments);
+  for (const candidateSegmentId of oldestSegmentIdsFirst.slice(0, excess)) {
+    nextRetainedSegments.delete(candidateSegmentId);
+  }
+  return nextRetainedSegments;
+}
+
+/**
+ * Adds or refreshes `segmentId` at recency `touchCounter`, then trims to
+ * `maxRetained` by evicting the oldest-touched entries. Only the relative
+ * order of `touchCounter` values across entries matters.
+ */
 export function retainSpatiallyIndexedSkeletonOverlaySegment(
-  retainedSegmentIds: readonly number[],
+  retainedSegments: ReadonlyMap<number, number>,
   segmentId: number,
+  touchCounter: number,
   options: {
     maxRetained?: number;
   } = {},
-) {
+): Map<number, number> {
   const normalizedSegmentId = normalizeSegmentId(segmentId);
   if (normalizedSegmentId === undefined) {
-    return [...retainedSegmentIds];
+    return new Map(retainedSegments);
   }
-  const nextRetainedSegmentIds = retainedSegmentIds.filter(
-    (candidateSegmentId) => candidateSegmentId !== normalizedSegmentId,
-  );
-  nextRetainedSegmentIds.push(normalizedSegmentId);
+  const nextRetainedSegments = new Map(retainedSegments);
+  nextRetainedSegments.set(normalizedSegmentId, touchCounter);
   const maxRetained = Math.max(
     1,
     Math.round(options.maxRetained ?? DEFAULT_MAX_RETAINED_OVERLAY_SEGMENTS),
   );
-  if (nextRetainedSegmentIds.length <= maxRetained) {
-    return nextRetainedSegmentIds;
-  }
-  return nextRetainedSegmentIds.slice(
-    nextRetainedSegmentIds.length - maxRetained,
-  );
+  return trimRetainedOverlaySegments(nextRetainedSegments, maxRetained);
 }

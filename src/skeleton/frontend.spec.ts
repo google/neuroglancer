@@ -394,6 +394,8 @@ describe("SpatiallyIndexedSkeletonLayer browse exclusions", () => {
         editedSegmentIds: new Set<number>(),
         browseExcludedSegments: new Uint64Set(),
         browseExcludedSegmentsKey: undefined,
+        retainedOverlaySegments: new Map<number, number>(),
+        overlaySegmentTouchCounter: 0,
         redrawNeeded: { dispatch: vi.fn() },
       },
     );
