@@ -350,3 +350,54 @@ input.neuroglancer-segment-list-entry-id {
 .neuroglancer-related-segment-list-header-checkbox {
   min-width: 17px;
 }
+
+/* Status notification shown while a property data-entry tool is active. Lists
+   each value and the key that sets it (for enum/bool) or the number being
+   typed (for numeric), wrapping to fit narrow screens. */
+.neuroglancer-annotation-entry-tool-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: min(80vw, 640px);
+}
+
+.neuroglancer-annotation-entry-tool-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 1px 6px;
+  border: 1px solid #555;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.neuroglancer-annotation-entry-tool-chip-active {
+  background-color: black;
+  border-color: #888;
+}
+
+.neuroglancer-annotation-entry-tool-chip-key {
+  color: #0ff;
+  font: 9pt monospace;
+}
+
+.neuroglancer-annotation-entry-tool-chip-label {
+  color: white;
+}
+
+/* Numeric entry input reuses the annotation details-box input styling; when its
+   value is out of the data type's range it is flagged red via native :invalid. */
+.neuroglancer-annotation-entry-tool-input {
+  min-width: 8ch;
+}
+
+.neuroglancer-annotation-entry-tool-input:invalid {
+  color: #ff5555;
+  outline: 1px solid #ff5555;
+}
+
+.neuroglancer-annotation-entry-tool-nav {
+  margin-top: 4px;
+  color: #bbb;
+  font-size: small;
+}

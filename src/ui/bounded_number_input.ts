@@ -26,6 +26,11 @@ export interface NumberDisplayConfig {
   min?: number;
   max?: number;
   step?: number;
+  // When true (the default), out-of-range values are clamped to the nearest
+  // bound on `change`. Set to false to leave the value as typed (e.g. so the
+  // caller can reject it and flag it via the native `:invalid` state); the
+  // `min`/`max`/`step` attributes are still set for native validation.
+  clampToBounds?: boolean;
 }
 
 export function createBoundedNumberInputElement(
@@ -61,34 +66,36 @@ export function createBoundedNumberInputElement(
     input.max = max !== undefined ? String(max) : "";
     step = step ?? 1;
     input.step = String(step);
-    const withinBounds = (value: number) => {
-      return (
-        (min === undefined || value >= min) &&
-        (max === undefined || value <= max)
-      );
-    };
-    input.addEventListener("change", (event: Event) => {
-      if (!event.target) return;
-      const inputEventValue = (event.target as HTMLInputElement).value;
-      const newValue = parseFloat(inputEventValue);
-      if (isNaN(newValue)) {
-        // If the value is not a number, reset to the initial value
-        (event.target as HTMLInputElement).value = numberToStringFixed(
-          inputValue,
-          config.numDecimals || 4,
+    if (config.clampToBounds !== false) {
+      const withinBounds = (value: number) => {
+        return (
+          (min === undefined || value >= min) &&
+          (max === undefined || value <= max)
         );
-        return;
-      }
-      // Ensure the new value is within bounds
-      if (!withinBounds(newValue)) {
-        // reset to the closest bound
-        if (min !== undefined && newValue < min) {
-          input.value = String(min);
-        } else if (max !== undefined && newValue > max) {
-          input.value = String(max);
+      };
+      input.addEventListener("change", (event: Event) => {
+        if (!event.target) return;
+        const inputEventValue = (event.target as HTMLInputElement).value;
+        const newValue = parseFloat(inputEventValue);
+        if (isNaN(newValue)) {
+          // If the value is not a number, reset to the initial value
+          (event.target as HTMLInputElement).value = numberToStringFixed(
+            inputValue,
+            config.numDecimals || 4,
+          );
+          return;
         }
-      }
-    });
+        // Ensure the new value is within bounds
+        if (!withinBounds(newValue)) {
+          // reset to the closest bound
+          if (min !== undefined && newValue < min) {
+            input.value = String(min);
+          } else if (max !== undefined && newValue > max) {
+            input.value = String(max);
+          }
+        }
+      });
+    }
   }
   input.type = "number";
   input.value = numberToStringFixed(inputValue, config.numDecimals || 4);

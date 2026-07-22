@@ -76,7 +76,7 @@ export class ToolActivation<ToolType extends Tool = Tool> extends RefCounted {
   cancel() {
     const { globalBinder } = this.tool;
     if (this === globalBinder.activeTool_) {
-      globalBinder.deactivate_();
+      globalBinder.deactivateAndReactivateQueued_();
     }
   }
 }
@@ -497,6 +497,16 @@ export class GlobalToolBinder extends RefCounted {
     if (activation === undefined) return;
     this.activeTool_ = undefined;
     activation.dispose();
+  }
+
+  // Deactivate the current tool and, if a toggle tool was displaced by it,
+  // restore that toggle tool. Used when a momentary tool ends via
+  // `ToolActivation.cancel()`: without this, a tool that cancels synchronously
+  // (e.g. select-next-annotation) would orphan the queued toggle tool, dropping
+  // its active key bindings.
+  deactivateAndReactivateQueued_() {
+    this.deactivate_();
+    this.reactivateQueuedTool();
   }
 
   public deactivate() {

@@ -29,6 +29,7 @@ import {
   isAnnotationNumericPropertySpec,
   LocalAnnotationSource,
   parseAnnotationPropertySpecs,
+  propertyTypeDataType,
 } from "#src/annotation/index.js";
 import type { CoordinateTransformSpecification } from "#src/coordinate_transform.js";
 import { makeCoordinateSpace } from "#src/coordinate_transform.js";
@@ -59,10 +60,12 @@ import {
   observeWatchable,
 } from "#src/trackable_value.js";
 import {
-  setEnumPropertyToolJson,
+  annotateEnumPropertyToolJson,
+  annotateNumberPropertyToolJson,
   toggleBoolPropertyToolJson,
 } from "#src/ui/annotation_properties.js";
 import { AnnotationSchemaTab } from "#src/ui/annotation_schema_tab.js";
+import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import type {
   AnnotationLayerView,
   MergedAnnotationStates,
@@ -72,12 +75,17 @@ import {
   SELECT_PREVIOUS_ANNOTATION_TOOL_ID,
   UserLayerWithAnnotationsMixin,
 } from "#src/ui/annotations.js";
+import { StatusMessage } from "#src/status.js";
 import type { ToolActivation } from "#src/ui/tool.js";
 import { LayerTool, registerTool, unregisterTool } from "#src/ui/tool.js";
+import type { DataType } from "#src/util/data_type.js";
+import type { ActionEvent } from "#src/util/event_action_map.js";
+import { EventActionMap } from "#src/util/event_action_map.js";
+import { numberToStringFixed } from "#src/util/number_to_string.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { updateChildren } from "#src/util/dom.js";
+import { removeChildren, updateChildren } from "#src/util/dom.js";
 import {
   parseArray,
   parseFixedLengthArray,
@@ -412,15 +420,15 @@ class LinkedSegmentationLayersWidget extends RefCounted {
   }
 }
 
-// Identifies a keybindable property tool so it can be (re)constructed: either
-// setting an enum property to a specific value, or toggling a bool property.
+// Identifies a keybindable property-entry tool so it can be (re)constructed,
+// one per property type.
 type PropertyToolDescriptor =
-  | { kind: "enum"; propertyIdentifier: string; enumValue: number }
-  | { kind: "bool"; propertyIdentifier: string };
+  | { kind: "enum"; propertyIdentifier: string }
+  | { kind: "bool"; propertyIdentifier: string }
+  | { kind: "number"; propertyIdentifier: string };
 
 // Sets a single property of the currently-selected annotation, computing the
-// new value from the existing one. Shared by the enum-set and bool-toggle
-// tools below.
+// new value from the existing one. Shared by the property-entry tools below.
 function updateSelectedAnnotationProperty(
   layer: AnnotationUserLayer,
   propertyIdentifier: string,
@@ -448,64 +456,314 @@ function updateSelectedAnnotationProperty(
   }
 }
 
-// A keybindable tool that sets the currently-selected annotation's enum
-// property to a specific value, so the user can classify a list with
-// keystrokes alone.
-class SetEnumPropertyTool extends LayerTool<AnnotationUserLayer> {
-  constructor(
-    public propertyIdentifier: string,
-    public enumValue: number,
-    layer: AnnotationUserLayer,
-  ) {
-    super(layer, true);
-  }
-
-  private get property(): AnnotationNumericPropertySpec | undefined {
-    const properties = this.layer.localAnnotations?.properties.value;
-    const property = properties?.find(
-      (x) => x.identifier === this.propertyIdentifier,
-    );
-    if (property !== undefined && isAnnotationNumericPropertySpec(property)) {
-      return property;
-    }
-    return undefined;
-  }
-
-  private get enumLabel(): string {
-    const { property } = this;
-    const enumIndex = property?.enumValues?.indexOf(this.enumValue) ?? -1;
-    if (enumIndex !== -1 && property?.enumLabels !== undefined) {
-      return property.enumLabels[enumIndex];
-    }
-    return String(this.enumValue);
-  }
-
-  activate(activation: ToolActivation<this>) {
-    updateSelectedAnnotationProperty(
-      this.layer,
-      this.propertyIdentifier,
-      () => this.enumValue,
-    );
-    activation.cancel();
-  }
-
-  toJSON() {
-    return setEnumPropertyToolJson(this.propertyIdentifier, this.enumValue);
-  }
-
-  get description() {
-    return `set ${this.propertyIdentifier} = ${this.enumLabel}`;
+// Returns the currently-selected annotation's value for `propertyIdentifier`,
+// or undefined if there is no selection / property.
+function getSelectedAnnotationPropertyValue(
+  layer: AnnotationUserLayer,
+  propertyIdentifier: string,
+): number | undefined {
+  const context = layer.getSelectedAnnotationContext();
+  if (context === undefined) return undefined;
+  const { source } = context.annotationLayerState;
+  const propertyIndex = source.properties.value.findIndex(
+    (x) => x.identifier === propertyIdentifier,
+  );
+  if (propertyIndex === -1) return undefined;
+  const reference = source.getReference(context.annotationId);
+  try {
+    const value = reference.value?.properties[propertyIndex];
+    return typeof value === "number" ? value : undefined;
+  } finally {
+    reference.dispose();
   }
 }
 
-// A keybindable tool that toggles a boolean annotation property on the
-// currently-selected annotation.
+// Maps an option index to the number key that triggers it: 1-9 for the first
+// nine options, 0 for a tenth. Further options have no key.
+function keyForEnumOptionIndex(index: number): string | undefined {
+  if (index < 9) return String(index + 1);
+  if (index === 9) return "0";
+  return undefined;
+}
+
+// Returns the unshifted key-event identifier (e.g. "keyw") for the key
+// currently bound to `toolId` in this layer's tool binder, or undefined if the
+// tool is unbound. Tool keys are single uppercase letters activated with shift;
+// the entry-mode tools reuse the unshifted key for in-mode navigation.
+function boundKeyEventIdentifier(
+  layer: AnnotationUserLayer,
+  toolId: string,
+): string | undefined {
+  const key = layer.toolBinder.jsonToKey.get(JSON.stringify(toolId));
+  if (key === undefined) return undefined;
+  return `key${key.toLowerCase()}`;
+}
+
+// A binding registered by a property-entry tool: an event identifier, the
+// action it maps to, and the handler to run.
+type EntryKeyBinder = (
+  eventKey: string,
+  action: string,
+  handler: (event: ActionEvent<Event>) => void,
+) => void;
+
+// Base class for the keybindable, toggle-style "data-entry mode" tools. While
+// active, the tool stays active across annotation navigation and shows a
+// bottom-of-screen status notification. It binds the unshifted keys of the
+// layer's previous/next annotation tools to move within the mode, and delegates
+// the value-entry keys (number keys, typing, ...) and the rendering of the
+// current value to the concrete subclass.
+abstract class AnnotationPropertyEntryTool extends LayerTool<AnnotationUserLayer> {
+  constructor(
+    public propertyIdentifier: string,
+    layer: AnnotationUserLayer,
+  ) {
+    super(layer, /*toggle=*/ true);
+  }
+
+  protected get property(): AnnotationPropertySpec | undefined {
+    return this.layer.localAnnotations?.properties.value?.find(
+      (x) => x.identifier === this.propertyIdentifier,
+    );
+  }
+
+  protected get currentValue(): number | undefined {
+    return getSelectedAnnotationPropertyValue(
+      this.layer,
+      this.propertyIdentifier,
+    );
+  }
+
+  // Verb shown in the status header, e.g. "Set".
+  protected abstract readonly modeVerb: string;
+
+  // Register the value-entry key bindings for this property kind. Key-capture
+  // tools (enum) override this; input-based tools override `activate` instead.
+  protected configureValueBindings(
+    _addBinding: EntryKeyBinder,
+    _requestRefresh: () => void,
+  ): void {}
+
+  // Render the current value / entry state into `container`.
+  protected renderValue(_container: HTMLElement): void {}
+
+  // Called when the selected annotation changes, so transient entry state
+  // (e.g. a number being typed) can be reset. No-op by default.
+  protected onAnnotationChanged(): void {}
+
+  // Builds the standard bottom-of-screen status notification, reusing the tool
+  // status styling so it matches other tools. Returns the header and (empty)
+  // body for the caller to fill.
+  protected createStatusMessage(activation: ToolActivation<this>): {
+    header: HTMLElement;
+    body: HTMLElement;
+  } {
+    const status = activation.registerDisposer(new StatusMessage(false));
+    status.element.classList.add("neuroglancer-tool-status");
+    const content = document.createElement("div");
+    content.classList.add("neuroglancer-tool-status-content");
+    status.element.appendChild(content);
+    const headerContainer = document.createElement("div");
+    headerContainer.classList.add("neuroglancer-tool-status-header-container");
+    const header = document.createElement("div");
+    header.classList.add("neuroglancer-tool-status-header");
+    headerContainer.appendChild(header);
+    content.appendChild(headerContainer);
+    const body = document.createElement("div");
+    body.classList.add("neuroglancer-tool-status-body");
+    content.appendChild(body);
+    return { header, body };
+  }
+
+  // The unshifted key-event identifiers bound to this layer's previous/next
+  // annotation tools, and a human-readable hint describing them.
+  protected navKeyInfo(): {
+    prevKey: string | undefined;
+    nextKey: string | undefined;
+    hint: string;
+  } {
+    const prevKey = boundKeyEventIdentifier(
+      this.layer,
+      SELECT_PREVIOUS_ANNOTATION_TOOL_ID,
+    );
+    const nextKey = boundKeyEventIdentifier(
+      this.layer,
+      SELECT_NEXT_ANNOTATION_TOOL_ID,
+    );
+    const labels: string[] = [];
+    if (prevKey !== undefined)
+      labels.push(`${prevKey.slice(3).toUpperCase()} prev`);
+    if (nextKey !== undefined)
+      labels.push(`${nextKey.slice(3).toUpperCase()} next`);
+    const hint =
+      labels.length > 0
+        ? `${labels.join(" · ")} annotation`
+        : "bind the prev/next annotation tools to navigate here";
+    return { prevKey, nextKey, hint };
+  }
+
+  activate(activation: ToolActivation<this>) {
+    const { layer, propertyIdentifier } = this;
+    const { header, body } = this.createStatusMessage(activation);
+    const valueContainer = document.createElement("div");
+    valueContainer.classList.add("neuroglancer-annotation-entry-tool-values");
+    body.appendChild(valueContainer);
+    const navHint = document.createElement("div");
+    navHint.classList.add("neuroglancer-annotation-entry-tool-nav");
+    body.appendChild(navHint);
+
+    const refresh = () => {
+      const property = this.property;
+      header.textContent =
+        property === undefined
+          ? `Property "${propertyIdentifier}" unavailable`
+          : `${this.modeVerb} ${propertyIdentifier}`;
+      this.renderValue(valueContainer);
+    };
+    const debouncedRefresh = activation.registerCancellable(
+      animationFrameDebounce(refresh),
+    );
+
+    // Collect all key bindings (value-entry + navigation) into one event map so
+    // they override the defaults (e.g. layer select/deselect) while active.
+    const bindings: { [key: string]: string } = {};
+    const handlers: Array<[string, (event: ActionEvent<Event>) => void]> = [];
+    const addBinding: EntryKeyBinder = (eventKey, action, handler) => {
+      bindings[eventKey] = action;
+      handlers.push([action, handler]);
+    };
+
+    this.configureValueBindings(addBinding, debouncedRefresh);
+
+    // Navigation: reuse the unshifted keys of the layer's previous/next
+    // annotation tools so the user's own nav bindings work while in the mode.
+    const { prevKey, nextKey, hint } = this.navKeyInfo();
+    const navigate = (offset: number) => (event: ActionEvent<Event>) => {
+      event.stopPropagation();
+      layer.shiftSelectedIndexBy(offset);
+    };
+    if (prevKey !== undefined) {
+      addBinding(prevKey, "annotation-entry-prev", navigate(-1));
+    }
+    if (nextKey !== undefined) {
+      addBinding(nextKey, "annotation-entry-next", navigate(1));
+    }
+    navHint.textContent = hint;
+
+    activation.bindInputEventMap(EventActionMap.fromObject(bindings));
+    for (const [action, handler] of handlers) {
+      activation.bindAction(action, handler);
+    }
+
+    // Keep the display in sync, and reset transient state, as the selection or
+    // schema changes.
+    activation.registerDisposer(
+      layer.manager.root.selectionState.changed.add(() => {
+        this.onAnnotationChanged();
+        debouncedRefresh();
+      }),
+    );
+    activation.registerDisposer(
+      layer.localAnnotationProperties.changed.add(debouncedRefresh),
+    );
+    this.onAnnotationChanged();
+    refresh();
+  }
+
+  get description() {
+    return `${this.modeVerb.toLowerCase()} ${this.propertyIdentifier}`;
+  }
+
+  // Helper for subclasses that render key/label chips.
+  protected appendChip(
+    container: HTMLElement,
+    key: string,
+    label: string,
+    active: boolean,
+  ) {
+    const chip = document.createElement("div");
+    chip.classList.add("neuroglancer-annotation-entry-tool-chip");
+    if (active) {
+      chip.classList.add("neuroglancer-annotation-entry-tool-chip-active");
+    }
+    const keyElement = document.createElement("span");
+    keyElement.classList.add("neuroglancer-annotation-entry-tool-chip-key");
+    keyElement.textContent = key;
+    const labelElement = document.createElement("span");
+    labelElement.classList.add("neuroglancer-annotation-entry-tool-chip-label");
+    labelElement.textContent = label;
+    chip.appendChild(keyElement);
+    chip.appendChild(labelElement);
+    container.appendChild(chip);
+  }
+}
+
+// Enum property: number keys 1..N (0 for a tenth) set each option's value.
+class EnumPropertyEntryTool extends AnnotationPropertyEntryTool {
+  protected readonly modeVerb = "Set";
+
+  private get numericProperty(): AnnotationNumericPropertySpec | undefined {
+    const property = this.property;
+    return property !== undefined && isAnnotationNumericPropertySpec(property)
+      ? property
+      : undefined;
+  }
+
+  protected configureValueBindings(
+    addBinding: EntryKeyBinder,
+    requestRefresh: () => void,
+  ) {
+    const enumValues = this.numericProperty?.enumValues ?? [];
+    const boundOptionCount = Math.min(enumValues.length, 10);
+    for (let index = 0; index < boundOptionCount; ++index) {
+      addBinding(
+        `digit${keyForEnumOptionIndex(index)}`,
+        `annotation-enum-option-${index}`,
+        (event) => {
+          event.stopPropagation();
+          const value = this.numericProperty?.enumValues?.[index];
+          if (value === undefined) return;
+          updateSelectedAnnotationProperty(
+            this.layer,
+            this.propertyIdentifier,
+            () => value,
+          );
+          requestRefresh();
+        },
+      );
+    }
+  }
+
+  protected renderValue(container: HTMLElement) {
+    removeChildren(container);
+    const property = this.numericProperty;
+    const enumValues = property?.enumValues ?? [];
+    const enumLabels = property?.enumLabels ?? [];
+    const currentValue = this.currentValue;
+    enumValues.forEach((value, index) => {
+      this.appendChip(
+        container,
+        keyForEnumOptionIndex(index) ?? "–",
+        enumLabels[index] ?? String(value),
+        value === currentValue,
+      );
+    });
+  }
+
+  toJSON() {
+    return annotateEnumPropertyToolJson(this.propertyIdentifier);
+  }
+}
+
+// Bool property: an instant-action tool that toggles the value of the
+// currently-selected annotation and immediately deactivates (unlike the enum
+// and number tools, there is no data-entry mode).
 class ToggleBoolPropertyTool extends LayerTool<AnnotationUserLayer> {
   constructor(
     public propertyIdentifier: string,
     layer: AnnotationUserLayer,
   ) {
-    super(layer, true);
+    super(layer);
   }
 
   activate(activation: ToolActivation<this>) {
@@ -523,6 +781,120 @@ class ToggleBoolPropertyTool extends LayerTool<AnnotationUserLayer> {
 
   get description() {
     return `toggle ${this.propertyIdentifier}`;
+  }
+}
+
+// Plain numeric property: type a number and press Enter to commit it.
+class NumberPropertyEntryTool extends AnnotationPropertyEntryTool {
+  protected readonly modeVerb = "Set";
+
+  private get isFloat(): boolean {
+    return this.property?.type === "float32";
+  }
+
+  private get dataType(): DataType | undefined {
+    const type = this.property?.type;
+    return type === undefined ? undefined : propertyTypeDataType[type];
+  }
+
+  // Uses a real numeric <input> (the same widget as the annotation details box)
+  // rather than the key-capture flow of the base class, so this overrides
+  // `activate` instead of the value-binding/render hooks.
+  activate(activation: ToolActivation<this>) {
+    const { layer, propertyIdentifier } = this;
+    const { header, body } = this.createStatusMessage(activation);
+
+    // Native numeric input with the data type's min/max/step, matching the
+    // details box. `clampToBounds: false` keeps an out-of-range value as typed
+    // so it is flagged (native `:invalid`) and refused on commit rather than
+    // silently clamped.
+    const input = createBoundedNumberInputElement(this.currentValue ?? 0, {
+      dataType: this.dataType,
+      clampToBounds: false,
+      className: "neuroglancer-annotation-property-value-input",
+    });
+    input.classList.add("neuroglancer-annotation-entry-tool-input");
+    body.appendChild(input);
+
+    const navHint = document.createElement("div");
+    navHint.classList.add("neuroglancer-annotation-entry-tool-nav");
+    body.appendChild(navHint);
+
+    const refreshHeader = () => {
+      header.textContent =
+        this.property === undefined
+          ? `Property "${propertyIdentifier}" unavailable`
+          : `${this.modeVerb} ${propertyIdentifier}`;
+    };
+    const showCurrentValue = () => {
+      const value = this.currentValue;
+      input.value = value === undefined ? "" : numberToStringFixed(value, 4);
+    };
+    // On (re)focus, select the whole value so typing overwrites it.
+    const focusAndSelectAll = () => {
+      input.focus();
+      input.select();
+    };
+
+    // Commit on change (fires on Enter / blur). An out-of-range or otherwise
+    // invalid value fails native validation and is refused; the input stays red
+    // (via the `:invalid` style) so the user can correct it.
+    input.addEventListener("change", () => {
+      if (input.value === "" || !input.checkValidity()) return;
+      const value = input.valueAsNumber;
+      if (Number.isNaN(value)) return;
+      updateSelectedAnnotationProperty(layer, propertyIdentifier, () =>
+        this.isFloat ? value : Math.round(value),
+      );
+    });
+
+    // Navigation: reuse the unshifted keys of the layer's prev/next annotation
+    // tools. Handled here (not via the base's input event map) because the
+    // focused input captures keystrokes.
+    const { prevKey, nextKey, hint } = this.navKeyInfo();
+    navHint.textContent = `${hint}  ·  Enter to set · Esc to exit`;
+    const prevLetter = prevKey?.slice(3);
+    const nextLetter = nextKey?.slice(3);
+    input.addEventListener("keydown", (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      if (key === "escape") {
+        event.stopPropagation();
+        activation.cancel();
+      } else if (prevLetter !== undefined && key === prevLetter) {
+        event.preventDefault();
+        event.stopPropagation();
+        layer.shiftSelectedIndexBy(-1);
+        focusAndSelectAll();
+      } else if (nextLetter !== undefined && key === nextLetter) {
+        event.preventDefault();
+        event.stopPropagation();
+        layer.shiftSelectedIndexBy(1);
+        focusAndSelectAll();
+      } else if (key === "enter") {
+        // Let the `change` handler commit; don't leak Enter to global handlers.
+        event.stopPropagation();
+      }
+    });
+
+    // When the selection changes (e.g. via the external advance tool or by
+    // clicking an annotation), show the new value and select it so it can be
+    // typed over.
+    activation.registerDisposer(
+      layer.manager.root.selectionState.changed.add(() => {
+        showCurrentValue();
+        focusAndSelectAll();
+      }),
+    );
+    activation.registerDisposer(
+      layer.localAnnotationProperties.changed.add(refreshHeader),
+    );
+    refreshHeader();
+    showCurrentValue();
+    focusAndSelectAll();
+  }
+
+  toJSON() {
+    return annotateNumberPropertyToolJson(this.propertyIdentifier);
   }
 }
 
@@ -560,7 +932,9 @@ export class AnnotationUserLayer extends Base {
   localAnnotations: LocalAnnotationSource | undefined;
   codeVisible = new TrackableBoolean(true);
   hideInactiveShaderControls = new TrackableBoolean(false);
-  private localAnnotationProperties: WatchableValue<AnnotationPropertySpec[]> =
+  // Accessed by the property keybind tools (e.g. EnumClassificationTool) to
+  // observe schema changes while active.
+  readonly localAnnotationProperties: WatchableValue<AnnotationPropertySpec[]> =
     new WatchableValue([]);
   private localAnnotationRelationships: string[];
   private localAnnotationsJson: any = undefined;
@@ -623,9 +997,9 @@ export class AnnotationUserLayer extends Base {
     );
   }
 
-  // Keep one keybindable tool registered per (enum property × enum value) and
-  // per bool property so each can be bound to a hotkey in the schema editor.
-  // Registers newly-added options and tears down removed ones, including any
+  // Keep one keybindable data-entry tool registered per property (enum, bool,
+  // or plain number) so each can be bound to a hotkey in the schema editor.
+  // Registers newly-added properties and tears down removed ones, including any
   // live keybindings in this layer's tool binder.
   private syncPropertyTools(
     properties: readonly AnnotationPropertySpec[] = this
@@ -633,25 +1007,27 @@ export class AnnotationUserLayer extends Base {
   ) {
     const desired = new Map<string, PropertyToolDescriptor>();
     for (const property of properties) {
-      if (
-        isAnnotationNumericPropertySpec(property) &&
-        property.enumValues !== undefined
-      ) {
-        for (const enumValue of property.enumValues) {
-          desired.set(setEnumPropertyToolJson(property.identifier, enumValue), {
+      const { identifier } = property;
+      if (property.type === "bool") {
+        desired.set(toggleBoolPropertyToolJson(identifier), {
+          kind: "bool",
+          propertyIdentifier: identifier,
+        });
+      } else if (isAnnotationNumericPropertySpec(property)) {
+        if (property.enumValues !== undefined) {
+          desired.set(annotateEnumPropertyToolJson(identifier), {
             kind: "enum",
-            propertyIdentifier: property.identifier,
-            enumValue,
+            propertyIdentifier: identifier,
+          });
+        } else {
+          desired.set(annotateNumberPropertyToolJson(identifier), {
+            kind: "number",
+            propertyIdentifier: identifier,
           });
         }
-      } else if (property.type === "bool") {
-        desired.set(toggleBoolPropertyToolJson(property.identifier), {
-          kind: "bool",
-          propertyIdentifier: property.identifier,
-        });
       }
     }
-    // Tear down tools whose property/value no longer exists, including any live
+    // Tear down tools whose property no longer exists, including any live
     // keybinding for them.
     for (const toolId of this.registeredPropertyTools.keys()) {
       if (!desired.has(toolId)) {
@@ -663,15 +1039,25 @@ export class AnnotationUserLayer extends Base {
     // Register newly-added tools.
     for (const [toolId, descriptor] of desired) {
       if (!this.registeredPropertyTools.has(toolId)) {
-        registerTool(AnnotationUserLayer, toolId, (layer) =>
-          descriptor.kind === "enum"
-            ? new SetEnumPropertyTool(
+        registerTool(AnnotationUserLayer, toolId, (layer) => {
+          switch (descriptor.kind) {
+            case "enum":
+              return new EnumPropertyEntryTool(
                 descriptor.propertyIdentifier,
-                descriptor.enumValue,
                 layer,
-              )
-            : new ToggleBoolPropertyTool(descriptor.propertyIdentifier, layer),
-        );
+              );
+            case "bool":
+              return new ToggleBoolPropertyTool(
+                descriptor.propertyIdentifier,
+                layer,
+              );
+            case "number":
+              return new NumberPropertyEntryTool(
+                descriptor.propertyIdentifier,
+                layer,
+              );
+          }
+        });
         this.registeredPropertyTools.set(toolId, descriptor);
       }
     }

@@ -59,7 +59,8 @@ import {
   makeReadonlyColorProperty,
   isEnumType,
   createTextAreaElement,
-  setEnumPropertyToolJson,
+  annotateEnumPropertyToolJson,
+  annotateNumberPropertyToolJson,
   toggleBoolPropertyToolJson,
 } from "#src/ui/annotation_properties.js";
 import type { UserLayerWithAnnotations } from "#src/ui/annotations.js";
@@ -633,6 +634,16 @@ class AnnotationUIProperty extends RefCounted {
 
     selectorContainer.appendChild(select);
 
+    // Keybind affordance for the whole enum: bind a key to enter "classify"
+    // mode, where the number keys set the selected annotation's value to each
+    // option. One button per property (not per value).
+    const toolButton = makeToolButton(this, this.parentView.layer.toolBinder, {
+      toolJson: annotateEnumPropertyToolJson(enumProperty.identifier),
+      title: `Bind a key to classify the selected annotation's ${enumProperty.identifier} using the number keys`,
+    });
+    toolButton.classList.add("neuroglancer-annotation-schema-enum-keybind");
+    selectorContainer.appendChild(toolButton);
+
     return {
       container: selectorContainer,
       select: select,
@@ -664,6 +675,19 @@ class AnnotationUIProperty extends RefCounted {
     container.appendChild(numberInput);
     if (!this.readonly) {
       this.registerEventListener(numberInput, "change", changeFunction);
+      // Keybind affordance: bind a key to enter a mode where the selected
+      // annotation's value for this property is typed with the number keys and
+      // committed with Enter.
+      const toolButton = makeToolButton(
+        this,
+        this.parentView.layer.toolBinder,
+        {
+          toolJson: annotateNumberPropertyToolJson(oldProperty.identifier),
+          title: `Bind a key to type values for the selected annotation's ${oldProperty.identifier}`,
+        },
+      );
+      toolButton.classList.add("neuroglancer-annotation-schema-keybind");
+      container.appendChild(toolButton);
     }
 
     return [numberInput as HTMLInputElement];
@@ -735,20 +759,6 @@ class AnnotationUIProperty extends RefCounted {
     enumRow.appendChild(valueInput);
 
     if (!this.readonly) {
-      // Keybind affordance: bind a key so that pressing it while iterating the
-      // annotation list sets the selected annotation's property to this enum
-      // value.
-      const toolButton = makeToolButton(
-        this,
-        this.parentView.layer.toolBinder,
-        {
-          toolJson: setEnumPropertyToolJson(oldProperty.identifier, value),
-          title: `Bind a key to set the selected annotation's ${oldProperty.identifier} to "${label}"`,
-        },
-      );
-      toolButton.classList.add("neuroglancer-annotation-schema-enum-keybind");
-      enumRow.appendChild(toolButton);
-
       const deleteIcon = this.createEnumDeleteIcon(enumIndex, oldProperty);
       enumRow.appendChild(deleteIcon);
     }
