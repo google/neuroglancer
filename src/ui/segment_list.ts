@@ -117,18 +117,31 @@ abstract class SegmentListSource
 
   abstract update(): void;
 
-  private updateRendering(element: HTMLElement) {
-    this.segmentWidgetFactory.update(element);
-  }
-
   segmentWidgetFactory: SegmentWidgetWithExtraColumnsFactory;
 
-  abstract render(index: number): HTMLDivElement;
+  abstract getSegmentId(index: number): bigint;
+
+  render = (index: number) => {
+    return this.segmentWidgetFactory.get(this.getSegmentId(index));
+  };
+
+  prefetch(start: number, end: number) {
+    const source = this;
+    this.segmentWidgetFactory.prefetchBaseObjectColors(
+      (function* () {
+        for (let index = start; index < end; ++index) {
+          yield source.getSegmentId(index);
+        }
+      })(),
+    );
+  }
 
   updateRenderedItems(list: VirtualList) {
+    const renderedItems: HTMLElement[] = [];
     list.forEachRenderedItem((element) => {
-      this.updateRendering(element);
+      renderedItems.push(element);
     });
+    this.segmentWidgetFactory.updateMany(renderedItems);
   }
 }
 
@@ -172,11 +185,10 @@ class StarredSegmentsListSource extends SegmentListSource {
     this.changed.dispatch(splices);
   }
 
-  render = (index: number) => {
+  getSegmentId(index: number) {
     const { explicitSegments } = this;
-    const id = explicitSegments![index];
-    return this.segmentWidgetFactory.get(id);
-  };
+    return explicitSegments![index];
+  }
 }
 
 class SegmentQueryListSource extends SegmentListSource {
@@ -330,19 +342,16 @@ class SegmentQueryListSource extends SegmentListSource {
     }
   }
 
-  render = (index: number) => {
+  getSegmentId(index: number) {
     const { explicitSegments } = this;
-    let id: bigint;
     if (explicitSegments !== undefined) {
-      id = explicitSegments[index];
-    } else {
-      const propIndex = this.queryResult.value!.indices![index];
-      const { ids } =
-        this.segmentPropertyMap!.segmentPropertyMap.inlineProperties!;
-      id = ids[propIndex];
+      return explicitSegments[index];
     }
-    return this.segmentWidgetFactory.get(id);
-  };
+    const propIndex = this.queryResult.value!.indices![index];
+    const { ids } =
+      this.segmentPropertyMap!.segmentPropertyMap.inlineProperties!;
+    return ids[propIndex];
+  }
 }
 
 const keyMap = EventActionMap.fromObject({
