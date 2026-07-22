@@ -176,6 +176,25 @@ describe("getShaderBaseSegmentColor", () => {
     );
   });
 
+  it("gets multiple colors with a single offscreen lookup", () => {
+    const segmentationUserLayer = setupSegmentationLayer();
+    const { displayState } = segmentationUserLayer;
+    displayState.segmentStatedColors.value.set(
+      1n,
+      BigInt(packColor(vec3.fromValues(1.0, 0.0, 0.0))),
+    );
+    displayState.segmentStatedColors.value.set(
+      2n,
+      BigInt(packColor(vec3.fromValues(0.0, 1.0, 0.0))),
+    );
+    displayState.segmentDefaultColor.value = vec3.fromValues(0.0, 0.0, 1.0);
+
+    const colors = displayState.getShaderBaseSegmentColors([1n, 2n, 3n])!;
+    expectColor(colors.subarray(0, 4) as vec4, [1.0, 0.0, 0.0, 0.0]);
+    expectColor(colors.subarray(4, 8) as vec4, [0.0, 1.0, 0.0, 0.0]);
+    expectColor(colors.subarray(8, 12) as vec4, [0.0, 0.0, 1.0, 0.0]);
+  });
+
   it("does not apply hover highlighting to offscreen color lookups", () => {
     const segmentationUserLayer = setupSegmentationLayer();
     segmentationUserLayer.displayState.segmentStatedColors.value.set(
