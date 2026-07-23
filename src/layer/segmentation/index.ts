@@ -680,6 +680,7 @@ vColor = segmentColorUserShader(uint64_t(aID));
     ids: readonly bigint[],
     colors = new Float32Array(ids.length * 4),
   ) => {
+    console.log("getShaderBaseSegmentColors", ids.length);
     const numIds = ids.length;
     if (numIds === 0) return colors;
     const { shader, parameters } = this.getSegmentColorShader(
