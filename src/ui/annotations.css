@@ -358,7 +358,9 @@ input.neuroglancer-segment-list-entry-id {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  max-width: min(80vw, 640px);
+  /* Fill the available width so options stay on one line on wide screens and
+     only wrap as the panel narrows. */
+  width: 100%;
 }
 
 .neuroglancer-annotation-entry-tool-chip {
