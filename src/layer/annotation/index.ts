@@ -49,6 +49,7 @@ import { Overlay } from "#src/overlay.js";
 import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
 import { RenderLayerRole } from "#src/renderlayer.js";
 import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
+import { StatusMessage } from "#src/status.js";
 import {
   ElementVisibilityFromTrackableBoolean,
   TrackableBoolean,
@@ -65,7 +66,6 @@ import {
   toggleBoolPropertyToolJson,
 } from "#src/ui/annotation_properties.js";
 import { AnnotationSchemaTab } from "#src/ui/annotation_schema_tab.js";
-import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import type {
   AnnotationLayerView,
   MergedAnnotationStates,
@@ -75,17 +75,16 @@ import {
   SELECT_PREVIOUS_ANNOTATION_TOOL_ID,
   UserLayerWithAnnotationsMixin,
 } from "#src/ui/annotations.js";
-import { StatusMessage } from "#src/status.js";
+import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import type { ToolActivation } from "#src/ui/tool.js";
 import { LayerTool, registerTool, unregisterTool } from "#src/ui/tool.js";
-import type { DataType } from "#src/util/data_type.js";
-import type { ActionEvent } from "#src/util/event_action_map.js";
-import { EventActionMap } from "#src/util/event_action_map.js";
-import { numberToStringFixed } from "#src/util/number_to_string.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import type { DataType } from "#src/util/data_type.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeChildren, updateChildren } from "#src/util/dom.js";
+import type { ActionEvent } from "#src/util/event_action_map.js";
+import { EventActionMap } from "#src/util/event_action_map.js";
 import {
   parseArray,
   parseFixedLengthArray,
@@ -97,6 +96,7 @@ import {
   verifyString,
   verifyStringArray,
 } from "#src/util/json.js";
+import { numberToStringFixed } from "#src/util/number_to_string.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 import {
