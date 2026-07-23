@@ -363,19 +363,25 @@ input.neuroglancer-segment-list-entry-id {
   width: 100%;
 }
 
+/* Each option is a "pill" on a dark panel background (like the rest of the UI)
+   so the cyan key and light label read clearly, rather than floating on the
+   mid-gray status bar. Colors follow app conventions: cyan #0ff for the key
+   (as everywhere keys are shown), and the annotation-list "selected" purple
+   (#939) to fill the option currently set on the annotation. */
 .neuroglancer-annotation-entry-tool-chip {
   display: inline-flex;
   align-items: baseline;
   gap: 5px;
   padding: 1px 6px;
+  background-color: #333;
   border: 1px solid #555;
   border-radius: 3px;
   white-space: nowrap;
 }
 
 .neuroglancer-annotation-entry-tool-chip-active {
-  background-color: black;
-  border-color: #888;
+  background-color: #939;
+  border-color: #969;
 }
 
 .neuroglancer-annotation-entry-tool-chip-key {
@@ -384,22 +390,50 @@ input.neuroglancer-segment-list-entry-id {
 }
 
 .neuroglancer-annotation-entry-tool-chip-label {
-  color: white;
+  color: #ccc;
 }
 
-/* Numeric entry input reuses the annotation details-box input styling; when its
-   value is out of the data type's range it is flagged red via native :invalid. */
-.neuroglancer-annotation-entry-tool-input {
+.neuroglancer-annotation-entry-tool-chip-active
+  .neuroglancer-annotation-entry-tool-chip-label {
+  color: #fff;
+}
+
+/* Numeric entry input. It reuses the annotation details-box input, but that
+   input's translucent light fill is meant for a dark panel; on the mid-gray
+   status bar it reads poorly, so give it an opaque dark field (compact, not
+   full width). The combined selector overrides the base hover/focus fills
+   regardless of stylesheet order. */
+.neuroglancer-annotation-property-value-input.neuroglancer-annotation-entry-tool-input {
+  width: auto;
   min-width: 8ch;
+  max-width: 16ch;
+  background: #222;
+  border: 1px solid #555;
 }
 
-.neuroglancer-annotation-entry-tool-input:invalid {
-  color: #ff5555;
-  outline: 1px solid #ff5555;
+.neuroglancer-annotation-property-value-input.neuroglancer-annotation-entry-tool-input:hover {
+  background: #222;
 }
 
+.neuroglancer-annotation-property-value-input.neuroglancer-annotation-entry-tool-input:focus {
+  background: #222;
+  border-color: #016dcc;
+}
+
+/* Out-of-range / invalid value: red text and border (native :invalid). */
+.neuroglancer-annotation-property-value-input.neuroglancer-annotation-entry-tool-input:invalid {
+  color: #ff8080;
+  border-color: #ff5555;
+}
+
+/* Advancement / commit instructions: a dark pill so the help text is readable
+   against the mid-gray status bar. */
 .neuroglancer-annotation-entry-tool-nav {
+  display: inline-block;
   margin-top: 4px;
-  color: #bbb;
+  padding: 1px 6px;
+  background-color: #333;
+  border-radius: 3px;
+  color: #ccc;
   font-size: small;
 }
