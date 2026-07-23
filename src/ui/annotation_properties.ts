@@ -34,7 +34,7 @@ export type AnnotationPropertyType = AnnotationPropertySpec["type"];
 
 // The keybindable "data-entry mode" tools all put the layer into a focused mode
 // for a single property while active: enum options are set with the number
-// keys, and a plain number is typed and committed with Enter.  
+// keys, and a plain number is typed and committed with Enter.
 // Their tool ids are defined here (a neutral leaf module)
 // so that both the tool registration in `src/layer/annotation/index.ts` and the
 // schema-editor keybind buttons in `src/ui/annotation_schema_tab.ts` produce
