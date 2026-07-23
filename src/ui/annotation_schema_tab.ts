@@ -686,7 +686,7 @@ class AnnotationUIProperty extends RefCounted {
           title: `Bind a key to type values for the selected annotation's ${oldProperty.identifier}`,
         },
       );
-      toolButton.classList.add("changeSelectedIndex");
+      toolButton.classList.add("neuroglancer-annotation-schema-keybind");
       container.appendChild(toolButton);
     }
 
