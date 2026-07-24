@@ -1134,7 +1134,6 @@ export class PerspectivePanel extends RenderedDataPanel {
         : perspectivePanelEmit,
       emitColor: true,
       emitPickID: true,
-      emitNormals: ssaoRequested,
       alreadyEmittedPickID: false,
       bindFramebuffer,
       frameNumber: this.context.frameNumber,

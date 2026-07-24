@@ -295,7 +295,7 @@ export class MeshShaderManager {
     mat3.invert(tempMat3, tempMat3);
     mat3.transpose(tempMat3, tempMat3);
     gl.uniformMatrix3fv(shader.uniform("uNormalMatrix"), false, tempMat3);
-    if (renderContext.emitNormals) {
+    if (renderContext.emitter === perspectivePanelEmitWithNormals) {
       // Combined model→view normal transform for SSAO. Uses `modelMat`
       // directly, bypassing `uNormalMatrix`'s `canonicalVoxelFactors` scaling,
       // which gives wrong oblique normals on anisotropic data.
@@ -547,7 +547,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
         ++presentChunks;
         if (renderContext.emitColor) {
           meshShaderManager.setColor(gl, shader, color!);
-          if (renderContext.emitNormals) {
+          if (renderContext.emitter === perspectivePanelEmitWithNormals) {
             const isHighlighted =
               displayState.hoverHighlight.value &&
               displayState.segmentSelectionState.isSelected(objectId);
@@ -936,7 +936,7 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
         }
         if (renderContext.emitColor) {
           meshShaderManager.setColor(gl, shader, color!);
-          if (renderContext.emitNormals) {
+          if (renderContext.emitter === perspectivePanelEmitWithNormals) {
             const isHighlighted =
               displayState.hoverHighlight.value &&
               displayState.segmentSelectionState.isSelected(objectId);
