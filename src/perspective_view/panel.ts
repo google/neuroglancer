@@ -47,6 +47,7 @@ import {
 import type { SliceView } from "#src/sliceview/frontend.js";
 import { SliceViewRenderHelper } from "#src/sliceview/frontend.js";
 import { SSAOManager } from "#src/ssao/ssao_manager.js";
+import type { TrackableSSAO } from "#src/ssao/trackable_ssao_params.js";
 import {
   SSAO_INTENSITY_RANGE,
   SSAO_RADIUS_RANGE,
@@ -100,9 +101,7 @@ export interface PerspectiveViewerState extends RenderedDataViewerState {
   crossSectionBackgroundColor: TrackableRGB;
   perspectiveViewBackgroundColor: TrackableRGB;
   hideCrossSectionBackground3D: TrackableBoolean;
-  ssao: WatchableValueInterface<boolean>;
-  ssaoIntensity: WatchableValueInterface<number>;
-  ssaoRadius: WatchableValueInterface<number>;
+  ssao: TrackableSSAO;
   rpc: RPC;
 }
 
@@ -700,12 +699,6 @@ export class PerspectivePanel extends RenderedDataPanel {
     );
     this.registerDisposer(viewer.ssao.changed.add(() => this.scheduleRedraw()));
     this.registerDisposer(
-      viewer.ssaoIntensity.changed.add(() => this.scheduleRedraw()),
-    );
-    this.registerDisposer(
-      viewer.ssaoRadius.changed.add(() => this.scheduleRedraw()),
-    );
-    this.registerDisposer(
       viewer.hideCrossSectionBackground3D.changed.add(() =>
         this.scheduleRedraw(),
       ),
@@ -1017,7 +1010,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     const gl = this.gl;
     // ssaoActive (set below after the opaque walk) may be false when
     // ssaoRequested is true, if volume rendering is present.
-    const ssaoRequested = this.viewer.ssao.value;
+    const ssaoRequested = this.viewer.ssao.enabled.value;
     if (ssaoRequested && !this.hasNormalAttachment) {
       this.enableNormalAttachment();
     }
@@ -1210,7 +1203,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       // slider's screen-space effect stays consistent across scales.
       const radius = Math.min(
         SSAO_RADIUS_RANGE.max,
-        Math.max(SSAO_RADIUS_RANGE.min, this.viewer.ssaoRadius.value),
+        Math.max(SSAO_RADIUS_RANGE.min, this.viewer.ssao.radius.value),
       );
 
       this.ssaoManager.render(
@@ -1608,7 +1601,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     // absurd exponent would otherwise NaN or wash out the composite.
     const intensity = Math.min(
       SSAO_INTENSITY_RANGE.max,
-      Math.max(SSAO_INTENSITY_RANGE.min, this.viewer.ssaoIntensity.value),
+      Math.max(SSAO_INTENSITY_RANGE.min, this.viewer.ssao.intensity.value),
     );
     this.ssaoManager.drawComposite(
       offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture,

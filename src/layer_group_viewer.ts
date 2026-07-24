@@ -51,6 +51,7 @@ import {
   WatchableDisplayDimensionRenderInfo,
 } from "#src/navigation_state.js";
 import type { RenderLayerRole } from "#src/renderlayer.js";
+import type { TrackableSSAO } from "#src/ssao/trackable_ssao_params.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type {
   TrackableValue,
@@ -104,9 +105,7 @@ export interface LayerGroupViewerState {
   crossSectionBackgroundColor: TrackableRGB;
   perspectiveViewBackgroundColor: TrackableRGB;
   hideCrossSectionBackground3D: TrackableBoolean;
-  ssao: WatchableValueInterface<boolean>;
-  ssaoIntensity: WatchableValueInterface<number>;
-  ssaoRadius: WatchableValueInterface<number>;
+  ssao: TrackableSSAO;
   pickRadius: TrackableValue<number>;
 }
 
@@ -396,12 +395,6 @@ export class LayerGroupViewer extends RefCounted {
   }
   get ssao() {
     return this.viewerState.ssao;
-  }
-  get ssaoIntensity() {
-    return this.viewerState.ssaoIntensity;
-  }
-  get ssaoRadius() {
-    return this.viewerState.ssaoRadius;
   }
   layerPanel: LayerBar | undefined;
   layout: DataPanelLayoutContainer;

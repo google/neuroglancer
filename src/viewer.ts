@@ -71,11 +71,7 @@ import {
 import { overlaysOpen } from "#src/overlay.js";
 import { ScreenshotHandler } from "#src/python_integration/screenshots.js";
 import { allRenderLayerRoles, RenderLayerRole } from "#src/renderlayer.js";
-import {
-  makeTrackableSSAO,
-  makeTrackableSSAOIntensity,
-  makeTrackableSSAORadius,
-} from "#src/ssao/trackable_ssao_params.js";
+import { TrackableSSAO } from "#src/ssao/trackable_ssao_params.js";
 import { StatusMessage } from "#src/status.js";
 import {
   ElementVisibilityFromTrackableBoolean,
@@ -267,8 +263,6 @@ class TrackableViewerState extends CompoundTrackable {
     this.add("showAxisLines", viewer.showAxisLines);
     this.add("wireFrame", viewer.wireFrame);
     this.add("ssao", viewer.ssao);
-    this.add("ssaoIntensity", viewer.ssaoIntensity);
-    this.add("ssaoRadius", viewer.ssaoRadius);
     this.add("enableAdaptiveDownsampling", viewer.enableAdaptiveDownsampling);
     this.add("showScaleBar", viewer.showScaleBar);
     this.add("showDefaultAnnotations", viewer.showDefaultAnnotations);
@@ -443,9 +437,7 @@ export class Viewer extends RefCounted implements ViewerState {
   );
   showAxisLines = new TrackableBoolean(true, true);
   wireFrame = new TrackableBoolean(false, false);
-  ssao = makeTrackableSSAO();
-  ssaoIntensity = makeTrackableSSAOIntensity();
-  ssaoRadius = makeTrackableSSAORadius();
+  ssao = this.registerDisposer(new TrackableSSAO());
   enableAdaptiveDownsampling = new TrackableBoolean(true, true);
   showScaleBar = new TrackableBoolean(true, true);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
@@ -1149,7 +1141,7 @@ export class Viewer extends RefCounted implements ViewerState {
       this.showPerspectiveSliceViews.toggle(),
     );
     this.bindAction("toggle-show-statistics", () => this.showStatistics());
-    this.bindAction("toggle-ssao", () => this.ssao.toggle());
+    this.bindAction("toggle-ssao", () => this.ssao.enabled.toggle());
   }
 
   toggleHelpPanel() {

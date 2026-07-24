@@ -42,6 +42,7 @@ import type { RenderLayerRole } from "#src/renderlayer.js";
 import { SliceView } from "#src/sliceview/frontend.js";
 import type { SliceViewerState } from "#src/sliceview/panel.js";
 import { SliceViewPanel } from "#src/sliceview/panel.js";
+import type { TrackableSSAO } from "#src/ssao/trackable_ssao_params.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type {
   WatchableSet,
@@ -101,9 +102,7 @@ export interface ViewerUIState
   crossSectionBackgroundColor: TrackableRGB;
   perspectiveViewBackgroundColor: TrackableRGB;
   hideCrossSectionBackground3D: TrackableBoolean;
-  ssao: WatchableValueInterface<boolean>;
-  ssaoIntensity: WatchableValueInterface<number>;
-  ssaoRadius: WatchableValueInterface<number>;
+  ssao: TrackableSSAO;
   pickRadius: TrackableValue<number>;
 }
 
@@ -188,8 +187,6 @@ export function getCommonViewerState(viewer: ViewerUIState) {
     scaleBarOptions: viewer.scaleBarOptions,
     hideCrossSectionBackground3D: viewer.hideCrossSectionBackground3D,
     ssao: viewer.ssao,
-    ssaoIntensity: viewer.ssaoIntensity,
-    ssaoRadius: viewer.ssaoRadius,
     pickRadius: viewer.pickRadius,
   };
 }

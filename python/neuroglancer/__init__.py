@@ -118,5 +118,6 @@ from .viewer_state import (
     row_layout,  # noqa: F401
     column_layout,  # noqa: F401
     LayerGroupViewer,  # noqa: F401
+    Ssao,  # noqa: F401
     ViewerState,  # noqa: F401
 )

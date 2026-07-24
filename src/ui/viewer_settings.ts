@@ -167,18 +167,18 @@ export class ViewerSettingsPanel extends SidePanel {
 
     addCheckbox(
       "Enable SSAO (shadows)",
-      viewer.ssao,
+      viewer.ssao.enabled,
       "Screen-space ambient occlusion: more realistic shading/shadows on mesh surfaces.",
     );
     addRange(
       "SSAO intensity",
-      viewer.ssaoIntensity,
+      viewer.ssao.intensity,
       SSAO_INTENSITY_RANGE,
       "Higher values give darker shading/shadows.",
     );
     addRange(
       "SSAO radius",
-      viewer.ssaoRadius,
+      viewer.ssao.radius,
       SSAO_RADIUS_RANGE,
       "Higher values give broader, softer shadows.",
     );

@@ -17,6 +17,7 @@
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import { TrackableValue } from "#src/trackable_value.js";
 import { verifyFiniteFloat } from "#src/util/json.js";
+import { CompoundTrackable } from "#src/util/trackable.js";
 
 // Slider / clamp range for the SSAO sampling radius.
 export const SSAO_RADIUS_RANGE = { min: 0.01, max: 3, step: 0.01 };
@@ -30,22 +31,31 @@ function clampToRange(range: { min: number; max: number }) {
     Math.min(range.max, Math.max(range.min, verifyFiniteFloat(obj)));
 }
 
-export function makeTrackableSSAO(initial = false) {
-  return new TrackableBoolean(initial, false);
-}
-
-export function makeTrackableSSAORadius(initial = 2.0) {
-  return new TrackableValue<number>(
-    initial,
-    clampToRange(SSAO_RADIUS_RANGE),
-    0.05,
-  );
-}
-
-export function makeTrackableSSAOIntensity(initial = 1.8) {
-  return new TrackableValue<number>(
-    initial,
+export class TrackableSSAO extends CompoundTrackable {
+  enabled = new TrackableBoolean(false, false);
+  intensity = new TrackableValue<number>(
+    1.8,
     clampToRange(SSAO_INTENSITY_RANGE),
     1.8,
   );
+  radius = new TrackableValue<number>(
+    0.2,
+    clampToRange(SSAO_RADIUS_RANGE),
+    0.2,
+  );
+
+  constructor() {
+    super();
+    this.add("enabled", this.enabled);
+    this.add("intensity", this.intensity);
+    this.add("radius", this.radius);
+  }
+
+  toJSON(): any {
+    const result = super.toJSON();
+    for (const key of Object.keys(result)) {
+      if (result[key] === undefined) delete result[key];
+    }
+    return Object.keys(result).length === 0 ? undefined : result;
+  }
 }

@@ -422,8 +422,6 @@ function getCommonViewerState(viewer: Viewer) {
     perspectiveViewBackgroundColor: viewer.perspectiveViewBackgroundColor,
     hideCrossSectionBackground3D: viewer.hideCrossSectionBackground3D,
     ssao: viewer.ssao,
-    ssaoIntensity: viewer.ssaoIntensity,
-    ssaoRadius: viewer.ssaoRadius,
     pickRadius: viewer.uiConfiguration.pickRadius,
   };
 }
