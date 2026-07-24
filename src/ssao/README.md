@@ -6,28 +6,7 @@ shapes, and it makes the display more appealing. SSAO is an efficient
 post-processing effect applied to the perspective view after opaque geometry is
 drawn.
 
-<p align="center">
-  <img src="ssao-off.png" width="45%" />
-  <img src="ssao-on.png" width="45%" />
-</p>
-
-## User experience
-
-Use the `q` key to toggle SSAO on and off. The settings panel has three
-controls for SSAO:
-
-- "Enable SSAO (shadows)": the `q` toggle
-- "SSAO intensity": a slider with higher values giving darker shadow effects
-- "SSAO radius": a slider with higher values giving broader, softer shadows
-
-SSAO applies only to mesh surfaces (`MeshLayer` or `MultiscaleMeshLayer`).
-SSAO does not apply to other opaque geometry like skeletons and annotations.
-SSAO is disabled in any perspective view that contains a volume-rendering
-layer.
-
-## Technical details
-
-### Overview
+## Overview
 
 This implementation uses the Ground Truth Ambient Occlusion (GTAO) algorithm
 presented by Jimenez et al. at SIGGRAPH 2016
