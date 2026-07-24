@@ -94,6 +94,9 @@ import { Tab } from "#src/widget/tab_view.js";
 import type { VirtualListSource } from "#src/widget/virtual_list.js";
 import { VirtualList } from "#src/widget/virtual_list.js";
 
+const SEGMENT_COLOR_PREFETCH_CHUNK_SIZE = 32;
+const SEGMENT_COLOR_PREFETCH_CHUNKS = 1;
+
 abstract class SegmentListSource
   extends RefCounted
   implements VirtualListSource
@@ -119,7 +122,38 @@ abstract class SegmentListSource
 
   segmentWidgetFactory: SegmentWidgetWithExtraColumnsFactory;
 
-  abstract render(index: number): HTMLDivElement;
+  abstract getSegmentId(index: number): bigint;
+
+  render = (index: number) => {
+    return this.segmentWidgetFactory.get(this.getSegmentId(index));
+  };
+
+  prefetch(start: number, end: number) {
+    const chunkStart =
+      Math.floor(start / SEGMENT_COLOR_PREFETCH_CHUNK_SIZE) *
+      SEGMENT_COLOR_PREFETCH_CHUNK_SIZE;
+    const chunkEnd =
+      Math.ceil(end / SEGMENT_COLOR_PREFETCH_CHUNK_SIZE) *
+      SEGMENT_COLOR_PREFETCH_CHUNK_SIZE;
+    const prefetchStart = Math.max(
+      0,
+      chunkStart -
+        SEGMENT_COLOR_PREFETCH_CHUNKS * SEGMENT_COLOR_PREFETCH_CHUNK_SIZE,
+    );
+    const prefetchEnd = Math.min(
+      this.length,
+      chunkEnd +
+        SEGMENT_COLOR_PREFETCH_CHUNKS * SEGMENT_COLOR_PREFETCH_CHUNK_SIZE,
+    );
+    const source = this;
+    this.segmentWidgetFactory.prefetchBaseObjectColors(
+      (function* () {
+        for (let index = prefetchStart; index < prefetchEnd; ++index) {
+          yield source.getSegmentId(index);
+        }
+      })(),
+    );
+  }
 
   updateRenderedItems(list: VirtualList) {
     const renderedItems: HTMLElement[] = [];
@@ -170,11 +204,10 @@ class StarredSegmentsListSource extends SegmentListSource {
     this.changed.dispatch(splices);
   }
 
-  render = (index: number) => {
+  getSegmentId(index: number) {
     const { explicitSegments } = this;
-    const id = explicitSegments![index];
-    return this.segmentWidgetFactory.get(id);
-  };
+    return explicitSegments![index];
+  }
 }
 
 class SegmentQueryListSource extends SegmentListSource {
@@ -328,19 +361,16 @@ class SegmentQueryListSource extends SegmentListSource {
     }
   }
 
-  render = (index: number) => {
+  getSegmentId(index: number) {
     const { explicitSegments } = this;
-    let id: bigint;
     if (explicitSegments !== undefined) {
-      id = explicitSegments[index];
-    } else {
-      const propIndex = this.queryResult.value!.indices![index];
-      const { ids } =
-        this.segmentPropertyMap!.segmentPropertyMap.inlineProperties!;
-      id = ids[propIndex];
+      return explicitSegments[index];
     }
-    return this.segmentWidgetFactory.get(id);
-  };
+    const propIndex = this.queryResult.value!.indices![index];
+    const { ids } =
+      this.segmentPropertyMap!.segmentPropertyMap.inlineProperties!;
+    return ids[propIndex];
+  }
 }
 
 const keyMap = EventActionMap.fromObject({

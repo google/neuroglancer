@@ -629,6 +629,8 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
   private registerEventHandlers:
     | undefined
     | ((element: HTMLElement, template: SegmentWidgetTemplate) => void);
+  private prefetchedBaseObjectColors = new Map<bigint, vec3>();
+  private baseObjectColorCacheState: unknown[] = [];
   constructor(
     public displayState: SegmentationDisplayState | undefined,
     protected template: Template,
@@ -725,14 +727,79 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
     this.updateWithId(container, id);
   }
 
-  updateMany(containers: Iterable<HTMLElement>) {
+  private ensureBaseObjectColorCacheCurrent() {
     const { displayState } = this;
     if (displayState === undefined) return;
-    const updates: { container: HTMLElement; mapped: bigint }[] = [];
+    const colorGroupState = displayState.segmentationColorGroupState.value;
+    const groupState = displayState.segmentationGroupState.value;
+    const state = [
+      colorGroupState,
+      colorGroupState.segmentColorHash.changed.count,
+      colorGroupState.segmentStatedColors.changed.count,
+      colorGroupState.segmentDefaultColor.changed.count,
+      groupState,
+      groupState.segmentPropertyMap.changed.count,
+      displayState.fragmentSegmentColor.changed.count,
+      displayState.segmentColorShaderControlState.changed.count,
+    ];
+    if (
+      state.length === this.baseObjectColorCacheState.length &&
+      state.every(
+        (value, index) => value === this.baseObjectColorCacheState[index],
+      )
+    ) {
+      return;
+    }
+    this.baseObjectColorCacheState = state;
+    this.prefetchedBaseObjectColors.clear();
+  }
+
+  prefetchBaseObjectColors(rawIds: Iterable<bigint | number | Uint64MapEntry>) {
+    const { displayState } = this;
+    if (displayState === undefined) return;
+    this.ensureBaseObjectColorCacheCurrent();
     const ids: bigint[] = [];
     const seen = new Set<bigint>();
     const addId = (id: bigint) => {
       if (seen.has(id)) return;
+      seen.add(id);
+      if (this.prefetchedBaseObjectColors.has(id)) return;
+      ids.push(id);
+    };
+    for (const rawId of rawIds) {
+      const normalizedId = augmentSegmentId(displayState, rawId);
+      const mapped = normalizedId.value ?? normalizedId.key;
+      addId(mapped);
+      if (
+        this.template.unmappedIdIndex !== -1 &&
+        displayState.baseSegmentColoring.value &&
+        normalizedId.value !== undefined
+      ) {
+        addId(normalizedId.key);
+      }
+    }
+    for (const id of this.prefetchedBaseObjectColors.keys()) {
+      if (!seen.has(id)) this.prefetchedBaseObjectColors.delete(id);
+    }
+    if (ids.length === 0) return;
+    const colors = getBaseObjectColors(displayState, ids);
+    for (let i = 0; i < ids.length; ++i) {
+      this.prefetchedBaseObjectColors.set(
+        ids[i],
+        colors.subarray(4 * i, 4 * i + 4) as vec3,
+      );
+    }
+  }
+
+  updateMany(containers: Iterable<HTMLElement>) {
+    const { displayState } = this;
+    if (displayState === undefined) return;
+    this.ensureBaseObjectColorCacheCurrent();
+    const updates: { container: HTMLElement; mapped: bigint }[] = [];
+    const ids: bigint[] = [];
+    const seen = new Set<bigint>();
+    const addId = (id: bigint) => {
+      if (seen.has(id) || this.prefetchedBaseObjectColors.has(id)) return;
       seen.add(id);
       ids.push(id);
     };
@@ -751,13 +818,17 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
         addId(BigInt(unmappedIdString));
       }
     }
-    const colors = getBaseObjectColors(displayState, ids);
-    const colorMap = new Map<bigint, vec3>();
-    for (let i = 0; i < ids.length; ++i) {
-      colorMap.set(ids[i], colors.subarray(4 * i, 4 * i + 4) as vec3);
+    if (ids.length !== 0) {
+      const colors = getBaseObjectColors(displayState, ids);
+      for (let i = 0; i < ids.length; ++i) {
+        this.prefetchedBaseObjectColors.set(
+          ids[i],
+          colors.subarray(4 * i, 4 * i + 4) as vec3,
+        );
+      }
     }
     for (const { container, mapped } of updates) {
-      this.updateWithId(container, mapped, colorMap);
+      this.updateWithId(container, mapped);
     }
   }
 
@@ -766,6 +837,7 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
     mapped: bigint,
     colorMap?: SegmentColorMap,
   ) {
+    this.ensureBaseObjectColorCacheCurrent();
     const { children } = container;
     const stickyChildren = children[0].children;
     const { template } = this;
@@ -788,7 +860,9 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
       template.idContainerIndex
     ] as HTMLElement;
     const getColor = (id: bigint) =>
-      colorMap?.get(id) ?? (getBaseObjectColor(this.displayState, id) as vec3);
+      colorMap?.get(id) ??
+      this.prefetchedBaseObjectColors.get(id) ??
+      (getBaseObjectColor(this.displayState, id) as vec3);
     let color = getColor(mapped);
     setSegmentIdElementStyle(
       idContainer.children[template.idIndex] as HTMLElement,
@@ -1120,6 +1194,7 @@ export function getBaseObjectColors(
   objectIds: readonly bigint[],
   colors = new Float32Array(objectIds.length * 4),
 ) {
+  if (objectIds.length === 0) return colors;
   if (displayState == null) {
     colors.fill(1);
     return colors;

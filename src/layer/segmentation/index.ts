@@ -680,7 +680,6 @@ vColor = segmentColorUserShader(uint64_t(aID));
     ids: readonly bigint[],
     colors = new Float32Array(ids.length * 4),
   ) => {
-    console.log("getShaderBaseSegmentColors", ids.length);
     const numIds = ids.length;
     if (numIds === 0) return colors;
     const { shader, parameters } = this.getSegmentColorShader(
@@ -1588,9 +1587,7 @@ export class SegmentationUserLayer extends Base {
     const visibleSegments = [...visibleSegmentsSet];
     const baseColors = getBaseObjectColors(displayState, visibleSegments);
     const colors = visibleSegments.map((id, index) => {
-      const color = getCssColor(
-        baseColors.subarray(4 * index, 4 * index + 4),
-      );
+      const color = getCssColor(baseColors.subarray(4 * index, 4 * index + 4));
       return { color, id };
     });
 

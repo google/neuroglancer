@@ -60,6 +60,7 @@ export class VirtualListState {
 export interface VirtualListSource {
   length: number;
   render(index: number): HTMLElement;
+  prefetch?(start: number, end: number): void;
   changed?: Signal<(splices: ArraySpliceOp[]) => void> | undefined;
   renderChanged?: Signal | undefined;
 }
@@ -428,6 +429,7 @@ export class VirtualList extends RefCounted {
         endIndex: curEndIndex,
         anchorIndex,
       } = renderParams;
+      source.prefetch?.(curStartIndex, curEndIndex);
       function* getChildren(start: number, end: number) {
         for (let i = start; i < end; ++i) {
           let item = prevRenderedItems[i];
