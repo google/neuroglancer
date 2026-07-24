@@ -68,6 +68,7 @@ const SUPPORTED_OME_MULTISCALE_VERSIONS = new Set([
   "0.5-dev",
   "0.5",
   "0.6.dev1",
+  "0.6.dev3",
   "0.6",
 ]);
 
@@ -125,7 +126,10 @@ function parseOmeroChannel(omeroChannel: unknown): SingleChannelMetadata {
   if (colorString && /^[0-9a-f]{6}$/i.test(colorString)) {
     colorString = `#${colorString}`;
   }
-  const color = parseRGBColorSpecification(colorString);
+  const color =
+    colorString !== undefined
+      ? parseRGBColorSpecification(colorString)
+      : undefined;
   const inverted = getProp("inverted", verifyBoolean);
   const label = getProp("label", verifyString);
 
@@ -730,9 +734,9 @@ export function parseOmeMetadata(
   attrs: any,
   zarrVersion: number,
 ): OmeMetadata | undefined {
-  const ome = attrs.ome;
-  const multiscales = ome == undefined ? attrs.multiscales : ome.multiscales; // >0.4
-  const omero = attrs.omero;
+  const { ome } = attrs;
+  const metadata = ome ?? attrs; // 0.5+ nests under `ome`; 0.4 keeps fields at root
+  const { multiscales, omero } = metadata;
 
   if (!Array.isArray(multiscales)) return undefined;
   const errors: string[] = [];
@@ -746,7 +750,7 @@ export function parseOmeMetadata(
       return undefined;
     }
 
-    const version = ome == undefined ? multiscale.version : ome.version; // >0.4
+    const version = ome?.version ?? multiscale.version; // 0.5+ moved version onto `ome`
 
     if (version === undefined) return undefined;
     if (!SUPPORTED_OME_MULTISCALE_VERSIONS.has(version)) {

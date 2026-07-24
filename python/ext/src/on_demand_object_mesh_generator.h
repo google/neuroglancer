@@ -17,6 +17,8 @@
 #ifndef NEUROGLANCER_ON_DEMAND_OBJECT_MESH_GENERATOR_H
 #define NEUROGLANCER_ON_DEMAND_OBJECT_MESH_GENERATOR_H
 
+#include <stdint.h>
+
 #include <cstddef>
 #include <memory>
 #include <string>
@@ -44,9 +46,8 @@ class OnDemandObjectMeshGenerator {
 
   // Label must be one of uint8_t, uint16_t, uint32_t, uint64_t.
   template <class Label>
-  OnDemandObjectMeshGenerator(const Label* labels, const int64_t* size,
-                              const int64_t* strides, const float voxel_size[3],
-                              const float offset[3],
+  OnDemandObjectMeshGenerator(const Label* labels, const int64_t* size, const int64_t* strides,
+                              const float voxel_size[3], const float offset[3],
                               const SimplifyOptions& simplify_options);
 
   const std::string& GetSimplifiedMesh(uint64_t object_id);
@@ -57,4 +58,4 @@ class OnDemandObjectMeshGenerator {
 }  // namespace meshing
 }  // namespace neuroglancer
 
-#endif //  NEUROGLANCER_ON_DEMAND_OBJECT_MESH_GENERATOR_H
+#endif  //  NEUROGLANCER_ON_DEMAND_OBJECT_MESH_GENERATOR_H

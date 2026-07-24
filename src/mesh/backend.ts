@@ -47,7 +47,7 @@ import {
 } from "#src/segmentation_display_state/base.js";
 import type { Endianness } from "#src/util/endian.js";
 import { convertEndian32 } from "#src/util/endian.js";
-import { getFrustrumPlanes, mat4, vec3 } from "#src/util/geom.js";
+import { getFrustumPlanes, mat4, vec3 } from "#src/util/geom.js";
 import {
   verifyObject,
   verifyObjectProperty,
@@ -715,7 +715,7 @@ export class MultiscaleMeshLayer extends withSegmentationLayerBackendState(
         projectionParameters.viewProjectionMat,
         modelViewProjectionMatrix,
       );
-      const clippingPlanes = getFrustrumPlanes(
+      const clippingPlanes = getFrustumPlanes(
         new Float32Array(24),
         modelViewProjectionMatrix,
       );

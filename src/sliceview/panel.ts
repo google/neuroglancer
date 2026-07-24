@@ -23,11 +23,12 @@ import type {
   FramePickingData,
   RenderedDataViewerState,
 } from "#src/rendered_data_panel.js";
+import { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import {
   getPickDiameter,
   getPickOffsetSequence,
-  RenderedDataPanel,
-} from "#src/rendered_data_panel.js";
+  resolveNearestPanelPickSample,
+} from "#src/rendered_data_panel_picking.js";
 import type { SliceView } from "#src/sliceview/frontend.js";
 import { SliceViewRenderHelper } from "#src/sliceview/frontend.js";
 import type {
@@ -469,24 +470,22 @@ export class SliceViewPanel extends RenderedDataPanel {
   ) {
     const { mouseState } = this.viewer;
     mouseState.pickedRenderLayer = null;
-    const pickDiameter = getPickDiameter(pickRadius);
     const pickOffsetSequence = getPickOffsetSequence(pickRadius);
     const { viewportWidth, viewportHeight } = pickingData;
-    const numOffsets = pickOffsetSequence.length;
     const { value: voxelCoordinates } = this.navigationState.position;
     const rank = voxelCoordinates.length;
     const displayDimensions = this.navigationState.pose.displayDimensions.value;
     const { displayRank, displayDimensionIndices } = displayDimensions;
 
     const setPosition = (
-      xOffset: number,
-      yOffset: number,
+      relativeX: number,
+      relativeY: number,
       position: Float32Array,
     ) => {
-      const x = glWindowX + xOffset;
-      const y = glWindowY + yOffset;
-      tempVec3[0] = (2.0 * x) / viewportWidth - 1.0;
-      tempVec3[1] = (2.0 * y) / viewportHeight - 1.0;
+      tempVec3[0] =
+        (2.0 * (glWindowX + relativeX - pickRadius)) / viewportWidth - 1.0;
+      tempVec3[1] =
+        (2.0 * (glWindowY + relativeY - pickRadius)) / viewportHeight - 1.0;
       tempVec3[2] = 0;
       vec3.transformMat4(tempVec3, tempVec3, pickingData.invTransform);
       position.set(voxelCoordinates);
@@ -502,7 +501,7 @@ export class SliceViewPanel extends RenderedDataPanel {
     mouseState.coordinateSpace = this.navigationState.coordinateSpace.value;
     mouseState.displayDimensions = displayDimensions;
 
-    setPosition(0, 0, unsnappedPosition);
+    setPosition(pickRadius, pickRadius, unsnappedPosition);
 
     const setStateFromRelative = (
       relativeX: number,
@@ -513,21 +512,21 @@ export class SliceViewPanel extends RenderedDataPanel {
       if (mousePosition.length !== rank) {
         mousePosition = mouseState.position = new Float32Array(rank);
       }
-      setPosition(
-        relativeX - pickRadius,
-        relativeY - pickRadius,
-        mousePosition,
-      );
+      setPosition(relativeX, relativeY, mousePosition);
       this.pickIDs.setMouseState(mouseState, pickId);
       mouseState.setActive(true);
     };
-    for (let i = 0; i < numOffsets; ++i) {
-      const offset = pickOffsetSequence[i];
-      const pickId = data[4 * i];
-      if (pickId === 0) continue;
-      const relativeX = offset % pickDiameter;
-      const relativeY = (offset - relativeX) / pickDiameter;
-      setStateFromRelative(relativeX, relativeY, pickId);
+    const resolvedPick = resolveNearestPanelPickSample(
+      data,
+      pickOffsetSequence,
+      pickRadius,
+    );
+    if (resolvedPick !== undefined) {
+      setStateFromRelative(
+        resolvedPick.relativeX,
+        resolvedPick.relativeY,
+        resolvedPick.pickValue,
+      );
       return;
     }
     setStateFromRelative(pickRadius, pickRadius, 0);

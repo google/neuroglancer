@@ -48,6 +48,7 @@ import {
 } from "#src/webgl/lerp.js";
 import type { ShaderModule, ShaderProgram } from "#src/webgl/shader.js";
 import { ShaderBuilder } from "#src/webgl/shader.js";
+import { glsl_string } from "#src/webgl/shader_lib.js";
 import type {
   ShaderControlsBuilderState,
   ShaderControlState,
@@ -217,6 +218,11 @@ const annotationPropertyTypeRenderHandlers: {
     "highp int",
     1,
     WebGL2RenderingContext.BYTE,
+  ),
+  bool: makeIntegerPropertyRenderHandler(
+    "highp uint",
+    1,
+    WebGL2RenderingContext.UNSIGNED_BYTE,
   ),
 };
 
@@ -553,6 +559,7 @@ void userMain();
           renderHandler.defineShaderNoOpSetters(builder);
         }
         defineShader(builder);
+        builder.addVertexCode(glsl_string);
         builder.addVertexCode(
           "\n#define main userMain\n" +
             shaderCodeWithLineDirective(parameters.parseResult.code) +
@@ -629,7 +636,7 @@ if (ng_discardValue) {
       gl,
       shader,
       this.shaderControlState,
-      parameters.parseResult.controls,
+      parameters.parseResult,
     );
     gl.uniform3fv(shader.uniform("uSubspaceMatrix"), context.subspaceMatrix);
     gl.uniform1fv(shader.uniform("uModelClipBounds"), context.modelClipBounds);

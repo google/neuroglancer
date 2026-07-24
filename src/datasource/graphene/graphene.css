@@ -14,12 +14,12 @@
   color: #4444ff;
 }
 
-.graphene-multicut-status {
+.graphene-tool-status {
   display: flex;
-  flex-direction: row;
+  gap: 10px;
 }
 
-.graphene-multicut-status > .activeGroupIndicator {
+.graphene-multicut > .activeGroupIndicator {
   padding: 2px;
   margin: auto 0;
   background-color: red;
@@ -27,15 +27,15 @@
   font-weight: 900;
 }
 
-.graphene-multicut-status > .activeGroupIndicator.blueGroup {
+.graphene-multicut > .activeGroupIndicator.blueGroup {
   background-color: blue;
 }
 
-.graphene-multicut-status > .activeGroupIndicator::after {
+.graphene-multicut > .activeGroupIndicator::after {
   content: "Red";
 }
 
-.graphene-multicut-status > .activeGroupIndicator.blueGroup::after {
+.graphene-multicut > .activeGroupIndicator.blueGroup::after {
   content: "Blue";
 }
 
@@ -49,13 +49,7 @@
   gap: 10px;
 }
 
-.graphene-merge-segments-status {
-  display: flex;
-  gap: 10px;
-}
-
-.graphene-merge-segments-status .neuroglancer-icon,
-.graphene-multicut-status .neuroglancer-icon {
+.graphene-tool-status .neuroglancer-icon {
   height: 100%;
 }
 
@@ -77,4 +71,23 @@
   .neuroglancer-segment-list-entry-visible-checkbox,
 .graphene-merge-segments-point .neuroglancer-segment-list-entry-copy-container {
   display: none;
+}
+
+.graphene-find-path > label {
+  display: flex;
+}
+
+.graphene-find-path > label > span {
+  display: flex;
+  align-content: center;
+  flex-wrap: wrap;
+}
+
+.find-path-annotations {
+  display: flex;
+  gap: 10px;
+}
+
+.find-path-annotations > .neuroglancer-annotation-list-entry {
+  background-color: black;
 }

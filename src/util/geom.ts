@@ -17,6 +17,7 @@
 import { mat3, mat4, quat, vec3, vec4 } from "gl-matrix";
 import type { TypedNumberArray } from "#src/util/array.js";
 import { findMatchingIndices } from "#src/util/array.js";
+import { nearlyEqual } from "#src/util/number.js";
 
 export { mat2, mat3, mat4, quat, vec2, vec3, vec4 } from "gl-matrix";
 
@@ -218,7 +219,7 @@ export function mat3FromMat4(out: mat3, m: mat4) {
  * clipping plane.
  * @param m Projection matrix
  */
-export function getFrustrumPlanes(out: Float32Array, m: mat4): Float32Array {
+export function getFrustumPlanes(out: Float32Array, m: mat4): Float32Array {
   // http://web.archive.org/web/20120531231005/http://crazyjoke.free.fr/doc/3D/plane%20extraction.pdf
   const m00 = m[0];
   const m10 = m[1];
@@ -285,10 +286,10 @@ export function getFrustrumPlanes(out: Float32Array, m: mat4): Float32Array {
 }
 
 /**
- * Checks whether the specified axis-aligned bounding box (AABB) intersects the view frustrum.
+ * Checks whether the specified axis-aligned bounding box (AABB) intersects the view frustum.
  *
- * @param clippingPlanes Array of length 24 specifying the clipping planes of the view frustrum, as
- *     computed by `getFrustrumPlanes`
+ * @param clippingPlanes Array of length 24 specifying the clipping planes of the view frustum, as
+ *     computed by `getFrustumPlanes`
  */
 export function isAABBVisible(
   xLower: number,
@@ -412,7 +413,7 @@ export function scaleMat3Output(
   return out;
 }
 
-export function getViewFrustrumVolume(projectionMat: mat4) {
+export function getViewFrustumVolume(projectionMat: mat4) {
   if (projectionMat[15] === 1) {
     // orthographic projection
     const depth = 2 / Math.abs(projectionMat[10]);
@@ -432,7 +433,7 @@ export function getViewFrustrumVolume(projectionMat: mat4) {
   return (baseArea / 3) * (Math.abs(far) ** 3 - Math.abs(near) ** 3);
 }
 
-export function getViewFrustrumDepthRange(projectionMat: mat4) {
+export function getViewFrustumDepthRange(projectionMat: mat4) {
   if (projectionMat[15] === 1) {
     // orthographic projection
     const depth = 2 / Math.abs(projectionMat[10]);
@@ -460,11 +461,11 @@ export function disableZProjection(mat: mat4) {
 
 const tempVec3 = vec3.create();
 
-// Determines the bounding box in world coordinates of the view frustrum for a given view-projection
+// Determines the bounding box in world coordinates of the view frustum for a given view-projection
 // matrix.
 //
 // https://gamedev.stackexchange.com/questions/29999/how-do-i-create-a-bounding-frustum-from-a-view-projection-matrix
-export function getViewFrustrumWorldBounds(
+export function getViewFrustumWorldBounds(
   invViewProjectionMat: mat4,
   bounds: Float32Array,
 ) {
@@ -489,9 +490,6 @@ export function calculateOrientedSliceScales(
   units: readonly string[],
   tolerance: number = 1e-6,
 ): OrientedSliceScales | null {
-  function nearlyEqualScales(a: number, b: number): boolean {
-    return Math.abs(a - b) / Math.max(a, b) < tolerance;
-  }
   function extractContributingScales(
     matrixRow: 0 | 1 | 2,
   ): { scale: number; unit: string } | null {
@@ -505,7 +503,7 @@ export function calculateOrientedSliceScales(
           contributingUnit = units[i];
         } else if (
           contributingUnit !== units[i] ||
-          !nearlyEqualScales(contributingScale, scales[i])
+          !nearlyEqual(contributingScale, scales[i], tolerance)
         )
           return null;
       }

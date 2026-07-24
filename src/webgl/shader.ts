@@ -223,6 +223,7 @@ export class ShaderProgram extends RefCounted {
       throw new ShaderLinkError(vertexSource, fragmentSource, log);
     }
     this.program = shaderProgram!;
+    this.textureUnits = new Map<any, number>();
 
     const { uniforms, attributes } = this;
     if (uniformNames) {
@@ -238,8 +239,12 @@ export class ShaderProgram extends RefCounted {
     }
   }
 
-  uniform(name: string): WebGLUniformLocation {
-    return this.uniforms.get(name)!;
+  uniform(name: string): WebGLUniformLocation | null {
+    const location = this.uniforms.get(name);
+    if (location === undefined) {
+      throw new Error(`Invalid uniform: ${name}`);
+    }
+    return location;
   }
 
   attribute(name: string): number {

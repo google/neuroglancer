@@ -20,7 +20,7 @@ import {
   getDesiredMultiscaleMeshChunks,
   getMultiscaleChunksToDraw,
 } from "#src/mesh/multiscale.js";
-import { getFrustrumPlanes, mat4, vec3 } from "#src/util/geom.js";
+import { getFrustumPlanes, mat4, vec3 } from "#src/util/geom.js";
 
 interface MultiscaleChunkResult {
   lod: number;
@@ -40,7 +40,7 @@ function getDesiredChunkList(
   getDesiredMultiscaleMeshChunks(
     manifest,
     modelViewProjection,
-    getFrustrumPlanes(new Float32Array(24), modelViewProjection),
+    getFrustumPlanes(new Float32Array(24), modelViewProjection),
     detailCutoff,
     viewportWidth,
     viewportHeight,
@@ -71,7 +71,7 @@ function getDrawChunkList(
   getMultiscaleChunksToDraw(
     manifest,
     modelViewProjection,
-    getFrustrumPlanes(new Float32Array(24), modelViewProjection),
+    getFrustumPlanes(new Float32Array(24), modelViewProjection),
     detailCutoff,
     viewportWidth,
     viewportHeight,

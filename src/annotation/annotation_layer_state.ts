@@ -132,7 +132,7 @@ void main() {
 
 export class AnnotationDisplayState extends RefCounted {
   annotationProperties = new WatchableValue<
-    AnnotationPropertySpec[] | undefined
+    readonly Readonly<AnnotationPropertySpec>[] | undefined
   >(undefined);
   shader = makeTrackableFragmentMain(DEFAULT_FRAGMENT_MAIN);
   shaderControls = new ShaderControlState(

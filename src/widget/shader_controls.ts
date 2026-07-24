@@ -15,8 +15,13 @@
  */
 
 import { debounce } from "lodash-es";
+import "#src/widget/shader_controls.css";
 import type { DisplayContext } from "#src/display_context.js";
 import type { UserLayer, UserLayerConstructor } from "#src/layer/index.js";
+import {
+  TrackableBoolean,
+  TrackableBooleanCheckbox,
+} from "#src/trackable_boolean.js";
 import { registerTool } from "#src/ui/tool.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeChildren } from "#src/util/dom.js";
@@ -27,7 +32,10 @@ import type {
   ParameterizedEmitterDependentShaderOptions,
   ParameterizedShaderGetterResult,
 } from "#src/webgl/dynamic_shader.js";
-import type { ShaderControlState } from "#src/webgl/shader_ui_controls.js";
+import {
+  getShaderSelectOptionLabel,
+  type ShaderControlState,
+} from "#src/webgl/shader_ui_controls.js";
 import type {
   LayerControlDefinition,
   LayerControlFactory,
@@ -41,6 +49,7 @@ import { checkboxLayerControl } from "#src/widget/layer_control_checkbox.js";
 import { colorLayerControl } from "#src/widget/layer_control_color.js";
 import { propertyInvlerpLayerControl } from "#src/widget/layer_control_property_invlerp.js";
 import { rangeLayerControl } from "#src/widget/layer_control_range.js";
+import { selectLayerControl } from "#src/widget/layer_control_select.js";
 import { Tab } from "#src/widget/tab_view.js";
 import { transferFunctionLayerControl } from "#src/widget/transfer_function.js";
 
@@ -53,6 +62,9 @@ export interface ShaderControlsOptions {
   legendShaderOptions?: LegendShaderOptions;
   visibility?: WatchableVisibilityPriority;
   toolId?: string;
+  // Toggle controlling whether inactive controls are hidden. Owned and
+  // persisted by the layer; when omitted a non-persisted toggle is created.
+  hideInactiveShaderControls?: TrackableBoolean;
 }
 
 function getShaderLayerControlFactory<LayerType extends UserLayer>(
@@ -73,6 +85,14 @@ function getShaderLayerControlFactory<LayerType extends UserLayer>(
       return colorLayerControl(() => controlState.trackable);
     case "checkbox":
       return checkboxLayerControl(() => controlState.trackable);
+    case "select":
+      return selectLayerControl(() => ({
+        value: controlState.trackable,
+        options: control.options.map((option) => ({
+          value: option.value,
+          label: getShaderSelectOptionLabel(option),
+        })),
+      }));
     case "imageInvlerp": {
       return channelInvlerpLayerControl(() => ({
         dataType: control.dataType,
@@ -164,6 +184,9 @@ function getShaderLayerControlDefinition<LayerType extends UserLayer>(
 
 export class ShaderControls extends Tab {
   private controlDisposer: RefCounted | undefined = undefined;
+  private controlsContainer: HTMLDivElement;
+  private hiddenCountElement: HTMLSpanElement;
+  private hideInactiveShaderControls: TrackableBoolean;
   private toolId: string;
   constructor(
     public state: ShaderControlState,
@@ -174,30 +197,84 @@ export class ShaderControls extends Tab {
     super(options.visibility);
     const { toolId = SHADER_CONTROL_TOOL_ID } = options;
     this.toolId = toolId;
+    // The layer owns and persists this toggle; fall back to a non-persisted
+    // one if a caller doesn't supply it.
+    const hideInactiveShaderControls = (this.hideInactiveShaderControls =
+      options.hideInactiveShaderControls ?? new TrackableBoolean(false));
     const { element } = this;
     element.style.display = "contents";
+
+    // "Hide inactive controls" toggle. Built once and never torn down by
+    // `updateControls()`, so its UI state is stable across shader recompiles.
+    // The tooltip lives on the label so hovering the text shows it too.
+    const hideInactiveControl = document.createElement("label");
+    hideInactiveControl.className =
+      "neuroglancer-shader-controls-hide-inactive";
+    hideInactiveControl.title =
+      "Hide #uicontrols that have no effect on the current render (their" +
+      " uniforms were eliminated by the GLSL compiler, e.g. controls only" +
+      " referenced inside an `if (checkbox)` branch that's currently false).";
+    const checkbox = this.registerDisposer(
+      new TrackableBooleanCheckbox(hideInactiveShaderControls),
+    );
+    hideInactiveControl.appendChild(checkbox.element);
+    hideInactiveControl.appendChild(
+      document.createTextNode("Hide inactive shader controls"),
+    );
+    // Trailing "(X hidden)" annotation, updated by `updateControls()`.
+    const hiddenCountElement = (this.hiddenCountElement =
+      document.createElement("span"));
+    hiddenCountElement.className = "neuroglancer-shader-controls-hidden-count";
+    hideInactiveControl.appendChild(hiddenCountElement);
+    element.appendChild(hideInactiveControl);
+
+    // Separate container so the rebuild loop only tears down the controls,
+    // not the header.
+    const controlsContainer = (this.controlsContainer =
+      document.createElement("div"));
+    controlsContainer.style.display = "contents";
+    element.appendChild(controlsContainer);
+
     const { controls } = state;
+    const scheduleUpdate = this.registerCancellable(
+      debounce(() => this.updateControls(), 0),
+    );
+    this.registerDisposer(controls.changed.add(scheduleUpdate));
+    this.registerDisposer(state.activeControls.changed.add(scheduleUpdate));
     this.registerDisposer(
-      controls.changed.add(
-        this.registerCancellable(debounce(() => this.updateControls(), 0)),
-      ),
+      hideInactiveShaderControls.changed.add(scheduleUpdate),
     );
     this.updateControls();
   }
 
   updateControls() {
-    const { element } = this;
+    const { controlsContainer } = this;
     if (this.controlDisposer !== undefined) {
       this.controlDisposer.dispose();
-      removeChildren(element);
+      removeChildren(controlsContainer);
     }
     const controlDisposer = (this.controlDisposer = new RefCounted());
     const layerShaderControlsGetter = () => ({
       shaderControlState: this.state,
       legendShaderOptions: this.options.legendShaderOptions,
     });
+    const hideInactive = this.hideInactiveShaderControls.value;
+    const activeControls = this.state.activeControls.value;
+    let hiddenCount = 0;
     for (const name of this.state.state.keys()) {
-      element.appendChild(
+      // Skip when the user has opted in and we have a known active set
+      // (computed from the last linked shader) that does not include `name`.
+      // `activeControls === undefined` means we haven't rendered yet; show
+      // everything in that case to avoid hiding controls prematurely.
+      if (
+        hideInactive &&
+        activeControls !== undefined &&
+        !activeControls.has(name)
+      ) {
+        ++hiddenCount;
+        continue;
+      }
+      controlsContainer.appendChild(
         addLayerControlToOptionsTab(
           controlDisposer,
           this.layer,
@@ -210,6 +287,8 @@ export class ShaderControls extends Tab {
         ),
       );
     }
+    this.hiddenCountElement.textContent =
+      hiddenCount > 0 ? ` (${hiddenCount} hidden)` : "";
   }
 
   disposed() {

@@ -69,6 +69,35 @@ vec3 getBoxFaceVertexPosition(int vertexIndex) {
 }
 `;
 
+export const glsl_getBoxEdgeVertexPosition = `
+vec3 getBoxEdgeVertexPosition(int vertexIndex) {
+  // 12 edges × 2 endpoints = 24
+  const int edgeTable[24] = int[24](
+    0,1, 2,3, 4,5, 6,7,
+    0,2, 1,3, 4,6, 5,7,
+    0,4, 1,5, 2,6, 3,7
+  );
+  // Order is x, y, z, so at
+  // corner i: x=i&1, y=(i>>1)&1, z=(i>>2)&1
+  // for example, corner 5 is 0101 in binary, so x=1, y=0, z=1
+  int corner = edgeTable[vertexIndex];
+  return vec3(float(corner & 1), float((corner >> 1) & 1), float((corner >> 2) & 1));
+}
+`;
+
+export function drawBoxEdges(
+  gl: WebGL2RenderingContext,
+  boxesPerInstance: number,
+  numInstances: number,
+) {
+  gl.drawArraysInstanced(
+    WebGL2RenderingContext.LINES,
+    0,
+    EDGES_PER_BOX * 2 * boxesPerInstance,
+    numInstances,
+  );
+}
+
 export function drawBoxes(
   gl: WebGL2RenderingContext,
   boxesPerInstance: number,

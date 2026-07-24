@@ -6,8 +6,7 @@ Neuroglancer
    :hidden:
    :caption: User Guide
 
-   user-guide/navigation
-   user-guide/rendering
+   user-guide/index
 
 .. toctree::
    :hidden:
@@ -33,6 +32,12 @@ Neuroglancer
    :caption: Python API
 
    python/api/index
+
+.. toctree::
+   :hidden:
+   :caption: Gallery
+
+   gallery/index
 
 .. toctree::
    :hidden:

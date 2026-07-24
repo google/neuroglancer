@@ -505,3 +505,38 @@ export class IndirectTrackableValue<U, T>
     return this.inner.toJSON();
   }
 }
+
+/**
+ * A WatchableValue that only updates its value and dispatches change notifications
+ * when the enableWatchable is true. When the enableWatchable is false, the last
+ * value is retained.
+ * This essentially allows "pausing" of a WatchableValue.
+ */
+export class ConditionalWatchableValue<T>
+  extends RefCounted
+  implements WatchableValueInterface<T>
+{
+  changed = new NullarySignal();
+  private lastValue: T;
+
+  constructor(
+    private valueWatchable: WatchableValueInterface<T>,
+    private enableWatchable: WatchableValueInterface<boolean>,
+  ) {
+    super();
+    this.lastValue = valueWatchable.value;
+
+    this.registerDisposer(
+      valueWatchable.changed.add(() => {
+        if (this.enableWatchable.value) {
+          this.lastValue = this.valueWatchable.value;
+          this.changed.dispatch();
+        }
+      }),
+    );
+  }
+
+  get value(): T {
+    return this.lastValue;
+  }
+}
