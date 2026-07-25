@@ -93,10 +93,14 @@ pub fn frames(ptr: *mut u8, input_size: usize, _output_size: usize) -> i32 {
 }
 
 
-/// Decode to uint8 output. `preserve_alpha` controls the RGBA alpha channel:
+/// Decode to uint8 output. `preserve_alpha` controls the RGBA/LA alpha channel:
 /// when nonzero the true alpha from the codestream is returned; when zero (the
 /// default for callers that pass no value) alpha is forced opaque, preserving
 /// the legacy precomputed behavior.
+///
+/// Samples are returned in stored pixel order: the codestream's EXIF-style
+/// orientation is NOT applied (samples come straight from `frame.stream()`),
+/// as required by the zarr `jpegxl` codec spec.
 #[no_mangle]
 pub fn decode(ptr: *mut u8, input_size: usize, output_size: usize, preserve_alpha: i32) -> *const u8 {
     if ptr.is_null() || input_size == 0 || output_size == 0 {
@@ -141,6 +145,19 @@ pub fn decode(ptr: *mut u8, input_size: usize, output_size: usize, preserve_alph
                     output_buffer.push(value);
                 }
             }
+            PixelFormat::Graya => {
+                // fb.buf() laid out as GA GA ...; write exactly 2 bytes per pixel
+                for px in fb.buf().chunks_exact(2) {
+                    let gray = (px[0] * 255.0).clamp(0.0, 255.0).round() as u8;
+                    output_buffer.push(gray);
+                    let alpha = if preserve_alpha != 0 {
+                        (px[1] * 255.0).clamp(0.0, 255.0).round() as u8
+                    } else {
+                        255 // opaque alpha (legacy precomputed behavior)
+                    };
+                    output_buffer.push(alpha);
+                }
+            }
             PixelFormat::Rgba => {
                 // fb.buf() laid out as RGBA RGBA ...; write exactly 4 bytes per pixel
                 for px in fb.buf().chunks_exact(4) {
@@ -171,9 +188,11 @@ pub fn decode(ptr: *mut u8, input_size: usize, output_size: usize, preserve_alph
 
 /// Extended decode that supports 1-, 2-, or 4-byte per sample output.
 /// 1 => uint8, 2 => uint16 little-endian, 4 => float32 little-endian (linear 0..1).
-/// `preserve_alpha` controls the RGBA alpha channel: nonzero returns the true
+/// `preserve_alpha` controls the RGBA/LA alpha channel: nonzero returns the true
 /// alpha from the codestream; zero forces opaque alpha (legacy precomputed
 /// behavior).
+/// Samples are returned in stored pixel order; the codestream's orientation is
+/// NOT applied.
 /// Returns a pointer to a heap-allocated buffer of length exactly `output_size` on success or null on failure.
 #[no_mangle]
 pub fn decode_with_bpp(ptr: *mut u8, input_size: usize, output_size: usize, bytes_per_sample: usize, preserve_alpha: i32) -> *const u8 {
@@ -242,6 +261,39 @@ pub fn decode_with_bpp(ptr: *mut u8, input_size: usize, output_size: usize, byte
                         4 => {
                             let f = *pixel as f32;
                             output_buffer.extend_from_slice(&f.to_le_bytes());
+                        }
+                        _ => return ptr::null_mut(),
+                    }
+                }
+            }
+            PixelFormat::Graya => {
+                // Iterate per pixel (2 floats: gray, alpha)
+                for px in fb.buf().chunks_exact(2) {
+                    match bytes_per_sample {
+                        1 => {
+                            let g = (px[0] * 255.0).clamp(0.0, 255.0) as u8;
+                            output_buffer.push(g);
+                            let a = if preserve_alpha != 0 {
+                                (px[1] * 255.0).clamp(0.0, 255.0).round() as u8
+                            } else {
+                                255
+                            };
+                            output_buffer.push(a);
+                        }
+                        2 => {
+                            let g = (px[0] * 65535.0).clamp(0.0, 65535.0).round() as u16;
+                            output_buffer.extend_from_slice(&g.to_le_bytes());
+                            let a = if preserve_alpha != 0 {
+                                (px[1] * 65535.0).clamp(0.0, 65535.0).round() as u16
+                            } else {
+                                0xFFFFu16
+                            };
+                            output_buffer.extend_from_slice(&a.to_le_bytes());
+                        }
+                        4 => {
+                            let g = px[0] as f32; output_buffer.extend_from_slice(&g.to_le_bytes());
+                            let a: f32 = if preserve_alpha != 0 { px[1] as f32 } else { 1.0 };
+                            output_buffer.extend_from_slice(&a.to_le_bytes());
                         }
                         _ => return ptr::null_mut(),
                     }
