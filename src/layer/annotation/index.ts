@@ -778,6 +778,28 @@ abstract class AnnotationPropertyEntryTool extends LayerTool<AnnotationUserLayer
       }
     });
 
+    // Keep the input usable as a persistent mode. The data viewer's panels are
+    // focusable and grab focus on click, which would blur this input and force
+    // the user to click back in. While the tool is active, reclaim focus when it
+    // is lost *to the viewer* (not to other controls, so normal interactions
+    // elsewhere still work).
+    let active = true;
+    activation.registerDisposer(() => {
+      active = false;
+    });
+    input.addEventListener("blur", () => {
+      requestAnimationFrame(() => {
+        if (!active || document.activeElement === input) return;
+        const focused = document.activeElement;
+        if (
+          focused instanceof HTMLElement &&
+          focused.closest(".neuroglancer-rendered-data-panel") !== null
+        ) {
+          input.focus();
+        }
+      });
+    });
+
     activation.registerDisposer(
       layer.manager.root.selectionState.changed.add(() => {
         showValue();
