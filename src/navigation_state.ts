@@ -169,6 +169,12 @@ function makeSimpleLinked<T extends RefCounted & { changed: NullarySignal }>(
 export class Position extends RefCounted {
   private coordinates_: Float32Array = vector.kEmptyFloat32Vec;
   private curCoordinateSpace: CoordinateSpace | undefined;
+  // Indicates that `coordinates_` was inferred from the bounds of
+  // `curCoordinateSpace` rather than specified explicitly.  Inferred
+  // coordinates are only meaningful for the coordinate space they were computed
+  // from, and must be recomputed rather than reused if the coordinate space is
+  // replaced while invalid.
+  private coordinatesAreDefault_ = false;
   changed = new NullarySignal();
   constructor(
     public coordinateSpace: WatchableValueInterface<CoordinateSpace>,
@@ -196,6 +202,7 @@ export class Position extends RefCounted {
   reset() {
     this.curCoordinateSpace = undefined;
     this.coordinates_ = vector.kEmptyFloat32Vec;
+    this.coordinatesAreDefault_ = false;
     this.changed.dispatch();
   }
 
@@ -210,6 +217,7 @@ export class Position extends RefCounted {
     }
     const { coordinates_ } = this;
     coordinates_.set(coordinates);
+    this.coordinatesAreDefault_ = false;
     this.changed.dispatch();
   }
 
@@ -222,8 +230,16 @@ export class Position extends RefCounted {
     if (!coordinateSpace.valid) return;
     if (prevCoordinateSpace === undefined || !prevCoordinateSpace.valid) {
       let { coordinates_ } = this;
-      if (coordinates_ !== undefined && coordinates_.length === rank) {
-        // Use the existing voxel coordinates if rank is the same.  Otherwise, ignore.
+      if (
+        coordinates_ !== undefined &&
+        coordinates_.length === rank &&
+        !this.coordinatesAreDefault_
+      ) {
+        // Use the existing voxel coordinates if they were specified explicitly
+        // and the rank is the same.  Otherwise, ignore.  Previously inferred
+        // coordinates cannot be reused, since the dimensions of the new
+        // coordinate space may be ordered differently, which would leave the
+        // position outside the bounds.
       } else {
         coordinates_ = this.coordinates_ = new Float32Array(rank);
         getBoundingBoxCenter(coordinates_, coordinateSpace.bounds);
@@ -235,6 +251,7 @@ export class Position extends RefCounted {
             coordinates_[i] = Math.floor(coordinates_[i]) + 0.5;
           }
         }
+        this.coordinatesAreDefault_ = true;
       }
       this.changed.dispatch();
       return;
@@ -276,6 +293,7 @@ export class Position extends RefCounted {
     }
     this.curCoordinateSpace = undefined;
     this.coordinates_ = Float32Array.from(parseArray(obj, verifyFiniteFloat));
+    this.coordinatesAreDefault_ = false;
     this.handleCoordinateSpaceChanged();
     this.changed.dispatch();
   }
@@ -299,9 +317,10 @@ export class Position extends RefCounted {
 
   assign(other: Borrowed<Position>) {
     other.handleCoordinateSpaceChanged();
-    const { curCoordinateSpace, coordinates_ } = other;
+    const { curCoordinateSpace, coordinates_, coordinatesAreDefault_ } = other;
     this.curCoordinateSpace = curCoordinateSpace;
     this.coordinates_ = Float32Array.from(coordinates_);
+    this.coordinatesAreDefault_ = coordinatesAreDefault_;
     this.changed.dispatch();
   }
 
