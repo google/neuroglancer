@@ -942,6 +942,18 @@ export class LayerManager extends RefCounted {
     if (this.numDirectUsers > 0) {
       return;
     }
+    // A layer that is no longer part of any layer group is archived rather than
+    // discarded, so that a state which defines a layer without displaying it —
+    // a custom layout whose viewers do not list it, for instance — keeps the
+    // layer instead of silently dropping it.  Archiving clears `visible` and
+    // removes the layer from every subset, so the layer settles after one pass.
+    // Layers with no user layer are transient drag targets rather than
+    // something the user asked for, and are still removed below.
+    for (const layer of Array.from(this.managedLayers)) {
+      if (layer.refCount === 1 && !layer.archived && layer.layer !== null) {
+        layer.setArchived(true);
+      }
+    }
     this.filter((layer) => layer.refCount !== 1 || layer.archived);
   }
 
