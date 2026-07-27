@@ -398,39 +398,41 @@ input.neuroglancer-segment-list-entry-id {
   color: #fff;
 }
 
-/* Numeric entry input. It reuses the annotation details-box input, but that
-   input's translucent light fill is meant for a dark panel; on the mid-gray
-   status bar it reads poorly, so give it an opaque dark field (compact, not
-   full width). The combined selector overrides the base hover/focus fills
-   regardless of stylesheet order. */
-.neuroglancer-annotation-property-value-input.neuroglancer-annotation-entry-tool-input {
-  width: auto;
+/* Numeric entry box. Not a real <input> — only number keys are routed to the
+   tool's buffer (leaving other keybinds live) and the typed value is shown
+   here, styled like a compact dark field (white text on #222). It turns red
+   when the value is outside the data type's range. */
+.neuroglancer-annotation-entry-tool-number {
+  display: inline-block;
   min-width: 8ch;
-  max-width: 16ch;
+  margin-right: 6px;
+  padding: 2px 4px;
   background: #222;
   border: 1px solid #555;
+  border-radius: 3px;
+  color: #fff;
+  font: 12px monospace;
+  white-space: pre;
 }
 
-.neuroglancer-annotation-property-value-input.neuroglancer-annotation-entry-tool-input:hover {
-  background: #222;
-}
-
-.neuroglancer-annotation-property-value-input.neuroglancer-annotation-entry-tool-input:focus {
-  background: #222;
-  border-color: #016dcc;
-}
-
-/* Out-of-range / invalid value: red text and border (native :invalid). */
-.neuroglancer-annotation-property-value-input.neuroglancer-annotation-entry-tool-input:invalid {
+.neuroglancer-annotation-entry-tool-number-invalid {
   color: #ff8080;
   border-color: #ff5555;
+}
+
+/* Second UI line: the optional numeric entry box followed by the navigation /
+   commit hint. */
+.neuroglancer-annotation-entry-tool-nav-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 4px;
 }
 
 /* Advancement / commit instructions: a dark pill so the help text is readable
    against the mid-gray status bar. */
 .neuroglancer-annotation-entry-tool-nav {
   display: inline-block;
-  margin-top: 4px;
   padding: 1px 6px;
   background-color: #333;
   border-radius: 3px;
