@@ -25,23 +25,30 @@ import { WatchableValue } from "#src/trackable_value.js";
 
 // Stable per-name dimension ids, so that a space listing the same dimensions in
 // a different order still refers to the same dimensions.
-const dimensionIds: { [name: string]: number } = { x: 1, y: 2, z: 3 };
+const dimensionIds: { [name: string]: number } = { x: 1, y: 2, z: 3, c: 4 };
 
 function makeSpace(
   names: string[],
   scales: number[],
   upperBounds: number[],
+  options: {
+    lowerBounds?: number[];
+    voxelCenterAtIntegerCoordinates?: boolean[];
+  } = {},
 ): CoordinateSpace {
-  const rank = names.length;
+  const {
+    lowerBounds = names.map(() => 0),
+    voxelCenterAtIntegerCoordinates = names.map(() => false),
+  } = options;
   return makeCoordinateSpace({
     names,
     ids: names.map((name) => dimensionIds[name]),
     units: names.map(() => "m"),
     scales: Float64Array.from(scales),
     bounds: {
-      lowerBounds: new Float64Array(rank),
+      lowerBounds: Float64Array.from(lowerBounds),
       upperBounds: Float64Array.from(upperBounds),
-      voxelCenterAtIntegerCoordinates: names.map(() => false),
+      voxelCenterAtIntegerCoordinates,
     },
   });
 }
@@ -140,5 +147,188 @@ describe("Position", () => {
     coordinateSpace.value = xyzSpace;
     expect(Array.from(position.value)).toEqual([10, 20, 30]);
     position.dispose();
+  });
+});
+
+describe("Position edge cases", () => {
+  function newPosition(): {
+    coordinateSpace: WatchableValue<CoordinateSpace>;
+    position: Position;
+  } {
+    const coordinateSpace = new WatchableValue<CoordinateSpace>(
+      emptyInvalidCoordinateSpace,
+    );
+    return { coordinateSpace, position: new Position(coordinateSpace) };
+  }
+
+  it("re-infers the position when the rank changes as well as the order", () => {
+    const { coordinateSpace, position } = newPosition();
+    coordinateSpace.value = xyzSpace;
+    expect(Array.from(position.value)).toEqual([125000.5, 60000.5, 2500.5]);
+
+    // A channel dimension appears, so the rank no longer matches.
+    const zxycSpace = makeSpace(
+      ["z", "x", "y", "c"],
+      [4e-8, 4e-9, 4e-9, 1],
+      [5000, 250000, 120000, 10],
+    );
+    coordinateSpace.value = emptyInvalidCoordinateSpace;
+    coordinateSpace.value = zxycSpace;
+
+    expectWithinBounds(zxycSpace, position.value);
+    expect(Array.from(position.value)).toEqual([
+      2500.5, 125000.5, 60000.5, 5.5,
+    ]);
+    position.dispose();
+  });
+
+  it("re-infers after several consecutive invalid coordinate spaces", () => {
+    const { coordinateSpace, position } = newPosition();
+    coordinateSpace.value = xyzSpace;
+    expect(Array.from(position.value)).toEqual([125000.5, 60000.5, 2500.5]);
+
+    const otherInvalidSpace = makeCoordinateSpace({
+      valid: false,
+      names: [],
+      units: [],
+      scales: new Float64Array(0),
+      boundingBoxes: [],
+    });
+    coordinateSpace.value = emptyInvalidCoordinateSpace;
+    coordinateSpace.value = otherInvalidSpace;
+    coordinateSpace.value = zxySpace;
+
+    expectWithinBounds(zxySpace, position.value);
+    expect(Array.from(position.value)).toEqual([2500.5, 125000.5, 60000.5]);
+    position.dispose();
+  });
+
+  it("leaves an inferred position unchanged when the same space returns", () => {
+    // Reloading the same data must not make the position jump.
+    const { coordinateSpace, position } = newPosition();
+    coordinateSpace.value = xyzSpace;
+    const before = Array.from(position.value);
+
+    coordinateSpace.value = emptyInvalidCoordinateSpace;
+    coordinateSpace.value = xyzSpace;
+
+    expect(Array.from(position.value)).toEqual(before);
+    position.dispose();
+  });
+
+  it("keeps an explicitly restored position that lies outside the bounds", () => {
+    // Navigating deliberately outside the volume is allowed; only inferred
+    // positions are recomputed.
+    const { coordinateSpace, position } = newPosition();
+    coordinateSpace.value = xyzSpace;
+    position.restoreState([999999, 0, 0]);
+
+    coordinateSpace.value = emptyInvalidCoordinateSpace;
+    coordinateSpace.value = xyzSpace;
+
+    expect(Array.from(position.value)).toEqual([999999, 0, 0]);
+    position.dispose();
+  });
+
+  it("infers a finite position for unbounded dimensions", () => {
+    const { coordinateSpace, position } = newPosition();
+    const unboundedSpace = makeSpace(
+      ["x", "y", "z"],
+      [1, 1, 1],
+      [
+        Number.POSITIVE_INFINITY,
+        Number.POSITIVE_INFINITY,
+        Number.POSITIVE_INFINITY,
+      ],
+      {
+        lowerBounds: [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, 0],
+      },
+    );
+    coordinateSpace.value = unboundedSpace;
+
+    for (const coordinate of position.value) {
+      expect(Number.isFinite(coordinate)).toBe(true);
+    }
+    expect(Array.from(position.value)).toEqual([0.5, 0.5, 0.5]);
+    position.dispose();
+  });
+
+  it("rounds to integer coordinates where the voxel centre is integral", () => {
+    const { coordinateSpace, position } = newPosition();
+    const mixedSpace = makeSpace(["x", "y", "z"], [1, 1, 1], [100, 100, 100], {
+      voxelCenterAtIntegerCoordinates: [true, false, true],
+    });
+    coordinateSpace.value = mixedSpace;
+    expect(Array.from(position.value)).toEqual([50, 50.5, 50]);
+    position.dispose();
+  });
+
+  it("still matches dimensions by id when the previous space stays valid", () => {
+    // The reordering path that never goes through an invalid space is
+    // unaffected: coordinates are remapped by dimension id.
+    const { coordinateSpace, position } = newPosition();
+    coordinateSpace.value = xyzSpace;
+    expect(Array.from(position.value)).toEqual([125000.5, 60000.5, 2500.5]);
+
+    coordinateSpace.value = zxySpace;
+
+    expectWithinBounds(zxySpace, position.value);
+    expect(Array.from(position.value)).toEqual([2500.5, 125000.5, 60000.5]);
+    position.dispose();
+  });
+
+  it("re-infers a snapped inferred position after a reorder", () => {
+    const { coordinateSpace, position } = newPosition();
+    coordinateSpace.value = xyzSpace;
+    position.snapToVoxel();
+
+    coordinateSpace.value = emptyInvalidCoordinateSpace;
+    coordinateSpace.value = zxySpace;
+
+    expectWithinBounds(zxySpace, position.value);
+    expect(Array.from(position.value)).toEqual([2500.5, 125000.5, 60000.5]);
+    position.dispose();
+  });
+
+  it("carries inferred-ness across assign", () => {
+    const source = newPosition();
+    source.coordinateSpace.value = xyzSpace;
+    expect(Array.from(source.position.value)).toEqual([
+      125000.5, 60000.5, 2500.5,
+    ]);
+
+    const target = newPosition();
+    target.position.assign(source.position);
+    expect(Array.from(target.position.value)).toEqual([
+      125000.5, 60000.5, 2500.5,
+    ]);
+
+    // The copied position was inferred, so it must be recomputed rather than
+    // reused when the target's space is replaced while invalid.
+    target.coordinateSpace.value = emptyInvalidCoordinateSpace;
+    target.coordinateSpace.value = zxySpace;
+
+    expectWithinBounds(zxySpace, target.position.value);
+    expect(Array.from(target.position.value)).toEqual([
+      2500.5, 125000.5, 60000.5,
+    ]);
+    source.position.dispose();
+    target.position.dispose();
+  });
+
+  it("carries explicitness across assign", () => {
+    const source = newPosition();
+    source.coordinateSpace.value = xyzSpace;
+    source.position.restoreState([1, 2, 3]);
+
+    const target = newPosition();
+    target.position.assign(source.position);
+
+    target.coordinateSpace.value = emptyInvalidCoordinateSpace;
+    target.coordinateSpace.value = xyzSpace;
+
+    expect(Array.from(target.position.value)).toEqual([1, 2, 3]);
+    source.position.dispose();
+    target.position.dispose();
   });
 });
