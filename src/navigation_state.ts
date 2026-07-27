@@ -169,12 +169,18 @@ function makeSimpleLinked<T extends RefCounted & { changed: NullarySignal }>(
 export class Position extends RefCounted {
   private coordinates_: Float32Array = vector.kEmptyFloat32Vec;
   private curCoordinateSpace: CoordinateSpace | undefined;
-  // Indicates that `coordinates_` was inferred from the bounds of
-  // `curCoordinateSpace` rather than specified explicitly.  Inferred
+  // The coordinates that were inferred from the bounds of `curCoordinateSpace`,
+  // or `undefined` if the coordinates were specified explicitly.  Inferred
   // coordinates are only meaningful for the coordinate space they were computed
   // from, and must be recomputed rather than reused if the coordinate space is
   // replaced while invalid.
-  private coordinatesAreDefault_ = false;
+  //
+  // This is a copy of the coordinates rather than a boolean flag because
+  // several callers, such as `NavigationState.translateVoxelsRelative`, move
+  // the position by writing into the array returned by `value` instead of going
+  // through the setter.  Comparing against the copy detects those moves as
+  // well.
+  private inferredCoordinates_: Float32Array | undefined;
   changed = new NullarySignal();
   constructor(
     public coordinateSpace: WatchableValueInterface<CoordinateSpace>,
@@ -202,8 +208,18 @@ export class Position extends RefCounted {
   reset() {
     this.curCoordinateSpace = undefined;
     this.coordinates_ = vector.kEmptyFloat32Vec;
-    this.coordinatesAreDefault_ = false;
+    this.inferredCoordinates_ = undefined;
     this.changed.dispatch();
+  }
+
+  // Returns `true` if the coordinates are still exactly the ones that were
+  // inferred from the bounds, i.e. the position has not been moved since.
+  private get coordinatesAreInferred() {
+    const { inferredCoordinates_ } = this;
+    return (
+      inferredCoordinates_ !== undefined &&
+      arraysEqual(inferredCoordinates_, this.coordinates_)
+    );
   }
 
   set value(coordinates: Float32Array) {
@@ -217,7 +233,7 @@ export class Position extends RefCounted {
     }
     const { coordinates_ } = this;
     coordinates_.set(coordinates);
-    this.coordinatesAreDefault_ = false;
+    this.inferredCoordinates_ = undefined;
     this.changed.dispatch();
   }
 
@@ -233,13 +249,13 @@ export class Position extends RefCounted {
       if (
         coordinates_ !== undefined &&
         coordinates_.length === rank &&
-        !this.coordinatesAreDefault_
+        !this.coordinatesAreInferred
       ) {
         // Use the existing voxel coordinates if they were specified explicitly
-        // and the rank is the same.  Otherwise, ignore.  Previously inferred
-        // coordinates cannot be reused, since the dimensions of the new
-        // coordinate space may be ordered differently, which would leave the
-        // position outside the bounds.
+        // and the rank is the same.  Otherwise, ignore.  Coordinates that are
+        // still exactly as inferred cannot be reused, since the dimensions of
+        // the new coordinate space may be ordered differently, which would
+        // leave the position outside the bounds.
       } else {
         coordinates_ = this.coordinates_ = new Float32Array(rank);
         getBoundingBoxCenter(coordinates_, coordinateSpace.bounds);
@@ -251,12 +267,13 @@ export class Position extends RefCounted {
             coordinates_[i] = Math.floor(coordinates_[i]) + 0.5;
           }
         }
-        this.coordinatesAreDefault_ = true;
+        this.inferredCoordinates_ = Float32Array.from(coordinates_);
       }
       this.changed.dispatch();
       return;
     }
     // Match dimensions by ID.
+    const wasInferred = this.coordinatesAreInferred;
     const newCoordinates = new Float32Array(rank);
     const prevCoordinates = this.coordinates_;
     const { ids, scales: newScales } = coordinateSpace;
@@ -275,6 +292,11 @@ export class Position extends RefCounted {
       }
     }
     this.coordinates_ = newCoordinates;
+    // Remapping does not count as moving the position, so coordinates that were
+    // still exactly as inferred remain so for the new coordinate space.
+    this.inferredCoordinates_ = wasInferred
+      ? Float32Array.from(newCoordinates)
+      : undefined;
     this.changed.dispatch();
   }
 
@@ -293,7 +315,7 @@ export class Position extends RefCounted {
     }
     this.curCoordinateSpace = undefined;
     this.coordinates_ = Float32Array.from(parseArray(obj, verifyFiniteFloat));
-    this.coordinatesAreDefault_ = false;
+    this.inferredCoordinates_ = undefined;
     this.handleCoordinateSpaceChanged();
     this.changed.dispatch();
   }
@@ -317,10 +339,13 @@ export class Position extends RefCounted {
 
   assign(other: Borrowed<Position>) {
     other.handleCoordinateSpaceChanged();
-    const { curCoordinateSpace, coordinates_, coordinatesAreDefault_ } = other;
+    const { curCoordinateSpace, coordinates_, inferredCoordinates_ } = other;
     this.curCoordinateSpace = curCoordinateSpace;
     this.coordinates_ = Float32Array.from(coordinates_);
-    this.coordinatesAreDefault_ = coordinatesAreDefault_;
+    this.inferredCoordinates_ =
+      inferredCoordinates_ === undefined
+        ? undefined
+        : Float32Array.from(inferredCoordinates_);
     this.changed.dispatch();
   }
 

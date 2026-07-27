@@ -316,6 +316,63 @@ describe("Position edge cases", () => {
     target.position.dispose();
   });
 
+  it("keeps a position that was panned in place", () => {
+    // `NavigationState.translateVoxelsRelative` and the slice-view zoom move the
+    // position by writing into the array returned by `value` rather than going
+    // through the setter, so a position that started out inferred must stop
+    // counting as inferred once the user has moved it.  Such a position is kept
+    // for the same reason an explicitly restored one is: it is a location the
+    // user chose.  There is no previous valid coordinate space left to match
+    // dimension ids against, so the coordinates carry over by index, exactly as
+    // they do for a position restored from JSON.
+    const { coordinateSpace, position } = newPosition();
+    coordinateSpace.value = xyzSpace;
+
+    const voxelCoordinates = position.value;
+    voxelCoordinates[0] = 1000;
+    voxelCoordinates[1] = 2000;
+    position.changed.dispatch();
+
+    coordinateSpace.value = emptyInvalidCoordinateSpace;
+    coordinateSpace.value = zxySpace;
+
+    expect(Array.from(position.value)).toEqual([1000, 2000, 2500.5]);
+    position.dispose();
+  });
+
+  it("keeps a position with a single panned dimension", () => {
+    const { coordinateSpace, position } = newPosition();
+    coordinateSpace.value = xyzSpace;
+
+    position.value[2] = 4000;
+    position.changed.dispatch();
+
+    coordinateSpace.value = emptyInvalidCoordinateSpace;
+    coordinateSpace.value = zxySpace;
+
+    expect(Array.from(position.value)).toEqual([125000.5, 60000.5, 4000]);
+    position.dispose();
+  });
+
+  it("re-infers a position panned back onto the inferred coordinates", () => {
+    // Moving the position and then moving it back leaves it indistinguishable
+    // from a position that was never touched, so it is treated as inferred.
+    const { coordinateSpace, position } = newPosition();
+    coordinateSpace.value = xyzSpace;
+
+    position.value[0] = 1000;
+    position.changed.dispatch();
+    position.value[0] = 125000.5;
+    position.changed.dispatch();
+
+    coordinateSpace.value = emptyInvalidCoordinateSpace;
+    coordinateSpace.value = zxySpace;
+
+    expectWithinBounds(zxySpace, position.value);
+    expect(Array.from(position.value)).toEqual([2500.5, 125000.5, 60000.5]);
+    position.dispose();
+  });
+
   it("carries explicitness across assign", () => {
     const source = newPosition();
     source.coordinateSpace.value = xyzSpace;
