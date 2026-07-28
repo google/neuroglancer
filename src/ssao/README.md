@@ -16,12 +16,13 @@ The algorithm does the following for each pixel:
 
 1. Reconstruct the view-space position from the depth buffer.
 2. Read the view-space normal from the normal buffer.
-3. March in 4 directions (`NUM_DIRECTIONS`) × 8 steps (`NUM_STEPS`) to find the
-   maximum horizon angle in each direction.
-4. Integrate occlusion from the horizon angles relative to the surface normal.
+3. March in 4 view-space slices (`NUM_DIRECTIONS`) × 8 steps (`NUM_STEPS`) on
+   both sides of the pixel to find the positive and negative horizon angles.
+4. Project the surface normal into each slice and analytically integrate the
+   visible arc between its horizons.
 
-Then the raw ambient occlusion is bilaterally blurred (depth-aware, 5-tap
-kernel, two passes) and composited with the color buffer using
+Then the raw ambient occlusion is bilaterally blurred (view-space-depth-aware,
+5-tap kernel, two passes) and composited with the color buffer using
 `color.rgb * pow(ao, intensity)`.
 
 ## Scope

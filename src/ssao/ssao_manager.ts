@@ -114,6 +114,17 @@ export class SSAOManager extends RefCounted {
     this.ssaoFboB!.bind(width, height);
     const blurShader = this.blurCopyHelper!.shader;
     blurShader.bind();
+    gl.uniformMatrix4fv(
+      blurShader.uniform("uProjection"),
+      false,
+      projectionMat,
+    );
+    gl.uniformMatrix4fv(
+      blurShader.uniform("uInvProjection"),
+      false,
+      invProjectionMat,
+    );
+    gl.uniform1f(blurShader.uniform("uRadius"), radius);
     gl.uniform2f(blurShader.uniform("uDirection"), 1.0, 0.0);
     this.blurCopyHelper!.draw(
       this.ssaoFboA!.colorBuffers[0].texture,

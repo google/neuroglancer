@@ -20,7 +20,7 @@ import { verifyFiniteFloat } from "#src/util/json.js";
 import { CompoundTrackable } from "#src/util/trackable.js";
 
 // Slider / clamp range for the SSAO sampling radius.
-export const SSAO_RADIUS_RANGE = { min: 0.01, max: 3, step: 0.01 };
+export const SSAO_RADIUS_RANGE = { min: 0.01, max: 0.6, step: 0.01 };
 // Slider / clamp range for the AO power exponent at composite time.
 export const SSAO_INTENSITY_RANGE = { min: 0.5, max: 5.0, step: 0.1 };
 

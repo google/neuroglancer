@@ -430,7 +430,7 @@ vColor *= pow(1.0 - absCosAngle, uSilhouettePower);
         builder.setVertexMain(vertexMain);
         builder.setFragmentMain(
           emitNormals
-            ? "emit(vColor, uPickID, vViewNormal);"
+            ? "emit(vColor, uPickID, gl_FrontFacing ? vViewNormal : -vViewNormal);"
             : "emit(vColor, uPickID);",
         );
       },

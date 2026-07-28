@@ -23,15 +23,13 @@ const glsl_gtao = `
 // depth buffer.
 #define NUM_STEPS 8
 #define PI 3.14159265
+#define HALF_PI 1.57079633
 // Cap the per-pixel kernel at this fraction of viewport height; avoids
 // runaway sampling at extreme zoom-in. Sized for scenes of thin arbors.
 #define MAX_KERNEL_FRACTION 0.6
-// Minimum view-space distance to count a horizon sample; avoids division by zero
-// at coincident samples.
-#define MIN_SAMPLE_DIST 0.0001
 // Squared length below which a packed normal is treated as the no-AO
 // sentinel (zero-RGB plus rounding tolerance). Real packed unit normals
-// have squared length >= 1/3, so 0.01 is safely below.
+// have squared length >= 1 - sqrt(3) / 2 (~0.134), so 0.01 is safely below.
 #define SENTINEL_EPS 0.01
 // Decorrelate the per-step noise from the per-direction noise by perturbing
 // the hash input.
@@ -48,6 +46,11 @@ float gtaoHash(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
   return fract((p3.x + p3.y) * p3.z);
+}
+
+float integrateArc(float horizonAngle, float normalAngle) {
+  return -cos(2.0 * horizonAngle - normalAngle) + cos(normalAngle) +
+         2.0 * horizonAngle * sin(normalAngle);
 }
 
 vec4 gtao() {
@@ -84,7 +87,11 @@ vec4 gtao() {
   float noiseAngle = gtaoHash(gl_FragCoord.xy) * PI;
   float stepNoise = gtaoHash(gl_FragCoord.xy * STEP_NOISE_SCALE + STEP_NOISE_BIAS);
 
-  float totalOcclusion = 0.0;
+  float totalVisibility = 0.0;
+  vec3 viewDirection = abs(uProjection[2][3]) > 0.5
+    ? normalize(-P)
+    : vec3(0.0, 0.0, 1.0);
+  float minSampleDist = max(falloffRadius * 0.0001, 0.000001);
 
   for (int d = 0; d < NUM_DIRECTIONS; d++) {
     float phi = (float(d) + 0.5) / float(NUM_DIRECTIONS) * PI + noiseAngle;
@@ -93,8 +100,27 @@ vec4 gtao() {
     vec2 dir2D = vec2(cos(phi), sin(phi)) * vec2(uResolution.y / uResolution.x, 1.0);
     vec2 stepUV = dir2D * kernelRadius / float(NUM_STEPS);
 
-    float maxSinH_pos = 0.0;
-    float maxSinH_neg = 0.0;
+    // Construct the view-space slice corresponding to this screen-space
+    // direction, then project the surface normal into it.
+    vec3 tangentPoint = viewPosFromDepth(
+      uv + dir2D / uResolution.y, fragZ, uInvProjection);
+    vec3 sliceTangent = normalize(tangentPoint - P);
+    vec3 sliceNormal = normalize(cross(viewDirection, sliceTangent));
+    vec3 projectedNormal = N - sliceNormal * dot(N, sliceNormal);
+    float projectedNormalLength = length(projectedNormal);
+    if (projectedNormalLength < 0.0001) {
+      continue;
+    }
+    projectedNormal /= projectedNormalLength;
+    float normalAngle = acos(clamp(dot(projectedNormal, viewDirection), -1.0, 1.0));
+    normalAngle *= sign(dot(projectedNormal, sliceTangent));
+
+    // The projected normal's +/- pi/2 boundaries represent an unobstructed
+    // hemisphere. Samples move each horizon inward as they occlude the slice.
+    float horizonPosLimit = normalAngle + HALF_PI;
+    float horizonNegLimit = normalAngle - HALF_PI;
+    float horizonPos = horizonPosLimit;
+    float horizonNeg = horizonNegLimit;
 
     for (int s = 1; s <= NUM_STEPS; s++) {
       float t = float(s) + stepNoise * 0.5;
@@ -106,10 +132,10 @@ vec4 gtao() {
           vec3 S = viewPosFromDepth(uvP, 1.0 - dv, uInvProjection);
           vec3 delta = S - P;
           float dist = length(delta);
-          if (dist > MIN_SAMPLE_DIST) {
-            float sinH = dot(delta / dist, N);
+          if (dist > minSampleDist) {
             float falloff = clamp(1.0 - dist * dist / (falloffRadius * falloffRadius), 0.0, 1.0);
-            maxSinH_pos = max(maxSinH_pos, sinH * falloff);
+            float sampleAngle = acos(clamp(dot(delta / dist, viewDirection), -1.0, 1.0));
+            horizonPos = min(horizonPos, mix(horizonPosLimit, sampleAngle, falloff));
           }
         }
       }
@@ -121,19 +147,23 @@ vec4 gtao() {
           vec3 S = viewPosFromDepth(uvN, 1.0 - dv, uInvProjection);
           vec3 delta = S - P;
           float dist = length(delta);
-          if (dist > MIN_SAMPLE_DIST) {
-            float sinH = dot(delta / dist, N);
+          if (dist > minSampleDist) {
             float falloff = clamp(1.0 - dist * dist / (falloffRadius * falloffRadius), 0.0, 1.0);
-            maxSinH_neg = max(maxSinH_neg, sinH * falloff);
+            float sampleAngle = -acos(clamp(dot(delta / dist, viewDirection), -1.0, 1.0));
+            horizonNeg = max(horizonNeg, mix(horizonNegLimit, sampleAngle, falloff));
           }
         }
       }
     }
 
-    totalOcclusion += (maxSinH_pos + maxSinH_neg) * 0.5;
+    horizonPos = clamp(horizonPos, horizonNegLimit, horizonPosLimit);
+    horizonNeg = clamp(horizonNeg, horizonNegLimit, horizonPosLimit);
+    totalVisibility += projectedNormalLength * 0.25 *
+      (integrateArc(horizonPos, normalAngle) +
+       integrateArc(-horizonNeg, -normalAngle));
   }
 
-  float ao = 1.0 - totalOcclusion / float(NUM_DIRECTIONS);
+  float ao = totalVisibility / float(NUM_DIRECTIONS);
   ao = clamp(ao, 0.0, 1.0);
   return vec4(vec3(ao), 1.0);
 }
@@ -150,13 +180,24 @@ export function defineGTAOShader(builder: ShaderBuilder) {
 }
 
 const glsl_blur = `
-// Bilateral falloff sharpness; tuned for normalized [0,1] depth so that
-// samples across surface boundaries get rejected.
-#define DEPTH_AWARE_FALLOFF 1000.0
+#define DEPTH_SIGMA_FRACTION 0.1
+
+float viewZFromDepth(vec2 uv, float depthVal) {
+  vec4 clip = vec4(uv * 2.0 - 1.0, (1.0 - depthVal) * 2.0 - 1.0, 1.0);
+  vec4 view = uInvProjection * clip;
+  return view.z / view.w;
+}
 
 vec4 blur() {
   vec2 texelSize = 1.0 / vec2(textureSize(uSampler[0], 0));
   float centerDepth = getValue1().r;
+  if (centerDepth == 0.0) {
+    return vec4(1.0);
+  }
+  float centerZ = viewZFromDepth(vTexCoord, centerDepth);
+  float wClip = uProjection[2][3] * centerZ + uProjection[3][3];
+  float falloffRadius = uRadius * 2.0 * wClip / uProjection[1][1];
+  float depthSigma = max(falloffRadius * DEPTH_SIGMA_FRACTION, 0.000001);
 
   float result = 0.0;
   float totalWeight = 0.0;
@@ -165,8 +206,11 @@ vec4 blur() {
     vec2 offset = vec2(float(i)) * texelSize * uDirection;
     vec2 uv = vTexCoord + offset;
     float sampleDepth = texture(uSampler[1], uv).r;
-    float depthDiff = abs(sampleDepth - centerDepth);
-    float w = exp(-depthDiff * DEPTH_AWARE_FALLOFF);
+    if (sampleDepth == 0.0) {
+      continue;
+    }
+    float sampleZ = viewZFromDepth(uv, sampleDepth);
+    float w = exp(-abs(sampleZ - centerZ) / depthSigma);
     result += texture(uSampler[0], uv).r * w;
     totalWeight += w;
   }
@@ -177,6 +221,9 @@ vec4 blur() {
 
 export function defineBlurShader(builder: ShaderBuilder) {
   builder.addUniform("highp vec2", "uDirection");
+  builder.addUniform("highp mat4", "uProjection");
+  builder.addUniform("highp mat4", "uInvProjection");
+  builder.addUniform("highp float", "uRadius");
   builder.addOutputBuffer("vec4", "v4f_fragColor", null);
   builder.addFragmentCode(glsl_blur);
   builder.setFragmentMain(`v4f_fragColor = blur();`);
@@ -185,7 +232,7 @@ export function defineBlurShader(builder: ShaderBuilder) {
 const glsl_ssaoComposite = `
 // Squared length below which a packed normal is treated as the no-AO
 // sentinel (zero-RGB plus rounding tolerance). Real packed unit normals
-// have squared length >= 1/3, so 0.01 is safely below.
+// have squared length >= 1 - sqrt(3) / 2 (~0.134), so 0.01 is safely below.
 #define SENTINEL_EPS 0.01
 
 // Set to 1 to visualize the (post-intensity) AO buffer directly instead of

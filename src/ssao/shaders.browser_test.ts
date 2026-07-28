@@ -75,6 +75,12 @@ function readRgba8(gl: GL): Uint8Array {
   return out;
 }
 
+function viewZToDepthValue(projection: mat4, viewZ: number): number {
+  const clipZ = projection[10] * viewZ + projection[14];
+  const clipW = projection[11] * viewZ + projection[15];
+  return 1.0 - (clipZ / clipW + 1.0) * 0.5;
+}
+
 // Runs the GTAO (SSAO) shader on a w × h depth grid with every pixel's normal facing
 // the camera, and returns the RGBA bytes at (cx, cy). Used by tests that vary
 // only the depth pattern.
@@ -85,6 +91,11 @@ function runGTAOAndReadCenter(
   cx: number,
   cy: number,
   depths: Float32Array,
+  options: {
+    normal?: [number, number, number];
+    projection?: mat4;
+    radius?: number;
+  } = {},
 ): Uint8Array {
   const helper = OffscreenCopyHelper.get(gl, defineGTAOShader, 2);
   const depthTex = makeTexture(
@@ -96,12 +107,12 @@ function runGTAOAndReadCenter(
     w,
     h,
   );
-  // Every pixel: packed view-space normal (0, 0, 1), i.e., facing the camera.
+  const normal = options.normal ?? [0, 0, 1];
   const normals = new Uint8Array(w * h * 4);
   for (let i = 0; i < w * h; i++) {
-    normals[i * 4] = 128;
-    normals[i * 4 + 1] = 128;
-    normals[i * 4 + 2] = 255;
+    normals[i * 4] = Math.round((normal[0] * 0.5 + 0.5) * 255);
+    normals[i * 4 + 1] = Math.round((normal[1] * 0.5 + 0.5) * 255);
+    normals[i * 4 + 2] = Math.round((normal[2] * 0.5 + 0.5) * 255);
     normals[i * 4 + 3] = 255;
   }
   const normalTex = makeTexture(
@@ -126,9 +137,11 @@ function runGTAOAndReadCenter(
   try {
     fbo.bind(w, h);
     helper.shader.bind();
-    const proj = mat4.create();
-    // Make a camera with 90 degree vertical FOV, square aspect, [0.1, 10] depth range.
-    mat4.perspective(proj, Math.PI / 2, 1.0, 0.1, 10.0);
+    const proj = options.projection ?? mat4.create();
+    if (options.projection === undefined) {
+      // 90 degree vertical FOV, square aspect, [0.1, 10] depth range.
+      mat4.perspective(proj, Math.PI / 2, 1.0, 0.1, 10.0);
+    }
     const invProj = mat4.create();
     mat4.invert(invProj, proj);
     gl.uniformMatrix4fv(helper.shader.uniform("uProjection"), false, proj);
@@ -139,7 +152,7 @@ function runGTAOAndReadCenter(
     );
     // 0.4 > 1/uResolution.y (i.e., 0.125), so the sub-pixel exit is skipped;
     // kernel reaches ~3 pixels from center.
-    gl.uniform1f(helper.shader.uniform("uRadius"), 0.4);
+    gl.uniform1f(helper.shader.uniform("uRadius"), options.radius ?? 0.4);
     gl.uniform2f(helper.shader.uniform("uResolution"), w, h);
     helper.draw(depthTex, normalTex);
     const px = new Uint8Array(4);
@@ -378,6 +391,29 @@ describe("SSAO shaders", () => {
     });
   });
 
+  it("SSAO produces ao ≈ 1 on a tilted plane", () => {
+    webglTest((gl) => {
+      const w = 16;
+      const h = 16;
+      const projection = mat4.create();
+      mat4.ortho(projection, -1, 1, -1, 1, 0.1, 10);
+      const normal: [number, number, number] = [0.6, 0, 0.8];
+      const depths = new Float32Array(w * h);
+      for (let y = 0; y < h; ++y) {
+        for (let x = 0; x < w; ++x) {
+          const viewX = ((x + 0.5) / w) * 2.0 - 1.0;
+          const viewZ = (-0.8 - normal[0] * viewX) / normal[2];
+          depths[y * w + x] = viewZToDepthValue(projection, viewZ);
+        }
+      }
+      const px = runGTAOAndReadCenter(gl, w, h, 8, 8, depths, {
+        normal,
+        projection,
+      });
+      expect(px[0]).toBeGreaterThanOrEqual(245);
+    });
+  });
+
   it("blur is identity for constant input", () => {
     webglTest((gl) => {
       const helper = OffscreenCopyHelper.get(gl, defineBlurShader, 2);
@@ -400,6 +436,21 @@ describe("SSAO shaders", () => {
       try {
         fbo.bind(1, 1);
         helper.shader.bind();
+        const projection = mat4.create();
+        mat4.perspective(projection, Math.PI / 2, 1.0, 0.1, 10.0);
+        const invProjection = mat4.create();
+        mat4.invert(invProjection, projection);
+        gl.uniformMatrix4fv(
+          helper.shader.uniform("uProjection"),
+          false,
+          projection,
+        );
+        gl.uniformMatrix4fv(
+          helper.shader.uniform("uInvProjection"),
+          false,
+          invProjection,
+        );
+        gl.uniform1f(helper.shader.uniform("uRadius"), 0.4);
         gl.uniform2f(helper.shader.uniform("uDirection"), 1.0, 0.0);
         helper.draw(aoTex, depthTex);
         const out = readRgba8(gl);
@@ -407,6 +458,71 @@ describe("SSAO shaders", () => {
         // and every weight is 1; the bilateral average equals the input.
         expect(out[0]).toBeGreaterThanOrEqual(177);
         expect(out[0]).toBeLessThanOrEqual(179);
+      } finally {
+        fbo.dispose();
+        gl.deleteTexture(aoTex);
+        gl.deleteTexture(depthTex);
+      }
+    });
+  });
+
+  it("blur rejects a far-field view-space depth discontinuity", () => {
+    webglTest((gl) => {
+      const helper = OffscreenCopyHelper.get(gl, defineBlurShader, 2);
+      const aoTex = makeTexture(
+        gl,
+        WebGL2RenderingContext.R8,
+        WebGL2RenderingContext.RED,
+        WebGL2RenderingContext.UNSIGNED_BYTE,
+        new Uint8Array([0, 255, 255]),
+        3,
+        1,
+      );
+      const projection = mat4.create();
+      mat4.perspective(projection, Math.PI / 2, 1.0, 0.1, 10.0);
+      const depthTex = makeTexture(
+        gl,
+        WebGL2RenderingContext.R32F,
+        WebGL2RenderingContext.RED,
+        WebGL2RenderingContext.FLOAT,
+        new Float32Array([
+          viewZToDepthValue(projection, -8),
+          viewZToDepthValue(projection, -9),
+          viewZToDepthValue(projection, -9),
+        ]),
+        3,
+        1,
+      );
+      const fbo = makeRgba8Output(gl);
+      try {
+        fbo.bind(3, 1);
+        helper.shader.bind();
+        const invProjection = mat4.create();
+        mat4.invert(invProjection, projection);
+        gl.uniformMatrix4fv(
+          helper.shader.uniform("uProjection"),
+          false,
+          projection,
+        );
+        gl.uniformMatrix4fv(
+          helper.shader.uniform("uInvProjection"),
+          false,
+          invProjection,
+        );
+        gl.uniform1f(helper.shader.uniform("uRadius"), 0.1);
+        gl.uniform2f(helper.shader.uniform("uDirection"), 1.0, 0.0);
+        helper.draw(aoTex, depthTex);
+        const out = new Uint8Array(4);
+        gl.readPixels(
+          1,
+          0,
+          1,
+          1,
+          WebGL2RenderingContext.RGBA,
+          WebGL2RenderingContext.UNSIGNED_BYTE,
+          out,
+        );
+        expect(out[0]).toBeGreaterThanOrEqual(250);
       } finally {
         fbo.dispose();
         gl.deleteTexture(aoTex);
