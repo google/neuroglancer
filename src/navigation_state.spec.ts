@@ -203,6 +203,27 @@ describe("Position edge cases", () => {
     position.dispose();
   });
 
+  it("re-infers when a reset leaves an inferred position behind", () => {
+    // The sequence reported in the issue: resetting the viewer state empties
+    // the position while the outgoing coordinate space is still valid, so the
+    // next render infers a position for that space.  Applying the new state
+    // then replaces the space through an invalid gap, and the position left
+    // behind must not be carried over by index.
+    const { coordinateSpace, position } = newPosition();
+    coordinateSpace.value = xyzSpace;
+    position.restoreState([1, 2, 3]);
+
+    position.reset();
+    expect(Array.from(position.value)).toEqual([125000.5, 60000.5, 2500.5]);
+
+    coordinateSpace.value = emptyInvalidCoordinateSpace;
+    coordinateSpace.value = zxySpace;
+
+    expectWithinBounds(zxySpace, position.value);
+    expect(Array.from(position.value)).toEqual([2500.5, 125000.5, 60000.5]);
+    position.dispose();
+  });
+
   it("leaves an inferred position unchanged when the same space returns", () => {
     // Reloading the same data must not make the position jump.
     const { coordinateSpace, position } = newPosition();
@@ -277,6 +298,37 @@ describe("Position edge cases", () => {
     position.dispose();
   });
 
+  it("keeps an inferred position inferred across a remap between valid spaces", () => {
+    // Matching dimensions by id is not a move, so a position that is still
+    // exactly as inferred stays that way and must be re-inferred if the
+    // coordinate space is later replaced while invalid.
+    const { coordinateSpace, position } = newPosition();
+    coordinateSpace.value = xyzSpace;
+    coordinateSpace.value = zxySpace;
+    expect(Array.from(position.value)).toEqual([2500.5, 125000.5, 60000.5]);
+
+    coordinateSpace.value = emptyInvalidCoordinateSpace;
+    coordinateSpace.value = xyzSpace;
+
+    expectWithinBounds(xyzSpace, position.value);
+    expect(Array.from(position.value)).toEqual([125000.5, 60000.5, 2500.5]);
+    position.dispose();
+  });
+
+  it("keeps an explicit position explicit across a remap between valid spaces", () => {
+    const { coordinateSpace, position } = newPosition();
+    coordinateSpace.value = xyzSpace;
+    position.restoreState([1000, 2000, 3000]);
+    coordinateSpace.value = zxySpace;
+    expect(Array.from(position.value)).toEqual([3000, 1000, 2000]);
+
+    coordinateSpace.value = emptyInvalidCoordinateSpace;
+    coordinateSpace.value = zxySpace;
+
+    expect(Array.from(position.value)).toEqual([3000, 1000, 2000]);
+    position.dispose();
+  });
+
   it("re-infers a snapped inferred position after a reorder", () => {
     const { coordinateSpace, position } = newPosition();
     coordinateSpace.value = xyzSpace;
@@ -299,6 +351,10 @@ describe("Position edge cases", () => {
 
     const target = newPosition();
     target.position.assign(source.position);
+    // Reading the value here is load-bearing: `assign` copies the source's
+    // valid coordinate space, so the target has to observe its own invalid
+    // space before the new one arrives.  Without this read the dimension-id
+    // remap path runs instead of the invalid-gap path under test.
     expect(Array.from(target.position.value)).toEqual([
       125000.5, 60000.5, 2500.5,
     ]);
@@ -380,8 +436,11 @@ describe("Position edge cases", () => {
 
     const target = newPosition();
     target.position.assign(source.position);
+    // As above, the target must observe its own invalid coordinate space
+    // first; otherwise it still holds the space copied from the source and the
+    // assignment below is a no-op that exercises nothing.
+    expect(Array.from(target.position.value)).toEqual([1, 2, 3]);
 
-    target.coordinateSpace.value = emptyInvalidCoordinateSpace;
     target.coordinateSpace.value = xyzSpace;
 
     expect(Array.from(target.position.value)).toEqual([1, 2, 3]);
