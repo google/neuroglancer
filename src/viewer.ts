@@ -89,6 +89,7 @@ import {
   LayerListPanelState,
 } from "#src/ui/layer_list_panel.js";
 import { LayerSidePanelManager } from "#src/ui/layer_side_panel.js";
+import { registerMemoryLimitStatusMessage } from "#src/ui/memory_limit_status.js";
 import { setupPositionDropHandlers } from "#src/ui/position_drag_and_drop.js";
 import { ScreenshotDialog } from "#src/ui/screenshot_menu.js";
 import { SelectionDetailsPanel } from "#src/ui/selection_details.js";
@@ -674,6 +675,8 @@ export class Viewer extends RefCounted implements ViewerState {
         }
       }),
     );
+
+    registerMemoryLimitStatusMessage(this, this.dataContext.chunkQueueManager);
 
     this.makeUI();
     this.updateShowBorders();
