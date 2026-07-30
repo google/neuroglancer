@@ -332,6 +332,10 @@ export class GlobalToolBinder extends RefCounted {
     return this.bindings.get(key);
   }
 
+  isActive(tool: Tool | undefined) {
+    return tool !== undefined && this.activeTool_?.tool === tool;
+  }
+
   private deleteBinding(tool: Tool) {
     const keyBinding = tool.keyBinding!;
     tool.keyBinding = undefined;

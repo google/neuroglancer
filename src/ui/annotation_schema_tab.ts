@@ -39,6 +39,7 @@ import {
   annotationPropertySpecsToJson,
   canConvertTypes,
   compareAnnotationSpecProperties,
+  isAnnotationNumericPropertySpec,
   isAnnotationTypeNumeric,
   parseAnnotationPropertySpecs,
   propertyTypeDataType,
@@ -88,6 +89,19 @@ import { makeAddButton } from "#src/widget/add_button.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import { makeIcon } from "#src/widget/icon.js";
 import { Tab } from "#src/widget/tab_view.js";
+
+function getPropertyToolJson(
+  property: AnnotationPropertySpec,
+  identifier = property.identifier,
+): string | undefined {
+  if (property.type === "bool") {
+    return toggleBoolPropertyToolJson(identifier);
+  }
+  if (!isAnnotationNumericPropertySpec(property)) return undefined;
+  return property.enumValues !== undefined
+    ? annotateEnumPropertyToolJson(identifier)
+    : annotateNumberPropertyToolJson(identifier);
+}
 
 interface InputConfig extends NumberDisplayConfig {
   type: "number" | "text" | "checkbox";
@@ -166,7 +180,25 @@ class AnnotationUIProperty extends RefCounted {
       console.warn(`Property with name ${oldIdentifier} not found.`);
       return;
     }
+    const oldToolJson = getPropertyToolJson(oldProperty);
+    const boundKey =
+      oldToolJson === undefined
+        ? undefined
+        : this.parentView.layer.toolBinder.jsonToKey.get(
+            JSON.stringify(oldToolJson),
+          );
+    const { globalBinder } = this.parentView.layer.toolBinder;
+    const wasToolActive =
+      boundKey !== undefined &&
+      globalBinder.isActive(this.parentView.layer.toolBinder.get(boundKey));
     this.updateProperty(oldProperty, { identifier: newIdentifier });
+    if (boundKey !== undefined) {
+      const newToolJson = getPropertyToolJson(oldProperty, newIdentifier);
+      if (newToolJson !== undefined) {
+        this.parentView.layer.toolBinder.setJson(boundKey, newToolJson);
+        if (wasToolActive) globalBinder.activate(boundKey);
+      }
+    }
   }
 
   private getPropertyByIdentifier(
