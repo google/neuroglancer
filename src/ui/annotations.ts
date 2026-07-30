@@ -2933,18 +2933,7 @@ export function makeAnnotationListElement(
   element.addEventListener("action:move-to-annotation", (event) => {
     event.stopPropagation();
     event.preventDefault();
-    const { layerRank } = chunkTransform;
-    const chunkPosition = new Float32Array(layerRank);
-    const layerPosition = new Float32Array(layerRank);
-    getCenterPosition(chunkPosition, annotation);
-    matrix.transformPoint(
-      layerPosition,
-      chunkTransform.chunkToLayerTransform,
-      layerRank + 1,
-      chunkPosition,
-      layerRank,
-    );
-    setLayerPosition(layer, chunkTransform, layerPosition);
+    moveToAnnotation(layer, annotation, state);
   });
   return [element, columnWidths];
 }

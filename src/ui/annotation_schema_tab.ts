@@ -327,7 +327,7 @@ class AnnotationUIProperty extends RefCounted {
       const rawValue = (event.target as HTMLInputElement).value;
       // Replace dash and spaces with underscores
       let sanitizedValue = rawValue.replace(/-/g, "_");
-      sanitizedValue = rawValue.replace(/\s+/g, "_");
+      sanitizedValue = sanitizedValue.replace(/\s+/g, "_");
       sanitizedValue = sanitizedValue.toLowerCase();
       // Remove any non-alphanumeric characters except underscores
       sanitizedValue = sanitizedValue.replace(/[^a-z0-9_]/g, "");

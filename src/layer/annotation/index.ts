@@ -426,6 +426,48 @@ type PropertyToolDescriptor =
   | { kind: "bool"; propertyIdentifier: string }
   | { kind: "number"; propertyIdentifier: string };
 
+const propertyToolRegistrationCounts = new Map<string, number>();
+
+function retainPropertyTool(
+  toolId: string,
+  descriptor: PropertyToolDescriptor,
+) {
+  const registrationCount = propertyToolRegistrationCounts.get(toolId) ?? 0;
+  if (registrationCount === 0) {
+    registerTool(AnnotationUserLayer, toolId, (layer) => {
+      switch (descriptor.kind) {
+        case "enum":
+          return new EnumPropertyEntryTool(
+            descriptor.propertyIdentifier,
+            layer,
+          );
+        case "bool":
+          return new ToggleBoolPropertyTool(
+            descriptor.propertyIdentifier,
+            layer,
+          );
+        case "number":
+          return new NumberPropertyEntryTool(
+            descriptor.propertyIdentifier,
+            layer,
+          );
+      }
+    });
+  }
+  propertyToolRegistrationCounts.set(toolId, registrationCount + 1);
+}
+
+function releasePropertyTool(toolId: string) {
+  const registrationCount = propertyToolRegistrationCounts.get(toolId);
+  if (registrationCount === undefined) return;
+  if (registrationCount === 1) {
+    propertyToolRegistrationCounts.delete(toolId);
+    unregisterTool(AnnotationUserLayer, toolId);
+  } else {
+    propertyToolRegistrationCounts.set(toolId, registrationCount - 1);
+  }
+}
+
 // Sets a single property of the currently-selected annotation, computing the
 // new value from the existing one. Shared by the property-entry tools below.
 function updateSelectedAnnotationProperty(
@@ -787,16 +829,19 @@ abstract class AnnotationPropertyEntryTool extends LayerTool<AnnotationUserLayer
       activation.bindAction(action, handler);
     }
 
-    // Keep the display in sync, and reset transient state, as the selection or
-    // schema changes.
+    // Keep the display in sync and reset transient state as the selection
+    // changes.
     activation.registerDisposer(
       layer.manager.root.selectionState.changed.add(() => {
         this.onAnnotationChanged();
         debouncedRefresh();
       }),
     );
+    // Value bindings and numeric bounds are fixed when the mode is activated.
+    // End the mode on schema changes so it cannot continue with stale input
+    // behavior; activating it again rebuilds everything from the new schema.
     activation.registerDisposer(
-      layer.localAnnotationProperties.changed.add(debouncedRefresh),
+      layer.localAnnotationProperties.changed.add(() => activation.cancel()),
     );
     this.onAnnotationChanged();
     refresh();
@@ -1099,6 +1144,10 @@ export class AnnotationUserLayer extends Base {
     if (localAnnotations !== undefined) {
       localAnnotations.dispose();
     }
+    for (const toolId of this.registeredPropertyTools.keys()) {
+      releasePropertyTool(toolId);
+    }
+    this.registeredPropertyTools.clear();
     super.disposed();
   }
 
@@ -1173,32 +1222,14 @@ export class AnnotationUserLayer extends Base {
     for (const toolId of this.registeredPropertyTools.keys()) {
       if (!desired.has(toolId)) {
         this.toolBinder.removeJsonString(JSON.stringify(toolId));
-        unregisterTool(AnnotationUserLayer, toolId);
+        releasePropertyTool(toolId);
         this.registeredPropertyTools.delete(toolId);
       }
     }
     // Register newly-added tools.
     for (const [toolId, descriptor] of desired) {
       if (!this.registeredPropertyTools.has(toolId)) {
-        registerTool(AnnotationUserLayer, toolId, (layer) => {
-          switch (descriptor.kind) {
-            case "enum":
-              return new EnumPropertyEntryTool(
-                descriptor.propertyIdentifier,
-                layer,
-              );
-            case "bool":
-              return new ToggleBoolPropertyTool(
-                descriptor.propertyIdentifier,
-                layer,
-              );
-            case "number":
-              return new NumberPropertyEntryTool(
-                descriptor.propertyIdentifier,
-                layer,
-              );
-          }
-        });
+        retainPropertyTool(toolId, descriptor);
         this.registeredPropertyTools.set(toolId, descriptor);
       }
     }
