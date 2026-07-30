@@ -83,6 +83,30 @@ describe("LayerManager", () => {
     expect(layer.visible).toBe(false);
   });
 
+  it("archives a layer when its last layer group reference is released", async () => {
+    // A displayed layer is referenced by the root layer manager and by a layer
+    // group, and must be left alone; once the group's reference is released,
+    // the sweep archives it rather than deleting it.
+    const { layerManager, manager } = makeFixture();
+    const layer = addLayer(layerManager, manager, "image");
+    const groupRef = layer.addRef();
+
+    await flushRemoveLayers();
+
+    expect(layer.archived).toBe(false);
+    expect(layer.visible).toBe(true);
+
+    groupRef.dispose();
+    // Releasing a layer notifies the root layer manager, as
+    // `unbindManagedLayer` does in production.
+    layerManager.layersChanged.dispatch();
+    await flushRemoveLayers();
+
+    expect(layerManager.managedLayers).toContain(layer);
+    expect(layer.archived).toBe(true);
+    expect(layer.visible).toBe(false);
+  });
+
   it("leaves an already archived layer alone", async () => {
     const { layerManager, manager } = makeFixture();
     const layer = addLayer(layerManager, manager, "image");
