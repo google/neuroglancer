@@ -182,9 +182,14 @@ function updateFixedCurPositionInChunks<
   globalPosition: Float32Array,
   localPosition: Float32Array,
 ): boolean {
-  const { curPositionInChunks, fixedPositionWithinChunk } = tsource;
+  const {
+    curPositionInChunks,
+    fixedPositionWithinChunk,
+    chunkDisplayDimensionIndices,
+  } = tsource;
   const { nonDisplayLowerClipBound, nonDisplayUpperClipBound } = tsource;
-  const { rank, chunkDataSize } = tsource.source.spec;
+  const { rank, chunkDataSize, lowerChunkBound, upperChunkBound } =
+    tsource.source.spec;
   if (
     !getChunkPositionFromCombinedGlobalLocalPositions(
       curPositionInChunks,
@@ -217,20 +222,25 @@ function updateFixedCurPositionInChunks<
       }
       return false;
     }
+    if (chunkDisplayDimensionIndices.includes(chunkDim)) {
+      // This function computes only the *fixed* (non-display) part of the
+      // position.  The rows of `fixedLayerToChunkTransform` corresponding to
+      // display dimensions are zeroed, so `x` is a placeholder 0 rather than a
+      // real coordinate; the actual chunk index is filled in by the caller's
+      // iteration over the display subspace.  Clamping the placeholder to
+      // `lowerChunkBound` would, for a source with a non-zero
+      // `spec.lowerVoxelBound`, force `chunk` past `x` and leave a negative
+      // `fixedPositionWithinChunk`.
+      fixedPositionWithinChunk[chunkDim] = 0;
+      continue;
+    }
     const chunkSize = chunkDataSize[chunkDim];
-    // Given that clip bounds are already tested above, clamp the chunk index to
-    // the range implied by those clip bounds, to ensure floating-point
-    // imprecision does not result in an out-of-bounds index. The clip bounds
-    // are used because they are expressed in the same coordinate frame as `x`.
-    const lowerChunkLimit = Math.floor(
-      nonDisplayLowerClipBound[chunkDim] / chunkSize,
-    );
-    const upperChunkLimit = Math.ceil(
-      nonDisplayUpperClipBound[chunkDim] / chunkSize,
-    );
+    // Given that clip bounds are already tested above, clamp chunk index to its
+    // bounds, to ensure floating-point imprecision does not result in an
+    // out-of-bounds index.
     const chunk = (curPositionInChunks[chunkDim] = Math.min(
-      upperChunkLimit - 1,
-      Math.max(lowerChunkLimit, Math.floor(x / chunkSize)),
+      upperChunkBound[chunkDim] - 1,
+      Math.max(lowerChunkBound[chunkDim], Math.floor(x / chunkSize)),
     ));
     fixedPositionWithinChunk[chunkDim] = x - chunk * chunkSize;
   }
