@@ -116,6 +116,12 @@ pub fn decode(ptr: *mut u8, input_size: usize, output_size: usize, preserve_alph
         Err(_image) => return std::ptr::null_mut(),
     };
 
+    // Value preservation: jxl-oxide normalizes integer samples so the stored
+    // range 0..=(2^bits-1) maps to [0, 1]. Scale by that same 2^bits-1 (not the
+    // output type's full range) so a reduced-bit codestream keeps its stored
+    // integer values instead of being rescaled.
+    let maxval = ((1u64 << image.image_header().metadata.bit_depth.bits_per_sample()) - 1) as f32;
+
     let mut output_buffer = Vec::with_capacity(output_size);
 
     for keyframe_idx in 0..image.num_loaded_keyframes() {
@@ -135,25 +141,25 @@ pub fn decode(ptr: *mut u8, input_size: usize, output_size: usize, preserve_alph
         match image.pixel_format() {
             PixelFormat::Gray => {
                 for pixel in fb.buf() {
-                    let value = (pixel * 255.0).clamp(0.0, 255.0).round() as u8;
+                    let value = (pixel * maxval).clamp(0.0, maxval).round() as u8;
                     output_buffer.push(value);
                 }
             },
             PixelFormat::Rgb => {
                 for pixel in fb.buf() {
-                    let value = (pixel * 255.0).clamp(0.0, 255.0).round() as u8;
+                    let value = (pixel * maxval).clamp(0.0, maxval).round() as u8;
                     output_buffer.push(value);
                 }
             }
             PixelFormat::Graya => {
                 // fb.buf() laid out as GA GA ...; write exactly 2 bytes per pixel
                 for px in fb.buf().chunks_exact(2) {
-                    let gray = (px[0] * 255.0).clamp(0.0, 255.0).round() as u8;
+                    let gray = (px[0] * maxval).clamp(0.0, maxval).round() as u8;
                     output_buffer.push(gray);
                     let alpha = if preserve_alpha != 0 {
-                        (px[1] * 255.0).clamp(0.0, 255.0).round() as u8
+                        (px[1] * maxval).clamp(0.0, maxval).round() as u8
                     } else {
-                        255 // opaque alpha (legacy precomputed behavior)
+                        maxval as u8 // opaque alpha (legacy precomputed behavior)
                     };
                     output_buffer.push(alpha);
                 }
@@ -162,13 +168,13 @@ pub fn decode(ptr: *mut u8, input_size: usize, output_size: usize, preserve_alph
                 // fb.buf() laid out as RGBA RGBA ...; write exactly 4 bytes per pixel
                 for px in fb.buf().chunks_exact(4) {
                     for c in 0..3 { // RGB
-                        let v = (px[c] * 255.0).clamp(0.0, 255.0) as u8;
+                        let v = (px[c] * maxval).clamp(0.0, maxval).round() as u8;
                         output_buffer.push(v);
                     }
                     let alpha = if preserve_alpha != 0 {
-                        (px[3] * 255.0).clamp(0.0, 255.0).round() as u8
+                        (px[3] * maxval).clamp(0.0, maxval).round() as u8
                     } else {
-                        255 // opaque alpha (legacy precomputed behavior)
+                        maxval as u8 // opaque alpha (legacy precomputed behavior)
                     };
                     output_buffer.push(alpha);
                 }
@@ -211,6 +217,11 @@ pub fn decode_with_bpp(ptr: *mut u8, input_size: usize, output_size: usize, byte
         Err(_image) => return std::ptr::null_mut(),
     };
 
+    // Value preservation: scale integer samples by the codestream's
+    // 2^bits-1 (not the output type range) so reduced-bit stores keep
+    // their stored values.
+    let maxval = ((1u64 << image.image_header().metadata.bit_depth.bits_per_sample()) - 1) as f32;
+
     let mut output_buffer: Vec<u8> = Vec::with_capacity(output_size);
 
     for keyframe_idx in 0..image.num_loaded_keyframes() {
@@ -232,11 +243,11 @@ pub fn decode_with_bpp(ptr: *mut u8, input_size: usize, output_size: usize, byte
                 for pixel in fb.buf() { // pixel in 0.0..1.0
                     match bytes_per_sample {
                         1 => {
-                            let value = (pixel * 255.0).clamp(0.0, 255.0) as u8;
+                            let value = (pixel * maxval).clamp(0.0, maxval) as u8;
                             output_buffer.push(value);
                         }
                         2 => {
-                            let v = (pixel * 65535.0).clamp(0.0, 65535.0).round() as u16;
+                            let v = (pixel * maxval).clamp(0.0, maxval).round() as u16;
                             output_buffer.extend_from_slice(&v.to_le_bytes());
                         }
                         4 => {
@@ -251,11 +262,11 @@ pub fn decode_with_bpp(ptr: *mut u8, input_size: usize, output_size: usize, byte
                 for pixel in fb.buf() {
                     match bytes_per_sample {
                         1 => {
-                            let value = (pixel * 255.0).clamp(0.0, 255.0) as u8;
+                            let value = (pixel * maxval).clamp(0.0, maxval) as u8;
                             output_buffer.push(value);
                         }
                         2 => {
-                            let v = (pixel * 65535.0).clamp(0.0, 65535.0).round() as u16;
+                            let v = (pixel * maxval).clamp(0.0, maxval).round() as u16;
                             output_buffer.extend_from_slice(&v.to_le_bytes());
                         }
                         4 => {
@@ -271,22 +282,22 @@ pub fn decode_with_bpp(ptr: *mut u8, input_size: usize, output_size: usize, byte
                 for px in fb.buf().chunks_exact(2) {
                     match bytes_per_sample {
                         1 => {
-                            let g = (px[0] * 255.0).clamp(0.0, 255.0) as u8;
+                            let g = (px[0] * maxval).clamp(0.0, maxval) as u8;
                             output_buffer.push(g);
                             let a = if preserve_alpha != 0 {
-                                (px[1] * 255.0).clamp(0.0, 255.0).round() as u8
+                                (px[1] * maxval).clamp(0.0, maxval).round() as u8
                             } else {
-                                255
+                                maxval as u8
                             };
                             output_buffer.push(a);
                         }
                         2 => {
-                            let g = (px[0] * 65535.0).clamp(0.0, 65535.0).round() as u16;
+                            let g = (px[0] * maxval).clamp(0.0, maxval).round() as u16;
                             output_buffer.extend_from_slice(&g.to_le_bytes());
                             let a = if preserve_alpha != 0 {
-                                (px[1] * 65535.0).clamp(0.0, 65535.0).round() as u16
+                                (px[1] * maxval).clamp(0.0, maxval).round() as u16
                             } else {
-                                0xFFFFu16
+                                maxval as u16
                             };
                             output_buffer.extend_from_slice(&a.to_le_bytes());
                         }
@@ -305,24 +316,24 @@ pub fn decode_with_bpp(ptr: *mut u8, input_size: usize, output_size: usize, byte
                     match bytes_per_sample {
                         1 => {
                             for c in 0..3 { // RGB
-                                let v = (px[c] * 255.0).clamp(0.0, 255.0) as u8; output_buffer.push(v);
+                                let v = (px[c] * maxval).clamp(0.0, maxval) as u8; output_buffer.push(v);
                             }
                             let a = if preserve_alpha != 0 {
-                                (px[3] * 255.0).clamp(0.0, 255.0).round() as u8
+                                (px[3] * maxval).clamp(0.0, maxval).round() as u8
                             } else {
-                                255
+                                maxval as u8
                             };
                             output_buffer.push(a);
                         }
                         2 => {
                             for c in 0..3 {
-                                let v = (px[c] * 65535.0).clamp(0.0, 65535.0).round() as u16;
+                                let v = (px[c] * maxval).clamp(0.0, maxval).round() as u16;
                                 output_buffer.extend_from_slice(&v.to_le_bytes());
                             }
                             let a = if preserve_alpha != 0 {
-                                (px[3] * 65535.0).clamp(0.0, 65535.0).round() as u16
+                                (px[3] * maxval).clamp(0.0, maxval).round() as u16
                             } else {
-                                0xFFFFu16
+                                maxval as u16
                             };
                             output_buffer.extend_from_slice(&a.to_le_bytes());
                         }
