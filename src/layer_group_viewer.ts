@@ -91,6 +91,7 @@ export interface LayerGroupViewerState {
   velocity: Owned<CoordinateSpacePlaybackVelocity>;
   mouseState: MouseSelectionState;
   showAxisLines: TrackableBoolean;
+  showCrossSectionHoverPosition: TrackableBoolean;
   wireFrame: TrackableBoolean;
   enableAdaptiveDownsampling: TrackableBoolean;
   showScaleBar: TrackableBoolean;
@@ -354,6 +355,9 @@ export class LayerGroupViewer extends RefCounted {
   }
   get showAxisLines() {
     return this.viewerState.showAxisLines;
+  }
+  get showCrossSectionHoverPosition() {
+    return this.viewerState.showCrossSectionHoverPosition;
   }
   get wireFrame() {
     return this.viewerState.wireFrame;
