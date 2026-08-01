@@ -265,6 +265,10 @@ class TrackableViewerState extends CompoundTrackable {
     this.add("projectionDepth", viewer.projectionDepthRange);
     this.add("layers", viewer.layerSpecification);
     this.add("showAxisLines", viewer.showAxisLines);
+    this.add(
+      "showCrossSectionHoverPosition",
+      viewer.showCrossSectionHoverPosition,
+    );
     this.add("wireFrame", viewer.wireFrame);
     this.add("enableAdaptiveDownsampling", viewer.enableAdaptiveDownsampling);
     this.add("showScaleBar", viewer.showScaleBar);
@@ -439,6 +443,7 @@ export class Viewer extends RefCounted implements ViewerState {
     new SelectedLayerState(this.layerManager.addRef()),
   );
   showAxisLines = new TrackableBoolean(true, true);
+  showCrossSectionHoverPosition = new TrackableBoolean(false, false);
   wireFrame = new TrackableBoolean(false, false);
   enableAdaptiveDownsampling = new TrackableBoolean(true, true);
   showScaleBar = new TrackableBoolean(true, true);
@@ -1155,6 +1160,9 @@ export class Viewer extends RefCounted implements ViewerState {
     });
 
     this.bindAction("toggle-axis-lines", () => this.showAxisLines.toggle());
+    this.bindAction("toggle-cross-section-hover-position", () =>
+      this.showCrossSectionHoverPosition.toggle(),
+    );
     this.bindAction("toggle-scale-bar", () => this.showScaleBar.toggle());
     this.bindAction("toggle-default-annotations", () =>
       this.showDefaultAnnotations.toggle(),
