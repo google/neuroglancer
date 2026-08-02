@@ -812,7 +812,7 @@ interface AnnotationRenderHelperConstructor {
   ): AnnotationRenderHelper;
 }
 
-interface AnnotationTypeRenderHandler<T extends Annotation> {
+export interface AnnotationTypeRenderHandler<T extends Annotation> {
   defineShaderNoOpSetters: (builder: ShaderBuilder) => void;
   perspectiveViewRenderHelper: AnnotationRenderHelperConstructor;
   sliceViewRenderHelper: AnnotationRenderHelperConstructor;

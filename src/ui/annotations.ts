@@ -55,7 +55,10 @@ import {
 import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import type { MouseSelectionState, UserLayer } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
-import type { ChunkTransformParameters } from "#src/render_coordinate_transform.js";
+import type {
+  ChunkTransformParameters,
+  RenderLayerTransform,
+} from "#src/render_coordinate_transform.js";
 import { getChunkPositionFromCombinedGlobalLocalPositions } from "#src/render_coordinate_transform.js";
 import {
   RenderScaleHistogram,
@@ -91,8 +94,10 @@ import {
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { getDefaultAnnotationListBindings } from "#src/ui/default_input_event_bindings.js";
 import { LegacyTool, registerLegacyTool } from "#src/ui/tool.js";
+import { computeVertexPhysicalAngles } from "#src/util/angle_measurement.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { arraysEqual, type ArraySpliceOp } from "#src/util/array.js";
+import { computeAxisPhysicalExtents } from "#src/util/axis_extents.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import { packColor } from "#src/util/color.js";
 import type { Borrowed } from "#src/util/disposable.js";
@@ -112,8 +117,10 @@ import * as matrix from "#src/util/matrix.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { nearlyEqual } from "#src/util/number.js";
 import { numberToStringFixed } from "#src/util/number_to_string.js";
+import { computeRulerPhysicalLength } from "#src/util/ruler_length.js";
 import { formatScaleWithUnitAsString } from "#src/util/si_units.js";
 import { NullarySignal, Signal } from "#src/util/signal.js";
+import { formatLength, formatVolume } from "#src/util/spatial_units.js";
 import * as vector from "#src/util/vector.js";
 import { makeAddButton } from "#src/widget/add_button.js";
 import { ColorWidget } from "#src/widget/color.js";
@@ -1123,7 +1130,6 @@ const ANNOTATE_LINE_TOOL_ID = "annotateLine";
 const ANNOTATE_BOUNDING_BOX_TOOL_ID = "annotateBoundingBox";
 const ANNOTATE_ELLIPSOID_TOOL_ID = "annotateSphere";
 const ANNOTATE_POLYLINE_TOOL_ID = "annotatePolyline";
-
 export class PlacePointTool extends PlaceAnnotationTool {
   trigger(mouseState: MouseSelectionState) {
     const { annotationLayer } = this;
@@ -1640,6 +1646,108 @@ class PlacePolylineTool extends MultiStepAnnotationTool {
   undo() {
     this.removeLastPointFromAnnotation();
   }
+}
+
+/**
+ * Builds a per-annotation-dimension physical scale array (nanometers per unit)
+ * for the given annotation layer. A dimension whose unit is not length (meters)
+ * contributes 0 so it does not affect the measured length. Returns undefined if
+ * the layer transform is not yet resolved.
+ */
+function getAnnotationPhysicalScales(
+  annotationLayer: AnnotationLayerState,
+  layer: UserLayerWithAnnotations,
+): Float64Array | undefined {
+  const transformValue = annotationLayer.transform.value;
+  if (transformValue.error !== undefined) return undefined;
+  const transform: RenderLayerTransform = transformValue;
+  const scaleNm = new Float64Array(transform.rank);
+  const assign = (
+    coordinateSpace: CoordinateSpace,
+    spaceDim: number,
+    renderDim: number,
+  ) => {
+    if (renderDim < 0 || renderDim >= scaleNm.length) return;
+    if (coordinateSpace.units[spaceDim] === "m") {
+      scaleNm[renderDim] = coordinateSpace.scales[spaceDim] * 1e9;
+    }
+  };
+  const globalCoordinateSpace = layer.manager.root.coordinateSpace.value;
+  const { globalToRenderLayerDimensions } = transform;
+  for (let g = 0; g < globalToRenderLayerDimensions.length; ++g) {
+    assign(globalCoordinateSpace, g, globalToRenderLayerDimensions[g]);
+  }
+  const localCoordinateSpace = layer.localCoordinateSpace.value;
+  const { localToRenderLayerDimensions } = transform;
+  for (let l = 0; l < localToRenderLayerDimensions.length; ++l) {
+    assign(localCoordinateSpace, l, localToRenderLayerDimensions[l]);
+  }
+  return scaleNm;
+}
+
+/**
+ * Returns, for each annotation (render-layer) dimension, the axis name derived
+ * from the coordinate space in the state (Neuroglancer defaults to x, y, z), or
+ * undefined if the layer transform is not yet resolved. Used to label per-axis
+ * measurements (line projected lengths and bounding-box edges).
+ */
+function getAnnotationAxisNames(
+  annotationLayer: AnnotationLayerState,
+  layer: UserLayerWithAnnotations,
+): string[] | undefined {
+  const transformValue = annotationLayer.transform.value;
+  if (transformValue.error !== undefined) return undefined;
+  const transform: RenderLayerTransform = transformValue;
+  const names = new Array<string>(transform.rank).fill("");
+  const assign = (
+    coordinateSpace: CoordinateSpace,
+    spaceDim: number,
+    renderDim: number,
+  ) => {
+    if (renderDim < 0 || renderDim >= names.length) return;
+    names[renderDim] = coordinateSpace.names[spaceDim];
+  };
+  const globalCoordinateSpace = layer.manager.root.coordinateSpace.value;
+  const { globalToRenderLayerDimensions } = transform;
+  for (let g = 0; g < globalToRenderLayerDimensions.length; ++g) {
+    assign(globalCoordinateSpace, g, globalToRenderLayerDimensions[g]);
+  }
+  const localCoordinateSpace = layer.localCoordinateSpace.value;
+  const { localToRenderLayerDimensions } = transform;
+  for (let l = 0; l < localToRenderLayerDimensions.length; ++l) {
+    assign(localCoordinateSpace, l, localToRenderLayerDimensions[l]);
+  }
+  return names;
+}
+
+/**
+ * Computes the total physical length of the given ruler points formatted with
+ * value and unit (e.g. "1.23 µm"), or undefined if the physical scale is not yet
+ * resolved.
+ */
+function formatRulerLength(
+  points: readonly Float32Array[],
+  annotationLayer: AnnotationLayerState,
+  layer: UserLayerWithAnnotations,
+): string | undefined {
+  const scaleNm = getAnnotationPhysicalScales(annotationLayer, layer);
+  if (scaleNm === undefined) return undefined;
+  return formatLength(computeRulerPhysicalLength(points, scaleNm));
+}
+
+/**
+ * Computes the interior-vertex angles (degrees) of the given angle points, or
+ * undefined if the physical scale is not yet resolved. Entry `i` corresponds to
+ * interior vertex `i+1`; a NaN entry marks a degenerate vertex.
+ */
+function computeAnnotationPhysicalAngles(
+  points: readonly Float32Array[],
+  annotationLayer: AnnotationLayerState,
+  layer: UserLayerWithAnnotations,
+): number[] | undefined {
+  const scaleNm = getAnnotationPhysicalScales(annotationLayer, layer);
+  if (scaleNm === undefined) return undefined;
+  return computeVertexPhysicalAngles(points, scaleNm);
 }
 
 class PlaceEllipsoidTool extends TwoStepAnnotationTool {
@@ -2275,6 +2383,154 @@ export function UserLayerWithAnnotationsMixin<
                 idValueElement.textContent = reference.id;
                 label.appendChild(idValueElement);
                 parent.appendChild(label);
+
+                // For rulers, show the total physical length (value + unit) as a
+                // read-only property row, alongside the other computed properties.
+                // Read-only measurement rows (matching the property-row style).
+                const addMeasurementRow = (
+                  label: string,
+                  valueText: string,
+                  tooltip: string,
+                ) => {
+                  const row = document.createElement("div");
+                  row.classList.add("neuroglancer-annotation-property");
+                  const nameWrapper = document.createElement("span");
+                  nameWrapper.classList.add(
+                    "neuroglancer-annotation-property-name-wrapper",
+                  );
+                  nameWrapper.appendChild(makeDescriptionIcon(tooltip));
+                  const labelEl = document.createElement("span");
+                  labelEl.classList.add(
+                    "neuroglancer-annotation-property-label",
+                  );
+                  labelEl.textContent = label;
+                  nameWrapper.appendChild(labelEl);
+                  row.appendChild(nameWrapper);
+                  const valueEl = document.createElement("span");
+                  valueEl.classList.add(
+                    "neuroglancer-annotation-property-value",
+                  );
+                  valueEl.textContent = valueText;
+                  row.appendChild(valueEl);
+                  parent.appendChild(row);
+                };
+
+                // Line: total length + projected length along each axis. A line
+                // is two points, so the reading is dynamic (updates as the second
+                // point tracks the cursor during placement).
+                if (annotation.type === AnnotationType.LINE) {
+                  const scaleNm = getAnnotationPhysicalScales(
+                    annotationLayer,
+                    this,
+                  );
+                  if (scaleNm !== undefined) {
+                    const { pointA, pointB } = annotation;
+                    addMeasurementRow(
+                      "Length",
+                      formatLength(
+                        computeRulerPhysicalLength([pointA, pointB], scaleNm),
+                      ),
+                      "Physical length of the line (distance between its endpoints).",
+                    );
+                    const names = getAnnotationAxisNames(annotationLayer, this);
+                    const extents = computeAxisPhysicalExtents(
+                      pointA,
+                      pointB,
+                      scaleNm,
+                    );
+                    for (let d = 0; d < extents.length; ++d) {
+                      if (scaleNm[d] === 0) continue; // skip non-length axes
+                      const axis = names?.[d] || `#${d + 1}`;
+                      addMeasurementRow(
+                        `Length (${axis})`,
+                        formatLength(extents[d]),
+                        `Physical length of the line projected onto the ${axis} axis.`,
+                      );
+                    }
+                  }
+                }
+
+                // Polyline: total length + interior angle at each vertex. Not
+                // dynamic — while pending, the trailing preview (cursor) point is
+                // excluded so it reflects only committed points.
+                if (annotation.type === AnnotationType.POLYLINE) {
+                  const source = annotationLayer.source;
+                  const isBeingPlaced =
+                    source instanceof AnnotationSource &&
+                    source.pending.has(annotation.id);
+                  const measuredPoints = isBeingPlaced
+                    ? annotation.points.slice(0, -1)
+                    : annotation.points;
+                  const lengthText = formatRulerLength(
+                    measuredPoints,
+                    annotationLayer,
+                    this,
+                  );
+                  if (lengthText !== undefined) {
+                    addMeasurementRow(
+                      "Length",
+                      lengthText,
+                      "Total physical length of the polyline (sum of its segment lengths).",
+                    );
+                  }
+                  const angles = computeAnnotationPhysicalAngles(
+                    measuredPoints,
+                    annotationLayer,
+                    this,
+                  );
+                  if (angles !== undefined) {
+                    for (let v = 0; v < angles.length; ++v) {
+                      const angle = angles[v];
+                      if (!Number.isFinite(angle)) continue; // skip degenerate
+                      addMeasurementRow(
+                        `Angle #${v + 1}`,
+                        `${angle.toFixed(1)}°`,
+                        "Interior angle at this vertex, between its two adjoining segments (physical space).",
+                      );
+                    }
+                  }
+                }
+
+                // Bounding box: per-axis edge length + volume.
+                if (
+                  annotation.type === AnnotationType.AXIS_ALIGNED_BOUNDING_BOX
+                ) {
+                  const scaleNm = getAnnotationPhysicalScales(
+                    annotationLayer,
+                    this,
+                  );
+                  if (scaleNm !== undefined) {
+                    const { pointA, pointB } = annotation;
+                    const names = getAnnotationAxisNames(annotationLayer, this);
+                    const extents = computeAxisPhysicalExtents(
+                      pointA,
+                      pointB,
+                      scaleNm,
+                    );
+                    let spatialCount = 0;
+                    let volume = 1;
+                    for (let d = 0; d < extents.length; ++d) {
+                      if (scaleNm[d] === 0) continue; // skip non-length axes
+                      const axis = names?.[d] || `#${d + 1}`;
+                      addMeasurementRow(
+                        `Edge (${axis})`,
+                        formatLength(extents[d]),
+                        `Physical edge length of the bounding box along the ${axis} axis.`,
+                      );
+                      volume *= extents[d];
+                      ++spatialCount;
+                    }
+                    // Volume is a cubic quantity; only show it for exactly three
+                    // length dimensions.
+                    if (spatialCount === 3) {
+                      addMeasurementRow(
+                        "Volume",
+                        formatVolume(volume),
+                        "Physical volume of the bounding box (product of its edge lengths).",
+                      );
+                    }
+                  }
+                }
 
                 for (let i = 0, count = allProperties.length; i < count; ++i) {
                   const property = allProperties[i];

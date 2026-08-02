@@ -23,6 +23,7 @@ import { AnnotationType } from "#src/annotation/index.js";
 import type {
   AnnotationRenderContext,
   AnnotationShaderGetter,
+  AnnotationTypeRenderHandler,
 } from "#src/annotation/type_handler.js";
 import {
   AnnotationRenderHelper,
@@ -297,7 +298,7 @@ function getPartIndexInfo(partIndex: number) {
   return { linePart, lineIndex, pointIndex };
 }
 
-registerAnnotationTypeRenderHandler<PolyLine>(AnnotationType.POLYLINE, {
+const polylineRenderHandler: AnnotationTypeRenderHandler<PolyLine> = {
   sliceViewRenderHelper: RenderHelper,
   perspectiveViewRenderHelper: RenderHelper,
   defineShaderNoOpSetters(builder) {
@@ -339,4 +340,9 @@ registerAnnotationTypeRenderHandler<PolyLine>(AnnotationType.POLYLINE, {
 
     return oldAnnotation;
   },
-});
+};
+
+registerAnnotationTypeRenderHandler<PolyLine>(
+  AnnotationType.POLYLINE,
+  polylineRenderHandler,
+);
