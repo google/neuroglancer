@@ -27,6 +27,7 @@ import type {
   LayerListSpecification,
   MouseSelectionState,
   SelectedLayerState,
+  UserLayer,
 } from "#src/layer/index.js";
 import { LayerSubsetSpecification } from "#src/layer/index.js";
 import type {
@@ -51,6 +52,7 @@ import {
   WatchableDisplayDimensionRenderInfo,
 } from "#src/navigation_state.js";
 import type { RenderLayerRole } from "#src/renderlayer.js";
+import { StatusMessage } from "#src/status.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type {
   TrackableValue,
@@ -70,6 +72,7 @@ import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { removeChildren } from "#src/util/dom.js";
 import { getDropEffectFromModifiers } from "#src/util/drag_and_drop.js";
+import type { ActionEvent } from "#src/util/event_action_map.js";
 import {
   dispatchEventAction,
   registerActionListener,
@@ -477,10 +480,35 @@ export class LayerGroupViewer extends RefCounted {
     this.makeUI();
   }
 
-  bindAction(action: string, handler: () => void) {
+  bindAction(
+    action: string,
+    handler: (event: ActionEvent<MouseEvent>) => void,
+  ) {
     this.registerDisposer(
       registerActionListener(this.element, action, handler),
     );
+  }
+
+  // Returns the layer shown in this group that should receive an annotation
+  // click.  Prefers the globally-selected layer when it is shown in this group
+  // and has an active tool; otherwise the first layer in this group that has
+  // one.  Returns undefined when no layer in this group has an active tool, so a
+  // click in this panel never annotates a layer shown only in another panel.
+  private getAnnotationToolLayer(): UserLayer | undefined {
+    const selected = this.selectedLayer.layer;
+    if (selected !== undefined && this.layerManager.has(selected)) {
+      const userLayer = selected.layer;
+      if (userLayer !== null && userLayer.tool.value !== undefined) {
+        return userLayer;
+      }
+    }
+    for (const managedLayer of this.layerManager.managedLayers) {
+      const userLayer = managedLayer.layer;
+      if (userLayer !== null && userLayer.tool.value !== undefined) {
+        return userLayer;
+      }
+    }
+    return undefined;
   }
 
   private registerActionBindings() {
@@ -494,6 +522,31 @@ export class LayerGroupViewer extends RefCounted {
     });
     this.bindAction("t+", () => {
       this.navigationState.pose.translateNonDisplayDimension(0, +1);
+    });
+
+    // Scope segment/annotation click actions to the layer group under the
+    // cursor, so a click acts on the layers shown in the panel where the
+    // (original) cursor is -- not on the globally-selected layer, which may be
+    // displayed in a different panel.  stopPropagation prevents the root
+    // Viewer's global bindings (which use the root layer manager / global
+    // selected layer) from also handling the event.
+    for (const action of ["select", "star"]) {
+      this.bindAction(action, (event) => {
+        event.stopPropagation();
+        this.mouseState.updateUnconditionally();
+        this.layerManager.invokeAction(action);
+      });
+    }
+    this.bindAction("annotate", (event) => {
+      event.stopPropagation();
+      const userLayer = this.getAnnotationToolLayer();
+      if (userLayer === undefined) {
+        StatusMessage.showTemporaryMessage(
+          "No layer with an active annotation tool is shown in this panel.",
+        );
+        return;
+      }
+      userLayer.tool.value!.trigger(this.mouseState);
     });
   }
 
