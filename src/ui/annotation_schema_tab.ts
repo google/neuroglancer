@@ -44,6 +44,11 @@ import {
   parseAnnotationPropertySpecs,
   propertyTypeDataType,
 } from "#src/annotation/index.js";
+import {
+  annotateEnumPropertyToolJson,
+  annotateNumberPropertyToolJson,
+  toggleBoolPropertyToolJson,
+} from "#src/layer/annotation/tool_ids.js";
 import { FramedDialog } from "#src/overlay.js";
 import { StatusMessage } from "#src/status.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
@@ -60,9 +65,6 @@ import {
   makeReadonlyColorProperty,
   isEnumType,
   createTextAreaElement,
-  annotateEnumPropertyToolJson,
-  annotateNumberPropertyToolJson,
-  toggleBoolPropertyToolJson,
 } from "#src/ui/annotation_properties.js";
 import type { UserLayerWithAnnotations } from "#src/ui/annotations.js";
 import type { NumberDisplayConfig } from "#src/ui/bounded_number_input.js";

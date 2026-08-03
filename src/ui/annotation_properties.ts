@@ -32,31 +32,6 @@ import { makeIcon } from "#src/widget/icon.js";
 export type AnnotationColorKey = AnnotationColorPropertySpec["type"];
 export type AnnotationPropertyType = AnnotationPropertySpec["type"];
 
-// The keybindable "data-entry mode" tools all put the layer into a focused mode
-// for a single property while active: enum options are set with the number
-// keys, and a plain number is typed and committed with Enter.
-// Their tool ids are defined here (a neutral leaf module)
-// so that both the tool registration in `src/layer/annotation/index.ts` and the
-// schema-editor keybind buttons in `src/ui/annotation_schema_tab.ts` produce
-// identical ids, letting bindings round-trip through saved state.
-export const ANNOTATE_ENUM_PROPERTY_TOOL_ID = "annotateEnumProperty";
-
-export function annotateEnumPropertyToolJson(propertyIdentifier: string) {
-  return `${ANNOTATE_ENUM_PROPERTY_TOOL_ID}_${propertyIdentifier}`;
-}
-
-export const TOGGLE_BOOL_PROPERTY_TOOL_ID = "toggleBoolProperty";
-
-export function toggleBoolPropertyToolJson(propertyIdentifier: string) {
-  return `${TOGGLE_BOOL_PROPERTY_TOOL_ID}_${propertyIdentifier}`;
-}
-
-export const ANNOTATE_NUMBER_PROPERTY_TOOL_ID = "annotateNumberProperty";
-
-export function annotateNumberPropertyToolJson(propertyIdentifier: string) {
-  return `${ANNOTATE_NUMBER_PROPERTY_TOOL_ID}_${propertyIdentifier}`;
-}
-
 export const ANNOTATION_TYPES: AnnotationPropertyType[] = [
   "bool",
   "rgb",

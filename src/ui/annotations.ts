@@ -53,6 +53,10 @@ import {
   SpatiallyIndexedSliceViewAnnotationLayer,
 } from "#src/annotation/renderlayer.js";
 import type { CoordinateSpace } from "#src/coordinate_transform.js";
+import {
+  SELECT_NEXT_ANNOTATION_TOOL_ID,
+  SELECT_PREVIOUS_ANNOTATION_TOOL_ID,
+} from "#src/layer/annotation/tool_ids.js";
 import type { MouseSelectionState, UserLayer } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import type { ChunkTransformParameters } from "#src/render_coordinate_transform.js";
@@ -273,9 +277,6 @@ interface AnnotationLayerViewAttachedState {
   idToIndex: Map<AnnotationId, number>;
   listOffset: number;
 }
-
-export const SELECT_PREVIOUS_ANNOTATION_TOOL_ID = "selectPreviousAnnotation";
-export const SELECT_NEXT_ANNOTATION_TOOL_ID = "selectNextAnnotation";
 
 export class AnnotationLayerView extends Tab {
   private previousSelectedState:

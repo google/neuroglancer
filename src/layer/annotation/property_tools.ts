@@ -1,0 +1,702 @@
+/**
+ * @license
+ * Copyright 2026 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import type {
+  AnnotationNumericPropertySpec,
+  AnnotationPropertySpec,
+} from "#src/annotation/index.js";
+import {
+  isAnnotationNumericPropertySpec,
+  propertyTypeDataType,
+} from "#src/annotation/index.js";
+import type { AnnotationUserLayer } from "#src/layer/annotation/index.js";
+import {
+  annotateEnumPropertyToolJson,
+  annotateNumberPropertyToolJson,
+  SELECT_NEXT_ANNOTATION_TOOL_ID,
+  SELECT_PREVIOUS_ANNOTATION_TOOL_ID,
+  toggleBoolPropertyToolJson,
+} from "#src/layer/annotation/tool_ids.js";
+import type { ToolActivation } from "#src/ui/tool.js";
+import {
+  LayerTool,
+  makeToolActivationStatusMessageWithHeader,
+  registerTool,
+  unregisterTool,
+} from "#src/ui/tool.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import { DataType } from "#src/util/data_type.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { removeChildren } from "#src/util/dom.js";
+import type { ActionEvent } from "#src/util/event_action_map.js";
+import { EventActionMap } from "#src/util/event_action_map.js";
+import { defaultDataTypeRange } from "#src/util/lerp.js";
+import type { AnyConstructor } from "#src/util/mixin.js";
+
+export type PropertyToolDescriptor =
+  | { kind: "enum"; propertyIdentifier: string }
+  | { kind: "bool"; propertyIdentifier: string }
+  | { kind: "number"; propertyIdentifier: string };
+
+type AnnotationUserLayerConstructor = AnyConstructor<AnnotationUserLayer>;
+
+const registrationCounts = new Map<
+  AnnotationUserLayerConstructor,
+  Map<string, number>
+>();
+
+function retainPropertyTool(
+  contextType: AnnotationUserLayerConstructor,
+  toolId: string,
+  descriptor: PropertyToolDescriptor,
+) {
+  let counts = registrationCounts.get(contextType);
+  if (counts === undefined) {
+    counts = new Map();
+    registrationCounts.set(contextType, counts);
+  }
+  const count = counts.get(toolId) ?? 0;
+  if (count === 0) {
+    registerTool(contextType, toolId, (layer) => {
+      switch (descriptor.kind) {
+        case "enum":
+          return new EnumPropertyEntryTool(
+            descriptor.propertyIdentifier,
+            layer,
+          );
+        case "bool":
+          return new ToggleBoolPropertyTool(
+            descriptor.propertyIdentifier,
+            layer,
+          );
+        case "number":
+          return new NumberPropertyEntryTool(
+            descriptor.propertyIdentifier,
+            layer,
+          );
+      }
+    });
+  }
+  counts.set(toolId, count + 1);
+}
+
+function releasePropertyTool(
+  contextType: AnnotationUserLayerConstructor,
+  toolId: string,
+) {
+  const counts = registrationCounts.get(contextType);
+  const count = counts?.get(toolId);
+  if (counts === undefined || count === undefined) return;
+  if (count === 1) {
+    counts.delete(toolId);
+    unregisterTool(contextType, toolId);
+    if (counts.size === 0) registrationCounts.delete(contextType);
+  } else {
+    counts.set(toolId, count - 1);
+  }
+}
+
+export function getPropertyToolDescriptors(
+  properties: readonly AnnotationPropertySpec[],
+) {
+  const desired = new Map<string, PropertyToolDescriptor>();
+  for (const property of properties) {
+    const { identifier } = property;
+    if (property.type === "bool") {
+      desired.set(toggleBoolPropertyToolJson(identifier), {
+        kind: "bool",
+        propertyIdentifier: identifier,
+      });
+    } else if (isAnnotationNumericPropertySpec(property)) {
+      if (property.enumValues !== undefined) {
+        desired.set(annotateEnumPropertyToolJson(identifier), {
+          kind: "enum",
+          propertyIdentifier: identifier,
+        });
+      } else {
+        desired.set(annotateNumberPropertyToolJson(identifier), {
+          kind: "number",
+          propertyIdentifier: identifier,
+        });
+      }
+    }
+  }
+  return desired;
+}
+
+export class AnnotationPropertyToolRegistry extends RefCounted {
+  private registeredTools = new Map<string, PropertyToolDescriptor>();
+
+  constructor(
+    private layer: AnnotationUserLayer,
+    private contextType: AnnotationUserLayerConstructor,
+  ) {
+    super();
+    this.registerDisposer(
+      layer.localAnnotationProperties.changed.add(() =>
+        this.sync(layer.localAnnotationProperties.value),
+      ),
+    );
+    this.sync(layer.localAnnotationProperties.value);
+  }
+
+  sync(properties: readonly AnnotationPropertySpec[]) {
+    const desired = getPropertyToolDescriptors(properties);
+    for (const toolId of this.registeredTools.keys()) {
+      if (!desired.has(toolId)) {
+        this.layer.toolBinder.removeJsonString(JSON.stringify(toolId));
+        releasePropertyTool(this.contextType, toolId);
+        this.registeredTools.delete(toolId);
+      }
+    }
+    for (const [toolId, descriptor] of desired) {
+      if (!this.registeredTools.has(toolId)) {
+        retainPropertyTool(this.contextType, toolId, descriptor);
+        this.registeredTools.set(toolId, descriptor);
+      }
+    }
+  }
+
+  disposed() {
+    for (const toolId of this.registeredTools.keys()) {
+      releasePropertyTool(this.contextType, toolId);
+    }
+    this.registeredTools.clear();
+    super.disposed();
+  }
+}
+
+function updateSelectedAnnotationProperty(
+  layer: AnnotationUserLayer,
+  propertyIdentifier: string,
+  computeValue: (currentValue: number) => number,
+) {
+  const context = layer.getSelectedAnnotationContext();
+  if (context === undefined) return;
+  const { annotationLayerState, annotationId } = context;
+  const { source } = annotationLayerState;
+  const propertyIndex = source.properties.value.findIndex(
+    (property) => property.identifier === propertyIdentifier,
+  );
+  if (propertyIndex === -1) return;
+  const reference = source.getReference(annotationId);
+  try {
+    const annotation = reference.value;
+    if (annotation != null) {
+      const properties = annotation.properties.slice();
+      properties[propertyIndex] = computeValue(properties[propertyIndex]);
+      source.update(reference, { ...annotation, properties });
+      source.commit(reference);
+    }
+  } finally {
+    reference.dispose();
+  }
+}
+
+function getSelectedAnnotationPropertyValue(
+  layer: AnnotationUserLayer,
+  propertyIdentifier: string,
+): number | undefined {
+  const context = layer.getSelectedAnnotationContext();
+  if (context === undefined) return undefined;
+  const { source } = context.annotationLayerState;
+  const propertyIndex = source.properties.value.findIndex(
+    (property) => property.identifier === propertyIdentifier,
+  );
+  if (propertyIndex === -1) return undefined;
+  const reference = source.getReference(context.annotationId);
+  try {
+    const value = reference.value?.properties[propertyIndex];
+    return typeof value === "number" ? value : undefined;
+  } finally {
+    reference.dispose();
+  }
+}
+
+export function keyForEnumOptionIndex(index: number): string | undefined {
+  if (index < 9) return String(index + 1);
+  if (index === 9) return "0";
+  return undefined;
+}
+
+export function getEnumPropertyBindingConfigurationKey(optionCount: number) {
+  return optionCount > 10 ? "numeric" : `direct:${optionCount}`;
+}
+
+export function boundKeyEventIdentifier(
+  layer: AnnotationUserLayer,
+  toolId: string,
+): string | undefined {
+  const key = layer.toolBinder.jsonToKey.get(JSON.stringify(toolId));
+  return key === undefined ? undefined : `key${key.toLowerCase()}`;
+}
+
+type EntryKeyBinder = (
+  eventKey: string,
+  action: string,
+  handler: (event: ActionEvent<Event>) => void,
+) => void;
+
+interface NumericEntryOptions {
+  isFloat: () => boolean;
+  allowNegative: () => boolean;
+  range: () => [number, number];
+  currentValue: () => number | undefined;
+  commit: (value: number) => void;
+}
+
+export class NumericEntryBuffer {
+  private buffer = "";
+
+  constructor(private readonly options: NumericEntryOptions) {}
+
+  reset() {
+    this.buffer = "";
+  }
+
+  private parse(): number | undefined {
+    if (this.buffer === "" || this.buffer === "-" || this.buffer === ".") {
+      return undefined;
+    }
+    const value = this.options.isFloat()
+      ? Number.parseFloat(this.buffer)
+      : Number.parseInt(this.buffer, 10);
+    return Number.isFinite(value) ? value : undefined;
+  }
+
+  private get outOfRange(): boolean {
+    const value = this.parse();
+    if (value === undefined) return false;
+    const [min, max] = this.options.range();
+    return value < min || value > max;
+  }
+
+  bindKeys(
+    addBinding: EntryKeyBinder,
+    requestRefresh: () => void,
+    activation: ToolActivation,
+  ) {
+    const append = (character: string) => (event: ActionEvent<Event>) => {
+      event.stopPropagation();
+      if (character === "-" && this.buffer.length > 0) return;
+      if (character === "." && this.buffer.includes(".")) return;
+      this.buffer += character;
+      requestRefresh();
+    };
+    for (let digit = 0; digit <= 9; ++digit) {
+      addBinding(
+        `digit${digit}`,
+        `annotation-number-${digit}`,
+        append(String(digit)),
+      );
+    }
+    if (this.options.isFloat()) {
+      addBinding("period", "annotation-number-decimal", append("."));
+    }
+    if (this.options.allowNegative()) {
+      addBinding("minus", "annotation-number-minus", append("-"));
+    }
+    addBinding("backspace", "annotation-number-backspace", (event) => {
+      event.stopPropagation();
+      this.buffer = this.buffer.slice(0, -1);
+      requestRefresh();
+    });
+    addBinding("enter", "annotation-number-commit", (event) => {
+      event.stopPropagation();
+      const value = this.parse();
+      if (value === undefined || this.outOfRange) return;
+      this.options.commit(value);
+      this.buffer = "";
+      requestRefresh();
+    });
+    addBinding("escape", "annotation-number-exit", (event) => {
+      event.stopPropagation();
+      activation.cancel();
+    });
+  }
+
+  render(container: HTMLElement) {
+    const box = document.createElement("div");
+    box.classList.add("neuroglancer-annotation-entry-tool-number");
+    box.textContent =
+      this.buffer !== ""
+        ? this.buffer
+        : `${this.options.currentValue() ?? "—"}`;
+    if (this.outOfRange) {
+      box.classList.add("neuroglancer-annotation-entry-tool-number-invalid");
+    }
+    container.appendChild(box);
+  }
+}
+
+export abstract class AnnotationPropertyEntryTool extends LayerTool<AnnotationUserLayer> {
+  constructor(
+    public propertyIdentifier: string,
+    layer: AnnotationUserLayer,
+  ) {
+    super(layer, true);
+  }
+
+  protected get property(): AnnotationPropertySpec | undefined {
+    return this.layer.localAnnotations?.properties.value?.find(
+      (property) => property.identifier === this.propertyIdentifier,
+    );
+  }
+
+  protected get currentValue(): number | undefined {
+    return getSelectedAnnotationPropertyValue(
+      this.layer,
+      this.propertyIdentifier,
+    );
+  }
+
+  protected abstract readonly modeVerb: string;
+
+  protected configureValueBindings(
+    _addBinding: EntryKeyBinder,
+    _requestRefresh: () => void,
+    _activation: ToolActivation<this>,
+  ): void {}
+
+  protected renderValue(
+    _valueContainer: HTMLElement,
+    _entrySlot: HTMLElement,
+  ): void {}
+
+  protected onAnnotationChanged(): void {}
+
+  protected navHintSuffix(): string {
+    return "";
+  }
+
+  protected bindingConfigurationKey(): string {
+    return this.property?.type ?? "";
+  }
+
+  protected navKeyInfo() {
+    const prevKey = boundKeyEventIdentifier(
+      this.layer,
+      SELECT_PREVIOUS_ANNOTATION_TOOL_ID,
+    );
+    const nextKey = boundKeyEventIdentifier(
+      this.layer,
+      SELECT_NEXT_ANNOTATION_TOOL_ID,
+    );
+    const labels: string[] = [];
+    if (prevKey !== undefined)
+      labels.push(`${prevKey.slice(3).toUpperCase()} prev`);
+    if (nextKey !== undefined)
+      labels.push(`${nextKey.slice(3).toUpperCase()} next`);
+    const hint =
+      labels.length > 0
+        ? `${labels.join(" · ")} annotation`
+        : "bind the prev/next annotation tools to navigate here";
+    return { prevKey, nextKey, hint };
+  }
+
+  activate(activation: ToolActivation<this>) {
+    const { layer, propertyIdentifier } = this;
+    const { header, body } =
+      makeToolActivationStatusMessageWithHeader(activation);
+    const valueContainer = document.createElement("div");
+    valueContainer.classList.add("neuroglancer-annotation-entry-tool-values");
+    body.appendChild(valueContainer);
+    const navLine = document.createElement("div");
+    navLine.classList.add("neuroglancer-annotation-entry-tool-nav-line");
+    const entrySlot = document.createElement("span");
+    navLine.appendChild(entrySlot);
+    const navText = document.createElement("span");
+    navText.classList.add("neuroglancer-annotation-entry-tool-nav");
+    navLine.appendChild(navText);
+    body.appendChild(navLine);
+
+    const refresh = () => {
+      const property = this.property;
+      header.textContent =
+        property === undefined
+          ? `Property "${propertyIdentifier}" unavailable`
+          : `${this.modeVerb} ${propertyIdentifier}`;
+      this.renderValue(valueContainer, entrySlot);
+    };
+    const debouncedRefresh = activation.registerCancellable(
+      animationFrameDebounce(refresh),
+    );
+    const bindingConfigurationKey = this.bindingConfigurationKey();
+    const bindings: { [key: string]: string } = {};
+    const handlers: Array<[string, (event: ActionEvent<Event>) => void]> = [];
+    const addBinding: EntryKeyBinder = (eventKey, action, handler) => {
+      bindings[eventKey] = action;
+      handlers.push([action, handler]);
+    };
+
+    this.configureValueBindings(addBinding, debouncedRefresh, activation);
+    const { prevKey, nextKey, hint } = this.navKeyInfo();
+    const navigate = (offset: number) => (event: ActionEvent<Event>) => {
+      event.stopPropagation();
+      layer.shiftSelectedIndexBy(offset);
+    };
+    if (prevKey !== undefined) {
+      addBinding(prevKey, "annotation-entry-prev", navigate(-1));
+    }
+    if (nextKey !== undefined) {
+      addBinding(nextKey, "annotation-entry-next", navigate(1));
+    }
+    navText.textContent = hint + this.navHintSuffix();
+
+    activation.bindInputEventMap(EventActionMap.fromObject(bindings));
+    for (const [action, handler] of handlers) {
+      activation.bindAction(action, handler);
+    }
+    activation.registerDisposer(
+      layer.manager.root.selectionState.changed.add(() => {
+        this.onAnnotationChanged();
+        debouncedRefresh();
+      }),
+    );
+    activation.registerDisposer(
+      layer.localAnnotationProperties.changed.add(() => {
+        if (this.bindingConfigurationKey() === bindingConfigurationKey) {
+          debouncedRefresh();
+          return;
+        }
+        // Input bindings are fixed per activation.
+        activation.cancel();
+      }),
+    );
+    this.onAnnotationChanged();
+    refresh();
+  }
+
+  get description() {
+    return `${this.modeVerb.toLowerCase()} ${this.propertyIdentifier}`;
+  }
+
+  protected appendChip(
+    container: HTMLElement,
+    key: string,
+    label: string,
+    active: boolean,
+  ) {
+    const chip = document.createElement("div");
+    chip.classList.add("neuroglancer-annotation-entry-tool-chip");
+    if (active) {
+      chip.classList.add("neuroglancer-annotation-entry-tool-chip-active");
+    }
+    const keyElement = document.createElement("span");
+    keyElement.classList.add("neuroglancer-annotation-entry-tool-chip-key");
+    keyElement.textContent = key;
+    const labelElement = document.createElement("span");
+    labelElement.classList.add("neuroglancer-annotation-entry-tool-chip-label");
+    labelElement.textContent = label;
+    chip.appendChild(keyElement);
+    chip.appendChild(labelElement);
+    container.appendChild(chip);
+  }
+}
+
+export class EnumPropertyEntryTool extends AnnotationPropertyEntryTool {
+  protected readonly modeVerb = "Set";
+
+  protected bindingConfigurationKey(): string {
+    return getEnumPropertyBindingConfigurationKey(
+      this.numericProperty?.enumValues?.length ?? 0,
+    );
+  }
+
+  private readonly entry = new NumericEntryBuffer({
+    isFloat: () => false,
+    allowNegative: () => false,
+    range: () => [1, this.numericProperty?.enumValues?.length ?? 0],
+    currentValue: () => {
+      const enumValues = this.numericProperty?.enumValues ?? [];
+      const index =
+        this.currentValue === undefined
+          ? -1
+          : enumValues.indexOf(this.currentValue);
+      return index === -1 ? undefined : index + 1;
+    },
+    commit: (optionNumber) => {
+      const value = this.numericProperty?.enumValues?.[optionNumber - 1];
+      if (value === undefined) return;
+      updateSelectedAnnotationProperty(
+        this.layer,
+        this.propertyIdentifier,
+        () => value,
+      );
+    },
+  });
+
+  private get numericProperty(): AnnotationNumericPropertySpec | undefined {
+    const property = this.property;
+    return property !== undefined && isAnnotationNumericPropertySpec(property)
+      ? property
+      : undefined;
+  }
+
+  private get useNumberEntry(): boolean {
+    return (this.numericProperty?.enumValues?.length ?? 0) > 10;
+  }
+
+  protected configureValueBindings(
+    addBinding: EntryKeyBinder,
+    requestRefresh: () => void,
+    activation: ToolActivation<this>,
+  ) {
+    if (this.useNumberEntry) {
+      this.entry.bindKeys(addBinding, requestRefresh, activation);
+      return;
+    }
+    const enumValues = this.numericProperty?.enumValues ?? [];
+    for (let index = 0; index < Math.min(enumValues.length, 10); ++index) {
+      addBinding(
+        `digit${keyForEnumOptionIndex(index)}`,
+        `annotation-enum-option-${index}`,
+        (event) => {
+          event.stopPropagation();
+          const value = this.numericProperty?.enumValues?.[index];
+          if (value === undefined) return;
+          updateSelectedAnnotationProperty(
+            this.layer,
+            this.propertyIdentifier,
+            () => value,
+          );
+          requestRefresh();
+        },
+      );
+    }
+  }
+
+  protected renderValue(valueContainer: HTMLElement, entrySlot: HTMLElement) {
+    removeChildren(valueContainer);
+    removeChildren(entrySlot);
+    const property = this.numericProperty;
+    const enumValues = property?.enumValues ?? [];
+    const enumLabels = property?.enumLabels ?? [];
+    const currentValue = this.currentValue;
+    const useNumberEntry = this.useNumberEntry;
+    // Ten options fit 1-9 and 0; larger enums use buffered 1-based entry.
+    enumValues.forEach((value, index) => {
+      this.appendChip(
+        valueContainer,
+        useNumberEntry
+          ? String(index + 1)
+          : (keyForEnumOptionIndex(index) ?? String(index + 1)),
+        enumLabels[index] ?? String(value),
+        value === currentValue,
+      );
+    });
+    if (useNumberEntry) this.entry.render(entrySlot);
+  }
+
+  protected onAnnotationChanged() {
+    this.entry.reset();
+  }
+
+  protected navHintSuffix() {
+    return this.useNumberEntry ? "  ·  Enter to set · Esc to exit" : "";
+  }
+
+  toJSON() {
+    return annotateEnumPropertyToolJson(this.propertyIdentifier);
+  }
+}
+
+export class ToggleBoolPropertyTool extends LayerTool<AnnotationUserLayer> {
+  constructor(
+    public propertyIdentifier: string,
+    layer: AnnotationUserLayer,
+  ) {
+    super(layer);
+  }
+
+  activate(activation: ToolActivation<this>) {
+    updateSelectedAnnotationProperty(
+      this.layer,
+      this.propertyIdentifier,
+      (currentValue) => (currentValue ? 0 : 1),
+    );
+    activation.cancel();
+  }
+
+  toJSON() {
+    return toggleBoolPropertyToolJson(this.propertyIdentifier);
+  }
+
+  get description() {
+    return `toggle ${this.propertyIdentifier}`;
+  }
+}
+
+export class NumberPropertyEntryTool extends AnnotationPropertyEntryTool {
+  protected readonly modeVerb = "Set";
+
+  private get isFloat(): boolean {
+    return this.property?.type === "float32";
+  }
+
+  private get dataType(): DataType | undefined {
+    const type = this.property?.type;
+    return type === undefined ? undefined : propertyTypeDataType[type];
+  }
+
+  private range(): [number, number] {
+    const { dataType } = this;
+    if (dataType === undefined) return [-Infinity, Infinity];
+    if (dataType === DataType.FLOAT32) {
+      return [-3.40282347e38, 3.40282347e38];
+    }
+    return defaultDataTypeRange[dataType] as [number, number];
+  }
+
+  private readonly entry = new NumericEntryBuffer({
+    isFloat: () => this.isFloat,
+    allowNegative: () => this.range()[0] < 0,
+    range: () => this.range(),
+    currentValue: () => this.currentValue,
+    commit: (value) =>
+      updateSelectedAnnotationProperty(
+        this.layer,
+        this.propertyIdentifier,
+        () => (this.isFloat ? value : Math.round(value)),
+      ),
+  });
+
+  protected configureValueBindings(
+    addBinding: EntryKeyBinder,
+    requestRefresh: () => void,
+    activation: ToolActivation<this>,
+  ) {
+    this.entry.bindKeys(addBinding, requestRefresh, activation);
+  }
+
+  protected renderValue(valueContainer: HTMLElement, entrySlot: HTMLElement) {
+    removeChildren(valueContainer);
+    removeChildren(entrySlot);
+    this.entry.render(entrySlot);
+  }
+
+  protected onAnnotationChanged() {
+    this.entry.reset();
+  }
+
+  protected navHintSuffix() {
+    return "  ·  Enter to set · Esc to exit";
+  }
+
+  toJSON() {
+    return annotateNumberPropertyToolJson(this.propertyIdentifier);
+  }
+}

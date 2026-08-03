@@ -19,23 +19,23 @@ import "#src/layer/annotation/style.css";
 import type { AnnotationDisplayState } from "#src/annotation/annotation_layer_state.js";
 import { AnnotationLayerState } from "#src/annotation/annotation_layer_state.js";
 import { MultiscaleAnnotationSource } from "#src/annotation/frontend_source.js";
-import type {
-  AnnotationNumericPropertySpec,
-  AnnotationPropertySpec,
-} from "#src/annotation/index.js";
+import type { AnnotationPropertySpec } from "#src/annotation/index.js";
 import {
   annotationPropertySpecsToJson,
   AnnotationType,
-  isAnnotationNumericPropertySpec,
   LocalAnnotationSource,
   parseAnnotationPropertySpecs,
-  propertyTypeDataType,
 } from "#src/annotation/index.js";
 import type { CoordinateTransformSpecification } from "#src/coordinate_transform.js";
 import { makeCoordinateSpace } from "#src/coordinate_transform.js";
 import type { DataSourceSpecification } from "#src/datasource/index.js";
 import { localAnnotationsUrl, LocalDataSource } from "#src/datasource/local.js";
+import { AnnotationPropertyToolRegistry } from "#src/layer/annotation/property_tools.js";
 import { buildShaderPropertyList } from "#src/layer/annotation/shader_ui_property_list.js";
+import {
+  SELECT_NEXT_ANNOTATION_TOOL_ID,
+  SELECT_PREVIOUS_ANNOTATION_TOOL_ID,
+} from "#src/layer/annotation/tool_ids.js";
 import type { LayerManager, ManagedUserLayer } from "#src/layer/index.js";
 import {
   LayerReference,
@@ -49,7 +49,6 @@ import { Overlay } from "#src/overlay.js";
 import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
 import { RenderLayerRole } from "#src/renderlayer.js";
 import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
-import { StatusMessage } from "#src/status.js";
 import {
   ElementVisibilityFromTrackableBoolean,
   TrackableBoolean,
@@ -60,30 +59,18 @@ import {
   WatchableValue,
   observeWatchable,
 } from "#src/trackable_value.js";
-import {
-  annotateEnumPropertyToolJson,
-  annotateNumberPropertyToolJson,
-  toggleBoolPropertyToolJson,
-} from "#src/ui/annotation_properties.js";
 import { AnnotationSchemaTab } from "#src/ui/annotation_schema_tab.js";
 import type {
   AnnotationLayerView,
   MergedAnnotationStates,
 } from "#src/ui/annotations.js";
-import {
-  SELECT_NEXT_ANNOTATION_TOOL_ID,
-  SELECT_PREVIOUS_ANNOTATION_TOOL_ID,
-  UserLayerWithAnnotationsMixin,
-} from "#src/ui/annotations.js";
+import { UserLayerWithAnnotationsMixin } from "#src/ui/annotations.js";
 import type { ToolActivation } from "#src/ui/tool.js";
-import { LayerTool, registerTool, unregisterTool } from "#src/ui/tool.js";
+import { LayerTool, registerTool } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
-import { DataType } from "#src/util/data_type.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { removeChildren, updateChildren } from "#src/util/dom.js";
-import type { ActionEvent } from "#src/util/event_action_map.js";
-import { EventActionMap } from "#src/util/event_action_map.js";
+import { updateChildren } from "#src/util/dom.js";
 import {
   parseArray,
   parseFixedLengthArray,
@@ -95,7 +82,6 @@ import {
   verifyString,
   verifyStringArray,
 } from "#src/util/json.js";
-import { defaultDataTypeRange } from "#src/util/lerp.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 import {
@@ -419,671 +405,6 @@ class LinkedSegmentationLayersWidget extends RefCounted {
   }
 }
 
-// Identifies a keybindable property-entry tool so it can be (re)constructed,
-// one per property type.
-type PropertyToolDescriptor =
-  | { kind: "enum"; propertyIdentifier: string }
-  | { kind: "bool"; propertyIdentifier: string }
-  | { kind: "number"; propertyIdentifier: string };
-
-const propertyToolRegistrationCounts = new Map<string, number>();
-
-function retainPropertyTool(
-  toolId: string,
-  descriptor: PropertyToolDescriptor,
-) {
-  const registrationCount = propertyToolRegistrationCounts.get(toolId) ?? 0;
-  if (registrationCount === 0) {
-    registerTool(AnnotationUserLayer, toolId, (layer) => {
-      switch (descriptor.kind) {
-        case "enum":
-          return new EnumPropertyEntryTool(
-            descriptor.propertyIdentifier,
-            layer,
-          );
-        case "bool":
-          return new ToggleBoolPropertyTool(
-            descriptor.propertyIdentifier,
-            layer,
-          );
-        case "number":
-          return new NumberPropertyEntryTool(
-            descriptor.propertyIdentifier,
-            layer,
-          );
-      }
-    });
-  }
-  propertyToolRegistrationCounts.set(toolId, registrationCount + 1);
-}
-
-function releasePropertyTool(toolId: string) {
-  const registrationCount = propertyToolRegistrationCounts.get(toolId);
-  if (registrationCount === undefined) return;
-  if (registrationCount === 1) {
-    propertyToolRegistrationCounts.delete(toolId);
-    unregisterTool(AnnotationUserLayer, toolId);
-  } else {
-    propertyToolRegistrationCounts.set(toolId, registrationCount - 1);
-  }
-}
-
-// Sets a single property of the currently-selected annotation, computing the
-// new value from the existing one. Shared by the property-entry tools below.
-function updateSelectedAnnotationProperty(
-  layer: AnnotationUserLayer,
-  propertyIdentifier: string,
-  computeValue: (currentValue: number) => number,
-) {
-  const context = layer.getSelectedAnnotationContext();
-  if (context === undefined) return;
-  const { annotationLayerState, annotationId } = context;
-  const { source } = annotationLayerState;
-  const propertyIndex = source.properties.value.findIndex(
-    (x) => x.identifier === propertyIdentifier,
-  );
-  if (propertyIndex === -1) return;
-  const reference = source.getReference(annotationId);
-  try {
-    const annotation = reference.value;
-    if (annotation != null) {
-      const properties = annotation.properties.slice();
-      properties[propertyIndex] = computeValue(properties[propertyIndex]);
-      source.update(reference, { ...annotation, properties });
-      source.commit(reference);
-    }
-  } finally {
-    reference.dispose();
-  }
-}
-
-// Returns the currently-selected annotation's value for `propertyIdentifier`,
-// or undefined if there is no selection / property.
-function getSelectedAnnotationPropertyValue(
-  layer: AnnotationUserLayer,
-  propertyIdentifier: string,
-): number | undefined {
-  const context = layer.getSelectedAnnotationContext();
-  if (context === undefined) return undefined;
-  const { source } = context.annotationLayerState;
-  const propertyIndex = source.properties.value.findIndex(
-    (x) => x.identifier === propertyIdentifier,
-  );
-  if (propertyIndex === -1) return undefined;
-  const reference = source.getReference(context.annotationId);
-  try {
-    const value = reference.value?.properties[propertyIndex];
-    return typeof value === "number" ? value : undefined;
-  } finally {
-    reference.dispose();
-  }
-}
-
-// Maps an option index to the number key that triggers it: 1-9 for the first
-// nine options, 0 for a tenth. Further options have no key.
-function keyForEnumOptionIndex(index: number): string | undefined {
-  if (index < 9) return String(index + 1);
-  if (index === 9) return "0";
-  return undefined;
-}
-
-// Returns the unshifted key-event identifier (e.g. "keyw") for the key
-// currently bound to `toolId` in this layer's tool binder, or undefined if the
-// tool is unbound. Tool keys are single uppercase letters activated with shift;
-// the entry-mode tools reuse the unshifted key for in-mode navigation.
-function boundKeyEventIdentifier(
-  layer: AnnotationUserLayer,
-  toolId: string,
-): string | undefined {
-  const key = layer.toolBinder.jsonToKey.get(JSON.stringify(toolId));
-  if (key === undefined) return undefined;
-  return `key${key.toLowerCase()}`;
-}
-
-// A binding registered by a property-entry tool: an event identifier, the
-// action it maps to, and the handler to run.
-type EntryKeyBinder = (
-  eventKey: string,
-  action: string,
-  handler: (event: ActionEvent<Event>) => void,
-) => void;
-
-// All fields are read live (functions) because they depend on the property
-// spec, which may not be loaded when the tool is constructed.
-interface NumericEntryOptions {
-  isFloat: () => boolean;
-  allowNegative: () => boolean;
-  // Inclusive [min, max] range.
-  range: () => [number, number];
-  // The value to show when nothing is being typed, or undefined.
-  currentValue: () => number | undefined;
-  // Commit a validated, in-range value to the selected annotation.
-  commit: (value: number) => void;
-}
-
-// Accumulates a typed numeric string for the key-capture numeric-entry tools
-// (plain number properties, and enum properties with too many options for one
-// key each). Only number-related keys are routed to it via the tool's input
-// event map, so every other keybind stays live. It renders the buffer in a dark
-// box that turns red when the value is outside the allowed range, and refuses
-// to commit an invalid value.
-class NumericEntryBuffer {
-  private buffer = "";
-
-  constructor(private readonly options: NumericEntryOptions) {}
-
-  reset() {
-    this.buffer = "";
-  }
-
-  // Parses the buffer, or undefined if it is empty or not yet a complete number
-  // (e.g. just "-" or ".").
-  private parse(): number | undefined {
-    if (this.buffer === "" || this.buffer === "-" || this.buffer === ".") {
-      return undefined;
-    }
-    const value = this.options.isFloat()
-      ? Number.parseFloat(this.buffer)
-      : Number.parseInt(this.buffer, 10);
-    return Number.isFinite(value) ? value : undefined;
-  }
-
-  // Whether the current (complete) buffer is outside the allowed range.
-  private get outOfRange(): boolean {
-    const value = this.parse();
-    if (value === undefined) return false;
-    const [min, max] = this.options.range();
-    return value < min || value > max;
-  }
-
-  // Registers the number-entry key bindings. Only these keys are intercepted;
-  // everything else falls through to the user's normal keybinds.
-  bindKeys(
-    addBinding: EntryKeyBinder,
-    requestRefresh: () => void,
-    activation: ToolActivation,
-  ) {
-    const append = (ch: string) => (event: ActionEvent<Event>) => {
-      event.stopPropagation();
-      if (ch === "-" && this.buffer.length > 0) return; // leading only
-      if (ch === "." && this.buffer.includes(".")) return; // one decimal point
-      this.buffer += ch;
-      requestRefresh();
-    };
-    for (let digit = 0; digit <= 9; ++digit) {
-      addBinding(
-        `digit${digit}`,
-        `annotation-number-${digit}`,
-        append(String(digit)),
-      );
-    }
-    if (this.options.isFloat()) {
-      addBinding("period", "annotation-number-decimal", append("."));
-    }
-    if (this.options.allowNegative()) {
-      addBinding("minus", "annotation-number-minus", append("-"));
-    }
-    addBinding("backspace", "annotation-number-backspace", (event) => {
-      event.stopPropagation();
-      this.buffer = this.buffer.slice(0, -1);
-      requestRefresh();
-    });
-    addBinding("enter", "annotation-number-commit", (event) => {
-      event.stopPropagation();
-      const value = this.parse();
-      // Refuse an empty/incomplete or out-of-range value; the buffer stays
-      // (shown red) so the user can correct it.
-      if (value === undefined || this.outOfRange) return;
-      this.options.commit(value);
-      this.buffer = "";
-      requestRefresh();
-    });
-    addBinding("escape", "annotation-number-exit", (event) => {
-      event.stopPropagation();
-      activation.cancel();
-    });
-  }
-
-  // Appends the buffer / current-value box to `container`, styled like the old
-  // input box: white text on a dark box, red when out of range. The caller is
-  // responsible for clearing `container` before a rebuild.
-  render(container: HTMLElement) {
-    const box = document.createElement("div");
-    box.classList.add("neuroglancer-annotation-entry-tool-number");
-    box.textContent =
-      this.buffer !== ""
-        ? this.buffer
-        : `${this.options.currentValue() ?? "—"}`;
-    if (this.outOfRange) {
-      box.classList.add("neuroglancer-annotation-entry-tool-number-invalid");
-    }
-    container.appendChild(box);
-  }
-}
-
-// Base class for the keybindable, toggle-style "data-entry mode" tools. While
-// active, the tool stays active across annotation navigation and shows a
-// bottom-of-screen status notification. It binds the unshifted keys of the
-// layer's previous/next annotation tools to move within the mode, and delegates
-// the value-entry keys (number keys, typing, ...) and the rendering of the
-// current value to the concrete subclass.
-abstract class AnnotationPropertyEntryTool extends LayerTool<AnnotationUserLayer> {
-  constructor(
-    public propertyIdentifier: string,
-    layer: AnnotationUserLayer,
-  ) {
-    super(layer, /*toggle=*/ true);
-  }
-
-  protected get property(): AnnotationPropertySpec | undefined {
-    return this.layer.localAnnotations?.properties.value?.find(
-      (x) => x.identifier === this.propertyIdentifier,
-    );
-  }
-
-  protected get currentValue(): number | undefined {
-    return getSelectedAnnotationPropertyValue(
-      this.layer,
-      this.propertyIdentifier,
-    );
-  }
-
-  // Verb shown in the status header, e.g. "Set".
-  protected abstract readonly modeVerb: string;
-
-  // Register the value-entry key bindings for this property kind. `activation`
-  // is provided so bindings can end the mode (e.g. Escape). No-op by default;
-  // subclasses override.
-  protected configureValueBindings(
-    _addBinding: EntryKeyBinder,
-    _requestRefresh: () => void,
-    _activation: ToolActivation<this>,
-  ): void {}
-
-  // Render the value area (`valueContainer`, e.g. option chips) and, for the
-  // buffered numeric modes, the inline entry box into `entrySlot` (which sits on
-  // the nav line before the prev/next hint). No-op by default.
-  protected renderValue(
-    _valueContainer: HTMLElement,
-    _entrySlot: HTMLElement,
-  ): void {}
-
-  // Called when the selected annotation changes, so transient entry state
-  // (e.g. a number being typed) can be reset. No-op by default.
-  protected onAnnotationChanged(): void {}
-
-  // Extra text appended to the navigation hint (e.g. commit/exit keys for the
-  // buffered numeric modes). Empty by default.
-  protected navHintSuffix(): string {
-    return "";
-  }
-
-  // Builds the standard bottom-of-screen status notification, reusing the tool
-  // status styling so it matches other tools. Returns the header and (empty)
-  // body for the caller to fill.
-  protected createStatusMessage(activation: ToolActivation<this>): {
-    header: HTMLElement;
-    body: HTMLElement;
-  } {
-    const status = activation.registerDisposer(new StatusMessage(false));
-    status.element.classList.add("neuroglancer-tool-status");
-    const content = document.createElement("div");
-    content.classList.add("neuroglancer-tool-status-content");
-    status.element.appendChild(content);
-    const headerContainer = document.createElement("div");
-    headerContainer.classList.add("neuroglancer-tool-status-header-container");
-    const header = document.createElement("div");
-    header.classList.add("neuroglancer-tool-status-header");
-    headerContainer.appendChild(header);
-    content.appendChild(headerContainer);
-    const body = document.createElement("div");
-    body.classList.add("neuroglancer-tool-status-body");
-    content.appendChild(body);
-    return { header, body };
-  }
-
-  // The unshifted key-event identifiers bound to this layer's previous/next
-  // annotation tools, and a human-readable hint describing them.
-  protected navKeyInfo(): {
-    prevKey: string | undefined;
-    nextKey: string | undefined;
-    hint: string;
-  } {
-    const prevKey = boundKeyEventIdentifier(
-      this.layer,
-      SELECT_PREVIOUS_ANNOTATION_TOOL_ID,
-    );
-    const nextKey = boundKeyEventIdentifier(
-      this.layer,
-      SELECT_NEXT_ANNOTATION_TOOL_ID,
-    );
-    const labels: string[] = [];
-    if (prevKey !== undefined)
-      labels.push(`${prevKey.slice(3).toUpperCase()} prev`);
-    if (nextKey !== undefined)
-      labels.push(`${nextKey.slice(3).toUpperCase()} next`);
-    const hint =
-      labels.length > 0
-        ? `${labels.join(" · ")} annotation`
-        : "bind the prev/next annotation tools to navigate here";
-    return { prevKey, nextKey, hint };
-  }
-
-  activate(activation: ToolActivation<this>) {
-    const { layer, propertyIdentifier } = this;
-    const { header, body } = this.createStatusMessage(activation);
-    const valueContainer = document.createElement("div");
-    valueContainer.classList.add("neuroglancer-annotation-entry-tool-values");
-    body.appendChild(valueContainer);
-    // Second line: an optional inline entry box (numeric modes) followed by the
-    // navigation / commit hint.
-    const navLine = document.createElement("div");
-    navLine.classList.add("neuroglancer-annotation-entry-tool-nav-line");
-    const entrySlot = document.createElement("span");
-    navLine.appendChild(entrySlot);
-    const navText = document.createElement("span");
-    navText.classList.add("neuroglancer-annotation-entry-tool-nav");
-    navLine.appendChild(navText);
-    body.appendChild(navLine);
-
-    const refresh = () => {
-      const property = this.property;
-      header.textContent =
-        property === undefined
-          ? `Property "${propertyIdentifier}" unavailable`
-          : `${this.modeVerb} ${propertyIdentifier}`;
-      this.renderValue(valueContainer, entrySlot);
-    };
-    const debouncedRefresh = activation.registerCancellable(
-      animationFrameDebounce(refresh),
-    );
-
-    // Collect all key bindings (value-entry + navigation) into one event map so
-    // they override the defaults (e.g. layer select/deselect) while active.
-    const bindings: { [key: string]: string } = {};
-    const handlers: Array<[string, (event: ActionEvent<Event>) => void]> = [];
-    const addBinding: EntryKeyBinder = (eventKey, action, handler) => {
-      bindings[eventKey] = action;
-      handlers.push([action, handler]);
-    };
-
-    this.configureValueBindings(addBinding, debouncedRefresh, activation);
-
-    // Navigation: reuse the unshifted keys of the layer's previous/next
-    // annotation tools so the user's own nav bindings work while in the mode.
-    const { prevKey, nextKey, hint } = this.navKeyInfo();
-    const navigate = (offset: number) => (event: ActionEvent<Event>) => {
-      event.stopPropagation();
-      layer.shiftSelectedIndexBy(offset);
-    };
-    if (prevKey !== undefined) {
-      addBinding(prevKey, "annotation-entry-prev", navigate(-1));
-    }
-    if (nextKey !== undefined) {
-      addBinding(nextKey, "annotation-entry-next", navigate(1));
-    }
-    navText.textContent = hint + this.navHintSuffix();
-
-    activation.bindInputEventMap(EventActionMap.fromObject(bindings));
-    for (const [action, handler] of handlers) {
-      activation.bindAction(action, handler);
-    }
-
-    // Keep the display in sync and reset transient state as the selection
-    // changes.
-    activation.registerDisposer(
-      layer.manager.root.selectionState.changed.add(() => {
-        this.onAnnotationChanged();
-        debouncedRefresh();
-      }),
-    );
-    // Value bindings and numeric bounds are fixed when the mode is activated.
-    // End the mode on schema changes so it cannot continue with stale input
-    // behavior; activating it again rebuilds everything from the new schema.
-    activation.registerDisposer(
-      layer.localAnnotationProperties.changed.add(() => activation.cancel()),
-    );
-    this.onAnnotationChanged();
-    refresh();
-  }
-
-  get description() {
-    return `${this.modeVerb.toLowerCase()} ${this.propertyIdentifier}`;
-  }
-
-  // Helper for subclasses that render key/label chips.
-  protected appendChip(
-    container: HTMLElement,
-    key: string,
-    label: string,
-    active: boolean,
-  ) {
-    const chip = document.createElement("div");
-    chip.classList.add("neuroglancer-annotation-entry-tool-chip");
-    if (active) {
-      chip.classList.add("neuroglancer-annotation-entry-tool-chip-active");
-    }
-    const keyElement = document.createElement("span");
-    keyElement.classList.add("neuroglancer-annotation-entry-tool-chip-key");
-    keyElement.textContent = key;
-    const labelElement = document.createElement("span");
-    labelElement.classList.add("neuroglancer-annotation-entry-tool-chip-label");
-    labelElement.textContent = label;
-    chip.appendChild(keyElement);
-    chip.appendChild(labelElement);
-    container.appendChild(chip);
-  }
-}
-
-// Enum property: with up to ten options, number keys 1..9/0 set each option's
-// value directly. With more options (too many for one key each), the user types
-// the option's number and presses Enter instead.
-class EnumPropertyEntryTool extends AnnotationPropertyEntryTool {
-  protected readonly modeVerb = "Set";
-
-  // For >10 options, the user types the option's 1-based number instead of a
-  // single key. Values are 1..N integers.
-  private readonly entry = new NumericEntryBuffer({
-    isFloat: () => false,
-    allowNegative: () => false,
-    range: () => [1, this.numericProperty?.enumValues?.length ?? 0],
-    currentValue: () => {
-      const enumValues = this.numericProperty?.enumValues ?? [];
-      const index =
-        this.currentValue === undefined
-          ? -1
-          : enumValues.indexOf(this.currentValue);
-      return index === -1 ? undefined : index + 1;
-    },
-    commit: (optionNumber) => {
-      const value = this.numericProperty?.enumValues?.[optionNumber - 1];
-      if (value === undefined) return;
-      updateSelectedAnnotationProperty(
-        this.layer,
-        this.propertyIdentifier,
-        () => value,
-      );
-    },
-  });
-
-  private get numericProperty(): AnnotationNumericPropertySpec | undefined {
-    const property = this.property;
-    return property !== undefined && isAnnotationNumericPropertySpec(property)
-      ? property
-      : undefined;
-  }
-
-  private get useNumberEntry(): boolean {
-    return (this.numericProperty?.enumValues?.length ?? 0) > 10;
-  }
-
-  protected configureValueBindings(
-    addBinding: EntryKeyBinder,
-    requestRefresh: () => void,
-    activation: ToolActivation<this>,
-  ) {
-    if (this.useNumberEntry) {
-      // Too many options for one key each: type the option's number + Enter.
-      this.entry.bindKeys(addBinding, requestRefresh, activation);
-      return;
-    }
-    // Direct key-per-option: number keys 1..9/0 set each option's value.
-    const enumValues = this.numericProperty?.enumValues ?? [];
-    const boundOptionCount = Math.min(enumValues.length, 10);
-    for (let index = 0; index < boundOptionCount; ++index) {
-      addBinding(
-        `digit${keyForEnumOptionIndex(index)}`,
-        `annotation-enum-option-${index}`,
-        (event) => {
-          event.stopPropagation();
-          const value = this.numericProperty?.enumValues?.[index];
-          if (value === undefined) return;
-          updateSelectedAnnotationProperty(
-            this.layer,
-            this.propertyIdentifier,
-            () => value,
-          );
-          requestRefresh();
-        },
-      );
-    }
-  }
-
-  protected renderValue(valueContainer: HTMLElement, entrySlot: HTMLElement) {
-    removeChildren(valueContainer);
-    removeChildren(entrySlot);
-    const property = this.numericProperty;
-    const enumValues = property?.enumValues ?? [];
-    const enumLabels = property?.enumLabels ?? [];
-    const currentValue = this.currentValue;
-    const useNumberEntry = this.useNumberEntry;
-    // The chip's leading number differs by mode: in key-per-option mode it is
-    // the single key that selects it (1..9, then 0 for the 10th); in numeric
-    // mode it is the 1-based number you type (1, 2, ..., 10, 11, ...).
-    enumValues.forEach((value, index) => {
-      this.appendChip(
-        valueContainer,
-        useNumberEntry
-          ? String(index + 1)
-          : (keyForEnumOptionIndex(index) ?? String(index + 1)),
-        enumLabels[index] ?? String(value),
-        value === currentValue,
-      );
-    });
-    // In >10 mode the typed option number appears in the entry box on the nav
-    // line (next to the prev/next hint), not among the option chips.
-    if (this.useNumberEntry) {
-      this.entry.render(entrySlot);
-    }
-  }
-
-  protected onAnnotationChanged() {
-    this.entry.reset();
-  }
-
-  protected navHintSuffix() {
-    return this.useNumberEntry ? "  ·  Enter to set · Esc to exit" : "";
-  }
-
-  toJSON() {
-    return annotateEnumPropertyToolJson(this.propertyIdentifier);
-  }
-}
-
-// Bool property: an instant-action tool that toggles the value of the
-// currently-selected annotation and immediately deactivates (unlike the enum
-// and number tools, there is no data-entry mode).
-class ToggleBoolPropertyTool extends LayerTool<AnnotationUserLayer> {
-  constructor(
-    public propertyIdentifier: string,
-    layer: AnnotationUserLayer,
-  ) {
-    super(layer);
-  }
-
-  activate(activation: ToolActivation<this>) {
-    updateSelectedAnnotationProperty(
-      this.layer,
-      this.propertyIdentifier,
-      (currentValue) => (currentValue ? 0 : 1),
-    );
-    activation.cancel();
-  }
-
-  toJSON() {
-    return toggleBoolPropertyToolJson(this.propertyIdentifier);
-  }
-
-  get description() {
-    return `toggle ${this.propertyIdentifier}`;
-  }
-}
-
-// Plain numeric property: type a number and press Enter to commit it, using the
-// key-capture buffer (only number keys are routed; other keybinds stay live).
-class NumberPropertyEntryTool extends AnnotationPropertyEntryTool {
-  protected readonly modeVerb = "Set";
-
-  private get isFloat(): boolean {
-    return this.property?.type === "float32";
-  }
-
-  private get dataType(): DataType | undefined {
-    const type = this.property?.type;
-    return type === undefined ? undefined : propertyTypeDataType[type];
-  }
-
-  // The value range allowed by the data type. float32 uses its full magnitude
-  // range rather than the normalized [0, 1] default.
-  private range(): [number, number] {
-    const { dataType } = this;
-    if (dataType === undefined) return [-Infinity, Infinity];
-    if (dataType === DataType.FLOAT32) {
-      return [-3.40282347e38, 3.40282347e38];
-    }
-    return defaultDataTypeRange[dataType] as [number, number];
-  }
-
-  private readonly entry = new NumericEntryBuffer({
-    isFloat: () => this.isFloat,
-    allowNegative: () => this.range()[0] < 0,
-    range: () => this.range(),
-    currentValue: () => this.currentValue,
-    commit: (value) =>
-      updateSelectedAnnotationProperty(
-        this.layer,
-        this.propertyIdentifier,
-        () => (this.isFloat ? value : Math.round(value)),
-      ),
-  });
-
-  protected configureValueBindings(
-    addBinding: EntryKeyBinder,
-    requestRefresh: () => void,
-    activation: ToolActivation<this>,
-  ) {
-    this.entry.bindKeys(addBinding, requestRefresh, activation);
-  }
-
-  protected renderValue(valueContainer: HTMLElement, entrySlot: HTMLElement) {
-    removeChildren(valueContainer);
-    removeChildren(entrySlot);
-    this.entry.render(entrySlot);
-  }
-
-  protected onAnnotationChanged() {
-    this.entry.reset();
-  }
-
-  protected navHintSuffix() {
-    return "  ·  Enter to set · Esc to exit";
-  }
-
-  toJSON() {
-    return annotateNumberPropertyToolJson(this.propertyIdentifier);
-  }
-}
-
 const Base = UserLayerWithAnnotationsMixin(UserLayer);
 
 // A keybindable tool that selects the previous annotation in the iteration order.
@@ -1124,10 +445,7 @@ export class AnnotationUserLayer extends Base {
     new WatchableValue([]);
   private localAnnotationRelationships: string[];
   private localAnnotationsJson: any = undefined;
-  // Keybindable property tools currently registered for this layer, keyed by
-  // tool id. Covers both enum-value setters and bool toggles; the descriptor
-  // records which kind each is so the tool can be reconstructed.
-  private registeredPropertyTools = new Map<string, PropertyToolDescriptor>();
+  private propertyToolRegistry: AnnotationPropertyToolRegistry;
   private pointAnnotationsJson: any = undefined;
   static supportColorPickerInAnnotationTab = false;
 
@@ -1144,10 +462,6 @@ export class AnnotationUserLayer extends Base {
     if (localAnnotations !== undefined) {
       localAnnotations.dispose();
     }
-    for (const toolId of this.registeredPropertyTools.keys()) {
-      releasePropertyTool(toolId);
-    }
-    this.registeredPropertyTools.clear();
     super.disposed();
   }
 
@@ -1180,59 +494,9 @@ export class AnnotationUserLayer extends Base {
       getter: () => new AnnotationSchemaTab(this),
     });
     this.tabs.default = "annotations";
-    this.registerDisposer(
-      this.localAnnotationProperties.changed.add(() => {
-        this.syncPropertyTools();
-      }),
+    this.propertyToolRegistry = this.registerDisposer(
+      new AnnotationPropertyToolRegistry(this, AnnotationUserLayer),
     );
-  }
-
-  // Keep one keybindable data-entry tool registered per property (enum, bool,
-  // or plain number) so each can be bound to a hotkey in the schema editor.
-  // Registers newly-added properties and tears down removed ones, including any
-  // live keybindings in this layer's tool binder.
-  private syncPropertyTools(
-    properties: readonly AnnotationPropertySpec[] = this
-      .localAnnotationProperties.value,
-  ) {
-    const desired = new Map<string, PropertyToolDescriptor>();
-    for (const property of properties) {
-      const { identifier } = property;
-      if (property.type === "bool") {
-        desired.set(toggleBoolPropertyToolJson(identifier), {
-          kind: "bool",
-          propertyIdentifier: identifier,
-        });
-      } else if (isAnnotationNumericPropertySpec(property)) {
-        if (property.enumValues !== undefined) {
-          desired.set(annotateEnumPropertyToolJson(identifier), {
-            kind: "enum",
-            propertyIdentifier: identifier,
-          });
-        } else {
-          desired.set(annotateNumberPropertyToolJson(identifier), {
-            kind: "number",
-            propertyIdentifier: identifier,
-          });
-        }
-      }
-    }
-    // Tear down tools whose property no longer exists, including any live
-    // keybinding for them.
-    for (const toolId of this.registeredPropertyTools.keys()) {
-      if (!desired.has(toolId)) {
-        this.toolBinder.removeJsonString(JSON.stringify(toolId));
-        releasePropertyTool(toolId);
-        this.registeredPropertyTools.delete(toolId);
-      }
-    }
-    // Register newly-added tools.
-    for (const [toolId, descriptor] of desired) {
-      if (!this.registeredPropertyTools.has(toolId)) {
-        retainPropertyTool(toolId, descriptor);
-        this.registeredPropertyTools.set(toolId, descriptor);
-      }
-    }
   }
 
   restoreState(specification: any) {
@@ -1244,7 +508,7 @@ export class AnnotationUserLayer extends Base {
     // Register property tools before `super.restoreState` restores the tool
     // binder, so that any saved property keybindings resolve to a registered
     // tool.
-    this.syncPropertyTools(properties ?? []);
+    this.propertyToolRegistry.sync(properties ?? []);
     super.restoreState(specification);
     this.linkedSegmentationLayers.restoreState(specification);
     this.codeVisible.restoreState(specification[CODE_VISIBLE_KEY]);
