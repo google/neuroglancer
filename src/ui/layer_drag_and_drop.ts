@@ -104,6 +104,21 @@ export function endLayerDrag(dropEffect = "none") {
       dragSource.manager.layerManager.filter(
         (x: ManagedUserLayer) => !removedLayers.has(x),
       );
+      // After removal from the source panel, a layer that is no longer shown in
+      // any layer group would be garbage-collected from the master layer list
+      // (the master LayerManager collects layers with a single reference).
+      // Archive it instead so it stays available in the master layer list --
+      // this matches the layer tab's close button and makes dragging a layer
+      // back onto the master layer list ("main parent") behave like closing it
+      // from its last group.  `containers` holds the master LayerManager plus one
+      // entry per group showing the layer, so size <= 1 means it is no longer in
+      // any group.  When moved to another group instead, that group keeps it
+      // (size >= 2) and it is not archived.
+      for (const layer of dragSource.layers) {
+        if (!layer.archived && layer.containers.size <= 1) {
+          layer.setArchived(true);
+        }
+      }
     }
     dragSource.disposer();
   }
@@ -233,6 +248,34 @@ export class DropLayers {
 
 type LayerDropEffect = "none" | "move" | "copy" | "link";
 
+// Drop effect for dragging a layer between two different panels of the same
+// window (group -> other group, or group -> master layer list).  The default is
+// *move* (remove the layer from the panel it came from); hold Ctrl to link (show
+// it in both panels) or Shift to copy (duplicate it).  This differs from the
+// shared `getDropEffectFromModifiers`, which maps Ctrl to "move".
+function getLayerCrossPanelDropEffect(event: DragEvent): {
+  dropEffect: LayerDropEffect;
+  dropEffectMessage: string;
+} {
+  let dropEffect: LayerDropEffect;
+  if (event.shiftKey) {
+    dropEffect = "copy";
+  } else if (event.ctrlKey) {
+    dropEffect = "link";
+  } else {
+    dropEffect = "move";
+  }
+  let message = "";
+  const addMessage = (msg: string) => {
+    if (message !== "") message += ", ";
+    message += msg;
+  };
+  if (dropEffect !== "move") addMessage("release modifiers to move");
+  if (dropEffect !== "link") addMessage("hold CONTROL to link");
+  if (dropEffect !== "copy") addMessage("hold SHIFT to copy");
+  return { dropEffect, dropEffectMessage: message };
+}
+
 export function getLayerDropEffect(
   event: DragEvent,
   manager: Borrowed<LayerListSpecification>,
@@ -244,29 +287,28 @@ export function getLayerDropEffect(
   let defaultDropEffect: LayerDropEffect;
   if (source === undefined) {
     defaultDropEffect = "copy";
-  } else {
-    if (newTarget) {
-      // We cannot "move" layers out of the layer list panel.
-      if (!source.isLayerListPanel) {
-        moveAllowed = true;
-      }
-      defaultDropEffect = "link";
-    } else {
-      if (
-        source.manager === manager &&
-        source.isLayerListPanel === targetIsLayerListPanel
-      ) {
-        defaultDropEffect = "move";
-        moveAllowed = true;
-      } else if (targetIsLayerListPanel) {
-        defaultDropEffect = "none";
-      } else if (source.isLayerListPanel) {
-        defaultDropEffect = "link";
-      } else {
-        moveAllowed = true;
-        defaultDropEffect = "link";
-      }
+  } else if (newTarget) {
+    // We cannot "move" layers out of the layer list panel.
+    if (!source.isLayerListPanel) {
+      moveAllowed = true;
     }
+    defaultDropEffect = "link";
+  } else if (
+    source.manager === manager &&
+    source.isLayerListPanel === targetIsLayerListPanel
+  ) {
+    // Reordering within the same panel.
+    defaultDropEffect = "move";
+    moveAllowed = true;
+  } else if (source.isLayerListPanel) {
+    // Dragging from the master layer list into a group panel: link only.  A
+    // layer cannot be moved *out* of the master list (that would delete it); it
+    // is only shown/hidden in individual groups.
+    defaultDropEffect = "link";
+  } else {
+    // Dragging a layer from a group panel to a different panel: another group,
+    // or back onto the master layer list (the "main parent").  Default to move.
+    return getLayerCrossPanelDropEffect(event);
   }
   return getDropEffectFromModifiers(event, defaultDropEffect, moveAllowed);
 }
@@ -518,10 +560,15 @@ export function registerLayerBarDropHandlers(
       return;
     }
     const { dropLayers, dropEffect, dropEffectMessage } = updateResult;
-    const numLayers = dropLayers.layers.size;
     let message = "";
     const maybePlural = dropLayers.numSourceLayers === 1 ? "" : "s";
     const numSourceLayers = dropLayers.numSourceLayers;
+    // For a move, every source layer is removed from its origin panel, even if
+    // some are already present in the target (e.g. dropping onto the master
+    // layer list, which already contains every layer), so report the source
+    // count rather than the number of layers added to the target.
+    const numLayers =
+      dropEffect === "move" ? numSourceLayers : dropLayers.layers.size;
     if (dropEffect === "none") {
       message = `Cannot link dragged layer${maybePlural} here`;
     } else {
