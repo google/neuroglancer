@@ -863,18 +863,7 @@ describe("CatmaidClient skeleton editing methods", () => {
           { nodeId: 201, revisionToken: "2026-03-29T12:04:00Z" },
         ],
       }),
-    ).resolves.toEqual({
-      nodeSourceStateUpdates: [
-        {
-          nodeId: 202,
-          sourceState: testSourceState("2026-03-29T12:08:00Z"),
-        },
-        {
-          nodeId: 201,
-          sourceState: testSourceState("2026-03-29T12:08:00Z"),
-        },
-      ],
-    });
+    ).resolves.toEqual({});
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const requestBody = getFetchBody(fetchMock);
@@ -954,11 +943,12 @@ describe("CatmaidClient skeleton editing methods", () => {
     );
   });
 
-  it("rejects reroot when the response is missing edition_time", async () => {
+  it("does not trust reroot response edition_time for revision state", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi.fn().mockResolvedValue({
       newroot: 202,
       skeleton_id: 17,
+      edition_time: "2026-03-29T12:08:00Z",
     });
     (client as any).fetchProjectEndpoint = fetchMock;
 
@@ -978,8 +968,33 @@ describe("CatmaidClient skeleton editing methods", () => {
           { nodeId: 201, revisionToken: "2026-03-29T12:04:00Z" },
         ],
       }),
+    ).resolves.toEqual({});
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects reroot when CATMAID reports a different new root", async () => {
+    const client = new CatmaidClient("https://example.invalid", 1);
+    const fetchMock = vi.fn().mockResolvedValue({
+      newroot: 203,
+      skeleton_id: 17,
+      edition_time: "2026-03-29T12:08:00Z",
+    });
+    (client as any).fetchProjectEndpoint = fetchMock;
+
+    await expect(
+      client.rerootSkeleton(202, {
+        node: {
+          nodeId: 202,
+          parentNodeId: 201,
+          revisionToken: "2026-03-29T12:05:00Z",
+        },
+        parent: {
+          nodeId: 201,
+          revisionToken: "2026-03-29T12:04:00Z",
+        },
+      }),
     ).rejects.toThrow(
-      "CATMAID skeleton/reroot did not return the new root edition_time.",
+      "CATMAID skeleton/reroot did not return the requested new root.",
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
