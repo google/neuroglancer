@@ -17,15 +17,11 @@
 import "#src/noselect.css";
 import "#src/ui/layer_bar.css";
 import svg_plus from "ikonate/icons/plus.svg?raw";
-import type {
-  LayerSubsetSpecification,
-  ManagedUserLayer,
-} from "#src/layer/index.js";
+import type { ManagedUserLayer } from "#src/layer/index.js";
 import { addNewLayer, deleteLayer, makeLayer } from "#src/layer/index.js";
 import type { LayerGroupViewer } from "#src/layer_group_viewer.js";
 import { NavigationLinkType } from "#src/navigation_state.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
-import { ContextMenu } from "#src/ui/context_menu.js";
 import type { DropLayers } from "#src/ui/layer_drag_and_drop.js";
 import {
   registerLayerBarDragLeaveHandler,
@@ -39,64 +35,12 @@ import {
   useWhiteBackground,
 } from "#src/util/color.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { removeChildren, removeFromParent } from "#src/util/dom.js";
+import { removeFromParent } from "#src/util/dom.js";
 import { preventDrag } from "#src/util/drag_and_drop.js";
 import { makeCloseButton } from "#src/widget/close_button.js";
 import { makeDeleteButton } from "#src/widget/delete_button.js";
 import { makeIcon } from "#src/widget/icon.js";
 import { PositionWidget } from "#src/widget/position_widget.js";
-
-// Removes `layer` from the layer group displayed by `panel`.  If the layer is
-// also displayed in another layer group, it is simply removed from this one;
-// otherwise (it is the only group showing it) the layer is archived.  This
-// mirrors the behavior of the layer tab's close (×) button.
-function removeLayerFromPanel(panel: LayerBar, layer: ManagedUserLayer) {
-  if (panel.layerManager === panel.manager.rootLayers) {
-    // The layer bar corresponds to a TopLevelLayerListSpecification.  That means
-    // there is just a single layer group, archive the layer unconditionally.
-    layer.setArchived(true);
-  } else if (layer.containers.size > 2) {
-    // Layer is contained in at least one other layer group (root + this group +
-    // another), just remove it from this layer group.
-    panel.layerManager.removeManagedLayer(layer);
-  } else {
-    // Layer is not contained in any other layer group.  Archive it.
-    layer.setArchived(true);
-  }
-}
-
-// Returns the layer subsets (other than `panel`'s) belonging to the same root,
-// split into those that currently contain `layer` and those that do not.
-function getOtherPanels(panel: LayerBar, layer: ManagedUserLayer) {
-  const withLayer: LayerSubsetSpecification[] = [];
-  const withoutLayer: LayerSubsetSpecification[] = [];
-  for (const subset of panel.manager.root.subsets) {
-    if (subset.layerManager === panel.layerManager) continue;
-    (subset.layerManager.has(layer) ? withLayer : withoutLayer).push(subset);
-  }
-  return { withLayer, withoutLayer };
-}
-
-// Removes `layer` from every layer group other than `panel`'s, so it is shown
-// only in `panel`.
-function showLayerOnlyInPanel(panel: LayerBar, layer: ManagedUserLayer) {
-  for (const subset of getOtherPanels(panel, layer).withLayer) {
-    subset.layerManager.removeManagedLayer(layer);
-  }
-}
-
-// Moves `layer` from `panel` into the single other layer group, adding it there
-// if necessary.
-function moveLayerToOtherPanel(panel: LayerBar, layer: ManagedUserLayer) {
-  const { withLayer, withoutLayer } = getOtherPanels(panel, layer);
-  const others = [...withLayer, ...withoutLayer];
-  if (others.length !== 1) return;
-  const other = others[0];
-  if (!other.layerManager.has(layer)) {
-    other.layerManager.addManagedLayer(layer.addRef());
-  }
-  removeLayerFromPanel(panel, layer);
-}
 
 class LayerWidget extends RefCounted {
   element = document.createElement("div");
@@ -110,7 +54,6 @@ class LayerWidget extends RefCounted {
   maxLength = 0;
   prevValueText = "";
   private colorChangeDisposer: () => void = () => {};
-  private contextMenu = this.registerDisposer(new ContextMenu());
 
   constructor(
     public layer: ManagedUserLayer,
@@ -150,7 +93,22 @@ class LayerWidget extends RefCounted {
     const closeElement = makeCloseButton();
     closeElement.title = "Remove layer from this layer group";
     closeElement.addEventListener("click", (event: MouseEvent) => {
-      removeLayerFromPanel(this.panel, this.layer);
+      if (this.panel.layerManager === this.panel.manager.rootLayers) {
+        // The layer bar corresponds to a TopLevelLayerListSpecification.  That means there is just
+        // a single layer group, archive the layer unconditionally.
+        this.layer.setArchived(true);
+      } else {
+        // The layer bar corresponds to a LayerSubsetSpecification.  The layer is always contained
+        // in the root LayerManager, as well as the LayerManager for each LayerSubsetSpecification.
+        if (this.layer.containers.size > 2) {
+          // Layer is contained in at least one other layer group, just remove it from this layer
+          // group.
+          this.panel.layerManager.removeManagedLayer(this.layer);
+        } else {
+          // Layer is not contained in any other layer group.  Archive it.
+          this.layer.setArchived(true);
+        }
+      }
       event.stopPropagation();
     });
     const deleteElement = makeDeleteButton();
@@ -211,7 +169,8 @@ class LayerWidget extends RefCounted {
     });
 
     element.addEventListener("contextmenu", (event: MouseEvent) => {
-      this.showContextMenu(event);
+      panel.selectedLayer.layer = layer;
+      panel.selectedLayer.visible = true;
       event.stopPropagation();
       event.preventDefault();
     });
@@ -219,44 +178,6 @@ class LayerWidget extends RefCounted {
       getLayoutSpec: () => panel.getLayoutSpecForDrag(),
     });
     registerLayerBarDropHandlers(this.panel, element, this.layer);
-  }
-
-  private showContextMenu(event: MouseEvent) {
-    const { contextMenu, layer, panel } = this;
-    // The context menu only offers actions that move a layer between layer
-    // groups, so it is only shown when the screen is split into multiple layer
-    // groups (i.e. this bar corresponds to a subset, not the single top-level
-    // group).  With a single panel, right-clicking does nothing.
-    if (panel.layerManager === panel.manager.rootLayers) {
-      return;
-    }
-    const menu = contextMenu.element;
-    removeChildren(menu);
-    const addItem = (text: string, action: () => void) => {
-      const button = document.createElement("button");
-      button.textContent = text;
-      button.addEventListener("click", () => {
-        action();
-        contextMenu.hide();
-      });
-      menu.appendChild(button);
-    };
-    addItem("Layer controls", () => {
-      panel.selectedLayer.layer = layer;
-      panel.selectedLayer.visible = true;
-    });
-    const { withLayer, withoutLayer } = getOtherPanels(panel, layer);
-    const numPanels = withLayer.length + withoutLayer.length + 1;
-    if (numPanels === 2 && withoutLayer.length === 1) {
-      addItem("Move to other panel", () => moveLayerToOtherPanel(panel, layer));
-    }
-    if (withLayer.length > 0) {
-      addItem("Show only in this panel", () =>
-        showLayerOnlyInPanel(panel, layer),
-      );
-    }
-    addItem("Remove from this panel", () => removeLayerFromPanel(panel, layer));
-    contextMenu.show(event);
   }
 
   setColor() {
