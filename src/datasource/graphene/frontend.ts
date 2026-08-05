@@ -57,6 +57,11 @@ import {
   PYCG_APP_VERSION,
   getHttpSource,
 } from "#src/datasource/graphene/base.js";
+import {
+  applySplitPreviewToTemporaryState,
+  MulticutSplitPreviewState,
+  parseGrapheneSplitPreviewResponse,
+} from "#src/datasource/graphene/split_preview.js";
 import type {
   DataSource,
   DataSourceLookupResult,
@@ -1153,6 +1158,7 @@ class MulticutState extends RefCounted implements Trackable {
 
   sinks = new WatchableSet<SegmentSelection>();
   sources = new WatchableSet<SegmentSelection>();
+  preview = new MulticutSplitPreviewState();
 
   constructor(
     public focusSegment = new TrackableValue<bigint | undefined>(
@@ -1169,13 +1175,28 @@ class MulticutState extends RefCounted implements Trackable {
       }
     };
 
-    this.registerDisposer(focusSegment.changed.add(this.changed.dispatch));
+    this.registerDisposer(
+      focusSegment.changed.add(() => {
+        this.preview.invalidate();
+        this.changed.dispatch();
+      }),
+    );
     this.registerDisposer(this.sinks.changed.add(maybeResetFocusSegemnt));
     this.registerDisposer(this.sources.changed.add(maybeResetFocusSegemnt));
 
     this.registerDisposer(this.blueGroup.changed.add(this.changed.dispatch));
-    this.registerDisposer(this.sinks.changed.add(this.changed.dispatch));
-    this.registerDisposer(this.sources.changed.add(this.changed.dispatch));
+    this.registerDisposer(
+      this.sinks.changed.add(() => {
+        this.preview.invalidate();
+        this.changed.dispatch();
+      }),
+    );
+    this.registerDisposer(
+      this.sources.changed.add(() => {
+        this.preview.invalidate();
+        this.changed.dispatch();
+      }),
+    );
   }
 
   replaceSegments(oldValues: Uint64Set, newValues: Uint64Set) {
@@ -1183,6 +1204,13 @@ class MulticutState extends RefCounted implements Trackable {
     const {
       focusSegment: { value: focusSegment },
     } = this;
+    const rootsChanged =
+      (focusSegment !== undefined && oldValues.has(focusSegment)) ||
+      [...this.sinks].some((sink) => oldValues.has(sink.rootId)) ||
+      [...this.sources].some((source) => oldValues.has(source.rootId));
+    if (rootsChanged) {
+      this.preview.invalidate();
+    }
     if (focusSegment && oldValues.has(focusSegment)) {
       if (newValue) {
         this.focusSegment.value = newValue;
@@ -1200,10 +1228,28 @@ class MulticutState extends RefCounted implements Trackable {
   }
 
   reset() {
+    this.preview.invalidate();
     this.focusSegment.reset();
     this.blueGroup.value = false;
     this.sinks.clear();
     this.sources.clear();
+  }
+
+  setPreviewPending(value: boolean) {
+    if (this.preview.setPending(value)) {
+      this.changed.dispatch();
+    }
+  }
+
+  setPreviewActive(value: boolean) {
+    if (this.preview.setPreviewActive(value)) {
+      this.changed.dispatch();
+    }
+  }
+
+  cachePreview(response: ReturnType<typeof parseGrapheneSplitPreviewResponse>) {
+    this.preview.cachePreview(response);
+    this.changed.dispatch();
   }
 
   toJSON() {
@@ -1628,6 +1674,70 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     }
   }
 
+  private showSplitPreviewMessages() {
+    const { preview } = this.state.multicutState;
+    if (!preview.previewActive || !preview.hasCachedPreview) return;
+    if (preview.isSplitIllegal) {
+      StatusMessage.showTemporaryMessage(
+        "This split preview is illegal and cannot be submitted until the multicut seeds change.",
+        7000,
+      );
+    }
+    if (preview.connectedComponents.length > 2) {
+      StatusMessage.showTemporaryMessage(
+        "Additional split preview components are shown with the default preview color.",
+        7000,
+      );
+    }
+  }
+
+  async requestSplitPreview(annotationToNanometers: Float64Array) {
+    const {
+      state: { multicutState },
+    } = this;
+    const { sinks, sources, preview } = multicutState;
+    if (sinks.size === 0 || sources.size === 0) {
+      StatusMessage.showTemporaryMessage(
+        "You must select at least one red and one blue supervoxel to preview a split.",
+        7000,
+      );
+      return false;
+    }
+    if (preview.previewPending) {
+      return false;
+    }
+    if (preview.hasCachedPreview) {
+      multicutState.setPreviewActive(true);
+      this.showSplitPreviewMessages();
+      return true;
+    }
+    multicutState.setPreviewPending(true);
+    try {
+      const response = await this.graph.graphServer.splitPreview(
+        [...sinks].map((x) => selectionInNanometers(x, annotationToNanometers)),
+        [...sources].map((x) =>
+          selectionInNanometers(x, annotationToNanometers),
+        ),
+      );
+      multicutState.cachePreview(response);
+      this.showSplitPreviewMessages();
+      return true;
+    } catch {
+      multicutState.setPreviewPending(false);
+      return false;
+    }
+  }
+
+  applyMulticutPreviewDisplay() {
+    return applySplitPreviewToTemporaryState(
+      this.segmentsState,
+      this.state.multicutState.preview.connectedComponents,
+      this.state.multicutState.focusSegment.value === undefined
+        ? []
+        : [this.state.multicutState.focusSegment.value],
+    );
+  }
+
   async submitMulticut(annotationToNanometers: Float64Array): Promise<boolean> {
     const {
       state: { multicutState },
@@ -1942,6 +2052,28 @@ class GrapheneGraphServerInterface {
       final[i] = parseUint64(jsonResp.new_root_ids[i]);
     }
     return final;
+  }
+
+  async splitPreview(first: SegmentSelection[], second: SegmentSelection[]) {
+    const { fetchOkImpl, baseUrl } = this.httpSource;
+    const promise = fetchOkImpl(
+      `${baseUrl}/graph/split_preview?int64_as_str=1`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          sources: first.map((x) => [String(x.segmentId), ...x.position]),
+          sinks: second.map((x) => [String(x.segmentId), ...x.position]),
+        }),
+      },
+    );
+    const jsonResp = await withErrorMessageHTTP(
+      promise.then((response) => response.json()),
+      {
+        initialMessage: `Calculating split preview for ${first.length + second.length} seeds`,
+        errorPrefix: "Split preview failed: ",
+      },
+    );
+    return parseGrapheneSplitPreviewResponse(jsonResp);
   }
 
   async filterLatestRoots(segments: bigint[]): Promise<bigint[]> {
@@ -2515,11 +2647,23 @@ class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
       makeToolActivationStatusMessageWithHeader(activation);
     header.textContent = "Multicut segments";
     body.classList.add("graphene-tool-status", "graphene-multicut");
+    const blockPreviewEdit = (message: string) => {
+      if (!multicutState.preview.previewActive) return false;
+      StatusMessage.showTemporaryMessage(message, 5000);
+      return true;
+    };
     body.appendChild(
       makeIcon({
         text: "Swap",
         title: "Swap group",
         onClick: () => {
+          if (
+            blockPreviewEdit(
+              "Exit split preview before changing the multicut groups.",
+            )
+          ) {
+            return;
+          }
           multicutState.swapGroup();
         },
       }),
@@ -2533,13 +2677,43 @@ class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
         },
       }),
     );
+    const getAnnotationToNanometers = () =>
+      getGraphLoadedSubsource(
+        this.layer,
+      )!.loadedDataSource.transform.inputSpace.value.scales.map(
+        (x) => x / 1e-9,
+      );
+    const previewAction = async () => {
+      if (multicutState.preview.previewPending) {
+        return;
+      }
+      if (multicutState.preview.previewActive) {
+        multicutState.setPreviewActive(false);
+        return;
+      }
+      await graphConnection.requestSplitPreview(getAnnotationToNanometers());
+    };
+    const previewIcon = makeIcon({
+      text: "Preview",
+      title: "Split preview",
+      onClick: () => {
+        previewAction();
+      },
+    });
+    body.appendChild(previewIcon);
     const submitAction = async () => {
-      submitIcon.classList.toggle("disabled", true);
-      const loadedSubsource = getGraphLoadedSubsource(this.layer)!;
-      const annotationToNanometers =
-        loadedSubsource.loadedDataSource.transform.inputSpace.value.scales.map(
-          (x) => x / 1e-9,
+      if (
+        multicutState.preview.hasCachedPreview &&
+        multicutState.preview.isSplitIllegal
+      ) {
+        StatusMessage.showTemporaryMessage(
+          "This split preview is illegal. Change the multicut seeds before submitting.",
+          7000,
         );
+        return;
+      }
+      submitIcon.classList.toggle("disabled", true);
+      const annotationToNanometers = getAnnotationToNanometers();
       graphConnection.submitMulticut(annotationToNanometers).then((success) => {
         submitIcon.classList.toggle("disabled", false);
         if (success) {
@@ -2569,6 +2743,7 @@ class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
 
     activation.bindInputEventMap(MULTICUT_SEGMENTS_INPUT_EVENT_MAP);
     activation.registerDisposer(() => {
+      multicutState.setPreviewActive(false);
       resetMulticutDisplay();
       displayState.baseSegmentHighlighting.value = priorBaseSegmentHighlighting;
       displayState.highlightColor.value = priorHighlightColor;
@@ -2580,8 +2755,29 @@ class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
       displayState.tempSegmentDefaultColor2d.value = undefined;
       displayState.highlightColor.value = undefined;
     };
+    const updatePreviewIcon = () => {
+      previewIcon.classList.toggle(
+        "disabled",
+        multicutState.preview.previewPending,
+      );
+      previewIcon.title = multicutState.preview.previewActive
+        ? "Turn off split preview"
+        : multicutState.preview.hasCachedPreview
+          ? "Show cached split preview"
+          : "Split preview";
+      previewIcon.style.borderStyle = multicutState.preview.previewActive
+        ? "inset"
+        : "";
+      previewIcon.style.filter = multicutState.preview.previewActive
+        ? "invert(0.15)"
+        : "";
+      previewIcon.style.webkitFilter = multicutState.preview.previewActive
+        ? "invert(0.15)"
+        : "";
+    };
     const updateMulticutDisplay = () => {
       resetMulticutDisplay();
+      updatePreviewIcon();
       activeGroupIndicator.classList.toggle(
         "blueGroup",
         multicutState.blueGroup.value,
@@ -2589,6 +2785,28 @@ class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
       const focusSegment = multicutState.focusSegment.value;
       if (focusSegment === undefined) return;
       displayState.baseSegmentHighlighting.value = true;
+      if (
+        multicutState.preview.previewActive &&
+        multicutState.preview.hasCachedPreview
+      ) {
+        const previewRepresentatives =
+          graphConnection.applyMulticutPreviewDisplay();
+        displayState.tempSegmentDefaultColor2d.value = MULTICUT_OFF_COLOR;
+        if (previewRepresentatives[0] !== undefined) {
+          displayState.tempSegmentStatedColors2d.value.set(
+            previewRepresentatives[0],
+            RED_COLOR_SEGMENT_PACKED,
+          );
+        }
+        if (previewRepresentatives[1] !== undefined) {
+          displayState.tempSegmentStatedColors2d.value.set(
+            previewRepresentatives[1],
+            BLUE_COLOR_SEGMENT_PACKED,
+          );
+        }
+        displayState.useTempSegmentStatedColors2d.value = true;
+        return;
+      }
       displayState.highlightColor.value = multicutState.blueGroup.value
         ? BLUE_COLOR_HIGHTLIGHT
         : RED_COLOR_HIGHLIGHT;
@@ -2642,10 +2860,24 @@ class MulticutSegmentsTool extends LayerTool<SegmentationUserLayer> {
     );
     activation.bindAction("swap-group", (event) => {
       event.stopPropagation();
+      if (
+        blockPreviewEdit(
+          "Exit split preview before changing the multicut groups.",
+        )
+      ) {
+        return;
+      }
       multicutState.swapGroup();
     });
     activation.bindAction("set-anchor", (event) => {
       event.stopPropagation();
+      if (
+        blockPreviewEdit(
+          "Exit split preview before changing the multicut seeds.",
+        )
+      ) {
+        return;
+      }
       const currentSegmentSelection = maybeGetSelection(
         this,
         segmentationGroupState.visibleSegments,
