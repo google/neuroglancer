@@ -16,20 +16,40 @@
 
 export const ANNOTATE_ENUM_PROPERTY_TOOL_ID = "annotateEnumProperty";
 
-export function annotateEnumPropertyToolJson(propertyIdentifier: string) {
-  return `${ANNOTATE_ENUM_PROPERTY_TOOL_ID}_${propertyIdentifier}`;
+export interface AnnotationPropertyToolJson {
+  type: string;
+  property: string;
+}
+
+export function annotateEnumPropertyToolJson(
+  propertyIdentifier: string,
+): AnnotationPropertyToolJson {
+  return {
+    type: ANNOTATE_ENUM_PROPERTY_TOOL_ID,
+    property: propertyIdentifier,
+  };
 }
 
 export const TOGGLE_BOOL_PROPERTY_TOOL_ID = "toggleBoolProperty";
 
-export function toggleBoolPropertyToolJson(propertyIdentifier: string) {
-  return `${TOGGLE_BOOL_PROPERTY_TOOL_ID}_${propertyIdentifier}`;
+export function toggleBoolPropertyToolJson(
+  propertyIdentifier: string,
+): AnnotationPropertyToolJson {
+  return {
+    type: TOGGLE_BOOL_PROPERTY_TOOL_ID,
+    property: propertyIdentifier,
+  };
 }
 
 export const ANNOTATE_NUMBER_PROPERTY_TOOL_ID = "annotateNumberProperty";
 
-export function annotateNumberPropertyToolJson(propertyIdentifier: string) {
-  return `${ANNOTATE_NUMBER_PROPERTY_TOOL_ID}_${propertyIdentifier}`;
+export function annotateNumberPropertyToolJson(
+  propertyIdentifier: string,
+): AnnotationPropertyToolJson {
+  return {
+    type: ANNOTATE_NUMBER_PROPERTY_TOOL_ID,
+    property: propertyIdentifier,
+  };
 }
 
 export const SELECT_PREVIOUS_ANNOTATION_TOOL_ID = "selectPreviousAnnotation";

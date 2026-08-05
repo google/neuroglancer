@@ -24,10 +24,13 @@ import {
 } from "#src/annotation/index.js";
 import type { AnnotationUserLayer } from "#src/layer/annotation/index.js";
 import {
+  ANNOTATE_ENUM_PROPERTY_TOOL_ID,
   annotateEnumPropertyToolJson,
+  ANNOTATE_NUMBER_PROPERTY_TOOL_ID,
   annotateNumberPropertyToolJson,
   SELECT_NEXT_ANNOTATION_TOOL_ID,
   SELECT_PREVIOUS_ANNOTATION_TOOL_ID,
+  TOGGLE_BOOL_PROPERTY_TOOL_ID,
   toggleBoolPropertyToolJson,
 } from "#src/layer/annotation/tool_ids.js";
 import type { ToolActivation } from "#src/ui/tool.js";
@@ -35,147 +38,100 @@ import {
   LayerTool,
   makeToolActivationStatusMessageWithHeader,
   registerTool,
-  unregisterTool,
 } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { DataType } from "#src/util/data_type.js";
-import { RefCounted } from "#src/util/disposable.js";
 import { removeChildren } from "#src/util/dom.js";
 import type { ActionEvent } from "#src/util/event_action_map.js";
 import { EventActionMap } from "#src/util/event_action_map.js";
+import {
+  verifyObject,
+  verifyObjectProperty,
+  verifyString,
+} from "#src/util/json.js";
 import { defaultDataTypeRange } from "#src/util/lerp.js";
 import type { AnyConstructor } from "#src/util/mixin.js";
 
-export type PropertyToolDescriptor =
-  | { kind: "enum"; propertyIdentifier: string }
-  | { kind: "bool"; propertyIdentifier: string }
-  | { kind: "number"; propertyIdentifier: string };
-
 type AnnotationUserLayerConstructor = AnyConstructor<AnnotationUserLayer>;
 
-const registrationCounts = new Map<
-  AnnotationUserLayerConstructor,
-  Map<string, number>
->();
+function parsePropertyIdentifier(options: unknown) {
+  verifyObject(options);
+  return verifyObjectProperty(options, "property", verifyString);
+}
 
-function retainPropertyTool(
+function getProperty(layer: AnnotationUserLayer, propertyIdentifier: string) {
+  return layer.localAnnotationProperties.value.find(
+    (property) => property.identifier === propertyIdentifier,
+  );
+}
+
+export function registerAnnotationPropertyTools(
   contextType: AnnotationUserLayerConstructor,
-  toolId: string,
-  descriptor: PropertyToolDescriptor,
 ) {
-  let counts = registrationCounts.get(contextType);
-  if (counts === undefined) {
-    counts = new Map();
-    registrationCounts.set(contextType, counts);
-  }
-  const count = counts.get(toolId) ?? 0;
-  if (count === 0) {
-    registerTool(contextType, toolId, (layer) => {
-      switch (descriptor.kind) {
-        case "enum":
-          return new EnumPropertyEntryTool(
-            descriptor.propertyIdentifier,
-            layer,
-          );
-        case "bool":
-          return new ToggleBoolPropertyTool(
-            descriptor.propertyIdentifier,
-            layer,
-          );
-        case "number":
-          return new NumberPropertyEntryTool(
-            descriptor.propertyIdentifier,
-            layer,
-          );
+  registerTool(
+    contextType,
+    ANNOTATE_ENUM_PROPERTY_TOOL_ID,
+    (layer, options) => {
+      const propertyIdentifier = parsePropertyIdentifier(options);
+      const property = getProperty(layer, propertyIdentifier);
+      if (
+        property === undefined ||
+        !isAnnotationNumericPropertySpec(property) ||
+        property.enumValues === undefined
+      ) {
+        return undefined;
       }
-    });
-  }
-  counts.set(toolId, count + 1);
+      return new EnumPropertyEntryTool(propertyIdentifier, layer);
+    },
+  );
+  registerTool(contextType, TOGGLE_BOOL_PROPERTY_TOOL_ID, (layer, options) => {
+    const propertyIdentifier = parsePropertyIdentifier(options);
+    if (getProperty(layer, propertyIdentifier)?.type !== "bool") {
+      return undefined;
+    }
+    return new ToggleBoolPropertyTool(propertyIdentifier, layer);
+  });
+  registerTool(
+    contextType,
+    ANNOTATE_NUMBER_PROPERTY_TOOL_ID,
+    (layer, options) => {
+      const propertyIdentifier = parsePropertyIdentifier(options);
+      const property = getProperty(layer, propertyIdentifier);
+      if (
+        property === undefined ||
+        !isAnnotationNumericPropertySpec(property) ||
+        property.enumValues !== undefined
+      ) {
+        return undefined;
+      }
+      return new NumberPropertyEntryTool(propertyIdentifier, layer);
+    },
+  );
 }
 
-function releasePropertyTool(
-  contextType: AnnotationUserLayerConstructor,
-  toolId: string,
-) {
-  const counts = registrationCounts.get(contextType);
-  const count = counts?.get(toolId);
-  if (counts === undefined || count === undefined) return;
-  if (count === 1) {
-    counts.delete(toolId);
-    unregisterTool(contextType, toolId);
-    if (counts.size === 0) registrationCounts.delete(contextType);
-  } else {
-    counts.set(toolId, count - 1);
-  }
-}
-
-export function getPropertyToolDescriptors(
-  properties: readonly AnnotationPropertySpec[],
-) {
-  const desired = new Map<string, PropertyToolDescriptor>();
-  for (const property of properties) {
-    const { identifier } = property;
-    if (property.type === "bool") {
-      desired.set(toggleBoolPropertyToolJson(identifier), {
-        kind: "bool",
-        propertyIdentifier: identifier,
-      });
-    } else if (isAnnotationNumericPropertySpec(property)) {
-      if (property.enumValues !== undefined) {
-        desired.set(annotateEnumPropertyToolJson(identifier), {
-          kind: "enum",
-          propertyIdentifier: identifier,
-        });
-      } else {
-        desired.set(annotateNumberPropertyToolJson(identifier), {
-          kind: "number",
-          propertyIdentifier: identifier,
-        });
-      }
+export function removeInvalidPropertyToolBindings(layer: AnnotationUserLayer) {
+  for (const [key, tool] of layer.toolBinder.bindings) {
+    if (
+      !(tool instanceof AnnotationPropertyEntryTool) &&
+      !(tool instanceof ToggleBoolPropertyTool)
+    ) {
+      continue;
     }
-  }
-  return desired;
-}
-
-export class AnnotationPropertyToolRegistry extends RefCounted {
-  private registeredTools = new Map<string, PropertyToolDescriptor>();
-
-  constructor(
-    private layer: AnnotationUserLayer,
-    private contextType: AnnotationUserLayerConstructor,
-  ) {
-    super();
-    this.registerDisposer(
-      layer.localAnnotationProperties.changed.add(() =>
-        this.sync(layer.localAnnotationProperties.value),
-      ),
-    );
-    this.sync(layer.localAnnotationProperties.value);
-  }
-
-  sync(properties: readonly AnnotationPropertySpec[]) {
-    const desired = getPropertyToolDescriptors(properties);
-    for (const toolId of this.registeredTools.keys()) {
-      if (!desired.has(toolId)) {
-        this.layer.toolBinder.removeJsonString(JSON.stringify(toolId));
-        releasePropertyTool(this.contextType, toolId);
-        this.registeredTools.delete(toolId);
-      }
+    const property = getProperty(layer, tool.propertyIdentifier);
+    if (
+      (tool instanceof EnumPropertyEntryTool &&
+        property !== undefined &&
+        isAnnotationNumericPropertySpec(property) &&
+        property.enumValues !== undefined) ||
+      (tool instanceof NumberPropertyEntryTool &&
+        property !== undefined &&
+        isAnnotationNumericPropertySpec(property) &&
+        property.enumValues === undefined) ||
+      (tool instanceof ToggleBoolPropertyTool && property?.type === "bool")
+    ) {
+      continue;
     }
-    for (const [toolId, descriptor] of desired) {
-      if (!this.registeredTools.has(toolId)) {
-        retainPropertyTool(this.contextType, toolId, descriptor);
-        this.registeredTools.set(toolId, descriptor);
-      }
-    }
-  }
-
-  disposed() {
-    for (const toolId of this.registeredTools.keys()) {
-      releasePropertyTool(this.contextType, toolId);
-    }
-    this.registeredTools.clear();
-    super.disposed();
+    layer.toolBinder.set(key, undefined);
   }
 }
 

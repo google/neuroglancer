@@ -30,7 +30,10 @@ import type { CoordinateTransformSpecification } from "#src/coordinate_transform
 import { makeCoordinateSpace } from "#src/coordinate_transform.js";
 import type { DataSourceSpecification } from "#src/datasource/index.js";
 import { localAnnotationsUrl, LocalDataSource } from "#src/datasource/local.js";
-import { AnnotationPropertyToolRegistry } from "#src/layer/annotation/property_tools.js";
+import {
+  registerAnnotationPropertyTools,
+  removeInvalidPropertyToolBindings,
+} from "#src/layer/annotation/property_tools.js";
 import { buildShaderPropertyList } from "#src/layer/annotation/shader_ui_property_list.js";
 import {
   SELECT_NEXT_ANNOTATION_TOOL_ID,
@@ -445,7 +448,6 @@ export class AnnotationUserLayer extends Base {
     new WatchableValue([]);
   private localAnnotationRelationships: string[];
   private localAnnotationsJson: any = undefined;
-  private propertyToolRegistry: AnnotationPropertyToolRegistry;
   private pointAnnotationsJson: any = undefined;
   static supportColorPickerInAnnotationTab = false;
 
@@ -494,8 +496,10 @@ export class AnnotationUserLayer extends Base {
       getter: () => new AnnotationSchemaTab(this),
     });
     this.tabs.default = "annotations";
-    this.propertyToolRegistry = this.registerDisposer(
-      new AnnotationPropertyToolRegistry(this, AnnotationUserLayer),
+    this.registerDisposer(
+      this.localAnnotationProperties.changed.add(() =>
+        removeInvalidPropertyToolBindings(this),
+      ),
     );
   }
 
@@ -505,10 +509,7 @@ export class AnnotationUserLayer extends Base {
       ANNOTATION_PROPERTIES_JSON_KEY,
       parseAnnotationPropertySpecs,
     );
-    // Register property tools before `super.restoreState` restores the tool
-    // binder, so that any saved property keybindings resolve to a registered
-    // tool.
-    this.propertyToolRegistry.sync(properties ?? []);
+    this.localAnnotationProperties.value = properties ?? [];
     super.restoreState(specification);
     this.linkedSegmentationLayers.restoreState(specification);
     this.codeVisible.restoreState(specification[CODE_VISIBLE_KEY]);
@@ -516,8 +517,6 @@ export class AnnotationUserLayer extends Base {
       specification[HIDE_INACTIVE_SHADER_CONTROLS_JSON_KEY],
     );
     this.localAnnotationsJson = specification[ANNOTATIONS_JSON_KEY];
-    this.localAnnotationProperties.value = properties ?? [];
-
     this.localAnnotationRelationships = verifyOptionalObjectProperty(
       specification,
       ANNOTATION_RELATIONSHIPS_JSON_KEY,
@@ -959,6 +958,8 @@ for (const control of Object.values(LAYER_CONTROLS)) {
 
 registerLayerType(AnnotationUserLayer);
 registerLayerType(AnnotationUserLayer, "pointAnnotation");
+
+registerAnnotationPropertyTools(AnnotationUserLayer);
 
 registerTool(
   AnnotationUserLayer,

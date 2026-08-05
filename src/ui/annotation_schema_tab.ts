@@ -95,7 +95,7 @@ import { Tab } from "#src/widget/tab_view.js";
 function getPropertyToolJson(
   property: AnnotationPropertySpec,
   identifier = property.identifier,
-): string | undefined {
+) {
   if (property.type === "bool") {
     return toggleBoolPropertyToolJson(identifier);
   }
