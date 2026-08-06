@@ -109,6 +109,7 @@ export function registerAnnotationPropertyTools(
   );
 }
 
+// TODO. do we need this? is this too defensive? shouldn't we just error if it is not compatible or drop it?
 export function removeInvalidPropertyToolBindings(layer: AnnotationUserLayer) {
   for (const [key, tool] of layer.toolBinder.bindings) {
     if (
@@ -365,8 +366,10 @@ export abstract class AnnotationPropertyEntryTool extends LayerTool<AnnotationUs
 
   activate(activation: ToolActivation<this>) {
     const { layer, propertyIdentifier } = this;
-    const { header, body } =
-      makeToolActivationStatusMessageWithHeader(activation);
+    const { header, body } = makeToolActivationStatusMessageWithHeader(
+      activation,
+      { showBindings: false },
+    );
     const valueContainer = document.createElement("div");
     valueContainer.classList.add("neuroglancer-annotation-entry-tool-values");
     body.appendChild(valueContainer);

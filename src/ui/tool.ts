@@ -839,30 +839,39 @@ export function makeToolButton(
   return element;
 }
 
-export function makeToolActivationStatusMessage(activation: ToolActivation) {
+export function makeToolActivationStatusMessage(
+  activation: ToolActivation,
+  options: { showBindings?: boolean } = {},
+) {
   const message = activation.registerDisposer(new StatusMessage(false));
   message.element.classList.add("neuroglancer-tool-status");
   const content = document.createElement("div");
   content.classList.add("neuroglancer-tool-status-content");
   message.element.appendChild(content);
-  const { inputEventMapBinder } = activation;
-  activation.inputEventMapBinder = (
-    inputEventMap: EventActionMap,
-    context: RefCounted,
-  ) => {
-    const bindingHelp = document.createElement("div");
-    bindingHelp.textContent = inputEventMap.describe();
-    bindingHelp.classList.add("neuroglancer-tool-status-bindings");
-    message.element.appendChild(bindingHelp);
-    inputEventMapBinder(inputEventMap, context);
-  };
+  if (options.showBindings !== false) {
+    const { inputEventMapBinder } = activation;
+    activation.inputEventMapBinder = (
+      inputEventMap: EventActionMap,
+      context: RefCounted,
+    ) => {
+      const bindingHelp = document.createElement("div");
+      bindingHelp.textContent = inputEventMap.describe();
+      bindingHelp.classList.add("neuroglancer-tool-status-bindings");
+      message.element.appendChild(bindingHelp);
+      inputEventMapBinder(inputEventMap, context);
+    };
+  }
   return { message, content };
 }
 
 export function makeToolActivationStatusMessageWithHeader(
   activation: ToolActivation,
+  options: { showBindings?: boolean } = {},
 ) {
-  const { message, content } = makeToolActivationStatusMessage(activation);
+  const { message, content } = makeToolActivationStatusMessage(
+    activation,
+    options,
+  );
   const header = document.createElement("div");
   header.classList.add("neuroglancer-tool-status-header");
   const headerContainer = document.createElement("div");
