@@ -2068,10 +2068,13 @@ export function UserLayerWithAnnotationsMixin<
       const { annotationId } = layerSelectionState;
       if (annotationId === undefined) return undefined;
       const annotationLayerState = this.annotationStates.states.find(
-        (x) =>
-          x.sourceIndex === layerSelectionState.annotationSourceIndex &&
+        (state) =>
+          state.sourceIndex === layerSelectionState.annotationSourceIndex &&
           (layerSelectionState.annotationSubsource === undefined ||
-            x.subsourceId === layerSelectionState.annotationSubsource),
+            state.subsourceId === layerSelectionState.annotationSubsource) &&
+          (layerSelectionState.annotationSubsubsourceId === undefined ||
+            state.subsubsourceId ===
+              layerSelectionState.annotationSubsubsourceId),
       );
       if (annotationLayerState === undefined) return undefined;
       return { annotationLayerState, annotationId };
@@ -2086,7 +2089,6 @@ export function UserLayerWithAnnotationsMixin<
       const context = this.getSelectedAnnotationContext();
       if (context === undefined) return;
       const { annotationLayerState, annotationId } = context;
-
       const entries = this.annotationStates.states.flatMap((state) =>
         Array.from(state.source, (annotation) => ({ annotation, state })),
       );
@@ -2096,13 +2098,11 @@ export function UserLayerWithAnnotationsMixin<
           entry.annotation.id === annotationId,
       );
       if (selectedIndex === -1) return;
-
       const targetIndex = Math.max(
         0,
         Math.min(entries.length - 1, selectedIndex + offset),
       );
       if (targetIndex === selectedIndex) return;
-
       const { annotation, state } = entries[targetIndex];
       this.selectAnnotation(state, annotation.id, true);
       moveToAnnotation(this, annotation, state);

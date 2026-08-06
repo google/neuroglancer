@@ -109,7 +109,21 @@ export function registerAnnotationPropertyTools(
   );
 }
 
-// TODO. do we need this? is this too defensive? shouldn't we just error if it is not compatible or drop it?
+function isCompatiblePropertyTool(
+  tool: AnnotationPropertyEntryTool | ToggleBoolPropertyTool,
+  property: AnnotationPropertySpec | undefined,
+) {
+  if (property === undefined) return false;
+  if (tool instanceof ToggleBoolPropertyTool) return property.type === "bool";
+  if (!isAnnotationNumericPropertySpec(property)) return false;
+  if (tool instanceof EnumPropertyEntryTool) {
+    return property.enumValues !== undefined;
+  }
+  return (
+    tool instanceof NumberPropertyEntryTool && property.enumValues === undefined
+  );
+}
+
 export function removeInvalidPropertyToolBindings(layer: AnnotationUserLayer) {
   for (const [key, tool] of layer.toolBinder.bindings) {
     if (
@@ -119,27 +133,15 @@ export function removeInvalidPropertyToolBindings(layer: AnnotationUserLayer) {
       continue;
     }
     const property = getProperty(layer, tool.propertyIdentifier);
-    if (
-      (tool instanceof EnumPropertyEntryTool &&
-        property !== undefined &&
-        isAnnotationNumericPropertySpec(property) &&
-        property.enumValues !== undefined) ||
-      (tool instanceof NumberPropertyEntryTool &&
-        property !== undefined &&
-        isAnnotationNumericPropertySpec(property) &&
-        property.enumValues === undefined) ||
-      (tool instanceof ToggleBoolPropertyTool && property?.type === "bool")
-    ) {
-      continue;
+    if (!isCompatiblePropertyTool(tool, property)) {
+      layer.toolBinder.set(key, undefined);
     }
-    layer.toolBinder.set(key, undefined);
   }
 }
 
-function updateSelectedAnnotationProperty(
+function getSelectedAnnotationProperty(
   layer: AnnotationUserLayer,
   propertyIdentifier: string,
-  computeValue: (currentValue: number) => number,
 ) {
   const context = layer.getSelectedAnnotationContext();
   if (context === undefined) return;
@@ -149,15 +151,28 @@ function updateSelectedAnnotationProperty(
     (property) => property.identifier === propertyIdentifier,
   );
   if (propertyIndex === -1) return;
-  const reference = source.getReference(annotationId);
+  return {
+    source,
+    propertyIndex,
+    reference: source.getReference(annotationId),
+  };
+}
+
+function updateSelectedAnnotationProperty(
+  layer: AnnotationUserLayer,
+  propertyIdentifier: string,
+  computeValue: (currentValue: number) => number,
+) {
+  const context = getSelectedAnnotationProperty(layer, propertyIdentifier);
+  if (context === undefined) return;
+  const { source, propertyIndex, reference } = context;
   try {
     const annotation = reference.value;
-    if (annotation != null) {
-      const properties = annotation.properties.slice();
-      properties[propertyIndex] = computeValue(properties[propertyIndex]);
-      source.update(reference, { ...annotation, properties });
-      source.commit(reference);
-    }
+    if (annotation == null) return;
+    const properties = annotation.properties.slice();
+    properties[propertyIndex] = computeValue(properties[propertyIndex]);
+    source.update(reference, { ...annotation, properties });
+    source.commit(reference);
   } finally {
     reference.dispose();
   }
@@ -167,14 +182,9 @@ function getSelectedAnnotationPropertyValue(
   layer: AnnotationUserLayer,
   propertyIdentifier: string,
 ): number | undefined {
-  const context = layer.getSelectedAnnotationContext();
-  if (context === undefined) return undefined;
-  const { source } = context.annotationLayerState;
-  const propertyIndex = source.properties.value.findIndex(
-    (property) => property.identifier === propertyIdentifier,
-  );
-  if (propertyIndex === -1) return undefined;
-  const reference = source.getReference(context.annotationId);
+  const context = getSelectedAnnotationProperty(layer, propertyIdentifier);
+  if (context === undefined) return;
+  const { propertyIndex, reference } = context;
   try {
     const value = reference.value?.properties[propertyIndex];
     return typeof value === "number" ? value : undefined;
@@ -308,9 +318,7 @@ export abstract class AnnotationPropertyEntryTool extends LayerTool<AnnotationUs
   }
 
   protected get property(): AnnotationPropertySpec | undefined {
-    return this.layer.localAnnotations?.properties.value?.find(
-      (property) => property.identifier === this.propertyIdentifier,
-    );
+    return getProperty(this.layer, this.propertyIdentifier);
   }
 
   protected get currentValue(): number | undefined {
