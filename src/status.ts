@@ -77,14 +77,14 @@ export class StatusMessage {
       event.preventDefault();
     }
   };
-  constructor(delay: Delay = false, modal = false) {
+  constructor(delay: Delay = false, modal = false, insertAtBottom = false) {
     const element = document.createElement("li");
     this.element = element;
     element.addEventListener("mousedown", this.handleMouseDown);
     if (delay === true) {
       delay = DEFAULT_STATUS_DELAY;
     }
-    this.setModal(modal);
+    this.setModal(modal, insertAtBottom);
     if (delay !== false) {
       this.setVisible(false);
       this.timer = window.setTimeout(this.setVisible.bind(this, true), delay);
@@ -124,7 +124,16 @@ export class StatusMessage {
   setPreventFocusChangeOnMouseDown(value: boolean) {
     this.preventFocusChangeOnMouseDown = value;
   }
-  setModal(value: boolean) {
+  setModal(value: boolean, insertAtBottom: boolean = false) {
+    const insertIntoStatusContainer = () => {
+      const container = getStatusContainer();
+      if (insertAtBottom) {
+        container.appendChild(this.element);
+      } else {
+        container.prepend(this.element);
+      }
+    };
+
     if (value) {
       if (this.modalElementWrapper === undefined) {
         const modalElementWrapper = document.createElement("div");
@@ -146,9 +155,9 @@ export class StatusMessage {
       if (this.modalElementWrapper !== undefined) {
         modalStatusContainer!.removeChild(this.modalElementWrapper);
         this.modalElementWrapper = undefined;
-        getStatusContainer().appendChild(this.element);
+        insertIntoStatusContainer();
       } else if (this.element.parentElement === null) {
-        getStatusContainer().appendChild(this.element);
+        insertIntoStatusContainer();
       }
     }
   }
