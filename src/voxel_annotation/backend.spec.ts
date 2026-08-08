@@ -1646,6 +1646,40 @@ describe("VoxelEditController: Tool Operations", () => {
     expect(indices.length).toBeGreaterThan(50);
   });
 
+  it("floodFillPlane2D: morphological=false fills through thin channels", async () => {
+    (controller as any).morphologicalConfig = {
+      growthThresholds: [{ count: 5, size: 3 }],
+      maxSize: 9,
+    };
+
+    const data = new BigUint64Array(1000);
+    // Closed box 0..9 at z=0, split by a wall column at x=5 with a 1-voxel
+    // hole at y=5.
+    for (let i = 0; i <= 9; i++) {
+      data[0 * 100 + 0 * 10 + i] = 1n;
+      data[0 * 100 + 9 * 10 + i] = 1n;
+      data[0 * 100 + i * 10 + 0] = 1n;
+      data[0 * 100 + i * 10 + 9] = 1n;
+      if (i !== 5) data[0 * 100 + i * 10 + 5] = 1n;
+    }
+    mockSource.serverStorage.set("0,0,0", data.buffer);
+
+    await controller.performOperation({
+      type: VoxelOperationType.FLOOD_FILL,
+      seed: new Float32Array([2, 5, 0]),
+      value: 2n,
+      maxVoxels: 1000,
+      basis: { u: new Float32Array([1, 0, 0]), v: new Float32Array([0, 1, 0]) },
+      morphological: false,
+    });
+
+    await vi.runAllTimersAsync();
+
+    // Left chamber (4×8) + hole + right chamber (3×8).
+    const indices = (mockSource.applyEdits as any).mock.calls[0][1];
+    expect(indices.length).toBe(57);
+  });
+
   it("performOperation: flood fill returns the covered vox chunk keys", async () => {
     const data = new BigUint64Array(1000);
     for (let x = 3; x <= 7; x++) {

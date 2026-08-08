@@ -1486,6 +1486,7 @@ export class VoxelEditController extends SharedObject {
     // itself stays outside the chain (reads only; its edits flush later).
     await this.runExclusive(() => this.flushPendingLocked());
     const { seed, value: fillValue, maxVoxels, basis, filterValue, seq } = op;
+    const morphological = op.morphological !== false;
     const sourceIndex = 0;
     const accessor = this.getAccessor(sourceIndex);
 
@@ -1520,6 +1521,7 @@ export class VoxelEditController extends SharedObject {
     };
 
     const getCurrentThickness = (): number => {
+      if (!morphological) return 1;
       let thickness = 1;
       for (const threshold of this.morphologicalConfig.growthThresholds) {
         if (filledCount >= threshold.count) {
