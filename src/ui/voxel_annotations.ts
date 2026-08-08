@@ -287,6 +287,7 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
           Math.floor(max),
           basis,
           filterValue,
+          this.layer.floodMorphological.value,
         )
         .catch((e: any) =>
           StatusMessage.showTemporaryMessage(String(e?.message ?? e)),

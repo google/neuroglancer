@@ -80,6 +80,7 @@ const BRUSH_SIZE_JSON_KEY = "brushSize";
 const ERASE_SELECTED_MODE_JSON_KEY = "eraseSelectedMode";
 const BRUSH_SHAPE_JSON_KEY = "brushShape";
 const FLOOD_FILL_MAX_VOXELS_JSON_KEY = "floodFillMaxVoxels";
+const FLOOD_FILL_MORPHOLOGICAL_JSON_KEY = "floodFillMorphological";
 const PAINT_VALUE_JSON_KEY = "paintValue";
 
 const DATA_TYPE_BIT_INFO = {
@@ -300,6 +301,7 @@ export class VoxelEditingContext
     maxVoxels: number,
     basis: { u: Float32Array; v: Float32Array },
     filterValue?: bigint,
+    morphological = true,
   ) {
     if (!this._controller)
       throw new Error("Cannot use floodFillPlane2D without a controller");
@@ -311,6 +313,7 @@ export class VoxelEditingContext
         maxVoxels,
         basis,
         filterValue,
+        morphological,
       ),
     );
   }
@@ -489,6 +492,7 @@ export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
   lockToSelectedValue: TrackableBoolean;
   brushShape: TrackableEnum<BrushShape>;
   floodMaxVoxels: TrackableValue<number>;
+  floodMorphological: TrackableBoolean;
   paintValue: TrackableValue<bigint>;
   cursorInEraseMode: TrackableBoolean;
 
@@ -529,6 +533,7 @@ export function UserLayerWithVoxelEditingMixin<
     lockToSelectedValue = new TrackableBoolean(false);
     brushShape = new TrackableEnum(BrushShape, BrushShape.DISK);
     floodMaxVoxels = new TrackableValue<number>(10000, verifyFiniteFloat);
+    floodMorphological = new TrackableBoolean(true);
     cursorInEraseMode = new TrackableBoolean(false, false);
 
     private _isInEraseState = false;
@@ -545,6 +550,7 @@ export function UserLayerWithVoxelEditingMixin<
       this.lockToSelectedValue.changed.add(this.specificationChanged.dispatch);
       this.brushShape.changed.add(this.specificationChanged.dispatch);
       this.floodMaxVoxels.changed.add(this.specificationChanged.dispatch);
+      this.floodMorphological.changed.add(this.specificationChanged.dispatch);
       this.paintValue.changed.add(this.specificationChanged.dispatch);
 
       this.bindOverlayToPanels();
@@ -709,6 +715,8 @@ export function UserLayerWithVoxelEditingMixin<
       json[ERASE_SELECTED_MODE_JSON_KEY] = this.lockToSelectedValue.toJSON();
       json[BRUSH_SHAPE_JSON_KEY] = this.brushShape.toJSON();
       json[FLOOD_FILL_MAX_VOXELS_JSON_KEY] = this.floodMaxVoxels.toJSON();
+      json[FLOOD_FILL_MORPHOLOGICAL_JSON_KEY] =
+        this.floodMorphological.toJSON();
       const pv = this.paintValue.toJSON();
       json[PAINT_VALUE_JSON_KEY] = pv === undefined ? undefined : pv.toString();
       return json;
@@ -731,6 +739,11 @@ export function UserLayerWithVoxelEditingMixin<
         specification,
         FLOOD_FILL_MAX_VOXELS_JSON_KEY,
         (v) => this.floodMaxVoxels.restoreState(v),
+      );
+      verifyOptionalObjectProperty(
+        specification,
+        FLOOD_FILL_MORPHOLOGICAL_JSON_KEY,
+        (v) => this.floodMorphological.restoreState(v),
       );
       verifyOptionalObjectProperty(specification, PAINT_VALUE_JSON_KEY, (v) =>
         this.paintValue.restoreState(v),

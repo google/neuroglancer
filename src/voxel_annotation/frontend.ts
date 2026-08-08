@@ -485,6 +485,7 @@ export class VoxelEditController extends SharedObject {
     maxVoxels: number,
     basis: { u: Float32Array; v: Float32Array },
     filterValue?: bigint,
+    morphological = true,
   ) {
     const seq = this.beginStroke();
     const previewValue = fillValueGetter(true);
@@ -541,6 +542,7 @@ export class VoxelEditController extends SharedObject {
         maxVoxels,
         basis,
         filterValue,
+        morphological,
       });
       return;
     }
@@ -634,6 +636,7 @@ export class VoxelEditController extends SharedObject {
         maxVoxels,
         basis,
         filterValue,
+        morphological,
       });
       this.reconcileStroke(seq, coveredVoxKeys);
     } catch (e) {

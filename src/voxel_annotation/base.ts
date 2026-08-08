@@ -63,6 +63,9 @@ export interface FloodFillOperation extends VoxelOperationBase {
   maxVoxels: number;
   basis: { u: Float32Array; v: Float32Array };
   filterValue?: bigint;
+  // Defaults to true; false disables the channel-thickness gating so the fill
+  // is a plain 4-connected walk.
+  morphological?: boolean;
 }
 
 export type VoxelOperation = BrushOperation | FloodFillOperation;
