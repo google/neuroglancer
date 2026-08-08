@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ChunkState } from "#src/chunk_manager/base.js";
 import { NullarySignal } from "#src/util/signal.js";
-import type { RPC } from "#src/worker_rpc.js";
 import { makeVoxChunkKey } from "#src/voxel_annotation/base.js";
 import { VoxelEditController } from "#src/voxel_annotation/frontend.js";
+import type { RPC } from "#src/worker_rpc.js";
 
 const mockRpc = {
   get: vi.fn(),
@@ -64,7 +64,22 @@ describe("VoxelEditController.callChunkReload: overlay swap observation", () => 
         sources.map((chunkSource) => ({
           chunkSource,
           chunkToMultiscaleTransform: Float32Array.of(
-            ...[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
           ),
         })),
       ],
