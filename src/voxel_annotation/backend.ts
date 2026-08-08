@@ -1321,7 +1321,9 @@ export class VoxelEditController extends SharedObject {
     await this.performUndoRedo(this.redoStack, this.undoStack, false, "redo");
   }
 
-  async performOperation(operation: VoxelOperation): Promise<void> {
+  // Resolves with the vox chunk keys whose stored data will contain the
+  // operation's overlay content once its edits flush ("covered" chunks).
+  async performOperation(operation: VoxelOperation): Promise<string[]> {
     switch (operation.type) {
       case VoxelOperationType.BRUSH:
         return this.performBrush(operation);
@@ -1334,11 +1336,33 @@ export class VoxelEditController extends SharedObject {
     }
   }
 
-  private async performBrush(op: BrushOperation): Promise<void> {
+  private async performBrush(op: BrushOperation): Promise<string[]> {
     const { centers, radius, value, shape, basis, filterValue, seq } = op;
     const voxelSize = 1; // Hardcoded LOD 0
     const sourceIndex = 0;
     const accessor = this.getAccessor(sourceIndex);
+
+    const covered = new Set<string>();
+    // Voxels skipped because the store already holds the brush value are
+    // covered without being rewritten: clearing their overlay would flash
+    // pre-write data until the prior write's own reload lands.
+    const coveredSpec = this.sources.get(sourceIndex)?.spec;
+    const csizeX = coveredSpec?.chunkDataSize[0] ?? 1;
+    const csizeY = coveredSpec?.chunkDataSize[1] ?? 1;
+    const csizeZ = coveredSpec?.chunkDataSize[2] ?? 1;
+    let lastCX = -Infinity;
+    let lastCY = -Infinity;
+    let lastCZ = -Infinity;
+    const markCovered = (x: number, y: number, z: number) => {
+      const cx = Math.floor(x / csizeX);
+      const cy = Math.floor(y / csizeY);
+      const cz = Math.floor(z / csizeZ);
+      if (cx === lastCX && cy === lastCY && cz === lastCZ) return;
+      lastCX = cx;
+      lastCY = cy;
+      lastCZ = cz;
+      covered.add(`lod${sourceIndex}#${cx},${cy},${cz}`);
+    };
 
     let r = Math.round(radius / voxelSize);
     if (r <= 0) throw new Error(`Brush radius must be positive.`);
@@ -1369,6 +1393,7 @@ export class VoxelEditController extends SharedObject {
       const toAwait = new Set<Promise<void>>();
       const pushIf = (x: number, y: number, z: number) => {
         if (shouldSkip(x, y, z)) {
+          markCovered(x, y, z);
           return;
         }
         if (filterValue == undefined) {
@@ -1378,8 +1403,11 @@ export class VoxelEditController extends SharedObject {
         toAwait.add(
           accessor.getValue(x, y, z).then((v) => {
             if (v == null) return;
-            if (v === value || (filterValue !== undefined && v !== filterValue))
+            if (v === value) {
+              markCovered(x, y, z);
               return;
+            }
+            if (filterValue !== undefined && v !== filterValue) return;
             bufferEnqueue(x, y, z);
           }),
         );
@@ -1439,11 +1467,20 @@ export class VoxelEditController extends SharedObject {
         buffer = result.buffer;
         count = result.count;
       }
-      this.processBackendEdits(buffer, count, value, sourceIndex, seq);
+      for (const key of this.processBackendEdits(
+        buffer,
+        count,
+        value,
+        sourceIndex,
+        seq,
+      )) {
+        covered.add(key);
+      }
     }
+    return Array.from(covered);
   }
 
-  private async performFloodFill(op: FloodFillOperation): Promise<void> {
+  private async performFloodFill(op: FloodFillOperation): Promise<string[]> {
     // The fill walk reads the store, which does not see pending edits: flush
     // them first so a fill right after a stroke sees that stroke. The walk
     // itself stays outside the chain (reads only; its edits flush later).
@@ -1459,9 +1496,9 @@ export class VoxelEditController extends SharedObject {
       startVoxelLod[2],
     );
 
-    if (originalValue === null) return;
-    if (filterValue !== undefined && originalValue !== filterValue) return;
-    if (originalValue === fillValue) return;
+    if (originalValue === null) return [];
+    if (filterValue !== undefined && originalValue !== filterValue) return [];
+    if (originalValue === fillValue) return [];
 
     const visited = new Set<string>();
     const queue: [number, number][] = [];
@@ -1601,7 +1638,7 @@ export class VoxelEditController extends SharedObject {
       basis,
       seed,
     );
-    this.processBackendEdits(
+    return this.processBackendEdits(
       result.buffer,
       result.count,
       fillValue,
@@ -1695,9 +1732,9 @@ export class VoxelEditController extends SharedObject {
     value: bigint,
     lodIndex: number,
     seq?: number,
-  ) {
+  ): string[] {
     const source = this.sources.get(lodIndex);
-    if (!source) return;
+    if (!source) return [];
 
     const { chunkDataSize } = source.spec;
     const indicesByVoxKey = new Map<string, number[]>();
@@ -1751,6 +1788,7 @@ export class VoxelEditController extends SharedObject {
       backendEdits.push({ key: voxKey, indices, value, seq });
     }
     this.commitVoxels(backendEdits);
+    return Array.from(indicesByVoxKey.keys());
   }
 }
 
@@ -1775,7 +1813,7 @@ registerPromiseRPC(
   VOX_EDIT_OPERATION_RPC_ID,
   async function (this: RPC, x: any) {
     const obj = this.get(x.rpcId) as VoxelEditController;
-    await obj.performOperation(x.operation);
-    return { value: undefined };
+    const coveredVoxKeys = await obj.performOperation(x.operation);
+    return { value: coveredVoxKeys };
   },
 );

@@ -1645,6 +1645,97 @@ describe("VoxelEditController: Tool Operations", () => {
     expect(indices.length).toBeLessThan(100);
     expect(indices.length).toBeGreaterThan(50);
   });
+
+  it("performOperation: flood fill returns the covered vox chunk keys", async () => {
+    const data = new BigUint64Array(1000);
+    for (let x = 3; x <= 7; x++) {
+      data[0 * 100 + 3 * 10 + x] = 1n;
+      data[0 * 100 + 7 * 10 + x] = 1n;
+    }
+    for (let y = 3; y <= 7; y++) {
+      data[0 * 100 + y * 10 + 3] = 1n;
+      data[0 * 100 + y * 10 + 7] = 1n;
+    }
+    mockSource.serverStorage.set("0,0,0", data.buffer);
+
+    const covered = await controller.performOperation({
+      type: VoxelOperationType.FLOOD_FILL,
+      seed: new Float32Array([5, 5, 0]),
+      value: 5n,
+      maxVoxels: 100,
+      basis: { u: new Float32Array([1, 0, 0]), v: new Float32Array([0, 1, 0]) },
+    });
+
+    expect(covered).toEqual(["lod0#0,0,0"]);
+    await vi.runAllTimersAsync();
+  });
+
+  it("performOperation: refused flood fill returns empty coverage", async () => {
+    const data = new BigUint64Array(1000);
+    data[0 * 100 + 5 * 10 + 5] = 5n;
+    mockSource.serverStorage.set("0,0,0", data.buffer);
+
+    const covered = await controller.performOperation({
+      type: VoxelOperationType.FLOOD_FILL,
+      seed: new Float32Array([5, 5, 0]),
+      value: 5n,
+      maxVoxels: 100,
+      basis: { u: new Float32Array([1, 0, 0]), v: new Float32Array([0, 1, 0]) },
+    });
+
+    expect(covered).toEqual([]);
+    expect(mockSource.applyEdits).not.toHaveBeenCalled();
+  });
+
+  it("performOperation: brush returns the covered vox chunk keys", async () => {
+    const covered = await controller.performOperation({
+      type: VoxelOperationType.BRUSH,
+      centers: [new Float32Array([5, 5, 5])],
+      radius: 3,
+      value: 5n,
+      shape: BrushShape.SPHERE,
+      basis: { u: new Float32Array([1, 0, 0]), v: new Float32Array([0, 1, 0]) },
+    });
+
+    expect(covered).toEqual(["lod0#0,0,0"]);
+    await vi.runAllTimersAsync();
+  });
+
+  it("performOperation: filtered brush counts already-written voxels as covered", async () => {
+    const data = new BigUint64Array(1000).fill(5n);
+    mockSource.serverStorage.set("0,0,0", data.buffer);
+
+    const covered = await controller.performOperation({
+      type: VoxelOperationType.BRUSH,
+      centers: [new Float32Array([5, 5, 5])],
+      radius: 3,
+      value: 5n,
+      shape: BrushShape.SPHERE,
+      basis: { u: new Float32Array([1, 0, 0]), v: new Float32Array([0, 1, 0]) },
+      filterValue: 1n,
+    });
+
+    expect(covered).toEqual(["lod0#0,0,0"]);
+    expect(mockSource.applyEdits).not.toHaveBeenCalled();
+  });
+
+  it("performOperation: filtered brush leaves filtered-out chunks uncovered", async () => {
+    const data = new BigUint64Array(1000).fill(7n);
+    mockSource.serverStorage.set("0,0,0", data.buffer);
+
+    const covered = await controller.performOperation({
+      type: VoxelOperationType.BRUSH,
+      centers: [new Float32Array([5, 5, 5])],
+      radius: 3,
+      value: 5n,
+      shape: BrushShape.SPHERE,
+      basis: { u: new Float32Array([1, 0, 0]), v: new Float32Array([0, 1, 0]) },
+      filterValue: 1n,
+    });
+
+    expect(covered).toEqual([]);
+    expect(mockSource.applyEdits).not.toHaveBeenCalled();
+  });
 });
 
 describe("VolumeChunkSource.applyEdits: unreadable stored chunk", () => {

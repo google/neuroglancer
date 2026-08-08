@@ -109,16 +109,39 @@ export class VoxelEditController extends SharedObject {
     return ++this.dispatchSeq;
   }
 
-  // Drops the overlay chunks tagged by a stroke whose edits will never be
-  // written (stamina/permission refusal, empty stroke, dispatch failure):
-  // no reload would ever clear them.
-  rollbackStroke(seq: number): void {
-    const overlaySource = this.host.previewSource?.getSources(
+  private getOverlaySource(): InMemoryVolumeChunkSource | undefined {
+    return this.host.previewSource?.getSources(
       this.getIdentitySliceViewSourceOptions(),
     )[0]?.[0]?.chunkSource as InMemoryVolumeChunkSource | undefined;
+  }
+
+  // For a stroke whose edits will never be written: stamina/permission
+  // refusal, empty stroke, dispatch failure.
+  rollbackStroke(seq: number): void {
+    this.reconcileStroke(seq, []);
+  }
+
+  // Drops the overlay chunks a stroke tagged that its backend write does not
+  // cover: nothing will be written there, so no reload would ever clear them
+  // and the real data beneath is already correct. Chunks re-tagged by a newer
+  // stroke no longer match `seq` and are left untouched.
+  reconcileStroke(seq: number, coveredVoxKeys: string[]): void {
+    const overlaySource = this.getOverlaySource();
     if (overlaySource === undefined) return;
-    const keys = overlaySource.keysWithOverlaySeq(seq);
-    if (keys.length > 0) overlaySource.invalidateChunks(keys);
+    const tagged = overlaySource.keysWithOverlaySeq(seq);
+    if (tagged.length === 0) return;
+    let stale = tagged;
+    if (coveredVoxKeys.length > 0) {
+      const covered = new Set<string>();
+      for (const voxKey of coveredVoxKeys) {
+        const parsed = parseVoxChunkKey(voxKey);
+        if (parsed !== null && parsed.lodIndex === 0) {
+          covered.add(parsed.chunkKey);
+        }
+      }
+      stale = tagged.filter((key) => !covered.has(key));
+    }
+    if (stale.length > 0) overlaySource.invalidateChunks(stale);
   }
 
   constructor(private host: VoxelEditControllerHost) {
@@ -178,12 +201,18 @@ export class VoxelEditController extends SharedObject {
     );
   }
 
-  private async dispatchOperation(operation: VoxelOperation) {
+  private async dispatchOperation(
+    operation: VoxelOperation,
+  ): Promise<string[]> {
     if (!this.rpc) throw new Error("RPC unavailable");
-    await this.rpc.promiseInvoke(VOX_EDIT_OPERATION_RPC_ID, {
-      rpcId: this.rpcId,
-      operation,
-    });
+    const coveredVoxKeys = await this.rpc.promiseInvoke<string[]>(
+      VOX_EDIT_OPERATION_RPC_ID,
+      {
+        rpcId: this.rpcId,
+        operation,
+      },
+    );
+    return Array.isArray(coveredVoxKeys) ? coveredVoxKeys : [];
   }
 
   readonly singleChannelAccess: ChunkChannelAccessParameters = {
@@ -437,7 +466,7 @@ export class VoxelEditController extends SharedObject {
       return;
     }
     const storageValue = valueGetter(false);
-    await this.dispatchOperation({
+    const coveredVoxKeys = await this.dispatchOperation({
       type: VoxelOperationType.BRUSH,
       seq,
       centers,
@@ -447,6 +476,7 @@ export class VoxelEditController extends SharedObject {
       basis,
       filterValue,
     });
+    this.reconcileStroke(seq, coveredVoxKeys);
   }
 
   async floodFillPlane2D(
@@ -596,7 +626,7 @@ export class VoxelEditController extends SharedObject {
 
     const storageValue = fillValueGetter(false);
     try {
-      await this.dispatchOperation({
+      const coveredVoxKeys = await this.dispatchOperation({
         type: VoxelOperationType.FLOOD_FILL,
         seq,
         seed: startPositionCanonical,
@@ -605,6 +635,7 @@ export class VoxelEditController extends SharedObject {
         basis,
         filterValue,
       });
+      this.reconcileStroke(seq, coveredVoxKeys);
     } catch (e) {
       this.rollbackStroke(seq);
       throw e;
