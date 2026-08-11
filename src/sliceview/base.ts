@@ -75,11 +75,6 @@ export function estimateSliceAreaPerChunk(
   return chunkVolume / viewZProjection;
 }
 
-export interface wasmModuleInstance {
-  module: WebAssembly.Module;
-  instance: WebAssembly.Instance;
-}
-
 export interface MultiscaleVolumetricDataRenderLayer {
   localPosition: WatchableValueInterface<Float32Array>;
   renderScaleTarget: WatchableValueInterface<number>;
