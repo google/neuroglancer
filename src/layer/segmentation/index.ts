@@ -799,7 +799,7 @@ export class SegmentationUserLayer extends Base {
   readonly selectedSpatialSkeletonNodeInfo = new WatchableValue<
     SelectedSpatialSkeletonNodeInfo | undefined
   >(undefined);
-  readonly hoveredSpatialSkeletonNodeId = this.registerDisposer(
+  readonly hoveredSpatialSkeletonNodeInfo = this.registerDisposer(
     new SpatialSkeletonHoverState(),
   );
   readonly spatialSkeletonVisibleChunksNeeded = new WatchableValue(0);
@@ -1118,7 +1118,7 @@ export class SegmentationUserLayer extends Base {
       ),
     );
     syncSelectedSpatialSkeletonNodeIdFromGlobalSelection();
-    this.hoveredSpatialSkeletonNodeId.bindTo(
+    this.hoveredSpatialSkeletonNodeInfo.bindTo(
       this.manager.layerSelectedValues,
       this,
     );
@@ -1603,6 +1603,7 @@ export class SegmentationUserLayer extends Base {
                 {
                   sources2d: slicePanelSources,
                   selectedNodeInfo: this.selectedSpatialSkeletonNodeInfo,
+                  hoveredNodeInfo: this.hoveredSpatialSkeletonNodeInfo,
                   pendingNodePositionVersion:
                     this.spatialSkeletonState.pendingNodePositionVersion,
                   getPendingNodePosition: (nodeId) =>
@@ -1636,6 +1637,7 @@ export class SegmentationUserLayer extends Base {
               displayState,
               {
                 selectedNodeInfo: this.selectedSpatialSkeletonNodeInfo,
+                hoveredNodeInfo: this.hoveredSpatialSkeletonNodeInfo,
                 pendingNodePositionVersion:
                   this.spatialSkeletonState.pendingNodePositionVersion,
                 getPendingNodePosition: (nodeId) =>

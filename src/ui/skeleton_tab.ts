@@ -511,7 +511,7 @@ export class SpatialSkeletonEditTab extends Tab {
       layer.getSpatialSkeletonNodeDisplayDescription(node);
 
     const getHoveredNodeIdFromViewer = () => {
-      return layer.hoveredSpatialSkeletonNodeId.value;
+      return layer.hoveredSpatialSkeletonNodeInfo.value?.nodeId;
     };
 
     const getSelectedSegmentId = () => {
@@ -1723,7 +1723,7 @@ export class SpatialSkeletonEditTab extends Tab {
       }),
     );
     this.registerDisposer(
-      layer.hoveredSpatialSkeletonNodeId.changed.add(() => {
+      layer.hoveredSpatialSkeletonNodeInfo.changed.add(() => {
         updateHoveredViewerNode();
       }),
     );

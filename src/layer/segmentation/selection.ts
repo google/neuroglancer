@@ -14,7 +14,10 @@
  * limitations under the License.
  */
 
-import type { LayerSelectedValues } from "#src/layer/index.js";
+import type {
+  LayerSelectedValues,
+  PickedSpatialSkeletonState,
+} from "#src/layer/index.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { parseUint64 } from "#src/util/json.js";
@@ -23,11 +26,12 @@ import { NullarySignal } from "#src/util/signal.js";
 interface SpatialSkeletonViewerHoverMouseStateLike<TRenderLayer> {
   active: boolean;
   pickedRenderLayer: TRenderLayer | null | undefined;
-  pickedSpatialSkeleton?:
-    | {
-        nodeId?: unknown;
-      }
-    | undefined;
+  pickedSpatialSkeleton?: PickedSpatialSkeletonState;
+}
+
+export interface SpatialSkeletonHoverInfo {
+  readonly nodeId: number;
+  readonly segmentId?: number;
 }
 
 interface SpatialSkeletonViewerHoverLayerLike<TRenderLayer> {
@@ -86,12 +90,6 @@ function getSelectionValueIdString(value: unknown) {
   } catch {
     return undefined;
   }
-}
-
-function normalizeSpatialSkeletonViewerHoverNodeId(value: unknown) {
-  return typeof value === "number" && Number.isSafeInteger(value) && value > 0
-    ? value
-    : undefined;
 }
 
 export function getNodeIdFromLayerSelectionState(
@@ -175,10 +173,10 @@ export function getNodeIdFromViewerSelection<TLayer>(
   );
 }
 
-function getSpatialSkeletonNodeIdFromViewerHover<TRenderLayer>(
+function getSpatialSkeletonHoverInfoFromViewerHover<TRenderLayer>(
   mouseState: SpatialSkeletonViewerHoverMouseStateLike<TRenderLayer>,
   layer: SpatialSkeletonViewerHoverLayerLike<TRenderLayer>,
-) {
+): SpatialSkeletonHoverInfo | undefined {
   if (!mouseState.active) return undefined;
   const pickedRenderLayer = mouseState.pickedRenderLayer;
   if (pickedRenderLayer !== null) {
@@ -189,18 +187,29 @@ function getSpatialSkeletonNodeIdFromViewerHover<TRenderLayer>(
       return undefined;
     }
   }
-  // TODO (SKM): I think we can inline this function
-  return normalizeSpatialSkeletonViewerHoverNodeId(
-    mouseState.pickedSpatialSkeleton?.nodeId,
-  );
+  const pickedSpatialSkeleton = mouseState.pickedSpatialSkeleton;
+  const nodeId = pickedSpatialSkeleton?.nodeId;
+  if (nodeId === undefined) return undefined;
+  const segmentId = pickedSpatialSkeleton?.segmentId;
+  if (segmentId === undefined) return undefined;
+  return segmentId === undefined ? { nodeId } : { nodeId, segmentId };
+}
+
+function spatialSkeletonHoverInfoEqual(
+  a: SpatialSkeletonHoverInfo | undefined,
+  b: SpatialSkeletonHoverInfo | undefined,
+) {
+  if (a === b) return true;
+  if (a === undefined || b === undefined) return false;
+  return a.nodeId === b.nodeId && a.segmentId === b.segmentId;
 }
 
 export class SpatialSkeletonHoverState extends RefCounted {
-  value: number | undefined = undefined;
+  value: SpatialSkeletonHoverInfo | undefined = undefined;
   readonly changed = new NullarySignal();
 
-  setValue(value: number | undefined) {
-    if (this.value !== value) {
+  setValue(value: SpatialSkeletonHoverInfo | undefined) {
+    if (!spatialSkeletonHoverInfoEqual(this.value, value)) {
       this.value = value;
       this.changed.dispatch();
     }
@@ -213,7 +222,7 @@ export class SpatialSkeletonHoverState extends RefCounted {
     this.registerDisposer(
       layerSelectedValues.changed.add(() => {
         this.setValue(
-          getSpatialSkeletonNodeIdFromViewerHover(
+          getSpatialSkeletonHoverInfoFromViewerHover(
             layerSelectedValues.mouseState,
             layer,
           ),

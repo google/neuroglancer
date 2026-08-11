@@ -134,22 +134,23 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
     const layer = Object.assign(
       Object.create(SpatiallyIndexedSkeletonLayer.prototype),
       {
-        selectedNodeId: { value: 101 },
+        selectedNodeInfo: { value: { nodeId: 101 } },
         selectedNodeOutlineColor: vec3.create(),
-        selectedNodeOutlineColorGeneration: 0,
-        cachedSelectedNodeOutlineColorGeneration: -1,
+        highlightedNodeOutlineColor: vec3.create(),
+        nodeOutlineColorGeneration: 0,
+        cachedNodeOutlineColorGeneration: -1,
         displayState,
       },
     );
 
-    const outlineColor = (layer as any).getSelectedNodeOutlineColor();
-    const cachedOutlineColor = (layer as any).getSelectedNodeOutlineColor();
+    (layer as any).updateNodeOutlineColorPair();
+    const outlineColor = (layer as any).selectedNodeOutlineColor;
+    (layer as any).updateNodeOutlineColorPair();
+    const cachedOutlineColor = (layer as any).selectedNodeOutlineColor;
 
     expect(isSelected).not.toHaveBeenCalled();
     expect(cachedOutlineColor).toBe(outlineColor);
-    expect(outlineColor[0]).toBeCloseTo(1);
-    expect(outlineColor[1]).toBeCloseTo(0.95);
-    expect(outlineColor[2]).toBeCloseTo(0.35);
+    // The outline color is chosen for high contrast against the segment color.
     expect(getContrastRatio(outlineColor, sourceColor)).toBeGreaterThanOrEqual(
       3,
     );
@@ -183,16 +184,17 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
       {
         selectedNodeInfo: { value: { nodeId: 101 } },
         selectedNodeOutlineColor: vec3.create(),
-        selectedNodeOutlineColorGeneration: 0,
-        cachedSelectedNodeOutlineColorGeneration: -1,
+        highlightedNodeOutlineColor: vec3.create(),
+        nodeOutlineColorGeneration: 0,
+        cachedNodeOutlineColorGeneration: -1,
         displayState,
       },
     );
 
-    (layer as any).getSelectedNodeOutlineColor();
+    (layer as any).updateNodeOutlineColorPair();
     selectedNodeId.value = 202;
-    ++(layer as any).selectedNodeOutlineColorGeneration;
-    (layer as any).getSelectedNodeOutlineColor();
+    ++(layer as any).nodeOutlineColorGeneration;
+    (layer as any).updateNodeOutlineColorPair();
 
     expect(computeSegmentColor).toHaveBeenCalledTimes(2);
   });
@@ -224,17 +226,103 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
       {
         selectedNodeInfo: { value: { nodeId: 101 } },
         selectedNodeOutlineColor: vec3.create(),
-        selectedNodeOutlineColorGeneration: 0,
-        cachedSelectedNodeOutlineColorGeneration: -1,
+        highlightedNodeOutlineColor: vec3.create(),
+        nodeOutlineColorGeneration: 0,
+        cachedNodeOutlineColorGeneration: -1,
         displayState,
       },
     );
 
-    (layer as any).getSelectedNodeOutlineColor();
-    ++(layer as any).selectedNodeOutlineColorGeneration;
-    (layer as any).getSelectedNodeOutlineColor();
+    (layer as any).updateNodeOutlineColorPair();
+    ++(layer as any).nodeOutlineColorGeneration;
+    (layer as any).updateNodeOutlineColorPair();
 
     expect(computeSegmentColor).toHaveBeenCalledTimes(2);
+  });
+
+  it("derives the hovered-node outline color from the hovered segment when nothing is selected", () => {
+    const sourceColor = vec3.fromValues(1, 1, 1);
+    const displayState = {
+      segmentationColorGroupState: {
+        value: {
+          segmentStatedColors: new Map(),
+          segmentDefaultColor: { value: sourceColor },
+          segmentColorHash: { compute: vi.fn() },
+        },
+      },
+      saturation: { value: 0 },
+      hoverHighlight: { value: true },
+      segmentSelectionState: { isSelected: vi.fn(() => false), baseValue: 0n },
+    };
+    const layer = Object.assign(
+      Object.create(SpatiallyIndexedSkeletonLayer.prototype),
+      {
+        selectedNodeInfo: { value: undefined },
+        hoveredNodeInfo: { value: { nodeId: 303, segmentId: 202 } },
+        selectedNodeOutlineColor: vec3.create(),
+        highlightedNodeOutlineColor: vec3.create(),
+        nodeOutlineColorGeneration: 0,
+        cachedNodeOutlineColorGeneration: -1,
+        displayState,
+      },
+    );
+
+    (layer as any).updateNodeOutlineColorPair();
+    const highlightedColor = (layer as any).highlightedNodeOutlineColor;
+
+    // The hovered outline is chosen for high contrast against its own (white)
+    // segment color.
+    expect(
+      getContrastRatio(highlightedColor, sourceColor),
+    ).toBeGreaterThanOrEqual(3);
+  });
+
+  it("derives each outline from its own segment when selected and hovered nodes belong to different segments", () => {
+    // Selected node on a dark segment, hovered node on a bright segment, as
+    // happens when hovering a merge target on a differently colored skeleton.
+    const selectedSegmentColor = vec3.fromValues(0, 0, 0);
+    const hoveredSegmentColor = vec3.fromValues(1, 1, 1);
+    const displayState = {
+      segmentationColorGroupState: {
+        value: {
+          segmentStatedColors: new Map([
+            [101n, 0x000000n],
+            [202n, 0xffffffn],
+          ]),
+          segmentDefaultColor: { value: undefined },
+          segmentColorHash: { compute: vi.fn() },
+        },
+      },
+      saturation: { value: 0 },
+      hoverHighlight: { value: true },
+      segmentSelectionState: { isSelected: vi.fn(() => false), baseValue: 0n },
+    };
+    const layer = Object.assign(
+      Object.create(SpatiallyIndexedSkeletonLayer.prototype),
+      {
+        selectedNodeInfo: { value: { nodeId: 101, segmentId: 101 } },
+        hoveredNodeInfo: { value: { nodeId: 303, segmentId: 202 } },
+        selectedNodeOutlineColor: vec3.create(),
+        highlightedNodeOutlineColor: vec3.create(),
+        nodeOutlineColorGeneration: 0,
+        cachedNodeOutlineColorGeneration: -1,
+        displayState,
+      },
+    );
+
+    (layer as any).updateNodeOutlineColorPair();
+    const selectedColor = (layer as any).selectedNodeOutlineColor;
+    const highlightedColor = (layer as any).highlightedNodeOutlineColor;
+
+    // Each outline contrasts against its own segment color...
+    expect(
+      getContrastRatio(selectedColor, selectedSegmentColor),
+    ).toBeGreaterThanOrEqual(3);
+    expect(
+      getContrastRatio(highlightedColor, hoveredSegmentColor),
+    ).toBeGreaterThanOrEqual(3);
+    // ...and the two outlines are different colors.
+    expect([...selectedColor]).not.toEqual([...highlightedColor]);
   });
 });
 

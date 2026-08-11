@@ -144,7 +144,7 @@ describe("layer/segmentation/selection", () => {
     let mouseState: {
       active: boolean;
       pickedRenderLayer: unknown;
-      pickedSpatialSkeleton?: { nodeId?: unknown };
+      pickedSpatialSkeleton?: { nodeId?: unknown; segmentId?: unknown };
     } = {
       active: false,
       pickedRenderLayer: null,
@@ -175,7 +175,15 @@ describe("layer/segmentation/selection", () => {
       pickedSpatialSkeleton: { nodeId: 31 },
     };
     trigger();
-    expect(hoverState.value).toBe(31);
+    expect(hoverState.value).toEqual({ nodeId: 31 });
+
+    mouseState = {
+      active: true,
+      pickedRenderLayer: renderLayerA,
+      pickedSpatialSkeleton: { nodeId: 31, segmentId: 7 },
+    };
+    trigger();
+    expect(hoverState.value).toEqual({ nodeId: 31, segmentId: 7 });
 
     mouseState = {
       active: true,

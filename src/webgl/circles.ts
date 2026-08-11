@@ -39,21 +39,28 @@ export function defineCircleShader(
 
   // 2-D position within circle quad, ranging from [-1, -1] to [1, 1].
   builder.addVarying("highp vec4", "vCircleCoord");
+  // Normalized radius where the first border ends and the border outline begins.
+  builder.addVarying("highp float", "vCircleBorderFraction");
   builder.addVertexCode(`
-void emitCircle(vec4 position, float diameter, float borderWidth) {
+void emitCircle(vec4 position, float diameter, float borderWidth, float borderOutlineWidth) {
   gl_Position = position;
-  float totalDiameter = diameter + 2.0 * (borderWidth + uCircleParams.z);
+  float totalDiameter = diameter + 2.0 * (borderWidth + borderOutlineWidth + uCircleParams.z);
   if (diameter == 0.0) totalDiameter = 0.0;
   vec2 circleCornerOffset = getQuadVertexPosition(vec2(-1.0, -1.0), vec2(1.0, 1.0));
   gl_Position.xy += circleCornerOffset * uCircleParams.xy * gl_Position.w * totalDiameter;
   vCircleCoord.xy = circleCornerOffset;
-  if (borderWidth == 0.0) {
+  if (borderWidth == 0.0 && borderOutlineWidth == 0.0) {
     vCircleCoord.z = totalDiameter;
     vCircleCoord.w = 1e-6;
+    vCircleBorderFraction = totalDiameter;
   } else {
     vCircleCoord.z = diameter / totalDiameter;
+    vCircleBorderFraction = (diameter + 2.0 * borderWidth) / totalDiameter;
     vCircleCoord.w = uCircleParams.z / totalDiameter;
   }
+}
+void emitCircle(vec4 position, float diameter, float borderWidth) {
+  emitCircle(position, diameter, borderWidth, 0.0);
 }
 `);
   if (crossSectionFade) {
@@ -70,17 +77,22 @@ float getCircleAlphaMultiplier() {
 `);
   }
   builder.addFragmentCode(`
-vec4 getCircleColor(vec4 interiorColor, vec4 borderColor) {
+vec4 getCircleColor(vec4 interiorColor, vec4 borderColor, vec4 borderOutlineColor) {
   float radius = length(vCircleCoord.xy);
   if (radius > 1.0) {
     discard;
   }
 
   float borderColorFraction = clamp((radius - vCircleCoord.z) / vCircleCoord.w, 0.0, 1.0);
+  float outlineColorFraction = clamp((radius - vCircleBorderFraction) / vCircleCoord.w, 0.0, 1.0);
   float feather = clamp((1.0 - radius) / vCircleCoord.w, 0.0, 1.0);
   vec4 color = mix(interiorColor, borderColor, borderColorFraction);
+  color = mix(color, borderOutlineColor, outlineColorFraction);
 
   return vec4(color.rgb, color.a * feather * getCircleAlphaMultiplier());
+}
+vec4 getCircleColor(vec4 interiorColor, vec4 borderColor) {
+  return getCircleColor(interiorColor, borderColor, borderColor);
 }
 `);
 }
