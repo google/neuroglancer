@@ -32,7 +32,7 @@ import {
   SELECT_PREVIOUS_ANNOTATION_TOOL_ID,
   TOGGLE_BOOL_PROPERTY_TOOL_ID,
   toggleBoolPropertyToolJson,
-} from "#src/layer/annotation/tool_ids.js";
+} from "#src/layer/annotation/tool_state.js";
 import type { ToolActivation } from "#src/ui/tool.js";
 import {
   LayerTool,

@@ -48,7 +48,7 @@ import {
   annotateEnumPropertyToolJson,
   annotateNumberPropertyToolJson,
   toggleBoolPropertyToolJson,
-} from "#src/layer/annotation/tool_ids.js";
+} from "#src/layer/annotation/tool_state.js";
 import { FramedDialog } from "#src/overlay.js";
 import { StatusMessage } from "#src/status.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";

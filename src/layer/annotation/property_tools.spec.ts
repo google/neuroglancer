@@ -25,7 +25,7 @@ import {
   annotateEnumPropertyToolJson,
   annotateNumberPropertyToolJson,
   toggleBoolPropertyToolJson,
-} from "#src/layer/annotation/tool_ids.js";
+} from "#src/layer/annotation/tool_state.js";
 import { restoreTool } from "#src/ui/tool.js";
 
 describe("annotation property tool bindings", () => {

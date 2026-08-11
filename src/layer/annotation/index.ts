@@ -38,7 +38,7 @@ import { buildShaderPropertyList } from "#src/layer/annotation/shader_ui_propert
 import {
   SELECT_NEXT_ANNOTATION_TOOL_ID,
   SELECT_PREVIOUS_ANNOTATION_TOOL_ID,
-} from "#src/layer/annotation/tool_ids.js";
+} from "#src/layer/annotation/tool_state.js";
 import type { LayerManager, ManagedUserLayer } from "#src/layer/index.js";
 import {
   LayerReference,
@@ -410,7 +410,6 @@ class LinkedSegmentationLayersWidget extends RefCounted {
 
 const Base = UserLayerWithAnnotationsMixin(UserLayer);
 
-// A keybindable tool that selects the previous annotation in the iteration order.
 class SelectPreviousAnnotationTool extends LayerTool<AnnotationUserLayer> {
   activate(activation: ToolActivation<this>) {
     this.layer.shiftSelectedIndexBy(-1);
@@ -424,7 +423,6 @@ class SelectPreviousAnnotationTool extends LayerTool<AnnotationUserLayer> {
   }
 }
 
-// A keybindable tool that selects the next annotation in the iteration order.
 class SelectNextAnnotationTool extends LayerTool<AnnotationUserLayer> {
   activate(activation: ToolActivation<this>) {
     this.layer.shiftSelectedIndexBy(1);
@@ -442,8 +440,6 @@ export class AnnotationUserLayer extends Base {
   localAnnotations: LocalAnnotationSource | undefined;
   codeVisible = new TrackableBoolean(true);
   hideInactiveShaderControls = new TrackableBoolean(false);
-  // Accessed by the property keybind tools (e.g. EnumClassificationTool) to
-  // observe schema changes while active.
   readonly localAnnotationProperties: WatchableValue<AnnotationPropertySpec[]> =
     new WatchableValue([]);
   private localAnnotationRelationships: string[];
