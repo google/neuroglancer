@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-import type { wasmModuleInstance } from "#src/sliceview/base.js";
-
 const headerSize = 29;
 
 const libraryEnv = {
@@ -24,8 +22,6 @@ const libraryEnv = {
     throw `proc exit: ${code}`;
   },
 };
-
-let wasmModule: wasmModuleInstance | null = null;
 
 function crc8(data: Uint8Array<ArrayBuffer>) {
   let crc = 0xff;
@@ -38,22 +34,25 @@ function crc8(data: Uint8Array<ArrayBuffer>) {
   return crc;
 }
 
-async function loadCrackleModule() {
-  // import crackleWasmDataUrl from './libcrackle.wasm';
-  if (wasmModule !== null) {
-    return wasmModule;
-  }
+let crackleModulePromise: Promise<WebAssembly.Instance> | undefined;
 
-  const crackleWasmDataUrl = new URL("./libcrackle.wasm", import.meta.url);
-  const response = await fetch(crackleWasmDataUrl);
-  const wasmCode = await response.arrayBuffer();
-  const m = await WebAssembly.instantiate(wasmCode, {
-    env: libraryEnv,
-    wasi_snapshot_preview1: libraryEnv,
-  });
-  (m.instance.exports._initialize as Function)();
-  wasmModule = m;
-  return m;
+function getCrackleModulePromise() {
+  if (crackleModulePromise === undefined) {
+    crackleModulePromise = (async () => {
+      const m = (
+        await WebAssembly.instantiateStreaming(
+          fetch(new URL("./libcrackle.wasm", import.meta.url)),
+          {
+            env: libraryEnv,
+            wasi_snapshot_preview1: libraryEnv,
+          },
+        )
+      ).instance;
+      (m.exports._initialize as Function)();
+      return m;
+    })();
+  }
+  return crackleModulePromise;
 }
 
 // not a full implementation of read header, just the parts we need
@@ -102,7 +101,7 @@ export function readHeader(buffer: Uint8Array<ArrayBuffer>): {
 export async function decompressCrackle(
   buffer: Uint8Array<ArrayBuffer>,
 ): Promise<Uint8Array<ArrayBuffer>> {
-  const m = await loadCrackleModule();
+  const m = await getCrackleModulePromise();
   const { sx, sy, sz, dataWidth } = readHeader(buffer);
 
   const voxels = sx * sy * sz;
@@ -115,23 +114,23 @@ export async function decompressCrackle(
 
   // heap must be referenced after creating bufPtr and imagePtr because
   // memory growth can detatch the buffer.
-  const bufPtr = (m.instance.exports.malloc as Function)(buffer.byteLength);
+  const bufPtr = (m.exports.malloc as Function)(buffer.byteLength);
   if (bufPtr === 0) {
     throw new Error("crackle: malloc failed for input buffer (out of memory)");
   }
-  const imagePtr = (m.instance.exports.malloc as Function)(nbytes);
+  const imagePtr = (m.exports.malloc as Function)(nbytes);
   if (imagePtr === 0) {
-    (m.instance.exports.free as Function)(bufPtr);
+    (m.exports.free as Function)(bufPtr);
     throw new Error("crackle: malloc failed for output buffer (out of memory)");
   }
 
   try {
     const heap = new Uint8Array(
-      (m.instance.exports.memory as WebAssembly.Memory).buffer,
+      (m.exports.memory as WebAssembly.Memory).buffer,
     );
     heap.set(buffer, bufPtr);
 
-    const code = (m.instance.exports.crackle_decompress as Function)(
+    const code = (m.exports.crackle_decompress as Function)(
       bufPtr,
       buffer.byteLength,
       imagePtr,
@@ -146,7 +145,7 @@ export async function decompressCrackle(
     // because memory growth during decompress could have detached
     // the buffer.
     const image = new Uint8Array(
-      (m.instance.exports.memory as WebAssembly.Memory).buffer,
+      (m.exports.memory as WebAssembly.Memory).buffer,
       imagePtr,
       nbytes,
     );
@@ -154,7 +153,7 @@ export async function decompressCrackle(
     // and we can free the emscripten buffer
     return image.slice(0);
   } finally {
-    (m.instance.exports.free as Function)(bufPtr);
-    (m.instance.exports.free as Function)(imagePtr);
+    (m.exports.free as Function)(bufPtr);
+    (m.exports.free as Function)(imagePtr);
   }
 }
