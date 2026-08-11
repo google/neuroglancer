@@ -339,7 +339,7 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
       throw new Error(`Invalid project ID: ${projectIdStr}`);
     }
 
-    let baseUrl = cleanUrl.substring(0, lastSlash);
+    let baseUrl = cleanUrl.substring(0, lastSlash).replace(/\/+$/, "");
     if (!baseUrl.startsWith("http")) {
       baseUrl = "https://" + baseUrl;
     }

@@ -15,7 +15,10 @@ CATMAID documentation to set up a CATMAID server. At minimum you will need:
 - CATMAID ``2026.05.06.dev11+g...`` or later by git-describe semantics.
 - A CATMAID project
 - A linked project stack
-- ``AnonymousUser`` permissions to read and edit the data on that project
+- CATMAID read permissions for anonymous access or for the account associated
+  with a personal API token
+- CATMAID edit permissions for that account when editing is enabled
+- Cross-origin access for the Neuroglancer origin and authorization headers
 - Skeletons initialised for that project
 
 The project stack dimensions and resolution are used to inform the bounding box
@@ -56,7 +59,13 @@ If ``spatial`` is absent or empty, Neuroglancer derives a default chunk size
 from the CATMAID project-space bounds and uses ``limit: 0`` for the generated
 spatial level.
 
-After setting this up, enter ``catmaid:<your-catmaid-server-url>/<your-catmaid-project-id>`` as a data source in neuroglancer.
+After setting this up, enter
+``catmaid:<your-catmaid-server-url>/<your-catmaid-project-id>`` as a data
+source in Neuroglancer. Public projects use CATMAID's anonymous API token.
+Private projects prompt for a personal API token, which is retained for the
+current browser tab. Python-hosted viewers can configure the token with
+``neuroglancer.set_catmaid_token`` or ``CATMAID_CREDENTIALS``. See
+:ref:`catmaid-datasource` for authentication and CORS details.
 
 .. _skeleton-editing-subsources:
 

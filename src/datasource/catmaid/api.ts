@@ -50,7 +50,8 @@ interface CatmaidStackInfo {
 }
 
 export interface CatmaidToken {
-  token?: string;
+  token: string;
+  kind: "anonymous" | "personal";
 }
 
 export const credentialsKey = "CATMAID";
@@ -1193,19 +1194,18 @@ function fetchWithCatmaidCredentials(
     input,
     init,
     (credentials: CatmaidToken, init: RequestInit) => {
-      const newInit: RequestInit = { ...init };
-      if (credentials.token) {
-        newInit.headers = {
-          ...newInit.headers,
-          Authorization: `Token ${credentials.token}`,
-        };
-      }
-      return newInit;
+      const headers = new Headers(init.headers);
+      headers.set("Authorization", `Token ${credentials.token}`);
+      return { ...init, headers };
     },
-    (error) => {
+    (error, credentials) => {
       const { status } = error;
-      if (status === 403 || status === 401) {
-        // Authorization needed.  Retry with refreshed token.
+      if (
+        status === 401 ||
+        (status === 403 && credentials.kind === "anonymous")
+      ) {
+        // Anonymous credentials may not have access to private projects. A
+        // 401 also indicates that a personal token must be replaced.
         return "refresh";
       }
       throw error;

@@ -49,9 +49,7 @@ default_credentials_manager.register(
 
 default_credentials_manager.register(
     "CATMAID",
-    lambda parameters: catmaid_credentials.CatmaidAnonymousCredentialsProvider(
-        parameters
-    ),
+    lambda parameters: catmaid_credentials.get_credentials_provider(parameters),
 )
 
 
@@ -62,3 +60,15 @@ def set_boss_token(token):
       credentials
     """
     boss_credentials_provider.set_token(token)
+
+
+def set_catmaid_token(server_url, token):
+    """Sets or removes a personal API token for a CATMAID server.
+
+    Pass None as the token to remove a previously configured value. Tokens
+    should be configured before adding CATMAID layers.
+
+    Group:
+      credentials
+    """
+    catmaid_credentials.set_token(server_url, token)
