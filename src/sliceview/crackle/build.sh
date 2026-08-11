@@ -1,6 +1,6 @@
 #!/bin/bash -xve
 
-# This script builds `compresso.wasm` using emsdk in a docker container.
+# This script builds `libcrackle.wasm` using emsdk in a docker container.
 
 cd "$(dirname "$0")"
 
