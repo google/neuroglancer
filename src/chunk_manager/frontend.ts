@@ -22,7 +22,7 @@ import {
   CHUNK_LAYER_STATISTICS_RPC_ID,
   CHUNK_MANAGER_RPC_ID,
   CHUNK_QUEUE_MANAGER_RPC_ID,
-  CHUNK_SOURCE_INVALIDATE_KEY_PREFIXES_RPC_ID,
+  CHUNK_SOURCE_INVALIDATE_KEYS_RPC_ID,
   CHUNK_SOURCE_INVALIDATE_RPC_ID,
   ChunkState,
   REQUEST_CHUNK_STATISTICS_RPC_ID,
@@ -45,10 +45,6 @@ import {
 } from "#src/worker_rpc.js";
 
 const DEBUG_CHUNK_UPDATES = false;
-
-function keyMatchesAnyPrefix(key: string, keyPrefixes: readonly string[]) {
-  return keyPrefixes.some((keyPrefix) => key.startsWith(keyPrefix));
-}
 
 export class Chunk {
   state = ChunkState.SYSTEM_MEMORY;
@@ -247,15 +243,13 @@ export class ChunkQueueManager extends SharedObject {
     }
     if (update.promise !== undefined) {
       this.handleFetch_(source, update);
-    } else if (update.keyPrefixes !== undefined) {
-      const keyPrefixes = update.keyPrefixes as string[];
-      const chunkKeysToDelete = [...source.chunks.keys()].filter((chunkKey) =>
-        keyMatchesAnyPrefix(chunkKey, keyPrefixes),
-      );
-      for (const chunkKey of chunkKeysToDelete) {
-        source.deleteChunk(chunkKey);
+    } else if (update.keys !== undefined) {
+      for (const chunkKey of update.keys as string[]) {
+        if (source.chunks.has(chunkKey)) {
+          source.deleteChunk(chunkKey);
+          visibleChunksChanged = true;
+        }
       }
-      visibleChunksChanged = chunkKeysToDelete.length !== 0;
     } else if (update.id === undefined) {
       // Invalidate source.
       for (const chunkKey of source.chunks.keys()) {
@@ -496,19 +490,17 @@ export class ChunkSource extends SharedObject {
   }
 
   /**
-   * Invalidates cached chunks whose backend keys match any of the specified prefixes.
-   * Operates asynchronously.
+   * Invalidates the cached chunks named by `keys`, leaving the rest of the cache intact.  Keys are
+   * the `Chunk.key` values the source assigns.  Operates asynchronously.
    */
-  invalidateCacheKeyPrefixes(keyPrefixes: Iterable<string>): void {
-    const normalizedKeyPrefixes = [...new Set(keyPrefixes)].filter(
-      (keyPrefix) => keyPrefix.length !== 0,
-    );
-    if (normalizedKeyPrefixes.length === 0) {
+  invalidateCacheKeys(keys: Iterable<string>): void {
+    const uniqueKeys = [...new Set(keys)];
+    if (uniqueKeys.length === 0) {
       return;
     }
-    this.rpc!.invoke(CHUNK_SOURCE_INVALIDATE_KEY_PREFIXES_RPC_ID, {
+    this.rpc!.invoke(CHUNK_SOURCE_INVALIDATE_KEYS_RPC_ID, {
       id: this.rpcId,
-      keyPrefixes: normalizedKeyPrefixes,
+      keys: uniqueKeys,
     });
   }
 

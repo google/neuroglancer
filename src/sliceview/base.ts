@@ -656,6 +656,17 @@ export interface SliceViewChunkSpecification<
   upperVoxelBound: Float32Array;
 }
 
+/**
+ * Returns the key identifying the chunk at `chunkGridPosition` within its source.
+ *
+ * This is the single definition of the chunk key format, for a grid position of any rank:
+ * `SliceViewChunkSourceBackend.getChunk` creates chunks under these keys, so anything naming an
+ * existing chunk (e.g. to invalidate it) must derive its key here rather than formatting one itself.
+ */
+export function getChunkKey(chunkGridPosition: ArrayLike<number>): string {
+  return Array.prototype.join.call(chunkGridPosition, ",");
+}
+
 export function makeSliceViewChunkSpecification<
   ChunkDataSize extends Uint32Array | Float32Array,
 >(

@@ -103,6 +103,8 @@ import {
 } from "#src/skeleton/skeleton_shader_color.js";
 import type { SpatiallyIndexedSkeletonView } from "#src/skeleton/source_selection.js";
 import {
+  getChunkKey,
+  type SliceViewChunkSpecification,
   type SliceViewSourceOptions,
   type TransformedSource,
 } from "#src/sliceview/base.js";
@@ -1961,24 +1963,31 @@ export const SPATIAL_SKELETON_SOURCE_OPTIONS: SliceViewSourceOptions = {
   modelChannelDimensionIndices: [],
 };
 
-export function getSpatialSkeletonCellKeyPrefix(
+/**
+ * Returns the key of the chunk containing `position`, given in the source's own voxel coordinates,
+ * or undefined if no single chunk can be named.
+ *
+ * A skeleton node position is 3D, so it identifies exactly one chunk only while the grid is also 3D.
+ * Every spatial skeleton source today is (see `CatmaidMultiscaleSpatiallyIndexedSkeletonSource`); a
+ * higher-rank grid would spread one 3D cell over every combination of the extra dimensions, which
+ * cannot be named without enumerating the source's chunks, so this reports undefined rather than
+ * guessing. The grid is anchored at the origin rather than at the source's lower bound, matching the
+ * chunk index computation in `updateFixedCurPositionInChunks`.
+ */
+export function getSpatialSkeletonChunkKey(
+  spec: SliceViewChunkSpecification,
   position: ArrayLike<number>,
-  chunkDataSize: ArrayLike<number>,
-) {
-  const cell = new Array<number>(3);
-  for (let i = 0; i < 3; ++i) {
-    const coordinate = Number(position[i]);
-    const chunkSize = Number(chunkDataSize[i]);
-    if (
-      !Number.isFinite(coordinate) ||
-      !Number.isFinite(chunkSize) ||
-      chunkSize <= 0
-    ) {
-      return undefined;
-    }
-    cell[i] = Math.floor(coordinate / chunkSize);
+): string | undefined {
+  const { rank, chunkDataSize } = spec;
+  if (rank !== 3) return undefined;
+  const chunkGridPosition = new Array<number>(rank);
+  for (let i = 0; i < rank; ++i) {
+    const coordinate = position[i];
+    const chunkSize = chunkDataSize[i];
+    if (!Number.isFinite(coordinate) || !(chunkSize > 0)) return undefined;
+    chunkGridPosition[i] = Math.floor(coordinate / chunkSize);
   }
-  return `${cell[0]},${cell[1]},${cell[2]}`;
+  return getChunkKey(chunkGridPosition);
 }
 
 export abstract class MultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleSliceViewChunkSource<SpatiallyIndexedSkeletonSource> {
@@ -3044,23 +3053,20 @@ export class SpatiallyIndexedSkeletonLayer
       const sourceId = getObjectId(chunkSource);
       if (seenSourceIds.has(sourceId)) continue;
       seenSourceIds.add(sourceId);
-      const keyPrefixes = new Set<string>();
-      const { chunkDataSize } = chunkSource.spec;
+      const chunkKeys = new Set<string>();
+      const { spec } = chunkSource;
       for (const position of positionList) {
         // Spatial skeleton node positions are already source/model coordinates;
         // render-layer transforms do not apply to CATMAID grid-cell keys.
-        const keyPrefix = getSpatialSkeletonCellKeyPrefix(
-          position,
-          chunkDataSize,
-        );
-        if (keyPrefix !== undefined) {
-          keyPrefixes.add(keyPrefix);
+        const chunkKey = getSpatialSkeletonChunkKey(spec, position);
+        if (chunkKey !== undefined) {
+          chunkKeys.add(chunkKey);
         }
       }
-      if (keyPrefixes.size === 0) {
+      if (chunkKeys.size === 0) {
         continue;
       }
-      chunkSource.invalidateCacheKeyPrefixes(keyPrefixes);
+      chunkSource.invalidateCacheKeys(chunkKeys);
       invalidated = true;
     }
     if (!invalidated) {

@@ -23,7 +23,7 @@ import {
   CHUNK_LAYER_STATISTICS_RPC_ID,
   CHUNK_MANAGER_RPC_ID,
   CHUNK_QUEUE_MANAGER_RPC_ID,
-  CHUNK_SOURCE_INVALIDATE_KEY_PREFIXES_RPC_ID,
+  CHUNK_SOURCE_INVALIDATE_KEYS_RPC_ID,
   CHUNK_SOURCE_INVALIDATE_RPC_ID,
   ChunkDownloadStatistics,
   ChunkMemoryStatistics,
@@ -60,10 +60,6 @@ import {
 } from "#src/worker_rpc.js";
 
 const DEBUG_CHUNK_UPDATES = false;
-
-function keyMatchesAnyPrefix(key: string, keyPrefixes: readonly string[]) {
-  return keyPrefixes.some((keyPrefix) => key.startsWith(keyPrefix));
-}
 
 export interface ChunkStateListener {
   (chunk: Chunk, oldState: ChunkState): void;
@@ -1132,16 +1128,15 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     this.scheduleUpdate();
   }
 
-  invalidateSourceCacheKeyPrefixes(
-    source: ChunkSource,
-    keyPrefixes: readonly string[],
-  ) {
-    let invalidated = false;
-    for (const chunk of source.chunks.values()) {
-      const key = chunk.key;
-      if (key === null || !keyMatchesAnyPrefix(key, keyPrefixes)) {
-        continue;
-      }
+  /**
+   * Like {@link invalidateSourceCache}, but limited to the chunks named by `keys`.  Keys are the
+   * `Chunk.key` values the source assigns; keys naming no cached chunk are ignored.
+   */
+  invalidateSourceCacheKeys(source: ChunkSource, keys: readonly string[]) {
+    const invalidatedKeys: string[] = [];
+    for (const key of keys) {
+      const chunk = source.chunks.get(key);
+      if (chunk === undefined) continue;
       switch (chunk.state) {
         case ChunkState.DOWNLOADING:
           cancelChunkDownload(chunk);
@@ -1152,14 +1147,14 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
       }
       // Note: After calling this, chunk may no longer be valid.
       this.updateChunkState(chunk, ChunkState.QUEUED);
-      invalidated = true;
+      invalidatedKeys.push(key);
     }
-    if (!invalidated) {
+    if (invalidatedKeys.length === 0) {
       return;
     }
     this.rpc!.invoke("Chunk.update", {
       source: source.rpcId,
-      keyPrefixes: [...keyPrefixes],
+      keys: invalidatedKeys,
     });
     this.scheduleUpdate();
   }
@@ -1415,18 +1410,9 @@ registerRPC(CHUNK_SOURCE_INVALIDATE_RPC_ID, function (x) {
   source.chunkManager.queueManager.invalidateSourceCache(source);
 });
 
-registerRPC(CHUNK_SOURCE_INVALIDATE_KEY_PREFIXES_RPC_ID, function (x) {
+registerRPC(CHUNK_SOURCE_INVALIDATE_KEYS_RPC_ID, function (x) {
   const source = <ChunkSource>this.get(x.id);
-  const keyPrefixes = Array.isArray(x.keyPrefixes)
-    ? x.keyPrefixes.filter(
-        (keyPrefix: unknown): keyPrefix is string =>
-          typeof keyPrefix === "string" && keyPrefix.length !== 0,
-      )
-    : [];
-  source.chunkManager.queueManager.invalidateSourceCacheKeyPrefixes(
-    source,
-    keyPrefixes,
-  );
+  source.chunkManager.queueManager.invalidateSourceCacheKeys(source, x.keys);
 });
 
 registerPromiseRPC(

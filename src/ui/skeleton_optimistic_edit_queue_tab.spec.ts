@@ -72,15 +72,29 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
     document.body.replaceChildren();
   });
 
-  it("keeps Queue tab registration disabled by the debug flag by default", () => {
+  it("registers no Queue tab when debug registration is disabled", () => {
     const { layer } = makeQueueTabLayer(() => []);
     const hidden = { value: false, changed: makeSignal().changed };
 
-    expect(OPTIMISTIC_EDIT_QUEUE_DEBUG).toBe(false);
     expect(
-      maybeRegisterSpatialSkeletonOptimisticEditQueueTab(layer, hidden as any),
+      maybeRegisterSpatialSkeletonOptimisticEditQueueTab(
+        layer,
+        hidden as any,
+        false,
+      ),
     ).toBe(false);
     expect(layer.tabs.add).not.toHaveBeenCalled();
+  });
+
+  it("defaults to the OPTIMISTIC_EDIT_QUEUE_DEBUG flag when not told otherwise", () => {
+    const { layer } = makeQueueTabLayer(() => []);
+    const hidden = { value: false, changed: makeSignal().changed };
+
+    // Asserted against the flag rather than a literal: this is a development toggle, so pinning its
+    // shipped value here only breaks the suite whenever someone flips it.
+    expect(
+      maybeRegisterSpatialSkeletonOptimisticEditQueueTab(layer, hidden as any),
+    ).toBe(OPTIMISTIC_EDIT_QUEUE_DEBUG);
   });
 
   it("registers a dedicated Queue tab when debug registration is enabled", () => {

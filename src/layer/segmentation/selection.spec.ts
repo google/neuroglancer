@@ -169,13 +169,15 @@ describe("layer/segmentation/selection", () => {
     );
     const trigger = () => handlers.forEach((h) => h());
 
+    // A node id alone is not a usable hover: consumers derive the outline colour from the hovered
+    // segment, so both ids have to resolve before a hover is reported.
     mouseState = {
       active: true,
       pickedRenderLayer: renderLayerA,
       pickedSpatialSkeleton: { nodeId: 31 },
     };
     trigger();
-    expect(hoverState.value).toEqual({ nodeId: 31 });
+    expect(hoverState.value).toBeUndefined();
 
     mouseState = {
       active: true,
