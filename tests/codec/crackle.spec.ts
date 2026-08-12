@@ -40,14 +40,11 @@ beforeAll(() => {
         const data = await fs.readFile(filePath);
 
         return new Response(
-          data.buffer.slice(
-            data.byteOffset,
-            data.byteOffset + data.byteLength,
-          ),
-          { 
+          data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
+          {
             status: 200,
             headers: { "Content-Type": "application/wasm" },
-          }
+          },
         );
       }
 
@@ -57,10 +54,10 @@ beforeAll(() => {
 
         return new Response(
           buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
-          { 
+          {
             status: 200,
             headers: { "Content-Type": "application/wasm" },
-          }
+          },
         );
       }
 
