@@ -14,61 +14,33 @@
  * limitations under the License.
  */
 
-export const SpatialSkeletonActions = {
-  inspect: "inspectSkeletons",
-  addNodes: "addNodes",
-  insertNodes: "insertNodes",
-  moveNodes: "moveNodes",
-  deleteNodes: "deleteNodes",
-  reroot: "rerootSkeletons",
-  editNodeDescription: "editNodeDescription",
-  editNodeTrueEnd: "editNodeTrueEnd",
-  editNodeRadius: "editNodeRadius",
-  editNodeConfidence: "editNodeConfidence",
-  mergeSkeletons: "mergeSkeletons",
-  splitSkeletons: "splitSkeletons",
-} as const;
+// Neuroglancer event action identifier strings for all skeleton UI.
+// These are the "skeleton-*" prefixed action names used in EventActionMap bindings
+// and registerActionListener calls throughout the skeleton tab and edit tool.
+// Default key bindings live in src/ui/default_input_event_bindings.ts.
 
-export type SpatialSkeletonAction =
-  (typeof SpatialSkeletonActions)[keyof typeof SpatialSkeletonActions];
+// --- Tab navigation ---
+export const SKELETON_GO_ROOT = "skeleton-go-root";
+export const SKELETON_GO_BRANCH_START = "skeleton-go-branch-start";
+export const SKELETON_GO_BRANCH_END = "skeleton-go-branch-end";
+export const SKELETON_GO_PARENT = "skeleton-go-parent";
+export const SKELETON_GO_CHILD = "skeleton-go-child";
+export const SKELETON_CYCLE_BRANCHES = "skeleton-cycle-branches";
+export const SKELETON_GO_UNFINISHED = "skeleton-go-unfinished-branch";
+export const SKELETON_UNDO = "skeleton-undo";
+export const SKELETON_REDO = "skeleton-redo";
 
-export const DEFAULT_SPATIAL_SKELETON_EDIT_ACTIONS = [
-  SpatialSkeletonActions.addNodes,
-  SpatialSkeletonActions.moveNodes,
-  SpatialSkeletonActions.deleteNodes,
-] as const satisfies readonly SpatialSkeletonAction[];
+// --- Node mutations (tab list focus + edit tool viewer focus) ---
+export const SKELETON_TOGGLE_TRUE_END = "skeleton-toggle-true-end";
+export const SKELETON_REROOT = "skeleton-reroot";
 
-export function isSpatialSkeletonEditAction(action: SpatialSkeletonAction) {
-  return action !== SpatialSkeletonActions.inspect;
-}
-
-export function getSpatialSkeletonActionSupportLabel(
-  action: SpatialSkeletonAction,
-) {
-  switch (action) {
-    case SpatialSkeletonActions.inspect:
-      return "full skeleton inspection";
-    case SpatialSkeletonActions.addNodes:
-      return "node creation";
-    case SpatialSkeletonActions.insertNodes:
-      return "internal node insertion";
-    case SpatialSkeletonActions.moveNodes:
-      return "node movement";
-    case SpatialSkeletonActions.deleteNodes:
-      return "node deletion";
-    case SpatialSkeletonActions.reroot:
-      return "skeleton rerooting";
-    case SpatialSkeletonActions.editNodeDescription:
-      return "node description editing";
-    case SpatialSkeletonActions.editNodeTrueEnd:
-      return "node true-end editing";
-    case SpatialSkeletonActions.editNodeRadius:
-      return "node radius editing";
-    case SpatialSkeletonActions.editNodeConfidence:
-      return "node confidence editing";
-    case SpatialSkeletonActions.mergeSkeletons:
-      return "skeleton merging";
-    case SpatialSkeletonActions.splitSkeletons:
-      return "skeleton splitting";
-  }
-}
+// --- Edit tool spatial actions ---
+export const SKELETON_ADD_NODE = "skeleton-add-node";
+// Merge (m): enters merge mode; click the anchor node, then the target node.
+export const SKELETON_ENTER_MERGE_MODE = "skeleton-enter-merge-mode";
+// Split (s): enters split mode; click the node to split.
+export const SKELETON_ENTER_SPLIT_MODE = "skeleton-enter-split-mode";
+export const SKELETON_ENTER_CREATE = "skeleton-enter-create";
+export const SKELETON_PIN_NODE = "skeleton-pin-node";
+export const SKELETON_DELETE_NODE = "skeleton-delete-node";
+export const SKELETON_CLEAR_SELECTION = "skeleton-clear-node-selection";

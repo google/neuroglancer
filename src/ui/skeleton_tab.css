@@ -115,6 +115,10 @@
   flex: 0 0 auto;
 }
 
+.neuroglancer-skeleton-filter-row .neuroglancer-tool-button {
+  margin-left: auto;
+}
+
 .neuroglancer-skeleton-navigation-bar {
   display: flex;
   align-items: center;

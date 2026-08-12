@@ -17,7 +17,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { RenderLayerTransform } from "#src/render_coordinate_transform.js";
-import { SpatialSkeletonActions } from "#src/skeleton/actions.js";
+import { SpatialSkeletonActions } from "#src/skeleton/command_protocol.js";
 import { WatchableValue } from "#src/trackable_value.js";
 
 if (!("WebGL2RenderingContext" in globalThis)) {

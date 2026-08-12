@@ -14,21 +14,11 @@
  * limitations under the License.
  */
 
+import type { SpatialSkeletonCommand } from "#src/skeleton/command_protocol.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { RefCounted } from "#src/util/disposable.js";
 
 export const SPATIAL_SKELETON_COMMAND_HISTORY_MAX_ENTRIES = 100;
-
-export interface SpatialSkeletonCommandContext {
-  readonly mappings: SpatialSkeletonCommandMappings;
-}
-
-export interface SpatialSkeletonCommand {
-  readonly label: string;
-  execute(context: SpatialSkeletonCommandContext): Promise<void>;
-  undo(context: SpatialSkeletonCommandContext): Promise<void>;
-  redo?(context: SpatialSkeletonCommandContext): Promise<void>;
-}
 
 interface SpatialSkeletonCommandMappingSnapshot {
   nodeIdMappings: Array<[number, number]>;
