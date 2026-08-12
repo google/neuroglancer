@@ -17,7 +17,6 @@
 import { registerEventListener } from "#src/util/disposable.js";
 import type { HierarchicalMapInterface } from "#src/util/hierarchical_map.js";
 import { HierarchicalMap } from "#src/util/hierarchical_map.js";
-import { isMacPlatform } from "#src/util/platform.js";
 
 /**
  * @file Facilities for dispatching user-defined actions in response to input events.
@@ -464,18 +463,8 @@ export function dispatchEventWithModifiers(
   detail: any,
   eventMap: EventActionMapInterface,
 ) {
-  let modifiers = getEventModifierMask(originalEvent);
-  // On Mac, treat Cmd (meta) as Ctrl for shortcut matching so that
-  // "control+key" bindings fire when the user presses Cmd+key.
-  if (
-    isMacPlatform() &&
-    modifiers & Modifiers.META &&
-    !(modifiers & Modifiers.CONTROL)
-  ) {
-    modifiers = (modifiers & ~Modifiers.META) | Modifiers.CONTROL;
-  }
   dispatchEvent(
-    getStrokeIdentifier(baseIdentifier, modifiers),
+    getStrokeIdentifier(baseIdentifier, getEventModifierMask(originalEvent)),
     originalEvent,
     originalEvent.eventPhase,
     detail,

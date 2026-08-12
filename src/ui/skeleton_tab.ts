@@ -99,7 +99,6 @@ import {
   KeyboardEventBinder,
 } from "#src/util/keyboard_bindings.js";
 import * as matrix from "#src/util/matrix.js";
-import { isMacPlatform } from "#src/util/platform.js";
 import { formatScaleWithUnitAsString } from "#src/util/si_units.js";
 import { Signal } from "#src/util/signal.js";
 import { EnumSelectWidget } from "#src/widget/enum_widget.js";
@@ -190,18 +189,17 @@ export class SpatialSkeletonEditTab extends Tab {
     toolbarActions.className = "neuroglancer-skeleton-toolbar-actions";
 
     const formatKeyHint = (stroke: string): string => {
-      const mac = isMacPlatform();
       const parts = stroke.split("+").map((part) => {
-        if (part === "control") return mac ? "⌘" : "Ctrl";
-        if (part === "shift") return mac ? "⇧" : "Shift";
-        if (part === "alt") return mac ? "⌥" : "Alt";
+        if (part === "control") return "Ctrl";
+        if (part === "shift") return "Shift";
+        if (part === "alt") return "Alt";
         if (part.startsWith("key")) return part.slice(3).toUpperCase();
         if (part.startsWith("digit")) return part.slice(5);
         if (part === "bracketleft") return "[";
         if (part === "bracketright") return "]";
         return part.charAt(0).toUpperCase() + part.slice(1);
       });
-      return parts.join(mac ? "" : "+");
+      return parts.join("+");
     };
 
     const tabBindings = getDefaultSkeletonTabBindings();
@@ -548,7 +546,7 @@ export class SpatialSkeletonEditTab extends Tab {
     ) => {
       const id = BigInt(segmentId);
       const hasSegmentSelectionModifiers = (event: MouseEvent) =>
-        (isMacPlatform() ? event.metaKey : event.ctrlKey) && !event.altKey;
+        event.ctrlKey && !event.altKey;
       element.addEventListener("mousedown", (event: MouseEvent) => {
         if (event.button !== 2 || !hasSegmentSelectionModifiers(event)) {
           return;
@@ -567,14 +565,10 @@ export class SpatialSkeletonEditTab extends Tab {
       });
     };
 
-    const getSegmentSelectionTitle = (segmentId: number) => {
-      const modKey = isMacPlatform() ? "Cmd" : "Ctrl";
-      return (
-        `segment ${segmentId}\n` +
-        `${modKey}+right-click to pin selection\n` +
-        `${modKey}+shift+right-click to unpin`
-      );
-    };
+    const getSegmentSelectionTitle = (segmentId: number) =>
+      `segment ${segmentId}\n` +
+      `Ctrl+right-click to pin selection\n` +
+      `Ctrl+shift+right-click to unpin`;
 
     const getNodeDescriptionText = (node: SpatiallyIndexedSkeletonNode) =>
       layer.getSpatialSkeletonNodeDisplayDescription(node);
