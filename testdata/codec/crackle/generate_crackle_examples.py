@@ -29,7 +29,7 @@
 import crackle
 import numpy as np
 
-ones = np.ones([32,32,32], dtype=np.uint8, order="F")
+ones = np.ones([32, 32, 32], dtype=np.uint8, order="F")
 
 crackle.save(ones, "ones1.ckl")
 crackle.save(ones.astype(np.uint16), "ones2.ckl")
@@ -37,7 +37,7 @@ crackle.save(ones.astype(np.uint32), "ones4.ckl")
 crackle.save(ones.astype(np.uint64), "ones8.ckl")
 crackle.save(ones, "ones_pins.ckl", allow_pins=True)
 
-zeros = np.zeros([32,32,32], dtype=np.uint8, order="F")
+zeros = np.zeros([32, 32, 32], dtype=np.uint8, order="F")
 
 crackle.save(zeros, "zeros1.ckl")
 crackle.save(zeros.astype(np.uint16), "zeros2.ckl")
@@ -52,6 +52,3 @@ crackle.save(pinky40, "pinky40_pins.ckl", allow_pins=True)
 
 random_data = np.load("random.npy")
 crackle.save(random_data, "random.ckl")
-
-
-
