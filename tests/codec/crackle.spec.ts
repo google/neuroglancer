@@ -39,26 +39,29 @@ beforeAll(() => {
 
         const data = await fs.readFile(filePath);
 
-        return {
-          ok: true,
-          status: 200,
-          arrayBuffer: async () =>
-            data.buffer.slice(
-              data.byteOffset,
-              data.byteOffset + data.byteLength,
-            ),
-        } as any;
+        return new Response(
+          data.buffer.slice(
+            data.byteOffset,
+            data.byteOffset + data.byteLength,
+          ),
+          { 
+            status: 200,
+            headers: { "Content-Type": "application/wasm" },
+          }
+        );
       }
 
       if (url.includes(".npy")) {
         const filename = path.basename(url);
         const buf = readFileSync(`testdata/codec/crackle/${filename}`);
 
-        return {
-          ok: true,
-          arrayBuffer: async () =>
-            buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
-        } as any;
+        return new Response(
+          buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
+          { 
+            status: 200,
+            headers: { "Content-Type": "application/wasm" },
+          }
+        );
       }
 
       throw new Error(`Unexpected fetch: ${url}`);
