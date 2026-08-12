@@ -18,8 +18,10 @@ import { AxesLineHelper, computeAxisLineMatrix } from "#src/axes_lines.js";
 import type { DisplayContext } from "#src/display_context.js";
 import {
   computeHoverMarkerMatrix,
-  HoverPositionMarker,
+  crossSectionHoverMarkerAlpha,
+  shouldDrawCrossSectionHoverMarker,
 } from "#src/hover_position_marker.js";
+import { HoverPositionMarker } from "#src/hover_position_marker_renderer.js";
 import type { VisibleRenderLayerTracker } from "#src/layer/index.js";
 import { makeRenderedPanelVisibleLayerTracker } from "#src/layer/index.js";
 import { PickIDManager } from "#src/object_picking.js";
@@ -425,10 +427,11 @@ export class SliceViewPanel extends RenderedDataPanel {
     // Draw the hover position coming from another panel, but not in the panel
     // the mouse is currently over (`mouseX >= 0`), where the real cursor is
     // already visible.
-    const showHoverMarker =
-      this.viewer.showCrossSectionHoverPosition.value &&
-      mouseState.active &&
-      this.mouseX < 0;
+    const showHoverMarker = shouldDrawCrossSectionHoverMarker({
+      enabled: this.viewer.showCrossSectionHoverPosition.value,
+      mouseActive: mouseState.active,
+      mouseInThisPanel: this.mouseX >= 0,
+    });
     if (
       this.viewer.showAxisLines.value ||
       this.viewer.showScaleBar.value ||
@@ -459,12 +462,8 @@ export class SliceViewPanel extends RenderedDataPanel {
           HOVER_MARKER_SIZE * zoom,
           mouseState.position,
         );
-        // The last column of `markerMat` is the marker center projected into
-        // clip space; its normalized z gives the signed distance from this
-        // panel's slice plane (|z| == 1 at the edge of the visible depth slab).
-        const clipW = markerMat[15];
-        const ndcZ = clipW !== 0 ? markerMat[14] / clipW : 0;
-        const alpha = Math.max(0, 1 - Math.abs(ndcZ));
+        // Fade the marker with distance from this panel's slice plane.
+        const alpha = crossSectionHoverMarkerAlpha(markerMat);
         if (alpha > 0) {
           vec4.set(tempHoverColor, 1, 0.85, 0, alpha);
           this.hoverMarker.draw(disableZProjection(markerMat), tempHoverColor);
