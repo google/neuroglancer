@@ -76,7 +76,7 @@ export class ToolActivation<ToolType extends Tool = Tool> extends RefCounted {
   cancel() {
     const { globalBinder } = this.tool;
     if (this === globalBinder.activeTool_) {
-      globalBinder.deactivate_();
+      globalBinder.deactivateAndReactivateQueued_();
     }
   }
 }
@@ -242,6 +242,17 @@ export function registerTool<Context extends object>(
   tools.set(type, { getter, lister });
 }
 
+export function unregisterTool<Context extends object>(
+  contextType: AnyConstructor<Context>,
+  type: string,
+) {
+  const { prototype } = contextType;
+  const tools = toolsForPrototype.get(prototype);
+  if (tools) {
+    tools.delete(type);
+  }
+}
+
 export class SelectedLegacyTool
   extends RefCounted
   implements TrackableValueInterface<LegacyTool | undefined>
@@ -319,6 +330,10 @@ export class GlobalToolBinder extends RefCounted {
 
   get(key: string): Borrowed<Tool> | undefined {
     return this.bindings.get(key);
+  }
+
+  isActive(tool: Tool | undefined) {
+    return tool !== undefined && this.activeTool_?.tool === tool;
   }
 
   private deleteBinding(tool: Tool) {
@@ -486,6 +501,16 @@ export class GlobalToolBinder extends RefCounted {
     if (activation === undefined) return;
     this.activeTool_ = undefined;
     activation.dispose();
+  }
+
+  // Deactivate the current tool and, if a toggle tool was displaced by it,
+  // restore that toggle tool. Used when a momentary tool ends via
+  // `ToolActivation.cancel()`: without this, a tool that cancels synchronously
+  // (e.g. select-next-annotation) would orphan the queued toggle tool, dropping
+  // its active key bindings.
+  deactivateAndReactivateQueued_() {
+    this.deactivate_();
+    this.reactivateQueuedTool();
   }
 
   public deactivate() {
@@ -787,15 +812,14 @@ export function makeToolButton(
 ) {
   const element = document.createElement("div");
   element.classList.add("neuroglancer-tool-button");
-  element.appendChild(
-    context.registerDisposer(
-      new ToolBindingWidget(
-        localBinder,
-        options.toolJson,
-        options.dragElement ?? element,
-      ),
-    ).element,
+  const bindingWidget = context.registerDisposer(
+    new ToolBindingWidget(
+      localBinder,
+      options.toolJson,
+      options.dragElement ?? element,
+    ),
   );
+  element.appendChild(bindingWidget.element);
   const labelElement = document.createElement("div");
   labelElement.classList.add("neuroglancer-tool-button-label");
   const labelText = options.label;
@@ -803,36 +827,51 @@ export function makeToolButton(
     labelElement.textContent = labelText;
   }
   if (options.title) {
-    labelElement.title = options.title;
+    // Combine the caller's description with the key-binding widget's own hint.
+    // The label element never surfaces its title when there is no visible
+    // label, so also apply the combined title to the key-binding widget, which
+    // is the only hover target in that case.
+    const combinedTitle = `${options.title}\n(${bindingWidget.element.title})`;
+    labelElement.title = combinedTitle;
+    bindingWidget.element.title = combinedTitle;
   }
   element.appendChild(labelElement);
   return element;
 }
 
-export function makeToolActivationStatusMessage(activation: ToolActivation) {
+export function makeToolActivationStatusMessage(
+  activation: ToolActivation,
+  options: { showBindings?: boolean } = {},
+) {
   const message = activation.registerDisposer(new StatusMessage(false));
   message.element.classList.add("neuroglancer-tool-status");
   const content = document.createElement("div");
   content.classList.add("neuroglancer-tool-status-content");
   message.element.appendChild(content);
-  const { inputEventMapBinder } = activation;
-  activation.inputEventMapBinder = (
-    inputEventMap: EventActionMap,
-    context: RefCounted,
-  ) => {
-    const bindingHelp = document.createElement("div");
-    bindingHelp.textContent = inputEventMap.describe();
-    bindingHelp.classList.add("neuroglancer-tool-status-bindings");
-    message.element.appendChild(bindingHelp);
-    inputEventMapBinder(inputEventMap, context);
-  };
+  if (options.showBindings !== false) {
+    const { inputEventMapBinder } = activation;
+    activation.inputEventMapBinder = (
+      inputEventMap: EventActionMap,
+      context: RefCounted,
+    ) => {
+      const bindingHelp = document.createElement("div");
+      bindingHelp.textContent = inputEventMap.describe();
+      bindingHelp.classList.add("neuroglancer-tool-status-bindings");
+      message.element.appendChild(bindingHelp);
+      inputEventMapBinder(inputEventMap, context);
+    };
+  }
   return { message, content };
 }
 
 export function makeToolActivationStatusMessageWithHeader(
   activation: ToolActivation,
+  options: { showBindings?: boolean } = {},
 ) {
-  const { message, content } = makeToolActivationStatusMessage(activation);
+  const { message, content } = makeToolActivationStatusMessage(
+    activation,
+    options,
+  );
   const header = document.createElement("div");
   header.classList.add("neuroglancer-tool-status-header");
   const headerContainer = document.createElement("div");
