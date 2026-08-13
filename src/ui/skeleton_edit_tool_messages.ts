@@ -109,28 +109,6 @@ export function getSpatialSkeletonToolPointStatusFields(
 }
 
 // --- Name / status / actions message system ---
-//
-// The tool's status bar is split into three parts: a name (rendered by the
-// caller via a fixed header, see SPATIAL_SKELETON_EDIT_TOOL_NAME), a short
-// `status` describing what's currently true, and a short `actions` list
-// describing what's currently doable. Keeping these separate (rather than
-// one long banner string) avoids mixing state with instructions, and lets
-// the no-selection default state stop advertising actions that don't apply
-// yet (e.g. shift+click, which requires an existing selection).
-//
-// User-facing copy says "from node" rather than "merge anchor" — the
-<<<<<<< HEAD
-export interface SpatialSkeletonToolStatusText {
-  status: string;
-  actions: string;
-}
-
-export const SPATIAL_SKELETON_EDIT_TOOL_NAME = "Skeleton editing";
-export const SPATIAL_SKELETON_ROTATE_PAN_HINT =
-  "middle-click or ctrl+click to rotate/pan";
-
-=======
->>>>>>> 209548a32 (Merge pull request #285 from MetaCell/feature/NGLASS-2012)
 export type SpatialSkeletonDefaultSelectionState =
   | "none"
   | "selected-visible"
