@@ -53,6 +53,16 @@ export default defineConfig((env, args) => {
           resourceQuery: /raw/,
           type: "asset/source",
         },
+        // Inline these specific cursor SVGs as base64 data URIs so the
+        // browser has nothing to fetch the first time a CSS cursor: url(...)
+        // rule referencing them is applied (see skeleton_edit_tools.css) —
+        // without this, rspack's default url-dependency handling always
+        // emits a separate fetched file regardless of size, which caused the
+        // custom cursor to only appear starting from the second activation.
+        {
+          test: /src[\\/]ui[\\/]images[\\/](.*_cursor)\.svg$/,
+          type: "asset/inline",
+        },
         // Needed for .html assets used for auth redirect pages for the
         // brainmaps and bossDB data sources.
         {

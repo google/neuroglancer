@@ -724,6 +724,8 @@ describe("spatial_skeleton_edit_tool", () => {
       },
       spatialSkeletonEditMode: makeModeWatchable(),
       spatialSkeletonMergeMode: makeModeWatchable(),
+      spatialSkeletonSplitMode: makeModeWatchable(),
+      spatialSkeletonSuppressSelectedNodeHighlight: makeModeWatchable(),
       selectedSpatialSkeletonNodeInfo: {
         value: undefined,
         changed: makeChangedSignal(),
@@ -817,6 +819,8 @@ describe("spatial_skeleton_edit_tool", () => {
       },
       spatialSkeletonEditMode: makeModeWatchable(),
       spatialSkeletonMergeMode: makeModeWatchable(),
+      spatialSkeletonSplitMode: makeModeWatchable(),
+      spatialSkeletonSuppressSelectedNodeHighlight: makeModeWatchable(),
       selectedSpatialSkeletonNodeInfo: {
         value: undefined,
         changed: makeChangedSignal(),
@@ -889,6 +893,8 @@ describe("spatial_skeleton_edit_tool", () => {
       },
       spatialSkeletonEditMode: makeModeWatchable(),
       spatialSkeletonMergeMode: makeModeWatchable(),
+      spatialSkeletonSplitMode: makeModeWatchable(),
+      spatialSkeletonSuppressSelectedNodeHighlight: makeModeWatchable(),
       selectedSpatialSkeletonNodeInfo: {
         value: undefined, // No node selected.
         changed: makeChangedSignal(),

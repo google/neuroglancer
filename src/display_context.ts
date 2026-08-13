@@ -17,6 +17,10 @@
 import { debounce } from "lodash-es";
 
 import type { FrameNumberCounter } from "#src/chunk_manager/frontend.js";
+import type {
+  PanelOverlaySource,
+  PanelOverlayTarget,
+} from "#src/panel_overlay.js";
 import { TrackableValue } from "#src/trackable_value.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import type { Borrowed } from "#src/util/disposable.js";
@@ -301,6 +305,16 @@ export abstract class RenderedPanel extends RefCounted {
   }
 
   abstract draw(): void;
+
+  // Repositions this panel's DOM overlays.  Default no-op; overridden by panels
+  // that support overlays.
+  updateOverlays(): void {}
+
+  scheduleOverlayUpdate(): void {
+    if (this.visible) {
+      this.context.scheduleOverlayUpdate();
+    }
+  }
 
   disposed() {
     this.context.unmonitorPanel(this.element, this.monitorState);
@@ -640,6 +654,45 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     animationFrameDebounce(() => this.draw()),
   );
 
+  // Overlay sources shown on data panels, each with its optional panel-type
+  // target.  Panels observe `panelOverlaysChanged` to add/remove their bindings.
+  readonly panelOverlays = new Map<PanelOverlaySource, PanelOverlayTarget>();
+  readonly panelOverlaysChanged = new NullarySignal();
+
+  /**
+   * Registers an overlay source shown on the data panels matching `target` (every
+   * data panel by default).  Returns a disposer that removes it.
+   */
+  registerPanelOverlay(
+    source: PanelOverlaySource,
+    target: PanelOverlayTarget = {},
+  ): () => void {
+    this.panelOverlays.set(source, target);
+    this.panelOverlaysChanged.dispatch();
+    return () => {
+      if (this.panelOverlays.delete(source)) {
+        this.panelOverlaysChanged.dispatch();
+      }
+    };
+  }
+
+  // Repositions DOM overlays across all panels, coalesced per animation frame
+  // and independent of `scheduleRedraw`.
+  readonly scheduleOverlayUpdate = this.registerCancellable(
+    animationFrameDebounce(() => this.updateOverlays()),
+  );
+
+  private updateOverlays() {
+    this.ensureBoundsUpdated();
+    for (const panel of this.panels) {
+      if (!panel.shouldDraw) continue;
+      panel.ensureBoundsUpdated();
+      const { renderViewport } = panel;
+      if (renderViewport.width === 0 || renderViewport.height === 0) continue;
+      panel.updateOverlays();
+    }
+  }
+
   ensureBoundsUpdated() {
     const { resizeGeneration } = this;
     if (this.boundsGeneration === resizeGeneration) return;
@@ -684,6 +737,9 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     this.updateFinished.dispatch();
     this.framerateMonitor.endLastTimeQuery(gl, ext);
     this.framerateMonitor.grabAnyFinishedQueryResults(gl);
+    // Each panel's draw() already updated its overlays, so drop any pending
+    // overlay-only update.
+    this.scheduleOverlayUpdate.cancel();
   }
 
   getDepthArray(): Float32Array<ArrayBuffer> {

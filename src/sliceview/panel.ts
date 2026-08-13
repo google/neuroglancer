@@ -532,6 +532,40 @@ export class SliceViewPanel extends RenderedDataPanel {
     setStateFromRelative(pickRadius, pickRadius, 0);
   }
 
+  readonly overlayPanelTypes = ["cross-section"];
+
+  protected projectGlobalPosition(position: Float32Array) {
+    const {
+      viewProjectionMat,
+      logicalWidth,
+      logicalHeight,
+      displayDimensionRenderInfo: { displayDimensionIndices },
+    } = this.sliceView.projectionParameters.value;
+    const displayPos = tempVec3;
+    displayPos[0] =
+      displayDimensionIndices[0] >= 0
+        ? position[displayDimensionIndices[0]]
+        : 0;
+    displayPos[1] =
+      displayDimensionIndices[1] >= 0
+        ? position[displayDimensionIndices[1]]
+        : 0;
+    displayPos[2] =
+      displayDimensionIndices[2] >= 0
+        ? position[displayDimensionIndices[2]]
+        : 0;
+    vec3.transformMat4(displayPos, displayPos, viewProjectionMat);
+    const ndcZ = displayPos[2];
+    if (ndcZ < -1 || ndcZ > 1) return undefined;
+    return {
+      x: (displayPos[0] * 0.5 + 0.5) * logicalWidth,
+      y: (1 - (displayPos[1] * 0.5 + 0.5)) * logicalHeight,
+      // Cross-section fade: match the node's on-screen alpha (1 on the slice
+      // plane, → 0 at the slab edge). See getCircleAlphaMultiplier in circles.ts.
+      opacity: 1 - Math.abs(ndcZ),
+    };
+  }
+
   /**
    * Zooms by the specified factor, maintaining the data position that projects to the current mouse
    * position.

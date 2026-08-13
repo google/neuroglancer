@@ -933,6 +933,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     const requestBody = getFetchBody(fetchMock);
     expect(getFetchPath(fetchMock)).toBe("skeleton/split");
     expect(requestBody.get("treenode_id")).toBe("202");
+    expect(requestBody.get("downstream_annotation_map")).toBe("{}");
     expect(requestBody.get("state")).toBe(
       JSON.stringify({
         edition_time: "2026-03-29T12:05:00Z",

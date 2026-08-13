@@ -245,6 +245,11 @@ export class SpatialSkeletonState extends RefCounted {
   readonly mergeAnchorNodeId = new WatchableValue<number | undefined>(
     undefined,
   );
+  // When true, the selected-node highlight is hidden even if a node is
+  // selected. Driven by the edit tool so that entering merge/split mode does
+  // not display a stale highlight until the user makes their first click
+  // (merge) or is suppressed entirely until a click/exit (split).
+  readonly suppressSelectedNodeHighlight = new WatchableValue(false);
   readonly nodeDataVersion = new WatchableValue(0);
   readonly pendingNodePositionVersion = new WatchableValue(0);
 

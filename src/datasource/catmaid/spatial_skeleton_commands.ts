@@ -446,6 +446,15 @@ function requireCatmaidMergeCommandPayload(payload: object) {
   );
 }
 
+function validateCatmaidNodeDescription(description: string | undefined) {
+  if (description === undefined) return;
+  for (const line of description.split(/\r?\n/)) {
+    if (line.trim().includes(",")) {
+      throw new Error("Node descriptions containing commas are not supported.");
+    }
+  }
+}
+
 function cloneNodeSnapshot(
   node: SpatiallyIndexedSkeletonNode,
 ): SpatiallyIndexedSkeletonNode {
@@ -1515,6 +1524,7 @@ class NodeDescriptionCommand implements SpatialSkeletonCommand {
     nextDescription: string | undefined,
     statusPrefix: string,
   ) {
+    validateCatmaidNodeDescription(nextDescription);
     const { node } = await getResolvedNodeForEdit(
       this.layer,
       this.stableNodeId,
@@ -1852,7 +1862,8 @@ class SplitCommand implements SpatialSkeletonCommand {
       this.stableSegmentId,
     );
     if (resolvedNode.node.parentNodeId === undefined) {
-      throw new Error("Cannot split at the root node.");
+      StatusMessage.showTemporaryMessage("Cannot split at the root node.");
+      return;
     }
     let result: CatmaidSpatialSkeletonSplitResult;
     try {
