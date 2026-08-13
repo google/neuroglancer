@@ -59,34 +59,39 @@
 }
 
 /* Per-mode cursor indicators — driven by data-skeleton-edit-mode on the panel element */
+.neuroglancer-rendered-data-panel[data-skeleton-edit-mode="default"] {
+  cursor:
+    url("./images/crosshair_cursor.svg") 20 20,
+    crosshair;
+}
 
 .neuroglancer-rendered-data-panel[data-skeleton-edit-mode="add"] {
   cursor:
-    url("./images/metacell/add_node_cursor.svg") 20 20,
+    url("./images/add_node_cursor.svg") 20 20,
     crosshair;
 }
 
 .neuroglancer-rendered-data-panel[data-skeleton-edit-mode="merge"] {
   cursor:
-    url("./images/metacell/merge_cursor.svg") 20 20,
+    url("./images/merge_cursor.svg") 20 20,
     crosshair;
 }
 
 .neuroglancer-rendered-data-panel[data-skeleton-edit-mode="create"] {
   cursor:
-    url("./images/metacell/new_skeleton_cursor.svg") 20 20,
+    url("./images/new_skeleton_cursor.svg") 20 20,
     crosshair;
 }
 
 .neuroglancer-rendered-data-panel[data-skeleton-edit-mode="split"] {
   cursor:
-    url("./images/metacell/split_cursor.svg") 20 20,
+    url("./images/split_cursor.svg") 20 20,
     crosshair;
 }
 
 .neuroglancer-rendered-data-panel[data-skeleton-edit-mode="delete"] {
   cursor:
-    url("./images/metacell/delete_cursor.svg") 20 20,
+    url("./images/delete_cursor.svg") 20 20,
     crosshair;
 }
 
@@ -101,6 +106,6 @@
 
 .neuroglancer-rendered-data-panel[data-skeleton-press-mode="move"] {
   cursor:
-    url("./images/metacell/drag_cursor.svg") 20 20,
+    url("./images/drag_cursor.svg") 20 20,
     grabbing;
 }

@@ -15,9 +15,7 @@
  */
 
 .neuroglancer-rendered-data-panel {
-  cursor:
-    url("./ui/images/metacell/crosshair_cursor.svg") 20 20,
-    crosshair;
+  cursor: crosshair;
   position: relative;
   outline: 0;
   touch-action: none;

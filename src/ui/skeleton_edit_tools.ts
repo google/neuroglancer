@@ -575,7 +575,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     } else if (this.shiftHeld && !this.ctrlHeld) {
       this.setModeAttribute("add");
     } else {
-      this.setModeAttribute(undefined);
+      this.setModeAttribute("default");
     }
   }
 
