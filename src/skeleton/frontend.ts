@@ -205,7 +205,6 @@ const DEFAULT_FRAGMENT_MAIN = `void main() {
   emitDefault();
 }
 `;
-const SELECTED_NODE_OUTLINE_FALLBACK_COLOR = vec3.fromValues(1.0, 0.95, 0.35);
 
 // Converts a linear 0..1 RGB triple to a CSS `rgb(...)` string for DOM markers.
 function vec3ToCssColor(color: vec3): string {
