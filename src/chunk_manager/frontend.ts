@@ -326,7 +326,11 @@ export class ChunkQueueManager extends SharedObject {
 }
 
 function updateChunk(rpc: RPC, x: any) {
-  const source: ChunkSource = rpc.get(x.source);
+  const source = rpc.get(x.source) as ChunkSource | undefined;
+  if (source === undefined) {
+    // Source was removed while chunk update was in flight.
+    return;
+  }
   if (DEBUG_CHUNK_UPDATES) {
     console.log(
       `${Date.now()} Chunk.update received: ` +

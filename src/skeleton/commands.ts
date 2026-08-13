@@ -352,8 +352,11 @@ export function executeSpatialSkeletonMerge(
 export async function undoSpatialSkeletonCommand(
   layer: SpatialSkeletonLayerContext,
 ) {
-  const changed = await layer.spatialSkeletonState.commandHistory.undo();
-  if (!changed) {
+  const { commandHistory } = layer.spatialSkeletonState;
+  if (commandHistory.isBusy.value) {
+    StatusMessage.showTemporaryMessage(
+      "Wait for the current skeleton edit to finish.",
+    );
     return false;
   }
   const optimisticEditState = isSpatialSkeletonOptimisticEditState(
@@ -364,7 +367,6 @@ export async function undoSpatialSkeletonCommand(
   if (optimisticEditState?.canUndoOptimisticEdit() === true) {
     return optimisticEditState.undoLatestOptimisticEdit();
   }
-  const commandHistory = layer.spatialSkeletonState.commandHistory;
   if (!commandHistory.canUndo.value) {
     return false;
   }
@@ -380,8 +382,11 @@ export async function undoSpatialSkeletonCommand(
 export async function redoSpatialSkeletonCommand(
   layer: SpatialSkeletonLayerContext,
 ) {
-  const changed = await layer.spatialSkeletonState.commandHistory.redo();
-  if (!changed) {
+  const { commandHistory } = layer.spatialSkeletonState;
+  if (commandHistory.isBusy.value) {
+    StatusMessage.showTemporaryMessage(
+      "Wait for the current skeleton edit to finish.",
+    );
     return false;
   }
   const optimisticEditState = isSpatialSkeletonOptimisticEditState(

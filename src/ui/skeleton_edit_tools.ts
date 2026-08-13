@@ -62,16 +62,23 @@ import { StatusMessage } from "#src/status.js";
 import {
   getDefaultSkeletonEditAuxBindings,
   getDefaultSkeletonEditNodeBindings,
-
+  getDefaultSkeletonEditToolBindings,
+} from "#src/ui/default_input_event_bindings.js";
+import {
+  getSpatialSkeletonCreateIdleStatusText,
+  getSpatialSkeletonCreatingStatusText,
+  getSpatialSkeletonDefaultStatusText,
   getSpatialSkeletonDeleteIdleStatusText,
   getSpatialSkeletonDeletingStatusText,
   getSpatialSkeletonMergeStatusText,
   getSpatialSkeletonMovingStatusText,
+  getSpatialSkeletonSplitIdleStatusText,
+} from "#src/ui/skeleton_edit_tool_messages.js";
+import type { SpatialSkeletonToolStatusText } from "#src/ui/skeleton_edit_tool_shortcuts.js";
 import {
   SPATIAL_SKELETON_EDIT_TOOL_NAME,
   renderSpatialSkeletonShortcut,
 } from "#src/ui/skeleton_edit_tool_shortcuts.js";
-import type { SpatialSkeletonToolStatusText } from "#src/ui/skeleton_edit_tool_shortcuts.js";
 import type { ToolActivation } from "#src/ui/tool.js";
 import {
   LayerTool,
@@ -145,11 +152,17 @@ function renderSpatialSkeletonToolStatus(
   body: HTMLElement,
   text: SpatialSkeletonToolStatusText,
 ) {
-
+  removeChildren(body);
+  body.classList.add("neuroglancer-skeleton-tool-status");
+  const statusElement = document.createElement("span");
+  statusElement.className = "neuroglancer-skeleton-tool-status-text";
+  statusElement.textContent = text.status;
   body.appendChild(statusElement);
   if (text.actions.length === 0) {
     return;
   }
+  const actionsElement = document.createElement("span");
+  actionsElement.className = "neuroglancer-skeleton-tool-status-actions";
   for (const shortcut of text.actions) {
     actionsElement.appendChild(renderSpatialSkeletonShortcut(shortcut));
   }
@@ -1396,12 +1409,16 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     );
     if (disabledReason !== undefined) {
       StatusMessage.showTemporaryMessage(disabledReason);
+      renderSpatialSkeletonToolStatus(body, {
+        status: disabledReason,
         actions: [],
       });
       queueMicrotask(() => activation.cancel());
       return;
     }
     if (this.getActiveSpatiallyIndexedSkeletonLayer() === undefined) {
+      const msg = "No spatially indexed skeleton source is currently loaded.";
+      StatusMessage.showTemporaryMessage(msg);
       renderSpatialSkeletonToolStatus(body, { status: msg, actions: [] });
       queueMicrotask(() => activation.cancel());
       return;

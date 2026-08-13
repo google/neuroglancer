@@ -482,6 +482,9 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
         id: "skeletons-chunked",
         default: true,
         subsource: { mesh: multiscaleSource },
+        layerRuntimeStateDisposal: {
+          kind: "spatiallyIndexedSkeleton",
+        },
       },
       {
         id: "skeletons",
