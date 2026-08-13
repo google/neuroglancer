@@ -44,3 +44,6 @@ export const SKELETON_ENTER_CREATE = "skeleton-enter-create";
 export const SKELETON_PIN_NODE = "skeleton-pin-node";
 export const SKELETON_ENTER_DELETE_MODE = "skeleton-enter-delete-mode";
 export const SKELETON_CLEAR_SELECTION = "skeleton-clear-node-selection";
+
+// --- Display toggles ---
+export const SKELETON_TOGGLE_HIDDEN = "skeleton-toggle-hidden";

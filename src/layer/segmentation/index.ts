@@ -42,7 +42,10 @@ import {
   registerVolumeLayerType,
   UserLayer,
 } from "#src/layer/index.js";
-import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
+import type {
+  LayerDataSourceChangeRuntimeDisposalContext,
+  LoadedDataSubsource,
+} from "#src/layer/layer_data_source.js";
 import { layerDataSourceSpecificationFromJson } from "#src/layer/layer_data_source.js";
 import * as json_keys from "#src/layer/segmentation/json_keys.js";
 import { registerLayerControls } from "#src/layer/segmentation/layer_controls.js";
@@ -104,6 +107,7 @@ import {
   SKELETON_GO_ROOT,
   SKELETON_GO_UNFINISHED,
   SKELETON_REDO,
+  SKELETON_TOGGLE_HIDDEN,
   SKELETON_UNDO,
 } from "#src/skeleton/actions.js";
 import type {
@@ -812,6 +816,9 @@ function copyOptionalSpatialSkeletonPosition(
   return new Float32Array(Array.from(value, Number));
 }
 
+const SPATIALLY_INDEXED_SKELETON_RUNTIME_DISPOSAL_KIND =
+  "spatiallyIndexedSkeleton";
+
 const Base = UserLayerWithAnnotationsMixin(UserLayer);
 export class SegmentationUserLayer extends Base {
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
@@ -1094,6 +1101,8 @@ export class SegmentationUserLayer extends Base {
   anchorSegment = new TrackableValue<bigint | undefined>(undefined, (x) =>
     x === undefined ? undefined : parseUint64(x),
   );
+
+  private savedHiddenObjectAlpha: number | undefined;
 
   constructor(managedLayer: Borrowed<ManagedUserLayer>) {
     super(managedLayer);
@@ -1597,6 +1606,31 @@ export class SegmentationUserLayer extends Base {
     this.spatialSkeletonState.markNodeDataChanged(options);
   }
 
+  disposeLayerRuntimeStateForDataSourceChange(
+    context: LayerDataSourceChangeRuntimeDisposalContext,
+  ) {
+    if (
+      context.request.kind !== SPATIALLY_INDEXED_SKELETON_RUNTIME_DISPOSAL_KIND
+    ) {
+      return super.disposeLayerRuntimeStateForDataSourceChange(context);
+    }
+    let changed = false;
+    const spatialSkeletonLayers = new Set<SpatiallyIndexedSkeletonLayer>();
+    for (const renderLayer of context.loadedSubsource.renderLayers) {
+      if (
+        renderLayer instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer ||
+        renderLayer instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer
+      ) {
+        spatialSkeletonLayers.add(renderLayer.base);
+      }
+    }
+    for (const spatialSkeletonLayer of spatialSkeletonLayers) {
+      changed = spatialSkeletonLayer.disposeRuntimeState() || changed;
+    }
+    changed = this.spatialSkeletonState.clearRuntimeState() || changed;
+    return changed;
+  }
+
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>) {
     const updatedSegmentPropertyMaps: SegmentPropertyMap[] = [];
     const isGroupRoot =
@@ -2097,6 +2131,17 @@ export class SegmentationUserLayer extends Base {
               segmentSet.set(segment, newValue);
             }
           });
+        }
+        break;
+      }
+      case SKELETON_TOGGLE_HIDDEN: {
+        const { hiddenObjectAlpha } = this.displayState;
+        if (this.savedHiddenObjectAlpha !== undefined) {
+          hiddenObjectAlpha.value = this.savedHiddenObjectAlpha;
+          this.savedHiddenObjectAlpha = undefined;
+        } else {
+          this.savedHiddenObjectAlpha = hiddenObjectAlpha.value;
+          hiddenObjectAlpha.value = 0;
         }
         break;
       }
@@ -2676,13 +2721,11 @@ export class SegmentationUserLayer extends Base {
             ? svg_circle
             : nodeType === undefined
               ? svg_circle
-              : nodeType === undefined
-                ? svg_circle
-                : SPATIAL_SKELETON_NODE_TYPE_ICONS[nodeType],
-        title: nodeTypeIconTitle,
-        clickable: false,
-      }),
-    );
+              : SPATIAL_SKELETON_NODE_TYPE_ICONS[nodeType],
+      title: nodeTypeIconTitle,
+      clickable: false,
+    });
+    icon.appendChild(nodeTypeIcon);
     summaryRow.appendChild(icon);
 
     const skeletonDisplayTransform =

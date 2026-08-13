@@ -216,6 +216,7 @@ const DEFAULT_FRAGMENT_MAIN = `void main() {
   emitDefault();
 }
 `;
+const SELECTED_NODE_OUTLINE_FALLBACK_COLOR = vec3.fromValues(1.0, 0.95, 0.35);
 
 // Converts a linear 0..1 RGB triple to a CSS `rgb(...)` string for DOM markers.
 function vec3ToCssColor(color: vec3): string {
@@ -770,6 +771,7 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
       : this.defineEdgeRaycastCylinder(builder, skeletonParams);
     const path = this.dynamicColorPath(skeletonParams) ? "dynamic" : "legacy";
     builder.addFragmentCode(edgeColorPathsGlsl(path, geometry.shading));
+    builder.addFragmentCode(glsl_string);
     this.finalizeShaderBuilder(
       builder,
       shaderBuilderState,
@@ -792,6 +794,7 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
     builder.addFragmentCode(
       nodeColorPathsGlsl(path, geometry.legacyPremultiply),
     );
+    builder.addFragmentCode(glsl_string);
     this.finalizeShaderBuilder(
       builder,
       shaderBuilderState,
@@ -1954,6 +1957,46 @@ export class SpatiallyIndexedSkeletonSource extends SliceViewChunkSource<
   }
 }
 
+export interface SpatiallyIndexedSkeletonSourceRuntimeDisposalOptions {
+  invalidateCache?: boolean;
+}
+
+export function disposeSpatiallyIndexedSkeletonSourceRuntimeState(
+  sources: Iterable<SpatiallyIndexedSkeletonSource>,
+  options: SpatiallyIndexedSkeletonSourceRuntimeDisposalOptions = {},
+) {
+  const uniqueSources = new Set(sources);
+  const invalidateCache = options.invalidateCache ?? true;
+  const chunkQueueManagersWithDeletedChunks = new Set<
+    ChunkManager["chunkQueueManager"]
+  >();
+  let changed = false;
+  for (const source of uniqueSources) {
+    if (source.chunks.size !== 0) {
+      for (const chunkKey of source.chunks.keys()) {
+        source.deleteChunk(chunkKey);
+      }
+      chunkQueueManagersWithDeletedChunks.add(
+        source.chunkManager.chunkQueueManager,
+      );
+      changed = true;
+    }
+    if (
+      invalidateCache &&
+      source.wasDisposed !== true &&
+      source.rpc !== null &&
+      source.rpcId !== null
+    ) {
+      source.invalidateCache();
+      changed = true;
+    }
+  }
+  for (const chunkQueueManager of chunkQueueManagersWithDeletedChunks) {
+    chunkQueueManager.visibleChunksChanged.dispatch();
+  }
+  return changed;
+}
+
 // Options are provided by the SliceView framework for scale selection,
 // but spatial skeleton sources expose all grid levels unconditionally.
 // TODO (SKM): validate if this is an ok deviation from the SliceView
@@ -2253,10 +2296,10 @@ export class SpatiallyIndexedSkeletonLayer
   private cachedOverlayRenderRetainedVersion = -1;
   private maxRetainedOverlaySegments: number;
   private readonly selectedNodeOutlineColor = vec3.clone(
-    ACTIVE_NODE_BORDER_FALLBACK_COLOR,
+    SELECTED_NODE_OUTLINE_FALLBACK_COLOR,
   );
   private readonly highlightedNodeOutlineColor = vec3.clone(
-    ACTIVE_NODE_BORDER_FALLBACK_COLOR,
+    SELECTED_NODE_OUTLINE_FALLBACK_COLOR,
   );
   // The selected and hovered outline colors are derived together from a single
   // source segment color, so they share one cache generation.
@@ -2412,7 +2455,7 @@ export class SpatiallyIndexedSkeletonLayer
     } else {
       vec3.copy(
         this.selectedNodeOutlineColor,
-        ACTIVE_NODE_BORDER_FALLBACK_COLOR,
+        SELECTED_NODE_OUTLINE_FALLBACK_COLOR,
       );
     }
 
@@ -2433,7 +2476,7 @@ export class SpatiallyIndexedSkeletonLayer
     } else {
       vec3.copy(
         this.highlightedNodeOutlineColor,
-        ACTIVE_NODE_BORDER_FALLBACK_COLOR,
+        SELECTED_NODE_OUTLINE_FALLBACK_COLOR,
       );
     }
   }
@@ -2656,7 +2699,7 @@ export class SpatiallyIndexedSkeletonLayer
   ) {
     super();
     this.registerDisposer(() => {
-      this.disposeOverlayChunk();
+      this.disposeRuntimeState();
     });
     let sources3d: SpatiallyIndexedSkeletonSourceEntry[];
     let sources2d = options.sources2d ?? [];

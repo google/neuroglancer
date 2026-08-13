@@ -146,9 +146,9 @@ export class StatusMessage {
       if (this.modalElementWrapper !== undefined) {
         modalStatusContainer!.removeChild(this.modalElementWrapper);
         this.modalElementWrapper = undefined;
-        getStatusContainer().appendChild(this.element);
+        getStatusContainer().prepend(this.element);
       } else if (this.element.parentElement === null) {
-        getStatusContainer().appendChild(this.element);
+        getStatusContainer().prepend(this.element);
       }
     }
   }

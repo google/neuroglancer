@@ -926,7 +926,18 @@ describe("CatmaidClient skeleton editing methods", () => {
           { nodeId: 201, revisionToken: "2026-03-29T12:04:00Z" },
         ],
       }),
-    ).resolves.toEqual({});
+    ).resolves.toEqual({
+      nodeSourceStateUpdates: [
+        {
+          nodeId: 202,
+          sourceState: testSourceState("2026-03-29T12:08:00Z"),
+        },
+        {
+          nodeId: 201,
+          sourceState: testSourceState("2026-03-29T12:08:00Z"),
+        },
+      ],
+    });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const requestBody = getFetchBody(fetchMock);
@@ -1055,7 +1066,6 @@ describe("CatmaidClient skeleton editing methods", () => {
     const fetchMock = vi.fn().mockResolvedValue({
       newroot: 202,
       skeleton_id: 17,
-      edition_time: "2026-03-29T12:08:00Z",
     });
     (client as any).fetchProjectEndpoint = fetchMock;
 
@@ -1075,7 +1085,9 @@ describe("CatmaidClient skeleton editing methods", () => {
           { nodeId: 201, revisionToken: "2026-03-29T12:04:00Z" },
         ],
       }),
-    ).resolves.toEqual({});
+    ).rejects.toThrow(
+      "CATMAID skeleton/reroot did not return the new root edition_time.",
+    );
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
