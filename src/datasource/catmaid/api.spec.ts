@@ -611,6 +611,32 @@ describe("CatmaidClient skeleton editing methods", () => {
     );
   });
 
+  it("merges skeletons with nocheck state when requested", async () => {
+    const client = new CatmaidClient("https://example.invalid", 1);
+    const fetchMock = vi.fn().mockResolvedValue({
+      result_skeleton_id: 17,
+      deleted_skeleton_id: 21,
+      stable_annotation_swap: true,
+    });
+    (client as any).fetchProjectEndpoint = fetchMock;
+
+    await expect(
+      client.mergeSkeletons(101, 202, undefined, { nocheck: true }),
+    ).resolves.toEqual({
+      resultSegmentId: 17,
+      deletedSegmentId: 21,
+      directionAdjusted: true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const requestBody = getFetchBody(fetchMock);
+    expect(getFetchPath(fetchMock)).toBe("skeleton/join");
+    expect(requestBody.get("from_id")).toBe("101");
+    expect(requestBody.get("to_id")).toBe("202");
+    expect(requestBody.get("nocheck")).toBeNull();
+    expect(requestBody.get("state")).toBe(JSON.stringify({ nocheck: true }));
+  });
+
   it("parses browse node/list rows with revision tokens", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi.fn().mockResolvedValue([
@@ -780,6 +806,43 @@ describe("CatmaidClient skeleton editing methods", () => {
     );
   });
 
+  it("sends nocheck addNode requests as CATMAID state", async () => {
+    const client = new CatmaidClient("https://example.invalid", 1);
+    const abortController = new AbortController();
+    const fetchMock = vi.fn().mockResolvedValue({
+      treenode_id: 88,
+      skeleton_id: 13,
+      edition_time: "2026-03-29T12:00:00Z",
+      parent_edition_time: "2026-03-29T12:00:01Z",
+    });
+    (client as any).fetchProjectEndpoint = fetchMock;
+
+    await expect(
+      client.addNode(
+        13,
+        1,
+        2,
+        3,
+        7,
+        {
+          node: {
+            nodeId: 7,
+            revisionToken: "2026-03-29T11:59:00Z",
+          },
+        },
+        { nocheck: true, signal: abortController.signal },
+      ),
+    ).resolves.toMatchObject({
+      nodeId: 88,
+      segmentId: 13,
+    });
+
+    const requestBody = getFetchBody(fetchMock);
+    expect(requestBody.get("nocheck")).toBeNull();
+    expect(requestBody.get("state")).toBe(JSON.stringify({ nocheck: true }));
+    expect(getFetchInit(fetchMock).signal).toBe(abortController.signal);
+  });
+
   it("inserts nodes using CATMAID local parent-and-child state", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi.fn().mockResolvedValue({
@@ -882,6 +945,25 @@ describe("CatmaidClient skeleton editing methods", () => {
     );
   });
 
+  it("reroots skeletons with nocheck state for optimistic compensation", async () => {
+    const client = new CatmaidClient("https://example.invalid", 1);
+    const fetchMock = vi.fn().mockResolvedValue({
+      newroot: 202,
+      skeleton_id: 17,
+    });
+    (client as any).fetchProjectEndpoint = fetchMock;
+
+    await expect(
+      client.rerootSkeleton(202, undefined, { nocheck: true }),
+    ).resolves.toEqual({});
+
+    const requestBody = getFetchBody(fetchMock);
+    expect(getFetchPath(fetchMock)).toBe("skeleton/reroot");
+    expect(requestBody.get("treenode_id")).toBe("202");
+    expect(requestBody.get("nocheck")).toBeNull();
+    expect(requestBody.get("state")).toBe(JSON.stringify({ nocheck: true }));
+  });
+
   it("rejects reroot state when the parent neighborhood is incomplete", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi.fn();
@@ -944,7 +1026,31 @@ describe("CatmaidClient skeleton editing methods", () => {
     );
   });
 
-  it("does not trust reroot response edition_time for revision state", async () => {
+  it("splits skeletons with nocheck state when requested", async () => {
+    const client = new CatmaidClient("https://example.invalid", 1);
+    const fetchMock = vi.fn().mockResolvedValue({
+      existing_skeleton_id: 17,
+      new_skeleton_id: 21,
+    });
+    (client as any).fetchProjectEndpoint = fetchMock;
+
+    await expect(
+      client.splitSkeleton(202, undefined, { nocheck: true }),
+    ).resolves.toEqual({
+      existingSegmentId: 17,
+      newSegmentId: 21,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const requestBody = getFetchBody(fetchMock);
+    expect(getFetchPath(fetchMock)).toBe("skeleton/split");
+    expect(requestBody.get("treenode_id")).toBe("202");
+    expect(requestBody.get("downstream_annotation_map")).toBe("{}");
+    expect(requestBody.get("nocheck")).toBeNull();
+    expect(requestBody.get("state")).toBe(JSON.stringify({ nocheck: true }));
+  });
+
+  it("rejects reroot when the response is missing edition_time", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi.fn().mockResolvedValue({
       newroot: 202,
@@ -1025,6 +1131,34 @@ describe("CatmaidClient skeleton editing methods", () => {
     );
   });
 
+  it("moves nodes with nocheck state when requested", async () => {
+    const client = new CatmaidClient("https://example.invalid", 1);
+    const fetchMock = vi.fn().mockResolvedValue({
+      updated: 1,
+      old_treenodes: [[42, "2026-03-29T12:10:00Z", 1, 2, 3]],
+      old_connectors: [],
+    });
+    (client as any).fetchProjectEndpoint = fetchMock;
+
+    await client.moveNode(
+      42,
+      10,
+      11,
+      12,
+      {
+        node: {
+          nodeId: 42,
+          revisionToken: "2026-03-29T12:00:00Z",
+        },
+      },
+      { nocheck: true },
+    );
+
+    expect(getFetchBody(fetchMock).get("state")).toBe(
+      JSON.stringify({ nocheck: true }),
+    );
+  });
+
   it("deletes nodes using neighborhood state and returns child revisions", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi.fn().mockResolvedValue({
@@ -1072,6 +1206,36 @@ describe("CatmaidClient skeleton editing methods", () => {
         ],
         links: [],
       }),
+    );
+  });
+
+  it("deletes nodes with nocheck state when requested", async () => {
+    const client = new CatmaidClient("https://example.invalid", 1);
+    const fetchMock = vi.fn().mockResolvedValue({
+      success: "Removed treenode successfully.",
+      children: [[12, "2026-03-29T12:20:00Z"]],
+    });
+    (client as any).fetchProjectEndpoint = fetchMock;
+
+    await client.deleteNode(11, {
+      childNodeIds: [12],
+      editContext: {
+        node: {
+          nodeId: 11,
+          parentNodeId: 7,
+          revisionToken: "2026-03-29T12:15:00Z",
+        },
+        parent: {
+          nodeId: 7,
+          revisionToken: "2026-03-29T12:14:00Z",
+        },
+        children: [{ nodeId: 12, revisionToken: "2026-03-29T12:13:00Z" }],
+      },
+      nocheck: true,
+    });
+
+    expect(getFetchBody(fetchMock).get("state")).toBe(
+      JSON.stringify({ nocheck: true }),
     );
   });
 

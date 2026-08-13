@@ -114,6 +114,7 @@ function makeSpatialSkeletonActionGateLayer(options: {
   visibleChunksNeeded?: number;
   visibleChunksAvailable?: number;
   commandBusy?: boolean;
+  canQueueOptimisticAction?: (action: string) => boolean;
 }) {
   return Object.assign(Object.create(SegmentationUserLayer.prototype), {
     getSpatiallyIndexedSkeletonLayer: () =>
@@ -122,7 +123,12 @@ function makeSpatialSkeletonActionGateLayer(options: {
       commandHistory: {
         isBusy: new WatchableValue(options.commandBusy ?? false),
       },
+      hasUnconfirmedOptimisticEdits: vi.fn(() => false),
+      ...(options.canQueueOptimisticAction === undefined
+        ? {}
+        : { canQueueOptimisticAction: options.canQueueOptimisticAction }),
     },
+    optimisticSkeletonEdits: new WatchableValue(true),
     spatialSkeletonVisibleChunksLoaded: new WatchableValue(
       options.visibleChunksLoaded ?? true,
     ),
@@ -238,6 +244,105 @@ describe("layer/segmentation spatial skeleton action gating", () => {
         },
       ),
     ).toBeUndefined();
+  });
+
+  it("allows queued optimistic edits and blocks stateful edits while optimistic skeleton edits are unconfirmed", () => {
+    const layer = makeSpatialSkeletonActionGateLayer({
+      source: makeEditableSpatialSkeletonSource({
+        confidenceConfiguration: true,
+        rerootCommand: true,
+      }),
+    });
+    layer.spatialSkeletonState.hasUnconfirmedOptimisticEdits.mockReturnValue(
+      true,
+    );
+
+    for (const action of [
+      SpatialSkeletonActions.addNodes,
+      SpatialSkeletonActions.moveNodes,
+      SpatialSkeletonActions.deleteNodes,
+    ]) {
+      expect(
+        layer.getSpatialSkeletonActionsDisabledReason(action),
+      ).toBeUndefined();
+    }
+
+    for (const action of [
+      SpatialSkeletonActions.insertNodes,
+      SpatialSkeletonActions.mergeSkeletons,
+      SpatialSkeletonActions.splitSkeletons,
+      SpatialSkeletonActions.reroot,
+      SpatialSkeletonActions.editNodeDescription,
+      SpatialSkeletonActions.editNodeTrueEnd,
+      SpatialSkeletonActions.editNodeRadius,
+      SpatialSkeletonActions.editNodeConfidence,
+    ]) {
+      expect(layer.getSpatialSkeletonActionsDisabledReason(action)).toBe(
+        "Wait for pending optimistic skeleton edits to finish.",
+      );
+    }
+  });
+
+  it("allows optimistic merge and split actions when the queue advertises support", () => {
+    const canQueueOptimisticAction = vi.fn(
+      (action: string) =>
+        action === SpatialSkeletonActions.mergeSkeletons ||
+        action === SpatialSkeletonActions.splitSkeletons,
+    );
+    const layer = makeSpatialSkeletonActionGateLayer({
+      source: makeEditableSpatialSkeletonSource({
+        confidenceConfiguration: true,
+        rerootCommand: true,
+      }),
+      canQueueOptimisticAction,
+    });
+    layer.spatialSkeletonState.hasUnconfirmedOptimisticEdits.mockReturnValue(
+      true,
+    );
+
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason(
+        SpatialSkeletonActions.mergeSkeletons,
+      ),
+    ).toBeUndefined();
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason(
+        SpatialSkeletonActions.splitSkeletons,
+      ),
+    ).toBeUndefined();
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason(
+        SpatialSkeletonActions.reroot,
+      ),
+    ).toBe("Wait for pending optimistic skeleton edits to finish.");
+    expect(canQueueOptimisticAction).toHaveBeenCalledWith(
+      SpatialSkeletonActions.mergeSkeletons,
+    );
+    expect(canQueueOptimisticAction).toHaveBeenCalledWith(
+      SpatialSkeletonActions.splitSkeletons,
+    );
+    expect(canQueueOptimisticAction).toHaveBeenCalledWith(
+      SpatialSkeletonActions.reroot,
+    );
+  });
+
+  it("blocks merge and split when optimistic queue support is unavailable", () => {
+    const layer = makeSpatialSkeletonActionGateLayer({
+      source: makeEditableSpatialSkeletonSource(),
+      canQueueOptimisticAction: () => false,
+    });
+    layer.spatialSkeletonState.hasUnconfirmedOptimisticEdits.mockReturnValue(
+      true,
+    );
+
+    for (const action of [
+      SpatialSkeletonActions.mergeSkeletons,
+      SpatialSkeletonActions.splitSkeletons,
+    ]) {
+      expect(layer.getSpatialSkeletonActionsDisabledReason(action)).toBe(
+        "Wait for pending optimistic skeleton edits to finish.",
+      );
+    }
   });
 
   it("still reports visible chunk loading when requested", () => {

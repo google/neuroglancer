@@ -349,6 +349,10 @@ describe("spatial_skeleton_edit_tool", () => {
       expect.objectContaining({
         node: expect.objectContaining({ nodeId: 5 }),
       }),
+      {
+        nocheck: undefined,
+        signal: undefined,
+      },
     );
     expect(upsertCachedNode).toHaveBeenCalledWith(
       {
@@ -439,7 +443,10 @@ describe("spatial_skeleton_edit_tool", () => {
       positionInModelSpace: position,
     });
 
-    expect(addNode).toHaveBeenCalledWith(13, 4, 5, 6, undefined, undefined);
+    expect(addNode).toHaveBeenCalledWith(13, 4, 5, 6, undefined, undefined, {
+      nocheck: undefined,
+      signal: undefined,
+    });
     expect(upsertCachedNode).toHaveBeenCalledWith(
       {
         nodeId: 29,

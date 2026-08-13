@@ -271,6 +271,14 @@ export class SpatialSkeletonCommandHistory extends RefCounted {
     });
   }
 
+  recordExecuted(command: SpatialSkeletonCommand) {
+    return this.runOperation(async () => {
+      this.redoEntries = [];
+      this.undoEntries.push({ command });
+      this.trimUndoEntries();
+    });
+  }
+
   undo() {
     return this.runOperation(async () => {
       const entry = this.undoEntries.at(-1);

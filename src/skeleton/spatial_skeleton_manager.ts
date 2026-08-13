@@ -38,6 +38,60 @@ interface SpatialSkeletonSourceAccess {
   source: unknown;
 }
 
+export interface SpatialSkeletonOptimisticEditState {
+  hasUnconfirmedOptimisticEdits(): boolean;
+  canUndoOptimisticEdit(): boolean;
+  undoLatestOptimisticEdit(): Promise<boolean>;
+}
+
+export function isSpatialSkeletonOptimisticEditState(
+  value: unknown,
+): value is SpatialSkeletonOptimisticEditState {
+  return (
+    hasFunction(value, "hasUnconfirmedOptimisticEdits") &&
+    hasFunction(value, "canUndoOptimisticEdit") &&
+    hasFunction(value, "undoLatestOptimisticEdit")
+  );
+}
+
+export interface SpatialSkeletonOptimisticEditQueue {
+  canUndo(): boolean;
+  canQueueAction?(action: SpatialSkeletonAction): boolean;
+  clear?(): boolean;
+  dispose?(): boolean;
+  hasUnconfirmedActions(): boolean;
+  undoLatest(): Promise<boolean>;
+
+  // Debug/inspection hooks used by the optimistic edit queue widget.
+  clearSettled?(): boolean;
+  getDebugSnapshot?(): readonly SpatialSkeletonOptimisticEditDebugEntry[];
+}
+
+export interface SpatialSkeletonOptimisticEditDebugEntry {
+  readonly operationId?: number;
+  readonly kind: string;
+  readonly status: string;
+  readonly tempNodeId?: number;
+  readonly parentNodeId?: number;
+  readonly parentTempNodeId?: number;
+  readonly nodeId?: number;
+  readonly segmentId?: number;
+  readonly dependencies?: readonly number[];
+  readonly tempSegmentId?: number;
+  readonly secondNodeId?: number;
+  readonly secondSegmentId?: number;
+  readonly resultSegmentId?: number;
+  readonly deletedSegmentId?: number;
+}
+
+/**
+ * A cloneable snapshot of a full cached segment.  `undefined` represents an
+ * uncached segment, while an empty array represents a known empty segment.
+ */
+export type SpatialSkeletonCachedSegmentSnapshot =
+  | readonly SpatiallyIndexedSkeletonNode[]
+  | undefined;
+
 function hasFunction<T extends string>(
   value: unknown,
   property: T,
@@ -229,13 +283,50 @@ function cloneSpatiallyIndexedSkeletonNode(
   };
 }
 
+function cachedSkeletonNodesEqual(
+  a: SpatiallyIndexedSkeletonNode,
+  b: SpatiallyIndexedSkeletonNode,
+) {
+  if (
+    a.nodeId !== b.nodeId ||
+    a.segmentId !== b.segmentId ||
+    a.parentNodeId !== b.parentNodeId ||
+    a.radius !== b.radius ||
+    a.confidence !== b.confidence ||
+    a.description !== b.description ||
+    a.isTrueEnd !== b.isTrueEnd ||
+    a.sourceState !== b.sourceState ||
+    a.position.length !== b.position.length
+  ) {
+    return false;
+  }
+  for (let i = 0; i < a.position.length; ++i) {
+    if (a.position[i] !== b.position[i]) return false;
+  }
+  return true;
+}
+
+function cachedSegmentSnapshotsEqual(
+  a: readonly SpatiallyIndexedSkeletonNode[] | undefined,
+  b: readonly SpatiallyIndexedSkeletonNode[] | undefined,
+) {
+  if (a === undefined || b === undefined) return a === b;
+  return (
+    a.length === b.length &&
+    a.every((node, index) => cachedSkeletonNodesEqual(node, b[index]))
+  );
+}
+
 /**
  * Full-segment skeleton fetches bypass the chunk queue manager, so they are
  * capped separately at min(this, the concurrentDownloads viewer setting).
  */
 const MAX_CONCURRENT_FULL_SEGMENT_NODE_FETCHES = 8;
 
-export class SpatialSkeletonState extends RefCounted {
+export class SpatialSkeletonState
+  extends RefCounted
+  implements SpatialSkeletonOptimisticEditState
+{
   readonly commandHistory = this.registerDisposer(
     new SpatialSkeletonCommandHistory(),
   );
@@ -252,6 +343,7 @@ export class SpatialSkeletonState extends RefCounted {
   readonly suppressSelectedNodeHighlight = new WatchableValue(false);
   readonly nodeDataVersion = new WatchableValue(0);
   readonly pendingNodePositionVersion = new WatchableValue(0);
+  readonly optimisticEditQueueVersion = new WatchableValue(0);
 
   private pendingNodePositions = new Map<number, Float32Array>();
   private fullSkeletonCacheGeneration = 0;
@@ -264,6 +356,7 @@ export class SpatialSkeletonState extends RefCounted {
     {
       promise: Promise<SpatiallyIndexedSkeletonNode[]>;
       abortController: AbortController;
+      retainWhileInactive: boolean;
     }
   >();
   private fullSegmentNodeFetchLimitLayer:
@@ -279,6 +372,47 @@ export class SpatialSkeletonState extends RefCounted {
     );
   });
   private cachedNodesById = new Map<number, SpatiallyIndexedSkeletonNode>();
+  private optimisticEditQueue?: SpatialSkeletonOptimisticEditQueue;
+
+  setOptimisticEditQueue(
+    optimisticEditQueue: SpatialSkeletonOptimisticEditQueue | undefined,
+  ) {
+    if (this.optimisticEditQueue === optimisticEditQueue) {
+      return false;
+    }
+    this.optimisticEditQueue = optimisticEditQueue;
+    this.notifyOptimisticEditQueueChanged();
+    return true;
+  }
+
+  notifyOptimisticEditQueueChanged() {
+    this.optimisticEditQueueVersion.value =
+      this.optimisticEditQueueVersion.value + 1;
+  }
+
+  hasUnconfirmedOptimisticEdits() {
+    return this.optimisticEditQueue?.hasUnconfirmedActions() ?? false;
+  }
+
+  canQueueOptimisticAction(action: SpatialSkeletonAction) {
+    return this.optimisticEditQueue?.canQueueAction?.(action) ?? false;
+  }
+
+  getOptimisticEditQueueDebugSnapshot() {
+    return this.optimisticEditQueue?.getDebugSnapshot?.() ?? [];
+  }
+
+  clearSettledOptimisticEdits() {
+    return this.optimisticEditQueue?.clearSettled?.() ?? false;
+  }
+
+  canUndoOptimisticEdit() {
+    return this.optimisticEditQueue?.canUndo() ?? false;
+  }
+
+  undoLatestOptimisticEdit() {
+    return this.optimisticEditQueue?.undoLatest() ?? Promise.resolve(false);
+  }
 
   setNodeRadius(nodeId: number, radius: number) {
     const normalizedNodeId = this.normalizeNodeId(nodeId);
@@ -416,6 +550,48 @@ export class SpatialSkeletonState extends RefCounted {
     return true;
   }
 
+  clearRuntimeState() {
+    const optimisticQueue = this.optimisticEditQueue;
+    const optimisticQueueChanged =
+      optimisticQueue?.dispose?.() ?? optimisticQueue?.clear?.() ?? false;
+    if (this.optimisticEditQueue !== undefined) {
+      this.optimisticEditQueue = undefined;
+      this.notifyOptimisticEditQueueChanged();
+    }
+    const cacheChanged =
+      this.fullSegmentNodeCache.size !== 0 ||
+      this.pendingFullSegmentNodeFetches.size !== 0 ||
+      this.cachedNodesById.size !== 0;
+    const pendingChanged = this.clearPendingNodePositions();
+    const mergeAnchorChanged = this.clearMergeAnchor();
+    let modeChanged = false;
+    if (this.editMode.value) {
+      this.editMode.value = false;
+      modeChanged = true;
+    }
+    if (this.mergeMode.value) {
+      this.mergeMode.value = false;
+      modeChanged = true;
+    }
+    if (this.splitMode.value) {
+      this.splitMode.value = false;
+      modeChanged = true;
+    }
+    const historyChanged = this.commandHistory.clear();
+    if (cacheChanged) {
+      this.clearFullSkeletonCache();
+      this.nodeDataVersion.value = this.nodeDataVersion.value + 1;
+    }
+    return (
+      cacheChanged ||
+      pendingChanged ||
+      optimisticQueueChanged ||
+      mergeAnchorChanged ||
+      modeChanged ||
+      historyChanged
+    );
+  }
+
   markNodeDataChanged(options: { invalidateFullSkeletonCache?: boolean } = {}) {
     if (options.invalidateFullSkeletonCache ?? true) {
       this.clearFullSkeletonCache();
@@ -429,6 +605,128 @@ export class SpatialSkeletonState extends RefCounted {
 
   getCachedNode(nodeId: number) {
     return this.cachedNodesById.get(nodeId);
+  }
+
+  /**
+   * Captures independent copies of complete cached segments for optimistic
+   * topology edits and rollback.  Missing cache entries are retained as
+   * `undefined`, so restoring the returned map recreates the exact cached /
+   * uncached distinction.
+   */
+  snapshotCachedSegments(segmentIds: Iterable<number>) {
+    const snapshots = new Map<number, SpatialSkeletonCachedSegmentSnapshot>();
+    for (const segmentId of segmentIds) {
+      const cachedNodes = this.fullSegmentNodeCache.get(segmentId);
+      snapshots.set(
+        segmentId,
+        cachedNodes?.map(cloneSpatiallyIndexedSkeletonNode),
+      );
+    }
+    return snapshots;
+  }
+
+  /**
+   * Atomically replaces complete cached segments.
+   *
+   * Each input node and its position are cloned, and its segment id is set to
+   * the entry key.  `undefined` deletes a cache entry; `[]` records a known
+   * empty segment.  All input is validated before any cache or pending fetch
+   * is changed.  Node-data listeners are notified once after the whole
+   * replacement unless `notify` is false.
+   */
+  replaceCachedSegmentSnapshots(
+    snapshots: Iterable<
+      readonly [number, SpatialSkeletonCachedSegmentSnapshot]
+    >,
+    options: { notify?: boolean } = {},
+  ) {
+    const replacements = new Map<
+      number,
+      SpatiallyIndexedSkeletonNode[] | undefined
+    >();
+    for (const [segmentId, snapshot] of snapshots) {
+      if (!Number.isSafeInteger(segmentId) || segmentId <= 0) {
+        throw new RangeError(
+          `Invalid spatial skeleton segment id: ${segmentId}`,
+        );
+      }
+      if (snapshot === undefined) {
+        replacements.set(segmentId, undefined);
+        continue;
+      }
+      const clonedNodes: SpatiallyIndexedSkeletonNode[] = [];
+      for (const node of snapshot) {
+        if (!Number.isSafeInteger(node.nodeId) || node.nodeId <= 0) {
+          throw new RangeError(
+            `Invalid spatial skeleton node id: ${node.nodeId}`,
+          );
+        }
+        clonedNodes.push(
+          cloneSpatiallyIndexedSkeletonNode({ ...node, segmentId }),
+        );
+      }
+      replacements.set(segmentId, clonedNodes);
+    }
+    if (replacements.size === 0) return false;
+
+    // Build the complete prospective reverse index before mutating either
+    // cache.  Besides keeping the update atomic, this rejects accidentally
+    // placing one node in multiple segments.
+    const nextNodesById = new Map<number, SpatiallyIndexedSkeletonNode>();
+    const addSegmentNodesToIndex = (
+      segmentId: number,
+      nodes: readonly SpatiallyIndexedSkeletonNode[],
+    ) => {
+      for (const node of nodes) {
+        const existing = nextNodesById.get(node.nodeId);
+        if (existing !== undefined) {
+          throw new Error(
+            `Spatial skeleton node ${node.nodeId} is present in both segment ${existing.segmentId} and segment ${segmentId}.`,
+          );
+        }
+        nextNodesById.set(node.nodeId, node);
+      }
+    };
+    for (const [segmentId, nodes] of this.fullSegmentNodeCache) {
+      if (replacements.has(segmentId)) continue;
+      addSegmentNodesToIndex(segmentId, nodes);
+    }
+    for (const [segmentId, nodes] of replacements) {
+      if (nodes !== undefined) addSegmentNodesToIndex(segmentId, nodes);
+    }
+
+    let changed = false;
+    for (const [segmentId, nodes] of replacements) {
+      changed =
+        !cachedSegmentSnapshotsEqual(
+          this.fullSegmentNodeCache.get(segmentId),
+          nodes,
+        ) || changed;
+    }
+
+    for (const segmentId of replacements.keys()) {
+      this.abortPendingFullSegmentNodeFetch(
+        segmentId,
+        "spatial skeleton full-segment inspection request replaced by atomic local cache update",
+      );
+    }
+    if (!changed) return false;
+
+    for (const [segmentId, nodes] of replacements) {
+      if (nodes === undefined) {
+        this.fullSegmentNodeCache.delete(segmentId);
+      } else {
+        this.fullSegmentNodeCache.set(segmentId, nodes);
+      }
+    }
+    this.cachedNodesById.clear();
+    for (const [nodeId, node] of nextNodesById) {
+      this.cachedNodesById.set(nodeId, node);
+    }
+    if (options.notify ?? true) {
+      this.markNodeDataChanged({ invalidateFullSkeletonCache: false });
+    }
+    return true;
   }
 
   private replaceCachedSegmentNodes(
@@ -850,8 +1148,14 @@ export class SpatialSkeletonState extends RefCounted {
       if (activeSegmentIdSet.has(segmentId)) continue;
       changed = this.deleteCachedSegment(segmentId) || changed;
     }
-    for (const segmentId of this.pendingFullSegmentNodeFetches.keys()) {
-      if (activeSegmentIdSet.has(segmentId)) continue;
+    for (const [segmentId, pendingEntry] of this
+      .pendingFullSegmentNodeFetches) {
+      if (
+        activeSegmentIdSet.has(segmentId) ||
+        pendingEntry.retainWhileInactive
+      ) {
+        continue;
+      }
       this.abortPendingFullSegmentNodeFetch(
         segmentId,
         "spatial skeleton full-segment inspection request evicted for inactive segment",
@@ -860,16 +1164,70 @@ export class SpatialSkeletonState extends RefCounted {
     return changed;
   }
 
-  async getFullSegmentNodes(
+  /**
+   * Refreshes complete segments without removing their current cached values.
+   * Successful fetches are published together after every request settles, so
+   * renderers never observe an intermediate cache with those segments missing.
+   */
+  async refreshCachedSegments(
+    skeletonLayer: SpatiallyIndexedSkeletonLayer,
+    segmentIds: readonly number[],
+    options: { notify?: boolean } = {},
+  ) {
+    const refreshVersion = this.fullSkeletonCacheGeneration;
+    const refreshedSegments = await Promise.allSettled(
+      segmentIds.map(
+        async (segmentId) =>
+          [
+            segmentId,
+            await this.fetchFullSegmentNodes(skeletonLayer, segmentId, {
+              forceRefresh: true,
+              updateCache: false,
+            }),
+          ] as const,
+      ),
+    );
+    if (this.fullSkeletonCacheGeneration !== refreshVersion) return false;
+    const replacements = new Map<
+      number,
+      readonly SpatiallyIndexedSkeletonNode[]
+    >();
+    for (const refreshedSegment of refreshedSegments) {
+      if (refreshedSegment.status !== "fulfilled") continue;
+      replacements.set(...refreshedSegment.value);
+    }
+    return this.replaceCachedSegmentSnapshots(replacements, options);
+  }
+
+  getFullSegmentNodes(
     skeletonLayer: SpatiallyIndexedSkeletonLayer,
     segmentId: number,
+    options: { retainWhileInactive?: boolean } = {},
+  ): Promise<SpatiallyIndexedSkeletonNode[]> {
+    return this.fetchFullSegmentNodes(skeletonLayer, segmentId, options);
+  }
+
+  private async fetchFullSegmentNodes(
+    skeletonLayer: SpatiallyIndexedSkeletonLayer,
+    segmentId: number,
+    options: {
+      forceRefresh?: boolean;
+      retainWhileInactive?: boolean;
+      updateCache?: boolean;
+    } = {},
   ): Promise<SpatiallyIndexedSkeletonNode[]> {
     const cached = this.fullSegmentNodeCache.get(segmentId);
-    if (cached !== undefined) {
+    if (cached !== undefined && !options.forceRefresh) {
       return cached;
     }
     const pendingEntry = this.pendingFullSegmentNodeFetches.get(segmentId);
     if (pendingEntry !== undefined) {
+      if (options.retainWhileInactive) {
+        // A command may join a fetch that was originally started only for the
+        // render overlay. Promote the shared request so visibility-based cache
+        // eviction cannot cancel work that an edit is actively awaiting.
+        pendingEntry.retainWhileInactive = true;
+      }
       return pendingEntry.promise;
     }
     const skeletonSource = getSpatiallyIndexedSkeletonSource(skeletonLayer);
@@ -901,6 +1259,7 @@ export class SpatialSkeletonState extends RefCounted {
           }
           normalizedNodes.sort((a, b) => a.nodeId - b.nodeId);
           if (
+            (options.updateCache ?? true) &&
             this.fullSkeletonCacheGeneration === fetchVersion &&
             pendingFetch.promise !== undefined &&
             this.pendingFullSegmentNodeFetches.get(segmentId)?.promise ===
@@ -925,6 +1284,7 @@ export class SpatialSkeletonState extends RefCounted {
     this.pendingFullSegmentNodeFetches.set(segmentId, {
       promise: fetchPromise,
       abortController,
+      retainWhileInactive: options.retainWhileInactive ?? false,
     });
     return fetchPromise;
   }
