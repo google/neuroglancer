@@ -20,42 +20,57 @@
   align-items: center;
   gap: 0.75rem;
   min-width: 0;
-}
 
-/* Sits right after the divider, immediately beside the tool name in the
-   header, sized to its own content (not flex-grow) rather than stretching
-   across the bar. */
-.neuroglancer-skeleton-tool-status-divider {
-  flex: 0 0 auto;
-  color: #6b6c6f;
-  line-height: 1.25rem;
-}
-
-.neuroglancer-skeleton-tool-status-text {
-  flex: 0 1 auto;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  line-height: 1.25rem;
+  color: #999ca0;
 }
 
 /* margin-left: auto consumes all remaining space on the main axis before
    justify-content is applied, so the actions list is pushed to the far
    right regardless of the status text's width or the parent's
    justify-content (neuroglass-theme.css sets justify-content: flex-end on
-   this same element via a higher-specificity nested rule). */
-.neuroglancer-skeleton-tool-status-actions {
+  display: flex;
   flex: 0 1 auto;
+  align-items: center;
+  gap: 1rem;
   margin-left: auto;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   color: #999ca0;
   font-size: 0.8125rem;
   line-height: 1.25rem;
   text-align: right;
+.neuroglancer-skeleton-tool-shortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.neuroglancer-skeleton-tool-shortcut-label {
+  color: #fff;
+}
+
+.neuroglancer-skeleton-tool-shortcut-combo {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px;
+  border-radius: 0.25rem;
+  background: #333;
+  font-size: 0.75rem;
+  color: #999CA0;
+  line-height: 1rem;
+}
+
+.neuroglancer-skeleton-tool-shortcut-icon {
+  display: inline-flex;
+  align-items: center;
+  min-width: 1rem !important;
+  max-height: 1rem;
+  min-height: 1rem;
 }
 
 /* Per-mode cursor indicators — driven by data-skeleton-edit-mode on the panel element */

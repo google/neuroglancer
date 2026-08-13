@@ -1709,7 +1709,31 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
         "CATMAID skeleton/reroot did not return the requested new root.",
       );
     }
-    return {};
+    // The `nocheck` path is used for optimistic compensation, where no cached revision tokens are
+    // being reconciled, so CATMAID is not asked for an edition time either.
+    if (options.nocheck === true) {
+      return {};
+    }
+    // Rerooting rewrites the parent links along the path from the old root to the new one, bumping
+    // the edition time of every node on that path. CATMAID reports a single edition time for the
+    // operation, which applies to all of them; without it the cached revision tokens for those nodes
+    // would go stale and the next edit would be rejected as out of date.
+    const revisionToken = normalizeCatmaidRevisionToken(response?.edition_time);
+    if (revisionToken === undefined) {
+      throw new Error(
+        "CATMAID skeleton/reroot did not return the new root edition_time.",
+      );
+    }
+    const sourceState = makeCatmaidNodeSourceState(revisionToken)!;
+    const nodeSourceStateUpdates = (editContext?.nodes ?? []).map(
+      ({ nodeId: affectedNodeId }) => ({
+        nodeId: affectedNodeId,
+        sourceState,
+      }),
+    );
+    return nodeSourceStateUpdates.length === 0
+      ? {}
+      : { nodeSourceStateUpdates };
   }
 
   async deleteNode(

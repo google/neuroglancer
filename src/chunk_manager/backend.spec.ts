@@ -2,29 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ChunkQueueManager } from "#src/chunk_manager/backend.js";
 import { ChunkState } from "#src/chunk_manager/base.js";
+import { getChunkKey } from "#src/sliceview/base.js";
 
 describe("ChunkQueueManager targeted source invalidation", () => {
-  it("invalidates only chunks whose keys match requested cell prefixes", () => {
-    const matchingWorkerChunk = {
-      key: "13,9,5:0",
-      state: ChunkState.SYSTEM_MEMORY_WORKER,
-      freeSystemMemory: vi.fn(),
-    };
-    const matchingSystemChunk = {
-      key: "13,9,5:1",
-      state: ChunkState.SYSTEM_MEMORY,
-      freeSystemMemory: vi.fn(),
-    };
-    const adjacentCellChunk = {
-      key: "13,9,50:0",
-      state: ChunkState.SYSTEM_MEMORY,
-      freeSystemMemory: vi.fn(),
-    };
-    const otherCellChunk = {
-      key: "13,9,6:0",
-      state: ChunkState.SYSTEM_MEMORY,
-      freeSystemMemory: vi.fn(),
-    };
+  function makeChunk(key: string, state: ChunkState) {
+    return { key, state, freeSystemMemory: vi.fn() };
+  }
+
+  function makeQueueManager() {
     const rpc = { invoke: vi.fn() };
     const queueManager = Object.assign(
       Object.create(ChunkQueueManager.prototype),
@@ -38,39 +23,84 @@ describe("ChunkQueueManager targeted source invalidation", () => {
         ),
       },
     );
+    return { rpc, queueManager };
+  }
+
+  it("requeues only the identified chunks", () => {
+    const workerChunk = makeChunk(
+      getChunkKey([13, 9, 5]),
+      ChunkState.SYSTEM_MEMORY_WORKER,
+    );
+    const systemChunk = makeChunk(
+      getChunkKey([13, 9, 6]),
+      ChunkState.SYSTEM_MEMORY,
+    );
+    // Would have been caught by a bare `startsWith` test against key "13,9,5".
+    const untouchedChunk = makeChunk(
+      getChunkKey([13, 9, 50]),
+      ChunkState.SYSTEM_MEMORY,
+    );
+    const { rpc, queueManager } = makeQueueManager();
     const source = {
       rpcId: 7,
       chunks: new Map([
-        [matchingWorkerChunk.key, matchingWorkerChunk],
-        [matchingSystemChunk.key, matchingSystemChunk],
-        [adjacentCellChunk.key, adjacentCellChunk],
-        [otherCellChunk.key, otherCellChunk],
+        [workerChunk.key, workerChunk],
+        [systemChunk.key, systemChunk],
+        [untouchedChunk.key, untouchedChunk],
       ]),
     };
 
-    queueManager.invalidateSourceCacheKeyPrefixes(source, ["13,9,5:"]);
+    queueManager.invalidateSourceCacheKeys(source, [
+      workerChunk.key,
+      systemChunk.key,
+    ]);
 
-    expect(matchingWorkerChunk.freeSystemMemory).toHaveBeenCalledTimes(1);
+    expect(workerChunk.freeSystemMemory).toHaveBeenCalledTimes(1);
     expect(queueManager.updateChunkState).toHaveBeenCalledWith(
-      matchingWorkerChunk,
+      workerChunk,
       ChunkState.QUEUED,
     );
     expect(queueManager.updateChunkState).toHaveBeenCalledWith(
-      matchingSystemChunk,
+      systemChunk,
       ChunkState.QUEUED,
     );
     expect(queueManager.updateChunkState).not.toHaveBeenCalledWith(
-      adjacentCellChunk,
-      ChunkState.QUEUED,
-    );
-    expect(queueManager.updateChunkState).not.toHaveBeenCalledWith(
-      otherCellChunk,
+      untouchedChunk,
       ChunkState.QUEUED,
     );
     expect(rpc.invoke).toHaveBeenCalledWith("Chunk.update", {
       source: 7,
-      keyPrefixes: ["13,9,5:"],
+      keys: [workerChunk.key, systemChunk.key],
     });
+    // Marking chunks QUEUED only takes effect once the queue is processed.
     expect(queueManager.scheduleUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("tells the frontend only about the keys it actually invalidated", () => {
+    const chunk = makeChunk(getChunkKey([13, 9, 5]), ChunkState.SYSTEM_MEMORY);
+    const { rpc, queueManager } = makeQueueManager();
+    const source = { rpcId: 7, chunks: new Map([[chunk.key, chunk]]) };
+
+    queueManager.invalidateSourceCacheKeys(source, [
+      chunk.key,
+      getChunkKey([99, 99, 99]),
+    ]);
+
+    expect(rpc.invoke).toHaveBeenCalledWith("Chunk.update", {
+      source: 7,
+      keys: [chunk.key],
+    });
+  });
+
+  it("does not notify the frontend when no key matched", () => {
+    const chunk = makeChunk(getChunkKey([13, 9, 6]), ChunkState.SYSTEM_MEMORY);
+    const { rpc, queueManager } = makeQueueManager();
+    const source = { rpcId: 7, chunks: new Map([[chunk.key, chunk]]) };
+
+    queueManager.invalidateSourceCacheKeys(source, [getChunkKey([13, 9, 5])]);
+
+    expect(queueManager.updateChunkState).not.toHaveBeenCalled();
+    expect(rpc.invoke).not.toHaveBeenCalled();
+    expect(queueManager.scheduleUpdate).not.toHaveBeenCalled();
   });
 });

@@ -16,6 +16,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 
+import type { SliceViewChunkSpecification } from "#src/sliceview/base.js";
 import { Uint64Set } from "#src/uint64_set.js";
 import { getContrastRatio } from "#src/util/color.js";
 import { vec3 } from "#src/util/geom.js";
@@ -36,7 +37,7 @@ if (!("WebGL2RenderingContext" in globalThis)) {
 
 const {
   SpatiallyIndexedSkeletonLayer,
-  getSpatialSkeletonCellKeyPrefix,
+  getSpatialSkeletonChunkKey,
   resolveSpatiallyIndexedSkeletonSegmentPick,
 } = await import("#src/skeleton/frontend.js");
 
@@ -240,48 +241,10 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
     expect(computeSegmentColor).toHaveBeenCalledTimes(2);
   });
 
-  it("derives the hovered-node outline color from the hovered segment when nothing is selected", () => {
-    const sourceColor = vec3.fromValues(1, 1, 1);
-    const displayState = {
-      segmentationColorGroupState: {
-        value: {
-          segmentStatedColors: new Map(),
-          segmentDefaultColor: { value: sourceColor },
-          segmentColorHash: { compute: vi.fn() },
-        },
-      },
-      saturation: { value: 0 },
-      hoverHighlight: { value: true },
-      segmentSelectionState: { isSelected: vi.fn(() => false), baseValue: 0n },
-    };
-    const layer = Object.assign(
-      Object.create(SpatiallyIndexedSkeletonLayer.prototype),
-      {
-        selectedNodeInfo: { value: undefined },
-        hoveredNodeInfo: { value: { nodeId: 303, segmentId: 202 } },
-        selectedNodeOutlineColor: vec3.create(),
-        highlightedNodeOutlineColor: vec3.create(),
-        nodeOutlineColorGeneration: 0,
-        cachedNodeOutlineColorGeneration: -1,
-        displayState,
-      },
-    );
-
-    (layer as any).updateNodeOutlineColorPair();
-    const highlightedColor = (layer as any).highlightedNodeOutlineColor;
-
-    // The hovered outline is chosen for high contrast against its own (white)
-    // segment color.
-    expect(
-      getContrastRatio(highlightedColor, sourceColor),
-    ).toBeGreaterThanOrEqual(3);
-  });
-
   it("derives each outline from its own segment when selected and hovered nodes belong to different segments", () => {
     // Selected node on a dark segment, hovered node on a bright segment, as
     // happens when hovering a merge target on a differently colored skeleton.
     const selectedSegmentColor = vec3.fromValues(0, 0, 0);
-    const hoveredSegmentColor = vec3.fromValues(1, 1, 1);
     const displayState = {
       segmentationColorGroupState: {
         value: {
@@ -314,48 +277,63 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
     const selectedColor = (layer as any).selectedNodeOutlineColor;
     const highlightedColor = (layer as any).highlightedNodeOutlineColor;
 
-    // Each outline contrasts against its own segment color...
+    // The selected outline is picked from the contrast palette, so it stands off its own segment
+    // color. The hovered outline is instead a saturation adjustment of its own segment color, which
+    // carries no contrast guarantee, so only the selected one is checked here.
     expect(
       getContrastRatio(selectedColor, selectedSegmentColor),
     ).toBeGreaterThanOrEqual(3);
-    expect(
-      getContrastRatio(highlightedColor, hoveredSegmentColor),
-    ).toBeGreaterThanOrEqual(3);
-    // ...and the two outlines are different colors.
+    // Each outline still derives from its own segment, so the two differ.
     expect([...selectedColor]).not.toEqual([...highlightedColor]);
   });
 });
 
 describe("SpatiallyIndexedSkeletonLayer targeted source invalidation", () => {
-  it("computes absolute half-open cell prefixes without lower-bound offsets", () => {
+  const spec3d = {
+    rank: 3,
+    chunkDataSize: new Float32Array([100, 100, 100]),
+    lowerChunkBound: new Float32Array([10, 20, 30]),
+  } as unknown as SliceViewChunkSpecification;
+
+  it("derives chunk keys from the origin, without lower-bound offsets", () => {
     expect(
-      getSpatialSkeletonCellKeyPrefix(
-        new Float32Array([100, 200, 300]),
-        new Float32Array([100, 100, 100]),
-      ),
+      getSpatialSkeletonChunkKey(spec3d, new Float32Array([100, 200, 300])),
     ).toBe("1,2,3");
     expect(
-      getSpatialSkeletonCellKeyPrefix(
+      getSpatialSkeletonChunkKey(
+        spec3d,
         new Float32Array([99.999, 199.999, 299.999]),
-        new Float32Array([100, 100, 100]),
       ),
     ).toBe("0,1,2");
   });
 
-  it("dedupes cell prefixes per unique source entry", () => {
-    const invalidateCacheKeyPrefixes = vi.fn();
+  it("names no chunk when the grid is not 3D", () => {
+    // A 3D node position spans every combination of the extra dimensions, so no single key applies.
+    const spec4d = {
+      rank: 4,
+      chunkDataSize: new Float32Array([100, 100, 100, 1]),
+    } as unknown as SliceViewChunkSpecification;
+    expect(
+      getSpatialSkeletonChunkKey(spec4d, new Float32Array([100, 200, 300])),
+    ).toBeUndefined();
+  });
+
+  it("dedupes chunk keys per unique source entry", () => {
+    const invalidateCacheKeys = vi.fn();
     const source = {
       spec: {
+        rank: 3,
         chunkDataSize: new Float32Array([100, 100, 100]),
         lowerChunkBound: new Float32Array([10, 20, 30]),
       },
-      invalidateCacheKeyPrefixes,
+      invalidateCacheKeys,
     };
     const source2d = {
       spec: {
+        rank: 3,
         chunkDataSize: new Float32Array([50, 50, 50]),
       },
-      invalidateCacheKeyPrefixes: vi.fn(),
+      invalidateCacheKeys: vi.fn(),
     };
     const redrawNeeded = { dispatch: vi.fn() };
     const layer = {
@@ -375,10 +353,10 @@ describe("SpatiallyIndexedSkeletonLayer targeted source invalidation", () => {
       );
 
     expect(invalidated).toBe(true);
-    expect(invalidateCacheKeyPrefixes).toHaveBeenCalledTimes(1);
-    expect([...invalidateCacheKeyPrefixes.mock.calls[0][0]]).toEqual(["1,2,3"]);
-    expect(source2d.invalidateCacheKeyPrefixes).toHaveBeenCalledTimes(1);
-    expect([...source2d.invalidateCacheKeyPrefixes.mock.calls[0][0]]).toEqual([
+    expect(invalidateCacheKeys).toHaveBeenCalledTimes(1);
+    expect([...invalidateCacheKeys.mock.calls[0][0]]).toEqual(["1,2,3"]);
+    expect(source2d.invalidateCacheKeys).toHaveBeenCalledTimes(1);
+    expect([...source2d.invalidateCacheKeys.mock.calls[0][0]]).toEqual([
       "2,4,6",
       "3,4,6",
     ]);
@@ -394,6 +372,8 @@ describe("SpatiallyIndexedSkeletonLayer browse exclusions", () => {
         editedSegmentIds: new Set<number>(),
         browseExcludedSegments: new Uint64Set(),
         browseExcludedSegmentsKey: undefined,
+        retainedOverlaySegments: new Map<number, number>(),
+        overlaySegmentTouchCounter: 0,
         redrawNeeded: { dispatch: vi.fn() },
       },
     );

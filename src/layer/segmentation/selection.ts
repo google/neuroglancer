@@ -31,7 +31,9 @@ interface SpatialSkeletonViewerHoverMouseStateLike<TRenderLayer> {
 
 export interface SpatialSkeletonHoverInfo {
   readonly nodeId: number;
-  readonly segmentId?: number;
+  // A hover is only reported once both ids resolve, so consumers (e.g. outline colouring, which
+  // derives from the hovered segment) can rely on the segment being known.
+  readonly segmentId: number;
   // Model-space position of the picked node, carried so the highlight overlay can
   // still be placed when the node's skeleton is not currently loaded/cached.
   readonly position?: Float32Array;

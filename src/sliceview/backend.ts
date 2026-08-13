@@ -39,6 +39,7 @@ import type {
 import {
   filterVisibleSources,
   forEachPlaneIntersectingVolumetricChunk,
+  getChunkKey,
   getNormalizedChunkLayout,
   SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID,
   SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID,
@@ -405,7 +406,7 @@ export class SliceViewChunkSourceBackend<
   }
 
   getChunk(chunkGridPosition: Float32Array) {
-    const key = chunkGridPosition.join();
+    const key = getChunkKey(chunkGridPosition);
     let chunk = this.chunks.get(key);
     if (chunk === undefined) {
       chunk = this.getNewChunk_(this.chunkConstructor) as ChunkType;

@@ -1672,6 +1672,8 @@ export class SegmentationUserLayer extends Base {
                     this.spatialSkeletonState.pendingNodePositionVersion,
                   getPendingNodePosition: (nodeId) =>
                     this.spatialSkeletonState.getPendingNodePosition(nodeId),
+                  getPendingNodeIds: () =>
+                    this.spatialSkeletonState.getPendingNodeIds(),
                   getCachedNode: (nodeId) =>
                     this.spatialSkeletonState.getCachedNode(nodeId),
                   resolveGlobalPosition: (modelPosition) =>
@@ -1712,6 +1714,8 @@ export class SegmentationUserLayer extends Base {
                   this.spatialSkeletonState.pendingNodePositionVersion,
                 getPendingNodePosition: (nodeId) =>
                   this.spatialSkeletonState.getPendingNodePosition(nodeId),
+                getPendingNodeIds: () =>
+                  this.spatialSkeletonState.getPendingNodeIds(),
                 getCachedNode: (nodeId) =>
                   this.spatialSkeletonState.getCachedNode(nodeId),
                 resolveGlobalPosition: (modelPosition) =>
@@ -2664,12 +2668,13 @@ export class SegmentationUserLayer extends Base {
       iconFilterType !== undefined
         ? getSpatialSkeletonNodeFilterLabel(iconFilterType)
         : nodeTypeLabel;
-    icon.appendChild(
-      makeIcon({
-        svg:
-          iconFilterType === SpatialSkeletonNodeFilterType.TRUE_END
-            ? svg_flag
-            : iconFilterType === SpatialSkeletonNodeFilterType.VIRTUAL_END
+    const nodeTypeIcon = makeIcon({
+      svg:
+        iconFilterType === SpatialSkeletonNodeFilterType.TRUE_END
+          ? svg_flag
+          : iconFilterType === SpatialSkeletonNodeFilterType.VIRTUAL_END
+            ? svg_circle
+            : nodeType === undefined
               ? svg_circle
               : nodeType === undefined
                 ? svg_circle

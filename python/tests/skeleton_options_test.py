@@ -63,10 +63,17 @@ void main () {
         s.layout = "3d"
         s.layers[0].skeleton_rendering.line_width3d = 100
     screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
-    np.testing.assert_array_equal(
-        screenshot.image_pixels,
-        np.tile(np.array([255, 0, 0, 255], dtype=np.uint8), (10, 10, 1)),
-    )
+    # In the perspective view the skeleton is now rendered with lit
+    # cylinder/sphere impostors rather than flat billboards, so the red channel
+    # is modulated by the lighting factor instead of being a uniform 255.  The
+    # shader emits only the red channel, so green/blue remain 0 and the
+    # composited alpha remains 255; some red must be present (the skeleton
+    # renders).
+    pixels = screenshot.image_pixels
+    np.testing.assert_array_equal(pixels[..., 1], 0)  # green
+    np.testing.assert_array_equal(pixels[..., 2], 0)  # blue
+    np.testing.assert_array_equal(pixels[..., 3], 255)  # alpha
+    assert pixels[..., 0].max() > 0  # red skeleton rendered
 
     with webdriver.viewer.txn() as s:
         s.layers[0].source[0].subsources["default"] = False

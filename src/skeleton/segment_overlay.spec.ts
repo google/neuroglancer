@@ -67,6 +67,28 @@ describe("buildSpatiallyIndexedSkeletonOverlayGeometry", () => {
     expect([...geometry.indices]).toEqual([1, 0]);
     expect([...geometry.pickEdgeSegmentIds]).toEqual([11]);
   });
+
+  it("returns a nodeIndex map aligned with the packed vertex order", () => {
+    const geometry = buildSpatiallyIndexedSkeletonOverlayGeometry([
+      [
+        { nodeId: 5, segmentId: 11, position: new Float32Array([1, 2, 3]) },
+        {
+          nodeId: 6,
+          segmentId: 11,
+          position: new Float32Array([4, 5, 6]),
+          parentNodeId: 5,
+        },
+      ],
+      // Duplicate of node 5 in a second segment must not create a new vertex.
+      [{ nodeId: 5, segmentId: 13, position: new Float32Array([9, 9, 9]) }],
+    ]);
+    expect(geometry.numVertices).toBe(2);
+    // The nodeIndex maps each nodeId to its packed vertex index, so a live drag
+    // can override the right vertex's position via a shader uniform.
+    expect(geometry.nodeIndex.get(5)).toBe(0);
+    expect(geometry.nodeIndex.get(6)).toBe(1);
+    expect([...geometry.nodeIds]).toEqual([5, 6]);
+  });
 });
 
 describe("mergeSpatiallyIndexedSkeletonOverlaySegmentIds", () => {
@@ -84,27 +106,38 @@ describe("mergeSpatiallyIndexedSkeletonOverlaySegmentIds", () => {
 });
 
 describe("retainSpatiallyIndexedSkeletonOverlaySegment", () => {
-  it("moves retained segments to the most recent position", () => {
-    expect(retainSpatiallyIndexedSkeletonOverlaySegment([2, 4, 6], 4)).toEqual([
-      2, 6, 4,
+  it("sets the touched segment's recency counter", () => {
+    const retained = retainSpatiallyIndexedSkeletonOverlaySegment(
+      new Map([
+        [2, 0],
+        [4, 1],
+        [6, 2],
+      ]),
+      4,
+      10,
+    );
+    expect([...retained.entries()]).toEqual([
+      [2, 0],
+      [4, 10],
+      [6, 2],
     ]);
   });
 
-  it("keeps only the most recent retained segments", () => {
-    const retained: number[] = [];
+  it("keeps only the most recently touched segments", () => {
+    let retained = new Map<number, number>();
     for (
       let segmentId = 1;
       segmentId <= DEFAULT_MAX_RETAINED_OVERLAY_SEGMENTS + 2;
       ++segmentId
     ) {
-      retained.splice(
-        0,
-        retained.length,
-        ...retainSpatiallyIndexedSkeletonOverlaySegment(retained, segmentId),
+      retained = retainSpatiallyIndexedSkeletonOverlaySegment(
+        retained,
+        segmentId,
+        segmentId,
       );
     }
     const firstRetainedSegmentId = 3;
-    expect(retained).toEqual(
+    expect([...retained.keys()].sort((a, b) => a - b)).toEqual(
       Array.from(
         { length: DEFAULT_MAX_RETAINED_OVERLAY_SEGMENTS },
         (_, index) => firstRetainedSegmentId + index,

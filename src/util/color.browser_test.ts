@@ -20,6 +20,7 @@ import {
   parseRGBColorSpecification,
   packColor,
   serializeColor,
+  useWhiteBackground,
 } from "#src/util/color.js";
 import { vec3, vec4 } from "#src/util/geom.js";
 
@@ -79,5 +80,15 @@ describe("color", () => {
     expect(packColor(vec4.fromValues(-1, 0, 0, -1))).toEqual(0x00000000);
     expect(packColor(vec4.fromValues(0, 0.2, 2, 1))).toEqual(0xffff3300);
     expect(packColor(vec4.fromValues(0.4, 4.4, -0.4, 4))).toEqual(0xff00ff66);
+  });
+});
+
+describe("useWhiteBackground", () => {
+  it("works for simple cases", () => {
+    expect(useWhiteBackground(vec3.fromValues(0, 0, 0))).toBe(true);
+    expect(useWhiteBackground(vec3.fromValues(1, 1, 1))).toBe(false);
+    expect(useWhiteBackground(vec3.fromValues(1, 0, 0))).toBe(false);
+    expect(useWhiteBackground(vec3.fromValues(0, 1, 0))).toBe(false);
+    expect(useWhiteBackground(vec3.fromValues(0, 0, 1))).toBe(true);
   });
 });

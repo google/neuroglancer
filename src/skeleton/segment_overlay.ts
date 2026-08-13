@@ -58,6 +58,29 @@ export interface SpatiallyIndexedSkeletonOverlayGeometry {
   pickEdgeSegmentIds: Uint32Array;
   indices: Uint32Array;
   numVertices: number;
+  // Maps nodeId to its packed vertex index. Retained by the overlay chunk so a
+  // live node drag can override just the moving vertex's position via a shader
+  // uniform, rather than rebuilding or re-uploading the geometry.
+  nodeIndex: ReadonlyMap<number, number>;
+}
+
+// Writes xyz node positions (one vertex per node, in `orderedNodes` order) into
+// `positions`, applying any pending (dragged) position override so the built
+// texture is correct at build time. Live-drag position changes between builds
+// are applied at render time via a shader uniform, not here.
+function writeSpatiallyIndexedSkeletonOverlayNodePositions(
+  orderedNodes: readonly SpatiallyIndexedSkeletonOverlayNodeLike[],
+  positions: Float32Array,
+  getPendingNodePosition?: (nodeId: number) => ArrayLike<number> | undefined,
+) {
+  for (let index = 0; index < orderedNodes.length; ++index) {
+    const node = orderedNodes[index];
+    const position = getPendingNodePosition?.(node.nodeId) ?? node.position;
+    const baseOffset = index * 3;
+    positions[baseOffset] = Number(position[0] ?? 0);
+    positions[baseOffset + 1] = Number(position[1] ?? 0);
+    positions[baseOffset + 2] = Number(position[2] ?? 0);
+  }
 }
 
 export function buildSpatiallyIndexedSkeletonOverlayGeometry(
@@ -92,12 +115,12 @@ export function buildSpatiallyIndexedSkeletonOverlayGeometry(
   const scratch = ensureGpuScratch(numVertices);
   const { segmentIds, edgeIndices, edgeSegIds } = scratch;
 
+  writeSpatiallyIndexedSkeletonOverlayNodePositions(
+    orderedNodes,
+    positions,
+    getPendingNodePosition,
+  );
   orderedNodes.forEach((node, index) => {
-    const position = getPendingNodePosition?.(node.nodeId) ?? node.position;
-    const baseOffset = index * 3;
-    positions[baseOffset] = Number(position[0] ?? 0);
-    positions[baseOffset + 1] = Number(position[1] ?? 0);
-    positions[baseOffset + 2] = Number(position[2] ?? 0);
     segmentIds[index] = Math.max(0, Math.round(Number(node.segmentId)));
     pickSegmentIds[index] = segmentIds[index];
     nodeIds[index] = Math.round(Number(node.nodeId));
@@ -134,10 +157,11 @@ export function buildSpatiallyIndexedSkeletonOverlayGeometry(
     // Subarray view: consumed immediately by GLBuffer.fromData.
     indices: edgeIndices.subarray(0, edgeCount * 2),
     numVertices,
+    nodeIndex,
   };
 }
 
-export const DEFAULT_MAX_RETAINED_OVERLAY_SEGMENTS = 16;
+export const DEFAULT_MAX_RETAINED_OVERLAY_SEGMENTS = 24;
 
 function normalizeSegmentId(segmentId: number) {
   const normalizedSegmentId = Math.round(Number(segmentId));
@@ -160,29 +184,50 @@ export function mergeSpatiallyIndexedSkeletonOverlaySegmentIds(
   return [...mergedSegmentIds].sort((a, b) => a - b);
 }
 
+/**
+ * Trims to `maxRetained` entries, evicting the oldest (smallest counter)
+ * entries first.
+ */
+function trimRetainedOverlaySegments(
+  retainedSegments: Map<number, number>,
+  maxRetained: number,
+): Map<number, number> {
+  const excess = retainedSegments.size - maxRetained;
+  if (excess <= 0) {
+    return retainedSegments;
+  }
+  const oldestSegmentIdsFirst = [...retainedSegments.entries()]
+    .sort((a, b) => a[1] - b[1])
+    .map(([candidateSegmentId]) => candidateSegmentId);
+  const nextRetainedSegments = new Map(retainedSegments);
+  for (const candidateSegmentId of oldestSegmentIdsFirst.slice(0, excess)) {
+    nextRetainedSegments.delete(candidateSegmentId);
+  }
+  return nextRetainedSegments;
+}
+
+/**
+ * Adds or refreshes `segmentId` at recency `touchCounter`, then trims to
+ * `maxRetained` by evicting the oldest-touched entries. Only the relative
+ * order of `touchCounter` values across entries matters.
+ */
 export function retainSpatiallyIndexedSkeletonOverlaySegment(
-  retainedSegmentIds: readonly number[],
+  retainedSegments: ReadonlyMap<number, number>,
   segmentId: number,
+  touchCounter: number,
   options: {
     maxRetained?: number;
   } = {},
-) {
+): Map<number, number> {
   const normalizedSegmentId = normalizeSegmentId(segmentId);
   if (normalizedSegmentId === undefined) {
-    return [...retainedSegmentIds];
+    return new Map(retainedSegments);
   }
-  const nextRetainedSegmentIds = retainedSegmentIds.filter(
-    (candidateSegmentId) => candidateSegmentId !== normalizedSegmentId,
-  );
-  nextRetainedSegmentIds.push(normalizedSegmentId);
+  const nextRetainedSegments = new Map(retainedSegments);
+  nextRetainedSegments.set(normalizedSegmentId, touchCounter);
   const maxRetained = Math.max(
     1,
     Math.round(options.maxRetained ?? DEFAULT_MAX_RETAINED_OVERLAY_SEGMENTS),
   );
-  if (nextRetainedSegmentIds.length <= maxRetained) {
-    return nextRetainedSegmentIds;
-  }
-  return nextRetainedSegmentIds.slice(
-    nextRetainedSegmentIds.length - maxRetained,
-  );
+  return trimRetainedOverlaySegments(nextRetainedSegments, maxRetained);
 }
