@@ -87,61 +87,114 @@ describe("shouldDrawCrossSectionHoverMarker", () => {
 
 // Builds a minimal ProjectionParameters carrying only the fields
 // computeHoverMarkerMatrix reads.
-function makeProjectionParameters(
-  viewProjectionMat: mat4,
-  displayDimensionIndices: Int32Array,
-  canonicalVoxelFactors: Float32Array,
-): ProjectionParameters {
+function makeProjectionParameters(options: {
+  viewProjectionMat: mat4;
+  displayDimensionIndices: Int32Array;
+  logicalWidth: number;
+  logicalHeight: number;
+}): ProjectionParameters {
+  const {
+    viewProjectionMat,
+    displayDimensionIndices,
+    logicalWidth,
+    logicalHeight,
+  } = options;
   return {
     viewProjectionMat,
+    logicalWidth,
+    logicalHeight,
     displayDimensionRenderInfo: {
       displayDimensionIndices,
-      canonicalVoxelFactors,
     },
   } as unknown as ProjectionParameters;
 }
 
 describe("computeHoverMarkerMatrix", () => {
-  it("centers the marker at the given global position", () => {
-    const projectionParameters = makeProjectionParameters(
-      mat4.identity(mat4.create()),
-      Int32Array.of(0, 1, 2),
-      Float32Array.of(1, 1, 1),
-    );
-    const position = Float32Array.of(3, -4, 5);
+  it("centers the reticle at the projected hover position", () => {
+    const projectionParameters = makeProjectionParameters({
+      viewProjectionMat: mat4.identity(mat4.create()),
+      displayDimensionIndices: Int32Array.of(0, 1, 2),
+      logicalWidth: 100,
+      logicalHeight: 100,
+    });
+    const position = Float32Array.of(0.3, -0.4, 0.5);
     const mat = computeHoverMarkerMatrix(projectionParameters, 1, position);
-    // With an identity view-projection and unit voxel factors, the translation
-    // column of the marker matrix is exactly the hovered position.
-    expect(Array.from(mat.slice(12, 15))).toEqual([3, -4, 5]);
+    // With an identity view-projection (w = 1) the reticle center is the hovered
+    // position in normalized device coordinates.
+    expect(mat[12]).toBeCloseTo(0.3);
+    expect(mat[13]).toBeCloseTo(-0.4);
+    expect(mat[14]).toBeCloseTo(0.5);
+    expect(mat[15]).toBe(1);
   });
 
-  it("scales the marker by markerSize / canonicalVoxelFactors", () => {
-    const projectionParameters = makeProjectionParameters(
-      mat4.identity(mat4.create()),
-      Int32Array.of(0, 1, 2),
-      Float32Array.of(1, 2, 4),
-    );
+  it("sizes the reticle in screen space (pixels -> NDC via viewport)", () => {
+    const projectionParameters = makeProjectionParameters({
+      viewProjectionMat: mat4.identity(mat4.create()),
+      displayDimensionIndices: Int32Array.of(0, 1, 2),
+      logicalWidth: 200,
+      logicalHeight: 100,
+    });
     const mat = computeHoverMarkerMatrix(
       projectionParameters,
-      8,
+      10,
       Float32Array.of(0, 0, 0),
     );
-    // Diagonal scale entries: markerSize / canonicalVoxelFactors[i].
-    expect(mat[0]).toBe(8 / 1);
-    expect(mat[5]).toBe(8 / 2);
-    expect(mat[10]).toBe(8 / 4);
+    // Half-extent in NDC = 2 * pixels / logicalSize; independent of the world.
+    expect(mat[0]).toBeCloseTo((2 * 10) / 200); // x arm: 0.1
+    expect(mat[5]).toBeCloseTo((2 * 10) / 100); // y arm: 0.2
+    // The reticle lies in the screen plane; no local-z contribution.
+    expect(mat[10]).toBe(0);
   });
 
   it("ignores display dimensions mapped to -1", () => {
-    const projectionParameters = makeProjectionParameters(
-      mat4.identity(mat4.create()),
-      Int32Array.of(0, -1, 2),
-      Float32Array.of(1, 1, 1),
-    );
-    const position = Float32Array.of(3, 4, 5);
+    const projectionParameters = makeProjectionParameters({
+      viewProjectionMat: mat4.identity(mat4.create()),
+      displayDimensionIndices: Int32Array.of(0, -1, 2),
+      logicalWidth: 100,
+      logicalHeight: 100,
+    });
+    const position = Float32Array.of(0.3, 0.4, 0.5);
     const mat = computeHoverMarkerMatrix(projectionParameters, 1, position);
-    // The second display dimension is unmapped, so its translation is 0.
-    expect(Array.from(mat.slice(12, 15))).toEqual([3, 0, 5]);
+    // The second display dimension is unmapped, so its coordinate is 0.
+    expect(mat[12]).toBeCloseTo(0.3);
+    expect(mat[13]).toBe(0);
+    expect(mat[14]).toBeCloseTo(0.5);
+  });
+
+  it("draws an identically-shaped crosshair regardless of panel orientation", () => {
+    // The core of the fix: in every orthoview the reticle must be the same
+    // screen-space "+", not a cross in one panel and a line in the others.  Two
+    // panels viewing the same point through different orientations (identity vs
+    // a 90-degree rotation about X, i.e. an xy- vs xz-style view) must yield the
+    // same in-plane arm sizes.
+    const viewport = { logicalWidth: 100, logicalHeight: 100 };
+    const position = Float32Array.of(0.2, 0.3, 0.4);
+
+    const xyView = computeHoverMarkerMatrix(
+      makeProjectionParameters({
+        viewProjectionMat: mat4.identity(mat4.create()),
+        displayDimensionIndices: Int32Array.of(0, 1, 2),
+        ...viewport,
+      }),
+      8,
+      position,
+    );
+    const rotated = mat4.fromXRotation(mat4.create(), Math.PI / 2);
+    const xzView = computeHoverMarkerMatrix(
+      makeProjectionParameters({
+        viewProjectionMat: rotated,
+        displayDimensionIndices: Int32Array.of(0, 1, 2),
+        ...viewport,
+      }),
+      8,
+      position,
+    );
+
+    // Both arms have the same non-zero screen-space length in both panels.
+    expect(xyView[0]).toBeGreaterThan(0);
+    expect(xyView[5]).toBeGreaterThan(0);
+    expect(xzView[0]).toBeCloseTo(xyView[0]);
+    expect(xzView[5]).toBeCloseTo(xyView[5]);
   });
 });
 
