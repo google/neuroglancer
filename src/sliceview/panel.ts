@@ -456,10 +456,11 @@ export class SliceViewPanel extends RenderedDataPanel {
         );
       }
       if (showHoverMarker) {
-        const { value: zoom } = this.viewer.navigationState.zoomFactor;
+        // A fixed-size, screen-aligned crosshair so it reads consistently in
+        // every orthoview regardless of the panel's orientation.
         const markerMat = computeHoverMarkerMatrix(
           projectionParameters,
-          HOVER_MARKER_SIZE * zoom,
+          HOVER_MARKER_SIZE,
           mouseState.position,
         );
         // Fade the marker with distance from this panel's slice plane.

@@ -23,38 +23,68 @@
  */
 
 import type { ProjectionParameters } from "#src/projection_parameters.js";
-import { mat4 } from "#src/util/geom.js";
+import { mat4, vec4 } from "#src/util/geom.js";
 
 const tempMat = mat4.create();
+const tempPoint = vec4.create();
 
 /**
- * Computes the transform that places a fixed-size marker centered at the
- * specified global `position`, projected into the viewport described by
- * `projectionParameters`.  This mirrors `computeAxisLineMatrix` but uses an
- * arbitrary position (the mouse-hover position) rather than the navigation
- * center.
+ * Computes the transform that draws the hover marker as a fixed-size,
+ * screen-aligned "+" reticle centered at the projected location of the global
+ * `position` within the panel described by `projectionParameters`.
+ *
+ * The reticle is built in screen space -- rather than in the plane of the first
+ * two display dimensions -- so that it appears as a consistent crosshair in
+ * every cross-section panel regardless of that panel's orientation.  If it were
+ * built in a fixed world plane, an arm of the "+" that happens to point along a
+ * panel's depth axis would collapse to a point, leaving only a line in the
+ * orthoviews whose slice plane differs from that world plane.
+ *
+ * The returned matrix maps the unit "+" vertices (local x/y in [-1, 1], z = 0)
+ * directly to clip space with w = 1, so no view-projection multiply is applied
+ * afterwards.  Its third row carries the marker center's normalized device z
+ * (the signed distance from this panel's slice plane) for use by
+ * {@link crossSectionHoverMarkerAlpha}.
  */
 export function computeHoverMarkerMatrix(
   projectionParameters: ProjectionParameters,
-  markerSize: number,
+  markerSizeInPixels: number,
   position: Float32Array,
 ) {
-  const mat = mat4.identity(tempMat);
   const {
-    displayDimensionRenderInfo: {
-      canonicalVoxelFactors,
-      displayDimensionIndices,
-    },
+    displayDimensionRenderInfo: { displayDimensionIndices },
+    viewProjectionMat,
+    logicalWidth,
+    logicalHeight,
   } = projectionParameters;
+  // Project the hover position (taken along the display dimensions) into clip
+  // space to obtain the reticle center.
+  const point = tempPoint;
   for (let i = 0; i < 3; ++i) {
     const globalDim = displayDimensionIndices[i];
-    mat[12 + i] =
+    point[i] =
       globalDim === -1 || globalDim >= position.length
         ? 0
         : position[globalDim];
-    mat[5 * i] = markerSize / canonicalVoxelFactors[i];
   }
-  mat4.multiply(mat, projectionParameters.viewProjectionMat, mat);
+  point[3] = 1;
+  vec4.transformMat4(point, point, viewProjectionMat);
+  const w = point[3];
+  const cx = w !== 0 ? point[0] / w : 0;
+  const cy = w !== 0 ? point[1] / w : 0;
+  const cz = w !== 0 ? point[2] / w : 0;
+  // Half-extent of the reticle in normalized device coordinates for the
+  // requested pixel size (the unit "+" vertices span [-1, 1]).
+  const hx = logicalWidth !== 0 ? (2 * markerSizeInPixels) / logicalWidth : 0;
+  const hy = logicalHeight !== 0 ? (2 * markerSizeInPixels) / logicalHeight : 0;
+  const mat = mat4.identity(tempMat);
+  mat[0] = hx;
+  mat[5] = hy;
+  mat[10] = 0;
+  mat[12] = cx;
+  mat[13] = cy;
+  mat[14] = cz;
+  mat[15] = 1;
   return mat;
 }
 
