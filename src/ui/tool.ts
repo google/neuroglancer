@@ -37,11 +37,11 @@ import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { getDropEffectFromModifiers } from "#src/util/drag_and_drop.js";
-import type {
-  ActionEvent,
+import type { ActionEvent } from "#src/util/event_action_map.js";
+import {
   EventActionMap,
+  registerActionListener,
 } from "#src/util/event_action_map.js";
-import { registerActionListener } from "#src/util/event_action_map.js";
 import {
   verifyObject,
   verifyObjectProperty,
@@ -52,9 +52,25 @@ import { Signal } from "#src/util/signal.js";
 
 const TOOL_KEY_PATTERN = /^[A-Z]$/;
 
+// Priorities used when attaching an `EventActionMap` as a parent of the
+// viewer's root binding maps.  `HierarchicalMap.get` consults parents with
+// priority greater than 0 before the map's own direct bindings, and the
+// built-in default maps are attached at `NEGATIVE_INFINITY`, giving:
+//
+//   +Inf   bindings of the currently active tool
+//   1000   bindings supplied via the Python `config_state`
+//    100   letters the user has bound a tool to
+//     10   bindings of a visible side panel, e.g. the skeleton tab
+//      0   direct bindings on the root maps
+//   -Inf   built-in global and data panel bindings
+export const ACTIVE_TOOL_BINDING_PRIORITY = Number.POSITIVE_INFINITY;
+export const USER_TOOL_BINDING_PRIORITY = 100;
+export const CONTEXTUAL_PANEL_BINDING_PRIORITY = 10;
+
 export type InputEventMapBinder = (
   eventActionMap: EventActionMap,
   context: RefCounted,
+  priority?: number,
 ) => void;
 
 export class ToolActivation<ToolType extends Tool = Tool> extends RefCounted {
@@ -310,15 +326,57 @@ export class GlobalToolBinder extends RefCounted {
   localBinders = new Set<LocalToolBinder>();
   localBindersChanged = new Signal();
 
+  /**
+   * Maps the letter keys that currently have a tool bound to the corresponding
+   * `tool-<LETTER>` action.  Attached as a parent of the viewer's root binding
+   * maps at `USER_TOOL_BINDING_PRIORITY` so that a tool the user has bound
+   * takes precedence over the built-in binding for the same letter.
+   */
+  readonly boundKeyEventActionMap = new EventActionMap();
+
+  private readonly registeredBoundKeys = new Set<string>();
+
   constructor(
     private inputEventMapBinder: InputEventMapBinder,
     public toolPaletteState: MultiToolPaletteState,
   ) {
     super();
+    this.boundKeyEventActionMap.label = "Tool key bindings";
+    this.registerDisposer(
+      this.changed.add(() => this.updateBoundKeyEventActionMap()),
+    );
   }
 
-  bindInputEventMap(inputEventMap: EventActionMap, context: RefCounted) {
-    this.inputEventMapBinder(inputEventMap, context);
+  /**
+   * Brings `boundKeyEventActionMap` in sync with `bindings`.  Driven by the
+   * `changed` signal, which every mutation path dispatches, including
+   * `LocalToolBinder.clear`, which deletes from `bindings` directly.
+   */
+  private updateBoundKeyEventActionMap() {
+    const { bindings, boundKeyEventActionMap, registeredBoundKeys } = this;
+    // Only the bare letter and the legacy `shift`+letter form are registered.
+    // Including optional `alt`/`control` would allow a tool bound to `P` to
+    // shadow `control+keyp` → `open-command-palette`.
+    const eventIdentifier = (key: string) =>
+      `shift?+key${key.toLowerCase()}` as const;
+    for (const key of registeredBoundKeys) {
+      if (bindings.has(key)) continue;
+      boundKeyEventActionMap.delete(eventIdentifier(key));
+      registeredBoundKeys.delete(key);
+    }
+    for (const key of bindings.keys()) {
+      if (registeredBoundKeys.has(key)) continue;
+      boundKeyEventActionMap.set(eventIdentifier(key), `tool-${key}`);
+      registeredBoundKeys.add(key);
+    }
+  }
+
+  bindInputEventMap(
+    inputEventMap: EventActionMap,
+    context: RefCounted,
+    priority?: number,
+  ) {
+    this.inputEventMapBinder(inputEventMap, context, priority);
   }
 
   get(key: string): Borrowed<Tool> | undefined {

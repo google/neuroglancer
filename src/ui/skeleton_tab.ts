@@ -92,7 +92,10 @@ import {
   type SpatialSkeletonSegmentRenderRow,
   type SpatialSkeletonSegmentRenderState,
 } from "#src/ui/skeleton_tab_render.js";
-import { makeToolButton } from "#src/ui/tool.js";
+import {
+  CONTEXTUAL_PANEL_BINDING_PRIORITY,
+  makeToolButton,
+} from "#src/ui/tool.js";
 import type { ArraySpliceOp } from "#src/util/array.js";
 import {
   registerActionListener,
@@ -360,9 +363,12 @@ export class SpatialSkeletonEditTab extends Tab {
     // Add the tab navigation map to the viewer's slice and perspective view
     // panels so shortcuts work when the user's focus is on a viewport, not just
     // the sidebar.  Scoped to this Tab's lifetime via `this` as the context.
+    // Bound below `USER_TOOL_BINDING_PRIORITY` so that a tool the user has bound
+    // to one of these letters still wins while the tab is open.
     layer.manager.root.toolBinder.bindInputEventMap(
       getDefaultSkeletonTabBindings(),
       this,
+      CONTEXTUAL_PANEL_BINDING_PRIORITY,
     );
 
     let allNodes: SpatiallyIndexedSkeletonNode[] = [];

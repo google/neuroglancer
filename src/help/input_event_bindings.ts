@@ -255,7 +255,7 @@ export class InputEventBindingHelpDialog extends SidePanel {
           layerBindings = [];
           layerToolBindingsMap.set(tool.context, layerBindings);
         }
-        layerBindings.push([`shift+key${key.toLowerCase()}`, tool.description]);
+        layerBindings.push([`key${key.toLowerCase()}`, tool.description]);
       }
     }
     const layerToolBindings = Array.from(layerToolBindingsMap.entries());
