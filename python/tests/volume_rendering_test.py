@@ -11,38 +11,28 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Test volume rendering picking."""
+"""Test volume rendering picking and rendering."""
 
 import threading
 
 import neuroglancer
 import numpy as np
+import pytest
 
 
-def test_volume_rendering_picking_does_not_occlude_mesh(webdriver):
-    """Volume rendering must not steal pick buffer entries from a transparent entry in front of it.
-
-    Scene: a transparent segmentation mesh occupies the near half of the volume (low z,
-    close to the default camera which looks in the +z direction), and an image volume
-    occupies the far half (high z).  Clicking the centre of the 3-D view should pick
-    the mesh, not the image.
-
-    The regression being guarded: before the fix, volume rendering wrote the near-plane
-    depth (≈ 0) to the picking buffer, making it appear closer than any real geometry
-    and stealing pick buffer entries from meshes that were geometrically in front of it.
-    """
+def _setup_viewer_with_volume_and_mesh(webdriver, orthographic, mesh_opacity=1.0):
     shape = (20, 20, 20)
 
     # Image data in the far half of the volume (high z = far from default camera,
     # which looks in the +z direction so low z is nearest).
     image_data = np.zeros(shape, dtype=np.uint8)
-    image_data[:, :, 10:20] = 200
+    image_data[1:19, 1:19, 11:20] = 255
 
     # Segmentation cube in the near half (low z = close to default camera).
     # The cube must not touch any array boundary so that marching cubes generates
     # a fully closed mesh rather than an open plane.
     seg_data = np.zeros(shape, dtype=np.uint64)
-    seg_data[2:18, 2:18, 2:9] = 1
+    seg_data[1:19, 1:19, 1:9] = 1
 
     with webdriver.viewer.txn() as s:
         s.dimensions = neuroglancer.CoordinateSpace(
@@ -54,7 +44,13 @@ def test_volume_rendering_picking_does_not_occlude_mesh(webdriver):
                 source=neuroglancer.LocalVolume(
                     data=image_data, dimensions=s.dimensions
                 ),
-                volume_rendering_mode="On",
+                volume_rendering_mode="Max",
+                shader="""
+#uicontrol invlerp normalized
+void main() {
+    emitRGBA(vec4(0.0, 0.0, normalized(), 1.0));
+}
+                """,
             ),
         )
         s.layers.append(
@@ -62,13 +58,67 @@ def test_volume_rendering_picking_does_not_occlude_mesh(webdriver):
             layer=neuroglancer.SegmentationLayer(
                 source=neuroglancer.LocalVolume(data=seg_data, dimensions=s.dimensions),
                 segments=[1],
-                object_alpha=0.5,
+                segment_default_color="#ff0000",
+                hover_highlight=False,
+                object_alpha=mesh_opacity,
             ),
         )
         s.layout = "3d"
+        s.layout.orthographic_projection = orthographic
         s.show_axis_lines = False
         s.position = [10, 10, 10]
-        s.projection_scale = 30
+        s.projection_scale = 15
+
+
+@pytest.mark.parametrize("orthographic", [False, True])
+def test_volume_rendering_occlusion(webdriver, orthographic):
+    """Test that an opaque mesh occludes a volume rendered from an image volume.
+
+    Specifically, this aims to check the harder case where the mesh sits
+    inside a single image chunk, as opposed to fully being in front of the chunk.
+    """
+    _setup_viewer_with_volume_and_mesh(webdriver, orthographic=orthographic)
+
+    # The mesh should occlude the volume with default camera
+    webdriver.sync()
+    screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
+    pixels = screenshot.image_pixels
+    # Lighting causes each color channel to vary slightly instead of saturating
+    # at 255, so check bounds rather than exact equality.
+    # Mesh is red, so the only non-zero colors should be in the red channel.
+    np.testing.assert_array_equal(pixels[..., 1], 0)
+    np.testing.assert_array_equal(pixels[..., 2], 0)
+    np.testing.assert_array_equal(pixels[..., 3], 255)
+    assert np.all(pixels[..., 0] >= 230)
+
+    # On flipping the camera, a full opacity volume rendering occludes the mesh
+    with webdriver.viewer.txn() as s:
+        s.projection_orientation = [0, 1, 0, 0]
+
+    webdriver.sync()
+    screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
+    np.testing.assert_array_equal(
+        screenshot.image_pixels,
+        np.tile(np.array([0, 0, 255, 255], dtype=np.uint8), (10, 10, 1)),
+    )
+
+
+@pytest.mark.parametrize("orthographic", [False, True])
+def test_volume_rendering_picking_does_not_occlude_mesh(webdriver, orthographic):
+    """Volume rendering must not steal pick buffer entries from a transparent entry in front of it.
+
+    Scene: a transparent segmentation mesh occupies the near half of the volume (low z,
+    close to the default camera which looks in the +z direction), and an image volume
+    occupies the far half (high z).  Clicking the centre of the 3-D view should pick
+    the mesh, not the image.
+
+    The regression being guarded: before the fix, volume rendering wrote the near-plane
+    depth (≈ 0) to the picking buffer, making it appear closer than any real geometry
+    and stealing pick buffer entries from meshes that were geometrically in front of it.
+    """
+    _setup_viewer_with_volume_and_mesh(
+        webdriver, orthographic=orthographic, mesh_opacity=0.5
+    )
 
     # threading.Event is required because the pick callback fires on a background
     # thread (browser → Python action dispatch), not on the test's main thread.

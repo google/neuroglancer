@@ -454,10 +454,6 @@ float computeDepthFromClipSpace(vec4 clipSpacePosition) {
   float NDCDepthCoord = clipSpacePosition.z / clipSpacePosition.w;
   return (NDCDepthCoord + 1.0) * 0.5;
 }
-vec2 computeUVFromClipSpace(vec4 clipSpacePosition) {
-  vec2 NDCPosition = clipSpacePosition.xy / clipSpacePosition.w;
-  return (NDCPosition + 1.0) * 0.5;
-}
 `,
           ]);
           builder.setFragmentMainFunction(`
@@ -498,16 +494,22 @@ void main() {
   int endStep = min(uMaxSteps, int(floor((intersectEnd - uNearLimitFraction) / stepSize)) + 1);
   outputColor = vec4(0, 0, 0, 0);
   revealage = 1.0;
+  vec4 clipNearPoint = uModelViewProjectionMatrix * vec4(nearPoint, 1.0);
+  vec4 clipFarPoint = uModelViewProjectionMatrix * vec4(farPoint, 1.0);
+  float depthInBuffer = texture(uDepthSampler, (normalizedPosition + 1.0) * 0.5).r;
   for (int rayStep = startStep; rayStep < endStep; ++rayStep) {
-    vec3 position = mix(nearPoint, farPoint, uNearLimitFraction + float(rayStep) * stepSize);
-    vec4 clipSpacePosition = uModelViewProjectionMatrix * vec4(position, 1.0);
+    // linearly interpolate position and clip space position along the ray
+    float rayFraction = uNearLimitFraction + float(rayStep) * stepSize;
+    vec3 position = mix(nearPoint, farPoint, rayFraction);
+    vec4 clipSpacePosition = mix(clipNearPoint, clipFarPoint, rayFraction);
+
+    // compute depth at the ray position and check if it is behind an opaque object
     depthAtRayPosition = computeDepthFromClipSpace(clipSpacePosition);
-    vec2 uv = computeUVFromClipSpace(clipSpacePosition);
-    float depthInBuffer = texture(uDepthSampler, uv).r;
     bool rayPositionBehindOpaqueObject = (1.0 - depthAtRayPosition) < depthInBuffer;
     if (rayPositionBehindOpaqueObject) {
       break;
     }
+
     curChunkPosition = position - uTranslation;
     userMain();
     ${glsl_handleMaxProjectionUpdate}
