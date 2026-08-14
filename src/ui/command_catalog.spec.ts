@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { ActionCommand } from "#src/ui/command.js";
 import {
   collectActionBindings,
   CommandCatalog,
   type CommandCatalogContext,
 } from "#src/ui/command_catalog.js";
+import { CommandRegistry } from "#src/ui/command_registry.js";
 import { EventActionMap } from "#src/util/event_action_map.js";
 import { Signal } from "#src/util/signal.js";
 import type { InputEventBindings } from "#src/viewer.js";
@@ -42,9 +44,18 @@ function makeInputEventBindings(
 
 const noopSignal = { add: () => () => {} };
 
+// Registries created by makeContext, disposed after each test.
+const activeRegistries: CommandRegistry[] = [];
+
+afterEach(() => {
+  while (activeRegistries.length > 0) activeRegistries.pop()!.dispose();
+});
+
 function makeContext(
   inputEventBindings = makeInputEventBindings(new EventActionMap()),
+  commandRegistry = new CommandRegistry(),
 ): CommandCatalogContext {
+  activeRegistries.push(commandRegistry);
   return {
     globalToolBinder: {
       changed: noopSignal,
@@ -59,6 +70,7 @@ function makeContext(
     },
     selectedLayer: {},
     inputEventBindings,
+    commandRegistry,
   } as unknown as CommandCatalogContext;
 }
 
@@ -111,10 +123,15 @@ describe("collectActionBindings", () => {
 });
 
 describe("CommandCatalog.filter", () => {
-  // With empty bindings the catalog contains only the two supplemental commands:
-  // "Edit JSON State" and "Screenshot".
+  // Seed the registry with two commands so the catalog surfaces exactly
+  // "Edit JSON State" and "Screenshot" as its flat entries.
   function makeCatalog() {
-    return new CommandCatalog(makeContext());
+    const registry = new CommandRegistry();
+    registry.register(new ActionCommand("edit-json-state", "Edit JSON State"));
+    registry.register(new ActionCommand("screenshot", "Screenshot"));
+    return new CommandCatalog(
+      makeContext(makeInputEventBindings(new EventActionMap()), registry),
+    );
   }
 
   it("returns all commands for an empty query", () => {
@@ -140,6 +157,95 @@ describe("CommandCatalog.filter", () => {
 
   it("returns empty for a non-matching query", () => {
     expect(makeCatalog().filter("xyz")).toHaveLength(0);
+  });
+});
+
+describe("CommandCatalog command sources", () => {
+  function makeCatalog(map: EventActionMap, registry: CommandRegistry) {
+    return new CommandCatalog(
+      makeContext(makeInputEventBindings(map), registry),
+    );
+  }
+
+  function commandEntries(catalog: CommandCatalog) {
+    return catalog.commands.filter((entry) => entry.kind === "command");
+  }
+
+  it("annotates a registered command with its live binding", () => {
+    const map = new EventActionMap();
+    map.set("keyb", "toggle-scale-bar");
+    const registry = new CommandRegistry();
+    registry.register(
+      new ActionCommand("toggle-scale-bar", "Toggle Scale Bar"),
+    );
+    const catalog = makeCatalog(map, registry);
+    try {
+      const entries = commandEntries(catalog).filter(
+        (entry) => entry.command.id === "toggle-scale-bar",
+      );
+      expect(entries).toHaveLength(1);
+      expect(entries[0].label).toBe("Toggle Scale Bar");
+      expect(entries[0].shortcut).toBe("b");
+    } finally {
+      catalog.dispose();
+    }
+  });
+
+  it("still lists a bound action that nothing registered", () => {
+    // An embedder (or the Python integration) may bind an action without
+    // registering a command for it; it should not vanish from the palette.
+    const map = new EventActionMap();
+    map.set("keyq", "embedder-action");
+    const catalog = makeCatalog(map, new CommandRegistry());
+    try {
+      const entries = commandEntries(catalog).filter(
+        (entry) => entry.command.id === "embedder-action",
+      );
+      expect(entries).toHaveLength(1);
+      // Falls back to a label derived from the action id.
+      expect(entries[0].label).toBe("Embedder Action");
+      expect(entries[0].shortcut).toBe("q");
+    } finally {
+      catalog.dispose();
+    }
+  });
+
+  it("does not duplicate an action that is both registered and bound", () => {
+    const map = new EventActionMap();
+    map.set("keyb", "toggle-scale-bar");
+    const registry = new CommandRegistry();
+    registry.register(
+      new ActionCommand("toggle-scale-bar", "Toggle Scale Bar"),
+    );
+    const catalog = makeCatalog(map, registry);
+    try {
+      expect(
+        commandEntries(catalog).filter(
+          (entry) => entry.command.id === "toggle-scale-bar",
+        ),
+      ).toHaveLength(1);
+    } finally {
+      catalog.dispose();
+    }
+  });
+
+  it("omits a disabled command, binding or not", () => {
+    const map = new EventActionMap();
+    map.set("keyb", "toggle-scale-bar");
+    const registry = new CommandRegistry();
+    const command = new ActionCommand("toggle-scale-bar", "Toggle Scale Bar");
+    command.enabled = false;
+    registry.register(command);
+    const catalog = makeCatalog(map, registry);
+    try {
+      expect(
+        commandEntries(catalog).filter(
+          (entry) => entry.command.id === "toggle-scale-bar",
+        ),
+      ).toHaveLength(0);
+    } finally {
+      catalog.dispose();
+    }
   });
 });
 

@@ -16,6 +16,9 @@
 
 import type { LayerManager, SelectedLayerState } from "#src/layer/index.js";
 import { UserLayer } from "#src/layer/index.js";
+import type { Command } from "#src/ui/command.js";
+import { ActionCommand } from "#src/ui/command.js";
+import type { CommandRegistry } from "#src/ui/command_registry.js";
 import {
   getMatchingTools,
   restoreTool,
@@ -39,15 +42,14 @@ export interface CommandCatalogContext {
   layerManager: LayerManager;
   selectedLayer: SelectedLayerState;
   inputEventBindings: InputEventBindings;
+  /**
+   * Primary source of the flat command set. Registered commands are enumerated
+   * directly and take precedence; any keyboard-bound action that is *not*
+   * registered is still listed afterwards, so actions an embedder or the Python
+   * integration only ever bound to a key do not disappear from the palette.
+   */
+  commandRegistry: CommandRegistry;
 }
-
-const SUPPLEMENTAL_COMMANDS: readonly {
-  actionId: ActionIdentifier;
-  label: string;
-}[] = [
-  { actionId: "edit-json-state", label: "Edit JSON State" },
-  { actionId: "screenshot", label: "Screenshot" },
-];
 
 export interface ActionBinding {
   readonly actionId: ActionIdentifier;
@@ -59,14 +61,15 @@ interface CommandPaletteEntryBase {
   readonly shortcut: string;
 }
 
-// Dispatched as an `action:<actionId>` DOM event, exactly as the keyboard
-// shortcut would be.
-export interface ActionCommandEntry extends CommandPaletteEntryBase {
-  readonly kind: "action";
-  readonly actionId: ActionIdentifier;
+// A command, either taken from the registry or synthesised for a keyboard-bound
+// action that nothing registered. The consumer invokes it with its own context.
+export interface CommandEntry extends CommandPaletteEntryBase {
+  readonly kind: "command";
+  readonly command: Command;
 }
 
-// Runs a callback directly (no DOM action exists for it).
+// Runs an anonymous callback directly (no command identity, e.g. a per-layer
+// toggle or an unbound tool activation).
 export interface ExecuteCommandEntry extends CommandPaletteEntryBase {
   readonly kind: "execute";
   readonly execute: () => void;
@@ -79,7 +82,7 @@ export interface GroupCommandEntry extends CommandPaletteEntryBase {
 }
 
 export type CommandPaletteEntry =
-  | ActionCommandEntry
+  | CommandEntry
   | ExecuteCommandEntry
   | GroupCommandEntry;
 
@@ -95,6 +98,7 @@ function formatKeyStroke(stroke: string): string {
     .join("+");
 }
 
+// Fallback label for a bound action that no command was registered for.
 function actionIdToLabel(actionId: ActionIdentifier): string {
   return actionId
     .split("-")
@@ -270,6 +274,9 @@ export class CommandCatalog extends RefCounted {
     this.registerDisposer(
       context.layerManager.layersChanged.add(debouncedRebuild),
     );
+    this.registerDisposer(
+      context.commandRegistry.changed.add(debouncedRebuild),
+    );
     this.rebuild();
   }
 
@@ -279,16 +286,9 @@ export class CommandCatalog extends RefCounted {
       layerManager,
       selectedLayer,
       inputEventBindings,
+      commandRegistry,
     } = this.context;
     const commands: CommandPaletteEntry[] = [];
-
-    // "Deactivate Active Tool" is always present — harmless no-op when nothing is active.
-    commands.push({
-      kind: "action",
-      label: "Deactivate Active Tool",
-      shortcut: "",
-      actionId: "deactivate-active-tool",
-    });
 
     // Hierarchical layer actions — each group entry opens a sub-palette of layers.
     // The first 9 layers carry their digit-key shortcuts so users can see they
@@ -347,20 +347,34 @@ export class CommandCatalog extends RefCounted {
       );
     }
 
-    for (const { actionId, eventAction } of bindings) {
+    // Registered commands come first. A command's shortcut is whatever binding
+    // is currently installed for its id, shown for reference only.
+    for (const command of commandRegistry.values()) {
+      if (!command.enabled) continue;
+      commands.push({
+        kind: "command",
+        label: command.label,
+        shortcut: shortcutByAction.get(command.id) ?? "",
+        command,
+      });
+    }
+
+    // The registry is not required to be exhaustive: an embedder (or the Python
+    // integration) may bind an action without registering a command for it.
+    // Those are listed too, labelled from their action id, so nothing that used
+    // to appear in the palette is lost.
+    for (const { actionId } of bindings) {
+      if (commandRegistry.has(actionId)) continue;
       if (/^tool-[A-Z]$/.test(actionId)) continue;
       // Layer-index actions are replaced by hierarchical group entries above.
       if (/^(toggle|select|toggle-pick)-layer-\d+$/.test(actionId)) continue;
-
       const label = actionIdToLabel(actionId);
-      const shortcut = formatKeyStroke(
-        friendlyEventIdentifier(eventAction.originalEventIdentifier ?? ""),
-      );
-      commands.push({ kind: "action", label, shortcut, actionId });
-    }
-
-    for (const { actionId, label } of SUPPLEMENTAL_COMMANDS) {
-      commands.push({ kind: "action", label, shortcut: "", actionId });
+      commands.push({
+        kind: "command",
+        label,
+        shortcut: shortcutByAction.get(actionId) ?? "",
+        command: new ActionCommand(actionId, label),
+      });
     }
 
     const toolQueryResult = parseToolQuery("+");
@@ -402,10 +416,10 @@ export class CommandCatalog extends RefCounted {
               ? `${tool.description} — ${tool.context.managedLayer.name}`
               : tool.description;
           commands.push({
-            kind: "action",
+            kind: "command",
             label,
             shortcut: shortcutByAction.get(actionId) ?? "",
-            actionId,
+            command: new ActionCommand(actionId, label),
           });
         } else {
           const capturedToolJson = toolJson;
