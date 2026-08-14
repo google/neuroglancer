@@ -218,16 +218,18 @@ const STATIC_COMMANDS: readonly BuiltinCommand[] = [
   },
 ];
 
+/** The built-in commands, in the order they are registered. */
+export function getDefaultCommands(): readonly BuiltinCommand[] {
+  return [...STATIC_COMMANDS, ...axisCommands()];
+}
+
 /**
  * Registers the built-in commands into `registry`. Called once during default
  * viewer setup. The registry is owned (and disposed) by the viewer, so no
  * disposers are returned here, and the commands live for the viewer's lifetime.
  */
 export function registerDefaultCommands(registry: CommandRegistry): void {
-  for (const { id, label, description } of [
-    ...STATIC_COMMANDS,
-    ...axisCommands(),
-  ]) {
+  for (const { id, label, description } of getDefaultCommands()) {
     registry.register(new ActionCommand(id, label, description));
   }
 }
