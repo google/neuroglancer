@@ -43,9 +43,10 @@ export interface CommandCatalogContext {
   selectedLayer: SelectedLayerState;
   inputEventBindings: InputEventBindings;
   /**
-   * Authoritative source of the flat command set. Its commands are enumerated
-   * directly; the input bindings are consulted only to annotate each command
-   * with its current shortcut, not to discover which commands exist.
+   * Primary source of the flat command set. Registered commands are enumerated
+   * directly and take precedence; any keyboard-bound action that is *not*
+   * registered is still listed afterwards, so actions an embedder or the Python
+   * integration only ever bound to a key do not disappear from the palette.
    */
   commandRegistry: CommandRegistry;
 }
@@ -60,7 +61,8 @@ interface CommandPaletteEntryBase {
   readonly shortcut: string;
 }
 
-// A registered command. The consumer invokes it with its own context.
+// A command, either taken from the registry or synthesised for a keyboard-bound
+// action that nothing registered. The consumer invokes it with its own context.
 export interface CommandEntry extends CommandPaletteEntryBase {
   readonly kind: "command";
   readonly command: Command;
@@ -94,6 +96,14 @@ function formatKeyStroke(stroke: string): string {
       return part;
     })
     .join("+");
+}
+
+// Fallback label for a bound action that no command was registered for.
+function actionIdToLabel(actionId: ActionIdentifier): string {
+  return actionId
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
 
 function isKeyboardEvent(normalizedId: NormalizedEventIdentifier): boolean {
@@ -337,8 +347,8 @@ export class CommandCatalog extends RefCounted {
       );
     }
 
-    // A command's shortcut is whatever binding is currently installed for its
-    // id, shown for reference only.
+    // Registered commands come first. A command's shortcut is whatever binding
+    // is currently installed for its id, shown for reference only.
     for (const command of commandRegistry.values()) {
       if (!command.enabled) continue;
       commands.push({
@@ -346,6 +356,24 @@ export class CommandCatalog extends RefCounted {
         label: command.label,
         shortcut: shortcutByAction.get(command.id) ?? "",
         command,
+      });
+    }
+
+    // The registry is not required to be exhaustive: an embedder (or the Python
+    // integration) may bind an action without registering a command for it.
+    // Those are listed too, labelled from their action id, so nothing that used
+    // to appear in the palette is lost.
+    for (const { actionId } of bindings) {
+      if (commandRegistry.has(actionId)) continue;
+      if (/^tool-[A-Z]$/.test(actionId)) continue;
+      // Layer-index actions are replaced by hierarchical group entries above.
+      if (/^(toggle|select|toggle-pick)-layer-\d+$/.test(actionId)) continue;
+      const label = actionIdToLabel(actionId);
+      commands.push({
+        kind: "command",
+        label,
+        shortcut: shortcutByAction.get(actionId) ?? "",
+        command: new ActionCommand(actionId, label),
       });
     }
 
