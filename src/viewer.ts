@@ -1176,9 +1176,11 @@ export class Viewer extends RefCounted implements ViewerState {
     new GlobalToolBinder(this.toolInputEventMapBinder, this.toolPalettes),
   );
 
-  // Global, binding-independent registry of viewer commands. Populated with the
-  // built-in commands during default viewer setup; feature code and hosts may
-  // register additional commands against it.
+  // Binding-independent registry of the viewer's commands. Populated with the
+  // built-in commands during default viewer setup; feature code and embedding
+  // applications may register additional commands against it. It lists the
+  // commands it was told about, not every action that exists - see
+  // docs/concepts/commands.rst.
   public commandRegistry = this.registerDisposer(new CommandRegistry());
 
   public toolBinder = this.registerDisposer(
