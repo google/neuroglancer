@@ -49,49 +49,40 @@ import type {
   ActionCommandInfo,
   CommandRegistry,
 } from "#src/ui/command_registry.js";
+import { AXES_NAMES } from "#src/util/geom.js";
 
 // Every built-in command is action-backed (dispatches `action:<id>`); the type
 // is stamped by `registerAction` at registration time.
 type BuiltinCommand = Omit<ActionCommandInfo, "type">;
 
-const AXES = ["X", "Y", "Z"] as const;
-
-// Directional position nudges (arrow keys / , . / [ ] in the data panels).
-function axisMoveCommands(): BuiltinCommand[] {
+// Directional position nudges and relative rotations, one pair per axis (arrow
+// keys / , . and r / e / shift+arrow keys in the data panels). The ids are
+// derived from the same AXES_NAMES that RenderedDataPanel derives its action
+// listeners from, so the two cannot drift apart.
+function axisCommands(): BuiltinCommand[] {
   const commands: BuiltinCommand[] = [];
-  for (const axis of AXES) {
-    const lower = axis.toLowerCase();
+  for (const axis of AXES_NAMES) {
+    const upper = axis.toUpperCase();
     commands.push(
       {
-        id: `${lower}-`,
-        label: `Move −${axis}`,
-        description: `Move the view one step in the −${axis} direction.`,
+        id: `${axis}-`,
+        label: `Move −${upper}`,
+        description: `Move the view one step in the −${upper} direction.`,
       },
       {
-        id: `${lower}+`,
-        label: `Move +${axis}`,
-        description: `Move the view one step in the +${axis} direction.`,
-      },
-    );
-  }
-  return commands;
-}
-
-// Relative rotations about each axis (r / e and shift+arrow keys).
-function axisRotateCommands(): BuiltinCommand[] {
-  const commands: BuiltinCommand[] = [];
-  for (const axis of AXES) {
-    const lower = axis.toLowerCase();
-    commands.push(
-      {
-        id: `rotate-relative-${lower}-`,
-        label: `Rotate −${axis}`,
-        description: `Rotate the view a small amount about the ${axis} axis (negative direction).`,
+        id: `${axis}+`,
+        label: `Move +${upper}`,
+        description: `Move the view one step in the +${upper} direction.`,
       },
       {
-        id: `rotate-relative-${lower}+`,
-        label: `Rotate +${axis}`,
-        description: `Rotate the view a small amount about the ${axis} axis (positive direction).`,
+        id: `rotate-relative-${axis}-`,
+        label: `Rotate −${upper}`,
+        description: `Rotate the view a small amount about the ${upper} axis (negative direction).`,
+      },
+      {
+        id: `rotate-relative-${axis}+`,
+        label: `Rotate +${upper}`,
+        description: `Rotate the view a small amount about the ${upper} axis (positive direction).`,
       },
     );
   }
@@ -239,10 +230,7 @@ export function registerDefaultCommands(registry: CommandRegistry): void {
   for (const command of STATIC_COMMANDS) {
     registry.registerAction(command);
   }
-  for (const command of axisMoveCommands()) {
-    registry.registerAction(command);
-  }
-  for (const command of axisRotateCommands()) {
+  for (const command of axisCommands()) {
     registry.registerAction(command);
   }
 }
