@@ -15,136 +15,79 @@
  */
 
 /**
- * @file Global, binding-independent registry of viewer commands.
+ * @file Registry of the {@link Command}s a viewer knows about.
  *
- * A command is declared once, with a stable id, a pretty label, and an optional
- * help description. Any key binding is looked up separately and shown alongside;
- * it is not the source of truth for which commands exist.
+ * The registry owns *what commands exist*: their id, how they present, and how
+ * they run. Bindings, ordering and grouping live with the consumers; a consumer
+ * that wants to show a shortcut looks the live binding up itself.
  *
- * The registry is owned by the viewer so commands can be registered before — or
- * without — any UI chrome. The command palette and help panel are consumers of
- * the same surface; see {@link CommandCatalog}.
+ * The registry is owned by the viewer, so commands can be registered before any
+ * UI chrome exists, or without any at all. It lists the commands it was told
+ * about, and there is no way to make that list complete: a viewer embedded in
+ * another application, or driven from Python, can bind an action without ever
+ * registering a command for it. See `docs/concepts/commands.rst`.
  */
 
-import type { ActionIdentifier } from "#src/util/event_action_map.js";
+import type { Command, CommandId } from "#src/ui/command.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { Signal } from "#src/util/signal.js";
-import type { WatchableValueInterface } from "#src/trackable_value.js";
-
-interface CommandInfoBase {
-  /** Stable, serialisable identifier, e.g. "toggle-scale-bar". */
-  readonly id: ActionIdentifier;
-  /** Human-readable name shown in the palette / help panel. */
-  readonly label: string;
-  /**
-   * Optional longer help text describing what the command does. Surfaced by
-   * hosts that can afford more than a label (help panel, tooltips).
-   */
-  readonly description?: string;
-  /**
-   * Optional observable of whether the command is currently usable. When it
-   * changes the registry dispatches `changed`, so consumers can re-enumerate
-   * "what's usable now" without polling.
-   */
-  readonly isAvailable?: WatchableValueInterface<boolean>;
-}
+import { NullarySignal } from "#src/util/signal.js";
 
 /**
- * A command backed by a DOM action: invoking it dispatches `action:<id>`,
- * exactly as the equivalent keyboard shortcut would. `id` doubles as the action
- * id, so existing actions need no extra wiring.
- */
-export interface ActionCommandInfo extends CommandInfoBase {
-  readonly type: "action";
-}
-
-/**
- * A command that runs a callback directly, for commands with no corresponding
- * DOM action (e.g. host-registered commands).
- */
-export interface CallbackCommandInfo extends CommandInfoBase {
-  readonly type: "callback";
-  readonly invoke: (payload?: unknown) => unknown;
-}
-
-/**
- * A registered command. The `type` discriminant is stated explicitly by the
- * registrant rather than inferred from which optional fields are present, so
- * new command types can be added without changing how existing ones are read.
- */
-export type CommandInfo = ActionCommandInfo | CallbackCommandInfo;
-
-export type CommandType = CommandInfo["type"];
-
-/**
- * Per-viewer registry of {@link CommandInfo}. Registration returns a disposer
- * that unregisters the command, so feature code can add commands for the
- * lifetime of a layer / control and clean up automatically.
+ * Per-viewer registry of {@link Command}s. Registration returns a disposer that
+ * unregisters the command, so feature code can add commands for the lifetime of
+ * a layer / control and clean up automatically.
  */
 export class CommandRegistry extends RefCounted {
-  private readonly commands = new Map<ActionIdentifier, CommandInfo>();
-  private readonly availabilityDisposers = new Map<
-    ActionIdentifier,
-    () => void
-  >();
+  private readonly commands = new Map<CommandId, Command>();
+  private readonly commandChangedDisposers = new Map<CommandId, () => void>();
 
-  /** Dispatched when a command is added/removed, or its availability changes. */
-  readonly changed = new Signal();
+  /**
+   * Dispatched when a command is registered or unregistered, or when a
+   * registered command reports a change of its own.
+   */
+  readonly changed = new NullarySignal();
 
-  /** Registers an action-backed command. See {@link ActionCommandInfo}. */
-  registerAction(options: Omit<ActionCommandInfo, "type">): () => void {
-    return this.register({ type: "action", ...options });
-  }
-
-  /** Registers a callback command. See {@link CallbackCommandInfo}. */
-  registerCallback(options: Omit<CallbackCommandInfo, "type">): () => void {
-    return this.register({ type: "callback", ...options });
-  }
-
-  /** Registers a command. Throws on duplicate `id`. Returns a disposer. */
-  register(command: CommandInfo): () => void {
+  /** Registers `command`. Throws on duplicate id. Returns a disposer. */
+  register(command: Command): () => void {
     const { id } = command;
     if (this.commands.has(id)) {
       throw new Error(`Command already registered: ${JSON.stringify(id)}`);
     }
     this.commands.set(id, command);
-    const { isAvailable } = command;
-    if (isAvailable !== undefined) {
-      this.availabilityDisposers.set(
-        id,
-        isAvailable.changed.add(() => this.changed.dispatch()),
-      );
-    }
+    this.commandChangedDisposers.set(
+      id,
+      command.changed.add(() => this.changed.dispatch()),
+    );
     this.changed.dispatch();
     return () => this.unregister(id);
   }
 
-  unregister(id: ActionIdentifier): void {
+  unregister(id: CommandId): void {
     if (!this.commands.delete(id)) return;
-    const disposer = this.availabilityDisposers.get(id);
+    const disposer = this.commandChangedDisposers.get(id);
     if (disposer !== undefined) {
       disposer();
-      this.availabilityDisposers.delete(id);
+      this.commandChangedDisposers.delete(id);
     }
     this.changed.dispatch();
   }
 
-  get(id: ActionIdentifier): CommandInfo | undefined {
+  get(id: CommandId): Command | undefined {
     return this.commands.get(id);
   }
 
-  has(id: ActionIdentifier): boolean {
+  has(id: CommandId): boolean {
     return this.commands.has(id);
   }
 
-  /** Iterates every registered command, regardless of current availability. */
-  values(): IterableIterator<CommandInfo> {
+  /** Iterates every registered command, enabled or not, in registration order. */
+  values(): IterableIterator<Command> {
     return this.commands.values();
   }
 
   disposed() {
-    for (const disposer of this.availabilityDisposers.values()) disposer();
-    this.availabilityDisposers.clear();
+    for (const disposer of this.commandChangedDisposers.values()) disposer();
+    this.commandChangedDisposers.clear();
     this.commands.clear();
     super.disposed();
   }

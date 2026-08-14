@@ -82,6 +82,7 @@ import {
   observeWatchable,
   TrackableValue,
 } from "#src/trackable_value.js";
+import { CommandRegistry } from "#src/ui/command_registry.js";
 import {
   LayerArchiveCountWidget,
   LayerListPanel,
@@ -94,7 +95,6 @@ import { SelectionDetailsPanel } from "#src/ui/selection_details.js";
 import { SidePanelManager } from "#src/ui/side_panel.js";
 import { StateEditorDialog } from "#src/ui/state_editor.js";
 import { StatisticsDisplayState, StatisticsPanel } from "#src/ui/statistics.js";
-import { CommandRegistry } from "#src/ui/command_registry.js";
 import { GlobalToolBinder, LocalToolBinder } from "#src/ui/tool.js";
 import {
   MultiToolPaletteDropdownButton,

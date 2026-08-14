@@ -19,41 +19,39 @@
  *
  * Each entry names an existing DOM action (`id` === the `action:` id dispatched
  * by the default input-event bindings) and gives it an explicit, human-readable
- * label and help description. The registry — not the bindings — is now the
- * authoritative list of commands; the shortcut shown for each command is looked
- * up from whatever binding happens to be installed (see {@link CommandCatalog}).
+ * label and help description, so that consumers no longer have to prettify an
+ * action id and can show commands that happen to have no binding at all.
  *
  * Commands whose behaviour is per-entity or otherwise dynamic (layer toggles,
  * tool activation) are contributed by the catalog at enumeration time and are
  * intentionally *not* declared here.
  *
- * This is the built-in *seed* set, not a required registry. It exists only
- * because these commands correspond to DOM actions that predate the registry.
- * Feature code should NOT add entries here; instead register commands
- * colocated with the feature, for its own lifetime, e.g.
+ * This is the built-in *seed* set. It exists only because these commands
+ * correspond to DOM actions that predate the registry. Feature code should NOT
+ * add entries here; instead register commands colocated with the feature, for
+ * its own lifetime, e.g.
  *
  *     this.registerDisposer(
- *       viewer.commandRegistry.registerCallback({
- *         id: "clip.addPlane",
- *         label: "Add Clip Plane",
- *         invoke: () => this.addPlane(),
- *       }),
+ *       viewer.commandRegistry.register(
+ *         new CallbackCommand("add-clip-plane", "Add Clip Plane", () =>
+ *           this.addPlane(),
+ *         ),
+ *       ),
  *     );
  *
- * `registerAction` / `registerCallback` each return a disposer, so commands may
- * come and go with the feature (e.g. per-layer). `CommandRegistry` — not this
- * file — is the authoritative, runtime-enumerable list.
+ * `register` returns a disposer, so commands may come and go with the feature
+ * (e.g. per-layer).
  */
 
-import type {
-  ActionCommandInfo,
-  CommandRegistry,
-} from "#src/ui/command_registry.js";
+import { ActionCommand, type CommandId } from "#src/ui/command.js";
+import type { CommandRegistry } from "#src/ui/command_registry.js";
 import { AXES_NAMES } from "#src/util/geom.js";
 
-// Every built-in command is action-backed (dispatches `action:<id>`); the type
-// is stamped by `registerAction` at registration time.
-type BuiltinCommand = Omit<ActionCommandInfo, "type">;
+interface BuiltinCommand {
+  readonly id: CommandId;
+  readonly label: string;
+  readonly description: string;
+}
 
 // Directional position nudges and relative rotations, one pair per axis (arrow
 // keys / , . and r / e / shift+arrow keys in the data panels). The ids are
@@ -201,8 +199,8 @@ const STATIC_COMMANDS: readonly BuiltinCommand[] = [
     label: "Undo Annotation Step",
     description: "Undo the last point added to the in-progress annotation.",
   },
-  // State — these have no default key binding; before the registry they were
-  // special-cased so the palette could surface them at all.
+  // Actions with no default key binding; before the registry the palette had to
+  // special-case these to surface them at all.
   {
     id: "edit-json-state",
     label: "Edit JSON State",
@@ -213,7 +211,6 @@ const STATIC_COMMANDS: readonly BuiltinCommand[] = [
     label: "Screenshot",
     description: "Capture a screenshot of the current view.",
   },
-  // Tools.
   {
     id: "deactivate-active-tool",
     label: "Deactivate Active Tool",
@@ -224,13 +221,13 @@ const STATIC_COMMANDS: readonly BuiltinCommand[] = [
 /**
  * Registers the built-in commands into `registry`. Called once during default
  * viewer setup. The registry is owned (and disposed) by the viewer, so no
- * disposers are returned here — the commands live for the viewer's lifetime.
+ * disposers are returned here, and the commands live for the viewer's lifetime.
  */
 export function registerDefaultCommands(registry: CommandRegistry): void {
-  for (const command of STATIC_COMMANDS) {
-    registry.registerAction(command);
-  }
-  for (const command of axisCommands()) {
-    registry.registerAction(command);
+  for (const { id, label, description } of [
+    ...STATIC_COMMANDS,
+    ...axisCommands(),
+  ]) {
+    registry.register(new ActionCommand(id, label, description));
   }
 }

@@ -15,67 +15,81 @@
  */
 
 import { describe, expect, it } from "vitest";
+import type { CommandContext } from "#src/ui/command.js";
+import { ActionCommand, CallbackCommand } from "#src/ui/command.js";
 import { CommandRegistry } from "#src/ui/command_registry.js";
-import { WatchableValue } from "#src/trackable_value.js";
+
+function makeContext(dispatchTarget: EventTarget = new EventTarget()) {
+  return { dispatchTarget } satisfies CommandContext;
+}
+
+describe("Command", () => {
+  it("dispatches an action event for an action command", () => {
+    const target = document.createElement("div");
+    const seen: string[] = [];
+    target.addEventListener("action:screenshot", () => seen.push("screenshot"));
+    new ActionCommand("screenshot", "Screenshot").invoke(makeContext(target));
+    expect(seen).toStrictEqual(["screenshot"]);
+  });
+
+  it("passes the invocation context to a callback command", () => {
+    const target = new EventTarget();
+    let seen: EventTarget | undefined;
+    new CallbackCommand("c", "C", (context) => {
+      seen = context.dispatchTarget;
+    }).invoke(makeContext(target));
+    expect(seen).toBe(target);
+  });
+
+  it("dispatches changed when enabled flips, and only then", () => {
+    const command = new ActionCommand("a", "A");
+    let count = 0;
+    command.changed.add(() => ++count);
+    expect(command.enabled).toBe(true);
+    command.enabled = true;
+    expect(count).toBe(0);
+    command.enabled = false;
+    expect(count).toBe(1);
+  });
+});
 
 describe("CommandRegistry", () => {
   it("registers and retrieves a command by id", () => {
     const registry = new CommandRegistry();
-    registry.registerAction({
-      id: "screenshot",
-      label: "Screenshot",
-      description: "Capture a screenshot.",
-    });
+    registry.register(
+      new ActionCommand("screenshot", "Screenshot", "Capture a screenshot."),
+    );
     expect(registry.has("screenshot")).toBe(true);
     expect(registry.get("screenshot")?.label).toBe("Screenshot");
+    expect(registry.get("screenshot")?.description).toBe(
+      "Capture a screenshot.",
+    );
     registry.dispose();
   });
 
-  it("stamps the command type explicitly per registrar", () => {
+  it("enumerates commands in registration order, independent of any binding", () => {
     const registry = new CommandRegistry();
-    registry.registerAction({ id: "a", label: "A" });
-    registry.registerCallback({ id: "c", label: "C", invoke: () => {} });
-    expect(registry.get("a")?.type).toBe("action");
-    expect(registry.get("c")?.type).toBe("callback");
-    registry.dispose();
-  });
-
-  it("invokes a callback command's callback", () => {
-    const registry = new CommandRegistry();
-    let ran = false;
-    registry.registerCallback({
-      id: "c",
-      label: "C",
-      invoke: () => {
-        ran = true;
-      },
-    });
-    const command = registry.get("c");
-    if (command?.type === "callback") command.invoke();
-    expect(ran).toBe(true);
-    registry.dispose();
-  });
-
-  it("enumerates commands independent of any binding", () => {
-    const registry = new CommandRegistry();
-    registry.registerAction({ id: "a", label: "A" });
-    registry.registerAction({ id: "b", label: "B" });
-    expect([...registry.values()].map((c) => c.id)).toStrictEqual(["a", "b"]);
+    registry.register(new ActionCommand("a", "A"));
+    registry.register(new CallbackCommand("c", "C", () => {}));
+    expect([...registry.values()].map((command) => command.id)).toStrictEqual([
+      "a",
+      "c",
+    ]);
     registry.dispose();
   });
 
   it("throws on duplicate id", () => {
     const registry = new CommandRegistry();
-    registry.registerAction({ id: "dup", label: "First" });
-    expect(() =>
-      registry.registerAction({ id: "dup", label: "Second" }),
-    ).toThrow(/already registered/);
+    registry.register(new ActionCommand("dup", "First"));
+    expect(() => registry.register(new ActionCommand("dup", "Second"))).toThrow(
+      /already registered/,
+    );
     registry.dispose();
   });
 
   it("unregisters via the returned disposer", () => {
     const registry = new CommandRegistry();
-    const dispose = registry.registerAction({ id: "temp", label: "Temp" });
+    const dispose = registry.register(new ActionCommand("temp", "Temp"));
     expect(registry.has("temp")).toBe(true);
     dispose();
     expect(registry.has("temp")).toBe(false);
@@ -86,36 +100,32 @@ describe("CommandRegistry", () => {
     const registry = new CommandRegistry();
     let count = 0;
     registry.changed.add(() => ++count);
-    const dispose = registry.registerAction({ id: "x", label: "X" });
+    const dispose = registry.register(new ActionCommand("x", "X"));
     expect(count).toBe(1);
     dispose();
     expect(count).toBe(2);
     registry.dispose();
   });
 
-  it("dispatches changed when a command's availability changes", () => {
+  it("forwards a registered command's own changed signal", () => {
     const registry = new CommandRegistry();
-    const isAvailable = new WatchableValue(true);
-    registry.registerAction({ id: "x", label: "X", isAvailable });
+    const command = new ActionCommand("x", "X");
+    registry.register(command);
     let count = 0;
     registry.changed.add(() => ++count);
-    isAvailable.value = false;
+    command.enabled = false;
     expect(count).toBe(1);
     registry.dispose();
   });
 
-  it("stops observing availability after unregister", () => {
+  it("stops forwarding a command's changed signal after unregister", () => {
     const registry = new CommandRegistry();
-    const isAvailable = new WatchableValue(true);
-    const dispose = registry.registerAction({
-      id: "x",
-      label: "X",
-      isAvailable,
-    });
+    const command = new ActionCommand("x", "X");
+    const dispose = registry.register(command);
     dispose();
     let count = 0;
     registry.changed.add(() => ++count);
-    isAvailable.value = false;
+    command.enabled = false;
     expect(count).toBe(0);
     registry.dispose();
   });

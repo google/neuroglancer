@@ -15,6 +15,7 @@
  */
 
 import { afterEach, describe, expect, it } from "vitest";
+import { ActionCommand } from "#src/ui/command.js";
 import {
   collectActionBindings,
   CommandCatalog,
@@ -126,8 +127,8 @@ describe("CommandCatalog.filter", () => {
   // "Edit JSON State" and "Screenshot" as its flat entries.
   function makeCatalog() {
     const registry = new CommandRegistry();
-    registry.registerAction({ id: "edit-json-state", label: "Edit JSON State" });
-    registry.registerAction({ id: "screenshot", label: "Screenshot" });
+    registry.register(new ActionCommand("edit-json-state", "Edit JSON State"));
+    registry.register(new ActionCommand("screenshot", "Screenshot"));
     return new CommandCatalog(
       makeContext(makeInputEventBindings(new EventActionMap()), registry),
     );

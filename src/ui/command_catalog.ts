@@ -16,6 +16,8 @@
 
 import type { LayerManager, SelectedLayerState } from "#src/layer/index.js";
 import { UserLayer } from "#src/layer/index.js";
+import type { Command } from "#src/ui/command.js";
+import { ActionCommand } from "#src/ui/command.js";
 import type { CommandRegistry } from "#src/ui/command_registry.js";
 import {
   getMatchingTools,
@@ -41,9 +43,9 @@ export interface CommandCatalogContext {
   selectedLayer: SelectedLayerState;
   inputEventBindings: InputEventBindings;
   /**
-   * Authoritative source of the flat command set. Its command-kind entries are
-   * enumerated directly; the input bindings are consulted only to annotate each
-   * command with its current shortcut, not to discover which commands exist.
+   * Authoritative source of the flat command set. Its commands are enumerated
+   * directly; the input bindings are consulted only to annotate each command
+   * with its current shortcut, not to discover which commands exist.
    */
   commandRegistry: CommandRegistry;
 }
@@ -58,23 +60,14 @@ interface CommandPaletteEntryBase {
   readonly shortcut: string;
 }
 
-// Dispatched as an `action:<actionId>` DOM event, exactly as the keyboard
-// shortcut would be.
-export interface ActionCommandEntry extends CommandPaletteEntryBase {
-  readonly kind: "action";
-  readonly actionId: ActionIdentifier;
-}
-
-// A registered command that runs a callback. Unlike `execute`, it carries the
-// registry's stable `id` so consumers can correlate it back to the registry.
+// A registered command. The consumer invokes it with its own context.
 export interface CommandEntry extends CommandPaletteEntryBase {
   readonly kind: "command";
-  readonly id: ActionIdentifier;
-  readonly invoke: () => void;
+  readonly command: Command;
 }
 
-// Runs an anonymous callback directly (no DOM action and no registry identity —
-// e.g. a per-layer toggle or an unbound tool activation).
+// Runs an anonymous callback directly (no command identity, e.g. a per-layer
+// toggle or an unbound tool activation).
 export interface ExecuteCommandEntry extends CommandPaletteEntryBase {
   readonly kind: "execute";
   readonly execute: () => void;
@@ -87,7 +80,6 @@ export interface GroupCommandEntry extends CommandPaletteEntryBase {
 }
 
 export type CommandPaletteEntry =
-  | ActionCommandEntry
   | CommandEntry
   | ExecuteCommandEntry
   | GroupCommandEntry;
@@ -345,36 +337,16 @@ export class CommandCatalog extends RefCounted {
       );
     }
 
-    // Flat commands come from the registry. A command's shortcut is whatever
-    // binding is currently installed for its id (or its suggested default),
-    // shown for reference only.
+    // A command's shortcut is whatever binding is currently installed for its
+    // id, shown for reference only.
     for (const command of commandRegistry.values()) {
-      if (command.isAvailable !== undefined && !command.isAvailable.value) {
-        continue;
-      }
-      const shortcut = shortcutByAction.get(command.id) ?? "";
-      const { label } = command;
-      switch (command.type) {
-        case "action":
-          commands.push({
-            kind: "action",
-            label,
-            shortcut,
-            actionId: command.id,
-          });
-          break;
-        case "callback": {
-          const invoke = command.invoke;
-          commands.push({
-            kind: "command",
-            label,
-            shortcut,
-            id: command.id,
-            invoke: () => invoke(),
-          });
-          break;
-        }
-      }
+      if (!command.enabled) continue;
+      commands.push({
+        kind: "command",
+        label: command.label,
+        shortcut: shortcutByAction.get(command.id) ?? "",
+        command,
+      });
     }
 
     const toolQueryResult = parseToolQuery("+");
@@ -416,10 +388,10 @@ export class CommandCatalog extends RefCounted {
               ? `${tool.description} — ${tool.context.managedLayer.name}`
               : tool.description;
           commands.push({
-            kind: "action",
+            kind: "command",
             label,
             shortcut: shortcutByAction.get(actionId) ?? "",
-            actionId,
+            command: new ActionCommand(actionId, label),
           });
         } else {
           const capturedToolJson = toolJson;
