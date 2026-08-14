@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 William Silversmith.
+ * Copyright 2026 William Silversmith.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,30 +14,21 @@
  * limitations under the License.
  */
 
-import { decodePng } from "#src/async_computation/decode_png_request.js";
+import { decodeCrackle } from "#src/async_computation/decode_crackle_request.js";
 import { requestAsyncComputation } from "#src/async_computation/request.js";
 import { decodeRawChunk } from "#src/sliceview/backend_chunk_decoders/raw.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
-import { DATA_TYPE_BYTES } from "#src/util/data_type.js";
 
-export async function decodePngChunk(
+export async function decodeCrackleChunk(
   chunk: VolumeChunk,
   signal: AbortSignal,
   response: ArrayBuffer,
 ) {
-  const chunkDataSize = chunk.chunkDataSize!;
-  const dataType = chunk.source!.spec.dataType;
-  const { uint8Array: image } = await requestAsyncComputation(
-    decodePng,
+  const image = await requestAsyncComputation(
+    decodeCrackle,
     signal,
     [response],
-    /*buffer=*/ new Uint8Array(response),
-    /*width=*/ undefined,
-    /*height=*/ undefined,
-    /*area=*/ chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2],
-    /*numComponents=*/ chunkDataSize[3] || 1,
-    /*bytesPerPixel=*/ DATA_TYPE_BYTES[dataType],
-    /*convertToGrayscale=*/ false,
+    new Uint8Array(response),
   );
 
   await decodeRawChunk(chunk, signal, image.buffer);

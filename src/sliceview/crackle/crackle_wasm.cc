@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 William Silversmith
+ * Copyright 2026 William Silversmith
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,20 +14,17 @@
  * limitations under the License.
  */
 
-#include "./compresso.hpp"
+#include "./src/crackle.hpp"
 
 extern "C" {
 
-int compresso_decompress(
-	unsigned char* buf, unsigned int num_bytes, void* out
+int crackle_decompress(
+	unsigned char* buf, unsigned int num_bytes, 
+    void* out, unsigned int output_num_bytes
 ) {
-	int err = compresso::decompress<void,void>(buf, num_bytes, out);
-
-	if (err != 0) {
-		return err;
-	}
-
-	return 0;
+	return crackle::decompress(
+        buf, num_bytes, out, output_num_bytes
+    );
 }
 
 }

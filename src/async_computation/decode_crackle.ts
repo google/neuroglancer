@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 William Silversmith
+ * Copyright 2023 William Silversmith
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,20 +14,11 @@
  * limitations under the License.
  */
 
-#include "./compresso.hpp"
+import { decodeCrackle } from "#src/async_computation/decode_crackle_request.js";
+import { registerAsyncComputation } from "#src/async_computation/handler.js";
+import { decompressCrackle } from "#src/sliceview/crackle/index.js";
 
-extern "C" {
-
-int compresso_decompress(
-	unsigned char* buf, unsigned int num_bytes, void* out
-) {
-	int err = compresso::decompress<void,void>(buf, num_bytes, out);
-
-	if (err != 0) {
-		return err;
-	}
-
-	return 0;
-}
-
-}
+registerAsyncComputation(decodeCrackle, async (data) => {
+  const result = await decompressCrackle(data);
+  return { value: result, transfer: [result.buffer] };
+});
