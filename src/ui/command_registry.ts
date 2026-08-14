@@ -41,15 +41,6 @@ interface CommandInfoBase {
    * hosts that can afford more than a label (help panel, tooltips).
    */
   readonly description?: string;
-  /** Optional flat category / section for grouping in a host surface. */
-  readonly category?: string;
-  /**
-   * Optional suggested key binding, e.g. "shift+keyc". Purely informational at
-   * the registry level — installing it into the input bindings is a consumer
-   * concern. A command with no `defaultBinding` and no live binding is still a
-   * first-class member of the registry.
-   */
-  readonly defaultBinding?: string;
   /**
    * Optional observable of whether the command is currently usable. When it
    * changes the registry dispatches `changed`, so consumers can re-enumerate

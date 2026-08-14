@@ -56,8 +56,6 @@ export interface ActionBinding {
 interface CommandPaletteEntryBase {
   readonly label: string;
   readonly shortcut: string;
-  /** Optional grouping section, carried through from a registered command. */
-  readonly category?: string;
 }
 
 // Dispatched as an `action:<actionId>` DOM event, exactly as the keyboard
@@ -354,19 +352,14 @@ export class CommandCatalog extends RefCounted {
       if (command.isAvailable !== undefined && !command.isAvailable.value) {
         continue;
       }
-      const shortcut =
-        shortcutByAction.get(command.id) ??
-        (command.defaultBinding !== undefined
-          ? formatKeyStroke(friendlyEventIdentifier(command.defaultBinding))
-          : "");
-      const { label, category } = command;
+      const shortcut = shortcutByAction.get(command.id) ?? "";
+      const { label } = command;
       switch (command.type) {
         case "action":
           commands.push({
             kind: "action",
             label,
             shortcut,
-            category,
             actionId: command.id,
           });
           break;
@@ -376,7 +369,6 @@ export class CommandCatalog extends RefCounted {
             kind: "command",
             label,
             shortcut,
-            category,
             id: command.id,
             invoke: () => invoke(),
           });
