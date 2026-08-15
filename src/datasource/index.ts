@@ -132,8 +132,8 @@ export interface DataSubsource {
   singleMesh?: SingleMeshSource;
   segmentPropertyMap?: SegmentPropertyMap;
   segmentationGraph?: SegmentationGraphSource;
-  // specify whether the datasource & kvstore implementations supports writing, is also responsible for showing the enableWriting checkbox in the UI
-  isPotentiallyWritable?: boolean;
+  // Specifies whether the datasource & kvstore implementations support writing.
+  supportsWriting?: boolean;
 }
 
 export interface CompleteUrlOptionsBase extends Partial<ProgressOptions> {

@@ -508,7 +508,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
       options,
       async (progressOptions) => {
         const { sharedKvStoreContext } = options.registry;
-        const isPotentiallyWritable =
+        const supportsWriting =
           sharedKvStoreContext.kvStoreContext.getKvStore(kvStoreUrl).store
             .write !== undefined;
         const metadata = await getMetadata(sharedKvStoreContext, kvStoreUrl, {
@@ -560,7 +560,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
               id: "default",
               default: true,
               url: undefined,
-              subsource: { volume, isPotentiallyWritable },
+              subsource: { volume, supportsWriting },
             },
             {
               id: "bounds",
