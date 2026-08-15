@@ -295,6 +295,13 @@ export class ChunkSourceBase extends SharedObject {
    */
   sourceQueueLevel = 0;
 
+  /**
+   * Optional hook called when the source's cache is invalidated.
+   * Subclasses can override this to invalidate related caches
+   * (e.g. shard index caches for sharded zarr3 sources).
+   */
+  onInvalidateCache?(): void;
+
   constructor(public chunkManager: Borrowed<ChunkManager>) {
     super();
     chunkManager.queueManager.sources.add(this);
@@ -1111,6 +1118,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
   }
 
   invalidateSourceCache(source: ChunkSource) {
+    source.onInvalidateCache?.();
     for (const chunk of source.chunks.values()) {
       switch (chunk.state) {
         case ChunkState.DOWNLOADING:
