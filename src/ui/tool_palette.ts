@@ -17,11 +17,14 @@
 import "#src/ui/tool_palette.css";
 
 import svg_search from "ikonate/icons/search.svg?raw";
+import swap_horizontal from "ikonate/icons/swap-horizontal.svg?raw";
+import swap_vertical from "ikonate/icons/swap-vertical.svg?raw";
 import svg_tool from "ikonate/icons/tool.svg?raw";
 import { debounce } from "lodash-es";
 import type { UserLayer } from "#src/layer/index.js";
 import {
   ElementVisibilityFromTrackableBoolean,
+  TrackableBoolean,
   TrackableBooleanCheckbox,
 } from "#src/trackable_boolean.js";
 import {
@@ -84,6 +87,7 @@ import {
 import { NullarySignal } from "#src/util/signal.js";
 import type { Trackable } from "#src/util/trackable.js";
 import { CompoundTrackable, getCachedJson } from "#src/util/trackable.js";
+import { TrackableEnum } from "#src/util/trackable_enum.js";
 import type { Viewer } from "#src/viewer.js";
 import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeDeleteButton } from "#src/widget/delete_button.js";
@@ -97,6 +101,14 @@ import {
   makeCompletionElementWithDescription,
 } from "#src/widget/multiline_autocomplete.js";
 import { TextInputWidget } from "#src/widget/text_input.js";
+
+enum StackingMode {
+  AUTO = 0,
+  VERTICAL = 1,
+  HORIZONTAL = 2,
+}
+
+type TrackableStackingMode = TrackableEnum<StackingMode>;
 
 const DEFAULT_TOOL_PALETTE_PANEL_LOCATION: SidePanelLocation = {
   ...DEFAULT_SIDE_PANEL_LOCATION,
@@ -272,6 +284,11 @@ export class ToolPaletteState extends RefCounted implements Trackable {
   get changed() {
     return this.trackable.changed;
   }
+  stackingMode: TrackableStackingMode = new TrackableEnum(
+    StackingMode,
+    StackingMode.AUTO,
+  );
+  verticalStacking = new TrackableBoolean(true, true);
 
   constructor(public viewer: Viewer) {
     super();
@@ -280,6 +297,7 @@ export class ToolPaletteState extends RefCounted implements Trackable {
     this.name.changed.add(this.changed.dispatch);
     this.trackable.add("tools", this.tools);
     this.trackable.add("query", this.query);
+    this.trackable.add("stacking", this.stackingMode);
     this.queryDefined = this.registerDisposer(
       makeCachedDerivedWatchableValue(
         (value) => value.length === 0,
@@ -293,6 +311,12 @@ export class ToolPaletteState extends RefCounted implements Trackable {
     this.trackable.restoreState(obj);
     if (this.query.value !== "") {
       this.tools.reset();
+    }
+    if (this.stackingMode.value === StackingMode.VERTICAL) {
+      this.verticalStacking.value = true;
+    }
+    if (this.stackingMode.value === StackingMode.HORIZONTAL) {
+      this.verticalStacking.value = false;
     }
   }
 
@@ -512,13 +536,16 @@ class RenderedTool extends RefCounted {
 
 export class ToolPalettePanel extends SidePanel {
   private itemContainer = document.createElement("div");
+  private layerGroupItemsContainer = document.createElement("div");
   private dropZone = document.createElement("div");
   private renderedTools = new Map<Tool, RenderedTool>();
   private dragState:
     | { dragSource: ToolDragSource; ephemeralTool: Tool }
     | undefined = undefined;
   private dragEnterCount = 0;
+  private mousePositionOnLastDrag: [number, number] | undefined = undefined;
   private queryResults: QueryResults;
+  private resizeGeneration = -1;
 
   private clearDragState() {
     const { dragState } = this;
@@ -549,11 +576,7 @@ export class ToolPalettePanel extends SidePanel {
       if (this.hasQuery) {
         this.clearDragState();
         const otherPalette = toolDragSource?.paletteState?.palette;
-        if (
-          updateDropEffect &&
-          otherPalette !== undefined &&
-          otherPalette !== this
-        ) {
+        if (updateDropEffect && otherPalette !== this) {
           pushDragStatus(
             event,
             this.itemContainer,
@@ -632,6 +655,7 @@ export class ToolPalettePanel extends SidePanel {
     };
 
     const handleDragOver = (event: DragEvent) => {
+      this.mousePositionOnLastDrag = [event.clientX, event.clientY];
       const updateResult = update(event, /*updateDropEffect=*/ true);
       if (updateResult === undefined) {
         popDragStatus(event, this.itemContainer, "drop");
@@ -648,7 +672,20 @@ export class ToolPalettePanel extends SidePanel {
     element.addEventListener("dragleave", (event: DragEvent) => {
       if (--this.dragEnterCount !== 0) return;
       popDragStatus(event, this.itemContainer, "drop");
-      this.clearDragState();
+      if (this.state.verticalStacking.value) {
+        this.clearDragState();
+      }
+      // In horizontal mode, the tools can move themselves
+      // So we need to check if the mouse cursor actually moved
+      else {
+        const [x, y] = this.mousePositionOnLastDrag!;
+        if (
+          Math.abs(x - event.clientX) > 1 ||
+          Math.abs(y - event.clientY) > 1
+        ) {
+          this.clearDragState();
+        }
+      }
       event.stopPropagation();
     });
     element.addEventListener("drop", (event: DragEvent) => {
@@ -686,7 +723,35 @@ export class ToolPalettePanel extends SidePanel {
     const hasQuery = this.registerDisposer(
       makeCachedDerivedWatchableValue((value) => value !== "", [state.query]),
     );
+    this.registerDisposer(
+      this.sidePanelManager.display.changed.add(() =>
+        this.autoDetermineStacking(),
+      ),
+    );
     const self = this;
+    const changeStackingButton = this.registerDisposer(
+      new CheckboxIcon(
+        {
+          changed: self.state.verticalStacking.changed,
+          get value() {
+            return self.state.verticalStacking.value;
+          },
+          set value(newValue: boolean) {
+            self.state.verticalStacking.value = newValue;
+            self.state.stackingMode.value = newValue
+              ? StackingMode.VERTICAL
+              : StackingMode.HORIZONTAL;
+          },
+        },
+        {
+          svg: swap_horizontal,
+          disableSvg: swap_vertical,
+          enableTitle: "Swap to vertical group stacking",
+          disableTitle: "Swap to horizontal group stacking",
+        },
+      ),
+    );
+    titleBar.appendChild(changeStackingButton.element);
     const searchButton = this.registerDisposer(
       new CheckboxIcon(
         {
@@ -718,8 +783,11 @@ export class ToolPalettePanel extends SidePanel {
 
     const body = document.createElement("div");
     body.classList.add("neuroglancer-tool-palette-body");
-    const { itemContainer } = this;
+    const { itemContainer, layerGroupItemsContainer } = this;
     itemContainer.classList.add("neuroglancer-tool-palette-items");
+    layerGroupItemsContainer.classList.add(
+      "neuroglancer-tool-palette-layer-group-items",
+    );
     body.appendChild(
       this.registerDisposer(
         new DependentViewWidget(
@@ -733,19 +801,70 @@ export class ToolPalettePanel extends SidePanel {
         ),
       ).element,
     );
+    itemContainer.appendChild(layerGroupItemsContainer);
     body.appendChild(itemContainer);
     this.addBody(body);
 
     const { dropZone } = this;
     dropZone.classList.add("neuroglancer-tool-palette-drop-zone");
+    itemContainer.appendChild(dropZone);
     this.registerDropHandlers(dropZone, () => undefined);
     const debouncedRender = this.registerCancellable(
       animationFrameDebounce(() => this.render()),
     );
-    this.registerDisposer(this.state.tools.changed.add(debouncedRender));
-    this.registerDisposer(this.queryResults.changed.add(debouncedRender));
+    this.registerDisposer(
+      this.state.tools.changed.add(() => {
+        this.handleNumToolsChange();
+        debouncedRender();
+      }),
+    );
+    this.registerDisposer(
+      this.queryResults.changed.add(() => {
+        this.handleNumToolsChange();
+        debouncedRender();
+      }),
+    );
+    this.registerDisposer(
+      this.state.verticalStacking.changed.add(() => {
+        this.handleStackingChange();
+        debouncedRender();
+      }),
+    );
     this.visibility.changed.add(debouncedRender);
+    this.autoDetermineStacking();
+    this.handleStackingChange();
+    this.handleNumToolsChange();
     this.render();
+  }
+
+  private autoDetermineStacking() {
+    if (this.state.stackingMode.value !== StackingMode.AUTO) return;
+    if (
+      this.resizeGeneration === this.sidePanelManager.display.resizeGeneration
+    )
+      return;
+    const { width, height } = this.element.getBoundingClientRect();
+    if (height === 0 || width === 0) return;
+    this.resizeGeneration = this.sidePanelManager.display.resizeGeneration;
+    this.state.verticalStacking.value = height > 0.4 * width;
+  }
+
+  private handleNumToolsChange() {
+    // If in horizontal stacking mode, the palette gets set to full height when there
+    // is at least one tool
+    this.layerGroupItemsContainer.setAttribute(
+      "has-tools",
+      this.state.tools.tools.length > 0 || this.queryResults.value.length > 0
+        ? "true"
+        : "false",
+    );
+  }
+
+  private handleStackingChange() {
+    this.layerGroupItemsContainer.setAttribute(
+      "tool-stacking",
+      this.state.verticalStacking.value ? "vertical" : "horizontal",
+    );
   }
 
   private getRenderedTool(tool: Tool) {
@@ -837,10 +956,8 @@ export class ToolPalettePanel extends SidePanel {
           renderedTools.delete(tool);
         }
       }
-
-      yield self.dropZone;
     }
-    updateChildren(this.itemContainer, getItems());
+    updateChildren(this.layerGroupItemsContainer, getItems());
   }
 
   disposed() {}
