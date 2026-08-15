@@ -169,6 +169,19 @@ function makeSimpleLinked<T extends RefCounted & { changed: NullarySignal }>(
 export class Position extends RefCounted {
   private coordinates_: Float32Array = vector.kEmptyFloat32Vec;
   private curCoordinateSpace: CoordinateSpace | undefined;
+  // The coordinates that were inferred from the bounds of `curCoordinateSpace`,
+  // or `undefined` if the coordinates were specified explicitly.  Inferred
+  // coordinates are only meaningful for the coordinate space they were computed
+  // from, and must be recomputed rather than reused if the coordinate space is
+  // replaced while invalid.
+  //
+  // This is a copy of the coordinates rather than a boolean flag because
+  // several callers move the position by writing into the array returned by
+  // `value` instead of going through the setter.  Those callers report the move
+  // via `markMoved`, but comparing against the copy means that a caller which
+  // does not report one is still detected, and errs towards keeping the
+  // position rather than discarding it.
+  private inferredCoordinates_: Float32Array | undefined;
   changed = new NullarySignal();
   constructor(
     public coordinateSpace: WatchableValueInterface<CoordinateSpace>,
@@ -196,7 +209,29 @@ export class Position extends RefCounted {
   reset() {
     this.curCoordinateSpace = undefined;
     this.coordinates_ = vector.kEmptyFloat32Vec;
+    this.inferredCoordinates_ = undefined;
     this.changed.dispatch();
+  }
+
+  /**
+   * Records that the position has been moved by a caller that writes into the
+   * array returned by `value` rather than going through the setter, so that a
+   * move which happens to land back on the inferred coordinates is still
+   * treated as a position the user chose.  Call this only when a coordinate
+   * actually changed.
+   */
+  markMoved() {
+    this.inferredCoordinates_ = undefined;
+  }
+
+  // Returns `true` if the coordinates are still exactly the ones that were
+  // inferred from the bounds, i.e. the position has not been moved since.
+  private get coordinatesAreInferred() {
+    const { inferredCoordinates_ } = this;
+    return (
+      inferredCoordinates_ !== undefined &&
+      arraysEqual(inferredCoordinates_, this.coordinates_)
+    );
   }
 
   set value(coordinates: Float32Array) {
@@ -210,6 +245,7 @@ export class Position extends RefCounted {
     }
     const { coordinates_ } = this;
     coordinates_.set(coordinates);
+    this.inferredCoordinates_ = undefined;
     this.changed.dispatch();
   }
 
@@ -222,8 +258,16 @@ export class Position extends RefCounted {
     if (!coordinateSpace.valid) return;
     if (prevCoordinateSpace === undefined || !prevCoordinateSpace.valid) {
       let { coordinates_ } = this;
-      if (coordinates_ !== undefined && coordinates_.length === rank) {
-        // Use the existing voxel coordinates if rank is the same.  Otherwise, ignore.
+      if (
+        coordinates_ !== undefined &&
+        coordinates_.length === rank &&
+        !this.coordinatesAreInferred
+      ) {
+        // Use the existing voxel coordinates if they were specified explicitly
+        // and the rank is the same.  Otherwise, ignore.  Coordinates that are
+        // still exactly as inferred cannot be reused, since the dimensions of
+        // the new coordinate space may be ordered differently, which would
+        // leave the position outside the bounds.
       } else {
         coordinates_ = this.coordinates_ = new Float32Array(rank);
         getBoundingBoxCenter(coordinates_, coordinateSpace.bounds);
@@ -235,11 +279,13 @@ export class Position extends RefCounted {
             coordinates_[i] = Math.floor(coordinates_[i]) + 0.5;
           }
         }
+        this.inferredCoordinates_ = Float32Array.from(coordinates_);
       }
       this.changed.dispatch();
       return;
     }
     // Match dimensions by ID.
+    const wasInferred = this.coordinatesAreInferred;
     const newCoordinates = new Float32Array(rank);
     const prevCoordinates = this.coordinates_;
     const { ids, scales: newScales } = coordinateSpace;
@@ -258,6 +304,11 @@ export class Position extends RefCounted {
       }
     }
     this.coordinates_ = newCoordinates;
+    // Remapping does not count as moving the position, so coordinates that were
+    // still exactly as inferred remain so for the new coordinate space.
+    this.inferredCoordinates_ = wasInferred
+      ? Float32Array.from(newCoordinates)
+      : undefined;
     this.changed.dispatch();
   }
 
@@ -276,6 +327,7 @@ export class Position extends RefCounted {
     }
     this.curCoordinateSpace = undefined;
     this.coordinates_ = Float32Array.from(parseArray(obj, verifyFiniteFloat));
+    this.inferredCoordinates_ = undefined;
     this.handleCoordinateSpaceChanged();
     this.changed.dispatch();
   }
@@ -287,21 +339,29 @@ export class Position extends RefCounted {
     } = this.coordinateSpace.value;
     const { coordinates_ } = this;
     const rank = coordinates_.length;
+    let moved = false;
     for (let i = 0; i < rank; ++i) {
+      const previousCoordinate = coordinates_[i];
       if (voxelCenterAtIntegerCoordinates[i]) {
         coordinates_[i] = Math.round(coordinates_[i]);
       } else {
         coordinates_[i] = Math.floor(coordinates_[i]) + 0.5;
       }
+      if (coordinates_[i] !== previousCoordinate) moved = true;
     }
+    if (moved) this.markMoved();
     this.changed.dispatch();
   }
 
   assign(other: Borrowed<Position>) {
     other.handleCoordinateSpaceChanged();
-    const { curCoordinateSpace, coordinates_ } = other;
+    const { curCoordinateSpace, coordinates_, inferredCoordinates_ } = other;
     this.curCoordinateSpace = curCoordinateSpace;
     this.coordinates_ = Float32Array.from(coordinates_);
+    this.inferredCoordinates_ =
+      inferredCoordinates_ === undefined
+        ? undefined
+        : Float32Array.from(inferredCoordinates_);
     this.changed.dispatch();
   }
 
@@ -330,7 +390,15 @@ export class Position extends RefCounted {
     target.handleCoordinateSpaceChanged();
     const { value: sourceCoordinates } = source;
     if (offset !== undefined && sourceCoordinates.length === offset.length) {
-      vector.scaleAndAdd(target.value, sourceCoordinates, offset, scale);
+      const targetCoordinates = target.value;
+      const rank = targetCoordinates.length;
+      let moved = false;
+      for (let i = 0; i < rank; ++i) {
+        const previousCoordinate = targetCoordinates[i];
+        targetCoordinates[i] = sourceCoordinates[i] + offset[i] * scale;
+        if (targetCoordinates[i] !== previousCoordinate) moved = true;
+      }
+      if (moved) target.markMoved();
       target.changed.dispatch();
     }
   }
@@ -813,6 +881,7 @@ export class PlaybackManager extends RefCounted {
     const ids = coordinateSpace.ids;
     const positionVector = this.position.value;
     let positionChanged = false;
+    let positionMoved = false;
     let velocityChanged = false;
     const curTime = Date.now();
     const velocities = this.velocity.value;
@@ -870,12 +939,17 @@ export class PlaybackManager extends RefCounted {
             break;
         }
       }
+      const previousCoordinate = positionVector[dimensionIndex];
       positionVector[dimensionIndex] = newCoordinate;
+      if (positionVector[dimensionIndex] !== previousCoordinate) {
+        positionMoved = true;
+      }
       dimensionState.prevCoordinate = positionVector[dimensionIndex];
       dimensionState.prevTime = curTime;
       positionChanged = true;
     }
     if (positionChanged) {
+      if (positionMoved) this.position.markMoved();
       this.position.changed.dispatch();
     }
     if (velocityChanged) {
@@ -1749,10 +1823,14 @@ export class DisplayPose extends RefCounted {
       temp[i] = voxelCoordinates[dim];
     }
     if (fun(temp) !== false) {
+      let moved = false;
       for (let i = 0; i < displayRank; ++i) {
         const dim = displayDimensionIndices[i];
+        const prevCoordinate = voxelCoordinates[dim];
         voxelCoordinates[dim] = temp[i];
+        if (voxelCoordinates[dim] !== prevCoordinate) moved = true;
       }
+      if (moved) this.position.markMoved();
       this.position.changed.dispatch();
       return true;
     }
@@ -1804,11 +1882,15 @@ export class DisplayPose extends RefCounted {
     const { position } = this;
     const { value: voxelCoordinates } = position;
     const { bounds } = position.coordinateSpace.value;
+    const prevCoordinate = voxelCoordinates[dimensionIndex];
     voxelCoordinates[dimensionIndex] = clampAndRoundCoordinateToVoxelCenter(
       bounds,
       dimensionIndex,
-      voxelCoordinates[dimensionIndex] + adjustment,
+      prevCoordinate + adjustment,
     );
+    if (voxelCoordinates[dimensionIndex] !== prevCoordinate) {
+      position.markMoved();
+    }
     position.changed.dispatch();
   }
 
@@ -1826,16 +1908,20 @@ export class DisplayPose extends RefCounted {
     const { displayDimensionIndices, displayRank } =
       this.displayDimensions.value;
     const { bounds } = position.coordinateSpace.value;
+    let moved = false;
     for (let i = 0; i < displayRank; ++i) {
       const dim = displayDimensionIndices[i];
       const adjustment = temp[i];
       if (adjustment === 0) continue;
+      const prevCoordinate = voxelCoordinates[dim];
       voxelCoordinates[dim] = clampAndRoundCoordinateToVoxelCenter(
         bounds,
         dim,
-        voxelCoordinates[dim] + adjustment,
+        prevCoordinate + adjustment,
       );
+      if (voxelCoordinates[dim] !== prevCoordinate) moved = true;
     }
+    if (moved) this.position.markMoved();
     this.position.changed.dispatch();
   }
 
@@ -1890,12 +1976,16 @@ export class DisplayPose extends RefCounted {
     quat.multiply(orientation, temp, orientation);
     vec3.transformQuat(fixedPointLocal, fixedPointLocal, orientation);
 
+    let moved = false;
     for (let i = 0; i < displayRank; ++i) {
       const dim = displayDimensionIndices[i];
+      const prevCoordinate = voxelCoordinates[dim];
       voxelCoordinates[dim] =
         fixedPoint[dim] -
         fixedPointLocal[i] / (scales[dim] * relativeDisplayScales[dim]);
+      if (voxelCoordinates[dim] !== prevCoordinate) moved = true;
     }
+    if (moved) this.position.markMoved();
     this.position.changed.dispatch();
     this.orientation.changed.dispatch();
   }
