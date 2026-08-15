@@ -37,6 +37,7 @@ import { joinBaseUrlAndPath } from "#src/kvstore/url.js";
 import type { FetchOk } from "#src/util/http_request.js";
 import { HttpError, fetchOk } from "#src/util/http_request.js";
 import { ProgressSpan } from "#src/util/progress_listener.js";
+import { getRandomHexString } from "#src/util/random.js";
 
 export class S3KvStoreBase<
   SharedKvStoreContext extends SharedKvStoreContextBase,
@@ -50,17 +51,26 @@ export class S3KvStoreBase<
     protected fetchOkImpl: FetchOk = fetchOk,
   ) {}
 
+  // Random query parameter (ignored by S3) so cached responses are never
+  // used — same rationale as GcsKvStore.getObjectUrl: stale ACAO headers on
+  // 304s (S3's CORS headers also vary with the Origin) and staleness after
+  // this or another session writes to the bucket.
+  private getObjectUrl(key: string): string {
+    return (
+      joinBaseUrlAndPath(this.baseUrl, key) +
+      `?neuroglancer=${getRandomHexString()}`
+    );
+  }
+
   stat(key: string, options: StatOptions): Promise<StatResponse | undefined> {
-    const url = joinBaseUrlAndPath(this.baseUrl, key);
-    return stat(this, key, url, options, this.fetchOkImpl);
+    return stat(this, key, this.getObjectUrl(key), options, this.fetchOkImpl);
   }
 
   read(
     key: string,
     options: DriverReadOptions,
   ): Promise<ReadResponse | undefined> {
-    const url = joinBaseUrlAndPath(this.baseUrl, key);
-    return read(this, key, url, options, this.fetchOkImpl);
+    return read(this, key, this.getObjectUrl(key), options, this.fetchOkImpl);
   }
 
   list(prefix: string, options: DriverListOptions): Promise<ListResponse> {

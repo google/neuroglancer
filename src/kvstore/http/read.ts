@@ -131,9 +131,6 @@ export async function read<Key>(
       signal: options.signal,
       progressListener: options.progressListener,
     };
-    if (options.cacheMode !== undefined) {
-      requestInit.cache = options.cacheMode;
-    }
     if (rangeHeader !== undefined) {
       requestInit.headers = { range: rangeHeader };
       requestInit.cache = byteRangeCacheMode;
