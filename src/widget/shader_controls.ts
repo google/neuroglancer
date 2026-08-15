@@ -47,6 +47,7 @@ import {
 import { channelInvlerpLayerControl } from "#src/widget/layer_control_channel_invlerp.js";
 import { checkboxLayerControl } from "#src/widget/layer_control_checkbox.js";
 import { colorLayerControl } from "#src/widget/layer_control_color.js";
+import { colormapLayerControl } from "#src/widget/layer_control_colormap.js";
 import { propertyInvlerpLayerControl } from "#src/widget/layer_control_property_invlerp.js";
 import { rangeLayerControl } from "#src/widget/layer_control_range.js";
 import { selectLayerControl } from "#src/widget/layer_control_select.js";
@@ -123,6 +124,11 @@ function getShaderLayerControlFactory<LayerType extends UserLayer>(
         defaultChannel: control.default.channel,
         histogramSpecifications: shaderControlState.histogramSpecifications,
         histogramIndex: calculateHistogramIndex(),
+      }));
+    }
+    case "colormap": {
+      return colormapLayerControl(() => ({
+        watchableValue: controlState.trackable,
       }));
     }
   }

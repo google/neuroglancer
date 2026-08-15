@@ -113,6 +113,10 @@ jobs:
           cache: "npm"
           cache-dependency-path: |
             package-lock.json
+      # uv is invoked by neuroglancer's `prepare` script (via build-package
+      # -> generate_colormaps_zarr.py) when example projects install
+      # neuroglancer from `file:../../..`.
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
       - run: npm ci
       - run: npm run example-project-test -- --reporter=html
       - name: Upload report and built clients
