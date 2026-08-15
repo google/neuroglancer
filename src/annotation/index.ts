@@ -767,6 +767,7 @@ export type Annotation =
 export interface AnnotationTypeHandler<T extends Annotation = Annotation> {
   icon: string;
   description: string;
+  dataProperties: string[];
   toJSON: (annotation: T, rank: number) => any;
   restoreState: (annotation: T, obj: any, rank: number) => void;
   /**
@@ -888,6 +889,7 @@ export const annotationTypeHandlers: Record<
   [AnnotationType.LINE]: {
     icon: "ꕹ",
     description: "Line",
+    dataProperties: ["pointA", "pointB"],
     toJSON(annotation: Line) {
       return {
         pointA: Array.from(annotation.pointA),
@@ -952,6 +954,7 @@ export const annotationTypeHandlers: Record<
   [AnnotationType.POLYLINE]: {
     icon: "⤤",
     description: "Polyline",
+    dataProperties: ["points"],
     toJSON(annotation: PolyLine) {
       return {
         points: annotation.points.map((point) => Array.from(point)),
@@ -1083,6 +1086,7 @@ export const annotationTypeHandlers: Record<
   [AnnotationType.POINT]: {
     icon: "⚬",
     description: "Point",
+    dataProperties: ["point"],
     toJSON: (annotation: Point) => {
       return {
         point: Array.from(annotation.point),
@@ -1131,6 +1135,7 @@ export const annotationTypeHandlers: Record<
   [AnnotationType.AXIS_ALIGNED_BOUNDING_BOX]: {
     icon: "❑",
     description: "Bounding Box",
+    dataProperties: ["pointA", "pointB"],
     toJSON: (annotation: AxisAlignedBoundingBox) => {
       return {
         pointA: Array.from(annotation.pointA),
@@ -1203,6 +1208,7 @@ export const annotationTypeHandlers: Record<
   [AnnotationType.ELLIPSOID]: {
     icon: "◎",
     description: "Ellipsoid",
+    dataProperties: ["center", "radii"],
     toJSON: (annotation: Ellipsoid) => {
       return {
         center: Array.from(annotation.center),
