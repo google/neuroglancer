@@ -235,13 +235,12 @@ export class DataSourceSubsourceView extends RefCounted {
       this.registerDisposer(
         new ElementVisibilityFromTrackableBoolean(
           makeCachedDerivedWatchableValue(
-            (enabled, isPotentiallyWritable) =>
-              enabled && isPotentiallyWritable,
+            (enabled, supportsWriting) => enabled && supportsWriting,
             [
               enabledState,
               new WatchableValue(
-                loadedSubsource.subsourceEntry.subsource
-                  .isPotentiallyWritable ?? false,
+                loadedSubsource.subsourceEntry.subsource.supportsWriting ??
+                  false,
               ),
             ],
           ),

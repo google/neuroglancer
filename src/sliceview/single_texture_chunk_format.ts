@@ -146,10 +146,7 @@ export abstract class SingleTextureVolumeChunk<
     gl.bindTexture(textureTarget, null);
   }
 
-  updateFromCpuData(
-    gl: GL,
-    _region?: { offset: Uint32Array; size: Uint32Array },
-  ) {
+  updateFromCpuData(gl: GL) {
     if (this.data == null) return;
 
     if (this.texture == null) {

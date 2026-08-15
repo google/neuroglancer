@@ -62,7 +62,7 @@ import {
   verifyOptionalObjectProperty,
 } from "#src/util/json.js";
 import { TrackableEnum } from "#src/util/trackable_enum.js";
-import { VoxelPreviewMultiscaleSource } from "#src/voxel_annotation/PreviewMultiscaleChunkSource.js";
+import { VoxelPreviewMultiscaleSource } from "#src/voxel_annotation/preview_multiscale_chunk_source.js";
 import type {
   VoxelEditControllerHost,
   VoxelValueGetter,

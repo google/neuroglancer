@@ -73,7 +73,7 @@ such as the following:
        }
    ]
 
-If the bucket also needs to support write operations (e.g. for :ref:`voxel-annotation`), ``PUT`` and ``DELETE`` must be added to ``AllowedMethods``:
+If the bucket also needs to support write operations (e.g. for :ref:`voxel-annotation`), ``PUT`` and ``DELETE`` must be added to ``AllowedMethods``. When allowing write methods, do not use a wildcard ``AllowedOrigins``; explicitly list the origins that should be permitted to write:
 
 .. code-block:: json
 
@@ -89,7 +89,7 @@ If the bucket also needs to support write operations (e.g. for :ref:`voxel-annot
                "DELETE"
            ],
            "AllowedOrigins": [
-               "*"
+               "https://example.com"
            ],
            "ExposeHeaders": [
                "ETag",

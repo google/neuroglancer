@@ -16,7 +16,7 @@
 
 import type { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import { vec3 } from "#src/util/geom.js";
-import type { VoxelPreviewMultiscaleSource } from "#src/voxel_annotation/PreviewMultiscaleChunkSource.js";
+import type { VoxelPreviewMultiscaleSource } from "#src/voxel_annotation/preview_multiscale_chunk_source.js";
 import type { RPC } from "#src/worker_rpc.js";
 
 export const VOX_RELOAD_CHUNKS_RPC_ID = "vox.chunk.reload";
