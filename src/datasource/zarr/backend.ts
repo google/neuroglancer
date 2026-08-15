@@ -54,11 +54,9 @@ export class ZarrVolumeChunkSource extends WithParameters(
     this.sharedKvStoreContext.kvStoreContext.getKvStore(this.parameters.url),
   );
 
-  async download(chunk: VolumeChunk, signal: AbortSignal) {
-    chunk.chunkDataSize = this.spec.chunkDataSize;
-    const { parameters } = this;
-    const { chunkGridPosition } = chunk;
-    const { metadata } = parameters;
+  // Sharded stores use structured (non-string) keys, hence the unknown type.
+  private getChunkStoreKey(chunkGridPosition: Float32Array): unknown {
+    const { metadata } = this.parameters;
     let baseKey = "";
     const rank = this.spec.rank;
     const { physicalToLogicalDimension } = metadata.codecs.layoutInfo[0];
@@ -91,9 +89,15 @@ export class ZarrVolumeChunkSource extends WithParameters(
       baseKey += `${sep}${keyCoords[i]}`;
       sep = metadata.dimensionSeparator;
     }
+    return this.chunkKvStore.getChunkKey(chunkGridPosition, baseKey);
+  }
+
+  async download(chunk: VolumeChunk, signal: AbortSignal) {
+    chunk.chunkDataSize = this.spec.chunkDataSize;
+    const { chunkGridPosition } = chunk;
     const { chunkKvStore } = this;
     const response = await chunkKvStore.kvStore.read(
-      chunkKvStore.getChunkKey(chunkGridPosition, baseKey),
+      this.getChunkStoreKey(chunkGridPosition),
       {
         signal,
         cacheMode: this.requireRevalidatedReads ? "no-cache" : undefined,
@@ -110,7 +114,7 @@ export class ZarrVolumeChunkSource extends WithParameters(
   }
 
   async writeChunk(chunk: VolumeChunk): Promise<void> {
-    const { kvStore, getChunkKey, decodeCodecs } = this.chunkKvStore;
+    const { kvStore, decodeCodecs } = this.chunkKvStore;
     if (!kvStore.write) {
       throw new Error(
         "ZarrVolumeChunkSource.writeChunk: underlying kvStore is not writable",
@@ -201,43 +205,7 @@ export class ZarrVolumeChunkSource extends WithParameters(
       new AbortController().signal,
     );
 
-    const { parameters } = this;
-    const { chunkGridPosition } = chunk;
-    const { metadata } = parameters;
-    let baseKey = "";
-    const rank = this.spec.rank;
-    const { physicalToLogicalDimension } = metadata.codecs.layoutInfo[0];
-    let sep: string;
-    if (metadata.chunkKeyEncoding === ChunkKeyEncoding.DEFAULT) {
-      baseKey += "c";
-      sep = metadata.dimensionSeparator;
-    } else {
-      sep = "";
-      if (rank === 0) {
-        baseKey += "0";
-      }
-    }
-    const keyCoords = new Array<number>(rank);
-    const { readChunkShape } = metadata.codecs.layoutInfo[0];
-    const { chunkShape } = metadata;
-    for (
-      let fOrderPhysicalDim = 0;
-      fOrderPhysicalDim < rank;
-      ++fOrderPhysicalDim
-    ) {
-      const decodedDim =
-        physicalToLogicalDimension[rank - 1 - fOrderPhysicalDim];
-      keyCoords[decodedDim] = Math.floor(
-        (chunkGridPosition[fOrderPhysicalDim] * readChunkShape[decodedDim]) /
-          chunkShape[decodedDim],
-      );
-    }
-    for (let i = 0; i < rank; ++i) {
-      baseKey += `${sep}${keyCoords[i]}`;
-      sep = metadata.dimensionSeparator;
-    }
-
-    const key = getChunkKey(chunkGridPosition, baseKey);
+    const key = this.getChunkStoreKey(chunk.chunkGridPosition);
     const arrayBuffer = new Uint8Array(encoded).buffer;
     await kvStore.write!(key, arrayBuffer);
   }
