@@ -82,6 +82,7 @@ describe("VolumeChunkSource: applyEdits", () => {
       adjustCapacitiesForChunk: vi.fn(),
       updateChunkState: vi.fn(),
       scheduleUpdate: vi.fn(),
+      invalidateCachedChunks: vi.fn(),
       moveChunkToFrontend: vi.fn(),
       markRecentlyUsed: vi.fn(),
       gl: {},
@@ -137,11 +138,10 @@ describe("VolumeChunkSource: applyEdits", () => {
       const writeSpy = vi.spyOn(source, "writeChunk");
       const result = await source.applyEdits("0,0,0", [0], [100n]);
 
-      const chunk = source.chunks.get("0,0,0")! as VolumeChunk;
-
-      expect(chunk.data).toBeInstanceOf(BigUint64Array);
-      expect((chunk.data as BigUint64Array)[0]).toBe(100n);
       expect(writeSpy).toHaveBeenCalled();
+      const written = writeSpy.mock.calls[0][0] as VolumeChunk;
+      expect(written.data).toBeInstanceOf(BigUint64Array);
+      expect((written.data as BigUint64Array)[0]).toBe(100n);
       expect(result.newValues[0]).toBe(100n);
     });
 
@@ -172,11 +172,12 @@ describe("VolumeChunkSource: applyEdits", () => {
         chunkManager: 0,
       });
 
+      const writeSpy = vi.spyOn(uint32Source, "writeChunk");
       const result = await uint32Source.applyEdits("0,0,0", [0], [123]);
 
-      const chunk = uint32Source.chunks.get("0,0,0")! as VolumeChunk;
-      expect(chunk.data).toBeInstanceOf(Uint32Array);
-      expect((chunk.data as Uint32Array)[0]).toBe(123);
+      const written = writeSpy.mock.calls[0][0] as VolumeChunk;
+      expect(written.data).toBeInstanceOf(Uint32Array);
+      expect((written.data as Uint32Array)[0]).toBe(123);
       expect(result.newValues[0]).toBe(123);
     });
   });
@@ -196,11 +197,16 @@ describe("VolumeChunkSource: applyEdits", () => {
         new Float32Array([0, 0, 0]),
       ) as VolumeChunk;
       chunk.data = new Uint32Array([123]);
+      chunk.state = ChunkState.SYSTEM_MEMORY_WORKER;
 
+      const writeSpy = vi.spyOn(compressedSource, "writeChunk");
       const result = await compressedSource.applyEdits("0,0,0", [0], [99n]);
 
       expect(result.oldValues[0]).toBe(5n);
-      expect((chunk.data as Uint32Array)[0]).toBe(888);
+      const written = writeSpy.mock.calls[0][0] as VolumeChunk;
+      expect((written.data as Uint32Array)[0]).toBe(888);
+      // The shared cache entry is invalidated, never mutated in place.
+      expect((chunk.data as Uint32Array)[0]).toBe(123);
     });
 
     it("should handle UINT32 compressed segmentation", async () => {
@@ -218,12 +224,15 @@ describe("VolumeChunkSource: applyEdits", () => {
         new Float32Array([0, 0, 0]),
       ) as VolumeChunk;
       chunk.data = new Uint32Array([123]);
+      chunk.state = ChunkState.SYSTEM_MEMORY_WORKER;
 
+      const writeSpy = vi.spyOn(compressedSource, "writeChunk");
       const result = await compressedSource.applyEdits("0,0,0", [0], [77]);
 
       expect(result.oldValues[0]).toBe(5);
       expect(result.newValues[0]).toBe(77);
-      expect((chunk.data as Uint32Array)[0]).toBe(444);
+      const written = writeSpy.mock.calls[0][0] as VolumeChunk;
+      expect((written.data as Uint32Array)[0]).toBe(444);
     });
 
     it("should handle zero-offset compressed data (empty/new)", async () => {
@@ -240,9 +249,12 @@ describe("VolumeChunkSource: applyEdits", () => {
         new Float32Array([0, 0, 0]),
       ) as VolumeChunk;
       chunk.data = new Uint32Array([]);
+      chunk.state = ChunkState.SYSTEM_MEMORY_WORKER;
 
+      const writeSpy = vi.spyOn(compressedSource, "writeChunk");
       await compressedSource.applyEdits("0,0,0", [0], [50n]);
-      expect((chunk.data as Uint32Array)[0]).toBe(888);
+      const written = writeSpy.mock.calls[0][0] as VolumeChunk;
+      expect((written.data as Uint32Array)[0]).toBe(888);
     });
 
     it("should handle zero-offset compressed data for UINT32", async () => {
@@ -260,9 +272,12 @@ describe("VolumeChunkSource: applyEdits", () => {
         new Float32Array([0, 0, 0]),
       ) as VolumeChunk;
       chunk.data = new Uint32Array([]);
+      chunk.state = ChunkState.SYSTEM_MEMORY_WORKER;
 
+      const writeSpy = vi.spyOn(compressedSource, "writeChunk");
       await compressedSource.applyEdits("0,0,0", [0], [50]);
-      expect((chunk.data as Uint32Array)[0]).toBe(444);
+      const written = writeSpy.mock.calls[0][0] as VolumeChunk;
+      expect((written.data as Uint32Array)[0]).toBe(444);
     });
   });
 
