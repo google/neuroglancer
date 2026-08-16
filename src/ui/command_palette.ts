@@ -288,15 +288,11 @@ export class CommandPalette extends Overlay {
 /**
  * Binds the command palette to a viewer by handling the "open-command-palette"
  * action at the viewer element level, the same way every other global action
- * (e.g. "help") is bound. The action is dispatched by the configured
- * `control+keyp` binding in the viewer's input event map. This intentionally
+ * (e.g. "help") is bound. This intentionally
  * does not install any document-level key listener, so the palette opens from
  * the main viewer UI but does not intercept keystrokes globally.
  */
-export function bindCommandPalette(
-  viewer: Viewer,
-  catalog: CommandCatalog,
-): void {
+export function bindCommandPalette(viewer: Viewer): void {
   let openPalette: CommandPalette | undefined;
   const openCommandPalette = () => {
     if (openPalette !== undefined && !openPalette.wasDisposed) return;
@@ -308,7 +304,7 @@ export function bindCommandPalette(
       prevFocused instanceof HTMLElement && viewer.element.contains(prevFocused)
         ? prevFocused
         : viewer.element;
-    openPalette = new CommandPalette(catalog, dispatchTarget);
+    openPalette = new CommandPalette(viewer.commandCatalog, dispatchTarget);
   };
   viewer.bindAction("open-command-palette", openCommandPalette);
 }

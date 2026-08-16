@@ -66,8 +66,7 @@ export function setupDefaultViewer(options?: Partial<MinimalViewerOptions>) {
   bindDefaultCopyHandler(viewer);
   bindDefaultPasteHandler(viewer);
   registerDefaultCommands(viewer.commandRegistry);
-  const catalog = viewer.registerDisposer(new CommandCatalog(viewer));
-  bindCommandPalette(viewer, catalog);
+  bindCommandPalette(viewer);
 
   return viewer;
 }

@@ -82,6 +82,7 @@ import {
   observeWatchable,
   TrackableValue,
 } from "#src/trackable_value.js";
+import { CommandCatalog } from "#src/ui/command_catalog.js";
 import { CommandRegistry } from "#src/ui/command_registry.js";
 import {
   LayerArchiveCountWidget,
@@ -1182,6 +1183,13 @@ export class Viewer extends RefCounted implements ViewerState {
   // commands it was told about, not every action that exists - see
   // docs/concepts/commands.rst.
   public commandRegistry = this.registerDisposer(new CommandRegistry());
+  private commandCatalog_: CommandCatalog | undefined;
+
+  get commandCatalog(): CommandCatalog {
+    return (this.commandCatalog_ ??= this.registerDisposer(
+      new CommandCatalog(this),
+    ));
+  }
 
   public toolBinder = this.registerDisposer(
     new LocalToolBinder(this, this.globalToolBinder),
