@@ -33,6 +33,7 @@ import type {
 } from "#src/datasource/index.js";
 import { getKvStorePathCompletions } from "#src/datasource/kvstore_completions.js";
 import { VolumeChunkSourceParameters } from "#src/datasource/zarr/base.js";
+import { codecChainSupportsWriting } from "#src/datasource/zarr/codec/index.js";
 import "#src/datasource/zarr/codec/bytes/resolve.js";
 import "#src/datasource/zarr/codec/crc32c/resolve.js";
 import "#src/datasource/zarr/codec/gzip/resolve.js";
@@ -508,9 +509,6 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
       options,
       async (progressOptions) => {
         const { sharedKvStoreContext } = options.registry;
-        const supportsWriting =
-          sharedKvStoreContext.kvStoreContext.getKvStore(kvStoreUrl).store
-            .write !== undefined;
         const metadata = await getMetadata(sharedKvStoreContext, kvStoreUrl, {
           ...progressOptions,
           zarrVersion: this.zarrVersion,
@@ -551,6 +549,12 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
           sharedKvStoreContext,
           multiscaleInfo,
         );
+        const supportsWriting =
+          sharedKvStoreContext.kvStoreContext.getKvStore(kvStoreUrl).store
+            .write !== undefined &&
+          multiscaleInfo.scales.every((scale) =>
+            codecChainSupportsWriting(scale.metadata.codecs),
+          );
         return {
           canonicalUrl: `${kvStoreUrl}|zarr${metadata.zarrVersion}:`,
           modelTransform: makeIdentityTransform(volume.modelSpace),

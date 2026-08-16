@@ -49,6 +49,11 @@ Voxel editing is currently supported for the following configurations:
     - Blosc
     - Gzip
 
+.. note::
+  Writing is not supported for arrays whose codec chain includes
+  ``sharding_indexed`` (the Zarr v3 sharded format) or an array-to-array codec
+  such as ``transpose``.
+
 Tools
 -----
 

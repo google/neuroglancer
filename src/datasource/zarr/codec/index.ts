@@ -49,6 +49,13 @@ export interface ShardingInfo {
   subChunkCodecs: CodecChainSpec;
 }
 
+export function codecChainSupportsWriting(codecs: CodecChainSpec): boolean {
+  return (
+    codecs.shardingInfo === undefined &&
+    codecs[CodecKind.arrayToArray].length === 0
+  );
+}
+
 export interface CodecArrayInfo {
   dataType: DataType;
   // Specifies the chunk shape, indexed by logical dimension.
