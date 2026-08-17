@@ -422,8 +422,9 @@ export class PerspectivePanel extends RenderedDataPanel {
         ),
       ];
       if (this.hasNormalAttachment) {
-        // Packed normals + sentinel alpha live in [0, 1]; 8 bits/channel is
-        // plenty after the *2-1 decode in the GTAO shader.
+        // Packed normals + sentinel alpha live in [0, 1]. RGBA8 keeps the
+        // attachment compact, at the cost of slight horizon error on some
+        // oblique surfaces after the *2-1 decode in the GTAO shader.
         colorBuffers.push(
           new TextureBuffer(
             this.gl,
