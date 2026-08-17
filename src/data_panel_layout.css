@@ -49,3 +49,28 @@
 .neuroglancer-data-panel-layout-controls > button:hover {
   color: #6ff;
 }
+
+.neuroglancer-data-panel-status {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.neuroglancer-data-panel-status > .neuroglancer-display-dimensions-widget {
+  position: static;
+  pointer-events: auto;
+}
+
+.neuroglancer-frame-time-indicator {
+  padding: 2px 4px;
+  background-color: rgba(0, 0, 0, 0.3);
+  color: white;
+  font-family: monospace;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}

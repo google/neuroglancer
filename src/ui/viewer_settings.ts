@@ -16,6 +16,10 @@
 
 import "#src/ui/viewer_settings.css";
 
+import {
+  SSAO_INTENSITY_RANGE,
+  SSAO_RADIUS_RANGE,
+} from "#src/ssao/trackable_ssao_params.js";
 import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
 import type {
   TrackableValue,
@@ -33,6 +37,7 @@ import { emptyToUndefined } from "#src/util/json.js";
 import type { Viewer } from "#src/viewer.js";
 import { ColorWidget } from "#src/widget/color.js";
 import { NumberInputWidget } from "#src/widget/number_input_widget.js";
+import { RangeWidget } from "#src/widget/range.js";
 import { TextInputWidget } from "#src/widget/text_input.js";
 
 const DEFAULT_SETTINGS_PANEL_LOCATION: SidePanelLocation = {
@@ -106,9 +111,11 @@ export class ViewerSettingsPanel extends SidePanel {
     const addCheckbox = (
       label: string,
       value: WatchableValueInterface<boolean>,
+      tooltip?: string,
     ) => {
       const labelElement = document.createElement("label");
       labelElement.textContent = label;
+      if (tooltip !== undefined) labelElement.title = tooltip;
       const checkbox = this.registerDisposer(
         new TrackableBooleanCheckbox(value),
       );
@@ -117,6 +124,7 @@ export class ViewerSettingsPanel extends SidePanel {
     };
     addCheckbox("Show axis lines", viewer.showAxisLines);
     addCheckbox("Show scale bar", viewer.showScaleBar);
+    addCheckbox("Show frame time", viewer.showFrameTime);
     addCheckbox("Show cross sections in 3-d", viewer.showPerspectiveSliceViews);
     addCheckbox(
       "Hide sections background 3-d",
@@ -144,5 +152,36 @@ export class ViewerSettingsPanel extends SidePanel {
 
     addColor("Cross-section background", viewer.crossSectionBackgroundColor);
     addColor("Projection background", viewer.perspectiveViewBackgroundColor);
+
+    const addRange = (
+      label: string,
+      value: WatchableValueInterface<number>,
+      options: { min: number; max: number; step: number },
+      tooltip?: string,
+    ) => {
+      const widget = this.registerDisposer(
+        new RangeWidget(value, { ...options, label }),
+      );
+      if (tooltip !== undefined) widget.element.title = tooltip;
+      scroll.appendChild(widget.element);
+    };
+
+    addCheckbox(
+      "Enable SSAO (shadows)",
+      viewer.ssao.enabled,
+      "Screen-space ambient occlusion: more realistic shading/shadows on mesh surfaces.",
+    );
+    addRange(
+      "SSAO intensity",
+      viewer.ssao.intensity,
+      SSAO_INTENSITY_RANGE,
+      "Higher values give darker shading/shadows.",
+    );
+    addRange(
+      "SSAO radius",
+      viewer.ssao.radius,
+      SSAO_RADIUS_RANGE,
+      "Higher values give broader, softer shadows.",
+    );
   }
 }

@@ -409,6 +409,7 @@ function getCommonViewerState(viewer: Viewer) {
     wireFrame: viewer.wireFrame,
     enableAdaptiveDownsampling: viewer.enableAdaptiveDownsampling,
     showScaleBar: viewer.showScaleBar,
+    showFrameTime: viewer.showFrameTime,
     scaleBarOptions: viewer.scaleBarOptions,
     showPerspectiveSliceViews: viewer.showPerspectiveSliceViews,
     inputEventBindings: viewer.inputEventBindings,
@@ -421,6 +422,7 @@ function getCommonViewerState(viewer: Viewer) {
     crossSectionBackgroundColor: viewer.crossSectionBackgroundColor,
     perspectiveViewBackgroundColor: viewer.perspectiveViewBackgroundColor,
     hideCrossSectionBackground3D: viewer.hideCrossSectionBackground3D,
+    ssao: viewer.ssao,
     pickRadius: viewer.uiConfiguration.pickRadius,
   };
 }

@@ -12,6 +12,8 @@ Topics
   to segmentation layers.
 - :doc:`annotation_shaders` — writing custom GLSL shader code to drive
   the visual appearance of annotations from their properties.
+- :doc:`rendering` — perspective-view rendering modes, including
+  screen-space ambient occlusion.
 
 .. toctree::
    :hidden:
@@ -19,3 +21,4 @@ Topics
    navigation
    annotations
    annotation_shaders
+   rendering
