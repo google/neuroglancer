@@ -63,6 +63,7 @@ function makeContext(
       bindings: new Map(),
       localBinders: new Set(),
     },
+    toolBinder: { context: {} },
     layerManager: {
       layersChanged: noopSignal,
       managedLayers: [],

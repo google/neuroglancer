@@ -27,6 +27,7 @@ import {
   getMatchingTools,
   restoreTool,
   type GlobalToolBinder,
+  type LocalToolBinder,
 } from "#src/ui/tool.js";
 import { parseToolQuery } from "#src/ui/tool_query.js";
 import type { DebouncedFunction } from "#src/util/animation_frame_debounce.js";
@@ -42,17 +43,23 @@ import { Signal } from "#src/util/signal.js";
 import type { InputEventBindings } from "#src/viewer.js";
 
 export interface CommandCatalogContext {
-  globalToolBinder: GlobalToolBinder;
-  layerManager: LayerManager;
-  selectedLayer: SelectedLayerState;
-  inputEventBindings: InputEventBindings;
+  readonly globalToolBinder: GlobalToolBinder;
+  /**
+   * Tool context for tools that are not scoped to a layer. Tool factories are
+   * registered against a class prototype, so the binder's own context has to be
+   * a real instance of such a class rather than an arbitrary object.
+   */
+  readonly toolBinder: LocalToolBinder;
+  readonly layerManager: LayerManager;
+  readonly selectedLayer: SelectedLayerState;
+  readonly inputEventBindings: InputEventBindings;
   /**
    * Primary source of the flat command set. Registered commands are enumerated
    * directly and take precedence; any keyboard-bound action that is *not*
    * registered is still listed afterwards, so actions an embedder or the Python
    * integration only ever bound to a key do not disappear from the palette.
    */
-  commandRegistry: CommandRegistry;
+  readonly commandRegistry: CommandRegistry;
 }
 
 export interface ActionBinding {
@@ -111,9 +118,7 @@ function createToolFromJson(context: CommandCatalogContext, toolJson: unknown) {
       if (userLayer === null) return undefined;
       return restoreTool(userLayer, rest);
     }
-    // context is the viewer instance; restoreTool walks its prototype chain
-    // to find the registered tool factory.
-    return restoreTool(context, toolJson);
+    return restoreTool(context.toolBinder.context, toolJson);
   } catch {
     return undefined;
   }
