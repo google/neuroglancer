@@ -16,7 +16,7 @@ The algorithm does the following for each pixel:
 
 1. Reconstruct the view-space position from the depth buffer.
 2. Read the view-space normal from the normal buffer.
-3. March in 8 view-space slices (`NUM_DIRECTIONS`) × 8 steps (`NUM_STEPS`) on
+3. March in 4 view-space slices (`NUM_DIRECTIONS`) × 8 steps (`NUM_STEPS`) on
    both sides of the pixel to find the positive and negative horizon angles.
 4. Project the surface normal into each slice and analytically integrate the
    visible arc between its horizons.
@@ -27,14 +27,12 @@ Then the raw ambient occlusion is bilaterally blurred (view-space-depth-aware,
 
 ## Scope
 
-SSAO is limited to mesh surfaces because only `MeshLayer` and
-`MultiscaleMeshLayer` supply a view-space normal via the three-argument
+SSAO is limited to mesh surfaces because `MeshLayer`, `MultiscaleMeshLayer`, and
+`SingleMeshLayer` supply a view-space normal via the three-argument
 `emit(color, pickId, viewNormal)` form. Annotations are omitted from SSAO because
 they are glyphs for which 3D shading makes little sense. Skeletons are omitted
 because they are rendered as lines without the surface normals needed for SSAO.
-Single meshes are omitted because their source files (OBJ, VTK) treat normals as
-optional; a future extension could handle the case where normals are present, sharing
-code with the other mesh layers. The omitted types call the two-argument
+The omitted types call the two-argument
 `emit(color, pickId)` form, which writes the zero sentinel `vec4(0)` to the NORMAL
 attachment. The SSAO shader treats a zero-RGB normal as a no-AO sentinel, so those
 pixels render at full brightness. Highlighted (hovered) mesh segments use the same

@@ -17,10 +17,8 @@
 import type { ShaderBuilder } from "#src/webgl/shader.js";
 
 const glsl_gtao = `
-// Number of view-space slices in which to sample horizon angles. Eight
-// directions reduce angular noise and camera-motion pattern changes compared
-// with the previous four-direction kernel.
-#define NUM_DIRECTIONS 8
+// Number of view-space slices in which to sample horizon angles.
+#define NUM_DIRECTIONS 4
 // Number of steps along each direction at which to sample the horizon from the
 // depth buffer.
 #define NUM_STEPS 8
@@ -90,6 +88,7 @@ vec4 gtao() {
   float stepNoise = gtaoHash(gl_FragCoord.xy * STEP_NOISE_SCALE + STEP_NOISE_BIAS);
 
   float totalVisibility = 0.0;
+  float totalUnoccludedVisibility = 0.0;
   vec3 viewDirection = abs(uProjection[2][3]) > 0.5
     ? normalize(-P)
     : vec3(0.0, 0.0, 1.0);
@@ -124,6 +123,9 @@ vec4 gtao() {
     float horizonNegLimit = normalAngle - HALF_PI;
     float horizonPos = horizonPosLimit;
     float horizonNeg = horizonNegLimit;
+    totalUnoccludedVisibility += projectedNormalLength * 0.25 *
+      (integrateArc(horizonPosLimit, normalAngle) +
+       integrateArc(-horizonNegLimit, -normalAngle));
 
     for (int s = 1; s <= NUM_STEPS; s++) {
       float t = float(s) + stepNoise * 0.5;
@@ -166,7 +168,10 @@ vec4 gtao() {
        integrateArc(-horizonNeg, -normalAngle));
   }
 
-  float ao = totalVisibility / float(NUM_DIRECTIONS);
+  // Normalize by the same finite set of slices with unobstructed horizons.
+  // Without this, sparse angular quadrature darkens unoccluded off-axis
+  // surfaces because its projected-normal weights do not sum to exactly one.
+  float ao = totalVisibility / max(totalUnoccludedVisibility, 0.0001);
   ao = clamp(ao, 0.0, 1.0);
   return vec4(vec3(ao), 1.0);
 }

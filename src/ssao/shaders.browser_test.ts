@@ -410,7 +410,56 @@ describe("SSAO shaders", () => {
         normal,
         projection,
       });
-      expect(px[0]).toBeGreaterThanOrEqual(245);
+      expect(px[0]).toBeGreaterThanOrEqual(250);
+    });
+  });
+
+  it("SSAO produces ao ≈ 1 on perspective tilted planes", () => {
+    webglTest((gl) => {
+      const w = 64;
+      const h = 64;
+      const projection = mat4.create();
+      mat4.perspective(projection, Math.PI / 2, 1.0, 0.1, 10);
+      for (const unnormalizedNormal of [
+        [-0.6, -0.35, 1.0],
+        [-1.2, -0.7, 1.0],
+        [-2.0, -0.5, 1.0],
+      ] as const) {
+        const normalLength = Math.hypot(...unnormalizedNormal);
+        const normal: [number, number, number] = [
+          unnormalizedNormal[0] / normalLength,
+          unnormalizedNormal[1] / normalLength,
+          unnormalizedNormal[2] / normalLength,
+        ];
+        const planeOffset = -2 * normal[2];
+        const depths = new Float32Array(w * h);
+        for (let y = 0; y < h; ++y) {
+          for (let x = 0; x < w; ++x) {
+            const rayX = ((x + 0.5) / w) * 2.0 - 1.0;
+            const rayY = ((y + 0.5) / h) * 2.0 - 1.0;
+            const rayZ = -1.0;
+            const distance =
+              planeOffset /
+              (normal[0] * rayX + normal[1] * rayY + normal[2] * rayZ);
+            depths[y * w + x] = viewZToDepthValue(projection, distance * rayZ);
+          }
+        }
+        for (const [x, y] of [
+          [32, 32],
+          [20, 32],
+          [44, 32],
+        ]) {
+          const px = runGTAOAndReadCenter(gl, w, h, x, y, depths, {
+            normal,
+            projection,
+            radius: 0.4,
+          });
+          expect(
+            px[0],
+            `normal=${unnormalizedNormal.join(",")}, pixel=${x},${y}`,
+          ).toBeGreaterThanOrEqual(245);
+        }
+      }
     });
   });
 
