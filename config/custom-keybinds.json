@@ -1,0 +1,39 @@
+{
+  "keym": {
+    "action": {
+      "layerType": "segmentation",
+      "tool": "grapheneMergeSegments",
+      "provider": "graphene"
+    }
+  },
+  "keyc": {
+    "action": {
+      "layerType": "segmentation",
+      "tool": "grapheneMulticutSegments",
+      "provider": "graphene"
+    }
+  },
+  "keyf": {
+    "action": {
+      "layerType": "segmentation",
+      "tool": "grapheneFindPath",
+      "provider": "graphene"
+    }
+  },
+  "keyx": {
+    "action": false
+  },
+  "control+shift+keyx": {
+    "action": "clear-segments"
+  },
+  "bracketleft": [
+    { "action": false, "context": "sliceView" },
+    { "action": false, "context": "perspectiveView" },
+    { "action": "select-previous" }
+  ],
+  "bracketright": [
+    { "action": false, "context": "sliceView" },
+    { "action": false, "context": "perspectiveView" },
+    { "action": "select-next" }
+  ]
+}
