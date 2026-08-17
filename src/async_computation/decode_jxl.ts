@@ -22,15 +22,15 @@ registerAsyncComputation(
   decodeJxl,
   async (
     data: Uint8Array,
-    area: number | undefined,
-    numComponents: number | undefined,
+    expectedElements: number,
     bytesPerPixel: number,
+    preserveAlpha: boolean,
   ) => {
     const result = await decompressJxl(
       data,
-      area,
-      numComponents,
+      expectedElements,
       bytesPerPixel,
+      preserveAlpha,
     );
     return { value: result, transfer: [result.uint8Array.buffer] };
   },
