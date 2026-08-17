@@ -218,7 +218,7 @@ class CoordinateSpace:
         self,
         json: Any = None,
         names: Sequence[str] | None = None,
-        scales: Sequence[float] | None = None,
+        scales: np.typing.NDArray[np.float64] | Sequence[float] | None = None,
         units: str | Sequence[str] | None = None,
         coordinate_arrays: Sequence[CoordinateArray | None] | None = None,
     ):
