@@ -17,7 +17,7 @@
 import type { LayerManager, SelectedLayerState } from "#src/layer/index.js";
 import { UserLayer } from "#src/layer/index.js";
 import type { Command } from "#src/ui/command.js";
-import { ActionCommand } from "#src/ui/command.js";
+import { ActionCommand, formatKeyStroke } from "#src/ui/command.js";
 import type { CommandRegistry } from "#src/ui/command_registry.js";
 import {
   getMatchingTools,
@@ -85,18 +85,6 @@ export type CommandPaletteEntry =
   | CommandEntry
   | ExecuteCommandEntry
   | GroupCommandEntry;
-
-function formatKeyStroke(stroke: string): string {
-  return stroke
-    .split("+")
-    .map((part) => {
-      if (part.startsWith("key")) return part.substring(3);
-      if (part.startsWith("digit")) return part.substring(5);
-      if (part.startsWith("arrow")) return part.substring(5);
-      return part;
-    })
-    .join("+");
-}
 
 // Fallback label for a bound action that no command was registered for.
 function actionIdToLabel(actionId: ActionIdentifier): string {

@@ -123,3 +123,21 @@ export class CallbackCommand extends Command {
     this.callback(context);
   }
 }
+
+export function formatKeyName(name: string) {
+  if (name.startsWith("key")) {
+    return name.substring(3);
+  }
+  if (name.startsWith("digit")) {
+    return name.substring(5);
+  }
+  if (name.startsWith("arrow")) {
+    return name.substring(5);
+  }
+  return name;
+}
+
+export function formatKeyStroke(stroke: string) {
+  const parts = stroke.split("+");
+  return parts.map(formatKeyName).join("+");
+}
