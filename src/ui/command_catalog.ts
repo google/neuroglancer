@@ -281,7 +281,7 @@ export class CommandCatalog extends RefCounted {
         group: toggleLayerGroup,
         command: new CallbackCommand(
           `toggle-layer-${index + 1}`,
-          layer.name,
+          `Show/hide ${layer.name}`,
           () => layer.setVisible(!layer.visible),
         ),
       });
@@ -299,7 +299,7 @@ export class CommandCatalog extends RefCounted {
         group: selectLayerGroup,
         command: new CallbackCommand(
           `select-layer-${index + 1}`,
-          layer.name,
+          `Select ${layer.name}`,
           () => {
             selectedLayer.layer = layer;
             selectedLayer.visible = true;
@@ -320,7 +320,7 @@ export class CommandCatalog extends RefCounted {
         group: togglePickLayerGroup,
         command: new CallbackCommand(
           `toggle-pick-layer-${index + 1}`,
-          layer.name,
+          `Toggle pick ${layer.name}`,
           () => {
             layer.pickEnabled = !layer.pickEnabled;
           },
