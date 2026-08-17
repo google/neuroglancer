@@ -62,27 +62,21 @@ export interface ActionBinding {
 
 export type CommandSource = "registered" | "derived";
 
-export interface CommandEntryBase {
-  kind: string;
-  shortcut: string;
-  label: string;
+// Can identify the sub-palette an entry belongs to.
+export interface CommandGroup {
+  readonly label: string;
+  readonly shortcut: string;
 }
 
 // A command, either taken from the registry or synthesised for a keyboard-bound
 // action that nothing registered. The consumer invokes it with its own context.
-export interface CommandEntry extends CommandEntryBase {
-  readonly kind: "command";
+export interface CommandEntry {
+  readonly shortcut: string;
+  readonly label: string;
   readonly command: Command;
   readonly source: CommandSource;
+  readonly group?: CommandGroup;
 }
-
-// Opens a sub-palette of `children` instead of activating anything itself.
-export interface GroupCommandEntry extends CommandEntryBase {
-  readonly kind: "group";
-  readonly children: readonly CommandPaletteEntry[];
-}
-
-export type CommandPaletteEntry = CommandEntry | GroupCommandEntry;
 
 // Fallback label for a bound action that no command was registered for.
 function actionIdToLabel(actionId: ActionIdentifier): string {
@@ -125,6 +119,7 @@ function createToolFromJson(context: CommandCatalogContext, toolJson: unknown) {
   }
 }
 
+// Attemp for full description of tool by creating then disposing
 function getToolDescription(
   context: CommandCatalogContext,
   toolJson: unknown,
@@ -139,7 +134,7 @@ function getToolDescription(
   return label;
 }
 
-// Fallback label derived purely from the JSON structure (no instantiation).
+// Fallback label derived purely from the JSON structure
 function toolJsonToLabel(toolJson: unknown): string {
   const json =
     typeof toolJson === "object" && toolJson !== null
@@ -183,18 +178,16 @@ function activateUnboundTool(
 ): void {
   const tool = createToolFromJson(context, toolJson);
   if (tool === undefined) return;
-  // If the same tool is already bound to a key, activate that key directly
-  // rather than creating a duplicate.
+
   const existingKey = tool.localBinder.jsonToKey.get(
     JSON.stringify(tool.toJSON()),
   );
   if (existingKey !== undefined) {
     tool.dispose();
     context.globalToolBinder.activate(existingKey);
-    return;
+  } else {
+    context.globalToolBinder.activateDirect(tool);
   }
-  // No key binding — activate directly without allocating a letter slot.
-  context.globalToolBinder.activateDirect(tool);
 }
 
 /**
@@ -235,14 +228,12 @@ export function collectActionBindings(
  * animationFrameDebounce so the palette always reflects current viewer state
  * without rebuilding from scratch on every open.
  *
- * Actions can be represented hierarchically, with parent entries that
- * expand to show child entries when activated. For example,
- * layer actions (toggle-layer-N, select-layer-N, toggle-pick-layer-N) are
- * replaced by three hierarchical entries whose children are the individual
- * layer rows, enabling a two-step layer picker instead of a flat list.
+ * `commands` is always flat: entries that belong together (e.g. the per-layer
+ * toggle-layer-N actions) share a `group`. It is up to the consumer
+ * if and how they wish to use this group.
  */
 export class CommandCatalog extends RefCounted {
-  commands: readonly CommandPaletteEntry[] = [];
+  commands: readonly CommandEntry[] = [];
   readonly changed = new Signal();
   private readonly debouncedRebuild: DebouncedFunction;
 
@@ -274,39 +265,38 @@ export class CommandCatalog extends RefCounted {
       inputEventBindings,
       commandRegistry,
     } = this.context;
-    const commands: CommandPaletteEntry[] = [];
+    const commands: CommandEntry[] = [];
 
-    // Hierarchical layer actions — each group entry opens a sub-palette of layers.
-    // The first 9 layers carry their digit-key shortcuts so users can see they
-    // still work directly from the keyboard without opening the sub-palette.
     const layers = layerManager?.managedLayers ?? [];
 
-    commands.push({
-      kind: "group",
+    const toggleLayerGroup: CommandGroup = {
       label: "Toggle Layer",
       shortcut: "1–9",
-      children: layers.map((layer, index) => ({
-        kind: "command",
+    };
+    for (const [index, layer] of layers.entries()) {
+      commands.push({
         label: layer.name,
         shortcut: index < 9 ? String(index + 1) : "",
         source: "derived",
+        group: toggleLayerGroup,
         command: new CallbackCommand(
           `toggle-layer-${index + 1}`,
           layer.name,
           () => layer.setVisible(!layer.visible),
         ),
-      })),
-    });
+      });
+    }
 
-    commands.push({
-      kind: "group",
+    const selectLayerGroup: CommandGroup = {
       label: "Select Layer",
       shortcut: "Ctrl+1–9",
-      children: layers.map((layer, index) => ({
-        kind: "command",
+    };
+    for (const [index, layer] of layers.entries()) {
+      commands.push({
         label: layer.name,
         shortcut: index < 9 ? `Ctrl+${index + 1}` : "",
         source: "derived",
+        group: selectLayerGroup,
         command: new CallbackCommand(
           `select-layer-${index + 1}`,
           layer.name,
@@ -315,18 +305,19 @@ export class CommandCatalog extends RefCounted {
             selectedLayer.visible = true;
           },
         ),
-      })),
-    });
+      });
+    }
 
-    commands.push({
-      kind: "group",
+    const togglePickLayerGroup: CommandGroup = {
       label: "Toggle Pick Layer",
       shortcut: "Alt+1–9",
-      children: layers.map((layer, index) => ({
-        kind: "command",
+    };
+    for (const [index, layer] of layers.entries()) {
+      commands.push({
         label: layer.name,
         shortcut: index < 9 ? `Alt+${index + 1}` : "",
         source: "derived",
+        group: togglePickLayerGroup,
         command: new CallbackCommand(
           `toggle-pick-layer-${index + 1}`,
           layer.name,
@@ -334,8 +325,8 @@ export class CommandCatalog extends RefCounted {
             layer.pickEnabled = !layer.pickEnabled;
           },
         ),
-      })),
-    });
+      });
+    }
 
     const bindings = collectActionBindings(inputEventBindings);
     const shortcutByAction = new Map<ActionIdentifier, string>();
@@ -353,7 +344,6 @@ export class CommandCatalog extends RefCounted {
     for (const command of commandRegistry.values()) {
       if (!command.enabled) continue;
       commands.push({
-        kind: "command",
         label: command.label,
         shortcut: shortcutByAction.get(command.id) ?? "",
         source: "registered",
@@ -368,11 +358,9 @@ export class CommandCatalog extends RefCounted {
     for (const { actionId } of bindings) {
       if (commandRegistry.has(actionId)) continue;
       if (/^tool-[A-Z]$/.test(actionId)) continue;
-      // Layer-index actions are replaced by hierarchical group entries above.
       if (/^(toggle|select|toggle-pick)-layer-\d+$/.test(actionId)) continue;
       const label = actionIdToLabel(actionId);
       commands.push({
-        kind: "command",
         label,
         shortcut: shortcutByAction.get(actionId) ?? "",
         source: "derived",
@@ -419,7 +407,6 @@ export class CommandCatalog extends RefCounted {
               ? `${tool.description} — ${tool.context.managedLayer.name}`
               : tool.description;
           commands.push({
-            kind: "command",
             label,
             shortcut: shortcutByAction.get(actionId) ?? "",
             source: "derived",
@@ -429,7 +416,6 @@ export class CommandCatalog extends RefCounted {
           const capturedToolJson = toolJson;
           const label = getToolDescription(this.context, toolJson);
           commands.push({
-            kind: "command",
             label,
             shortcut: "",
             source: "derived",
@@ -445,14 +431,26 @@ export class CommandCatalog extends RefCounted {
     this.changed.dispatch();
   }
 
-  filter(searchString: string): readonly CommandPaletteEntry[] {
-    if (searchString === "") return this.commands;
+  // Restricting to `groupLabel` scopes the search to a single group's entries
+  filter(
+    searchString: string,
+    groupLabel?: string,
+    ignoreGroupsForGlobalSearch: boolean = true,
+  ): readonly CommandEntry[] {
+    let pool = this.commands;
+    if (groupLabel !== undefined) {
+      pool = pool.filter((entry) => entry.group?.label === groupLabel);
+    } else if (ignoreGroupsForGlobalSearch) {
+      pool = pool.filter((entry) => entry.group === undefined);
+    }
+
+    if (searchString === "") return pool;
 
     const query = searchString.toLowerCase();
-    const prefixMatches: CommandPaletteEntry[] = [];
-    const substringMatches: CommandPaletteEntry[] = [];
+    const prefixMatches: CommandEntry[] = [];
+    const substringMatches: CommandEntry[] = [];
 
-    for (const command of this.commands) {
+    for (const command of pool) {
       const label = command.label.toLowerCase();
       if (label.startsWith(query)) prefixMatches.push(command);
       else if (label.includes(query)) substringMatches.push(command);

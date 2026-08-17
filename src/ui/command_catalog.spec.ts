@@ -167,10 +167,6 @@ describe("CommandCatalog command sources", () => {
     );
   }
 
-  function commandEntries(catalog: CommandCatalog) {
-    return catalog.commands.filter((entry) => entry.kind === "command");
-  }
-
   it("annotates a registered command with its live binding", () => {
     const map = new EventActionMap();
     map.set("keyb", "toggle-scale-bar");
@@ -180,7 +176,7 @@ describe("CommandCatalog command sources", () => {
     );
     const catalog = makeCatalog(map, registry);
     try {
-      const entries = commandEntries(catalog).filter(
+      const entries = catalog.commands.filter(
         (entry) => entry.command.id === "toggle-scale-bar",
       );
       expect(entries).toHaveLength(1);
@@ -198,7 +194,7 @@ describe("CommandCatalog command sources", () => {
     map.set("keyq", "embedder-action");
     const catalog = makeCatalog(map, new CommandRegistry());
     try {
-      const entries = commandEntries(catalog).filter(
+      const entries = catalog.commands.filter(
         (entry) => entry.command.id === "embedder-action",
       );
       expect(entries).toHaveLength(1);
@@ -220,7 +216,7 @@ describe("CommandCatalog command sources", () => {
     const catalog = makeCatalog(map, registry);
     try {
       expect(
-        commandEntries(catalog).filter(
+        catalog.commands.filter(
           (entry) => entry.command.id === "toggle-scale-bar",
         ),
       ).toHaveLength(1);
@@ -239,7 +235,7 @@ describe("CommandCatalog command sources", () => {
     const catalog = makeCatalog(map, registry);
     try {
       expect(
-        commandEntries(catalog).filter(
+        catalog.commands.filter(
           (entry) => entry.command.id === "toggle-scale-bar",
         ),
       ).toHaveLength(0);
