@@ -73,6 +73,17 @@ export enum ChunkMemoryStatistics {
 
 export const numChunkMemoryStatistics = 3;
 
+/**
+ * Bit flags indicating which memory limits are currently blocking visible
+ * (`ChunkPriorityTier.VISIBLE`) chunks from being loaded.  Shared from the
+ * backend to the frontend so the UI can surface a status message.
+ */
+export enum MemoryLimitFlags {
+  NONE = 0,
+  GPU = 1,
+  SYSTEM = 2,
+}
+
 export const numChunkDownloadStatistics = 2;
 
 export const numChunkStatistics =

@@ -30,6 +30,7 @@ import {
   ChunkState,
   getChunkDownloadStatisticIndex,
   getChunkStateStatisticIndex,
+  MemoryLimitFlags,
   numChunkMemoryStatistics,
   numChunkStatistics,
   REQUEST_CHUNK_STATISTICS_RPC_ID,
@@ -727,6 +728,13 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
 
   gpuMemoryChanged = new NullarySignal();
 
+  /**
+   * Bit mask of `MemoryLimitFlags` indicating which memory limits are currently
+   * preventing visible chunks from being loaded.  Written at the end of each
+   * `process()` pass and observed by the frontend to show a status message.
+   */
+  memoryLimitReached: SharedWatchableValue<number>;
+
   private numQueued = 0;
   private numFailed = 0;
   private gpuMemoryGeneration = 0;
@@ -751,6 +759,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
       getCapacity(options.downloadCapacity),
     ];
     this.computeCapacity = getCapacity(options.computeCapacity);
+    this.memoryLimitReached = rpc.get(options.memoryLimitReached);
   }
 
   scheduleUpdate() {
@@ -912,7 +921,11 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     this.addChunkToQueues_(chunk);
   }
 
-  private processGPUPromotions_() {
+  /**
+   * @returns true if a `VISIBLE`-tier chunk could not be promoted to GPU memory
+   *     because the GPU memory limit is full of equal-or-higher-priority chunks.
+   */
+  private processGPUPromotions_(): boolean {
     const queueManager = this;
     function evictFromGPUMemory(chunk: Chunk) {
       queueManager.freeChunkGPUMemory(chunk);
@@ -941,11 +954,14 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
           evictFromGPUMemory,
         )
       ) {
-        break;
+        // If the blocked chunk is currently visible, the GPU memory limit is
+        // preventing data the user is looking at from being displayed.
+        return priorityTier === ChunkPriorityTier.VISIBLE;
       }
       this.copyChunkToGPU(promotionCandidate);
       this.updateChunkState(promotionCandidate, ChunkState.GPU_MEMORY);
     }
+    return false;
   }
 
   freeChunkGPUMemory(chunk: Chunk) {
@@ -1003,7 +1019,14 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     rpc.invoke("Chunk.update", msg, transfers);
   }
 
-  private processQueuePromotions_() {
+  /**
+   * @returns true if a `VISIBLE`-tier chunk could not be downloaded because the
+   *     system memory limit is full of equal-or-higher-priority chunks.  The
+   *     per-source download/compute concurrency limits are request-rate limits
+   *     rather than memory limits and are intentionally not reported here.
+   */
+  private processQueuePromotions_(): boolean {
+    let systemMemoryBlocked = false;
     const evict = (chunk: Chunk) => {
       switch (chunk.state) {
         case ChunkState.DOWNLOADING:
@@ -1061,6 +1084,9 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
             evict,
           )
         ) {
+          if (priorityTier === ChunkPriorityTier.VISIBLE) {
+            systemMemoryBlocked = true;
+          }
           return;
         }
         this.updateChunkState(promotionCandidate, ChunkState.DOWNLOADING);
@@ -1084,6 +1110,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
       this.computeEvictionQueue.candidates(),
       this.computeCapacity,
     );
+    return systemMemoryBlocked;
   }
 
   process() {
@@ -1092,9 +1119,17 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     }
     this.updatePending = null;
     const gpuMemoryGeneration = this.gpuMemoryGeneration;
-    this.processGPUPromotions_();
-    this.processQueuePromotions_();
+    const gpuMemoryBlocked = this.processGPUPromotions_();
+    const systemMemoryBlocked = this.processQueuePromotions_();
     this.logStatistics();
+    let memoryLimitFlags = MemoryLimitFlags.NONE;
+    if (gpuMemoryBlocked) {
+      memoryLimitFlags |= MemoryLimitFlags.GPU;
+    }
+    if (systemMemoryBlocked) {
+      memoryLimitFlags |= MemoryLimitFlags.SYSTEM;
+    }
+    this.memoryLimitReached.value = memoryLimitFlags;
     if (this.gpuMemoryGeneration !== gpuMemoryGeneration) {
       this.gpuMemoryChanged.dispatch();
     }
