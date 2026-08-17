@@ -277,9 +277,7 @@ export class CommandPalette extends Overlay {
 
     this.closeAndRestoreFocus();
 
-    if (command.kind === "execute") {
-      command.execute();
-    } else if (command.kind === "command") {
+    if (command.kind === "command") {
       command.command.invoke({ dispatchTarget: this.actionDispatchTarget });
     }
   }

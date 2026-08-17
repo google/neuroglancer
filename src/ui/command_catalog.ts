@@ -17,7 +17,11 @@
 import type { LayerManager, SelectedLayerState } from "#src/layer/index.js";
 import { UserLayer } from "#src/layer/index.js";
 import type { Command } from "#src/ui/command.js";
-import { ActionCommand, formatKeyStroke } from "#src/ui/command.js";
+import {
+  ActionCommand,
+  CallbackCommand,
+  formatKeyStroke,
+} from "#src/ui/command.js";
 import type { CommandRegistry } from "#src/ui/command_registry.js";
 import {
   getMatchingTools,
@@ -56,35 +60,29 @@ export interface ActionBinding {
   readonly eventAction: EventAction;
 }
 
-interface CommandPaletteEntryBase {
-  readonly label: string;
-  readonly shortcut: string;
+export type CommandSource = "registered" | "derived";
+
+export interface CommandEntryBase {
+  kind: string;
+  shortcut: string;
+  label: string;
 }
 
 // A command, either taken from the registry or synthesised for a keyboard-bound
 // action that nothing registered. The consumer invokes it with its own context.
-export interface CommandEntry extends CommandPaletteEntryBase {
+export interface CommandEntry extends CommandEntryBase {
   readonly kind: "command";
   readonly command: Command;
-}
-
-// Runs an anonymous callback directly (no command identity, e.g. a per-layer
-// toggle or an unbound tool activation).
-export interface ExecuteCommandEntry extends CommandPaletteEntryBase {
-  readonly kind: "execute";
-  readonly execute: () => void;
+  readonly source: CommandSource;
 }
 
 // Opens a sub-palette of `children` instead of activating anything itself.
-export interface GroupCommandEntry extends CommandPaletteEntryBase {
+export interface GroupCommandEntry extends CommandEntryBase {
   readonly kind: "group";
   readonly children: readonly CommandPaletteEntry[];
 }
 
-export type CommandPaletteEntry =
-  | CommandEntry
-  | ExecuteCommandEntry
-  | GroupCommandEntry;
+export type CommandPaletteEntry = CommandEntry | GroupCommandEntry;
 
 // Fallback label for a bound action that no command was registered for.
 function actionIdToLabel(actionId: ActionIdentifier): string {
@@ -288,10 +286,15 @@ export class CommandCatalog extends RefCounted {
       label: "Toggle Layer",
       shortcut: "1–9",
       children: layers.map((layer, index) => ({
-        kind: "execute",
+        kind: "command",
         label: layer.name,
         shortcut: index < 9 ? String(index + 1) : "",
-        execute: () => layer.setVisible(!layer.visible),
+        source: "derived",
+        command: new CallbackCommand(
+          `toggle-layer-${index + 1}`,
+          layer.name,
+          () => layer.setVisible(!layer.visible),
+        ),
       })),
     });
 
@@ -300,13 +303,18 @@ export class CommandCatalog extends RefCounted {
       label: "Select Layer",
       shortcut: "Ctrl+1–9",
       children: layers.map((layer, index) => ({
-        kind: "execute",
+        kind: "command",
         label: layer.name,
         shortcut: index < 9 ? `Ctrl+${index + 1}` : "",
-        execute: () => {
-          selectedLayer.layer = layer;
-          selectedLayer.visible = true;
-        },
+        source: "derived",
+        command: new CallbackCommand(
+          `select-layer-${index + 1}`,
+          layer.name,
+          () => {
+            selectedLayer.layer = layer;
+            selectedLayer.visible = true;
+          },
+        ),
       })),
     });
 
@@ -315,12 +323,17 @@ export class CommandCatalog extends RefCounted {
       label: "Toggle Pick Layer",
       shortcut: "Alt+1–9",
       children: layers.map((layer, index) => ({
-        kind: "execute",
+        kind: "command",
         label: layer.name,
         shortcut: index < 9 ? `Alt+${index + 1}` : "",
-        execute: () => {
-          layer.pickEnabled = !layer.pickEnabled;
-        },
+        source: "derived",
+        command: new CallbackCommand(
+          `toggle-pick-layer-${index + 1}`,
+          layer.name,
+          () => {
+            layer.pickEnabled = !layer.pickEnabled;
+          },
+        ),
       })),
     });
 
@@ -343,6 +356,7 @@ export class CommandCatalog extends RefCounted {
         kind: "command",
         label: command.label,
         shortcut: shortcutByAction.get(command.id) ?? "",
+        source: "registered",
         command,
       });
     }
@@ -361,6 +375,7 @@ export class CommandCatalog extends RefCounted {
         kind: "command",
         label,
         shortcut: shortcutByAction.get(actionId) ?? "",
+        source: "derived",
         command: new ActionCommand(actionId, label),
       });
     }
@@ -407,15 +422,20 @@ export class CommandCatalog extends RefCounted {
             kind: "command",
             label,
             shortcut: shortcutByAction.get(actionId) ?? "",
+            source: "derived",
             command: new ActionCommand(actionId, label),
           });
         } else {
           const capturedToolJson = toolJson;
+          const label = getToolDescription(this.context, toolJson);
           commands.push({
-            kind: "execute",
-            label: getToolDescription(this.context, toolJson),
+            kind: "command",
+            label,
             shortcut: "",
-            execute: () => activateUnboundTool(this.context, capturedToolJson),
+            source: "derived",
+            command: new CallbackCommand(jsonKey, label, () =>
+              activateUnboundTool(this.context, capturedToolJson),
+            ),
           });
         }
       }
