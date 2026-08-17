@@ -183,6 +183,7 @@ describe("CommandCatalog command sources", () => {
       expect(entries).toHaveLength(1);
       expect(entries[0].label).toBe("Toggle Scale Bar");
       expect(entries[0].shortcut).toBe("b");
+      expect(entries[0].source).toBe("registered");
     } finally {
       catalog.dispose();
     }
@@ -202,6 +203,7 @@ describe("CommandCatalog command sources", () => {
       // Falls back to a label derived from the action id.
       expect(entries[0].label).toBe("Embedder Action");
       expect(entries[0].shortcut).toBe("q");
+      expect(entries[0].source).toBe("derived")
     } finally {
       catalog.dispose();
     }
