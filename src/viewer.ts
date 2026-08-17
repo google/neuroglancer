@@ -270,6 +270,7 @@ class TrackableViewerState extends CompoundTrackable {
     this.add("ssao", viewer.ssao);
     this.add("enableAdaptiveDownsampling", viewer.enableAdaptiveDownsampling);
     this.add("showScaleBar", viewer.showScaleBar);
+    this.add("showFrameTime", viewer.showFrameTime);
     this.add("showDefaultAnnotations", viewer.showDefaultAnnotations);
 
     this.add("showSlices", viewer.showPerspectiveSliceViews);
@@ -445,6 +446,7 @@ export class Viewer extends RefCounted implements ViewerState {
   ssao = this.registerDisposer(new TrackableSSAO());
   enableAdaptiveDownsampling = new TrackableBoolean(true, true);
   showScaleBar = new TrackableBoolean(true, true);
+  showFrameTime = new TrackableBoolean(false, false);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
   hideCrossSectionBackground3D = new TrackableBoolean(false, false);
   visibleLayerRoles = allRenderLayerRoles();
@@ -1159,6 +1161,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
     this.bindAction("toggle-axis-lines", () => this.showAxisLines.toggle());
     this.bindAction("toggle-scale-bar", () => this.showScaleBar.toggle());
+    this.bindAction("toggle-frame-time", () => this.showFrameTime.toggle());
     this.bindAction("toggle-default-annotations", () =>
       this.showDefaultAnnotations.toggle(),
     );

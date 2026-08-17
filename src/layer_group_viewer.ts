@@ -95,6 +95,7 @@ export interface LayerGroupViewerState {
   wireFrame: TrackableBoolean;
   enableAdaptiveDownsampling: TrackableBoolean;
   showScaleBar: TrackableBoolean;
+  showFrameTime: TrackableBoolean;
   scaleBarOptions: TrackableScaleBarOptions;
   showPerspectiveSliceViews: TrackableBoolean;
   layerSpecification: Owned<LayerListSpecification>;
@@ -368,6 +369,9 @@ export class LayerGroupViewer extends RefCounted {
   }
   get showScaleBar() {
     return this.viewerState.showScaleBar;
+  }
+  get showFrameTime() {
+    return this.viewerState.showFrameTime;
   }
   get showPerspectiveSliceViews() {
     return this.viewerState.showPerspectiveSliceViews;

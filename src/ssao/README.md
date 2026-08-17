@@ -16,7 +16,7 @@ The algorithm does the following for each pixel:
 
 1. Reconstruct the view-space position from the depth buffer.
 2. Read the view-space normal from the normal buffer.
-3. March in 4 view-space slices (`NUM_DIRECTIONS`) × 8 steps (`NUM_STEPS`) on
+3. March in 8 view-space slices (`NUM_DIRECTIONS`) × 8 steps (`NUM_STEPS`) on
    both sides of the pixel to find the positive and negative horizon angles.
 4. Project the surface normal into each slice and analytically integrate the
    visible arc between its horizons.

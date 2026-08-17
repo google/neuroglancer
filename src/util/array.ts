@@ -632,7 +632,7 @@ export class TypedArrayBuilder<T extends TypedArray<ArrayBuffer>> {
   }
 
   shrinkToFit() {
-    this.data = this.data.slice(0, length) as T;
+    this.data = this.data.slice(0, this.length) as T;
   }
 
   clear() {

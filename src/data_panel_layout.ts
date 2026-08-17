@@ -95,6 +95,7 @@ export interface ViewerUIState
   wireFrame: TrackableBoolean;
   enableAdaptiveDownsampling: TrackableBoolean;
   showScaleBar: TrackableBoolean;
+  showFrameTime: TrackableBoolean;
   scaleBarOptions: TrackableValue<ScaleBarOptions>;
   visibleLayerRoles: WatchableSet<RenderLayerRole>;
   selectedLayer: SelectedLayerState;
@@ -216,19 +217,39 @@ function addDisplayDimensionsWidget(
   panel: RenderedDataPanel,
 ) {
   const { navigationState } = panel;
-  panel.element.appendChild(
-    layout.registerDisposer(
-      new DisplayDimensionsWidget(
-        navigationState.pose.displayDimensionRenderInfo.addRef(),
-        navigationState.zoomFactor,
-        navigationState.depthRange.addRef(),
-        navigationState.pose.orientation.addRef(),
-        panel.boundsUpdated,
-        panel.renderViewport,
-        panel instanceof SliceViewPanel,
-      ),
-    ).element,
+  const statusContainer = document.createElement("div");
+  statusContainer.className = "neuroglancer-data-panel-status";
+  const displayDimensionsWidget = layout.registerDisposer(
+    new DisplayDimensionsWidget(
+      navigationState.pose.displayDimensionRenderInfo.addRef(),
+      navigationState.zoomFactor,
+      navigationState.depthRange.addRef(),
+      navigationState.pose.orientation.addRef(),
+      panel.boundsUpdated,
+      panel.renderViewport,
+      panel instanceof SliceViewPanel,
+    ),
   );
+  statusContainer.appendChild(displayDimensionsWidget.element);
+
+  const frameTimeElement = document.createElement("div");
+  frameTimeElement.className = "neuroglancer-frame-time-indicator";
+  statusContainer.appendChild(frameTimeElement);
+  panel.element.appendChild(statusContainer);
+
+  const { display, showFrameTime } = layout.container.viewer;
+  const updateFrameTime = () => {
+    const frameTime = display.getLastFrameTimesInMs(1)[0];
+    frameTimeElement.textContent =
+      frameTime === undefined ? "-- ms" : `${frameTime.toFixed(1)} ms`;
+  };
+  const updateFrameTimeVisibility = () => {
+    frameTimeElement.style.display = showFrameTime.value ? "block" : "none";
+    if (showFrameTime.value) updateFrameTime();
+  };
+  layout.registerDisposer(display.frameTimeUpdated.add(updateFrameTime));
+  layout.registerDisposer(showFrameTime.changed.add(updateFrameTimeVisibility));
+  updateFrameTimeVisibility();
 }
 
 function registerRelatedLayouts(

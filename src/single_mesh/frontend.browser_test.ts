@@ -15,15 +15,30 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { perspectivePanelEmitWithNormals } from "#src/perspective_view/panel.js";
 import type { VertexAttributeInfo } from "#src/single_mesh/base.js";
 import {
   getAttributeTextureFormats,
   SingleMeshShaderManager,
   VertexChunkData,
 } from "#src/single_mesh/frontend.js";
+import { ShaderBuilder } from "#src/webgl/shader.js";
 import { fragmentShaderTest } from "#src/webgl/shader_testing.js";
+import { webglTest } from "#src/webgl/testing.js";
 
 describe("single_mesh/frontend", () => {
+  it("supports the perspective SSAO normals emitter", () => {
+    webglTest((gl) => {
+      const builder = new ShaderBuilder(gl);
+      perspectivePanelEmitWithNormals(builder);
+      const shaderManager = new SingleMeshShaderManager([], []);
+      shaderManager.defineShader(builder, true);
+      builder.setFragmentMain("emitGray();");
+      const shader = builder.build();
+      shader.dispose();
+    });
+  });
+
   describe("attributes", () => {
     const attributeNames = ["attrA", "attrB", "attrC"];
     const attributeInfo: VertexAttributeInfo[] = [];
