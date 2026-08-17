@@ -31,3 +31,20 @@ Layout
 .. json:schema:: LayerGroupViewer
 
 .. json:schema:: DataPanelLayout
+
+Configuration
+-------------
+
+.. json:schema:: CustomInputEventBindings
+
+.. json:schema:: EventIdentifier
+
+.. json:schema:: CustomInputEventBindingValue
+
+.. json:schema:: CustomInputEventBindingList
+
+.. json:schema:: CustomInputEventBinding
+
+.. json:schema:: EventAction
+
+.. json:schema:: CustomToolBinding
