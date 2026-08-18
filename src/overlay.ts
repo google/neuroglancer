@@ -73,9 +73,9 @@ export class Overlay extends RefCounted {
  * @param title - The title text to display in the header
  * @param primaryButtonText - The text to display on the primary button
  * @param extraClassPrefix - Optional CSS class prefix to add to all dialog elements
- * @param onPrimaryButtonClick - Optional callback function to execute when primary button is clicked. Provide null to give no action.
+ * @param primaryButtonClickListener - Optional click handler for the primary
+ *     button; it closes the dialog when omitted
  */
-
 export class FramedDialog extends Overlay {
   header: HTMLDivElement;
   headerTitle: HTMLSpanElement;
@@ -93,7 +93,7 @@ export class FramedDialog extends Overlay {
 
     const header = (this.header = document.createElement("div"));
     const closeMenuIcon = (this.closeMenuIcon = makeIcon({ svg: svg_close }));
-    closeMenuIcon.addEventListener("click", () => this.close());
+    this.registerEventListener(closeMenuIcon, "click", () => this.close());
     const headerTitle = (this.headerTitle = document.createElement("span"));
     headerTitle.textContent = title;
     header.appendChild(headerTitle);
@@ -108,7 +108,7 @@ export class FramedDialog extends Overlay {
       document.createElement("button"));
     primaryButton.textContent = primaryButtonText;
     const onPrimaryClick = primaryButtonClickListener ?? (() => this.close());
-    primaryButton.addEventListener("click", onPrimaryClick);
+    this.registerEventListener(primaryButton, "click", onPrimaryClick);
     footer.appendChild(primaryButton);
     this.content.appendChild(this.footer);
 

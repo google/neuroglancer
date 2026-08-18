@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/* The vertex attribute widget, when present, sits above the code editor. */
+.neuroglancer-shader-code-editor-dialog-body {
+  flex-direction: column;
+}
+
 .neuroglancer-shader-code-editor-dialog-body .neuroglancer-shader-code-widget {
   width: 80vw;
   height: 65vh;
