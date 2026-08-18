@@ -16,9 +16,9 @@ Topics
   segmentation layers from segment ids and segment properties.
 
 .. toctree::
-  :hidden:
+   :hidden:
 
-  navigation
-  annotations
-  annotation_shaders
-  segmentation_shaders
+   navigation
+   annotations
+   annotation_shaders
+   segmentation_shaders
