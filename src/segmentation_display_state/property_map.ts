@@ -197,23 +197,6 @@ export class PreprocessedSegmentPropertyMap {
     const { inlineProperties } = segmentPropertyMap;
     if (inlineProperties !== undefined) {
       this.inlineIdToIndex = makeUint64PermutationHashMap(inlineProperties.ids);
-
-      const hasStringProperty = inlineProperties.properties.some(
-        (p) => p.type === "string",
-      );
-      if (!hasStringProperty) {
-        const numIds = inlineProperties.ids.length;
-        const categories = ["neuron", "glia", "synapse", "unknown"];
-        inlineProperties.properties.push({
-          id: "debug_category",
-          type: "string",
-          description: "Debug injected string property",
-          values: Array.from(
-            { length: numIds },
-            (_, i) => categories[i % categories.length],
-          ),
-        });
-      }
     }
     this.tags = inlineProperties?.properties.find((p) => p.type === "tags") as
       | InlineSegmentTagsProperty
