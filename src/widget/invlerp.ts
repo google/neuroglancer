@@ -764,14 +764,7 @@ function countDataInBins(
     } else if (dataTypeCompare(value, max) > 0) {
       counts[numDataBins + 1]++;
     } else {
-      // TODO segment properties doesn't support uint64 yet
-      // if (dataType === DataType.UINT64) {
-      //   binIndex = Math.floor(
-      //     Number((value as bigint) - (min as bigint)) / binSize,
-      //   );
-      // } else {
       binIndex = Math.floor(((value as number) - (min as number)) / binSize);
-      // }
       counts[binIndex + 1]++;
     }
   }
@@ -795,7 +788,6 @@ const createHistogramTextureFromValues = (
 };
 
 export class InvlerpWidget extends Tab {
-  // TODO should this implement ParentInverpWidget?
   cdfPanel;
   boundElements;
   invertArrows: HTMLElement[];
