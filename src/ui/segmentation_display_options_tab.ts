@@ -90,7 +90,7 @@ export class DisplayOptionsTab extends Tab {
           title: "Documentation on segmentation layer rendering",
           href: "https://github.com/google/neuroglancer/blob/master/src/layer/segmentation/rendering.md",
         },
-        "neuroglancer-segmentation-dropdown-segment-color-shader-header",
+        "neuroglancer-segmentation-dropdown-shader-header",
         "Segment Color Shader",
       ),
     );
@@ -135,7 +135,7 @@ export class DisplayOptionsTab extends Tab {
                 title: "Documentation on image layer rendering",
                 href: "https://github.com/google/neuroglancer/blob/master/src/sliceview/image_layer_rendering.md",
               },
-              "neuroglancer-segmentation-dropdown-skeleton-shader-header",
+              "neuroglancer-segmentation-dropdown-shader-header",
               "Skeleton Shader",
             ),
           );
