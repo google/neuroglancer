@@ -36,6 +36,7 @@ class SkeletonSource(neuroglancer.skeleton.SkeletonSource):
 def test_skeleton_options(webdriver):
     with webdriver.viewer.txn() as s:
         s.dimensions = dimensions
+        s.position = [0, 0, 0]
         s.layout = "xy"
         s.layers.append(
             name="a",

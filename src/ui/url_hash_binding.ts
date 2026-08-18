@@ -41,6 +41,13 @@ function encodeFragment(fragment: string) {
   );
 }
 
+/**
+ * Encodes a state object as a URL fragment string.
+ */
+export function encodeStateAsFragment(state: any): string {
+  return encodeFragment(JSON.stringify(state, bigintToStringJsonReplacer));
+}
+
 export interface UrlHashBindingOptions {
   defaultFragment?: string;
   updateDelayMilliseconds?: number;
@@ -96,9 +103,7 @@ export class UrlHashBinding extends RefCounted {
     const { generation } = cacheState;
     if (generation !== this.prevStateGeneration) {
       this.prevStateGeneration = cacheState.generation;
-      const stateString = encodeFragment(
-        JSON.stringify(cacheState.value, bigintToStringJsonReplacer),
-      );
+      const stateString = encodeStateAsFragment(cacheState.value);
       if (stateString !== this.prevStateString) {
         this.prevStateString = stateString;
         if (decodeURIComponent(stateString) === "{}") {

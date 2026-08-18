@@ -126,7 +126,10 @@ function parseOmeroChannel(omeroChannel: unknown): SingleChannelMetadata {
   if (colorString && /^[0-9a-f]{6}$/i.test(colorString)) {
     colorString = `#${colorString}`;
   }
-  const color = parseRGBColorSpecification(colorString);
+  const color =
+    colorString !== undefined
+      ? parseRGBColorSpecification(colorString)
+      : undefined;
   const inverted = getProp("inverted", verifyBoolean);
   const label = getProp("label", verifyString);
 

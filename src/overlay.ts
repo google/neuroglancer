@@ -87,13 +87,13 @@ export class FramedDialog extends Overlay {
     title: string = "Dialog",
     primaryButtonText: string = "Close",
     extraClassPrefix?: string,
-    onPrimaryButtonClick?: () => void | null,
+    primaryButtonClickListener?: () => void,
   ) {
     super();
 
     const header = (this.header = document.createElement("div"));
     const closeMenuIcon = (this.closeMenuIcon = makeIcon({ svg: svg_close }));
-    this.registerEventListener(closeMenuIcon, "click", () => this.close());
+    closeMenuIcon.addEventListener("click", () => this.close());
     const headerTitle = (this.headerTitle = document.createElement("span"));
     headerTitle.textContent = title;
     header.appendChild(headerTitle);
@@ -107,25 +107,24 @@ export class FramedDialog extends Overlay {
     const primaryButton = (this.primaryButton =
       document.createElement("button"));
     primaryButton.textContent = primaryButtonText;
-    if (onPrimaryButtonClick === undefined) {
-      this.registerEventListener(primaryButton, "click", () => this.close());
-    } else if (onPrimaryButtonClick !== null) {
-      this.registerEventListener(primaryButton, "click", onPrimaryButtonClick);
-    }
+    const onPrimaryClick = primaryButtonClickListener ?? (() => this.close());
+    primaryButton.addEventListener("click", onPrimaryClick);
     footer.appendChild(primaryButton);
     this.content.appendChild(this.footer);
 
-    const classPrefixes = ["neuroglancer-framed-dialog", extraClassPrefix];
+    const classPrefixes = ["neuroglancer-framed-dialog"];
+    if (extraClassPrefix !== undefined) {
+      classPrefixes.push(extraClassPrefix);
+    }
+
     for (const classPrefix of classPrefixes) {
-      if (classPrefix !== undefined) {
-        this.content.classList.add(`${classPrefix}`);
-        this.header.classList.add(`${classPrefix}-header`);
-        this.headerTitle.classList.add(`${classPrefix}-title`);
-        this.closeMenuIcon.classList.add(`${classPrefix}-close-icon`);
-        this.body.classList.add(`${classPrefix}-body`);
-        this.footer.classList.add(`${classPrefix}-footer`);
-        this.primaryButton.classList.add(`${classPrefix}-primary-button`);
-      }
+      this.content.classList.add(`${classPrefix}`);
+      this.header.classList.add(`${classPrefix}-header`);
+      this.headerTitle.classList.add(`${classPrefix}-title`);
+      this.closeMenuIcon.classList.add(`${classPrefix}-close-icon`);
+      this.body.classList.add(`${classPrefix}-body`);
+      this.footer.classList.add(`${classPrefix}-footer`);
+      this.primaryButton.classList.add(`${classPrefix}-primary-button`);
     }
   }
 }

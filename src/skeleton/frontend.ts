@@ -339,7 +339,7 @@ void emitDefault() {
   drawSkeleton(
     gl: GL,
     edgeShader: ShaderProgram,
-    nodeShader: ShaderProgram | null,
+    nodeShader: ShaderProgram,
     skeletonChunk: SkeletonChunk,
     projectionParameters: { width: number; height: number },
   ) {
@@ -377,12 +377,15 @@ void emitDefault() {
       gl.disableVertexAttribArray(aVertexIndex);
     }
 
-    if (nodeShader !== null) {
+    // Draw nodes - this is performed also in line render mode
+    // so that there are no visible gaps between the edges
+    // as the point size is set to the line width
+    {
       nodeShader.bind();
       initializeCircleShader(nodeShader, projectionParameters, {
         featherWidthInPixels: this.targetIsSliceView ? 1.0 : 0.0,
       });
-      drawCircles(nodeShader.gl, 2, skeletonChunk.numVertices);
+      drawCircles(nodeShader.gl, 1, skeletonChunk.numVertices);
     }
   }
 
