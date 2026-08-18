@@ -475,7 +475,7 @@ export function dispatchEventWithModifiers(
 /**
  * DOM Event type used for dispatching actions.
  *
- * Additional information relevant to the acction is specified as the `detail` property.
+ * Additional information relevant to the action is specified as the `detail` property.
  */
 export interface ActionEvent<Info> extends CustomEvent {
   detail: Info;

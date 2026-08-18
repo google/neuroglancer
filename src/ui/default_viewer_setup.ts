@@ -15,10 +15,12 @@
  */
 
 import { StatusMessage } from "#src/status.js";
+import { bindCommandPalette } from "#src/ui/command_palette.js";
 import {
   bindDefaultCopyHandler,
   bindDefaultPasteHandler,
 } from "#src/ui/default_clipboard_handling.js";
+import { registerDefaultCommands } from "#src/ui/default_commands.js";
 import { setDefaultInputEventBindings } from "#src/ui/default_input_event_bindings.js";
 import { makeDefaultViewer } from "#src/ui/default_viewer.js";
 import type { MinimalViewerOptions } from "#src/ui/minimal_viewer.js";
@@ -62,6 +64,8 @@ export function setupDefaultViewer(options?: Partial<MinimalViewerOptions>) {
 
   bindDefaultCopyHandler(viewer);
   bindDefaultPasteHandler(viewer);
+  registerDefaultCommands(viewer.commandRegistry);
+  bindCommandPalette(viewer);
 
   return viewer;
 }

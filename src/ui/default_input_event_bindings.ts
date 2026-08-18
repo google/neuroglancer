@@ -48,6 +48,8 @@ export function getDefaultGlobalBindings() {
     map.set("space", "toggle-layout");
     map.set("shift+space", "toggle-layout-alternative");
     map.set("backslash", "toggle-show-statistics");
+    map.set("control+keyp", "open-command-palette");
+    map.set("escape", "deactivate-active-tool");
     defaultGlobalBindings = map;
   }
   return defaultGlobalBindings;
