@@ -203,7 +203,7 @@ describe("CommandCatalog command sources", () => {
       // Falls back to a label derived from the action id.
       expect(entries[0].label).toBe("Embedder Action");
       expect(entries[0].shortcut).toBe("q");
-      expect(entries[0].source).toBe("derived")
+      expect(entries[0].source).toBe("derived");
     } finally {
       catalog.dispose();
     }
