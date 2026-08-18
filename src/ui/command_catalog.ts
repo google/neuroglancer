@@ -227,16 +227,6 @@ export function collectActionBindings(
   }));
 }
 
-/**
- * Persistent, signal-driven catalog of command palette entries. Subscribes to
- * tool-binding and layer changes and rebuilds automatically via
- * animationFrameDebounce so the palette always reflects current viewer state
- * without rebuilding from scratch on every open.
- *
- * `commands` is always flat: entries that belong together (e.g. the per-layer
- * toggle-layer-N actions) share a `group`. It is up to the consumer
- * if and how they wish to use this group.
- */
 export class CommandCatalog extends RefCounted {
   commands: readonly CommandEntry[] = [];
   readonly changed = new Signal();
@@ -262,7 +252,7 @@ export class CommandCatalog extends RefCounted {
     this.rebuild();
   }
 
-  private rebuild() {
+  public rebuild() {
     const {
       globalToolBinder,
       layerManager,

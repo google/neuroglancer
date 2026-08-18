@@ -115,6 +115,7 @@ export class CommandPalette extends Overlay {
     resultsList.className = "neuroglancer-command-palette-results";
     this.content.appendChild(resultsList);
 
+    catalog.rebuild();
     this.buildRows();
 
     searchInput.addEventListener("input", () => {
