@@ -21,6 +21,7 @@ import {
   HashSetShaderManager,
 } from "#src/gpu_hash/shader.js";
 import {
+  DEFAULT_USER_MAIN_SEGMENT_COLOR,
   encodeSegmentPropertyShaderDefinition,
   type SegmentationColorUserShaderManagerParameters,
   type SegmentPropertyShaderDefinition,
@@ -48,6 +49,7 @@ import {
   WatchableValue,
   AggregateWatchableValue,
   makeCachedDerivedWatchableValue,
+  WatchableValue,
 } from "#src/trackable_value.js";
 import type { Uint64Map } from "#src/uint64_map.js";
 import type { DisjointUint64Sets } from "#src/util/disjoint_sets.js";
@@ -56,7 +58,11 @@ import {
   SEGMENTATION_ERASE_SENTINEL,
 } from "#src/voxel_editing/base.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
-import { type ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
+import {
+  getFallbackBuilderState,
+  parseShaderUiControls,
+  type ShaderControlsBuilderState,
+} from "#src/webgl/shader_ui_controls.js";
 
 function glslUint64Equals(name: string, value: bigint) {
   const v = BigInt.asUintN(64, value);
@@ -102,6 +108,34 @@ interface ShaderParameters {
   shaderBuilderState: ShaderControlsBuilderState;
 }
 
+function getFallbackShaderParameters(
+  displayState: SliceViewSegmentationDisplayState,
+): ShaderParameters {
+  const activeSegmentDefaultColor =
+    displayState.tempSegmentDefaultColor2d.value ??
+    displayState.segmentDefaultColor.value;
+  const activeSegmentStatedColors = displayState.useTempSegmentStatedColors2d
+    .value
+    ? displayState.tempSegmentStatedColors2d.value
+    : displayState.segmentStatedColors.value;
+  return {
+    segmentColorParameters: {
+      hasSegmentDefaultColor: activeSegmentDefaultColor !== undefined,
+      hasSegmentStatedColors: activeSegmentStatedColors.size !== 0,
+    },
+    segmentColorProperties: [],
+    shaderBuilderState: getFallbackBuilderState(
+      parseShaderUiControls(DEFAULT_USER_MAIN_SEGMENT_COLOR),
+    ),
+    hasEquivalences:
+      displayState.segmentationGroupState.value.segmentEquivalences.size !== 0,
+    hasHighlightColor: displayState.highlightColor.value !== undefined,
+    hideSegmentZero: displayState.hideSegmentZero.value,
+    baseSegmentColoring: displayState.baseSegmentColoring.value,
+    baseSegmentHighlighting: displayState.baseSegmentHighlighting.value,
+  };
+}
+
 export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderParameters> {
   public readonly segmentationGroupState: SegmentationGroupState;
   private gpuSegmentStatedColorHashTable:
@@ -135,6 +169,9 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
         };
       },
       shaderError: displayState.shaderError,
+      fallbackShaderParameters: new WatchableValue(
+        getFallbackShaderParameters(displayState),
+      ),
       shaderParameters: new AggregateWatchableValue((refCounted) => ({
         segmentColorParameters: refCounted.registerDisposer(
           makeCachedDerivedWatchableValue(
