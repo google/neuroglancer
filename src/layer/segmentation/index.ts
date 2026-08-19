@@ -46,6 +46,7 @@ import {
   trackableRenderScaleTarget,
 } from "#src/render_scale_statistics.js";
 import {
+  DEFAULT_USER_MAIN_SEGMENT_COLOR,
   encodeSegmentPropertyShaderDefinition,
   getCssColor,
   SegmentColorHash,
@@ -145,7 +146,11 @@ import {
   parameterizedEmitterDependentShaderGetter,
 } from "#src/webgl/dynamic_shader.js";
 import type { ShaderModule } from "#src/webgl/shader.js";
-import { ShaderControlState } from "#src/webgl/shader_ui_controls.js";
+import {
+  getFallbackBuilderState,
+  parseShaderUiControls,
+  ShaderControlState,
+} from "#src/webgl/shader_ui_controls.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import { registerLayerShaderControlsTool } from "#src/widget/shader_controls.js";
 
@@ -427,12 +432,6 @@ class LinkedSegmentationGroupState<
   }
 }
 
-export const DEFAULT_USER_MAIN_SEGMENT_COLOR = `
-vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
-  return color;
-}
-`;
-
 class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   private getSegmentColorShader;
 
@@ -642,21 +641,34 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         shaderBuilderState: this.segmentColorShaderControlState.builderState,
       })),
     );
+    const fallbackParameters = new WatchableValue({
+      segmentColorParameters:
+        this.segmentationColorUserShader.shaderParameters.value,
+      segmentColorProperties: [],
+      shaderBuilderState: getFallbackBuilderState(
+        parseShaderUiControls(DEFAULT_USER_MAIN_SEGMENT_COLOR),
+      ),
+    });
     return parameterizedEmitterDependentShaderGetter(
       this.layer,
       this.offscreenGL,
       {
         memoizeKey: `segmentation/ColorShader`,
         parameters,
+        fallbackParameters,
         encodeParameters: (p) => {
           return `${p.shaderBuilderState.key}/${JSON.stringify(p.segmentColorParameters)}/${JSON.stringify(p.segmentColorProperties.map(encodeSegmentPropertyShaderDefinition))}`;
         },
         shaderError: this.layer.displayState.shaderError,
-        defineShader: (builder, { shaderBuilderState }) => {
+        defineShader: (
+          builder,
+          { segmentColorParameters, shaderBuilderState },
+        ) => {
           this.offscreenSegmentationColorUserShader.defineShader(
             builder,
             /*fragment=*/ false,
             shaderBuilderState,
+            segmentColorParameters,
           );
           builder.addAttribute("highp vec4", "aVertexPosition");
           builder.addAttribute("highp uvec2", "aID");
@@ -722,7 +734,7 @@ vColor = segmentColorUserShader(uint64_t(aID));
       gl,
       shader,
       parameters.shaderBuilderState,
-      undefined,
+      parameters.segmentColorParameters,
       {
         segmentDefaultColor: this.segmentDefaultColor.value,
         segmentStatedColors: this.segmentStatedColors.value,
@@ -743,7 +755,11 @@ vColor = segmentColorUserShader(uint64_t(aID));
     for (let i = 0; i < data.length; i++) {
       colors[i] = data[i] / 255.0;
     }
-    this.offscreenSegmentationColorUserShader.disable(gl, shader);
+    this.offscreenSegmentationColorUserShader.disable(
+      gl,
+      shader,
+      parameters.segmentColorParameters,
+    );
     positionBuffer.dispose();
     idBuffer.dispose();
     return colors;

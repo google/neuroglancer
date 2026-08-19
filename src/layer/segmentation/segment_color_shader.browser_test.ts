@@ -209,7 +209,7 @@ describe("getShaderBaseSegmentColor", () => {
     );
   });
 
-  it("returns undefined if segment properties have not been loaded and shader uses properties", () => {
+  it("uses the fallback shader if segment properties have not been loaded", () => {
     const segmentationUserLayer = setupSegmentationLayer();
     segmentationUserLayer.displayState.fragmentSegmentColor.value = `
 #uicontrol property redTag(type="tag")
@@ -222,7 +222,7 @@ describe("getShaderBaseSegmentColor", () => {
 
     expect(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(1n),
-    ).toBeUndefined();
+    ).toBeDefined();
   });
 
   it("colors by string properties", () => {
@@ -455,7 +455,7 @@ vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
 }`;
     expect(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(1n),
-    ).toBeUndefined();
+    ).toBeDefined();
     const shaderError = segmentationUserLayer.displayState.shaderError.value;
     expect(shaderError).toBeInstanceOf(ShaderCompilationError);
     expect(shaderError!.message).toContain(
@@ -576,7 +576,7 @@ vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
 }`;
     expect(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(1n),
-    ).toBeUndefined();
+    ).toBeDefined();
     const shaderError = segmentationUserLayer.displayState.shaderError.value;
     expect(shaderError).toBeInstanceOf(ShaderCompilationError);
     expect(shaderError!.message).toContain(
