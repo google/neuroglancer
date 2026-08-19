@@ -26,7 +26,10 @@ import type {
   ThreeDimensionalRenderLayerAttachmentState,
 } from "#src/renderlayer.js";
 import { update3dRenderLayerAttachment } from "#src/renderlayer.js";
-import { encodeSegmentPropertyShaderDefinition } from "#src/segment_color.js";
+import {
+  DEFAULT_USER_MAIN_SEGMENT_COLOR,
+  encodeSegmentPropertyShaderDefinition,
+} from "#src/segment_color.js";
 import {
   forEachVisibleSegment,
   getObjectKey,
@@ -174,6 +177,23 @@ vec4 premultiplyAlpha(vec4 color) {
             .builderState,
       })),
     );
+    const initialFallbackParameters = {
+      segmentColorParameters:
+        layer.displayState.segmentationColorUserShader.shaderParameters.value,
+      segmentColorProperties: [],
+      segmentColorShaderBuilderState: getFallbackBuilderState(
+        parseShaderUiControls(DEFAULT_USER_MAIN_SEGMENT_COLOR),
+      ),
+      skeletonShaderBuilderState: getFallbackBuilderState(
+        parseShaderUiControls(DEFAULT_FRAGMENT_MAIN),
+      ),
+    };
+    const edgeFallbackParameters = new WatchableValue(
+      initialFallbackParameters,
+    );
+    const nodeFallbackParameters = new WatchableValue({
+      ...initialFallbackParameters,
+    });
 
     this.vertexIdHelper = this.registerDisposer(VertexIdHelper.get(this.gl));
     this.edgeShaderGetter = parameterizedEmitterDependentShaderGetter(
@@ -184,7 +204,7 @@ vec4 premultiplyAlpha(vec4 color) {
           type: "skeleton/SkeletonShaderManager/edge",
           vertexAttributes: this.vertexAttributes,
         },
-        // fallbackParameters: this.base.fallbackShaderParameters,
+        fallbackParameters: edgeFallbackParameters,
         parameters,
         encodeParameters: (p) => {
           return `${p.skeletonShaderBuilderState.key}/${p.segmentColorShaderBuilderState.key}/${JSON.stringify(p.segmentColorParameters)}/${JSON.stringify(p.segmentColorProperties.map(encodeSegmentPropertyShaderDefinition))}}`;
@@ -193,7 +213,11 @@ vec4 premultiplyAlpha(vec4 color) {
           this.base.displayState.skeletonRenderingOptions.shaderError,
         defineShader: (
           builder: ShaderBuilder,
-          { segmentColorShaderBuilderState, skeletonShaderBuilderState },
+          {
+            segmentColorParameters,
+            segmentColorShaderBuilderState,
+            skeletonShaderBuilderState,
+          },
         ) => {
           if (skeletonShaderBuilderState.parseResult.errors.length !== 0) {
             throw new Error("Invalid UI control specification");
@@ -202,6 +226,7 @@ vec4 premultiplyAlpha(vec4 color) {
             builder,
             /*fragment=*/ true,
             segmentColorShaderBuilderState,
+            segmentColorParameters,
           );
           this.defineCommonShader(builder);
           this.defineAttributeAccess(builder);
@@ -260,7 +285,7 @@ void emitDefault() {
           type: "skeleton/SkeletonShaderManager/node",
           vertexAttributes: this.vertexAttributes,
         },
-        // fallbackParameters: this.base.fallbackShaderParameters,
+        fallbackParameters: nodeFallbackParameters,
         parameters,
         encodeParameters: (p) => {
           return `${p.skeletonShaderBuilderState.key}/${p.segmentColorShaderBuilderState.key}/${JSON.stringify(p.segmentColorParameters)}/${JSON.stringify(p.segmentColorProperties.map(encodeSegmentPropertyShaderDefinition))}}`;
@@ -269,7 +294,11 @@ void emitDefault() {
           this.base.displayState.skeletonRenderingOptions.shaderError,
         defineShader: (
           builder: ShaderBuilder,
-          { segmentColorShaderBuilderState, skeletonShaderBuilderState },
+          {
+            segmentColorParameters,
+            segmentColorShaderBuilderState,
+            skeletonShaderBuilderState,
+          },
         ) => {
           if (skeletonShaderBuilderState.parseResult.errors.length !== 0) {
             throw new Error("Invalid UI control specification");
@@ -278,6 +307,7 @@ void emitDefault() {
             builder,
             /*fragment=*/ true,
             segmentColorShaderBuilderState,
+            segmentColorParameters,
           );
           this.defineCommonShader(builder);
           this.defineAttributeAccess(builder);
@@ -548,9 +578,6 @@ export class SkeletonLayer extends RefCounted {
   redrawNeeded = new NullarySignal();
   private sharedObject: SegmentationLayerSharedObject;
   vertexAttributes: VertexAttributeRenderInfo[];
-  fallbackShaderParameters = new WatchableValue(
-    getFallbackBuilderState(parseShaderUiControls(DEFAULT_FRAGMENT_MAIN)),
-  );
 
   get visibility() {
     return this.sharedObject.visibility;

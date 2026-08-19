@@ -66,6 +66,12 @@ import {
 
 const NUM_COMPONENTS = 2;
 
+export const DEFAULT_USER_MAIN_SEGMENT_COLOR = `
+vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
+  return color;
+}
+`;
+
 export class SegmentColorShaderManager {
   seedName: string;
 

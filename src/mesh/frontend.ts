@@ -43,7 +43,9 @@ import type {
 import { PerspectiveViewRenderLayer } from "#src/perspective_view/render_layer.js";
 import type { ThreeDimensionalRenderLayerAttachmentState } from "#src/renderlayer.js";
 import { update3dRenderLayerAttachment } from "#src/renderlayer.js";
+import type { SegmentationColorUserShaderManagerParameters } from "#src/segment_color.js";
 import {
+  DEFAULT_USER_MAIN_SEGMENT_COLOR,
   encodeSegmentPropertyShaderDefinition,
   SegmentColorShaderManager,
 } from "#src/segment_color.js";
@@ -61,6 +63,7 @@ import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   AggregateWatchableValue,
   makeCachedDerivedWatchableValue,
+  WatchableValue,
 } from "#src/trackable_value.js";
 import type { Borrowed, RefCounted } from "#src/util/disposable.js";
 import {
@@ -78,6 +81,10 @@ import type { WatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import { parameterizedEmitterDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import { glsl_uint64 } from "#src/webgl/shader_lib.js";
+import {
+  getFallbackBuilderState,
+  parseShaderUiControls,
+} from "#src/webgl/shader_ui_controls.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { registerSharedObjectOwner } from "#src/worker_rpc.js";
 
@@ -355,8 +362,17 @@ export class MeshShaderManager {
     this.drawFragmentHelper(gl, shader, fragmentChunk, indexBegin, indexEnd);
   }
 
-  endLayer(gl: GL, shader: ShaderProgram, displayState: MeshDisplayState) {
-    displayState.segmentationColorUserShader.disable(gl, shader);
+  endLayer(
+    gl: GL,
+    shader: ShaderProgram,
+    displayState: MeshDisplayState,
+    segmentColorParameters: SegmentationColorUserShaderManagerParameters,
+  ) {
+    displayState.segmentationColorUserShader.disable(
+      gl,
+      shader,
+      segmentColorParameters,
+    );
     this.vertexPositionHandler.endLayer(gl, shader);
     gl.disableVertexAttribArray(shader.attribute("aVertexNormal"));
   }
@@ -378,6 +394,16 @@ export class MeshShaderManager {
         ),
       })),
     );
+    const fallbackParameters = new WatchableValue({
+      segmentColorParameters:
+        layer.displayState.segmentationColorUserShader.shaderParameters.value,
+      segmentColorProperties: [],
+      shaderBuilderState: getFallbackBuilderState(
+        parseShaderUiControls(DEFAULT_USER_MAIN_SEGMENT_COLOR),
+      ),
+      silhouetteRenderingEnabled:
+        layer.displayState.silhouetteRendering.value > 0,
+    });
 
     return parameterizedEmitterDependentShaderGetter(layer, layer.gl, {
       memoizeKey: `mesh/MeshShaderManager/${this.fragmentRelativeVertices}/${this.vertexPositionFormat}`,
@@ -385,16 +411,22 @@ export class MeshShaderManager {
       encodeParameters: (p) => {
         return `${p.shaderBuilderState.key}/${JSON.stringify(p.segmentColorParameters)}/${JSON.stringify(p.segmentColorProperties.map(encodeSegmentPropertyShaderDefinition))}/${p.silhouetteRenderingEnabled}`;
       },
+      fallbackParameters,
       shaderError: layer.displayState.shaderError,
       defineShader: (
         builder,
-        { shaderBuilderState, silhouetteRenderingEnabled },
+        {
+          segmentColorParameters,
+          shaderBuilderState,
+          silhouetteRenderingEnabled,
+        },
       ) => {
         this.vertexPositionHandler.defineShader(builder);
         layer.displayState.segmentationColorUserShader.defineShader(
           builder,
           /*fragment=*/ false,
           shaderBuilderState,
+          segmentColorParameters,
         );
         builder.addAttribute("highp vec2", "aVertexNormal");
         builder.addVarying("highp vec4", "vColor");
@@ -546,6 +578,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
       gl,
       shader,
       parameters.shaderBuilderState,
+      parameters.segmentColorParameters,
     );
 
     const manifestChunks = this.source.chunks;
@@ -605,7 +638,12 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
         totalChunks - presentChunks,
       );
     }
-    meshShaderManager.endLayer(gl, shader, displayState);
+    meshShaderManager.endLayer(
+      gl,
+      shader,
+      displayState,
+      parameters.segmentColorParameters,
+    );
   }
 
   isReady() {
@@ -892,6 +930,7 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
       gl,
       shader,
       parameters.shaderBuilderState,
+      parameters.segmentColorParameters,
     );
 
     const { renderScaleHistogram } = this.displayState;
@@ -1053,7 +1092,12 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
       presentManifestChunks,
       totalManifestChunks - presentManifestChunks,
     );
-    meshShaderManager.endLayer(gl, shader, displayState);
+    meshShaderManager.endLayer(
+      gl,
+      shader,
+      displayState,
+      parameters.segmentColorParameters,
+    );
   }
 
   isReady(
