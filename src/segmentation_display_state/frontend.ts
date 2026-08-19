@@ -23,7 +23,10 @@ import type { PickIDManager } from "#src/object_picking.js";
 import type { WatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
 import type { RenderScaleHistogram } from "#src/render_scale_statistics.js";
 import type { RenderLayer } from "#src/renderlayer.js";
-import type { SegmentColorHash } from "#src/segment_color.js";
+import type {
+  SegmentColorHash,
+  SegmentColorUserShaderManager,
+} from "#src/segment_color.js";
 import { getCssColor } from "#src/segment_color.js";
 import type { VisibleSegmentsState } from "#src/segmentation_display_state/base.js";
 import {
@@ -61,6 +64,7 @@ import { kOneVec, vec4 } from "#src/util/geom.js";
 import { parseUint64 } from "#src/util/json.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
+import type { ShaderControlState } from "#src/webgl/shader_ui_controls.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import { makeEyeButton } from "#src/widget/eye_button.js";
 import { makeFilterButton } from "#src/widget/filter_button.js";
@@ -193,6 +197,7 @@ export interface SegmentationColorGroupState {
 }
 
 export interface SegmentationDisplayState {
+  layer: SegmentationUserLayer;
   segmentSelectionState: SegmentSelectionState;
   saturation: TrackableAlphaValue;
   hoverHighlight: WatchableValueInterface<boolean>;
@@ -200,10 +205,18 @@ export interface SegmentationDisplayState {
   baseSegmentHighlighting: WatchableValueInterface<boolean>;
   segmentationGroupState: WatchableValueInterface<SegmentationGroupState>;
   segmentationColorGroupState: WatchableValueInterface<SegmentationColorGroupState>;
+  segmentColorShaderControlState: ShaderControlState;
+  segmentationColorUserShader: SegmentColorUserShaderManager;
+  fragmentSegmentColor: WatchableValueInterface<string>;
 
   selectSegment: (id: bigint, pin: boolean | "toggle" | "force-unpin") => void;
   filterBySegmentLabel: (id: bigint) => void;
   moveToSegment: (id: bigint) => void;
+  getShaderBaseSegmentColor: (id: bigint) => Float32Array | undefined;
+  getShaderBaseSegmentColors: (
+    ids: readonly bigint[],
+    colors?: Float32Array,
+  ) => Float32Array | undefined;
 
   // Indirect properties
   hideSegmentZero: WatchableValueInterface<boolean>;
@@ -403,6 +416,8 @@ const segmentWidgetTemplateWithUnmapped = (() => {
 })();
 
 export type SegmentWidgetTemplate = typeof segmentWidgetTemplate;
+
+type SegmentColorMap = ReadonlyMap<bigint, vec3>;
 
 interface SegmentWidgetWithExtraColumnsTemplate extends SegmentWidgetTemplate {
   numericalPropertyIndices: number[];
@@ -614,6 +629,7 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
   private registerEventHandlers:
     | undefined
     | ((element: HTMLElement, template: SegmentWidgetTemplate) => void);
+  private prefetchedBaseObjectColors = new Map<bigint, vec3>();
   constructor(
     public displayState: SegmentationDisplayState | undefined,
     protected template: Template,
@@ -710,7 +726,77 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
     this.updateWithId(container, id);
   }
 
-  private updateWithId(container: HTMLElement, mapped: bigint) {
+  prefetchBaseObjectColors(rawIds: Iterable<bigint | number | Uint64MapEntry>) {
+    const { displayState } = this;
+    if (displayState === undefined) return;
+    const ids: bigint[] = [];
+    const seen = new Set<bigint>();
+    const addId = (id: bigint) => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      ids.push(id);
+    };
+    for (const rawId of rawIds) {
+      const normalizedId = augmentSegmentId(displayState, rawId);
+      const mapped = normalizedId.value ?? normalizedId.key;
+      addId(mapped);
+      if (
+        this.template.unmappedIdIndex !== -1 &&
+        displayState.baseSegmentColoring.value &&
+        normalizedId.value !== undefined
+      ) {
+        addId(normalizedId.key);
+      }
+    }
+    const colors = getBaseObjectColors(displayState, ids);
+    const colorMap = new Map<bigint, vec3>();
+    for (let i = 0; i < ids.length; ++i) {
+      colorMap.set(ids[i], colors.subarray(4 * i, 4 * i + 4) as vec3);
+    }
+    this.prefetchedBaseObjectColors = colorMap;
+  }
+
+  updateMany(containers: Iterable<HTMLElement>) {
+    const { displayState } = this;
+    if (displayState === undefined) return;
+    const updates: { container: HTMLElement; mapped: bigint }[] = [];
+    const ids: bigint[] = [];
+    const seen = new Set<bigint>();
+    const addId = (id: bigint) => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      ids.push(id);
+    };
+    for (const container of containers) {
+      const idString = container.dataset.id;
+      if (idString === undefined) continue;
+      const mapped = BigInt(idString);
+      updates.push({ container, mapped });
+      addId(mapped);
+      const unmappedIdString = container.dataset.unmappedId;
+      if (
+        this.template.unmappedIdIndex !== -1 &&
+        displayState.baseSegmentColoring.value &&
+        unmappedIdString !== undefined
+      ) {
+        addId(BigInt(unmappedIdString));
+      }
+    }
+    const colors = getBaseObjectColors(displayState, ids);
+    const colorMap = new Map<bigint, vec3>();
+    for (let i = 0; i < ids.length; ++i) {
+      colorMap.set(ids[i], colors.subarray(4 * i, 4 * i + 4) as vec3);
+    }
+    for (const { container, mapped } of updates) {
+      this.updateWithId(container, mapped, colorMap);
+    }
+  }
+
+  private updateWithId(
+    container: HTMLElement,
+    mapped: bigint,
+    colorMap?: SegmentColorMap,
+  ) {
     const { children } = container;
     const stickyChildren = children[0].children;
     const { template } = this;
@@ -732,7 +818,11 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
     const idContainer = stickyChildren[
       template.idContainerIndex
     ] as HTMLElement;
-    let color = getBaseObjectColor(this.displayState, mapped) as vec3;
+    const getColor = (id: bigint) =>
+      colorMap?.get(id) ??
+      this.prefetchedBaseObjectColors.get(id) ??
+      (getBaseObjectColor(this.displayState, id) as vec3);
+    let color = getColor(mapped);
     setSegmentIdElementStyle(
       idContainer.children[template.idIndex] as HTMLElement,
       color,
@@ -755,7 +845,7 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
         (unmappedIdString = container.dataset.unmappedId) !== undefined
       ) {
         const unmappedId = BigInt(unmappedIdString);
-        color = getBaseObjectColor(this.displayState, unmappedId) as vec3;
+        color = getColor(unmappedId);
       } else {
         color = kOneVec;
       }
@@ -960,6 +1050,12 @@ export function registerCallbackWhenSegmentationDisplayStateChanged(
       c.registerDisposer(
         colorGroupState.segmentDefaultColor.changed.add(callback),
       );
+      c.registerDisposer(
+        colorGroupState.tempSegmentDefaultColor2d.changed.add(callback),
+      );
+      c.registerDisposer(
+        colorGroupState.tempSegmentStatedColors2d.changed.add(callback),
+      );
     }, displayState.segmentationColorGroupState),
   );
   context.registerDisposer(displayState.saturation.changed.add(callback));
@@ -972,6 +1068,15 @@ export function registerCallbackWhenSegmentationDisplayStateChanged(
   context.registerDisposer(displayState.hoverHighlight.changed.add(callback));
   context.registerDisposer(
     displayState.segmentStatedColors.changed.add(callback),
+  );
+  context.registerDisposer(
+    displayState.useTempSegmentStatedColors2d.changed.add(callback),
+  );
+  context.registerDisposer(
+    displayState.layer.displayState.fragmentSegmentColor.changed.add(callback),
+  );
+  context.registerDisposer(
+    displayState.segmentColorShaderControlState.changed.add(callback),
   );
 }
 
@@ -1039,61 +1144,22 @@ export function getBaseObjectColor(
     color.fill(1);
     return color;
   }
-  const colorGroupState = displayState.segmentationColorGroupState.value;
-  const { segmentStatedColors } = colorGroupState;
-  let statedColor: bigint | undefined;
-  if (
-    segmentStatedColors.size !== 0 &&
-    (statedColor = colorGroupState.segmentStatedColors.get(objectId)) !==
-      undefined
-  ) {
-    // If displayState maps the ID to a color, use it
-    color[0] = Number(statedColor & 0x0000ffn) / 255.0;
-    color[1] = (Number(statedColor & 0x00ff00n) >>> 8) / 255.0;
-    color[2] = (Number(statedColor & 0xff0000n) >>> 16) / 255.0;
-    return color;
-  }
-  const segmentDefaultColor = colorGroupState.segmentDefaultColor.value;
-  if (segmentDefaultColor !== undefined) {
-    color[0] = segmentDefaultColor[0];
-    color[1] = segmentDefaultColor[1];
-    color[2] = segmentDefaultColor[2];
-    return color;
-  }
-  colorGroupState.segmentColorHash.compute(color, objectId);
-  return color;
+  const { getShaderBaseSegmentColor } = displayState;
+  return getShaderBaseSegmentColor(objectId) ?? color;
 }
 
-/**
- * Returns the alpha-premultiplied color to use.
- */
-export function getObjectColor(
-  displayState: SegmentationDisplayState,
-  objectId: bigint,
-  alpha = 1,
+export function getBaseObjectColors(
+  displayState: SegmentationDisplayState | undefined | null,
+  objectIds: readonly bigint[],
+  colors = new Float32Array(objectIds.length * 4),
 ) {
-  const color = tempColor;
-  color[3] = alpha;
-  getBaseObjectColor(displayState, objectId, color);
-  let saturation = displayState.saturation.value;
-  if (
-    displayState.hoverHighlight.value &&
-    displayState.segmentSelectionState.isSelected(objectId)
-  ) {
-    if (saturation > 0.5) {
-      saturation = saturation -= 0.5;
-    } else {
-      saturation += 0.5;
-    }
+  if (objectIds.length === 0) return colors;
+  if (displayState == null) {
+    colors.fill(1);
+    return colors;
   }
-  for (let i = 0; i < 3; ++i) {
-    color[i] = color[i] * saturation + (1 - saturation);
-  }
-
-  color[0] *= alpha;
-  color[1] *= alpha;
-  color[2] *= alpha;
-  return color;
+  const { getShaderBaseSegmentColors } = displayState;
+  return getShaderBaseSegmentColors(objectIds, colors) ?? colors;
 }
 
 export function sendVisibleSegmentsState(
@@ -1147,29 +1213,18 @@ export class SegmentationLayerSharedObject extends Base {
 export function forEachVisibleSegmentToDraw(
   displayState: SegmentationDisplayState3D,
   renderLayer: RenderLayer,
-  emitColor: boolean,
   pickIDs: PickIDManager | undefined,
   callback: (
     objectId: bigint,
-    color: vec4 | undefined,
     pickIndex: number | undefined,
     rootObjectId: bigint,
   ) => void,
 ) {
-  const alpha = Math.min(1, displayState.objectAlpha.value);
-  const baseSegmentColoring = displayState.baseSegmentColoring.value;
   forEachVisibleSegment(
     displayState.segmentationGroupState.value,
     (objectId, rootObjectId) => {
       const pickIndex = pickIDs?.registerUint64(renderLayer, objectId);
-      const color = emitColor
-        ? getObjectColor(
-            displayState,
-            baseSegmentColoring ? objectId : rootObjectId,
-            alpha,
-          )
-        : undefined;
-      callback(objectId, color, pickIndex, rootObjectId);
+      callback(objectId, pickIndex, rootObjectId);
     },
   );
 }

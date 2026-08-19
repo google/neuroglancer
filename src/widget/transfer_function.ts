@@ -1184,7 +1184,7 @@ out_color = tempColor * alpha;
       );
       const histogramTextureUnit = lineShader.textureUnit(
         histogramSamplerTextureUnit,
-      );
+      )!;
       gl.uniform1f(
         lineShader.uniform("uBoundsFraction"),
         getIntervalBoundsEffectiveFraction(

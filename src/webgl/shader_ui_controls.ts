@@ -15,6 +15,7 @@
  */
 
 import type { CoordinateSpaceCombiner } from "#src/coordinate_transform.js";
+import type { PreprocessedSegmentPropertyMap } from "#src/segmentation_display_state/property_map.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type {
   TrackableValueInterface,
@@ -27,6 +28,7 @@ import {
   TrackableValue,
   WatchableValue,
 } from "#src/trackable_value.js";
+import type { TypedNumberArray } from "#src/util/array.js";
 import { arraysEqual, arraysEqualWithPredicate } from "#src/util/array.js";
 import {
   parseRGBColorSpecification,
@@ -71,6 +73,7 @@ import {
   activeControlsEqual,
   computeActiveControls,
 } from "#src/webgl/shader_control_reachability.js";
+import { glsl_string } from "#src/webgl/shader_lib.js";
 import {
   preprocessStrings,
   type ShaderStringLiteralIdMap,
@@ -112,6 +115,8 @@ export interface ShaderPropertyInvlerpControl {
   type: "propertyInvlerp";
   clamp: boolean;
   properties: PropertiesSpecification;
+  values?: Map<string, TypedNumberArray<ArrayBuffer>>;
+  shaderName?: (arg0: string) => string;
   default: PropertyInvlerpParameters;
 }
 
@@ -143,6 +148,18 @@ export interface ShaderTransferFunctionControl {
   default: TransferFunctionParameters;
 }
 
+export interface AvailableSegmentProperties {
+  tags: string[];
+  numericalProperties: Map<string, DataType>;
+  stringProperties: string[];
+}
+
+export interface ShaderPropertyControl {
+  type: "property";
+  segmentProperties: AvailableSegmentProperties;
+  default?: SegmentPropertyReference;
+}
+
 export type ShaderUiControl =
   | ShaderSliderControl
   | ShaderColorControl
@@ -150,7 +167,8 @@ export type ShaderUiControl =
   | ShaderPropertyInvlerpControl
   | ShaderCheckboxControl
   | ShaderSelectControl
-  | ShaderTransferFunctionControl;
+  | ShaderTransferFunctionControl
+  | ShaderPropertyControl;
 
 export interface ShaderControlParseError {
   line: number;
@@ -172,6 +190,7 @@ export interface ShaderControlsBuilderState {
   parseResult: ShaderControlsParseResult;
   builderValues: ShaderBuilderValues;
   referencedProperties: string[];
+  segmentProperties: SegmentPropertyReference[];
 }
 
 // Strips comments from GLSL code.  Also handles string literals since they are used in ui control
@@ -619,16 +638,78 @@ function parseInvlerpDirective(
   parameters: DirectiveParameters,
   dataContext: ShaderDataContext,
 ): DirectiveParseResult {
-  const { imageData, properties } = dataContext;
+  const { imageData, properties, values, shaderName } = dataContext;
   if (imageData !== undefined) {
     return parseImageInvlerpDirective(valueType, parameters, imageData);
   }
   if (properties !== undefined) {
-    return parsePropertyInvlerpDirective(valueType, parameters, properties);
+    return parsePropertyInvlerpDirective(
+      valueType,
+      parameters,
+      properties,
+      values,
+      shaderName,
+    );
   }
   const errors = [];
   errors.push("invlerp control not supported");
   return { errors };
+}
+
+function parsePropertyDirective(
+  valueType: string,
+  parameters: DirectiveParameters,
+  dataContext: ShaderDataContext,
+): DirectiveParseResult {
+  const { segmentPropertyMap } = dataContext;
+  const errors: string[] = [];
+  if (valueType !== "property") {
+    errors.push("type must be property");
+  }
+
+  let typeFilter: SegmentPropertyReference["type"] | undefined;
+  for (const [key, value] of parameters) {
+    if (key !== "type") {
+      errors.push(`Invalid parameter: ${key}`);
+      continue;
+    }
+    if (value === "number") {
+      typeFilter = "numerical";
+    } else if (value === "tag" || value === "numerical" || value === "string") {
+      typeFilter = value;
+    } else {
+      errors.push(`Invalid type value: ${JSON.stringify(value)}`);
+    }
+  }
+  if (errors.length > 0) {
+    return { errors };
+  }
+
+  const includeType = (type: SegmentPropertyReference["type"]) => {
+    return typeFilter === undefined || typeFilter === type;
+  };
+
+  const segmentProperties = {
+    tags: segmentPropertyMap?.tags?.tags.filter(() => includeType("tag")) || [],
+    numericalProperties: new Map(
+      (segmentPropertyMap?.numericalProperties ?? [])
+        .filter(() => includeType("numerical"))
+        .map((x) => [x.id, x.dataType]),
+    ),
+    stringProperties:
+      (segmentPropertyMap?.strings ?? [])
+        .filter(() => includeType("string"))
+        .map((x) => x.id) || [],
+  };
+
+  return {
+    control: {
+      type: "property",
+      segmentProperties,
+      default: getFirstSegmentPropertyReference(segmentProperties),
+    } satisfies ShaderPropertyControl,
+    errors: undefined,
+  };
 }
 
 function parseImageInvlerpDirective(
@@ -674,8 +755,9 @@ function parseImageInvlerpDirective(
           errors.push(`Invalid parameter: ${key}`);
           break;
       }
-    } catch (e) {
-      errors.push(`Invalid ${key} value: ${e.message}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `${error}`;
+      errors.push(`Invalid ${key} value: ${message}`);
     }
   }
   if (errors.length > 0) {
@@ -700,6 +782,8 @@ function parsePropertyInvlerpDirective(
   valueType: string,
   parameters: DirectiveParameters,
   properties: Map<string, DataType>,
+  values?: Map<string, TypedNumberArray<ArrayBuffer>>,
+  shaderName?: (arg0: string) => string,
 ) {
   const errors = [];
   if (valueType !== "invlerp") {
@@ -742,8 +826,9 @@ function parsePropertyInvlerpDirective(
           errors.push(`Invalid parameter: ${key}`);
           break;
       }
-    } catch (e) {
-      errors.push(`Invalid ${key} value: ${e.message}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `${error}`;
+      errors.push(`Invalid ${key} value: ${message}`);
     }
   }
   if (errors.length > 0) {
@@ -767,8 +852,10 @@ function parsePropertyInvlerpDirective(
       type: "propertyInvlerp",
       clamp,
       properties,
-      default: { range, window, property, dataType },
-    } as ShaderPropertyInvlerpControl,
+      values,
+      shaderName,
+      default: { range, window, property: property!, dataType },
+    } satisfies ShaderPropertyInvlerpControl,
     errors: undefined,
   };
 }
@@ -827,8 +914,9 @@ function parseTransferFunctionDirective(
           errors.push(`Invalid parameter: ${key}`);
           break;
       }
-    } catch (e) {
-      errors.push(`Invalid ${key} value: ${e.message}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `${error}`;
+      errors.push(`Invalid ${key} value: ${message}`);
     }
   }
 
@@ -861,6 +949,9 @@ export interface ImageDataSpecification {
 export interface ShaderDataContext {
   imageData?: ImageDataSpecification;
   properties?: Map<string, DataType>;
+  values?: Map<string, TypedNumberArray<ArrayBuffer>>;
+  shaderName?: (arg0: string) => string;
+  segmentPropertyMap?: PreprocessedSegmentPropertyMap;
 }
 
 const controlParsers = new Map<
@@ -877,6 +968,7 @@ const controlParsers = new Map<
   ["checkbox", parseCheckboxDirective],
   ["select", parseSelectDirective],
   ["transferFunction", parseTransferFunctionDirective],
+  ["property", parsePropertyDirective],
 ]);
 
 export function parseShaderUiControls(
@@ -961,7 +1053,11 @@ function uniformName(controlName: string) {
 export function addControlsToBuilder(
   builderState: ShaderControlsBuilderState,
   builder: ShaderBuilder,
+  fragment = true,
 ) {
+  const addCode = fragment
+    ? builder.addFragmentCode.bind(builder)
+    : builder.addVertexCode.bind(builder);
   const { builderValues } = builderState;
   for (const [name, control] of builderState.parseResult.controls) {
     const uName = uniformName(name);
@@ -981,33 +1077,50 @@ float ${uName}() {
 }
 `,
         ];
-        builder.addFragmentCode(code);
-        builder.addFragmentCode(`#define ${name} ${uName}\n`);
+        addCode(code);
+        addCode(`#define ${name} ${uName}\n`);
         break;
       }
       case "propertyInvlerp": {
         const property = builderValue.property;
         const dataType = control.properties.get(property)!;
+        const propertyShaderName = control.shaderName
+          ? control.shaderName(property)
+          : `prop_${property}()`;
         const code = [
           defineInvlerpShaderFunction(builder, uName, dataType, control.clamp),
           `
 float ${uName}() {
-  return ${uName}(prop_${property}());
+  return ${uName}(${propertyShaderName});
 }
 `,
         ];
-        builder.addVertexCode(code);
-        builder.addVertexCode(`#define ${name} ${uName}\n`);
+        addCode(code);
+        addCode(`#define ${name} ${uName}\n`);
+        break;
+      }
+      case "property": {
+        if (builderValue) {
+          const { type, id } = builderValue;
+          let code = `#define ${name} ${type}${id}\n`;
+          if (type === "tag") {
+            code = `#define ${name} (${type}${id} == 1u)\n`;
+          }
+          if (type === "string") {
+            addCode(glsl_string);
+            code = `#define ${name} string_t(${type}${id})\n`;
+          }
+          addCode(code);
+        }
         break;
       }
       case "checkbox": {
         const code = `#define ${name} ${builderValue.value}\n`;
-        builder.addFragmentCode(code);
-        builder.addVertexCode(code);
+        addCode(code);
         break;
       }
       case "transferFunction": {
-        builder.addFragmentCode(`#define ${name} ${uName}\n`);
+        addCode(`#define ${name} ${uName}\n`);
         builder.addFragmentCode(
           defineTransferFunctionShader(
             builder,
@@ -1033,8 +1146,7 @@ float ${uName}() {
       }
       default: {
         builder.addUniform(`highp ${control.valueType}`, uName);
-        builder.addVertexCode(`#define ${name} ${uName}\n`);
-        builder.addFragmentCode(`#define ${name} ${uName}\n`);
+        addCode(`#define ${name} ${uName}\n`);
         break;
       }
     }
@@ -1411,6 +1523,68 @@ export class TrackableTransferFunctionParameters extends TrackableValue<Transfer
   }
 }
 
+export interface SegmentPropertyReference {
+  type: "tag" | "numerical" | "string";
+  id: string;
+}
+
+function getSegmentPropertyIndex(
+  segmentProperties: AvailableSegmentProperties,
+  reference: SegmentPropertyReference,
+) {
+  switch (reference.type) {
+    case "numerical":
+      return [...segmentProperties.numericalProperties.keys()].indexOf(
+        reference.id,
+      );
+    case "string":
+      return segmentProperties.stringProperties.indexOf(reference.id);
+    case "tag":
+      return segmentProperties.tags.indexOf(reference.id);
+  }
+}
+
+function parseSegmentPropertyReference(
+  segmentProperties: AvailableSegmentProperties,
+  value: unknown,
+): SegmentPropertyReference | undefined {
+  if (value === undefined) return undefined;
+  const obj = verifyObject(value);
+  const type = verifyString(obj.type);
+  if (type !== "tag" && type !== "numerical" && type !== "string") {
+    throw new Error(`Invalid property reference type: ${JSON.stringify(type)}`);
+  }
+  const referenceType: SegmentPropertyReference["type"] = type;
+  const reference = { type: referenceType, id: verifyString(obj.id) };
+  if (getSegmentPropertyIndex(segmentProperties, reference) === -1) {
+    throw new Error(`Invalid property reference: ${JSON.stringify(reference)}`);
+  }
+  return reference;
+}
+
+function getSegmentPropertyBuilderValue(
+  control: ShaderPropertyControl,
+  reference: SegmentPropertyReference | undefined,
+) {
+  if (reference === undefined) return undefined;
+  const id = getSegmentPropertyIndex(control.segmentProperties, reference);
+  return id === -1 ? undefined : { type: reference.type, id };
+}
+
+function getFirstSegmentPropertyReference(
+  segmentProperties: AvailableSegmentProperties,
+): SegmentPropertyReference | undefined {
+  const tagId = segmentProperties.tags[0];
+  if (tagId !== undefined) return { type: "tag", id: tagId };
+  const numericalId = segmentProperties.numericalProperties.keys().next().value;
+  if (numericalId !== undefined) {
+    return { type: "numerical", id: numericalId };
+  }
+  const stringId = segmentProperties.stringProperties[0];
+  if (stringId !== undefined) return { type: "string", id: stringId };
+  return undefined;
+}
+
 function getControlTrackable(control: ShaderUiControl): {
   trackable: TrackableValueInterface<any>;
   getBuilderValue: (value: any) => any;
@@ -1462,6 +1636,15 @@ function getControlTrackable(control: ShaderUiControl): {
           property: value.property,
           dataType: value.dataType,
         }),
+      };
+    case "property":
+      return {
+        trackable: new TrackableValue<SegmentPropertyReference | undefined>(
+          control.default,
+          (x) => parseSegmentPropertyReference(control.segmentProperties, x),
+        ),
+        getBuilderValue: (x: SegmentPropertyReference | undefined) =>
+          getSegmentPropertyBuilderValue(control, x),
       };
     case "checkbox":
       return {
@@ -1516,29 +1699,97 @@ export type ShaderBuilderValues = {
 function encodeBuilderStateKey(
   builderValues: ShaderBuilderValues,
   parseResult: ShaderControlsParseResult,
+  referencedProperties: string[],
+  segmentProperties: SegmentPropertyReference[],
 ) {
-  return JSON.stringify(builderValues) + "\0" + parseResult.source;
+  return (
+    JSON.stringify(builderValues) +
+    "\0" +
+    JSON.stringify(referencedProperties) +
+    "\0" +
+    JSON.stringify(segmentProperties) +
+    "\0" +
+    parseResult.source
+  );
+}
+
+function addReferencedPropertiesFromControl(
+  control: ShaderUiControl,
+  builderValue: any,
+  trackableValue: any,
+  referencedProperties: string[],
+  segmentProperties: SegmentPropertyReference[],
+) {
+  if (control.type === "propertyInvlerp") {
+    if (control.shaderName === undefined) {
+      referencedProperties.push(builderValue.property);
+    } else {
+      segmentProperties.push({
+        type: "numerical",
+        id: builderValue.property,
+      });
+    }
+  }
+  if (control.type === "property" && builderValue !== undefined) {
+    const { type, id } = trackableValue as SegmentPropertyReference;
+    segmentProperties.push({ type, id });
+  }
 }
 
 export function getFallbackBuilderState(
   parseResult: ShaderControlsParseResult,
 ): ShaderControlsBuilderState {
   const builderValues: ShaderBuilderValues = {};
-  const referencedProperties = [];
+  const referencedProperties: string[] = [];
+  const segmentProperties: SegmentPropertyReference[] = [];
   for (const [key, control] of parseResult.controls) {
     const { trackable, getBuilderValue } = getControlTrackable(control);
     const builderValue = getBuilderValue(trackable.value);
     builderValues[key] = builderValue;
-    if (control.type === "propertyInvlerp") {
-      referencedProperties.push(builderValue.property);
-    }
+    addReferencedPropertiesFromControl(
+      control,
+      builderValue,
+      trackable.value,
+      referencedProperties,
+      segmentProperties,
+    );
   }
   return {
     builderValues,
     parseResult,
-    key: encodeBuilderStateKey(builderValues, parseResult),
+    key: encodeBuilderStateKey(
+      builderValues,
+      parseResult,
+      referencedProperties,
+      segmentProperties,
+    ),
     referencedProperties,
+    segmentProperties,
   };
+}
+
+function getLoadingParseResult(): ShaderControlsParseResult {
+  return {
+    source: "",
+    code: "",
+    controls: new Map(),
+    preprocessing: { stringLiteralIds: new Map() },
+    errors: [{ line: 0, message: "Loading" }],
+  };
+}
+
+function canUseFallbackParseResult(result: ShaderControlsParseResult) {
+  if (result.errors.length !== 0) return false;
+  for (const control of result.controls.values()) {
+    switch (control.type) {
+      case "imageInvlerp":
+      case "propertyInvlerp":
+      case "property":
+      case "transferFunction":
+        return false;
+    }
+  }
+  return true;
 }
 
 export class ShaderControlState
@@ -1561,7 +1812,7 @@ export class ShaderControlState
   private dataContextGeneration = -1;
   private parseErrors_: ShaderControlParseError[] = [];
   private processedFragmentMain_ = "";
-  private parseResult_: ShaderControlsParseResult;
+  private parseResult_!: ShaderControlsParseResult;
   private controlsGeneration = -1;
   private parseResultChanged = new NullarySignal();
   private lastReportedProgram: WebGLProgram | undefined = undefined;
@@ -1572,6 +1823,8 @@ export class ShaderControlState
       {},
     ),
     public channelCoordinateSpaceCombiner?: CoordinateSpaceCombiner | undefined,
+    private fallbackDataContext?: ShaderDataContext,
+    private fallbackFragmentMain?: string,
   ) {
     super();
     this.registerDisposer(
@@ -1608,19 +1861,31 @@ export class ShaderControlState
     this.builderState = makeCachedDerivedWatchableValue(
       (parseResult: ShaderControlsParseResult, state: ShaderControlMap) => {
         const builderValues: ShaderBuilderValues = {};
-        const referencedProperties = [];
+        const referencedProperties: string[] = [];
+        const segmentProperties: SegmentPropertyReference[] = [];
         for (const [key, { control, trackable, getBuilderValue }] of state) {
+          if (!parseResult.controls.has(key)) continue;
           const builderValue = getBuilderValue(trackable.value);
           builderValues[key] = builderValue;
-          if (control.type === "propertyInvlerp") {
-            referencedProperties.push(builderValue.property);
-          }
+          addReferencedPropertiesFromControl(
+            control,
+            builderValue,
+            trackable.value,
+            referencedProperties,
+            segmentProperties,
+          );
         }
         return {
-          key: encodeBuilderStateKey(builderValues, parseResult),
+          key: encodeBuilderStateKey(
+            builderValues,
+            parseResult,
+            referencedProperties,
+            segmentProperties,
+          ),
           parseResult,
           builderValues,
           referencedProperties,
+          segmentProperties,
         };
       },
       [this.parseResult, this],
@@ -1693,27 +1958,38 @@ export class ShaderControlState
     }
     this.fragmentMainGeneration = generation;
     this.dataContextGeneration = dataContextGeneration;
-    const dataContext = this.dataContext.value;
+    const realDataContext = this.dataContext.value;
+    const dataContext = realDataContext ?? this.fallbackDataContext ?? null;
     if (dataContext === null) {
-      this.parseResult_ = {
-        source: "",
-        code: "",
-        controls: new Map(),
-        preprocessing: { stringLiteralIds: new Map() },
-        errors: [{ line: 0, message: "Loading" }],
-      };
+      this.parseResult_ = getLoadingParseResult();
       this.parseErrors_ = [];
       this.processedFragmentMain_ = "";
       this.controls.value = undefined;
     } else {
-      const result = (this.parseResult_ = parseShaderUiControls(
+      const result = parseShaderUiControls(
         this.fragmentMain.value,
         dataContext,
-      ));
-      this.parseErrors_ = result.errors;
-      this.processedFragmentMain_ = result.code;
-      if (result.errors.length === 0) {
-        this.controls.value = result.controls;
+      );
+      if (
+        realDataContext === null &&
+        this.fallbackDataContext !== undefined &&
+        !canUseFallbackParseResult(result)
+      ) {
+        const fallbackFragmentMain = this.fallbackFragmentMain;
+        this.parseResult_ =
+          fallbackFragmentMain === undefined
+            ? getLoadingParseResult()
+            : parseShaderUiControls(fallbackFragmentMain, dataContext);
+        this.parseErrors_ = [];
+        this.processedFragmentMain_ = this.parseResult_.code;
+        this.controls.value = undefined;
+      } else {
+        this.parseResult_ = result;
+        this.parseErrors_ = result.errors;
+        this.processedFragmentMain_ = result.code;
+        if (result.errors.length === 0) {
+          this.controls.value = result.controls;
+        }
       }
     }
     // The active-controls set was derived from the previous shader. Forget the
@@ -1760,15 +2036,30 @@ export class ShaderControlState
     }
     for (const [name, control] of controls) {
       let controlState = state_.get(name);
+      let preservedValue: unknown;
       if (
         controlState !== undefined &&
         JSON.stringify(controlState.control) !== JSON.stringify(control)
       ) {
+        if (
+          controlState.control.type === "property" &&
+          control.type === "property"
+        ) {
+          preservedValue = controlState.trackable.value;
+        }
         controlState.trackable.changed.remove(this.changed.dispatch);
         controlState = undefined;
       }
       if (controlState === undefined) {
         const { trackable, getBuilderValue } = getControlTrackable(control);
+        if (preservedValue !== undefined) {
+          trackable.restoreState(preservedValue);
+          if (control.type === "property" && trackable.value === undefined) {
+            trackable.restoreState(
+              getFirstSegmentPropertyReference(control.segmentProperties),
+            );
+          }
+        }
         controlState = { control, trackable, getBuilderValue };
         controlState.trackable.changed.add(this.changed.dispatch);
         state_.set(name, controlState);
@@ -1928,6 +2219,11 @@ function setControlInShader(
         control.dataType,
         value.sortedControlPoints,
       );
+      break;
+    case "property":
+      // Property values are compile-time defines backed by textures managed by
+      // SegmentColorUserShaderManager.
+      break;
   }
 }
 
@@ -1947,6 +2243,7 @@ export function setControlsInShader(
     preprocessing: { stringLiteralIds },
   } = parseResult;
   const { state } = shaderControlState;
+
   if (shaderControlState.controls.value === controls) {
     // Case when shader doesn't have any errors.
     for (const [name, controlState] of state) {

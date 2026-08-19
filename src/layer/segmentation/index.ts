@@ -45,7 +45,13 @@ import {
   RenderScaleHistogram,
   trackableRenderScaleTarget,
 } from "#src/render_scale_statistics.js";
-import { getCssColor, SegmentColorHash } from "#src/segment_color.js";
+import {
+  DEFAULT_USER_MAIN_SEGMENT_COLOR,
+  encodeSegmentPropertyShaderDefinition,
+  getCssColor,
+  SegmentColorHash,
+  SegmentColorUserShaderManager,
+} from "#src/segment_color.js";
 import type {
   SegmentationColorGroupState,
   SegmentationDisplayState,
@@ -54,7 +60,7 @@ import type {
 import {
   augmentSegmentId,
   bindSegmentListWidth,
-  getBaseObjectColor,
+  getBaseObjectColors,
   makeSegmentWidget,
   maybeAugmentSegmentId,
   registerCallbackWhenSegmentationDisplayStateChanged,
@@ -92,6 +98,7 @@ import type {
   WatchableValueInterface,
 } from "#src/trackable_value.js";
 import {
+  AggregateWatchableValue,
   IndirectTrackableValue,
   IndirectWatchableValue,
   makeCachedDerivedWatchableValue,
@@ -109,6 +116,7 @@ import { DisplayOptionsTab } from "#src/ui/segmentation_display_options_tab.js";
 import { Uint64Map } from "#src/uint64_map.js";
 import { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import { Uint64Set } from "#src/uint64_set.js";
+import type { TypedNumberArray } from "#src/util/array.js";
 import { gatherUpdate } from "#src/util/array.js";
 import {
   packColor,
@@ -119,7 +127,8 @@ import {
 } from "#src/util/color.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
-import type { vec3, vec4 } from "#src/util/geom.js";
+import type { vec3 } from "#src/util/geom.js";
+import { vec4 } from "#src/util/geom.js";
 import {
   parseArray,
   parseUint64,
@@ -129,11 +138,24 @@ import {
   verifyString,
 } from "#src/util/json.js";
 import { Signal } from "#src/util/signal.js";
-import { makeWatchableShaderError } from "#src/webgl/dynamic_shader.js";
+import { GLBuffer } from "#src/webgl/buffer.js";
+import { initializeWebGL } from "#src/webgl/context.js";
+import {
+  makeTrackableFragmentMain,
+  makeWatchableShaderError,
+  parameterizedEmitterDependentShaderGetter,
+} from "#src/webgl/dynamic_shader.js";
+import type { ShaderModule } from "#src/webgl/shader.js";
+import {
+  getFallbackBuilderState,
+  parseShaderUiControls,
+  ShaderControlState,
+} from "#src/webgl/shader_ui_controls.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import { registerLayerShaderControlsTool } from "#src/widget/shader_controls.js";
 
 const MAX_LAYER_BAR_UI_INDICATOR_COLORS = 6;
+const emptySegmentColorShaderModule: ShaderModule = () => {};
 
 export class SegmentationUserLayerGroupState
   extends RefCounted
@@ -411,6 +433,11 @@ class LinkedSegmentationGroupState<
 }
 
 class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
+  private getSegmentColorShader;
+
+  segmentColorShaderControlState: ShaderControlState;
+  segmentationColorUserShader: SegmentColorUserShaderManager;
+
   constructor(public layer: SegmentationUserLayer) {
     // Even though `SegmentationUserLayer` assigns this to its `displayState` property, redundantly
     // assign it here first in order to allow it to be accessed by `segmentationGroupState`.
@@ -520,7 +547,56 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         (group) => group.segmentPropertyMap,
       ),
     );
+
+    this.segmentColorShaderControlState = this.layer.registerDisposer(
+      new ShaderControlState(
+        this.fragmentSegmentColor,
+        makeCachedLazyDerivedWatchableValue(
+          (segmentPropertyMap, isReady) => {
+            const properties = new Map<string, DataType>();
+            const values = new Map<string, TypedNumberArray<ArrayBuffer>>();
+            if (segmentPropertyMap === undefined) {
+              // dont return a non null before layer.isReady to prevent losing shader control state during loading process
+              return isReady ? {} : null;
+            }
+            for (const property of segmentPropertyMap.numericalProperties) {
+              properties.set(property.id, property.dataType);
+              values.set(property.id, property.values);
+            }
+            const shaderName = (property: string) => {
+              const propertyIdx =
+                segmentPropertyMap.numericalProperties.findIndex(
+                  (p) => p.id === property,
+                );
+              return `numerical${propertyIdx}`; // TEMP extract this from the SegmentationColorUserShaderManager
+            };
+
+            return { properties, values, shaderName, segmentPropertyMap };
+          },
+          this.segmentationGroupState.value.segmentPropertyMap,
+          this.layer.isReadyWatchable,
+        ),
+        undefined,
+        {},
+        DEFAULT_USER_MAIN_SEGMENT_COLOR,
+      ),
+    );
+
+    // 2d/3d share GL context
+    // the offscreen canvas is a separate context that doesn't share textures
+    this.segmentationColorUserShader = new SegmentColorUserShaderManager(
+      this,
+      this.layer.manager.chunkManager.chunkQueueManager.gl,
+    );
+
+    this.offscreenGL = initializeWebGL(new OffscreenCanvas(1, 1));
+    this.offscreenSegmentationColorUserShader =
+      new SegmentColorUserShaderManager(this, this.offscreenGL);
+    this.getSegmentColorShader = this.makeSegmentColorShaderGetter();
   }
+
+  offscreenGL;
+  offscreenSegmentationColorUserShader;
 
   segmentSelectionState = new SegmentSelectionState();
   selectedAlpha = trackableAlphaValue(0.5);
@@ -536,6 +612,10 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   ignoreNullVisibleSet = new TrackableBoolean(true, true);
   skeletonRenderingOptions = new SkeletonRenderingOptions();
   shaderError = makeWatchableShaderError();
+  fragmentSegmentColor = makeTrackableFragmentMain(
+    DEFAULT_USER_MAIN_SEGMENT_COLOR,
+  );
+
   renderScaleHistogram = new RenderScaleHistogram();
   renderScaleTarget = trackableRenderScaleTarget(1);
   selectSegment: (id: bigint, pin: boolean | "toggle") => void;
@@ -549,6 +629,145 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
 
   moveToSegment = (id: bigint) => {
     this.layer.moveToSegment(id);
+  };
+
+  makeSegmentColorShaderGetter = () => {
+    const parameters = this.layer.registerDisposer(
+      new AggregateWatchableValue(() => ({
+        segmentColorParameters:
+          this.segmentationColorUserShader.shaderParameters,
+        segmentColorProperties:
+          this.offscreenSegmentationColorUserShader.usedProperties,
+        shaderBuilderState: this.segmentColorShaderControlState.builderState,
+      })),
+    );
+    const fallbackParameters = new WatchableValue({
+      segmentColorParameters:
+        this.segmentationColorUserShader.shaderParameters.value,
+      segmentColorProperties: [],
+      shaderBuilderState: getFallbackBuilderState(
+        parseShaderUiControls(DEFAULT_USER_MAIN_SEGMENT_COLOR),
+      ),
+    });
+    return parameterizedEmitterDependentShaderGetter(
+      this.layer,
+      this.offscreenGL,
+      {
+        memoizeKey: `segmentation/ColorShader`,
+        parameters,
+        fallbackParameters,
+        encodeParameters: (p) => {
+          return `${p.shaderBuilderState.key}/${JSON.stringify(p.segmentColorParameters)}/${JSON.stringify(p.segmentColorProperties.map(encodeSegmentPropertyShaderDefinition))}`;
+        },
+        shaderError: this.layer.displayState.shaderError,
+        defineShader: (
+          builder,
+          { segmentColorParameters, shaderBuilderState },
+        ) => {
+          this.offscreenSegmentationColorUserShader.defineShader(
+            builder,
+            /*fragment=*/ false,
+            shaderBuilderState,
+            segmentColorParameters,
+          );
+          builder.addAttribute("highp vec4", "aVertexPosition");
+          builder.addAttribute("highp uvec2", "aID");
+          builder.addVarying("highp vec4", "vColor");
+          const vertexMain = `
+gl_Position = vec4(aVertexPosition.xy, 0.0, 1.0);
+gl_PointSize = 1.0;
+vColor = segmentColorUserShader(uint64_t(aID));
+`;
+          builder.addVertexMain(vertexMain);
+          builder.addOutputBuffer("vec4", "out_fragColor", 0);
+          builder.setFragmentMain("out_fragColor = vColor;");
+        },
+      },
+    );
+  };
+
+  private tempColor = vec4.create();
+
+  getShaderBaseSegmentColors = (
+    ids: readonly bigint[],
+    colors = new Float32Array(ids.length * 4),
+  ) => {
+    const numIds = ids.length;
+    if (numIds === 0) return colors;
+    const { shader, parameters } = this.getSegmentColorShader(
+      emptySegmentColorShaderModule,
+    );
+    if (shader === null) return;
+    shader.bind();
+    const { gl } = shader;
+    const canvas = gl.canvas as OffscreenCanvas;
+    if (canvas.width !== numIds || canvas.height !== 1) {
+      canvas.width = numIds;
+      canvas.height = 1;
+    }
+    gl.viewport(0, 0, numIds, 1);
+
+    const positions = new Float32Array(numIds * 2);
+    const idsData = new Uint32Array(numIds * 2);
+    for (let i = 0; i < numIds; ++i) {
+      const id = ids[i];
+      positions[2 * i] = (2 * (i + 0.5)) / numIds - 1;
+      positions[2 * i + 1] = 0;
+      idsData[2 * i] = Number(id & 0xffffffffn);
+      idsData[2 * i + 1] = Number(id >> 32n);
+    }
+    const positionBuffer = GLBuffer.fromData(
+      gl,
+      positions,
+      undefined,
+      WebGL2RenderingContext.STREAM_DRAW,
+    );
+    positionBuffer.bindToVertexAttrib(shader.attribute("aVertexPosition"), 2);
+    const idBuffer = GLBuffer.fromData(
+      gl,
+      idsData,
+      undefined,
+      WebGL2RenderingContext.STREAM_DRAW,
+    );
+    idBuffer.bindToVertexAttribI(shader.attribute("aID"), 2);
+    this.offscreenSegmentationColorUserShader.enable(
+      gl,
+      shader,
+      parameters.shaderBuilderState,
+      parameters.segmentColorParameters,
+      {
+        segmentDefaultColor: this.segmentDefaultColor.value,
+        segmentStatedColors: this.segmentStatedColors.value,
+        hoverHighlight: false,
+      },
+    );
+    gl.drawArrays(gl.POINTS, 0, numIds);
+    const data = new Uint8Array(4 * numIds);
+    gl.readPixels(
+      0,
+      0,
+      numIds,
+      1,
+      WebGL2RenderingContext.RGBA,
+      WebGL2RenderingContext.UNSIGNED_BYTE,
+      data,
+    );
+    for (let i = 0; i < data.length; i++) {
+      colors[i] = data[i] / 255.0;
+    }
+    this.offscreenSegmentationColorUserShader.disable(
+      gl,
+      shader,
+      parameters.segmentColorParameters,
+    );
+    positionBuffer.dispose();
+    idBuffer.dispose();
+    return colors;
+  };
+
+  getShaderBaseSegmentColor = (id: bigint) => {
+    const colors = this.getShaderBaseSegmentColors([id], this.tempColor);
+    return colors === undefined ? undefined : this.tempColor;
   };
 
   linkedSegmentationGroup: LinkedLayerGroup;
@@ -688,6 +907,12 @@ export class SegmentationUserLayer extends Base {
     );
     this.displayState.linkedSegmentationGroup.changed.add(() =>
       this.updateDataSubsourceActivations(),
+    );
+    this.displayState.fragmentSegmentColor.changed.add(
+      this.specificationChanged.dispatch,
+    );
+    this.displayState.segmentColorShaderControlState.changed.add(
+      this.specificationChanged.dispatch,
     );
     this.tabs.add("rendering", {
       label: "Render",
@@ -996,6 +1221,9 @@ export class SegmentationUserLayer extends Base {
     this.displayState.ignoreNullVisibleSet.restoreState(
       specification[json_keys.IGNORE_NULL_VISIBLE_SET_JSON_KEY],
     );
+    this.displayState.fragmentSegmentColor.restoreState(
+      specification[json_keys.SEGMENT_COLOR_SHADER_JSON_KEY],
+    );
 
     const { skeletonRenderingOptions } = this.displayState;
     skeletonRenderingOptions.restoreState(
@@ -1040,6 +1268,9 @@ export class SegmentationUserLayer extends Base {
     this.displayState.segmentationColorGroupState.value.restoreState(
       specification,
     );
+    this.displayState.segmentColorShaderControlState.restoreState(
+      specification[json_keys.SHADER_CONTROLS_JSON_KEY],
+    );
   }
 
   toJSON() {
@@ -1068,6 +1299,8 @@ export class SegmentationUserLayer extends Base {
       this.displayState.renderScaleTarget.toJSON();
     x[json_keys.CROSS_SECTION_RENDER_SCALE_JSON_KEY] =
       this.sliceViewRenderScaleTarget.toJSON();
+    x[json_keys.SEGMENT_COLOR_SHADER_JSON_KEY] =
+      this.displayState.fragmentSegmentColor.toJSON();
 
     const { linkedSegmentationGroup, linkedSegmentationColorGroup } =
       this.displayState;
@@ -1091,6 +1324,8 @@ export class SegmentationUserLayer extends Base {
         this.displayState.segmentationColorGroupState.value.toJSON(),
       );
     }
+    x[json_keys.SHADER_CONTROLS_JSON_KEY] =
+      this.displayState.segmentColorShaderControlState.toJSON();
     return x;
   }
 
@@ -1366,8 +1601,9 @@ export class SegmentationUserLayer extends Base {
     }
 
     const visibleSegments = [...visibleSegmentsSet];
-    const colors = visibleSegments.map((id) => {
-      const color = getCssColor(getBaseObjectColor(displayState, id));
+    const baseColors = getBaseObjectColors(displayState, visibleSegments);
+    const colors = visibleSegments.map((id, index) => {
+      const color = getCssColor(baseColors.subarray(4 * index, 4 * index + 4));
       return { color, id };
     });
 
@@ -1402,6 +1638,10 @@ registerLayerTypeDetector((subsource) => {
   }
   return undefined;
 });
+
+registerLayerShaderControlsTool(SegmentationUserLayer, (layer) => ({
+  shaderControlState: layer.displayState.segmentColorShaderControlState,
+}));
 
 registerLayerShaderControlsTool(
   SegmentationUserLayer,
