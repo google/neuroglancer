@@ -16,6 +16,12 @@
 
 import { AxesLineHelper, computeAxisLineMatrix } from "#src/axes_lines.js";
 import type { DisplayContext } from "#src/display_context.js";
+import {
+  computeHoverMarkerMatrix,
+  crossSectionHoverMarkerAlpha,
+  shouldDrawCrossSectionHoverMarker,
+} from "#src/hover_position_marker.js";
+import { HoverPositionMarker } from "#src/hover_position_marker_renderer.js";
 import type { VisibleRenderLayerTracker } from "#src/layer/index.js";
 import { makeRenderedPanelVisibleLayerTracker } from "#src/layer/index.js";
 import { PickIDManager } from "#src/object_picking.js";
@@ -98,12 +104,18 @@ void emit(vec4 color, highp uint pickId) {
 const tempVec3 = vec3.create();
 const tempVec3b = vec3.create();
 const tempVec4 = vec4.create();
+const tempHoverColor = vec4.create();
+
+// Half-length, in logical pixels, of the "+" reticle drawn at the hover
+// position that is synchronized across cross-section panels.
+const HOVER_MARKER_SIZE = 8;
 
 export class SliceViewPanel extends RenderedDataPanel {
   declare viewer: SliceViewerState;
   private sliceViewRenderHelper;
 
   private axesLineHelper = this.registerDisposer(AxesLineHelper.get(this.gl));
+  private hoverMarker = this.registerDisposer(HoverPositionMarker.get(this.gl));
 
   private colorFactor = vec4.fromValues(1, 1, 1, 1);
   private pickIDs = new PickIDManager();
@@ -261,6 +273,20 @@ export class SliceViewPanel extends RenderedDataPanel {
         }
       }),
     );
+    this.registerDisposer(
+      viewer.showCrossSectionHoverPosition.changed.add(() => {
+        if (this.visible) {
+          this.scheduleRedraw();
+        }
+      }),
+    );
+    this.registerDisposer(
+      viewer.mouseState.changed.add(() => {
+        if (this.visible && viewer.showCrossSectionHoverPosition.value) {
+          this.scheduleRedraw();
+        }
+      }),
+    );
 
     this.registerDisposer(
       viewer.showScaleBar.changed.add(() => {
@@ -397,7 +423,20 @@ export class SliceViewPanel extends RenderedDataPanel {
       renderLayer.draw(renderContext, attachment);
     }
     gl.disable(WebGL2RenderingContext.BLEND);
-    if (this.viewer.showAxisLines.value || this.viewer.showScaleBar.value) {
+    const { mouseState } = this.viewer;
+    // Draw the hover position coming from another panel, but not in the panel
+    // the mouse is currently over (`mouseX >= 0`), where the real cursor is
+    // already visible.
+    const showHoverMarker = shouldDrawCrossSectionHoverMarker({
+      enabled: this.viewer.showCrossSectionHoverPosition.value,
+      mouseActive: mouseState.active,
+      mouseInThisPanel: this.mouseX >= 0,
+    });
+    if (
+      this.viewer.showAxisLines.value ||
+      this.viewer.showScaleBar.value ||
+      showHoverMarker
+    ) {
       this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
       if (this.viewer.showAxisLines.value) {
         const axisLength =
@@ -415,6 +454,21 @@ export class SliceViewPanel extends RenderedDataPanel {
             computeAxisLineMatrix(projectionParameters, axisLength * zoom),
           ),
         );
+      }
+      if (showHoverMarker) {
+        // A fixed-size, screen-aligned crosshair so it reads consistently in
+        // every orthoview regardless of the panel's orientation.
+        const markerMat = computeHoverMarkerMatrix(
+          projectionParameters,
+          HOVER_MARKER_SIZE,
+          mouseState.position,
+        );
+        // Fade the marker with distance from this panel's slice plane.
+        const alpha = crossSectionHoverMarkerAlpha(markerMat);
+        if (alpha > 0) {
+          vec4.set(tempHoverColor, 1, 0.85, 0, alpha);
+          this.hoverMarker.draw(disableZProjection(markerMat), tempHoverColor);
+        }
       }
       if (this.viewer.showScaleBar.value) {
         gl.enable(WebGL2RenderingContext.BLEND);
