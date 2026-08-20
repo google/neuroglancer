@@ -402,7 +402,7 @@ uint64_t getMappedObjectId(uint64_t value) {
           : this.gpuEquivalencesHashTable,
       );
     }
-    if (highlightColor !== undefined) {
+    if (parameters.hasHighlightColor && highlightColor !== undefined) {
       gl.uniform4fv(shader.uniform("uHighlightColor"), highlightColor);
     }
     displayState.segmentationColorUserShader.enable(
