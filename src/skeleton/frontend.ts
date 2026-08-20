@@ -141,7 +141,9 @@ class RenderHelper extends RefCounted {
     builder.addFragmentCode(`
 // Layer opacity is applied by emitRGBA.
 vec4 segmentColor() {
-  return vec4(segmentColorUserShader(uint64_t(uID)).rgb, 1.0);
+  vec4 res = segmentColorUserShader(uint64_t(uID));
+  if (res.a < 0.0) res.a = 1.0;
+  return res;
 }
 vec4 premultiplyAlpha(vec4 color) {
   return ${this.targetIsSliceView ? "color" : "vec4(color.rgb * color.a, color.a)"};
