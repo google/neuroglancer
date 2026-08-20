@@ -153,7 +153,7 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
           ...rest,
         };
       },
-      shaderError: displayState.shaderError,
+      shaderError: displayState.volumeShaderError,
       fallbackShaderParameters: new WatchableValue(
         getFallbackShaderParameters(displayState),
       ),

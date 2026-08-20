@@ -140,7 +140,9 @@ import {
 import { Signal } from "#src/util/signal.js";
 import { GLBuffer } from "#src/webgl/buffer.js";
 import { initializeWebGL } from "#src/webgl/context.js";
+import type { WatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import {
+  makeAggregateWatchableShaderError,
   makeTrackableFragmentMain,
   makeWatchableShaderError,
   parameterizedEmitterDependentShaderGetter,
@@ -443,6 +445,12 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
     // assign it here first in order to allow it to be accessed by `segmentationGroupState`.
     layer.displayState = this;
 
+    this.shaderError = makeAggregateWatchableShaderError(this.layer, [
+      this.volumeShaderError,
+      this.meshShaderError,
+      this.offscreenShaderError,
+    ]);
+
     this.linkedSegmentationGroup = layer.registerDisposer(
       new LinkedLayerGroup(
         layer.manager.rootLayers,
@@ -621,7 +629,10 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   objectAlpha = trackableAlphaValue(1.0);
   ignoreNullVisibleSet = new TrackableBoolean(true, true);
   skeletonRenderingOptions = new SkeletonRenderingOptions();
-  shaderError = makeWatchableShaderError();
+  volumeShaderError = makeWatchableShaderError();
+  meshShaderError = makeWatchableShaderError();
+  offscreenShaderError = makeWatchableShaderError();
+  shaderError: WatchableShaderError;
   fragmentSegmentColor = makeTrackableFragmentMain(
     DEFAULT_USER_MAIN_SEGMENT_COLOR,
   );
@@ -669,7 +680,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         encodeParameters: (p) => {
           return `${p.shaderBuilderState.key}/${JSON.stringify(p.segmentColorParameters)}/${JSON.stringify(p.segmentColorProperties.map(encodeSegmentPropertyShaderDefinition))}`;
         },
-        shaderError: this.layer.displayState.shaderError,
+        shaderError: this.layer.displayState.offscreenShaderError,
         defineShader: (
           builder,
           { segmentColorParameters, shaderBuilderState },
