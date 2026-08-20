@@ -136,6 +136,7 @@ class RenderHelper extends RefCounted {
     builder.addUniform("highp mat4", "uProjection");
     builder.addUniform("highp uint", "uPickID");
     builder.addUniform("highp uvec2", "uID");
+    builder.addUniform("highp float", "uAlpha");
   }
 
   edgeShaderGetter;
@@ -233,19 +234,20 @@ highp uint vertexIndex = aVertexIndex.x * (1u - lineEndpointIndex) + aVertexInde
           builder.addFragmentCode(`
 vec4 segmentColor() {
   vec4 res = segmentColorUserShader(uint64_t(uID));
-  res.a = 1.0;
+  if (res.a < 0.0) res.a = 1.0;
   return res;
 }
 void emitRGBA(vec4 color) {
-  color.a *= uColor.a;
+  color.a *= uAlpha;
   emit(vec4(color.rgb * color.a, color.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
 }
 void emitRGB(vec3 color) {
-  float alpha = segmentColor().a;
+  float alpha = segmentColor().a * uAlpha;
   emit(vec4(color * alpha, alpha * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
 }
 void emitDefault() {
   vec4 color = segmentColor();
+  color.a *= uAlpha;
   emit(vec4(color.rgb, color.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
 }
 `);
@@ -321,12 +323,11 @@ emitCircle(uProjection * vec4(vertexPosition, 1.0), uNodeDiameter, 0.0);
           builder.addFragmentCode(`
 vec4 segmentColor() {
   vec4 res = segmentColorUserShader(uint64_t(uID));
-  res.a = 1.0;
+  if (res.a < 0.0) res.a = 1.0;
   return res;
 }
 void emitRGBA(vec4 color) {
-  color.a *= uColor.a;
-  color.rgb *= color.a;
+  color.a *= uAlpha;
   vec4 borderColor = color;
   vec4 circleColor = getCircleColor(color, borderColor);
   emit(circleColor, uPickID);
@@ -336,6 +337,7 @@ void emitRGB(vec3 color) {
 }
 void emitDefault() {
   vec4 color = segmentColor();
+  color.a *= uAlpha;
   vec4 circleColor = getCircleColor(color, color);
   emit(circleColor, uPickID);
 }
@@ -409,6 +411,10 @@ void emitDefault() {
     const { viewProjectionMat } = renderContext.projectionParameters;
     const mat = mat4.multiply(tempMat2, viewProjectionMat, modelMatrix);
     gl.uniformMatrix4fv(shader.uniform("uProjection"), false, mat);
+    gl.uniform1f(
+      shader.uniform("uAlpha"),
+      this.base.displayState.objectAlpha.value,
+    );
     this.vertexIdHelper.enable();
   }
 
