@@ -16,6 +16,7 @@
 
 import { describe, test, expect } from "vitest";
 import {
+  executeSegmentQuery,
   mergeSegmentPropertyMaps,
   parseSegmentQuery,
   PreprocessedSegmentPropertyMap,
@@ -64,6 +65,53 @@ describe("mergeSegmentPropertyMaps", () => {
         { type: "string", id: "prop2", values: ["a", "", "b", ""] },
       ],
     });
+  });
+
+  test("preserves numerical property type and zero-fills missing values", () => {
+    const a = new SegmentPropertyMap({
+      inlineProperties: {
+        ids: BigUint64Array.of(5n, 8n),
+        properties: [
+          {
+            type: "number",
+            id: "score",
+            description: undefined,
+            dataType: DataType.INT32,
+            values: Int32Array.of(10, 20),
+            bounds: [10, 20],
+          },
+        ],
+      },
+    });
+    const b = new SegmentPropertyMap({
+      inlineProperties: {
+        ids: BigUint64Array.of(6n, 7n),
+        properties: [],
+      },
+    });
+
+    const merged = mergeSegmentPropertyMaps([a, b]);
+
+    expect(merged?.inlineProperties).toEqual({
+      ids: BigUint64Array.of(5n, 6n, 7n, 8n),
+      properties: [
+        {
+          type: "number",
+          id: "score",
+          description: undefined,
+          dataType: DataType.INT32,
+          values: Int32Array.of(10, 0, 0, 20),
+          bounds: [0, 20],
+        },
+      ],
+    });
+
+    const preprocessed = new PreprocessedSegmentPropertyMap(merged!);
+    const result = executeSegmentQuery(
+      preprocessed,
+      parseSegmentQuery(preprocessed, "score=0"),
+    );
+    expect(result.indices).toEqual(Uint8Array.of(1, 2));
   });
 });
 
