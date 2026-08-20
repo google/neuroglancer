@@ -16,7 +16,7 @@
 
 import type { DisplayContext } from "#src/display_context.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
-import type { TypedNumberArray } from "#src/util/array.js";
+import type { TypedArray } from "#src/util/array.js";
 import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { computePercentilesFromEmpiricalHistogram } from "#src/util/empirical_cdf.js";
@@ -55,7 +55,31 @@ interface ParentInvlerpWidget {
   element: HTMLDivElement;
   histogramSpecifications: HistogramSpecifications;
   histogramIndex: number;
-  values?: WatchableValueInterface<TypedNumberArray<ArrayBuffer> | undefined>;
+  values?: WatchableValueInterface<TypedArray<ArrayBuffer> | undefined>;
+}
+
+export function computePercentileRangeFromValues(
+  values: TypedArray<ArrayBuffer>,
+  minPercentile: number,
+  maxPercentile: number,
+): DataTypeInterval | undefined {
+  if (values instanceof BigInt64Array || values instanceof BigUint64Array) {
+    const valuesSorted = values.slice().sort(dataTypeCompare);
+    const numValues = valuesSorted.length;
+    if (numValues === 0) return undefined;
+    const minIndex = Math.floor(minPercentile * (numValues - 1));
+    const maxIndex = Math.ceil(maxPercentile * (numValues - 1));
+    return [valuesSorted[minIndex], valuesSorted[maxIndex]];
+  }
+  const valuesSorted = values
+    .filter((value) => !Number.isNaN(value))
+    .slice()
+    .sort(dataTypeCompare);
+  const numValues = valuesSorted.length;
+  if (numValues === 0) return undefined;
+  const minIndex = Math.floor(minPercentile * (numValues - 1));
+  const maxIndex = Math.ceil(maxPercentile * (numValues - 1));
+  return [valuesSorted[minIndex], valuesSorted[maxIndex]];
 }
 
 export class AutoRangeFinder extends RefCounted {
@@ -91,14 +115,12 @@ export class AutoRangeFinder extends RefCounted {
   autoComputeRange(minPercentile: number, maxPercentile: number) {
     const { values } = this.parent;
     if (values?.value) {
-      const valuesWithoutNaN = values.value.filter((x) => !Number.isNaN(x));
-      const valuesSorted = valuesWithoutNaN.slice().sort((a, b) => a - b);
-      const n = valuesSorted.length;
-      const minIndex = Math.floor(minPercentile * (n - 1));
-      const maxIndex = Math.ceil(maxPercentile * (n - 1));
-      const min = valuesSorted[minIndex];
-      const max = valuesSorted[maxIndex];
-      const range: DataTypeInterval = [min, max];
+      const range = computePercentileRangeFromValues(
+        values.value,
+        minPercentile,
+        maxPercentile,
+      );
+      if (range === undefined) return;
       this.setTrackableValue(range, range);
       this.parent.display.scheduleRedraw();
     } else {
