@@ -1083,7 +1083,7 @@ function updatePropertyHistogram(
   const { values } = property;
   const [min, max] = bounds as [number, number];
   const multiplier = max <= min ? 0 : numBins / (max - min);
-  const histogram = new Uint32Array(numBins + 2); // TODO here we have 258 entries, are the texture ones 256?
+  const histogram = new Uint32Array(numBins + 2);
   const { numericalConstraints } = queryResult!.query as FilterQuery;
   const constraintIndex = numericalConstraints.findIndex(
     (c) => c.fieldId === property.id,

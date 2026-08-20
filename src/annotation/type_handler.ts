@@ -270,10 +270,10 @@ class AnnotationRenderHelperBase extends RefCounted {
 
   protected defineProperties(
     builder: ShaderBuilder,
-    referencedProperties: number[],
+    annotationPropertyIndices: number[],
   ) {
     const { properties, rank } = this;
-    for (const i of referencedProperties) {
+    for (const i of annotationPropertyIndices) {
       const property = properties[i];
       const handler = annotationPropertyTypeRenderHandlers[property.type];
       handler.defineShader(builder, property.identifier, rank);
@@ -281,7 +281,7 @@ class AnnotationRenderHelperBase extends RefCounted {
     const { propertyOffsets } = this;
     const { propertyGroupBytes, propertyGroupCumulativeBytes } = this;
     builder.addInitializer((shader) => {
-      const binders = referencedProperties.map(
+      const binders = annotationPropertyIndices.map(
         (i) =>
           shader.vertexShaderInputBinders[`prop_${properties[i].identifier}`],
       );
@@ -295,7 +295,7 @@ class AnnotationRenderHelperBase extends RefCounted {
         bind(stride: number, offset: number) {
           for (let i = 0; i < numProperties; ++i) {
             const { group, offset: propertyOffset } =
-              propertyOffsets[referencedProperties[i]];
+              propertyOffsets[annotationPropertyIndices[i]];
             binders[i].bind(
               /*stride=*/ propertyGroupBytes[group],
               /*offset=*/ offset +
@@ -351,8 +351,11 @@ export abstract class AnnotationRenderHelper extends AnnotationRenderHelperBase 
         parameters: ShaderControlsBuilderState,
       ) => {
         const { rank, properties } = this;
-        const referencedProperties: number[] = [];
-        const controlsReferencedProperties = parameters.referencedProperties;
+        const annotationPropertyIndices: number[] = [];
+        const controlAnnotationProperties =
+          parameters.propertyReferences.source === "annotation"
+            ? parameters.propertyReferences.references
+            : [];
         const processedCode = parameters.parseResult.code;
         for (
           let i = 0, numProperties = properties.length;
@@ -362,14 +365,14 @@ export abstract class AnnotationRenderHelper extends AnnotationRenderHelperBase 
           const property = properties[i];
           const functionName = `prop_${property.identifier}`;
           if (
-            !controlsReferencedProperties.includes(property.identifier) &&
+            !controlAnnotationProperties.includes(property.identifier) &&
             !processedCode.match(new RegExp(`\\b${functionName}\\b`))
           ) {
             continue;
           }
-          referencedProperties.push(i);
+          annotationPropertyIndices.push(i);
         }
-        this.defineProperties(builder, referencedProperties);
+        this.defineProperties(builder, annotationPropertyIndices);
         builder.addUniform("highp vec3", "uColor");
         builder.addUniform("highp uint", "uSelectedIndex");
         builder.addVarying("highp vec4", "vColor");

@@ -276,6 +276,25 @@ export interface SegmentationColorUserShaderManagerInputs {
 }
 
 export class SegmentColorUserShaderManager extends RefCounted {
+  private static getPropertyShaderIdentifier(
+    type: SegmentPropertyReference["type"],
+    index: number,
+  ) {
+    return `${type}${index}`;
+  }
+
+  static getNumericalPropertyShaderIdentifier(
+    segmentPropertyMap: PreprocessedSegmentPropertyMap,
+    propertyId: string,
+  ) {
+    const index = segmentPropertyMap.numericalProperties.findIndex(
+      (property) => property.id === propertyId,
+    );
+    return index === -1
+      ? undefined
+      : this.getPropertyShaderIdentifier("numerical", index);
+  }
+
   protected segmentColorShaderManager = new SegmentColorShaderManager(
     "segmentColorHash",
   );
@@ -369,7 +388,14 @@ export class SegmentColorUserShaderManager extends RefCounted {
       const index = tags.tags.indexOf(prop.id);
       return index === -1
         ? undefined
-        : { identifier: `tag${index}`, dataType: DataType.UINT8 };
+        : {
+            identifier:
+              SegmentColorUserShaderManager.getPropertyShaderIdentifier(
+                "tag",
+                index,
+              ),
+            dataType: DataType.UINT8,
+          };
     }
     if (prop.type === "numerical") {
       const index = segmentPropertyMap.numericalProperties.findIndex(
@@ -377,14 +403,23 @@ export class SegmentColorUserShaderManager extends RefCounted {
       );
       if (index === -1) return undefined;
       return {
-        identifier: `numerical${index}`,
+        identifier: SegmentColorUserShaderManager.getPropertyShaderIdentifier(
+          "numerical",
+          index,
+        ),
         dataType: segmentPropertyMap.numericalProperties[index].dataType,
       };
     }
     const index = segmentPropertyMap.strings.findIndex((p) => p.id === prop.id);
     return index === -1
       ? undefined
-      : { identifier: `string${index}`, dataType: DataType.UINT8 };
+      : {
+          identifier: SegmentColorUserShaderManager.getPropertyShaderIdentifier(
+            "string",
+            index,
+          ),
+          dataType: DataType.UINT8,
+        };
   }
 
   private getSegmentPropertyReferenceForHelperCall(
@@ -410,7 +445,10 @@ export class SegmentColorUserShaderManager extends RefCounted {
     builderState: ShaderControlsBuilderState,
     segmentPropertyMap: PreprocessedSegmentPropertyMap | undefined,
   ): SegmentPropertyReferencesResult {
-    const segmentProperties = [...builderState.segmentProperties];
+    const segmentProperties =
+      builderState.propertyReferences.source === "segment"
+        ? [...builderState.propertyReferences.references]
+        : [];
     const errors: SegmentPropertyReferenceError[] = [];
     let allPropertiesFound = true;
     const stringLiteralValues = new Map(
@@ -582,7 +620,8 @@ export class SegmentColorUserShaderManager extends RefCounted {
     const index = tags.tags.indexOf(id);
     if (index === -1) return;
     const { values } = tags;
-    const propertyShaderIdentifier = `tag${index}`;
+    const propertyShaderIdentifier =
+      SegmentColorUserShaderManager.getPropertyShaderIdentifier("tag", index);
     const codeUnit = String.fromCharCode(index);
     const valuesForTag = values.map((x) => (x.includes(codeUnit) ? 1 : 0));
     this.updateShaderData(
@@ -602,7 +641,11 @@ export class SegmentColorUserShaderManager extends RefCounted {
     const index = numericalProperties.findIndex((p) => p.id === id);
     if (index === -1) return;
     const property = numericalProperties[index];
-    const propertyShaderIdentifier = `numerical${index}`;
+    const propertyShaderIdentifier =
+      SegmentColorUserShaderManager.getPropertyShaderIdentifier(
+        "numerical",
+        index,
+      );
     this.updateShaderData(
       propertyShaderIdentifier,
       property.values,
@@ -620,7 +663,11 @@ export class SegmentColorUserShaderManager extends RefCounted {
     const index = strings.findIndex((p) => p.id === id);
     if (index === -1) return;
     const property = strings[index];
-    const propertyShaderIdentifier = `string${index}`;
+    const propertyShaderIdentifier =
+      SegmentColorUserShaderManager.getPropertyShaderIdentifier(
+        "string",
+        index,
+      );
     this.updateShaderData(
       propertyShaderIdentifier,
       new Uint8Array(property.values.map((x) => stringLiteralIds.get(x) ?? 0)),
@@ -971,7 +1018,6 @@ function createSegmentPropertyTextureData(
   dataType: DataType,
 ) {
   const texture = gl.createTexture();
-  // for now, immediately load the data into the texture
   {
     const textureFormat = computeTextureFormat(
       new TextureFormat(),
@@ -983,7 +1029,6 @@ function createSegmentPropertyTextureData(
     setOneDimensionalTextureData(gl, textureFormat, values);
     gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
   }
-
   return {
     texture,
     dataType,
