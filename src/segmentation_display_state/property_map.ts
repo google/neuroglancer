@@ -22,6 +22,7 @@ import type { Uint64Set } from "#src/uint64_set.js";
 import type {
   TypedArray,
   TypedNumberArray,
+  TypedNumberArrayConstructor,
   WritableArrayLike,
 } from "#src/util/array.js";
 import { mergeSequences } from "#src/util/array.js";
@@ -300,10 +301,16 @@ function remapNumericalProperty(
   numMerged: number,
   toMerged: Uint32Array,
 ): InlineSegmentNumericalProperty {
-  const values = property.values.slice(0, numMerged);
-  values.fill(Number.NaN);
+  const values = new (property.values
+    .constructor as TypedNumberArrayConstructor<ArrayBuffer>)(numMerged);
   remapArray(property.values, values, toMerged);
-  return { ...property, values };
+  if (toMerged.length === numMerged) return { ...property, values };
+  const [min, max] = property.bounds;
+  const bounds = [
+    dataTypeCompare(min, 0) > 0 ? 0 : min,
+    dataTypeCompare(max, 0) < 0 ? 0 : max,
+  ] as DataTypeInterval;
+  return { ...property, values, bounds };
 }
 
 function remapProperty(
