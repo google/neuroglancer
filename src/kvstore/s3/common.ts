@@ -39,6 +39,16 @@ import { HttpError, fetchOk } from "#src/util/http_request.js";
 import { ProgressSpan } from "#src/util/progress_listener.js";
 import { getRandomHexString } from "#src/util/random.js";
 
+function validateObjectKey(key: string) {
+  for (const component of key.split("/")) {
+    if (component === "." || component === "..") {
+      throw new Error(
+        `Invalid S3 object key ${JSON.stringify(key)}: "." and ".." path components are not supported`,
+      );
+    }
+  }
+}
+
 export class S3KvStoreBase<
   SharedKvStoreContext extends SharedKvStoreContextBase,
 > implements KvStore
@@ -51,15 +61,17 @@ export class S3KvStoreBase<
     protected fetchOkImpl: FetchOk = fetchOk,
   ) {}
 
+  private getBaseObjectUrl(key: string): string {
+    validateObjectKey(key);
+    return joinBaseUrlAndPath(this.baseUrl, key);
+  }
+
   // Random query parameter (ignored by S3) so cached responses are never
   // used — same rationale as GcsKvStore.getObjectUrl: stale ACAO headers on
   // 304s (S3's CORS headers also vary with the Origin) and staleness after
   // this or another session writes to the bucket.
   private getObjectUrl(key: string): string {
-    return (
-      joinBaseUrlAndPath(this.baseUrl, key) +
-      `?neuroglancer=${getRandomHexString()}`
-    );
+    return this.getBaseObjectUrl(key) + `?neuroglancer=${getRandomHexString()}`;
   }
 
   stat(key: string, options: StatOptions): Promise<StatResponse | undefined> {
@@ -99,7 +111,7 @@ export class S3KvStoreBase<
   }
 
   async write(key: string, value: ArrayBuffer): Promise<void> {
-    const url = joinBaseUrlAndPath(this.baseUrl, key);
+    const url = this.getBaseObjectUrl(key);
     try {
       await this.fetchOkImpl(url, {
         method: "PUT",
@@ -111,7 +123,7 @@ export class S3KvStoreBase<
   }
 
   async delete(key: string): Promise<void> {
-    const url = joinBaseUrlAndPath(this.baseUrl, key);
+    const url = this.getBaseObjectUrl(key);
     try {
       await this.fetchOkImpl(url, {
         method: "DELETE",
