@@ -286,6 +286,41 @@ ${declaration}(vec3 color, bool hasProperties, bool isStated) {
     );
   });
 
+  it("colors by string literals with ids greater than 255", () => {
+    const segmentationUserLayer = setupSegmentationLayer();
+    setSegmentPropertyMap(segmentationUserLayer, {
+      ids: new BigUint64Array([1n]),
+      properties: [
+        {
+          id: "color",
+          type: "string",
+          values: ["target"],
+        },
+      ],
+    });
+    const precedingLiterals = Array.from(
+      { length: 256 },
+      (_, index) => `"unused${index}"`,
+    ).join(" ");
+    segmentationUserLayer.displayState.fragmentSegmentColor.value = `
+#uicontrol property colorProperty(type="string")
+  /* ${precedingLiterals} */
+  vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
+      if (colorProperty == "target") {
+          return vec3(1.0, 0.0, 0.0);
+      }
+      return vec3(0.0, 0.0, 1.0);
+  }`;
+    setSegmentPropertyControl(segmentationUserLayer, "colorProperty", {
+      type: "string",
+      id: "color",
+    });
+    expectColor(
+      segmentationUserLayer.displayState.getShaderBaseSegmentColor(1n)!,
+      [1.0, 0.0, 0.0, 0.0],
+    );
+  });
+
   it("defaults invalid string property control state", () => {
     const segmentationUserLayer = setupSegmentationLayer();
     setSegmentPropertyMap(segmentationUserLayer, {

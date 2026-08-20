@@ -671,8 +671,8 @@ export class SegmentColorUserShaderManager extends RefCounted {
       );
     this.updateShaderData(
       propertyShaderIdentifier,
-      new Uint8Array(property.values.map((x) => stringLiteralIds.get(x) ?? 0)),
-      DataType.UINT8,
+      new Uint32Array(property.values.map((x) => stringLiteralIds.get(x) ?? 0)),
+      DataType.UINT32,
       property.values,
       stringLiteralIds,
     );
