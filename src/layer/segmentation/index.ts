@@ -121,7 +121,7 @@ import { registerVoxelEditingTools } from "#src/ui/voxel_editing.js";
 import { Uint64Map } from "#src/uint64_map.js";
 import { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import { Uint64Set } from "#src/uint64_set.js";
-import type { TypedNumberArray } from "#src/util/array.js";
+import type { TypedArray } from "#src/util/array.js";
 import { gatherUpdate } from "#src/util/array.js";
 import {
   packColor,
@@ -565,7 +565,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         makeCachedLazyDerivedWatchableValue(
           (segmentPropertyMap, isReady) => {
             const properties = new Map<string, DataType>();
-            const values = new Map<string, TypedNumberArray<ArrayBuffer>>();
+            const values = new Map<string, TypedArray<ArrayBuffer>>();
             if (segmentPropertyMap === undefined) {
               // dont return a non null before layer.isReady to prevent losing shader control state during loading process
               return isReady ? {} : null;

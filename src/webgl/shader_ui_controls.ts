@@ -27,7 +27,7 @@ import {
   makeCachedLazyDerivedWatchableValue,
   TrackableValue,
 } from "#src/trackable_value.js";
-import type { TypedNumberArray } from "#src/util/array.js";
+import type { TypedArray } from "#src/util/array.js";
 import { arraysEqual, arraysEqualWithPredicate } from "#src/util/array.js";
 import {
   parseRGBColorSpecification,
@@ -112,7 +112,7 @@ export interface ShaderPropertyInvlerpControl {
   type: "propertyInvlerp";
   clamp: boolean;
   properties: PropertiesSpecification;
-  values?: Map<string, TypedNumberArray<ArrayBuffer>>;
+  values?: Map<string, TypedArray<ArrayBuffer>>;
   propertySource: PropertySource;
   getPropertyValueExpression?: (property: string) => string;
   default: PropertyInvlerpParameters;
@@ -786,7 +786,7 @@ function parsePropertyInvlerpDirective(
   valueType: string,
   parameters: DirectiveParameters,
   properties: Map<string, DataType>,
-  values?: Map<string, TypedNumberArray<ArrayBuffer>>,
+  values?: Map<string, TypedArray<ArrayBuffer>>,
   propertySource: PropertySource = "annotation",
   getPropertyValueExpression?: (property: string) => string,
 ) {
@@ -957,7 +957,7 @@ export interface ImageDataSpecification {
 export interface ShaderDataContext {
   imageData?: ImageDataSpecification;
   properties?: Map<string, DataType>;
-  values?: Map<string, TypedNumberArray<ArrayBuffer>>;
+  values?: Map<string, TypedArray<ArrayBuffer>>;
   propertySource?: PropertySource;
   getPropertyValueExpression?: (property: string) => string;
   segmentPropertyMap?: PreprocessedSegmentPropertyMap;
