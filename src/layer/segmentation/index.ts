@@ -563,15 +563,25 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
               properties.set(property.id, property.dataType);
               values.set(property.id, property.values);
             }
-            const shaderName = (property: string) => {
-              const propertyIdx =
-                segmentPropertyMap.numericalProperties.findIndex(
-                  (p) => p.id === property,
+            const getPropertyValueExpression = (property: string) => {
+              const identifier =
+                SegmentColorUserShaderManager.getNumericalPropertyShaderIdentifier(
+                  segmentPropertyMap,
+                  property,
                 );
-              return `numerical${propertyIdx}`; // TEMP extract this from the SegmentationColorUserShaderManager
+              if (identifier === undefined) {
+                throw new Error(`Unknown numerical property: ${property}`);
+              }
+              return identifier;
             };
 
-            return { properties, values, shaderName, segmentPropertyMap };
+            return {
+              properties,
+              values,
+              propertySource: "segment" as const,
+              getPropertyValueExpression,
+              segmentPropertyMap,
+            };
           },
           this.segmentationGroupState.value.segmentPropertyMap,
           this.layer.isReadyWatchable,
