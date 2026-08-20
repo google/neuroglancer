@@ -27,7 +27,7 @@ import {
 } from "#src/trackable_value.js";
 import type { ToolActivation } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
-import type { TypedNumberArray } from "#src/util/array.js";
+import type { TypedArray } from "#src/util/array.js";
 import { DataType } from "#src/util/data_type.js";
 import type { Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -740,8 +740,8 @@ export function adjustInvlerpBrightnessContrast(
 
 // The first and last bin are for values below the lower bound/above the upper
 // To simulate output from the GLSL shader function on CPU
-function countDataInBins(
-  inputData: TypedNumberArray<ArrayBuffer>,
+export function countDataInBins(
+  inputData: TypedArray<ArrayBuffer>,
   dataType: DataType,
   min: number | bigint,
   max: number | bigint,
@@ -750,21 +750,34 @@ function countDataInBins(
   // Total number of bins is numDataBins + 2, one for values below the lower
   // bound and one for values above the upper bound.
   const counts = new Float32Array(numDataBins + 2).fill(0);
-  let binSize: number;
   let binIndex: number;
-  if (dataType === DataType.UINT64) {
-    binSize = Number((max as bigint) - (min as bigint)) / numDataBins;
-  } else {
-    binSize = ((max as number) - (min as number)) / numDataBins;
-  }
   for (let i = 0; i < inputData.length; i++) {
     const value = inputData[i];
+    if (typeof value === "number" && Number.isNaN(value)) continue;
     if (dataTypeCompare(value, min) < 0) {
       counts[0]++;
     } else if (dataTypeCompare(value, max) > 0) {
       counts[numDataBins + 1]++;
     } else {
-      binIndex = Math.floor(((value as number) - (min as number)) / binSize);
+      if (dataType === DataType.UINT64) {
+        const span = (max as bigint) - (min as bigint);
+        binIndex =
+          span === 0n
+            ? 0
+            : Number(
+                (((value as bigint) - (min as bigint)) * BigInt(numDataBins)) /
+                  span,
+              );
+      } else {
+        const span = (max as number) - (min as number);
+        binIndex =
+          span === 0
+            ? 0
+            : Math.floor(
+                (((value as number) - (min as number)) * numDataBins) / span,
+              );
+      }
+      binIndex = Math.min(numDataBins - 1, binIndex);
       counts[binIndex + 1]++;
     }
   }
@@ -772,7 +785,7 @@ function countDataInBins(
 }
 
 const createHistogramTextureFromValues = (
-  values: TypedNumberArray<ArrayBuffer>,
+  values: TypedArray<ArrayBuffer>,
   window: DataTypeInterval,
   dataType: DataType,
   gl: GL,
@@ -814,7 +827,7 @@ export class InvlerpWidget extends Tab {
     public histogramIndex: number,
     public legendShaderOptions: LegendShaderOptions | undefined,
     public values?: WatchableValueInterface<
-      TypedNumberArray<ArrayBuffer> | undefined
+      TypedArray<ArrayBuffer> | undefined
     >,
   ) {
     super(visibility);
@@ -944,7 +957,7 @@ export class VariableDataTypeInvlerpWidget extends Tab {
     public histogramIndex: number,
     public legendShaderOptions: LegendShaderOptions | undefined,
     public values?: WatchableValueInterface<
-      TypedNumberArray<ArrayBuffer> | undefined
+      TypedArray<ArrayBuffer> | undefined
     >,
   ) {
     super(visibility);
