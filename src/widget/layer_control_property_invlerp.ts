@@ -20,7 +20,7 @@ import {
   makeCachedDerivedWatchableValue,
   makeCachedLazyDerivedWatchableValue,
 } from "#src/trackable_value.js";
-import type { TypedNumberArray } from "#src/util/array.js";
+import type { TypedArray } from "#src/util/array.js";
 import { DataType } from "#src/util/data_type.js";
 import {
   convertDataTypeInterval,
@@ -44,7 +44,7 @@ export function propertyInvlerpLayerControl<LayerType extends UserLayer>(
   getter: (layer: LayerType) => {
     watchableValue: WatchableValueInterface<PropertyInvlerpParameters>;
     properties: PropertiesSpecification;
-    values?: Map<string, TypedNumberArray<ArrayBuffer>>;
+    values?: Map<string, TypedArray<ArrayBuffer>>;
     histogramSpecifications: HistogramSpecifications;
     histogramIndex: number;
     legendShaderOptions: LegendShaderOptions | undefined;
