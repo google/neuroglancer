@@ -135,6 +135,23 @@ describe("getShaderBaseSegmentColor", () => {
     expectColor(outColor!, [1.0, 0.0, 0.0, 0.0]);
   });
 
+  it.each([
+    "highp vec3 segmentColor",
+    "vec3 segmentColor ",
+    "vec3\nsegmentColor\n",
+  ])("supports %s declarations", (declaration) => {
+    const segmentationUserLayer = setupSegmentationLayer();
+    segmentationUserLayer.displayState.fragmentSegmentColor.value = `
+${declaration}(vec3 color, bool hasProperties, bool isStated) {
+  return vec3(1.0, 0.0, 0.0);
+}`;
+
+    const outColor =
+      segmentationUserLayer.displayState.getShaderBaseSegmentColor(1n);
+
+    expectColor(outColor!, [1.0, 0.0, 0.0, 0.0]);
+  });
+
   it("alpha shader", () => {
     const segmentationUserLayer = setupSegmentationLayer();
     segmentationUserLayer.displayState.fragmentSegmentColor.value = `

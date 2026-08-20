@@ -259,6 +259,7 @@ interface SegmentPropertyReferenceError {
 
 const segmentPropertyHelperCallPattern =
   /\b(tag|prop)\s*\(\s*string_t\(\s*(\d+)u\s*\)\s*\)/g;
+const vec3SegmentColorFunctionPattern = /\bvec3\s+segmentColor\s*\(/;
 
 function getLineNumberAtIndex(code: string, index: number) {
   return Math.max(0, code.substring(0, index).split("\n").length - 1);
@@ -860,7 +861,7 @@ bool loadSegmentProperties(uint64_t id) {
 }`;
       addCode(loadSegmentPropertiesCode);
       addCode(shaderCodeWithLineDirective(userCode));
-      if (userCode.includes("vec3 segmentColor(")) {
+      if (vec3SegmentColorFunctionPattern.test(userCode)) {
         addCode(`
 vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
   return vec4(segmentColor(color.rgb, hasProperties, isStated), color.a);
