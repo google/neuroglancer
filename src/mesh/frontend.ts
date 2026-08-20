@@ -412,7 +412,7 @@ export class MeshShaderManager {
         return `${p.shaderBuilderState.key}/${JSON.stringify(p.segmentColorParameters)}/${JSON.stringify(p.segmentColorProperties.map(encodeSegmentPropertyShaderDefinition))}/${p.silhouetteRenderingEnabled}`;
       },
       fallbackParameters,
-      shaderError: layer.displayState.shaderError,
+      shaderError: layer.displayState.meshShaderError,
       defineShader: (
         builder,
         {
