@@ -65,6 +65,7 @@ import { parseUint64 } from "#src/util/json.js";
 import { altModifierLabel } from "#src/util/platform.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
+import type { WatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import type { ShaderControlState } from "#src/webgl/shader_ui_controls.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import { makeEyeButton } from "#src/widget/eye_button.js";
@@ -209,6 +210,9 @@ export interface SegmentationDisplayState {
   segmentColorShaderControlState: ShaderControlState;
   segmentationColorUserShader: SegmentColorUserShaderManager;
   fragmentSegmentColor: WatchableValueInterface<string>;
+  volumeShaderError: WatchableShaderError;
+  meshShaderError: WatchableShaderError;
+  offscreenShaderError: WatchableShaderError;
 
   selectSegment: (id: bigint, pin: boolean | "toggle" | "force-unpin") => void;
   filterBySegmentLabel: (id: bigint) => void;
