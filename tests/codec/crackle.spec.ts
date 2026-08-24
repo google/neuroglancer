@@ -16,12 +16,16 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { load } from "npyjs";
 import { expect, test, vi, beforeAll } from "vitest";
 import { readHeader, decompressCrackle } from "#src/sliceview/crackle/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+function loadJsonData(filename: string): number[] {
+  const json = JSON.parse(readFileSync(filename, "utf8")) as { data: number[] };
+  return json.data;
+}
 
 beforeAll(() => {
   vi.stubGlobal(
@@ -41,19 +45,6 @@ beforeAll(() => {
 
         return new Response(
           data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/wasm" },
-          },
-        );
-      }
-
-      if (url.includes(".npy")) {
-        const filename = path.basename(url);
-        const buf = readFileSync(`testdata/codec/crackle/${filename}`);
-
-        return new Response(
-          buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
           {
             status: 200,
             headers: { "Content-Type": "application/wasm" },
@@ -152,15 +143,13 @@ test("crackle: random volume", async () => {
 
   const header = readHeader(compressed);
   expect(header.dataWidth).toBe(1);
-  expect(header.sx).toBe(32);
-  expect(header.sy).toBe(32);
-  expect(header.sz).toBe(32);
+  expect(header.sx).toBe(20);
+  expect(header.sy).toBe(20);
+  expect(header.sz).toBe(20);
 
   const decoded = await decompressCrackle(compressed);
 
-  const npy = await load("testdata/codec/crackle/random.npy");
-
-  const gt = npy.data as Uint8Array;
+  const gt = loadJsonData("testdata/codec/crackle/random.json");
 
   expect(decoded.length).toBe(gt.length);
 
@@ -181,9 +170,7 @@ async function run_connectomics_volume(filename: string) {
   const decoded8 = await decompressCrackle(compressed);
   const decoded = new Uint32Array(decoded8.buffer);
 
-  const npy = await load("testdata/codec/crackle/pinky40.npy");
-
-  const gt = npy.data as Uint32Array;
+  const gt = loadJsonData("testdata/codec/crackle/pinky40.json");
 
   expect(decoded.length).toBe(gt.length);
 
