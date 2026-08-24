@@ -31,6 +31,7 @@ import json
 import crackle
 import numpy as np
 
+
 def load_json(filename):
     with open(filename) as f:
         json_obj = json.load(f)
@@ -40,15 +41,27 @@ def load_json(filename):
         metadata["shape"], order=order
     )
 
+
 def to_json(arr):
- 	return json.dumps({ 
- 		"data": [ int(x) for x in arr.reshape([ arr.size, ], order="F") ],
- 		"metadata": {
- 			"dataType": np.dtype(arr.dtype).name,
- 			"shape": [ int(d) for d in arr.shape ],
- 			"fortranOrder": arr.flags.f_contiguous,
- 		}
- 	})
+    return json.dumps(
+        {
+            "data": [
+                int(x)
+                for x in arr.reshape(
+                    [
+                        arr.size,
+                    ],
+                    order="F",
+                )
+            ],
+            "metadata": {
+                "dataType": np.dtype(arr.dtype).name,
+                "shape": [int(d) for d in arr.shape],
+                "fortranOrder": arr.flags.f_contiguous,
+            },
+        }
+    )
+
 
 ones = np.ones([32, 32, 32], dtype=np.uint8, order="F")
 
@@ -72,9 +85,11 @@ crackle.save(pinky40, "pinky40_m4.ckl", markov_model_order=4)
 crackle.save(pinky40, "pinky40_m4pins.ckl", markov_model_order=4, allow_pins=True)
 crackle.save(pinky40, "pinky40_pins.ckl", allow_pins=True)
 
-random_data = np.asfortranarray(np.random.randint(0,2, size=[20,20,20], dtype=np.uint8))
+random_data = np.asfortranarray(
+    np.random.randint(0, 2, size=[20, 20, 20], dtype=np.uint8)
+)
 
 with open("random.json", "wb") as f:
-	f.write(to_json(random_data).encode("utf8"))
+    f.write(to_json(random_data).encode("utf8"))
 
 crackle.save(random_data, "random.ckl")
