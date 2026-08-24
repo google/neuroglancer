@@ -72,7 +72,7 @@ crackle.save(pinky40, "pinky40_m4.ckl", markov_model_order=4)
 crackle.save(pinky40, "pinky40_m4pins.ckl", markov_model_order=4, allow_pins=True)
 crackle.save(pinky40, "pinky40_pins.ckl", allow_pins=True)
 
-random_data = np.asfortranarray(np.random.randint(0,1, size=[20,20,20], dtype=np.uint8))
+random_data = np.asfortranarray(np.random.randint(0,2, size=[20,20,20], dtype=np.uint8))
 
 with open("random.json", "wb") as f:
 	f.write(to_json(random_data).encode("utf8"))
