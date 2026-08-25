@@ -34,6 +34,7 @@ import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
 import { ensureEmptyUrlSuffix } from "#src/kvstore/url.js";
 import type { PickState, VisibleLayerInfo } from "#src/layer/index.js";
 import type { PerspectivePanel } from "#src/perspective_view/panel.js";
+import { perspectivePanelEmitWithNormals } from "#src/perspective_view/panel.js";
 import type { PerspectiveViewRenderContext } from "#src/perspective_view/render_layer.js";
 import { PerspectiveViewRenderLayer } from "#src/perspective_view/render_layer.js";
 import type { WatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
@@ -51,8 +52,7 @@ import {
 } from "#src/single_mesh/base.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { DataType } from "#src/util/data_type.js";
-import type { mat4 } from "#src/util/geom.js";
-import { vec3 } from "#src/util/geom.js";
+import { mat3, mat3FromMat4, mat4, vec3 } from "#src/util/geom.js";
 import type { ProgressOptions } from "#src/util/progress_listener.js";
 import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
 import type { GLBuffer } from "#src/webgl/buffer.js";
@@ -100,6 +100,9 @@ const DEFAULT_FRAGMENT_MAIN = `void main() {
   emitGray();
 }
 `;
+
+const tempMat4 = mat4.create();
+const tempMat3 = mat3.create();
 
 export class SingleMeshDisplayState {
   shaderError = makeWatchableShaderError();
@@ -229,7 +232,7 @@ vec3 vertexNormal = readVertexNormal(${vertexIndexVariable});
     builder.addVertexMain(vertexMain);
   }
 
-  defineShader(builder: ShaderBuilder) {
+  defineShader(builder: ShaderBuilder, emitNormals: boolean) {
     builder.require(countingBufferShaderModule);
     this.indexBufferHelper.defineShader(builder);
     builder.addVarying("highp float", "vLightingFactor");
@@ -239,13 +242,17 @@ vec3 vertexNormal = readVertexNormal(${vertexIndexVariable});
     builder.addUniform("highp mat4", "uProjection");
     builder.addUniform("highp uint", "uPickID");
     builder.addVarying("highp uint", "vPickID", "flat");
+    if (emitNormals) {
+      builder.addVarying("highp vec3", "vViewNormal");
+      builder.addUniform("highp mat3", "uViewNormalMatrix");
+    }
     builder.addVertexMain(`
 uint triangleIndex = getPrimitiveIndex() / 3u;
 vPickID = uPickID + triangleIndex;
 `);
     builder.addFragmentCode(`
 void emitPremultipliedRGBA(vec4 color) {
-  emit(vec4(color.rgb * vLightingFactor, color.a), vPickID);
+  emit(vec4(color.rgb * vLightingFactor, color.a), vPickID${emitNormals ? ", gl_FrontFacing ? vViewNormal : -vViewNormal" : ""});
 }
 void emitRGBA(vec4 color) {
   color = clamp(color, 0.0, 1.0);
@@ -269,6 +276,7 @@ void emitGray() {
 gl_Position = uProjection * (uModelMatrix * vec4(vertexPosition, 1.0));
 vec3 normal = normalize((uModelMatrix * vec4(vertexNormal, 0.0)).xyz);
 vLightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
+${emitNormals ? "vViewNormal = normalize(uViewNormalMatrix * vertexNormal);" : ""}
 `);
   }
 
@@ -299,12 +307,28 @@ vLightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
     gl.uniform1ui(shader.uniform("uPickID"), pickID);
   }
 
-  beginObject(gl: GL, shader: ShaderProgram, objectToDataMatrix: mat4) {
+  beginObject(
+    gl: GL,
+    shader: ShaderProgram,
+    objectToDataMatrix: mat4,
+    renderContext: PerspectiveViewRenderContext,
+  ) {
     gl.uniformMatrix4fv(
       shader.uniform("uModelMatrix"),
       false,
       objectToDataMatrix,
     );
+    if (renderContext.emitter === perspectivePanelEmitWithNormals) {
+      mat4.multiply(
+        tempMat4,
+        renderContext.projectionParameters.viewMatrix,
+        objectToDataMatrix,
+      );
+      mat4.invert(tempMat4, tempMat4);
+      mat3FromMat4(tempMat3, tempMat4);
+      mat3.transpose(tempMat3, tempMat3);
+      gl.uniformMatrix3fv(shader.uniform("uViewNormalMatrix"), false, tempMat3);
+    }
   }
 
   bindVertexData(gl: GL, shader: ShaderProgram, data: VertexChunkData) {
@@ -498,12 +522,17 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensional
         defineShader: (
           builder: ShaderBuilder,
           shaderBuilderState: ShaderControlsBuilderState,
+          _,
+          emitter,
         ) => {
           if (shaderBuilderState.parseResult.errors.length !== 0) {
             throw new Error("Invalid UI control specification");
           }
           addControlsToBuilder(shaderBuilderState, builder);
-          this.shaderManager.defineShader(builder);
+          this.shaderManager.defineShader(
+            builder,
+            emitter === perspectivePanelEmitWithNormals,
+          );
           builder.addFragmentCode(glsl_string);
           builder.setFragmentMainFunction(
             shaderCodeWithLineDirective(shaderBuilderState.parseResult.code),
@@ -610,7 +639,7 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensional
 
     const { pickIDs } = renderContext;
 
-    shaderManager.beginObject(gl, shader, modelMatrix);
+    shaderManager.beginObject(gl, shader, modelMatrix, renderContext);
     if (renderContext.emitPickID) {
       shaderManager.setPickID(
         gl,

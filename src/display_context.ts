@@ -433,6 +433,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
   gl: GL;
   updateStarted = new NullarySignal();
   updateFinished = new NullarySignal();
+  frameTimeUpdated = new NullarySignal();
   continuousCameraMotionStarted = new NullarySignal();
   continuousCameraMotionFinished = new NullarySignal();
   multiChannelSetupFinished = new NullarySignal();
@@ -684,6 +685,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     this.updateFinished.dispatch();
     this.framerateMonitor.endLastTimeQuery(gl, ext);
     this.framerateMonitor.grabAnyFinishedQueryResults(gl);
+    this.frameTimeUpdated.dispatch();
   }
 
   getDepthArray(): Float32Array<ArrayBuffer> {

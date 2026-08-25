@@ -51,6 +51,7 @@ import {
   WatchableDisplayDimensionRenderInfo,
 } from "#src/navigation_state.js";
 import type { RenderLayerRole } from "#src/renderlayer.js";
+import type { TrackableSSAO } from "#src/ssao/trackable_ssao_params.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type {
   TrackableValue,
@@ -94,6 +95,7 @@ export interface LayerGroupViewerState {
   wireFrame: TrackableBoolean;
   enableAdaptiveDownsampling: TrackableBoolean;
   showScaleBar: TrackableBoolean;
+  showFrameTime: TrackableBoolean;
   scaleBarOptions: TrackableScaleBarOptions;
   showPerspectiveSliceViews: TrackableBoolean;
   layerSpecification: Owned<LayerListSpecification>;
@@ -104,6 +106,7 @@ export interface LayerGroupViewerState {
   crossSectionBackgroundColor: TrackableRGB;
   perspectiveViewBackgroundColor: TrackableRGB;
   hideCrossSectionBackground3D: TrackableBoolean;
+  ssao: TrackableSSAO;
   pickRadius: TrackableValue<number>;
 }
 
@@ -367,6 +370,9 @@ export class LayerGroupViewer extends RefCounted {
   get showScaleBar() {
     return this.viewerState.showScaleBar;
   }
+  get showFrameTime() {
+    return this.viewerState.showFrameTime;
+  }
   get showPerspectiveSliceViews() {
     return this.viewerState.showPerspectiveSliceViews;
   }
@@ -390,6 +396,9 @@ export class LayerGroupViewer extends RefCounted {
   }
   get scaleBarOptions() {
     return this.viewerState.scaleBarOptions;
+  }
+  get ssao() {
+    return this.viewerState.ssao;
   }
   layerPanel: LayerBar | undefined;
   layout: DataPanelLayoutContainer;

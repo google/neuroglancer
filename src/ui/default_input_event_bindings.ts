@@ -26,9 +26,11 @@ export function getDefaultGlobalBindings() {
     map.set("keyx", "clear-segments");
     map.set("keys", "toggle-show-slices");
     map.set("keyb", "toggle-scale-bar");
+    map.set("keyf", "toggle-frame-time");
     map.set("keyv", "toggle-default-annotations");
     map.set("keya", "toggle-axis-lines");
     map.set("keyo", "toggle-orthographic-projection");
+    map.set("keyq", "toggle-ssao");
 
     for (let i = 1; i <= 9; ++i) {
       map.set("digit" + i, "toggle-layer-" + i);

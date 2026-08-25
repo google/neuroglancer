@@ -24,6 +24,7 @@ export interface RangeWidgetOptions {
   min?: number;
   max?: number;
   step?: number;
+  label?: string;
 }
 
 export class RangeWidget extends RefCounted {
@@ -33,11 +34,14 @@ export class RangeWidget extends RefCounted {
 
   constructor(
     public value: WatchableValueInterface<number>,
-    { min = 0, max = 1, step = 0.01 }: RangeWidgetOptions = {},
+    { min = 0, max = 1, step = 0.01, label }: RangeWidgetOptions = {},
   ) {
     super();
     const { element, inputElement, numericInputElement } = this;
     element.className = "range-slider";
+    if (label !== undefined) {
+      element.appendChild(document.createTextNode(label));
+    }
     const initInputElement = (el: HTMLInputElement) => {
       el.min = "" + min;
       el.max = "" + max;

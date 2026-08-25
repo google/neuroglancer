@@ -24,7 +24,21 @@ import {
   transposeArray2d,
   findClosestMatchInSortedArray,
   findFirstInSortedArray,
+  TypedArrayBuilder,
 } from "#src/util/array.js";
+
+describe("TypedArrayBuilder", () => {
+  it("shrinks capacity to the logical length", () => {
+    const builder = new TypedArrayBuilder(Float32Array, 16);
+    builder.appendArray([1, 2, 3]);
+
+    builder.shrinkToFit();
+
+    expect(builder.length).toBe(3);
+    expect(builder.data).toEqual(Float32Array.of(1, 2, 3));
+    expect(builder.view).toEqual(Float32Array.of(1, 2, 3));
+  });
+});
 
 describe("partitionArray", () => {
   it("basic test", () => {
