@@ -44,6 +44,7 @@ import { EventActionMap } from "#src/util/mouse_bindings.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
 import { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 import {
+  BRUSH_SIZE_TOOL_ID,
   BRUSH_TOOL_ID,
   type BrushShape,
   FLOODFILL_TOOL_ID,
@@ -64,7 +65,7 @@ const FLOOD_INPUT_MAP = EventActionMap.fromObject({
 });
 
 const CONTROLS_FOR_TOOL = new Map<string, string[]>([
-  [BRUSH_TOOL_ID, ["vox-brush-size", "vox-brush-shape"]],
+  [BRUSH_TOOL_ID, [BRUSH_SIZE_TOOL_ID, "vox-brush-shape"]],
   [FLOODFILL_TOOL_ID, ["vox-flood-max-voxels"]],
 ]);
 

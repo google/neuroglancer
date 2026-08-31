@@ -70,6 +70,7 @@ import type {
 import {
   VOXEL_EDIT_STAMINA,
   VOXEL_EMPTY_VALUE,
+  BRUSH_SIZE_TOOL_ID,
   BRUSH_TOOL_ID,
   BrushShape,
   MAX_VOXEL_EDIT_STAMINA,
@@ -631,14 +632,14 @@ export function UserLayerWithVoxelEditingMixin<
       const activation = globalToolBinder.activeTool_;
       let radiusY = 0;
 
-      if (
-        activation &&
-        activation.tool.localBinder === this.toolBinder &&
-        activation.tool.toJSON() === BRUSH_TOOL_ID
-      ) {
-        const radiusXY = drawBrushCursor(this, panel, ctx);
-        if (radiusXY.radiusY > 0) {
-          radiusY = radiusXY.radiusY;
+      if (activation && activation.tool.localBinder === this.toolBinder) {
+        const toolJson = activation.tool.toJSON();
+        const toolId = typeof toolJson === "string" ? toolJson : toolJson?.type;
+        if (toolId === BRUSH_TOOL_ID || toolId === BRUSH_SIZE_TOOL_ID) {
+          const radiusXY = drawBrushCursor(this, panel, ctx);
+          if (radiusXY.radiusY > 0) {
+            radiusY = radiusXY.radiusY;
+          }
         }
       }
 

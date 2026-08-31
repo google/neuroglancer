@@ -25,6 +25,7 @@ import { SliceViewPanel } from "#src/sliceview/panel.js";
 import { observeWatchable } from "#src/trackable_value.js";
 import { mat3, vec3 } from "#src/util/geom.js";
 import {
+  BRUSH_SIZE_TOOL_ID,
   BRUSH_TOOL_ID,
   FLOODFILL_MAX_POSSIBLE_VOXELS,
   FLOODFILL_MIN_POSSIBLE_VOXELS,
@@ -176,7 +177,7 @@ const TOOL_SPECIFIC_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEditing>[
   [
     {
       label: "Brush size",
-      toolJson: { type: "vox-brush-size" },
+      toolJson: { type: BRUSH_SIZE_TOOL_ID },
       ...(() => {
         const control = rangeLayerControl(
           (layer: UserLayerWithVoxelEditing) => ({
