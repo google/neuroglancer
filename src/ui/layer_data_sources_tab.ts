@@ -34,6 +34,7 @@ import type {
 } from "#src/layer/layer_data_source.js";
 import { LoadedLayerDataSource } from "#src/layer/layer_data_source.js";
 import { createImageLayerAsMultiChannel } from "#src/layer/multi_channel_setup.js";
+import { getVoxelAnnotationIncompatibility } from "#src/layer/voxel_annotation/eligibility.js";
 import { MeshSource, MultiscaleMeshSource } from "#src/mesh/frontend.js";
 import { SkeletonSource } from "#src/skeleton/frontend.js";
 import { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
@@ -219,10 +220,8 @@ export class DataSourceSubsourceView extends RefCounted {
     sourceInfoLine.classList.add("neuroglancer-layer-data-sources-info-line");
     sourceInfoLine.appendChild(enabledCheckbox.element);
 
-    if (
-      loadedSubsource.subsourceEntry.subsource.volume instanceof
-      MultiscaleVolumeChunkSource
-    ) {
+    const { subsource } = loadedSubsource.subsourceEntry;
+    if (subsource.volume instanceof MultiscaleVolumeChunkSource) {
       const writableCheckbox = this.registerDisposer(
         new TrackableBooleanCheckbox(loadedSubsource.writingEnabled),
       );
@@ -232,16 +231,24 @@ export class DataSourceSubsourceView extends RefCounted {
       writableLabel.appendChild(writableCheckbox.element);
       writableLabel.appendChild(document.createTextNode("[Enable writing?]"));
 
+      const incompatibility =
+        subsource.writingIncompatibility ??
+        getVoxelAnnotationIncompatibility(subsource.volume);
+      if (incompatibility !== undefined) {
+        writableCheckbox.element.disabled = true;
+        writableLabel.title = incompatibility;
+        writableLabel.classList.add(
+          "neuroglancer-layer-data-source-writable-label-disabled",
+        );
+      }
+
       this.registerDisposer(
         new ElementVisibilityFromTrackableBoolean(
           makeCachedDerivedWatchableValue(
             (enabled, supportsWriting) => enabled && supportsWriting,
             [
               enabledState,
-              new WatchableValue(
-                loadedSubsource.subsourceEntry.subsource.supportsWriting ??
-                  false,
-              ),
+              new WatchableValue(subsource.supportsWriting ?? false),
             ],
           ),
           writableLabel,
@@ -266,7 +273,6 @@ export class DataSourceSubsourceView extends RefCounted {
     sourceInfoLine.appendChild(sourceType);
     element.appendChild(messagesView.element);
     let sourceTypeStr = "";
-    const { subsource } = loadedSubsource.subsourceEntry;
     const { volume } = subsource;
     if (volume instanceof MultiscaleVolumeChunkSource) {
       sourceTypeStr = `${DataType[volume.dataType].toLowerCase()} volume`;

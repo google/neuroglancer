@@ -25,6 +25,7 @@ import {
   getEditingContext,
 } from "#src/layer/voxel_annotation/controls.js";
 import { VoxToolTab } from "#src/layer/voxel_annotation/draw_tab.js";
+import { getVoxelAnnotationIncompatibility } from "#src/layer/voxel_annotation/eligibility.js";
 import type {
   ChunkTransformParameters,
   RenderLayerTransformOrError,
@@ -125,16 +126,10 @@ export class VoxelEditingContext
 
     if (!writingEnabled) return;
 
-    // The following checks are in place due to limitations in the implementation, and could be removed if support for the checked constraint is added.
-    if (primarySource.rank !== 3) {
-      throw new Error(
-        `Voxel annotation only supports rank 3 volumes (got ${primarySource.rank}).`,
-      );
+    const incompatibility = getVoxelAnnotationIncompatibility(primarySource);
+    if (incompatibility !== undefined) {
+      throw new Error(incompatibility);
     }
-    if (primarySource.dataType === DataType.FLOAT32) {
-      throw new Error(`Voxel annotation does not support Float32 datasets.`);
-    }
-    this.validateHierarchy(primarySource);
 
     this.previewSource = new VoxelPreviewMultiscaleSource(
       this.hostLayer.manager.chunkManager,
@@ -357,52 +352,6 @@ export class VoxelEditingContext
    * Verifies that the size of a parent chunk is an integer multiple
    * of the size of a child chunk.
    */
-  private validateHierarchy(primarySource: MultiscaleVolumeChunkSource) {
-    const rank = primarySource.rank;
-
-    const identityOptions = this.hostLayer.getIdentitySliceViewSourceOptions();
-    const scales = primarySource.getSources(identityOptions)[0];
-
-    if (!scales || scales.length < 2) return;
-
-    const getPhysicalChunkExtent = (lodIndex: number) => {
-      const source = scales[lodIndex];
-      const transform = source.chunkToMultiscaleTransform;
-      const chunkVoxels = source.chunkSource.spec.chunkDataSize;
-
-      const extent = new Float32Array(rank);
-
-      for (let i = 0; i < rank; i++) {
-        let sumSq = 0;
-        for (let row = 0; row < rank; row++) {
-          const val = transform[i * (rank + 1) + row];
-          sumSq += val * val;
-        }
-        const scaleFactor = Math.sqrt(sumSq);
-        extent[i] = chunkVoxels[i] * scaleFactor;
-      }
-      return extent;
-    };
-
-    for (let i = 0; i < scales.length - 1; i++) {
-      const childExtents = getPhysicalChunkExtent(i);
-      const parentExtents = getPhysicalChunkExtent(i + 1);
-
-      for (let d = 0; d < rank; d++) {
-        const ratio = parentExtents[d] / childExtents[d];
-        const isInteger = Math.abs(ratio - Math.round(ratio)) < 0.001;
-
-        if (!isInteger) {
-          throw new Error(
-            `Hierarchy mismatch between LOD ${i} and ${i + 1}. ` +
-              `Parent chunk must contain a whole number of child chunks. ` +
-              `Ratio dim ${d}: ${ratio.toFixed(3)}`,
-          );
-        }
-      }
-    }
-  }
-
   getChunkTransform(): ChunkTransformParameters | undefined {
     const renderLayer = this.primaryRenderLayer;
     const renderLayerTransform = renderLayer.transform.value;

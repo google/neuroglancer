@@ -134,6 +134,9 @@ export interface DataSubsource {
   segmentationGraph?: SegmentationGraphSource;
   // Specifies whether the datasource & kvstore implementations support writing.
   supportsWriting?: boolean;
+  // Reason writing is unsupported for this particular array even though the
+  // kvstore allows it.
+  writingIncompatibility?: string;
 }
 
 export interface CompleteUrlOptionsBase extends Partial<ProgressOptions> {

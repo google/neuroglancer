@@ -23,6 +23,10 @@
   margin-right: 5px;
 }
 
+.neuroglancer-layer-data-source-writable-label-disabled {
+  opacity: 0.5;
+}
+
 .neuroglancer-layer-data-sources-container {
   overflow-y: auto;
   display: flex;

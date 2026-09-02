@@ -551,10 +551,13 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
         );
         const supportsWriting =
           sharedKvStoreContext.kvStoreContext.getKvStore(kvStoreUrl).store
-            .write !== undefined &&
-          multiscaleInfo.scales.every((scale) =>
-            codecChainSupportsWriting(scale.metadata.codecs),
-          );
+            .write !== undefined;
+        const writingIncompatibility = multiscaleInfo.scales.every((scale) =>
+          codecChainSupportsWriting(scale.metadata.codecs),
+        )
+          ? undefined
+          : "Writing is not supported for arrays whose codec chain includes " +
+            "sharding_indexed or an array-to-array codec such as transpose.";
         return {
           canonicalUrl: `${kvStoreUrl}|zarr${metadata.zarrVersion}:`,
           modelTransform: makeIdentityTransform(volume.modelSpace),
@@ -564,7 +567,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
               id: "default",
               default: true,
               url: undefined,
-              subsource: { volume, supportsWriting },
+              subsource: { volume, supportsWriting, writingIncompatibility },
             },
             {
               id: "bounds",
