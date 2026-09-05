@@ -34,6 +34,7 @@ import {
   registerAnnotationPropertyTools,
   removeInvalidPropertyToolBindings,
 } from "#src/layer/annotation/property_tools.js";
+import { upgradeLegacyAnnotationShader } from "#src/layer/annotation/shader.js";
 import { buildShaderPropertyList } from "#src/layer/annotation/shader_ui_property_list.js";
 import {
   SELECT_NEXT_ANNOTATION_TOOL_ID,
@@ -52,6 +53,7 @@ import { Overlay } from "#src/overlay.js";
 import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
 import { RenderLayerRole } from "#src/renderlayer.js";
 import type { SegmentationDisplayState } from "#src/segmentation_display_state/frontend.js";
+import { CURRENT_STATE_VERSION } from "#src/state_migration.js";
 import {
   ElementVisibilityFromTrackableBoolean,
   TrackableBoolean,
@@ -445,6 +447,7 @@ export class AnnotationUserLayer extends Base {
   private localAnnotationRelationships: string[];
   private localAnnotationsJson: any = undefined;
   private pointAnnotationsJson: any = undefined;
+  private completeStateMigration: (() => void) | undefined;
   static supportColorPickerInAnnotationTab = false;
 
   linkedSegmentationLayers = this.registerDisposer(
@@ -500,6 +503,15 @@ export class AnnotationUserLayer extends Base {
   }
 
   restoreState(specification: any) {
+    if (typeof specification[SHADER_JSON_KEY] === "string") {
+      this.completeStateMigration =
+        this.manager.root.stateMigrations.registerMigration(
+          CURRENT_STATE_VERSION,
+        );
+      if (this.completeStateMigration !== undefined) {
+        this.registerDisposer(this.completeStateMigration);
+      }
+    }
     const properties = verifyOptionalObjectProperty(
       specification,
       ANNOTATION_PROPERTIES_JSON_KEY,
@@ -716,6 +728,15 @@ export class AnnotationUserLayer extends Base {
       this.annotationDisplayState.annotationProperties.value = [
         ...properties.value,
       ];
+    }
+    if (properties !== undefined && this.completeStateMigration !== undefined) {
+      const { shader } = this.annotationDisplayState;
+      shader.value = upgradeLegacyAnnotationShader(
+        shader.value,
+        properties.value,
+      );
+      this.completeStateMigration();
+      this.completeStateMigration = undefined;
     }
   }
 
