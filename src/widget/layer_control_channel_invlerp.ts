@@ -78,8 +78,9 @@ export function channelInvlerpLayerControl<LayerType extends UserLayer>(
           const value = position.value;
           const params = watchableValue.value;
           if (!arraysEqual(value, params.channel)) {
-            value.set(params.channel);
-            position.changed.dispatch();
+            // Assign through the setter so that the coordinates count as
+            // explicitly specified.
+            position.value = Float32Array.from(params.channel);
           }
         };
         updatePosition();
