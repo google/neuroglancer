@@ -21,11 +21,14 @@ import { RefCounted } from "#src/util/disposable.js";
 import type { MakeIconOptions } from "#src/widget/icon.js";
 import { makeIcon } from "#src/widget/icon.js";
 
+// disableSvg is a new option that allows to replace the svg with a custom svg when the checkbox is disabled
+// this replaces the default behavior of changing the color of the svg
 export interface MakeCheckboxIconOptions
   extends Omit<MakeIconOptions, "onClick" | "title"> {
   enableTitle?: string;
   disableTitle?: string;
   backgroundScheme?: "light" | "dark";
+  disableSvg?: string;
 }
 
 export class CheckboxIcon extends RefCounted {
@@ -49,9 +52,13 @@ export class CheckboxIcon extends RefCounted {
     );
     const updateView = () => {
       const value = model.value;
-      this.element.dataset.checked = value ? "true" : "false";
       this.element.title =
         (value ? options.disableTitle : options.enableTitle) || "";
+      if (options.disableSvg && options.svg) {
+        this.element.innerHTML = value ? options.disableSvg : options.svg;
+      } else {
+        this.element.dataset.checked = value ? "true" : "false";
+      }
     };
     this.registerDisposer(model.changed.add(updateView));
     updateView();
