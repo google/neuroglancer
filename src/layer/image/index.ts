@@ -34,7 +34,7 @@ import {
   UserLayer,
 } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
-import { registerVoxelLayerControls } from "#src/layer/voxel_annotation/controls.js";
+import { registerVoxelEditingLayerControls } from "#src/layer/voxel_annotation/controls.js";
 import { UserLayerWithVoxelEditingMixin } from "#src/layer/voxel_annotation/index.js";
 import { Overlay } from "#src/overlay.js";
 import type { RenderLayerTransformOrError } from "#src/render_coordinate_transform.js";
@@ -64,7 +64,7 @@ import {
   WatchableValue,
 } from "#src/trackable_value.js";
 import { UserLayerWithAnnotationsMixin } from "#src/ui/annotations.js";
-import { registerVoxelTools } from "#src/ui/voxel_annotations.js";
+import { registerVoxelEditingTools } from "#src/ui/voxel_annotations.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { makeValueOrError } from "#src/util/error.js";
@@ -79,7 +79,7 @@ import {
   VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE,
   VolumeRenderingRenderLayer,
 } from "#src/volume_rendering/volume_render_layer.js";
-import { VOXEL_EMPTY_VALUE } from "#src/voxel_annotation/base.js";
+import { EMPTY_VOXEL_VALUE } from "#src/voxel_annotation/base.js";
 import type { ParameterizedShaderGetterResult } from "#src/webgl/dynamic_shader.js";
 import { makeWatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import type { ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
@@ -210,9 +210,9 @@ ${originalShader}
 #undef main
 
 void main() {
-  // VOXEL_EMPTY_VALUE is transparent in the preview so the underlying data
+  // EMPTY_VOXEL_VALUE is transparent in the preview so the underlying data
   // shows through. This means it cannot be used as a paint value on image layers.
-  if (toRaw(getDataValue()) == ${VOXEL_EMPTY_VALUE}n) {
+  if (toRaw(getDataValue()) == ${EMPTY_VOXEL_VALUE}n) {
     emitTransparent();
     return;
   }
@@ -654,8 +654,8 @@ class ShaderCodeOverlay extends Overlay {
 }
 
 registerLayerType(ImageUserLayer);
-registerVoxelTools(ImageUserLayer);
-registerVoxelLayerControls(ImageUserLayer);
+registerVoxelEditingTools(ImageUserLayer);
+registerVoxelEditingLayerControls(ImageUserLayer);
 registerVolumeLayerType(VolumeType.IMAGE, ImageUserLayer);
 // Use ImageUserLayer as a fallback layer type if there is a `volume` subsource.
 registerLayerTypeDetector((subsource) => {

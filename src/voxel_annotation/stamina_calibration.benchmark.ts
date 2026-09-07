@@ -19,12 +19,12 @@ import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { DataType, DATA_TYPE_ARRAY_CONSTRUCTOR } from "#src/util/data_type.js";
 import { vec3 } from "#src/util/geom.js";
-import { VoxelEditController } from "#src/voxel_annotation/backend.js";
+import { VoxelEditingController } from "#src/voxel_annotation/backend.js";
 import {
   BrushShape,
-  VOXEL_EMPTY_VALUE,
+  EMPTY_VOXEL_VALUE,
   VoxelOperationType,
-  makeVoxChunkKey,
+  makeLodChunkKey,
 } from "#src/voxel_annotation/base.js";
 
 const NETWORK_LATENCY = 0;
@@ -78,7 +78,7 @@ const spec = {
   lowerVoxelBound: new Float32Array([0, 0, 0]),
   upperVoxelBound: new Float32Array([10000, 10000, 10000]),
   baseVoxelOffset: new Float32Array([0, 0, 0]),
-  fillValue: VOXEL_EMPTY_VALUE,
+  fillValue: EMPTY_VOXEL_VALUE,
 };
 
 const mockChunkQueueManager = { sources: new Set() };
@@ -107,7 +107,7 @@ const mockSource0 = new RealisticInMemorySource(rpcHandler, {
 });
 rpcObjects.set(100, mockSource0);
 
-const controller = new VoxelEditController(rpcHandler, {
+const controller = new VoxelEditingController(rpcHandler, {
   resolutions: [createResConfig(0, CHUNK_SIZE)],
   pendingOpCount: 999,
 });
@@ -159,7 +159,7 @@ describe("Commit", () => {
 
 describe("Downsample", () => {
   bench(`inputVoxels=${CHUNK_SIZE ** 3}`, async () => {
-    const originKey = makeVoxChunkKey("0,0,0", 0);
+    const originKey = makeLodChunkKey("0,0,0", 0);
     await (controller as any).downsampleStep(originKey, originKey, 0);
   });
 });
@@ -238,7 +238,7 @@ describe("FloodFill", () => {
       const chunk = mockSource0.getChunk(
         new Float32Array([0, 0, 0]),
       ) as VolumeChunk;
-      (chunk.data as BigUint64Array).fill(VOXEL_EMPTY_VALUE);
+      (chunk.data as BigUint64Array).fill(EMPTY_VOXEL_VALUE);
 
       try {
         await (controller as any).performFloodFill({

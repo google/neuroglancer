@@ -26,16 +26,16 @@ import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import type { vec3 } from "#src/util/geom.js";
 import type {
-  VoxelEditControllerHost,
-  VoxelLayerResolution,
+  VoxelEditingControllerHost,
+  LodResolution,
   VoxelOperation,
-  VoxelValueGetter,
+  PaintValueGetter,
 } from "#src/voxel_annotation/base.js";
 import {
   BrushShape,
   getDiskStencilKernel,
   getSphereRowRangesKernel,
-  parseVoxChunkKey,
+  parseLodChunkKey,
   VOX_EDIT_BACKEND_RPC_ID,
   VOX_EDIT_FAILURE_RPC_ID,
   VOX_EDIT_HISTORY_UPDATE_RPC_ID,
@@ -52,7 +52,7 @@ import {
 } from "#src/worker_rpc.js";
 
 @registerSharedObjectOwner(VOX_EDIT_BACKEND_RPC_ID)
-export class VoxelEditController extends SharedObject {
+export class VoxelEditingController extends SharedObject {
   public undoCount = new WatchableValue<number>(0);
   public redoCount = new WatchableValue<number>(0);
   public pendingOpCount: SharedWatchableValue<number>;
@@ -61,7 +61,7 @@ export class VoxelEditController extends SharedObject {
   // backend.
   private dispatchSeq = 0;
 
-  // Preview swaps awaiting their refetched real chunk, keyed by real vox
+  // Preview swaps awaiting their refetched real chunk, keyed by real voxel
   // chunk key and resolved by observing visibleChunksChanged: the real
   // chunk's object identity distinguishes the lazily kept stale chunk
   // (recorded at arming) from the refetched one, since a `new` chunk update
@@ -82,13 +82,13 @@ export class VoxelEditController extends SharedObject {
 
   private processPendingPreviewSwaps(): void {
     if (this.pendingPreviewSwaps.size === 0) return;
-    for (const [voxKey, swap] of this.pendingPreviewSwaps) {
+    for (const [lodChunkKey, swap] of this.pendingPreviewSwaps) {
       const chunk = swap.source.chunks.get(swap.chunkKey);
       // Still the stale chunk (or gone): the refetch has not landed yet.
       if (chunk === undefined || chunk === swap.staleChunk) continue;
       // Refetched but not yet displayed: keep waiting.
       if (chunk.state !== ChunkState.GPU_MEMORY) continue;
-      this.pendingPreviewSwaps.delete(voxKey);
+      this.pendingPreviewSwaps.delete(lodChunkKey);
       // The preview tag is read now, at swap time: a stroke that touched the
       // chunk since arming raised it above coveredSeq, keeping the preview on
       // screen; the covering write's own reload re-arms the swap.
@@ -126,16 +126,16 @@ export class VoxelEditController extends SharedObject {
   // cover: nothing will be written there, so no reload would ever clear them
   // and the real data beneath is already correct. Chunks re-tagged by a newer
   // stroke no longer match `seq` and are left untouched.
-  reconcileStroke(seq: number, coveredVoxKeys: string[]): void {
+  reconcileStroke(seq: number, coveredLodChunkKeys: string[]): void {
     const previewChunkSource = this.getPreviewChunkSource();
     if (previewChunkSource === undefined) return;
     const tagged = previewChunkSource.keysWithPreviewSeq(seq);
     if (tagged.length === 0) return;
     let stale = tagged;
-    if (coveredVoxKeys.length > 0) {
+    if (coveredLodChunkKeys.length > 0) {
       const covered = new Set<string>();
-      for (const voxKey of coveredVoxKeys) {
-        const parsed = parseVoxChunkKey(voxKey);
+      for (const lodChunkKey of coveredLodChunkKeys) {
+        const parsed = parseLodChunkKey(lodChunkKey);
         if (parsed !== null && parsed.lodIndex === 0) {
           covered.add(parsed.chunkKey);
         }
@@ -145,12 +145,12 @@ export class VoxelEditController extends SharedObject {
     if (stale.length > 0) previewChunkSource.invalidateChunks(stale);
   }
 
-  constructor(private host: VoxelEditControllerHost) {
+  constructor(private host: VoxelEditingControllerHost) {
     super();
     const rpc = this.host.rpc;
     if (!rpc) {
       throw new Error(
-        "VoxelEditController: Missing RPC from multiscale chunk manager.",
+        "VoxelEditingController: Missing RPC from multiscale chunk manager.",
       );
     }
 
@@ -160,18 +160,18 @@ export class VoxelEditController extends SharedObject {
     const sources = sourcesByScale[0];
     if (!sources) {
       throw new Error(
-        "VoxelEditController: Could not retrieve sources from multiscale object.",
+        "VoxelEditingController: Could not retrieve sources from multiscale object.",
       );
     }
 
-    const resolutions: VoxelLayerResolution[] = [];
+    const resolutions: LodResolution[] = [];
 
     for (let i = 0; i < sources.length; ++i) {
       const source = sources[i]!.chunkSource;
       const rpcId = source.rpcId;
       if (rpcId == null) {
         throw new Error(
-          `VoxelEditController: Source at LOD index ${i} has null rpcId during initialization.`,
+          `VoxelEditingController: Source at LOD index ${i} has null rpcId during initialization.`,
         );
       }
       resolutions.push({
@@ -206,14 +206,14 @@ export class VoxelEditController extends SharedObject {
     operation: VoxelOperation,
   ): Promise<string[]> {
     if (!this.rpc) throw new Error("RPC unavailable");
-    const coveredVoxKeys = await this.rpc.promiseInvoke<string[]>(
+    const coveredLodChunkKeys = await this.rpc.promiseInvoke<string[]>(
       VOX_EDIT_OPERATION_RPC_ID,
       {
         rpcId: this.rpcId,
         operation,
       },
     );
-    return Array.isArray(coveredVoxKeys) ? coveredVoxKeys : [];
+    return Array.isArray(coveredLodChunkKeys) ? coveredLodChunkKeys : [];
   }
 
   readonly singleChannelAccess: ChunkChannelAccessParameters = {
@@ -226,7 +226,7 @@ export class VoxelEditController extends SharedObject {
   private getIdentitySliceViewSourceOptions() {
     const rank = this.host.primarySource.rank as number | undefined;
     if (!Number.isInteger(rank) || (rank as number) <= 0) {
-      throw new Error("VoxelEditController: Invalid multiscale rank.");
+      throw new Error("VoxelEditingController: Invalid multiscale rank.");
     }
     const r = rank as number;
     const displayRank = r;
@@ -247,7 +247,7 @@ export class VoxelEditController extends SharedObject {
   async applyBrushPreview(
     points: Float32Array[],
     radiusCanonical: number,
-    valueGetter: VoxelValueGetter,
+    valueGetter: PaintValueGetter,
     shape: BrushShape,
     basis: { u: Float32Array; v: Float32Array },
     seq: number,
@@ -454,7 +454,7 @@ export class VoxelEditController extends SharedObject {
   async dispatchBrushStroke(
     centers: Float32Array[],
     radiusCanonical: number,
-    valueGetter: VoxelValueGetter,
+    valueGetter: PaintValueGetter,
     shape: BrushShape,
     basis: { u: Float32Array; v: Float32Array },
     seq: number,
@@ -467,7 +467,7 @@ export class VoxelEditController extends SharedObject {
       return;
     }
     const storageValue = valueGetter(false);
-    const coveredVoxKeys = await this.dispatchOperation({
+    const coveredLodChunkKeys = await this.dispatchOperation({
       type: VoxelOperationType.BRUSH,
       seq,
       centers,
@@ -477,12 +477,12 @@ export class VoxelEditController extends SharedObject {
       basis,
       filterValue,
     });
-    this.reconcileStroke(seq, coveredVoxKeys);
+    this.reconcileStroke(seq, coveredLodChunkKeys);
   }
 
   async floodFillPlane2D(
     startPositionCanonical: Float32Array,
-    fillValueGetter: VoxelValueGetter,
+    fillValueGetter: PaintValueGetter,
     maxVoxels: number,
     basis: { u: Float32Array; v: Float32Array },
     filterValue?: bigint,
@@ -629,7 +629,7 @@ export class VoxelEditController extends SharedObject {
 
     const storageValue = fillValueGetter(false);
     try {
-      const coveredVoxKeys = await this.dispatchOperation({
+      const coveredLodChunkKeys = await this.dispatchOperation({
         type: VoxelOperationType.FLOOD_FILL,
         seq,
         seed: startPositionCanonical,
@@ -639,7 +639,7 @@ export class VoxelEditController extends SharedObject {
         filterValue,
         morphological,
       });
-      this.reconcileStroke(seq, coveredVoxKeys);
+      this.reconcileStroke(seq, coveredLodChunkKeys);
     } catch (e) {
       this.rollbackStroke(seq);
       throw e;
@@ -647,19 +647,19 @@ export class VoxelEditController extends SharedObject {
   }
 
   callChunkReload(
-    voxChunkKeys: string[],
+    lodChunkKeys: string[],
     isForPreviewChunks: boolean,
     previewKeysToClear?: Record<string, string>,
     coveredSeqs?: Record<string, number>,
     isRollback = false,
   ) {
-    if (!Array.isArray(voxChunkKeys) || voxChunkKeys.length === 0) return;
+    if (!Array.isArray(lodChunkKeys) || lodChunkKeys.length === 0) return;
     const multiscaleSource = isForPreviewChunks
       ? this.host.previewSource
       : this.host.primarySource;
     if (!multiscaleSource) {
       throw new Error(
-        "VoxelEditController.callChunkReload: ERROR Missing source",
+        "VoxelEditingController.callChunkReload: ERROR Missing source",
       );
     }
     const sources = multiscaleSource.getSources(
@@ -667,7 +667,7 @@ export class VoxelEditController extends SharedObject {
     )[0];
     if (!sources) {
       throw new Error(
-        "VoxelEditController.callChunkReload: Missing base source",
+        "VoxelEditingController.callChunkReload: Missing base source",
       );
     }
 
@@ -696,8 +696,8 @@ export class VoxelEditController extends SharedObject {
       // refetch follows within one round trip, so the effect is a rare,
       // self-healing flicker — the trade-off for keeping the chunk manager
       // free of voxel-specific hooks.
-      for (const voxKey of voxChunkKeys) {
-        const parsed = parseVoxChunkKey(voxKey);
+      for (const lodChunkKey of lodChunkKeys) {
+        const parsed = parseLodChunkKey(lodChunkKey);
         if (!parsed) continue;
         const source = sources[parsed.lodIndex]?.chunkSource as
           | VolumeChunkSource
@@ -705,8 +705,8 @@ export class VoxelEditController extends SharedObject {
         if (!source) continue;
         const { chunkKey } = parsed;
 
-        const previewParsed = parseVoxChunkKey(
-          previewKeysToClear?.[voxKey] ?? voxKey,
+        const previewParsed = parseLodChunkKey(
+          previewKeysToClear?.[lodChunkKey] ?? lodChunkKey,
         );
         const previewChunkSource = previewParsed
           ? (previewSources?.[previewParsed.lodIndex]?.chunkSource as
@@ -730,13 +730,13 @@ export class VoxelEditController extends SharedObject {
             // (Ctrl+Z mid-drag, accepted).
             previewChunkSource.clearPreviewSeq(previewParsed!.chunkKey);
           }
-          this.pendingPreviewSwaps.set(voxKey, {
+          this.pendingPreviewSwaps.set(lodChunkKey, {
             source,
             chunkKey,
             staleChunk: source.chunks.get(chunkKey),
             previewChunkSource,
             previewChunkKey: previewParsed!.chunkKey,
-            coveredSeq: coveredSeqs?.[voxKey] ?? 0,
+            coveredSeq: coveredSeqs?.[lodChunkKey] ?? 0,
           });
         }
         let arr = chunksToInvalidateBySource.get(source);
@@ -757,8 +757,8 @@ export class VoxelEditController extends SharedObject {
 
     // Preview chunks: clear the preview immediately (write-failure
     // rollback, and downsampled-preview cleanup).
-    for (const voxKey of voxChunkKeys) {
-      const parsed = parseVoxChunkKey(voxKey);
+    for (const lodChunkKey of lodChunkKeys) {
+      const parsed = parseLodChunkKey(lodChunkKey);
       if (!parsed) continue;
       const source = sources[parsed.lodIndex]?.chunkSource as
         | VolumeChunkSource
@@ -780,9 +780,9 @@ export class VoxelEditController extends SharedObject {
     }
   }
 
-  handleCommitFailure(voxChunkKeys: string[], message: string): void {
+  handleCommitFailure(lodChunkKeys: string[], message: string): void {
     try {
-      this.callChunkReload(voxChunkKeys, true);
+      this.callChunkReload(lodChunkKeys, true);
     } finally {
       StatusMessage.showTemporaryMessage(message);
     }
@@ -790,7 +790,7 @@ export class VoxelEditController extends SharedObject {
 
   public async undo() {
     if (!this.rpc)
-      throw new Error("VoxelEditController.undo: RPC not initialized.");
+      throw new Error("VoxelEditingController.undo: RPC not initialized.");
     await this.rpc
       .promiseInvoke<void>(VOX_EDIT_UNDO_RPC_ID, { rpcId: this.rpcId })
       .catch((error: unknown) => {
@@ -801,7 +801,7 @@ export class VoxelEditController extends SharedObject {
 
   public async redo() {
     if (!this.rpc)
-      throw new Error("VoxelEditController.redo: RPC not initialized.");
+      throw new Error("VoxelEditingController.redo: RPC not initialized.");
     await this.rpc
       .promiseInvoke<void>(VOX_EDIT_REDO_RPC_ID, { rpcId: this.rpcId })
       .catch((error: unknown) => {
@@ -818,8 +818,8 @@ function asRecordOrUndefined<T>(x: unknown): Record<string, T> | undefined {
 }
 
 registerRPC(VOX_RELOAD_CHUNKS_RPC_ID, function (x: any) {
-  const obj = this.get(x.rpcId) as VoxelEditController;
-  const keys: string[] = Array.isArray(x.voxChunkKeys) ? x.voxChunkKeys : [];
+  const obj = this.get(x.rpcId) as VoxelEditingController;
+  const keys: string[] = Array.isArray(x.lodChunkKeys) ? x.lodChunkKeys : [];
   obj.callChunkReload(
     keys,
     x.isForPreviewChunks,
@@ -830,15 +830,15 @@ registerRPC(VOX_RELOAD_CHUNKS_RPC_ID, function (x: any) {
 });
 
 registerRPC(VOX_EDIT_FAILURE_RPC_ID, function (x: any) {
-  const obj = this.get(x.rpcId) as VoxelEditController;
-  const keys: string[] = Array.isArray(x.voxChunkKeys) ? x.voxChunkKeys : [];
+  const obj = this.get(x.rpcId) as VoxelEditingController;
+  const keys: string[] = Array.isArray(x.lodChunkKeys) ? x.lodChunkKeys : [];
   const message: string =
     typeof x.message === "string" ? x.message : "Voxel edit failed.";
   obj.handleCommitFailure(keys, message);
 });
 
 registerRPC(VOX_EDIT_HISTORY_UPDATE_RPC_ID, function (x: any) {
-  const obj = this.get(x.rpcId) as VoxelEditController;
+  const obj = this.get(x.rpcId) as VoxelEditingController;
   const undoCount = typeof x.undoCount === "number" ? x.undoCount : 0;
   const redoCount = typeof x.redoCount === "number" ? x.redoCount : 0;
   obj.undoCount.value = undoCount;

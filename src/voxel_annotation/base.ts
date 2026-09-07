@@ -16,7 +16,7 @@
 
 import type { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import { vec3 } from "#src/util/geom.js";
-import type { VoxelPreviewMultiscaleSource } from "#src/voxel_annotation/preview_multiscale_chunk_source.js";
+import type { PreviewMultiscaleSource } from "#src/voxel_annotation/preview_multiscale_chunk_source.js";
 import type { RPC } from "#src/worker_rpc.js";
 
 export const VOX_RELOAD_CHUNKS_RPC_ID = "vox.chunk.reload";
@@ -75,12 +75,12 @@ export const BRUSH_SIZE_TOOL_ID = "vox-brush-size";
 export const FLOODFILL_TOOL_ID = "vox-flood-fill";
 export const VALUE_PICKER_TOOL_ID = "vox-value-picker";
 
-export const VOXEL_EMPTY_VALUE = 0n;
+export const EMPTY_VOXEL_VALUE = 0n;
 
 // Special value used to indicate to the preview render layer that a voxel has been erased
-export const SEG_ERASE_SENTINEL = ~1n;
+export const SEGMENTATION_ERASE_SENTINEL = ~1n;
 
-export const VOXEL_EDIT_STAMINA = {
+export const VOXEL_EDITING_STAMINA = {
   pendingEdits: (voxelCount: number) => Math.round(voxelCount * 0.0004),
   downsamplingJobs: (count: number, downsamplingSteps: number) =>
     Math.round(count * 10 * downsamplingSteps),
@@ -95,11 +95,11 @@ export const VOXEL_EDIT_STAMINA = {
   floodFill: (maxVoxels: number) => Math.round(maxVoxels * 0.005),
   undoRedo: () => 20,
 };
-export const MAX_VOXEL_EDIT_STAMINA = 10000;
+export const MAX_VOXEL_EDITING_STAMINA = 10000;
 
-export type VoxelValueGetter = (isPreview: boolean) => bigint;
+export type PaintValueGetter = (isPreview: boolean) => bigint;
 
-export interface VoxelLayerResolution {
+export interface LodResolution {
   lodIndex: number;
   transform: number[];
   chunkSize: number[];
@@ -120,7 +120,7 @@ export interface EditAction {
   description: string;
 }
 
-export function makeVoxChunkKey(chunkKey: string, lodIndex: number) {
+export function makeLodChunkKey(chunkKey: string, lodIndex: number) {
   return `lod${lodIndex}#${chunkKey}`;
 }
 
@@ -128,7 +128,7 @@ export function makeChunkKey(x: number, y: number, z: number) {
   return `${x},${y},${z}`;
 }
 
-export function parseVoxChunkKey(key: string) {
+export function parseLodChunkKey(key: string) {
   const parts = [
     Number(key.split("#")[0].substring(3)),
     ...key.split("#")[1].split(",").map(Number),
@@ -210,8 +210,8 @@ export function getDiskStencilKernel(radius: number): Int16Array {
   return kernel;
 }
 
-export interface VoxelEditControllerHost {
+export interface VoxelEditingControllerHost {
   primarySource: MultiscaleVolumeChunkSource;
-  previewSource?: VoxelPreviewMultiscaleSource;
+  previewSource?: PreviewMultiscaleSource;
   rpc: RPC;
 }

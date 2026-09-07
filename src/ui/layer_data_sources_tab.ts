@@ -34,7 +34,7 @@ import type {
 } from "#src/layer/layer_data_source.js";
 import { LoadedLayerDataSource } from "#src/layer/layer_data_source.js";
 import { createImageLayerAsMultiChannel } from "#src/layer/multi_channel_setup.js";
-import { getVoxelAnnotationIncompatibility } from "#src/layer/voxel_annotation/eligibility.js";
+import { getVoxelEditingIncompatibility } from "#src/layer/voxel_annotation/eligibility.js";
 import { MeshSource, MultiscaleMeshSource } from "#src/mesh/frontend.js";
 import { SkeletonSource } from "#src/skeleton/frontend.js";
 import { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
@@ -233,7 +233,7 @@ export class DataSourceSubsourceView extends RefCounted {
 
       const incompatibility =
         subsource.writingIncompatibility ??
-        getVoxelAnnotationIncompatibility(subsource.volume);
+        getVoxelEditingIncompatibility(subsource.volume);
       if (incompatibility !== undefined) {
         writableCheckbox.element.disabled = true;
         writableLabel.title = incompatibility;

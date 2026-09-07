@@ -400,31 +400,31 @@ describe("Voxel Editing Utilities", () => {
     });
   });
 
-  describe("setVoxelPaintValue", () => {
+  describe("setPaintValue", () => {
     it("UINT8: Clamps and wraps", () => {
       const { userLayer } = createLayer(DataType.UINT8);
-      expect(userLayer.setVoxelPaintValue(255)).toBe(255n);
-      expect(userLayer.setVoxelPaintValue(256)).toBe(0n);
-      expect(userLayer.setVoxelPaintValue(-1)).toBe(255n);
+      expect(userLayer.setPaintValue(255)).toBe(255n);
+      expect(userLayer.setPaintValue(256)).toBe(0n);
+      expect(userLayer.setPaintValue(-1)).toBe(255n);
     });
 
     it("INT8: Signed wrapping", () => {
       const { userLayer } = createLayer(DataType.INT8);
-      expect(userLayer.setVoxelPaintValue(127)).toBe(127n);
-      expect(userLayer.setVoxelPaintValue(128)).toBe(-128n);
-      expect(userLayer.setVoxelPaintValue(-129)).toBe(127n);
+      expect(userLayer.setPaintValue(127)).toBe(127n);
+      expect(userLayer.setPaintValue(128)).toBe(-128n);
+      expect(userLayer.setPaintValue(-129)).toBe(127n);
     });
 
     it("UINT64: Handles BigInts", () => {
       const { userLayer } = createLayer(DataType.UINT64);
       const bigVal = BigInt(Number.MAX_SAFE_INTEGER) + 10n;
-      expect(userLayer.setVoxelPaintValue(bigVal)).toBe(bigVal);
+      expect(userLayer.setPaintValue(bigVal)).toBe(bigVal);
     });
 
     it("No Context: Fails", () => {
       const { userLayer } = createLayer(DataType.UINT64);
       userLayer.editingContexts.clear();
-      expect(() => userLayer.setVoxelPaintValue(1)).toThrow(
+      expect(() => userLayer.setPaintValue(1)).toThrow(
         "No voxel editing context available",
       );
     });

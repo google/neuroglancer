@@ -28,7 +28,7 @@ import {
   type VolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
 
-export class VoxelPreviewMultiscaleSource extends MultiscaleVolumeChunkSource {
+export class PreviewMultiscaleSource extends MultiscaleVolumeChunkSource {
   dataType: DataType;
   volumeType: VolumeType;
   rank: number;

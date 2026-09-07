@@ -4,10 +4,10 @@ import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { DATA_TYPE_ARRAY_CONSTRUCTOR, DataType } from "#src/util/data_type.js";
 import { mat4 } from "#src/util/geom.js";
 import { HttpError } from "#src/util/http_request.js";
-import { VoxelEditController } from "#src/voxel_annotation/backend.js";
+import { VoxelEditingController } from "#src/voxel_annotation/backend.js";
 import {
-  makeVoxChunkKey,
-  VOXEL_EMPTY_VALUE,
+  makeLodChunkKey,
+  EMPTY_VOXEL_VALUE,
   VOX_EDIT_FAILURE_RPC_ID,
   VOX_EDIT_HISTORY_UPDATE_RPC_ID,
   VoxelOperationType,
@@ -128,8 +128,8 @@ function flattenGrid(grid: Grid3D, Ctor: any = Uint32Array) {
   return { data, size: [w, h, d] as [number, number, number] };
 }
 
-describe("VoxelEditController: _calculateParentUpdate", () => {
-  let controller: VoxelEditController;
+describe("VoxelEditingController: _calculateParentUpdate", () => {
+  let controller: VoxelEditingController;
   let runDownsample: Function;
 
   beforeEach(() => {
@@ -167,7 +167,7 @@ describe("VoxelEditController: _calculateParentUpdate", () => {
 
     const childRes = resConfig(0, [1, 1, 1], childSize);
     const parentRes = resConfig(1, scale, parentChunkSize, translation);
-    controller = new VoxelEditController(mockRpc, {
+    controller = new VoxelEditingController(mockRpc, {
       resolutions: [childRes, parentRes],
     });
     runDownsample = (controller as any)._calculateParentUpdate.bind(controller);
@@ -454,8 +454,8 @@ describe("VoxelEditController: _calculateParentUpdate", () => {
   });
 });
 
-describe("VoxelEditController: _getParentChunkInfo", () => {
-  let controller: VoxelEditController;
+describe("VoxelEditingController: _getParentChunkInfo", () => {
+  let controller: VoxelEditingController;
 
   const setupController = (resConfigs: any[]) => {
     (mockRpc.get as any).mockImplementation((id: number) => {
@@ -464,7 +464,9 @@ describe("VoxelEditController: _getParentChunkInfo", () => {
       source.rpcId = id;
       return source;
     });
-    controller = new VoxelEditController(mockRpc, { resolutions: resConfigs });
+    controller = new VoxelEditingController(mockRpc, {
+      resolutions: resConfigs,
+    });
     return controller;
   };
 
@@ -475,14 +477,14 @@ describe("VoxelEditController: _getParentChunkInfo", () => {
     setupController([childRes, parentRes]);
     const getInfo = (controller as any)._getParentChunkInfo.bind(controller);
 
-    let res = getInfo(makeVoxChunkKey("0,0,0", 0), childRes);
+    let res = getInfo(makeLodChunkKey("0,0,0", 0), childRes);
     expect(res.chunkKey).toBe("0,0,0");
-    expect(res.parentKey).toBe(makeVoxChunkKey("0,0,0", 1));
+    expect(res.parentKey).toBe(makeLodChunkKey("0,0,0", 1));
 
-    res = getInfo(makeVoxChunkKey("1,0,0", 0), childRes);
+    res = getInfo(makeLodChunkKey("1,0,0", 0), childRes);
     expect(res.chunkKey).toBe("0,0,0");
 
-    res = getInfo(makeVoxChunkKey("2,0,0", 0), childRes);
+    res = getInfo(makeLodChunkKey("2,0,0", 0), childRes);
     expect(res.chunkKey).toBe("1,0,0");
   });
 
@@ -493,7 +495,7 @@ describe("VoxelEditController: _getParentChunkInfo", () => {
     setupController([childRes, parentRes]);
     const getInfo = (controller as any)._getParentChunkInfo.bind(controller);
 
-    const res = getInfo(makeVoxChunkKey("0,0,0", 0), childRes);
+    const res = getInfo(makeLodChunkKey("0,0,0", 0), childRes);
     expect(res.chunkKey).toBe("1,0,0");
   });
 
@@ -504,7 +506,7 @@ describe("VoxelEditController: _getParentChunkInfo", () => {
     setupController([childRes, parentRes]);
     const getInfo = (controller as any)._getParentChunkInfo.bind(controller);
 
-    const res = getInfo(makeVoxChunkKey("-1,-1,-1", 0), childRes);
+    const res = getInfo(makeLodChunkKey("-1,-1,-1", 0), childRes);
     expect(res.chunkKey).toBe("-1,-1,-1");
   });
 
@@ -513,7 +515,7 @@ describe("VoxelEditController: _getParentChunkInfo", () => {
     setupController([childRes]);
     const getInfo = (controller as any)._getParentChunkInfo.bind(controller);
 
-    const res = getInfo(makeVoxChunkKey("0,0,0", 0), childRes);
+    const res = getInfo(makeLodChunkKey("0,0,0", 0), childRes);
     expect(res).toBeNull();
   });
 
@@ -524,7 +526,7 @@ describe("VoxelEditController: _getParentChunkInfo", () => {
     setupController([childRes, parentRes]);
     const getInfo = (controller as any)._getParentChunkInfo.bind(controller);
 
-    const res = getInfo(makeVoxChunkKey("3,0,0", 0), childRes);
+    const res = getInfo(makeLodChunkKey("3,0,0", 0), childRes);
     expect(res.chunkKey).toBe("1,0,0");
   });
 
@@ -535,10 +537,10 @@ describe("VoxelEditController: _getParentChunkInfo", () => {
     setupController([childRes, parentRes]);
     const getInfo = (controller as any)._getParentChunkInfo.bind(controller);
 
-    let res = getInfo(makeVoxChunkKey("2,0,0", 0), childRes);
+    let res = getInfo(makeLodChunkKey("2,0,0", 0), childRes);
     expect(res.chunkKey).toBe("0,0,0");
 
-    res = getInfo(makeVoxChunkKey("3,0,0", 0), childRes);
+    res = getInfo(makeLodChunkKey("3,0,0", 0), childRes);
     expect(res.chunkKey).toBe("1,0,0");
   });
 
@@ -549,13 +551,13 @@ describe("VoxelEditController: _getParentChunkInfo", () => {
     setupController([childRes, parentRes]);
     const getInfo = (controller as any)._getParentChunkInfo.bind(controller);
 
-    const res = getInfo(makeVoxChunkKey("1,1,1", 0), childRes);
+    const res = getInfo(makeLodChunkKey("1,1,1", 0), childRes);
     expect(res.chunkKey).toBe("1,0,0");
   });
 });
 
-describe("VoxelEditController: Downsampling Integration", () => {
-  let controller: VoxelEditController;
+describe("VoxelEditingController: Downsampling Integration", () => {
+  let controller: VoxelEditingController;
   let childSource: any;
   let parentSource: any;
   let grandParentSource: any;
@@ -594,7 +596,7 @@ describe("VoxelEditController: Downsampling Integration", () => {
       resolutions.push(resConfig(2, [4, 4, 4], [2, 2, 2])); // Grandparent (4x scale)
     }
 
-    controller = new VoxelEditController(mockRpc, {
+    controller = new VoxelEditingController(mockRpc, {
       resolutions,
       pendingOpCount: 999,
     });
@@ -604,7 +606,7 @@ describe("VoxelEditController: Downsampling Integration", () => {
 
   it("Single Step Flow: Writes to parent and notifies frontend", async () => {
     setupIntegration(2);
-    const key = makeVoxChunkKey("0,0,0", 0);
+    const key = makeLodChunkKey("0,0,0", 0);
 
     (controller as any).enqueueDownsample(key);
 
@@ -624,16 +626,16 @@ describe("VoxelEditController: Downsampling Integration", () => {
     // edit was flushed for the origin). The old eager preview-clear call no
     // longer exists.
     expect((controller as any).callChunkReload).toHaveBeenCalledWith(
-      [makeVoxChunkKey("0,0,0", 1)],
+      [makeLodChunkKey("0,0,0", 1)],
       false, // isForPreviewChunks
-      { [makeVoxChunkKey("0,0,0", 1)]: makeVoxChunkKey("0,0,0", 0) },
-      { [makeVoxChunkKey("0,0,0", 1)]: 0 },
+      { [makeLodChunkKey("0,0,0", 1)]: makeLodChunkKey("0,0,0", 0) },
+      { [makeLodChunkKey("0,0,0", 1)]: 0 },
     );
   });
 
   it("Coverage echo: flush and cascade reloads carry the max flushed dispatch seq", async () => {
     setupIntegration(2);
-    const key = makeVoxChunkKey("0,0,0", 0);
+    const key = makeLodChunkKey("0,0,0", 0);
 
     // Two dispatched strokes touch the chunk before the flush runs: the write
     // covers both, so the echoed coverage must be the max seq (7).
@@ -653,16 +655,16 @@ describe("VoxelEditController: Downsampling Integration", () => {
     // The cascade reload claims the origin's flushed coverage for the parent.
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect((controller as any).callChunkReload).toHaveBeenCalledWith(
-      [makeVoxChunkKey("0,0,0", 1)],
+      [makeLodChunkKey("0,0,0", 1)],
       false,
-      { [makeVoxChunkKey("0,0,0", 1)]: key },
-      { [makeVoxChunkKey("0,0,0", 1)]: 7 },
+      { [makeLodChunkKey("0,0,0", 1)]: key },
+      { [makeLodChunkKey("0,0,0", 1)]: 7 },
     );
   });
 
   it("Coverage pruning: lastFlushedSeq entry dropped once the cascade completes", async () => {
     setupIntegration(2);
-    const key = makeVoxChunkKey("0,0,0", 0);
+    const key = makeLodChunkKey("0,0,0", 0);
 
     controller.commitVoxels([{ key, indices: [0], value: 1n, seq: 3 }]);
     await (controller as any).flushPending();
@@ -675,7 +677,7 @@ describe("VoxelEditController: Downsampling Integration", () => {
 
   it("Coverage pruning: a later flush still covers older preview tags", async () => {
     setupIntegration(2);
-    const key = makeVoxChunkKey("0,0,0", 0);
+    const key = makeLodChunkKey("0,0,0", 0);
 
     controller.commitVoxels([{ key, indices: [0], value: 1n, seq: 3 }]);
     await (controller as any).flushPending();
@@ -695,7 +697,7 @@ describe("VoxelEditController: Downsampling Integration", () => {
 
   it("Coverage echo: a chain claims its start-of-chain coverage even if a flush lands mid-chain", async () => {
     setupIntegration(3);
-    const originKey = makeVoxChunkKey("0,0,0", 0);
+    const originKey = makeLodChunkKey("0,0,0", 0);
 
     (controller as any).lastFlushedSeq.set(originKey, 1);
 
@@ -714,10 +716,10 @@ describe("VoxelEditController: Downsampling Integration", () => {
 
     expect(grandParentSource.applyEdits).toHaveBeenCalled();
     expect((controller as any).callChunkReload).toHaveBeenCalledWith(
-      [makeVoxChunkKey("0,0,0", 2)],
+      [makeLodChunkKey("0,0,0", 2)],
       false,
-      { [makeVoxChunkKey("0,0,0", 2)]: originKey },
-      { [makeVoxChunkKey("0,0,0", 2)]: 1 },
+      { [makeLodChunkKey("0,0,0", 2)]: originKey },
+      { [makeLodChunkKey("0,0,0", 2)]: 1 },
     );
   });
 
@@ -730,7 +732,7 @@ describe("VoxelEditController: Downsampling Integration", () => {
       parentSource.serverStorage.set("0,0,0", new Uint8Array(8).fill(1).buffer);
     });
 
-    const key = makeVoxChunkKey("0,0,0", 0);
+    const key = makeLodChunkKey("0,0,0", 0);
     (controller as any).enqueueDownsample(key);
 
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -742,13 +744,13 @@ describe("VoxelEditController: Downsampling Integration", () => {
     const reloadCalls = (controller as any).callChunkReload.mock.calls;
     const keysReloaded = reloadCalls.flatMap((c: any) => c[0]);
 
-    expect(keysReloaded).toContain(makeVoxChunkKey("0,0,0", 1));
-    expect(keysReloaded).toContain(makeVoxChunkKey("0,0,0", 2));
+    expect(keysReloaded).toContain(makeLodChunkKey("0,0,0", 1));
+    expect(keysReloaded).toContain(makeLodChunkKey("0,0,0", 2));
   });
 
   it("Queue Deduplication: Processes same key once per batch", async () => {
     setupIntegration(2);
-    const key = makeVoxChunkKey("0,0,0", 0);
+    const key = makeLodChunkKey("0,0,0", 0);
 
     (controller as any).enqueueDownsample(key);
     (controller as any).enqueueDownsample(key);
@@ -768,7 +770,7 @@ describe("VoxelEditController: Downsampling Integration", () => {
       chunk.data = new Uint32Array(8).fill(1);
     });
 
-    const key = makeVoxChunkKey("0,0,0", 0);
+    const key = makeLodChunkKey("0,0,0", 0);
     (controller as any).enqueueDownsample(key);
 
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -783,7 +785,7 @@ describe("VoxelEditController: Downsampling Integration", () => {
 
     childSource.download.mockRejectedValue(new Error("Network Error"));
 
-    const key = makeVoxChunkKey("0,0,0", 0);
+    const key = makeLodChunkKey("0,0,0", 0);
     (controller as any).enqueueDownsample(key);
 
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -799,7 +801,7 @@ describe("VoxelEditController: Downsampling Integration", () => {
 
     parentSource.applyEdits.mockRejectedValue(new Error("Write Failed"));
 
-    const key = makeVoxChunkKey("0,0,0", 0);
+    const key = makeLodChunkKey("0,0,0", 0);
     (controller as any).enqueueDownsample(key);
 
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -811,7 +813,7 @@ describe("VoxelEditController: Downsampling Integration", () => {
     expect(mockRpc.invoke).toHaveBeenCalledWith(
       "vox.edit.failure",
       expect.objectContaining({
-        voxChunkKeys: [makeVoxChunkKey("0,0,0", 1)],
+        lodChunkKeys: [makeLodChunkKey("0,0,0", 1)],
       }),
     );
 
@@ -819,8 +821,8 @@ describe("VoxelEditController: Downsampling Integration", () => {
   });
 });
 
-describe("VoxelEditController: flushPending", () => {
-  let controller: VoxelEditController;
+describe("VoxelEditingController: flushPending", () => {
+  let controller: VoxelEditingController;
   let mockSource0: any;
   let mockSource1: any;
 
@@ -846,7 +848,7 @@ describe("VoxelEditController: flushPending", () => {
       return null;
     });
 
-    controller = new VoxelEditController(mockRpc, {
+    controller = new VoxelEditingController(mockRpc, {
       resolutions: [
         resConfig(0, [1, 1, 1], [2, 2, 2]),
         resConfig(1, [2, 2, 2], [2, 2, 2]),
@@ -864,14 +866,14 @@ describe("VoxelEditController: flushPending", () => {
   });
 
   it("Batching: Aggregates multiple edits to the same chunk into one write", async () => {
-    const key = makeVoxChunkKey("0,0,0", 0);
+    const key = makeLodChunkKey("0,0,0", 0);
 
     controller.commitVoxels([
       { key, indices: [1], value: 50n },
       { key, indices: [2], value: 60n },
     ]);
 
-    const otherKey = makeVoxChunkKey("1,0,0", 0);
+    const otherKey = makeLodChunkKey("1,0,0", 0);
     controller.commitVoxels([{ key: otherKey, indices: [5], value: 99n }]);
 
     controller.commitVoxels([
@@ -891,7 +893,7 @@ describe("VoxelEditController: flushPending", () => {
   });
 
   it("History: Updates stacks and notifies frontend correctly", async () => {
-    const key = makeVoxChunkKey("0,0,0", 0);
+    const key = makeLodChunkKey("0,0,0", 0);
 
     (controller as any).redoStack.push({
       changes: new Map(),
@@ -917,8 +919,8 @@ describe("VoxelEditController: flushPending", () => {
   });
 
   it("Partial Failure: Succeeds for valid chunks even if one chunk fails", async () => {
-    const validKey = makeVoxChunkKey("0,0,0", 0);
-    const failKey = makeVoxChunkKey("1,0,0", 0);
+    const validKey = makeLodChunkKey("0,0,0", 0);
+    const failKey = makeLodChunkKey("1,0,0", 0);
 
     mockSource0.applyEdits.mockImplementation((chunkKey: string) => {
       if (chunkKey === "1,0,0") {
@@ -926,7 +928,7 @@ describe("VoxelEditController: flushPending", () => {
       }
       return Promise.resolve({
         indices: new Uint32Array([1]),
-        oldValues: new BigUint64Array([VOXEL_EMPTY_VALUE]),
+        oldValues: new BigUint64Array([EMPTY_VOXEL_VALUE]),
         newValues: new BigUint64Array([50n]),
       });
     });
@@ -955,7 +957,7 @@ describe("VoxelEditController: flushPending", () => {
     expect(mockRpc.invoke).toHaveBeenCalledWith(
       VOX_EDIT_FAILURE_RPC_ID,
       expect.objectContaining({
-        voxChunkKeys: [failKey],
+        lodChunkKeys: [failKey],
       }),
     );
 
@@ -968,7 +970,7 @@ describe("VoxelEditController: flushPending", () => {
   });
 
   it("Invalid Data: Handles malformed keys gracefully without crashing", async () => {
-    const validKey = makeVoxChunkKey("0,0,0", 0);
+    const validKey = makeLodChunkKey("0,0,0", 0);
     const badKey = "invalid_format_key";
 
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -989,7 +991,7 @@ describe("VoxelEditController: flushPending", () => {
     expect(mockRpc.invoke).toHaveBeenCalledWith(
       VOX_EDIT_FAILURE_RPC_ID,
       expect.objectContaining({
-        voxChunkKeys: [badKey],
+        lodChunkKeys: [badKey],
       }),
     );
 
@@ -997,7 +999,7 @@ describe("VoxelEditController: flushPending", () => {
   });
 
   it("Downsample Trigger: Enqueues modified keys for processing", async () => {
-    const key = makeVoxChunkKey("0,0,0", 0);
+    const key = makeLodChunkKey("0,0,0", 0);
     const enqueueSpy = vi.spyOn(controller as any, "enqueueDownsample");
 
     controller.commitVoxels([{ key, indices: [1], value: 50n }]);
@@ -1007,8 +1009,8 @@ describe("VoxelEditController: flushPending", () => {
   });
 });
 
-describe("VoxelEditController: Undo/Redo", () => {
-  let controller: VoxelEditController;
+describe("VoxelEditingController: Undo/Redo", () => {
+  let controller: VoxelEditingController;
   let mockSource0: any;
 
   beforeEach(() => {
@@ -1028,7 +1030,7 @@ describe("VoxelEditController: Undo/Redo", () => {
       return null;
     });
 
-    controller = new VoxelEditController(mockRpc, {
+    controller = new VoxelEditingController(mockRpc, {
       resolutions: [resConfig(0, [1, 1, 1], [2, 2, 2])],
       pendingOpCount: 999,
     });
@@ -1041,7 +1043,7 @@ describe("VoxelEditController: Undo/Redo", () => {
   });
 
   it("A flush triggered during an undo waits for the undo to finish", async () => {
-    const key = makeVoxChunkKey("0,0,0", 0);
+    const key = makeLodChunkKey("0,0,0", 0);
     const order: string[] = [];
     let releaseUndo!: () => void;
     const undoGate = new Promise<void>((resolve) => (releaseUndo = resolve));
@@ -1091,7 +1093,7 @@ describe("VoxelEditController: Undo/Redo", () => {
   });
 
   it("Concurrent undos are serialized and pop in order", async () => {
-    const key = makeVoxChunkKey("0,0,0", 0);
+    const key = makeLodChunkKey("0,0,0", 0);
     const makeAction = (label: string) => ({
       changes: new Map([
         [
@@ -1136,7 +1138,7 @@ describe("VoxelEditController: Undo/Redo", () => {
   });
 
   it("Undo flushes pending edits first, so it targets the latest stroke", async () => {
-    const key = makeVoxChunkKey("0,0,0", 0);
+    const key = makeLodChunkKey("0,0,0", 0);
     const action1 = {
       changes: new Map([
         [
@@ -1164,7 +1166,7 @@ describe("VoxelEditController: Undo/Redo", () => {
   });
 
   it("Successful Undo and Redo Lifecycle", async () => {
-    const key = makeVoxChunkKey("0,0,0", 0);
+    const key = makeLodChunkKey("0,0,0", 0);
     const editAction = {
       changes: new Map([
         [
@@ -1244,7 +1246,7 @@ describe("VoxelEditController: Undo/Redo", () => {
   });
 
   it("Undo Failure Handling", async () => {
-    const key = makeVoxChunkKey("0,0,0", 0);
+    const key = makeLodChunkKey("0,0,0", 0);
     const editAction = {
       changes: new Map([
         [
@@ -1269,7 +1271,7 @@ describe("VoxelEditController: Undo/Redo", () => {
     expect(mockRpc.invoke).toHaveBeenCalledWith(
       VOX_EDIT_FAILURE_RPC_ID,
       expect.objectContaining({
-        voxChunkKeys: [key],
+        lodChunkKeys: [key],
         message: "Undo failed.",
       }),
     );
@@ -1283,7 +1285,7 @@ describe("VoxelEditController: Undo/Redo", () => {
   });
 
   it("Redo Failure Handling", async () => {
-    const key = makeVoxChunkKey("0,0,0", 0);
+    const key = makeLodChunkKey("0,0,0", 0);
     const editAction = {
       changes: new Map([
         [
@@ -1308,7 +1310,7 @@ describe("VoxelEditController: Undo/Redo", () => {
     expect(mockRpc.invoke).toHaveBeenCalledWith(
       VOX_EDIT_FAILURE_RPC_ID,
       expect.objectContaining({
-        voxChunkKeys: [key],
+        lodChunkKeys: [key],
         message: "Redo failed.",
       }),
     );
@@ -1320,8 +1322,8 @@ describe("VoxelEditController: Undo/Redo", () => {
   });
 
   it("Multi-Chunk Action Consistency", async () => {
-    const key1 = makeVoxChunkKey("0,0,0", 0);
-    const key2 = makeVoxChunkKey("1,0,0", 0);
+    const key1 = makeLodChunkKey("0,0,0", 0);
+    const key2 = makeLodChunkKey("1,0,0", 0);
 
     const editAction = {
       changes: new Map([
@@ -1375,8 +1377,8 @@ describe("VoxelEditController: Undo/Redo", () => {
   });
 });
 
-describe("VoxelEditController: Tool Operations", () => {
-  let controller: VoxelEditController;
+describe("VoxelEditingController: Tool Operations", () => {
+  let controller: VoxelEditingController;
   let mockSource: MockBackendSource;
 
   beforeEach(() => {
@@ -1390,7 +1392,7 @@ describe("VoxelEditController: Tool Operations", () => {
       lowerVoxelBound: new Float32Array([0, 0, 0]),
       upperVoxelBound: new Float32Array([100, 100, 100]),
       baseVoxelOffset: new Float32Array([0, 0, 0]),
-      fillValue: VOXEL_EMPTY_VALUE,
+      fillValue: EMPTY_VOXEL_VALUE,
     };
     mockSource = createMockSource({ ...spec });
     vi.spyOn(mockSource, "applyEdits").mockResolvedValue({
@@ -1406,7 +1408,7 @@ describe("VoxelEditController: Tool Operations", () => {
       return null;
     });
 
-    controller = new VoxelEditController(mockRpc, {
+    controller = new VoxelEditingController(mockRpc, {
       resolutions: [resConfig(0, [1, 1, 1], [10, 10, 10])],
       pendingOpCount: 999,
     });
@@ -1680,7 +1682,7 @@ describe("VoxelEditController: Tool Operations", () => {
     expect(indices.length).toBe(57);
   });
 
-  it("performOperation: flood fill returns the covered vox chunk keys", async () => {
+  it("performOperation: flood fill returns the covered voxel chunk keys", async () => {
     const data = new BigUint64Array(1000);
     for (let x = 3; x <= 7; x++) {
       data[0 * 100 + 3 * 10 + x] = 1n;
@@ -1721,7 +1723,7 @@ describe("VoxelEditController: Tool Operations", () => {
     expect(mockSource.applyEdits).not.toHaveBeenCalled();
   });
 
-  it("performOperation: brush returns the covered vox chunk keys", async () => {
+  it("performOperation: brush returns the covered voxel chunk keys", async () => {
     const covered = await controller.performOperation({
       type: VoxelOperationType.BRUSH,
       centers: [new Float32Array([5, 5, 5])],
@@ -1829,7 +1831,7 @@ describe("VolumeChunkSource.applyEdits: unreadable stored chunk", () => {
 });
 
 describe("BackendVoxelAccessor: mid-flight invalidation", () => {
-  let controller: VoxelEditController;
+  let controller: VoxelEditingController;
   let source: any;
 
   beforeEach(() => {
@@ -1841,7 +1843,7 @@ describe("BackendVoxelAccessor: mid-flight invalidation", () => {
       if (id === 999) return { value: 0 };
       return null;
     });
-    controller = new VoxelEditController(mockRpc, {
+    controller = new VoxelEditingController(mockRpc, {
       resolutions: [resConfig(0, [1, 1, 1], [2, 2, 2])],
       pendingOpCount: 999,
     });
@@ -1881,7 +1883,7 @@ describe("BackendVoxelAccessor: mid-flight invalidation", () => {
   });
 
   it("flood fill flushes pending edits before reading", async () => {
-    const key = makeVoxChunkKey("0,0,0", 0);
+    const key = makeLodChunkKey("0,0,0", 0);
     controller.commitVoxels([{ key, indices: [0], value: 5n, seq: 1 }]);
 
     // Fill value equals the seed's current value: early return right after

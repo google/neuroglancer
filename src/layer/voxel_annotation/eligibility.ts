@@ -79,7 +79,7 @@ function getHierarchyIncompatibility(
 
 // The following checks are in place due to limitations in the implementation,
 // and could be removed if support for the checked constraint is added.
-export function getVoxelAnnotationIncompatibility(
+export function getVoxelEditingIncompatibility(
   volume: MultiscaleVolumeChunkSource,
 ): string | undefined {
   if (volume.rank !== 3) {
