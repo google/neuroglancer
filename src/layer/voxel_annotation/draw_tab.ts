@@ -14,23 +14,23 @@
  * limitations under the License.
  */
 
-import { VOXEL_TAB_LAYOUT } from "#src/layer/voxel_annotation/controls.js";
+import { VOXEL_EDITING_TAB_LAYOUT } from "#src/layer/voxel_annotation/controls.js";
 import type { UserLayerWithVoxelEditing } from "#src/layer/voxel_annotation/index.js";
 import { observeWatchable } from "#src/trackable_value.js";
 import { makeToolButton } from "#src/ui/tool.js";
-import type { VoxelEditController } from "#src/voxel_annotation/frontend.js";
+import type { VoxelEditingController } from "#src/voxel_annotation/frontend.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 import { addLayerControlToOptionsTab } from "#src/widget/layer_control.js";
 import { Tab } from "#src/widget/tab_view.js";
 
-export class VoxToolTab extends Tab {
+export class VoxelEditingTab extends Tab {
   constructor(public layer: UserLayerWithVoxelEditing) {
     super();
     const { element } = this;
 
     const toolbox = document.createElement("div");
 
-    for (const elementDef of VOXEL_TAB_LAYOUT) {
+    for (const elementDef of VOXEL_EDITING_TAB_LAYOUT) {
       if ("type" in elementDef && elementDef.type === "header") {
         const title = document.createElement("div");
         title.textContent = elementDef.label;
@@ -76,7 +76,7 @@ export class VoxToolTab extends Tab {
                   },
                 },
                 (
-                  controller: VoxelEditController | undefined,
+                  controller: VoxelEditingController | undefined,
                   _parent,
                   context,
                 ) => {

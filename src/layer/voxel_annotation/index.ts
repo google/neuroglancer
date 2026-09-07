@@ -24,8 +24,8 @@ import {
   drawBrushCursor,
   getEditingContext,
 } from "#src/layer/voxel_annotation/controls.js";
-import { VoxToolTab } from "#src/layer/voxel_annotation/draw_tab.js";
-import { getVoxelAnnotationIncompatibility } from "#src/layer/voxel_annotation/eligibility.js";
+import { VoxelEditingTab } from "#src/layer/voxel_annotation/draw_tab.js";
+import { getVoxelEditingIncompatibility } from "#src/layer/voxel_annotation/eligibility.js";
 import type {
   ChunkTransformParameters,
   RenderLayerTransformOrError,
@@ -63,20 +63,20 @@ import {
   verifyOptionalObjectProperty,
 } from "#src/util/json.js";
 import { TrackableEnum } from "#src/util/trackable_enum.js";
-import { VoxelPreviewMultiscaleSource } from "#src/voxel_annotation/preview_multiscale_chunk_source.js";
 import type {
-  VoxelEditControllerHost,
-  VoxelValueGetter,
+  VoxelEditingControllerHost,
+  PaintValueGetter,
 } from "#src/voxel_annotation/base.js";
 import {
-  VOXEL_EDIT_STAMINA,
-  VOXEL_EMPTY_VALUE,
+  VOXEL_EDITING_STAMINA,
+  EMPTY_VOXEL_VALUE,
   BRUSH_SIZE_TOOL_ID,
   BRUSH_TOOL_ID,
   BrushShape,
-  MAX_VOXEL_EDIT_STAMINA,
+  MAX_VOXEL_EDITING_STAMINA,
 } from "#src/voxel_annotation/base.js";
-import { VoxelEditController } from "#src/voxel_annotation/frontend.js";
+import { VoxelEditingController } from "#src/voxel_annotation/frontend.js";
+import { PreviewMultiscaleSource } from "#src/voxel_annotation/preview_multiscale_chunk_source.js";
 
 const BRUSH_SIZE_JSON_KEY = "brushSize";
 const ERASE_SELECTED_MODE_JSON_KEY = "eraseSelectedMode";
@@ -97,9 +97,9 @@ const DATA_TYPE_BIT_INFO = {
 
 export class VoxelEditingContext
   extends RefCounted
-  implements VoxelEditControllerHost
+  implements VoxelEditingControllerHost
 {
-  private readonly _controller: VoxelEditController | undefined = undefined;
+  private readonly _controller: VoxelEditingController | undefined = undefined;
   private _pendingPermissionPromise: Promise<boolean> | undefined;
   private hasUserConfirmedWriting = false;
 
@@ -108,7 +108,7 @@ export class VoxelEditingContext
   private cachedVoxelPosition: Float32Array = new Float32Array(3);
   previewRenderLayer: ImageRenderLayer | SegmentationRenderLayer | undefined =
     undefined;
-  previewSource: VoxelPreviewMultiscaleSource | undefined = undefined;
+  previewSource: PreviewMultiscaleSource | undefined = undefined;
 
   private localLoadEstimate = new WatchableValue<number>(0);
   public totalPending: WatchableValueInterface<number>;
@@ -124,12 +124,12 @@ export class VoxelEditingContext
 
     if (!writingEnabled) return;
 
-    const incompatibility = getVoxelAnnotationIncompatibility(primarySource);
+    const incompatibility = getVoxelEditingIncompatibility(primarySource);
     if (incompatibility !== undefined) {
       throw new Error(incompatibility);
     }
 
-    this.previewSource = new VoxelPreviewMultiscaleSource(
+    this.previewSource = new PreviewMultiscaleSource(
       this.hostLayer.manager.chunkManager,
       primarySource,
     );
@@ -157,7 +157,7 @@ export class VoxelEditingContext
 
     this.hostLayer.addRenderLayer(this.previewRenderLayer);
 
-    this._controller = new VoxelEditController(this);
+    this._controller = new VoxelEditingController(this);
 
     this.totalPending = this.registerDisposer(
       makeDerivedWatchableValue(
@@ -208,7 +208,7 @@ export class VoxelEditingContext
     cost: number,
     op: () => Promise<T>,
   ): Promise<T | void> {
-    if (this.localLoadEstimate.value >= MAX_VOXEL_EDIT_STAMINA) return;
+    if (this.localLoadEstimate.value >= MAX_VOXEL_EDITING_STAMINA) return;
     this.localLoadEstimate.value += cost;
     try {
       if (await this.checkPermission()) {
@@ -232,7 +232,7 @@ export class VoxelEditingContext
   async applyBrushPreview(
     points: Float32Array[],
     radiusCanonical: number,
-    value: VoxelValueGetter,
+    value: PaintValueGetter,
     shape: BrushShape,
     basis: { u: Float32Array; v: Float32Array },
     seq: number,
@@ -255,7 +255,7 @@ export class VoxelEditingContext
   async dispatchBrushStroke(
     centers: Float32Array[],
     radiusCanonical: number,
-    value: VoxelValueGetter,
+    value: PaintValueGetter,
     shape: BrushShape,
     basis: { u: Float32Array; v: Float32Array },
     seq: number,
@@ -264,7 +264,7 @@ export class VoxelEditingContext
     if (!this._controller)
       throw new Error("Cannot use dispatchBrushStroke without a controller");
     const cost =
-      VOXEL_EDIT_STAMINA.brush(
+      VOXEL_EDITING_STAMINA.brush(
         shape,
         radiusCanonical,
         filterValue !== undefined,
@@ -294,7 +294,7 @@ export class VoxelEditingContext
 
   async floodFillPlane2D(
     startPositionCanonical: Float32Array,
-    fillValue: VoxelValueGetter,
+    fillValue: PaintValueGetter,
     maxVoxels: number,
     basis: { u: Float32Array; v: Float32Array },
     filterValue?: bigint,
@@ -302,7 +302,7 @@ export class VoxelEditingContext
   ) {
     if (!this._controller)
       throw new Error("Cannot use floodFillPlane2D without a controller");
-    const cost = VOXEL_EDIT_STAMINA.floodFill(maxVoxels);
+    const cost = VOXEL_EDITING_STAMINA.floodFill(maxVoxels);
     await this.withCost(cost, () =>
       this._controller!.floodFillPlane2D(
         startPositionCanonical,
@@ -318,7 +318,7 @@ export class VoxelEditingContext
   async undo() {
     if (!this._controller)
       throw new Error("Cannot use undo without a controller");
-    await this.withCost(VOXEL_EDIT_STAMINA.undoRedo(), () =>
+    await this.withCost(VOXEL_EDITING_STAMINA.undoRedo(), () =>
       this._controller!.undo(),
     );
   }
@@ -326,7 +326,7 @@ export class VoxelEditingContext
   async redo() {
     if (!this._controller)
       throw new Error("Cannot use redo without a controller");
-    await this.withCost(VOXEL_EDIT_STAMINA.undoRedo(), () =>
+    await this.withCost(VOXEL_EDITING_STAMINA.undoRedo(), () =>
       this._controller!.redo(),
     );
   }
@@ -453,8 +453,8 @@ export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
     source: MultiscaleVolumeChunkSource,
     transform: WatchableValueInterface<RenderLayerTransformOrError>,
   ): ImageRenderLayer | SegmentationRenderLayer;
-  abstract getVoxelPaintValue(erase: boolean): VoxelValueGetter;
-  abstract setVoxelPaintValue(value: any): bigint;
+  abstract getPaintValue(erase: boolean): PaintValueGetter;
+  abstract setPaintValue(value: any): bigint;
   setEraseState(erase: boolean): void;
   shouldErase(): boolean;
   scheduleOverlayRedraw(): void;
@@ -468,7 +468,7 @@ export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
   ): void;
   updateHasSubsourcesWithWritingEnabled(): void;
   getIdentitySliceViewSourceOptions(): SliceViewSourceOptions;
-  handleVoxAction(action: string, context: LayerActionContext): void;
+  handleVoxelEditingAction(action: string, context: LayerActionContext): void;
 }
 
 export function UserLayerWithVoxelEditingMixin<
@@ -534,7 +534,7 @@ export function UserLayerWithVoxelEditingMixin<
           (editable) => !editable,
           this.hasSubsourcesWithWritingEnabled,
         ),
-        getter: () => new VoxToolTab(this),
+        getter: () => new VoxelEditingTab(this),
       });
     }
 
@@ -605,7 +605,7 @@ export function UserLayerWithVoxelEditingMixin<
       pendingCount: number,
       brushOffset: number,
     ) {
-      const ratio = Math.max(0, 1.0 - pendingCount / MAX_VOXEL_EDIT_STAMINA);
+      const ratio = Math.max(0, 1.0 - pendingCount / MAX_VOXEL_EDITING_STAMINA);
       if (ratio > 0.99) {
         return;
       }
@@ -701,12 +701,12 @@ export function UserLayerWithVoxelEditingMixin<
       );
     }
 
-    getVoxelPaintValue(erase: boolean): VoxelValueGetter {
+    getPaintValue(erase: boolean): PaintValueGetter {
       return (_isPreview: boolean) =>
-        erase ? VOXEL_EMPTY_VALUE : this.paintValue.value;
+        erase ? EMPTY_VOXEL_VALUE : this.paintValue.value;
     }
 
-    setVoxelPaintValue(x: any) {
+    setPaintValue(x: any) {
       const editContext = this.editingContexts.values().next().value;
       if (!editContext) throw new Error("No voxel editing context available");
       const dataType = editContext.primarySource.dataType;
@@ -779,7 +779,7 @@ export function UserLayerWithVoxelEditingMixin<
         );
         this.editingContexts.set(loadedSubsource, context);
         this.updateHasSubsourcesWithWritingEnabled();
-        this.setVoxelPaintValue(this.paintValue.value);
+        this.setPaintValue(this.paintValue.value);
       } catch (e) {
         if (writingEnabled) {
           loadedSubsource.writingEnabled.value = false;
@@ -817,7 +817,10 @@ export function UserLayerWithVoxelEditingMixin<
       };
     }
 
-    handleVoxAction(action: string, _context: LayerActionContext): void {
+    handleVoxelEditingAction(
+      action: string,
+      _context: LayerActionContext,
+    ): void {
       const firstContext = this.editingContexts.values().next()
         .value as VoxelEditingContext;
       if (!firstContext) return;
@@ -829,7 +832,7 @@ export function UserLayerWithVoxelEditingMixin<
           void firstContext.redo();
           break;
         case "randomize-paint-value":
-          this.setVoxelPaintValue(randomUint64());
+          this.setPaintValue(randomUint64());
           break;
       }
     }

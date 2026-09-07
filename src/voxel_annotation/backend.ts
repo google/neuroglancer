@@ -27,7 +27,7 @@ import type { TypedArray } from "#src/util/array.js";
 import { mat4, vec3 } from "#src/util/geom.js";
 import * as matrix from "#src/util/matrix.js";
 import type {
-  VoxelLayerResolution,
+  LodResolution,
   EditAction,
   VoxelChange,
   VoxelOperation,
@@ -35,8 +35,8 @@ import type {
   FloodFillOperation,
 } from "#src/voxel_annotation/base.js";
 import {
-  VOXEL_EMPTY_VALUE,
-  VOXEL_EDIT_STAMINA,
+  EMPTY_VOXEL_VALUE,
+  VOXEL_EDITING_STAMINA,
   VOX_EDIT_BACKEND_RPC_ID,
   VOX_EDIT_COMMIT_VOXELS_RPC_ID,
   VOX_RELOAD_CHUNKS_RPC_ID,
@@ -47,8 +47,8 @@ import {
   VOX_EDIT_OPERATION_RPC_ID,
   VoxelOperationType,
   BrushShape,
-  makeVoxChunkKey,
-  parseVoxChunkKey,
+  makeLodChunkKey,
+  parseLodChunkKey,
   makeChunkKey,
 } from "#src/voxel_annotation/base.js";
 import type { RPC } from "#src/worker_rpc.js";
@@ -383,11 +383,11 @@ class BrushOptimizationCache {
 }
 
 @registerSharedObject(VOX_EDIT_BACKEND_RPC_ID)
-export class VoxelEditController extends SharedObject {
+export class VoxelEditingController extends SharedObject {
   private sources = new Map<number, VolumeChunkSource>();
   private resolutions = new Map<
     number,
-    VoxelLayerResolution & { invTransform: mat4 }
+    LodResolution & { invTransform: mat4 }
   >();
 
   private pendingEdits: {
@@ -399,7 +399,7 @@ export class VoxelEditController extends SharedObject {
     seq?: number;
   }[] = [];
 
-  // Per LOD-0 vox key: the highest frontend dispatch seq whose edits have been
+  // Per LOD-0 voxel key: the highest frontend dispatch seq whose edits have been
   // durably written to that chunk. Echoed in reload messages (including
   // downsample cascade reloads, keyed by origin) so the frontend can tell
   // whether the refetched data covers everything its preview represents.
@@ -425,8 +425,8 @@ export class VoxelEditController extends SharedObject {
       (a, { indices }) => indices.length + a,
       0,
     );
-    const pendingEdits = VOXEL_EDIT_STAMINA.pendingEdits(editedVoxel);
-    const downsampling = VOXEL_EDIT_STAMINA.downsamplingJobs(
+    const pendingEdits = VOXEL_EDITING_STAMINA.pendingEdits(editedVoxel);
+    const downsampling = VOXEL_EDITING_STAMINA.downsamplingJobs(
       this.downsampleQueue.length,
       this.resolutions.size,
     );
@@ -488,11 +488,11 @@ export class VoxelEditController extends SharedObject {
     initializeSharedObjectCounterpart(this, rpc, options);
 
     const passedResolutions = options?.resolutions as
-      | VoxelLayerResolution[]
+      | LodResolution[]
       | undefined;
     if (passedResolutions === undefined || !Array.isArray(passedResolutions)) {
       throw new Error(
-        "VoxelEditBackend: missing required 'resolutions' array during initialization",
+        "VoxelEditingBackend: missing required 'resolutions' array during initialization",
       );
     }
 
@@ -513,7 +513,7 @@ export class VoxelEditController extends SharedObject {
       const resolved = rpc.get(res.sourceRpc) as VolumeChunkSource | undefined;
       if (!resolved) {
         throw new Error(
-          `VoxelEditBackend: failed to resolve VolumeChunkSource for LOD ${res.lodIndex}`,
+          `VoxelEditingBackend: failed to resolve VolumeChunkSource for LOD ${res.lodIndex}`,
         );
       }
       this.sources.set(res.lodIndex, resolved);
@@ -533,19 +533,19 @@ export class VoxelEditController extends SharedObject {
       return;
     }
 
-    const editsByVoxKey = new Map<string, Map<number, bigint>>();
-    const maxSeqByVoxKey = new Map<string, number>();
+    const editsByLodChunkKey = new Map<string, Map<number, bigint>>();
+    const maxSeqByLodChunkKey = new Map<string, number>();
 
     for (const edit of edits) {
-      let chunkMap = editsByVoxKey.get(edit.key);
+      let chunkMap = editsByLodChunkKey.get(edit.key);
       if (!chunkMap) {
         chunkMap = new Map<number, bigint>();
-        editsByVoxKey.set(edit.key, chunkMap);
+        editsByLodChunkKey.set(edit.key, chunkMap);
       }
       if (edit.seq !== undefined) {
-        maxSeqByVoxKey.set(
+        maxSeqByLodChunkKey.set(
           edit.key,
-          Math.max(maxSeqByVoxKey.get(edit.key) ?? 0, edit.seq),
+          Math.max(maxSeqByLodChunkKey.get(edit.key) ?? 0, edit.seq),
         );
       }
 
@@ -569,7 +569,7 @@ export class VoxelEditController extends SharedObject {
       }
     }
 
-    const failedVoxChunkKeys: string[] = [];
+    const failedLodChunkKeys: string[] = [];
     let firstErrorMessage: string | undefined = undefined;
 
     const newAction: EditAction = {
@@ -578,13 +578,13 @@ export class VoxelEditController extends SharedObject {
       description: "Voxel Edit",
     };
 
-    for (const [voxKey, chunkEdits] of editsByVoxKey.entries()) {
+    for (const [lodChunkKey, chunkEdits] of editsByLodChunkKey.entries()) {
       try {
-        const parsedKey = parseVoxChunkKey(voxKey);
+        const parsedKey = parseLodChunkKey(lodChunkKey);
         if (!parsedKey) {
-          const msg = `flushPending: Failed to parse vox chunk key: ${voxKey}`;
+          const msg = `flushPending: Failed to parse voxel chunk key: ${lodChunkKey}`;
           console.error(msg);
-          failedVoxChunkKeys.push(voxKey);
+          failedLodChunkKeys.push(lodChunkKey);
           if (firstErrorMessage === undefined) firstErrorMessage = msg;
           continue;
         }
@@ -592,7 +592,7 @@ export class VoxelEditController extends SharedObject {
         if (!source) {
           const msg = `flushPending: No source found for LOD index ${parsedKey.lodIndex}`;
           console.error(msg);
-          failedVoxChunkKeys.push(voxKey);
+          failedLodChunkKeys.push(lodChunkKey);
           if (firstErrorMessage === undefined) firstErrorMessage = msg;
           continue;
         }
@@ -608,19 +608,19 @@ export class VoxelEditController extends SharedObject {
         const accessor = this.getAccessor(parsedKey.lodIndex);
         accessor.invalidate(parsedKey.chunkKey);
 
-        const flushedSeq = maxSeqByVoxKey.get(voxKey);
+        const flushedSeq = maxSeqByLodChunkKey.get(lodChunkKey);
         if (flushedSeq !== undefined) {
           this.lastFlushedSeq.set(
-            voxKey,
-            Math.max(this.lastFlushedSeq.get(voxKey) ?? 0, flushedSeq),
+            lodChunkKey,
+            Math.max(this.lastFlushedSeq.get(lodChunkKey) ?? 0, flushedSeq),
           );
         }
 
-        newAction.changes.set(voxKey, change);
+        newAction.changes.set(lodChunkKey, change);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        console.error(`Failed to write chunk ${voxKey}:`, e);
-        failedVoxChunkKeys.push(voxKey);
+        console.error(`Failed to write chunk ${lodChunkKey}:`, e);
+        failedLodChunkKeys.push(lodChunkKey);
         if (firstErrorMessage === undefined) firstErrorMessage = msg;
       }
     }
@@ -628,13 +628,13 @@ export class VoxelEditController extends SharedObject {
     // Failed keys are excluded: their store was not modified, so a real
     // reload would refetch unchanged data and race with the failure
     // rollback below.
-    const flushedKeys = editsByVoxKey
+    const flushedKeys = editsByLodChunkKey
       .keys()
       .toArray()
-      .filter((voxKey) => !failedVoxChunkKeys.includes(voxKey));
+      .filter((lodChunkKey) => !failedLodChunkKeys.includes(lodChunkKey));
     const coveredSeqs: Record<string, number> = {};
-    for (const voxKey of flushedKeys) {
-      coveredSeqs[voxKey] = this.lastFlushedSeq.get(voxKey) ?? 0;
+    for (const lodChunkKey of flushedKeys) {
+      coveredSeqs[lodChunkKey] = this.lastFlushedSeq.get(lodChunkKey) ?? 0;
     }
     if (flushedKeys.length > 0) {
       this.callChunkReload(flushedKeys, false, undefined, coveredSeqs);
@@ -651,19 +651,19 @@ export class VoxelEditController extends SharedObject {
     // Notify frontend of history changes after any commit attempt
     this.notifyHistoryChanged();
 
-    if (failedVoxChunkKeys.length > 0) {
+    if (failedLodChunkKeys.length > 0) {
       this.rpc?.invoke(VOX_EDIT_FAILURE_RPC_ID, {
         rpcId: this.rpcId,
-        voxChunkKeys: failedVoxChunkKeys,
+        lodChunkKeys: failedLodChunkKeys,
         message: firstErrorMessage ?? "Voxel edit commit failed.",
       });
     }
 
     const hasDownsampling = this.resolutions.size > 1;
     if (hasDownsampling) {
-      for (const [voxKey, _] of editsByVoxKey.entries()) {
-        if (failedVoxChunkKeys.includes(voxKey)) continue;
-        this.enqueueDownsample(voxKey);
+      for (const [lodChunkKey, _] of editsByLodChunkKey.entries()) {
+        if (failedLodChunkKeys.includes(lodChunkKey)) continue;
+        this.enqueueDownsample(lodChunkKey);
       }
     }
     // The preview is cleared by the swap-on-arrival registered in the real
@@ -671,8 +671,8 @@ export class VoxelEditController extends SharedObject {
     // preview is dropped when the refetched real chunk arrives.
 
     // With downsampling, the queue guard defers pruning to the chain-end hook.
-    for (const voxKey of editsByVoxKey.keys()) {
-      this.maybePruneFlushedSeq(voxKey);
+    for (const lodChunkKey of editsByLodChunkKey.keys()) {
+      this.maybePruneFlushedSeq(lodChunkKey);
     }
 
     this.updatePendingCount();
@@ -702,7 +702,7 @@ export class VoxelEditController extends SharedObject {
     for (const e of edits) {
       if (!e || !e.key || !e.indices) {
         throw new Error(
-          "VoxelEditController.commitVoxels: invalid edit payload",
+          "VoxelEditingController.commitVoxels: invalid edit payload",
         );
       }
       this.pendingEdits.push(e);
@@ -715,7 +715,7 @@ export class VoxelEditController extends SharedObject {
     }, this.commitDebounceDelayMs) as unknown as number;
   }
 
-  // `previewKeysToClear[realKey]` is the preview vox key (LOD 0) to drop once the
+  // `previewKeysToClear[realKey]` is the preview voxel key (LOD 0) to drop once the
   // real chunk `realKey` reaches the GPU. A real key absent from the map defaults
   // to itself on the frontend; downsampled parents map to the originating LOD-0
   // key so the visible (forced LOD-0) preview is cleared as soon as any covering
@@ -729,7 +729,7 @@ export class VoxelEditController extends SharedObject {
   // `isRollback` marks a state rollback (undo/redo): the frontend purges the
   // preview tags so the swap clears on the first arrival, whatever it covers.
   callChunkReload(
-    voxChunkKeys: string[],
+    lodChunkKeys: string[],
     isForPreviewChunks = false,
     previewKeysToClear?: Record<string, string>,
     coveredSeqs?: Record<string, number>,
@@ -737,7 +737,7 @@ export class VoxelEditController extends SharedObject {
   ) {
     this.rpc?.invoke(VOX_RELOAD_CHUNKS_RPC_ID, {
       rpcId: this.rpcId,
-      voxChunkKeys: voxChunkKeys,
+      lodChunkKeys: lodChunkKeys,
       isForPreviewChunks,
       previewKeysToClear,
       coveredSeqs,
@@ -860,7 +860,7 @@ export class VoxelEditController extends SharedObject {
     originKey: string,
     originCoveredSeq: number,
   ): Promise<string | null> {
-    const childInfo = parseVoxChunkKey(childKey);
+    const childInfo = parseLodChunkKey(childKey);
     if (childInfo === null) {
       console.error(`[Downsample] Invalid child key format: ${childKey}`);
       return null;
@@ -936,7 +936,7 @@ export class VoxelEditController extends SharedObject {
         );
         this.rpc?.invoke(VOX_EDIT_FAILURE_RPC_ID, {
           rpcId: this.rpcId,
-          voxChunkKeys: [parentKey],
+          lodChunkKeys: [parentKey],
           message: `Downsampling to ${parentKey} failed.`,
         });
         return null;
@@ -949,11 +949,8 @@ export class VoxelEditController extends SharedObject {
   /**
    * Helper to find and describe the parent chunk.
    */
-  private _getParentChunkInfo(
-    childKey: string,
-    childRes: VoxelLayerResolution,
-  ) {
-    const childInfo = parseVoxChunkKey(childKey)!;
+  private _getParentChunkInfo(childKey: string, childRes: LodResolution) {
+    const childInfo = parseLodChunkKey(childKey)!;
     const parentLodIndex = childInfo.lodIndex + 1;
     const parentRes = this.resolutions.get(parentLodIndex);
     if (parentRes === undefined) return null; // No parent LOD exists
@@ -999,7 +996,7 @@ export class VoxelEditController extends SharedObject {
     );
 
     const parentChunkKey = makeChunkKey(parentX, parentY, parentZ);
-    const parentKey = makeVoxChunkKey(parentChunkKey, parentLodIndex);
+    const parentKey = makeLodChunkKey(parentChunkKey, parentLodIndex);
     return { parentKey, chunkKey: parentChunkKey, parentRes, parentSource };
   }
 
@@ -1009,8 +1006,8 @@ export class VoxelEditController extends SharedObject {
    */
   private _calculateParentUpdate(
     childChunkData: Uint32Array | BigUint64Array,
-    childRes: VoxelLayerResolution & { invTransform: mat4 },
-    parentRes: VoxelLayerResolution & { invTransform: mat4 },
+    childRes: LodResolution & { invTransform: mat4 },
+    parentRes: LodResolution & { invTransform: mat4 },
     childInfo: { x: number; y: number; z: number },
     childActualSize: number[],
   ) {
@@ -1194,13 +1191,13 @@ export class VoxelEditController extends SharedObject {
   }
 
   private _calculateMode(values: (bigint | number)[]): bigint {
-    if (values.length === 0) return VOXEL_EMPTY_VALUE;
+    if (values.length === 0) return EMPTY_VOXEL_VALUE;
     const counts = new Map<bigint, number>();
     let maxCount = 0;
     let mode = 0n;
     for (const v of values) {
       const bigV = BigInt(v);
-      if (bigV === VOXEL_EMPTY_VALUE) continue;
+      if (bigV === EMPTY_VOXEL_VALUE) continue;
       const c = (counts.get(bigV) ?? 0) + 1;
       counts.set(bigV, c);
       if (c > maxCount) {
@@ -1253,8 +1250,8 @@ export class VoxelEditController extends SharedObject {
     const chunksToReload = new Set<string>();
     let success = true;
 
-    for (const [voxKey, change] of action.changes.entries()) {
-      const parsedKey = parseVoxChunkKey(voxKey);
+    for (const [lodChunkKey, change] of action.changes.entries()) {
+      const parsedKey = parseLodChunkKey(lodChunkKey);
       if (!parsedKey) continue;
       const source = this.sources.get(parsedKey.lodIndex);
       if (!source) continue;
@@ -1266,16 +1263,16 @@ export class VoxelEditController extends SharedObject {
           change.indices,
           valuesToApply,
         );
-        chunksToReload.add(voxKey);
+        chunksToReload.add(lodChunkKey);
       } catch (e) {
         success = false;
         console.error(
-          `performUndoRedo: failed to apply edits for ${voxKey}`,
+          `performUndoRedo: failed to apply edits for ${lodChunkKey}`,
           e,
         );
         this.rpc?.invoke(VOX_EDIT_FAILURE_RPC_ID, {
           rpcId: this.rpcId,
-          voxChunkKeys: [voxKey],
+          lodChunkKeys: [lodChunkKey],
           message: useOldValues ? "Undo failed." : "Redo failed.",
         });
         break;
@@ -1316,7 +1313,7 @@ export class VoxelEditController extends SharedObject {
     await this.performUndoRedo(this.redoStack, this.undoStack, false, "redo");
   }
 
-  // Resolves with the vox chunk keys whose stored data will contain the
+  // Resolves with the voxel chunk keys whose stored data will contain the
   // operation's preview content once its edits flush ("covered" chunks).
   async performOperation(operation: VoxelOperation): Promise<string[]> {
     switch (operation.type) {
@@ -1511,7 +1508,7 @@ export class VoxelEditController extends SharedObject {
     const isFillable = async (p: vec3): Promise<boolean> => {
       const val = await accessor.getValue(p[0], p[1], p[2]);
       if (val === null) return false;
-      if (originalValue === VOXEL_EMPTY_VALUE) return val === VOXEL_EMPTY_VALUE;
+      if (originalValue === EMPTY_VOXEL_VALUE) return val === EMPTY_VOXEL_VALUE;
       return val === originalValue;
     };
 
@@ -1734,7 +1731,7 @@ export class VoxelEditController extends SharedObject {
     if (!source) return [];
 
     const { chunkDataSize } = source.spec;
-    const indicesByVoxKey = new Map<string, number[]>();
+    const indicesByLodChunkKey = new Map<string, number[]>();
 
     let lastGridX = -Infinity;
     let lastGridY = -Infinity;
@@ -1762,12 +1759,12 @@ export class VoxelEditController extends SharedObject {
         lastGridY = cy;
         lastGridZ = cz;
 
-        const voxKey = `lod${lodIndex}#${cx},${cy},${cz}`;
+        const lodChunkKey = `lod${lodIndex}#${cx},${cy},${cz}`;
 
-        currentIndicesList = indicesByVoxKey.get(voxKey);
+        currentIndicesList = indicesByLodChunkKey.get(lodChunkKey);
         if (!currentIndicesList) {
           currentIndicesList = [];
-          indicesByVoxKey.set(voxKey, currentIndicesList);
+          indicesByLodChunkKey.set(lodChunkKey, currentIndicesList);
         }
       }
 
@@ -1781,27 +1778,27 @@ export class VoxelEditController extends SharedObject {
     }
 
     const backendEdits = [];
-    for (const [voxKey, indices] of indicesByVoxKey.entries()) {
-      backendEdits.push({ key: voxKey, indices, value, seq });
+    for (const [lodChunkKey, indices] of indicesByLodChunkKey.entries()) {
+      backendEdits.push({ key: lodChunkKey, indices, value, seq });
     }
     this.commitVoxels(backendEdits);
-    return Array.from(indicesByVoxKey.keys());
+    return Array.from(indicesByLodChunkKey.keys());
   }
 }
 
 registerRPC(VOX_EDIT_COMMIT_VOXELS_RPC_ID, function (x: any) {
-  const obj = this.get(x.rpcId) as VoxelEditController;
+  const obj = this.get(x.rpcId) as VoxelEditingController;
   obj.commitVoxels(Array.isArray(x.edits) ? x.edits : []);
 });
 
 registerPromiseRPC(VOX_EDIT_UNDO_RPC_ID, async function (this: RPC, x: any) {
-  const obj = this.get(x.rpcId) as VoxelEditController;
+  const obj = this.get(x.rpcId) as VoxelEditingController;
   await obj.undo();
   return { value: undefined };
 });
 
 registerPromiseRPC(VOX_EDIT_REDO_RPC_ID, async function (this: RPC, x: any) {
-  const obj = this.get(x.rpcId) as VoxelEditController;
+  const obj = this.get(x.rpcId) as VoxelEditingController;
   await obj.redo();
   return { value: undefined };
 });
@@ -1809,8 +1806,8 @@ registerPromiseRPC(VOX_EDIT_REDO_RPC_ID, async function (this: RPC, x: any) {
 registerPromiseRPC(
   VOX_EDIT_OPERATION_RPC_ID,
   async function (this: RPC, x: any) {
-    const obj = this.get(x.rpcId) as VoxelEditController;
-    const coveredVoxKeys = await obj.performOperation(x.operation);
-    return { value: coveredVoxKeys };
+    const obj = this.get(x.rpcId) as VoxelEditingController;
+    const coveredLodChunkKeys = await obj.performOperation(x.operation);
+    return { value: coveredLodChunkKeys };
   },
 );

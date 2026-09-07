@@ -19,7 +19,7 @@ import "#src/ui/voxel_annotations.css";
 import type { MouseSelectionState } from "#src/layer/index.js";
 import {
   getEditingContext,
-  VOXEL_LAYER_CONTROLS,
+  VOXEL_EDITING_LAYER_CONTROLS,
 } from "#src/layer/voxel_annotation/controls.js";
 import type {
   UserLayerWithVoxelEditing,
@@ -50,7 +50,7 @@ import {
   FLOODFILL_TOOL_ID,
   getBasisFromNormal,
   VALUE_PICKER_TOOL_ID,
-  type VoxelValueGetter,
+  type PaintValueGetter,
 } from "#src/voxel_annotation/base.js";
 
 const BRUSH_INPUT_MAP = EventActionMap.fromObject({
@@ -81,7 +81,7 @@ function getFloodFillCursor(erase: boolean) {
   return `url('data:image/svg+xml;utf8,${encodeURIComponent(floodFillSVG)}') 24 24, crosshair`;
 }
 
-abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
+abstract class VoxelEditingTool extends LayerTool<UserLayerWithVoxelEditing> {
   protected latestMouseState: MouseSelectionState | null = null;
   private lastNormal: vec3 | undefined = undefined;
   protected cursorEraseMode = new TrackableBoolean(false);
@@ -89,24 +89,24 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
   protected getPoint(mouseState: MouseSelectionState): Int32Array | undefined {
     const editContext = getEditingContext(this.layer);
     if (editContext === undefined) return undefined;
-    const vox = editContext.getVoxelPositionFromMouse(mouseState) as
+    const voxel = editContext.getVoxelPositionFromMouse(mouseState) as
       | Float32Array
       | undefined;
-    if (!mouseState?.active || !vox) return undefined;
+    if (!mouseState?.active || !voxel) return undefined;
     if (!mouseState.planeNormal) return;
     this.lastNormal = editContext.transformGlobalToVoxelNormal(
       mouseState.planeNormal,
     );
     const CHUNK_POSITION_EPSILON = 1e-3;
-    const shiftedVox = new Float32Array(3);
+    const shiftedVoxel = new Float32Array(3);
     for (let i = 0; i < 3; ++i) {
-      shiftedVox[i] =
-        vox[i] + CHUNK_POSITION_EPSILON * Math.abs(this.lastNormal[i]);
+      shiftedVoxel[i] =
+        voxel[i] + CHUNK_POSITION_EPSILON * Math.abs(this.lastNormal[i]);
     }
     return new Int32Array([
-      Math.floor(shiftedVox[0]),
-      Math.floor(shiftedVox[1]),
-      Math.floor(shiftedVox[2]),
+      Math.floor(shiftedVoxel[0]),
+      Math.floor(shiftedVoxel[1]),
+      Math.floor(shiftedVoxel[2]),
     ]);
   }
 
@@ -186,7 +186,7 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
       makeToolActivationStatusMessageWithHeader(activation);
     header.textContent = `${this.layer.managedLayer.name} - ${this.description}`;
     header.classList.add("neuroglancer-tool-activation-status-header");
-    body.classList.add("neuroglancer-voxel-tool-options-body");
+    body.classList.add("neuroglancer-voxel-editing-tool-options-body");
 
     if (!controlTypes) return;
 
@@ -195,7 +195,7 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
     );
 
     for (const type of controlTypes) {
-      const def = VOXEL_LAYER_CONTROLS.find(
+      const def = VOXEL_EDITING_LAYER_CONTROLS.find(
         (c) => c.toolJson && c.toolJson.type === type,
       );
       if (!def) continue;
@@ -270,7 +270,7 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
       return;
     }
     try {
-      const value = this.layer.getVoxelPaintValue(erasing);
+      const value = this.layer.getPaintValue(erasing);
       const max = Number(this.layer.floodMaxVoxels.value);
       if (!Number.isFinite(max) || max <= 0) {
         throw new Error("Invalid max fill voxels setting");
@@ -278,7 +278,7 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
 
       const filterValue =
         this.layer.lockToSelectedValue.value && erasing
-          ? this.layer.getVoxelPaintValue(false)(false)
+          ? this.layer.getPaintValue(false)(false)
           : undefined;
 
       void editContext
@@ -323,7 +323,7 @@ abstract class BaseVoxelTool extends LayerTool<UserLayerWithVoxelEditing> {
   }
 }
 
-export class VoxelBrushTool extends BaseVoxelTool {
+export class BrushTool extends VoxelEditingTool {
   private isDrawing = false;
   private lastPoint: Int32Array | undefined;
   private mouseDisposer: (() => void) | undefined;
@@ -335,7 +335,7 @@ export class VoxelBrushTool extends BaseVoxelTool {
         radius: number;
         shape: BrushShape;
         basis: { u: Float32Array; v: Float32Array };
-        value: VoxelValueGetter;
+        value: PaintValueGetter;
         filterValue: bigint | undefined;
         seq: number;
         // Snapshotted so a stroke abandoned without dispatch can always be
@@ -472,10 +472,10 @@ export class VoxelBrushTool extends BaseVoxelTool {
       radius: this.layer.brushRadius.value,
       shape: this.layer.brushShape.value,
       basis: this.getBasis()!,
-      value: this.layer.getVoxelPaintValue(this.layer.shouldErase()),
+      value: this.layer.getPaintValue(this.layer.shouldErase()),
       filterValue:
         this.layer.lockToSelectedValue.value && this.layer.shouldErase()
-          ? this.layer.getVoxelPaintValue(false)(false)
+          ? this.layer.getPaintValue(false)(false)
           : undefined,
       seq: editContext.beginStroke(),
       context: editContext,
@@ -557,7 +557,7 @@ export class VoxelBrushTool extends BaseVoxelTool {
   }
 }
 
-export class VoxelFloodFillTool extends BaseVoxelTool {
+export class FloodFillTool extends VoxelEditingTool {
   activate(activation: ToolActivation<this>) {
     if (!super.activate(activation)) return false;
     this.setCursor(getFloodFillCursor(this.cursorEraseMode.value));
@@ -599,7 +599,7 @@ export class VoxelFloodFillTool extends BaseVoxelTool {
 
 const pickerCursor = `url('data:image/svg+xml;utf8,${encodeURIComponent(svg_valuePicker)}') 24 24, crosshair`;
 
-export class AdoptVoxelValueTool extends LayerTool<UserLayerWithVoxelEditing> {
+export class ValuePickerTool extends LayerTool<UserLayerWithVoxelEditing> {
   private lastPickPosition: Float32Array | undefined;
   private lastCheckedSourceIndex = -1;
 
@@ -692,7 +692,7 @@ export class AdoptVoxelValueTool extends LayerTool<UserLayerWithVoxelEditing> {
         const bigValue = BigInt(value || 0);
 
         if (bigValue !== 0n) {
-          this.layer.setVoxelPaintValue(bigValue);
+          this.layer.setPaintValue(bigValue);
           this.lastCheckedSourceIndex = sourceIndex;
           StatusMessage.showTemporaryMessage(
             `Adopted value: ${bigValue} (from source ${sourceIndex + 1}/${numSources})`,
@@ -717,20 +717,20 @@ export class AdoptVoxelValueTool extends LayerTool<UserLayerWithVoxelEditing> {
   }
 }
 
-export function registerVoxelTools(LayerCtor: any) {
+export function registerVoxelEditingTools(LayerCtor: any) {
   registerTool(
     LayerCtor,
     BRUSH_TOOL_ID,
-    (layer: UserLayerWithVoxelEditing) => new VoxelBrushTool(layer),
+    (layer: UserLayerWithVoxelEditing) => new BrushTool(layer),
   );
   registerTool(
     LayerCtor,
     FLOODFILL_TOOL_ID,
-    (layer: UserLayerWithVoxelEditing) => new VoxelFloodFillTool(layer),
+    (layer: UserLayerWithVoxelEditing) => new FloodFillTool(layer),
   );
   registerTool(
     LayerCtor,
     VALUE_PICKER_TOOL_ID,
-    (layer: UserLayerWithVoxelEditing) => new AdoptVoxelValueTool(layer),
+    (layer: UserLayerWithVoxelEditing) => new ValuePickerTool(layer),
   );
 }

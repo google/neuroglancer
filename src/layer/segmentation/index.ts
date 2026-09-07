@@ -35,7 +35,7 @@ import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import { layerDataSourceSpecificationFromJson } from "#src/layer/layer_data_source.js";
 import * as json_keys from "#src/layer/segmentation/json_keys.js";
 import { registerLayerControls } from "#src/layer/segmentation/layer_controls.js";
-import { registerVoxelLayerControls } from "#src/layer/voxel_annotation/controls.js";
+import { registerVoxelEditingLayerControls } from "#src/layer/voxel_annotation/controls.js";
 import { UserLayerWithVoxelEditingMixin } from "#src/layer/voxel_annotation/index.js";
 import {
   MeshLayer,
@@ -110,7 +110,7 @@ import { SegmentDisplayTab } from "#src/ui/segment_list.js";
 import { registerSegmentSelectTools } from "#src/ui/segment_select_tools.js";
 import { registerSegmentSplitMergeTools } from "#src/ui/segment_split_merge_tools.js";
 import { DisplayOptionsTab } from "#src/ui/segmentation_display_options_tab.js";
-import { registerVoxelTools } from "#src/ui/voxel_annotations.js";
+import { registerVoxelEditingTools } from "#src/ui/voxel_annotations.js";
 import { Uint64Map } from "#src/uint64_map.js";
 import { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import { Uint64Set } from "#src/uint64_set.js";
@@ -135,9 +135,9 @@ import {
 } from "#src/util/json.js";
 import { Signal } from "#src/util/signal.js";
 import {
-  SEG_ERASE_SENTINEL,
-  VOXEL_EMPTY_VALUE,
-  type VoxelValueGetter,
+  SEGMENTATION_ERASE_SENTINEL,
+  EMPTY_VOXEL_VALUE,
+  type PaintValueGetter,
 } from "#src/voxel_annotation/base.js";
 import { makeWatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
@@ -632,9 +632,10 @@ export class SegmentationUserLayer extends Base {
     });
   }
 
-  getVoxelPaintValue(erase: boolean): VoxelValueGetter {
+  getPaintValue(erase: boolean): PaintValueGetter {
     return (isPreview) => {
-      if (erase) return isPreview ? SEG_ERASE_SENTINEL : VOXEL_EMPTY_VALUE;
+      if (erase)
+        return isPreview ? SEGMENTATION_ERASE_SENTINEL : EMPTY_VOXEL_VALUE;
       return this.paintValue.value;
     };
   }
@@ -1433,8 +1434,8 @@ export class SegmentationUserLayer extends Base {
 }
 
 registerLayerControls(SegmentationUserLayer);
-registerVoxelTools(SegmentationUserLayer);
-registerVoxelLayerControls(SegmentationUserLayer);
+registerVoxelEditingTools(SegmentationUserLayer);
+registerVoxelEditingLayerControls(SegmentationUserLayer);
 registerLayerType(SegmentationUserLayer);
 registerVolumeLayerType(VolumeType.SEGMENTATION, SegmentationUserLayer);
 registerLayerTypeDetector((subsource) => {

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ChunkState } from "#src/chunk_manager/base.js";
 import { NullarySignal } from "#src/util/signal.js";
-import { makeVoxChunkKey } from "#src/voxel_annotation/base.js";
-import { VoxelEditController } from "#src/voxel_annotation/frontend.js";
+import { makeLodChunkKey } from "#src/voxel_annotation/base.js";
+import { VoxelEditingController } from "#src/voxel_annotation/frontend.js";
 import type { RPC } from "#src/worker_rpc.js";
 
 const mockRpc = {
@@ -46,11 +46,11 @@ function createPreviewSourceMock() {
   };
 }
 
-describe("VoxelEditController.callChunkReload: preview swap observation", () => {
+describe("VoxelEditingController.callChunkReload: preview swap observation", () => {
   let realSources: ReturnType<typeof createRealSourceMock>[];
   let previewSources: ReturnType<typeof createPreviewSourceMock>[];
   let visibleChunksChanged: NullarySignal;
-  let controller: VoxelEditController;
+  let controller: VoxelEditingController;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -89,7 +89,7 @@ describe("VoxelEditController.callChunkReload: preview swap observation", () => 
       primarySource: makeMultiscale(realSources),
       previewSource: makeMultiscale(previewSources),
     };
-    controller = new VoxelEditController(host as any);
+    controller = new VoxelEditingController(host as any);
   });
 
   it("allocates monotonically increasing stroke seqs", () => {
@@ -104,8 +104,10 @@ describe("VoxelEditController.callChunkReload: preview swap observation", () => 
     // The stale chunk is on display when the reload arrives.
     realSources[0].fireFreshChunk("0,0,0");
 
-    const voxKey = makeVoxChunkKey("0,0,0", 0);
-    controller.callChunkReload([voxKey], false, undefined, { [voxKey]: seq });
+    const lodChunkKey = makeLodChunkKey("0,0,0", 0);
+    controller.callChunkReload([lodChunkKey], false, undefined, {
+      [lodChunkKey]: seq,
+    });
 
     expect(realSources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"], {
       lazy: true,
@@ -125,8 +127,10 @@ describe("VoxelEditController.callChunkReload: preview swap observation", () => 
     const seq = controller.beginStroke();
     previewSources[0].setPreviewSeq("0,0,0", seq);
 
-    const voxKey = makeVoxChunkKey("0,0,0", 0);
-    controller.callChunkReload([voxKey], false, undefined, { [voxKey]: seq });
+    const lodChunkKey = makeLodChunkKey("0,0,0", 0);
+    controller.callChunkReload([lodChunkKey], false, undefined, {
+      [lodChunkKey]: seq,
+    });
 
     // Refetched data arrived in system memory only: keep the preview.
     realSources[0].fireFreshChunk("0,0,0", ChunkState.SYSTEM_MEMORY);
@@ -145,14 +149,18 @@ describe("VoxelEditController.callChunkReload: preview swap observation", () => 
     previewSources[0].setPreviewSeq("0,0,0", seq2);
 
     // The reload for stroke 1's flush only covers seq 1 < 2.
-    const voxKey = makeVoxChunkKey("0,0,0", 0);
-    controller.callChunkReload([voxKey], false, undefined, { [voxKey]: 1 });
+    const lodChunkKey = makeLodChunkKey("0,0,0", 0);
+    controller.callChunkReload([lodChunkKey], false, undefined, {
+      [lodChunkKey]: 1,
+    });
     realSources[0].fireFreshChunk("0,0,0");
     visibleChunksChanged.dispatch();
     expect(previewSources[0].invalidateChunks).not.toHaveBeenCalled();
 
     // Stroke 2's own flush covers seq 2: its reload performs the clear.
-    controller.callChunkReload([voxKey], false, undefined, { [voxKey]: 2 });
+    controller.callChunkReload([lodChunkKey], false, undefined, {
+      [lodChunkKey]: 2,
+    });
     realSources[0].fireFreshChunk("0,0,0");
     visibleChunksChanged.dispatch();
     expect(previewSources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
@@ -162,8 +170,10 @@ describe("VoxelEditController.callChunkReload: preview swap observation", () => 
     const seq1 = controller.beginStroke();
     previewSources[0].setPreviewSeq("0,0,0", seq1);
 
-    const voxKey = makeVoxChunkKey("0,0,0", 0);
-    controller.callChunkReload([voxKey], false, undefined, { [voxKey]: seq1 });
+    const lodChunkKey = makeLodChunkKey("0,0,0", 0);
+    controller.callChunkReload([lodChunkKey], false, undefined, {
+      [lodChunkKey]: seq1,
+    });
 
     // A new stroke's preview touches the chunk before the refetch lands:
     // the arriving data cannot contain it.
@@ -180,7 +190,7 @@ describe("VoxelEditController.callChunkReload: preview swap observation", () => 
     // preview that a dispatched-but-unwritten stroke still owns.
     previewSources[0].setPreviewSeq("0,0,0", controller.beginStroke());
 
-    controller.callChunkReload([makeVoxChunkKey("0,0,0", 0)], false);
+    controller.callChunkReload([makeLodChunkKey("0,0,0", 0)], false);
     realSources[0].fireFreshChunk("0,0,0");
     visibleChunksChanged.dispatch();
 
@@ -188,7 +198,7 @@ describe("VoxelEditController.callChunkReload: preview swap observation", () => 
   });
 
   it("clears without coverage info when no stroke ever tagged the chunk", () => {
-    controller.callChunkReload([makeVoxChunkKey("0,0,0", 0)], false);
+    controller.callChunkReload([makeLodChunkKey("0,0,0", 0)], false);
     realSources[0].fireFreshChunk("0,0,0");
     visibleChunksChanged.dispatch();
     expect(previewSources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
@@ -199,8 +209,8 @@ describe("VoxelEditController.callChunkReload: preview swap observation", () => 
     const seq2 = controller.beginStroke(); // seq 2, unwritten
     previewSources[0].setPreviewSeq("1,2,3", seq2);
 
-    const parentKey = makeVoxChunkKey("0,0,0", 1);
-    const originKey = makeVoxChunkKey("1,2,3", 0);
+    const parentKey = makeLodChunkKey("0,0,0", 1);
+    const originKey = makeLodChunkKey("1,2,3", 0);
 
     // Cascade reload from stroke 1's flush: parent data only covers seq 1.
     controller.callChunkReload(
@@ -233,8 +243,14 @@ describe("VoxelEditController.callChunkReload: preview swap observation", () => 
     // rollback purges it so the swap resolves unconditionally.
     previewSources[0].setPreviewSeq("0,0,0", controller.beginStroke());
 
-    const voxKey = makeVoxChunkKey("0,0,0", 0);
-    controller.callChunkReload([voxKey], false, undefined, undefined, true);
+    const lodChunkKey = makeLodChunkKey("0,0,0", 0);
+    controller.callChunkReload(
+      [lodChunkKey],
+      false,
+      undefined,
+      undefined,
+      true,
+    );
 
     // Not cleared before data arrives: the preview keeps showing the stroke.
     visibleChunksChanged.dispatch();
@@ -253,9 +269,13 @@ describe("VoxelEditController.callChunkReload: preview swap observation", () => 
     const seq2 = controller.beginStroke();
     previewSources[0].setPreviewSeq("0,0,0", seq2);
 
-    const voxKey = makeVoxChunkKey("0,0,0", 0);
-    controller.callChunkReload([voxKey], false, undefined, { [voxKey]: 1 });
-    controller.callChunkReload([voxKey], false, undefined, { [voxKey]: 2 });
+    const lodChunkKey = makeLodChunkKey("0,0,0", 0);
+    controller.callChunkReload([lodChunkKey], false, undefined, {
+      [lodChunkKey]: 1,
+    });
+    controller.callChunkReload([lodChunkKey], false, undefined, {
+      [lodChunkKey]: 2,
+    });
 
     realSources[0].fireFreshChunk("0,0,0");
     visibleChunksChanged.dispatch();

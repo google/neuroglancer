@@ -168,7 +168,7 @@ export function drawBrushCursor(
   return radiusXY;
 }
 
-export type VoxelTabElement =
+export type VoxelEditingTabElement =
   | { type: "header"; label: string }
   | { type: "tool-row"; tools: { toolId: string; label: string }[] }
   | LayerControlDefinition<UserLayerWithVoxelEditing>;
@@ -235,7 +235,7 @@ const TOOL_SPECIFIC_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEditing>[
     },
   ];
 
-const COMMON_CONTROLS: VoxelTabElement[] = [
+const COMMON_CONTROLS: VoxelEditingTabElement[] = [
   { type: "header", label: "Settings" },
   {
     label: "Erase only selected value",
@@ -249,7 +249,7 @@ const COMMON_CONTROLS: VoxelTabElement[] = [
     ...buttonLayerControl({
       text: "Undo",
       onClick: (layer) =>
-        layer.handleVoxAction("undo", new LayerActionContext()),
+        layer.handleVoxelEditingAction("undo", new LayerActionContext()),
     }),
   },
   {
@@ -258,7 +258,7 @@ const COMMON_CONTROLS: VoxelTabElement[] = [
     ...buttonLayerControl({
       text: "Redo",
       onClick: (layer) =>
-        layer.handleVoxAction("redo", new LayerActionContext()),
+        layer.handleVoxelEditingAction("redo", new LayerActionContext()),
     }),
   },
   {
@@ -270,7 +270,7 @@ const COMMON_CONTROLS: VoxelTabElement[] = [
       control.title = "Specify segment ID or intensity value to paint";
       control.addEventListener("change", () => {
         try {
-          layer.setVoxelPaintValue(control.value);
+          layer.setPaintValue(control.value);
         } catch {
           control.value = layer.paintValue.value.toString();
         }
@@ -291,7 +291,7 @@ const COMMON_CONTROLS: VoxelTabElement[] = [
     ...buttonLayerControl({
       text: "Random",
       onClick: (layer) =>
-        layer.handleVoxAction(
+        layer.handleVoxelEditingAction(
           "randomize-paint-value",
           new LayerActionContext(),
         ),
@@ -299,13 +299,13 @@ const COMMON_CONTROLS: VoxelTabElement[] = [
   },
 ];
 
-export const VOXEL_LAYER_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEditing>[] =
+export const VOXEL_EDITING_LAYER_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEditing>[] =
   [...TOOL_SPECIFIC_CONTROLS, ...COMMON_CONTROLS].filter(
     (x): x is LayerControlDefinition<UserLayerWithVoxelEditing> =>
       !("type" in x) || (x.type !== "header" && x.type !== "tool-row"),
   );
 
-export const VOXEL_TAB_LAYOUT: VoxelTabElement[] = [
+export const VOXEL_EDITING_TAB_LAYOUT: VoxelEditingTabElement[] = [
   { type: "header", label: "Tools" },
   {
     type: "tool-row",
@@ -318,10 +318,10 @@ export const VOXEL_TAB_LAYOUT: VoxelTabElement[] = [
   ...COMMON_CONTROLS,
 ];
 
-export function registerVoxelLayerControls(
+export function registerVoxelEditingLayerControls(
   layerType: UserLayerConstructor<UserLayerWithVoxelEditing>,
 ) {
-  for (const control of VOXEL_LAYER_CONTROLS) {
+  for (const control of VOXEL_EDITING_LAYER_CONTROLS) {
     registerLayerControl(layerType, control);
   }
 }
