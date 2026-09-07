@@ -142,7 +142,7 @@ export class ImageUserLayer extends Base {
   shaderError = makeWatchableShaderError();
   dataType = new WatchableValue<DataType | undefined>(undefined);
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
-  voxelOverlayRenderScaleHistogram = new RenderScaleHistogram();
+  voxelEditingPreviewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
   volumeRenderingGain = trackableFiniteFloat(0);
   volumeRenderingChunkResolutionHistogram = new RenderScaleHistogram(
@@ -199,7 +199,7 @@ export class ImageUserLayer extends Base {
     };
   }
 
-  _createVoxelOverlayRenderLayer(
+  createVoxelEditingPreviewRenderLayer(
     source: MultiscaleVolumeChunkSource,
     transform: WatchableValueInterface<RenderLayerTransformOrError>,
   ): ImageRenderLayer {
@@ -210,7 +210,7 @@ ${originalShader}
 #undef main
 
 void main() {
-  // VOXEL_EMPTY_VALUE is transparent in the overlay so the underlying data
+  // VOXEL_EMPTY_VALUE is transparent in the preview so the underlying data
   // shows through. This means it cannot be used as a paint value on image layers.
   if (toRaw(getDataValue()) == ${VOXEL_EMPTY_VALUE}n) {
     emitTransparent();
@@ -237,7 +237,7 @@ void main() {
       shaderError: this.shaderError,
       transform: transform,
       renderScaleTarget: this.sliceViewRenderScaleTarget,
-      renderScaleHistogram: this.voxelOverlayRenderScaleHistogram,
+      renderScaleHistogram: this.voxelEditingPreviewRenderScaleHistogram,
       localPosition: this.localPosition,
       channelCoordinateSpace: this.channelCoordinateSpace,
     });

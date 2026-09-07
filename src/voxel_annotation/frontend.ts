@@ -61,55 +61,56 @@ export class VoxelEditController extends SharedObject {
   // backend.
   private dispatchSeq = 0;
 
-  // Overlay swaps awaiting their refetched real chunk, keyed by real vox
+  // Preview swaps awaiting their refetched real chunk, keyed by real vox
   // chunk key and resolved by observing visibleChunksChanged: the real
   // chunk's object identity distinguishes the lazily kept stale chunk
   // (recorded at arming) from the refetched one, since a `new` chunk update
   // always builds a fresh Chunk object. A newer reload for the same chunk
   // overwrites its entry, so the map never grows beyond the set of chunks
   // awaiting a swap.
-  private pendingOverlaySwaps = new Map<
+  private pendingPreviewSwaps = new Map<
     string,
     {
       source: VolumeChunkSource;
       chunkKey: string;
       staleChunk: unknown;
-      overlaySource: InMemoryVolumeChunkSource;
-      overlayChunkKey: string;
+      previewChunkSource: InMemoryVolumeChunkSource;
+      previewChunkKey: string;
       coveredSeq: number;
     }
   >();
 
-  private processPendingOverlaySwaps(): void {
-    if (this.pendingOverlaySwaps.size === 0) return;
-    for (const [voxKey, swap] of this.pendingOverlaySwaps) {
+  private processPendingPreviewSwaps(): void {
+    if (this.pendingPreviewSwaps.size === 0) return;
+    for (const [voxKey, swap] of this.pendingPreviewSwaps) {
       const chunk = swap.source.chunks.get(swap.chunkKey);
       // Still the stale chunk (or gone): the refetch has not landed yet.
       if (chunk === undefined || chunk === swap.staleChunk) continue;
       // Refetched but not yet displayed: keep waiting.
       if (chunk.state !== ChunkState.GPU_MEMORY) continue;
-      this.pendingOverlaySwaps.delete(voxKey);
-      // The overlay tag is read now, at swap time: a stroke that touched the
-      // chunk since arming raised it above coveredSeq, keeping the overlay on
+      this.pendingPreviewSwaps.delete(voxKey);
+      // The preview tag is read now, at swap time: a stroke that touched the
+      // chunk since arming raised it above coveredSeq, keeping the preview on
       // screen; the covering write's own reload re-arms the swap.
       if (
-        swap.coveredSeq < swap.overlaySource.getOverlaySeq(swap.overlayChunkKey)
+        swap.coveredSeq <
+        swap.previewChunkSource.getPreviewSeq(swap.previewChunkKey)
       ) {
         continue;
       }
-      swap.overlaySource.invalidateChunks([swap.overlayChunkKey]);
+      swap.previewChunkSource.invalidateChunks([swap.previewChunkKey]);
     }
   }
 
   // Allocates a stroke's seq before its first preview. Previews tag the
-  // overlay chunks they touch with it and the dispatch carries the same
-  // value, so what the overlay shows and what the write covers cannot
+  // preview chunks they touch with it and the dispatch carries the same
+  // value, so what the preview shows and what the write covers cannot
   // diverge.
   beginStroke(): number {
     return ++this.dispatchSeq;
   }
 
-  private getOverlaySource(): InMemoryVolumeChunkSource | undefined {
+  private getPreviewChunkSource(): InMemoryVolumeChunkSource | undefined {
     return this.host.previewSource?.getSources(
       this.getIdentitySliceViewSourceOptions(),
     )[0]?.[0]?.chunkSource as InMemoryVolumeChunkSource | undefined;
@@ -121,14 +122,14 @@ export class VoxelEditController extends SharedObject {
     this.reconcileStroke(seq, []);
   }
 
-  // Drops the overlay chunks a stroke tagged that its backend write does not
+  // Drops the preview chunks a stroke tagged that its backend write does not
   // cover: nothing will be written there, so no reload would ever clear them
   // and the real data beneath is already correct. Chunks re-tagged by a newer
   // stroke no longer match `seq` and are left untouched.
   reconcileStroke(seq: number, coveredVoxKeys: string[]): void {
-    const overlaySource = this.getOverlaySource();
-    if (overlaySource === undefined) return;
-    const tagged = overlaySource.keysWithOverlaySeq(seq);
+    const previewChunkSource = this.getPreviewChunkSource();
+    if (previewChunkSource === undefined) return;
+    const tagged = previewChunkSource.keysWithPreviewSeq(seq);
     if (tagged.length === 0) return;
     let stale = tagged;
     if (coveredVoxKeys.length > 0) {
@@ -141,7 +142,7 @@ export class VoxelEditController extends SharedObject {
       }
       stale = tagged.filter((key) => !covered.has(key));
     }
-    if (stale.length > 0) overlaySource.invalidateChunks(stale);
+    if (stale.length > 0) previewChunkSource.invalidateChunks(stale);
   }
 
   constructor(private host: VoxelEditControllerHost) {
@@ -190,13 +191,13 @@ export class VoxelEditController extends SharedObject {
       pendingOpCount: this.pendingOpCount.rpcId,
     });
 
-    // Pending overlay swaps are resolved by observing chunk changes rather
+    // Pending preview swaps are resolved by observing chunk changes rather
     // than by hooks inside the chunk manager: the signal fires after every
     // applied batch of chunk updates, and the check below is a cheap scan of
     // the (small) pending map.
     this.registerDisposer(
       this.host.primarySource.chunkManager.chunkQueueManager.visibleChunksChanged.add(
-        () => this.processPendingOverlaySwaps(),
+        () => this.processPendingPreviewSwaps(),
       ),
     );
   }
@@ -446,7 +447,7 @@ export class VoxelEditController extends SharedObject {
 
     if (edits.size > 0) {
       previewSource.applyLocalEdits(edits);
-      for (const key of edits.keys()) previewSource.setOverlaySeq(key, seq);
+      for (const key of edits.keys()) previewSource.setPreviewSeq(key, seq);
     }
   }
 
@@ -461,7 +462,7 @@ export class VoxelEditController extends SharedObject {
   ) {
     if (centers.length === 0) {
       // Nothing will be written for this stroke; drop whatever its previews
-      // tagged so the overlay does not wait for a write that never comes.
+      // tagged so the preview does not wait for a write that never comes.
       this.rollbackStroke(seq);
       return;
     }
@@ -622,7 +623,7 @@ export class VoxelEditController extends SharedObject {
     if (filledCount > 0) {
       previewChunkSource.applyLocalEdits(edits);
       for (const key of edits.keys()) {
-        previewChunkSource.setOverlaySeq(key, seq);
+        previewChunkSource.setPreviewSeq(key, seq);
       }
     }
 
@@ -648,7 +649,7 @@ export class VoxelEditController extends SharedObject {
   callChunkReload(
     voxChunkKeys: string[],
     isForPreviewChunks: boolean,
-    overlayKeysToClear?: Record<string, string>,
+    previewKeysToClear?: Record<string, string>,
     coveredSeqs?: Record<string, number>,
     isRollback = false,
   ) {
@@ -674,13 +675,13 @@ export class VoxelEditController extends SharedObject {
 
     if (!isForPreviewChunks) {
       // Real chunks: invalidate lazily so the current GPU chunk stays on screen,
-      // and clear the matching overlay chunk only once the refetched real data
+      // and clear the matching preview chunk only once the refetched real data
       // has actually arrived on the GPU (swap-on-arrival), never on a timer.
       //
-      // The overlay to clear defaults to the same key/LOD (max-res edits). For
+      // The preview to clear defaults to the same key/LOD (max-res edits). For
       // downsampled parents the backend passes the originating LOD-0 key, so the
-      // visible (forced LOD-0) overlay is cleared as soon as the real chunk of
-      // whatever LOD is on screen arrives. A never-swapped overlay simply stays
+      // visible (forced LOD-0) preview is cleared as soon as the real chunk of
+      // whatever LOD is on screen arrives. A never-swapped preview simply stays
       // displayed (correct) at worst leaking a little memory — far better than a
       // timer that would clear it with nothing to show.
       const previewSources = this.host.previewSource?.getSources(
@@ -689,7 +690,7 @@ export class VoxelEditController extends SharedObject {
       // Known, accepted race: a refetch predating the write we are reloading
       // for may still sit in the frontend's pending-update queue at arming
       // time; its arrival is indistinguishable from the fresh one and can
-      // clear the overlay over pre-write data. The window requires the queue
+      // clear the preview over pre-write data. The window requires the queue
       // to lag behind RPC processing (heavy load only), and the backend's
       // in-flight download cancellation on write guarantees a correct
       // refetch follows within one round trip, so the effect is a rare,
@@ -704,21 +705,21 @@ export class VoxelEditController extends SharedObject {
         if (!source) continue;
         const { chunkKey } = parsed;
 
-        const overlayParsed = parseVoxChunkKey(
-          overlayKeysToClear?.[voxKey] ?? voxKey,
+        const previewParsed = parseVoxChunkKey(
+          previewKeysToClear?.[voxKey] ?? voxKey,
         );
-        const overlaySource = overlayParsed
-          ? (previewSources?.[overlayParsed.lodIndex]?.chunkSource as
+        const previewChunkSource = previewParsed
+          ? (previewSources?.[previewParsed.lodIndex]?.chunkSource as
               | InMemoryVolumeChunkSource
               | undefined)
           : undefined;
-        if (overlaySource) {
+        if (previewChunkSource) {
           // The backend echoes, per reloaded chunk, the highest stroke seq
-          // its write covers. The overlay chunk carries the seq of the last
+          // its write covers. The preview chunk carries the seq of the last
           // stroke whose preview touched it (including a stroke still under
           // the mouse — its seq is allocated before its first preview), read
           // when the swap resolves. Clearing only when coverage reaches that
-          // tag guarantees the arriving data contains everything the overlay
+          // tag guarantees the arriving data contains everything the preview
           // shows. A skipped clear is re-armed by the covering write's own
           // reload; a stroke that never gets written is rolled back
           // explicitly (rollbackStroke) instead of waited for.
@@ -727,14 +728,14 @@ export class VoxelEditController extends SharedObject {
             // so the swap clears on first arrival. An in-progress stroke's
             // chunk would lose its preview until its dispatch rewrites it
             // (Ctrl+Z mid-drag, accepted).
-            overlaySource.clearOverlaySeq(overlayParsed!.chunkKey);
+            previewChunkSource.clearPreviewSeq(previewParsed!.chunkKey);
           }
-          this.pendingOverlaySwaps.set(voxKey, {
+          this.pendingPreviewSwaps.set(voxKey, {
             source,
             chunkKey,
             staleChunk: source.chunks.get(chunkKey),
-            overlaySource,
-            overlayChunkKey: overlayParsed!.chunkKey,
+            previewChunkSource,
+            previewChunkKey: previewParsed!.chunkKey,
             coveredSeq: coveredSeqs?.[voxKey] ?? 0,
           });
         }
@@ -754,8 +755,8 @@ export class VoxelEditController extends SharedObject {
       return;
     }
 
-    // Preview chunks: clear the optimistic overlay immediately (write-failure
-    // rollback, and downsampled-overlay cleanup).
+    // Preview chunks: clear the preview immediately (write-failure
+    // rollback, and downsampled-preview cleanup).
     for (const voxKey of voxChunkKeys) {
       const parsed = parseVoxChunkKey(voxKey);
       if (!parsed) continue;
@@ -822,7 +823,7 @@ registerRPC(VOX_RELOAD_CHUNKS_RPC_ID, function (x: any) {
   obj.callChunkReload(
     keys,
     x.isForPreviewChunks,
-    asRecordOrUndefined<string>(x.overlayKeysToClear),
+    asRecordOrUndefined<string>(x.previewKeysToClear),
     asRecordOrUndefined<number>(x.coveredSeqs),
     x.isRollback === true,
   );

@@ -106,10 +106,8 @@ export class VoxelEditingContext
   private cachedChunkTransform: ChunkTransformParameters | undefined;
   private cachedTransformGeneration: number = -1;
   private cachedVoxelPosition: Float32Array = new Float32Array(3);
-  optimisticRenderLayer:
-    | ImageRenderLayer
-    | SegmentationRenderLayer
-    | undefined = undefined;
+  previewRenderLayer: ImageRenderLayer | SegmentationRenderLayer | undefined =
+    undefined;
   previewSource: VoxelPreviewMultiscaleSource | undefined = undefined;
 
   private localLoadEstimate = new WatchableValue<number>(0);
@@ -136,25 +134,28 @@ export class VoxelEditingContext
       primarySource,
     );
 
-    this.optimisticRenderLayer = this.hostLayer._createVoxelOverlayRenderLayer(
-      this.previewSource,
-      primaryRenderLayer.transform,
-    );
+    this.previewRenderLayer =
+      this.hostLayer.createVoxelEditingPreviewRenderLayer(
+        this.previewSource,
+        primaryRenderLayer.transform,
+      );
 
     if (
       this.primaryRenderLayer instanceof SegmentationRenderLayer &&
-      this.optimisticRenderLayer instanceof SegmentationRenderLayer
+      this.previewRenderLayer instanceof SegmentationRenderLayer
     ) {
-      this.optimisticRenderLayer.forceHiddenFromMainRenderLoop = true;
-      this.primaryRenderLayer.setVoxelPreviewLayer(this.optimisticRenderLayer);
+      this.previewRenderLayer.forceHiddenFromMainRenderLoop = true;
+      this.primaryRenderLayer.setVoxelEditingPreviewLayer(
+        this.previewRenderLayer,
+      );
     }
 
-    // since we only allow drawing at max res, we can lock the optimistic render layer to it
+    // since we only allow drawing at max res, we can lock the preview render layer to it
     (
-      this.optimisticRenderLayer as SliceViewRenderLayer
+      this.previewRenderLayer as SliceViewRenderLayer
     ).getForcedSourceIndexOverride = () => 0;
 
-    this.hostLayer.addRenderLayer(this.optimisticRenderLayer);
+    this.hostLayer.addRenderLayer(this.previewRenderLayer);
 
     this._controller = new VoxelEditController(this);
 
@@ -268,10 +269,10 @@ export class VoxelEditingContext
         radiusCanonical,
         filterValue !== undefined,
       ) * centers.length;
-    // The stroke's previews already tagged overlay chunks with `seq`. If the
+    // The stroke's previews already tagged preview chunks with `seq`. If the
     // dispatch does not reach the backend — stamina or permission refusal in
     // withCost, or an RPC failure — those edits will never be written and no
-    // reload would ever clear them: roll the stroke's overlay chunks back.
+    // reload would ever clear them: roll the stroke's preview chunks back.
     let dispatched = false;
     try {
       await this.withCost(cost, async () => {
@@ -336,14 +337,14 @@ export class VoxelEditingContext
 
   disposed() {
     if (this._controller) this._controller.dispose();
-    if (this.optimisticRenderLayer) {
+    if (this.previewRenderLayer) {
       if (
         this.primaryRenderLayer instanceof SegmentationRenderLayer &&
-        this.optimisticRenderLayer instanceof SegmentationRenderLayer
+        this.previewRenderLayer instanceof SegmentationRenderLayer
       ) {
-        this.primaryRenderLayer.setVoxelPreviewLayer(undefined);
+        this.primaryRenderLayer.setVoxelEditingPreviewLayer(undefined);
       }
-      this.hostLayer.removeRenderLayer(this.optimisticRenderLayer);
+      this.hostLayer.removeRenderLayer(this.previewRenderLayer);
     }
     super.disposed();
   }
@@ -448,7 +449,7 @@ export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
 
   editingContexts: Map<LoadedDataSubsource, VoxelEditingContext>;
 
-  abstract _createVoxelOverlayRenderLayer(
+  abstract createVoxelEditingPreviewRenderLayer(
     source: MultiscaleVolumeChunkSource,
     transform: WatchableValueInterface<RenderLayerTransformOrError>,
   ): ImageRenderLayer | SegmentationRenderLayer;
@@ -736,7 +737,7 @@ export function UserLayerWithVoxelEditingMixin<
       return truncated;
     }
 
-    abstract _createVoxelOverlayRenderLayer(
+    abstract createVoxelEditingPreviewRenderLayer(
       source: MultiscaleVolumeChunkSource,
       transform: WatchableValueInterface<RenderLayerTransformOrError>,
     ): ImageRenderLayer | SegmentationRenderLayer;

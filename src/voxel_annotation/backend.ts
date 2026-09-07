@@ -402,7 +402,7 @@ export class VoxelEditController extends SharedObject {
   // Per LOD-0 vox key: the highest frontend dispatch seq whose edits have been
   // durably written to that chunk. Echoed in reload messages (including
   // downsample cascade reloads, keyed by origin) so the frontend can tell
-  // whether the refetched data covers everything its overlay represents.
+  // whether the refetched data covers everything its preview represents.
   // Pruned via maybePruneFlushedSeq: bounded by the cascades in flight.
   private lastFlushedSeq = new Map<string, number>();
 
@@ -666,9 +666,9 @@ export class VoxelEditController extends SharedObject {
         this.enqueueDownsample(voxKey);
       }
     }
-    // The overlay is cleared by the swap-on-arrival registered in the real
+    // The preview is cleared by the swap-on-arrival registered in the real
     // callChunkReload above (not here): on the no-downsampling path the max-res
-    // overlay is dropped when the refetched real chunk arrives.
+    // preview is dropped when the refetched real chunk arrives.
 
     // With downsampling, the queue guard defers pruning to the chain-end hook.
     for (const voxKey of editsByVoxKey.keys()) {
@@ -715,23 +715,23 @@ export class VoxelEditController extends SharedObject {
     }, this.commitDebounceDelayMs) as unknown as number;
   }
 
-  // `overlayKeysToClear[realKey]` is the overlay vox key (LOD 0) to drop once the
+  // `previewKeysToClear[realKey]` is the preview vox key (LOD 0) to drop once the
   // real chunk `realKey` reaches the GPU. A real key absent from the map defaults
   // to itself on the frontend; downsampled parents map to the originating LOD-0
-  // key so the visible (forced LOD-0) overlay is cleared as soon as any covering
+  // key so the visible (forced LOD-0) preview is cleared as soon as any covering
   // real LOD arrives. Using a keyed map (not parallel arrays) keeps real and
-  // overlay keys aligned regardless of ordering or partial population.
+  // preview keys aligned regardless of ordering or partial population.
   // `coveredSeqs[realKey]` is the highest frontend dispatch seq whose edits
   // are guaranteed present in the stored data this reload refetches (for
   // downsampled parents: the origin chunk's flushed seq at the time the child
-  // was read). The frontend clears the matching overlay only if this covers
+  // was read). The frontend clears the matching preview only if this covers
   // the last dispatched stroke that touched it.
   // `isRollback` marks a state rollback (undo/redo): the frontend purges the
-  // overlay tags so the swap clears on the first arrival, whatever it covers.
+  // preview tags so the swap clears on the first arrival, whatever it covers.
   callChunkReload(
     voxChunkKeys: string[],
     isForPreviewChunks = false,
-    overlayKeysToClear?: Record<string, string>,
+    previewKeysToClear?: Record<string, string>,
     coveredSeqs?: Record<string, number>,
     isRollback = false,
   ) {
@@ -739,7 +739,7 @@ export class VoxelEditController extends SharedObject {
       rpcId: this.rpcId,
       voxChunkKeys: voxChunkKeys,
       isForPreviewChunks,
-      overlayKeysToClear,
+      previewKeysToClear,
       coveredSeqs,
       isRollback,
     });
@@ -805,7 +805,7 @@ export class VoxelEditController extends SharedObject {
     // read: every step propagates data derived from the LOD-0 content read at
     // chain start, so a flush completing mid-chain (higher seq) is NOT
     // included in what the later steps write — claiming it would clear the
-    // overlay over a parent that lacks those edits. Under-claiming is safe:
+    // preview over a parent that lacks those edits. Under-claiming is safe:
     // that flush enqueues its own chain, which re-claims with its seq.
     const chainCoveredSeq = this.lastFlushedSeq.get(key) ?? 0;
     let currentKey: string | null = key;
@@ -814,9 +814,9 @@ export class VoxelEditController extends SharedObject {
       currentKey = await this.downsampleStep(currentKey, key, chainCoveredSeq);
     }
 
-    // Note: the overlay is no longer cleared eagerly here. Each parent's real
-    // reload (above) drops the originating LOD-0 overlay once it reaches the
-    // GPU, so the visible overlay is never removed before its replacement is
+    // Note: the preview is no longer cleared eagerly here. Each parent's real
+    // reload (above) drops the originating LOD-0 preview once it reaches the
+    // GPU, so the visible preview is never removed before its replacement is
     // rendered — even when zoomed out.
     this.updatePendingCount();
   }
@@ -919,7 +919,7 @@ export class VoxelEditController extends SharedObject {
           update.values,
         );
         // Reload the real parent lazily; when it reaches the GPU, clear the
-        // originating LOD-0 overlay (the visible one when zoomed out) — if
+        // originating LOD-0 preview (the visible one when zoomed out) — if
         // the propagated data covers every stroke dispatched to the origin.
         this.callChunkReload(
           [parentKey],
@@ -1299,7 +1299,7 @@ export class VoxelEditController extends SharedObject {
           this.enqueueDownsample(key);
         }
       }
-      // Rollback reload: the overlay keeps showing the undone strokes until
+      // Rollback reload: the preview keeps showing the undone strokes until
       // real data arrives. Clearing immediately would reveal older data and
       // make the stroke blink back when a pre-undo refetch lands.
       this.callChunkReload(keys, false, undefined, undefined, true);
@@ -1317,7 +1317,7 @@ export class VoxelEditController extends SharedObject {
   }
 
   // Resolves with the vox chunk keys whose stored data will contain the
-  // operation's overlay content once its edits flush ("covered" chunks).
+  // operation's preview content once its edits flush ("covered" chunks).
   async performOperation(operation: VoxelOperation): Promise<string[]> {
     switch (operation.type) {
       case VoxelOperationType.BRUSH:
@@ -1339,7 +1339,7 @@ export class VoxelEditController extends SharedObject {
 
     const covered = new Set<string>();
     // Voxels skipped because the store already holds the brush value are
-    // covered without being rewritten: clearing their overlay would flash
+    // covered without being rewritten: clearing their preview would flash
     // pre-write data until the prior write's own reload lands.
     const coveredSpec = this.sources.get(sourceIndex)?.spec;
     const csizeX = coveredSpec?.chunkDataSize[0] ?? 1;

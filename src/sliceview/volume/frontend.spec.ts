@@ -192,29 +192,29 @@ describe("InMemoryVolumeChunkSource", () => {
     expect(chunk.data[0]).toBe(123n);
   });
 
-  it("Overlay seqs: default to 0, are set per key and filtered by seq", () => {
+  it("Preview seqs: default to 0, are set per key and filtered by seq", () => {
     const source = createSource(DataType.UINT64);
-    expect(source.getOverlaySeq("0,0,0")).toBe(0);
+    expect(source.getPreviewSeq("0,0,0")).toBe(0);
 
-    source.setOverlaySeq("0,0,0", 3);
-    source.setOverlaySeq("1,0,0", 3);
-    source.setOverlaySeq("2,0,0", 4);
+    source.setPreviewSeq("0,0,0", 3);
+    source.setPreviewSeq("1,0,0", 3);
+    source.setPreviewSeq("2,0,0", 4);
 
-    expect(source.getOverlaySeq("0,0,0")).toBe(3);
-    expect(source.keysWithOverlaySeq(3).sort()).toEqual(["0,0,0", "1,0,0"]);
-    expect(source.keysWithOverlaySeq(4)).toEqual(["2,0,0"]);
-    expect(source.keysWithOverlaySeq(5)).toEqual([]);
+    expect(source.getPreviewSeq("0,0,0")).toBe(3);
+    expect(source.keysWithPreviewSeq(3).sort()).toEqual(["0,0,0", "1,0,0"]);
+    expect(source.keysWithPreviewSeq(4)).toEqual(["2,0,0"]);
+    expect(source.keysWithPreviewSeq(5)).toEqual([]);
   });
 
-  it("Overlay seqs: purged when the chunk is deleted", () => {
+  it("Preview seqs: purged when the chunk is deleted", () => {
     const source = createSource(DataType.UINT64);
     source.applyLocalEdits(new Map([["0,0,0", { indices: [0], value: 1n }]]));
-    source.setOverlaySeq("0,0,0", 7);
+    source.setPreviewSeq("0,0,0", 7);
 
     source.invalidateChunks(["0,0,0"]);
 
-    expect(source.getOverlaySeq("0,0,0")).toBe(0);
-    expect(source.keysWithOverlaySeq(7)).toEqual([]);
+    expect(source.getPreviewSeq("0,0,0")).toBe(0);
+    expect(source.keysWithPreviewSeq(7)).toEqual([]);
   });
 
   it("Applies contiguous index ranges with typed-array fills", () => {

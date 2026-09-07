@@ -29,33 +29,33 @@ function createRealSourceMock() {
   };
 }
 
-// Overlay source mock mirroring InMemoryVolumeChunkSource's stroke-seq tags:
+// Preview source mock mirroring InMemoryVolumeChunkSource's stroke-seq tags:
 // invalidateChunks purges the tag, like the real deleteChunk does.
-function createOverlaySourceMock() {
-  const overlaySeqs = new Map<string, number>();
+function createPreviewSourceMock() {
+  const previewSeqs = new Map<string, number>();
   return {
-    overlaySeqs,
-    setOverlaySeq: (key: string, seq: number) => overlaySeqs.set(key, seq),
-    getOverlaySeq: (key: string) => overlaySeqs.get(key) ?? 0,
-    keysWithOverlaySeq: (seq: number) =>
-      [...overlaySeqs.entries()].filter(([, s]) => s === seq).map(([k]) => k),
-    clearOverlaySeq: (key: string) => overlaySeqs.delete(key),
+    previewSeqs,
+    setPreviewSeq: (key: string, seq: number) => previewSeqs.set(key, seq),
+    getPreviewSeq: (key: string) => previewSeqs.get(key) ?? 0,
+    keysWithPreviewSeq: (seq: number) =>
+      [...previewSeqs.entries()].filter(([, s]) => s === seq).map(([k]) => k),
+    clearPreviewSeq: (key: string) => previewSeqs.delete(key),
     invalidateChunks: vi.fn((keys: string[]) => {
-      for (const key of keys) overlaySeqs.delete(key);
+      for (const key of keys) previewSeqs.delete(key);
     }),
   };
 }
 
-describe("VoxelEditController.callChunkReload: overlay swap observation", () => {
+describe("VoxelEditController.callChunkReload: preview swap observation", () => {
   let realSources: ReturnType<typeof createRealSourceMock>[];
-  let overlaySources: ReturnType<typeof createOverlaySourceMock>[];
+  let previewSources: ReturnType<typeof createPreviewSourceMock>[];
   let visibleChunksChanged: NullarySignal;
   let controller: VoxelEditController;
 
   beforeEach(() => {
     vi.clearAllMocks();
     realSources = [createRealSourceMock(), createRealSourceMock()];
-    overlaySources = [createOverlaySourceMock(), createOverlaySourceMock()];
+    previewSources = [createPreviewSourceMock(), createPreviewSourceMock()];
     visibleChunksChanged = new NullarySignal();
     const makeMultiscale = (sources: unknown[]) => ({
       rank: 3,
@@ -87,7 +87,7 @@ describe("VoxelEditController.callChunkReload: overlay swap observation", () => 
     const host = {
       rpc: mockRpc,
       primarySource: makeMultiscale(realSources),
-      previewSource: makeMultiscale(overlaySources),
+      previewSource: makeMultiscale(previewSources),
     };
     controller = new VoxelEditController(host as any);
   });
@@ -98,9 +98,9 @@ describe("VoxelEditController.callChunkReload: overlay swap observation", () => 
     expect(controller.beginStroke()).toBe(3);
   });
 
-  it("clears the overlay once the refetched chunk replaces the stale one on the GPU", () => {
+  it("clears the preview once the refetched chunk replaces the stale one on the GPU", () => {
     const seq = controller.beginStroke();
-    overlaySources[0].setOverlaySeq("0,0,0", seq);
+    previewSources[0].setPreviewSeq("0,0,0", seq);
     // The stale chunk is on display when the reload arrives.
     realSources[0].fireFreshChunk("0,0,0");
 
@@ -113,54 +113,54 @@ describe("VoxelEditController.callChunkReload: overlay swap observation", () => 
 
     // Signal fires while the stale chunk is still displayed: no clear.
     visibleChunksChanged.dispatch();
-    expect(overlaySources[0].invalidateChunks).not.toHaveBeenCalled();
+    expect(previewSources[0].invalidateChunks).not.toHaveBeenCalled();
 
     // The refetched chunk (a new object) reaches the GPU.
     realSources[0].fireFreshChunk("0,0,0");
     visibleChunksChanged.dispatch();
-    expect(overlaySources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
+    expect(previewSources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
   });
 
   it("waits until the refetched chunk actually reaches the GPU", () => {
     const seq = controller.beginStroke();
-    overlaySources[0].setOverlaySeq("0,0,0", seq);
+    previewSources[0].setPreviewSeq("0,0,0", seq);
 
     const voxKey = makeVoxChunkKey("0,0,0", 0);
     controller.callChunkReload([voxKey], false, undefined, { [voxKey]: seq });
 
-    // Refetched data arrived in system memory only: keep the overlay.
+    // Refetched data arrived in system memory only: keep the preview.
     realSources[0].fireFreshChunk("0,0,0", ChunkState.SYSTEM_MEMORY);
     visibleChunksChanged.dispatch();
-    expect(overlaySources[0].invalidateChunks).not.toHaveBeenCalled();
+    expect(previewSources[0].invalidateChunks).not.toHaveBeenCalled();
 
     // Promotion to the GPU resolves the swap.
     realSources[0].chunks.get("0,0,0")!.state = ChunkState.GPU_MEMORY;
     visibleChunksChanged.dispatch();
-    expect(overlaySources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
+    expect(previewSources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
   });
 
   it("skips the clear when the write does not cover the last stroke", () => {
     controller.beginStroke(); // seq 1, written
     const seq2 = controller.beginStroke(); // seq 2, dispatched but unwritten
-    overlaySources[0].setOverlaySeq("0,0,0", seq2);
+    previewSources[0].setPreviewSeq("0,0,0", seq2);
 
     // The reload for stroke 1's flush only covers seq 1 < 2.
     const voxKey = makeVoxChunkKey("0,0,0", 0);
     controller.callChunkReload([voxKey], false, undefined, { [voxKey]: 1 });
     realSources[0].fireFreshChunk("0,0,0");
     visibleChunksChanged.dispatch();
-    expect(overlaySources[0].invalidateChunks).not.toHaveBeenCalled();
+    expect(previewSources[0].invalidateChunks).not.toHaveBeenCalled();
 
     // Stroke 2's own flush covers seq 2: its reload performs the clear.
     controller.callChunkReload([voxKey], false, undefined, { [voxKey]: 2 });
     realSources[0].fireFreshChunk("0,0,0");
     visibleChunksChanged.dispatch();
-    expect(overlaySources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
+    expect(previewSources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
   });
 
   it("reads the tag at swap time: a stroke touching the chunk after arming blocks the clear", () => {
     const seq1 = controller.beginStroke();
-    overlaySources[0].setOverlaySeq("0,0,0", seq1);
+    previewSources[0].setPreviewSeq("0,0,0", seq1);
 
     const voxKey = makeVoxChunkKey("0,0,0", 0);
     controller.callChunkReload([voxKey], false, undefined, { [voxKey]: seq1 });
@@ -168,36 +168,36 @@ describe("VoxelEditController.callChunkReload: overlay swap observation", () => 
     // A new stroke's preview touches the chunk before the refetch lands:
     // the arriving data cannot contain it.
     const seq2 = controller.beginStroke();
-    overlaySources[0].setOverlaySeq("0,0,0", seq2);
+    previewSources[0].setPreviewSeq("0,0,0", seq2);
     realSources[0].fireFreshChunk("0,0,0");
     visibleChunksChanged.dispatch();
 
-    expect(overlaySources[0].invalidateChunks).not.toHaveBeenCalled();
+    expect(previewSources[0].invalidateChunks).not.toHaveBeenCalled();
   });
 
   it("skips the clear when a reload carries no coverage but a stroke tagged the chunk", () => {
     // e.g. an undo/redo reload: without echoed coverage it must not clear an
-    // overlay that a dispatched-but-unwritten stroke still owns.
-    overlaySources[0].setOverlaySeq("0,0,0", controller.beginStroke());
+    // preview that a dispatched-but-unwritten stroke still owns.
+    previewSources[0].setPreviewSeq("0,0,0", controller.beginStroke());
 
     controller.callChunkReload([makeVoxChunkKey("0,0,0", 0)], false);
     realSources[0].fireFreshChunk("0,0,0");
     visibleChunksChanged.dispatch();
 
-    expect(overlaySources[0].invalidateChunks).not.toHaveBeenCalled();
+    expect(previewSources[0].invalidateChunks).not.toHaveBeenCalled();
   });
 
   it("clears without coverage info when no stroke ever tagged the chunk", () => {
     controller.callChunkReload([makeVoxChunkKey("0,0,0", 0)], false);
     realSources[0].fireFreshChunk("0,0,0");
     visibleChunksChanged.dispatch();
-    expect(overlaySources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
+    expect(previewSources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
   });
 
   it("guards downsampled-parent reloads with the origin chunk's coverage", () => {
     controller.beginStroke(); // seq 1, written
     const seq2 = controller.beginStroke(); // seq 2, unwritten
-    overlaySources[0].setOverlaySeq("1,2,3", seq2);
+    previewSources[0].setPreviewSeq("1,2,3", seq2);
 
     const parentKey = makeVoxChunkKey("0,0,0", 1);
     const originKey = makeVoxChunkKey("1,2,3", 0);
@@ -214,7 +214,7 @@ describe("VoxelEditController.callChunkReload: overlay swap observation", () => 
     });
     realSources[1].fireFreshChunk("0,0,0");
     visibleChunksChanged.dispatch();
-    expect(overlaySources[0].invalidateChunks).not.toHaveBeenCalled();
+    expect(previewSources[0].invalidateChunks).not.toHaveBeenCalled();
 
     // Cascade re-run after stroke 2's flush covers seq 2.
     controller.callChunkReload(
@@ -225,24 +225,24 @@ describe("VoxelEditController.callChunkReload: overlay swap observation", () => 
     );
     realSources[1].fireFreshChunk("0,0,0");
     visibleChunksChanged.dispatch();
-    expect(overlaySources[0].invalidateChunks).toHaveBeenCalledWith(["1,2,3"]);
+    expect(previewSources[0].invalidateChunks).toHaveBeenCalledWith(["1,2,3"]);
   });
 
-  it("a rollback reload clears the overlay on first arrival regardless of tags", () => {
+  it("a rollback reload clears the preview on first arrival regardless of tags", () => {
     // An undone stroke's tag can never be covered by a future write; the
     // rollback purges it so the swap resolves unconditionally.
-    overlaySources[0].setOverlaySeq("0,0,0", controller.beginStroke());
+    previewSources[0].setPreviewSeq("0,0,0", controller.beginStroke());
 
     const voxKey = makeVoxChunkKey("0,0,0", 0);
     controller.callChunkReload([voxKey], false, undefined, undefined, true);
 
-    // Not cleared before data arrives: the overlay keeps showing the stroke.
+    // Not cleared before data arrives: the preview keeps showing the stroke.
     visibleChunksChanged.dispatch();
-    expect(overlaySources[0].invalidateChunks).not.toHaveBeenCalled();
+    expect(previewSources[0].invalidateChunks).not.toHaveBeenCalled();
 
     realSources[0].fireFreshChunk("0,0,0");
     visibleChunksChanged.dispatch();
-    expect(overlaySources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
+    expect(previewSources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
   });
 
   it("a newer reload overwrites the pending swap for the same chunk", () => {
@@ -251,7 +251,7 @@ describe("VoxelEditController.callChunkReload: overlay swap observation", () => 
     // with the newest coverage.
     controller.beginStroke();
     const seq2 = controller.beginStroke();
-    overlaySources[0].setOverlaySeq("0,0,0", seq2);
+    previewSources[0].setPreviewSeq("0,0,0", seq2);
 
     const voxKey = makeVoxChunkKey("0,0,0", 0);
     controller.callChunkReload([voxKey], false, undefined, { [voxKey]: 1 });
@@ -260,29 +260,29 @@ describe("VoxelEditController.callChunkReload: overlay swap observation", () => 
     realSources[0].fireFreshChunk("0,0,0");
     visibleChunksChanged.dispatch();
     visibleChunksChanged.dispatch();
-    expect(overlaySources[0].invalidateChunks).toHaveBeenCalledTimes(1);
-    expect(overlaySources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
+    expect(previewSources[0].invalidateChunks).toHaveBeenCalledTimes(1);
+    expect(previewSources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
   });
 
-  it("rollbackStroke drops exactly the overlay chunks tagged by that stroke", () => {
+  it("rollbackStroke drops exactly the preview chunks tagged by that stroke", () => {
     const seq1 = controller.beginStroke();
-    overlaySources[0].setOverlaySeq("0,0,0", seq1);
+    previewSources[0].setPreviewSeq("0,0,0", seq1);
     const seq2 = controller.beginStroke();
-    overlaySources[0].setOverlaySeq("1,0,0", seq2);
-    overlaySources[0].setOverlaySeq("2,0,0", seq2);
+    previewSources[0].setPreviewSeq("1,0,0", seq2);
+    previewSources[0].setPreviewSeq("2,0,0", seq2);
 
     controller.rollbackStroke(seq2);
 
-    expect(overlaySources[0].invalidateChunks).toHaveBeenCalledTimes(1);
-    const [rolledBack] = overlaySources[0].invalidateChunks.mock.calls[0];
+    expect(previewSources[0].invalidateChunks).toHaveBeenCalledTimes(1);
+    const [rolledBack] = previewSources[0].invalidateChunks.mock.calls[0];
     expect([...rolledBack].sort()).toEqual(["1,0,0", "2,0,0"]);
     // The other stroke's chunk is untouched and still tagged.
-    expect(overlaySources[0].getOverlaySeq("0,0,0")).toBe(seq1);
+    expect(previewSources[0].getPreviewSeq("0,0,0")).toBe(seq1);
   });
 
   it("rollbackStroke with no tagged chunks is a no-op", () => {
     const seq = controller.beginStroke();
     controller.rollbackStroke(seq);
-    expect(overlaySources[0].invalidateChunks).not.toHaveBeenCalled();
+    expect(previewSources[0].invalidateChunks).not.toHaveBeenCalled();
   });
 });

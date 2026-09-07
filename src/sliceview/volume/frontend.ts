@@ -305,31 +305,31 @@ export class InMemoryVolumeChunkSource extends VolumeChunkSource {
   // Stroke seq of the last local edit that touched each chunk. A reload may
   // clear a chunk only once its write coverage reaches this seq. Entries live
   // and die with the chunk (purged in deleteChunk), so the map never outgrows
-  // the set of live overlay chunks.
-  private overlaySeqs = new Map<string, number>();
+  // the set of live preview chunks.
+  private previewSeqs = new Map<string, number>();
 
-  setOverlaySeq(key: string, seq: number): void {
-    this.overlaySeqs.set(key, seq);
+  setPreviewSeq(key: string, seq: number): void {
+    this.previewSeqs.set(key, seq);
   }
 
-  getOverlaySeq(key: string): number {
-    return this.overlaySeqs.get(key) ?? 0;
+  getPreviewSeq(key: string): number {
+    return this.previewSeqs.get(key) ?? 0;
   }
 
-  clearOverlaySeq(key: string): void {
-    this.overlaySeqs.delete(key);
+  clearPreviewSeq(key: string): void {
+    this.previewSeqs.delete(key);
   }
 
-  keysWithOverlaySeq(seq: number): string[] {
+  keysWithPreviewSeq(seq: number): string[] {
     const keys: string[] = [];
-    for (const [key, s] of this.overlaySeqs) {
+    for (const [key, s] of this.previewSeqs) {
       if (s === seq) keys.push(key);
     }
     return keys;
   }
 
   deleteChunk(key: string) {
-    this.overlaySeqs.delete(key);
+    this.previewSeqs.delete(key);
     super.deleteChunk(key);
   }
 
@@ -354,7 +354,7 @@ export class InMemoryVolumeChunkSource extends VolumeChunkSource {
     // not apply here: an in-memory source has no backend refetch to swap in, so
     // there is nothing to keep the stale chunk on screen for. Deletion is always
     // immediate; the crossfade with the real data is timed by the caller (the
-    // overlay is dropped when its pending swap resolves, or as a rollback on
+    // preview is dropped when its pending swap resolves, or as a rollback on
     // write failure or an undispatched stroke), not by a blind delay here.
     const validKeys: string[] = [];
     for (const key of keys) {

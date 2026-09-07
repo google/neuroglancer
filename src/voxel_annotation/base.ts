@@ -41,7 +41,7 @@ export interface VoxelOperationBase {
   type: VoxelOperationType;
   // Frontend dispatch sequence number. Echoed back per written chunk (as the
   // max seq the write covers) in reload messages, so the frontend clears an
-  // overlay chunk only once the stored data covers every dispatched stroke
+  // preview chunk only once the stored data covers every dispatched stroke
   // that touched it.
   seq?: number;
 }
@@ -77,7 +77,7 @@ export const VALUE_PICKER_TOOL_ID = "vox-value-picker";
 
 export const VOXEL_EMPTY_VALUE = 0n;
 
-// Special value used to indicate to the optimistic renderer that a voxel has been erased
+// Special value used to indicate to the preview render layer that a voxel has been erased
 export const SEG_ERASE_SENTINEL = ~1n;
 
 export const VOXEL_EDIT_STAMINA = {

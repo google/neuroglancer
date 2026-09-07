@@ -619,7 +619,7 @@ describe("VoxelEditController: Downsampling Integration", () => {
     );
 
     // The real parent is reloaded lazily; when it reaches the GPU it clears the
-    // originating LOD-0 overlay (swap-on-arrival), passed as a { real -> overlay }
+    // originating LOD-0 preview (swap-on-arrival), passed as a { real -> preview }
     // map along with the origin's covered dispatch seq (0 here: no seq-tagged
     // edit was flushed for the origin). The old eager preview-clear call no
     // longer exists.
@@ -673,7 +673,7 @@ describe("VoxelEditController: Downsampling Integration", () => {
     expect((controller as any).lastFlushedSeq.has(key)).toBe(false);
   });
 
-  it("Coverage pruning: a later flush still covers older overlay tags", async () => {
+  it("Coverage pruning: a later flush still covers older preview tags", async () => {
     setupIntegration(2);
     const key = makeVoxChunkKey("0,0,0", 0);
 
@@ -702,7 +702,7 @@ describe("VoxelEditController: Downsampling Integration", () => {
     // Mid-chain (during the L0->L1 write), a newer flush of the same origin
     // completes (seq 5). The data propagated by the running chain derives from
     // a read made before that write, so the L1->L2 reload must keep claiming
-    // seq 1 — claiming 5 would clear the overlay over a parent lacking those
+    // seq 1 — claiming 5 would clear the preview over a parent lacking those
     // edits.
     parentSource.applyEdits.mockImplementation(async () => {
       parentSource.serverStorage.set("0,0,0", new Uint8Array(8).fill(1).buffer);
@@ -1192,7 +1192,7 @@ describe("VoxelEditController: Undo/Redo", () => {
     const undoCallArgs = mockSource0.applyEdits.mock.calls[0];
     expect(undoCallArgs[2][0]).toBe(10n);
 
-    // A single rollback reload: the frontend purges the overlay tags and the
+    // A single rollback reload: the frontend purges the preview tags and the
     // swap clears on first arrival.
     expect((controller as any).callChunkReload).toHaveBeenCalledWith(
       [key],

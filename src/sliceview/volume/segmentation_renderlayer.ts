@@ -87,7 +87,7 @@ interface ShaderParameters {
   hideSegmentZero: boolean;
   hasSegmentDefaultColor: boolean;
   hasHighlightColor: boolean;
-  isForOptimisticPreview: boolean;
+  isVoxelEditingPreview: boolean;
 }
 
 const HAS_SELECTED_SEGMENT_FLAG = 1;
@@ -111,14 +111,14 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
   private temporaryEquivalencesHashMap;
   private gpuEquivalencesHashTable;
   private gpuTemporaryEquivalencesHashTable;
-  private voxelPreviewLayer: SegmentationRenderLayer | undefined;
-  public isForOptimisticPreview: WatchableValue<boolean>;
+  private voxelEditingPreviewLayer: SegmentationRenderLayer | undefined;
+  public isVoxelEditingPreview: WatchableValue<boolean>;
 
   constructor(
     multiscaleSource: MultiscaleVolumeChunkSource,
     public displayState: SliceViewSegmentationDisplayState,
   ) {
-    const isForOptimisticPreview = new WatchableValue(false);
+    const isVoxelEditingPreview = new WatchableValue(false);
     super(multiscaleSource, {
       shaderParameters: new AggregateWatchableValue((refCounted) => ({
         hasEquivalences: refCounted.registerDisposer(
@@ -169,14 +169,14 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
         hideSegmentZero: displayState.hideSegmentZero,
         baseSegmentColoring: displayState.baseSegmentColoring,
         baseSegmentHighlighting: displayState.baseSegmentHighlighting,
-        isForOptimisticPreview: isForOptimisticPreview,
+        isVoxelEditingPreview: isVoxelEditingPreview,
       })),
       transform: displayState.transform,
       renderScaleHistogram: displayState.renderScaleHistogram,
       renderScaleTarget: displayState.renderScaleTarget,
       localPosition: displayState.localPosition,
     });
-    this.isForOptimisticPreview = isForOptimisticPreview;
+    this.isVoxelEditingPreview = isVoxelEditingPreview;
     this.segmentationGroupState = displayState.segmentationGroupState.value;
     this.gpuHashTable = this.registerDisposer(
       GPUHashTable.get(
@@ -275,7 +275,7 @@ uint64_t getMappedObjectId(uint64_t value) {
   float alpha = uSelectedAlpha;
   float saturation = uSaturation;
 `;
-    if (parameters.isForOptimisticPreview)
+    if (parameters.isVoxelEditingPreview)
       fragmentMain += `
   if (baseValue.value[0] == 0xfffffffeu && baseValue.value[1] == 0xffffffffu) {
     emit(vec4(0, 0, 0, 0));
@@ -475,14 +475,14 @@ uint64_t getMappedObjectId(uint64_t value) {
     }
     super.endSlice(sliceView, shader, parameters);
   }
-  setVoxelPreviewLayer(layer: SegmentationRenderLayer | undefined) {
-    this.voxelPreviewLayer = layer;
-    if (layer) layer.isForOptimisticPreview.value = true;
+  setVoxelEditingPreviewLayer(layer: SegmentationRenderLayer | undefined) {
+    this.voxelEditingPreviewLayer = layer;
+    if (layer) layer.isVoxelEditingPreview.value = true;
   }
 
   draw(renderContext: SliceViewRenderContext) {
-    if (this.voxelPreviewLayer) {
-      this.voxelPreviewLayer.draw(renderContext);
+    if (this.voxelEditingPreviewLayer) {
+      this.voxelEditingPreviewLayer.draw(renderContext);
     }
     super.draw(renderContext);
   }
