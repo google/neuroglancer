@@ -154,6 +154,27 @@
   font-weight: normal;
 }
 
+.neuroglancer-segment-query-result-tag-header-btn {
+  background: transparent;
+  border: 1px solid #555;
+  color: rgba(255, 255, 255, 0.45);
+  padding: 1px 4px;
+  cursor: pointer;
+  font-size: 11px;
+  border-radius: 2px;
+  line-height: 1.4;
+}
+
+.neuroglancer-segment-query-result-tag-header-btn:hover {
+  border-color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.neuroglancer-segment-query-result-tag-header-btn[data-active="true"] {
+  border-color: #4e9ac0;
+  color: #4e9ac0;
+}
+
 .neuroglancer-segment-query-result-tag-toggle {
   display: inline-block;
   white-space: nowrap;
