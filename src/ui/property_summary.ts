@@ -29,6 +29,7 @@ import type {
 } from "#src/segmentation_display_state/property_map.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { WatchableValue } from "#src/trackable_value.js";
+import { createPropertyListSummaryGroup } from "#src/ui/property_list.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import type { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -43,6 +44,13 @@ import {
   getIntervalBoundsEffectiveFraction,
   parseDataTypeValue,
 } from "#src/util/lerp.js";
+import {
+  type DisplayUnit,
+  formatValueWithUnit,
+  parseValueWithUnit,
+  pickDisplayUnit,
+  roundValueToDisplayUnit,
+} from "#src/util/si_units.js";
 import { neverSignal } from "#src/util/signal.js";
 import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import type { RangeAndWindowIntervals } from "#src/widget/invlerp.js";
@@ -58,11 +66,17 @@ export interface NumericalSummaryProperty {
   dataType: DataType;
   bounds: DataTypeInterval;
   description?: string;
+  baseUnit?: string;
+  applicableAnnotationTypes?: readonly number[];
 }
 
 /** Implemented by segment and annotation callers to provide histogram data. */
 export interface NumericalSummaryDataSource {
   properties: NumericalSummaryProperty[];
+  isPropertyApplicable?: (
+    property: NumericalSummaryProperty,
+    queryResult: NumericalSummaryQueryResult | undefined,
+  ) => boolean;
   updateHistograms(
     queryResult:
       | {
@@ -145,6 +159,8 @@ interface NumericalPropertySummaryWidget {
   bounds: RangeAndWindowIntervals;
   columnCheckbox: HTMLInputElement;
   sortIcon: HTMLElement;
+  displayUnit: DisplayUnit | undefined;
+  applicable: boolean;
 }
 
 function updateInputBoundWidth(inputElement: HTMLInputElement) {
@@ -154,7 +170,21 @@ function updateInputBoundWidth(inputElement: HTMLInputElement) {
   );
 }
 
-function updateInputBoundValue(inputElement: HTMLInputElement, bound: number) {
+function updateInputBoundValue(
+  inputElement: HTMLInputElement,
+  bound: number,
+  displayUnit?: DisplayUnit,
+  roundingDirection?: "down" | "up",
+) {
+  if (displayUnit !== undefined) {
+    inputElement.value = formatValueWithUnit(
+      bound,
+      displayUnit,
+      roundingDirection,
+    );
+    updateInputBoundWidth(inputElement);
+    return;
+  }
   let boundString: string;
   if (Number.isInteger(bound)) {
     boundString = bound.toString();
@@ -265,6 +295,7 @@ export function updateColumnSortIcon(
  */
 export class NumericalPropertiesSummary extends RefCounted {
   listElement: HTMLElement | undefined;
+  summaryElement: HTMLElement | undefined;
   properties: NumericalPropertySummaryWidget[];
   propertyHistograms: NumericalPropertyHistogram[] = [];
   bounds = {
@@ -293,9 +324,10 @@ export class NumericalPropertiesSummary extends RefCounted {
     const { properties } = dataSource;
     const propertySummaries: NumericalPropertySummaryWidget[] = [];
     let listElement: HTMLElement | undefined;
+    let summaryElement: HTMLElement | undefined;
     if (properties.length > 0) {
       listElement = document.createElement("details");
-      const summaryElement = document.createElement("summary");
+      summaryElement = document.createElement("summary");
       summaryElement.textContent = `${properties.length} numerical propert${
         properties.length > 1 ? "ies" : "y"
       }`;
@@ -313,6 +345,7 @@ export class NumericalPropertiesSummary extends RefCounted {
       }
     }
     this.listElement = listElement;
+    this.summaryElement = summaryElement;
     this.properties = propertySummaries;
     this.registerDisposer(
       this.queryResult.changed.add(() => this.handleNewQueryResult()),
@@ -367,6 +400,20 @@ export class NumericalPropertiesSummary extends RefCounted {
       this.bounds.range.value[propertyIndex] = newRange;
       this.bounds.range.changed.dispatch();
     }
+  }
+
+  private roundBoundsToDisplayUnit(
+    propertyIndex: number,
+    value: RangeAndWindowIntervals,
+  ): RangeAndWindowIntervals {
+    const displayUnit = this.properties[propertyIndex].displayUnit;
+    if (displayUnit === undefined) return value;
+    const round = (bound: number | bigint) =>
+      roundValueToDisplayUnit(bound, displayUnit);
+    return {
+      range: [round(value.range[0]), round(value.range[1])],
+      window: [round(value.window[0]), round(value.window[1])],
+    };
   }
 
   private setBound(
@@ -438,12 +485,25 @@ export class NumericalPropertiesSummary extends RefCounted {
     }
     listElement.style.display = "";
     const { properties } = this;
+    let applicablePropertyCount = 0;
     for (let i = 0, n = properties.length; i < n; ++i) {
       this.updatePropertySummaryRendering(
         i,
         properties[i],
         propertyHistograms[i],
       );
+      if (properties[i].applicable) ++applicablePropertyCount;
+    }
+    const { summaryElement } = this;
+    if (summaryElement !== undefined) {
+      const totalPropertyCount = properties.length;
+      const countText =
+        applicablePropertyCount === totalPropertyCount
+          ? `${totalPropertyCount}`
+          : `${applicablePropertyCount}/${totalPropertyCount}`;
+      summaryElement.textContent = `${countText} numerical propert${
+        totalPropertyCount === 1 ? "y" : "ies"
+      }`;
     }
   }
 
@@ -461,7 +521,12 @@ export class NumericalPropertiesSummary extends RefCounted {
       plotImg,
       property.dataType,
       () => this.getBounds(propertyIndex),
-      (bounds) => this.setBounds(propertyIndex, bounds),
+      (bounds) =>
+        propertySummary.applicable &&
+        this.setBounds(
+          propertyIndex,
+          this.roundBoundsToDisplayUnit(propertyIndex, bounds),
+        ),
     );
     const sortIcon = document.createElement("span");
     sortIcon.classList.add(
@@ -470,6 +535,7 @@ export class NumericalPropertiesSummary extends RefCounted {
     const columnCheckbox = document.createElement("input");
     columnCheckbox.type = "checkbox";
     columnCheckbox.addEventListener("click", () => {
+      if (!propertySummary.applicable) return;
       const q = this.queryResult.value?.query;
       if (q === undefined) return;
       toggleIncludeColumn(q, this.setQuery, property.id);
@@ -487,10 +553,25 @@ export class NumericalPropertiesSummary extends RefCounted {
       const makeBoundElement = (endpointIndex: 0 | 1) => {
         const e = createBoundInput(boundType, endpointIndex);
         e.addEventListener("change", () => {
+          if (!propertySummary.applicable) return;
           const existingBounds = this.bounds[boundType].value[propertyIndex];
           if (existingBounds === undefined) return;
           try {
-            const value = parseDataTypeValue(property.dataType, e.value);
+            const parsedValue =
+              property.baseUnit === undefined
+                ? Number(e.value)
+                : parseValueWithUnit(
+                    e.value,
+                    property.baseUnit,
+                    propertySummary.displayUnit,
+                  );
+            if (parsedValue === undefined || !Number.isFinite(parsedValue)) {
+              throw new Error("Invalid bound");
+            }
+            const value = parseDataTypeValue(
+              property.dataType,
+              `${parsedValue}`,
+            );
             this.setBound(
               boundType,
               endpointIndex,
@@ -506,6 +587,7 @@ export class NumericalPropertiesSummary extends RefCounted {
             this.bounds[boundType].value[propertyIndex][
               endpointIndex
             ] as number,
+            propertySummary.displayUnit,
           );
         });
         return e;
@@ -532,6 +614,7 @@ export class NumericalPropertiesSummary extends RefCounted {
         label.appendChild(document.createTextNode(property.id));
         label.appendChild(sortIcon);
         label.addEventListener("click", () => {
+          if (!propertySummary.applicable) return;
           const q = this.queryResult.value?.query;
           if (q === undefined) return;
           toggleSortOrder(q, this.setQuery, property.id);
@@ -570,7 +653,7 @@ export class NumericalPropertiesSummary extends RefCounted {
     plotContainer.appendChild(boundElements.range.container);
     plotContainer.appendChild(plotImg);
     plotContainer.appendChild(boundElements.window.container);
-    return {
+    const propertySummary: NumericalPropertySummaryWidget = {
       property,
       controller,
       element: plotContainer,
@@ -583,7 +666,10 @@ export class NumericalPropertiesSummary extends RefCounted {
       propertyHistogram: undefined,
       columnCheckbox,
       sortIcon,
+      displayUnit: undefined,
+      applicable: true,
     };
+    return propertySummary;
   }
 
   private updatePropertySummaryRendering(
@@ -596,6 +682,32 @@ export class NumericalPropertiesSummary extends RefCounted {
     const prevConstraintBounds = summary.bounds.range;
     const constraintBounds = this.bounds.range.value[propertyIndex]!;
     const { property } = summary;
+    const nextDisplayUnit =
+      property.baseUnit === undefined
+        ? undefined
+        : pickDisplayUnit(
+            property.bounds as [number, number],
+            property.baseUnit,
+          );
+    const displayUnitChanged =
+      nextDisplayUnit?.scale !== summary.displayUnit?.scale ||
+      nextDisplayUnit?.suffix !== summary.displayUnit?.suffix;
+    summary.displayUnit = nextDisplayUnit;
+    const applicable =
+      this.dataSource.isPropertyApplicable?.(
+        property,
+        this.queryResult.value,
+      ) ?? true;
+    const applicabilityChanged = applicable !== summary.applicable;
+    summary.applicable = applicable;
+    summary.element.style.display = applicable ? "" : "none";
+    summary.element.setAttribute("aria-disabled", `${!applicable}`);
+    summary.columnCheckbox.disabled = !applicable;
+    for (const boundType of ["range", "window"] as const) {
+      for (const input of summary.boundElements[boundType].inputs) {
+        input.disabled = !applicable;
+      }
+    }
     const query = this.queryResult.value?.query;
     const isIncluded = queryIncludesColumn(query, property.id);
     summary.columnCheckbox.checked = isIncluded;
@@ -606,7 +718,9 @@ export class NumericalPropertiesSummary extends RefCounted {
     if (
       summary.propertyHistogram === propertyHistogram &&
       dataTypeIntervalEqual(prevWindowBounds, windowBounds) &&
-      dataTypeIntervalEqual(prevConstraintBounds, constraintBounds)
+      dataTypeIntervalEqual(prevConstraintBounds, constraintBounds) &&
+      !displayUnitChanged &&
+      !applicabilityChanged
     ) {
       return;
     }
@@ -708,15 +822,30 @@ export class NumericalPropertiesSummary extends RefCounted {
     summary.plotImg.src = `data:image/svg+xml;base64,${btoa(xml)}`;
     summary.propertyHistogram = propertyHistogram;
     for (let endpointIndex = 0; endpointIndex < 2; ++endpointIndex) {
+      const roundingDirection = endpointIndex === 0 ? "down" : "up";
       prevWindowBounds[endpointIndex] = windowBounds[endpointIndex];
       updateInputBoundValue(
         summary.boundElements.window.inputs[endpointIndex],
         windowBounds[endpointIndex] as number,
+        summary.displayUnit,
+        dataTypeCompare(
+          windowBounds[endpointIndex],
+          property.bounds[endpointIndex],
+        ) === 0
+          ? roundingDirection
+          : undefined,
       );
       prevConstraintBounds[endpointIndex] = constraintBounds[endpointIndex];
       updateInputBoundValue(
         summary.boundElements.range.inputs[endpointIndex],
         constraintBounds[endpointIndex] as number,
+        summary.displayUnit,
+        dataTypeCompare(
+          constraintBounds[endpointIndex],
+          property.bounds[endpointIndex],
+        ) === 0
+          ? roundingDirection
+          : undefined,
       );
     }
 
@@ -831,4 +960,21 @@ export function renderIncludeExcludeChips(
     list.appendChild(chipElement);
   }
   return list;
+}
+
+export function renderCategoricalPropertiesSummary(options: {
+  chips: IncludeExcludeChip[];
+  propertyCount: number;
+  open?: boolean;
+  onToggle?: (open: boolean) => void;
+}): HTMLDetailsElement | undefined {
+  const chipsElement = renderIncludeExcludeChips(options.chips);
+  if (chipsElement === undefined) return undefined;
+  return createPropertyListSummaryGroup({
+    content: chipsElement,
+    propertyCount: options.propertyCount,
+    propertyKind: "categorical",
+    open: options.open,
+    onToggle: options.onToggle,
+  });
 }

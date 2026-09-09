@@ -22,6 +22,7 @@ import {
   dataTypeValueNextAfter,
   parseDataTypeValue,
 } from "#src/util/lerp.js";
+import { parseValueWithUnit } from "#src/util/si_units.js";
 
 export interface PropertyQueryToken {
   text: string;
@@ -116,6 +117,7 @@ export interface PropertyQueryNumericField {
   fieldId: string;
   dataType: DataType;
   bounds: DataTypeInterval;
+  baseUnit?: string;
 }
 
 export type PropertyQueryResolution<T> =
@@ -251,7 +253,14 @@ function applyNumericalComparison(
 ): PropertyQuerySyntaxError | undefined {
   let value: number;
   try {
-    value = parseDataTypeValue(field.dataType, clause.value) as number;
+    const parsedValue =
+      field.baseUnit === undefined
+        ? clause.value
+        : parseValueWithUnit(clause.value, field.baseUnit);
+    if (parsedValue === undefined) {
+      throw new Error(`Invalid value: ${JSON.stringify(clause.value)}`);
+    }
+    value = parseDataTypeValue(field.dataType, `${parsedValue}`) as number;
   } catch (error) {
     return {
       begin: clause.begin + clause.field.length + clause.operator.length,

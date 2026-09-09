@@ -27,6 +27,7 @@ import {
   parseAnnotationQuery,
   unparseAnnotationQuery,
 } from "#src/annotation/annotation_query.js";
+import { AnnotationType } from "#src/annotation/index.js";
 import { DataType } from "#src/util/data_type.js";
 
 // ---------------------------------------------------------------------------
@@ -453,6 +454,42 @@ describe("unparseAnnotationQuery", () => {
       "<score |count score>=0.5 #status=1 -#verified /foo/",
     );
   });
+
+  it("uses a property's display unit for generated constraints", () => {
+    const unitSchema = {
+      numericProps: [
+        {
+          identifier: "length",
+          dataType: DataType.FLOAT32,
+          bounds: [0, 30e-9] as [number, number],
+          baseUnit: "m",
+        },
+      ],
+      enumProps: [],
+      boolProps: [],
+    };
+    const q = parseAnnotationQuery(unitSchema, "length>=5nm") as any;
+    expect(q.numericalConstraints[0].bounds[0]).toBeCloseTo(5e-9);
+    expect(
+      unparseAnnotationQuery(
+        q,
+        new Map([["length", [0, 30e-9]]]),
+        new Map([["length", "m"]]),
+      ),
+    ).toBe("length>=5.00nm");
+
+    const precise = parseAnnotationQuery(
+      unitSchema,
+      "length>=26.1234nm",
+    ) as any;
+    expect(
+      unparseAnnotationQuery(
+        precise,
+        new Map([["length", [0, 30e-9]]]),
+        new Map([["length", "m"]]),
+      ),
+    ).toBe("length>=26.1234nm");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -466,6 +503,57 @@ describe("makeAnnotationNumericalDataSource", () => {
   it("exposes numericProps as properties", () => {
     const ds = makeAnnotationNumericalDataSource(schema, () => items);
     expect(ds.properties.map((p) => p.id)).toEqual(["score", "count"]);
+  });
+
+  it("exposes derived property units", () => {
+    const unitSchema = {
+      ...schema,
+      numericProps: [{ ...schema.numericProps[0], baseUnit: "m" }],
+    };
+    const ds = makeAnnotationNumericalDataSource(unitSchema, () => items);
+    expect(ds.properties[0].baseUnit).toBe("m");
+  });
+
+  it("evaluates derived property applicability against type constraints", () => {
+    const applicabilitySchema = {
+      ...schema,
+      numericProps: [
+        {
+          ...schema.numericProps[0],
+          applicableAnnotationTypes: [
+            AnnotationType.LINE,
+            AnnotationType.POLYLINE,
+          ],
+        },
+        schema.numericProps[1],
+      ],
+    };
+    const ds = makeAnnotationNumericalDataSource(
+      applicabilitySchema,
+      () => items,
+    );
+    const length = ds.properties[0];
+    const count = ds.properties[1];
+    const isApplicable = (include: number[], exclude: number[] = []) =>
+      ds.isPropertyApplicable!(length, {
+        query: {
+          sortBy: [],
+          includeColumns: [],
+          numericalConstraints: [],
+          enumConstraints: [{ fieldId: "type", include, exclude }],
+        },
+      } as any);
+
+    expect(ds.isPropertyApplicable!(length, undefined)).toBe(true);
+    expect(isApplicable([AnnotationType.POINT])).toBe(false);
+    expect(isApplicable([AnnotationType.LINE])).toBe(true);
+    expect(isApplicable([AnnotationType.POINT, AnnotationType.POLYLINE])).toBe(
+      true,
+    );
+    expect(
+      isApplicable([], [AnnotationType.LINE, AnnotationType.POLYLINE]),
+    ).toBe(false);
+    expect(ds.isPropertyApplicable!(count, undefined)).toBe(true);
   });
 
   it("fills histograms when query has indices", () => {

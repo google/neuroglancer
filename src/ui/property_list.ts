@@ -94,6 +94,34 @@ export function createPropertyListQueryInput(options: {
   return input;
 }
 
+export function createPropertyListQueryContainer(
+  input: HTMLInputElement,
+): HTMLDivElement {
+  const container = document.createElement("div");
+  container.classList.add("neuroglancer-property-list-query-container");
+  container.appendChild(input);
+  return container;
+}
+
+export function createPropertyListSummaryGroup(options: {
+  content: HTMLElement;
+  propertyCount: number;
+  propertyKind: string;
+  open?: boolean;
+  onToggle?: (open: boolean) => void;
+}): HTMLDetailsElement {
+  const details = document.createElement("details");
+  details.classList.add("neuroglancer-property-list-summary-group");
+  details.open = options.open ?? false;
+  details.addEventListener("toggle", () => options.onToggle?.(details.open));
+  const summary = document.createElement("summary");
+  summary.textContent = `${options.propertyCount} ${options.propertyKind} propert${
+    options.propertyCount === 1 ? "y" : "ies"
+  }`;
+  details.append(summary, options.content);
+  return details;
+}
+
 export interface PropertyListStatisticsShell {
   root: HTMLDivElement;
   count: HTMLDivElement;
@@ -106,7 +134,10 @@ export function createPropertyListStatisticsShell(): PropertyListStatisticsShell
   const root = document.createElement("div");
   root.classList.add("neuroglancer-property-list-statistics");
   const count = document.createElement("div");
-  count.classList.add("neuroglancer-property-list-statistics-count");
+  count.classList.add(
+    "neuroglancer-property-list-statistics-count",
+    "neuroglancer-property-list-status-message",
+  );
   const content = document.createElement("div");
   root.append(count, content);
   const separator = document.createElement("div");

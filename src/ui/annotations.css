@@ -56,7 +56,6 @@
   display: grid;
   padding-bottom: 2px;
   justify-content: start;
-  background-color: #111;
 }
 
 .neuroglancer-annotation-coordinate {
@@ -467,12 +466,6 @@ input.neuroglancer-segment-list-entry-id {
   border-radius: 3px;
   color: #ccc;
   font-size: small;
-}
-
-/* Query input */
-.neuroglancer-annotation-query-container {
-  padding: 3px 4px;
-  border-bottom: 1px solid #2a2a2a;
 }
 
 /* Warning shown when measurable annotations exist but dimensions lack units */

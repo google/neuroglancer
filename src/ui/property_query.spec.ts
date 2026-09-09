@@ -163,7 +163,7 @@ describe("resolvePropertyQuery", () => {
   });
 
   test("resolves common clauses and narrows numerical intervals", () => {
-    const result = resolvePropertyQuery(
+    const result = resolvePropertyQuery<TestQuery>(
       "score>=2 score<8 |score #active /foo/",
       makeResolver(),
     );
@@ -178,7 +178,10 @@ describe("resolvePropertyQuery", () => {
 
   test("reports duplicate sorts and regexp/text conflicts", () => {
     expect(
-      resolvePropertyQuery("<score >score /foo/ text", makeResolver()),
+      resolvePropertyQuery<TestQuery>(
+        "<score >score /foo/ text",
+        makeResolver(),
+      ),
     ).toEqual({
       errors: [
         { begin: 8, end: 13, message: "Duplicate sort field: score" },
@@ -192,8 +195,8 @@ describe("resolvePropertyQuery", () => {
   });
 
   test("combines multiple text clauses", () => {
-    expect(resolvePropertyQuery("alpha beta", makeResolver())).toMatchObject({
-      prefix: "alpha beta",
-    });
+    expect(
+      resolvePropertyQuery<TestQuery>("alpha beta", makeResolver()),
+    ).toMatchObject({ prefix: "alpha beta" });
   });
 });

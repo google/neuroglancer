@@ -49,6 +49,7 @@ import { observeWatchable, WatchableValue } from "#src/trackable_value.js";
 import { getDefaultSelectBindings } from "#src/ui/default_input_event_bindings.js";
 import {
   bindPropertyListSortControl,
+  createPropertyListQueryContainer,
   createPropertyListQueryInput,
   createPropertyListStatisticsShell,
 } from "#src/ui/property_list.js";
@@ -61,7 +62,7 @@ import type {
 import {
   NumericalPropertiesSummary,
   queryIncludesColumn,
-  renderIncludeExcludeChips,
+  renderCategoricalPropertiesSummary,
   toggleSortOrder,
 } from "#src/ui/property_summary.js";
 import { SELECT_SEGMENTS_TOOLS_ID } from "#src/ui/segment_select_tools.js";
@@ -461,8 +462,12 @@ abstract class SegmentListGroupBase extends RefCounted {
     const { selectionStatusContainer } = this;
     this.selectionStatusMessage.classList.add(
       "neuroglancer-segment-list-status-message",
+      "neuroglancer-property-list-status-message",
     );
-    selectionStatusContainer.classList.add("neuroglancer-segment-list-status");
+    selectionStatusContainer.classList.add(
+      "neuroglancer-segment-list-status",
+      "neuroglancer-property-list-status",
+    );
     selectionStatusContainer.appendChild(this.copyAllSegmentsButton);
     selectionStatusContainer.appendChild(this.starAllButton);
     selectionStatusContainer.appendChild(this.visibilityToggleAllButton);
@@ -577,6 +582,8 @@ class SegmentListGroupSelected extends SegmentListGroupBase {
 }
 
 class SegmentListGroupQuery extends SegmentListGroupBase {
+  private categoricalDetailsOpen = false;
+
   updateQuery() {
     const { listSource, debouncedUpdateQueryModel } = this;
     debouncedUpdateQueryModel();
@@ -712,7 +719,10 @@ class SegmentListGroupQuery extends SegmentListGroupBase {
       removeChildren(list.header);
       if (segmentPropertyMap !== undefined) {
         const header = listSource.segmentWidgetFactory.getHeader();
-        header.container.classList.add("neuroglancer-segment-list-header");
+        header.container.classList.add(
+          "neuroglancer-segment-list-header",
+          "neuroglancer-property-list-header",
+        );
         for (const headerLabel of header.propertyLabels) {
           const { label, sortIcon, id } = headerLabel;
           bindPropertyListSortControl({
@@ -774,7 +784,14 @@ class SegmentListGroupQuery extends SegmentListGroupBase {
             },
           }),
         );
-        tagSummary = renderIncludeExcludeChips(chips);
+        tagSummary = renderCategoricalPropertiesSummary({
+          chips,
+          propertyCount: 1,
+          open: this.categoricalDetailsOpen,
+          onToggle: (open) => {
+            this.categoricalDetailsOpen = open;
+          },
+        });
       }
       if (tagSummary !== undefined) {
         queryStatisticsContainer.appendChild(tagSummary);
@@ -876,7 +893,7 @@ export class SegmentDisplayTab extends Tab {
       }, this.layer.segmentQueryFocusTime),
     );
 
-    element.appendChild(queryElement);
+    element.appendChild(createPropertyListQueryContainer(queryElement));
     element.appendChild(
       this.registerDisposer(
         new DependentViewWidget(

@@ -598,6 +598,13 @@ export function analyzeDerivedProperties(
       bounds: [bounds[0], bounds[1]] as DataTypeInterval,
       description: d.description,
       baseUnit: d.baseUnit,
+      applicableAnnotationTypes: [
+        ...new Set(
+          descriptors
+            .filter((candidate) => candidate.id === d.id)
+            .flatMap((candidate) => [...candidate.appliesTo]),
+        ),
+      ],
     });
   }
 

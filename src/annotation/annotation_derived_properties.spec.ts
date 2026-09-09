@@ -167,6 +167,21 @@ describe("analyzeDerivedProperties", () => {
     expect(schemaIds(r).has("length")).toBe(true);
   });
 
+  it("unions applicability for derived properties with shared ids", () => {
+    const a = line([0, 0, 0], [3, 4, 0]);
+    const b = polyline([
+      [0, 0, 0],
+      [0, 3, 0],
+      [4, 3, 0],
+    ]);
+    const r = analyze([a, b], meters3());
+    const length = r.schemas.find((schema) => schema.identifier === "length");
+    expect(length?.applicableAnnotationTypes).toEqual([
+      AnnotationType.LINE,
+      AnnotationType.POLYLINE,
+    ]);
+  });
+
   it("drops delta for a constant dimension", () => {
     const a = line([0, 0, 0], [3, 4, 0]);
     const r = analyze([a], meters3());

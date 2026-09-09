@@ -22,8 +22,12 @@
 import type {
   AnnotationNumericPropertySpec,
   AnnotationPropertySpec,
+  AnnotationType,
 } from "#src/annotation/index.js";
-import { propertyTypeDataType } from "#src/annotation/index.js";
+import {
+  annotationTypes,
+  propertyTypeDataType,
+} from "#src/annotation/index.js";
 import type {
   NumericalPropertyConstraint,
   QueryParseError,
@@ -44,6 +48,7 @@ import type {
 import { DataType } from "#src/util/data_type.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
 import { defaultDataTypeRange } from "#src/util/lerp.js";
+import { formatValueWithUnit, pickDisplayUnit } from "#src/util/si_units.js";
 
 // ============================================================================
 // Schema types
@@ -56,6 +61,8 @@ export interface AnnotationNumericPropSchema {
   description?: string;
   /** SI base unit for derived/computed properties (e.g. "m", "s", "m^3"). */
   baseUnit?: string;
+  /** Annotation types for which this derived property is defined. */
+  applicableAnnotationTypes?: readonly AnnotationType[];
 }
 
 export interface AnnotationEnumPropSchema {
@@ -395,6 +402,7 @@ export function parseAnnotationQuery(
           fieldId: property.identifier,
           dataType: property.dataType,
           bounds: property.bounds,
+          baseUnit: property.baseUnit,
         },
       };
     },
@@ -479,6 +487,7 @@ export function parseAnnotationQuery(
 export function unparseAnnotationQuery(
   query: AnnotationFilterQuery,
   schemaBoundsMap?: ReadonlyMap<string, readonly [number, number]>,
+  schemaBaseUnitMap?: ReadonlyMap<string, string>,
 ): string {
   const clauses: SerializablePropertyQueryClause[] = [];
   for (const { fieldId, order } of query.sortBy) {
@@ -494,12 +503,21 @@ export function unparseAnnotationQuery(
   for (const c of query.numericalConstraints) {
     const sb = schemaBoundsMap?.get(c.fieldId);
     const [lo, hi] = c.bounds as [number, number];
+    const baseUnit = schemaBaseUnitMap?.get(c.fieldId);
+    const displayUnit =
+      baseUnit === undefined || sb === undefined
+        ? undefined
+        : pickDisplayUnit(sb, baseUnit);
+    const formatValue = (value: number) =>
+      displayUnit === undefined
+        ? `${value}`
+        : formatValueWithUnit(value, displayUnit);
     if (sb === undefined || lo > sb[0]) {
       clauses.push({
         type: "comparison",
         field: c.fieldId,
         operator: ">=",
-        value: `${lo}`,
+        value: formatValue(lo),
       });
     }
     if (sb === undefined || hi < sb[1]) {
@@ -507,7 +525,7 @@ export function unparseAnnotationQuery(
         type: "comparison",
         field: c.fieldId,
         operator: "<=",
-        value: `${hi}`,
+        value: formatValue(hi),
       });
     }
   }
@@ -831,11 +849,31 @@ export function makeAnnotationNumericalDataSource(
       dataType: p.dataType,
       bounds: p.bounds,
       description: p.description,
+      baseUnit: p.baseUnit,
+      applicableAnnotationTypes: p.applicableAnnotationTypes,
     }),
   );
 
   return {
     properties,
+    isPropertyApplicable(property, qr) {
+      const applicableTypes = property.applicableAnnotationTypes;
+      if (applicableTypes === undefined) return true;
+      const annotationQr = qr as AnnotationQueryResult | undefined;
+      const typeConstraint = annotationQr?.query.enumConstraints.find(
+        (constraint) => constraint.fieldId === "type",
+      );
+      if (typeConstraint === undefined) return true;
+      const selectedTypes =
+        typeConstraint.include.length === 0
+          ? annotationTypes
+          : typeConstraint.include;
+      return selectedTypes.some(
+        (type) =>
+          !typeConstraint.exclude.includes(type) &&
+          applicableTypes.includes(type),
+      );
+    },
     updateHistograms(qr, histograms, windowBounds) {
       const annotationQr = qr as AnnotationQueryResult | undefined;
       if (annotationQr?.indices === undefined) {

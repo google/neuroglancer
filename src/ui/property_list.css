@@ -1,3 +1,9 @@
+.neuroglancer-property-list-header {
+  background-color: #666;
+  color: white;
+  font: 10pt sans-serif;
+}
+
 .neuroglancer-property-list-header-label {
   cursor: pointer;
 }
@@ -32,6 +38,11 @@
   font-size: medium;
 }
 
+.neuroglancer-property-list-query-container {
+  padding: 3px 4px;
+  border-bottom: 1px solid #2a2a2a;
+}
+
 .neuroglancer-property-list-query:focus {
   border-color: #4e9ac0;
 }
@@ -59,7 +70,27 @@
 }
 
 .neuroglancer-property-list-statistics-count {
-  padding: 1px 4px;
+  padding-inline: 4px;
+}
+
+.neuroglancer-property-list-summary-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.neuroglancer-property-list-status {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  background-color: #333;
+}
+
+.neuroglancer-property-list-status-message {
+  min-width: 0;
+  overflow: hidden;
+  padding-block: 1px;
   color: rgba(255, 255, 255, 0.72);
   font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

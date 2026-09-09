@@ -120,6 +120,7 @@ import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js
 import { getDefaultAnnotationListBindings } from "#src/ui/default_input_event_bindings.js";
 import {
   bindPropertyListSortControl,
+  createPropertyListQueryContainer,
   createPropertyListQueryInput,
   createPropertyListStatisticsShell,
   type PropertyListSortDirection,
@@ -132,7 +133,7 @@ import type {
 } from "#src/ui/property_summary.js";
 import {
   NumericalPropertiesSummary,
-  renderIncludeExcludeChips,
+  renderCategoricalPropertiesSummary,
 } from "#src/ui/property_summary.js";
 import {
   LegacyTool,
@@ -577,7 +578,10 @@ export class AnnotationLayerView extends Tab {
         this.updateAttachedAnnotationLayerStates(),
       ),
     );
-    this.headerRow.classList.add("neuroglancer-annotation-list-header");
+    this.headerRow.classList.add(
+      "neuroglancer-annotation-list-header",
+      "neuroglancer-property-list-header",
+    );
 
     const toolbox = document.createElement("div");
     toolbox.className = "neuroglancer-annotation-toolbox";
@@ -681,15 +685,11 @@ export class AnnotationLayerView extends Tab {
     toolbox.appendChild(navRow);
     this.element.appendChild(toolbox);
     // Query input
-    const queryInputContainer = document.createElement("div");
-    queryInputContainer.classList.add(
-      "neuroglancer-annotation-query-container",
-    );
     const queryInput = (this.queryInput = createPropertyListQueryInput({
       placeholder:
         "Filter: text, /regexp/, #bool, #enum=label, prop<N, <sort, |col",
     }));
-    queryInputContainer.appendChild(queryInput);
+    const queryInputContainer = createPropertyListQueryContainer(queryInput);
     {
       const checkbox = this.registerDisposer(
         new TrackableBooleanCheckbox(this.layer.listLoadedAnnotations),
@@ -704,7 +704,9 @@ export class AnnotationLayerView extends Tab {
     }
     this.element.appendChild(queryInputContainer);
 
-    this.queryStatisticsElement.style.display = "none";
+    this.queryStatisticsElement.classList.add(
+      "neuroglancer-property-list-status",
+    );
     this.categoricalSummaryContainer.style.display = "none";
     this.numericalSummaryContainer.style.display = "none";
     this.derivedWarningElement.classList.add(
@@ -725,6 +727,7 @@ export class AnnotationLayerView extends Tab {
     this.element.append(
       this.queryStatistics.root,
       this.queryStatistics.separator,
+      this.queryStatisticsElement,
     );
 
     const debouncedQuery = this.registerCancellable(
@@ -1267,7 +1270,6 @@ export class AnnotationLayerView extends Tab {
 
   private updateStatisticsVisibility() {
     const visible = [
-      this.queryStatisticsElement,
       this.categoricalSummaryContainer,
       this.numericalSummaryContainer,
       this.derivedWarningElement,
@@ -1342,7 +1344,12 @@ export class AnnotationLayerView extends Tab {
         p.bounds as [number, number],
       ]),
     );
-    const text = unparseAnnotationQuery(q, schemaBoundsMap);
+    const schemaBaseUnitMap = new Map(
+      this.annotationQuerySchema.numericProps
+        .filter((p) => p.baseUnit !== undefined)
+        .map((p) => [p.identifier, p.baseUnit!]),
+    );
+    const text = unparseAnnotationQuery(q, schemaBoundsMap, schemaBaseUnitMap);
     this.queryInput.value = text;
     this.annotationQueryText.value = text;
     // After writing all state into text, the separate GUI constraint arrays are
@@ -1391,16 +1398,10 @@ export class AnnotationLayerView extends Tab {
     removeChildren(queryStatisticsElement);
     const schema = this.annotationQuerySchema;
     const hasProps = schema.enumProps.length > 0 || schema.boolProps.length > 0;
-    if (result.total === 0 && !hasProps) {
-      queryStatisticsElement.style.display = "none";
-      this.updateStatisticsVisibility();
-      return;
-    }
     if (result.count < result.total) {
       queryStatisticsElement.textContent = `${result.count} / ${result.total} annotations`;
-      queryStatisticsElement.style.display = "";
     } else {
-      queryStatisticsElement.style.display = "none";
+      queryStatisticsElement.textContent = `${result.total} annotations`;
     }
     if (!hasProps) {
       this.updateStatisticsVisibility();
@@ -1528,21 +1529,18 @@ export class AnnotationLayerView extends Tab {
         },
       });
     }
-    const chipsEl = renderIncludeExcludeChips(chips);
     const { categoricalSummaryContainer } = this;
     removeChildren(categoricalSummaryContainer);
-    if (chipsEl !== undefined) {
-      const numCategorical = schema.enumProps.length + schema.boolProps.length;
-      const details = document.createElement("details");
-      details.classList.add("neuroglancer-segment-query-result-numerical-list");
-      details.open = this.categoricalDetailsOpen;
-      details.addEventListener("toggle", () => {
-        this.categoricalDetailsOpen = details.open;
-      });
-      const summary = document.createElement("summary");
-      summary.textContent = `${numCategorical} categorical propert${numCategorical > 1 ? "ies" : "y"}`;
-      details.appendChild(summary);
-      details.appendChild(chipsEl);
+    const numCategorical = schema.enumProps.length + schema.boolProps.length;
+    const details = renderCategoricalPropertiesSummary({
+      chips,
+      propertyCount: numCategorical,
+      open: this.categoricalDetailsOpen,
+      onToggle: (open) => {
+        this.categoricalDetailsOpen = open;
+      },
+    });
+    if (details !== undefined) {
       categoricalSummaryContainer.appendChild(details);
       categoricalSummaryContainer.style.display = "";
     } else {
@@ -1743,7 +1741,10 @@ export class AnnotationLayerView extends Tab {
       ...allSpecs.map((s) => `${s.identifier}:${s.type}`),
       ...globalCoordNames.map((n) => `g:${n}`),
       ...localCoordNames.map((n) => `l:${n}`),
-      ...derivedSchemas.map((s) => `d:${s.identifier}:${s.baseUnit}`),
+      ...derivedSchemas.map(
+        (s) =>
+          `d:${s.identifier}:${s.baseUnit}:${s.applicableAnnotationTypes?.join(",")}`,
+      ),
     ].join(",");
     if (schemaKey !== this.annotationQuerySchemaKey) {
       this.annotationQuerySchemaKey = schemaKey;

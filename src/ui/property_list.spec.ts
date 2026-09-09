@@ -17,7 +17,9 @@
 import { describe, expect, test, vi } from "vitest";
 import {
   bindPropertyListSortControl,
+  createPropertyListQueryContainer,
   createPropertyListQueryInput,
+  createPropertyListSummaryGroup,
   createPropertyListStatisticsShell,
   getNextPropertyListSortDirection,
   type PropertyListSortDirection,
@@ -85,14 +87,38 @@ describe("property-list presentation", () => {
     expect(select).toHaveBeenCalledOnce();
   });
 
+  test("wraps query inputs in the shared query container", () => {
+    const input = createPropertyListQueryInput({ placeholder: "Filter" });
+    const container = createPropertyListQueryContainer(input);
+    expect(container.classList).toContain(
+      "neuroglancer-property-list-query-container",
+    );
+    expect(container.firstElementChild).toBe(input);
+  });
+
   test("exposes statistics slots and controls shell visibility", () => {
     const shell = createPropertyListStatisticsShell();
     expect(shell.root.contains(shell.count)).toBe(true);
+    expect(shell.count.classList).toContain(
+      "neuroglancer-property-list-status-message",
+    );
     expect(shell.root.contains(shell.content)).toBe(true);
     expect(shell.root.style.display).toBe("none");
     expect(shell.separator.style.display).toBe("none");
     shell.setVisible(true);
     expect(shell.root.style.display).toBe("");
     expect(shell.separator.style.display).toBe("");
+  });
+
+  test("creates categorical property groups collapsed by default", () => {
+    const details = createPropertyListSummaryGroup({
+      content: document.createElement("div"),
+      propertyCount: 2,
+      propertyKind: "categorical",
+    });
+    expect(details.open).toBe(false);
+    expect(details.querySelector("summary")?.textContent).toBe(
+      "2 categorical properties",
+    );
   });
 });
