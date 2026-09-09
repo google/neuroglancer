@@ -118,6 +118,12 @@ import {
 } from "#src/ui/annotation_properties.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
 import { getDefaultAnnotationListBindings } from "#src/ui/default_input_event_bindings.js";
+import {
+  bindPropertyListSortControl,
+  createPropertyListQueryInput,
+  createPropertyListStatisticsShell,
+  type PropertyListSortDirection,
+} from "#src/ui/property_list.js";
 import type {
   IncludeExcludeChip,
   NumericalSummaryDataSource,
@@ -467,7 +473,8 @@ export class AnnotationLayerView extends Tab {
   private annotationQuerySchemaKey = "";
   private coordDimNames: string[] = [];
   private derivedAnalysis: DerivedAnalysisResult | undefined;
-  private queryStatisticsElement = document.createElement("div");
+  private queryStatistics = createPropertyListStatisticsShell();
+  private queryStatisticsElement = this.queryStatistics.count;
   private categoricalSummaryContainer = document.createElement("div");
   private categoricalDetailsOpen = false;
   private numericalSummaryContainer = document.createElement("div");
@@ -678,13 +685,10 @@ export class AnnotationLayerView extends Tab {
     queryInputContainer.classList.add(
       "neuroglancer-annotation-query-container",
     );
-    const queryInput = (this.queryInput = document.createElement("input"));
-    queryInput.type = "text";
-    queryInput.classList.add("neuroglancer-annotation-query");
-    queryInput.placeholder =
-      "Filter: text, /regexp/, #bool, #enum=label, prop<N, <sort, |col";
-    queryInput.autocomplete = "off";
-    queryInput.spellcheck = false;
+    const queryInput = (this.queryInput = createPropertyListQueryInput({
+      placeholder:
+        "Filter: text, /regexp/, #bool, #enum=label, prop<N, <sort, |col",
+    }));
     queryInputContainer.appendChild(queryInput);
     {
       const checkbox = this.registerDisposer(
@@ -700,34 +704,28 @@ export class AnnotationLayerView extends Tab {
     }
     this.element.appendChild(queryInputContainer);
 
-    this.queryStatisticsElement.classList.add(
-      "neuroglancer-annotation-query-statistics",
-    );
     this.queryStatisticsElement.style.display = "none";
-    this.element.appendChild(this.queryStatisticsElement);
-
-    this.categoricalSummaryContainer.classList.add(
-      "neuroglancer-annotation-numerical-summary",
-    );
     this.categoricalSummaryContainer.style.display = "none";
-    this.element.appendChild(this.categoricalSummaryContainer);
-
-    this.numericalSummaryContainer.classList.add(
-      "neuroglancer-annotation-numerical-summary",
-    );
     this.numericalSummaryContainer.style.display = "none";
-    this.element.appendChild(this.numericalSummaryContainer);
     this.derivedWarningElement.classList.add(
       "neuroglancer-annotation-derived-warning",
     );
     this.derivedWarningElement.textContent = "⚠ measurements unavailable";
     this.derivedWarningElement.style.display = "none";
-    this.element.appendChild(this.derivedWarningElement);
     this.loadedNoticeElement.classList.add(
       "neuroglancer-annotation-loaded-notice",
     );
     this.loadedNoticeElement.style.display = "none";
-    this.element.appendChild(this.loadedNoticeElement);
+    this.queryStatistics.content.append(
+      this.categoricalSummaryContainer,
+      this.numericalSummaryContainer,
+      this.derivedWarningElement,
+      this.loadedNoticeElement,
+    );
+    this.element.append(
+      this.queryStatistics.root,
+      this.queryStatistics.separator,
+    );
 
     const debouncedQuery = this.registerCancellable(
       debounce(() => {
@@ -1165,6 +1163,50 @@ export class AnnotationLayerView extends Tab {
     this.forceUpdateView();
   }
 
+  private getSortDirection(
+    fieldId: string,
+  ): PropertyListSortDirection | undefined {
+    if (this.sortState?.propertyId !== fieldId) return undefined;
+    return this.sortState.order === "asc" ? "ascending" : "descending";
+  }
+
+  private setSortDirection(
+    fieldId: string,
+    direction: PropertyListSortDirection | undefined,
+  ) {
+    this.sortState =
+      direction === undefined
+        ? undefined
+        : {
+            propertyId: fieldId,
+            order: direction === "ascending" ? "asc" : "desc",
+          };
+    this.layer.annotationListSortState.value = this.sortState ?? null;
+    this.writeCurrentStateToQueryText({
+      sortBy:
+        direction === undefined
+          ? []
+          : [
+              {
+                fieldId,
+                order: direction === "ascending" ? "<" : ">",
+              },
+            ],
+    });
+    ++this.curColumnConfigGeneration;
+    this.forceUpdateView();
+  }
+
+  private bindSortControl(label: HTMLElement, fieldId: string) {
+    return bindPropertyListSortControl({
+      label,
+      fieldId,
+      allowClear: true,
+      getDirection: () => this.getSortDirection(fieldId),
+      onChange: (direction) => this.setSortDirection(fieldId, direction),
+    });
+  }
+
   private createPropertyColumnHeader(
     identifier: string,
     label: string = identifier,
@@ -1177,53 +1219,7 @@ export class AnnotationLayerView extends Tab {
     name.textContent = label;
     if (description) name.title = description;
     header.appendChild(name);
-    const curOrder =
-      this.sortState?.propertyId === identifier
-        ? this.sortState.order
-        : undefined;
-    const sortBtn = document.createElement("button");
-    sortBtn.classList.add("neuroglancer-annotation-property-sort-btn");
-    sortBtn.textContent =
-      curOrder === "asc" ? "▲" : curOrder === "desc" ? "▼" : "↕";
-    sortBtn.title =
-      curOrder === "asc"
-        ? `Sort ${identifier} descending (click again to clear)`
-        : curOrder === "desc"
-          ? `Clear sort on ${identifier}`
-          : `Sort ${identifier} ascending`;
-    if (curOrder !== undefined) sortBtn.dataset.active = "true";
-    sortBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      const cur =
-        this.sortState?.propertyId === identifier
-          ? this.sortState.order
-          : undefined;
-      if (cur === undefined) {
-        this.sortState = { propertyId: identifier, order: "asc" };
-      } else if (cur === "asc") {
-        this.sortState = { propertyId: identifier, order: "desc" };
-      } else {
-        this.sortState = undefined;
-      }
-      this.layer.annotationListSortState.value = this.sortState ?? null;
-      this.writeCurrentStateToQueryText({
-        sortBy: this.sortState
-          ? [
-              {
-                fieldId: this.sortState.propertyId,
-                order:
-                  this.sortState.order === "asc"
-                    ? ("<" as const)
-                    : (">" as const),
-              },
-            ]
-          : [],
-      });
-      ++this.curColumnConfigGeneration;
-      this.forceUpdateView();
-    });
-    header.appendChild(sortBtn);
+    this.bindSortControl(header, identifier);
     return header;
   }
 
@@ -1233,6 +1229,7 @@ export class AnnotationLayerView extends Tab {
     removeChildren(this.numericalSummaryContainer);
     if (this.annotationQuerySchema.numericProps.length === 0) {
       this.numericalSummaryContainer.style.display = "none";
+      this.updateStatisticsVisibility();
       return;
     }
     const dataSource = makeAnnotationNumericalDataSource(
@@ -1253,6 +1250,7 @@ export class AnnotationLayerView extends Tab {
       this.numericalSummaryContainer.appendChild(summary.listElement);
       this.numericalSummaryContainer.style.display = "";
     }
+    this.updateStatisticsVisibility();
   }
 
   private updateDerivedWarning(warning: string | undefined) {
@@ -1264,6 +1262,18 @@ export class AnnotationLayerView extends Tab {
       el.style.display = "";
       el.title = warning;
     }
+    this.updateStatisticsVisibility();
+  }
+
+  private updateStatisticsVisibility() {
+    const visible = [
+      this.queryStatisticsElement,
+      this.categoricalSummaryContainer,
+      this.numericalSummaryContainer,
+      this.derivedWarningElement,
+      this.loadedNoticeElement,
+    ].some((element) => element.style.display !== "none");
+    this.queryStatistics.setVisible(visible);
   }
 
   private syncNumericalBounds() {
@@ -1383,16 +1393,19 @@ export class AnnotationLayerView extends Tab {
     const hasProps = schema.enumProps.length > 0 || schema.boolProps.length > 0;
     if (result.total === 0 && !hasProps) {
       queryStatisticsElement.style.display = "none";
+      this.updateStatisticsVisibility();
       return;
     }
-    queryStatisticsElement.style.display = "";
     if (result.count < result.total) {
-      const countEl = document.createElement("div");
-      countEl.classList.add("neuroglancer-annotation-query-count");
-      countEl.textContent = `${result.count} / ${result.total} annotations`;
-      queryStatisticsElement.appendChild(countEl);
+      queryStatisticsElement.textContent = `${result.count} / ${result.total} annotations`;
+      queryStatisticsElement.style.display = "";
+    } else {
+      queryStatisticsElement.style.display = "none";
     }
-    if (!hasProps) return;
+    if (!hasProps) {
+      this.updateStatisticsVisibility();
+      return;
+    }
     const items = this.annotationQueryItems;
     const indices = result.indices!;
     const chips: IncludeExcludeChip[] = [];
@@ -1535,6 +1548,7 @@ export class AnnotationLayerView extends Tab {
     } else {
       categoricalSummaryContainer.style.display = "none";
     }
+    this.updateStatisticsVisibility();
   }
 
   private updateView() {
@@ -1555,60 +1569,13 @@ export class AnnotationLayerView extends Tab {
 
       removeChildren(headerRow);
 
-      // Symbol column header: cycling sort button for annotation type.
       const TYPE_FIELD = "type";
-      const typeOrder =
-        this.sortState?.propertyId === TYPE_FIELD
-          ? this.sortState.order
-          : undefined;
       const symbolHeader = document.createElement("div");
       symbolHeader.style.gridColumn = "symbol";
       symbolHeader.style.display = "flex";
       symbolHeader.style.alignItems = "center";
       symbolHeader.style.justifyContent = "center";
-      const typeSortBtn = document.createElement("button");
-      typeSortBtn.classList.add("neuroglancer-annotation-property-sort-btn");
-      typeSortBtn.textContent =
-        typeOrder === "asc" ? "▲" : typeOrder === "desc" ? "▼" : "↕";
-      typeSortBtn.title =
-        typeOrder === "asc"
-          ? "Sort by type descending"
-          : typeOrder === "desc"
-            ? "Clear sort by type"
-            : "Sort by type ascending";
-      if (typeOrder !== undefined) typeSortBtn.dataset.active = "true";
-      typeSortBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        const cur =
-          this.sortState?.propertyId === TYPE_FIELD
-            ? this.sortState.order
-            : undefined;
-        if (cur === undefined) {
-          this.sortState = { propertyId: TYPE_FIELD, order: "asc" };
-        } else if (cur === "asc") {
-          this.sortState = { propertyId: TYPE_FIELD, order: "desc" };
-        } else {
-          this.sortState = undefined;
-        }
-        this.layer.annotationListSortState.value = this.sortState ?? null;
-        this.writeCurrentStateToQueryText({
-          sortBy: this.sortState
-            ? [
-                {
-                  fieldId: TYPE_FIELD,
-                  order:
-                    this.sortState.order === "asc"
-                      ? ("<" as const)
-                      : (">" as const),
-                },
-              ]
-            : [],
-        });
-        ++this.curColumnConfigGeneration;
-        this.forceUpdateView();
-      });
-      symbolHeader.appendChild(typeSortBtn);
+      this.bindSortControl(symbolHeader, TYPE_FIELD);
       headerRow.appendChild(symbolHeader);
       let i = 0;
       let gridTemplate = "[symbol] 2ch";
@@ -1631,54 +1598,7 @@ export class AnnotationLayerView extends Tab {
         );
         dimWidget.appendChild(name);
         dimWidget.appendChild(scale);
-        // Cycling sort button for this coordinate column.
-        const curOrder =
-          this.sortState?.propertyId === dimName
-            ? this.sortState.order
-            : undefined;
-        const sortBtn = document.createElement("button");
-        sortBtn.classList.add("neuroglancer-annotation-property-sort-btn");
-        sortBtn.textContent =
-          curOrder === "asc" ? "▲" : curOrder === "desc" ? "▼" : "↕";
-        sortBtn.title =
-          curOrder === "asc"
-            ? `Sort by ${dimName} descending`
-            : curOrder === "desc"
-              ? `Clear sort by ${dimName}`
-              : `Sort by ${dimName} ascending`;
-        if (curOrder !== undefined) sortBtn.dataset.active = "true";
-        sortBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          e.preventDefault();
-          const cur =
-            this.sortState?.propertyId === dimName
-              ? this.sortState.order
-              : undefined;
-          if (cur === undefined) {
-            this.sortState = { propertyId: dimName, order: "asc" };
-          } else if (cur === "asc") {
-            this.sortState = { propertyId: dimName, order: "desc" };
-          } else {
-            this.sortState = undefined;
-          }
-          this.layer.annotationListSortState.value = this.sortState ?? null;
-          this.writeCurrentStateToQueryText({
-            sortBy: this.sortState
-              ? [
-                  {
-                    fieldId: this.sortState.propertyId,
-                    order:
-                      this.sortState.order === "asc"
-                        ? ("<" as const)
-                        : (">" as const),
-                  },
-                ]
-              : [],
-          });
-          ++this.curColumnConfigGeneration;
-          this.forceUpdateView();
-        });
-        dimWidget.appendChild(sortBtn);
+        this.bindSortControl(dimWidget, dimName);
         dimWidget.style.gridColumn = `dim ${i + 1}`;
         this.setColumnWidth(
           i,

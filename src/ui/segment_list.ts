@@ -47,6 +47,11 @@ import {
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { observeWatchable, WatchableValue } from "#src/trackable_value.js";
 import { getDefaultSelectBindings } from "#src/ui/default_input_event_bindings.js";
+import {
+  bindPropertyListSortControl,
+  createPropertyListQueryInput,
+  createPropertyListStatisticsShell,
+} from "#src/ui/property_list.js";
 import type {
   IncludeExcludeChip,
   NumericalSummaryDataSource,
@@ -58,7 +63,6 @@ import {
   queryIncludesColumn,
   renderIncludeExcludeChips,
   toggleSortOrder,
-  updateColumnSortIcon,
 } from "#src/ui/property_summary.js";
 import { SELECT_SEGMENTS_TOOLS_ID } from "#src/ui/segment_select_tools.js";
 import {
@@ -608,21 +612,15 @@ class SegmentListGroupQuery extends SegmentListGroupBase {
       segmentQuery.value = value;
       queryElement.select();
     };
-    const queryStatisticsContainer = document.createElement("div");
-    queryStatisticsContainer.classList.add(
-      "neuroglancer-segment-query-result-statistics",
-    );
-    const queryStatisticsSeparator = document.createElement("div");
-    queryStatisticsSeparator.classList.add(
-      "neuroglancer-segment-query-result-statistics-separator",
-    );
+    const queryStatistics = createPropertyListStatisticsShell();
+    const queryStatisticsContainer = queryStatistics.content;
     const queryErrors = document.createElement("ul");
     queryErrors.classList.add("neuroglancer-segment-query-errors");
     // push them in front of the base list elements
     this.element.prepend(
       queryErrors,
-      queryStatisticsContainer,
-      queryStatisticsSeparator,
+      queryStatistics.root,
+      queryStatistics.separator,
     );
     this.registerEventListener(queryElement, "input", () => {
       debouncedUpdateQueryModel();
@@ -717,21 +715,36 @@ class SegmentListGroupQuery extends SegmentListGroupBase {
         header.container.classList.add("neuroglancer-segment-list-header");
         for (const headerLabel of header.propertyLabels) {
           const { label, sortIcon, id } = headerLabel;
-          label.addEventListener("click", () => {
-            toggleSortOrder(
-              listSource.queryResult.value?.query as
-                | NumericalSummaryQuery
-                | undefined,
-              setQuery as unknown as (q: NumericalSummaryQuery) => void,
-              id,
-            );
+          bindPropertyListSortControl({
+            label,
+            sortIcon,
+            fieldId: id,
+            allowClear: false,
+            getDirection: () => {
+              const order = queryResult?.query?.sortBy?.find(
+                (sort) => sort.fieldId === id,
+              )?.order;
+              return order === "<"
+                ? "ascending"
+                : order === ">"
+                  ? "descending"
+                  : undefined;
+            },
+            onChange: () => {
+              toggleSortOrder(
+                listSource.queryResult.value?.query as
+                  | NumericalSummaryQuery
+                  | undefined,
+                setQuery as unknown as (q: NumericalSummaryQuery) => void,
+                id,
+              );
+            },
           });
-          updateColumnSortIcon(queryResult?.query, sortIcon, id);
         }
         list.header.appendChild(header.container);
       }
       updateQueryErrors(queryResult);
-      queryStatisticsSeparator.style.display = "none";
+      queryStatistics.setVisible(false);
       tagSummary?.remove();
       if (queryResult === undefined) return;
       const { query } = queryResult;
@@ -767,7 +780,7 @@ class SegmentListGroupQuery extends SegmentListGroupBase {
         queryStatisticsContainer.appendChild(tagSummary);
       }
       if (segmentDataSource.properties.length > 0 || tagSummary !== undefined) {
-        queryStatisticsSeparator.style.display = "";
+        queryStatistics.setVisible(true);
       }
     }, listSource.queryResult);
   }
@@ -832,10 +845,9 @@ export class SegmentDisplayTab extends Tab {
     );
     element.appendChild(toolbox);
 
-    const queryElement = document.createElement("input");
-    queryElement.classList.add("neuroglancer-segment-list-query");
-    queryElement.addEventListener("focus", () => {
-      queryElement.select();
+    const queryElement = createPropertyListQueryInput({
+      placeholder: "Enter ID, name prefix or /regexp",
+      selectOnFocus: true,
     });
     const keyboardHandler = this.registerDisposer(
       new KeyboardEventBinder(queryElement, keyMap),
@@ -847,10 +859,7 @@ export class SegmentDisplayTab extends Tab {
         segmentQuery.value = queryElement.value;
       }, 200),
     );
-    queryElement.autocomplete = "off";
     queryElement.title = keyMap.describe();
-    queryElement.spellcheck = false;
-    queryElement.placeholder = "Enter ID, name prefix or /regexp";
     this.registerDisposer(
       observeWatchable((q) => {
         queryElement.value = q;

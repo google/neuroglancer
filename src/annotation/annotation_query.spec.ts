@@ -443,6 +443,16 @@ describe("unparseAnnotationQuery", () => {
     ) as any;
     expect(reparsed.boolConstraints[0].value).toBe(false);
   });
+
+  it("serializes mixed clauses in canonical syntax", () => {
+    const q = parseAnnotationQuery(
+      schema,
+      "<score |count score>=0.5 #status=active -#verified /foo/",
+    ) as any;
+    expect(unparseAnnotationQuery(q, new Map([["score", [0, 1]]]))).toBe(
+      "<score |count score>=0.5 #status=1 -#verified /foo/",
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

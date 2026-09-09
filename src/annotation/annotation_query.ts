@@ -29,6 +29,11 @@ import type {
   QueryParseError,
   SortBy,
 } from "#src/segmentation_display_state/property_map.js";
+import type { SerializablePropertyQueryClause } from "#src/ui/property_query.js";
+import {
+  resolvePropertyQuery,
+  serializePropertyQueryClauses,
+} from "#src/ui/property_query.js";
 import type {
   NumericalPropertyHistogram,
   NumericalSummaryDataSource,
@@ -38,13 +43,7 @@ import type {
 } from "#src/ui/property_summary.js";
 import { DataType } from "#src/util/data_type.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
-import {
-  clampToInterval,
-  dataTypeCompare,
-  dataTypeValueNextAfter,
-  defaultDataTypeRange,
-  parseDataTypeValue,
-} from "#src/util/lerp.js";
+import { defaultDataTypeRange } from "#src/util/lerp.js";
 
 // ============================================================================
 // Schema types
@@ -328,9 +327,6 @@ export function parseAnnotationQuery(
   schema: AnnotationQuerySchema,
   queryText: string,
 ): AnnotationFilterQuery | { errors: QueryParseError[] } {
-  const parsed = emptyQuery();
-  const errors: QueryParseError[] = [];
-
   const allNumericIds = new Set(
     schema.numericProps.map((p) => p.identifier.toLowerCase()),
   );
@@ -341,300 +337,142 @@ export function parseAnnotationQuery(
     schema.boolProps.map((p) => p.identifier.toLowerCase()),
   );
   const allFieldIds = new Set([...allNumericIds, ...allEnumIds, ...allBoolIds]);
-
-  const tokens = tokenize(queryText);
-  for (const { word, startIndex, endIndex } of tokens) {
-    // Sort token: <field or >field
-    if (word.startsWith("<") || word.startsWith(">")) {
-      const fieldId = word.substring(1).toLowerCase();
-      const order = word[0] as "<" | ">";
+  return resolvePropertyQuery(queryText, {
+    createQuery: emptyQuery,
+    resolveSortField: (clause) => {
+      const fieldId = clause.field.toLowerCase();
       if (
         fieldId !== "description" &&
         fieldId !== "index" &&
         !allFieldIds.has(fieldId)
       ) {
-        errors.push({
-          begin: startIndex + 1,
-          end: endIndex,
-          message: `Unknown sort field: ${fieldId}`,
-        });
-        continue;
+        return {
+          error: {
+            begin: clause.begin + 1,
+            end: clause.end,
+            message: `Unknown sort field: ${fieldId}`,
+          },
+        };
       }
-      const canonId =
-        fieldId === "description" || fieldId === "index"
-          ? fieldId
-          : findCanonicalId(fieldId, schema);
-      if (parsed.sortBy.find((s) => s.fieldId === canonId)) {
-        errors.push({
-          begin: startIndex + 1,
-          end: endIndex,
-          message: `Duplicate sort field: ${fieldId}`,
-        });
-        continue;
-      }
-      parsed.sortBy.push({ fieldId: canonId, order });
-      continue;
-    }
-
-    // Column token: |field
-    if (word.startsWith("|")) {
-      const fieldId = word.substring(1).toLowerCase();
+      return {
+        value:
+          fieldId === "description" || fieldId === "index"
+            ? fieldId
+            : findCanonicalId(fieldId, schema),
+      };
+    },
+    duplicateSortMessage: (clause) =>
+      `Duplicate sort field: ${clause.field.toLowerCase()}`,
+    resolveColumnField: (clause) => {
+      const fieldId = clause.field.toLowerCase();
       if (!allFieldIds.has(fieldId)) {
-        errors.push({
-          begin: startIndex + 1,
-          end: endIndex,
-          message: `Unknown column field: ${fieldId}`,
-        });
-        continue;
+        return {
+          error: {
+            begin: clause.begin + 1,
+            end: clause.end,
+            message: `Unknown column field: ${fieldId}`,
+          },
+        };
       }
-      const canonId = findCanonicalId(fieldId, schema);
-      if (
-        parsed.sortBy.find((s) => s.fieldId === canonId) ||
-        parsed.includeColumns.includes(canonId)
-      ) {
-        continue;
+      return { value: findCanonicalId(fieldId, schema) };
+    },
+    resolveNumericField: (clause) => {
+      const fieldId = clause.field.toLowerCase();
+      const property = schema.numericProps.find(
+        (candidate) => candidate.identifier.toLowerCase() === fieldId,
+      );
+      if (property === undefined) {
+        return {
+          error: {
+            begin: clause.begin,
+            end: clause.end,
+            message: `Unknown or non-numeric field: ${fieldId}`,
+          },
+        };
       }
-      parsed.includeColumns.push(canonId);
-      continue;
-    }
-
-    // Regexp token: /pattern/ — trailing slash is optional
-    if (word.startsWith("/")) {
-      if (parsed.regexp !== undefined) {
-        errors.push({
-          begin: startIndex,
-          end: endIndex,
-          message: "Only one regular expression allowed",
-        });
-        continue;
-      }
-      if (parsed.prefix !== undefined) {
-        errors.push({
-          begin: startIndex,
-          end: endIndex,
-          message: "Prefix cannot be combined with regular expression",
-        });
-        continue;
-      }
-      const pattern =
-        word.endsWith("/") && word.length > 1
-          ? word.slice(1, -1)
-          : word.slice(1);
-      try {
-        parsed.regexp = new RegExp(pattern, "i");
-      } catch {
-        errors.push({
-          begin: startIndex,
-          end: endIndex,
-          message: "Invalid regular expression syntax",
-        });
-      }
-      continue;
-    }
-
-    // Enum/bool constraint: #prop[=label] or -#prop[=label]
-    const enumBoolMatch = word.match(
-      /^(-?)#([a-zA-Z][a-zA-Z0-9_]*)(?:=(.*))?$/,
-    );
-    if (enumBoolMatch !== null) {
-      const negate = enumBoolMatch[1] === "-";
-      const rawId = enumBoolMatch[2].toLowerCase();
-      const valueStr = enumBoolMatch[3];
-
-      if (allBoolIds.has(rawId)) {
-        // Bool constraint
-        if (valueStr !== undefined) {
+      return {
+        value: {
+          fieldId: property.identifier,
+          dataType: property.dataType,
+          bounds: property.bounds,
+        },
+      };
+    },
+    applyCategoricalClause: (query, clause, { errors }) => {
+      const fieldId = clause.field.toLowerCase();
+      if (allBoolIds.has(fieldId)) {
+        if (clause.value !== undefined) {
           errors.push({
-            begin: startIndex,
-            end: endIndex,
-            message: `Bool property ${rawId} does not accept a value; use #${rawId} or -#${rawId}`,
+            begin: clause.begin,
+            end: clause.end,
+            message: `Bool property ${fieldId} does not accept a value; use #${fieldId} or -#${fieldId}`,
           });
-          continue;
+          return;
         }
-        const canonId = findCanonicalId(rawId, schema);
-        let constraint = parsed.boolConstraints.find(
-          (c) => c.fieldId === canonId,
+        const canonicalId = findCanonicalId(fieldId, schema);
+        let constraint = query.boolConstraints.find(
+          (candidate) => candidate.fieldId === canonicalId,
         );
         if (constraint === undefined) {
-          constraint = { fieldId: canonId, value: undefined };
-          parsed.boolConstraints.push(constraint);
+          constraint = { fieldId: canonicalId, value: undefined };
+          query.boolConstraints.push(constraint);
         }
-        constraint.value = !negate;
-        continue;
+        constraint.value = !clause.exclude;
+        return;
       }
-
-      if (allEnumIds.has(rawId)) {
-        const enumSchema = schema.enumProps.find(
-          (p) => p.identifier.toLowerCase() === rawId,
+      if (allEnumIds.has(fieldId)) {
+        const property = schema.enumProps.find(
+          (candidate) => candidate.identifier.toLowerCase() === fieldId,
         )!;
-        const canonId = enumSchema.identifier;
-        let rawEnumValue: number;
-
-        if (valueStr === undefined) {
+        if (clause.value === undefined) {
           errors.push({
-            begin: startIndex,
-            end: endIndex,
-            message: `Enum property ${rawId} requires a value: #${rawId}=label`,
+            begin: clause.begin,
+            end: clause.end,
+            message: `Enum property ${fieldId} requires a value: #${fieldId}=label`,
           });
-          continue;
+          return;
         }
-
-        // Try label lookup (case-insensitive) first
-        const labelIdx = enumSchema.enumLabels.findIndex(
-          (l) => l.toLowerCase() === valueStr.toLowerCase(),
+        const labelIndex = property.enumLabels.findIndex(
+          (label) => label.toLowerCase() === clause.value!.toLowerCase(),
         );
-        if (labelIdx !== -1) {
-          rawEnumValue = enumSchema.enumValues[labelIdx];
-        } else {
-          // Fall back to numeric value
-          const num = Number(valueStr);
-          if (!Number.isFinite(num) || !enumSchema.enumValues.includes(num)) {
-            errors.push({
-              begin: startIndex,
-              end: endIndex,
-              message: `Unknown enum value for ${rawId}: ${valueStr}`,
-            });
-            continue;
-          }
-          rawEnumValue = num;
+        const numericValue = Number(clause.value);
+        const value =
+          labelIndex === -1 ? numericValue : property.enumValues[labelIndex];
+        if (
+          labelIndex === -1 &&
+          (!Number.isFinite(value) || !property.enumValues.includes(value))
+        ) {
+          errors.push({
+            begin: clause.begin,
+            end: clause.end,
+            message: `Unknown enum value for ${fieldId}: ${clause.value}`,
+          });
+          return;
         }
-
-        let constraint = parsed.enumConstraints.find(
-          (c) => c.fieldId === canonId,
+        let constraint = query.enumConstraints.find(
+          (candidate) => candidate.fieldId === property.identifier,
         );
         if (constraint === undefined) {
-          constraint = { fieldId: canonId, include: [], exclude: [] };
-          parsed.enumConstraints.push(constraint);
+          constraint = {
+            fieldId: property.identifier,
+            include: [],
+            exclude: [],
+          };
+          query.enumConstraints.push(constraint);
         }
-        if (negate) {
-          if (!constraint.exclude.includes(rawEnumValue)) {
-            constraint.exclude.push(rawEnumValue);
-          }
-        } else {
-          if (!constraint.include.includes(rawEnumValue)) {
-            constraint.include.push(rawEnumValue);
-          }
-        }
-        continue;
+        const target = clause.exclude ? constraint.exclude : constraint.include;
+        if (!target.includes(value)) target.push(value);
+        return;
       }
-
       errors.push({
-        begin: startIndex,
-        end: endIndex,
-        message: `Unknown property: ${rawId}`,
+        begin: clause.begin,
+        end: clause.end,
+        message: `Unknown property: ${fieldId}`,
       });
-      continue;
-    }
-
-    // Numeric constraint: prop<N, prop<=N, prop=N, prop>=N, prop>N
-    const numericMatch = word.match(
-      /^([a-zA-Z][a-zA-Z0-9_]*)(<|<=|=|>=|>)(-?[0-9.].*)$/,
-    );
-    if (numericMatch !== null) {
-      const rawId = numericMatch[1].toLowerCase();
-      const op = numericMatch[2];
-      const numericSchema = schema.numericProps.find(
-        (p) => p.identifier.toLowerCase() === rawId,
-      );
-      if (numericSchema === undefined) {
-        errors.push({
-          begin: startIndex,
-          end: endIndex,
-          message: `Unknown or non-numeric field: ${rawId}`,
-        });
-        continue;
-      }
-      const canonId = numericSchema.identifier;
-      let value: number;
-      try {
-        value = parseDataTypeValue(
-          numericSchema.dataType,
-          numericMatch[3],
-        ) as number;
-      } catch (e: any) {
-        errors.push({
-          begin: startIndex + numericMatch[1].length + numericMatch[2].length,
-          end: endIndex,
-          message: e.message,
-        });
-        continue;
-      }
-      let constraint = parsed.numericalConstraints.find(
-        (c) => c.fieldId === canonId,
-      );
-      if (constraint === undefined) {
-        constraint = { fieldId: canonId, bounds: numericSchema.bounds };
-        parsed.numericalConstraints.push(constraint);
-      }
-      const origMin = clampToInterval(
-        numericSchema.bounds,
-        constraint.bounds[0],
-      ) as number;
-      const origMax = clampToInterval(
-        numericSchema.bounds,
-        constraint.bounds[1],
-      ) as number;
-      let newMin = origMin;
-      let newMax = origMax;
-      switch (op) {
-        case "<":
-          newMax = dataTypeValueNextAfter(
-            numericSchema.dataType,
-            value,
-            -1,
-          ) as number;
-          break;
-        case "<=":
-          newMax = value;
-          break;
-        case "=":
-          newMin = newMax = value;
-          break;
-        case ">=":
-          newMin = value;
-          break;
-        case ">":
-          newMin = dataTypeValueNextAfter(
-            numericSchema.dataType,
-            value,
-            +1,
-          ) as number;
-          break;
-      }
-      newMin = dataTypeCompare(origMin, newMin) > 0 ? origMin : newMin;
-      newMax = dataTypeCompare(origMax, newMax) < 0 ? origMax : newMax;
-      if (dataTypeCompare(newMin, newMax) > 0) {
-        errors.push({
-          begin: startIndex,
-          end: endIndex,
-          message: "Constraint would not match any values",
-        });
-        continue;
-      }
-      constraint.bounds = [newMin, newMax] as DataTypeInterval;
-      continue;
-    }
-
-    // Prefix token: bare word
-    if (parsed.regexp !== undefined) {
-      errors.push({
-        begin: startIndex,
-        end: endIndex,
-        message: "Prefix cannot be combined with regular expression",
-      });
-      continue;
-    }
-    parsed.prefix =
-      parsed.prefix !== undefined ? `${parsed.prefix} ${word}` : word;
-  }
-
-  if (errors.length > 0) {
-    return { errors };
-  }
-  if (parsed.sortBy.length === 0) {
-    parsed.sortBy.push({ fieldId: "index", order: "<" });
-  }
-  return parsed;
+    },
+    defaultSort: { fieldId: "index", order: "<" },
+    regexpFlags: "i",
+  });
 }
 
 /** Convert an AnnotationFilterQuery back to a query string. */
@@ -642,42 +480,75 @@ export function unparseAnnotationQuery(
   query: AnnotationFilterQuery,
   schemaBoundsMap?: ReadonlyMap<string, readonly [number, number]>,
 ): string {
-  const parts: string[] = [];
+  const clauses: SerializablePropertyQueryClause[] = [];
   for (const { fieldId, order } of query.sortBy) {
     if (fieldId !== "index" || order !== "<") {
-      parts.push(`${order}${fieldId}`);
+      clauses.push({ type: "sort", field: fieldId, order });
     }
   }
   for (const col of query.includeColumns) {
     if (!query.sortBy.find((s) => s.fieldId === col)) {
-      parts.push(`|${col}`);
+      clauses.push({ type: "column", field: col });
     }
   }
   for (const c of query.numericalConstraints) {
     const sb = schemaBoundsMap?.get(c.fieldId);
     const [lo, hi] = c.bounds as [number, number];
     if (sb === undefined || lo > sb[0]) {
-      parts.push(`${c.fieldId}>=${lo}`);
+      clauses.push({
+        type: "comparison",
+        field: c.fieldId,
+        operator: ">=",
+        value: `${lo}`,
+      });
     }
     if (sb === undefined || hi < sb[1]) {
-      parts.push(`${c.fieldId}<=${hi}`);
+      clauses.push({
+        type: "comparison",
+        field: c.fieldId,
+        operator: "<=",
+        value: `${hi}`,
+      });
     }
   }
   for (const c of query.enumConstraints) {
-    for (const v of c.include) parts.push(`#${c.fieldId}=${v}`);
-    for (const v of c.exclude) parts.push(`-#${c.fieldId}=${v}`);
+    for (const value of c.include) {
+      clauses.push({
+        type: "categorical",
+        exclude: false,
+        field: c.fieldId,
+        value: `${value}`,
+      });
+    }
+    for (const value of c.exclude) {
+      clauses.push({
+        type: "categorical",
+        exclude: true,
+        field: c.fieldId,
+        value: `${value}`,
+      });
+    }
   }
   for (const c of query.boolConstraints) {
     if (c.value !== undefined) {
-      parts.push(c.value ? `#${c.fieldId}` : `-#${c.fieldId}`);
+      clauses.push({
+        type: "categorical",
+        exclude: !c.value,
+        field: c.fieldId,
+        value: undefined,
+      });
     }
   }
   if (query.regexp !== undefined) {
-    parts.push(`/${query.regexp.source}/`);
+    clauses.push({
+      type: "regexp",
+      pattern: query.regexp.source,
+      closed: true,
+    });
   } else if (query.prefix !== undefined) {
-    parts.push(query.prefix);
+    clauses.push({ type: "text", value: query.prefix });
   }
-  return parts.join(" ");
+  return serializePropertyQueryClauses(clauses);
 }
 
 // ============================================================================
@@ -1053,29 +924,6 @@ function computeAnnotationPropertyHistogram(
     }
   }
   return { window, histogram };
-}
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-interface Token {
-  word: string;
-  startIndex: number;
-  endIndex: number;
-}
-
-function tokenize(text: string): Token[] {
-  const tokens: Token[] = [];
-  let i = 0;
-  while (i < text.length) {
-    while (i < text.length && text[i] === " ") ++i;
-    if (i >= text.length) break;
-    const start = i;
-    while (i < text.length && text[i] !== " ") ++i;
-    tokens.push({ word: text.slice(start, i), startIndex: start, endIndex: i });
-  }
-  return tokens;
 }
 
 function findCanonicalId(
