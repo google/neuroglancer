@@ -28,6 +28,7 @@ import {
   AnnotationSerializer,
   AnnotationType,
   deserializeAnnotation,
+  filterSerializedAnnotations,
   makeAnnotationPropertySerializers,
 } from "#src/annotation/index.js";
 
@@ -178,5 +179,25 @@ describe("deserializeAnnotation", () => {
       expectVecClose(decodedPolylineB.points[i], polylineB.points[i]);
     }
     expect(decodedPolylineB.properties).toEqual(polylineB.properties);
+
+    const filtered = filterSerializedAnnotations(
+      serialized,
+      propertySerializers,
+      (id) => id === line.id || id === polylineA.id,
+    );
+    expect(filtered.typeToIds[AnnotationType.LINE]).toEqual([line.id]);
+    expect(filtered.typeToIds[AnnotationType.POLYLINE]).toEqual([polylineA.id]);
+    expect(filtered.typeToSize[AnnotationType.LINE]).toBe(1);
+    expect(filtered.typeToSize[AnnotationType.POLYLINE]).toBe(2);
+    const filteredPolyline = deserializeAnnotation(
+      filtered,
+      propertySerializers[AnnotationType.POLYLINE],
+      AnnotationType.POLYLINE,
+      0,
+    ) as PolyLine;
+    expect(filteredPolyline.properties).toEqual(polylineA.properties);
+    for (let i = 0; i < polylineA.points.length; ++i) {
+      expectVecClose(filteredPolyline.points[i], polylineA.points[i]);
+    }
   });
 });

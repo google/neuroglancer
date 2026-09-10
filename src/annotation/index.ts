@@ -1995,3 +1995,26 @@ export class AnnotationSerializer {
     return serializeAnnotations(this.annotations, this.propertySerializers);
   }
 }
+
+export function filterSerializedAnnotations(
+  serialized: SerializedAnnotations,
+  propertySerializers: AnnotationPropertySerializer[],
+  predicate: (id: AnnotationId) => boolean,
+): SerializedAnnotations {
+  const serializer = new AnnotationSerializer(propertySerializers);
+  for (const annotationType of annotationTypes) {
+    const ids = serialized.typeToIds[annotationType];
+    for (let i = 0; i < ids.length; ++i) {
+      if (!predicate(ids[i])) continue;
+      serializer.add(
+        deserializeAnnotation(
+          serialized,
+          propertySerializers[annotationType],
+          annotationType,
+          i,
+        ),
+      );
+    }
+  }
+  return serializer.serialize();
+}
