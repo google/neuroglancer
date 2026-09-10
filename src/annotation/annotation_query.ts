@@ -59,6 +59,8 @@ export interface AnnotationNumericPropSchema {
   dataType: DataType;
   bounds: DataTypeInterval;
   description?: string;
+  /** Whether the result-table column can be toggled from the summary. */
+  columnToggleable?: boolean;
   /** SI base unit for derived/computed properties (e.g. "m", "s", "m^3"). */
   baseUnit?: string;
   /** Annotation types for which this derived property is defined. */
@@ -154,6 +156,7 @@ export function buildAnnotationQuerySchema(
           dataType: DataType.FLOAT32,
           bounds: defaultDataTypeRange[DataType.FLOAT32] as DataTypeInterval,
           description: coord.description,
+          columnToggleable: false,
         });
         usedIds.add(coord.id);
       }
@@ -849,6 +852,7 @@ export function makeAnnotationNumericalDataSource(
       dataType: p.dataType,
       bounds: p.bounds,
       description: p.description,
+      columnToggleable: p.columnToggleable,
       baseUnit: p.baseUnit,
       applicableAnnotationTypes: p.applicableAnnotationTypes,
     }),

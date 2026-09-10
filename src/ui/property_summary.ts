@@ -66,6 +66,7 @@ export interface NumericalSummaryProperty {
   dataType: DataType;
   bounds: DataTypeInterval;
   description?: string;
+  columnToggleable?: boolean;
   baseUnit?: string;
   applicableAnnotationTypes?: readonly number[];
 }
@@ -534,8 +535,13 @@ export class NumericalPropertiesSummary extends RefCounted {
     );
     const columnCheckbox = document.createElement("input");
     columnCheckbox.type = "checkbox";
+    if (property.columnToggleable === false) {
+      columnCheckbox.style.visibility = "hidden";
+    }
     columnCheckbox.addEventListener("click", () => {
-      if (!propertySummary.applicable) return;
+      if (!propertySummary.applicable || property.columnToggleable === false) {
+        return;
+      }
       const q = this.queryResult.value?.query;
       if (q === undefined) return;
       toggleIncludeColumn(q, this.setQuery, property.id);
@@ -709,11 +715,16 @@ export class NumericalPropertiesSummary extends RefCounted {
       }
     }
     const query = this.queryResult.value?.query;
-    const isIncluded = queryIncludesColumn(query, property.id);
+    const isIncluded =
+      property.columnToggleable === false ||
+      queryIncludesColumn(query, property.id);
     summary.columnCheckbox.checked = isIncluded;
-    summary.columnCheckbox.title = isIncluded
-      ? "Remove column from result table"
-      : "Add column to result table";
+    summary.columnCheckbox.title =
+      property.columnToggleable === false
+        ? ""
+        : isIncluded
+          ? "Remove column from result table"
+          : "Add column to result table";
     updateColumnSortIcon(query, summary.sortIcon, property.id);
     if (
       summary.propertyHistogram === propertyHistogram &&

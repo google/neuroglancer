@@ -120,6 +120,20 @@ describe("buildAnnotationQuerySchema", () => {
     expect(statusProp.enumValues).toEqual([0, 1, 2]);
   });
 
+  it("marks coordinate dimensions as non-toggleable columns", () => {
+    const schema = buildAnnotationQuerySchema(ALL_SPECS as any, [
+      { id: "x", description: "x coordinate" },
+    ]);
+    expect(
+      schema.numericProps.find((property) => property.identifier === "x")
+        ?.columnToggleable,
+    ).toBe(false);
+    expect(
+      schema.numericProps.find((property) => property.identifier === "score")
+        ?.columnToggleable,
+    ).toBeUndefined();
+  });
+
   it("skips rgb/rgba specs", () => {
     const schema = buildAnnotationQuerySchema([
       {
@@ -503,6 +517,16 @@ describe("makeAnnotationNumericalDataSource", () => {
   it("exposes numericProps as properties", () => {
     const ds = makeAnnotationNumericalDataSource(schema, () => items);
     expect(ds.properties.map((p) => p.id)).toEqual(["score", "count"]);
+  });
+
+  it("preserves coordinate column toggleability", () => {
+    const coordinateSchema = buildAnnotationQuerySchema(ALL_SPECS as any, [
+      { id: "x" },
+    ]);
+    const ds = makeAnnotationNumericalDataSource(coordinateSchema, () => items);
+    expect(ds.properties.find((property) => property.id === "x")).toMatchObject(
+      { columnToggleable: false },
+    );
   });
 
   it("exposes derived property units", () => {
