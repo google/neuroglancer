@@ -76,7 +76,7 @@ import { Tab } from "#src/widget/tab_view.js";
 const inputEventMap = EventActionMap.fromObject({
   "shift?+mousedown0": { action: "set" },
   "shift?+alt+mousedown0": { action: "adjust-window-via-drag" },
-  "shift?+wheel": { action: "zoom-via-wheel" },
+  "shift+wheel": { action: "zoom-via-wheel" },
 });
 
 export function createCDFLineShader(gl: GL, textureUnit: symbol) {

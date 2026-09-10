@@ -11,8 +11,8 @@
 .neuroglancer-property-list-header-sort {
   visibility: hidden;
   margin-left: 2px;
-  color: rgba(255, 255, 255, 0.75);
-  font-size: 9px;
+  color: white;
+  font-size: 1em;
   line-height: 1;
 }
 
@@ -23,7 +23,7 @@
 }
 
 .neuroglancer-property-list-header-sort[data-active="true"] {
-  color: #4e9ac0;
+  color: white;
 }
 
 .neuroglancer-property-list-query {

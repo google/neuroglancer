@@ -114,6 +114,7 @@
 
 /* Property column headers */
 .neuroglancer-annotation-property-header {
+  font-family: monospace;
   display: flex;
   align-items: center;
   gap: 1px;
@@ -122,10 +123,13 @@
 }
 
 .neuroglancer-annotation-property-header-name {
-  font-size: 0.85em;
   color: rgba(255, 255, 255, 0.6);
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.neuroglancer-annotation-type-header {
+  font-family: monospace;
 }
 
 /* Per-annotation property value cells in the annotation list */

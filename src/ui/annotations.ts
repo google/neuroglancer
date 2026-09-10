@@ -719,8 +719,8 @@ export class AnnotationLayerView extends Tab {
     );
     this.loadedNoticeElement.style.display = "none";
     this.queryStatistics.content.append(
-      this.categoricalSummaryContainer,
       this.numericalSummaryContainer,
+      this.categoricalSummaryContainer,
       this.derivedWarningElement,
       this.loadedNoticeElement,
     );
@@ -1102,6 +1102,7 @@ export class AnnotationLayerView extends Tab {
       columns.length > 0
         ? { columns, dimColumnCount: numDimColumns }
         : undefined,
+      this.layer.annotationListTypeColumnVisible.value,
     );
     for (const [column, width] of elementColumnWidths.entries()) {
       this.setColumnWidth(column, width);
@@ -1162,6 +1163,17 @@ export class AnnotationLayerView extends Tab {
       shownPropertyIds.add(fieldId);
     }
     this.layer.annotationListShownColumns.value = [...shownPropertyIds];
+    ++this.curColumnConfigGeneration;
+    this.forceUpdateView();
+  }
+
+  private toggleTypeColumn() {
+    const visible = !this.layer.annotationListTypeColumnVisible.value;
+    this.layer.annotationListTypeColumnVisible.value = visible;
+    if (!visible && this.sortState?.propertyId === "type") {
+      this.sortState = undefined;
+      this.layer.annotationListSortState.value = null;
+    }
     ++this.curColumnConfigGeneration;
     this.forceUpdateView();
   }
@@ -1435,8 +1447,14 @@ export class AnnotationLayerView extends Tab {
           key: `${fieldId}=${val}`,
           headerLabel: fieldId,
           label: `=${label}`,
-          headerActive: this.shownPropertyIds.has(fieldId),
-          onHeaderClick: () => this.togglePropertyColumn(fieldId),
+          headerActive:
+            fieldId === "type"
+              ? this.layer.annotationListTypeColumnVisible.value
+              : this.shownPropertyIds.has(fieldId),
+          onHeaderClick: () =>
+            fieldId === "type"
+              ? this.toggleTypeColumn()
+              : this.togglePropertyColumn(fieldId),
           count,
           totalCount: result.count,
           included: constraint?.include.includes(val) ?? false,
@@ -1568,15 +1586,19 @@ export class AnnotationLayerView extends Tab {
       removeChildren(headerRow);
 
       const TYPE_FIELD = "type";
-      const symbolHeader = document.createElement("div");
-      symbolHeader.style.gridColumn = "symbol";
-      symbolHeader.style.display = "flex";
-      symbolHeader.style.alignItems = "center";
-      symbolHeader.style.justifyContent = "center";
-      this.bindSortControl(symbolHeader, TYPE_FIELD);
-      headerRow.appendChild(symbolHeader);
+      const showTypeColumn = this.layer.annotationListTypeColumnVisible.value;
+      if (showTypeColumn) {
+        const symbolHeader = document.createElement("div");
+        symbolHeader.classList.add("neuroglancer-annotation-type-header");
+        symbolHeader.style.gridColumn = "symbol";
+        symbolHeader.style.display = "flex";
+        symbolHeader.style.alignItems = "center";
+        symbolHeader.style.justifyContent = "center";
+        this.bindSortControl(symbolHeader, TYPE_FIELD);
+        headerRow.appendChild(symbolHeader);
+      }
       let i = 0;
-      let gridTemplate = "[symbol] 2ch";
+      let gridTemplate = showTypeColumn ? "[symbol] 2ch" : "";
       const addDimension = (
         coordinateSpace: CoordinateSpace,
         dimIndex: number,
@@ -2892,6 +2914,7 @@ export function UserLayerWithAnnotationsMixin<
     // Written by AnnotationLayerView on every user interaction; serialized by
     // AnnotationUserLayer.toJSON / restoreState.
     annotationListShownColumns = new WatchableValue<string[]>([]);
+    annotationListTypeColumnVisible = new TrackableBoolean(true);
     annotationListSortState = new WatchableValue<{
       propertyId: string;
       order: "asc" | "desc";
@@ -2914,6 +2937,9 @@ export function UserLayerWithAnnotationsMixin<
         this.specificationChanged.dispatch,
       );
       this.annotationListShownColumns.changed.add(
+        this.specificationChanged.dispatch,
+      );
+      this.annotationListTypeColumnVisible.changed.add(
         this.specificationChanged.dispatch,
       );
       this.annotationListSortState.changed.add(
@@ -3851,6 +3877,7 @@ export function makeAnnotationListElement(
     columns: readonly AnnotationListColumn[];
     dimColumnCount: number;
   },
+  showTypeColumn = true,
 ): [HTMLDivElement, number[]] {
   const chunkTransform = state.chunkTransform.value as ChunkTransformParameters;
   const element = document.createElement("div");
@@ -3858,10 +3885,13 @@ export function makeAnnotationListElement(
   element.dataset.color = state.displayState.color.toString();
   element.dataset.annotationId = annotation.id;
   element.style.gridTemplateColumns = gridTemplate;
-  const icon = document.createElement("div");
-  icon.className = "neuroglancer-annotation-icon";
-  icon.textContent = annotationTypeHandlers[annotation.type].icon;
-  element.appendChild(icon);
+  let icon: HTMLDivElement | undefined;
+  if (showTypeColumn) {
+    icon = document.createElement("div");
+    icon.className = "neuroglancer-annotation-icon";
+    icon.textContent = annotationTypeHandlers[annotation.type].icon;
+    element.appendChild(icon);
+  }
 
   let deleteButton: HTMLElement | undefined;
 
@@ -3970,7 +4000,9 @@ export function makeAnnotationListElement(
     description.textContent = annotation.description;
     element.appendChild(description);
   }
-  icon.style.gridRow = `span ${numRows}`;
+  if (icon !== undefined) {
+    icon.style.gridRow = `span ${numRows}`;
+  }
   if (deleteButton !== undefined) {
     deleteButton.style.gridRow = `span ${numRows}`;
   }
