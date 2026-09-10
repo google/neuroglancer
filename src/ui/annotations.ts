@@ -177,8 +177,6 @@ import { Tab } from "#src/widget/tab_view.js";
 import type { VirtualListSource } from "#src/widget/virtual_list.js";
 import { VirtualList } from "#src/widget/virtual_list.js";
 
-const MULTISCALE_LIST_CAP = 5000;
-
 export class MergedAnnotationStates
   extends RefCounted
   implements WatchableValueInterface<readonly AnnotationLayerState[]>
@@ -1712,7 +1710,7 @@ export class AnnotationLayerView extends Tab {
         source instanceof MultiscaleAnnotationSource &&
         this.layer.listLoadedAnnotations.value
       ) {
-        const loaded = source.getLoadedAnnotations(MULTISCALE_LIST_CAP);
+        const loaded = source.getLoadedAnnotations(Infinity);
         annotations = loaded.annotations;
         this.loadedAnnotationCounts.shown += loaded.annotations.length;
         this.loadedAnnotationCounts.total += loaded.totalLoaded;
@@ -1925,12 +1923,19 @@ export class AnnotationLayerView extends Tab {
     }
     // Update viewport rendering filter: only show query-matching annotations in 3D/2D views.
     {
-      const filteredIds =
-        queryResult.count < queryResult.total
-          ? new Set(listElements.map((el) => el.annotation.id))
-          : null;
+      let filteredIds: Set<AnnotationId> | null = null;
+      if (queryResult.count < queryResult.total) {
+        filteredIds = new Set<AnnotationId>();
+        for (const element of listElements) {
+          filteredIds.add(element.annotation.id);
+        }
+      }
       for (const [state] of this.attachedAnnotationStates) {
         state.displayState.filteredAnnotationIds.value = filteredIds;
+        state.displayState.filterMatchFraction.value =
+          queryResult.total > 0 && queryResult.count < queryResult.total
+            ? queryResult.count / queryResult.total
+            : 1;
       }
     }
     // Build idToFlatIndex only when sorting or filtering is active.

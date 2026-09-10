@@ -184,6 +184,7 @@ export class AnnotationDisplayState extends RefCounted {
   );
   hoverState = new AnnotationHoverState(undefined);
   filteredAnnotationIds = new WatchableValue<ReadonlySet<string> | null>(null);
+  filterMatchFraction = new WatchableValue(1);
   // Latest derived (computed) geometric property analysis, published by the
   // annotation list view so the selection-details panel can show the same
   // length/volume/duration metrics.

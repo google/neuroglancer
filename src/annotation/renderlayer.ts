@@ -30,6 +30,7 @@ import {
   ANNOTATION_RENDER_LAYER_UPDATE_SEGMENTATION_RPC_ID,
   ANNOTATION_SPATIALLY_INDEXED_RENDER_LAYER_RPC_ID,
   forEachVisibleAnnotationChunk,
+  getAnnotationFilterAdjustedRenderScaleTarget,
 } from "#src/annotation/base.js";
 import type { AnnotationGeometryChunkSource } from "#src/annotation/frontend_source.js";
 import {
@@ -1043,7 +1044,15 @@ const SpatiallyIndexedAnnotationLayer = <
       renderScaleHistogram: RenderScaleHistogram;
     }) {
       super(options.annotationLayer, options.renderScaleHistogram);
-      this.renderScaleTarget = options.renderScaleTarget;
+      this.renderScaleTarget = this.registerDisposer(
+        makeCachedDerivedWatchableValue(
+          getAnnotationFilterAdjustedRenderScaleTarget,
+          [
+            options.renderScaleTarget,
+            this.base.state.displayState.filterMatchFraction,
+          ],
+        ),
+      );
       this.registerDisposer(
         this.renderScaleTarget.changed.add(this.redrawNeeded.dispatch),
       );
