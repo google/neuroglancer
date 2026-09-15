@@ -113,6 +113,46 @@ describe("mergeSegmentPropertyMaps", () => {
     );
     expect(result.indices).toEqual(Uint8Array.of(1, 2));
   });
+
+  test("NaN-fills missing FLOAT32 property values", () => {
+    const a = new SegmentPropertyMap({
+      inlineProperties: {
+        ids: BigUint64Array.of(5n, 8n),
+        properties: [
+          {
+            type: "number",
+            id: "score",
+            description: undefined,
+            dataType: DataType.FLOAT32,
+            values: Float32Array.of(10, 20),
+            bounds: [10, 20],
+          },
+        ],
+      },
+    });
+    const b = new SegmentPropertyMap({
+      inlineProperties: {
+        ids: BigUint64Array.of(6n, 7n),
+        properties: [],
+      },
+    });
+
+    const merged = mergeSegmentPropertyMaps([a, b]);
+
+    expect(merged?.inlineProperties).toEqual({
+      ids: BigUint64Array.of(5n, 6n, 7n, 8n),
+      properties: [
+        {
+          type: "number",
+          id: "score",
+          description: undefined,
+          dataType: DataType.FLOAT32,
+          values: Float32Array.of(10, NaN, NaN, 20),
+          bounds: [10, 20],
+        },
+      ],
+    });
+  });
 });
 
 describe("parseSegmentQuery", () => {
