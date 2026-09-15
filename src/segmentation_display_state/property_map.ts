@@ -303,8 +303,14 @@ function remapNumericalProperty(
 ): InlineSegmentNumericalProperty {
   const values = new (property.values
     .constructor as TypedNumberArrayConstructor<ArrayBuffer>)(numMerged);
+  if (property.dataType === DataType.FLOAT32) {
+    (values as Float32Array).fill(Number.NaN);
+  }
   remapArray(property.values, values, toMerged);
-  if (toMerged.length === numMerged) return { ...property, values };
+  if (toMerged.length === numMerged || property.dataType === DataType.FLOAT32) {
+    return { ...property, values };
+  }
+  // missing values so zero values were introduced
   const [min, max] = property.bounds;
   const bounds = [
     dataTypeCompare(min, 0) > 0 ? 0 : min,
