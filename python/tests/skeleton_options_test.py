@@ -55,19 +55,51 @@ void main () {
         s.layers[0].skeleton_rendering.shader_controls["color"] = "#f00"
         s.show_axis_lines = False
     screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
+    opaque_pixels_2d = screenshot.image_pixels.copy()
     np.testing.assert_array_equal(
-        screenshot.image_pixels,
+        opaque_pixels_2d,
         np.tile(np.array([255, 0, 0, 255], dtype=np.uint8), (10, 10, 1)),
     )
 
     with webdriver.viewer.txn() as s:
+        s.layers[0].source[0].subsources["default"] = False
+    background_pixels_2d = webdriver.viewer.screenshot(
+        size=[10, 10]
+    ).screenshot.image_pixels.copy()
+
+    with webdriver.viewer.txn() as s:
+        s.layers[0].source[0].subsources["default"] = True
+        s.layers[0].object_alpha = 0.5
+    screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
+    pixels = screenshot.image_pixels
+    np.testing.assert_allclose(
+        pixels[..., :3],
+        opaque_pixels_2d[..., :3] * 0.5 + background_pixels_2d[..., :3] * 0.5,
+        atol=2,
+    )
+    np.testing.assert_array_equal(pixels[..., 3], 255)
+
+    with webdriver.viewer.txn() as s:
         s.layout = "3d"
+        s.layers[0].object_alpha = 1.0
         s.layers[0].skeleton_rendering.line_width3d = 100
     screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
+    opaque_pixels = screenshot.image_pixels.copy()
     np.testing.assert_array_equal(
-        screenshot.image_pixels,
+        opaque_pixels,
         np.tile(np.array([255, 0, 0, 255], dtype=np.uint8), (10, 10, 1)),
     )
+
+    # Perspective OIT requires premultiplied RGB, so reducing opacity must
+    # reduce the red intensity rather than leave it saturated or brighten it.
+    with webdriver.viewer.txn() as s:
+        s.layers[0].object_alpha = 0.5
+    screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
+    pixels = screenshot.image_pixels
+    np.testing.assert_allclose(pixels[..., 0], opaque_pixels[..., 0] * 0.5, atol=2)
+    np.testing.assert_array_equal(pixels[..., 1], 0)
+    np.testing.assert_array_equal(pixels[..., 2], 0)
+    np.testing.assert_array_equal(pixels[..., 3], 255)
 
     with webdriver.viewer.txn() as s:
         s.layers[0].source[0].subsources["default"] = False

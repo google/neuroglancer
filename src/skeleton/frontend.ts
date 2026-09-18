@@ -242,13 +242,14 @@ void emitRGBA(vec4 color) {
   emit(vec4(color.rgb * color.a, color.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
 }
 void emitRGB(vec3 color) {
-  float alpha = segmentColor().a * uAlpha;
-  emit(vec4(color * alpha, alpha * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
+  float alpha = segmentColor().a * uAlpha * getLineAlpha() * ${this.getCrossSectionFadeFactor()};
+  emit(vec4(color${this.targetIsSliceView ? "" : " * alpha"}, alpha), uPickID);
 }
 void emitDefault() {
   vec4 color = segmentColor();
-  color.a *= uAlpha;
-  emit(vec4(color.rgb, color.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
+  color.a *= uAlpha * getLineAlpha() * ${this.getCrossSectionFadeFactor()};
+  ${this.targetIsSliceView ? "" : "color.rgb *= color.a;"}
+  emit(color, uPickID);
 }
 `);
           builder.addFragmentCode(glsl_COLORMAPS);
@@ -330,6 +331,7 @@ void emitRGBA(vec4 color) {
   color.a *= uAlpha;
   vec4 borderColor = color;
   vec4 circleColor = getCircleColor(color, borderColor);
+  ${this.targetIsSliceView ? "" : "circleColor.rgb *= circleColor.a;"}
   emit(circleColor, uPickID);
 }
 void emitRGB(vec3 color) {
@@ -339,6 +341,7 @@ void emitDefault() {
   vec4 color = segmentColor();
   color.a *= uAlpha;
   vec4 circleColor = getCircleColor(color, color);
+  ${this.targetIsSliceView ? "" : "circleColor.rgb *= circleColor.a;"}
   emit(circleColor, uPickID);
 }
 `);

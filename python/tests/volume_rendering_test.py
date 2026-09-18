@@ -104,6 +104,24 @@ def test_volume_rendering_occlusion(webdriver, orthographic):
 
 
 @pytest.mark.parametrize("orthographic", [False, True])
+def test_transparent_mesh_color_is_premultiplied(webdriver, orthographic):
+    _setup_viewer_with_volume_and_mesh(webdriver, orthographic=orthographic)
+
+    webdriver.sync()
+    opaque_pixels = webdriver.viewer.screenshot(size=[10, 10]).screenshot.image_pixels
+
+    with webdriver.viewer.txn() as s:
+        s.layers["seg"].object_alpha = 0.5
+
+    webdriver.sync()
+    transparent_pixels = webdriver.viewer.screenshot(
+        size=[10, 10]
+    ).screenshot.image_pixels
+    assert np.all(transparent_pixels[..., 0] > 0)
+    assert np.all(transparent_pixels[..., 0] < opaque_pixels[..., 0])
+
+
+@pytest.mark.parametrize("orthographic", [False, True])
 def test_volume_rendering_picking_does_not_occlude_mesh(webdriver, orthographic):
     """Volume rendering must not steal pick buffer entries from a transparent entry in front of it.
 
