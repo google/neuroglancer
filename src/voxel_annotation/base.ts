@@ -19,15 +19,15 @@ import { vec3 } from "#src/util/geom.js";
 import type { PreviewMultiscaleSource } from "#src/voxel_annotation/preview_multiscale_chunk_source.js";
 import type { RPC } from "#src/worker_rpc.js";
 
-export const VOX_RELOAD_CHUNKS_RPC_ID = "vox.chunk.reload";
-export const VOX_EDIT_BACKEND_RPC_ID = "vox.EditBackend";
-export const VOX_EDIT_COMMIT_VOXELS_RPC_ID = "vox.edit.commitVoxels";
-export const VOX_EDIT_FAILURE_RPC_ID = "vox.edit.failure";
-export const VOX_EDIT_UNDO_RPC_ID = "vox.edit.undo";
-export const VOX_EDIT_REDO_RPC_ID = "vox.edit.redo";
-export const VOX_EDIT_HISTORY_UPDATE_RPC_ID = "vox.edit.historyUpdate";
+export const VOXEL_EDITING_CHUNK_RELOAD_RPC_ID = "voxelEditing.chunkReload";
+export const VOXEL_EDITING_BACKEND_RPC_ID = "voxelEditing/VoxelEditingBackend";
+export const VOXEL_EDITING_COMMIT_VOXELS_RPC_ID = "voxelEditing.commitVoxels";
+export const VOXEL_EDITING_FAILURE_RPC_ID = "voxelEditing.failure";
+export const VOXEL_EDITING_UNDO_RPC_ID = "voxelEditing.undo";
+export const VOXEL_EDITING_REDO_RPC_ID = "voxelEditing.redo";
+export const VOXEL_EDITING_HISTORY_UPDATE_RPC_ID = "voxelEditing.historyUpdate";
 
-export const VOX_EDIT_OPERATION_RPC_ID = "vox.edit.operation";
+export const VOXEL_EDITING_OPERATION_RPC_ID = "voxelEditing.operation";
 
 export const FLOODFILL_MAX_POSSIBLE_VOXELS = 1000000;
 export const FLOODFILL_MIN_POSSIBLE_VOXELS = 1000;

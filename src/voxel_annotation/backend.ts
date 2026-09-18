@@ -37,14 +37,14 @@ import type {
 import {
   EMPTY_VOXEL_VALUE,
   VOXEL_EDITING_STAMINA,
-  VOX_EDIT_BACKEND_RPC_ID,
-  VOX_EDIT_COMMIT_VOXELS_RPC_ID,
-  VOX_RELOAD_CHUNKS_RPC_ID,
-  VOX_EDIT_FAILURE_RPC_ID,
-  VOX_EDIT_UNDO_RPC_ID,
-  VOX_EDIT_REDO_RPC_ID,
-  VOX_EDIT_HISTORY_UPDATE_RPC_ID,
-  VOX_EDIT_OPERATION_RPC_ID,
+  VOXEL_EDITING_BACKEND_RPC_ID,
+  VOXEL_EDITING_COMMIT_VOXELS_RPC_ID,
+  VOXEL_EDITING_CHUNK_RELOAD_RPC_ID,
+  VOXEL_EDITING_FAILURE_RPC_ID,
+  VOXEL_EDITING_UNDO_RPC_ID,
+  VOXEL_EDITING_REDO_RPC_ID,
+  VOXEL_EDITING_HISTORY_UPDATE_RPC_ID,
+  VOXEL_EDITING_OPERATION_RPC_ID,
   VoxelOperationType,
   BrushShape,
   makeLodChunkKey,
@@ -382,7 +382,7 @@ class BrushOptimizationCache {
   }
 }
 
-@registerSharedObject(VOX_EDIT_BACKEND_RPC_ID)
+@registerSharedObject(VOXEL_EDITING_BACKEND_RPC_ID)
 export class VoxelEditingController extends SharedObject {
   private sources = new Map<number, VolumeChunkSource>();
   private resolutions = new Map<
@@ -652,7 +652,7 @@ export class VoxelEditingController extends SharedObject {
     this.notifyHistoryChanged();
 
     if (failedLodChunkKeys.length > 0) {
-      this.rpc?.invoke(VOX_EDIT_FAILURE_RPC_ID, {
+      this.rpc?.invoke(VOXEL_EDITING_FAILURE_RPC_ID, {
         rpcId: this.rpcId,
         lodChunkKeys: failedLodChunkKeys,
         message: firstErrorMessage ?? "Voxel edit commit failed.",
@@ -735,7 +735,7 @@ export class VoxelEditingController extends SharedObject {
     coveredSeqs?: Record<string, number>,
     isRollback = false,
   ) {
-    this.rpc?.invoke(VOX_RELOAD_CHUNKS_RPC_ID, {
+    this.rpc?.invoke(VOXEL_EDITING_CHUNK_RELOAD_RPC_ID, {
       rpcId: this.rpcId,
       lodChunkKeys: lodChunkKeys,
       isForPreviewChunks,
@@ -934,7 +934,7 @@ export class VoxelEditingController extends SharedObject {
           `[Downsample] Failed to apply edits to parent chunk ${parentKey}:`,
           e,
         );
-        this.rpc?.invoke(VOX_EDIT_FAILURE_RPC_ID, {
+        this.rpc?.invoke(VOXEL_EDITING_FAILURE_RPC_ID, {
           rpcId: this.rpcId,
           lodChunkKeys: [parentKey],
           message: `Downsampling to ${parentKey} failed.`,
@@ -1210,7 +1210,7 @@ export class VoxelEditingController extends SharedObject {
     return mode;
   }
   private notifyHistoryChanged(): void {
-    this.rpc?.invoke(VOX_EDIT_HISTORY_UPDATE_RPC_ID, {
+    this.rpc?.invoke(VOXEL_EDITING_HISTORY_UPDATE_RPC_ID, {
       rpcId: this.rpcId,
       undoCount: this.undoStack.length,
       redoCount: this.redoStack.length,
@@ -1270,7 +1270,7 @@ export class VoxelEditingController extends SharedObject {
           `performUndoRedo: failed to apply edits for ${lodChunkKey}`,
           e,
         );
-        this.rpc?.invoke(VOX_EDIT_FAILURE_RPC_ID, {
+        this.rpc?.invoke(VOXEL_EDITING_FAILURE_RPC_ID, {
           rpcId: this.rpcId,
           lodChunkKeys: [lodChunkKey],
           message: useOldValues ? "Undo failed." : "Redo failed.",
@@ -1284,7 +1284,7 @@ export class VoxelEditingController extends SharedObject {
     } else {
       // Known limitation: chunks reverted before the failure stay reverted
       // while the action returns to the stack (no transactional rollback);
-      // the failure was already surfaced via VOX_EDIT_FAILURE.
+      // the failure was already surfaced via VOXEL_EDITING_FAILURE_RPC_ID.
       sourceStack.push(action);
     }
 
@@ -1786,25 +1786,31 @@ export class VoxelEditingController extends SharedObject {
   }
 }
 
-registerRPC(VOX_EDIT_COMMIT_VOXELS_RPC_ID, function (x: any) {
+registerRPC(VOXEL_EDITING_COMMIT_VOXELS_RPC_ID, function (x: any) {
   const obj = this.get(x.rpcId) as VoxelEditingController;
   obj.commitVoxels(Array.isArray(x.edits) ? x.edits : []);
 });
 
-registerPromiseRPC(VOX_EDIT_UNDO_RPC_ID, async function (this: RPC, x: any) {
-  const obj = this.get(x.rpcId) as VoxelEditingController;
-  await obj.undo();
-  return { value: undefined };
-});
-
-registerPromiseRPC(VOX_EDIT_REDO_RPC_ID, async function (this: RPC, x: any) {
-  const obj = this.get(x.rpcId) as VoxelEditingController;
-  await obj.redo();
-  return { value: undefined };
-});
+registerPromiseRPC(
+  VOXEL_EDITING_UNDO_RPC_ID,
+  async function (this: RPC, x: any) {
+    const obj = this.get(x.rpcId) as VoxelEditingController;
+    await obj.undo();
+    return { value: undefined };
+  },
+);
 
 registerPromiseRPC(
-  VOX_EDIT_OPERATION_RPC_ID,
+  VOXEL_EDITING_REDO_RPC_ID,
+  async function (this: RPC, x: any) {
+    const obj = this.get(x.rpcId) as VoxelEditingController;
+    await obj.redo();
+    return { value: undefined };
+  },
+);
+
+registerPromiseRPC(
+  VOXEL_EDITING_OPERATION_RPC_ID,
   async function (this: RPC, x: any) {
     const obj = this.get(x.rpcId) as VoxelEditingController;
     const coveredLodChunkKeys = await obj.performOperation(x.operation);
