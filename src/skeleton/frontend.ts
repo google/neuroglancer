@@ -815,7 +815,8 @@ export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
       displayState.objectAlpha.value < 1.0 ||
       stripComments(
         displayState.skeletonRenderingOptions.shader.value,
-      ).includes("emitRGBA")
+      ).includes("emitRGBA") ||
+      displayState.segmentationColorUserShader.mayReturnAlpha
     );
   }
 

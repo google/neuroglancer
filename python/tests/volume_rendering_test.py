@@ -122,6 +122,23 @@ def test_transparent_mesh_color_is_premultiplied(webdriver, orthographic):
 
 
 @pytest.mark.parametrize("orthographic", [False, True])
+def test_segment_color_shader_alpha_makes_mesh_transparent(webdriver, orthographic):
+    _setup_viewer_with_volume_and_mesh(webdriver, orthographic=orthographic)
+
+    with webdriver.viewer.txn() as s:
+        s.layers["seg"].segment_color_shader = """
+vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
+    return vec4(color.rgb, 0.5);
+}
+"""
+
+    webdriver.sync()
+    pixels = webdriver.viewer.screenshot(size=[10, 10]).screenshot.image_pixels
+    assert np.all(pixels[..., 0] > 0)
+    assert np.all(pixels[..., 2] > 0)
+
+
+@pytest.mark.parametrize("orthographic", [False, True])
 def test_volume_rendering_picking_does_not_occlude_mesh(webdriver, orthographic):
     """Volume rendering must not steal pick buffer entries from a transparent entry in front of it.
 
