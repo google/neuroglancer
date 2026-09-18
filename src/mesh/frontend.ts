@@ -592,7 +592,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
       displayState,
       this,
       renderContext.emitPickID ? renderContext.pickIDs : undefined,
-      (objectId, pickIndex) => {
+      (objectId, pickIndex, colorObjectId) => {
         const key = getObjectKey(objectId);
         const manifestChunk = manifestChunks.get(key);
         ++totalChunks;
@@ -607,7 +607,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
         if (renderContext.emitPickID) {
           meshShaderManager.setPickID(gl, shader, pickIndex!);
         }
-        meshShaderManager.setID(gl, shader, objectId);
+        meshShaderManager.setID(gl, shader, colorObjectId);
         totalChunks += manifestChunk.fragmentIds.length;
 
         for (const fragmentId of manifestChunk.fragmentIds) {
@@ -976,7 +976,7 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
       displayState,
       this,
       renderContext.emitPickID ? renderContext.pickIDs : undefined,
-      (objectId, pickIndex) => {
+      (objectId, pickIndex, colorObjectId) => {
         const key = getObjectKey(objectId);
         const manifestChunk = chunks.get(key);
         ++totalManifestChunks;
@@ -1001,7 +1001,7 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
         if (renderContext.emitPickID) {
           meshShaderManager.setPickID(gl, shader, pickIndex!);
         }
-        meshShaderManager.setID(gl, shader, objectId);
+        meshShaderManager.setID(gl, shader, colorObjectId);
 
         getMultiscaleChunksToDraw(
           manifest,
