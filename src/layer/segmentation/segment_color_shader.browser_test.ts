@@ -176,6 +176,31 @@ ${declaration}(vec3 color, bool hasProperties, bool isStated) {
     );
   });
 
+  it("uses the representative color for equivalent segments", () => {
+    const segmentationUserLayer = setupSegmentationLayer();
+    const { displayState } = segmentationUserLayer;
+    displayState.segmentationGroupState.value.segmentEquivalences.link(1n, 2n);
+    displayState.segmentStatedColors.value.set(
+      1n,
+      BigInt(packColor(vec3.fromValues(1.0, 0.0, 0.0))),
+    );
+    displayState.segmentStatedColors.value.set(
+      2n,
+      BigInt(packColor(vec3.fromValues(0.0, 1.0, 0.0))),
+    );
+
+    expectColor(
+      displayState.getShaderBaseSegmentColor(2n)!,
+      [1.0, 0.0, 0.0, 0.0],
+    );
+
+    displayState.baseSegmentColoring.value = true;
+    expectColor(
+      displayState.getShaderBaseSegmentColor(2n)!,
+      [0.0, 1.0, 0.0, 0.0],
+    );
+  });
+
   it("treats rgb mapped segment colors as having undefined alpha", () => {
     const segmentationUserLayer = setupSegmentationLayer();
     segmentationUserLayer.displayState.segmentStatedColors.value.set(
