@@ -260,6 +260,7 @@ interface SegmentPropertyReferenceError {
 const segmentPropertyHelperCallPattern =
   /\b(tag|prop)\s*\(\s*string_t\(\s*(\d+)u\s*\)\s*\)/g;
 const vec3SegmentColorFunctionPattern = /\bvec3\s+segmentColor\s*\(/;
+const vec4SegmentColorFunctionPattern = /\bvec4\s+segmentColor\s*\(/;
 
 function getLineNumberAtIndex(code: string, index: number) {
   return Math.max(0, code.substring(0, index).split("\n").length - 1);
@@ -369,6 +370,13 @@ export class SegmentColorUserShaderManager extends RefCounted {
   private getSegmentPropertyMap() {
     return this.displayState.segmentationGroupState.value.segmentPropertyMap
       .value;
+  }
+
+  get mayReturnAlpha() {
+    return vec4SegmentColorFunctionPattern.test(
+      this.displayState.segmentColorShaderControlState.builderState.value
+        .parseResult.code,
+    );
   }
 
   private getDefaultInputs(): SegmentationColorUserShaderManagerInputs {
