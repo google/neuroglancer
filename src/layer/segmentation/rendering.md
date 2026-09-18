@@ -30,7 +30,7 @@ be compared with string literals.
 Numerical segment properties can also be used with `invlerp` controls:
 
 ```glsl
-#uicontrol float intensity invlerp(property="size", range=[0, 100])
+#uicontrol invlerp intensity(property="size", range=[0, 100])
 ```
 
 If `property` is omitted, the control defaults to the first available numerical
@@ -87,7 +87,7 @@ property does not exist, shader compilation reports an error.
 ### Examples
 
 ```glsl
-#uicontrol float property1 invlerp(property="myNumericalProperty", window=[1, 10])
+#uicontrol invlerp property1(property="myNumericalProperty", window=[1, 10])
 vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
   if (!hasProperties) {
     return vec4(0.5, 0.5, 0.5, 1.0);
