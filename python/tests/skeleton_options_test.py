@@ -166,3 +166,51 @@ void main() {{
     expected_rgb = np.array([1.0, 0.5, 0.25]) * shader_alpha * layer_alpha * 255
     expected = np.tile(np.append(expected_rgb, 255), (4, 4, 1))
     np.testing.assert_allclose(pixels[14:18, 14:18], expected, atol=2, rtol=0)
+
+
+def test_segment_color_shader_alpha_makes_skeleton_transparent(webdriver):
+    image_data = np.zeros((20, 20, 20), dtype=np.uint8)
+    image_data[1:19, 1:19, 11:20] = 255
+
+    with webdriver.viewer.txn() as s:
+        s.dimensions = dimensions
+        s.layers.append(
+            name="image",
+            layer=neuroglancer.ImageLayer(
+                source=neuroglancer.LocalVolume(data=image_data, dimensions=dimensions),
+                volume_rendering_mode="Max",
+                shader="""
+#uicontrol invlerp normalized
+void main() {
+  emitRGBA(vec4(0.0, 0.0, normalized(), 1.0));
+}
+""",
+            ),
+        )
+        s.layers.append(
+            name="skeleton",
+            layer=neuroglancer.SegmentationLayer(
+                source=SkeletonSource(vertex_positions=[(10, 10, 5)]),
+                segments=[1],
+                segment_color_shader="""
+vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
+  return vec4(color.rgb, 0.5);
+}
+""",
+                skeleton_shader="""
+void main() {
+  emitRGB(vec3(1.0, 0.0, 0.0));
+}
+""",
+            ),
+        )
+        s.layers["skeleton"].skeleton_rendering.line_width3d = 100
+        s.layout = "3d"
+        s.show_axis_lines = False
+        s.position = [10, 10, 10]
+        s.projection_scale = 15
+
+    webdriver.sync()
+    pixels = webdriver.viewer.screenshot(size=[10, 10]).screenshot.image_pixels
+    assert np.all(pixels[..., 0] > 0)
+    assert np.all(pixels[..., 2] > 0)
