@@ -108,6 +108,7 @@ import {
   TrackableValue,
   WatchableValue,
 } from "#src/trackable_value.js";
+import { getSegmentEquivalences } from "#src/segmentation_display_state/base.js";
 import { UserLayerWithAnnotationsMixin } from "#src/ui/annotations.js";
 import { SegmentDisplayTab } from "#src/ui/segment_list.js";
 import { registerSegmentSelectTools } from "#src/ui/segment_select_tools.js";
@@ -730,8 +731,12 @@ vColor = segmentColorUserShader(uint64_t(aID));
 
     const positions = new Float32Array(numIds * 2);
     const idsData = new Uint32Array(numIds * 2);
+    const segmentEquivalences = getSegmentEquivalences(
+      this.segmentationGroupState.value,
+    );
+    const baseSegmentColoring = this.baseSegmentColoring.value;
     for (let i = 0; i < numIds; ++i) {
-      const id = ids[i];
+      const id = baseSegmentColoring ? ids[i] : segmentEquivalences.get(ids[i]);
       positions[2 * i] = (2 * (i + 0.5)) / numIds - 1;
       positions[2 * i + 1] = 0;
       idsData[2 * i] = Number(id & 0xffffffffn);
