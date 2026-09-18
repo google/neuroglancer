@@ -36,13 +36,13 @@ import {
   getDiskStencilKernel,
   getSphereRowRangesKernel,
   parseLodChunkKey,
-  VOX_EDIT_BACKEND_RPC_ID,
-  VOX_EDIT_FAILURE_RPC_ID,
-  VOX_EDIT_HISTORY_UPDATE_RPC_ID,
-  VOX_EDIT_OPERATION_RPC_ID,
-  VOX_EDIT_REDO_RPC_ID,
-  VOX_EDIT_UNDO_RPC_ID,
-  VOX_RELOAD_CHUNKS_RPC_ID,
+  VOXEL_EDITING_BACKEND_RPC_ID,
+  VOXEL_EDITING_FAILURE_RPC_ID,
+  VOXEL_EDITING_HISTORY_UPDATE_RPC_ID,
+  VOXEL_EDITING_OPERATION_RPC_ID,
+  VOXEL_EDITING_REDO_RPC_ID,
+  VOXEL_EDITING_UNDO_RPC_ID,
+  VOXEL_EDITING_CHUNK_RELOAD_RPC_ID,
   VoxelOperationType,
 } from "#src/voxel_annotation/base.js";
 import {
@@ -51,7 +51,7 @@ import {
   SharedObject,
 } from "#src/worker_rpc.js";
 
-@registerSharedObjectOwner(VOX_EDIT_BACKEND_RPC_ID)
+@registerSharedObjectOwner(VOXEL_EDITING_BACKEND_RPC_ID)
 export class VoxelEditingController extends SharedObject {
   public undoCount = new WatchableValue<number>(0);
   public redoCount = new WatchableValue<number>(0);
@@ -207,7 +207,7 @@ export class VoxelEditingController extends SharedObject {
   ): Promise<string[]> {
     if (!this.rpc) throw new Error("RPC unavailable");
     const coveredLodChunkKeys = await this.rpc.promiseInvoke<string[]>(
-      VOX_EDIT_OPERATION_RPC_ID,
+      VOXEL_EDITING_OPERATION_RPC_ID,
       {
         rpcId: this.rpcId,
         operation,
@@ -792,7 +792,7 @@ export class VoxelEditingController extends SharedObject {
     if (!this.rpc)
       throw new Error("VoxelEditingController.undo: RPC not initialized.");
     await this.rpc
-      .promiseInvoke<void>(VOX_EDIT_UNDO_RPC_ID, { rpcId: this.rpcId })
+      .promiseInvoke<void>(VOXEL_EDITING_UNDO_RPC_ID, { rpcId: this.rpcId })
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
         StatusMessage.showTemporaryMessage(`Undo failed: ${message}`, 3000);
@@ -803,7 +803,7 @@ export class VoxelEditingController extends SharedObject {
     if (!this.rpc)
       throw new Error("VoxelEditingController.redo: RPC not initialized.");
     await this.rpc
-      .promiseInvoke<void>(VOX_EDIT_REDO_RPC_ID, { rpcId: this.rpcId })
+      .promiseInvoke<void>(VOXEL_EDITING_REDO_RPC_ID, { rpcId: this.rpcId })
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
         StatusMessage.showTemporaryMessage(`Redo failed: ${message}`, 3000);
@@ -817,7 +817,7 @@ function asRecordOrUndefined<T>(x: unknown): Record<string, T> | undefined {
     : undefined;
 }
 
-registerRPC(VOX_RELOAD_CHUNKS_RPC_ID, function (x: any) {
+registerRPC(VOXEL_EDITING_CHUNK_RELOAD_RPC_ID, function (x: any) {
   const obj = this.get(x.rpcId) as VoxelEditingController;
   const keys: string[] = Array.isArray(x.lodChunkKeys) ? x.lodChunkKeys : [];
   obj.callChunkReload(
@@ -829,7 +829,7 @@ registerRPC(VOX_RELOAD_CHUNKS_RPC_ID, function (x: any) {
   );
 });
 
-registerRPC(VOX_EDIT_FAILURE_RPC_ID, function (x: any) {
+registerRPC(VOXEL_EDITING_FAILURE_RPC_ID, function (x: any) {
   const obj = this.get(x.rpcId) as VoxelEditingController;
   const keys: string[] = Array.isArray(x.lodChunkKeys) ? x.lodChunkKeys : [];
   const message: string =
@@ -837,7 +837,7 @@ registerRPC(VOX_EDIT_FAILURE_RPC_ID, function (x: any) {
   obj.handleCommitFailure(keys, message);
 });
 
-registerRPC(VOX_EDIT_HISTORY_UPDATE_RPC_ID, function (x: any) {
+registerRPC(VOXEL_EDITING_HISTORY_UPDATE_RPC_ID, function (x: any) {
   const obj = this.get(x.rpcId) as VoxelEditingController;
   const undoCount = typeof x.undoCount === "number" ? x.undoCount : 0;
   const redoCount = typeof x.redoCount === "number" ? x.redoCount : 0;

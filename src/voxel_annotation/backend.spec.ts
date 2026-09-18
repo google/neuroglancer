@@ -8,8 +8,8 @@ import { VoxelEditingController } from "#src/voxel_annotation/backend.js";
 import {
   makeLodChunkKey,
   EMPTY_VOXEL_VALUE,
-  VOX_EDIT_FAILURE_RPC_ID,
-  VOX_EDIT_HISTORY_UPDATE_RPC_ID,
+  VOXEL_EDITING_FAILURE_RPC_ID,
+  VOXEL_EDITING_HISTORY_UPDATE_RPC_ID,
   VoxelOperationType,
   BrushShape,
 } from "#src/voxel_annotation/base.js";
@@ -811,7 +811,7 @@ describe("VoxelEditingController: Downsampling Integration", () => {
     expect(grandParentSource.applyEdits).not.toHaveBeenCalled();
 
     expect(mockRpc.invoke).toHaveBeenCalledWith(
-      "vox.edit.failure",
+      "voxelEditing.failure",
       expect.objectContaining({
         lodChunkKeys: [makeLodChunkKey("0,0,0", 1)],
       }),
@@ -910,7 +910,7 @@ describe("VoxelEditingController: flushPending", () => {
     expect((controller as any).redoStack.length).toBe(0);
 
     expect(mockRpc.invoke).toHaveBeenCalledWith(
-      VOX_EDIT_HISTORY_UPDATE_RPC_ID,
+      VOXEL_EDITING_HISTORY_UPDATE_RPC_ID,
       expect.objectContaining({
         undoCount: 1,
         redoCount: 0,
@@ -955,7 +955,7 @@ describe("VoxelEditingController: flushPending", () => {
     );
 
     expect(mockRpc.invoke).toHaveBeenCalledWith(
-      VOX_EDIT_FAILURE_RPC_ID,
+      VOXEL_EDITING_FAILURE_RPC_ID,
       expect.objectContaining({
         lodChunkKeys: [failKey],
       }),
@@ -989,7 +989,7 @@ describe("VoxelEditingController: flushPending", () => {
     );
 
     expect(mockRpc.invoke).toHaveBeenCalledWith(
-      VOX_EDIT_FAILURE_RPC_ID,
+      VOXEL_EDITING_FAILURE_RPC_ID,
       expect.objectContaining({
         lodChunkKeys: [badKey],
       }),
@@ -1204,7 +1204,7 @@ describe("VoxelEditingController: Undo/Redo", () => {
       true,
     );
     expect(mockRpc.invoke).toHaveBeenCalledWith(
-      VOX_EDIT_HISTORY_UPDATE_RPC_ID,
+      VOXEL_EDITING_HISTORY_UPDATE_RPC_ID,
       expect.objectContaining({ undoCount: 0, redoCount: 1 }),
     );
 
@@ -1232,7 +1232,7 @@ describe("VoxelEditingController: Undo/Redo", () => {
       true,
     );
     expect(mockRpc.invoke).toHaveBeenCalledWith(
-      VOX_EDIT_HISTORY_UPDATE_RPC_ID,
+      VOXEL_EDITING_HISTORY_UPDATE_RPC_ID,
       expect.objectContaining({ undoCount: 1, redoCount: 0 }),
     );
 
@@ -1269,7 +1269,7 @@ describe("VoxelEditingController: Undo/Redo", () => {
     await controller.undo();
 
     expect(mockRpc.invoke).toHaveBeenCalledWith(
-      VOX_EDIT_FAILURE_RPC_ID,
+      VOXEL_EDITING_FAILURE_RPC_ID,
       expect.objectContaining({
         lodChunkKeys: [key],
         message: "Undo failed.",
@@ -1308,7 +1308,7 @@ describe("VoxelEditingController: Undo/Redo", () => {
     await controller.redo();
 
     expect(mockRpc.invoke).toHaveBeenCalledWith(
-      VOX_EDIT_FAILURE_RPC_ID,
+      VOXEL_EDITING_FAILURE_RPC_ID,
       expect.objectContaining({
         lodChunkKeys: [key],
         message: "Redo failed.",
