@@ -533,6 +533,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
     const { displayState } = this;
     return (
       displayState.objectAlpha.value < 1.0 ||
+      displayState.segmentationColorUserShader.mayReturnAlpha ||
       displayState.silhouetteRendering.value > 0
     );
   }
@@ -888,6 +889,7 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
     const { displayState } = this;
     return (
       displayState.objectAlpha.value < 1.0 ||
+      displayState.segmentationColorUserShader.mayReturnAlpha ||
       displayState.silhouetteRendering.value > 0
     );
   }
