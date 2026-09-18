@@ -469,7 +469,7 @@ float alpha = uAlpha;
 if (vColor.a >= 0.0) {
   alpha *= vColor.a;
 }
-vColor = vec4(lightingFactor * vColor.rgb, alpha);
+vColor = vec4(lightingFactor * vColor.rgb * alpha, alpha);
 `;
         if (silhouetteRenderingEnabled) {
           vertexMain += `
