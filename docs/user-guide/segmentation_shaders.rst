@@ -104,10 +104,11 @@ A ``property`` UI control lets the user choose which segment property a shader
 uses. The control can be filtered to tags, numerical properties, or string
 properties.
 
-.. code-block:: glsl
+.. code-block:: text
 
   #uicontrol property selectedTag(type="tag")
   #uicontrol property selectedSize(type="number")
+  #uicontrol property selectedClass(type="string")
 
   vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
     if (!hasProperties) {
@@ -119,11 +120,18 @@ properties.
     if (selectedSize > 100u) {
       return vec3(1.0, 1.0, 0.0);
     }
+    if (selectedClass == "interneuron") {
+      return vec3(0.0, 1.0, 0.6);
+    }
     return color;
   }
 
-Use ``type="string"`` for a string property picker. ``type="number"`` and
-``type="numerical"`` both select numerical properties.
+A ``type="tag"`` control lets the user choose an individual tag and evaluates
+to a ``bool`` indicating whether the current segment has that tag. A
+``type="string"`` control lets the user choose a string property and evaluates
+to that property's value, which can be compared with a string literal.
+``type="number"`` and ``type="numerical"`` both select numerical properties;
+the control's GLSL type matches the selected property's data type.
 
 Data Mapping
 ~~~~~~~~~~~~
@@ -134,7 +142,7 @@ shader UI.
 
 .. code-block:: glsl
 
-  #uicontrol float intensity invlerp(property="size", range=[0, 1000])
+  #uicontrol invlerp intensity(property="size", range=[0, 1000])
 
   vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
     if (!hasProperties) {
@@ -155,7 +163,7 @@ The remapped value from an ``invlerp`` control can be passed to a colormap:
 
 .. code-block:: glsl
 
-  #uicontrol float intensity invlerp(property="size", range=[0, 1000])
+  #uicontrol invlerp intensity(property="size", range=[0, 1000])
 
   vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
     if (!hasProperties) {
