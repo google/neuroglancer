@@ -729,7 +729,7 @@ export class SkeletonLayer extends RefCounted {
       displayState,
       layer,
       renderContext.emitPickID ? renderContext.pickIDs : undefined,
-      (objectId, pickIndex) => {
+      (objectId, pickIndex, colorObjectId) => {
         const key = getObjectKey(objectId);
         const skeleton = skeletons.get(key);
         if (
@@ -745,9 +745,9 @@ export class SkeletonLayer extends RefCounted {
           renderHelper.setPickID(gl, nodeShader, pickIndex);
         }
         edgeShader.bind();
-        renderHelper.setID(gl, edgeShader, objectId);
+        renderHelper.setID(gl, edgeShader, colorObjectId);
         nodeShader.bind();
-        renderHelper.setID(gl, nodeShader, objectId);
+        renderHelper.setID(gl, nodeShader, colorObjectId);
         renderHelper.drawSkeleton(
           gl,
           edgeShader,

@@ -1224,14 +1224,17 @@ export function forEachVisibleSegmentToDraw(
   callback: (
     objectId: bigint,
     pickIndex: number | undefined,
-    rootObjectId: bigint,
+    colorObjectId: bigint,
   ) => void,
 ) {
   forEachVisibleSegment(
     displayState.segmentationGroupState.value,
     (objectId, rootObjectId) => {
       const pickIndex = pickIDs?.registerUint64(renderLayer, objectId);
-      callback(objectId, pickIndex, rootObjectId);
+      const colorObjectId = displayState.baseSegmentColoring.value
+        ? objectId
+        : rootObjectId;
+      callback(objectId, pickIndex, colorObjectId);
     },
   );
 }
