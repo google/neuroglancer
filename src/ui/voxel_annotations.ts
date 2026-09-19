@@ -44,7 +44,7 @@ import { EventActionMap } from "#src/util/mouse_bindings.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
 import { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
 import {
-  BRUSH_SIZE_TOOL_ID,
+  BRUSH_RADIUS_TOOL_ID,
   BRUSH_TOOL_ID,
   type BrushShape,
   FLOODFILL_TOOL_ID,
@@ -65,8 +65,8 @@ const FLOOD_INPUT_MAP = EventActionMap.fromObject({
 });
 
 const CONTROLS_FOR_TOOL = new Map<string, string[]>([
-  [BRUSH_TOOL_ID, [BRUSH_SIZE_TOOL_ID, "vox-brush-shape"]],
-  [FLOODFILL_TOOL_ID, ["vox-flood-max-voxels"]],
+  [BRUSH_TOOL_ID, [BRUSH_RADIUS_TOOL_ID, "brushShape"]],
+  [FLOODFILL_TOOL_ID, ["floodFillMaxVoxels"]],
 ]);
 
 function getFloodFillCursor(erase: boolean) {
@@ -195,9 +195,7 @@ abstract class VoxelEditingTool extends LayerTool<UserLayerWithVoxelEditing> {
     );
 
     for (const type of controlTypes) {
-      const def = VOXEL_EDITING_LAYER_CONTROLS.find(
-        (c) => c.toolJson && c.toolJson.type === type,
-      );
+      const def = VOXEL_EDITING_LAYER_CONTROLS.find((c) => c.toolJson === type);
       if (!def) continue;
 
       const controlContainer = document.createElement("label");
@@ -277,7 +275,7 @@ abstract class VoxelEditingTool extends LayerTool<UserLayerWithVoxelEditing> {
       }
 
       const filterValue =
-        this.layer.lockToSelectedValue.value && erasing
+        this.layer.erasePaintValueOnly.value && erasing
           ? this.layer.getPaintValue(false)(false)
           : undefined;
 
@@ -474,7 +472,7 @@ export class BrushTool extends VoxelEditingTool {
       basis: this.getBasis()!,
       value: this.layer.getPaintValue(this.layer.shouldErase()),
       filterValue:
-        this.layer.lockToSelectedValue.value && this.layer.shouldErase()
+        this.layer.erasePaintValueOnly.value && this.layer.shouldErase()
           ? this.layer.getPaintValue(false)(false)
           : undefined,
       seq: editContext.beginStroke(),
