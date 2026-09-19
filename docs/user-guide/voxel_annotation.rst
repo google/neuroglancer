@@ -107,7 +107,7 @@ Common Controls
 
 The **Draw** tab provides several common controls:
 
--   **Erase only selected value**: When enabled, the erase action only affects
+-   **Erase only paint value**: When enabled, the erase action only affects
     voxels that match the current **Paint Value**. This feature will slow down
     painting performance when erasing.
 -   **Undo / Redo**: Revert or re-apply recent changes.

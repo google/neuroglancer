@@ -70,10 +70,12 @@ export interface FloodFillOperation extends VoxelOperationBase {
 
 export type VoxelOperation = BrushOperation | FloodFillOperation;
 
-export const BRUSH_TOOL_ID = "vox-brush";
-export const BRUSH_SIZE_TOOL_ID = "vox-brush-size";
-export const FLOODFILL_TOOL_ID = "vox-flood-fill";
-export const VALUE_PICKER_TOOL_ID = "vox-value-picker";
+export const BRUSH_TOOL_ID = "paintBrush";
+export const BRUSH_RADIUS_TOOL_ID = "brushRadius";
+export const FLOODFILL_TOOL_ID = "floodFill";
+export const UNDO_TOOL_ID = "undo";
+export const REDO_TOOL_ID = "redo";
+export const VALUE_PICKER_TOOL_ID = "pickPaintValue";
 
 export const EMPTY_VOXEL_VALUE = 0n;
 

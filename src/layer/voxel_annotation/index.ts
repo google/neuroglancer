@@ -70,7 +70,7 @@ import type {
 import {
   VOXEL_EDITING_STAMINA,
   EMPTY_VOXEL_VALUE,
-  BRUSH_SIZE_TOOL_ID,
+  BRUSH_RADIUS_TOOL_ID,
   BRUSH_TOOL_ID,
   BrushShape,
   MAX_VOXEL_EDITING_STAMINA,
@@ -78,8 +78,8 @@ import {
 import { VoxelEditingController } from "#src/voxel_annotation/frontend.js";
 import { PreviewMultiscaleSource } from "#src/voxel_annotation/preview_multiscale_chunk_source.js";
 
-const BRUSH_SIZE_JSON_KEY = "brushSize";
-const ERASE_SELECTED_MODE_JSON_KEY = "eraseSelectedMode";
+const BRUSH_RADIUS_JSON_KEY = "brushRadius";
+const ERASE_PAINT_VALUE_ONLY_JSON_KEY = "erasePaintValueOnly";
 const BRUSH_SHAPE_JSON_KEY = "brushShape";
 const FLOOD_FILL_MAX_VOXELS_JSON_KEY = "floodFillMaxVoxels";
 const FLOOD_FILL_MORPHOLOGICAL_JSON_KEY = "floodFillMorphological";
@@ -440,7 +440,7 @@ export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
   hasSubsourcesWithWritingEnabled: WatchableValue<boolean>;
 
   brushRadius: TrackableValue<number>;
-  lockToSelectedValue: TrackableBoolean;
+  erasePaintValueOnly: TrackableBoolean;
   brushShape: TrackableEnum<BrushShape>;
   floodMaxVoxels: TrackableValue<number>;
   floodMorphological: TrackableBoolean;
@@ -481,7 +481,7 @@ export function UserLayerWithVoxelEditingMixin<
 
     // Brush properties
     brushRadius = new TrackableValue<number>(3, verifyInt);
-    lockToSelectedValue = new TrackableBoolean(false);
+    erasePaintValueOnly = new TrackableBoolean(false);
     brushShape = new TrackableEnum(BrushShape, BrushShape.DISK);
     floodMaxVoxels = new TrackableValue<number>(10000, verifyFiniteFloat);
     floodMorphological = new TrackableBoolean(true);
@@ -498,7 +498,7 @@ export function UserLayerWithVoxelEditingMixin<
         this.editingContexts.clear();
       });
       this.brushRadius.changed.add(this.specificationChanged.dispatch);
-      this.lockToSelectedValue.changed.add(this.specificationChanged.dispatch);
+      this.erasePaintValueOnly.changed.add(this.specificationChanged.dispatch);
       this.brushShape.changed.add(this.specificationChanged.dispatch);
       this.floodMaxVoxels.changed.add(this.specificationChanged.dispatch);
       this.floodMorphological.changed.add(this.specificationChanged.dispatch);
@@ -583,9 +583,8 @@ export function UserLayerWithVoxelEditingMixin<
       let radiusY = 0;
 
       if (activation && activation.tool.localBinder === this.toolBinder) {
-        const toolJson = activation.tool.toJSON();
-        const toolId = typeof toolJson === "string" ? toolJson : toolJson?.type;
-        if (toolId === BRUSH_TOOL_ID || toolId === BRUSH_SIZE_TOOL_ID) {
+        const toolId = activation.tool.toJSON();
+        if (toolId === BRUSH_TOOL_ID || toolId === BRUSH_RADIUS_TOOL_ID) {
           const radiusXY = drawBrushCursor(this, panel, ctx);
           if (radiusXY.radiusY > 0) {
             radiusY = radiusXY.radiusY;
@@ -662,8 +661,8 @@ export function UserLayerWithVoxelEditingMixin<
 
     toJSON() {
       const json = super.toJSON();
-      json[BRUSH_SIZE_JSON_KEY] = this.brushRadius.toJSON();
-      json[ERASE_SELECTED_MODE_JSON_KEY] = this.lockToSelectedValue.toJSON();
+      json[BRUSH_RADIUS_JSON_KEY] = this.brushRadius.toJSON();
+      json[ERASE_PAINT_VALUE_ONLY_JSON_KEY] = this.erasePaintValueOnly.toJSON();
       json[BRUSH_SHAPE_JSON_KEY] = this.brushShape.toJSON();
       json[FLOOD_FILL_MAX_VOXELS_JSON_KEY] = this.floodMaxVoxels.toJSON();
       json[FLOOD_FILL_MORPHOLOGICAL_JSON_KEY] =
@@ -675,13 +674,13 @@ export function UserLayerWithVoxelEditingMixin<
 
     restoreState(specification: any) {
       super.restoreState(specification);
-      verifyOptionalObjectProperty(specification, BRUSH_SIZE_JSON_KEY, (v) =>
+      verifyOptionalObjectProperty(specification, BRUSH_RADIUS_JSON_KEY, (v) =>
         this.brushRadius.restoreState(v),
       );
       verifyOptionalObjectProperty(
         specification,
-        ERASE_SELECTED_MODE_JSON_KEY,
-        (v) => this.lockToSelectedValue.restoreState(v),
+        ERASE_PAINT_VALUE_ONLY_JSON_KEY,
+        (v) => this.erasePaintValueOnly.restoreState(v),
       );
       verifyOptionalObjectProperty(specification, BRUSH_SHAPE_JSON_KEY, (v) =>
         this.brushShape.restoreState(v),

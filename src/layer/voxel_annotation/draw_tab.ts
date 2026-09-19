@@ -18,6 +18,7 @@ import { VOXEL_EDITING_TAB_LAYOUT } from "#src/layer/voxel_annotation/controls.j
 import type { UserLayerWithVoxelEditing } from "#src/layer/voxel_annotation/index.js";
 import { observeWatchable } from "#src/trackable_value.js";
 import { makeToolButton } from "#src/ui/tool.js";
+import { REDO_TOOL_ID, UNDO_TOOL_ID } from "#src/voxel_annotation/base.js";
 import type { VoxelEditingController } from "#src/voxel_annotation/frontend.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 import { addLayerControlToOptionsTab } from "#src/widget/layer_control.js";
@@ -59,8 +60,8 @@ export class VoxelEditingTab extends Tab {
         );
 
         if (
-          controlDef.toolJson.type === "vox-undo" ||
-          controlDef.toolJson.type === "vox-redo"
+          controlDef.toolJson === UNDO_TOOL_ID ||
+          controlDef.toolJson === REDO_TOOL_ID
         ) {
           const button = controlElement.querySelector("button");
           if (button) {
@@ -85,7 +86,7 @@ export class VoxelEditingTab extends Tab {
                     return;
                   }
                   const watchable =
-                    controlDef.toolJson.type === "vox-undo"
+                    controlDef.toolJson === UNDO_TOOL_ID
                       ? controller.undoCount
                       : controller.redoCount;
                   context.registerDisposer(

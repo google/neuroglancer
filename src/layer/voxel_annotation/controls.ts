@@ -25,11 +25,13 @@ import { SliceViewPanel } from "#src/sliceview/panel.js";
 import { observeWatchable } from "#src/trackable_value.js";
 import { mat3, vec3 } from "#src/util/geom.js";
 import {
-  BRUSH_SIZE_TOOL_ID,
+  BRUSH_RADIUS_TOOL_ID,
   BRUSH_TOOL_ID,
   FLOODFILL_MAX_POSSIBLE_VOXELS,
   FLOODFILL_MIN_POSSIBLE_VOXELS,
   FLOODFILL_TOOL_ID,
+  REDO_TOOL_ID,
+  UNDO_TOOL_ID,
   getBasisFromNormal,
   VALUE_PICKER_TOOL_ID,
 } from "#src/voxel_annotation/base.js";
@@ -177,7 +179,7 @@ const TOOL_SPECIFIC_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEditing>[
   [
     {
       label: "Brush size",
-      toolJson: { type: BRUSH_SIZE_TOOL_ID },
+      toolJson: BRUSH_RADIUS_TOOL_ID,
       ...(() => {
         const control = rangeLayerControl(
           (layer: UserLayerWithVoxelEditing) => ({
@@ -216,14 +218,14 @@ const TOOL_SPECIFIC_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEditing>[
     },
     {
       label: "Brush shape",
-      toolJson: { type: "vox-brush-shape" },
+      toolJson: "brushShape",
       ...enumLayerControl(
         (layer: UserLayerWithVoxelEditing) => layer.brushShape,
       ),
     },
     {
       label: "Max fill voxels",
-      toolJson: { type: "vox-flood-max-voxels" },
+      toolJson: "floodFillMaxVoxels",
       ...rangeLayerControl((layer) => ({
         value: layer.floodMaxVoxels,
         options: {
@@ -238,14 +240,14 @@ const TOOL_SPECIFIC_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEditing>[
 const COMMON_CONTROLS: VoxelEditingTabElement[] = [
   { type: "header", label: "Settings" },
   {
-    label: "Erase only selected value",
-    toolJson: { type: "vox-erase-mode" },
-    ...checkboxLayerControl((layer) => layer.lockToSelectedValue),
+    label: "Erase only paint value",
+    toolJson: "erasePaintValueOnly",
+    ...checkboxLayerControl((layer) => layer.erasePaintValueOnly),
   },
   { type: "header", label: "Actions" },
   {
     label: "Undo",
-    toolJson: { type: "vox-undo" },
+    toolJson: UNDO_TOOL_ID,
     ...buttonLayerControl({
       text: "Undo",
       onClick: (layer) =>
@@ -254,7 +256,7 @@ const COMMON_CONTROLS: VoxelEditingTabElement[] = [
   },
   {
     label: "Redo",
-    toolJson: { type: "vox-redo" },
+    toolJson: REDO_TOOL_ID,
     ...buttonLayerControl({
       text: "Redo",
       onClick: (layer) =>
@@ -263,7 +265,7 @@ const COMMON_CONTROLS: VoxelEditingTabElement[] = [
   },
   {
     label: "Paint Value",
-    toolJson: { type: "vox-paint-value" },
+    toolJson: "paintValue",
     makeControl: (layer, context) => {
       const control = document.createElement("input");
       control.type = "text";
@@ -287,7 +289,7 @@ const COMMON_CONTROLS: VoxelEditingTabElement[] = [
   },
   {
     label: "New Random Value",
-    toolJson: { type: "vox-random-value" },
+    toolJson: "randomizePaintValue",
     ...buttonLayerControl({
       text: "Random",
       onClick: (layer) =>
