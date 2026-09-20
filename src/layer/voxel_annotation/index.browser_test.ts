@@ -429,4 +429,39 @@ describe("Voxel Editing Utilities", () => {
       );
     });
   });
+
+  describe("voxelEditing JSON state", () => {
+    it("Defaults: the key is omitted", () => {
+      const { userLayer } = createLayer(DataType.INT8);
+      expect(userLayer.toJSON().voxelEditing).toBeUndefined();
+    });
+
+    it("Round trip: restores a nested block with a negative paint value", () => {
+      const { userLayer } = createLayer(DataType.INT8);
+      const voxelEditing = {
+        paintValue: "-5",
+        brushRadius: 7,
+        brushShape: "sphere",
+        erasePaintValueOnly: true,
+      };
+      userLayer.restoreState({ ...userLayer.toJSON(), voxelEditing });
+      expect(userLayer.paintValue.value).toBe(-5n);
+      expect(userLayer.brushRadius.value).toBe(7);
+      expect(userLayer.erasePaintValueOnly.value).toBe(true);
+      expect(userLayer.toJSON().voxelEditing).toEqual(voxelEditing);
+    });
+
+    it.for(["abc", "1.5", 1.5, true])(
+      "Invalid paint value %j: falls back to the default",
+      (paintValue) => {
+        const { userLayer } = createLayer(DataType.INT8);
+        userLayer.paintValue.value = 42n;
+        userLayer.restoreState({
+          ...userLayer.toJSON(),
+          voxelEditing: { paintValue },
+        });
+        expect(userLayer.paintValue.value).toBe(1n);
+      },
+    );
+  });
 });

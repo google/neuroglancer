@@ -227,7 +227,7 @@ const TOOL_SPECIFIC_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEditing>[
       label: "Max fill voxels",
       toolJson: "floodFillMaxVoxels",
       ...rangeLayerControl((layer) => ({
-        value: layer.floodMaxVoxels,
+        value: layer.floodFillMaxVoxels,
         options: {
           min: FLOODFILL_MIN_POSSIBLE_VOXELS,
           max: FLOODFILL_MAX_POSSIBLE_VOXELS,

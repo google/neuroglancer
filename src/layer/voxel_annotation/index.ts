@@ -53,15 +53,11 @@ import {
   WatchableValue,
 } from "#src/trackable_value.js";
 import type { UserLayerWithAnnotations } from "#src/ui/annotations.js";
-import { randomUint64 } from "#src/util/bigint.js";
+import { randomUint64, UINT64_MAX } from "#src/util/bigint.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { vec3 } from "#src/util/geom.js";
-import {
-  parseUint64,
-  verifyFiniteFloat,
-  verifyInt,
-  verifyOptionalObjectProperty,
-} from "#src/util/json.js";
+import { verifyInt, verifyOptionalObjectProperty } from "#src/util/json.js";
+import { CompoundTrackable } from "#src/util/trackable.js";
 import { TrackableEnum } from "#src/util/trackable_enum.js";
 import type {
   VoxelEditingControllerHost,
@@ -78,12 +74,55 @@ import {
 import { VoxelEditingController } from "#src/voxel_annotation/frontend.js";
 import { PreviewMultiscaleSource } from "#src/voxel_annotation/preview_multiscale_chunk_source.js";
 
+const VOXEL_EDITING_JSON_KEY = "voxelEditing";
+const PAINT_VALUE_JSON_KEY = "paintValue";
 const BRUSH_RADIUS_JSON_KEY = "brushRadius";
-const ERASE_PAINT_VALUE_ONLY_JSON_KEY = "erasePaintValueOnly";
 const BRUSH_SHAPE_JSON_KEY = "brushShape";
 const FLOOD_FILL_MAX_VOXELS_JSON_KEY = "floodFillMaxVoxels";
 const FLOOD_FILL_MORPHOLOGICAL_JSON_KEY = "floodFillMorphological";
-const PAINT_VALUE_JSON_KEY = "paintValue";
+const ERASE_PAINT_VALUE_ONLY_JSON_KEY = "erasePaintValueOnly";
+
+const INT64_MIN = -(1n << 63n);
+
+// The data type is unknown when the state is restored, so any int64/uint64
+// value is accepted here; setPaintValue truncates to the data type.
+function parsePaintValue(obj: unknown): bigint {
+  let n: bigint;
+  switch (typeof obj) {
+    case "string":
+      if (obj.match(/^-?(?:0|[1-9][0-9]*)$/) === null) {
+        throw new Error(
+          `Expected base-10 integer, but received: ${JSON.stringify(obj)}`,
+        );
+      }
+      n = BigInt(obj);
+      break;
+    case "number":
+      n = BigInt(verifyInt(obj));
+      break;
+    case "bigint":
+      n = obj;
+      break;
+    default:
+      throw new Error(
+        `Expected integer paint value, but received: ${JSON.stringify(obj)}`,
+      );
+  }
+  if (n < INT64_MIN || n > UINT64_MAX) {
+    throw new Error(`Paint value out of the int64/uint64 range: ${n}`);
+  }
+  return n;
+}
+
+class TrackablePaintValue extends TrackableValue<bigint> {
+  constructor() {
+    super(1n, parsePaintValue);
+  }
+  toJSON() {
+    const value = super.toJSON();
+    return value === undefined ? undefined : value.toString();
+  }
+}
 
 const DATA_TYPE_BIT_INFO = {
   [DataType.UINT8]: { bits: 8, signed: false },
@@ -439,12 +478,13 @@ export class VoxelEditingContext
 export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
   hasSubsourcesWithWritingEnabled: WatchableValue<boolean>;
 
-  brushRadius: TrackableValue<number>;
-  erasePaintValueOnly: TrackableBoolean;
-  brushShape: TrackableEnum<BrushShape>;
-  floodMaxVoxels: TrackableValue<number>;
-  floodMorphological: TrackableBoolean;
+  voxelEditingState: CompoundTrackable;
   paintValue: TrackableValue<bigint>;
+  brushRadius: TrackableValue<number>;
+  brushShape: TrackableEnum<BrushShape>;
+  floodFillMaxVoxels: TrackableValue<number>;
+  floodFillMorphological: TrackableBoolean;
+  erasePaintValueOnly: TrackableBoolean;
   cursorInEraseMode: TrackableBoolean;
 
   editingContexts: Map<LoadedDataSubsource, VoxelEditingContext>;
@@ -477,14 +517,13 @@ export function UserLayerWithVoxelEditingMixin<
   abstract class C extends Base implements UserLayerWithVoxelEditing {
     editingContexts = new Map<LoadedDataSubsource, VoxelEditingContext>();
     hasSubsourcesWithWritingEnabled = new WatchableValue<boolean>(false);
-    paintValue = new TrackableValue<bigint>(1n, (x) => parseUint64(x));
-
-    // Brush properties
+    paintValue = new TrackablePaintValue();
     brushRadius = new TrackableValue<number>(3, verifyInt);
-    erasePaintValueOnly = new TrackableBoolean(false);
     brushShape = new TrackableEnum(BrushShape, BrushShape.DISK);
-    floodMaxVoxels = new TrackableValue<number>(10000, verifyFiniteFloat);
-    floodMorphological = new TrackableBoolean(true);
+    floodFillMaxVoxels = new TrackableValue<number>(10000, verifyInt);
+    floodFillMorphological = new TrackableBoolean(true);
+    erasePaintValueOnly = new TrackableBoolean(false);
+    voxelEditingState = this.registerDisposer(new CompoundTrackable());
     cursorInEraseMode = new TrackableBoolean(false, false);
 
     private _isInEraseState = false;
@@ -497,12 +536,14 @@ export function UserLayerWithVoxelEditingMixin<
         }
         this.editingContexts.clear();
       });
-      this.brushRadius.changed.add(this.specificationChanged.dispatch);
-      this.erasePaintValueOnly.changed.add(this.specificationChanged.dispatch);
-      this.brushShape.changed.add(this.specificationChanged.dispatch);
-      this.floodMaxVoxels.changed.add(this.specificationChanged.dispatch);
-      this.floodMorphological.changed.add(this.specificationChanged.dispatch);
-      this.paintValue.changed.add(this.specificationChanged.dispatch);
+      const state = this.voxelEditingState;
+      state.add(PAINT_VALUE_JSON_KEY, this.paintValue);
+      state.add(BRUSH_RADIUS_JSON_KEY, this.brushRadius);
+      state.add(BRUSH_SHAPE_JSON_KEY, this.brushShape);
+      state.add(FLOOD_FILL_MAX_VOXELS_JSON_KEY, this.floodFillMaxVoxels);
+      state.add(FLOOD_FILL_MORPHOLOGICAL_JSON_KEY, this.floodFillMorphological);
+      state.add(ERASE_PAINT_VALUE_ONLY_JSON_KEY, this.erasePaintValueOnly);
+      state.changed.add(this.specificationChanged.dispatch);
 
       this.bindOverlayToPanels();
       this.registerDisposer(
@@ -661,42 +702,19 @@ export function UserLayerWithVoxelEditingMixin<
 
     toJSON() {
       const json = super.toJSON();
-      json[BRUSH_RADIUS_JSON_KEY] = this.brushRadius.toJSON();
-      json[ERASE_PAINT_VALUE_ONLY_JSON_KEY] = this.erasePaintValueOnly.toJSON();
-      json[BRUSH_SHAPE_JSON_KEY] = this.brushShape.toJSON();
-      json[FLOOD_FILL_MAX_VOXELS_JSON_KEY] = this.floodMaxVoxels.toJSON();
-      json[FLOOD_FILL_MORPHOLOGICAL_JSON_KEY] =
-        this.floodMorphological.toJSON();
-      const pv = this.paintValue.toJSON();
-      json[PAINT_VALUE_JSON_KEY] = pv === undefined ? undefined : pv.toString();
+      const state = this.voxelEditingState.toJSON();
+      json[VOXEL_EDITING_JSON_KEY] = Object.values(state).some(
+        (v) => v !== undefined,
+      )
+        ? state
+        : undefined;
       return json;
     }
 
     restoreState(specification: any) {
       super.restoreState(specification);
-      verifyOptionalObjectProperty(specification, BRUSH_RADIUS_JSON_KEY, (v) =>
-        this.brushRadius.restoreState(v),
-      );
-      verifyOptionalObjectProperty(
-        specification,
-        ERASE_PAINT_VALUE_ONLY_JSON_KEY,
-        (v) => this.erasePaintValueOnly.restoreState(v),
-      );
-      verifyOptionalObjectProperty(specification, BRUSH_SHAPE_JSON_KEY, (v) =>
-        this.brushShape.restoreState(v),
-      );
-      verifyOptionalObjectProperty(
-        specification,
-        FLOOD_FILL_MAX_VOXELS_JSON_KEY,
-        (v) => this.floodMaxVoxels.restoreState(v),
-      );
-      verifyOptionalObjectProperty(
-        specification,
-        FLOOD_FILL_MORPHOLOGICAL_JSON_KEY,
-        (v) => this.floodMorphological.restoreState(v),
-      );
-      verifyOptionalObjectProperty(specification, PAINT_VALUE_JSON_KEY, (v) =>
-        this.paintValue.restoreState(v),
+      verifyOptionalObjectProperty(specification, VOXEL_EDITING_JSON_KEY, (v) =>
+        this.voxelEditingState.restoreState(v),
       );
     }
 
