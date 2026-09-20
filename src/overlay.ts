@@ -41,10 +41,10 @@ export class Overlay extends RefCounted {
     this.keyMap.addParent(defaultEventMap, Number.NEGATIVE_INFINITY);
     ++overlaysOpen;
     const container = (this.container = document.createElement("div"));
-    container.className = "overlay";
+    container.className = "neuroglancer-overlay";
     const content = (this.content = document.createElement("div"));
     this.registerDisposer(new AutomaticallyFocusedElement(content));
-    content.className = "overlay-content";
+    content.className = "neuroglancer-overlay-content";
     container.appendChild(content);
     document.body.appendChild(container);
     this.registerDisposer(new KeyboardEventBinder(this.container, this.keyMap));
@@ -65,6 +65,17 @@ export class Overlay extends RefCounted {
   }
 }
 
+/**
+ * A dialog that has a header, body, and footer.
+ * The header contains a title and a close icon.
+ * The footer contains a primary button.
+ * The body is where the main content goes.
+ * @param title - The title text to display in the header
+ * @param primaryButtonText - The text to display on the primary button
+ * @param extraClassPrefix - Optional CSS class prefix to add to all dialog elements
+ * @param primaryButtonClickListener - Optional click handler for the primary
+ *     button; it closes the dialog when omitted
+ */
 export class FramedDialog extends Overlay {
   header: HTMLDivElement;
   headerTitle: HTMLSpanElement;
@@ -82,7 +93,7 @@ export class FramedDialog extends Overlay {
 
     const header = (this.header = document.createElement("div"));
     const closeMenuIcon = (this.closeMenuIcon = makeIcon({ svg: svg_close }));
-    closeMenuIcon.addEventListener("click", () => this.close());
+    this.registerEventListener(closeMenuIcon, "click", () => this.close());
     const headerTitle = (this.headerTitle = document.createElement("span"));
     headerTitle.textContent = title;
     header.appendChild(headerTitle);
@@ -97,7 +108,7 @@ export class FramedDialog extends Overlay {
       document.createElement("button"));
     primaryButton.textContent = primaryButtonText;
     const onPrimaryClick = primaryButtonClickListener ?? (() => this.close());
-    primaryButton.addEventListener("click", onPrimaryClick);
+    this.registerEventListener(primaryButton, "click", onPrimaryClick);
     footer.appendChild(primaryButton);
     this.content.appendChild(this.footer);
 
