@@ -269,7 +269,7 @@ abstract class VoxelEditingTool extends LayerTool<UserLayerWithVoxelEditing> {
     }
     try {
       const value = this.layer.getPaintValue(erasing);
-      const max = Number(this.layer.floodMaxVoxels.value);
+      const max = Number(this.layer.floodFillMaxVoxels.value);
       if (!Number.isFinite(max) || max <= 0) {
         throw new Error("Invalid max fill voxels setting");
       }
@@ -286,7 +286,7 @@ abstract class VoxelEditingTool extends LayerTool<UserLayerWithVoxelEditing> {
           Math.floor(max),
           basis,
           filterValue,
-          this.layer.floodMorphological.value,
+          this.layer.floodFillMorphological.value,
         )
         .catch((e: any) =>
           StatusMessage.showTemporaryMessage(String(e?.message ?? e)),
