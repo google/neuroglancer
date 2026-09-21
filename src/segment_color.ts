@@ -1006,10 +1006,17 @@ vec4 segmentColorUserShader(uint64_t segmentId) {
       .shaderParameters.value,
   ) {
     this.hashMapManager.disable(gl, shader);
+    for (const identifier of this.segmentPropertyShaderData.keys()) {
+      const textureUnit = shader.textureUnit(Symbol.for(identifier));
+      if (textureUnit === undefined) continue;
+      gl.activeTexture(gl.TEXTURE0 + textureUnit);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+    }
     const { hasSegmentStatedColors } = shaderParameters;
     if (hasSegmentStatedColors) {
       this.segmentStatedColorShaderManager.disable(gl, shader);
     }
+    gl.activeTexture(gl.TEXTURE0);
   }
 
   disposed() {

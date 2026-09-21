@@ -52,6 +52,7 @@ import {
   SegmentColorHash,
   SegmentColorUserShaderManager,
 } from "#src/segment_color.js";
+import { getSegmentEquivalences } from "#src/segmentation_display_state/base.js";
 import type {
   SegmentationColorGroupState,
   SegmentationDisplayState,
@@ -108,7 +109,6 @@ import {
   TrackableValue,
   WatchableValue,
 } from "#src/trackable_value.js";
-import { getSegmentEquivalences } from "#src/segmentation_display_state/base.js";
 import { UserLayerWithAnnotationsMixin } from "#src/ui/annotations.js";
 import { SegmentDisplayTab } from "#src/ui/segment_list.js";
 import { registerSegmentSelectTools } from "#src/ui/segment_select_tools.js";
@@ -140,7 +140,6 @@ import {
 } from "#src/util/json.js";
 import { Signal } from "#src/util/signal.js";
 import { GLBuffer } from "#src/webgl/buffer.js";
-import { initializeWebGL } from "#src/webgl/context.js";
 import type { WatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import {
   makeAggregateWatchableShaderError,
@@ -148,6 +147,10 @@ import {
   makeWatchableShaderError,
   parameterizedEmitterDependentShaderGetter,
 } from "#src/webgl/dynamic_shader.js";
+import {
+  FramebufferConfiguration,
+  makeTextureBuffers,
+} from "#src/webgl/offscreen.js";
 import type { ShaderModule } from "#src/webgl/shader.js";
 import {
   getFallbackBuilderState,
@@ -601,21 +604,25 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
       ),
     );
 
-    // 2d/3d share GL context
-    // the offscreen canvas is a separate context that doesn't share textures
+    const gl = this.layer.manager.chunkManager.chunkQueueManager.gl;
     this.segmentationColorUserShader = new SegmentColorUserShaderManager(
       this,
-      this.layer.manager.chunkManager.chunkQueueManager.gl,
+      gl,
     );
-
-    this.offscreenGL = initializeWebGL(new OffscreenCanvas(1, 1));
-    this.offscreenSegmentationColorUserShader =
-      new SegmentColorUserShaderManager(this, this.offscreenGL);
+    this.segmentColorFramebuffer = this.layer.registerDisposer(
+      new FramebufferConfiguration(gl, {
+        colorBuffers: makeTextureBuffers(gl, 1),
+      }),
+    );
+    this.segmentColorVertexArray = gl.createVertexArray();
+    this.layer.registerDisposer(() => {
+      gl.deleteVertexArray(this.segmentColorVertexArray);
+    });
     this.getSegmentColorShader = this.makeSegmentColorShaderGetter();
   }
 
-  offscreenGL;
-  offscreenSegmentationColorUserShader;
+  private segmentColorFramebuffer;
+  private segmentColorVertexArray;
 
   segmentSelectionState = new SegmentSelectionState();
   selectedAlpha = trackableAlphaValue(0.5);
@@ -658,8 +665,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
       new AggregateWatchableValue(() => ({
         segmentColorParameters:
           this.segmentationColorUserShader.shaderParameters,
-        segmentColorProperties:
-          this.offscreenSegmentationColorUserShader.usedProperties,
+        segmentColorProperties: this.segmentationColorUserShader.usedProperties,
         shaderBuilderState: this.segmentColorShaderControlState.builderState,
       })),
     );
@@ -673,7 +679,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
     });
     return parameterizedEmitterDependentShaderGetter(
       this.layer,
-      this.offscreenGL,
+      this.layer.manager.chunkManager.chunkQueueManager.gl,
       {
         memoizeKey: `segmentation/ColorShader`,
         parameters,
@@ -686,7 +692,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
           builder,
           { segmentColorParameters, shaderBuilderState },
         ) => {
-          this.offscreenSegmentationColorUserShader.defineShader(
+          this.segmentationColorUserShader.defineShader(
             builder,
             /*fragment=*/ false,
             shaderBuilderState,
@@ -716,79 +722,97 @@ vColor = segmentColorUserShader(uint64_t(aID));
   ) => {
     const numIds = ids.length;
     if (numIds === 0) return colors;
-    const { shader, parameters } = this.getSegmentColorShader(
-      emptySegmentColorShaderModule,
-    );
-    if (shader === null) return;
-    shader.bind();
-    const { gl } = shader;
-    const canvas = gl.canvas as OffscreenCanvas;
-    if (canvas.width !== numIds || canvas.height !== 1) {
-      canvas.width = numIds;
-      canvas.height = 1;
-    }
-    gl.viewport(0, 0, numIds, 1);
+    const gl = this.layer.manager.chunkManager.chunkQueueManager.gl;
+    try {
+      const { shader, parameters } = this.getSegmentColorShader(
+        emptySegmentColorShaderModule,
+      );
+      if (shader === null) return;
+      this.segmentColorFramebuffer.bind(numIds, 1);
+      gl.bindVertexArray(this.segmentColorVertexArray);
+      shader.bind();
 
-    const positions = new Float32Array(numIds * 2);
-    const idsData = new Uint32Array(numIds * 2);
-    const segmentEquivalences = getSegmentEquivalences(
-      this.segmentationGroupState.value,
-    );
-    const baseSegmentColoring = this.baseSegmentColoring.value;
-    for (let i = 0; i < numIds; ++i) {
-      const id = baseSegmentColoring ? ids[i] : segmentEquivalences.get(ids[i]);
-      positions[2 * i] = (2 * (i + 0.5)) / numIds - 1;
-      positions[2 * i + 1] = 0;
-      idsData[2 * i] = Number(id & 0xffffffffn);
-      idsData[2 * i + 1] = Number(id >> 32n);
+      const positions = new Float32Array(numIds * 2);
+      const idsData = new Uint32Array(numIds * 2);
+      const segmentEquivalences = getSegmentEquivalences(
+        this.segmentationGroupState.value,
+      );
+      const baseSegmentColoring = this.baseSegmentColoring.value;
+      for (let i = 0; i < numIds; ++i) {
+        const id = baseSegmentColoring
+          ? ids[i]
+          : segmentEquivalences.get(ids[i]);
+        positions[2 * i] = (2 * (i + 0.5)) / numIds - 1;
+        positions[2 * i + 1] = 0;
+        idsData[2 * i] = Number(id & 0xffffffffn);
+        idsData[2 * i + 1] = Number(id >> 32n);
+      }
+      let positionBuffer: GLBuffer | undefined;
+      let idBuffer: GLBuffer | undefined;
+      try {
+        positionBuffer = GLBuffer.fromData(
+          gl,
+          positions,
+          undefined,
+          WebGL2RenderingContext.STREAM_DRAW,
+        );
+        positionBuffer.bindToVertexAttrib(
+          shader.attribute("aVertexPosition"),
+          2,
+        );
+        idBuffer = GLBuffer.fromData(
+          gl,
+          idsData,
+          undefined,
+          WebGL2RenderingContext.STREAM_DRAW,
+        );
+        idBuffer.bindToVertexAttribI(shader.attribute("aID"), 2);
+        try {
+          this.segmentationColorUserShader.enable(
+            gl,
+            shader,
+            parameters.shaderBuilderState,
+            parameters.segmentColorParameters,
+            {
+              segmentDefaultColor: this.segmentDefaultColor.value,
+              segmentStatedColors: this.segmentStatedColors.value,
+              hoverHighlight: false,
+            },
+          );
+          gl.drawArrays(gl.POINTS, 0, numIds);
+          const data = new Uint8Array(4 * numIds);
+          gl.readPixels(
+            0,
+            0,
+            numIds,
+            1,
+            WebGL2RenderingContext.RGBA,
+            WebGL2RenderingContext.UNSIGNED_BYTE,
+            data,
+          );
+          for (let i = 0; i < data.length; i++) {
+            colors[i] = data[i] / 255.0;
+          }
+        } finally {
+          this.segmentationColorUserShader.disable(
+            gl,
+            shader,
+            parameters.segmentColorParameters,
+          );
+        }
+      } finally {
+        positionBuffer?.dispose();
+        idBuffer?.dispose();
+      }
+      return colors;
+    } finally {
+      // UI color lookups run between render stages; release the bindings
+      // changed by this lookup before the next stage starts.
+      this.segmentColorFramebuffer.unbind();
+      gl.useProgram(null);
+      gl.bindVertexArray(null);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
     }
-    const positionBuffer = GLBuffer.fromData(
-      gl,
-      positions,
-      undefined,
-      WebGL2RenderingContext.STREAM_DRAW,
-    );
-    positionBuffer.bindToVertexAttrib(shader.attribute("aVertexPosition"), 2);
-    const idBuffer = GLBuffer.fromData(
-      gl,
-      idsData,
-      undefined,
-      WebGL2RenderingContext.STREAM_DRAW,
-    );
-    idBuffer.bindToVertexAttribI(shader.attribute("aID"), 2);
-    this.offscreenSegmentationColorUserShader.enable(
-      gl,
-      shader,
-      parameters.shaderBuilderState,
-      parameters.segmentColorParameters,
-      {
-        segmentDefaultColor: this.segmentDefaultColor.value,
-        segmentStatedColors: this.segmentStatedColors.value,
-        hoverHighlight: false,
-      },
-    );
-    gl.drawArrays(gl.POINTS, 0, numIds);
-    const data = new Uint8Array(4 * numIds);
-    gl.readPixels(
-      0,
-      0,
-      numIds,
-      1,
-      WebGL2RenderingContext.RGBA,
-      WebGL2RenderingContext.UNSIGNED_BYTE,
-      data,
-    );
-    for (let i = 0; i < data.length; i++) {
-      colors[i] = data[i] / 255.0;
-    }
-    this.offscreenSegmentationColorUserShader.disable(
-      gl,
-      shader,
-      parameters.segmentColorParameters,
-    );
-    positionBuffer.dispose();
-    idBuffer.dispose();
-    return colors;
   };
 
   getShaderBaseSegmentColor = (id: bigint) => {
