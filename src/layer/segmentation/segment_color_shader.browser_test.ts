@@ -30,6 +30,7 @@ import { vec3, vec4 } from "#src/util/geom.js";
 import { Viewer } from "#src/viewer.js";
 import { ShaderCompilationError } from "#src/webgl/shader.js";
 import type { SegmentPropertyReference } from "#src/webgl/shader_ui_controls.js";
+import { trivialColorShader } from "#src/webgl/trivial_shaders.js";
 
 const setupSegmentationLayer = () => {
   const target = document.createElement("div");
@@ -218,7 +219,7 @@ ${declaration}(vec3 color, bool hasProperties, bool isStated) {
     );
   });
 
-  it("gets multiple colors with a single offscreen lookup", () => {
+  it("gets multiple colors with a single framebuffer lookup", () => {
     const segmentationUserLayer = setupSegmentationLayer();
     const { displayState } = segmentationUserLayer;
     displayState.segmentStatedColors.value.set(
@@ -235,6 +236,101 @@ ${declaration}(vec3 color, bool hasProperties, bool isStated) {
     expectColor(colors.subarray(0, 4) as vec4, [1.0, 0.0, 0.0, 0.0]);
     expectColor(colors.subarray(4, 8) as vec4, [0.0, 1.0, 0.0, 0.0]);
     expectColor(colors.subarray(8, 12) as vec4, [0.0, 0.0, 1.0, 0.0]);
+  });
+
+  it("cleans up WebGL state owned by a framebuffer lookup", () => {
+    const segmentationUserLayer = setupSegmentationLayer();
+    const { displayState } = segmentationUserLayer;
+    displayState.fragmentSegmentColor.value = `
+vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
+  return vec3(1.0, 0.0, 0.0);
+}`;
+    const gl = segmentationUserLayer.manager.chunkManager.chunkQueueManager.gl;
+    const initialDrawFramebuffer = gl.getParameter(
+      gl.DRAW_FRAMEBUFFER_BINDING,
+    ) as WebGLFramebuffer | null;
+    const initialReadFramebuffer = gl.getParameter(
+      gl.READ_FRAMEBUFFER_BINDING,
+    ) as WebGLFramebuffer | null;
+    const initialViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
+    const initialProgram = gl.getParameter(
+      gl.CURRENT_PROGRAM,
+    ) as WebGLProgram | null;
+    const initialVertexArray = gl.getParameter(
+      gl.VERTEX_ARRAY_BINDING,
+    ) as WebGLVertexArrayObject | null;
+    const initialArrayBuffer = gl.getParameter(
+      gl.ARRAY_BUFFER_BINDING,
+    ) as WebGLBuffer | null;
+    const initialActiveTexture = gl.getParameter(gl.ACTIVE_TEXTURE) as number;
+    const initialTextureBindings = new Array<WebGLTexture | null>(
+      gl.maxTextureImageUnits,
+    );
+    for (let i = 0; i < initialTextureBindings.length; ++i) {
+      gl.activeTexture(gl.TEXTURE0 + i);
+      initialTextureBindings[i] = gl.getParameter(
+        gl.TEXTURE_BINDING_2D,
+      ) as WebGLTexture | null;
+    }
+
+    const drawFramebuffer = gl.createFramebuffer();
+    const readFramebuffer = gl.createFramebuffer();
+    const vertexArray = gl.createVertexArray();
+    const arrayBuffer = gl.createBuffer();
+    const textures = Array.from({ length: gl.maxTextureImageUnits }, () =>
+      gl.createTexture(),
+    );
+    const activeTexture = gl.TEXTURE0 + gl.maxTextureImageUnits - 1;
+    const markerShader = trivialColorShader(gl);
+
+    try {
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, drawFramebuffer);
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, readFramebuffer);
+      gl.viewport(7, 11, 13, 17);
+      markerShader.bind();
+      gl.bindVertexArray(vertexArray);
+      gl.bindBuffer(gl.ARRAY_BUFFER, arrayBuffer);
+      for (let i = 0; i < textures.length; ++i) {
+        gl.activeTexture(gl.TEXTURE0 + i);
+        gl.bindTexture(gl.TEXTURE_2D, textures[i]);
+      }
+      gl.activeTexture(activeTexture);
+
+      expectColor(displayState.getShaderBaseSegmentColor(1n)!, [1, 0, 0, 0]);
+      expect(gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING)).toBe(null);
+      expect(gl.getParameter(gl.READ_FRAMEBUFFER_BINDING)).toBe(null);
+      expect(gl.getParameter(gl.CURRENT_PROGRAM)).toBe(null);
+      expect(gl.getParameter(gl.VERTEX_ARRAY_BINDING)).toBe(null);
+      expect(gl.getParameter(gl.ARRAY_BUFFER_BINDING)).toBe(null);
+      expect(gl.getParameter(gl.ACTIVE_TEXTURE)).toBe(gl.TEXTURE0);
+      expect(gl.getParameter(gl.TEXTURE_BINDING_2D)).toBe(null);
+      gl.activeTexture(gl.TEXTURE1);
+      expect(gl.getParameter(gl.TEXTURE_BINDING_2D)).toBe(textures[1]);
+      gl.activeTexture(gl.TEXTURE0 + gl.tempTextureUnit);
+      expect(gl.getParameter(gl.TEXTURE_BINDING_2D)).toBe(null);
+    } finally {
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, initialDrawFramebuffer);
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, initialReadFramebuffer);
+      gl.viewport(
+        initialViewport[0],
+        initialViewport[1],
+        initialViewport[2],
+        initialViewport[3],
+      );
+      gl.useProgram(initialProgram);
+      gl.bindVertexArray(initialVertexArray);
+      gl.bindBuffer(gl.ARRAY_BUFFER, initialArrayBuffer);
+      for (let i = 0; i < initialTextureBindings.length; ++i) {
+        gl.activeTexture(gl.TEXTURE0 + i);
+        gl.bindTexture(gl.TEXTURE_2D, initialTextureBindings[i]);
+      }
+      gl.activeTexture(initialActiveTexture);
+      gl.deleteFramebuffer(drawFramebuffer);
+      gl.deleteFramebuffer(readFramebuffer);
+      gl.deleteVertexArray(vertexArray);
+      gl.deleteBuffer(arrayBuffer);
+      for (const texture of textures) gl.deleteTexture(texture);
+    }
   });
 
   it("does not apply hover highlighting to offscreen color lookups", () => {
