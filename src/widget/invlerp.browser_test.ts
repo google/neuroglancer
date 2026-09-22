@@ -16,7 +16,8 @@
 
 import { describe, expect, test } from "vitest";
 import { DataType } from "#src/util/data_type.js";
-import { countDataInBins } from "#src/widget/invlerp.js";
+import { webglTest } from "#src/webgl/testing.js";
+import { countDataInBins, HistogramTexture } from "#src/widget/invlerp.js";
 import { computePercentileRangeFromValues } from "#src/widget/invlerp_range_finder.js";
 
 describe("computePercentileRangeFromValues", () => {
@@ -51,5 +52,28 @@ describe("countDataInBins", () => {
         3,
       ),
     ).toEqual(Float32Array.of(1, 1, 1, 1, 1));
+  });
+});
+
+describe("HistogramTexture", () => {
+  test("replaces and deletes its texture", () => {
+    webglTest((gl) => {
+      const histogramTexture = new HistogramTexture(gl);
+      const firstTexture = histogramTexture.update(
+        Float32Array.of(0, 0.5, 1),
+        [0, 1],
+        DataType.FLOAT32,
+      );
+      expect(gl.isTexture(firstTexture)).toBe(true);
+      const secondTexture = histogramTexture.update(
+        Float32Array.of(0.25, 0.75),
+        [0, 1],
+        DataType.FLOAT32,
+      );
+      expect(gl.isTexture(firstTexture)).toBe(false);
+      expect(gl.isTexture(secondTexture)).toBe(true);
+      histogramTexture.dispose();
+      expect(gl.isTexture(secondTexture)).toBe(false);
+    });
   });
 });
