@@ -728,24 +728,16 @@ vColor = segmentColorUserShader(uint64_t(aID));
         emptySegmentColorShaderModule,
       );
       if (shader === null) return;
-      this.segmentColorFramebuffer.bind(numIds, 1);
+      const maxBatchSize = Math.min(numIds, gl.maxTextureSize);
+      this.segmentColorFramebuffer.bind(maxBatchSize, 1);
       gl.bindVertexArray(this.segmentColorVertexArray);
       shader.bind();
 
-      const positions = new Float32Array(numIds * 2);
-      const idsData = new Uint32Array(numIds * 2);
-      const segmentEquivalences = getSegmentEquivalences(
-        this.segmentationGroupState.value,
-      );
-      const baseSegmentColoring = this.baseSegmentColoring.value;
-      for (let i = 0; i < numIds; ++i) {
-        const id = baseSegmentColoring
-          ? ids[i]
-          : segmentEquivalences.get(ids[i]);
-        positions[2 * i] = (2 * (i + 0.5)) / numIds - 1;
+      const positions = new Float32Array(maxBatchSize * 2);
+      const idsData = new Uint32Array(maxBatchSize * 2);
+      for (let i = 0; i < maxBatchSize; ++i) {
+        positions[2 * i] = (2 * (i + 0.5)) / maxBatchSize - 1;
         positions[2 * i + 1] = 0;
-        idsData[2 * i] = Number(id & 0xffffffffn);
-        idsData[2 * i + 1] = Number(id >> 32n);
       }
       let positionBuffer: GLBuffer | undefined;
       let idBuffer: GLBuffer | undefined;
@@ -779,19 +771,40 @@ vColor = segmentColorUserShader(uint64_t(aID));
               hoverHighlight: false,
             },
           );
-          gl.drawArrays(gl.POINTS, 0, numIds);
-          const data = new Uint8Array(4 * numIds);
-          gl.readPixels(
-            0,
-            0,
-            numIds,
-            1,
-            WebGL2RenderingContext.RGBA,
-            WebGL2RenderingContext.UNSIGNED_BYTE,
-            data,
+          const segmentEquivalences = getSegmentEquivalences(
+            this.segmentationGroupState.value,
           );
-          for (let i = 0; i < data.length; i++) {
-            colors[i] = data[i] / 255.0;
+          const baseSegmentColoring = this.baseSegmentColoring.value;
+          const data = new Uint8Array(4 * maxBatchSize);
+          for (let batchStart = 0; batchStart < numIds; ) {
+            const batchSize = Math.min(maxBatchSize, numIds - batchStart);
+            for (let i = 0; i < batchSize; ++i) {
+              const inputId = ids[batchStart + i];
+              const id = baseSegmentColoring
+                ? inputId
+                : segmentEquivalences.get(inputId);
+              idsData[2 * i] = Number(id & 0xffffffffn);
+              idsData[2 * i + 1] = Number(id >> 32n);
+            }
+            idBuffer.setData(
+              idsData.subarray(0, batchSize * 2),
+              WebGL2RenderingContext.STREAM_DRAW,
+            );
+            gl.drawArrays(gl.POINTS, 0, batchSize);
+            gl.readPixels(
+              0,
+              0,
+              batchSize,
+              1,
+              WebGL2RenderingContext.RGBA,
+              WebGL2RenderingContext.UNSIGNED_BYTE,
+              data,
+            );
+            const outputOffset = batchStart * 4;
+            for (let i = 0; i < batchSize * 4; ++i) {
+              colors[outputOffset + i] = data[i] / 255.0;
+            }
+            batchStart += batchSize;
           }
         } finally {
           this.segmentationColorUserShader.disable(
