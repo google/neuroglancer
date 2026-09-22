@@ -605,9 +605,8 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
     );
 
     const gl = this.layer.manager.chunkManager.chunkQueueManager.gl;
-    this.segmentationColorUserShader = new SegmentColorUserShaderManager(
-      this,
-      gl,
+    this.segmentationColorUserShader = this.layer.registerDisposer(
+      new SegmentColorUserShaderManager(this, gl),
     );
     this.segmentColorFramebuffer = this.layer.registerDisposer(
       new FramebufferConfiguration(gl, {
