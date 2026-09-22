@@ -238,6 +238,24 @@ ${declaration}(vec3 color, bool hasProperties, bool isStated) {
     expectColor(colors.subarray(8, 12) as vec4, [0.0, 0.0, 1.0, 0.0]);
   });
 
+  it("batches lookups that exceed the maximum framebuffer width", () => {
+    const segmentationUserLayer = setupSegmentationLayer();
+    const { displayState } = segmentationUserLayer;
+    displayState.segmentStatedColors.value.set(
+      1n,
+      BigInt(packColor(vec3.fromValues(1.0, 0.0, 0.0))),
+    );
+    const gl = segmentationUserLayer.manager.chunkManager.chunkQueueManager.gl;
+    const ids = new Array<bigint>(gl.maxTextureSize + 1).fill(1n);
+
+    const colors = displayState.getShaderBaseSegmentColors(ids)!;
+    expectColor(colors.subarray(0, 4) as vec4, [1.0, 0.0, 0.0, 0.0]);
+    expectColor(
+      colors.subarray(colors.length - 4) as vec4,
+      [1.0, 0.0, 0.0, 0.0],
+    );
+  });
+
   it("cleans up WebGL state owned by a framebuffer lookup", () => {
     const segmentationUserLayer = setupSegmentationLayer();
     const { displayState } = segmentationUserLayer;
