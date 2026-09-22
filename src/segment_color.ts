@@ -314,6 +314,7 @@ export class SegmentColorUserShaderManager extends RefCounted {
   >;
 
   private segmentPropertyIndexMap = new HashMapUint64();
+  private gpuSegmentPropertyIndexHashTable: GPUHashTable<HashMapUint64>;
   private segmentPropertyIndexMapSource:
     | PreprocessedSegmentPropertyMap
     | undefined;
@@ -327,6 +328,9 @@ export class SegmentColorUserShaderManager extends RefCounted {
     private gl: GL,
   ) {
     super();
+    this.gpuSegmentPropertyIndexHashTable = this.registerDisposer(
+      GPUHashTable.get(gl, this.segmentPropertyIndexMap),
+    );
     this.shaderParameters = this.registerDisposer(
       new AggregateWatchableValue((refCounted) => ({
         hasSegmentDefaultColor: refCounted.registerDisposer(
@@ -969,7 +973,7 @@ vec4 segmentColorUserShader(uint64_t segmentId) {
     this.hashMapManager.enable(
       gl,
       shader,
-      GPUHashTable.get(this.gl, this.segmentPropertyIndexMap),
+      this.gpuSegmentPropertyIndexHashTable,
     );
     for (const identifier of activeSegmentPropertyIdentifiers) {
       const { texture } = this.segmentPropertyShaderData.get(identifier)!;
