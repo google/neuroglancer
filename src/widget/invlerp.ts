@@ -784,21 +784,36 @@ export function countDataInBins(
   return counts;
 }
 
-const createHistogramTextureFromValues = (
-  values: TypedArray<ArrayBuffer>,
-  window: DataTypeInterval,
-  dataType: DataType,
-  gl: GL,
-) => {
-  const histogram = countDataInBins(
-    values,
-    dataType,
-    window[0],
-    window[1],
-    NUM_HISTOGRAM_BINS_IN_RANGE,
-  );
-  return createFloat32Texture1D(gl, histogram);
-};
+export class HistogramTexture extends RefCounted {
+  texture: WebGLTexture | null = null;
+
+  constructor(public gl: GL) {
+    super();
+  }
+
+  update(
+    values: TypedArray<ArrayBuffer>,
+    window: DataTypeInterval,
+    dataType: DataType,
+  ) {
+    const histogram = countDataInBins(
+      values,
+      dataType,
+      window[0],
+      window[1],
+      NUM_HISTOGRAM_BINS_IN_RANGE,
+    );
+    this.gl.deleteTexture(this.texture);
+    this.texture = createFloat32Texture1D(this.gl, histogram);
+    return this.texture;
+  }
+
+  disposed() {
+    this.gl.deleteTexture(this.texture);
+    this.texture = null;
+    super.disposed();
+  }
+}
 
 export class InvlerpWidget extends Tab {
   cdfPanel;
@@ -876,28 +891,19 @@ export class InvlerpWidget extends Tab {
       }),
     );
 
-    const derivedWindowWatchable = makeCachedDerivedWatchableValue(
-      (p) => p.window,
-      [this.trackable],
+    const derivedWindowWatchable = this.registerDisposer(
+      makeCachedDerivedWatchableValue((p) => p.window, [this.trackable]),
     );
 
     if (values) {
-      let previousTextureFromValues: WebGLTexture | null = null;
+      const histogramTexture = this.registerDisposer(
+        new HistogramTexture(this.display.gl),
+      );
       this.textureFromValues = this.registerDisposer(
         makeCachedLazyDerivedWatchableValue(
           (values, window) => {
-            const { gl } = this.display;
-            gl.deleteTexture(previousTextureFromValues);
-            if (!values || !window) return;
-            const { dataType } = this;
-            const texture = createHistogramTextureFromValues(
-              values,
-              window,
-              dataType,
-              gl,
-            );
-            previousTextureFromValues = texture;
-            return texture;
+            if (!values) return;
+            return histogramTexture.update(values, window, this.dataType);
           },
           values,
           derivedWindowWatchable,
