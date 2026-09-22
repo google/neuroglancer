@@ -718,9 +718,12 @@ vColor = segmentColorUserShader(uint64_t(aID));
 
   getShaderBaseSegmentColors = (
     ids: readonly bigint[],
-    colors = new Float32Array(ids.length * 4),
+    colors: Float32Array = new Float32Array(ids.length * 4),
   ) => {
     const numIds = ids.length;
+    if (colors.length < numIds * 4) {
+      throw new RangeError("Output color buffer is too small");
+    }
     if (numIds === 0) return colors;
     const gl = this.layer.manager.chunkManager.chunkQueueManager.gl;
     try {
