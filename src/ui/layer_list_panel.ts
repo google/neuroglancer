@@ -169,12 +169,15 @@ class LayerColorWidget extends RefCounted {
       if (colors.length === 1) setSingleColor();
       else setMultiColor();
     };
+    const scheduleLayerColorUpdate = this.registerCancellable(
+      animationFrameDebounce(updateLayerColorWidget),
+    );
 
     const listenForColorChange = () => {
       if (!this.layer.isReady()) return;
       this.colorChangeDisposer();
       this.colorChangeDisposer = layer.observeLayerColor(() => {
-        updateLayerColorWidget();
+        scheduleLayerColorUpdate();
       });
     };
     this.registerDisposer(this.colorChangeDisposer);
@@ -185,12 +188,12 @@ class LayerColorWidget extends RefCounted {
     this.registerDisposer(
       layer.layerChanged.add(() => {
         element.dataset.visible = this.layer.visible.toString();
-        updateLayerColorWidget();
+        scheduleLayerColorUpdate();
       }),
     );
     element.dataset.visible = this.layer.visible.toString();
     listenForColorChange();
-    updateLayerColorWidget();
+    scheduleLayerColorUpdate();
   }
 
   private updateTooltip(message: string) {
