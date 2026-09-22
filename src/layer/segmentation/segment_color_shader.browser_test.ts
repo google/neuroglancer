@@ -238,6 +238,16 @@ ${declaration}(vec3 color, bool hasProperties, bool isStated) {
     expectColor(colors.subarray(8, 12) as vec4, [0.0, 0.0, 1.0, 0.0]);
   });
 
+  it("rejects an undersized output color buffer", () => {
+    const segmentationUserLayer = setupSegmentationLayer();
+    expect(() =>
+      segmentationUserLayer.displayState.getShaderBaseSegmentColors(
+        [1n, 2n],
+        new Float32Array(7),
+      ),
+    ).toThrow(RangeError);
+  });
+
   it("batches lookups that exceed the maximum framebuffer width", () => {
     const segmentationUserLayer = setupSegmentationLayer();
     const { displayState } = segmentationUserLayer;
