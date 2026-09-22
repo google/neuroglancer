@@ -161,6 +161,7 @@ import type { DependentViewContext } from "#src/widget/dependent_view_widget.js"
 import { registerLayerShaderControlsTool } from "#src/widget/shader_controls.js";
 
 const MAX_LAYER_BAR_UI_INDICATOR_COLORS = 6;
+const MAX_LAYER_BAR_SEGMENTS_TO_CHECK = 10_000;
 const emptySegmentColorShaderModule: ShaderModule = () => {};
 
 export class SegmentationUserLayerGroupState
@@ -648,7 +649,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
 
   renderScaleHistogram = new RenderScaleHistogram();
   renderScaleTarget = trackableRenderScaleTarget(1);
-  selectSegment: (id: bigint, pin: boolean | "toggle") => void;
+  selectSegment: SegmentationDisplayState["selectSegment"];
   transparentPickEnabled: TrackableBoolean;
   baseSegmentColoring = new TrackableBoolean(false, false);
   baseSegmentHighlighting = new TrackableBoolean(false, false);
@@ -1588,6 +1589,10 @@ export class SegmentationUserLayer extends Base {
       callback,
       this.displayState.segmentDefaultColor,
     );
+    const shaderDisposer = observeWatchable(
+      callback,
+      this.displayState.fragmentSegmentColor,
+    );
     const visibleSegmentDisposer =
       this.displayState.segmentationGroupState.value.visibleSegments.changed.add(
         callback,
@@ -1602,6 +1607,7 @@ export class SegmentationUserLayer extends Base {
     return () => {
       disposer();
       defaultColorDisposer();
+      shaderDisposer();
       visibleSegmentDisposer();
       colorHashChangeDisposer();
       showAllByDefaultDisposer();
@@ -1613,54 +1619,44 @@ export class SegmentationUserLayer extends Base {
     const { displayState } = this;
     const visibleSegmentsSet =
       displayState.segmentationGroupState.value.visibleSegments;
-    const fixedColor = displayState.segmentDefaultColor.value;
 
-    const noVisibleSegments = visibleSegmentsSet.size === 0;
-    const tooManyVisibleSegments =
-      visibleSegmentsSet.size > MAX_LAYER_BAR_UI_INDICATOR_COLORS;
-    const hasMappedColors =
-      displayState.segmentationColorGroupState.value.segmentStatedColors.size >
-      0;
-    const isFixedColorOnly = fixedColor !== undefined && !hasMappedColors;
-    const showAllByDefault = displayState.ignoreNullVisibleSet.value;
-    const hasVolume = displayState.hasVolume.value;
+    if (
+      visibleSegmentsSet.size === 0 &&
+      (!displayState.ignoreNullVisibleSet.value ||
+        !displayState.hasVolume.value)
+    ) {
+      return []; // No segments visible
+    }
 
-    if (noVisibleSegments) {
-      if (!showAllByDefault || !hasVolume) return []; // No segments visible
-      if (isFixedColorOnly) return [getCssColor(fixedColor)];
+    const defaultColor = displayState.segmentDefaultColor.value;
+    if (
+      defaultColor !== undefined &&
+      displayState.fragmentSegmentColor.value ===
+        DEFAULT_USER_MAIN_SEGMENT_COLOR
+    ) {
+      return [getCssColor(defaultColor)];
+    }
+
+    if (visibleSegmentsSet.size === 0) {
       return undefined; // Rainbow colors
     }
-    if (isFixedColorOnly) {
-      return [getCssColor(fixedColor)]; // All segments show as one color
-    }
 
-    // Because manually mapped colors are not guaranteed to be unique,
-    // we need to actually check all the visible segments if
-    // manually mapped colors are used
-    if (!hasMappedColors && tooManyVisibleSegments) {
-      return undefined; // Too many segments to show
+    const visibleSegments: bigint[] = [];
+    for (const id of visibleSegmentsSet) {
+      visibleSegments.push(id);
+      if (visibleSegments.length === MAX_LAYER_BAR_SEGMENTS_TO_CHECK) break;
     }
+    visibleSegments.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 
-    const visibleSegments = [...visibleSegmentsSet];
     const baseColors = getBaseObjectColors(displayState, visibleSegments);
-    const colors = visibleSegments.map((id, index) => {
-      const color = getCssColor(baseColors.subarray(4 * index, 4 * index + 4));
-      return { color, id };
-    });
-
-    // Sort the colors by their segment ID
-    // Otherwise, the order is random which is a bit confusing in the UI
-    colors.sort((a, b) => {
-      const aId = a.id;
-      const bId = b.id;
-      return aId < bId ? -1 : aId > bId ? 1 : 0;
-    });
-
-    const uniqueColors = [...new Set(colors.map((color) => color.color))];
-    if (uniqueColors.length > MAX_LAYER_BAR_UI_INDICATOR_COLORS) {
+    const uniqueColors = new Set<string>();
+    for (let i = 0; i < visibleSegments.length; ++i) {
+      uniqueColors.add(getCssColor(baseColors.subarray(4 * i, 4 * i + 4)));
+    }
+    if (uniqueColors.size > MAX_LAYER_BAR_UI_INDICATOR_COLORS) {
       return undefined; // Too many colors to show
     }
-    return uniqueColors;
+    return [...uniqueColors];
   }
 
   static type = "segmentation";
