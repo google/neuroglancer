@@ -20,9 +20,10 @@
 
 import "#src/widget/tab_view.css";
 
-import type {
-  WatchableValueChangeInterface,
-  WatchableValueInterface,
+import {
+  WatchableValue,
+  type WatchableValueChangeInterface,
+  type WatchableValueInterface,
 } from "#src/trackable_value.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import type { Owned } from "#src/util/disposable.js";
@@ -34,6 +35,7 @@ import { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.j
 
 export class Tab extends RefCounted {
   element = document.createElement("div");
+  embeddedTabHost: HTMLElement | undefined;
 
   get visible() {
     return this.visibility.visible;
@@ -282,6 +284,7 @@ export class TabSpecification extends OptionSpecification<{
   order?: number;
   getter: () => Owned<Tab>;
   hidden?: WatchableValueInterface<boolean>;
+  parent?: string;
 }> {}
 
 function updateTabLabelVisibilityStyle(
@@ -300,7 +303,7 @@ export interface TabViewOptions {
   makeTab: (id: string) => Tab;
   selectedTab: WatchableValueInterface<string | undefined>;
   tabs: WatchableValueChangeInterface<
-    { id: string; label: string; hidden: boolean }[]
+    { id: string; label: string; hidden: boolean; parent?: string }[]
   >;
   handleTabElement?: (id: string, element: HTMLElement) => void;
 }
@@ -310,7 +313,7 @@ export class TabView extends RefCounted {
   tabBar = document.createElement("div");
 
   tabs: WatchableValueChangeInterface<
-    { id: string; label: string; hidden: boolean }[]
+    { id: string; label: string; hidden: boolean; parent?: string }[]
   >;
   selectedTab: WatchableValueInterface<string | undefined>;
   private handleTabElement:
@@ -318,8 +321,11 @@ export class TabView extends RefCounted {
     | undefined;
 
   private stack: StackView<string>;
+  private displayedTab = new WatchableValue<string | undefined>(undefined);
   private tabLabels = new Map<string, HTMLElement>();
+  private renderedEmbeddedChildren = new Map<string, string[]>();
   private tabsGeneration = -1;
+  private makeTab: (id: string) => Tab;
 
   get visible() {
     return this.visibility.visible;
@@ -339,6 +345,8 @@ export class TabView extends RefCounted {
     this.tabs = options.tabs;
     this.selectedTab = options.selectedTab;
     this.handleTabElement = options.handleTabElement;
+    this.makeTab = options.makeTab;
+    this.updateDisplayedTab();
     const { element, tabBar } = this;
     element.className = "neuroglancer-tab-view";
     tabBar.className = "neuroglancer-tab-view-bar";
@@ -346,8 +354,8 @@ export class TabView extends RefCounted {
     this.registerDisposer(visibility.changed.add(this.debouncedUpdateView));
     const stack = (this.stack = this.registerDisposer(
       new StackView<string>(
-        options.makeTab,
-        options.selectedTab,
+        (id) => this.makeTabWithEmbeddedChildren(id),
+        this.displayedTab,
         this.visibility,
       ),
     ));
@@ -356,6 +364,7 @@ export class TabView extends RefCounted {
     let prevSelectedId = this.selectedTab.value;
     this.registerDisposer(
       options.selectedTab.changed.add(() => {
+        this.updateDisplayedTab();
         const tabs = this.tabs.value;
         const prevSelectedTab = tabs.find(({ id }) => id === prevSelectedId);
         if (prevSelectedTab?.hidden) {
@@ -371,8 +380,83 @@ export class TabView extends RefCounted {
     this.updateTabs();
   }
 
+  flush() {
+    this.debouncedUpdateView.flush();
+    this.updateDisplayedTab();
+    this.stack.flush();
+  }
+
+  private getEmbeddedParent(
+    id: string,
+    tabs = this.tabs.value,
+  ): string | undefined {
+    const tab = tabs.find((x) => x.id === id);
+    if (tab?.parent === undefined || tab.parent === id) return undefined;
+    const parent = tabs.find((x) => x.id === tab.parent);
+    if (parent === undefined || parent.parent !== undefined) return undefined;
+    return parent.id;
+  }
+
+  private getOuterTabs() {
+    return this.tabs.value.filter(
+      ({ id }) => this.getEmbeddedParent(id) === undefined,
+    );
+  }
+
+  private getEmbeddedChildren(parentId: string) {
+    return this.tabs.value.filter(
+      ({ id }) => this.getEmbeddedParent(id) === parentId,
+    );
+  }
+
+  private updateDisplayedTab() {
+    const selected = this.selectedTab.value;
+    this.displayedTab.value =
+      selected === undefined
+        ? undefined
+        : (this.getEmbeddedParent(selected) ?? selected);
+  }
+
+  private makeTabWithEmbeddedChildren(id: string) {
+    const tab = this.makeTab(id);
+    const children = this.getEmbeddedChildren(id);
+    this.renderedEmbeddedChildren.set(
+      id,
+      children.map(({ id }) => id),
+    );
+    if (children.length === 0) return tab;
+    const host = tab.embeddedTabHost;
+    if (host === undefined) {
+      throw new Error(`Tab ${JSON.stringify(id)} has no embedded tab host.`);
+    }
+    for (const child of children) {
+      const childTab = tab.registerDisposer(this.makeTab(child.id));
+      const container = document.createElement("div");
+      container.classList.add("neuroglancer-embedded-tab");
+      const label = document.createElement("div");
+      label.classList.add(
+        "neuroglancer-tab-label",
+        "neuroglancer-embedded-tab-label",
+      );
+      label.textContent = child.label;
+      this.handleTabElement?.(child.id, label);
+      const content = document.createElement("div");
+      content.classList.add("neuroglancer-embedded-tab-content");
+      content.appendChild(childTab.element);
+      container.append(label, content);
+      host.appendChild(container);
+      tab.registerDisposer(() => removeFromParent(container));
+      const updateVisibility = () => {
+        childTab.visibility.value = tab.visibility.value;
+      };
+      tab.registerDisposer(tab.visibility.changed.add(updateVisibility));
+      updateVisibility();
+    }
+    return tab;
+  }
+
   private updateTabLabelStyles() {
-    const selectedId = this.selectedTab.value;
+    const selectedId = this.displayedTab.value;
     for (const [id, element] of this.tabLabels) {
       updateTabLabelVisibilityStyle(element, id === selectedId);
     }
@@ -385,6 +469,7 @@ export class TabView extends RefCounted {
         this.makeTabs();
       }
     }
+    this.updateDisplayedTab();
   }
 
   private destroyTabs() {
@@ -394,11 +479,27 @@ export class TabView extends RefCounted {
     this.tabLabels.clear();
     if (!this.visible) {
       this.stack.invalidateAll();
+      this.renderedEmbeddedChildren.clear();
     } else {
-      const tabs = this.tabs.value;
-      this.stack.invalidateAll(
-        (existingId) => tabs.find(({ id }) => id === existingId) !== undefined,
-      );
+      const outerTabs = this.getOuterTabs();
+      const preservedEmbeddedChildren = new Map<string, string[]>();
+      this.stack.invalidateAll((existingId) => {
+        if (!outerTabs.some(({ id }) => id === existingId)) return false;
+        const previousChildren =
+          this.renderedEmbeddedChildren.get(existingId) ?? [];
+        const currentChildren = this.getEmbeddedChildren(existingId).map(
+          ({ id }) => id,
+        );
+        if (
+          previousChildren.length !== currentChildren.length ||
+          previousChildren.some((id, index) => id !== currentChildren[index])
+        ) {
+          return false;
+        }
+        preservedEmbeddedChildren.set(existingId, previousChildren);
+        return true;
+      });
+      this.renderedEmbeddedChildren = preservedEmbeddedChildren;
     }
     removeChildren(this.tabBar);
     this.tabsGeneration = -1;
@@ -406,8 +507,8 @@ export class TabView extends RefCounted {
 
   private makeTabs() {
     const { tabBar, tabLabels, handleTabElement } = this;
-    for (const { id, label, hidden } of this.tabs.value) {
-      if (hidden && id !== this.selectedTab.value) continue;
+    for (const { id, label, hidden } of this.getOuterTabs()) {
+      if (hidden && id !== this.displayedTab.value) continue;
       const labelElement = document.createElement("div");
       labelElement.classList.add("neuroglancer-tab-label");
       labelElement.textContent = label;

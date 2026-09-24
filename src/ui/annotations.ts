@@ -165,6 +165,7 @@ import { numberToStringFixed } from "#src/util/number_to_string.js";
 import { formatScaleWithUnitAsString } from "#src/util/si_units.js";
 import { NullarySignal, Signal } from "#src/util/signal.js";
 import * as vector from "#src/util/vector.js";
+import { VisibilityPriorityAggregator } from "#src/visibility_priority/frontend.js";
 import { makeAddButton } from "#src/widget/add_button.js";
 import { ColorWidget } from "#src/widget/color.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
@@ -321,6 +322,9 @@ interface AnnotationLayerViewAttachedState {
 }
 
 export class AnnotationLayerView extends Tab {
+  private viewVisibility: VisibilityPriorityAggregator;
+  readonly filterElement = document.createElement("div");
+  readonly embeddedTabHost = document.createElement("div");
   private previousSelectedState:
     | {
         annotationId: string;
@@ -542,8 +546,12 @@ export class AnnotationLayerView extends Tab {
     public layer: Borrowed<UserLayerWithAnnotations>,
     public displayState: AnnotationDisplayState,
   ) {
-    super();
+    const viewVisibility = new VisibilityPriorityAggregator();
+    super(viewVisibility);
+    this.viewVisibility = viewVisibility;
     this.element.classList.add("neuroglancer-annotation-layer-view");
+    this.filterElement.classList.add("neuroglancer-annotation-filter");
+    this.embeddedTabHost.classList.add("neuroglancer-annotation-filter-host");
     this.selectedAnnotationState = makeCachedLazyDerivedWatchableValue(
       (selectionState, pin) => {
         if (selectionState === undefined) return undefined;
@@ -700,7 +708,7 @@ export class AnnotationLayerView extends Tab {
       label.style.display = "none";
       queryInputContainer.appendChild(label);
     }
-    this.element.appendChild(queryInputContainer);
+    this.filterElement.appendChild(queryInputContainer);
 
     this.queryStatisticsElement.classList.add(
       "neuroglancer-property-list-status",
@@ -722,7 +730,7 @@ export class AnnotationLayerView extends Tab {
       this.derivedWarningElement,
       this.loadedNoticeElement,
     );
-    this.element.append(
+    this.filterElement.append(
       this.queryStatistics.root,
       this.queryStatistics.separator,
       this.queryStatisticsElement,
@@ -747,6 +755,7 @@ export class AnnotationLayerView extends Tab {
     const { virtualList } = this;
     virtualList.element.classList.add("neuroglancer-annotation-list");
     virtualList.header.appendChild(this.headerRow);
+    this.element.appendChild(this.embeddedTabHost);
     this.element.appendChild(virtualList.element);
     this.virtualList.element.addEventListener("mouseleave", () => {
       this.displayState.hoverState.value = undefined;
@@ -807,6 +816,10 @@ export class AnnotationLayerView extends Tab {
     this.registerDisposer(() => {
       this.layer.annotationListOrder = undefined;
     });
+  }
+
+  attachView(tab: Tab) {
+    return this.viewVisibility.add(tab.visibility);
   }
 
   private findStateForAnnotationId(
@@ -2039,13 +2052,23 @@ export class AnnotationTab extends Tab {
   private layerView: AnnotationLayerView;
   constructor(public layer: Borrowed<UserLayerWithAnnotations>) {
     super();
-    this.layerView = this.registerDisposer(
-      new AnnotationLayerView(layer, layer.annotationDisplayState),
-    );
+    this.layerView = getAnnotationLayerView(layer);
+    this.registerDisposer(this.layerView.attachView(this));
+    this.embeddedTabHost = this.layerView.embeddedTabHost;
 
     const { element } = this;
     element.classList.add("neuroglancer-annotations-tab");
     element.appendChild(this.layerView.element);
+  }
+}
+
+export class AnnotationFilterTab extends Tab {
+  constructor(public layer: Borrowed<UserLayerWithAnnotations>) {
+    super();
+    const layerView = getAnnotationLayerView(layer);
+    this.registerDisposer(layerView.attachView(this));
+    this.element.classList.add("neuroglancer-annotation-filter-tab");
+    this.element.appendChild(layerView.filterElement);
   }
 }
 
@@ -2959,6 +2982,12 @@ export function UserLayerWithAnnotationsMixin<
         order: 10,
         getter: () => new AnnotationTab(this),
       });
+      this.tabs.add("annotationFilter", {
+        label: "Filter",
+        order: 11,
+        parent: "annotations",
+        getter: () => new AnnotationFilterTab(this),
+      });
 
       let annotationStateReadyBinding: (() => void) | undefined;
 
@@ -3807,6 +3836,24 @@ type UserLayerWithAnnotationsClass = ReturnType<
 
 export type UserLayerWithAnnotations =
   InstanceType<UserLayerWithAnnotationsClass>;
+
+const annotationLayerViews = new WeakMap<
+  UserLayerWithAnnotations,
+  AnnotationLayerView
+>();
+
+function getAnnotationLayerView(
+  layer: Borrowed<UserLayerWithAnnotations>,
+): AnnotationLayerView {
+  let layerView = annotationLayerViews.get(layer);
+  if (layerView !== undefined) return layerView;
+  layerView = layer.registerDisposer(
+    new AnnotationLayerView(layer, layer.annotationDisplayState),
+  );
+  annotationLayerViews.set(layer, layerView);
+  layerView.registerDisposer(() => annotationLayerViews.delete(layer));
+  return layerView;
+}
 
 function mergeAnnotationConstraints<T extends { fieldId: string }>(
   textConstraints: T[],
