@@ -21,6 +21,30 @@
   flex-direction: column;
 }
 
+.neuroglancer-annotation-filter-host,
+.neuroglancer-annotation-filter-tab,
+.neuroglancer-annotation-filter {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.neuroglancer-annotation-filter-tab,
+.neuroglancer-annotation-filter-tab > .neuroglancer-annotation-filter {
+  flex: 1;
+}
+
+.neuroglancer-annotation-filter-tab > .neuroglancer-annotation-filter {
+  overflow: auto;
+}
+
+.neuroglancer-tab-view
+  > .neuroglancer-stack-view
+  > .neuroglancer-annotation-filter-tab
+  .neuroglancer-property-list-statistics {
+  max-height: none;
+}
+
 .neuroglancer-annotation-list {
   position: relative;
   margin: 0px;

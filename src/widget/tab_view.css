@@ -64,3 +64,36 @@
   min-height: 0px;
   padding: 2px;
 }
+
+.neuroglancer-embedded-tab {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.neuroglancer-embedded-tab-label {
+  align-self: flex-start;
+  position: relative;
+  z-index: 1;
+  border-top-color: white;
+  border-left-color: white;
+  border-right-color: white;
+  border-bottom: 1px solid black;
+  margin-bottom: -1px;
+  padding-bottom: 1px;
+  background-color: black;
+  cursor: grab;
+}
+
+.neuroglancer-embedded-tab-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-top: 1px solid white;
+}
+
+.neuroglancer-embedded-tab-content > .neuroglancer-tab-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
