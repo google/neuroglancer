@@ -29,6 +29,10 @@ import type {
   PerspectiveViewRenderContext,
 } from "#src/perspective_view/render_layer.js";
 import { PerspectiveViewRenderLayer } from "#src/perspective_view/render_layer.js";
+import {
+  type TrackableTransparentMeshRenderingMode,
+  TransparentMeshRenderingMode,
+} from "#src/perspective_view/transparent_mesh_rendering.js";
 import type { ProjectionParameters } from "#src/projection_parameters.js";
 import { updateProjectionParametersFromInverseViewAndProjection } from "#src/projection_parameters.js";
 import type {
@@ -72,13 +76,14 @@ import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
 import { isProjectionLayer } from "#src/volume_rendering/trackable_volume_rendering_mode.js";
 import type { VolumeRenderingRenderLayer } from "#src/volume_rendering/volume_render_layer.js";
 import {
+  DepthTextureBuffer,
   DepthStencilRenderbuffer,
   FramebufferConfiguration,
   makeTextureBuffers,
   OffscreenCopyHelper,
   TextureBuffer,
 } from "#src/webgl/offscreen.js";
-import type { ShaderBuilder } from "#src/webgl/shader.js";
+import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import type { ScaleBarOptions } from "#src/widget/scale_bar.js";
 import { MultipleScaleBarTextures } from "#src/widget/scale_bar.js";
 import type { RPC } from "#src/worker_rpc.js";
@@ -86,6 +91,7 @@ import { SharedObject } from "#src/worker_rpc.js";
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   wireFrame: WatchableValueInterface<boolean>;
+  transparentMeshRenderingMode: TrackableTransparentMeshRenderingMode;
   enableAdaptiveDownsampling: WatchableValueInterface<boolean>;
   orthographicProjection: TrackableBoolean;
   showSliceViews: TrackableBoolean;
@@ -133,6 +139,14 @@ float computeOITWeight(float alpha, float depth) {
 }
 `;
 
+export const glsl_computeImprovedOITWeight = `
+float computeOITWeight(float alpha, float depth) {
+  float a = min(1.0, alpha * 10.0) + 0.01;
+  float b = 1.0 - depth * 0.9;
+  return clamp(a * a * a * 1e8 * b * b * b, 1e-2, 3e3);
+}
+`;
+
 // Color must be premultiplied by alpha.
 // Can use emitAccumAndRevealage() to emit a pre-weighted OIT result.
 export const glsl_perspectivePanelEmitOIT = [
@@ -150,6 +164,82 @@ void emit(vec4 color, highp uint pickId) {
 `,
 ];
 
+export const glsl_perspectivePanelEmitImprovedOIT = [
+  glsl_computeImprovedOITWeight,
+  `
+void emitAccumAndRevealage(vec4 accum, float revealage, highp uint pickId) {
+  v4f_fragData0 = vec4(accum.rgb, revealage);
+  v4f_fragData1 = vec4(accum.a, 0.0, 0.0, 0.0);
+}
+void emit(vec4 color, highp uint pickId) {
+  float weight = computeOITWeight(color.a, gl_FragCoord.z);
+  emitAccumAndRevealage(color * weight, color.a, pickId);
+}
+`,
+];
+
+const previousPeelDepthSampler = Symbol("previousPeelDepth");
+const opaqueDepthSampler = Symbol("opaqueDepth");
+const HIGH_QUALITY_MESH_PEEL_LAYERS = 8;
+
+export const glsl_isBehindPreviousPeelDepth = `
+bool isBehindPreviousPeelDepth(float depth, float previousDepth) {
+  // Prevent a fragment from peeling again when DEPTH_COMPONENT24 rounds its depth downward.
+  const float depthEpsilon = 2.0 / 16777215.0;
+  return depth > previousDepth + depthEpsilon;
+}
+`;
+
+export function perspectivePanelEmitDepthPeel(builder: ShaderBuilder) {
+  builder.addOutputBuffer("vec4", "v4f_fragColor", 0);
+  builder.addTextureSampler(
+    "sampler2D",
+    "uPreviousPeelDepth",
+    previousPeelDepthSampler,
+  );
+  builder.addTextureSampler("sampler2D", "uOpaqueDepth", opaqueDepthSampler);
+  builder.addUniform("bool", "uHasPreviousPeelDepth");
+  builder.addFragmentCode(glsl_isBehindPreviousPeelDepth);
+  builder.addFragmentCode(`
+void emit(vec4 color, highp uint pickId) {
+  ivec2 position = ivec2(gl_FragCoord.xy);
+  float opaqueDepth = texelFetch(uOpaqueDepth, position, 0).r;
+  if (gl_FragCoord.z >= opaqueDepth) discard;
+  if (uHasPreviousPeelDepth &&
+      !isBehindPreviousPeelDepth(
+        gl_FragCoord.z,
+        texelFetch(uPreviousPeelDepth, position, 0).r)) discard;
+  v4f_fragColor = color;
+}
+`);
+}
+
+export function perspectivePanelEmitDepthPeelTail(builder: ShaderBuilder) {
+  builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
+  builder.addOutputBuffer("vec4", "v4f_fragData1", 1);
+  builder.addTextureSampler(
+    "sampler2D",
+    "uPreviousPeelDepth",
+    previousPeelDepthSampler,
+  );
+  builder.addFragmentCode(glsl_computeImprovedOITWeight);
+  builder.addFragmentCode(glsl_isBehindPreviousPeelDepth);
+  builder.addFragmentCode(`
+void emitAccumAndRevealage(vec4 accum, float revealage, highp uint pickId) {
+  v4f_fragData0 = vec4(accum.rgb, revealage);
+  v4f_fragData1 = vec4(accum.a, 0.0, 0.0, 0.0);
+}
+void emit(vec4 color, highp uint pickId) {
+  ivec2 position = ivec2(gl_FragCoord.xy);
+  if (!isBehindPreviousPeelDepth(
+      gl_FragCoord.z,
+      texelFetch(uPreviousPeelDepth, position, 0).r)) discard;
+  float weight = computeOITWeight(color.a, gl_FragCoord.z);
+  emitAccumAndRevealage(color * weight, color.a, pickId);
+}
+`);
+}
+
 export function perspectivePanelEmit(builder: ShaderBuilder) {
   builder.addOutputBuffer("vec4", "out_color", OffscreenTextures.COLOR);
   builder.addOutputBuffer("highp vec4", "out_z", OffscreenTextures.Z);
@@ -161,6 +251,12 @@ export function perspectivePanelEmitOIT(builder: ShaderBuilder) {
   builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
   builder.addOutputBuffer("vec4", "v4f_fragData1", 1);
   builder.addFragmentCode(glsl_perspectivePanelEmitOIT);
+}
+
+export function perspectivePanelEmitImprovedOIT(builder: ShaderBuilder) {
+  builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
+  builder.addOutputBuffer("vec4", "v4f_fragData1", 1);
+  builder.addFragmentCode(glsl_perspectivePanelEmitImprovedOIT);
 }
 
 export function maxProjectionEmit(builder: ShaderBuilder) {
@@ -196,6 +292,51 @@ v4f_fragColor = vec4(accum.rgb / accum.a, revealage);
 `);
 }
 
+function defineImprovedTransparencyCopyShader(builder: ShaderBuilder) {
+  builder.addOutputBuffer("vec4", "v4f_fragColor", null);
+  builder.setFragmentMain(`
+vec4 v0 = getValue0();
+float revealage = v0.a;
+float accumulatedAlpha = getValue1().r;
+vec3 color = accumulatedAlpha > 1e-5
+    ? v0.rgb / accumulatedAlpha
+    : vec3(0.0);
+
+v4f_fragColor = vec4(color, revealage);
+`);
+}
+
+function defineFirstPeelLayerCopyShader(builder: ShaderBuilder) {
+  builder.addOutputBuffer("vec4", "v4f_fragColor", 0);
+  builder.addOutputBuffer("vec4", "v4f_fragDepth", 1);
+  builder.setFragmentMain(`
+v4f_fragColor = getValue0();
+v4f_fragDepth = vec4(getValue1().r);
+`);
+}
+
+function defineOITToPremultipliedShader(builder: ShaderBuilder) {
+  builder.addOutputBuffer("vec4", "v4f_fragColor", null);
+  builder.setFragmentMain(`
+vec4 accum = vec4(getValue0().rgb, getValue1().r);
+float opacity = 1.0 - getValue0().a;
+vec3 color = accum.a > 1e-5 ? accum.rgb / accum.a : vec3(0.0);
+v4f_fragColor = vec4(color * opacity, opacity);
+`);
+}
+
+function defineMeshCompositeToOITShader(builder: ShaderBuilder) {
+  builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
+  builder.addOutputBuffer("vec4", "v4f_fragData1", 1);
+  builder.addFragmentCode(glsl_computeImprovedOITWeight);
+  builder.setFragmentMain(`
+vec4 color = getValue0();
+float weight = computeOITWeight(color.a, getValue1().r);
+v4f_fragData0 = vec4(color.rgb * weight, color.a);
+v4f_fragData1 = vec4(color.a * weight, 0.0, 0.0, 0.0);
+`);
+}
+
 function defineTransparentToTransparentCopyShader(builder: ShaderBuilder) {
   builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
   builder.addOutputBuffer("vec4", "v4f_fragData1", 1);
@@ -223,6 +364,18 @@ vec4 accum = color * weight;
 float revealage = color.a;
 
 emitAccumAndRevealage(accum, revealage, 0u);
+`);
+}
+
+function defineImprovedMaxProjectionColorCopyShader(builder: ShaderBuilder) {
+  builder.addOutputBuffer("vec4", "v4f_fragData0", 0);
+  builder.addOutputBuffer("vec4", "v4f_fragData1", 1);
+  builder.addFragmentCode(glsl_perspectivePanelEmitImprovedOIT);
+  builder.setFragmentMain(`
+vec4 color = getValue0();
+float bufferDepth = getValue1().r;
+float weight = computeOITWeight(color.a, 1.0 - bufferDepth);
+emitAccumAndRevealage(color * weight, color.a, 0u);
 `);
 }
 
@@ -346,7 +499,12 @@ export class PerspectivePanel extends RenderedDataPanel {
           WebGL2RenderingContext.FLOAT,
         ),
       ],
-      depthBuffer: new DepthStencilRenderbuffer(this.gl),
+      depthBuffer: new DepthTextureBuffer(
+        this.gl,
+        WebGL2RenderingContext.DEPTH24_STENCIL8,
+        WebGL2RenderingContext.DEPTH_STENCIL,
+        WebGL2RenderingContext.UNSIGNED_INT_24_8,
+      ),
     }),
   );
 
@@ -366,11 +524,26 @@ export class PerspectivePanel extends RenderedDataPanel {
     | FramebufferConfiguration<TextureBuffer>
     | undefined;
 
+  protected highQualityMeshPeelConfigurations_:
+    | FramebufferConfiguration<TextureBuffer, DepthTextureBuffer>[]
+    | undefined;
+
+  protected highQualityMeshAccumulationConfiguration_:
+    | FramebufferConfiguration<TextureBuffer>
+    | undefined;
+
+  protected highQualityMeshTailConfiguration_:
+    | FramebufferConfiguration<TextureBuffer>
+    | undefined;
+
   protected offscreenCopyHelper = this.registerDisposer(
     OffscreenCopyHelper.get(this.gl),
   );
   protected transparencyCopyHelper = this.registerDisposer(
     OffscreenCopyHelper.get(this.gl, defineTransparencyCopyShader, 2),
+  );
+  protected improvedTransparencyCopyHelper = this.registerDisposer(
+    OffscreenCopyHelper.get(this.gl, defineImprovedTransparencyCopyShader, 2),
   );
   protected transparentToTransparentCopyHelper = this.registerDisposer(
     OffscreenCopyHelper.get(
@@ -381,6 +554,22 @@ export class PerspectivePanel extends RenderedDataPanel {
   );
   protected maxProjectionColorCopyHelper = this.registerDisposer(
     OffscreenCopyHelper.get(this.gl, defineMaxProjectionColorCopyShader, 2),
+  );
+  protected improvedMaxProjectionColorCopyHelper = this.registerDisposer(
+    OffscreenCopyHelper.get(
+      this.gl,
+      defineImprovedMaxProjectionColorCopyShader,
+      2,
+    ),
+  );
+  protected firstPeelLayerCopyHelper = this.registerDisposer(
+    OffscreenCopyHelper.get(this.gl, defineFirstPeelLayerCopyShader, 2),
+  );
+  protected oitToPremultipliedCopyHelper = this.registerDisposer(
+    OffscreenCopyHelper.get(this.gl, defineOITToPremultipliedShader, 2),
+  );
+  protected meshCompositeToOITCopyHelper = this.registerDisposer(
+    OffscreenCopyHelper.get(this.gl, defineMeshCompositeToOITShader, 2),
   );
   protected maxProjectionPickCopyHelper = this.registerDisposer(
     OffscreenCopyHelper.get(this.gl, defineMaxProjectionPickCopyShader, 2),
@@ -587,6 +776,11 @@ export class PerspectivePanel extends RenderedDataPanel {
     );
     this.registerDisposer(
       viewer.wireFrame.changed.add(() => this.scheduleRedraw()),
+    );
+    this.registerDisposer(
+      viewer.transparentMeshRenderingMode.changed.add(() =>
+        this.scheduleRedraw(),
+      ),
     );
     this.registerDisposer(
       viewer.hideCrossSectionBackground3D.changed.add(() =>
@@ -825,6 +1019,98 @@ export class PerspectivePanel extends RenderedDataPanel {
     return volumeRenderingConfiguration;
   }
 
+  private get highQualityMeshPeelConfigurations() {
+    let configurations = this.highQualityMeshPeelConfigurations_;
+    if (configurations === undefined) {
+      configurations = this.highQualityMeshPeelConfigurations_ = [0, 1].map(
+        () =>
+          this.registerDisposer(
+            new FramebufferConfiguration(this.gl, {
+              colorBuffers: makeTextureBuffers(
+                this.gl,
+                1,
+                this.gl.RGBA32F,
+                this.gl.RGBA,
+                this.gl.FLOAT,
+              ),
+              depthBuffer: new DepthTextureBuffer(
+                this.gl,
+                this.gl.DEPTH_COMPONENT24,
+                this.gl.DEPTH_COMPONENT,
+                this.gl.UNSIGNED_INT,
+              ),
+            }),
+          ),
+      );
+    }
+    return configurations;
+  }
+
+  private get highQualityMeshAccumulationConfiguration() {
+    let configuration = this.highQualityMeshAccumulationConfiguration_;
+    if (configuration === undefined) {
+      configuration = this.highQualityMeshAccumulationConfiguration_ =
+        this.registerDisposer(
+          new FramebufferConfiguration(this.gl, {
+            colorBuffers: makeTextureBuffers(
+              this.gl,
+              2,
+              this.gl.RGBA32F,
+              this.gl.RGBA,
+              this.gl.FLOAT,
+            ),
+          }),
+        );
+    }
+    return configuration;
+  }
+
+  private get highQualityMeshTailConfiguration() {
+    let configuration = this.highQualityMeshTailConfiguration_;
+    if (configuration === undefined) {
+      configuration = this.highQualityMeshTailConfiguration_ =
+        this.registerDisposer(
+          new FramebufferConfiguration(this.gl, {
+            colorBuffers: makeTextureBuffers(
+              this.gl,
+              2,
+              this.gl.RGBA32F,
+              this.gl.RGBA,
+              this.gl.FLOAT,
+            ),
+            depthBuffer: this.offscreenFramebuffer.depthBuffer!.addRef(),
+          }),
+        );
+    }
+    return configuration;
+  }
+
+  private bindDepthPeelingEmitter(
+    shader: ShaderProgram,
+    previousDepthTexture: WebGLTexture | null | undefined,
+  ) {
+    const { gl } = this;
+    const previousDepthTextureUnit = shader.textureUnit(
+      previousPeelDepthSampler,
+    );
+    gl.activeTexture(gl.TEXTURE0 + previousDepthTextureUnit);
+    gl.bindTexture(
+      gl.TEXTURE_2D,
+      previousDepthTexture ?? this.offscreenFramebuffer.depthBuffer!.texture,
+    );
+    gl.uniform1i(
+      shader.uniform("uHasPreviousPeelDepth"),
+      previousDepthTexture === undefined ? 0 : 1,
+    );
+
+    const opaqueDepthTextureUnit = shader.textureUnit(opaqueDepthSampler);
+    gl.activeTexture(gl.TEXTURE0 + opaqueDepthTextureUnit);
+    gl.bindTexture(
+      gl.TEXTURE_2D,
+      this.offscreenFramebuffer.depthBuffer!.texture,
+    );
+  }
+
   private get maxProjectionConfiguration() {
     let maxProjectionConfiguration = this.maxProjectionConfiguration_;
     if (maxProjectionConfiguration === undefined) {
@@ -882,6 +1168,121 @@ export class PerspectivePanel extends RenderedDataPanel {
         );
     }
     return maxProjectionPickConfiguration;
+  }
+
+  private drawHighQualityMeshes(
+    renderContext: PerspectiveViewRenderContext,
+    width: number,
+    height: number,
+  ) {
+    const { visibleLayers } = this.visibleLayerTracker;
+    let hasTransparentMesh = false;
+    for (const [renderLayer] of visibleLayers) {
+      if (renderLayer.isTransparent && renderLayer.isMesh) {
+        hasTransparentMesh = true;
+        break;
+      }
+    }
+    if (!hasTransparentMesh) return false;
+
+    const { gl } = this;
+    const peelConfigurations = this.highQualityMeshPeelConfigurations;
+    const accumulationConfiguration =
+      this.highQualityMeshAccumulationConfiguration;
+
+    accumulationConfiguration.bind(width, height);
+    gl.clearBufferfv(gl.COLOR, 0, kZeroVec4);
+    gl.clearBufferfv(gl.COLOR, 1, kZeroVec4);
+
+    renderContext.emitter = perspectivePanelEmitDepthPeel;
+    renderContext.emitColor = true;
+    renderContext.emitPickID = false;
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LESS);
+    gl.depthMask(true);
+    gl.disable(gl.BLEND);
+
+    let previousDepthTexture: WebGLTexture | null | undefined;
+    for (
+      let peelLayer = 0;
+      peelLayer < HIGH_QUALITY_MESH_PEEL_LAYERS;
+      ++peelLayer
+    ) {
+      const peelConfiguration = peelConfigurations[peelLayer % 2];
+      peelConfiguration.bind(width, height);
+      gl.clearColor(0.0, 0.0, 0.0, 0.0);
+      gl.clearDepth(1.0);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+      renderContext.bindEmitter = (shader) =>
+        this.bindDepthPeelingEmitter(shader, previousDepthTexture);
+      for (const [renderLayer, attachment] of visibleLayers) {
+        if (renderLayer.isTransparent && renderLayer.isMesh) {
+          renderLayer.draw(renderContext, attachment);
+        }
+      }
+
+      gl.disable(gl.DEPTH_TEST);
+      if (peelLayer === 0) {
+        accumulationConfiguration.bind(width, height);
+        this.firstPeelLayerCopyHelper.draw(
+          peelConfiguration.colorBuffers[0].texture,
+          peelConfiguration.depthBuffer!.texture,
+        );
+      } else {
+        accumulationConfiguration.bindSingle(0);
+        gl.enable(gl.BLEND);
+        gl.blendFuncSeparate(
+          gl.ONE_MINUS_DST_ALPHA,
+          gl.ONE,
+          gl.ONE_MINUS_DST_ALPHA,
+          gl.ONE,
+        );
+        this.offscreenCopyHelper.draw(
+          peelConfiguration.colorBuffers[0].texture,
+        );
+        gl.disable(gl.BLEND);
+      }
+      previousDepthTexture = peelConfiguration.depthBuffer!.texture;
+      gl.enable(gl.DEPTH_TEST);
+    }
+
+    const tailConfiguration = this.highQualityMeshTailConfiguration;
+    tailConfiguration.bind(width, height);
+    gl.clearBufferfv(gl.COLOR, 0, new Float32Array([0, 0, 0, 1]));
+    gl.clearBufferfv(gl.COLOR, 1, kZeroVec4);
+    gl.depthMask(false);
+    gl.enable(gl.BLEND);
+    gl.blendFuncSeparate(gl.ONE, gl.ONE, gl.ZERO, gl.ONE_MINUS_SRC_ALPHA);
+    renderContext.emitter = perspectivePanelEmitDepthPeelTail;
+    renderContext.bindEmitter = (shader) => {
+      const textureUnit = shader.textureUnit(previousPeelDepthSampler);
+      gl.activeTexture(gl.TEXTURE0 + textureUnit);
+      gl.bindTexture(gl.TEXTURE_2D, previousDepthTexture ?? null);
+    };
+    for (const [renderLayer, attachment] of visibleLayers) {
+      if (renderLayer.isTransparent && renderLayer.isMesh) {
+        renderLayer.draw(renderContext, attachment);
+      }
+    }
+
+    accumulationConfiguration.bindSingle(0);
+    gl.disable(gl.DEPTH_TEST);
+    gl.blendFuncSeparate(
+      gl.ONE_MINUS_DST_ALPHA,
+      gl.ONE,
+      gl.ONE_MINUS_DST_ALPHA,
+      gl.ONE,
+    );
+    this.oitToPremultipliedCopyHelper.draw(
+      tailConfiguration.colorBuffers[0].texture,
+      tailConfiguration.colorBuffers[1].texture,
+    );
+    gl.disable(gl.BLEND);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthMask(false);
+    renderContext.bindEmitter = undefined;
+    return true;
   }
 
   drawWithPicking(pickingData: FramePickingData): boolean {
@@ -1087,6 +1488,23 @@ export class PerspectivePanel extends RenderedDataPanel {
     if (hasTransparent) {
       //Draw transparent objects.
 
+      const transparentMeshRenderingMode =
+        this.viewer.transparentMeshRenderingMode.value;
+      const useImprovedOIT =
+        transparentMeshRenderingMode !== TransparentMeshRenderingMode.CURRENT;
+      const useHighQualityMeshes =
+        transparentMeshRenderingMode ===
+        TransparentMeshRenderingMode.HIGH_QUALITY;
+      const weightedOITEmitter = useImprovedOIT
+        ? perspectivePanelEmitImprovedOIT
+        : perspectivePanelEmitOIT;
+      const maxProjectionColorCopyHelper = useImprovedOIT
+        ? this.improvedMaxProjectionColorCopyHelper
+        : this.maxProjectionColorCopyHelper;
+      const transparencyCopyHelper = useImprovedOIT
+        ? this.improvedTransparencyCopyHelper
+        : this.transparencyCopyHelper;
+
       let volumeRenderingBufferWidth = width;
       let volumeRenderingBufferHeight = height;
 
@@ -1164,6 +1582,10 @@ export class PerspectivePanel extends RenderedDataPanel {
         );
       }
 
+      const hasHighQualityMeshes =
+        useHighQualityMeshes &&
+        this.drawHighQualityMeshes(renderContext, width, height);
+
       const { transparentConfiguration } = this;
       renderContext.bindFramebuffer = () => {
         transparentConfiguration.bind(width, height);
@@ -1175,7 +1597,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       gl.enable(WebGL2RenderingContext.BLEND);
       gl.clearColor(0.0, 0.0, 0.0, 1.0);
       gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
-      renderContext.emitter = perspectivePanelEmitOIT;
+      renderContext.emitter = weightedOITEmitter;
       gl.blendFuncSeparate(
         WebGL2RenderingContext.ONE,
         WebGL2RenderingContext.ONE,
@@ -1183,6 +1605,14 @@ export class PerspectivePanel extends RenderedDataPanel {
         WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
       );
       renderContext.emitPickID = false;
+      if (hasHighQualityMeshes) {
+        gl.disable(WebGL2RenderingContext.DEPTH_TEST);
+        this.meshCompositeToOITCopyHelper.draw(
+          this.highQualityMeshAccumulationConfiguration.colorBuffers[0].texture,
+          this.highQualityMeshAccumulationConfiguration.colorBuffers[1].texture,
+        );
+        gl.enable(WebGL2RenderingContext.DEPTH_TEST);
+      }
       let currentTransparentRenderingState =
         TransparentRenderingState.TRANSPARENT;
       for (const [renderLayer, attachment] of visibleLayers) {
@@ -1215,7 +1645,7 @@ export class PerspectivePanel extends RenderedDataPanel {
               currentTransparentRenderingState !==
               TransparentRenderingState.VOLUME_RENDERING
             ) {
-              renderContext.emitter = perspectivePanelEmitOIT;
+              renderContext.emitter = weightedOITEmitter;
               bindVolumeRenderingBuffer();
             }
             gl.disable(WebGL2RenderingContext.DEPTH_TEST);
@@ -1262,7 +1692,7 @@ export class PerspectivePanel extends RenderedDataPanel {
             bindVolumeRenderingBuffer();
             gl.depthMask(false);
             gl.disable(WebGL2RenderingContext.DEPTH_TEST);
-            this.maxProjectionColorCopyHelper.draw(
+            maxProjectionColorCopyHelper.draw(
               this.maxProjectionConfiguration.colorBuffers[0 /*color*/].texture,
               this.maxProjectionConfiguration.colorBuffers[1 /*depth*/].texture,
             );
@@ -1291,11 +1721,12 @@ export class PerspectivePanel extends RenderedDataPanel {
         }
         // Draw regular transparent layers
         else if (renderLayer.isTransparent) {
+          if (useHighQualityMeshes && renderLayer.isMesh) continue;
           if (
             currentTransparentRenderingState !==
             TransparentRenderingState.TRANSPARENT
           ) {
-            renderContext.emitter = perspectivePanelEmitOIT;
+            renderContext.emitter = weightedOITEmitter;
             renderContext.bindFramebuffer();
           }
           currentTransparentRenderingState =
@@ -1317,7 +1748,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         WebGL2RenderingContext.SRC_ALPHA,
       );
       this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
-      this.transparencyCopyHelper.draw(
+      transparencyCopyHelper.draw(
         transparentConfiguration.colorBuffers[0].texture,
         transparentConfiguration.colorBuffers[1].texture,
       );
