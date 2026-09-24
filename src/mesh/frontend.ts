@@ -412,6 +412,8 @@ export interface MeshDisplayState extends SegmentationDisplayState3D {
 }
 
 export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRenderLayerAttachmentState> {
+  isMesh = true;
+
   protected meshShaderManager;
   private getShader;
   backend: SegmentationLayerSharedObject;
@@ -493,6 +495,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
     const { shader } = this.getShader(renderContext.emitter);
     if (shader === null) return;
     shader.bind();
+    renderContext.bindEmitter?.(shader);
     meshShaderManager.beginLayer(gl, shader, renderContext, this.displayState);
     meshShaderManager.beginModel(gl, shader, renderContext, modelMatrix);
 
@@ -753,6 +756,8 @@ function hasFragmentChunk(
 }
 
 export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRenderLayerAttachmentState> {
+  isMesh = true;
+
   protected meshShaderManager: MeshShaderManager;
   private getShader;
   backend: SegmentationLayerSharedObject;
@@ -832,6 +837,7 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
     const { shader } = this.getShader(renderContext.emitter);
     if (shader === null) return;
     shader.bind();
+    renderContext.bindEmitter?.(shader);
     meshShaderManager.beginLayer(gl, shader, renderContext, this.displayState);
 
     const { renderScaleHistogram } = this.displayState;

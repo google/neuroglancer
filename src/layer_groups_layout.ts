@@ -407,6 +407,7 @@ function getCommonViewerState(viewer: Viewer) {
     mouseState: viewer.mouseState,
     showAxisLines: viewer.showAxisLines,
     wireFrame: viewer.wireFrame,
+    transparentMeshRenderingMode: viewer.transparentMeshRenderingMode,
     enableAdaptiveDownsampling: viewer.enableAdaptiveDownsampling,
     showScaleBar: viewer.showScaleBar,
     scaleBarOptions: viewer.scaleBarOptions,
