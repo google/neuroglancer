@@ -109,6 +109,8 @@ const POINTS_JSON_KEY = "points";
 const ANNOTATIONS_JSON_KEY = "annotations";
 const ANNOTATION_PROPERTIES_JSON_KEY = "annotationProperties";
 const ANNOTATION_LIST_COLUMNS_KEY = "annotationListColumns";
+const ANNOTATION_LIST_HIDDEN_COORDINATES_KEY =
+  "annotationListHiddenCoordinates";
 const ANNOTATION_LIST_TYPE_COLUMN_VISIBLE_KEY =
   "annotationListTypeColumnVisible";
 const ANNOTATION_LIST_SORT_KEY = "annotationListSort";
@@ -552,6 +554,14 @@ export class AnnotationUserLayer extends Base {
     if (shownColumns !== undefined) {
       this.annotationListShownColumns.value = shownColumns;
     }
+    const hiddenCoordinates = verifyOptionalObjectProperty(
+      specification,
+      ANNOTATION_LIST_HIDDEN_COORDINATES_KEY,
+      verifyStringArray,
+    );
+    if (hiddenCoordinates !== undefined) {
+      this.annotationListHiddenCoordinates.value = hiddenCoordinates;
+    }
     this.annotationListTypeColumnVisible.restoreState(
       specification[ANNOTATION_LIST_TYPE_COLUMN_VISIBLE_KEY],
     );
@@ -854,6 +864,10 @@ export class AnnotationUserLayer extends Base {
     const shownColumns = this.annotationListShownColumns.value;
     if (shownColumns.length > 0) {
       x[ANNOTATION_LIST_COLUMNS_KEY] = shownColumns;
+    }
+    const hiddenCoordinates = this.annotationListHiddenCoordinates.value;
+    if (hiddenCoordinates.length > 0) {
+      x[ANNOTATION_LIST_HIDDEN_COORDINATES_KEY] = hiddenCoordinates;
     }
     x[ANNOTATION_LIST_TYPE_COLUMN_VISIBLE_KEY] =
       this.annotationListTypeColumnVisible.toJSON();

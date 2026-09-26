@@ -147,6 +147,7 @@ import { packColor } from "#src/util/color.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { disposableOnce, RefCounted } from "#src/util/disposable.js";
 import { removeChildren } from "#src/util/dom.js";
+import { positionDropdown } from "#src/util/dropdown.js";
 import { Endianness, ENDIANNESS } from "#src/util/endian.js";
 import type { ValueOrError } from "#src/util/error.js";
 import { vec3, vec4 } from "#src/util/geom.js";
@@ -352,6 +353,7 @@ export class AnnotationLayerView extends Tab {
   private updated = false;
   private mutableControls = document.createElement("div");
   private navRow = document.createElement("div");
+  private headerControls = document.createElement("div");
   private headerRow = document.createElement("div");
 
   get annotationStates() {
@@ -449,6 +451,8 @@ export class AnnotationLayerView extends Tab {
 
   private globalDimensionIndices: number[] = [];
   private localDimensionIndices: number[] = [];
+  private shownGlobalDimensionIndices: number[] = [];
+  private shownLocalDimensionIndices: number[] = [];
   private curCoordinateSpaceGeneration = -1;
   private prevCoordinateSpaceGeneration = -1;
   private columnWidths: number[] = [];
@@ -492,6 +496,25 @@ export class AnnotationLayerView extends Tab {
   private numericalPropertiesSummary: NumericalPropertiesSummary | undefined;
   private numericalDataSource: NumericalSummaryDataSource | undefined;
   private numericalBoundsInitialized = false;
+  private columnDeletionMode = false;
+  private columnDropdown: HTMLElement | undefined;
+  private columnDropdownAnchor: HTMLElement | undefined;
+
+  private closeColumnDropdown = () => {
+    this.columnDropdown?.remove();
+    this.columnDropdown = undefined;
+    this.columnDropdownAnchor = undefined;
+    document.removeEventListener("pointerdown", this.handleColumnDropdownBlur);
+  };
+
+  private handleColumnDropdownBlur = (event: PointerEvent) => {
+    const target = event.target;
+    if (target instanceof Node && this.columnDropdown?.contains(target)) return;
+    if (target instanceof Node && this.columnDropdownAnchor?.contains(target)) {
+      return;
+    }
+    this.closeColumnDropdown();
+  };
 
   private updateListLoadedAnnotationsToggleVisibility() {
     const hasNonLocalSource = this.annotationStates.states.some(
@@ -754,7 +777,7 @@ export class AnnotationLayerView extends Tab {
 
     const { virtualList } = this;
     virtualList.element.classList.add("neuroglancer-annotation-list");
-    virtualList.header.appendChild(this.headerRow);
+    virtualList.header.append(this.headerControls, this.headerRow);
     this.element.appendChild(this.embeddedTabHost);
     this.element.appendChild(virtualList.element);
     this.virtualList.element.addEventListener("mouseleave", () => {
@@ -816,6 +839,7 @@ export class AnnotationLayerView extends Tab {
     this.registerDisposer(() => {
       this.layer.annotationListOrder = undefined;
     });
+    this.registerDisposer(this.closeColumnDropdown);
   }
 
   attachView(tab: Tab) {
@@ -1089,8 +1113,8 @@ export class AnnotationLayerView extends Tab {
     const {
       layer,
       gridTemplate,
-      globalDimensionIndices,
-      localDimensionIndices,
+      shownGlobalDimensionIndices,
+      shownLocalDimensionIndices,
       shownColumns,
       numDimColumns,
     } = this;
@@ -1108,8 +1132,8 @@ export class AnnotationLayerView extends Tab {
       annotation,
       state,
       gridTemplate,
-      globalDimensionIndices,
-      localDimensionIndices,
+      shownGlobalDimensionIndices,
+      shownLocalDimensionIndices,
       columns.length > 0
         ? { columns, dimColumnCount: numDimColumns }
         : undefined,
@@ -1187,6 +1211,176 @@ export class AnnotationLayerView extends Tab {
     }
     ++this.curColumnConfigGeneration;
     this.forceUpdateView();
+  }
+
+  private getCoordinateColumnId(kind: "global" | "local", name: string) {
+    return `${kind}:${name}`;
+  }
+
+  private setCoordinateColumnVisible(
+    kind: "global" | "local",
+    name: string,
+    visible: boolean,
+  ) {
+    const id = this.getCoordinateColumnId(kind, name);
+    const hidden = new Set(this.layer.annotationListHiddenCoordinates.value);
+    if (visible) {
+      hidden.delete(id);
+    } else {
+      hidden.add(id);
+      if (this.sortState?.propertyId === name) {
+        this.sortState = undefined;
+        this.layer.annotationListSortState.value = null;
+      }
+    }
+    this.layer.annotationListHiddenCoordinates.value = [...hidden];
+    ++this.curColumnConfigGeneration;
+    this.forceUpdateView();
+  }
+
+  private makeColumnDeleteButton(title: string, onDelete: () => void) {
+    const button = makeDeleteButton({
+      title,
+      onClick: (event) => {
+        event.stopPropagation();
+        event.preventDefault();
+        onDelete();
+      },
+    });
+    button.classList.add("neuroglancer-annotation-column-delete");
+    return button;
+  }
+
+  private getAvailableColumns() {
+    const result: { group: string; label: string; add: () => void }[] = [];
+    if (!this.layer.annotationListTypeColumnVisible.value) {
+      result.push({
+        group: "Annotation",
+        label: "Type",
+        add: () => this.toggleTypeColumn(),
+      });
+    }
+    const hiddenCoordinates = new Set(
+      this.layer.annotationListHiddenCoordinates.value,
+    );
+    const addCoordinates = (
+      kind: "global" | "local",
+      coordinateSpace: CoordinateSpace,
+      indices: readonly number[],
+    ) => {
+      for (const index of indices) {
+        const name = coordinateSpace.names[index];
+        if (!hiddenCoordinates.has(this.getCoordinateColumnId(kind, name))) {
+          continue;
+        }
+        result.push({
+          group: "Coordinates",
+          label: kind === "global" ? name : `${name} (local)`,
+          add: () => this.setCoordinateColumnVisible(kind, name, true),
+        });
+      }
+    };
+    addCoordinates(
+      "global",
+      this.layer.manager.root.coordinateSpace.value,
+      this.globalDimensionIndices,
+    );
+    addCoordinates(
+      "local",
+      this.layer.localCoordinateSpace.value,
+      this.localDimensionIndices,
+    );
+    const availableProperties = new Map<string, string>();
+    for (const property of this.getAllPropertySpecs()) {
+      availableProperties.set(property.identifier, property.identifier);
+    }
+    for (const property of this.derivedAnalysis?.schemas ?? []) {
+      availableProperties.set(
+        property.identifier,
+        `${property.identifier} (${prettyUnit(property.baseUnit ?? "")})`,
+      );
+    }
+    for (const [identifier, label] of availableProperties) {
+      if (this.shownPropertyIds.has(identifier)) continue;
+      result.push({
+        group: "Properties",
+        label,
+        add: () => this.togglePropertyColumn(identifier),
+      });
+    }
+    return result;
+  }
+
+  private toggleColumnDropdown(anchor: HTMLElement) {
+    if (this.columnDropdown !== undefined) {
+      this.closeColumnDropdown();
+      return;
+    }
+    const dropdown = document.createElement("div");
+    dropdown.classList.add("neuroglancer-annotation-column-dropdown");
+    dropdown.setAttribute("role", "menu");
+    let previousGroup: string | undefined;
+    for (const option of this.getAvailableColumns()) {
+      if (option.group !== previousGroup) {
+        const group = document.createElement("div");
+        group.classList.add("neuroglancer-annotation-column-dropdown-header");
+        group.textContent = option.group;
+        dropdown.appendChild(group);
+        previousGroup = option.group;
+      }
+      const element = document.createElement("div");
+      element.classList.add("neuroglancer-annotation-column-dropdown-option");
+      element.setAttribute("role", "menuitem");
+      element.tabIndex = 0;
+      element.textContent = option.label;
+      const select = () => {
+        option.add();
+        this.closeColumnDropdown();
+      };
+      element.addEventListener("click", select);
+      element.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        select();
+      });
+      dropdown.appendChild(element);
+    }
+    document.body.appendChild(dropdown);
+    positionDropdown(dropdown, anchor);
+    dropdown.style.width = "";
+    dropdown.style.maxWidth = "min(320px, calc(100vw - 12px))";
+    this.columnDropdown = dropdown;
+    this.columnDropdownAnchor = anchor;
+    document.addEventListener("pointerdown", this.handleColumnDropdownBlur);
+  }
+
+  private makeColumnControls() {
+    const controls = document.createElement("div");
+    controls.classList.add("neuroglancer-annotation-column-controls");
+    const availableColumns = this.getAvailableColumns();
+    if (availableColumns.length !== 0) {
+      const addButton = makeAddButton({
+        title: "Add annotation list column",
+        onClick: () => this.toggleColumnDropdown(addButton),
+      });
+      controls.appendChild(addButton);
+    }
+    const deletionModeButton = makeDeleteButton({
+      title: this.columnDeletionMode
+        ? "Finish removing annotation list columns"
+        : "Remove annotation list columns",
+      onClick: () => {
+        this.columnDeletionMode = !this.columnDeletionMode;
+        ++this.curColumnConfigGeneration;
+        this.forceUpdateView();
+      },
+    });
+    deletionModeButton.classList.add(
+      "neuroglancer-annotation-column-deletion-mode",
+    );
+    deletionModeButton.dataset.active = this.columnDeletionMode.toString();
+    controls.appendChild(deletionModeButton);
+    return controls;
   }
 
   private getSortDirection(
@@ -1590,14 +1784,14 @@ export class AnnotationLayerView extends Tab {
       this.updated = false;
       const { columnWidths } = this;
       columnWidths.length = 0;
-      const { headerRow } = this;
-      const deletePlaceholder = document.createElement("div");
-      deletePlaceholder.style.gridColumn = "delete";
+      const { headerControls, headerRow } = this;
 
+      removeChildren(headerControls);
       removeChildren(headerRow);
 
       const TYPE_FIELD = "type";
       const showTypeColumn = this.layer.annotationListTypeColumnVisible.value;
+      headerControls.appendChild(this.makeColumnControls());
       if (showTypeColumn) {
         const symbolHeader = document.createElement("div");
         symbolHeader.classList.add("neuroglancer-annotation-type-header");
@@ -1606,11 +1800,24 @@ export class AnnotationLayerView extends Tab {
         symbolHeader.style.alignItems = "center";
         symbolHeader.style.justifyContent = "center";
         this.bindSortControl(symbolHeader, TYPE_FIELD);
+        if (this.columnDeletionMode) {
+          symbolHeader.appendChild(
+            this.makeColumnDeleteButton("Hide type column", () =>
+              this.toggleTypeColumn(),
+            ),
+          );
+        }
         headerRow.appendChild(symbolHeader);
       }
       let i = 0;
-      let gridTemplate = showTypeColumn ? "[symbol] 2ch" : "";
+      let gridTemplate = showTypeColumn
+        ? `[symbol] ${this.columnDeletionMode ? "4ch" : "2ch"}`
+        : "";
+      const hiddenCoordinates = new Set(
+        this.layer.annotationListHiddenCoordinates.value,
+      );
       const addDimension = (
+        kind: "global" | "local",
         coordinateSpace: CoordinateSpace,
         dimIndex: number,
       ) => {
@@ -1630,23 +1837,50 @@ export class AnnotationLayerView extends Tab {
         dimWidget.appendChild(name);
         dimWidget.appendChild(scale);
         this.bindSortControl(dimWidget, dimName);
+        if (this.columnDeletionMode) {
+          dimWidget.appendChild(
+            this.makeColumnDeleteButton(`Hide ${dimName} coordinate`, () =>
+              this.setCoordinateColumnVisible(kind, dimName, false),
+            ),
+          );
+        }
         dimWidget.style.gridColumn = `dim ${i + 1}`;
         this.setColumnWidth(
           i,
-          scale.textContent.length + name.textContent.length + 5,
+          scale.textContent.length +
+            name.textContent.length +
+            (this.columnDeletionMode ? 8 : 5),
         );
-        gridTemplate += ` [dim] var(--neuroglancer-column-${i}-width)`;
+        gridTemplate += ` [${i === 0 ? "content " : ""}dim] var(--neuroglancer-column-${i}-width)`;
         ++i;
         headerRow.appendChild(dimWidget);
       };
       const globalCoordinateSpace =
         this.layer.manager.root.coordinateSpace.value;
-      for (const globalDim of this.globalDimensionIndices) {
-        addDimension(globalCoordinateSpace, globalDim);
+      this.shownGlobalDimensionIndices = this.globalDimensionIndices.filter(
+        (index) =>
+          !hiddenCoordinates.has(
+            this.getCoordinateColumnId(
+              "global",
+              globalCoordinateSpace.names[index],
+            ),
+          ),
+      );
+      for (const globalDim of this.shownGlobalDimensionIndices) {
+        addDimension("global", globalCoordinateSpace, globalDim);
       }
       const localCoordinateSpace = this.layer.localCoordinateSpace.value;
-      for (const localDim of this.localDimensionIndices) {
-        addDimension(localCoordinateSpace, localDim);
+      this.shownLocalDimensionIndices = this.localDimensionIndices.filter(
+        (index) =>
+          !hiddenCoordinates.has(
+            this.getCoordinateColumnId(
+              "local",
+              localCoordinateSpace.names[index],
+            ),
+          ),
+      );
+      for (const localDim of this.shownLocalDimensionIndices) {
+        addDimension("local", localCoordinateSpace, localDim);
       }
       this.numDimColumns = i;
 
@@ -1687,15 +1921,27 @@ export class AnnotationLayerView extends Tab {
           label,
           description,
         );
+        if (this.columnDeletionMode) {
+          propHeader.appendChild(
+            this.makeColumnDeleteButton(`Hide ${label} column`, () =>
+              this.togglePropertyColumn(propId),
+            ),
+          );
+        }
         propHeader.style.gridColumn = `prop ${propColIdx + 1}`;
         headerRow.appendChild(propHeader);
         const colIdx = this.numDimColumns + propColIdx;
-        this.setColumnWidth(colIdx, label.length + 2);
-        gridTemplate += ` [prop] var(--neuroglancer-column-${colIdx}-width)`;
+        this.setColumnWidth(
+          colIdx,
+          label.length + (this.columnDeletionMode ? 6 : 2),
+        );
+        gridTemplate += ` [${colIdx === 0 ? "content " : ""}prop] var(--neuroglancer-column-${colIdx}-width)`;
       }
       this.shownColumns = shownColumns;
 
-      headerRow.appendChild(deletePlaceholder);
+      if (this.numDimColumns + shownColumns.length === 0) {
+        gridTemplate += " [content] 0";
+      }
       gridTemplate += " [delete] 2ch";
       this.gridTemplate = gridTemplate;
       headerRow.style.gridTemplateColumns = gridTemplate;
@@ -2942,6 +3188,7 @@ export function UserLayerWithAnnotationsMixin<
     // Written by AnnotationLayerView on every user interaction; serialized by
     // AnnotationUserLayer.toJSON / restoreState.
     annotationListShownColumns = new WatchableValue<string[]>([]);
+    annotationListHiddenCoordinates = new WatchableValue<string[]>([]);
     annotationListTypeColumnVisible = new TrackableBoolean(true);
     annotationListSortState = new WatchableValue<{
       propertyId: string;
@@ -2965,6 +3212,9 @@ export function UserLayerWithAnnotationsMixin<
         this.specificationChanged.dispatch,
       );
       this.annotationListShownColumns.changed.add(
+        this.specificationChanged.dispatch,
+      );
+      this.annotationListHiddenCoordinates.changed.add(
         this.specificationChanged.dispatch,
       );
       this.annotationListTypeColumnVisible.changed.add(
@@ -4049,6 +4299,7 @@ export function makeAnnotationListElement(
     ++numRows;
     const description = document.createElement("div");
     description.classList.add("neuroglancer-annotation-description");
+    description.style.gridColumn = "content / -1";
     description.textContent = annotation.description;
     element.appendChild(description);
   }

@@ -82,6 +82,58 @@
   justify-content: start;
 }
 
+.neuroglancer-annotation-column-controls {
+  display: flex;
+  align-items: center;
+  align-self: start;
+  padding-bottom: 2px;
+}
+
+.neuroglancer-annotation-column-deletion-mode[data-active="true"] {
+  background-color: #db4437;
+}
+
+.neuroglancer-annotation-column-delete {
+  flex: 0 0 auto;
+  min-width: 16px;
+  min-height: 16px;
+  margin: 0;
+  padding: 0;
+}
+
+.neuroglancer-annotation-column-delete svg {
+  width: 14px;
+  height: 14px;
+}
+
+.neuroglancer-annotation-column-dropdown {
+  position: absolute;
+  z-index: 1000;
+  min-width: 160px;
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid white;
+  background-color: #111;
+  color: white;
+  font: 13px sans-serif;
+}
+
+.neuroglancer-annotation-column-dropdown-header {
+  padding: 4px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.neuroglancer-annotation-column-dropdown-option {
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.neuroglancer-annotation-column-dropdown-option:hover,
+.neuroglancer-annotation-column-dropdown-option:focus {
+  outline: none;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
 .neuroglancer-annotation-coordinate {
   font-family: monospace;
   text-align: right;
