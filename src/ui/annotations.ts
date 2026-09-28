@@ -1449,7 +1449,9 @@ export class AnnotationLayerView extends Tab {
     name.textContent = label;
     if (description) name.title = description;
     header.appendChild(name);
-    this.bindSortControl(header, identifier);
+    if (!this.columnDeletionMode) {
+      this.bindSortControl(header, identifier);
+    }
     return header;
   }
 
@@ -1809,20 +1811,19 @@ export class AnnotationLayerView extends Tab {
         symbolHeader.style.display = "flex";
         symbolHeader.style.alignItems = "center";
         symbolHeader.style.justifyContent = "center";
-        this.bindSortControl(symbolHeader, TYPE_FIELD);
         if (this.columnDeletionMode) {
           symbolHeader.appendChild(
             this.makeColumnDeleteButton("Hide type column", () =>
               this.toggleTypeColumn(),
             ),
           );
+        } else {
+          this.bindSortControl(symbolHeader, TYPE_FIELD);
         }
         headerRow.appendChild(symbolHeader);
       }
       let i = 0;
-      let gridTemplate = showTypeColumn
-        ? `[symbol] ${this.columnDeletionMode ? "4ch" : "2ch"}`
-        : "";
+      let gridTemplate = showTypeColumn ? "[symbol] 2ch" : "";
       const hiddenCoordinates = new Set(
         this.layer.annotationListHiddenCoordinates.value,
       );
@@ -1846,20 +1847,19 @@ export class AnnotationLayerView extends Tab {
         );
         dimWidget.appendChild(name);
         dimWidget.appendChild(scale);
-        this.bindSortControl(dimWidget, dimName);
         if (this.columnDeletionMode) {
           dimWidget.appendChild(
             this.makeColumnDeleteButton(`Hide ${dimName} coordinate`, () =>
               this.setCoordinateColumnVisible(kind, dimName, false),
             ),
           );
+        } else {
+          this.bindSortControl(dimWidget, dimName);
         }
         dimWidget.style.gridColumn = `dim ${i + 1}`;
         this.setColumnWidth(
           i,
-          scale.textContent.length +
-            name.textContent.length +
-            (this.columnDeletionMode ? 8 : 5),
+          scale.textContent.length + name.textContent.length + 5,
         );
         gridTemplate += ` [${i === 0 ? "content " : ""}dim] var(--neuroglancer-column-${i}-width)`;
         ++i;
@@ -1941,10 +1941,7 @@ export class AnnotationLayerView extends Tab {
         propHeader.style.gridColumn = `prop ${propColIdx + 1}`;
         headerRow.appendChild(propHeader);
         const colIdx = this.numDimColumns + propColIdx;
-        this.setColumnWidth(
-          colIdx,
-          label.length + (this.columnDeletionMode ? 6 : 2),
-        );
+        this.setColumnWidth(colIdx, label.length + 2);
         gridTemplate += ` [${colIdx === 0 ? "content " : ""}prop] var(--neuroglancer-column-${colIdx}-width)`;
       }
       this.shownColumns = shownColumns;

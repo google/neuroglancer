@@ -109,16 +109,20 @@
 }
 
 .neuroglancer-annotation-column-delete {
-  flex: 0 0 auto;
-  min-width: 16px;
-  min-height: 16px;
-  margin: 0;
+  box-sizing: border-box;
+  flex: 0 0 1ch;
+  width: 1ch;
+  height: 1em;
+  min-width: 1ch;
+  min-height: 1em;
+  margin: 0 0 0 2px;
   padding: 0;
+  font: inherit;
 }
 
 .neuroglancer-annotation-column-delete svg {
-  width: 14px;
-  height: 14px;
+  width: 1ch;
+  height: 1em;
 }
 
 .neuroglancer-annotation-column-dropdown {
