@@ -232,9 +232,10 @@ export class CommandPalette extends Overlay {
     const rows: PaletteRow[] = [];
     const seenGroups = new Set<string>();
     for (const entry of this.catalog.commands) {
+      if (!entry.command.enabled) continue;
       const { group } = entry;
       if (group === undefined) {
-        if (entry.command.enabled) rows.push({ kind: "command", entry });
+        rows.push({ kind: "command", entry });
       } else if (!seenGroups.has(group.label)) {
         seenGroups.add(group.label);
         rows.push({ kind: "group-header", group });
