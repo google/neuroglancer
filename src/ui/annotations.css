@@ -99,27 +99,6 @@
   background-color: inherit;
 }
 
-.neuroglancer-annotation-column-deletion-mode[data-active="true"] {
-  background-color: #db4437;
-}
-
-.neuroglancer-annotation-column-delete {
-  box-sizing: border-box;
-  flex: 0 0 1ch;
-  width: 1ch;
-  height: 1em;
-  min-width: 1ch;
-  min-height: 1em;
-  margin: 0 0 0 2px;
-  padding: 0;
-  font: inherit;
-}
-
-.neuroglancer-annotation-column-delete svg {
-  width: 1ch;
-  height: 1em;
-}
-
 .neuroglancer-annotation-column-dropdown {
   position: absolute;
   z-index: 1000;
@@ -138,8 +117,16 @@
 }
 
 .neuroglancer-annotation-column-dropdown-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 4px 8px;
   cursor: pointer;
+}
+
+.neuroglancer-annotation-column-visibility {
+  flex: 0 0 auto;
 }
 
 .neuroglancer-annotation-column-dropdown-option:hover,
