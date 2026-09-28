@@ -49,7 +49,6 @@
   position: relative;
   margin: 0px;
   padding: 0px;
-  margin-top: 2px;
   overflow-y: auto;
   height: 0px;
   flex: 1;
@@ -75,7 +74,14 @@
   align-items: stretch;
 }
 
+.neuroglancer-annotation-list-header-container {
+  display: grid;
+  position: relative;
+  min-height: 20px;
+}
+
 .neuroglancer-annotation-list-header {
+  grid-area: 1 / 1;
   grid-auto-rows: min-content;
   display: grid;
   padding-bottom: 2px;
@@ -85,8 +91,17 @@
 .neuroglancer-annotation-column-controls {
   display: flex;
   align-items: center;
-  align-self: start;
   padding-bottom: 2px;
+}
+
+.neuroglancer-annotation-column-controls-container {
+  grid-area: 1 / 1;
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  justify-self: end;
+  background-color: inherit;
 }
 
 .neuroglancer-annotation-column-deletion-mode[data-active="true"] {

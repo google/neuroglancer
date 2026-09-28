@@ -147,7 +147,6 @@ import { packColor } from "#src/util/color.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { disposableOnce, RefCounted } from "#src/util/disposable.js";
 import { removeChildren } from "#src/util/dom.js";
-import { positionDropdown } from "#src/util/dropdown.js";
 import { Endianness, ENDIANNESS } from "#src/util/endian.js";
 import type { ValueOrError } from "#src/util/error.js";
 import { vec3, vec4 } from "#src/util/geom.js";
@@ -607,10 +606,7 @@ export class AnnotationLayerView extends Tab {
         this.updateAttachedAnnotationLayerStates(),
       ),
     );
-    this.headerRow.classList.add(
-      "neuroglancer-annotation-list-header",
-      "neuroglancer-property-list-header",
-    );
+    this.headerRow.classList.add("neuroglancer-annotation-list-header");
 
     const toolbox = document.createElement("div");
     toolbox.className = "neuroglancer-annotation-toolbox";
@@ -777,7 +773,14 @@ export class AnnotationLayerView extends Tab {
 
     const { virtualList } = this;
     virtualList.element.classList.add("neuroglancer-annotation-list");
-    virtualList.header.append(this.headerControls, this.headerRow);
+    virtualList.header.classList.add(
+      "neuroglancer-annotation-list-header-container",
+      "neuroglancer-property-list-header",
+    );
+    this.headerControls.classList.add(
+      "neuroglancer-annotation-column-controls-container",
+    );
+    virtualList.header.append(this.headerRow, this.headerControls);
     this.element.appendChild(this.embeddedTabHost);
     this.element.appendChild(virtualList.element);
     this.virtualList.element.addEventListener("mouseleave", () => {
@@ -1346,8 +1349,15 @@ export class AnnotationLayerView extends Tab {
       dropdown.appendChild(element);
     }
     document.body.appendChild(dropdown);
-    positionDropdown(dropdown, anchor);
+    const anchorRect = anchor.getBoundingClientRect();
+    const { clientHeight, clientWidth } = document.documentElement;
+    dropdown.style.top = `${anchorRect.bottom}px`;
+    dropdown.style.right = `${clientWidth - anchorRect.right}px`;
     dropdown.style.width = "";
+    dropdown.style.maxHeight = `${Math.max(
+      0,
+      Math.min(300, clientHeight - anchorRect.bottom - 6),
+    )}px`;
     dropdown.style.maxWidth = "min(320px, calc(100vw - 12px))";
     this.columnDropdown = dropdown;
     this.columnDropdownAnchor = anchor;
