@@ -232,6 +232,7 @@ export class CommandPalette extends Overlay {
     const rows: PaletteRow[] = [];
     const seenGroups = new Set<string>();
     for (const entry of this.catalog.commands) {
+      if (!entry.command.enabled) continue;
       const { group } = entry;
       if (group === undefined) {
         rows.push({ kind: "command", entry });
