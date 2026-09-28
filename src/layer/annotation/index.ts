@@ -67,7 +67,11 @@ import type {
   AnnotationLayerView,
   MergedAnnotationStates,
 } from "#src/ui/annotations.js";
-import { UserLayerWithAnnotationsMixin } from "#src/ui/annotations.js";
+import {
+  RELATED_SEGMENTS_SECTION_JSON_KEY,
+  SPACING_SECTION_JSON_KEY,
+  UserLayerWithAnnotationsMixin,
+} from "#src/ui/annotations.js";
 import type { ToolActivation } from "#src/ui/tool.js";
 import { LayerTool, registerTool } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
@@ -781,6 +785,7 @@ export class AnnotationUserLayer extends Base {
       new DependentViewWidget(
         hasChunkedSource,
         (hasChunkedSource, parent, refCounted) => {
+          tab.setSectionHidden(SPACING_SECTION_JSON_KEY, !hasChunkedSource);
           if (!hasChunkedSource) return;
           {
             const renderScaleWidget = refCounted.registerDisposer(
@@ -805,9 +810,10 @@ export class AnnotationUserLayer extends Base {
         },
       ),
     );
-    tab.element.insertBefore(
+    tab.appendChild(
       renderScaleControls.element,
-      tab.element.firstChild,
+      SPACING_SECTION_JSON_KEY,
+      !hasChunkedSource.value,
     );
     {
       const checkbox = tab.registerDisposer(
@@ -822,12 +828,13 @@ export class AnnotationUserLayer extends Base {
       label.title =
         "Display all annotations if filtering by related segments is enabled but no segments are selected";
       label.appendChild(checkbox.element);
-      tab.element.appendChild(label);
+      tab.appendChild(label, RELATED_SEGMENTS_SECTION_JSON_KEY);
     }
-    tab.element.appendChild(
+    tab.appendChild(
       tab.registerDisposer(
         new LinkedSegmentationLayersWidget(this.linkedSegmentationLayers),
       ).element,
+      RELATED_SEGMENTS_SECTION_JSON_KEY,
     );
   }
 

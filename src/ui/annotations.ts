@@ -165,6 +165,7 @@ import { numberToStringFixed } from "#src/util/number_to_string.js";
 import { formatScaleWithUnitAsString } from "#src/util/si_units.js";
 import { NullarySignal, Signal } from "#src/util/signal.js";
 import * as vector from "#src/util/vector.js";
+import { AccordionState, AccordionTab } from "#src/widget/accordion.js";
 import { makeAddButton } from "#src/widget/add_button.js";
 import { ColorWidget } from "#src/widget/color.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
@@ -320,7 +321,7 @@ interface AnnotationLayerViewAttachedState {
   listOffset: number;
 }
 
-export class AnnotationLayerView extends Tab {
+export class AnnotationLayerView extends AccordionTab {
   private previousSelectedState:
     | {
         annotationId: string;
@@ -563,8 +564,9 @@ export class AnnotationLayerView extends Tab {
   constructor(
     public layer: Borrowed<UserLayerWithAnnotations>,
     public displayState: AnnotationDisplayState,
+    annotationAccordionState: AccordionState,
   ) {
-    super();
+    super(annotationAccordionState);
     this.element.classList.add("neuroglancer-annotation-layer-view");
     this.selectedAnnotationState = makeCachedLazyDerivedWatchableValue(
       (selectionState, pin) => {
@@ -700,7 +702,7 @@ export class AnnotationLayerView extends Tab {
       }),
     );
     toolbox.appendChild(navRow);
-    this.element.appendChild(toolbox);
+    this.appendChild(toolbox, ANNOTATION_SECTION_JSON_KEY);
     // Query input
     const queryInput = (this.queryInput = createPropertyListQueryInput({
       placeholder:
@@ -719,7 +721,7 @@ export class AnnotationLayerView extends Tab {
       label.style.display = "none";
       queryInputContainer.appendChild(label);
     }
-    this.element.appendChild(queryInputContainer);
+    this.appendChild(queryInputContainer, FILTER_SECTION_JSON_KEY);
 
     this.queryStatisticsElement.classList.add(
       "neuroglancer-property-list-status",
@@ -741,11 +743,9 @@ export class AnnotationLayerView extends Tab {
       this.derivedWarningElement,
       this.loadedNoticeElement,
     );
-    this.element.append(
-      this.queryStatistics.root,
-      this.queryStatistics.separator,
-      this.queryStatisticsElement,
-    );
+    this.appendChild(this.queryStatistics.root, FILTER_SECTION_JSON_KEY);
+    this.appendChild(this.queryStatistics.separator, FILTER_SECTION_JSON_KEY);
+    this.appendChild(this.queryStatisticsElement, FILTER_SECTION_JSON_KEY);
 
     const debouncedQuery = this.registerCancellable(
       debounce(() => {
@@ -773,7 +773,7 @@ export class AnnotationLayerView extends Tab {
       "neuroglancer-annotation-column-controls-container",
     );
     virtualList.header.append(this.headerRow, this.headerControls);
-    this.element.appendChild(virtualList.element);
+    this.appendChild(virtualList.element, ANNOTATION_SECTION_JSON_KEY);
     this.virtualList.element.addEventListener("mouseleave", () => {
       this.displayState.hoverState.value = undefined;
     });
@@ -2293,7 +2293,11 @@ export class AnnotationTab extends Tab {
   constructor(public layer: Borrowed<UserLayerWithAnnotations>) {
     super();
     this.layerView = this.registerDisposer(
-      new AnnotationLayerView(layer, layer.annotationDisplayState),
+      new AnnotationLayerView(
+        layer,
+        layer.annotationDisplayState,
+        layer.annotationAccordionState,
+      ),
     );
 
     const { element } = this;
@@ -3151,12 +3155,43 @@ function makeRelatedSegmentList(
 }
 
 const ANNOTATION_COLOR_JSON_KEY = "annotationColor";
+const ANNOTATION_ACCORDION_JSON_KEY = "annotationsAccordion";
+export const SPACING_SECTION_JSON_KEY = "spacingExpanded";
+export const RELATED_SEGMENTS_SECTION_JSON_KEY = "relatedSegmentsExpanded";
+export const FILTER_SECTION_JSON_KEY = "filterExpanded";
+export const ANNOTATION_SECTION_JSON_KEY = "annotationsExpanded";
 export function UserLayerWithAnnotationsMixin<
   TBase extends { new (...args: any[]): UserLayer },
 >(Base: TBase) {
   abstract class C extends Base implements UserLayerWithAnnotations {
     annotationStates = this.registerDisposer(new MergedAnnotationStates());
     annotationDisplayState = new AnnotationDisplayState();
+    annotationAccordionState = this.registerDisposer(
+      new AccordionState({
+        accordionJsonKey: ANNOTATION_ACCORDION_JSON_KEY,
+        sections: [
+          {
+            jsonKey: SPACING_SECTION_JSON_KEY,
+            displayName: "Spacing",
+          },
+          {
+            jsonKey: RELATED_SEGMENTS_SECTION_JSON_KEY,
+            displayName: "Related segments",
+          },
+          {
+            jsonKey: FILTER_SECTION_JSON_KEY,
+            displayName: "Filter",
+            defaultExpanded: true,
+          },
+          {
+            jsonKey: ANNOTATION_SECTION_JSON_KEY,
+            displayName: "Annotations",
+            defaultExpanded: true,
+            isDefaultKey: true,
+          },
+        ],
+      }),
+    );
     annotationCrossSectionRenderScaleHistogram = new RenderScaleHistogram();
     annotationCrossSectionRenderScaleTarget = trackableRenderScaleTarget(8);
     annotationProjectionRenderScaleHistogram = new RenderScaleHistogram();
@@ -3193,6 +3228,9 @@ export function UserLayerWithAnnotationsMixin<
         this.specificationChanged.dispatch,
       );
       this.annotationDisplayState.shaderControls.changed.add(
+        this.specificationChanged.dispatch,
+      );
+      this.annotationAccordionState.specificationChanged.add(
         this.specificationChanged.dispatch,
       );
       this.annotationListShownColumns.changed.add(
@@ -3324,6 +3362,9 @@ export function UserLayerWithAnnotationsMixin<
       super.restoreState(specification);
       this.annotationDisplayState.color.restoreState(
         specification[ANNOTATION_COLOR_JSON_KEY],
+      );
+      this.annotationAccordionState.restoreState(
+        specification[ANNOTATION_ACCORDION_JSON_KEY],
       );
     }
 
@@ -4052,6 +4093,7 @@ export function UserLayerWithAnnotationsMixin<
     toJSON() {
       const x = super.toJSON();
       x[ANNOTATION_COLOR_JSON_KEY] = this.annotationDisplayState.color.toJSON();
+      x[ANNOTATION_ACCORDION_JSON_KEY] = this.annotationAccordionState.toJSON();
       return x;
     }
   }
