@@ -48,6 +48,25 @@
   flex-direction: column;
   flex: 1;
   align-items: stretch;
+  min-height: 0;
+}
+
+.neuroglancer-annotation-layer-view
+  > .neuroglancer-accordion-item[data-key="annotationsExpanded"][data-expanded="true"] {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.neuroglancer-annotation-layer-view
+  > .neuroglancer-accordion-item[data-key="annotationsExpanded"]
+  > .neuroglancer-accordion-body {
+  flex: 1;
+  min-height: 0;
+  padding-right: 0;
+  padding-bottom: 0;
+  padding-left: 0;
 }
 
 .neuroglancer-annotation-list-header-container {
