@@ -23,7 +23,8 @@ import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import type { Disposable } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { getViewFrustumDepthRange, vec4 } from "#src/util/geom.js";
+import type { mat4 } from "#src/util/geom.js";
+import { vec4 } from "#src/util/geom.js";
 
 export interface ViewportPosition {
   readonly viewportLeft: number;
@@ -36,6 +37,32 @@ export interface ViewportPoint extends ViewportPosition {
 }
 
 const tempClip = vec4.create();
+const tempFocalClip = vec4.create();
+
+function getClipCoordinates(
+  out: vec4,
+  parameters: ProjectionParameters,
+  position: ArrayLike<number>,
+): vec4 {
+  const {
+    viewProjectionMat,
+    displayDimensionRenderInfo: { displayDimensionIndices },
+  } = parameters;
+  for (let i = 0; i < 3; ++i) {
+    const index = displayDimensionIndices[i];
+    out[i] = index >= 0 ? position[index] : 0;
+  }
+  out[3] = 1;
+  return vec4.transformMat4(out, out, viewProjectionMat);
+}
+
+// Distance in front of the camera, from the depth row of `mat4.perspective` or `mat4.ortho`.
+function getEyeDepth(projectionMat: mat4, normalizedDeviceZ: number): number {
+  const orthographic = projectionMat[15] === 1;
+  return orthographic
+    ? (projectionMat[14] - normalizedDeviceZ) / projectionMat[10]
+    : projectionMat[14] / (normalizedDeviceZ + projectionMat[10]);
+}
 
 export function projectToViewport(
   parameters: ProjectionParameters,
@@ -43,39 +70,43 @@ export function projectToViewport(
 ): ViewportPoint | undefined {
   const {
     projectionMat,
-    viewProjectionMat,
     logicalWidth,
     logicalHeight,
     visibleLeftFraction,
     visibleTopFraction,
     visibleWidthFraction,
     visibleHeightFraction,
-    displayDimensionRenderInfo: { displayDimensionIndices },
   } = parameters;
-  const clip = tempClip;
-  for (let i = 0; i < 3; ++i) {
-    const index = displayDimensionIndices[i];
-    clip[i] = index >= 0 ? position[index] : 0;
-  }
-  clip[3] = 1;
-  vec4.transformMat4(clip, clip, viewProjectionMat);
+  const clip = getClipCoordinates(tempClip, parameters, position);
   const w = clip[3];
   if (w <= 0) return undefined;
+  const normalizedDeviceX = clip[0] / w;
+  const normalizedDeviceY = clip[1] / w;
   const normalizedDeviceZ = clip[2] / w;
   if (normalizedDeviceZ < -1 || normalizedDeviceZ > 1) return undefined;
-  const orthographic = projectionMat[15] === 1;
+  const eyeDepth = getEyeDepth(projectionMat, normalizedDeviceZ);
+  const focalClip = getClipCoordinates(
+    tempFocalClip,
+    parameters,
+    parameters.globalPosition,
+  );
+  const focalEyeDepth = getEyeDepth(projectionMat, focalClip[2] / focalClip[3]);
+  // The near and far planes can be unequally far from the focal plane.
+  const boundEyeDepth = getEyeDepth(
+    projectionMat,
+    eyeDepth < focalEyeDepth ? -1 : 1,
+  );
   return {
     viewportLeft:
       (visibleLeftFraction +
-        ((clip[0] / w) * 0.5 + 0.5) * visibleWidthFraction) *
+        (normalizedDeviceX * 0.5 + 0.5) * visibleWidthFraction) *
       logicalWidth,
     viewportTop:
       (visibleTopFraction +
-        (0.5 - (clip[1] / w) * 0.5) * visibleHeightFraction) *
+        (0.5 - normalizedDeviceY * 0.5) * visibleHeightFraction) *
       logicalHeight,
-    focalPlaneDepthFraction: orthographic
-      ? normalizedDeviceZ
-      : (w - 1) / (getViewFrustumDepthRange(projectionMat) / 2),
+    focalPlaneDepthFraction:
+      (eyeDepth - focalEyeDepth) / Math.abs(boundEyeDepth - focalEyeDepth),
     perspectiveDivideFactor: 1 / w,
   };
 }

@@ -73,6 +73,7 @@ function makeParameters(options: {
     ...renderViewport,
     projectionMat,
     viewProjectionMat: mat4.multiply(mat4.create(), projectionMat, viewMatrix),
+    globalPosition: Float32Array.of(0, 0, 0),
     displayDimensionRenderInfo: {
       displayDimensionIndices: Int32Array.of(0, 1, 2),
     },
@@ -192,6 +193,45 @@ describe("projectToViewport", () => {
     expect(
       projectToViewport(orthographic, halfWayToFar)!.focalPlaneDepthFraction,
     ).toBeCloseTo(0.5);
+  });
+
+  it("measures depth linearly from the focal plane to each clipping plane when the near plane is closer than the far plane", () => {
+    for (const projectionMat of [
+      mat4.perspective(mat4.create(), Math.PI / 2, 2, 0.1, 3),
+      mat4.ortho(mat4.create(), -2, 2, -1, 1, 0.1, 3),
+    ]) {
+      const parameters = makeParameters({
+        projectionMat,
+        focalDistance: 1,
+        logicalWidth: 200,
+        logicalHeight: 100,
+      });
+      const depthAt = (z: number) =>
+        projectToViewport(parameters, [0, 0, z])!.focalPlaneDepthFraction;
+      const atFocus = 0;
+      const atNearPlane = 0.9;
+      const atFarPlane = -2;
+      const halfWayToFar = -1;
+      expect(depthAt(atFocus)).toBeCloseTo(0);
+      expect(depthAt(atNearPlane)).toBeCloseTo(-1);
+      expect(depthAt(atFarPlane)).toBeCloseTo(1);
+      expect(depthAt(halfWayToFar)).toBeCloseTo(0.5);
+    }
+  });
+
+  it("measures depth from the slice plane when the clipping planes lie on both sides of the camera", () => {
+    const parameters = makeParameters({
+      projectionMat: mat4.ortho(mat4.create(), -2, 2, -1, 1, -4, 4),
+      focalDistance: 0,
+      logicalWidth: 200,
+      logicalHeight: 100,
+    });
+    const depthAt = (z: number) =>
+      projectToViewport(parameters, [0, 0, z])!.focalPlaneDepthFraction;
+    expect(depthAt(0)).toBeCloseTo(0);
+    expect(depthAt(4)).toBeCloseTo(-1);
+    expect(depthAt(-4)).toBeCloseTo(1);
+    expect(depthAt(-2)).toBeCloseTo(0.5);
   });
 });
 
