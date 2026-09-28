@@ -236,12 +236,11 @@ class LayerSidePanel extends SidePanel {
           new CachedWatchableValue({
             get value() {
               return panelState.tabs.map((id) => {
-                const { label, hidden, parent } = layer.tabs.options.get(id)!;
+                const { label, hidden } = layer.tabs.options.get(id)!;
                 return {
                   id,
                   label,
                   hidden: hidden?.value || false,
-                  parent,
                 };
               });
             },
