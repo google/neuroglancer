@@ -107,6 +107,12 @@ export function getDefaultRenderedDataPanelBindings() {
         "shift+arrowup": "rotate-relative-x+",
         "shift+arrowleft": "rotate-relative-y-",
         "shift+arrowright": "rotate-relative-y+",
+        "alt+keye": "sway-relative-z",
+        "alt+keyr": "sway-relative-z",
+        "alt+arrowdown": "sway-relative-x",
+        "alt+arrowup": "sway-relative-x",
+        "alt+arrowleft": "sway-relative-y",
+        "alt+arrowright": "sway-relative-y",
         "control+wheel": { action: "zoom-via-wheel", preventDefault: true },
         "alt+wheel": {
           action: "adjust-depth-range-via-wheel",
