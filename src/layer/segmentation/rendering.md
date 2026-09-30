@@ -58,9 +58,11 @@ vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
 
 - `isStated` indicates that `color` came from an explicit stated segment color.
 
-A `vec4` version of `segmentColor` can also be used to override opacity. A
-negative alpha means that the shader does not override the opacity determined by
-the segmentation layer.
+A `vec4` version of `segmentColor` can also be used to adjust opacity. A
+non-negative alpha is multiplied by the opacity determined by the segmentation
+layer: **Opacity (on)** or **Opacity (off)** in slice views, and **Opacity (3d)**
+for meshes and skeletons. A negative alpha leaves the applicable layer opacity
+unchanged.
 
 ```glsl
 vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
