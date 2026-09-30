@@ -41,39 +41,29 @@
   min-height: 0;
 }
 
-.neuroglancer-annotation-list-overflow-indicator {
+.neuroglancer-annotation-list-container::before,
+.neuroglancer-annotation-list-container::after {
   position: absolute;
   z-index: 2;
   top: 0;
   bottom: 0;
-  display: flex;
-  align-items: center;
-  width: 22px;
-  box-sizing: border-box;
-  color: white;
-  font-size: 22px;
+  width: 2px;
+  background-color: #ff0;
+  content: "";
   pointer-events: none;
   opacity: 0;
 }
 
-.neuroglancer-annotation-list-overflow-indicator-left {
+.neuroglancer-annotation-list-container::before {
   left: 0;
-  justify-content: flex-start;
-  padding-left: 2px;
-  background: linear-gradient(to right, rgba(0, 0, 0, 0.9), transparent);
 }
 
-.neuroglancer-annotation-list-overflow-indicator-right {
+.neuroglancer-annotation-list-container::after {
   right: 0;
-  justify-content: flex-end;
-  padding-right: 2px;
-  background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.9));
 }
 
-.neuroglancer-annotation-list-container[data-overflow-right="true"]
-  > .neuroglancer-annotation-list-overflow-indicator-right,
-.neuroglancer-annotation-list-container[data-overflow-left="true"]
-  > .neuroglancer-annotation-list-overflow-indicator-left {
+.neuroglancer-annotation-list-container[data-overflow-left="true"]::before,
+.neuroglancer-annotation-list-container[data-overflow-right="true"]::after {
   opacity: 1;
 }
 
@@ -134,6 +124,22 @@
   display: flex;
   align-items: center;
   padding-bottom: 2px;
+}
+
+.neuroglancer-annotation-column-controls
+  > .neuroglancer-annotation-list-scroll-button {
+  display: none;
+  min-width: 18px;
+  min-height: 18px;
+  margin: 0;
+  padding: 0;
+}
+
+.neuroglancer-annotation-list-container[data-overflow-left="true"]
+  .neuroglancer-annotation-list-scroll-button-left,
+.neuroglancer-annotation-list-container[data-overflow-right="true"]
+  .neuroglancer-annotation-list-scroll-button-right {
+  display: inline-flex;
 }
 
 .neuroglancer-annotation-column-controls-container {
