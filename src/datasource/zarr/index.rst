@@ -94,9 +94,30 @@ Supported codecs:
 - blosc
 - bytes
 - gzip
+- jpegxl
+- reshape
 - sharding_indexed
 - transpose
 - zstd
+
+JPEG XL
+~~~~~~~
+
+The ``jpegxl`` ``array -> bytes`` codec has a fixed image-shape contract: the
+array chunk it receives must equal the native JPEG XL image shape ``[frames,
+height, width, samples]`` with unit ``frames``/``samples`` axes dropped, i.e.
+one of ``[h, w]``, ``[h, w, c]``, ``[f, h, w]``, or ``[f, h, w, c]``. Supported
+data types are ``uint8``, ``uint16``, and ``float32``. The decoder performs no
+dimension guessing and no color-space conversion; it returns the samples as
+stored (for scientific multi-channel data, encode each channel independently as
+grayscale rather than a correlated color image).
+
+Arbitrary chunk shapes are adapted to this contract by chaining the ``reshape``
+codec (and, when the channel axis must be moved, ``transpose``) before
+``jpegxl``. For example, a chunk of shape ``[1, 1, 32, 256, 256]`` uses
+``{"name": "reshape", "configuration": {"shape": [[2], [3], [4]]}}`` to produce
+the ``[32, 256, 256]`` image the codec expects. The chain is asserted to produce
+chunks of exactly the expected size.
 
 Auto detection
 --------------
