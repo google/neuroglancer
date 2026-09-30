@@ -352,6 +352,10 @@ export class AnnotationLayerView extends AccordionTab {
   private navRow = document.createElement("div");
   private headerControls = document.createElement("div");
   private headerRow = document.createElement("div");
+  private listHeader = document.createElement("div");
+  private listContainer = document.createElement("div");
+  private listOverflowIndicator = document.createElement("div");
+  private listLeftOverflowIndicator = document.createElement("div");
 
   get annotationStates() {
     return this.layer.annotationStates;
@@ -520,6 +524,15 @@ export class AnnotationLayerView extends AccordionTab {
       ? ""
       : "none";
   }
+
+  private updateListOverflow = () => {
+    const { element } = this.virtualList;
+    this.headerRow.style.transform = `translateX(${-element.scrollLeft}px)`;
+    this.listContainer.dataset.overflowLeft = String(element.scrollLeft > 1);
+    this.listContainer.dataset.overflowRight = String(
+      element.scrollLeft + element.clientWidth < element.scrollWidth - 1,
+    );
+  };
 
   private updateCoordinateSpace() {
     const localCoordinateSpace = this.layer.localCoordinateSpace.value;
@@ -703,12 +716,6 @@ export class AnnotationLayerView extends AccordionTab {
     );
     toolbox.appendChild(navRow);
     this.appendChild(toolbox, ANNOTATION_SECTION_JSON_KEY);
-    // Query input
-    const queryInput = (this.queryInput = createPropertyListQueryInput({
-      placeholder:
-        "Filter: text, /regexp/, #bool, #enum=label, prop<N, <sort, |col",
-    }));
-    const queryInputContainer = createPropertyListQueryContainer(queryInput);
     {
       const checkbox = this.registerDisposer(
         new TrackableBooleanCheckbox(this.layer.listLoadedAnnotations),
@@ -719,8 +726,14 @@ export class AnnotationLayerView extends AccordionTab {
         "Shows currently-rendered annotations from non-local sources by decoding loaded chunk data.";
       label.appendChild(checkbox.element);
       label.style.display = "none";
-      queryInputContainer.appendChild(label);
+      this.appendChild(label, ANNOTATION_SECTION_JSON_KEY);
     }
+    // Query input
+    const queryInput = (this.queryInput = createPropertyListQueryInput({
+      placeholder:
+        "Filter: text, /regexp/, #bool, #enum=label, prop<N, <sort, |col",
+    }));
+    const queryInputContainer = createPropertyListQueryContainer(queryInput);
     this.appendChild(queryInputContainer, FILTER_SECTION_JSON_KEY);
 
     this.queryStatisticsElement.classList.add(
@@ -765,15 +778,47 @@ export class AnnotationLayerView extends AccordionTab {
 
     const { virtualList } = this;
     virtualList.element.classList.add("neuroglancer-annotation-list");
-    virtualList.header.classList.add(
+    virtualList.header.style.display = "none";
+    this.listHeader.classList.add(
       "neuroglancer-annotation-list-header-container",
       "neuroglancer-property-list-header",
     );
     this.headerControls.classList.add(
       "neuroglancer-annotation-column-controls-container",
     );
-    virtualList.header.append(this.headerRow, this.headerControls);
-    this.appendChild(virtualList.element, ANNOTATION_SECTION_JSON_KEY);
+    this.listHeader.append(this.headerRow);
+    const { listContainer, listOverflowIndicator, listLeftOverflowIndicator } =
+      this;
+    listContainer.classList.add("neuroglancer-annotation-list-container");
+    listOverflowIndicator.classList.add(
+      "neuroglancer-annotation-list-overflow-indicator",
+      "neuroglancer-annotation-list-overflow-indicator-right",
+    );
+    listOverflowIndicator.textContent = "\u203a";
+    listOverflowIndicator.title = "More annotation columns to the right";
+    listLeftOverflowIndicator.classList.add(
+      "neuroglancer-annotation-list-overflow-indicator",
+      "neuroglancer-annotation-list-overflow-indicator-left",
+    );
+    listLeftOverflowIndicator.textContent = "\u2039";
+    listLeftOverflowIndicator.title = "More annotation columns to the left";
+    listContainer.append(
+      this.listHeader,
+      virtualList.element,
+      listLeftOverflowIndicator,
+      listOverflowIndicator,
+      this.headerControls,
+    );
+    this.appendChild(listContainer, ANNOTATION_SECTION_JSON_KEY);
+    this.registerEventListener(
+      virtualList.element,
+      "scroll",
+      this.updateListOverflow,
+    );
+    const overflowObserver = new ResizeObserver(this.updateListOverflow);
+    overflowObserver.observe(virtualList.element);
+    overflowObserver.observe(virtualList.scrollContent);
+    this.registerDisposer(() => overflowObserver.disconnect());
     this.virtualList.element.addEventListener("mouseleave", () => {
       this.displayState.hoverState.value = undefined;
     });
@@ -1364,14 +1409,15 @@ export class AnnotationLayerView extends AccordionTab {
   private makeColumnControls() {
     const controls = document.createElement("div");
     controls.classList.add("neuroglancer-annotation-column-controls");
-    const addButton = makeAddButton({
+    const visibilityButton = makeEyeButton({
       title: "Choose annotation list columns",
-      onClick: () => this.toggleColumnDropdown(addButton),
+      onClick: () => this.toggleColumnDropdown(visibilityButton),
     });
+    visibilityButton.classList.add("neuroglancer-visible");
     if (this.columnDropdown !== undefined) {
-      this.columnDropdownAnchor = addButton;
+      this.columnDropdownAnchor = visibilityButton;
     }
-    controls.appendChild(addButton);
+    controls.appendChild(visibilityButton);
     return controls;
   }
 

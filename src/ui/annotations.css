@@ -32,6 +32,51 @@
   min-height: 0px;
 }
 
+.neuroglancer-annotation-list-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 0;
+  min-height: 0;
+}
+
+.neuroglancer-annotation-list-overflow-indicator {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  width: 22px;
+  box-sizing: border-box;
+  color: white;
+  font-size: 22px;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.neuroglancer-annotation-list-overflow-indicator-left {
+  left: 0;
+  justify-content: flex-start;
+  padding-left: 2px;
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.9), transparent);
+}
+
+.neuroglancer-annotation-list-overflow-indicator-right {
+  right: 0;
+  justify-content: flex-end;
+  padding-right: 2px;
+  background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.9));
+}
+
+.neuroglancer-annotation-list-container[data-overflow-right="true"]
+  > .neuroglancer-annotation-list-overflow-indicator-right,
+.neuroglancer-annotation-list-container[data-overflow-left="true"]
+  > .neuroglancer-annotation-list-overflow-indicator-left {
+  opacity: 1;
+}
+
 .neuroglancer-annotation-list-entry {
   display: grid;
   grid-auto-rows: min-content;
@@ -73,6 +118,8 @@
   display: grid;
   position: relative;
   min-height: 20px;
+  flex: 0 0 auto;
+  overflow: hidden;
 }
 
 .neuroglancer-annotation-list-header {
@@ -90,13 +137,10 @@
 }
 
 .neuroglancer-annotation-column-controls-container {
-  grid-area: 1 / 1;
-  position: sticky;
-  z-index: 1;
+  position: absolute;
+  z-index: 3;
   top: 0;
   right: 0;
-  justify-self: end;
-  background-color: inherit;
 }
 
 .neuroglancer-annotation-column-dropdown {
