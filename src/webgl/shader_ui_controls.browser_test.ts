@@ -1394,7 +1394,30 @@ void main() {
 `;
     const fragmentMain = new WatchableValue(unfilteredCode);
     const dataContext = new WatchableValue<ShaderDataContext | null>({
-      segmentPropertyMap: makeSegmentPropertyMap(),
+      segmentPropertyMap: new PreprocessedSegmentPropertyMap(
+        new SegmentPropertyMap({
+          inlineProperties: {
+            ids: new BigUint64Array([1n]),
+            properties: [
+              {
+                id: "tags",
+                type: "tags",
+                tags: ["red", "blue"],
+                tagDescriptions: ["red", "blue"],
+                values: ["\u0000"],
+              },
+              {
+                id: "score",
+                type: "number",
+                dataType: DataType.UINT8,
+                values: new Uint8Array([1]),
+                description: "score",
+                bounds: [0, 1],
+              },
+            ],
+          },
+        }),
+      ),
     });
     const shaderControlState = new ShaderControlState(
       fragmentMain,
@@ -1415,6 +1438,17 @@ void main() {
         type: "tag",
         id: "red",
       });
+      const tagFilteredControl =
+        shaderControlState.state.get("selected")!.control;
+      expect(tagFilteredControl.type).toBe("property");
+      if (tagFilteredControl.type !== "property") return;
+      expect(tagFilteredControl.segmentProperties.tags).toEqual([
+        "red",
+        "blue",
+      ]);
+      expect(
+        tagFilteredControl.segmentProperties.numericalProperties.size,
+      ).toBe(0);
       expect(shaderControlState.builderState.value.propertyReferences).toEqual({
         source: "segment",
         references: [{ type: "tag", id: "red" }],
@@ -1425,6 +1459,13 @@ void main() {
         type: "tag",
         id: "red",
       });
+      const unfilteredControl =
+        shaderControlState.state.get("selected")!.control;
+      expect(unfilteredControl.type).toBe("property");
+      if (unfilteredControl.type !== "property") return;
+      expect(
+        unfilteredControl.segmentProperties.numericalProperties.size,
+      ).toBeGreaterThan(0);
       expect(shaderControlState.builderState.value.propertyReferences).toEqual({
         source: "segment",
         references: [{ type: "tag", id: "red" }],

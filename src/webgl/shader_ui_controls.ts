@@ -172,6 +172,12 @@ export type ShaderUiControl =
   | ShaderTransferFunctionControl
   | ShaderPropertyControl;
 
+function shaderUiControlsEqual(a: ShaderUiControl, b: ShaderUiControl) {
+  const replacer = (_key: string, value: unknown) =>
+    value instanceof Map ? [...value] : value;
+  return JSON.stringify(a, replacer) === JSON.stringify(b, replacer);
+}
+
 export interface ShaderControlParseError {
   line: number;
   message: string;
@@ -2072,7 +2078,7 @@ export class ShaderControlState
       let preservedValue: unknown;
       if (
         controlState !== undefined &&
-        JSON.stringify(controlState.control) !== JSON.stringify(control)
+        !shaderUiControlsEqual(controlState.control, control)
       ) {
         if (
           controlState.control.type === "property" &&
@@ -2296,7 +2302,7 @@ export function setControlsInShader(
       const controlState = state.get(name);
       const value =
         controlState !== undefined &&
-        JSON.stringify(controlState.control) === JSON.stringify(control)
+        shaderUiControlsEqual(controlState.control, control)
           ? controlState.trackable.value
           : control.default;
       setControlInShader(gl, shader, name, control, value, stringLiteralIds);
