@@ -465,10 +465,7 @@ vec3 normal = normalize(uNormalMatrix * (normalMultiplier * origNormal));
 float absCosAngle = abs(dot(normal, uLightDirection.xyz));
 float lightingFactor = absCosAngle + uLightDirection.w;
 vColor = segmentColorUserShader(uint64_t(uID));
-float alpha = uAlpha;
-if (vColor.a >= 0.0) {
-  alpha *= vColor.a;
-}
+float alpha = uAlpha * vColor.a;
 vColor = vec4(lightingFactor * vColor.rgb * alpha, alpha);
 `;
         if (silhouetteRenderingEnabled) {
