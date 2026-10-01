@@ -233,9 +233,7 @@ highp uint vertexIndex = aVertexIndex.x * (1u - lineEndpointIndex) + aVertexInde
 
           builder.addFragmentCode(`
 vec4 segmentColor() {
-  vec4 res = segmentColorUserShader(uint64_t(uID));
-  if (res.a < 0.0) res.a = 1.0;
-  return res;
+  return segmentColorUserShader(uint64_t(uID));
 }
 void emitRGBA(vec4 color) {
   color.a *= uAlpha;
@@ -323,9 +321,7 @@ emitCircle(uProjection * vec4(vertexPosition, 1.0), uNodeDiameter, 0.0);
 
           builder.addFragmentCode(`
 vec4 segmentColor() {
-  vec4 res = segmentColorUserShader(uint64_t(uID));
-  if (res.a < 0.0) res.a = 1.0;
-  return res;
+  return segmentColorUserShader(uint64_t(uID));
 }
 void emitRGBA(vec4 color) {
   color.a *= uAlpha;
