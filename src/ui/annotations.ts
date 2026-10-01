@@ -739,6 +739,9 @@ export class AnnotationLayerView extends AccordionTab {
     this.queryStatisticsElement.classList.add(
       "neuroglancer-property-list-status",
     );
+    this.queryStatistics.content.classList.add(
+      "neuroglancer-annotation-filter-results",
+    );
     this.categoricalSummaryContainer.style.display = "none";
     this.numericalSummaryContainer.style.display = "none";
     this.derivedWarningElement.classList.add(
