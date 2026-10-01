@@ -18,8 +18,6 @@
  * @file User interface for display and editing annotations.
  */
 
-import svg_arrowLeft from "ikonate/icons/arrow-left.svg?raw";
-import svg_arrowRight from "ikonate/icons/arrow-right.svg?raw";
 import svg_help from "ikonate/icons/help.svg?raw";
 import "#src/ui/annotations.css";
 import { debounce, throttle } from "lodash-es";
@@ -356,6 +354,8 @@ export class AnnotationLayerView extends AccordionTab {
   private headerRow = document.createElement("div");
   private listHeader = document.createElement("div");
   private listContainer = document.createElement("div");
+  private listOverflowIndicator = document.createElement("div");
+  private listLeftOverflowIndicator = document.createElement("div");
 
   get annotationStates() {
     return this.layer.annotationStates;
@@ -533,14 +533,6 @@ export class AnnotationLayerView extends AccordionTab {
       element.scrollLeft + element.clientWidth < element.scrollWidth - 1,
     );
   };
-
-  private scrollAnnotationList(direction: -1 | 1) {
-    const { element } = this.virtualList;
-    element.scrollBy({
-      left: direction * Math.max(1, element.clientWidth - 32),
-    });
-    this.updateListOverflow();
-  }
 
   private updateCoordinateSpace() {
     const localCoordinateSpace = this.layer.localCoordinateSpace.value;
@@ -795,11 +787,26 @@ export class AnnotationLayerView extends AccordionTab {
       "neuroglancer-annotation-column-controls-container",
     );
     this.listHeader.append(this.headerRow);
-    const { listContainer } = this;
+    const { listContainer, listOverflowIndicator, listLeftOverflowIndicator } =
+      this;
     listContainer.classList.add("neuroglancer-annotation-list-container");
+    listOverflowIndicator.classList.add(
+      "neuroglancer-annotation-list-overflow-indicator",
+      "neuroglancer-annotation-list-overflow-indicator-right",
+    );
+    listOverflowIndicator.textContent = "\u203a";
+    listOverflowIndicator.title = "More annotation columns to the right";
+    listLeftOverflowIndicator.classList.add(
+      "neuroglancer-annotation-list-overflow-indicator",
+      "neuroglancer-annotation-list-overflow-indicator-left",
+    );
+    listLeftOverflowIndicator.textContent = "\u2039";
+    listLeftOverflowIndicator.title = "More annotation columns to the left";
     listContainer.append(
       this.listHeader,
       virtualList.element,
+      listLeftOverflowIndicator,
+      listOverflowIndicator,
       this.headerControls,
     );
     this.appendChild(listContainer, ANNOTATION_SECTION_JSON_KEY);
@@ -1402,24 +1409,6 @@ export class AnnotationLayerView extends AccordionTab {
   private makeColumnControls() {
     const controls = document.createElement("div");
     controls.classList.add("neuroglancer-annotation-column-controls");
-    const scrollLeftButton = makeIcon({
-      svg: svg_arrowLeft,
-      title: "Scroll annotation columns left",
-      onClick: () => this.scrollAnnotationList(-1),
-    });
-    scrollLeftButton.classList.add(
-      "neuroglancer-annotation-list-scroll-button",
-      "neuroglancer-annotation-list-scroll-button-left",
-    );
-    const scrollRightButton = makeIcon({
-      svg: svg_arrowRight,
-      title: "Scroll annotation columns right",
-      onClick: () => this.scrollAnnotationList(1),
-    });
-    scrollRightButton.classList.add(
-      "neuroglancer-annotation-list-scroll-button",
-      "neuroglancer-annotation-list-scroll-button-right",
-    );
     const visibilityButton = makeEyeButton({
       title: "Choose annotation list columns",
       onClick: () => this.toggleColumnDropdown(visibilityButton),
@@ -1428,7 +1417,7 @@ export class AnnotationLayerView extends AccordionTab {
     if (this.columnDropdown !== undefined) {
       this.columnDropdownAnchor = visibilityButton;
     }
-    controls.append(scrollLeftButton, scrollRightButton, visibilityButton);
+    controls.appendChild(visibilityButton);
     return controls;
   }
 

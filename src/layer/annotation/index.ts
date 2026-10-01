@@ -454,7 +454,7 @@ export class AnnotationUserLayer extends Base {
   hideInactiveShaderControls = new TrackableBoolean(false);
   readonly localAnnotationProperties: WatchableValue<AnnotationPropertySpec[]> =
     new WatchableValue([]);
-  private localAnnotationRelationships = ["segments"];
+  private localAnnotationRelationships: string[];
   private localAnnotationsJson: any = undefined;
   private pointAnnotationsJson: any = undefined;
   static supportColorPickerInAnnotationTab = false;
