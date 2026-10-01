@@ -110,6 +110,11 @@ export interface NumericalSummaryQueryResult {
   intermediateIndicesMask?: Uint32Array | Uint16Array | Uint8Array;
 }
 
+export interface NumericalPropertiesSummaryOptions {
+  propertyLabelPosition?: "inline" | "above";
+  showColumnToggle?: boolean;
+}
+
 /** Per-property histogram produced by the data source. */
 export interface NumericalPropertyHistogram {
   window: DataTypeInterval;
@@ -139,6 +144,12 @@ export interface IncludeExcludeChip {
   onHeaderClick?: () => void;
 }
 
+export interface IncludeExcludeChipGroup {
+  key: string;
+  label: string;
+  chips: IncludeExcludeChip[];
+}
+
 // --- Private helpers ----------------------------------------------------------
 
 interface NumericalBoundElements {
@@ -158,7 +169,7 @@ interface NumericalPropertySummaryWidget {
   plotImg: HTMLImageElement;
   propertyHistogram: NumericalPropertyHistogram | undefined;
   bounds: RangeAndWindowIntervals;
-  columnCheckbox: HTMLInputElement;
+  columnCheckbox: HTMLInputElement | undefined;
   sortIcon: HTMLElement;
   displayUnit: DisplayUnit | undefined;
   applicable: boolean;
@@ -320,6 +331,7 @@ export class NumericalPropertiesSummary extends RefCounted {
       NumericalSummaryQueryResult | undefined
     >,
     public setQuery: (query: NumericalSummaryQuery) => void,
+    public options: NumericalPropertiesSummaryOptions = {},
   ) {
     super();
     const { properties } = dataSource;
@@ -533,19 +545,37 @@ export class NumericalPropertiesSummary extends RefCounted {
     sortIcon.classList.add(
       "neuroglancer-segment-query-result-numerical-plot-sort",
     );
-    const columnCheckbox = document.createElement("input");
-    columnCheckbox.type = "checkbox";
-    if (property.columnToggleable === false) {
-      columnCheckbox.style.visibility = "hidden";
-    }
-    columnCheckbox.addEventListener("click", () => {
-      if (!propertySummary.applicable || property.columnToggleable === false) {
-        return;
-      }
+    const propertyLabel = document.createElement("span");
+    propertyLabel.classList.add(
+      "neuroglancer-segment-query-result-numerical-plot-label",
+    );
+    propertyLabel.append(property.id, sortIcon);
+    propertyLabel.addEventListener("click", () => {
+      if (!propertySummary.applicable) return;
       const q = this.queryResult.value?.query;
       if (q === undefined) return;
-      toggleIncludeColumn(q, this.setQuery, property.id);
+      toggleSortOrder(q, this.setQuery, property.id);
     });
+    if (property.description) propertyLabel.title = property.description;
+    let columnCheckbox: HTMLInputElement | undefined;
+    if (this.options.showColumnToggle !== false) {
+      columnCheckbox = document.createElement("input");
+      columnCheckbox.type = "checkbox";
+      if (property.columnToggleable === false) {
+        columnCheckbox.style.visibility = "hidden";
+      }
+      columnCheckbox.addEventListener("click", () => {
+        if (
+          !propertySummary.applicable ||
+          property.columnToggleable === false
+        ) {
+          return;
+        }
+        const q = this.queryResult.value?.query;
+        if (q === undefined) return;
+        toggleIncludeColumn(q, this.setQuery, property.id);
+      });
+    }
     const makeBoundElements = (
       boundType: "window" | "range",
     ): NumericalBoundElements => {
@@ -612,20 +642,12 @@ export class NumericalPropertiesSummary extends RefCounted {
         spacers[1].classList.add(
           "neuroglancer-segment-query-result-numerical-plot-bound-constraint-spacer",
         );
-        spacers[1].appendChild(columnCheckbox);
-        const label = document.createElement("span");
-        label.classList.add(
-          "neuroglancer-segment-query-result-numerical-plot-label",
-        );
-        label.appendChild(document.createTextNode(property.id));
-        label.appendChild(sortIcon);
-        label.addEventListener("click", () => {
-          if (!propertySummary.applicable) return;
-          const q = this.queryResult.value?.query;
-          if (q === undefined) return;
-          toggleSortOrder(q, this.setQuery, property.id);
-        });
-        spacers[1].appendChild(label);
+        if (columnCheckbox !== undefined) {
+          spacers[1].appendChild(columnCheckbox);
+        }
+        if (this.options.propertyLabelPosition !== "above") {
+          spacers[1].appendChild(propertyLabel);
+        }
         if (property.description) {
           spacers[1].title = property.description;
         }
@@ -656,6 +678,12 @@ export class NumericalPropertiesSummary extends RefCounted {
       range: makeBoundElements("range"),
       window: makeBoundElements("window"),
     };
+    if (this.options.propertyLabelPosition === "above") {
+      propertyLabel.classList.add(
+        "neuroglancer-segment-query-result-numerical-plot-label-above",
+      );
+      plotContainer.appendChild(propertyLabel);
+    }
     plotContainer.appendChild(boundElements.range.container);
     plotContainer.appendChild(plotImg);
     plotContainer.appendChild(boundElements.window.container);
@@ -708,23 +736,27 @@ export class NumericalPropertiesSummary extends RefCounted {
     summary.applicable = applicable;
     summary.element.style.display = applicable ? "" : "none";
     summary.element.setAttribute("aria-disabled", `${!applicable}`);
-    summary.columnCheckbox.disabled = !applicable;
+    if (summary.columnCheckbox !== undefined) {
+      summary.columnCheckbox.disabled = !applicable;
+    }
     for (const boundType of ["range", "window"] as const) {
       for (const input of summary.boundElements[boundType].inputs) {
         input.disabled = !applicable;
       }
     }
     const query = this.queryResult.value?.query;
-    const isIncluded =
-      property.columnToggleable === false ||
-      queryIncludesColumn(query, property.id);
-    summary.columnCheckbox.checked = isIncluded;
-    summary.columnCheckbox.title =
-      property.columnToggleable === false
-        ? ""
-        : isIncluded
-          ? "Remove column from result table"
-          : "Add column to result table";
+    if (summary.columnCheckbox !== undefined) {
+      const isIncluded =
+        property.columnToggleable === false ||
+        queryIncludesColumn(query, property.id);
+      summary.columnCheckbox.checked = isIncluded;
+      summary.columnCheckbox.title =
+        property.columnToggleable === false
+          ? ""
+          : isIncluded
+            ? "Remove column from result table"
+            : "Add column to result table";
+    }
     updateColumnSortIcon(query, summary.sortIcon, property.id);
     if (
       summary.propertyHistogram === propertyHistogram &&
@@ -887,13 +919,24 @@ export class NumericalPropertiesSummary extends RefCounted {
  */
 export function renderIncludeExcludeChips(
   chips: IncludeExcludeChip[],
+  options: { showZeroCountToggles?: boolean; tree?: boolean } = {},
 ): HTMLElement | undefined {
   if (chips.length === 0) return undefined;
   const list = document.createElement("div");
   list.classList.add("neuroglancer-segment-query-result-tag-list");
+  if (options.tree) {
+    list.classList.add("neuroglancer-property-list-categorical-tree-options");
+  }
   for (const chip of chips) {
     const chipElement = document.createElement("div");
     chipElement.classList.add("neuroglancer-segment-query-result-tag");
+    if (options.tree) {
+      const connector = document.createElement("span");
+      connector.classList.add(
+        "neuroglancer-property-list-categorical-tree-connector",
+      );
+      chipElement.appendChild(connector);
+    }
     const inQuery = chip.included || chip.excluded;
     const addToggleButton = (include: boolean) => {
       const sideCount = include ? chip.count : chip.totalCount - chip.count;
@@ -903,7 +946,7 @@ export function renderIncludeExcludeChips(
         `neuroglancer-segment-query-result-tag-${include ? "include" : "exclude"}`,
       );
       chipElement.appendChild(toggleEl);
-      if (!inQuery && sideCount === 0) return;
+      if (!options.showZeroCountToggles && !inQuery && sideCount === 0) return;
       const selected = include ? chip.included : chip.excluded;
       toggleEl.appendChild(
         new CheckboxIcon(
@@ -974,12 +1017,46 @@ export function renderIncludeExcludeChips(
 }
 
 export function renderCategoricalPropertiesSummary(options: {
-  chips: IncludeExcludeChip[];
+  chips?: IncludeExcludeChip[];
+  groups?: IncludeExcludeChipGroup[];
   propertyCount: number;
   open?: boolean;
   onToggle?: (open: boolean) => void;
 }): HTMLDetailsElement | undefined {
-  const chipsElement = renderIncludeExcludeChips(options.chips);
+  let chipsElement: HTMLElement | undefined;
+  if (options.groups !== undefined) {
+    const groupsElement = document.createElement("div");
+    groupsElement.classList.add(
+      "neuroglancer-property-list-categorical-property-groups",
+    );
+    for (const group of options.groups) {
+      const groupChips = renderIncludeExcludeChips(group.chips, {
+        showZeroCountToggles: true,
+        tree: true,
+      });
+      if (groupChips === undefined) continue;
+      groupChips.classList.add(
+        "neuroglancer-property-list-categorical-property-options",
+      );
+      const groupElement = document.createElement("div");
+      groupElement.classList.add(
+        "neuroglancer-property-list-categorical-property",
+      );
+      groupElement.dataset.propertyId = group.key;
+      groupElement.setAttribute("role", "group");
+      groupElement.setAttribute("aria-label", group.label);
+      const groupLabel = document.createElement("div");
+      groupLabel.classList.add(
+        "neuroglancer-property-list-categorical-property-label",
+      );
+      groupLabel.textContent = group.label;
+      groupElement.append(groupLabel, groupChips);
+      groupsElement.appendChild(groupElement);
+    }
+    if (groupsElement.childElementCount !== 0) chipsElement = groupsElement;
+  } else {
+    chipsElement = renderIncludeExcludeChips(options.chips ?? []);
+  }
   if (chipsElement === undefined) return undefined;
   return createPropertyListSummaryGroup({
     content: chipsElement,

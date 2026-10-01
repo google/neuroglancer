@@ -491,6 +491,7 @@ export function unparseAnnotationQuery(
   query: AnnotationFilterQuery,
   schemaBoundsMap?: ReadonlyMap<string, readonly [number, number]>,
   schemaBaseUnitMap?: ReadonlyMap<string, string>,
+  schemaEnumLabelMap?: ReadonlyMap<string, ReadonlyMap<number, string>>,
 ): string {
   const clauses: SerializablePropertyQueryClause[] = [];
   for (const { fieldId, order } of query.sortBy) {
@@ -538,7 +539,7 @@ export function unparseAnnotationQuery(
         type: "categorical",
         exclude: false,
         field: c.fieldId,
-        value: `${value}`,
+        value: schemaEnumLabelMap?.get(c.fieldId)?.get(value) ?? `${value}`,
       });
     }
     for (const value of c.exclude) {
@@ -546,7 +547,7 @@ export function unparseAnnotationQuery(
         type: "categorical",
         exclude: true,
         field: c.fieldId,
-        value: `${value}`,
+        value: schemaEnumLabelMap?.get(c.fieldId)?.get(value) ?? `${value}`,
       });
     }
   }

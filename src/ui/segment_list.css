@@ -244,6 +244,11 @@
   cursor: pointer;
 }
 
+.neuroglancer-segment-query-result-numerical-plot-label-above {
+  align-self: flex-start;
+  font-weight: bold;
+}
+
 .neuroglancer-segment-query-result-numerical-plot-sort {
   visibility: hidden;
 }
