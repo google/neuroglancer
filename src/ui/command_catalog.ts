@@ -36,9 +36,13 @@ import { RefCounted } from "#src/util/disposable.js";
 import type {
   ActionIdentifier,
   EventAction,
+  EventActionMap,
   NormalizedEventIdentifier,
 } from "#src/util/event_action_map.js";
-import { friendlyEventIdentifier } from "#src/util/event_action_map.js";
+import {
+  friendlyEventIdentifier,
+  hasMetaCounterpart,
+} from "#src/util/event_action_map.js";
 import { rankedMatches } from "#src/util/ranked_matches.js";
 import { Signal } from "#src/util/signal.js";
 import type { InputEventBindings } from "#src/viewer.js";
@@ -66,6 +70,7 @@ export interface CommandCatalogContext {
 export interface ActionBinding {
   readonly actionId: ActionIdentifier;
   readonly eventAction: EventAction;
+  readonly controlIsSeparateFromCommand: boolean;
 }
 
 export type CommandSource = "registered" | "derived";
@@ -204,27 +209,29 @@ function activateUnboundTool(
 export function collectActionBindings(
   inputEventBindings: InputEventBindings,
 ): readonly ActionBinding[] {
-  const seenBindings = new Map<ActionIdentifier, EventAction>();
+  const seenBindings = new Map<ActionIdentifier, ActionBinding>();
 
-  const collect = (
-    bindings: Iterable<[NormalizedEventIdentifier, EventAction]>,
-  ) => {
-    for (const [normalizedId, eventAction] of bindings) {
+  const collect = (eventMap: EventActionMap) => {
+    for (const [normalizedId, eventAction] of eventMap.entries()) {
       if (!isKeyboardEvent(normalizedId)) continue;
       if (!seenBindings.has(eventAction.action)) {
-        seenBindings.set(eventAction.action, eventAction);
+        seenBindings.set(eventAction.action, {
+          actionId: eventAction.action,
+          eventAction,
+          controlIsSeparateFromCommand: hasMetaCounterpart(
+            eventMap,
+            normalizedId,
+          ),
+        });
       }
     }
   };
 
-  collect(inputEventBindings.global.entries());
-  collect(inputEventBindings.sliceView.entries());
-  collect(inputEventBindings.perspectiveView.entries());
+  collect(inputEventBindings.global);
+  collect(inputEventBindings.sliceView);
+  collect(inputEventBindings.perspectiveView);
 
-  return Array.from(seenBindings.entries(), ([actionId, eventAction]) => ({
-    actionId,
-    eventAction,
-  }));
+  return Array.from(seenBindings.values());
 }
 
 export class CommandCatalog extends RefCounted {
@@ -267,16 +274,20 @@ export class CommandCatalog extends RefCounted {
 
     const bindings = collectActionBindings(inputEventBindings);
     const shortcutByAction = new Map<ActionIdentifier, string>();
-    for (const { actionId, eventAction } of bindings) {
+    for (const {
+      actionId,
+      eventAction,
+      controlIsSeparateFromCommand,
+    } of bindings) {
       shortcutByAction.set(
         actionId,
         formatKeyStroke(
           friendlyEventIdentifier(eventAction.originalEventIdentifier ?? ""),
+          { controlIsSeparateFromCommand },
         ),
       );
     }
 
-    // A group header states the whole digit range rather than one binding.
     const layerRangeShortcut = (actionPrefix: string) => {
       const shortcut = shortcutByAction.get(`${actionPrefix}-1`);
       return shortcut === undefined ? "" : `${shortcut}–9`;

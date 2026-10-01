@@ -30,6 +30,7 @@ import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { removeChildren } from "#src/util/dom.js";
 import {
   friendlyEventIdentifier,
+  hasMetaCounterpart,
   type EventActionMap,
 } from "#src/util/event_action_map.js";
 import { emptyToUndefined } from "#src/util/json.js";
@@ -63,29 +64,34 @@ export class HelpPanelState {
 interface BindingList {
   label: string;
   entries: Map<string, string>;
+  controlSeparateFromCommandStrokes: Set<string>;
 }
 
 function collectBindings(
   bindings: Iterable<[string, EventActionMap]>,
 ): Map<EventActionMap, BindingList> {
   const uniqueMaps = new Map<EventActionMap, BindingList>();
-  function addEntries(eventMap: EventActionMap, entries: Map<string, string>) {
+  function addEntries(eventMap: EventActionMap, list: BindingList) {
     for (const parent of eventMap.parents) {
       if (parent.label !== undefined) {
         addMap(parent.label, parent);
       } else {
-        addEntries(parent, entries);
+        addEntries(parent, list);
       }
     }
     for (const [event, eventAction] of eventMap.bindings.entries()) {
-      entries.set(
-        friendlyEventIdentifier(eventAction.originalEventIdentifier ?? event),
-        eventAction.action,
+      const stroke = friendlyEventIdentifier(
+        eventAction.originalEventIdentifier ?? event,
       );
+      list.entries.set(stroke, eventAction.action);
+      if (hasMetaCounterpart(eventMap, event)) {
+        list.controlSeparateFromCommandStrokes.add(stroke);
+      }
     }
   }
 
-  function simplifyEntries(entries: Map<string, string>) {
+  function simplifyEntries(list: BindingList) {
+    const { entries } = list;
     const identifierMap = new Map<string, [string, string]>();
 
     function increment(x: string, i: number) {
@@ -128,7 +134,12 @@ function collectBindings(
     const newEntries = new Map<string, string>();
     for (let [identifier, action] of entries) {
       const remapped = identifierMap.get(identifier);
-      [identifier, action] = remapped ?? [identifier, action];
+      if (remapped !== undefined) {
+        if (list.controlSeparateFromCommandStrokes.has(identifier)) {
+          list.controlSeparateFromCommandStrokes.add(remapped[0]);
+        }
+        [identifier, action] = remapped;
+      }
       newEntries.set(identifier, action);
     }
     return newEntries;
@@ -141,9 +152,10 @@ function collectBindings(
     const list: BindingList = {
       label,
       entries: new Map(),
+      controlSeparateFromCommandStrokes: new Set(),
     };
-    addEntries(map, list.entries);
-    list.entries = simplifyEntries(list.entries);
+    addEntries(map, list);
+    list.entries = simplifyEntries(list);
     uniqueMaps.set(map, list);
   }
   for (const [label, eventMap] of bindings) {
@@ -214,14 +226,21 @@ export class InputEventBindingHelpDialog extends SidePanel {
 
     const uniqueMaps = collectBindings(bindings);
 
-    const addGroup = (title: string, entries: Iterable<[string, string]>) => {
+    const addGroup = (
+      title: string,
+      entries: Iterable<[string, string]>,
+      controlSeparateFromCommandStrokes: ReadonlySet<string> = new Set(),
+    ) => {
       const header = document.createElement("h2");
       header.textContent = title;
       scroll.appendChild(header);
       for (const [event, action] of entries) {
         const dt = document.createElement("div");
         dt.className = "dt";
-        dt.textContent = formatKeyStroke(event);
+        dt.textContent = formatKeyStroke(event, {
+          controlIsSeparateFromCommand:
+            controlSeparateFromCommandStrokes.has(event),
+        });
         const dd = document.createElement("div");
         dd.className = "dd";
         dd.textContent = action;
@@ -262,7 +281,11 @@ export class InputEventBindingHelpDialog extends SidePanel {
     }
 
     for (const list of uniqueMaps.values()) {
-      addGroup(list.label, list.entries);
+      addGroup(
+        list.label,
+        list.entries,
+        list.controlSeparateFromCommandStrokes,
+      );
     }
   }
 }

@@ -124,6 +124,24 @@ describe("collectActionBindings", () => {
   });
 });
 
+describe("collectActionBindings control and Command", () => {
+  it("marks Control as separate only when the key has its own meta binding", () => {
+    const map = new EventActionMap();
+    map.set("control+keya", "shared-action");
+    map.set("control+keyb", "separate-action");
+    map.set("meta+keyb", "command-action");
+    const bindings = collectActionBindings(makeInputEventBindings(map));
+    const separateByAction = new Map(
+      bindings.map((binding) => [
+        binding.actionId,
+        binding.controlIsSeparateFromCommand,
+      ]),
+    );
+    expect(separateByAction.get("shared-action")).toBe(false);
+    expect(separateByAction.get("separate-action")).toBe(true);
+  });
+});
+
 describe("CommandCatalog.filter", () => {
   // Seed the registry with two commands so the catalog surfaces exactly
   // "Edit JSON State" and "Screenshot" as its flat entries.

@@ -458,6 +458,34 @@ export function dispatchEvent(
   dispatchEventAction(originalEvent, detail, eventAction);
 }
 
+function replaceModifier(
+  modifiers: ModifierMask,
+  removed: Modifiers,
+  added: Modifiers,
+) {
+  return (modifiers & ~removed) | added;
+}
+
+/**
+ * Whether `eventMap` has its own `meta+` binding for a `control+` stroke. On
+ * Mac, Command otherwise falls back to the `control+` binding.
+ */
+export function hasMetaCounterpart(
+  eventMap: EventActionMapInterface,
+  normalizedIdentifier: NormalizedEventIdentifier,
+) {
+  const { phase, keyName, modifiers } =
+    parseEventIdentifier(normalizedIdentifier);
+  if (!(modifiers & Modifiers.CONTROL) || modifiers & Modifiers.META) {
+    return false;
+  }
+  const metaStroke = getStrokeIdentifier(
+    keyName,
+    replaceModifier(modifiers, Modifiers.CONTROL, Modifiers.META),
+  );
+  return eventMap.get(`${phase}:${metaStroke}`) !== undefined;
+}
+
 export function dispatchEventWithModifiers(
   baseIdentifier: EventIdentifier,
   originalEvent: Event & EventModifierKeyState,
@@ -475,12 +503,11 @@ export function dispatchEventWithModifiers(
     !(modifiers & Modifiers.CONTROL) &&
     isMacPlatform()
   ) {
-    // Mac users expect Command for a shortcut, so it also reaches a `control+`
-    // binding. An explicit `meta+` binding matches above and so takes priority.
+    // An explicit `meta+` binding matches above and so takes priority.
     eventAction = eventMap.get(
       `${phase}:${getStrokeIdentifier(
         baseIdentifier,
-        (modifiers & ~Modifiers.META) | Modifiers.CONTROL,
+        replaceModifier(modifiers, Modifiers.META, Modifiers.CONTROL),
       )}`,
     );
   }

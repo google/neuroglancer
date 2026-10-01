@@ -22,19 +22,23 @@ describe("formatKeyStroke", () => {
     vi.unstubAllGlobals();
   });
 
-  function format(platform: string, stroke: string) {
-    vi.stubGlobal("navigator", { platform });
-    return formatKeyStroke(stroke);
-  }
-
   it("joins modifier names off Mac", () => {
-    expect(format("Win32", "control+alt+keyp")).toBe("control+alt+p");
+    vi.stubGlobal("navigator", { platform: "Win32" });
+    expect(formatKeyStroke("control+alt+keyp")).toBe("control+alt+p");
   });
 
   it("uses platform symbols on Mac", () => {
-    expect(format("MacIntel", "control+keyp")).toBe("⌘p");
-    expect(format("MacIntel", "alt+shift+keya")).toBe("⌥⇧a");
-    // A multi-character key name keeps a separator.
-    expect(format("MacIntel", "control+mousedown0")).toBe("⌘+mousedown0");
+    vi.stubGlobal("navigator", { platform: "MacIntel" });
+    expect(formatKeyStroke("control+keyp")).toBe("⌘p");
+    expect(formatKeyStroke("alt+shift+keya")).toBe("⌥⇧a");
+    expect(formatKeyStroke("control+mousedown0")).toBe("⌘+mousedown0");
+  });
+
+  it("tells Control from Command when both are bound to one key", () => {
+    vi.stubGlobal("navigator", { platform: "MacIntel" });
+    expect(
+      formatKeyStroke("control+keyx", { controlIsSeparateFromCommand: true }),
+    ).toBe("⌃x");
+    expect(formatKeyStroke("meta+keyx")).toBe("⌘x");
   });
 });
