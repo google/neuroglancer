@@ -156,6 +156,7 @@ import {
   getFallbackBuilderState,
   parseShaderUiControls,
   ShaderControlState,
+  type ShaderDataContext,
 } from "#src/webgl/shader_ui_controls.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import { registerLayerShaderControlsTool } from "#src/widget/shader_controls.js";
@@ -163,6 +164,38 @@ import { registerLayerShaderControlsTool } from "#src/widget/shader_controls.js"
 const MAX_LAYER_BAR_UI_INDICATOR_COLORS = 6;
 const MAX_LAYER_BAR_SEGMENTS_TO_CHECK = 10_000;
 const emptySegmentColorShaderModule: ShaderModule = () => {};
+
+export function getSegmentColorShaderDataContext(
+  segmentPropertyMap: PreprocessedSegmentPropertyMap | undefined,
+  isReady: boolean,
+): ShaderDataContext | null {
+  if (!isReady) return null;
+  if (segmentPropertyMap === undefined) return {};
+  const properties = new Map<string, DataType>();
+  const values = new Map<string, TypedArray<ArrayBuffer>>();
+  for (const property of segmentPropertyMap.numericalProperties) {
+    properties.set(property.id, property.dataType);
+    values.set(property.id, property.values);
+  }
+  const getPropertyValueExpression = (property: string) => {
+    const identifier =
+      SegmentColorUserShaderManager.getNumericalPropertyShaderIdentifier(
+        segmentPropertyMap,
+        property,
+      );
+    if (identifier === undefined) {
+      throw new Error(`Unknown numerical property: ${property}`);
+    }
+    return identifier;
+  };
+  return {
+    properties,
+    values,
+    propertySource: "segment",
+    getPropertyValueExpression,
+    segmentPropertyMap,
+  };
+}
 
 export class SegmentationUserLayerGroupState
   extends RefCounted
@@ -565,37 +598,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
       new ShaderControlState(
         this.fragmentSegmentColor,
         makeCachedLazyDerivedWatchableValue(
-          (segmentPropertyMap, isReady) => {
-            const properties = new Map<string, DataType>();
-            const values = new Map<string, TypedArray<ArrayBuffer>>();
-            if (segmentPropertyMap === undefined) {
-              // dont return a non null before layer.isReady to prevent losing shader control state during loading process
-              return isReady ? {} : null;
-            }
-            for (const property of segmentPropertyMap.numericalProperties) {
-              properties.set(property.id, property.dataType);
-              values.set(property.id, property.values);
-            }
-            const getPropertyValueExpression = (property: string) => {
-              const identifier =
-                SegmentColorUserShaderManager.getNumericalPropertyShaderIdentifier(
-                  segmentPropertyMap,
-                  property,
-                );
-              if (identifier === undefined) {
-                throw new Error(`Unknown numerical property: ${property}`);
-              }
-              return identifier;
-            };
-
-            return {
-              properties,
-              values,
-              propertySource: "segment" as const,
-              getPropertyValueExpression,
-              segmentPropertyMap,
-            };
-          },
+          getSegmentColorShaderDataContext,
           this.segmentationGroupState.value.segmentPropertyMap,
           this.layer.isReadyWatchable,
         ),
