@@ -450,6 +450,18 @@ describe("unparseAnnotationQuery", () => {
     expect(reparsed.enumConstraints[0].include).toEqual([1]);
   });
 
+  it("serializes enum constraints with schema labels", () => {
+    const q = parseAnnotationQuery(schema, "#status=active") as any;
+    expect(
+      unparseAnnotationQuery(
+        q,
+        undefined,
+        undefined,
+        new Map([["status", new Map<number, string>([[1, "active"]])]]),
+      ),
+    ).toBe("#status=active");
+  });
+
   it("round-trips bool constraint", () => {
     const q = parseAnnotationQuery(schema, "-#verified") as any;
     const reparsed = parseAnnotationQuery(

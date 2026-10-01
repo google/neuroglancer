@@ -119,6 +119,57 @@
   overflow-y: auto;
 }
 
+.neuroglancer-annotation-filter-results
+  .neuroglancer-property-list-categorical-property-options {
+  margin-left: 8px;
+}
+
+.neuroglancer-annotation-filter-results
+  .neuroglancer-property-list-categorical-property-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.neuroglancer-annotation-filter-results
+  .neuroglancer-property-list-categorical-property-label {
+  font-weight: bold;
+}
+
+.neuroglancer-annotation-filter-results
+  .neuroglancer-property-list-categorical-tree-options {
+  grid-template-columns: [tree] 12px [include] min-content [exclude] min-content [tag] 1fr [count] min-content;
+}
+
+.neuroglancer-property-list-categorical-tree-connector {
+  position: relative;
+  grid-column: tree;
+  min-height: 16px;
+}
+
+.neuroglancer-property-list-categorical-tree-connector::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  border-left: 1px solid #777;
+  content: "";
+}
+
+.neuroglancer-property-list-categorical-tree-connector::after {
+  position: absolute;
+  top: 50%;
+  right: 1px;
+  left: 2px;
+  border-top: 1px solid #777;
+  content: "";
+}
+
+.neuroglancer-segment-query-result-tag:last-child
+  > .neuroglancer-property-list-categorical-tree-connector::before {
+  bottom: 50%;
+}
+
 .neuroglancer-annotation-list-header-container {
   display: grid;
   position: relative;

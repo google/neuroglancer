@@ -127,6 +127,7 @@ import {
 } from "#src/ui/property_list.js";
 import type {
   IncludeExcludeChip,
+  IncludeExcludeChipGroup,
   NumericalSummaryDataSource,
   NumericalSummaryQuery,
   NumericalSummaryQueryResult,
@@ -1505,6 +1506,10 @@ export class AnnotationLayerView extends AccordionTab {
         NumericalSummaryQueryResult | undefined
       >,
       this.setNumericalSummaryQuery,
+      {
+        propertyLabelPosition: "above",
+        showColumnToggle: false,
+      },
     );
     this.numericalPropertiesSummary = summary;
     if (summary.listElement !== undefined) {
@@ -1607,7 +1612,23 @@ export class AnnotationLayerView extends AccordionTab {
         .filter((p) => p.baseUnit !== undefined)
         .map((p) => [p.identifier, p.baseUnit!]),
     );
-    const text = unparseAnnotationQuery(q, schemaBoundsMap, schemaBaseUnitMap);
+    const schemaEnumLabelMap = new Map(
+      this.annotationQuerySchema.enumProps.map((property) => [
+        property.identifier,
+        new Map(
+          property.enumValues.map((value, index) => [
+            value,
+            property.enumLabels[index],
+          ]),
+        ),
+      ]),
+    );
+    const text = unparseAnnotationQuery(
+      q,
+      schemaBoundsMap,
+      schemaBaseUnitMap,
+      schemaEnumLabelMap,
+    );
     this.queryInput.value = text;
     this.annotationQueryText.value = text;
     // After writing all state into text, the separate GUI constraint arrays are
@@ -1667,11 +1688,12 @@ export class AnnotationLayerView extends AccordionTab {
     }
     const items = this.annotationQueryItems;
     const indices = result.indices!;
-    const chips: IncludeExcludeChip[] = [];
+    const groups: IncludeExcludeChipGroup[] = [];
     const lastQuery = this.annotationQueryResult.value?.query as
       | AnnotationFilterQuery
       | undefined;
     for (const prop of schema.enumProps) {
+      const chips: IncludeExcludeChip[] = [];
       const constraint = lastQuery?.enumConstraints.find(
         (c) => c.fieldId === prop.identifier,
       );
@@ -1691,16 +1713,7 @@ export class AnnotationLayerView extends AccordionTab {
         if (count === 0 && !isConstrained) continue;
         chips.push({
           key: `${fieldId}=${val}`,
-          headerLabel: fieldId,
-          label: `=${label}`,
-          headerActive:
-            fieldId === "type"
-              ? this.layer.annotationListTypeColumnVisible.value
-              : this.shownPropertyIds.has(fieldId),
-          onHeaderClick: () =>
-            fieldId === "type"
-              ? this.toggleTypeColumn()
-              : this.togglePropertyColumn(fieldId),
+          label,
           count,
           totalCount: result.count,
           included: constraint?.include.includes(val) ?? false,
@@ -1746,6 +1759,11 @@ export class AnnotationLayerView extends AccordionTab {
           },
         });
       }
+      groups.push({
+        key: prop.identifier,
+        label: prop.identifier,
+        chips,
+      });
     }
     for (const prop of schema.boolProps) {
       const constraint = lastQuery?.boolConstraints.find(
@@ -1757,47 +1775,51 @@ export class AnnotationLayerView extends AccordionTab {
         if (v === true) ++trueCount;
       }
       const fieldId = prop.identifier;
-      chips.push({
-        key: `${fieldId}`,
-        headerLabel: fieldId,
-        label: "",
-        headerActive: this.shownPropertyIds.has(fieldId),
-        onHeaderClick: () => this.togglePropertyColumn(fieldId),
-        count: trueCount,
-        totalCount: result.count,
-        included: constraint?.value === true,
-        excluded: constraint?.value === false,
-        onToggle: (target, value) => {
-          const curBoolConstraints =
-            (
-              this.annotationQueryResult.value?.query as
-                | AnnotationFilterQuery
-                | undefined
-            )?.boolConstraints ?? [];
-          let newBoolConstraints: AnnotationBoolConstraint[];
-          if (value) {
-            const boolValue = target === "include";
-            newBoolConstraints = [
-              ...curBoolConstraints.filter((c) => c.fieldId !== fieldId),
-              { fieldId, value: boolValue },
-            ];
-          } else {
-            newBoolConstraints = curBoolConstraints.filter(
-              (c) => c.fieldId !== fieldId,
-            );
-          }
-          this.writeCurrentStateToQueryText({
-            boolConstraints: newBoolConstraints,
-          });
-          this.forceUpdateView();
+      const chips: IncludeExcludeChip[] = [
+        {
+          key: `${fieldId}`,
+          label: "true",
+          count: trueCount,
+          totalCount: result.count,
+          included: constraint?.value === true,
+          excluded: constraint?.value === false,
+          onToggle: (target, value) => {
+            const curBoolConstraints =
+              (
+                this.annotationQueryResult.value?.query as
+                  | AnnotationFilterQuery
+                  | undefined
+              )?.boolConstraints ?? [];
+            let newBoolConstraints: AnnotationBoolConstraint[];
+            if (value) {
+              const boolValue = target === "include";
+              newBoolConstraints = [
+                ...curBoolConstraints.filter((c) => c.fieldId !== fieldId),
+                { fieldId, value: boolValue },
+              ];
+            } else {
+              newBoolConstraints = curBoolConstraints.filter(
+                (c) => c.fieldId !== fieldId,
+              );
+            }
+            this.writeCurrentStateToQueryText({
+              boolConstraints: newBoolConstraints,
+            });
+            this.forceUpdateView();
+          },
         },
+      ];
+      groups.push({
+        key: fieldId,
+        label: fieldId,
+        chips,
       });
     }
     const { categoricalSummaryContainer } = this;
     removeChildren(categoricalSummaryContainer);
     const numCategorical = schema.enumProps.length + schema.boolProps.length;
     const details = renderCategoricalPropertiesSummary({
-      chips,
+      groups,
       propertyCount: numCategorical,
       open: this.categoricalDetailsOpen,
       onToggle: (open) => {
