@@ -112,6 +112,35 @@
   background-color: #969;
 }
 
+/* Property column headers */
+.neuroglancer-annotation-property-header {
+  font-family: monospace;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.neuroglancer-annotation-property-header-name {
+  color: rgba(255, 255, 255, 0.6);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.neuroglancer-annotation-type-header {
+  font-family: monospace;
+}
+
+/* Per-annotation property value cells in the annotation list */
+.neuroglancer-annotation-list-property-value {
+  font-family: monospace;
+  font-size: 0.9em;
+  text-align: right;
+  color: rgba(255, 255, 255, 0.6);
+  padding-right: 4px;
+}
+
 .neuroglancer-annotation-dragging {
   opacity: 0.5;
 }
@@ -193,7 +222,10 @@ div.neuroglancer-annotation-details-description {
 
 .neuroglancer-annotations-view-dimension {
   font-family: monospace;
-  text-align: right;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  white-space: nowrap;
 }
 
 .neuroglancer-annotations-view-dimension-name {
@@ -438,4 +470,39 @@ input.neuroglancer-segment-list-entry-id {
   border-radius: 3px;
   color: #ccc;
   font-size: small;
+}
+
+/* Warning shown when measurable annotations exist but dimensions lack units */
+.neuroglancer-annotation-derived-warning {
+  padding: 2px 4px;
+  font-size: 11px;
+  color: #e0b020;
+  cursor: help;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.neuroglancer-annotation-loaded-notice {
+  padding: 2px 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.72);
+  border-bottom: 1px solid #2a2a2a;
+}
+
+/* Inline enum/bool value chips shown in the description row */
+.neuroglancer-annotation-inline-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 2px;
+}
+
+.neuroglancer-annotation-inline-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 2px;
+  padding: 0 4px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: default;
+  white-space: nowrap;
 }

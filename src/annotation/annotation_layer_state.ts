@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import type { DerivedAnalysisResult } from "#src/annotation/annotation_derived_properties.js";
 import type { MultiscaleAnnotationSource } from "#src/annotation/frontend_source.js";
 import type {
   AnnotationPropertySpec,
@@ -182,6 +183,11 @@ export class AnnotationDisplayState extends RefCounted {
     this.ignoreNullSegmentFilter,
   );
   hoverState = new AnnotationHoverState(undefined);
+  filteredAnnotationIds = new WatchableValue<ReadonlySet<string> | null>(null);
+  // Latest derived (computed) geometric property analysis, published by the
+  // annotation list view so the selection-details panel can show the same
+  // length/volume/duration metrics.
+  derivedProperties: DerivedAnalysisResult | undefined = undefined;
 }
 
 export class AnnotationLayerState extends RefCounted {

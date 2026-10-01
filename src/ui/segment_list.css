@@ -71,27 +71,6 @@
   white-space: nowrap;
 }
 
-.neuroglancer-segment-list-query {
-  background-color: #151515;
-  color: white;
-  font-family: monospace;
-  font-size: medium;
-  border: 2px solid #333;
-  padding: 2px;
-  outline: 0px;
-}
-
-.neuroglancer-segment-list-query::placeholder {
-  color: #aaa;
-}
-
-.neuroglancer-segment-list-status {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  background-color: #333;
-}
-
 .neuroglancer-segment-list-entry-copy {
   order: -2;
   visibility: hidden;
@@ -154,6 +133,27 @@
   font-weight: normal;
 }
 
+.neuroglancer-segment-query-result-tag-header-btn {
+  background: transparent;
+  border: 1px solid #555;
+  color: rgba(255, 255, 255, 0.45);
+  padding: 1px 4px;
+  cursor: pointer;
+  font-size: 11px;
+  border-radius: 2px;
+  line-height: 1.4;
+}
+
+.neuroglancer-segment-query-result-tag-header-btn:hover {
+  border-color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.neuroglancer-segment-query-result-tag-header-btn[data-active="true"] {
+  border-color: #4e9ac0;
+  color: #4e9ac0;
+}
+
 .neuroglancer-segment-query-result-tag-toggle {
   display: inline-block;
   white-space: nowrap;
@@ -165,28 +165,6 @@
 
 .neuroglancer-segment-query-result-tag-exclude {
   grid-column: exclude;
-}
-
-.neuroglancer-segment-query-result-statistics {
-  background-color: #333;
-  max-height: 30%;
-  flex-shrink: 0;
-  overflow: auto;
-}
-
-.neuroglancer-segment-query-result-statistics:not(:empty) {
-  padding-top: 3px;
-}
-
-.neuroglancer-segment-query-result-statistics:not(:empty)
-  + .neuroglancer-segment-list-status {
-  border-top: 1px solid white;
-}
-
-.neuroglancer-segment-query-result-statistics-separator {
-  height: 3px;
-  background-color: #333;
-  border-bottom: 1px solid white;
 }
 
 .neuroglancer-segment-query-result-tag-count {
@@ -266,15 +244,12 @@
   cursor: pointer;
 }
 
-.neuroglancer-segment-query-result-numerical-plot-sort,
-.neuroglancer-segment-list-header-label-sort {
+.neuroglancer-segment-query-result-numerical-plot-sort {
   visibility: hidden;
 }
 
 .neuroglancer-segment-query-result-numerical-plot-label:hover
-  .neuroglancer-segment-query-result-numerical-plot-sort,
-.neuroglancer-segment-list-header-label:hover
-  .neuroglancer-segment-list-header-label-sort {
+  .neuroglancer-segment-query-result-numerical-plot-sort {
   visibility: visible;
 }
 
@@ -290,27 +265,13 @@
   pointer-events: none;
 }
 
-.neuroglancer-segment-list-entry.neuroglancer-segment-list-header {
-  background-color: #666;
-}
-
 .neuroglancer-segment-list-header .neuroglancer-segment-list-entry-id {
   background-color: inherit;
   color: white;
   text-align: center;
 }
 
-.neuroglancer-segment-list-header-label {
-  cursor: pointer;
-  font: 10pt sans-serif;
-}
-
 .neuroglancer-segment-list-header
   .neuroglancer-segment-list-entry-extra-property {
   text-align: center;
-}
-
-.neuroglancer-segment-list-status-message {
-  overflow: hidden;
-  white-space: nowrap;
 }

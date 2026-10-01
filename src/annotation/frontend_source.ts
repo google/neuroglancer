@@ -37,10 +37,12 @@ import {
   AnnotationType,
   annotationTypeHandlers,
   annotationTypes,
+  deserializeAnnotation,
   makeAnnotationId,
   makeAnnotationPropertySerializers,
 } from "#src/annotation/index.js";
 import { getAnnotationTypeRenderHandler } from "#src/annotation/type_handler.js";
+import { ChunkState } from "#src/chunk_manager/base.js";
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { Chunk, ChunkSource } from "#src/chunk_manager/frontend.js";
 import { getObjectKey } from "#src/segmentation_display_state/base.js";
@@ -1032,6 +1034,100 @@ export class MultiscaleAnnotationSource
     reference.dispose();
 
     this.localUpdates.delete(id);
+  }
+
+  /**
+   * Decodes the annotations currently loaded into frontend memory (i.e. those
+   * available for rendering) into `Annotation` objects, up to `limit`.
+   *
+   * Annotations are read from the packed geometry buffers held by the loaded
+   * (GPU-resident) spatial-index and segment-filtered chunks, plus the temporary
+   * chunk holding local uncommitted edits; the same annotation can appear in
+   * several chunks/levels, so ids are deduplicated.  The distinct-id scan is
+   * bounded (`10 * limit`) so a very large source does not spend unbounded time
+   * here on each refresh.
+   *
+   * This is the enumeration counterpart of the local `AnnotationSource`'s
+   * iterator: it lets the annotation list display the visible subset of a
+   * `MultiscaleAnnotationSource` without an async per-annotation fetch.
+   */
+  getLoadedAnnotations(limit: number): {
+    annotations: Annotation[];
+    totalLoaded: number;
+    truncated: boolean;
+    totalLoadedIsLowerBound: boolean;
+  } {
+    const annotations: Annotation[] = [];
+    const seen = new Set<AnnotationId>();
+    const serializers = this.annotationPropertySerializers;
+    const scanCeiling = Number.isFinite(limit) ? limit * 10 : Infinity;
+    let scanExceeded = false;
+
+    // Returns false to abort the whole scan once the dedup ceiling is reached.
+    const visit = (data: AnnotationGeometryData | undefined): boolean => {
+      if (data === undefined) return true;
+      const { serializedAnnotations } = data;
+      const { typeToIds } = serializedAnnotations;
+      for (const annotationType of annotationTypes) {
+        const ids = typeToIds[annotationType];
+        if (ids === undefined) continue;
+        for (let i = 0, n = ids.length; i < n; ++i) {
+          const id = ids[i];
+          if (seen.has(id)) continue;
+          seen.add(id);
+          if (annotations.length < limit) {
+            annotations.push(
+              deserializeAnnotation(
+                serializedAnnotations,
+                serializers[annotationType],
+                annotationType,
+                i,
+              ),
+            );
+          }
+          if (seen.size >= scanCeiling) {
+            scanExceeded = true;
+            return false;
+          }
+        }
+      }
+      return true;
+    };
+
+    const visitChunks = (
+      chunks: Iterable<{
+        state: ChunkState;
+        data: AnnotationGeometryData | undefined;
+      }>,
+    ): boolean => {
+      for (const chunk of chunks) {
+        if (chunk.state !== ChunkState.GPU_MEMORY) continue;
+        if (!visit(chunk.data)) return false;
+      }
+      return true;
+    };
+
+    let scanning = true;
+    for (const chunkSource of this.spatiallyIndexedSources) {
+      if (!scanning) break;
+      scanning = visitChunks(chunkSource.chunks.values());
+    }
+    for (const chunkSource of this.segmentFilteredSources) {
+      if (!scanning) break;
+      scanning = visitChunks(chunkSource.chunks.values());
+    }
+    // The temporary chunk (local uncommitted edits) is always considered loaded.
+    if (scanning) {
+      visit(this.temporary.data);
+    }
+
+    const totalLoaded = seen.size;
+    return {
+      annotations,
+      totalLoaded,
+      truncated: scanExceeded || annotations.length < totalLoaded,
+      totalLoadedIsLowerBound: scanExceeded,
+    };
   }
 
   // FIXME

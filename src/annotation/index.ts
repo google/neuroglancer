@@ -1922,6 +1922,63 @@ function serializeAnnotations(
   };
 }
 
+/**
+ * Reconstructs a single `Annotation` (id + geometry + properties) from a packed
+ * `SerializedAnnotations` buffer.  This is the inverse of `serializeAnnotations`
+ * and reuses the per-type `deserialize` handlers and the property serializer's
+ * `deserialize`; it performs no async fetch, so it can decode annotations that
+ * were loaded only for rendering (e.g. from a `MultiscaleAnnotationSource`).
+ *
+ * @param serialized - the packed buffer + index metadata.
+ * @param propertySerializer - `annotationPropertySerializers[annotationType]`.
+ * @param annotationType - which type block to read from.
+ * @param index - the annotation's index within that type, in `[0, typeToSize[type])`.
+ */
+export function deserializeAnnotation(
+  serialized: SerializedAnnotations,
+  propertySerializer: AnnotationPropertySerializer,
+  annotationType: AnnotationType,
+  index: number,
+): Annotation {
+  const { rank } = propertySerializer;
+  const isLittleEndian = ENDIANNESS === Endianness.LITTLE;
+  const { typeToOffset, typeToIds, typeToSize, typeToInstanceCounts } =
+    serialized;
+  const { data } = serialized;
+  const dv = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const handler = annotationTypeHandlers[annotationType];
+  const id = typeToIds[annotationType][index];
+  const baseOffset = typeToOffset[annotationType];
+  const instanceStride = propertySerializer.propertyGroupBytes[0];
+  const count = typeToSize[annotationType];
+  // For polylines the geometry is stored as a variable number of point-pair
+  // instances; `typeToInstanceCounts[type][index]` is the starting instance.
+  // For all other types there is exactly one instance per annotation.
+  const instanceIndex =
+    annotationType === AnnotationType.POLYLINE
+      ? typeToInstanceCounts[annotationType][index]
+      : index;
+  const annotation = handler.deserialize(
+    dv,
+    baseOffset + instanceIndex * instanceStride,
+    isLittleEndian,
+    rank,
+    id,
+    instanceStride,
+  );
+  const properties: any[] = [];
+  propertySerializer.deserialize(
+    dv,
+    baseOffset,
+    instanceIndex,
+    count,
+    isLittleEndian,
+    properties,
+  );
+  annotation.properties = properties;
+  return annotation;
+}
+
 export class AnnotationSerializer {
   annotations: [
     Point[],
