@@ -17,19 +17,27 @@
 import { describe, it, expect } from "vitest";
 import { DisplayContext } from "#src/display_context.js";
 import { makeLayer } from "#src/layer/index.js";
-import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+import {
+  getSegmentColorShaderDataContext,
+  type SegmentationUserLayer,
+} from "#src/layer/segmentation/index.js";
 import "#layer/segmentation";
 import {
   type InlineSegmentPropertyMap,
   PreprocessedSegmentPropertyMap,
   SegmentPropertyMap,
 } from "#src/segmentation_display_state/property_map.js";
+import { WatchableValue } from "#src/trackable_value.js";
 import { packColor } from "#src/util/color.js";
 import { DataType } from "#src/util/data_type.js";
 import { vec3, vec4 } from "#src/util/geom.js";
 import { Viewer } from "#src/viewer.js";
 import { ShaderCompilationError } from "#src/webgl/shader.js";
-import type { SegmentPropertyReference } from "#src/webgl/shader_ui_controls.js";
+import {
+  ShaderControlState,
+  type SegmentPropertyReference,
+  type ShaderDataContext,
+} from "#src/webgl/shader_ui_controls.js";
 import { trivialColorShader } from "#src/webgl/trivial_shaders.js";
 
 const setupSegmentationLayer = () => {
@@ -116,6 +124,67 @@ const expectColor = (
 };
 
 describe("getShaderBaseSegmentColor", () => {
+  it("restores property invlerp state after all property maps load", () => {
+    const makePropertyMap = (propertyIds: string[]) =>
+      new PreprocessedSegmentPropertyMap(
+        new SegmentPropertyMap({
+          inlineProperties: {
+            ids: new BigUint64Array([1n]),
+            properties: propertyIds.map((id) => ({
+              id,
+              type: "number" as const,
+              dataType: DataType.FLOAT32,
+              values: new Float32Array([1]),
+              description: undefined,
+              bounds: [0, 10],
+            })),
+          },
+        }),
+      );
+    const partialPropertyMap = makePropertyMap(["first"]);
+    const completePropertyMap = makePropertyMap(["first", "second"]);
+    const dataContext = new WatchableValue<ShaderDataContext | null>(
+      getSegmentColorShaderDataContext(partialPropertyMap, false),
+    );
+    const shaderControlState = new ShaderControlState(
+      new WatchableValue(`
+#uicontrol invlerp normalized
+vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
+  return color;
+}`),
+      dataContext,
+    );
+    expect(dataContext.value).toBeNull();
+    expect(shaderControlState.state.size).toBe(0);
+    const savedState = {
+      normalized: {
+        property: "second",
+        range: [2, 8],
+        window: [1, 9],
+      },
+    };
+    try {
+      shaderControlState.restoreState(savedState);
+      expect(shaderControlState.toJSON()).toEqual(savedState);
+
+      dataContext.value = getSegmentColorShaderDataContext(
+        completePropertyMap,
+        true,
+      );
+
+      expect(
+        shaderControlState.state.get("normalized")!.trackable.value,
+      ).toEqual({
+        property: "second",
+        dataType: DataType.FLOAT32,
+        range: [2, 8],
+        window: [1, 9],
+      });
+    } finally {
+      shaderControlState.dispose();
+    }
+  });
+
   it("default shader, return hash", () => {
     const segmentationUserLayer = setupSegmentationLayer();
     const objectId = 1n;
