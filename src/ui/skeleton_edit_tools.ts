@@ -626,6 +626,8 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
   // First node picked in insert mode; the next pick must be its parent or one
   // of its children.
   private insertAnchorNodeId: number | undefined = undefined;
+  // Lets a request that outlives its activation leave newer state alone.
+  private currentActivation: ToolActivation<this> | undefined = undefined;
   // Modifier-held state drives cursor indicators and blocks node actions.
   private shiftHeld = false;
   // While held, the shift-driven "add node" cursor/status must be
@@ -1347,6 +1349,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
         (Number(parentNode.position[i]) + Number(childNode.position[i])) / 2;
     }
 
+    const requestActivation = this.currentActivation;
     this.pending = true;
     this.setStatus(getSpatialSkeletonInsertingStatusText());
     void executeSpatialSkeletonInsertNode(this.layer, {
@@ -1359,6 +1362,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
         showSpatialSkeletonActionError("insert node", error);
       })
       .finally(() => {
+        if (this.currentActivation !== requestActivation) return;
         this.pending = false;
         // Releasing i mid-flight already exited insert mode and restored the
         // highlight; only re-arm for the next pick while still in insert mode.
@@ -1713,7 +1717,9 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
 
     // 4. Register disposer: clear statusBody, reset mode attribute, and
     //    deactivate layer-level mode flags.
+    this.currentActivation = activation;
     activation.registerDisposer(() => {
+      this.currentActivation = undefined;
       this.statusBody = undefined;
       this.setModeAttribute(undefined);
       layer.spatialSkeletonMergeMode.value = false;

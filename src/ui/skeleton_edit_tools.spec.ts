@@ -1317,6 +1317,14 @@ describe("spatial_skeleton_edit_tool", () => {
       { layer },
     );
     SpatialSkeletonEditTool.prototype.activate.call(tool, activation as any);
+    const activate = () => {
+      const nextActivation = makeToolActivation();
+      SpatialSkeletonEditTool.prototype.activate.call(
+        tool,
+        nextActivation.activation as any,
+      );
+      return nextActivation;
+    };
     const pickNode = async (node: SpatiallyIndexedSkeletonNode) => {
       mouseState.pickedSpatialSkeleton = node;
       tool.handleInsertPick();
@@ -1325,6 +1333,7 @@ describe("spatial_skeleton_edit_tool", () => {
     };
     return {
       actions,
+      activate,
       dispose,
       insertExecute,
       insertNodesCommand,
@@ -1612,6 +1621,47 @@ describe("spatial_skeleton_edit_tool", () => {
     expect(
       harness.layer.spatialSkeletonSuppressSelectedNodeHighlight.value,
     ).toBe(false);
+  });
+
+  it("keeps the first pick of a new activation when an insert from an earlier activation finishes", async () => {
+    const parentNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 1,
+      segmentId: 11,
+      position: new Float32Array([0, 0, 0]),
+    };
+    const childNode: SpatiallyIndexedSkeletonNode = {
+      nodeId: 2,
+      segmentId: 11,
+      parentNodeId: 1,
+      position: new Float32Array([2, 2, 2]),
+    };
+    const harness = makeInsertToolHarness([parentNode, childNode]);
+    let finishInsert = () => {};
+    harness.insertExecute.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishInsert = resolve;
+        }),
+    );
+    harness.actions.get(SKELETON_ENTER_INSERT_MODE)?.({});
+    await harness.pickNode(parentNode);
+    await harness.pickNode(childNode);
+    harness.dispose();
+    const reactivation = harness.activate();
+    try {
+      reactivation.actions.get(SKELETON_ENTER_INSERT_MODE)?.({});
+      await harness.pickNode(parentNode);
+      finishInsert();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(
+        harness.layer.spatialSkeletonSuppressSelectedNodeHighlight.value,
+      ).toBe(false);
+      await harness.pickNode(childNode);
+      expect(harness.insertNodesCommand.createCommand).toHaveBeenCalledTimes(2);
+    } finally {
+      reactivation.dispose();
+    }
   });
 
   it("uses regular clicks for Find Path and preserves skeleton navigation chords", () => {
