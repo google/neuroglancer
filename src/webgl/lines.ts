@@ -28,7 +28,27 @@ import { glsl_clipLineToDepthRange } from "#src/webgl/shader_lib.js";
 
 export const VERTICES_PER_LINE = VERTICES_PER_QUAD;
 
-export function defineLineShader(builder: ShaderBuilder, rounded = false) {
+export interface LineShaderOptions {
+  /** Adds a borderWidth argument to emitLine, and rounds the two ends. */
+  readonly rounded?: boolean;
+  /**
+   * Adds an endpointClipRadiusInPixels argument to emitLine, and discards
+   * fragments within that radius of either endpoint as it was given.
+   */
+  readonly endpointClipping?: boolean;
+}
+
+export function defineLineShader(
+  builder: ShaderBuilder,
+  options: LineShaderOptions = {},
+) {
+  const { rounded = false, endpointClipping = false } = options;
+  if (rounded && endpointClipping) {
+    throw new Error(
+      "defineLineShader does not support endpoint clipping on rounded lines. " +
+        "The clip lives in getLineAlpha, which a rounded line never calls.",
+    );
+  }
   builder.addVertexCode(glsl_getQuadVertexPosition);
   // x: 1 / viewportWidth
   // y: 1 / viewportHeight
@@ -37,6 +57,13 @@ export function defineLineShader(builder: ShaderBuilder, rounded = false) {
   builder.addVarying("highp float", "vLineCoord");
   // max(1e-6, featherWidth) / (lineWidth + featherWidth)
   builder.addVarying("highp float", "vLineFeatherFraction");
+  if (endpointClipping) {
+    // xy: endpoint A, zw: endpoint B, in the window coordinates gl_FragCoord uses.
+    // Taken before depth clipping, which moves the drawn ends away from them.
+
+    builder.addVarying("highp vec4", "vLineEndpointsWindow", "flat");
+    builder.addVarying("highp float", "vLineEndpointClipRadius", "flat");
+  }
   if (rounded) {
     // Fraction of total line length used by each endpoint.
     builder.addVarying("highp float", "vEndpointFraction");
@@ -46,11 +73,29 @@ export function defineLineShader(builder: ShaderBuilder, rounded = false) {
   }
   builder.addVertexCode(glsl_clipLineToDepthRange);
   builder.addVertexCode(`
+${
+  endpointClipping
+    ? `highp vec2 lineClipToWindow(vec4 clip) {
+  // Far off screen unless the endpoint is inside the depth range. A node is drawn
+  // there only if it is, and the disc exists to leave room for one.
+  if (!(clip.w > 0.0 && clip.z >= -clip.w && clip.z <= clip.w)) return vec2(-1e6);
+  return (clip.xy / clip.w * 0.5 + 0.5) / uLineParams.xy;
+}`
+    : ""
+}
 vec2 getLineOffset() { return getQuadVertexPosition(vec2(0.0, -1.0), vec2(1.0, 1.0)); }
 float getLineEndpointCoefficient() { return getLineOffset().x; }
 uint getLineEndpointIndex() { return uint(getLineEndpointCoefficient()); }
 void emitLine(vec4 vertexAClip, vec4 vertexBClip, float lineWidthInPixels
-              ${rounded ? ", float borderWidth" : ""}) {
+              ${rounded ? ", float borderWidth" : ""}
+              ${endpointClipping ? ", float endpointClipRadiusInPixels" : ""}) {
+  ${
+    endpointClipping
+      ? `vLineEndpointsWindow = vec4(lineClipToWindow(vertexAClip),
+                              lineClipToWindow(vertexBClip));
+  vLineEndpointClipRadius = endpointClipRadiusInPixels;`
+      : ""
+  }
   if (!clipLineToDepthRange(vertexAClip, vertexBClip)) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     return;
@@ -97,10 +142,12 @@ void emitLine(vec4 vertexAClip, vec4 vertexBClip, float lineWidthInPixels
   }
 }
 void emitLine(mat4 projection, vec3 vertexA, vec3 vertexB, float lineWidthInPixels
-              ${rounded ? ", float borderWidth" : ""}) {
+              ${rounded ? ", float borderWidth" : ""}
+              ${endpointClipping ? ", float endpointClipRadiusInPixels" : ""}) {
   emitLine(projection * vec4(vertexA, 1.0), projection * vec4(vertexB, 1.0),
            lineWidthInPixels
-           ${rounded ? ", borderWidth" : ""});
+           ${rounded ? ", borderWidth" : ""}
+           ${endpointClipping ? ", endpointClipRadiusInPixels" : ""});
 }
 `);
   if (rounded) {
@@ -126,6 +173,15 @@ vec4 getRoundedLineColor(vec4 interiorColor, vec4 borderColor) {
 
   builder.addFragmentCode(`
 float getLineAlpha() {
+  ${
+    endpointClipping
+      ? `if (vLineEndpointClipRadius > 0.0) {
+    float distFromA = distance(gl_FragCoord.xy, vLineEndpointsWindow.xy);
+    float distFromB = distance(gl_FragCoord.xy, vLineEndpointsWindow.zw);
+    if (min(distFromA, distFromB) < vLineEndpointClipRadius) discard;
+  }`
+      : ""
+  }
   return clamp((1.0 - abs(vLineCoord)) / vLineFeatherFraction, 0.0, 1.0);
 }
 `);

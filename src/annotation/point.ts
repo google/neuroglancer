@@ -110,7 +110,7 @@ emitAnnotation(color);
       `annotation/point:2d:${extraDim}`,
       (builder: ShaderBuilder) => {
         defineVertexId(builder);
-        defineLineShader(builder, /*rounded=*/ true);
+        defineLineShader(builder, { rounded: true });
         this.defineShaderCommon(builder);
         builder.addVertexMain(`
 vec3 subspacePositionA = projectModelVectorToSubspace(modelPosition);

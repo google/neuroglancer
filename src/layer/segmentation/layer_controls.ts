@@ -1,5 +1,7 @@
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import * as json_keys from "#src/layer/segmentation/json_keys.js";
+import type { SkeletonRenderMode } from "#src/skeleton/frontend.js";
+import type { TrackableEnum } from "#src/util/trackable_enum.js";
 import type { LayerControlDefinition } from "#src/widget/layer_control.js";
 import { registerLayerControl } from "#src/widget/layer_control.js";
 import { checkboxLayerControl } from "#src/widget/layer_control_checkbox.js";
@@ -111,42 +113,49 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
     title: "Highlight the segment under the mouse pointer",
     ...checkboxLayerControl((layer) => layer.displayState.hoverHighlight),
   },
-  ...getViewSpecificSkeletonRenderingControl("2d"),
-  ...getViewSpecificSkeletonRenderingControl("3d"),
+  getSkeletonModeControl(
+    "2d",
+    (layer) => layer.displayState.skeletonRenderingOptions.params2d.mode,
+  ),
+  getSkeletonLineWidthControl("2d"),
+  getSkeletonModeControl(
+    "3d",
+    (layer) => layer.displayState.skeletonRenderingOptions.params3d.mode,
+  ),
+  getSkeletonLineWidthControl("3d"),
 ];
 
 const maxSilhouettePower = 10;
 
-function getViewSpecificSkeletonRenderingControl(
+function getSkeletonModeControl<Mode extends SkeletonRenderMode>(
   viewName: "2d" | "3d",
-): LayerControlDefinition<SegmentationUserLayer>[] {
-  return [
-    {
-      label: `Skeleton mode (${viewName})`,
-      toolJson: `${json_keys.SKELETON_RENDERING_JSON_KEY}.mode${viewName}`,
-      isValid: (layer) => layer.hasSkeletonsLayer,
-      ...enumLayerControl(
-        (layer) =>
-          layer.displayState.skeletonRenderingOptions[
-            `params${viewName}` as const
-          ].mode,
-      ),
-    },
-    {
-      label: `Line width (${viewName})`,
-      toolJson: `${json_keys.SKELETON_RENDERING_JSON_KEY}.lineWidth${viewName}`,
-      isValid: (layer) => layer.hasSkeletonsLayer,
-      toolDescription: `Skeleton line width (${viewName})`,
-      title: `Skeleton line width (${viewName})`,
-      ...rangeLayerControl((layer) => ({
-        value:
-          layer.displayState.skeletonRenderingOptions[
-            `params${viewName}` as const
-          ].lineWidth,
-        options: { min: 1, max: 40, step: 1 },
-      })),
-    },
-  ];
+  getMode: (layer: SegmentationUserLayer) => TrackableEnum<Mode>,
+): LayerControlDefinition<SegmentationUserLayer> {
+  return {
+    label: `Skeleton mode (${viewName})`,
+    toolJson: `${json_keys.SKELETON_RENDERING_JSON_KEY}.mode${viewName}`,
+    isValid: (layer) => layer.hasSkeletonsLayer,
+    ...enumLayerControl(getMode),
+  };
+}
+
+function getSkeletonLineWidthControl(
+  viewName: "2d" | "3d",
+): LayerControlDefinition<SegmentationUserLayer> {
+  return {
+    label: `Line width (${viewName})`,
+    toolJson: `${json_keys.SKELETON_RENDERING_JSON_KEY}.lineWidth${viewName}`,
+    isValid: (layer) => layer.hasSkeletonsLayer,
+    toolDescription: `Skeleton line width (${viewName})`,
+    title: `Skeleton line width (${viewName})`,
+    ...rangeLayerControl((layer) => ({
+      value:
+        layer.displayState.skeletonRenderingOptions[
+          `params${viewName}` as const
+        ].lineWidth,
+      options: { min: 1, max: 40, step: 1 },
+    })),
+  };
 }
 
 export function registerLayerControls(layerType: typeof SegmentationUserLayer) {
