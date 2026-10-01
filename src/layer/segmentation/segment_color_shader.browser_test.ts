@@ -73,6 +73,7 @@ const compareWithCPUHash = (
     segmentationUserLayer.displayState.segmentationColorGroupState.value;
   const outColorCPU = vec4.create();
   colorGroupState.segmentColorHash.compute(outColorCPU, objectId);
+  outColorCPU[3] = 1.0;
   expect(outColor).toBeDefined();
   expect(outColor!.length).toBe(4);
   for (let i = 0; i < 4; ++i) {
@@ -133,7 +134,7 @@ describe("getShaderBaseSegmentColor", () => {
   }`;
     const outColor =
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(1n);
-    expectColor(outColor!, [1.0, 0.0, 0.0, 0.0]);
+    expectColor(outColor!, [1.0, 0.0, 0.0, 1.0]);
   });
 
   it.each([
@@ -150,7 +151,7 @@ ${declaration}(vec3 color, bool hasProperties, bool isStated) {
     const outColor =
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(1n);
 
-    expectColor(outColor!, [1.0, 0.0, 0.0, 0.0]);
+    expectColor(outColor!, [1.0, 0.0, 0.0, 1.0]);
   });
 
   it("alpha shader", () => {
@@ -192,17 +193,17 @@ ${declaration}(vec3 color, bool hasProperties, bool isStated) {
 
     expectColor(
       displayState.getShaderBaseSegmentColor(2n)!,
-      [1.0, 0.0, 0.0, 0.0],
+      [1.0, 0.0, 0.0, 1.0],
     );
 
     displayState.baseSegmentColoring.value = true;
     expectColor(
       displayState.getShaderBaseSegmentColor(2n)!,
-      [0.0, 1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0, 1.0],
     );
   });
 
-  it("treats rgb mapped segment colors as having undefined alpha", () => {
+  it("uses the identity alpha for rgb mapped segment colors", () => {
     const segmentationUserLayer = setupSegmentationLayer();
     segmentationUserLayer.displayState.segmentStatedColors.value.set(
       1n,
@@ -210,12 +211,12 @@ ${declaration}(vec3 color, bool hasProperties, bool isStated) {
     );
     segmentationUserLayer.displayState.fragmentSegmentColor.value = `
   vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
-      return vec4(color.rgb, color.a < 0.0 ? 0.75 : 0.25);
+      return color;
   }`;
 
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(1n)!,
-      [1.0, 0.0, 0.0, 0.75],
+      [1.0, 0.0, 0.0, 1.0],
     );
   });
 
@@ -233,9 +234,9 @@ ${declaration}(vec3 color, bool hasProperties, bool isStated) {
     displayState.segmentDefaultColor.value = vec3.fromValues(0.0, 0.0, 1.0);
 
     const colors = displayState.getShaderBaseSegmentColors([1n, 2n, 3n])!;
-    expectColor(colors.subarray(0, 4) as vec4, [1.0, 0.0, 0.0, 0.0]);
-    expectColor(colors.subarray(4, 8) as vec4, [0.0, 1.0, 0.0, 0.0]);
-    expectColor(colors.subarray(8, 12) as vec4, [0.0, 0.0, 1.0, 0.0]);
+    expectColor(colors.subarray(0, 4) as vec4, [1.0, 0.0, 0.0, 1.0]);
+    expectColor(colors.subarray(4, 8) as vec4, [0.0, 1.0, 0.0, 1.0]);
+    expectColor(colors.subarray(8, 12) as vec4, [0.0, 0.0, 1.0, 1.0]);
   });
 
   it("rejects an undersized output color buffer", () => {
@@ -259,10 +260,10 @@ ${declaration}(vec3 color, bool hasProperties, bool isStated) {
     const ids = new Array<bigint>(gl.maxTextureSize + 1).fill(1n);
 
     const colors = displayState.getShaderBaseSegmentColors(ids)!;
-    expectColor(colors.subarray(0, 4) as vec4, [1.0, 0.0, 0.0, 0.0]);
+    expectColor(colors.subarray(0, 4) as vec4, [1.0, 0.0, 0.0, 1.0]);
     expectColor(
       colors.subarray(colors.length - 4) as vec4,
-      [1.0, 0.0, 0.0, 0.0],
+      [1.0, 0.0, 0.0, 1.0],
     );
   });
 
@@ -324,7 +325,7 @@ vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
       }
       gl.activeTexture(activeTexture);
 
-      expectColor(displayState.getShaderBaseSegmentColor(1n)!, [1, 0, 0, 0]);
+      expectColor(displayState.getShaderBaseSegmentColor(1n)!, [1, 0, 0, 1]);
       expect(gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING)).toBe(null);
       expect(gl.getParameter(gl.READ_FRAMEBUFFER_BINDING)).toBe(null);
       expect(gl.getParameter(gl.CURRENT_PROGRAM)).toBe(null);
@@ -371,7 +372,7 @@ vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
 
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(1n)!,
-      [1.0, 0.0, 0.0, 0.0],
+      [1.0, 0.0, 0.0, 1.0],
     );
   });
 
@@ -423,15 +424,15 @@ vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
     });
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(1n)!,
-      [1.0, 0.0, 0.0, 0.0],
+      [1.0, 0.0, 0.0, 1.0],
     );
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(2n)!,
-      [0.0, 1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0, 1.0],
     );
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(3n)!,
-      [0.0, 0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0, 1.0],
     );
   });
 
@@ -466,7 +467,7 @@ vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
     });
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(1n)!,
-      [1.0, 0.0, 0.0, 0.0],
+      [1.0, 0.0, 0.0, 1.0],
     );
   });
 
@@ -502,7 +503,7 @@ vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
     });
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(1n)!,
-      [0.0, 1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0, 1.0],
     );
   });
 
@@ -532,7 +533,7 @@ vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
     });
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(1n)!,
-      [0.0, 1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0, 1.0],
     );
   });
 
@@ -575,19 +576,19 @@ vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
     });
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(1n)!,
-      [1.0, 0.0, 0.0, 0.0],
+      [1.0, 0.0, 0.0, 1.0],
     );
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(2n)!,
-      [0.0, 0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0, 1.0],
     );
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(3n)!,
-      [0.0, 1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0, 1.0],
     );
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(0n)!,
-      [0.0, 1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0, 1.0],
     );
   });
 
@@ -620,15 +621,15 @@ vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
 }`;
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(1n)!,
-      [1.0, 0.0, 0.0, 0.0],
+      [1.0, 0.0, 0.0, 1.0],
     );
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(2n)!,
-      [0.0, 0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0, 1.0],
     );
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(3n)!,
-      [0.0, 1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0, 1.0],
     );
   });
 
@@ -711,11 +712,11 @@ vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
     });
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(1n)!,
-      [0.0, 0.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0, 1.0],
     );
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(2n)!,
-      [1.0, 0.0, 0.0, 0.0],
+      [1.0, 0.0, 0.0, 1.0],
     );
   });
 
@@ -749,11 +750,11 @@ vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
 
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(1n)!,
-      [1.0, 0.0, 0.0, 0.0],
+      [1.0, 0.0, 0.0, 1.0],
     );
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(2n)!,
-      [0.0, 1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0, 1.0],
     );
   });
 
@@ -782,11 +783,11 @@ vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
 }`;
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(1n)!,
-      [0.0, 0.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0, 1.0],
     );
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(2n)!,
-      [1.0, 0.0, 0.0, 0.0],
+      [1.0, 0.0, 0.0, 1.0],
     );
   });
 
@@ -867,15 +868,15 @@ vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
   }`;
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(1n)!,
-      [1.0, 0.0, 0.0, 0.0],
+      [1.0, 0.0, 0.0, 1.0],
     );
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(2n)!,
-      [0.0, 1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0, 1.0],
     );
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(3n)!,
-      [0.0, 0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0, 1.0],
     );
   });
 
@@ -902,11 +903,11 @@ vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
 }`;
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(1n)!,
-      [0.0, 0.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0, 1.0],
     );
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(2n)!,
-      [0.5, 0.0, 0.0, 0.0],
+      [0.5, 0.0, 0.0, 1.0],
     );
   });
 
@@ -937,11 +938,11 @@ vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
     });
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(1n)!,
-      [0.0, 0.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0, 1.0],
     );
     expectColor(
       segmentationUserLayer.displayState.getShaderBaseSegmentColor(2n)!,
-      [0.75, 0.0, 0.0, 0.0],
+      [0.75, 0.0, 0.0, 1.0],
     );
   });
 });
