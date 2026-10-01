@@ -202,7 +202,7 @@ bool ${this.getFunctionName}(uint64_t x, out vec4 value) {
     value.r = float((uintValue & 0x0000ffu))       / 255.0;
     value.g = float((uintValue & 0x00ff00u) >>  8) / 255.0;
     value.b = float((uintValue & 0xff0000u) >> 16) / 255.0;
-    value.a = alpha == 0u ? -1.0 : float(alpha) / 255.0;
+    value.a = alpha == 0u ? 1.0 : float(alpha) / 255.0;
     return true;
   }
   return false;
@@ -768,7 +768,7 @@ export class SegmentColorUserShaderManager extends RefCounted {
 `;
     } else {
       this.segmentColorShaderManager.defineShader(builder, fragment);
-      getMappedIdColor += `  return vec4(segmentColorHash(value), -1.0);
+      getMappedIdColor += `  return vec4(segmentColorHash(value), 1.0);
 `;
     }
     getMappedIdColor += `
@@ -882,10 +882,8 @@ vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
     }
     addCode(`
 vec4 segmentColorUserShader(uint64_t segmentId, float adjustment) {
-  float alpha = -1.0; // negative = undefined
   bool isStated = false;
   vec4 color = getMappedIdColor(segmentId, isStated);
-  alpha = color.a;
   float saturation = uSaturation;
   if (uHasSelectedSegment && uSelectedSegment == segmentId.value) {
     if (saturation > adjustment) {
@@ -953,7 +951,7 @@ vec4 segmentColorUserShader(uint64_t segmentId) {
           r,
           g,
           b,
-          a === undefined ? -1.0 : a,
+          a === undefined ? 1.0 : a,
         );
       }
     } else {

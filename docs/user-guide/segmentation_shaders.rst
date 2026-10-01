@@ -48,8 +48,9 @@ else, use ``isStated``:
 Opacity
 ~~~~~~~
 
-Use a ``vec4`` return type to set opacity. The alpha channel is the fourth
-component. Returning a negative alpha leaves the layer opacity unchanged.
+Use a ``vec4`` return type to adjust opacity. The alpha channel is the fourth
+component. It is multiplied by **Opacity (on)** or **Opacity (off)** in slice
+views. For meshes and skeletons, it is multiplied by **Opacity (3d)**.
 
 .. code-block:: text
 
