@@ -114,6 +114,11 @@
   padding-left: 0;
 }
 
+.neuroglancer-annotation-filter-results {
+  max-height: min(400px, 50vh);
+  overflow-y: auto;
+}
+
 .neuroglancer-annotation-list-header-container {
   display: grid;
   position: relative;
