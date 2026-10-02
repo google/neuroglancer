@@ -54,6 +54,9 @@ class LayerWidget extends RefCounted {
   maxLength = 0;
   prevValueText = "";
   private colorChangeDisposer: () => void = () => {};
+  private scheduleColorUpdate = this.registerCancellable(
+    animationFrameDebounce(() => this.setColor()),
+  );
 
   constructor(
     public layer: ManagedUserLayer,
@@ -142,7 +145,7 @@ class LayerWidget extends RefCounted {
       if (!this.layer.isReady()) return;
       this.colorChangeDisposer();
       this.colorChangeDisposer = layer.observeLayerColor(() => {
-        this.setColor();
+        this.scheduleColorUpdate();
       });
     };
     this.registerDisposer(this.colorChangeDisposer);
@@ -238,7 +241,7 @@ class LayerWidget extends RefCounted {
     }
     title += ", drag to move, shift+drag to copy";
     element.title = title;
-    this.setColor();
+    this.scheduleColorUpdate();
   }
 
   disposed() {

@@ -22,14 +22,17 @@
 
 .neuroglancer-segmentation-rendering-tab .neuroglancer-shader-code-widget {
   height: 6em;
+  resize: vertical;
 }
 
-.neuroglancer-segmentation-dropdown-skeleton-shader-header {
+.neuroglancer-segmentation-dropdown-shader-header {
   display: flex;
   flex-direction: row;
   align-items: center;
 }
 
+.neuroglancer-segmentation-layer-segment-color-shader-overlay
+  .neuroglancer-shader-code-widget,
 .neuroglancer-segmentation-layer-skeleton-shader-overlay
   .neuroglancer-shader-code-widget {
   width: 80vw;

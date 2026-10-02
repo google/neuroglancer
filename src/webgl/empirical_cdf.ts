@@ -185,8 +185,8 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       WebGL2RenderingContext.UNSIGNED_BYTE,
       /*normalized=*/ true,
     );
-    const dataUnit = shader.textureUnit(histogramDataSamplerTextureUnit);
-    const depthUnit = shader.textureUnit(histogramDepthTextureUnit);
+    const dataUnit = shader.textureUnit(histogramDataSamplerTextureUnit)!;
+    const depthUnit = shader.textureUnit(histogramDepthTextureUnit)!;
     gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + depthUnit);
     gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, depthTexture);
     setRawTextureParameters(gl);

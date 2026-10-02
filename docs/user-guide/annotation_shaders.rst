@@ -71,7 +71,7 @@ interpolation**) will help us do that.
 
 .. code-block:: glsl
 
-  #uicontrol float red invlerp(range=[10,30], window=[0,1000])
+  #uicontrol invlerp red(range=[10,30], window=[0,1000])
   void main() {
     vec3 mycolor = vec3(red(), 0.0, 0.0);
     setColor(mycolor);
@@ -94,7 +94,7 @@ property goes from low to high.
 
 .. code-block:: glsl
 
-  #uicontrol float intensity invlerp(range=[10,30], window=[0,1000])
+  #uicontrol invlerp intensity(range=[10,30], window=[0,1000])
   #uicontrol vec3 mycolor color(default="red")
   void main() {
     setColor(intensity()*mycolor);
@@ -166,7 +166,7 @@ we might use the ``invlerp`` control again.
 
 .. code-block:: glsl
 
-  #uicontrol float intensity invlerp(range=[10,30], window=[0,1000])
+  #uicontrol invlerp intensity(range=[10,30], window=[0,1000])
   void main() {
     setColor(defaultColor());
     setPointMarkerSize(1.0 + 19.0*intensity());
@@ -177,7 +177,7 @@ control.
 
 .. code-block:: glsl
 
-  #uicontrol float intensity invlerp(range=[10,30], window=[0,1000])
+  #uicontrol invlerp intensity(range=[10,30], window=[0,1000])
   #uicontrol float maxsize slider(min=1.0, max=50.0, step=1.0)
   void main() {
     setColor(defaultColor());
