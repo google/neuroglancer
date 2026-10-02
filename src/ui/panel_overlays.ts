@@ -40,9 +40,8 @@ export interface PanelOverlay extends Disposable {
   /** Dispatched when the overlay must update without a redraw of the panel. */
   readonly updateNeeded: NullaryReadonlySignal;
   /**
-   * Runs after each drawn frame, after `updateNeeded`, and on mouse moves while `element` is shown.
-   * It never runs while the projection of the panel is stale.
-   * It must be cheap, and running it twice must give the same result as running it once.
+   * Must be cheap and idempotent, and never runs while the projection of the panel is stale.
+   * A mouse move does not update an overlay whose `element` is hidden.
    */
   update(): void;
 }
