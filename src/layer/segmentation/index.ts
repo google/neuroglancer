@@ -107,7 +107,6 @@ import {
   SKELETON_GO_ROOT,
   SKELETON_GO_UNFINISHED,
   SKELETON_REDO,
-  SKELETON_TOGGLE_HIDDEN,
   SKELETON_UNDO,
 } from "#src/skeleton/actions.js";
 import type {
@@ -1115,8 +1114,6 @@ export class SegmentationUserLayer extends Base {
   anchorSegment = new TrackableValue<bigint | undefined>(undefined, (x) =>
     x === undefined ? undefined : parseUint64(x),
   );
-
-  private savedHiddenObjectAlpha: number | undefined;
 
   constructor(managedLayer: Borrowed<ManagedUserLayer>) {
     super(managedLayer);
@@ -2227,17 +2224,6 @@ export class SegmentationUserLayer extends Base {
               segmentSet.set(segment, newValue);
             }
           });
-        }
-        break;
-      }
-      case SKELETON_TOGGLE_HIDDEN: {
-        const { hiddenObjectAlpha } = this.displayState;
-        if (this.savedHiddenObjectAlpha !== undefined) {
-          hiddenObjectAlpha.value = this.savedHiddenObjectAlpha;
-          this.savedHiddenObjectAlpha = undefined;
-        } else {
-          this.savedHiddenObjectAlpha = hiddenObjectAlpha.value;
-          hiddenObjectAlpha.value = 0;
         }
         break;
       }

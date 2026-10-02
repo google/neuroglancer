@@ -193,12 +193,6 @@ const STATIC_COMMANDS: readonly BuiltinCommand[] = [
     label: "Clear Selected Segments",
     description: "Deselect all currently selected segments.",
   },
-  {
-    id: "skeleton-toggle-hidden",
-    label: "Show/Hide Non-Visible Skeletons",
-    description:
-      "Toggle spatial skeletons for non visible segment IDs in and out of view.",
-  },
   // Annotation.
   {
     id: "finish-annotation",

@@ -33,7 +33,6 @@ import {
   SKELETON_PIN_NODE,
   SKELETON_REDO,
   SKELETON_REROOT,
-  SKELETON_TOGGLE_HIDDEN,
   SKELETON_TOGGLE_TRUE_END,
   SKELETON_UNDO,
 } from "#src/skeleton/actions.js";
@@ -67,7 +66,6 @@ export function getDefaultGlobalBindings() {
 
     map.set("keyn", "add-layer");
     map.set("keyh", "help");
-    map.set("keyg", SKELETON_TOGGLE_HIDDEN);
 
     map.set("space", "toggle-layout");
     map.set("shift+space", "toggle-layout-alternative");
