@@ -3,6 +3,8 @@ import "#datasource/boss/register_default";
 import "#datasource/boss/register_credentials_provider";
 import "#datasource/brainmaps/register_default";
 import "#datasource/brainmaps/register_credentials_provider";
+import "#datasource/catmaid/register_default";
+import "#datasource/catmaid/register_credentials_provider";
 import "#datasource/deepzoom/register_default";
 import "#datasource/dvid/register_default";
 import "#datasource/dvid/register_credentials_provider";

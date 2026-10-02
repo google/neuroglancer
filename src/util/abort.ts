@@ -34,6 +34,10 @@ export function scopedAbortCallback(
   };
 }
 
+export function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 // Abort controller that aborts when *all* consumers have aborted.
 export class SharedAbortController {
   private consumers = new Map<(this: AbortSignal) => void, AbortSignal>();

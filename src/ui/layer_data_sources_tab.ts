@@ -66,6 +66,30 @@ import {
 import { ProgressListenerWidget } from "#src/widget/progress_listener.js";
 import { Tab } from "#src/widget/tab_view.js";
 
+interface OptimisticSkeletonEditsLayer {
+  optimisticSkeletonEdits: WatchableValueInterface<boolean>;
+}
+
+function getOptimisticSkeletonEditsModel(layer: UserLayer) {
+  const model = (layer as Partial<OptimisticSkeletonEditsLayer>)
+    .optimisticSkeletonEdits;
+  return typeof model?.value === "boolean" ? model : undefined;
+}
+
+function getCatmaidStateChecksModel(layer: UserLayer) {
+  const optimisticSkeletonEdits = getOptimisticSkeletonEditsModel(layer);
+  if (optimisticSkeletonEdits === undefined) return undefined;
+  return {
+    changed: optimisticSkeletonEdits.changed,
+    get value() {
+      return !optimisticSkeletonEdits.value;
+    },
+    set value(value: boolean) {
+      optimisticSkeletonEdits.value = !value;
+    },
+  };
+}
+
 const dataSourceUrlSyntaxHighlighter: SyntaxHighlighter = {
   splitPattern: /\|?[^|:/_]*(?:[:/_]+)?/g,
   getSeparatorNode: (text: string) => {
@@ -366,6 +390,30 @@ export class DataSourceView extends RefCounted {
     const { element } = this;
     element.classList.add("neuroglancer-layer-data-source");
     element.appendChild(urlInput.element);
+    const catmaidStateChecksModel = getCatmaidStateChecksModel(source.layer);
+    if (
+      catmaidStateChecksModel !== undefined &&
+      source.layer.dataSources[0] === source
+    ) {
+      const catmaidStateChecksElement = document.createElement("label");
+      catmaidStateChecksElement.classList.add(
+        "neuroglancer-layer-data-sources-source-default",
+      );
+      catmaidStateChecksElement.title =
+        "Send CATMAID revision state and wait for server confirmation instead of using optimistic previews.";
+      catmaidStateChecksElement.appendChild(
+        this.registerDisposer(
+          new TrackableBooleanCheckbox(catmaidStateChecksModel, {
+            enabledTitle: "CATMAID state checks are enabled.",
+            disabledTitle: "Optimistic skeleton edits are enabled.",
+          }),
+        ).element,
+      );
+      catmaidStateChecksElement.appendChild(
+        document.createTextNode("Use CATMAID state checks"),
+      );
+      element.appendChild(catmaidStateChecksElement);
+    }
     element.appendChild(
       this.registerDisposer(new MessagesView(source.messages)).element,
     );
@@ -557,6 +605,7 @@ export class LayerDataSourcesTab extends Tab {
           let view = sourceViews.get(source);
           if (view === undefined) {
             view = new DataSourceView(this, source);
+            view.registerDisposer(source.changed.add(this.reRender));
             view.registerDisposer(
               view.urlInput.dirty.changed.add(this.reRender),
             );

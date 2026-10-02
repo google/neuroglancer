@@ -127,5 +127,6 @@ Data services
    :maxdepth: 1
 
    boss/index
+   catmaid/index
    dvid/index
    render/index

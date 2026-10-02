@@ -68,6 +68,7 @@ export interface SliceViewRenderLayerOptions {
    */
   localPosition: WatchableValueInterface<Float32Array>;
   dataHistogramSpecifications?: HistogramSpecifications;
+  visibleSourcesInvalidation?: WatchableValueInterface<unknown>[];
 
   rpcTransfer?: { [index: string]: number | string | null };
 }
@@ -96,6 +97,7 @@ export abstract class SliceViewRenderLayer<
   transform: WatchableValueInterface<RenderLayerTransformOrError>;
 
   renderScaleTarget: WatchableValueInterface<number>;
+  visibleSourcesInvalidation: WatchableValueInterface<unknown>[];
   renderScaleHistogram?: RenderScaleHistogram;
 
   // This is only used by `ImageRenderLayer` currently, but is defined here because
@@ -183,6 +185,7 @@ export abstract class SliceViewRenderLayer<
 
     const { renderScaleTarget = trackableRenderScaleTarget(1) } = options;
     this.renderScaleTarget = renderScaleTarget;
+    this.visibleSourcesInvalidation = options.visibleSourcesInvalidation ?? [];
     this.renderScaleHistogram = options.renderScaleHistogram;
     this.transform = options.transform;
     this.localPosition = options.localPosition;
@@ -217,6 +220,12 @@ export abstract class SliceViewRenderLayer<
       renderScaleTarget: this.registerDisposer(
         SharedWatchableValue.makeFromExisting(rpc, this.renderScaleTarget),
       ).rpcId,
+      visibleSourcesInvalidation: this.visibleSourcesInvalidation.map(
+        (watchable) =>
+          this.registerDisposer(
+            SharedWatchableValue.makeFromExisting(rpc, watchable),
+          ).rpcId,
+      ),
       ...this.rpcTransfer,
     });
     this.rpcId = sharedObject.rpcId;

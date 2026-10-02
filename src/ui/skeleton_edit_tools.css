@@ -1,0 +1,159 @@
+/**
+ * @license
+ * Copyright 2026 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.neuroglancer-skeleton-tool-status {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #999ca0;
+}
+
+/* margin-left: auto consumes all remaining space on the main axis before
+   justify-content is applied, so the actions list is pushed to the far
+   right regardless of the status text's width or the parent's
+   justify-content (neuroglass-theme.css sets justify-content: flex-end on
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 1rem;
+  margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  color: #999ca0;
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  text-align: right;
+.neuroglancer-skeleton-tool-shortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.neuroglancer-skeleton-tool-shortcut-label {
+  color: #fff;
+}
+
+.neuroglancer-skeleton-tool-shortcut-combo {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px;
+  border-radius: 0.25rem;
+  background: #333;
+  font-size: 0.75rem;
+  color: #999CA0;
+  line-height: 1rem;
+}
+
+.neuroglancer-skeleton-tool-shortcut-icon {
+  display: inline-flex;
+  align-items: center;
+  min-width: 1rem !important;
+  max-height: 1rem;
+  min-height: 1rem;
+}
+
+.neuroglancer-skeleton-find-path-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.neuroglancer-skeleton-find-path-status > .neuroglancer-icon {
+  height: 100%;
+}
+
+.neuroglancer-skeleton-find-path-message {
+  display: inline-flex;
+  align-items: center;
+}
+
+.neuroglancer-skeleton-find-path-annotations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.neuroglancer-skeleton-find-path-annotations
+  > .neuroglancer-annotation-list-entry {
+  background-color: black;
+}
+
+/* Per-mode cursor indicators — driven by data-skeleton-edit-mode on the panel element */
+.neuroglancer-rendered-data-panel[data-skeleton-edit-mode="default"] {
+  cursor:
+    url("./images/crosshair_cursor.svg") 20 20,
+    crosshair;
+}
+
+.neuroglancer-rendered-data-panel[data-skeleton-edit-mode="add"] {
+  cursor:
+    url("./images/add_node_cursor.svg") 20 20,
+    crosshair;
+}
+
+.neuroglancer-rendered-data-panel[data-skeleton-edit-mode="merge"] {
+  cursor:
+    url("./images/merge_cursor.svg") 20 20,
+    crosshair;
+}
+
+.neuroglancer-rendered-data-panel[data-skeleton-edit-mode="create"] {
+  cursor:
+    url("./images/new_skeleton_cursor.svg") 20 20,
+    crosshair;
+}
+
+.neuroglancer-rendered-data-panel[data-skeleton-edit-mode="insert"] {
+  cursor:
+    url("./images/insert_node_cursor.svg") 20 20,
+    crosshair;
+}
+
+.neuroglancer-rendered-data-panel[data-skeleton-edit-mode="split"] {
+  cursor:
+    url("./images/split_cursor.svg") 20 20,
+    crosshair;
+}
+
+.neuroglancer-rendered-data-panel[data-skeleton-edit-mode="delete"] {
+  cursor:
+    url("./images/delete_cursor.svg") 20 20,
+    crosshair;
+}
+
+/* Transient press-state cursors — driven by data-skeleton-press-mode on the panel element */
+.neuroglancer-rendered-data-panel[data-skeleton-press-mode="rotate"] {
+  cursor: move;
+}
+
+.neuroglancer-rendered-data-panel[data-skeleton-press-mode="pan"] {
+  cursor: move;
+}
+
+.neuroglancer-rendered-data-panel[data-skeleton-press-mode="move"] {
+  cursor:
+    url("./images/drag_cursor.svg") 20 20,
+    grabbing;
+}
