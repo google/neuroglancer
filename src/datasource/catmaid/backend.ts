@@ -23,18 +23,11 @@ import type {
 import { getCatmaidSpatialSkeletonGridCellBounds } from "#src/datasource/catmaid/api.js";
 import {
   CatmaidSkeletonSourceParameters,
-  CatmaidCompleteSkeletonSourceParameters,
   makeCatmaidClient,
 } from "#src/datasource/catmaid/base.js";
 import { packCatmaidSkeletonNodes } from "#src/datasource/catmaid/skeleton_packing.js";
-import type {
-  SpatiallyIndexedSkeletonChunk,
-  SkeletonChunk,
-} from "#src/skeleton/backend.js";
-import {
-  SpatiallyIndexedSkeletonSourceBackend,
-  SkeletonSource,
-} from "#src/skeleton/backend.js";
+import type { SpatiallyIndexedSkeletonChunk } from "#src/skeleton/backend.js";
+import { SpatiallyIndexedSkeletonSourceBackend } from "#src/skeleton/backend.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
 
 @registerSharedObject()
@@ -79,34 +72,5 @@ export class CatmaidSpatiallyIndexedSkeletonSourceBackend extends WithParameters
     chunk.vertexAttributes = [packed.segmentIds];
     chunk.nodeIds = packed.nodeIds;
     chunk.nodeSourceStates = packed.sourceStates;
-  }
-}
-
-@registerSharedObject()
-export class CatmaidSkeletonSourceBackend extends WithParameters(
-  WithSharedCredentialsProviderCounterpart<CatmaidToken>()(SkeletonSource),
-  CatmaidCompleteSkeletonSourceParameters,
-) {
-  private clientInstance: CatmaidClient | undefined;
-
-  get client(): CatmaidClient {
-    return (this.clientInstance ??= makeCatmaidClient(
-      this.parameters.catmaidParameters,
-      this.credentialsProvider,
-    ));
-  }
-
-  constructor(...args: any[]) {
-    super(args[0], args[1]);
-  }
-
-  async download(chunk: SkeletonChunk, signal: AbortSignal) {
-    const skeletonId = Number(chunk.objectId);
-    const nodes = await this.client.getSkeleton(skeletonId, { signal });
-    const packed = packCatmaidSkeletonNodes(nodes);
-
-    chunk.vertexPositions = packed.vertexPositions;
-    chunk.indices = packed.indices;
-    chunk.vertexAttributes = [packed.segmentIds];
   }
 }
