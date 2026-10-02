@@ -49,7 +49,7 @@ def write_transpose():
         delete_existing=True,
         dtype=ts.uint16,
         shape=[4, 3, 5, 6],
-        chunk_layout=ts.ChunkLayout(chunk_shape=[1, 3, 5, 6]),
+        chunk_layout=ts.ChunkLayout(chunk_shape=[4, 3, 5, 6]),
     ).result()
     store[...] = np.arange(np.prod(store.shape), dtype=store.dtype.numpy_dtype).reshape(
         store.shape
