@@ -2190,6 +2190,15 @@ export class SegmentationUserLayer extends Base {
     return maybeAugmentSegmentId(this.displayState, value);
   }
 
+  getMissingAnnotationToolMessage() {
+    const editDisabledReason = this.getSpatialSkeletonActionsDisabledReason();
+    const layerName = JSON.stringify(this.managedLayer.name);
+    if (editDisabledReason === undefined) {
+      return `Activate the edit mode tool to place skeletons in layer ${layerName}`;
+    }
+    return `The selected layer (${layerName}) does not have an active annotation tool or support editable skeletons (${editDisabledReason}).`;
+  }
+
   handleAction(action: string, context: SegmentationActionContext) {
     switch (action) {
       case "recolor": {

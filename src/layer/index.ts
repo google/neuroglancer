@@ -629,6 +629,12 @@ export class UserLayer extends RefCounted {
     return value;
   }
 
+  getMissingAnnotationToolMessage(): string {
+    return `The selected layer (${JSON.stringify(
+      this.managedLayer.name,
+    )}) does not have an active annotation tool.`;
+  }
+
   toJSON(): any {
     return {
       type: this.type,
