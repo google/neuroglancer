@@ -19,7 +19,6 @@ import type { DisplayContext } from "#src/display_context.js";
 import type { VisibleRenderLayerTracker } from "#src/layer/index.js";
 import { makeRenderedPanelVisibleLayerTracker } from "#src/layer/index.js";
 import { PickIDManager } from "#src/object_picking.js";
-import { projectToViewport } from "#src/panel_overlay.js";
 import type {
   FramePickingData,
   RenderedDataViewerState,
@@ -158,6 +157,10 @@ export class SliceViewPanel extends RenderedDataPanel {
 
   get navigationState() {
     return this.sliceView.navigationState;
+  }
+
+  get projectionParameters() {
+    return this.sliceView.projectionParameters;
   }
 
   constructor(
@@ -531,13 +534,6 @@ export class SliceViewPanel extends RenderedDataPanel {
       return;
     }
     setStateFromRelative(pickRadius, pickRadius, 0);
-  }
-
-  protected projectPosition(position: Float32Array) {
-    return projectToViewport(
-      this.sliceView.projectionParameters.value,
-      position,
-    );
   }
 
   /**

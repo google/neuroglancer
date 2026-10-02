@@ -14,24 +14,10 @@
  * limitations under the License.
  */
 
-.neuroglancer-panel-overlay-container {
+.neuroglancer-panel-overlays {
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 10;
   overflow: hidden;
-}
-
-/* Black on both sides of the white ring keeps it visible on any background. */
-.neuroglancer-picking-indicator {
-  position: absolute;
-  left: 0;
-  top: 0;
-  box-sizing: border-box;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.92);
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.92),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.92);
-  will-change: transform;
 }
