@@ -25,7 +25,7 @@ import type {
   TypedNumberArrayConstructor,
   WritableArrayLike,
 } from "#src/util/array.js";
-import { mergeSequences } from "#src/util/array.js";
+import { arraysEqual, mergeSequences } from "#src/util/array.js";
 import { bigintCompare } from "#src/util/bigint.js";
 import { DataType } from "#src/util/data_type.js";
 import { type Borrowed } from "#src/util/disposable.js";
@@ -419,12 +419,247 @@ function mergePropertyMaps(a: SegmentPropertyMap, b: SegmentPropertyMap) {
   });
 }
 
+interface PropertySource {
+  inlineProperties: InlineSegmentPropertyMap;
+  property: InlineSegmentProperty;
+}
+
+function propertiesAreCompatible(
+  a: InlineSegmentProperty,
+  b: InlineSegmentProperty,
+): boolean {
+  if (a.type !== b.type) return false;
+  if (a.type === "number") {
+    const other = b as InlineSegmentNumericalProperty;
+    return a.dataType === other.dataType && a.description === other.description;
+  }
+  if (a.type === "tags") {
+    const other = b as InlineSegmentTagsProperty;
+    return (
+      arraysEqual(a.tags, other.tags) &&
+      arraysEqual(a.tagDescriptions, other.tagDescriptions)
+    );
+  }
+  return a.description === (b as InlineSegmentStringProperty).description;
+}
+
+function propertyValuesEqual(a: string | number, b: string | number): boolean {
+  return (
+    a === b || (typeof a === "number" && Number.isNaN(a) && Number.isNaN(b))
+  );
+}
+
+function propertiesHaveEqualOverlappingValues(
+  a: PropertySource,
+  b: PropertySource,
+): boolean {
+  const aIds = a.inlineProperties.ids;
+  const bIds = b.inlineProperties.ids;
+  let aIndex = 0;
+  let bIndex = 0;
+  while (aIndex < aIds.length && bIndex < bIds.length) {
+    const comparison = bigintCompare(aIds[aIndex], bIds[bIndex]);
+    if (comparison < 0) {
+      ++aIndex;
+    } else if (comparison > 0) {
+      ++bIndex;
+    } else {
+      if (
+        !propertyValuesEqual(
+          a.property.values[aIndex],
+          b.property.values[bIndex],
+        )
+      ) {
+        return false;
+      }
+      ++aIndex;
+      ++bIndex;
+    }
+  }
+  return true;
+}
+
+function getToMergedIndices(
+  sourceIds: BigUint64Array,
+  mergedIds: BigUint64Array,
+): Uint32Array {
+  const toMerged = new Uint32Array(sourceIds.length);
+  let mergedIndex = 0;
+  for (let sourceIndex = 0; sourceIndex < sourceIds.length; ++sourceIndex) {
+    const sourceId = sourceIds[sourceIndex];
+    while (mergedIds[mergedIndex] !== sourceId) ++mergedIndex;
+    toMerged[sourceIndex] = mergedIndex;
+  }
+  return toMerged;
+}
+
+function mergeDuplicateProperties(
+  sources: PropertySource[],
+  mergedIds: BigUint64Array,
+  getSourceToMergedIndices: (
+    inlineProperties: InlineSegmentPropertyMap,
+  ) => Uint32Array,
+): InlineSegmentProperty {
+  const first = sources[0];
+  const firstToMerged = getSourceToMergedIndices(first.inlineProperties);
+  const merged = remapProperty(first.property, mergedIds.length, firstToMerged);
+  const present = new Uint8Array(mergedIds.length);
+  for (const source of sources) {
+    const toMerged = getSourceToMergedIndices(source.inlineProperties);
+    remapArray<string | number>(
+      source.property.values,
+      merged.values as WritableArrayLike<string | number>,
+      toMerged,
+    );
+    for (const index of toMerged) present[index] = 1;
+  }
+  if (merged.type === "number") {
+    let [min, max] = (sources[0].property as InlineSegmentNumericalProperty)
+      .bounds;
+    for (let i = 1; i < sources.length; ++i) {
+      const [sourceMin, sourceMax] = (
+        sources[i].property as InlineSegmentNumericalProperty
+      ).bounds;
+      if (dataTypeCompare(sourceMin, min) < 0) min = sourceMin;
+      if (dataTypeCompare(sourceMax, max) > 0) max = sourceMax;
+    }
+    if (
+      merged.dataType !== DataType.FLOAT32 &&
+      present.some((value) => value === 0)
+    ) {
+      if (dataTypeCompare(0, min) < 0) min = 0;
+      if (dataTypeCompare(0, max) > 0) max = 0;
+    }
+    merged.bounds = [min, max] as DataTypeInterval;
+  }
+  return merged;
+}
+
+function reconcileDuplicateProperties(
+  maps: SegmentPropertyMap[],
+  mergedInlineProperties: InlineSegmentPropertyMap,
+): InlineSegmentPropertyMap {
+  const sources: PropertySource[] = [];
+  const sourcesById = new Map<string, PropertySource[]>();
+  const usedIds = new Set<string>();
+  for (const map of maps) {
+    const { inlineProperties } = map;
+    if (inlineProperties === undefined) continue;
+    for (const property of inlineProperties.properties) {
+      const source = { inlineProperties, property };
+      sources.push(source);
+      let duplicates = sourcesById.get(property.id);
+      if (duplicates === undefined) {
+        duplicates = [];
+        sourcesById.set(property.id, duplicates);
+      }
+      duplicates.push(source);
+      usedIds.add(property.id);
+    }
+  }
+
+  if ([...sourcesById.values()].every((sources) => sources.length === 1)) {
+    return mergedInlineProperties;
+  }
+
+  const sourceToMergedIndices = new Map<
+    InlineSegmentPropertyMap,
+    Uint32Array
+  >();
+  const getSourceToMergedIndices = (
+    inlineProperties: InlineSegmentPropertyMap,
+  ): Uint32Array => {
+    let indices = sourceToMergedIndices.get(inlineProperties);
+    if (indices === undefined) {
+      indices = getToMergedIndices(
+        inlineProperties.ids,
+        mergedInlineProperties.ids,
+      );
+      sourceToMergedIndices.set(inlineProperties, indices);
+    }
+    return indices;
+  };
+
+  const safelyMergedIds = new Set<string>();
+  for (const [id, duplicates] of sourcesById) {
+    if (duplicates.length === 1) continue;
+    let safelyMerged = true;
+    for (let i = 1; safelyMerged && i < duplicates.length; ++i) {
+      const source = duplicates[i];
+      for (let j = 0; j < i; ++j) {
+        const other = duplicates[j];
+        if (
+          !propertiesAreCompatible(source.property, other.property) ||
+          !propertiesHaveEqualOverlappingValues(source, other)
+        ) {
+          safelyMerged = false;
+          break;
+        }
+      }
+    }
+    if (safelyMerged) {
+      safelyMergedIds.add(id);
+    }
+  }
+
+  const properties: InlineSegmentProperty[] = [];
+  const emittedMergedIds = new Set<string>();
+  const nextSuffix = new Map<string, number>();
+  for (const source of sources) {
+    const { id } = source.property;
+    const duplicates = sourcesById.get(id)!;
+    if (safelyMergedIds.has(id)) {
+      if (emittedMergedIds.has(id)) continue;
+      emittedMergedIds.add(id);
+      properties.push(
+        mergeDuplicateProperties(
+          duplicates,
+          mergedInlineProperties.ids,
+          getSourceToMergedIndices,
+        ),
+      );
+      continue;
+    }
+
+    const toMerged = getSourceToMergedIndices(source.inlineProperties);
+    let property = remapProperty(
+      source.property,
+      mergedInlineProperties.ids.length,
+      toMerged,
+    );
+    if (duplicates[0] !== source) {
+      let suffix = nextSuffix.get(id) ?? 1;
+      let suffixedId: string;
+      do {
+        suffixedId = `${id}${suffix++}`;
+      } while (usedIds.has(suffixedId));
+      nextSuffix.set(id, suffix);
+      usedIds.add(suffixedId);
+      property = { ...property, id: suffixedId };
+    }
+    properties.push(property);
+  }
+  return { ids: mergedInlineProperties.ids, properties };
+}
+
 export function mergeSegmentPropertyMaps(
   maps: SegmentPropertyMap[],
 ): SegmentPropertyMap | undefined {
+  const sourceMaps = maps;
   while (true) {
     if (maps.length === 0) return undefined;
-    if (maps.length === 1) return maps[0];
+    if (maps.length === 1) {
+      const merged = maps[0];
+      if (sourceMaps.length === 1 || merged.inlineProperties === undefined) {
+        return merged;
+      }
+      return new SegmentPropertyMap({
+        inlineProperties: reconcileDuplicateProperties(
+          sourceMaps,
+          merged.inlineProperties,
+        ),
+      });
+    }
     const merged: SegmentPropertyMap[] = [];
     for (let i = 0, length = maps.length; i < length; i += 2) {
       if (i + 1 === length) {
