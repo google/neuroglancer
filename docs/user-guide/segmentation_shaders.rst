@@ -178,3 +178,22 @@ The remapped value from an ``invlerp`` control can be passed to a colormap:
 
 This pattern is useful when a numerical segment property should control color
 continuously while still respecting explicitly assigned segment colors.
+
+Relationship to the Skeleton Shader
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A segmentation layer may have both a segment color shader and a skeleton user
+shader. The segment color shader determines the per-segment color used by slice
+views, meshes, and skeletons.
+
+The default skeleton shader preserves the result of the segment color shader:
+
+.. code-block:: glsl
+
+  void main() {
+    emitDefault();
+  }
+
+Here, ``emitDefault()`` emits the color and alpha returned by the segment color
+shader. A custom skeleton shader can also access that result through
+``vec4 segmentColor()``, or emit its own color.
