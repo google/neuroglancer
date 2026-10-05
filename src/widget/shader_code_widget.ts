@@ -203,20 +203,25 @@ export class ShaderCodeWidget extends RefCounted {
 }
 
 type UserLayerWithCodeEditor = UserLayer & { codeVisible: TrackableBoolean };
-type ShaderCodeOverlayConstructor<T extends Overlay> = new (
-  layer: UserLayerWithCodeEditor,
-) => T;
+type ShaderCodeOverlayConstructor<
+  Layer extends UserLayerWithCodeEditor,
+  T extends Overlay,
+> = new (layer: Layer) => T;
 
-export function makeShaderCodeWidgetTopRow<T extends Overlay>(
-  layer: UserLayerWithCodeEditor,
+export function makeShaderCodeWidgetTopRow<
+  Layer extends UserLayerWithCodeEditor,
+  T extends Overlay,
+>(
+  layer: Layer,
   codeWidget: ShaderCodeWidget,
-  ShaderCodeOverlay: ShaderCodeOverlayConstructor<T>,
+  ShaderCodeOverlay: ShaderCodeOverlayConstructor<Layer, T>,
   help: {
     title: string;
     href: string;
   },
   className: string,
   title = "Shader",
+  codeVisible = layer.codeVisible,
 ) {
   const spacer = document.createElement("div");
   spacer.style.flex = "1";
@@ -227,13 +232,10 @@ export function makeShaderCodeWidgetTopRow<T extends Overlay>(
   topRow.appendChild(spacer);
 
   layer.registerDisposer(
-    new ElementVisibilityFromTrackableBoolean(
-      layer.codeVisible,
-      codeWidget.element,
-    ),
+    new ElementVisibilityFromTrackableBoolean(codeVisible, codeWidget.element),
   );
 
-  const codeVisibilityControl = new CheckboxIcon(layer.codeVisible, {
+  const codeVisibilityControl = new CheckboxIcon(codeVisible, {
     enableTitle: "Show code",
     disableTitle: "Hide code",
     backgroundScheme: "dark",
