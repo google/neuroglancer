@@ -525,6 +525,7 @@ export class SkeletonRenderingOptions implements Trackable {
   shader = makeTrackableFragmentMain(DEFAULT_FRAGMENT_MAIN);
   shaderError = makeWatchableShaderError();
   shaderControlState = new ShaderControlState(this.shader);
+  codeVisible = new TrackableBoolean(true);
   hideInactiveShaderControls = new TrackableBoolean(false);
   params2d: ViewSpecificSkeletonRenderingOptions = {
     mode: new TrackableSkeletonRenderMode(SkeletonRenderMode.LINES_AND_POINTS),
@@ -539,6 +540,7 @@ export class SkeletonRenderingOptions implements Trackable {
     const { compound } = this;
     compound.add("shader", this.shader);
     compound.add("shaderControls", this.shaderControlState);
+    compound.add("codeVisible", this.codeVisible);
     compound.add("hideInactiveShaderControls", this.hideInactiveShaderControls);
     compound.add("mode2d", this.params2d.mode);
     compound.add("lineWidth2d", this.params2d.lineWidth);
