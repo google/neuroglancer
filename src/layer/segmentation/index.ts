@@ -1278,7 +1278,9 @@ export class SegmentationUserLayer extends Base {
     if (skeletonShader !== undefined) {
       skeletonRenderingOptions.shader.restoreState(skeletonShader);
     }
-    this.codeVisible.restoreState(json_keys.SKELETON_CODE_VISIBLE_KEY);
+    this.codeVisible.restoreState(
+      specification[json_keys.SKELETON_CODE_VISIBLE_KEY],
+    );
     this.displayState.renderScaleTarget.restoreState(
       specification[json_keys.MESH_RENDER_SCALE_JSON_KEY],
     );
