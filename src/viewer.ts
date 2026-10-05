@@ -285,7 +285,15 @@ class TrackableUiControlVisibility extends CompoundTrackable {
   }
 }
 
-class TrackableViewerState extends CompoundTrackable {
+export class TrackableViewerState extends CompoundTrackable {
+  /**
+   * `reset()` dispatches this signal after it resets each member. A view that
+   * keeps UI state outside this trackable subscribes to this signal, so the
+   * state does not call the view. `Viewer.resetInitiated` is a different
+   * event, which the viewer dispatches when the layer list becomes empty.
+   */
+  stateReset = new NullarySignal();
+
   constructor(public viewer: Borrowed<Viewer>) {
     super();
     this.add("title", viewer.title);
@@ -412,7 +420,7 @@ class TrackableViewerState extends CompoundTrackable {
 
   reset() {
     super.reset();
-    this.viewer.sidePanelManager.reset();
+    this.stateReset.dispatch();
   }
 }
 
@@ -759,6 +767,11 @@ export class Viewer extends RefCounted implements ViewerState {
     );
 
     this.state = new TrackableViewerState(this);
+    // Subscribe here and not in `makeUI()`, because `makeUI()` runs before
+    // the state exists.
+    this.registerDisposer(
+      this.state.stateReset.add(() => this.sidePanelManager.reset()),
+    );
 
     this.registerDisposer(
       new PlaybackManager(this.display, this.position, this.velocity),
