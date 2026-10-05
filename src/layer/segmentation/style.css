@@ -21,7 +21,8 @@
 }
 
 .neuroglancer-segmentation-rendering-tab .neuroglancer-shader-code-widget {
-  height: 6em;
+  flex-shrink: 0;
+  height: 8em;
   resize: vertical;
 }
 
