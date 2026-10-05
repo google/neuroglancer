@@ -137,6 +137,7 @@ export class DisplayOptionsTab extends Tab {
               },
               "neuroglancer-segmentation-dropdown-shader-header",
               "Skeleton Shader",
+              layer.displayState.skeletonRenderingOptions.codeVisible,
             ),
           );
           parent.appendChild(codeWidget.element);
