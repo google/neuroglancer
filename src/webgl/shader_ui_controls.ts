@@ -1553,8 +1553,9 @@ export class ShaderControlState
   builderState: WatchableValueInterface<ShaderControlsBuilderState>;
   histogramSpecifications: HistogramSpecifications;
   // Set of #uicontrol names that survived GLSL link-time dead-code elimination
-  // for the most recently rendered shader. `undefined` means "not yet known"
-  // (no shader has linked yet); UI treats that as "show everything".
+  // in any shader linked from the current builder state. `undefined` means
+  // "not yet known" (no shader has linked yet); UI treats that as "show
+  // everything".
   activeControls = new WatchableValue<Set<string> | undefined>(undefined);
 
   private fragmentMainGeneration = -1;
@@ -1564,7 +1565,7 @@ export class ShaderControlState
   private parseResult_: ShaderControlsParseResult;
   private controlsGeneration = -1;
   private parseResultChanged = new NullarySignal();
-  private lastReportedProgram: WebGLProgram | undefined = undefined;
+  private readonly linkedPrograms = new Set<WebGLProgram>();
 
   constructor(
     public fragmentMain: WatchableValueInterface<string>,
@@ -1625,6 +1626,9 @@ export class ShaderControlState
       },
       [this.parseResult, this],
       (a, b) => a.key === b.key,
+    );
+    this.registerDisposer(
+      this.builderState.changed.add(() => this.clearLinkedPrograms()),
     );
     const histogramChannels = makeCachedDerivedWatchableValue(
       (state) => {
@@ -1716,22 +1720,25 @@ export class ShaderControlState
         this.controls.value = result.controls;
       }
     }
-    // The active-controls set was derived from the previous shader. Forget the
-    // last reported program so `reportLinkedShader` recomputes it on the next
-    // link, rather than clearing `activeControls` here: linking happens fast
-    // enough that clearing would just flicker the controls in and back out.
-    this.lastReportedProgram = undefined;
     this.parseResultChanged.dispatch();
   }
 
-  // Called by `setControlsInShader` once per linked shader program. Reads
-  // which uniforms survived link-time dead-code elimination and publishes the
-  // resulting set on `activeControls`. Idempotent for repeated calls with the
-  // same program.
-  reportLinkedShader(shader: ShaderProgram) {
-    if (shader.program === this.lastReportedProgram) return;
-    this.lastReportedProgram = shader.program;
-    const next = computeActiveControls(shader, this.parseResult_);
+  // Rebuilds `activeControls` from the shaders that draw next.
+  clearLinkedPrograms() {
+    this.linkedPrograms.clear();
+  }
+
+  // Adds the controls that survive link-time dead-code elimination in `shader`.
+  addLinkedShader(shader: ShaderProgram) {
+    const { program } = shader;
+    if (this.linkedPrograms.has(program)) return;
+    const linkedControls = computeActiveControls(shader, this.parseResult_);
+    // The first program after `clearLinkedPrograms` replaces the stale set.
+    const next =
+      this.linkedPrograms.size === 0
+        ? linkedControls
+        : new Set([...this.activeControls.value!, ...linkedControls]);
+    this.linkedPrograms.add(program);
     if (!activeControlsEqual(this.activeControls.value, next)) {
       this.activeControls.value = next;
     }
@@ -1941,7 +1948,7 @@ export function setControlsInShader(
   // record which controls survived link-time DCE for the current shader.
   // The call is idempotent for the same program — no GL roundtrip beyond
   // the initial computation.
-  shaderControlState.reportLinkedShader(shader);
+  shaderControlState.addLinkedShader(shader);
   const {
     controls,
     preprocessing: { stringLiteralIds },

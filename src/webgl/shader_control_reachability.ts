@@ -66,12 +66,12 @@ export function computeActiveControls(
     ) {
       // These inject helper functions plus one or more underlying uniforms
       // (bound/interval uniforms for invlerp, texture sampler for transfer
-      // function). Any surviving uniform with the control's prefix means the
-      // helper is reachable.
-      const prefix = uniformName(name);
+      // function), each named `<kind>_u_shaderControl_<name>`.
+      // Matching the whole suffix keeps control `c` from matching `ca`.
+      const suffix = `_${uniformName(name)}`;
       let found = false;
       for (const [uName, location] of uniforms) {
-        if (location !== null && uName.startsWith(prefix)) {
+        if (location !== null && uName.endsWith(suffix)) {
           found = true;
           break;
         }

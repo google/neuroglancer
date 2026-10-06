@@ -755,7 +755,11 @@ gl_Position = uModelViewProjectionMatrix * vec4(position, 1.0);
       VolumeRenderingAttachmentState
     >,
   ) {
-    if (!renderContext.emitColor) return;
+    if (
+      !renderContext.emitColor ||
+      this.mode.value === VolumeRenderingModes.OFF
+    )
+      return;
     const allSources = attachment.state!.sources.value;
     if (allSources.length === 0) return;
     let curPhysicalSpacing = 0;

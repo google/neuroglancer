@@ -263,7 +263,7 @@ export class ShaderControls extends Tab {
     let hiddenCount = 0;
     for (const name of this.state.state.keys()) {
       // Skip when the user has opted in and we have a known active set
-      // (computed from the last linked shader) that does not include `name`.
+      // (computed from the linked shaders) that does not include `name`.
       // `activeControls === undefined` means we haven't rendered yet; show
       // everything in that case to avoid hiding controls prematurely.
       if (
