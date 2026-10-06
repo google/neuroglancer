@@ -29,7 +29,7 @@ import { SidePanel } from "#src/ui/side_panel.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
-import { controlEquivalentModifierLabel } from "#src/util/platform.js";
+import { commandOrControlLabel } from "#src/util/platform.js";
 import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
@@ -73,7 +73,7 @@ export class SelectionDetailsPanel extends SidePanel {
     });
     titleBar.appendChild(backButton);
     titleBar.appendChild(forwardButton);
-    const modifierKeyLabel = controlEquivalentModifierLabel();
+    const modifierKeyLabel = commandOrControlLabel();
     titleBar.appendChild(
       this.registerDisposer(
         new CheckboxIcon(state.pin, {

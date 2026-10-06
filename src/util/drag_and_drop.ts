@@ -31,8 +31,8 @@
 import { registerEventListener } from "#src/util/disposable.js";
 import { hexEncode, hexDecode } from "#src/util/hex.js";
 import {
-  controlEquivalentModifierLabel,
-  hasControlEquivalentModifier,
+  commandOrControlLabel,
+  hasCommandOrControl,
 } from "#src/util/platform.js";
 
 export function encodeStringAsDragType(s: string) {
@@ -241,8 +241,8 @@ export function getDropEffectFromModifiers<DropEffect extends string>(
   moveAllowed: boolean,
 ): { dropEffect: DropEffect | "move" | "copy"; dropEffectMessage: string } {
   const modifiers = savedModifiers ?? event;
-  const moveModifierActive = hasControlEquivalentModifier(modifiers);
-  const moveModifierLabel = controlEquivalentModifierLabel().toUpperCase();
+  const moveModifierActive = hasCommandOrControl(modifiers);
+  const moveModifierLabel = commandOrControlLabel().toUpperCase();
   let dropEffect: DropEffect | "move" | "copy";
   if (modifiers.shiftKey) {
     dropEffect = "copy";

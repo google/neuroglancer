@@ -27,14 +27,12 @@ export function isMacPlatform(): boolean {
 }
 
 /** Whether the event carries Control, or Command on Mac. */
-export function hasControlEquivalentModifier(
-  event: EventModifierKeyState,
-): boolean {
+export function hasCommandOrControl(event: EventModifierKeyState): boolean {
   return event.ctrlKey || (isMacPlatform() && event.metaKey);
 }
 
-/** Preferred display name of the modifier tested by {@link hasControlEquivalentModifier}. */
-export function controlEquivalentModifierLabel(): string {
+/** Preferred display name of the modifier tested by {@link hasCommandOrControl}. */
+export function commandOrControlLabel(): string {
   return isMacPlatform() ? "command" : "control";
 }
 

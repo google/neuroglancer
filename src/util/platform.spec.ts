@@ -15,10 +15,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  hasControlEquivalentModifier,
-  isMacPlatform,
-} from "#src/util/platform.js";
+import { hasCommandOrControl, isMacPlatform } from "#src/util/platform.js";
 
 describe("isMacPlatform", () => {
   afterEach(() => {
@@ -38,7 +35,7 @@ describe("isMacPlatform", () => {
   });
 });
 
-describe("hasControlEquivalentModifier", () => {
+describe("hasCommandOrControl", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -52,11 +49,9 @@ describe("hasControlEquivalentModifier", () => {
 
   it("accepts Command only on Mac", () => {
     vi.stubGlobal("navigator", { platform: "MacIntel" });
-    expect(hasControlEquivalentModifier({ ...none, metaKey: true })).toBe(true);
+    expect(hasCommandOrControl({ ...none, metaKey: true })).toBe(true);
     vi.stubGlobal("navigator", { platform: "Win32" });
-    expect(hasControlEquivalentModifier({ ...none, metaKey: true })).toBe(
-      false,
-    );
-    expect(hasControlEquivalentModifier({ ...none, ctrlKey: true })).toBe(true);
+    expect(hasCommandOrControl({ ...none, metaKey: true })).toBe(false);
+    expect(hasCommandOrControl({ ...none, ctrlKey: true })).toBe(true);
   });
 });
