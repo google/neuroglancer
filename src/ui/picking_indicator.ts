@@ -18,9 +18,14 @@ import "#src/ui/picking_indicator.css";
 
 import { coordinateSpacesEqual } from "#src/coordinate_transform.js";
 import type { MouseSelectionState } from "#src/layer/index.js";
+import type { NavigationState } from "#src/navigation_state.js";
+import type { ProjectionParameters } from "#src/projection_parameters.js";
 import { projectToViewport } from "#src/projection_parameters.js";
-import type { WatchableValueInterface } from "#src/trackable_value.js";
-import type { OverlaidPanel, PanelOverlay } from "#src/ui/panel_overlays.js";
+import type {
+  WatchableValueChangeInterface,
+  WatchableValueInterface,
+} from "#src/trackable_value.js";
+import type { PanelOverlay } from "#src/ui/panel_overlays.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { NullarySignal } from "#src/util/signal.js";
 
@@ -28,12 +33,20 @@ const PICKING_INDICATOR_DIAMETER = 14;
 const PICKING_INDICATOR_MIN_SCALE = 0.6;
 const PICKING_INDICATOR_MAX_SCALE = 1.7;
 
+export interface PickingIndicatorPanel {
+  /** In viewport pixels, or -1 while the mouse is outside the panel. */
+  readonly mouseX: number;
+  readonly mouseY: number;
+  readonly navigationState: NavigationState;
+  readonly projectionParameters: WatchableValueChangeInterface<ProjectionParameters>;
+}
+
 export class PickingIndicator extends RefCounted implements PanelOverlay {
   readonly element = document.createElement("div");
   readonly updateNeeded = new NullarySignal();
 
   constructor(
-    private readonly panel: OverlaidPanel,
+    private readonly panel: PickingIndicatorPanel,
     private readonly mouseState: MouseSelectionState,
     private readonly showPickingIndicator: WatchableValueInterface<boolean>,
   ) {

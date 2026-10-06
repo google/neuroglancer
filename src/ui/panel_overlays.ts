@@ -16,9 +16,6 @@
 
 import "#src/ui/panel_overlays.css";
 
-import type { NavigationState } from "#src/navigation_state.js";
-import type { ProjectionParameters } from "#src/projection_parameters.js";
-import type { WatchableValueChangeInterface } from "#src/trackable_value.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import type { Disposable } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -26,18 +23,10 @@ import type { NullaryReadonlySignal } from "#src/util/signal.js";
 import type { TrackableScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
 import { ScreenshotMode } from "#src/util/trackable_screenshot_mode.js";
 
-export interface OverlaidPanel {
-  /** In viewport pixels, or -1 while the mouse is outside the panel. */
-  readonly mouseX: number;
-  readonly mouseY: number;
-  readonly navigationState: NavigationState;
-  readonly projectionParameters: WatchableValueChangeInterface<ProjectionParameters>;
-}
-
 export interface PanelOverlay extends Disposable {
   /** Receives no pointer events, so that input reaches the panel. */
   readonly element: HTMLElement;
-  /** Dispatched when the overlay must update without a redraw of the panel. */
+  /** Dispatched when the overlay must update between frames of the panel. */
   readonly updateNeeded: NullaryReadonlySignal;
   /**
    * Must be cheap and idempotent, and never runs while the projection of the panel is stale.
@@ -46,6 +35,7 @@ export interface PanelOverlay extends Disposable {
   update(): void;
 }
 
+/** DOM elements, not WebGL, so that a pick or a mouse move updates an overlay without a redraw of the panel. */
 export class PanelOverlays extends RefCounted {
   private readonly container = document.createElement("div");
   private readonly overlays: PanelOverlay[] = [];
