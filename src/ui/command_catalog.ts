@@ -39,10 +39,7 @@ import type {
   EventActionMap,
   NormalizedEventIdentifier,
 } from "#src/util/event_action_map.js";
-import {
-  friendlyEventIdentifier,
-  hasMetaCounterpart,
-} from "#src/util/event_action_map.js";
+import { pressedEventIdentifier } from "#src/util/event_action_map.js";
 import { rankedMatches } from "#src/util/ranked_matches.js";
 import { Signal } from "#src/util/signal.js";
 import type { InputEventBindings } from "#src/viewer.js";
@@ -70,7 +67,7 @@ export interface CommandCatalogContext {
 export interface ActionBinding {
   readonly actionId: ActionIdentifier;
   readonly eventAction: EventAction;
-  readonly controlIsSeparateFromCommand: boolean;
+  readonly pressedEventIdentifier: string;
 }
 
 export type CommandSource = "registered" | "derived";
@@ -218,9 +215,10 @@ export function collectActionBindings(
         seenBindings.set(eventAction.action, {
           actionId: eventAction.action,
           eventAction,
-          controlIsSeparateFromCommand: hasMetaCounterpart(
+          pressedEventIdentifier: pressedEventIdentifier(
             eventMap,
             normalizedId,
+            eventAction,
           ),
         });
       }
@@ -274,18 +272,8 @@ export class CommandCatalog extends RefCounted {
 
     const bindings = collectActionBindings(inputEventBindings);
     const shortcutByAction = new Map<ActionIdentifier, string>();
-    for (const {
-      actionId,
-      eventAction,
-      controlIsSeparateFromCommand,
-    } of bindings) {
-      shortcutByAction.set(
-        actionId,
-        formatKeyStroke(
-          friendlyEventIdentifier(eventAction.originalEventIdentifier ?? ""),
-          { controlIsSeparateFromCommand },
-        ),
-      );
+    for (const { actionId, pressedEventIdentifier } of bindings) {
+      shortcutByAction.set(actionId, formatKeyStroke(pressedEventIdentifier));
     }
 
     const layerRangeShortcut = (actionPrefix: string) => {

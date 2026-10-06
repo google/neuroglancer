@@ -139,22 +139,17 @@ export function formatKeyName(name: string) {
 }
 
 const MAC_MODIFIER_SYMBOLS: Partial<Record<string, string>> = {
-  control: "⌘",
+  control: "⌃",
   meta: "⌘",
   alt: "⌥",
   shift: "⇧",
 };
 
-export function formatKeyStroke(
-  stroke: string,
-  options: { controlIsSeparateFromCommand?: boolean } = {},
-) {
+export function formatKeyStroke(stroke: string) {
   const parts = stroke.split("+");
   if (!isMacPlatform()) return parts.map(formatKeyName).join("+");
-  const formatted = parts.map((part) =>
-    part === "control" && options.controlIsSeparateFromCommand
-      ? "⌃"
-      : (MAC_MODIFIER_SYMBOLS[part] ?? formatKeyName(part)),
+  const formatted = parts.map(
+    (part) => MAC_MODIFIER_SYMBOLS[part] ?? formatKeyName(part),
   );
   const keyName = formatted[formatted.length - 1];
   return formatted.join(keyName.length === 1 ? "" : "+");

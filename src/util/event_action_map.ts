@@ -467,23 +467,30 @@ function replaceModifier(
 }
 
 /**
- * Whether `eventMap` has its own `meta+` binding for a `control+` stroke. On
- * Mac, Command otherwise falls back to the `control+` binding.
+ * The stroke a user presses for a binding, without phase or optional
+ * modifiers. On Mac, Command reaches a `control+` binding that has no `meta+`
+ * binding of its own.
  */
-export function hasMetaCounterpart(
+export function pressedEventIdentifier(
   eventMap: EventActionMapInterface,
   normalizedIdentifier: NormalizedEventIdentifier,
-) {
+  eventAction: EventAction,
+): string {
+  const identifier = friendlyEventIdentifier(
+    eventAction.originalEventIdentifier ?? normalizedIdentifier,
+  );
+  if (!isMacPlatform()) return identifier;
   const { phase, keyName, modifiers } =
     parseEventIdentifier(normalizedIdentifier);
   if (!(modifiers & Modifiers.CONTROL) || modifiers & Modifiers.META) {
-    return false;
+    return identifier;
   }
   const metaStroke = getStrokeIdentifier(
     keyName,
     replaceModifier(modifiers, Modifiers.CONTROL, Modifiers.META),
   );
-  return eventMap.get(`${phase}:${metaStroke}`) !== undefined;
+  if (eventMap.get(`${phase}:${metaStroke}`) !== undefined) return identifier;
+  return identifier.replace("control+", "meta+");
 }
 
 export function dispatchEventWithModifiers(

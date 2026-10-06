@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ActionCommand } from "#src/ui/command.js";
 import {
   collectActionBindings,
@@ -124,21 +124,27 @@ describe("collectActionBindings", () => {
   });
 });
 
-describe("collectActionBindings control and Command", () => {
-  it("marks Control as separate only when the key has its own meta binding", () => {
+describe("collectActionBindings on Mac", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("shows Command for a Control binding unless Command has its own binding", () => {
+    vi.stubGlobal("navigator", { platform: "MacIntel" });
     const map = new EventActionMap();
     map.set("control+keya", "shared-action");
-    map.set("control+keyb", "separate-action");
+    map.set("control+keyb", "control-action");
     map.set("meta+keyb", "command-action");
     const bindings = collectActionBindings(makeInputEventBindings(map));
-    const separateByAction = new Map(
+    const strokeByAction = new Map(
       bindings.map((binding) => [
         binding.actionId,
-        binding.controlIsSeparateFromCommand,
+        binding.pressedEventIdentifier,
       ]),
     );
-    expect(separateByAction.get("shared-action")).toBe(false);
-    expect(separateByAction.get("separate-action")).toBe(true);
+    expect(strokeByAction.get("shared-action")).toBe("meta+keya");
+    expect(strokeByAction.get("control-action")).toBe("control+keyb");
+    expect(strokeByAction.get("command-action")).toBe("meta+keyb");
   });
 });
 

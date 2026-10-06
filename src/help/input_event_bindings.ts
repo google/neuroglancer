@@ -29,8 +29,7 @@ import type { GlobalToolBinder } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { removeChildren } from "#src/util/dom.js";
 import {
-  friendlyEventIdentifier,
-  hasMetaCounterpart,
+  pressedEventIdentifier,
   type EventActionMap,
 } from "#src/util/event_action_map.js";
 import { emptyToUndefined } from "#src/util/json.js";
@@ -64,34 +63,29 @@ export class HelpPanelState {
 interface BindingList {
   label: string;
   entries: Map<string, string>;
-  controlSeparateFromCommandStrokes: Set<string>;
 }
 
 function collectBindings(
   bindings: Iterable<[string, EventActionMap]>,
 ): Map<EventActionMap, BindingList> {
   const uniqueMaps = new Map<EventActionMap, BindingList>();
-  function addEntries(eventMap: EventActionMap, list: BindingList) {
+  function addEntries(eventMap: EventActionMap, entries: Map<string, string>) {
     for (const parent of eventMap.parents) {
       if (parent.label !== undefined) {
         addMap(parent.label, parent);
       } else {
-        addEntries(parent, list);
+        addEntries(parent, entries);
       }
     }
     for (const [event, eventAction] of eventMap.bindings.entries()) {
-      const stroke = friendlyEventIdentifier(
-        eventAction.originalEventIdentifier ?? event,
+      entries.set(
+        pressedEventIdentifier(eventMap, event, eventAction),
+        eventAction.action,
       );
-      list.entries.set(stroke, eventAction.action);
-      if (hasMetaCounterpart(eventMap, event)) {
-        list.controlSeparateFromCommandStrokes.add(stroke);
-      }
     }
   }
 
-  function simplifyEntries(list: BindingList) {
-    const { entries } = list;
+  function simplifyEntries(entries: Map<string, string>) {
     const identifierMap = new Map<string, [string, string]>();
 
     function increment(x: string, i: number) {
@@ -134,12 +128,7 @@ function collectBindings(
     const newEntries = new Map<string, string>();
     for (let [identifier, action] of entries) {
       const remapped = identifierMap.get(identifier);
-      if (remapped !== undefined) {
-        if (list.controlSeparateFromCommandStrokes.has(identifier)) {
-          list.controlSeparateFromCommandStrokes.add(remapped[0]);
-        }
-        [identifier, action] = remapped;
-      }
+      [identifier, action] = remapped ?? [identifier, action];
       newEntries.set(identifier, action);
     }
     return newEntries;
@@ -152,10 +141,9 @@ function collectBindings(
     const list: BindingList = {
       label,
       entries: new Map(),
-      controlSeparateFromCommandStrokes: new Set(),
     };
-    addEntries(map, list);
-    list.entries = simplifyEntries(list);
+    addEntries(map, list.entries);
+    list.entries = simplifyEntries(list.entries);
     uniqueMaps.set(map, list);
   }
   for (const [label, eventMap] of bindings) {
@@ -226,21 +214,14 @@ export class InputEventBindingHelpDialog extends SidePanel {
 
     const uniqueMaps = collectBindings(bindings);
 
-    const addGroup = (
-      title: string,
-      entries: Iterable<[string, string]>,
-      controlSeparateFromCommandStrokes: ReadonlySet<string> = new Set(),
-    ) => {
+    const addGroup = (title: string, entries: Iterable<[string, string]>) => {
       const header = document.createElement("h2");
       header.textContent = title;
       scroll.appendChild(header);
       for (const [event, action] of entries) {
         const dt = document.createElement("div");
         dt.className = "dt";
-        dt.textContent = formatKeyStroke(event, {
-          controlIsSeparateFromCommand:
-            controlSeparateFromCommandStrokes.has(event),
-        });
+        dt.textContent = formatKeyStroke(event);
         const dd = document.createElement("div");
         dd.className = "dd";
         dd.textContent = action;
@@ -281,11 +262,7 @@ export class InputEventBindingHelpDialog extends SidePanel {
     }
 
     for (const list of uniqueMaps.values()) {
-      addGroup(
-        list.label,
-        list.entries,
-        list.controlSeparateFromCommandStrokes,
-      );
+      addGroup(list.label, list.entries);
     }
   }
 }

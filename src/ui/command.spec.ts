@@ -29,16 +29,9 @@ describe("formatKeyStroke", () => {
 
   it("uses platform symbols on Mac", () => {
     vi.stubGlobal("navigator", { platform: "MacIntel" });
-    expect(formatKeyStroke("control+keyp")).toBe("⌘p");
+    expect(formatKeyStroke("meta+keyp")).toBe("⌘p");
+    expect(formatKeyStroke("control+keyp")).toBe("⌃p");
     expect(formatKeyStroke("alt+shift+keya")).toBe("⌥⇧a");
-    expect(formatKeyStroke("control+mousedown0")).toBe("⌘+mousedown0");
-  });
-
-  it("tells Control from Command when both are bound to one key", () => {
-    vi.stubGlobal("navigator", { platform: "MacIntel" });
-    expect(
-      formatKeyStroke("control+keyx", { controlIsSeparateFromCommand: true }),
-    ).toBe("⌃x");
-    expect(formatKeyStroke("meta+keyx")).toBe("⌘x");
+    expect(formatKeyStroke("meta+mousedown0")).toBe("⌘+mousedown0");
   });
 });
