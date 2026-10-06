@@ -81,6 +81,10 @@ import {
   verifyOptionalObjectProperty,
   verifyString,
 } from "#src/util/json.js";
+import {
+  commandOrControlLabel,
+  hasCommandOrControl,
+} from "#src/util/platform.js";
 import { NullarySignal } from "#src/util/signal.js";
 import type { Trackable } from "#src/util/trackable.js";
 import { CompoundTrackable, getCachedJson } from "#src/util/trackable.js";
@@ -1274,11 +1278,20 @@ export class MultiToolPaletteDropdownButton extends RefCounted {
     const checkbox = this.registerDisposer(
       new CheckboxIcon(this.dropdownVisible, {
         svg: svg_tool,
-        enableTitle: "Show tool palette list",
+        enableTitle: `Show tool palette list (${commandOrControlLabel()}+click to create new)`,
         disableTitle: "Hide tool palette list",
         backgroundScheme: "dark",
       }),
     ).element;
+    checkbox.addEventListener(
+      "click",
+      (event: MouseEvent) => {
+        if (!hasCommandOrControl(event)) return;
+        event.stopImmediatePropagation();
+        state.addNew();
+      },
+      { capture: true },
+    );
     element.appendChild(checkbox);
     element.classList.add("neuroglancer-tool-palette-button");
     element.classList.add("neuroglancer-sticky-focus");
