@@ -34,11 +34,9 @@ import {
 } from "#src/datasource/catmaid/api.js";
 import {
   CatmaidSkeletonSourceParameters,
-  CatmaidCompleteSkeletonSourceParameters,
   CatmaidDataSourceParameters,
   getCatmaidLodForSpatialIndexLevel,
   makeCatmaidClient,
-  makeCatmaidSkeletonMetadata,
   parseCatmaidUrl,
 } from "#src/datasource/catmaid/base.js";
 import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
@@ -61,7 +59,6 @@ import type {
 import { SkeletonDataSourceState } from "#src/skeleton/find_path.js";
 import {
   SpatiallyIndexedSkeletonSource,
-  SkeletonSource,
   MultiscaleSpatiallyIndexedSkeletonSource,
   SPATIAL_SKELETON_SOURCE_OPTIONS,
 } from "#src/skeleton/frontend.js";
@@ -195,15 +192,6 @@ export class CatmaidSpatiallyIndexedSkeletonSource extends WithParameters(
   }
 }
 
-export class CatmaidSkeletonSource extends WithParameters(
-  WithCredentialsProvider<CatmaidToken>()(SkeletonSource),
-  CatmaidCompleteSkeletonSourceParameters,
-) {
-  get vertexAttributes() {
-    return this.parameters.metadata.vertexAttributes;
-  }
-}
-
 export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleSpatiallyIndexedSkeletonSource {
   get rank(): number {
     return 3;
@@ -291,7 +279,6 @@ export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleS
       parameters.catmaidParameters.readonly = this.sourceReadonly;
       parameters.gridIndex = gridIndex;
       parameters.catmaidLod = catmaidLod;
-      parameters.metadata = makeCatmaidSkeletonMetadata();
 
       const chunkSource = this.chunkManager.getChunkSource(
         CatmaidSpatiallyIndexedSkeletonSource,
@@ -430,21 +417,6 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
         cacheProvider,
         sourceReadonly,
       );
-    // Create complete skeleton source (non-chunked)
-    const completeSkeletonParameters =
-      new CatmaidCompleteSkeletonSourceParameters();
-    completeSkeletonParameters.catmaidParameters =
-      new CatmaidDataSourceParameters();
-    completeSkeletonParameters.catmaidParameters.url = baseUrl;
-    completeSkeletonParameters.catmaidParameters.projectId = projectId;
-    completeSkeletonParameters.url = providerUrl;
-    completeSkeletonParameters.metadata = makeCatmaidSkeletonMetadata();
-
-    const completeSkeletonSource = options.registry.chunkManager.getChunkSource(
-      CatmaidSkeletonSource,
-      { parameters: completeSkeletonParameters, credentialsProvider },
-    );
-
     // Create SegmentPropertyMap
     const ids = new BigUint64Array(skeletonIds.length);
     for (let i = 0; i < skeletonIds.length; ++i) {
@@ -460,17 +432,12 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
 
     const subsources = [
       {
-        id: "skeletons-chunked",
+        id: "skeletons",
         default: true,
         subsource: { mesh: multiscaleSource },
         layerRuntimeStateDisposal: {
           kind: "spatiallyIndexedSkeleton",
         },
-      },
-      {
-        id: "skeletons",
-        default: false,
-        subsource: { mesh: completeSkeletonSource },
       },
       {
         id: "properties",

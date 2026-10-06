@@ -73,9 +73,8 @@ current browser tab. Python-hosted viewers can configure the token with
 Layer Subsources
 ----------------
 
-The data source exposes two skeleton subsources. The first is a spatially indexed
-skeleton source, which is required for editing. The second is the regular skeleton
-subsource from the pre-existing pipeline for rendering precomputed format skeletons.
+The data source exposes a single spatially indexed skeleton subsource, which is
+required for editing.
 
 In the **Render** tab you can adjust:
 

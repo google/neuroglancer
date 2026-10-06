@@ -17,12 +17,6 @@
 import type { CredentialsProvider } from "#src/credentials_provider/index.js";
 import type { CatmaidToken } from "#src/datasource/catmaid/api.js";
 import { CatmaidClient } from "#src/datasource/catmaid/api.js";
-import {
-  SkeletonSourceParameters,
-  type SkeletonMetadata,
-} from "#src/datasource/precomputed/base.js";
-import { DataType } from "#src/util/data_type.js";
-import { mat4 } from "#src/util/geom.js";
 
 export class CatmaidDataSourceParameters {
   url!: string;
@@ -31,16 +25,11 @@ export class CatmaidDataSourceParameters {
   readonly = true;
 }
 
-export class CatmaidSkeletonSourceParameters extends SkeletonSourceParameters {
+export class CatmaidSkeletonSourceParameters {
   catmaidParameters!: CatmaidDataSourceParameters;
   gridIndex?: number;
   catmaidLod?: number;
   static RPC_ID = "catmaid/SkeletonSource";
-}
-
-export class CatmaidCompleteSkeletonSourceParameters extends SkeletonSourceParameters {
-  catmaidParameters!: CatmaidDataSourceParameters;
-  static RPC_ID = "catmaid/CompleteSkeletonSource";
 }
 
 export function getCatmaidLodForSpatialIndexLevel(
@@ -86,14 +75,4 @@ export function makeCatmaidClient(
     parameters.projectId,
     credentialsProvider,
   );
-}
-
-export function makeCatmaidSkeletonMetadata(): SkeletonMetadata {
-  return {
-    transform: mat4.create(),
-    vertexAttributes: new Map([
-      ["segment", { dataType: DataType.UINT32, numComponents: 1 }],
-    ]),
-    sharding: undefined,
-  };
 }
