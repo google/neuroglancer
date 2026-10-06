@@ -1910,7 +1910,11 @@ class SkeletonOverlayChunk implements SkeletonGPUGeometry {
 // the visible frustum of more than one slice panel in the same frame.
 const seenChunkKeysPerFrame = new WeakMap<
   RenderScaleHistogram,
-  { frameNumber: number; keys: Set<string> }
+  {
+    frameNumber: number;
+    keys: Set<string>;
+    indicatorSources: Set<SpatiallyIndexedSkeletonSource>;
+  }
 >();
 
 const SPATIAL_SKELETON_RESOLUTION_INDICATOR_BAR_HEIGHT = 10;
@@ -2947,10 +2951,10 @@ export class SpatiallyIndexedSkeletonLayer
     }
     let seen = seenChunkKeysPerFrame.get(histogram);
     if (seen === undefined || seen.frameNumber !== frameNumber) {
-      seen = { frameNumber, keys: new Set() };
+      seen = { frameNumber, keys: new Set(), indicatorSources: new Set() };
       seenChunkKeysPerFrame.set(histogram, seen);
     }
-    const seenKeys = seen.keys;
+    const { keys: seenKeys, indicatorSources } = seen;
     const localPosition = this.localPosition.value;
     for (const scales of transformedSources) {
       forEachSpatialSkeletonSourceScale(
@@ -2960,9 +2964,8 @@ export class SpatiallyIndexedSkeletonLayer
         (tsource, _, physicalSpacing, pixelSpacing, selected) => {
           if (selected) return;
           const source = tsource.source as SpatiallyIndexedSkeletonSource;
-          const indicatorKey = `indicator:${getObjectId(source)}`;
-          if (seenKeys.has(indicatorKey)) return;
-          seenKeys.add(indicatorKey);
+          if (indicatorSources.has(source)) return;
+          indicatorSources.add(source);
           histogram.add(
             physicalSpacing,
             pixelSpacing,

@@ -16,7 +16,10 @@
 
 import { describe, expect, it } from "vitest";
 
-import { getCatmaidLodForSpatialIndexLevel } from "#src/datasource/catmaid/base.js";
+import {
+  getCatmaidLodForSpatialIndexLevel,
+  parseCatmaidUrl,
+} from "#src/datasource/catmaid/base.js";
 
 describe("CATMAID frontend spatial index LOD mapping", () => {
   it("maps a single spatial index level to full CATMAID LOD", () => {
@@ -27,5 +30,24 @@ describe("CATMAID frontend spatial index LOD mapping", () => {
     expect(getCatmaidLodForSpatialIndexLevel(0, 3)).toBe(0);
     expect(getCatmaidLodForSpatialIndexLevel(1, 3)).toBe(0.5);
     expect(getCatmaidLodForSpatialIndexLevel(2, 3)).toBe(1);
+  });
+});
+
+describe("CATMAID data source URL", () => {
+  it.each([
+    "catmaid://catmaid.example.org/4",
+    "catmaid://catmaid.example.org",
+    "catmaid://localhost:8000/4",
+  ])("rejects %s because the protocol is missing", (url) => {
+    expect(() => parseCatmaidUrl(url)).toThrow(
+      `Invalid CATMAID URL "${url}": expected catmaid://<protocol>://<base_url>/<project_id>`,
+    );
+  });
+
+  it("reads the base URL and project ID when the protocol is present", () => {
+    expect(parseCatmaidUrl("catmaid://http://localhost:8000/4")).toEqual({
+      baseUrl: "http://localhost:8000",
+      projectId: 4,
+    });
   });
 });
