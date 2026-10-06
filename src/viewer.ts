@@ -53,7 +53,6 @@ import {
   TrackableDataSelectionState,
   UserLayer,
 } from "#src/layer/index.js";
-import { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import { LayerGroupViewer } from "#src/layer_group_viewer.js";
 import { RootLayoutContainer } from "#src/layer_groups_layout.js";
 import {
@@ -82,7 +81,6 @@ import {
   SKELETON_GO_ROOT,
   SKELETON_GO_UNFINISHED,
   SKELETON_REDO,
-  SKELETON_TOGGLE_HIDDEN,
   SKELETON_UNDO,
 } from "#src/skeleton/actions.js";
 import { StatusMessage } from "#src/status.js";
@@ -1201,11 +1199,7 @@ export class Viewer extends RefCounted implements ViewerState {
    * Called once by the constructor to register the action listeners.
    */
   private registerActionListeners() {
-    for (const action of [
-      "recolor",
-      "clear-segments",
-      SKELETON_TOGGLE_HIDDEN,
-    ]) {
+    for (const action of ["recolor", "clear-segments"]) {
       this.bindAction(action, () => {
         this.layerManager.invokeAction(action);
       });
@@ -1274,29 +1268,17 @@ export class Viewer extends RefCounted implements ViewerState {
         return;
       }
       const userLayer = selectedLayer.layer;
-      if (userLayer === null || userLayer.tool.value === undefined) {
-        if (userLayer instanceof SegmentationUserLayer) {
-          const editDisabledReason =
-            userLayer.getSpatialSkeletonActionsDisabledReason();
-          if (editDisabledReason === undefined) {
-            StatusMessage.showTemporaryMessage(
-              `Activate the edit mode tool to place skeletons in layer ${JSON.stringify(
-                selectedLayer.name,
-              )}`,
-            );
-          } else {
-            StatusMessage.showTemporaryMessage(
-              `The selected layer (${JSON.stringify(
-                selectedLayer.name,
-              )}) does not have an active annotation tool or support editable skeletons (${editDisabledReason}).`,
-            );
-          }
-          return;
-        }
+      if (userLayer === null) {
         StatusMessage.showTemporaryMessage(
           `The selected layer (${JSON.stringify(
             selectedLayer.name,
           )}) does not have an active annotation tool.`,
+        );
+        return;
+      }
+      if (userLayer.tool.value === undefined) {
+        StatusMessage.showTemporaryMessage(
+          userLayer.getMissingAnnotationToolMessage(),
         );
         return;
       }

@@ -50,6 +50,3 @@ export const SKELETON_CLEAR_SELECTION = "skeleton-clear-node-selection";
 // --- Find Path tool actions ---
 export const SKELETON_FIND_PATH_SELECT_ENDPOINT =
   "skeleton-find-path-select-endpoint";
-
-// --- Display toggles ---
-export const SKELETON_TOGGLE_HIDDEN = "skeleton-toggle-hidden";

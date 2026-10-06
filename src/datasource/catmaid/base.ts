@@ -40,6 +40,32 @@ export function getCatmaidLodForSpatialIndexLevel(
   return lastGridIndex === 0 ? 1 : gridIndex / lastGridIndex;
 }
 
+export function parseCatmaidUrl(providerUrl: string): {
+  baseUrl: string;
+  projectId: number;
+} {
+  const schemePrefix = "catmaid://";
+  const urlWithoutScheme = providerUrl.startsWith(schemePrefix)
+    ? providerUrl.substring(schemePrefix.length)
+    : providerUrl;
+
+  const lastSlash = urlWithoutScheme.lastIndexOf("/");
+  if (lastSlash === -1 || !/^[a-z]+:\/\//.test(urlWithoutScheme)) {
+    throw new Error(
+      `Invalid CATMAID URL ${JSON.stringify(providerUrl)}: expected catmaid://<protocol>://<base_url>/<project_id>`,
+    );
+  }
+
+  const projectIdText = urlWithoutScheme.substring(lastSlash + 1);
+  const projectId = parseInt(projectIdText);
+  if (isNaN(projectId)) {
+    throw new Error(`Invalid project ID: ${projectIdText}`);
+  }
+
+  const baseUrl = urlWithoutScheme.substring(0, lastSlash).replace(/\/+$/, "");
+  return { baseUrl, projectId };
+}
+
 export function makeCatmaidClient(
   parameters: CatmaidDataSourceParameters,
   credentialsProvider?: CredentialsProvider<CatmaidToken>,

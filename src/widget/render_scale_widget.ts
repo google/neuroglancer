@@ -191,16 +191,6 @@ export class RenderScaleWidget extends RefCounted {
     this.target.reset();
   }
 
-  protected getLegendChunkCounts(
-    totalPresent: number,
-    totalNotPresent: number,
-  ) {
-    return {
-      presentCount: totalPresent,
-      totalCount: totalPresent + totalNotPresent,
-    };
-  }
-
   updateView() {
     const { ctx } = this;
     const { canvas } = this;
@@ -317,10 +307,10 @@ export class RenderScaleWidget extends RefCounted {
     } else {
       this.legendSpatialScale.textContent = "";
     }
-    const { presentCount: legendPresentCount, totalCount: legendTotalCount } =
-      this.getLegendChunkCounts(totalPresent, totalNotPresent);
 
-    this.legendChunks.textContent = `${legendPresentCount}/${legendTotalCount}`;
+    this.legendChunks.textContent = `${totalPresent}/${
+      totalPresent + totalNotPresent
+    }`;
 
     const spatialScaleColors = sortedSpatialScales.map((spatialScale) => {
       const saturation = spatialScale === hoverSpatialScale ? 0.5 : 1;

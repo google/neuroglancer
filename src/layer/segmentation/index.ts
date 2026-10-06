@@ -107,7 +107,6 @@ import {
   SKELETON_GO_ROOT,
   SKELETON_GO_UNFINISHED,
   SKELETON_REDO,
-  SKELETON_TOGGLE_HIDDEN,
   SKELETON_UNDO,
 } from "#src/skeleton/actions.js";
 import type {
@@ -1115,8 +1114,6 @@ export class SegmentationUserLayer extends Base {
   anchorSegment = new TrackableValue<bigint | undefined>(undefined, (x) =>
     x === undefined ? undefined : parseUint64(x),
   );
-
-  private savedHiddenObjectAlpha: number | undefined;
 
   constructor(managedLayer: Borrowed<ManagedUserLayer>) {
     super(managedLayer);
@@ -2193,6 +2190,15 @@ export class SegmentationUserLayer extends Base {
     return maybeAugmentSegmentId(this.displayState, value);
   }
 
+  getMissingAnnotationToolMessage() {
+    const editDisabledReason = this.getSpatialSkeletonActionsDisabledReason();
+    const layerName = JSON.stringify(this.managedLayer.name);
+    if (editDisabledReason === undefined) {
+      return `Activate the edit mode tool to place skeletons in layer ${layerName}`;
+    }
+    return `The selected layer (${layerName}) does not have an active annotation tool or support editable skeletons (${editDisabledReason}).`;
+  }
+
   handleAction(action: string, context: SegmentationActionContext) {
     switch (action) {
       case "recolor": {
@@ -2227,17 +2233,6 @@ export class SegmentationUserLayer extends Base {
               segmentSet.set(segment, newValue);
             }
           });
-        }
-        break;
-      }
-      case SKELETON_TOGGLE_HIDDEN: {
-        const { hiddenObjectAlpha } = this.displayState;
-        if (this.savedHiddenObjectAlpha !== undefined) {
-          hiddenObjectAlpha.value = this.savedHiddenObjectAlpha;
-          this.savedHiddenObjectAlpha = undefined;
-        } else {
-          this.savedHiddenObjectAlpha = hiddenObjectAlpha.value;
-          hiddenObjectAlpha.value = 0;
         }
         break;
       }

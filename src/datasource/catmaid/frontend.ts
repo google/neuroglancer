@@ -37,6 +37,7 @@ import {
   CatmaidDataSourceParameters,
   getCatmaidLodForSpatialIndexLevel,
   makeCatmaidClient,
+  parseCatmaidUrl,
 } from "#src/datasource/catmaid/base.js";
 import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
 import type {
@@ -311,29 +312,7 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
     const { providerUrl } = options;
     const state = new SkeletonDataSourceState(options.state);
 
-    // Remove scheme if present to handle "catmaid://"
-    let cleanUrl = providerUrl;
-    if (cleanUrl.startsWith("catmaid://")) {
-      cleanUrl = cleanUrl.substring("catmaid://".length);
-    }
-
-    const lastSlash = cleanUrl.lastIndexOf("/");
-    if (lastSlash === -1) {
-      throw new Error(
-        "Invalid CATMAID URL. Expected format: catmaid://<base_url>/<project_id>",
-      );
-    }
-
-    const projectIdStr = cleanUrl.substring(lastSlash + 1);
-    const projectId = parseInt(projectIdStr);
-    if (isNaN(projectId)) {
-      throw new Error(`Invalid project ID: ${projectIdStr}`);
-    }
-
-    let baseUrl = cleanUrl.substring(0, lastSlash).replace(/\/+$/, "");
-    if (!baseUrl.startsWith("http")) {
-      baseUrl = "https://" + baseUrl;
-    }
+    const { baseUrl, projectId } = parseCatmaidUrl(providerUrl);
 
     const credentialsProvider =
       options.registry.credentialsManager.getCredentialsProvider(
