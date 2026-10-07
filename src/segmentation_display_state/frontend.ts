@@ -59,6 +59,7 @@ import { measureElementClone } from "#src/util/dom.js";
 import type { vec3 } from "#src/util/geom.js";
 import { kOneVec, vec4 } from "#src/util/geom.js";
 import { parseUint64 } from "#src/util/json.js";
+import { altModifierLabel } from "#src/util/platform.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
@@ -303,8 +304,10 @@ export function bindSegmentListWidth(
 const segmentWidgetTemplate = (() => {
   const template = document.createElement("div");
   template.classList.add("neuroglancer-segment-list-entry");
+  const altLabel = altModifierLabel();
   template.title =
-    "Right click to move to segment, alt+click to set color, alt+shift+click to unset color";
+    `Right click to move to segment, ${altLabel}+click to set color, ` +
+    `${altLabel}+shift+click to unset color`;
   const stickyContainer = document.createElement("div");
   stickyContainer.classList.add("neuroglancer-segment-list-entry-sticky");
   template.appendChild(stickyContainer);

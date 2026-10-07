@@ -45,6 +45,7 @@ import { KeyboardEventBinder } from "#src/util/keyboard_bindings.js";
 import * as matrix from "#src/util/matrix.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
+import { commandOrControlLabel } from "#src/util/platform.js";
 import type {
   TouchPinchInfo,
   TouchTranslateInfo,
@@ -432,7 +433,8 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       NEUROGLANCER_SHOW_OBJECT_SELECTION_TOOLTIP === true
     ) {
       element.title =
-        "Double click to toggle display of object under mouse pointer.  Control+rightclick to pin/unpin selection.";
+        "Double click to toggle display of object under mouse pointer.  " +
+        `Use ${commandOrControlLabel()}+rightclick to pin/unpin selection.`;
     }
 
     this.registerDisposer(new AutomaticallyFocusedElement(element));

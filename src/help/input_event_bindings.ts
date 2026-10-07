@@ -29,7 +29,7 @@ import type { GlobalToolBinder } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { removeChildren } from "#src/util/dom.js";
 import {
-  friendlyEventIdentifier,
+  pressedEventIdentifier,
   type EventActionMap,
 } from "#src/util/event_action_map.js";
 import { emptyToUndefined } from "#src/util/json.js";
@@ -79,7 +79,7 @@ function collectBindings(
     }
     for (const [event, eventAction] of eventMap.bindings.entries()) {
       entries.set(
-        friendlyEventIdentifier(eventAction.originalEventIdentifier ?? event),
+        pressedEventIdentifier(eventMap, event, eventAction),
         eventAction.action,
       );
     }

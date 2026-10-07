@@ -23,6 +23,7 @@ import { popDragStatus, pushDragStatus } from "#src/ui/drag_and_drop.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import type { DragInfo } from "#src/util/drag_and_drop.js";
 import {
+  declareAllowedDropEffects,
   decodeParametersFromDragTypeList,
   encodeParametersAsDragType,
   getDropEffect,
@@ -57,6 +58,7 @@ export function startLayerDrag(
   event: DragEvent,
   sourceInfo: LayerDragSourceInfo,
 ) {
+  declareAllowedDropEffects(event, "all");
   event.dataTransfer!.setData(
     encodeParametersAsDragType(
       layerDragTypePrefix,

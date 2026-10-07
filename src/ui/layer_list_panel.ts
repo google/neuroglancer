@@ -45,6 +45,7 @@ import { createSteppedCssGradient } from "#src/util/color.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { updateChildren } from "#src/util/dom.js";
 import { emptyToUndefined } from "#src/util/json.js";
+import { hasCommandOrControl } from "#src/util/platform.js";
 import type { Trackable } from "#src/util/trackable.js";
 import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeDeleteButton } from "#src/widget/delete_button.js";
@@ -304,7 +305,7 @@ class LayerListItem extends RefCounted {
     );
 
     element.addEventListener("click", (event: MouseEvent) => {
-      if (event.ctrlKey) {
+      if (hasCommandOrControl(event)) {
         panel.selectedLayer.toggle(layer);
         event.preventDefault();
       } else if (event.altKey) {

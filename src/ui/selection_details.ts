@@ -29,6 +29,7 @@ import { SidePanel } from "#src/ui/side_panel.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
+import { commandOrControlLabel } from "#src/util/platform.js";
 import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
@@ -72,15 +73,15 @@ export class SelectionDetailsPanel extends SidePanel {
     });
     titleBar.appendChild(backButton);
     titleBar.appendChild(forwardButton);
+    const modifierKeyLabel = commandOrControlLabel();
     titleBar.appendChild(
       this.registerDisposer(
         new CheckboxIcon(state.pin, {
           // Note: \ufe0e forces text display, as otherwise the pin icon may as an emoji with
           // color.
           text: "📌\ufe0e",
-          enableTitle: "Pin selection\nctrl+rightclick to select and pin",
-          disableTitle:
-            "Unpin selection\nctrl+shift+rightclick to select on hover",
+          enableTitle: `Pin selection\n${modifierKeyLabel}+rightclick to select and pin`,
+          disableTitle: `Unpin selection\n${modifierKeyLabel}+shift+rightclick to select on hover`,
         }),
       ).element,
     );

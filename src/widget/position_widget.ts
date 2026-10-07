@@ -65,6 +65,7 @@ import {
   updateChildren,
   updateInputFieldWidth,
 } from "#src/util/dom.js";
+import { declareAllowedDropEffects } from "#src/util/drag_and_drop.js";
 import { vec3 } from "#src/util/geom.js";
 import { verifyObjectProperty, verifyString } from "#src/util/json.js";
 import type { ActionEvent } from "#src/util/keyboard_bindings.js";
@@ -626,6 +627,7 @@ export class PositionWidget extends RefCounted {
     }
     if (this.singleDimensionId === undefined) {
       widget.container.addEventListener("dragstart", (event: DragEvent) => {
+        declareAllowedDropEffects(event, "copyMove");
         this.dragSource = widget;
         event.stopPropagation();
         event.dataTransfer!.setData("neuroglancer-dimension", "");
