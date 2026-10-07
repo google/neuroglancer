@@ -70,6 +70,7 @@ import {
   WatchableDisplayDimensionRenderInfo,
 } from "#src/navigation_state.js";
 import { overlaysOpen } from "#src/overlay.js";
+import { TrackableTransparentMeshRenderingMode } from "#src/perspective_view/transparent_mesh_rendering.js";
 import { ScreenshotHandler } from "#src/python_integration/screenshots.js";
 import { allRenderLayerRoles, RenderLayerRole } from "#src/renderlayer.js";
 import { StatusMessage } from "#src/status.js";
@@ -311,6 +312,10 @@ export class TrackableViewerState extends CompoundTrackable {
     this.add("layers", viewer.layerSpecification);
     this.add("showAxisLines", viewer.showAxisLines);
     this.add("wireFrame", viewer.wireFrame);
+    this.add(
+      "transparentMeshRenderingMode",
+      viewer.transparentMeshRenderingMode,
+    );
     this.add("enableAdaptiveDownsampling", viewer.enableAdaptiveDownsampling);
     this.add("showScaleBar", viewer.showScaleBar);
     this.add("showDefaultAnnotations", viewer.showDefaultAnnotations);
@@ -486,6 +491,7 @@ export class Viewer extends RefCounted implements ViewerState {
   );
   showAxisLines = new TrackableBoolean(true, true);
   wireFrame = new TrackableBoolean(false, false);
+  transparentMeshRenderingMode = new TrackableTransparentMeshRenderingMode();
   enableAdaptiveDownsampling = new TrackableBoolean(true, true);
   showScaleBar = new TrackableBoolean(true, true);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);

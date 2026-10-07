@@ -63,6 +63,19 @@ export const ANNOTATION_RENDER_LAYER_RPC_ID = "annotation/RenderLayer";
 export const ANNOTATION_RENDER_LAYER_UPDATE_SEGMENTATION_RPC_ID =
   "annotation/RenderLayer.updateSegmentation";
 
+export const MAX_ANNOTATION_FILTER_OVERSAMPLING = 32;
+
+export function getAnnotationFilterAdjustedRenderScaleTarget(
+  renderScaleTarget: number,
+  filterMatchFraction: number,
+) {
+  const clampedMatchFraction = Math.max(
+    1 / MAX_ANNOTATION_FILTER_OVERSAMPLING,
+    Math.min(1, filterMatchFraction),
+  );
+  return renderScaleTarget * Math.sqrt(clampedMatchFraction);
+}
+
 const tempMat3 = mat3.create();
 
 export function forEachVisibleAnnotationChunk<

@@ -25,12 +25,56 @@
   position: relative;
   margin: 0px;
   padding: 0px;
-  margin-top: 2px;
   overflow-y: auto;
   height: 0px;
   flex: 1;
   flex-basis: 0px;
   min-height: 0px;
+}
+
+.neuroglancer-annotation-list-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 0;
+  min-height: 0;
+}
+
+.neuroglancer-annotation-list-overflow-indicator {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  width: 22px;
+  box-sizing: border-box;
+  color: white;
+  font-size: 22px;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.neuroglancer-annotation-list-overflow-indicator-left {
+  left: 0;
+  justify-content: flex-start;
+  padding-left: 2px;
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.9), transparent);
+}
+
+.neuroglancer-annotation-list-overflow-indicator-right {
+  right: 0;
+  justify-content: flex-end;
+  padding-right: 2px;
+  background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.9));
+}
+
+.neuroglancer-annotation-list-container[data-overflow-right="true"]
+  > .neuroglancer-annotation-list-overflow-indicator-right,
+.neuroglancer-annotation-list-container[data-overflow-left="true"]
+  > .neuroglancer-annotation-list-overflow-indicator-left {
+  opacity: 1;
 }
 
 .neuroglancer-annotation-list-entry {
@@ -49,13 +93,146 @@
   flex-direction: column;
   flex: 1;
   align-items: stretch;
+  min-height: 0;
+}
+
+.neuroglancer-annotation-layer-view
+  > .neuroglancer-accordion-item[data-key="annotationsExpanded"][data-expanded="true"] {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.neuroglancer-annotation-layer-view
+  > .neuroglancer-accordion-item[data-key="annotationsExpanded"]
+  > .neuroglancer-accordion-body {
+  flex: 1;
+  min-height: 0;
+  padding-right: 0;
+  padding-bottom: 0;
+  padding-left: 0;
+}
+
+.neuroglancer-annotation-filter-results {
+  max-height: min(400px, 50vh);
+  overflow-y: auto;
+}
+
+.neuroglancer-annotation-filter-results
+  .neuroglancer-property-list-categorical-property-options {
+  margin-left: 8px;
+}
+
+.neuroglancer-annotation-filter-results
+  .neuroglancer-property-list-categorical-property-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.neuroglancer-annotation-filter-results
+  .neuroglancer-property-list-categorical-property-label {
+  font-weight: bold;
+}
+
+.neuroglancer-annotation-filter-results
+  .neuroglancer-property-list-categorical-tree-options {
+  grid-template-columns: [tree] 12px [include] min-content [exclude] min-content [tag] 1fr [count] min-content;
+}
+
+.neuroglancer-property-list-categorical-tree-connector {
+  position: relative;
+  grid-column: tree;
+  min-height: 16px;
+}
+
+.neuroglancer-property-list-categorical-tree-connector::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  border-left: 1px solid #777;
+  content: "";
+}
+
+.neuroglancer-property-list-categorical-tree-connector::after {
+  position: absolute;
+  top: 50%;
+  right: 1px;
+  left: 2px;
+  border-top: 1px solid #777;
+  content: "";
+}
+
+.neuroglancer-segment-query-result-tag:last-child
+  > .neuroglancer-property-list-categorical-tree-connector::before {
+  bottom: 50%;
+}
+
+.neuroglancer-annotation-list-header-container {
+  display: grid;
+  position: relative;
+  min-height: 20px;
+  flex: 0 0 auto;
+  overflow: hidden;
 }
 
 .neuroglancer-annotation-list-header {
+  grid-area: 1 / 1;
   grid-auto-rows: min-content;
   display: grid;
   padding-bottom: 2px;
   justify-content: start;
+}
+
+.neuroglancer-annotation-column-controls {
+  display: flex;
+  align-items: center;
+  padding-bottom: 2px;
+}
+
+.neuroglancer-annotation-column-controls-container {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  right: 0;
+}
+
+.neuroglancer-annotation-column-dropdown {
+  position: absolute;
+  z-index: 1000;
+  min-width: 160px;
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid white;
+  background-color: #111;
+  color: white;
+  font: 13px sans-serif;
+}
+
+.neuroglancer-annotation-column-dropdown-header {
+  padding: 4px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.neuroglancer-annotation-column-dropdown-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.neuroglancer-annotation-column-visibility {
+  flex: 0 0 auto;
+}
+
+.neuroglancer-annotation-column-dropdown-option:hover,
+.neuroglancer-annotation-column-dropdown-option:focus {
+  outline: none;
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
 .neuroglancer-annotation-coordinate {
@@ -110,6 +287,35 @@
 
 .neuroglancer-annotation-hover.neuroglancer-annotation-selected {
   background-color: #969;
+}
+
+/* Property column headers */
+.neuroglancer-annotation-property-header {
+  font-family: monospace;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.neuroglancer-annotation-property-header-name {
+  color: rgba(255, 255, 255, 0.6);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.neuroglancer-annotation-type-header {
+  font-family: monospace;
+}
+
+/* Per-annotation property value cells in the annotation list */
+.neuroglancer-annotation-list-property-value {
+  font-family: monospace;
+  font-size: 0.9em;
+  text-align: right;
+  color: rgba(255, 255, 255, 0.6);
+  padding-right: 4px;
 }
 
 .neuroglancer-annotation-dragging {
@@ -193,7 +399,10 @@ div.neuroglancer-annotation-details-description {
 
 .neuroglancer-annotations-view-dimension {
   font-family: monospace;
-  text-align: right;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  white-space: nowrap;
 }
 
 .neuroglancer-annotations-view-dimension-name {
@@ -438,4 +647,39 @@ input.neuroglancer-segment-list-entry-id {
   border-radius: 3px;
   color: #ccc;
   font-size: small;
+}
+
+/* Warning shown when measurable annotations exist but dimensions lack units */
+.neuroglancer-annotation-derived-warning {
+  padding: 2px 4px;
+  font-size: 11px;
+  color: #e0b020;
+  cursor: help;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.neuroglancer-annotation-loaded-notice {
+  padding: 2px 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.72);
+  border-bottom: 1px solid #2a2a2a;
+}
+
+/* Inline enum/bool value chips shown in the description row */
+.neuroglancer-annotation-inline-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 2px;
+}
+
+.neuroglancer-annotation-inline-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 2px;
+  padding: 0 4px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: default;
+  white-space: nowrap;
 }

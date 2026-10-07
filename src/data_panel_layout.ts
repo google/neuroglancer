@@ -37,6 +37,7 @@ import {
   OrientationState,
 } from "#src/navigation_state.js";
 import { PerspectivePanel } from "#src/perspective_view/panel.js";
+import type { TrackableTransparentMeshRenderingMode } from "#src/perspective_view/transparent_mesh_rendering.js";
 import type { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import type { RenderLayerRole } from "#src/renderlayer.js";
 import { SliceView } from "#src/sliceview/frontend.js";
@@ -92,6 +93,7 @@ export interface ViewerUIState
   showPerspectiveSliceViews: TrackableBoolean;
   showAxisLines: TrackableBoolean;
   wireFrame: TrackableBoolean;
+  transparentMeshRenderingMode: TrackableTransparentMeshRenderingMode;
   enableAdaptiveDownsampling: TrackableBoolean;
   showScaleBar: TrackableBoolean;
   scaleBarOptions: TrackableValue<ScaleBarOptions>;
@@ -178,6 +180,7 @@ export function getCommonViewerState(viewer: ViewerUIState) {
     layerManager: viewer.layerManager,
     showAxisLines: viewer.showAxisLines,
     wireFrame: viewer.wireFrame,
+    transparentMeshRenderingMode: viewer.transparentMeshRenderingMode,
     enableAdaptiveDownsampling: viewer.enableAdaptiveDownsampling,
     visibleLayerRoles: viewer.visibleLayerRoles,
     selectedLayer: viewer.selectedLayer,
