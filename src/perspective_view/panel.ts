@@ -112,12 +112,15 @@ enum TransparentRenderingState {
 }
 
 export const glsl_perspectivePanelEmit = `
-void emit(vec4 color, highp uint pickId) {
+void emit(vec4 color, highp float depth, highp uint pickId) {
   out_color = color;
-  float zValue = 1.0 - gl_FragCoord.z;
+  float zValue = 1.0 - depth;
   out_z = vec4(zValue, zValue, zValue, 1.0);
   float pickIdFloat = float(pickId);
   out_pickId = vec4(pickIdFloat, pickIdFloat, pickIdFloat, 1.0);
+}
+void emit(vec4 color, highp uint pickId) {
+  emit(color, gl_FragCoord.z, pickId);
 }
 `;
 
@@ -142,10 +145,13 @@ void emitAccumAndRevealage(vec4 accum, float revealage, highp uint pickId) {
   v4f_fragData0 = vec4(accum.rgb, revealage);
   v4f_fragData1 = vec4(accum.a, 0.0, 0.0, 0.0);
 }
-void emit(vec4 color, highp uint pickId) {
-  float weight = computeOITWeight(color.a, gl_FragCoord.z);
+void emit(vec4 color, highp float depth, highp uint pickId) {
+  float weight = computeOITWeight(color.a, depth);
   vec4 accum = color * weight;
   emitAccumAndRevealage(accum, color.a, pickId);
+}
+void emit(vec4 color, highp uint pickId) {
+  emit(color, gl_FragCoord.z, pickId);
 }
 `,
 ];
