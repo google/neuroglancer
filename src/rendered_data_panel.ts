@@ -524,6 +524,29 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       }
     }
 
+    for (let axis = 0; axis < 3; ++axis) {
+      const axisName = AXES_NAMES[axis];
+      registerActionListener(
+        element,
+        `sway-relative-${axisName}`,
+        () => {
+          this.context.flagContinuousCameraMotion();
+          this.navigationState.pose.swayRelative(kAxes[axis]);
+        },
+      );
+      const tempOffset = vec3.create();
+      registerActionListener(element, `${axisName}`, () => {
+        this.context.flagContinuousCameraMotion();
+        const { navigationState } = this;
+        const offset = tempOffset;
+        offset[0] = 0;
+        offset[1] = 0;
+        offset[2] = 0;
+        offset[axis] = +1;
+        navigationState.pose.translateVoxelsRelative(offset);
+      });
+    }
+
     registerActionListener(
       element,
       "zoom-via-wheel",
