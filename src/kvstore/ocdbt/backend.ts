@@ -34,7 +34,6 @@ import {
 import { getRoot } from "#src/kvstore/ocdbt/read_version.js";
 import { getOcdbtUrl } from "#src/kvstore/ocdbt/url.js";
 import { type VersionSpecifier } from "#src/kvstore/ocdbt/version_specifier.js";
-import type { BtreeGenerationReference } from "#src/kvstore/ocdbt/version_tree.js";
 import type { ProgressOptions } from "#src/util/progress_listener.js";
 
 export class OcdbtKvStore implements KvStore {
@@ -44,19 +43,13 @@ export class OcdbtKvStore implements KvStore {
     public version: VersionSpecifier | undefined,
   ) {}
 
-  private root: BtreeGenerationReference | undefined;
-
-  private async getRoot(options: Partial<ProgressOptions>) {
-    let { root } = this;
-    if (root === undefined) {
-      root = this.root = await getRoot(
-        this.sharedKvStoreContext,
-        this.baseUrl,
-        this.version,
-        options,
-      );
-    }
-    return root;
+  private resolveRoot(options: Partial<ProgressOptions>) {
+    return getRoot(
+      this.sharedKvStoreContext,
+      this.baseUrl,
+      this.version,
+      options,
+    );
   }
 
   getUrl(key: string) {
@@ -67,7 +60,7 @@ export class OcdbtKvStore implements KvStore {
     key: string,
     options: StatOptions,
   ): Promise<StatResponse | undefined> {
-    const root = await this.getRoot(options);
+    const root = await this.resolveRoot(options);
     const encodedKey = new TextEncoder().encode(key) as Key;
     const entry = await findEntryInRoot(
       this.sharedKvStoreContext,
@@ -85,7 +78,7 @@ export class OcdbtKvStore implements KvStore {
     key: string,
     options: DriverReadOptions,
   ): Promise<ReadResponse | undefined> {
-    const root = await this.getRoot(options);
+    const root = await this.resolveRoot(options);
     const encodedKey = new TextEncoder().encode(key) as Key;
     const entry = await findEntryInRoot(
       this.sharedKvStoreContext,
@@ -105,7 +98,7 @@ export class OcdbtKvStore implements KvStore {
     prefix: string,
     options: DriverListOptions,
   ): Promise<ListResponse> {
-    const root = await this.getRoot(options);
+    const root = await this.resolveRoot(options);
     const encodedPrefix = new TextEncoder().encode(prefix) as Key;
     return await listRoot(
       this.sharedKvStoreContext,
