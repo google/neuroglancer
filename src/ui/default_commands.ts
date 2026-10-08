@@ -140,6 +140,32 @@ const STATIC_COMMANDS: readonly BuiltinCommand[] = [
     label: "Open Command Palette",
     description: "Open the searchable list of commands.",
   },
+  // Side panels. These actions have no default key binding.
+  {
+    id: "toggle-layer-list-panel",
+    label: "Toggle Layer List",
+    description: "Show or hide the layer list panel.",
+  },
+  {
+    id: "toggle-selection-details-panel",
+    label: "Toggle Selection Details",
+    description: "Show or hide the selection details panel.",
+  },
+  {
+    id: "toggle-layer-side-panel",
+    label: "Toggle Layer Side Panel",
+    description: "Show or hide the side panel of the selected layer.",
+  },
+  {
+    id: "toggle-settings-panel",
+    label: "Toggle Settings",
+    description: "Show or hide the viewer settings panel.",
+  },
+  {
+    id: "new-tool-palette",
+    label: "New Tool Palette",
+    description: "Open a new, empty tool palette.",
+  },
   // Navigation.
   {
     id: "snap",
@@ -215,6 +241,21 @@ const STATIC_COMMANDS: readonly BuiltinCommand[] = [
     id: "screenshot",
     label: "Screenshot",
     description: "Capture a screenshot of the current view.",
+  },
+  {
+    id: "copy-url",
+    label: "Copy URL",
+    description: "Copy a URL of the current state to the clipboard.",
+  },
+  {
+    id: "copy-position",
+    label: "Copy Position",
+    description: "Copy the current position to the clipboard.",
+  },
+  {
+    id: "copy-selection-position",
+    label: "Copy Selection Position",
+    description: "Copy the position of the current selection to the clipboard.",
   },
   {
     id: "deactivate-active-tool",

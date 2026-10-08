@@ -93,7 +93,10 @@ import {
 import { LayerSidePanelManager } from "#src/ui/layer_side_panel.js";
 import { setupPositionDropHandlers } from "#src/ui/position_drag_and_drop.js";
 import { ScreenshotDialog } from "#src/ui/screenshot_menu.js";
-import { SelectionDetailsPanel } from "#src/ui/selection_details.js";
+import {
+  copySelectionPositionToClipboard,
+  SelectionDetailsPanel,
+} from "#src/ui/selection_details.js";
 import { SidePanelManager } from "#src/ui/side_panel.js";
 import { StateEditorDialog } from "#src/ui/state_editor.js";
 import { StatisticsDisplayState, StatisticsPanel } from "#src/ui/statistics.js";
@@ -146,6 +149,7 @@ import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeCopyUrlButton } from "#src/widget/copy_button.js";
 import { makeIcon } from "#src/widget/icon.js";
 import {
+  copyPositionToClipboard,
   MousePositionWidget,
   PositionWidget,
   registerDimensionToolForLayerGroupViewer,
@@ -987,15 +991,7 @@ export class Viewer extends RefCounted implements ViewerState {
     {
       const button = makeCopyUrlButton({
         title: "Copy URL to clipboard",
-        onClick: () => {
-          const stateString = encodeStateAsFragment(this.state.toJSON());
-          const url = new URL(window.location.href);
-          url.hash = "#!" + stateString;
-          const result = setClipboard(url.href);
-          StatusMessage.showTemporaryMessage(
-            result ? "URL copied to clipboard" : "Failed to copy URL",
-          );
-        },
+        onClick: () => this.copyUrlToClipboard(),
       });
       this.registerDisposer(
         new ElementVisibilityFromTrackableBoolean(
@@ -1192,6 +1188,28 @@ export class Viewer extends RefCounted implements ViewerState {
     }
 
     this.bindAction("help", () => this.toggleHelpPanel());
+    for (const [action, location] of [
+      ["toggle-layer-list-panel", this.layerListPanelState.location],
+      ["toggle-selection-details-panel", this.selectionDetailsState.location],
+      ["toggle-settings-panel", this.settingsPanelState.location],
+    ] as const) {
+      this.bindAction(action, () => {
+        location.visible = !location.visible;
+      });
+    }
+    this.bindAction("toggle-layer-side-panel", () => {
+      this.selectedLayer.visible = !this.selectedLayer.visible;
+    });
+    this.bindAction("new-tool-palette", () => {
+      this.toolPalettes.addNew();
+    });
+    this.bindAction("copy-url", () => this.copyUrlToClipboard());
+    this.bindAction("copy-position", () =>
+      copyPositionToClipboard(this.navigationState.position),
+    );
+    this.bindAction("copy-selection-position", () =>
+      copySelectionPositionToClipboard(this.selectionDetailsState),
+    );
 
     for (let i = 1; i <= 9; ++i) {
       this.bindAction(`toggle-layer-${i}`, () => {
@@ -1255,8 +1273,6 @@ export class Viewer extends RefCounted implements ViewerState {
     this.bindAction("deactivate-active-tool", () =>
       this.globalToolBinder.deactivate(),
     );
-    this.bindAction("edit-json-state", () => this.editJsonState());
-    this.bindAction("screenshot", () => this.showScreenshotDialog());
   }
 
   toggleHelpPanel() {
@@ -1322,6 +1338,16 @@ export class Viewer extends RefCounted implements ViewerState {
   showScreenshotDialog() {
     this.deactivateTools();
     new ScreenshotDialog(this.screenshotManager);
+  }
+
+  copyUrlToClipboard() {
+    const stateString = encodeStateAsFragment(this.state.toJSON());
+    const url = new URL(window.location.href);
+    url.hash = "#!" + stateString;
+    const result = setClipboard(url.href);
+    StatusMessage.showTemporaryMessage(
+      result ? "URL copied to clipboard" : "Failed to copy URL",
+    );
   }
 
   showStatistics(value: boolean | undefined = undefined) {

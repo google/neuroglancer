@@ -41,7 +41,15 @@ const DYNAMIC_ACTIONS = [
 const UNBOUND_BY_DEFAULT = new Set<ActionIdentifier>([
   "edit-json-state",
   "screenshot",
+  "copy-url",
+  "copy-position",
+  "copy-selection-position",
   "deactivate-active-tool",
+  "toggle-layer-list-panel",
+  "toggle-selection-details-panel",
+  "toggle-layer-side-panel",
+  "toggle-settings-panel",
+  "new-tool-palette",
 ]);
 
 function makeDefaultInputEventBindings(): InputEventBindings {

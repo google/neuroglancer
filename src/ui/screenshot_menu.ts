@@ -38,6 +38,7 @@ import {
   getViewerLayerResolutions,
   getViewerPanelResolutions,
 } from "#src/util/viewer_resolution_stats.js";
+import type { Viewer } from "#src/viewer.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import { makeIcon } from "#src/widget/icon.js";
 
@@ -913,4 +914,8 @@ export class ScreenshotDialog extends FramedDialog {
   get screenshotMode() {
     return this.screenshotManager.screenshotMode;
   }
+}
+
+export function bindScreenshotDialog(viewer: Viewer): void {
+  viewer.bindAction("screenshot", () => viewer.showScreenshotDialog());
 }

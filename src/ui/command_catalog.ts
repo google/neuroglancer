@@ -29,6 +29,7 @@ import {
   type GlobalToolBinder,
   type LocalToolBinder,
 } from "#src/ui/tool.js";
+import type { MultiToolPaletteState } from "#src/ui/tool_palette.js";
 import { parseToolQuery } from "#src/ui/tool_query.js";
 import type { DebouncedFunction } from "#src/util/animation_frame_debounce.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
@@ -53,6 +54,7 @@ export interface CommandCatalogContext {
   readonly toolBinder: LocalToolBinder;
   readonly layerManager: LayerManager;
   readonly selectedLayer: SelectedLayerState;
+  readonly toolPalettes: MultiToolPaletteState;
   readonly inputEventBindings: InputEventBindings;
   /**
    * Primary source of the flat command set. Registered commands are enumerated
@@ -232,6 +234,7 @@ export class CommandCatalog extends RefCounted {
   groups: readonly CommandGroup[] = [];
   readonly changed = new Signal();
   private readonly debouncedRebuild: DebouncedFunction;
+  private paletteNameDisposers: Array<() => void> = [];
 
   constructor(private readonly context: CommandCatalogContext) {
     super();
@@ -250,7 +253,16 @@ export class CommandCatalog extends RefCounted {
     this.registerDisposer(
       context.commandRegistry.changed.add(debouncedRebuild),
     );
+    this.registerDisposer(
+      context.toolPalettes.changedShallow.add(debouncedRebuild),
+    );
+    this.registerDisposer(() => this.disposePaletteNameListeners());
     this.rebuild();
+  }
+
+  private disposePaletteNameListeners() {
+    for (const dispose of this.paletteNameDisposers) dispose();
+    this.paletteNameDisposers = [];
   }
 
   public rebuild() {
@@ -260,6 +272,7 @@ export class CommandCatalog extends RefCounted {
       selectedLayer,
       inputEventBindings,
       commandRegistry,
+      toolPalettes,
     } = this.context;
     const commands: CommandEntry[] = [];
 
@@ -340,6 +353,33 @@ export class CommandCatalog extends RefCounted {
           command,
         });
       }
+    }
+
+    // A palette rename changes the label, but `changedShallow` only reports
+    // added and removed palettes.
+    this.disposePaletteNameListeners();
+    const toggleToolPaletteGroup: CommandGroup = {
+      label: "Toggle Tool Palette",
+      shortcut: "",
+    };
+    for (const palette of toolPalettes.palettes) {
+      this.paletteNameDisposers.push(
+        palette.name.changed.add(this.debouncedRebuild),
+      );
+      const name = palette.name.value;
+      commands.push({
+        label: name,
+        shortcut: "",
+        source: "derived",
+        group: toggleToolPaletteGroup,
+        command: new CallbackCommand(
+          `toggle-tool-palette-${name}`,
+          `Show/hide ${name}`,
+          () => {
+            palette.location.visible = !palette.location.visible;
+          },
+        ),
+      });
     }
 
     const bindings = collectActionBindings(inputEventBindings);
