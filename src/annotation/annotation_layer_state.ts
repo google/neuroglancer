@@ -142,12 +142,16 @@ export class AnnotationDisplayState extends RefCounted {
       if (annotationProperties === undefined) {
         return null;
       }
+      const booleanProperties = new Set<string>();
       for (const property of annotationProperties) {
         const dataType = propertyTypeDataType[property.type];
         if (dataType === undefined) continue;
         properties.set(property.identifier, dataType);
+        if (property.type === "bool") {
+          booleanProperties.add(property.identifier);
+        }
       }
-      return { properties };
+      return { properties, booleanProperties };
     }, this.annotationProperties),
   );
   fallbackShaderControls = new WatchableValue(

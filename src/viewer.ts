@@ -72,6 +72,7 @@ import {
 import { overlaysOpen } from "#src/overlay.js";
 import { ScreenshotHandler } from "#src/python_integration/screenshots.js";
 import { allRenderLayerRoles, RenderLayerRole } from "#src/renderlayer.js";
+import { verifyStateVersion } from "#src/state_migration.js";
 import { StatusMessage } from "#src/status.js";
 import {
   ElementVisibilityFromTrackableBoolean,
@@ -352,9 +353,27 @@ export class TrackableViewerState extends CompoundTrackable {
     this.add("uiControlVisibility", viewer.uiControlVisibilityState);
   }
 
+  baseJSON() {
+    const result = super.baseJSON();
+    const stateVersion =
+      this.viewer.layerSpecification.stateMigrations.stateVersion;
+    if (stateVersion !== 0) result.stateVersion = stateVersion;
+    return result;
+  }
+
   restoreState(obj: any) {
     const { viewer } = this;
-    super.restoreState(obj);
+    let stateVersion = 0;
+    verifyOptionalObjectProperty(obj, "stateVersion", (value) => {
+      stateVersion = verifyStateVersion(value);
+    });
+    const { stateMigrations } = viewer.layerSpecification;
+    stateMigrations.beginRestore(stateVersion);
+    try {
+      super.restoreState(obj);
+    } finally {
+      stateMigrations.endRestore();
+    }
     // Handle legacy properties
     verifyOptionalObjectProperty(obj, "navigation", (navObj) => {
       verifyObject(navObj);

@@ -18,6 +18,12 @@ import pytest
 from neuroglancer import viewer_state
 
 
+def test_viewer_state_version():
+    assert viewer_state.ViewerState().to_json()["stateVersion"] == 1
+    assert viewer_state.ViewerState({}).to_json() == {}
+    assert viewer_state.ViewerState({"stateVersion": 2}).state_version == 2
+
+
 def test_coordinate_space_from_json():
     x = viewer_state.CoordinateSpace(
         {

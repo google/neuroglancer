@@ -1886,6 +1886,7 @@ class ViewerState(JsonObjectWrapper):
     This includes all state that is normally encoded into a Neuroglancer URL."""
 
     __slots__ = ()
+    state_version = stateVersion = wrapped_property("stateVersion", optional(int))
     title = wrapped_property("title", optional(str))
     dimensions = wrapped_property("dimensions", CoordinateSpace)
     relative_display_scales = relativeDisplayScales = wrapped_property(
@@ -1976,6 +1977,11 @@ class ViewerState(JsonObjectWrapper):
         "toolPalettes", typed_map(key_type=str, value_type=ToolPalette)
     )
     selection = wrapped_property("selection", DataSelectionState)
+
+    def __init__(self, json_data=None, _readonly=False, **kwargs):
+        if json_data is None:
+            json_data = {"stateVersion": 1}
+        super().__init__(json_data, _readonly=_readonly, **kwargs)
 
     @staticmethod
     def interpolate(a, b, t):
