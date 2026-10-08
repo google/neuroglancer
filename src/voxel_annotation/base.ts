@@ -14,10 +14,7 @@
  * limitations under the License.
  */
 
-import type { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import { vec3 } from "#src/util/geom.js";
-import type { PreviewMultiscaleSource } from "#src/voxel_annotation/preview_multiscale_chunk_source.js";
-import type { RPC } from "#src/worker_rpc.js";
 
 export const VOXEL_EDITING_CHUNK_RELOAD_RPC_ID = "voxelEditing.chunkReload";
 export const VOXEL_EDITING_BACKEND_RPC_ID = "voxelEditing/VoxelEditingBackend";
@@ -210,10 +207,4 @@ export function getDiskStencilKernel(radius: number): Int16Array {
   kernel = Int16Array.from(pairs);
   diskStencilKernelCache.set(radius, kernel);
   return kernel;
-}
-
-export interface VoxelEditingControllerHost {
-  primarySource: MultiscaleVolumeChunkSource;
-  previewSource?: PreviewMultiscaleSource;
-  rpc: RPC;
 }
