@@ -1,0 +1,143 @@
+$schema: http://json-schema.org/draft-07/schema#
+$id: CustomInputEventBindings
+title: "Custom input event bindings."
+description: |
+  Specifies the shape of :python:`NEUROGLANCER_CUSTOM_INPUT_BINDINGS` used by
+  :python:`setCustomInputEventBindings`.
+
+  This is a map from :python:`EventIdentifier` keys to either a single
+  :python:`CustomInputEventBinding` value or a
+  :python:`CustomInputEventBindingList` value.
+
+  A binding may:
+
+  - disable an existing binding by setting the :python:`action` property to ``false``;
+  - map directly to an action name with a string;
+  - map to an :python:`EventAction` object with additional event handling flags; or
+  - describe a layer-independent tool binding.
+
+  For layer-independent tool bindings, the event identifier is only honored if
+  it is of the form :python:`key{letter}` (for example :python:`keya` or
+  :python:`keyz`).
+  Other identifiers are ignored at runtime and produce a warning.
+type: object
+propertyNames:
+  $ref: EventIdentifier
+additionalProperties:
+  $ref: CustomInputEventBindingValue
+
+definitions:
+  EventIdentifier:
+    $id: EventIdentifier
+    title: "Event identifier."
+    type: string
+    description: |
+      Specifies a criterion for matching input events using a relaxed form of
+      the NormalizedEventIdentifier syntax.  Each EventIdentifier corresponds to
+      one or more NormalizedEventIdentifier values.
+
+      Syntax:
+
+      .. code-block:: text
+
+         EventIdentifier ::= [ phase ':' ] ( modifier '+' )* base-event-identifier
+
+      The phase is optional, and modifiers may be specified in any order.  If
+      the phase is omitted, the EventIdentifier matches both the
+      :python:`at` and :python:`bubble` phases.
+
+  CustomInputEventBindingValue:
+    $id: CustomInputEventBindingValue
+    title: "Value bound to an event identifier."
+    description: |
+      Each EventIdentifier maps to either a single binding or a list of
+      bindings.
+    oneOf:
+      - $ref: CustomInputEventBinding
+      - $ref: CustomInputEventBindingList
+
+  CustomInputEventBindingList:
+    $id: CustomInputEventBindingList
+    title: "Multiple bindings applied to the same event identifier."
+    type: array
+    minItems: 1
+    items:
+      $ref: CustomInputEventBinding
+
+  CustomInputEventBinding:
+    $id: CustomInputEventBinding
+    title: "Custom input event binding."
+    type: object
+    properties:
+      action:
+        title: "Binding behavior."
+        oneOf:
+          - const: false
+            title: "Disable an existing binding."
+          - type: string
+            title: "Action identifier."
+          - $ref: EventAction
+          - $ref: CustomToolBinding
+      context:
+        type: string
+        enum:
+          - global
+          - perspectiveView
+          - sliceView
+        default: global
+        title: "Input binding context to modify."
+    required:
+      - action
+    additionalProperties: false
+
+  EventAction:
+    $id: EventAction
+    title: "Event action descriptor."
+    type: object
+    properties:
+      action:
+        type: string
+        title: "Action identifier to dispatch."
+      stopPropagation:
+        type: boolean
+        title: "Whether to call :python:`stopPropagation()` on the triggering event."
+      preventDefault:
+        type: boolean
+        title: "Whether to call :python:`preventDefault()` on the triggering event."
+    required:
+      - action
+    additionalProperties: false
+
+  CustomToolBinding:
+    $id: CustomToolBinding
+    title: "Layer-independent tool binding."
+    description: |
+      Resolves a tool against the first currently managed layer matching
+      `.layerType` and, if specified, `.provider`.
+    type: object
+    properties:
+      layerType:
+        type: string
+        title: "Registered layer type name."
+      tool:
+        title: "Tool specification."
+        description: |
+          Either a tool type string or a tool JSON object containing at least a
+          :python:`type` property.
+        oneOf:
+          - type: string
+          - type: object
+            properties:
+              type:
+                type: string
+                title: "Tool type identifier."
+            required:
+              - type
+            additionalProperties: true
+      provider:
+        type: string
+        title: "Optional data source scheme to match, such as :python:`precomputed`."
+    required:
+      - layerType
+      - tool
+    additionalProperties: false
