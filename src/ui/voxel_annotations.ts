@@ -29,7 +29,8 @@ import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transf
 import { StatusMessage } from "#src/status.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import { linkWatchableValue } from "#src/trackable_value.js";
-import svg_floodFillCursor from "#src/ui/flood_fill_cursor.svg?raw";
+import svg_floodFillCursor from "#src/ui/images/flood_fill_cursor.svg?raw";
+import svg_valuePicker from "#src/ui/images/value_picker_cursor.svg?raw";
 import {
   LayerTool,
   makeToolActivationStatusMessageWithHeader,
@@ -37,7 +38,6 @@ import {
   ToolBindingWidget,
   type ToolActivation,
 } from "#src/ui/tool.js";
-import svg_valuePicker from "#src/ui/value_picker_cursor.svg?raw";
 import { vec3 } from "#src/util/geom.js";
 import type { ActionEvent } from "#src/util/mouse_bindings.js";
 import { EventActionMap } from "#src/util/mouse_bindings.js";
