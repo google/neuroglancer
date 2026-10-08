@@ -49,6 +49,7 @@ import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   makeDerivedWatchableValue,
+  registerNested,
   TrackableValue,
   WatchableValue,
 } from "#src/trackable_value.js";
@@ -543,28 +544,11 @@ export function UserLayerWithVoxelEditingMixin<
       state.add(ERASE_PAINT_VALUE_ONLY_JSON_KEY, this.erasePaintValueOnly);
       state.changed.add(this.specificationChanged.dispatch);
 
-      this.bindOverlayToPanels();
       this.registerDisposer(
-        this.manager.root.display.updateStarted.add(() =>
-          this.bindOverlayToPanels(),
-        ),
+        registerNested((context, writingEnabled) => {
+          if (writingEnabled) this.bindOverlay(context);
+        }, this.hasSubsourcesWithWritingEnabled),
       );
-
-      this.brushRadius.changed.add(this.scheduleOverlayRedraw);
-      this.manager.root.layerSelectedValues.mouseState.changed.add(
-        this.scheduleOverlayRedraw,
-      );
-      this.cursorInEraseMode.changed.add(this.scheduleOverlayRedraw);
-
-      this.layersChanged.add(() => {
-        const ctx = getEditingContext(this);
-        if (ctx) {
-          this.registerDisposer(
-            ctx.totalPending.changed.add(this.scheduleOverlayRedraw),
-          );
-        }
-      });
-      this.scheduleOverlayRedraw();
 
       this.tabs.add("Draw", {
         label: "Draw",
@@ -584,6 +568,40 @@ export function UserLayerWithVoxelEditingMixin<
         }
       }
     };
+
+    // The overlay only draws the brush cursor, so it is bound to the panels
+    // and redrawn on mouse moves only while a source has writing enabled.
+    private bindOverlay(context: RefCounted) {
+      const { display, layerSelectedValues } = this.manager.root;
+      const redraw = this.scheduleOverlayRedraw;
+      this.bindOverlayToPanels();
+      context.registerDisposer(
+        display.updateStarted.add(() => this.bindOverlayToPanels()),
+      );
+      context.registerDisposer(this.brushRadius.changed.add(redraw));
+      context.registerDisposer(
+        layerSelectedValues.mouseState.changed.add(redraw),
+      );
+      context.registerDisposer(this.cursorInEraseMode.changed.add(redraw));
+
+      // The writable source can change while writing stays enabled.
+      let removePendingListener: (() => void) | undefined;
+      const bindPending = () => {
+        removePendingListener?.();
+        removePendingListener =
+          getEditingContext(this)?.totalPending.changed.add(redraw);
+      };
+      bindPending();
+      context.registerDisposer(this.layersChanged.add(bindPending));
+
+      context.registerDisposer(() => {
+        removePendingListener?.();
+        for (const cleanup of this.boundPanelCleanups.values()) cleanup();
+        this.boundPanelCleanups.clear();
+        redraw();
+      });
+      redraw();
+    }
 
     private boundPanelCleanups = new Map<RenderedDataPanel, () => void>();
     private bindOverlayToPanels() {

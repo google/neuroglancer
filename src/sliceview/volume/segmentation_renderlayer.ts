@@ -50,7 +50,16 @@ import {
 } from "#src/trackable_value.js";
 import type { Uint64Map } from "#src/uint64_map.js";
 import type { DisjointUint64Sets } from "#src/util/disjoint_sets.js";
+import {
+  EMPTY_VOXEL_VALUE,
+  SEGMENTATION_ERASE_SENTINEL,
+} from "#src/voxel_annotation/base.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
+
+function glslUint64Equals(name: string, value: bigint) {
+  const v = BigInt.asUintN(64, value);
+  return `${name}.value[0] == ${v & 0xffffffffn}u && ${name}.value[1] == ${v >> 32n}u`;
+}
 
 export class EquivalencesHashMap {
   generation = Number.NaN;
@@ -277,11 +286,11 @@ uint64_t getMappedObjectId(uint64_t value) {
 `;
     if (parameters.isVoxelEditingPreview)
       fragmentMain += `
-  if (baseValue.value[0] == 0xfffffffeu && baseValue.value[1] == 0xffffffffu) {
+  if (${glslUint64Equals("baseValue", SEGMENTATION_ERASE_SENTINEL)}) {
     emit(vec4(0, 0, 0, 0));
     return;
   }
-  if (value.value[0] == 0u && value.value[1] == 0u) {
+  if (${glslUint64Equals("value", EMPTY_VOXEL_VALUE)}) {
     discard;
   }
       `;
