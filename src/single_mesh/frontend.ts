@@ -56,7 +56,6 @@ import { vec3 } from "#src/util/geom.js";
 import type { ProgressOptions } from "#src/util/progress_listener.js";
 import { withSharedVisibility } from "#src/visibility_priority/frontend.js";
 import type { GLBuffer } from "#src/webgl/buffer.js";
-import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
 import type { GL } from "#src/webgl/context.js";
 import {
   makeTrackableFragmentMain,
@@ -259,7 +258,6 @@ void emitGray() {
   emitRGB(vec3(1.0, 1.0, 1.0));
 }
 `);
-    builder.addFragmentCode(glsl_COLORMAPS);
 
     // Make sure defineAttributeAccess is the last thing that adds fragment code prior to
     // this.fragmentMain, so that the #define attributes don't mess anything up.
