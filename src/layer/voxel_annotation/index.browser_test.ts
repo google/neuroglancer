@@ -57,7 +57,8 @@ import {
 } from "#src/sliceview/volume/frontend.js";
 import { SegmentationRenderLayer } from "#src/sliceview/volume/segmentation_renderlayer.js";
 import { WatchableValue } from "#src/trackable_value.js";
-import { GlobalToolBinder } from "#src/ui/tool.js";
+import { getMatchingTools, GlobalToolBinder } from "#src/ui/tool.js";
+import { parseToolQuery } from "#src/ui/tool_query.js";
 import { mat4, vec3 } from "#src/util/geom.js";
 import "#src/sliceview/uncompressed_chunk_format.js";
 
@@ -427,6 +428,19 @@ describe("Voxel Editing Utilities", () => {
       expect(() => userLayer.setPaintValue(1)).toThrow(
         "No voxel editing context available",
       );
+    });
+  });
+
+  describe("Layer controls", () => {
+    it("Palette: listed only while a source has writing enabled", () => {
+      const { userLayer } = createLayer();
+      const parsed = parseToolQuery("type:brushRadius");
+      if (!("query" in parsed)) throw new Error("Invalid tool query");
+      const countListed = () =>
+        getMatchingTools(userLayer.manager.root.toolBinder, parsed.query).size;
+      expect(countListed()).toBe(1);
+      userLayer.hasSubsourcesWithWritingEnabled.value = false;
+      expect(countListed()).toBe(0);
     });
   });
 
