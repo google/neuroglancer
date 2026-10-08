@@ -302,10 +302,15 @@ const COMMON_CONTROLS: VoxelEditingTabElement[] = [
 ];
 
 export const VOXEL_EDITING_LAYER_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEditing>[] =
-  [...TOOL_SPECIFIC_CONTROLS, ...COMMON_CONTROLS].filter(
-    (x): x is LayerControlDefinition<UserLayerWithVoxelEditing> =>
-      !("type" in x) || (x.type !== "header" && x.type !== "tool-row"),
-  );
+  [...TOOL_SPECIFIC_CONTROLS, ...COMMON_CONTROLS]
+    .filter(
+      (x): x is LayerControlDefinition<UserLayerWithVoxelEditing> =>
+        !("type" in x) || (x.type !== "header" && x.type !== "tool-row"),
+    )
+    .map((control) => ({
+      ...control,
+      isValid: (layer) => layer.hasSubsourcesWithWritingEnabled,
+    }));
 
 export const VOXEL_EDITING_TAB_LAYOUT: VoxelEditingTabElement[] = [
   { type: "header", label: "Tools" },
