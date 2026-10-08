@@ -42,6 +42,7 @@ const UNBOUND_BY_DEFAULT = new Set<ActionIdentifier>([
   "edit-json-state",
   "screenshot",
   "deactivate-active-tool",
+  "toggle-picking-indicator",
 ]);
 
 function makeDefaultInputEventBindings(): InputEventBindings {

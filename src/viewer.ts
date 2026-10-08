@@ -313,6 +313,7 @@ export class TrackableViewerState extends CompoundTrackable {
     this.add("wireFrame", viewer.wireFrame);
     this.add("enableAdaptiveDownsampling", viewer.enableAdaptiveDownsampling);
     this.add("showScaleBar", viewer.showScaleBar);
+    this.add("showPickingIndicator", viewer.showPickingIndicator);
     this.add("showDefaultAnnotations", viewer.showDefaultAnnotations);
 
     this.add("showSlices", viewer.showPerspectiveSliceViews);
@@ -488,6 +489,7 @@ export class Viewer extends RefCounted implements ViewerState {
   wireFrame = new TrackableBoolean(false, false);
   enableAdaptiveDownsampling = new TrackableBoolean(true, true);
   showScaleBar = new TrackableBoolean(true, true);
+  showPickingIndicator = new TrackableBoolean(false, false);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
   hideCrossSectionBackground3D = new TrackableBoolean(false, false);
   visibleLayerRoles = allRenderLayerRoles();
@@ -1244,6 +1246,9 @@ export class Viewer extends RefCounted implements ViewerState {
 
     this.bindAction("toggle-axis-lines", () => this.showAxisLines.toggle());
     this.bindAction("toggle-scale-bar", () => this.showScaleBar.toggle());
+    this.bindAction("toggle-picking-indicator", () =>
+      this.showPickingIndicator.toggle(),
+    );
     this.bindAction("toggle-default-annotations", () =>
       this.showDefaultAnnotations.toggle(),
     );

@@ -94,6 +94,7 @@ export interface ViewerUIState
   wireFrame: TrackableBoolean;
   enableAdaptiveDownsampling: TrackableBoolean;
   showScaleBar: TrackableBoolean;
+  showPickingIndicator: TrackableBoolean;
   scaleBarOptions: TrackableValue<ScaleBarOptions>;
   visibleLayerRoles: WatchableSet<RenderLayerRole>;
   selectedLayer: SelectedLayerState;
@@ -185,6 +186,7 @@ export function getCommonViewerState(viewer: ViewerUIState) {
     scaleBarOptions: viewer.scaleBarOptions,
     hideCrossSectionBackground3D: viewer.hideCrossSectionBackground3D,
     pickRadius: viewer.pickRadius,
+    showPickingIndicator: viewer.showPickingIndicator,
   };
 }
 

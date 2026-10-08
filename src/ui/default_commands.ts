@@ -105,6 +105,12 @@ const STATIC_COMMANDS: readonly BuiltinCommand[] = [
     description: "Show or hide the axis line indicators.",
   },
   {
+    id: "toggle-picking-indicator",
+    label: "Toggle Picking Indicator",
+    description:
+      "Show or hide the ring drawn at the picked position under the cursor.",
+  },
+  {
     id: "toggle-orthographic-projection",
     label: "Toggle Orthographic Projection",
     description:

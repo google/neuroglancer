@@ -450,6 +450,14 @@ export function getViewFrustumDepthRange(projectionMat: mat4) {
   return depth;
 }
 
+// Distance in front of the camera, from the depth row of `mat4.perspective` or `mat4.ortho`.
+export function getEyeDepth(projectionMat: mat4, normalizedDeviceZ: number) {
+  const orthographic = projectionMat[15] === 1;
+  return orthographic
+    ? (projectionMat[14] - normalizedDeviceZ) / projectionMat[10]
+    : projectionMat[14] / (normalizedDeviceZ + projectionMat[10]);
+}
+
 // Ensures the z output is 0.  Useful for disabling depth clipping.
 export function disableZProjection(mat: mat4) {
   mat[2] = 0;

@@ -49,6 +49,10 @@ properties:
     type: boolean
     title: "Indicates whether to show scale bars."
     default: true
+  showPickingIndicator:
+    type: boolean
+    title: "Indicates whether to show a ring at the picked position under the cursor in each data panel."
+    default: false
   showDefaultAnnotations:
     type: boolean
     title: "Indicates whether to show bounding boxes of data sources."

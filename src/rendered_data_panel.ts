@@ -23,6 +23,7 @@ import type { DisplayContext } from "#src/display_context.js";
 import { RenderedPanel } from "#src/display_context.js";
 import type { NavigationState } from "#src/navigation_state.js";
 import { PickIDManager } from "#src/object_picking.js";
+import type { ProjectionParameters } from "#src/projection_parameters.js";
 import {
   displayToLayerCoordinates,
   layerToDisplayCoordinates,
@@ -32,7 +33,13 @@ import {
   getPickDiameter,
 } from "#src/rendered_data_panel_picking.js";
 import { StatusMessage } from "#src/status.js";
-import type { TrackableValue } from "#src/trackable_value.js";
+import type { TrackableBoolean } from "#src/trackable_boolean.js";
+import type {
+  TrackableValue,
+  WatchableValueChangeInterface,
+} from "#src/trackable_value.js";
+import { PanelOverlays } from "#src/ui/panel_overlays.js";
+import { PickingIndicator } from "#src/ui/picking_indicator.js";
 import { AutomaticallyFocusedElement } from "#src/util/automatic_focus.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import type {
@@ -60,6 +67,7 @@ const tempVec3 = vec3.create();
 export interface RenderedDataViewerState extends ViewerState {
   inputEventMap: EventActionMap;
   pickRadius: TrackableValue<number>;
+  showPickingIndicator: TrackableBoolean;
 }
 
 export class FramePickingData {
@@ -105,6 +113,12 @@ export abstract class RenderedDataPanel extends RenderedPanel {
   inputEventMap: EventActionMap;
 
   abstract navigationState: NavigationState;
+
+  abstract readonly projectionParameters: WatchableValueChangeInterface<ProjectionParameters>;
+
+  private readonly overlays = this.registerDisposer(
+    new PanelOverlays(this.element, this.context.screenshotMode),
+  );
 
   pickingData = [new FramePickingData(), new FramePickingData()];
   pickRequests = [new PickRequest(), new PickRequest()];
@@ -326,8 +340,10 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     newPickingData.pickIDs.clear();
     if (!this.drawWithPicking(newPickingData)) {
       newPickingData.frameNumber = -1;
+      this.overlays.frameSkipped();
       return;
     }
+    this.overlays.frameDrawn();
     // For the new frame, allow new pick requests regardless of interval since last request.
     this.nextPickRequestTime = 0;
     if (this.mouseX >= 0) {
@@ -393,6 +409,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     }
     this.mouseX = mouseX;
     this.mouseY = mouseY;
+    this.overlays.mouseMoved();
     if (mouseX < 0) {
       // Mouse moved out of the viewport.
       this.pickRequestPending = false;
@@ -423,6 +440,13 @@ export abstract class RenderedDataPanel extends RenderedPanel {
   ) {
     super(context, element, viewer.visibility);
     this.inputEventMap = viewer.inputEventMap;
+    this.overlays.add(
+      new PickingIndicator(
+        this,
+        viewer.mouseState,
+        viewer.showPickingIndicator,
+      ),
+    );
 
     element.classList.add("neuroglancer-rendered-data-panel");
     element.classList.add("neuroglancer-panel");

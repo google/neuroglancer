@@ -1934,6 +1934,9 @@ class ViewerState(JsonObjectWrapper):
     show_scale_bar = showScaleBar = wrapped_property(
         "showScaleBar", optional(bool, True)
     )
+    show_picking_indicator = showPickingIndicator = wrapped_property(
+        "showPickingIndicator", optional(bool, False)
+    )
     show_default_annotations = showDefaultAnnotations = wrapped_property(
         "showDefaultAnnotations", optional(bool, True)
     )
