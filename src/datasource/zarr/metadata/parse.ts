@@ -23,7 +23,6 @@ import type {
 } from "#src/datasource/zarr/metadata/index.js";
 import { ChunkKeyEncoding } from "#src/datasource/zarr/metadata/index.js";
 import { parseNameAndConfiguration } from "#src/datasource/zarr/metadata/parse_util.js";
-import { DATA_TYPE_BYTES, DataType } from "#src/util/data_type.js";
 import { Endianness } from "#src/util/endian.js";
 import {
   parseArray,
@@ -39,6 +38,7 @@ import {
 } from "#src/util/json.js";
 import { parseNumpyDtype } from "#src/util/numpy_dtype.js";
 import { allSiPrefixes } from "#src/util/si_units.js";
+import { getSourceDataType } from "#src/util/source_data_type.js";
 
 function parseShape(obj: unknown): number[] {
   return parseArray(obj, (x) => {
@@ -126,50 +126,6 @@ export function parseDimensionUnit(obj: unknown): {
   return { unit: unitInfo.unit, scale: scale * unitInfo.scale };
 }
 
-function parseFillValue(dataType: DataType, value: unknown): number | bigint {
-  switch (dataType) {
-    case DataType.UINT8:
-    case DataType.INT8:
-    case DataType.UINT16:
-    case DataType.INT16:
-    case DataType.UINT32:
-    case DataType.INT32:
-    case DataType.UINT64:
-      if (typeof value !== "number" || !Number.isInteger(value)) {
-        throw new Error(
-          `Expected integer but received: ${JSON.stringify(value)}`,
-        );
-      }
-      if (dataType === DataType.UINT64) {
-        return BigInt(value);
-      }
-      return value;
-    case DataType.FLOAT32:
-      if (typeof value === "number") {
-        return value;
-      }
-      if (typeof value === "string") {
-        if (value === "Infinity") {
-          return Number.POSITIVE_INFINITY;
-        }
-        if (value === "-Infinity") {
-          return Number.NEGATIVE_INFINITY;
-        }
-        if (value === "NaN") {
-          return new Float32Array(Uint32Array.of(0x7fc00000).buffer)[0];
-        }
-        if (value.match(/^0x[a-fA-F0-9]+$/)) {
-          return new Float32Array(Uint32Array.of(Number(value)).buffer)[0];
-        }
-      }
-      throw new Error(
-        `Expected number, "Infinity", "-Infinity", "NaN", or hex string but received: ${JSON.stringify(
-          value,
-        )}`,
-      );
-  }
-}
-
 export function parseV3Metadata(
   obj: unknown,
   expectedNodeType: NodeType | undefined,
@@ -221,9 +177,15 @@ export function parseV3Metadata(
         verifyOptionalFixedLengthArrayOfStringOrNull(names ?? undefined, rank),
     );
 
-    const dataType = verifyObjectProperty(obj, "data_type", (x) =>
-      verifyEnumString(x, DataType, /^[a-z0-9]+$/),
+    const sourceDataType = verifyObjectProperty(obj, "data_type", (x) =>
+      getSourceDataType(verifyString(x)),
     );
+    const dataType = sourceDataType.dataType;
+    if (sourceDataType.numComponents !== 1) {
+      throw new Error(
+        `Unsupported data type: ${JSON.stringify(sourceDataType.name)}`,
+      );
+    }
 
     const { configuration: chunkShape } = verifyObjectProperty(
       obj,
@@ -272,11 +234,14 @@ export function parseV3Metadata(
       );
 
     const fillValue = verifyObjectProperty(obj, "fill_value", (value) =>
-      parseFillValue(dataType, value),
+      sourceDataType.parseFillValue(value),
     );
 
     const codecs = verifyObjectProperty(obj, "codecs", (value) =>
-      parseCodecChainSpec(value, { dataType, chunkShape }),
+      parseCodecChainSpec(value, {
+        sourceDataType: sourceDataType.name,
+        chunkShape,
+      }),
     );
 
     return {
@@ -294,10 +259,11 @@ export function parseV3Metadata(
       userAttributes,
       codecs,
     };
-  } catch (e) {
+  } catch (e: any) {
     const nodeStr =
       expectedNodeType === undefined ? "" : `${expectedNodeType} `;
-    throw new Error(`Error parsing zarr v3 ${nodeStr}metadata: ${e.message}`);
+    const message = e instanceof Error ? e.message : String(e);
+    throw new Error(`Error parsing zarr v3 ${nodeStr}metadata: ${message}`);
   }
 }
 
@@ -336,12 +302,19 @@ export function parseV2Metadata(
       parseNumpyDtype(verifyString(dtype)),
     );
 
-    const dataType = numpyDtype.dataType;
+    const sourceDataType = numpyDtype.sourceDataType;
+    const dataType = sourceDataType.dataType;
+    if (sourceDataType.numComponents !== 1) {
+      throw new Error(
+        `Unsupported data type: ${JSON.stringify(sourceDataType.name)}`,
+      );
+    }
+    const bytesPerElement = sourceDataType.bitsPerElement / 8;
     const fillValue = verifyObjectProperty(obj, "fill_value", (value) => {
       if (value === null) {
         return 0;
       }
-      return parseFillValue(dataType, value);
+      return sourceDataType.parseFillValue(value);
     });
 
     const codecs = [];
@@ -368,16 +341,14 @@ export function parseV2Metadata(
             configuration: {
               cname: verifyObjectProperty(compressor, "cname", verifyString),
               clevel: verifyObjectProperty(compressor, "clevel", verifyInt),
-              typesize: DATA_TYPE_BYTES[dataType],
+              typesize: bytesPerElement,
               shuffle: verifyObjectProperty(
                 compressor,
                 "shuffle",
                 (shuffle) => {
                   switch (shuffle) {
                     case -1:
-                      return DATA_TYPE_BYTES[dataType] === 1
-                        ? "bitshuffle"
-                        : "shuffle";
+                      return bytesPerElement === 1 ? "bitshuffle" : "shuffle";
                     case 0:
                       return "noshuffle";
                     case 1:
@@ -413,7 +384,7 @@ export function parseV2Metadata(
     });
 
     const codecChainSpec = parseCodecChainSpec(codecs, {
-      dataType,
+      sourceDataType: sourceDataType.name,
       chunkShape,
     });
 
@@ -438,7 +409,8 @@ export function parseV2Metadata(
       chunkKeyEncoding: ChunkKeyEncoding.V2,
       codecs: codecChainSpec,
     };
-  } catch (e) {
-    throw new Error(`Error parsing zarr v2 metadata: ${e.message}`);
+  } catch (e: any) {
+    const message = e instanceof Error ? e.message : String(e);
+    throw new Error(`Error parsing zarr v2 metadata: ${message}`);
   }
 }
