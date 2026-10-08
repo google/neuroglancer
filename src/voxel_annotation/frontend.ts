@@ -20,13 +20,13 @@ import { SharedWatchableValue } from "#src/shared_watchable_value.js";
 import type {
   InMemoryVolumeChunkSource,
   LocalVolumeEdit,
+  MultiscaleVolumeChunkSource,
   VolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import type { vec3 } from "#src/util/geom.js";
 import type {
-  VoxelEditingControllerHost,
   LodResolution,
   VoxelOperation,
   PaintValueGetter,
@@ -45,11 +45,19 @@ import {
   VOXEL_EDITING_CHUNK_RELOAD_RPC_ID,
   VoxelOperationType,
 } from "#src/voxel_annotation/base.js";
+import type { PreviewMultiscaleSource } from "#src/voxel_annotation/preview_multiscale_chunk_source.js";
+import type { RPC } from "#src/worker_rpc.js";
 import {
   registerRPC,
   registerSharedObjectOwner,
   SharedObject,
 } from "#src/worker_rpc.js";
+
+export interface VoxelEditingControllerHost {
+  primarySource: MultiscaleVolumeChunkSource;
+  previewSource?: PreviewMultiscaleSource;
+  rpc: RPC;
+}
 
 @registerSharedObjectOwner(VOXEL_EDITING_BACKEND_RPC_ID)
 export class VoxelEditingController extends SharedObject {

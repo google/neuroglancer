@@ -59,10 +59,7 @@ import { vec3 } from "#src/util/geom.js";
 import { verifyInt, verifyOptionalObjectProperty } from "#src/util/json.js";
 import { CompoundTrackable } from "#src/util/trackable.js";
 import { TrackableEnum } from "#src/util/trackable_enum.js";
-import type {
-  VoxelEditingControllerHost,
-  PaintValueGetter,
-} from "#src/voxel_annotation/base.js";
+import type { PaintValueGetter } from "#src/voxel_annotation/base.js";
 import {
   VOXEL_EDITING_STAMINA,
   EMPTY_VOXEL_VALUE,
@@ -71,6 +68,7 @@ import {
   BrushShape,
   MAX_VOXEL_EDITING_STAMINA,
 } from "#src/voxel_annotation/base.js";
+import type { VoxelEditingControllerHost } from "#src/voxel_annotation/frontend.js";
 import { VoxelEditingController } from "#src/voxel_annotation/frontend.js";
 import { PreviewMultiscaleSource } from "#src/voxel_annotation/preview_multiscale_chunk_source.js";
 
