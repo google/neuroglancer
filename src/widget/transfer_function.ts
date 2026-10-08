@@ -1978,8 +1978,9 @@ export function transferFunctionLayerControl<LayerType extends UserLayer>(
           const value = position.value;
           const params = watchableValue.value;
           if (!arraysEqual(params.channel, value)) {
-            value.set(params.channel);
-            position.changed.dispatch();
+            // Assign through the setter so that the coordinates count as
+            // explicitly specified.
+            position.value = Float32Array.from(params.channel);
           }
         };
         updatePosition();

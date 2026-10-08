@@ -557,11 +557,15 @@ export class SliceViewPanel extends RenderedDataPanel {
     // invViewMatrixLinear * factor * [mouseX, mouseY, 0]^T + [newX, newY, newZ]^T
 
     const position = this.navigationState.position.value;
+    let moved = false;
     for (let i = 0; i < displayRank; ++i) {
       const dim = displayDimensionIndices[i];
       const f = invViewMatrix[i] * mouseX + invViewMatrix[4 + i] * mouseY;
+      const previousCoordinate = position[dim];
       position[dim] += f * (1 - factor);
+      if (position[dim] !== previousCoordinate) moved = true;
     }
+    if (moved) this.navigationState.position.markMoved();
     this.navigationState.position.changed.dispatch();
     navigationState.zoomBy(factor);
   }
