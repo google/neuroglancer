@@ -24,6 +24,7 @@ import {
   CHUNK_QUEUE_MANAGER_RPC_ID,
   CHUNK_SOURCE_INVALIDATE_RPC_ID,
   ChunkState,
+  MemoryLimitFlags,
   REQUEST_CHUNK_STATISTICS_RPC_ID,
 } from "#src/chunk_manager/base.js";
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
@@ -112,6 +113,12 @@ export class ChunkQueueManager extends SharedObject {
 
   enablePrefetch = new TrackableBoolean(true, true);
 
+  /**
+   * Bit mask of `MemoryLimitFlags` set by the backend indicating which memory
+   * limits are currently preventing visible chunks from being loaded.
+   */
+  memoryLimitReached: SharedWatchableValue<number>;
+
   constructor(
     rpc: RPC,
     public gl: GL,
@@ -124,6 +131,10 @@ export class ChunkQueueManager extends SharedObject {
     },
   ) {
     super();
+
+    this.memoryLimitReached = this.registerDisposer(
+      SharedWatchableValue.make(rpc, MemoryLimitFlags.NONE),
+    );
 
     const makeCapacityCounterparts = (capacity: CapacitySpecification) => {
       return {
@@ -144,6 +155,7 @@ export class ChunkQueueManager extends SharedObject {
       enablePrefetch: this.registerDisposer(
         SharedWatchableValue.makeFromExisting(rpc, this.enablePrefetch),
       ).rpcId,
+      memoryLimitReached: this.memoryLimitReached.rpcId,
     });
   }
 
