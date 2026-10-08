@@ -293,6 +293,21 @@ function updateScaleElementStyle(scaleElement: HTMLInputElement) {
   scaleElement.parentElement!.dataset.isEmpty = value === "" ? "true" : "false";
 }
 
+export function formatPositionText(coordinates: ArrayLike<number>): string {
+  return Array.from(coordinates, (x) => Math.floor(x)).join(", ");
+}
+
+export function copyPositionToClipboard(position: Position) {
+  const result = setClipboard(
+    position.valid ? formatPositionText(position.value) : "",
+  );
+  StatusMessage.showTemporaryMessage(
+    result
+      ? "Position copied to clipboard"
+      : "Failed to copy position to clipboard",
+  );
+}
+
 export class PositionWidget extends RefCounted {
   element = document.createElement("div");
   private dimensionContainer = document.createElement("div");
@@ -1075,14 +1090,7 @@ export class PositionWidget extends RefCounted {
     if (copyButton) {
       const copyButton = makeCopyButton({
         title: "Copy position to clipboard",
-        onClick: () => {
-          const result = setClipboard(this.getPositionText());
-          StatusMessage.showTemporaryMessage(
-            result
-              ? "Position copied to clipboard"
-              : "Failed to copy position to clipboard",
-          );
-        },
+        onClick: () => copyPositionToClipboard(position),
       });
       copyButton.addEventListener("dragstart", (event) => {
         event.dataTransfer!.setData(
@@ -1261,7 +1269,7 @@ export class PositionWidget extends RefCounted {
   private getPositionText() {
     const { position } = this;
     if (position.valid) {
-      return position.value.map((x) => Math.floor(x)).join(", ");
+      return formatPositionText(position.value);
     }
     return "";
   }

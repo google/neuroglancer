@@ -157,3 +157,7 @@ export class StateEditorDialog extends Overlay {
     );
   }
 }
+
+export function bindStateEditor(viewer: Viewer): void {
+  viewer.bindAction("edit-json-state", () => viewer.editJsonState());
+}

@@ -34,6 +34,7 @@ import { makeCopyButton } from "#src/widget/copy_button.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 import { makeIcon } from "#src/widget/icon.js";
 import { makeMoveToButton } from "#src/widget/move_to_button.js";
+import { formatPositionText } from "#src/widget/position_widget.js";
 
 export function isWithinSelectionPanel(element: HTMLElement) {
   return element.closest(".neuroglancer-selection-details");
@@ -107,9 +108,7 @@ export class SelectionDetailsPanel extends SidePanel {
             );
             const copyButton = makeCopyButton({
               title: "Copy position",
-              onClick: () => {
-                setClipboard(position!.map((x) => Math.floor(x)).join(", "));
-              },
+              onClick: () => copySelectionPositionToClipboard(state),
             });
             positionElement.appendChild(copyButton);
             const {
@@ -206,4 +205,12 @@ export class SelectionDetailsPanel extends SidePanel {
     this.state.value = undefined;
     this.state.pin.value = true;
   }
+}
+
+export function copySelectionPositionToClipboard(
+  state: TrackableDataSelectionState,
+) {
+  const position = state.value?.position;
+  if (position === undefined) return;
+  setClipboard(formatPositionText(position));
 }
