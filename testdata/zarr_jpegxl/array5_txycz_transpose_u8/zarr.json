@@ -1,0 +1,109 @@
+{
+  "zarr_format": 3,
+  "node_type": "array",
+  "shape": [
+    2,
+    10,
+    10,
+    3,
+    2
+  ],
+  "data_type": "uint8",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        2,
+        10,
+        10,
+        3,
+        2
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": 0,
+  "codecs": [
+    {
+      "name": "sharding_indexed",
+      "configuration": {
+        "chunk_shape": [
+          2,
+          5,
+          5,
+          3,
+          2
+        ],
+        "codecs": [
+          {
+            "name": "transpose",
+            "configuration": {
+              "order": [
+                0,
+                3,
+                4,
+                1,
+                2
+              ]
+            }
+          },
+          {
+            "name": "reshape",
+            "configuration": {
+              "shape": [
+                [
+                  0,
+                  1,
+                  2
+                ],
+                [
+                  3
+                ],
+                [
+                  4
+                ]
+              ]
+            }
+          },
+          {
+            "name": "jpegxl",
+            "configuration": {}
+          }
+        ],
+        "index_codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "crc32c"
+          }
+        ],
+        "index_location": "end"
+      }
+    }
+  ],
+  "dimension_names": [
+    "t",
+    "x",
+    "y",
+    "c",
+    "z"
+  ],
+  "attributes": {
+    "dimension_units": [
+      "1s",
+      "1um",
+      "1um",
+      "",
+      "1um"
+    ]
+  }
+}

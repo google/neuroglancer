@@ -221,9 +221,36 @@ export function parseV3Metadata(
         verifyOptionalFixedLengthArrayOfStringOrNull(names ?? undefined, rank),
     );
 
-    const dataType = verifyObjectProperty(obj, "data_type", (x) =>
-      verifyEnumString(x, DataType, /^[a-z0-9]+$/),
-    );
+    // Neuroglancer has no float16 data type. The jpegxl codec decodes to
+    // float32 internally, so a float16 array that uses the jpegxl codec is read
+    // as float32 (interim, until a first-class float16 data type is added).
+    // float16 with any other codec is rejected, since its raw 2-byte samples
+    // cannot simply be reinterpreted as float32.
+    const rawDataType = verifyObjectProperty(obj, "data_type", verifyString);
+    let dataType: DataType;
+    if (rawDataType === "float16") {
+      const usesJpegxl = verifyObjectProperty(
+        obj,
+        "codecs",
+        (value) =>
+          Array.isArray(value) &&
+          value.some(
+            (c) =>
+              c != null &&
+              typeof c === "object" &&
+              (c as { name?: unknown }).name === "jpegxl",
+          ),
+      );
+      if (!usesJpegxl) {
+        throw new Error(
+          'Unsupported data type: "float16" (only supported via the jpegxl ' +
+            "codec, which is decoded as float32)",
+        );
+      }
+      dataType = DataType.FLOAT32;
+    } else {
+      dataType = verifyEnumString(rawDataType, DataType, /^[a-z0-9]+$/);
+    }
 
     const { configuration: chunkShape } = verifyObjectProperty(
       obj,
