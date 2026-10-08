@@ -21,7 +21,7 @@ import {
   CodecKind,
 } from "#src/datasource/zarr/codec/index.js";
 import { DATA_TYPE_BYTES } from "#src/sliceview/base.js";
-import { convertEndian } from "#src/util/endian.js";
+import { convertEndian, ENDIANNESS } from "#src/util/endian.js";
 
 registerCodec({
   name: "bytes",
@@ -32,11 +32,17 @@ registerCodec({
     decoded: ArrayBufferView,
   ): Promise<Uint8Array> {
     const bytesPerElement = DATA_TYPE_BYTES[encodedArrayInfo.dataType];
-    convertEndian(decoded, configuration.endian, bytesPerElement);
-    return new Uint8Array(
+    const bytes = new Uint8Array(
       decoded.buffer,
       decoded.byteOffset,
       decoded.byteLength,
     );
+    if (configuration.endian === ENDIANNESS || bytesPerElement === 1) {
+      return bytes;
+    }
+    // Swap a copy: `decoded` still belongs to the caller.
+    const swapped = bytes.slice();
+    convertEndian(swapped, configuration.endian, bytesPerElement);
+    return swapped;
   },
 });

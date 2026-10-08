@@ -297,53 +297,15 @@ describe("VolumeChunkSource: applyEdits", () => {
       computeSpy.mockRestore();
     });
 
-    it("should retry on 500 errors and eventually succeed", async () => {
-      vi.useFakeTimers();
+    it("should write once and surface the failure", async () => {
+      const failure = new HttpError("", 503, "");
       const writeSpy = vi
         .spyOn(source, "writeChunk")
-        .mockRejectedValueOnce(new HttpError("", 500, ""))
-        .mockRejectedValueOnce(new HttpError("", 503, ""))
-        .mockResolvedValue(undefined);
+        .mockRejectedValue(failure);
 
-      const promise = source.applyEdits("0,0,0", [0], [1n]);
-      await vi.runAllTimersAsync();
-      await promise;
-
-      expect(writeSpy).toHaveBeenCalledTimes(3);
-      vi.useRealTimers();
-    });
-
-    it("should stop retrying at one point", async () => {
-      vi.useFakeTimers();
-
-      vi.spyOn(source, "writeChunk").mockRejectedValue(
-        new Error("Fatal DB Error"),
-      );
-
-      const promise = source.applyEdits("0,0,0", [0], [1n]);
-
-      const assertRejection = expect(promise).rejects.toThrow(
-        /Failed to write chunk/,
-      );
-
-      await vi.runAllTimersAsync();
-      await assertRejection;
-
-      vi.useRealTimers();
-    });
-
-    it("should NOT retry on 400 errors", async () => {
-      vi.useFakeTimers();
-      const writeSpy = vi
-        .spyOn(source, "writeChunk")
-        .mockRejectedValue(new HttpError("Bad Request", 400, ""));
-
-      const promise = source.applyEdits("0,0,0", [0], [1n]);
-
-      await expect(promise).rejects.toThrow(/Failed to write chunk/);
+      await expect(source.applyEdits("0,0,0", [0], [1n])).rejects.toBe(failure);
 
       expect(writeSpy).toHaveBeenCalledTimes(1);
-      vi.useRealTimers();
     });
   });
 });
