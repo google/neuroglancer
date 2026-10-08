@@ -557,7 +557,8 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
         )
           ? undefined
           : "Writing is not supported for arrays whose codec chain includes " +
-            "sharding_indexed or an array-to-array codec such as transpose.";
+            "sharding_indexed, an array-to-array codec such as transpose, or " +
+            "a codec without an encoder such as zstd or crc32c.";
         return {
           canonicalUrl: `${kvStoreUrl}|zarr${metadata.zarrVersion}:`,
           modelTransform: makeIdentityTransform(volume.modelSpace),

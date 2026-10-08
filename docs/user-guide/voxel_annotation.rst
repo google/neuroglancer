@@ -40,7 +40,7 @@ Voxel editing is currently supported for the following configurations:
 - Amazon S3 or any S3 compatible storage.
 
 .. note::
-  Write operations require that the S3 bucket's CORS policy allows ``PUT`` and ``DELETE`` methods. See :ref:`s3-kvstore` for a reference CORS policy.
+  Write operations require that the S3 bucket's CORS policy allows the ``PUT`` method. See :ref:`s3-kvstore` for a reference CORS policy.
 
 **Data Format**:
 
@@ -51,8 +51,9 @@ Voxel editing is currently supported for the following configurations:
 
 .. note::
   Writing is not supported for arrays whose codec chain includes
-  ``sharding_indexed`` (the Zarr v3 sharded format) or an array-to-array codec
-  such as ``transpose``.
+  ``sharding_indexed`` (the Zarr v3 sharded format), an array-to-array codec
+  such as ``transpose``, or a codec that has no encoder yet (``zstd``,
+  ``crc32c``).
 
 Tools
 -----
