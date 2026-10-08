@@ -223,6 +223,65 @@ describe("CommandCatalog command sources", () => {
       catalog.dispose();
     }
   });
+
+  it("does not duplicate a bound show-only layer action", () => {
+    const map = new EventActionMap();
+    map.set("shift+digit1", "show-only-layer-1");
+    const context = makeContext(makeInputEventBindings(map));
+    (
+      context.layerManager as unknown as {
+        managedLayers: { name: string; archived: boolean }[];
+      }
+    ).managedLayers = [{ name: "first", archived: false }];
+    const catalog = new CommandCatalog(context);
+    try {
+      expect(
+        catalog.commands.filter(
+          ({ command }) => command.id === "show-only-layer-1",
+        ),
+      ).toHaveLength(1);
+    } finally {
+      catalog.dispose();
+    }
+  });
+});
+
+describe("CommandCatalog layer commands", () => {
+  it("dispatches the show-only action for the non-archived layer index", () => {
+    const makeLayer = (name: string, archived = false) => ({
+      name,
+      archived,
+      visible: true,
+      setVisible(value: boolean) {
+        this.visible = value;
+      },
+    });
+    const firstLayer = makeLayer("first");
+    const archivedLayer = makeLayer("archived", true);
+    const secondLayer = makeLayer("second");
+    const context = makeContext();
+    (
+      context.layerManager as unknown as {
+        managedLayers: ReturnType<typeof makeLayer>[];
+      }
+    ).managedLayers = [firstLayer, archivedLayer, secondLayer];
+    const catalog = new CommandCatalog(context);
+    try {
+      const entry = catalog.commands.find(
+        ({ command }) => command.id === "show-only-layer-2",
+      );
+      expect(entry?.shortcut).toBe("Shift+2");
+      const dispatchTarget = new EventTarget();
+      let dispatched = false;
+      dispatchTarget.addEventListener("action:show-only-layer-2", () => {
+        dispatched = true;
+      });
+      entry?.command.invoke({ dispatchTarget });
+      expect(dispatched).toBe(true);
+    } finally {
+      catalog.dispose();
+    }
+  });
 });
 
 describe("CommandCatalog reactivity", () => {
