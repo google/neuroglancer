@@ -46,6 +46,11 @@ export class ZarrVolumeChunkSource extends WithParameters(
     this.sharedKvStoreContext.kvStoreContext.getKvStore(this.parameters.url),
   );
 
+  onInvalidateCache() {
+    const { kvStore } = this.chunkKvStore;
+    kvStore.invalidateIndexCache?.();
+  }
+
   async download(chunk: VolumeChunk, signal: AbortSignal) {
     chunk.chunkDataSize = this.spec.chunkDataSize;
     const { parameters } = this;
