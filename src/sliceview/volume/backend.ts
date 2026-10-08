@@ -35,7 +35,6 @@ import type { TypedArray } from "#src/util/array.js";
 import { TypedArrayBuilder } from "#src/util/array.js";
 import { DATA_TYPE_ARRAY_CONSTRUCTOR } from "#src/util/data_type.js";
 import type { vec3 } from "#src/util/geom.js";
-import { HttpError } from "#src/util/http_request.js";
 import * as vector from "#src/util/vector.js";
 import type { VoxelChange } from "#src/voxel_annotation/base.js";
 import type { RPC } from "#src/worker_rpc.js";
@@ -367,40 +366,21 @@ export class VolumeChunkSource
       }
     }
 
-    const maxRetries = 3;
-    let lastError: Error | undefined;
-
-    for (let i = 0; i < maxRetries; i++) {
-      try {
-        await this.writeChunk(chunk);
-        // The edit was written from an isolated chunk, so the shared cache
-        // entry (if any) still holds pre-edit data — or has a pre-edit
-        // download in flight that would otherwise later land as "fresh" and
-        // even be reused by the next edit, durably erasing this write.
-        // Invalidate it backend-side: routing through the frontend RPC would
-        // miss chunks the frontend does not hold (e.g. still DOWNLOADING).
-        const { queueManager } = this.chunkManager;
-        queueManager.invalidateCachedChunks(this, [chunkKey]);
-        queueManager.scheduleUpdate();
-        return {
-          indices: indicesCopy,
-          oldValues: oldValuesArray,
-          newValues: newValuesArray,
-        };
-      } catch (e) {
-        lastError = e as Error;
-        if (e instanceof HttpError && e.status < 500 && e.status !== 429) {
-          break;
-        }
-        await new Promise((resolve) =>
-          setTimeout(resolve, 250 * Math.pow(2, i)),
-        );
-      }
-    }
-    throw new Error(
-      `Failed to write chunk ${chunkKey} after ${maxRetries} attempts.`,
-      { cause: lastError },
-    );
+    await this.writeChunk(chunk);
+    // The edit was written from an isolated chunk, so the shared cache
+    // entry (if any) still holds pre-edit data — or has a pre-edit
+    // download in flight that would otherwise later land as "fresh" and
+    // even be reused by the next edit, durably erasing this write.
+    // Invalidate it backend-side: routing through the frontend RPC would
+    // miss chunks the frontend does not hold (e.g. still DOWNLOADING).
+    const { queueManager } = this.chunkManager;
+    queueManager.invalidateCachedChunks(this, [chunkKey]);
+    queueManager.scheduleUpdate();
+    return {
+      indices: indicesCopy,
+      oldValues: oldValuesArray,
+      newValues: newValuesArray,
+    };
   }
 }
 
