@@ -921,6 +921,10 @@ gl_Position = uModelViewProjectionMatrix * vec4(position, 1.0);
           if (shader !== null) {
             shader.bind();
             if (chunkFormat !== null) {
+              this.shaderControlState.activeControls.trackShader(
+                shaderResult,
+                attachment,
+              );
               setControlsInShader(
                 gl,
                 shader,
@@ -1116,6 +1120,10 @@ gl_Position = uModelViewProjectionMatrix * vec4(position, 1.0);
           if (shader !== null && shaderSetupUniforms !== undefined) {
             shader.bind();
             if (chunkFormat !== null && chunkFormat !== undefined) {
+              this.shaderControlState.activeControls.trackShader(
+                shaderResult,
+                attachment,
+              );
               setControlsInShader(
                 gl,
                 shader,

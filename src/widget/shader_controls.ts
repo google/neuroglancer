@@ -240,7 +240,9 @@ export class ShaderControls extends Tab {
       debounce(() => this.updateControls(), 0),
     );
     this.registerDisposer(controls.changed.add(scheduleUpdate));
-    this.registerDisposer(state.activeControls.changed.add(scheduleUpdate));
+    this.registerDisposer(
+      state.activeControls.hint.changed.add(scheduleUpdate),
+    );
     this.registerDisposer(
       hideInactiveShaderControls.changed.add(scheduleUpdate),
     );
@@ -259,11 +261,11 @@ export class ShaderControls extends Tab {
       legendShaderOptions: this.options.legendShaderOptions,
     });
     const hideInactive = this.hideInactiveShaderControls.value;
-    const activeControls = this.state.activeControls.value;
+    const activeControls = this.state.activeControls.hint.value;
     let hiddenCount = 0;
     for (const name of this.state.state.keys()) {
       // Skip when the user has opted in and we have a known active set
-      // (computed from the last linked shader) that does not include `name`.
+      // (computed from the drawn shaders) that does not include `name`.
       // `activeControls === undefined` means we haven't rendered yet; show
       // everything in that case to avoid hiding controls prematurely.
       if (

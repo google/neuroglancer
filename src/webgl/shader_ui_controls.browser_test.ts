@@ -15,8 +15,12 @@
  */
 
 import { expect, describe, it } from "vitest";
-import { constantWatchableValue } from "#src/trackable_value.js";
+import {
+  constantWatchableValue,
+  TrackableValue,
+} from "#src/trackable_value.js";
 import { DataType } from "#src/util/data_type.js";
+import { RefCounted } from "#src/util/disposable.js";
 import { vec3, vec4 } from "#src/util/geom.js";
 import { defaultDataTypeRange } from "#src/util/lerp.js";
 import { glsl_string } from "#src/webgl/shader_lib.js";
@@ -1544,5 +1548,137 @@ uint getDataValue() {
         shaderControlState.dispose();
       }
     });
+  });
+});
+
+function makeShaderControlState(fragmentMain: string) {
+  return new ShaderControlState(
+    new TrackableValue(fragmentMain, (value) => value),
+    constantWatchableValue({
+      imageData: { dataType: DataType.FLOAT32, channelRank: 0 },
+    }),
+  );
+}
+
+function drawWithShader(
+  state: ShaderControlState,
+  attachment: RefCounted,
+  { volumeRendering = false }: { volumeRendering?: boolean } = {},
+) {
+  fragmentShaderTest({}, { outputValue: "float" }, (tester) => {
+    const parseResult = state.parseResult.value;
+    tester.builder.addFragmentCode(
+      `#define VOLUME_RENDERING ${volumeRendering}\n`,
+    );
+    tester.builder.addFragmentCode("float getDataValue() { return 0.5; }\n");
+    addControlsToBuilder(state.builderState.value, tester.builder);
+    tester.builder.setFragmentMainFunction(parseResult.code);
+    tester.build();
+    tester.shader.bind();
+    setControlsInShader(tester.gl, tester.shader, state, parseResult);
+    state.activeControls.trackShader(
+      {
+        shader: tester.shader,
+        parameters: state.builderState.value,
+        fallback: false,
+      },
+      attachment,
+    );
+  });
+}
+
+describe("ShaderControlState.activeControls", () => {
+  it("shows only the controls a compiled shader reads", () => {
+    const attachment = new RefCounted();
+    const state = makeShaderControlState(`
+#uicontrol invlerp contrast
+#uicontrol transferFunction tf
+#uicontrol vec3 color color
+void main() {
+  outputValue = contrast() + tf().a;
+}
+`);
+    drawWithShader(state, attachment);
+    expect(state.activeControls.hint.value).toEqual(
+      new Set(["contrast", "tf"]),
+    );
+  });
+
+  it("stays unchanged while the slice view and volume rendering shaders draw in turn", () => {
+    const attachment = new RefCounted();
+    const state = makeShaderControlState(`
+#uicontrol invlerp contrast
+#uicontrol transferFunction tf
+#uicontrol vec3 color color
+void main() {
+  if (VOLUME_RENDERING) {
+    outputValue = tf().a;
+  } else {
+    outputValue = color.r * contrast();
+  }
+}
+`);
+    drawWithShader(state, attachment, { volumeRendering: false });
+    drawWithShader(state, attachment, { volumeRendering: true });
+    let changeCount = 0;
+    state.activeControls.hint.changed.add(() => ++changeCount);
+    for (let frame = 0; frame < 3; ++frame) {
+      drawWithShader(state, attachment, { volumeRendering: false });
+      drawWithShader(state, attachment, { volumeRendering: true });
+    }
+    expect(changeCount).toBe(0);
+  });
+
+  it("hides a control whose name begins another control's name", () => {
+    const attachment = new RefCounted();
+    const state = makeShaderControlState(`
+#uicontrol invlerp c
+#uicontrol invlerp ca
+void main() {
+  outputValue = ca();
+}
+`);
+    drawWithShader(state, attachment);
+    expect(state.activeControls.hint.value).toEqual(new Set(["ca"]));
+  });
+
+  it("forgets controls that only the previous shader text used", () => {
+    const attachment = new RefCounted();
+    const state = makeShaderControlState(`
+#uicontrol transferFunction tf
+void main() {
+  outputValue = tf().a;
+}
+`);
+    drawWithShader(state, attachment);
+    state.fragmentMain.value = `
+#uicontrol vec3 color color
+void main() {
+  outputValue = color.r;
+}
+`;
+    drawWithShader(state, attachment);
+    expect(state.activeControls.hint.value).toEqual(new Set(["color"]));
+  });
+
+  it("hides a control again when a checkbox turns off its branch", () => {
+    const attachment = new RefCounted();
+    const state = makeShaderControlState(`
+#uicontrol bool useColor checkbox(default=true)
+#uicontrol vec3 color color
+void main() {
+  outputValue = 0.0;
+  if (useColor) {
+    outputValue = color.r;
+  }
+}
+`);
+    drawWithShader(state, attachment);
+    expect(state.activeControls.hint.value).toEqual(
+      new Set(["useColor", "color"]),
+    );
+    state.state.get("useColor")!.trackable.value = false;
+    drawWithShader(state, attachment);
+    expect(state.activeControls.hint.value).toEqual(new Set(["useColor"]));
   });
 });

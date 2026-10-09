@@ -15,6 +15,9 @@
 
 import neuroglancer
 import numpy as np
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.wait import WebDriverWait
 
 
 def test_invlerp(webdriver):
@@ -184,3 +187,79 @@ void main() {
             "color": 0,
         }
     expect_color([0, 0, 0, 255])
+
+
+def read_hidden_count(driver):
+    return driver.find_element(
+        By.CSS_SELECTOR, ".neuroglancer-shader-controls-hidden-count"
+    ).text
+
+
+def expect_hidden_count(webdriver, text):
+    webdriver.sync()
+    try:
+        WebDriverWait(
+            webdriver.driver, 5, ignored_exceptions=[NoSuchElementException]
+        ).until(lambda driver: read_hidden_count(driver) == text)
+    except TimeoutException:
+        assert read_hidden_count(webdriver.driver) == text
+
+
+def test_hidden_controls_follow_the_shaders_that_draw(webdriver):
+    with webdriver.viewer.txn() as s:
+        s.dimensions = neuroglancer.CoordinateSpace(
+            names=["x", "y", "z"], units="nm", scales=[1, 1, 1]
+        )
+        s.layers.append(
+            name="image",
+            layer=neuroglancer.ImageLayer(
+                source=neuroglancer.LocalVolume(
+                    dimensions=s.dimensions,
+                    data=np.full(shape=(4, 4, 4), dtype=np.uint8, fill_value=42),
+                ),
+                volume_rendering_mode="On",
+                hide_inactive_shader_controls=True,
+                tab="rendering",
+                shader="""
+#uicontrol invlerp contrast
+#uicontrol transferFunction tf
+#uicontrol vec3 sliceTint color
+#uicontrol float sliceGain slider(min=0, max=2, default=1)
+void main() {
+  if (VOLUME_RENDERING) {
+    emitRGBA(tf() * contrast());
+  } else {
+    emitRGB(sliceTint * sliceGain * contrast());
+  }
+}
+""",
+            ),
+        )
+        s.selected_layer.layer = "image"
+        s.selected_layer.visible = True
+        s.layout = "4panel"
+
+    def click_layout_button(layout):
+        webdriver.driver.find_element(
+            By.CSS_SELECTOR, f'button[title="Switch to {layout} layout."]'
+        ).click()
+
+    def set_volume_rendering_mode(mode):
+        with webdriver.viewer.txn() as s:
+            s.layers["image"].volume_rendering_mode = mode
+
+    expect_hidden_count(webdriver, "")
+    # Only the volume rendering shader draws: sliceTint and sliceGain hide.
+    click_layout_button("3d")
+    expect_hidden_count(webdriver, "(2 hidden)")
+    click_layout_button("4panel-alt")
+    expect_hidden_count(webdriver, "")
+    # Only the slice shader draws: tf hides.
+    click_layout_button("xy")
+    expect_hidden_count(webdriver, "(1 hidden)")
+    click_layout_button("4panel-alt")
+    expect_hidden_count(webdriver, "")
+    set_volume_rendering_mode("Off")
+    expect_hidden_count(webdriver, "(1 hidden)")
+    set_volume_rendering_mode("On")
+    expect_hidden_count(webdriver, "")
