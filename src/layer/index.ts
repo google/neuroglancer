@@ -38,7 +38,10 @@ import type {
 } from "#src/datasource/index.js";
 import { makeEmptyDataSourceSpecification } from "#src/datasource/index.js";
 import type { DisplayContext, RenderedPanel } from "#src/display_context.js";
-import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
+import type {
+  LayerDataSourceChangeRuntimeDisposalContext,
+  LoadedDataSubsource,
+} from "#src/layer/layer_data_source.js";
 import {
   LayerDataSource,
   layerDataSourceSpecificationFromJson,
@@ -63,6 +66,7 @@ import type {
   RenderLayerRole,
   VisibilityTrackedRenderLayer,
 } from "#src/renderlayer.js";
+import type { SpatialSkeletonSourceState } from "#src/skeleton/api.js";
 import type { VolumeType } from "#src/sliceview/volume/base.js";
 import { StatusMessage } from "#src/status.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
@@ -85,6 +89,7 @@ import { LayerToolBinder, SelectedLegacyTool } from "#src/ui/tool.js";
 import { gatherUpdate } from "#src/util/array.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { invokeDisposers, RefCounted } from "#src/util/disposable.js";
+import { formatErrorMessage } from "#src/util/error.js";
 import {
   emptyToUndefined,
   parseArray,
@@ -142,6 +147,7 @@ export interface UserLayerSelectionState {
   annotationSubsource: string | undefined;
   annotationSubsubsourceId: string | undefined;
   annotationPartIndex: number | undefined;
+  nodeId: string | undefined;
 
   value: any;
 }
@@ -191,7 +197,7 @@ export class UserLayer extends RefCounted {
 
   pick = new TrackableBoolean(true, true);
 
-  selectionState: UserLayerSelectionState;
+  selectionState!: UserLayerSelectionState;
 
   messages = new MessageList();
 
@@ -222,12 +228,14 @@ export class UserLayer extends RefCounted {
     state.annotationPartIndex = undefined;
     state.annotationInstanceIndex = undefined;
     state.annotationInstanceCount = undefined;
+    state.nodeId = undefined;
     state.value = undefined;
   }
 
   resetSelectionState(state: this["selectionState"]) {
     state.localPositionValid = false;
     state.annotationId = undefined;
+    state.nodeId = undefined;
     state.value = undefined;
   }
 
@@ -276,6 +284,7 @@ export class UserLayer extends RefCounted {
         verifyString,
       );
     }
+    state.nodeId = verifyOptionalObjectProperty(json, "nodeId", verifyString);
 
     state.value = json.value;
   }
@@ -306,6 +315,9 @@ export class UserLayer extends RefCounted {
       json.annotationPart = state.annotationPartIndex;
       json.annotationSource = state.annotationSourceIndex;
       json.annotationSubsource = state.annotationSubsource;
+    }
+    if (state.nodeId !== undefined) {
+      json.nodeId = state.nodeId;
     }
     if (state.value != null) {
       json.value = state.value;
@@ -353,6 +365,7 @@ export class UserLayer extends RefCounted {
     dest.annotationSourceIndex = source.annotationSourceIndex;
     dest.annotationSubsource = source.annotationSubsource;
     dest.annotationPartIndex = source.annotationPartIndex;
+    dest.nodeId = source.nodeId;
     dest.value = source.value;
   }
 
@@ -417,6 +430,14 @@ export class UserLayer extends RefCounted {
   // Should be overridden by derived classes.
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>): void {
     subsources;
+  }
+
+  // Derived classes may override to clear layer-owned runtime state for active
+  // datasources that explicitly request cleanup on source change.
+  disposeLayerRuntimeStateForDataSourceChange(
+    _context: LayerDataSourceChangeRuntimeDisposalContext,
+  ) {
+    return false;
   }
 
   updateDataSubsourceActivations() {
@@ -606,6 +627,12 @@ export class UserLayer extends RefCounted {
 
   transformPickedValue(value: any) {
     return value;
+  }
+
+  getMissingAnnotationToolMessage(): string {
+    return `The selected layer (${JSON.stringify(
+      this.managedLayer.name,
+    )}) does not have an active annotation tool.`;
   }
 
   toJSON(): any {
@@ -1115,10 +1142,18 @@ export class LayerManager extends RefCounted {
   }
 }
 
+export interface PickedSpatialSkeletonState {
+  nodeId?: number;
+  segmentId?: number;
+  position?: Float32Array;
+  sourceState?: SpatialSkeletonSourceState;
+}
+
 export interface PickState {
   pickedRenderLayer: RenderLayer | null;
   pickedValue: bigint;
   pickedOffset: number;
+  pickedSpatialSkeleton: PickedSpatialSkeletonState | undefined;
   pickedAnnotationLayer: AnnotationLayerState | undefined;
   pickedAnnotationId: string | undefined;
   pickedAnnotationBuffer: ArrayBuffer | undefined;
@@ -1140,6 +1175,7 @@ export class MouseSelectionState implements PickState {
   pickedRenderLayer: RenderLayer | null = null;
   pickedValue = 0n;
   pickedOffset = 0;
+  pickedSpatialSkeleton: PickedSpatialSkeletonState | undefined = undefined;
   pickedAnnotationLayer: AnnotationLayerState | undefined = undefined;
   pickedAnnotationId: string | undefined = undefined;
   pickedAnnotationBuffer: ArrayBuffer | undefined = undefined;
@@ -1384,6 +1420,7 @@ export class TrackableDataSelectionState
     userLayer: Borrowed<T>,
     capture: (state: T["selectionState"]) => boolean,
     pin: boolean | "toggle" | "force-unpin" = true,
+    options: { position?: ArrayLike<number> } = {},
   ) {
     if (pin === false && (!this.location.visible || this.pin.value)) return;
     const state = {} as UserLayerSelectionState;
@@ -1400,7 +1437,10 @@ export class TrackableDataSelectionState
       this.value = {
         layers: [{ layer: userLayer, state }],
         coordinateSpace: this.coordinateSpace.value,
-        position: undefined,
+        position:
+          options.position === undefined
+            ? undefined
+            : new Float32Array(options.position),
       };
     }
   }
@@ -2216,10 +2256,7 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
         managedLayer.dispose();
         const msg = new StatusMessage();
         msg.setErrorMessage(
-          `Error creating layer ${JSON.stringify(name)}: ` +
-            (e instanceof Error)
-            ? e.message
-            : "" + e,
+          `Error creating layer ${JSON.stringify(name)}: ${formatErrorMessage(e)}`,
         );
       }
     }
@@ -2229,10 +2266,7 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
       } catch (e) {
         const msg = new StatusMessage();
         msg.setErrorMessage(
-          `Error creating layer ${JSON.stringify(name)}: ` +
-            (e instanceof Error)
-            ? e.message
-            : "" + e,
+          `Error creating layer ${JSON.stringify(name)}: ${formatErrorMessage(e)}`,
         );
       }
     }

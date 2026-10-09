@@ -12,6 +12,7 @@ Topics
   to segmentation layers.
 - :doc:`annotation_shaders` — writing custom GLSL shader code to drive
   the visual appearance of annotations from their properties.
+- :doc:`skeleton_editing` — editing skeletons and navigating skeleton trees.
 
 .. toctree::
    :hidden:
@@ -19,3 +20,4 @@ Topics
    navigation
    annotations
    annotation_shaders
+   skeleton_editing

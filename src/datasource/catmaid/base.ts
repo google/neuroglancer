@@ -1,0 +1,78 @@
+/**
+ * @license
+ * Copyright 2026 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import type { CredentialsProvider } from "#src/credentials_provider/index.js";
+import type { CatmaidToken } from "#src/datasource/catmaid/api.js";
+import { CatmaidClient } from "#src/datasource/catmaid/api.js";
+
+export class CatmaidDataSourceParameters {
+  url!: string;
+  projectId!: number;
+  cacheProvider?: string;
+  readonly = true;
+}
+
+export class CatmaidSkeletonSourceParameters {
+  catmaidParameters!: CatmaidDataSourceParameters;
+  gridIndex?: number;
+  catmaidLod?: number;
+  static RPC_ID = "catmaid/SkeletonSource";
+}
+
+export function getCatmaidLodForSpatialIndexLevel(
+  gridIndex: number,
+  gridLevelCount: number,
+) {
+  const lastGridIndex = gridLevelCount - 1;
+  return lastGridIndex === 0 ? 1 : gridIndex / lastGridIndex;
+}
+
+export function parseCatmaidUrl(providerUrl: string): {
+  baseUrl: string;
+  projectId: number;
+} {
+  const schemePrefix = "catmaid://";
+  const urlWithoutScheme = providerUrl.startsWith(schemePrefix)
+    ? providerUrl.substring(schemePrefix.length)
+    : providerUrl;
+
+  const lastSlash = urlWithoutScheme.lastIndexOf("/");
+  if (lastSlash === -1 || !/^[a-z]+:\/\//.test(urlWithoutScheme)) {
+    throw new Error(
+      `Invalid CATMAID URL ${JSON.stringify(providerUrl)}: expected catmaid://<protocol>://<base_url>/<project_id>`,
+    );
+  }
+
+  const projectIdText = urlWithoutScheme.substring(lastSlash + 1);
+  const projectId = parseInt(projectIdText);
+  if (isNaN(projectId)) {
+    throw new Error(`Invalid project ID: ${projectIdText}`);
+  }
+
+  const baseUrl = urlWithoutScheme.substring(0, lastSlash).replace(/\/+$/, "");
+  return { baseUrl, projectId };
+}
+
+export function makeCatmaidClient(
+  parameters: CatmaidDataSourceParameters,
+  credentialsProvider?: CredentialsProvider<CatmaidToken>,
+) {
+  return new CatmaidClient(
+    parameters.url,
+    parameters.projectId,
+    credentialsProvider,
+  );
+}

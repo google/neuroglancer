@@ -18,6 +18,7 @@ from __future__ import annotations
 import collections
 import collections.abc
 import copy
+import enum
 import math
 import numbers
 import os
@@ -647,6 +648,16 @@ def _linked_segmentation_color_group_value(x):
 
 
 @export
+class SkeletonNodeFilterType(enum.StrEnum):
+    DEFAULT = "default"
+    NONE = "none"
+    LEAF = "leaf"
+    VIRTUAL_END = "virtual_end"
+    TRUE_END = "true_end"
+    HAS_DESCRIPTION = "has_description"
+
+
+@export
 class SkeletonRenderingOptions(JsonObjectWrapper):
     __slots__ = ()
 
@@ -982,6 +993,21 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
         "meshSilhouetteRendering", optional(float, 0)
     )
     segment_query = segmentQuery = wrapped_property("segmentQuery", optional(str))
+    skeleton_node_query = skeletonNodeQuery = wrapped_property(
+        "skeletonNodeQuery", optional(str, "")
+    )
+    skeleton_node_filter = skeletonNodeFilter = wrapped_property(
+        "skeletonNodeFilter", optional(SkeletonNodeFilterType)
+    )
+    hidden_object_alpha = hiddenObjectAlpha = wrapped_property(
+        "hiddenObjectAlpha", optional(float, 0.5)
+    )
+    skeleton_cross_section_spacing = skeletonCrossSectionSpacing = wrapped_property(
+        "skeletonCrossSectionSpacing", optional(float, 1)
+    )
+    skeleton_perspective_spacing = skeletonPerspectiveSpacing = wrapped_property(
+        "skeletonPerspectiveSpacing", optional(float, 1)
+    )
     segment_colors = segmentColors = wrapped_property(
         "segmentColors", typed_map(key_type=np.uint64, value_type=str)
     )
@@ -1859,6 +1885,7 @@ class LayerSelectionState(JsonObjectWrapper):
     annotation_subsource = annotationSubsource = wrapped_property(
         "annotationSubsource", optional(str)
     )
+    node_id = nodeId = wrapped_property("nodeId", optional(str))
 
 
 if typing.TYPE_CHECKING or _BUILDING_DOCS:
