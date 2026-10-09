@@ -16,61 +16,41 @@
 
 .neuroglancer-skeleton-tool-status {
   display: flex;
-  flex: 1;
   align-items: center;
   gap: 0.75rem;
   min-width: 0;
-
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: #999ca0;
 }
 
-/* margin-left: auto consumes all remaining space on the main axis before
-   justify-content is applied, so the actions list is pushed to the far
-   right regardless of the status text's width or the parent's
-   justify-content (neuroglass-theme.css sets justify-content: flex-end on
-  display: flex;
+.neuroglancer-skeleton-tool-status-text {
   flex: 0 1 auto;
-  align-items: center;
-  gap: 1rem;
-  margin-left: auto;
   min-width: 0;
-  overflow: hidden;
-  color: #999ca0;
-  font-size: 0.8125rem;
-  line-height: 1.25rem;
-  text-align: right;
-.neuroglancer-skeleton-tool-shortcut {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex: 0 0 auto;
-  white-space: nowrap;
 }
 
-.neuroglancer-skeleton-tool-shortcut-label {
-  color: #fff;
+/* A zero basis lets the status text keep its width while the actions wrap. */
+.neuroglancer-skeleton-tool-status-actions {
+  display: flex;
+  flex: 1 1 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  min-width: min-content;
 }
 
-.neuroglancer-skeleton-tool-shortcut-combo {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px 4px;
-  border-radius: 0.25rem;
-  background: #333;
-  font-size: 0.75rem;
-  color: #999CA0;
-  line-height: 1rem;
+.neuroglancer-icon.neuroglancer-skeleton-tool-shortcut-icon {
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  margin: 0 0.25em;
+  color: inherit;
+  vertical-align: middle;
 }
 
-.neuroglancer-skeleton-tool-shortcut-icon {
-  display: inline-flex;
-  align-items: center;
-  min-width: 1rem !important;
-  max-height: 1rem;
-  min-height: 1rem;
+.neuroglancer-icon.neuroglancer-skeleton-tool-shortcut-icon svg {
+  width: 1em;
+  height: 1em;
+  fill: currentColor;
+  stroke: none;
 }
 
 .neuroglancer-skeleton-find-path-status {

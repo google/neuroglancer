@@ -209,7 +209,88 @@ function makeToolActivation() {
       }
     }
   };
-  return { activation, actions, dispose };
+  const readStatusElement = () =>
+    disposers.find((disposer) => disposer instanceof StatusMessage)!.element;
+  return { activation, actions, dispose, readStatusElement };
+}
+
+function makeEditToolHarness() {
+  const layer = {
+    displayState: {
+      ...makeSkeletonRenderingOptions(),
+      segmentationGroupState: { value: makeVisibleSegmentsState([11n]) },
+    },
+    spatialSkeletonEditMode: makeModeWatchable(),
+    spatialSkeletonMergeMode: makeModeWatchable(),
+    spatialSkeletonSplitMode: makeModeWatchable(),
+    spatialSkeletonSuppressSelectedNodeHighlight: makeModeWatchable(),
+    selectedSpatialSkeletonNodeInfo: {
+      value: undefined,
+      changed: makeChangedSignal(),
+    },
+    spatialSkeletonState: {
+      mergeAnchorNodeId: { value: undefined, changed: makeChangedSignal() },
+      getCachedNode: vi.fn(),
+      commandHistory: new SpatialSkeletonCommandHistory(),
+      clearPendingNodePositions: vi.fn(),
+    },
+    manager: {
+      root: {
+        layerSelectedValues: {
+          mouseState: {
+            pickedRenderLayer: undefined,
+            pickedSpatialSkeleton: undefined,
+            updateUnconditionally: vi.fn(() => true),
+            active: true,
+          },
+        },
+        selectionState: { value: undefined, changed: makeChangedSignal() },
+        display: { panels: [] },
+      },
+    },
+    getSpatiallyIndexedSkeletonLayer: () => ({ getNode: vi.fn() }),
+    getSpatialSkeletonActionsDisabledReason: vi.fn(() => undefined),
+    clearSpatialSkeletonMergeAnchor: vi.fn(),
+    clearSpatialSkeletonNodeSelection: vi.fn(),
+    layersChanged: makeChangedSignal(),
+  };
+  const { activation, actions, dispose, readStatusElement } =
+    makeToolActivation();
+  const tool = Object.assign(Object.create(SpatialSkeletonEditTool.prototype), {
+    layer,
+  });
+  SpatialSkeletonEditTool.prototype.activate.call(tool, activation as any);
+  return { layer, actions, dispose, statusMessage: readStatusElement() };
+}
+
+function readFullText(element: HTMLElement) {
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  const words: string[] = [];
+  while (walker.nextNode()) {
+    const text = walker.currentNode.textContent!.replace(/\s+/g, " ").trim();
+    if (text !== "") words.push(text);
+  }
+  return words.join(" ");
+}
+
+function readStatusText(statusMessage: HTMLElement) {
+  return statusMessage.querySelector(".neuroglancer-skeleton-tool-status-text")
+    ?.textContent;
+}
+
+function readHints(statusMessage: HTMLElement) {
+  return Array.from(
+    statusMessage.querySelectorAll(".neuroglancer-annotation-entry-tool-chip"),
+    (chip) => ({
+      key: chip
+        .querySelector(".neuroglancer-annotation-entry-tool-chip-key")
+        ?.textContent?.replace(/\s+/g, " ")
+        .trim(),
+      label: chip.querySelector(
+        ".neuroglancer-annotation-entry-tool-chip-label",
+      )?.textContent,
+    }),
+  );
 }
 
 function makeFindPathActionEvent() {
@@ -324,7 +405,8 @@ function makeFindPathToolHarness(
     getSpatialSkeletonActionsDisabledReason,
     layersChanged: makeChangedSignal(),
   };
-  const { activation, actions, dispose } = makeToolActivation();
+  const { activation, actions, dispose, readStatusElement } =
+    makeToolActivation();
   const tool = Object.assign(
     Object.create(SpatialSkeletonFindPathTool.prototype),
     {
@@ -358,6 +440,7 @@ function makeFindPathToolHarness(
     mouseState,
     nodeDataVersion,
     pickNode,
+    readStatusElement,
     skeletonLayer,
     secondSkeletonLayer,
     state,
@@ -863,6 +946,74 @@ describe("spatial_skeleton_edit_tool", () => {
     );
     expect(clearSpatialSkeletonMergeAnchor).toHaveBeenCalledTimes(1);
     expect(unpin).not.toHaveBeenCalled();
+  });
+
+  it("shows shortcut hints in place of the generic bindings line", () => {
+    suppressStatusMessages();
+    const harness = makeEditToolHarness();
+    try {
+      expect(readFullText(harness.statusMessage)).toBe(
+        "Skeleton editing No selection" +
+          " click Select drag Move" +
+          " hold + m Merge hold + i Insert hold + s Split" +
+          " hold + n New skeleton hold + d Delete" +
+          " middle click / ctrl click Rotate/pan",
+      );
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  it("shows the bound merge key in the Merge hint", () => {
+    suppressStatusMessages();
+    const harness = makeEditToolHarness();
+    try {
+      expect(readHints(harness.statusMessage)).toContainEqual({
+        key: "hold + m",
+        label: "Merge",
+      });
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  it("ends merge mode when the key named in its release hint is released", () => {
+    suppressStatusMessages();
+    const harness = makeEditToolHarness();
+    try {
+      window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyM" }));
+      harness.actions.get(SKELETON_ENTER_MERGE_MODE)?.({});
+      expect(readHints(harness.statusMessage)).toContainEqual({
+        key: "release + m",
+        label: "Exit merge",
+      });
+
+      window.dispatchEvent(new KeyboardEvent("keyup", { code: "KeyM" }));
+
+      expect(harness.layer.spatialSkeletonMergeMode.value).toBe(false);
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  it("updates the status and the hints when merge mode starts", () => {
+    suppressStatusMessages();
+    const harness = makeEditToolHarness();
+    try {
+      expect(readStatusText(harness.statusMessage)).toBe("No selection");
+
+      harness.actions.get(SKELETON_ENTER_MERGE_MODE)?.({});
+
+      expect(readStatusText(harness.statusMessage)).toBe(
+        "Merge · click a node to merge from",
+      );
+      expect(readHints(harness.statusMessage)).toEqual([
+        { key: "click", label: "Select" },
+        { key: "middle click / ctrl click", label: "Rotate/pan" },
+      ]);
+    } finally {
+      harness.dispose();
+    }
   });
 
   it("enters merge mode without selecting a node or setting an anchor", () => {
@@ -1682,6 +1833,18 @@ describe("spatial_skeleton_edit_tool", () => {
     expect(bindings.get("at:mousedown1")?.action).toBe("rotate-via-mouse-drag");
   });
 
+  it("shows no generic bindings line in the Find Path status", () => {
+    suppressStatusMessages();
+    const harness = makeFindPathToolHarness();
+    try {
+      expect(readFullText(harness.readStatusElement())).toBe(
+        "Find Path Clear Left-click the source node.",
+      );
+    } finally {
+      harness.dispose();
+    }
+  });
+
   it("describes Find Path endpoints using their derived topology type", () => {
     const nodes = [
       makeFindPathNode(1),
@@ -1940,11 +2103,9 @@ describe("spatial_skeleton_edit_tool", () => {
     const harness = makeFindPathToolHarness({ state });
 
     try {
-      const status = Array.from(
-        document.querySelectorAll<HTMLElement>(
-          ".neuroglancer-skeleton-find-path-message",
-        ),
-      ).at(-1);
+      const status = harness
+        .readStatusElement()
+        .querySelector(".neuroglancer-skeleton-find-path-message");
       expect(status?.textContent).toBe(
         "The selected endpoint IDs are not supported by this spatial skeleton source.",
       );
@@ -2024,11 +2185,11 @@ describe("spatial_skeleton_edit_tool", () => {
       harness.pickNode(nodes[2]);
       expect(harness.state.result).toBeDefined();
 
-      const clearButton = Array.from(
-        document.querySelectorAll<HTMLElement>('[title="Clear Find Path"]'),
-      ).at(-1);
-      expect(clearButton).toBeDefined();
-      clearButton?.click();
+      const clearButton = harness
+        .readStatusElement()
+        .querySelector<HTMLElement>('[title="Clear Find Path"]');
+      expect(clearButton).not.toBeNull();
+      clearButton!.click();
 
       expect(harness.state.source).toBeUndefined();
       expect(harness.state.target).toBeUndefined();
