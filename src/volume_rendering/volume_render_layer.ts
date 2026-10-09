@@ -755,11 +755,7 @@ gl_Position = uModelViewProjectionMatrix * vec4(position, 1.0);
       VolumeRenderingAttachmentState
     >,
   ) {
-    if (
-      !renderContext.emitColor ||
-      this.mode.value === VolumeRenderingModes.OFF
-    )
-      return;
+    if (!renderContext.emitColor) return;
     const allSources = attachment.state!.sources.value;
     if (allSources.length === 0) return;
     let curPhysicalSpacing = 0;
@@ -925,6 +921,10 @@ gl_Position = uModelViewProjectionMatrix * vec4(position, 1.0);
           if (shader !== null) {
             shader.bind();
             if (chunkFormat !== null) {
+              this.shaderControlState.activeControls.trackShader(
+                shaderResult,
+                attachment,
+              );
               setControlsInShader(
                 gl,
                 shader,
@@ -1120,6 +1120,10 @@ gl_Position = uModelViewProjectionMatrix * vec4(position, 1.0);
           if (shader !== null && shaderSetupUniforms !== undefined) {
             shader.bind();
             if (chunkFormat !== null && chunkFormat !== undefined) {
+              this.shaderControlState.activeControls.trackShader(
+                shaderResult,
+                attachment,
+              );
               setControlsInShader(
                 gl,
                 shader,

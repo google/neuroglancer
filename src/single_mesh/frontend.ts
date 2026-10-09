@@ -601,6 +601,10 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensional
     const shaderManager = this.shaderManager!;
     shader.bind();
     shaderManager.beginLayer(gl, shader, renderContext);
+    this.displayState.shaderControlState.activeControls.trackShader(
+      shaderResult,
+      attachment,
+    );
     setControlsInShader(
       gl,
       shader,

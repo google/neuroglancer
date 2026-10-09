@@ -221,9 +221,6 @@ export class ImageUserLayer extends Base {
       this.specificationChanged.dispatch,
     );
     this.volumeRenderingMode.changed.add(this.specificationChanged.dispatch);
-    this.volumeRenderingMode.changed.add(() =>
-      this.shaderControlState.clearLinkedPrograms(),
-    );
     this.volumeRenderingDepthSamplesTarget.changed.add(
       this.specificationChanged.dispatch,
     );
