@@ -71,7 +71,10 @@ import {
 } from "#src/voxel_annotation/base.js";
 import type { VoxelEditingControllerHost } from "#src/voxel_annotation/frontend.js";
 import { VoxelEditingController } from "#src/voxel_annotation/frontend.js";
-import { PreviewMultiscaleSource } from "#src/voxel_annotation/preview_multiscale_chunk_source.js";
+import {
+  forEachVisiblePreviewChunk,
+  PreviewMultiscaleSource,
+} from "#src/voxel_annotation/preview_multiscale_chunk_source.js";
 
 const VOXEL_EDITING_JSON_KEY = "voxelEditing";
 const PAINT_VALUE_JSON_KEY = "paintValue";
@@ -192,6 +195,7 @@ export class VoxelEditingContext
     (
       this.previewRenderLayer as SliceViewRenderLayer
     ).getForcedSourceIndexOverride = () => 0;
+    this.previewRenderLayer.forEachVisibleChunk = forEachVisiblePreviewChunk;
 
     this.hostLayer.addRenderLayer(this.previewRenderLayer);
 

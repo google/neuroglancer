@@ -52,7 +52,6 @@ import type {
   VisibleLayerSources,
 } from "#src/sliceview/base.js";
 import {
-  forEachPlaneIntersectingVolumetricChunk,
   getNormalizedChunkLayout,
   SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID,
   SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID,
@@ -333,14 +332,11 @@ export class SliceView extends Base {
     chunkLayout: ChunkLayout,
     callback: (key: string) => void,
   ) {
-    forEachPlaneIntersectingVolumetricChunk(
-      this.projectionParameters.value,
-      tsource.renderLayer.localPosition.value,
+    tsource.renderLayer.forEachVisibleChunk(
+      this,
       tsource,
       chunkLayout,
-      () => {
-        callback(tsource.curPositionInChunks.join());
-      },
+      callback,
     );
   }
 
