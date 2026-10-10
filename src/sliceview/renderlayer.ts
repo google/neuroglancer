@@ -38,9 +38,12 @@ import type {
 } from "#src/sliceview/base.js";
 import {
   filterVisibleSources,
+  forEachPlaneIntersectingVolumetricChunk,
   SLICEVIEW_RENDERLAYER_RPC_ID,
 } from "#src/sliceview/base.js";
+import type { ChunkLayout } from "#src/sliceview/chunk_layout.js";
 import type {
+  FrontendTransformedSource,
   MultiscaleSliceViewChunkSource,
   SliceView,
   SliceViewChunkSource,
@@ -246,6 +249,23 @@ export abstract class SliceViewRenderLayer<
     sources: readonly TransformedSource[],
   ): Iterable<TransformedSource> {
     return filterVisibleSources(sliceView, this, sources);
+  }
+
+  forEachVisibleChunk(
+    sliceView: SliceView,
+    tsource: FrontendTransformedSource,
+    chunkLayout: ChunkLayout,
+    callback: (key: string) => void,
+  ) {
+    forEachPlaneIntersectingVolumetricChunk(
+      sliceView.projectionParameters.value,
+      this.localPosition.value,
+      tsource,
+      chunkLayout,
+      () => {
+        callback(tsource.curPositionInChunks.join());
+      },
+    );
   }
 }
 

@@ -958,6 +958,7 @@ export function forEachPlaneIntersectingVolumetricChunk<
   transformedSource: TransformedSource<RLayer>,
   chunkLayout: ChunkLayout,
   callback: (positionInChunks: vec3) => void,
+  candidateChunks?: Iterable<Float32Array>,
 ) {
   if (
     !updateFixedCurPositionInChunks(
@@ -1037,6 +1038,34 @@ export function forEachPlaneIntersectingVolumetricChunk<
     console.log("clippingPlanes", clippingPlanes);
     console.log("modelViewProjection", modelViewProjection.join(","));
     console.log(`lower=${lower.join(",")}, upper=${upper.join(",")}`);
+  }
+  if (candidateChunks !== undefined) {
+    // Test only the given chunk grid positions rather than walking the grid.
+    const { curPositionInChunks, chunkDisplayDimensionIndices } =
+      transformedSource;
+    for (const candidate of candidateChunks) {
+      const atFixedPosition = candidate.every(
+        (x, chunkDim) =>
+          x === curPositionInChunks[chunkDim] ||
+          chunkDisplayDimensionIndices.includes(chunkDim),
+      );
+      if (!atFixedPosition) continue;
+      for (let i = 0; i < 3; ++i) {
+        const chunkDim = chunkDisplayDimensionIndices[i];
+        lower[i] =
+          chunkDim === -1 || chunkDim >= candidate.length
+            ? 0
+            : candidate[chunkDim];
+        upper[i] = lower[i] + 1;
+      }
+      forEachVolumetricChunkWithinFrustrum(
+        clippingPlanes,
+        transformedSource,
+        callback,
+        isAABBIntersectingPlane,
+      );
+    }
+    return;
   }
   forEachVolumetricChunkWithinFrustrum(
     clippingPlanes,
