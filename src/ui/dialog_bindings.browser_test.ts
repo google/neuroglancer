@@ -16,6 +16,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ActionCommand } from "#src/ui/command.js";
+import { CommandRegistry } from "#src/ui/command_registry.js";
 import { bindScreenshotDialog } from "#src/ui/screenshot_menu.js";
 import { bindStateEditor } from "#src/ui/state_editor.js";
 import { registerActionListener } from "#src/util/event_action_map.js";
@@ -30,8 +31,14 @@ afterEach(() => {
 // The fake viewer binds an action on its element, as `Viewer.bindAction` does.
 function makeFakeViewer() {
   const element = document.createElement("div");
+  const commandRegistry = new CommandRegistry();
+  disposers.push(() => commandRegistry.dispose());
   const viewer = {
     element,
+    commandRegistry,
+    registerDisposer: (disposer: () => void) => {
+      disposers.push(disposer);
+    },
     bindAction: (action: string, handler: () => void) => {
       disposers.push(registerActionListener(element, action, handler));
     },
@@ -52,6 +59,9 @@ describe("dialog bindings", () => {
     expect(viewer.editJsonState).not.toHaveBeenCalled();
 
     bindStateEditor(viewer as unknown as Viewer);
+    expect(viewer.commandRegistry.get("edit-json-state")?.label).toBe(
+      "Edit JSON State",
+    );
     invoke("edit-json-state", viewer.element);
     expect(viewer.editJsonState).toHaveBeenCalledTimes(1);
   });
@@ -62,6 +72,7 @@ describe("dialog bindings", () => {
     expect(viewer.showScreenshotDialog).not.toHaveBeenCalled();
 
     bindScreenshotDialog(viewer as unknown as Viewer);
+    expect(viewer.commandRegistry.get("screenshot")?.label).toBe("Screenshot");
     invoke("screenshot", viewer.element);
     expect(viewer.showScreenshotDialog).toHaveBeenCalledTimes(1);
   });

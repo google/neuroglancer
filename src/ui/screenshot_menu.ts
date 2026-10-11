@@ -21,6 +21,7 @@ import svg_help from "ikonate/icons/help.svg?raw";
 import { throttle } from "lodash-es";
 import { FramedDialog } from "#src/overlay.js";
 import { StatusMessage } from "#src/status.js";
+import { ActionCommand } from "#src/ui/command.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import type {
   ScreenshotLoadStatistics,
@@ -917,5 +918,14 @@ export class ScreenshotDialog extends FramedDialog {
 }
 
 export function bindScreenshotDialog(viewer: Viewer): void {
+  viewer.registerDisposer(
+    viewer.commandRegistry.register(
+      new ActionCommand(
+        "screenshot",
+        "Screenshot",
+        "Capture a screenshot of the current view.",
+      ),
+    ),
+  );
   viewer.bindAction("screenshot", () => viewer.showScreenshotDialog());
 }

@@ -29,12 +29,12 @@ import { SidePanel } from "#src/ui/side_panel.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
+import { formatPositionText } from "#src/util/spatial_units.js";
 import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 import { makeIcon } from "#src/widget/icon.js";
 import { makeMoveToButton } from "#src/widget/move_to_button.js";
-import { formatPositionText } from "#src/widget/position_widget.js";
 
 export function isWithinSelectionPanel(element: HTMLElement) {
   return element.closest(".neuroglancer-selection-details");

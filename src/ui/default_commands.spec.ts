@@ -39,8 +39,6 @@ const DYNAMIC_ACTIONS = [
 
 // Commands that exist as viewer actions but have no default key binding.
 const UNBOUND_BY_DEFAULT = new Set<ActionIdentifier>([
-  "edit-json-state",
-  "screenshot",
   "copy-url",
   "copy-position",
   "copy-selection-position",

@@ -74,6 +74,7 @@ import {
 } from "#src/util/keyboard_bindings.js";
 import { EventActionMap, MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { formatScaleWithUnit, parseScale } from "#src/util/si_units.js";
+import { formatPositionText } from "#src/util/spatial_units.js";
 import { TrackableEnum } from "#src/util/trackable_enum.js";
 import { getWheelZoomAmount } from "#src/util/wheel_zoom.js";
 import type { Viewer } from "#src/viewer.js";
@@ -291,10 +292,6 @@ function updateScaleElementStyle(scaleElement: HTMLInputElement) {
   const { value } = scaleElement;
   updateInputFieldWidth(scaleElement);
   scaleElement.parentElement!.dataset.isEmpty = value === "" ? "true" : "false";
-}
-
-export function formatPositionText(coordinates: ArrayLike<number>): string {
-  return Array.from(coordinates, (x) => Math.floor(x)).join(", ");
 }
 
 export function copyPositionToClipboard(position: Position) {

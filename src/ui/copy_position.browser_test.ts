@@ -18,7 +18,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TrackableDataSelectionState } from "#src/layer/index.js";
 import { copySelectionPositionToClipboard } from "#src/ui/selection_details.js";
 import { setClipboard } from "#src/util/clipboard.js";
-import { formatPositionText } from "#src/widget/position_widget.js";
+import { formatPositionText } from "#src/util/spatial_units.js";
 
 vi.mock("#src/util/clipboard.js", () => ({ setClipboard: vi.fn(() => true) }));
 

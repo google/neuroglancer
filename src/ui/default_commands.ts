@@ -233,16 +233,6 @@ const STATIC_COMMANDS: readonly BuiltinCommand[] = [
   // Actions with no default key binding; before the registry the palette had to
   // special-case these to surface them at all.
   {
-    id: "edit-json-state",
-    label: "Edit JSON State",
-    description: "Open an editor for the raw viewer JSON state.",
-  },
-  {
-    id: "screenshot",
-    label: "Screenshot",
-    description: "Capture a screenshot of the current view.",
-  },
-  {
     id: "copy-url",
     label: "Copy URL",
     description: "Copy a URL of the current state to the clipboard.",
