@@ -23,8 +23,8 @@ import type {
 /** Resolve the current skeleton/node IDs required by a CATMAID queue input. */
 export function getCatmaidQueueInputRequirement(
   context: SpatialSkeletonCommandContext,
-  stableSegmentId: number | undefined,
-  stableNodeId: number | undefined,
+  stableSegmentId: bigint | undefined,
+  stableNodeId: bigint | undefined,
 ): SpatialSkeletonQueueInputRequirement | undefined {
   const segmentId =
     stableSegmentId === undefined
@@ -32,11 +32,7 @@ export function getCatmaidQueueInputRequirement(
       : (context.identities.resolveSegment(
           context.identities.getOrCreateSegmentHandle(stableSegmentId),
         ) ?? stableSegmentId);
-  if (
-    segmentId === undefined ||
-    !Number.isSafeInteger(segmentId) ||
-    segmentId <= 0
-  ) {
+  if (segmentId === undefined || segmentId === 0n) {
     return undefined;
   }
   const nodeId =
@@ -47,10 +43,7 @@ export function getCatmaidQueueInputRequirement(
         ) ?? stableNodeId);
   return {
     segmentId,
-    nodeId:
-      nodeId !== undefined && Number.isSafeInteger(nodeId) && nodeId > 0
-        ? nodeId
-        : undefined,
+    nodeId: nodeId === 0n ? undefined : nodeId,
   };
 }
 

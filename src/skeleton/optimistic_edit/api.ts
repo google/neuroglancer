@@ -141,41 +141,41 @@ export interface SpatialSkeletonOptimisticEditingContext {
  * transport boundary.
  */
 export interface SpatialSkeletonOptimisticIdentityService {
-  getOrCreateNodeHandle(nodeId: number): SpatialSkeletonLogicalNodeHandle;
+  getOrCreateNodeHandle(nodeId: bigint): SpatialSkeletonLogicalNodeHandle;
   getOrCreateNodeHandles(
-    nodeIds: readonly number[],
-  ): ReadonlyMap<number, SpatialSkeletonLogicalNodeHandle>;
+    nodeIds: readonly bigint[],
+  ): ReadonlyMap<bigint, SpatialSkeletonLogicalNodeHandle>;
   getOrCreateSegmentHandle(
-    segmentId: number,
+    segmentId: bigint,
   ): SpatialSkeletonLogicalSegmentHandle;
-  resolveNode(handle: SpatialSkeletonLogicalNodeHandle): number | undefined;
+  resolveNode(handle: SpatialSkeletonLogicalNodeHandle): bigint | undefined;
   resolveSegment(
     handle: SpatialSkeletonLogicalSegmentHandle,
-  ): number | undefined;
+  ): bigint | undefined;
   resolveAuthoritativeNode(
     handle: SpatialSkeletonLogicalNodeHandle,
-  ): number | undefined;
+  ): bigint | undefined;
   resolveAuthoritativeSegment(
     handle: SpatialSkeletonLogicalSegmentHandle,
-  ): number | undefined;
+  ): bigint | undefined;
   resolveNodeTarget(
     handle: SpatialSkeletonLogicalNodeHandle,
-  ): SpatialSkeletonLogicalHandleMappingResolution<number>;
+  ): SpatialSkeletonLogicalHandleMappingResolution<bigint>;
   resolveSegmentTarget(
     handle: SpatialSkeletonLogicalSegmentHandle,
-  ): SpatialSkeletonLogicalHandleMappingResolution<number>;
+  ): SpatialSkeletonLogicalHandleMappingResolution<bigint>;
 }
 
-/** Optional datasource policy for locally-presented positive numeric ids. */
+/** Optional datasource policy for locally-presented nonzero ids. */
 export interface SpatialSkeletonProvisionalNumericIdPolicy {
-  allocateNodeId(intentId: number): number;
-  allocateSegmentId(intentId: number): number;
+  allocateNodeId(intentId: number): bigint;
+  allocateSegmentId(intentId: number): bigint;
 }
 
 /** Facade captured by a driver and configured by its registration. */
 export interface SpatialSkeletonProvisionalNumericIdService {
-  allocateNodeId(intentId: number): number;
-  allocateSegmentId(intentId: number): number;
+  allocateNodeId(intentId: number): bigint;
+  allocateSegmentId(intentId: number): bigint;
 }
 
 /**

@@ -17,20 +17,20 @@ import type { SpatialSkeletonProjectionNodeAttributes } from "#src/skeleton/spat
 
 export interface CatmaidCapturedSegment {
   readonly segment: SpatialSkeletonLogicalSegmentHandle;
-  readonly physicalId: number;
+  readonly physicalId: bigint;
   readonly snapshot: CompleteSkeletonSnapshotHandle;
   readonly cacheRevision: number;
 }
 
 /** A logical node together with the physical ID captured for its recipe. */
 export interface CatmaidRetainedNode extends SpatialSkeletonLogicalNodeHandle {
-  readonly capturedNodeId: number;
+  readonly capturedNodeId: bigint;
   readonly handle: SpatialSkeletonLogicalNodeHandle;
 }
 
 export interface CatmaidSemanticBase {
   readonly capturedSegments: readonly CatmaidCapturedSegment[];
-  readonly retainedNodes: ReadonlyMap<number, CatmaidRetainedNode>;
+  readonly retainedNodes: ReadonlyMap<bigint, CatmaidRetainedNode>;
 }
 
 export interface CatmaidCreatedNodeSemantic extends CatmaidSemanticBase {
@@ -177,8 +177,8 @@ type CatmaidWorkflowFor<TSemantic extends CatmaidSemanticRecipe> =
 /** Discriminated immutable CATMAID workflow recipe. */
 export type CatmaidWorkflow = CatmaidWorkflowFor<CatmaidSemanticRecipe>;
 
-export function requirePositiveId(value: number | undefined, label: string) {
-  if (value === undefined || !Number.isSafeInteger(value) || value <= 0) {
+export function requirePositiveId(value: bigint | undefined, label: string) {
+  if (value === undefined || value === 0n) {
     throw new Error(`CATMAID ${label} has no authoritative numeric id.`);
   }
   return value;

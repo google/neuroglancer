@@ -26,47 +26,47 @@ import type { SpatialSkeletonVector } from "#src/skeleton/api.js";
 // CATMAID owns these payloads; the generic skeleton API only promises named edit operations.
 export interface CatmaidSpatialSkeletonAddNodeRequest {
   position: SpatialSkeletonVector;
-  parentNodeId?: number;
+  parentNodeId?: bigint;
 }
 
 export type CatmaidSpatialSkeletonAddNodeResult = CatmaidAddNodeResult;
 
 export interface CatmaidSpatialSkeletonInsertNodeRequest {
   position: SpatialSkeletonVector;
-  parentNodeId: number;
-  childNodeIds: readonly number[];
+  parentNodeId: bigint;
+  childNodeIds: readonly bigint[];
 }
 
 export type CatmaidSpatialSkeletonInsertNodeResult = CatmaidInsertNodeResult;
 
 export interface CatmaidSpatialSkeletonMoveNodeRequest {
-  nodeId: number;
+  nodeId: bigint;
   position: SpatialSkeletonVector;
 }
 
 export interface CatmaidSpatialSkeletonDeleteNodeRequest {
-  nodeId: number;
+  nodeId: bigint;
 }
 
 export interface CatmaidSpatialSkeletonSplitRequest {
-  nodeId: number;
+  nodeId: bigint;
 }
 
 export type CatmaidSpatialSkeletonSplitResult = CatmaidSplitResult;
 
 export interface CatmaidSpatialSkeletonMergeRequest {
-  fromNodeId: number;
-  toNodeId: number;
+  fromNodeId: bigint;
+  toNodeId: bigint;
 }
 
 export type CatmaidSpatialSkeletonMergeResult = CatmaidMergeResult;
 
 export interface CatmaidSpatialSkeletonRerootRequest {
-  nodeId: number;
+  nodeId: bigint;
 }
 
 export interface CatmaidSpatialSkeletonDescriptionUpdateRequest {
-  nodeId: number;
+  nodeId: bigint;
   description: string;
   isTrueEnd: boolean;
 }
@@ -75,16 +75,16 @@ export type CatmaidSpatialSkeletonDescriptionUpdateResult =
   CatmaidDescriptionUpdateResult;
 
 export interface CatmaidSpatialSkeletonTrueEndUpdateRequest {
-  nodeId: number;
+  nodeId: bigint;
   isTrueEnd: boolean;
 }
 
 export interface CatmaidSpatialSkeletonRadiusUpdateRequest {
-  nodeId: number;
+  nodeId: bigint;
   radius: number;
 }
 
 export interface CatmaidSpatialSkeletonConfidenceUpdateRequest {
-  nodeId: number;
+  nodeId: bigint;
   confidence: number;
 }

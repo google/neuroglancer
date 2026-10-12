@@ -65,17 +65,25 @@ export interface SkeletonDataSourceStateJson {
   findPath?: SkeletonFindPathStateJson;
 }
 
+function parseSkeletonId(value: unknown): bigint {
+  const id = parseUint64(value);
+  if (id === 0n) {
+    throw new Error("Expected a nonzero ID, but received 0.");
+  }
+  return id;
+}
+
 function restoreEndpoint(value: unknown): SkeletonFindPathEndpoint {
   return {
-    nodeId: verifyObjectProperty(value, "nodeId", parseUint64),
-    segmentId: verifyObjectProperty(value, "segmentId", parseUint64),
+    nodeId: verifyObjectProperty(value, "nodeId", parseSkeletonId),
+    segmentId: verifyObjectProperty(value, "segmentId", parseSkeletonId),
     position: verifyObjectProperty(value, "position", verify3dVec),
   };
 }
 
 function restoreResultNode(value: unknown): SkeletonFindPathResultNode {
   return {
-    nodeId: verifyObjectProperty(value, "nodeId", parseUint64),
+    nodeId: verifyObjectProperty(value, "nodeId", parseSkeletonId),
     position: verifyObjectProperty(value, "position", verify3dVec),
   };
 }

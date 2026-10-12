@@ -23,8 +23,8 @@ import {
 } from "#src/skeleton/find_path.js";
 
 function endpoint(
-  nodeId: bigint | number,
-  segmentId: bigint | number = 100n,
+  nodeId: bigint,
+  segmentId = 100n,
   position: ArrayLike<number> = [
     Number(nodeId),
     Number(nodeId) + 1,
@@ -32,8 +32,8 @@ function endpoint(
   ],
 ): SkeletonFindPathEndpoint {
   return {
-    nodeId: BigInt(nodeId),
-    segmentId: BigInt(segmentId),
+    nodeId,
+    segmentId,
     position: new Float32Array(position),
   };
 }
@@ -43,8 +43,8 @@ describe("SkeletonFindPathState", () => {
     const state = new SkeletonFindPathState();
     const largeSegmentId = 9_007_199_254_740_993n;
     state.setEndpoints(
-      endpoint(1, largeSegmentId),
-      endpoint(4, largeSegmentId),
+      endpoint(1n, largeSegmentId),
+      endpoint(4n, largeSegmentId),
     );
     state.setResult([
       { nodeId: 1n, position: new Float32Array([1, 2, 3]) },
@@ -83,6 +83,9 @@ describe("SkeletonFindPathState", () => {
     [],
     { source: { nodeId: "01", segmentId: "1", position: [1, 2, 3] } },
     { source: { nodeId: "1", segmentId: "-1", position: [1, 2, 3] } },
+    { source: { nodeId: "0", segmentId: "1", position: [1, 2, 3] } },
+    { target: { nodeId: "1", segmentId: "0", position: [1, 2, 3] } },
+    { result: [{ nodeId: "0", position: [1, 2, 3] }] },
     {
       source: {
         nodeId: "18446744073709551616",
@@ -99,18 +102,18 @@ describe("SkeletonFindPathState", () => {
 
   it("clears the result when either endpoint changes", () => {
     const state = new SkeletonFindPathState();
-    state.setEndpoints(endpoint(1), endpoint(2));
-    state.setResult([endpoint(1), endpoint(2)]);
+    state.setEndpoints(endpoint(1n), endpoint(2n));
+    state.setResult([endpoint(1n), endpoint(2n)]);
     expect(state.result).toHaveLength(2);
 
-    state.setTarget(endpoint(3));
+    state.setTarget(endpoint(3n));
     expect(state.result).toBeUndefined();
   });
 
   it("invalidates only the result when topology changes", () => {
     const state = new SkeletonFindPathState();
-    state.setEndpoints(endpoint(1), endpoint(2));
-    state.setResult([endpoint(1), endpoint(2)]);
+    state.setEndpoints(endpoint(1n), endpoint(2n));
+    state.setResult([endpoint(1n), endpoint(2n)]);
 
     expect(state.invalidateResult()).toBe(true);
     expect(state.source?.nodeId).toBe(1n);
@@ -120,14 +123,14 @@ describe("SkeletonFindPathState", () => {
 
   it("clear and reset return the state to its default", () => {
     const state = new SkeletonFindPathState();
-    state.setEndpoints(endpoint(1), endpoint(2));
-    state.setResult([endpoint(1), endpoint(2)]);
+    state.setEndpoints(endpoint(1n), endpoint(2n));
+    state.setResult([endpoint(1n), endpoint(2n)]);
 
     expect(state.clear()).toBe(true);
     expect(state.toJSON()).toBeUndefined();
     expect(state.clear()).toBe(false);
 
-    state.setSource(endpoint(3));
+    state.setSource(endpoint(3n));
     state.reset();
     expect(state.toJSON()).toBeUndefined();
   });
@@ -135,13 +138,13 @@ describe("SkeletonFindPathState", () => {
   it("leaves endpoint relationship validation to the tool", () => {
     const state = new SkeletonFindPathState();
     expect(() =>
-      state.setEndpoints(endpoint(1, 10), endpoint(1, 11)),
+      state.setEndpoints(endpoint(1n, 10n), endpoint(1n, 11n)),
     ).not.toThrow();
   });
 
   it("preserves the other endpoint when one endpoint is removed", () => {
     const state = new SkeletonFindPathState();
-    state.setEndpoints(endpoint(1), endpoint(2));
+    state.setEndpoints(endpoint(1n), endpoint(2n));
     state.setSource(undefined);
 
     const restored = new SkeletonFindPathState();
@@ -157,7 +160,7 @@ describe("SkeletonDataSourceState", () => {
 
     expect(state.toJSON()).toBeUndefined();
 
-    state.findPathState.setSource(endpoint(1));
+    state.findPathState.setSource(endpoint(1n));
     expect(state.toJSON()?.findPath?.source?.nodeId).toBe("1");
 
     state.findPathState.clear();
@@ -166,7 +169,7 @@ describe("SkeletonDataSourceState", () => {
 
   it("round-trips Find Path under the datasource-owned findPath key", () => {
     const state = new SkeletonDataSourceState();
-    state.findPathState.setEndpoints(endpoint(1, 7), endpoint(3, 7));
+    state.findPathState.setEndpoints(endpoint(1n, 7n), endpoint(3n, 7n));
 
     expect(state.toJSON()).toEqual({
       findPath: {
@@ -183,8 +186,8 @@ describe("SkeletonDataSourceState", () => {
     const state = new SkeletonDataSourceState();
     let changes = 0;
     state.changed.add(() => ++changes);
-    state.findPathState.setEndpoints(endpoint(1), endpoint(2));
-    state.findPathState.setResult([endpoint(1), endpoint(2)]);
+    state.findPathState.setEndpoints(endpoint(1n), endpoint(2n));
+    state.findPathState.setResult([endpoint(1n), endpoint(2n)]);
 
     expect(changes).toBe(3);
     expect(state.toJSON()?.findPath?.result).toHaveLength(2);

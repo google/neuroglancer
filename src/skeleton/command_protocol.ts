@@ -45,8 +45,8 @@ export type SpatialSkeletonAction =
  * datasource's identifier mapping strategy.
  */
 export interface SpatialSkeletonQueueInputRequirement {
-  readonly segmentId: number;
-  readonly nodeId?: number;
+  readonly segmentId: bigint;
+  readonly nodeId?: bigint;
 }
 
 /**
@@ -62,7 +62,7 @@ export interface SpatialSkeletonQueueInputRequirements {
 
 /** One complete, revision-fenced input acquired for an Execute intent. */
 export interface SpatialSkeletonQueueSegmentInput {
-  readonly segmentId: number;
+  readonly segmentId: bigint;
   readonly snapshot: CompleteSkeletonSnapshotHandle;
   readonly cacheRevision: number;
 }
@@ -85,7 +85,7 @@ export interface SpatialSkeletonPreparedQueueInput {
 /** Reusable input policy retained with the original intent for an unprepared Redo. */
 export interface SpatialSkeletonQueueInputPreparation {
   /** Current physical inputs that a live intent protects from visual eviction. */
-  getProtectedSegmentIds(): readonly number[];
+  getProtectedSegmentIds(): readonly bigint[];
 
   /** Synchronous inspection gate and admission-lifetime cache retention. */
   validate(intent: "execute" | "redo"): () => void;

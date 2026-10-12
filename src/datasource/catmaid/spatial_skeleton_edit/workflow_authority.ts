@@ -34,8 +34,8 @@ import type { SpatialSkeletonProjectionDelta } from "#src/skeleton/spatial_skele
 
 interface CatmaidMaterializationContext {
   readonly direction: "forward" | "inverse";
-  readonly localNodeBindings: ReadonlyMap<string, number>;
-  readonly localSegmentBindings: ReadonlyMap<string, number>;
+  readonly localNodeBindings: ReadonlyMap<string, bigint>;
+  readonly localSegmentBindings: ReadonlyMap<string, bigint>;
 }
 
 type CatmaidWorkflowContext = SpatialSkeletonMutationWorkflowContext<
@@ -49,7 +49,7 @@ export abstract class CatmaidWorkflowAuthorityDriverBase {
     protected readonly identity: SpatialSkeletonOptimisticIdentityService,
   ) {}
 
-  protected segmentHandle(segmentId: number) {
+  protected segmentHandle(segmentId: bigint) {
     return this.identity.getOrCreateSegmentHandle(segmentId);
   }
 
@@ -57,7 +57,7 @@ export abstract class CatmaidWorkflowAuthorityDriverBase {
     const steps = makeSteps(workflow.semantic, workflow.direction);
     const step = steps[context.committedAttempts.length];
     if (step === undefined) return undefined;
-    const committedAttempts = context.committedAttempts;
+    const { committedAttempts } = context;
     return Object.freeze({
       materializeMutation: () =>
         this.makeMutationRequest(
@@ -78,16 +78,16 @@ export abstract class CatmaidWorkflowAuthorityDriverBase {
     workflow: CatmaidWorkflow,
     attempts: CatmaidWorkflowContext["committedAttempts"],
   ): CatmaidMaterializationContext {
-    const localNodeBindings = new Map<string, number>();
-    const localSegmentBindings = new Map<string, number>();
+    const localNodeBindings = new Map<string, bigint>();
+    const localSegmentBindings = new Map<string, bigint>();
     const steps = makeSteps(workflow.semantic, workflow.direction);
     for (let index = 0; index < attempts.length; ++index) {
       const attempt = attempts[index];
       const step = steps[index]!;
       if (step.kind === "add-node" || step.kind === "insert-node") {
         const result = attempt.result as {
-          readonly nodeId?: number;
-          readonly segmentId?: number;
+          readonly nodeId?: bigint;
+          readonly segmentId?: bigint;
         };
         localNodeBindings.set(
           step.semantic.node.stableId,
@@ -99,8 +99,8 @@ export abstract class CatmaidWorkflowAuthorityDriverBase {
         );
       } else if (step.kind === "split") {
         const result = attempt.result as {
-          readonly existingSegmentId?: number;
-          readonly newSegmentId?: number;
+          readonly existingSegmentId?: bigint;
+          readonly newSegmentId?: bigint;
         };
         const existingId = requirePositiveId(
           result.existingSegmentId,
@@ -133,7 +133,7 @@ export abstract class CatmaidWorkflowAuthorityDriverBase {
         }
       } else if (step.kind === "merge") {
         const resultId = requirePositiveId(
-          (attempt.result as { readonly resultSegmentId?: number })
+          (attempt.result as { readonly resultSegmentId?: bigint })
             .resultSegmentId,
           "merge result skeleton",
         );
@@ -210,7 +210,7 @@ export abstract class CatmaidWorkflowAuthorityDriverBase {
         const semantic = step.semantic as
           | CatmaidCreatedNodeSemantic
           | CatmaidDeleteNodeSemantic;
-        const parent = semantic.parent;
+        const { parent } = semantic;
         return {
           kind: "add-node",
           request: {
@@ -375,7 +375,7 @@ export abstract class CatmaidWorkflowAuthorityDriverBase {
             : semantic.inverseOrientation === "second-from-first"
               ? semantic.secondNode
               : semantic.firstNode;
-        const inputSegmentIds: readonly [number, number] = Object.freeze(
+        const inputSegmentIds: readonly [bigint, bigint] = Object.freeze(
           semantic.kind === "split"
             ? [
                 this.resolveSegment(context, semantic.sourceSegment),
@@ -428,13 +428,13 @@ export abstract class CatmaidWorkflowAuthorityDriverBase {
       context.committedAttempts,
     );
     const nodeBindings: Array<
-      readonly [SpatialSkeletonLogicalNodeHandle, number]
+      readonly [SpatialSkeletonLogicalNodeHandle, bigint]
     > = [];
     const segmentBindings: Array<
-      readonly [SpatialSkeletonLogicalSegmentHandle, number]
+      readonly [SpatialSkeletonLogicalSegmentHandle, bigint]
     > = [];
     const retired = new Map<string, SpatialSkeletonLogicalResourceHandle>();
-    const retiredSegmentIds = new Set<number>();
+    const retiredSegmentIds = new Set<bigint>();
     let finalizedProjectionDelta: SpatialSkeletonProjectionDelta | undefined;
 
     const steps = makeSteps(workflow.semantic, workflow.direction);
@@ -446,8 +446,8 @@ export abstract class CatmaidWorkflowAuthorityDriverBase {
         case "add-node":
         case "insert-node": {
           const result = committed.result as {
-            nodeId: number;
-            segmentId: number;
+            nodeId: bigint;
+            segmentId: bigint;
           };
           nodeBindings.push([step.semantic.node, result.nodeId]);
           segmentBindings.push([step.semantic.segment, result.segmentId]);
@@ -494,8 +494,8 @@ export abstract class CatmaidWorkflowAuthorityDriverBase {
         }
         case "split": {
           const result = committed.result as {
-            existingSegmentId?: number;
-            newSegmentId?: number;
+            existingSegmentId?: bigint;
+            newSegmentId?: bigint;
           };
           const existingId = requirePositiveId(
             result.existingSegmentId,
@@ -524,8 +524,8 @@ export abstract class CatmaidWorkflowAuthorityDriverBase {
         }
         case "merge": {
           const result = committed.result as {
-            resultSegmentId?: number;
-            deletedSegmentId?: number;
+            resultSegmentId?: bigint;
+            deletedSegmentId?: bigint;
             directionAdjusted?: boolean;
           };
           const resultId = requirePositiveId(
@@ -641,7 +641,7 @@ export abstract class CatmaidWorkflowAuthorityDriverBase {
 
   private requireMergeInputSegmentIds(
     mutation: CatmaidOptimisticMutation,
-  ): readonly [number, number] {
+  ): readonly [bigint, bigint] {
     if (mutation.kind !== "merge") {
       throw new Error("CATMAID merge reconciliation lost its mutation.");
     }

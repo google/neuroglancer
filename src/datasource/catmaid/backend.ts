@@ -58,7 +58,7 @@ export class CatmaidSpatiallyIndexedSkeletonSourceBackend extends WithParameters
       chunkDataSize,
     );
     const catmaidLod = this.parameters.catmaidLod ?? 0;
-    const cacheProvider = this.parameters.catmaidParameters.cacheProvider;
+    const { cacheProvider } = this.parameters.catmaidParameters;
     const nodes = await this.client.fetchNodes(bounds, catmaidLod, {
       cacheProvider,
       signal,
@@ -68,8 +68,7 @@ export class CatmaidSpatiallyIndexedSkeletonSourceBackend extends WithParameters
     chunk.vertexPositions = packed.vertexPositions;
     chunk.indices = packed.indices;
 
-    // Pack only segment IDs into vertexAttributes (positions are in vertexPositions)
-    chunk.vertexAttributes = [packed.segmentIds];
     chunk.nodeIds = packed.nodeIds;
+    chunk.segmentIds = packed.segmentIds;
   }
 }

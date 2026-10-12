@@ -28,38 +28,43 @@ import {
   readQueue,
   readRenderedNodeIds,
   parentMap,
-  type GraphNode,
+  type ViewerNode,
 } from "./skeleton_edit_page.js";
 
-const IDS = [101, 102, 103, 201, 202, 203];
+const IDS = [101n, 102n, 103n, 201n, 202n, 203n];
 const INITIAL_PARENTS = [
-  [101, null],
-  [102, 101],
-  [103, 102],
-  [201, null],
-  [202, 201],
-  [203, 202],
+  [101n, null],
+  [102n, 101n],
+  [103n, 102n],
+  [201n, null],
+  [202n, 201n],
+  [203n, 202n],
 ];
 
 const SPLIT_PARENTS = [
-  [101, null],
-  [102, null],
-  [103, 102],
-  [201, null],
-  [202, 201],
-  [203, 202],
+  [101n, null],
+  [102n, null],
+  [103n, 102n],
+  [201n, null],
+  [202n, 201n],
+  [203n, 202n],
 ];
 const REROOT_PARENTS = [
-  [101, 102],
-  [102, 103],
-  [103, null],
-  [201, null],
-  [202, 201],
-  [203, 202],
+  [101n, 102n],
+  [102n, 103n],
+  [103n, null],
+  [201n, null],
+  [202n, 201n],
+  [203n, 202n],
 ];
 
 function savedParents(server: CatmaidMockServer) {
-  return server.snapshot().map(({ id, parentId }) => [id, parentId]);
+  return server
+    .snapshot()
+    .map(({ id, parentId }) => [
+      BigInt(id),
+      parentId === null ? null : BigInt(parentId),
+    ]);
 }
 
 const test = base.extend<{ server: CatmaidMockServer }>({
@@ -97,14 +102,14 @@ const test = base.extend<{ server: CatmaidMockServer }>({
 
 function savedTopology(server: CatmaidMockServer) {
   return server.snapshot().map((node) => ({
-    id: node.id,
-    parentId: node.parentId,
-    skeletonId: node.skeletonId,
+    id: BigInt(node.id),
+    parentId: node.parentId === null ? null : BigInt(node.parentId),
+    skeletonId: BigInt(node.skeletonId),
     position: [node.x, node.y, node.z],
   }));
 }
 
-function topology(nodes: GraphNode[]) {
+function topology(nodes: ViewerNode[]) {
   return nodes.map(({ id, parentId, skeletonId, position }) => ({
     id,
     parentId,
@@ -120,24 +125,24 @@ test("split previews the complete branch, then Undo and Redo restore topology", 
   const ui = new SkeletonEditPage(page);
   await ui.open(server.sourceUrl);
   const held = server.holdNextMutation("skeleton/split");
-  await ui.split(102);
+  await ui.split(102n);
   await held.received;
   await expect
     .poll(async () => parentMap(await readGraph(page, IDS, "Skeletons", true)))
     .toEqual([
-      [101, null],
-      [102, null],
-      [103, 102],
-      [201, null],
-      [202, 201],
-      [203, 202],
+      [101n, null],
+      [102n, null],
+      [103n, 102n],
+      [201n, null],
+      [202n, 201n],
+      [203n, 202n],
     ]);
   const preview = await readGraph(page, IDS);
-  expect(preview.find((n) => n.id === 101)!.skeletonId).not.toBe(
-    preview.find((n) => n.id === 102)!.skeletonId,
+  expect(preview.find((n) => n.id === 101n)!.skeletonId).not.toBe(
+    preview.find((n) => n.id === 102n)!.skeletonId,
   );
-  expect(preview.find((n) => n.id === 102)!.skeletonId).toBe(
-    preview.find((n) => n.id === 103)!.skeletonId,
+  expect(preview.find((n) => n.id === 102n)!.skeletonId).toBe(
+    preview.find((n) => n.id === 103n)!.skeletonId,
   );
   await ui.showQueue();
   await expect(page.getByText("Saving", { exact: true })).toBeVisible();
@@ -190,8 +195,14 @@ test("a cold merge appears in Queue immediately and can be undone before its tar
   });
   const ui = new SkeletonEditPage(page);
   try {
-    await ui.open(server.sourceUrl, [10, 20], false, [2000, 2000, 1000], [10]);
-    await ui.selectNode(103);
+    await ui.open(
+      server.sourceUrl,
+      [10n, 20n],
+      false,
+      [2000, 2000, 1000],
+      [10n],
+    );
+    await ui.selectNode(103n);
     const center = await ui.panelCenter();
     const scale = await page.evaluate(
       () =>
@@ -233,12 +244,12 @@ test("a cold merge appears in Queue immediately and can be undone before its tar
         parentMap(await readGraph(page, IDS, "Skeletons", true)),
       )
       .toEqual([
-        [101, null],
-        [102, 101],
-        [103, 102],
-        [201, 202],
-        [202, 203],
-        [203, 103],
+        [101n, null],
+        [102n, 101n],
+        [103n, 102n],
+        [201n, 202n],
+        [202n, 203n],
+        [203n, 103n],
       ]);
   } finally {
     blocked = false;
@@ -253,15 +264,15 @@ test("merge through a non-root node restores the original root after repeated Un
   const ui = new SkeletonEditPage(page);
   await ui.open(server.sourceUrl);
   const heldMerge = server.holdNextMutation("skeleton/join");
-  await ui.merge(103, 203);
+  await ui.merge(103n, 203n);
   await heldMerge.received;
   const mergedParents = [
-    [101, null],
-    [102, 101],
-    [103, 102],
-    [201, 202],
-    [202, 203],
-    [203, 103],
+    [101n, null],
+    [102n, 101n],
+    [103n, 102n],
+    [201n, 202n],
+    [202n, 203n],
+    [203n, 103n],
   ];
   await expect
     .poll(async () => parentMap(await readGraph(page, IDS, "Skeletons", true)))
@@ -335,7 +346,9 @@ test("merge through a non-root node restores the original root after repeated Un
       .map((entry) => entry.body.treenode_id),
   ).toEqual(["201", "201"]);
   const persisted = savedTopology(server);
-  await ui.reload([...new Set(server.snapshot().map((n) => n.skeletonId))]);
+  await ui.reload([
+    ...new Set(server.snapshot().map((n) => BigInt(n.skeletonId))),
+  ]);
   await expect
     .poll(async () => topology(await readGraph(page, IDS, "Skeletons", true)))
     .toEqual(persisted);
@@ -354,7 +367,7 @@ test("Undo during a saving Split restores the preview before its ordered inverse
   const ui = new SkeletonEditPage(page);
   await ui.open(server.sourceUrl);
   const held = server.holdNextMutation("skeleton/split");
-  await ui.split(102);
+  await ui.split(102n);
   await held.received;
   await ui.undo();
   expect(parentMap(await readGraph(page, IDS, "Skeletons", true))).toEqual(
@@ -448,11 +461,11 @@ test("Undo and Redo during root creation preserve the preview and save in order"
   expect(
     server.mutations.map(({ path }) => path.split("/").slice(-2).join("/")),
   ).toEqual(["treenode/create", "treenode/delete", "treenode/create"]);
-  const ids = [...IDS, 1002];
+  const ids = [...IDS, 1002n];
   await expect
     .poll(async () => topology(await readGraph(page, ids, "Skeletons", true)))
     .toEqual(savedTopology(server));
-  expect(await readGraph(page, [previewNodeId, 1001])).toEqual([]);
+  expect(await readGraph(page, [previewNodeId, 1001n])).toEqual([]);
   expect((await readQueue(page)).recent.map(({ status }) => status)).toEqual([
     "saved",
     "saved",
@@ -461,14 +474,14 @@ test("Undo and Redo during root creation preserve the preview and save in order"
 
   await ui.undo();
   await ui.waitSaved();
-  expect(server.snapshot().map(({ id }) => id)).toEqual(IDS);
+  expect(server.snapshot().map(({ id }) => BigInt(id))).toEqual(IDS);
   await ui.redo();
   await ui.waitSaved();
   await ui.reload([
-    ...new Set(server.snapshot().map(({ skeletonId }) => skeletonId)),
+    ...new Set(server.snapshot().map(({ skeletonId }) => BigInt(skeletonId))),
   ]);
   expect(
-    topology(await readGraph(page, [...IDS, 1003], "Skeletons", true)),
+    topology(await readGraph(page, [...IDS, 1003n], "Skeletons", true)),
   ).toEqual(savedTopology(server));
 });
 
@@ -494,7 +507,7 @@ for (const kind of ["new root", "split"] as const) {
         }
       });
     } else {
-      await ui.split(102);
+      await ui.split(102n);
     }
     await inputHeld.received;
     const inputNodeId = await page.evaluate(() => {
@@ -504,7 +517,7 @@ for (const kind of ["new root", "split"] as const) {
       return layer.selectedSpatialSkeletonNodeInfo.value!.nodeId;
     });
     const [source] = await readGraph(page, [inputNodeId]);
-    const [target] = await readGraph(page, [203]);
+    const [target] = await readGraph(page, [203n]);
     const center = await ui.panelCenter();
     const camera = await page.evaluate(() => {
       const viewer = (window as unknown as { viewer: Viewer }).viewer;
@@ -528,7 +541,7 @@ for (const kind of ["new root", "split"] as const) {
         await page.keyboard.up("m");
       }
     });
-    const [mergedTarget] = await readGraph(page, [203]);
+    const [mergedTarget] = await readGraph(page, [203n]);
     const previewId = mergedTarget.skeletonId;
     expect(previewId).not.toBe(source.skeletonId);
     const previewChip = page.locator(
@@ -540,11 +553,11 @@ for (const kind of ["new root", "split"] as const) {
     const mergeHeld = server.holdNextMutation("skeleton/join");
     inputHeld.release();
     await mergeHeld.received;
-    const savedNodeId = kind === "new root" ? 1001 : 102;
+    const savedNodeId = kind === "new root" ? 1001n : 102n;
     const mergedNodeIds =
       kind === "new root"
-        ? [201, 202, 203, savedNodeId]
-        : [102, 103, 201, 202, 203];
+        ? [201n, 202n, 203n, savedNodeId]
+        : [102n, 103n, 201n, 202n, 203n];
     await expect
       .poll(async () => (await readGraph(page, [savedNodeId]))[0]?.skeletonId)
       .toBe(previewId);
@@ -553,7 +566,7 @@ for (const kind of ["new root", "split"] as const) {
     expect(merged.every(({ skeletonId }) => skeletonId === previewId)).toBe(
       true,
     );
-    expect(merged.find(({ id }) => id === 203)?.parentId).toBe(savedNodeId);
+    expect(merged.find(({ id }) => id === 203n)?.parentId).toBe(savedNodeId);
     await expect
       .poll(() => readRenderedNodeIds(page))
       .toEqual(expect.arrayContaining(mergedNodeIds));
@@ -566,7 +579,7 @@ for (const kind of ["new root", "split"] as const) {
         segmentId: layer.selectedSpatialSkeletonNodeInfo.value?.segmentId,
         visible: [
           ...layer.displayState.segmentationGroupState.value.visibleSegments,
-        ].map(Number),
+        ],
       };
     });
     expect(selected.segmentId).toBe(previewId);
@@ -581,7 +594,7 @@ for (const kind of ["new root", "split"] as const) {
       .toEqual(savedTopology(server));
     await expect(previewChip).toHaveCount(0);
     await ui.reload([
-      ...new Set(server.snapshot().map(({ skeletonId }) => skeletonId)),
+      ...new Set(server.snapshot().map(({ skeletonId }) => BigInt(skeletonId))),
     ]);
     expect(topology(await readGraph(page, ids, "Skeletons", true))).toEqual(
       savedTopology(server),
@@ -606,18 +619,18 @@ for (const secondDirectionAdjusted of [false, true]) {
       parentId: null,
     });
     server.reset(initial);
-    const ids = [...IDS, 301];
+    const ids = [...IDS, 301n];
     const ui = new SkeletonEditPage(page);
-    await ui.open(server.sourceUrl, [10, 20, 40]);
+    await ui.open(server.sourceUrl, [10n, 20n, 40n]);
     await reverseNextMerge(page);
     const held = server.holdNextMutation("skeleton/join");
-    await ui.merge(103, 203);
+    await ui.merge(103n, 203n);
     await held.received;
     if (secondDirectionAdjusted) {
       await reverseNextMerge(page);
-      await ui.merge(103, 301);
+      await ui.merge(103n, 301n);
     } else {
-      await ui.merge(301, 103);
+      await ui.merge(301n, 103n);
     }
     expect(server.mutations).toHaveLength(1);
     held.release();
@@ -625,13 +638,13 @@ for (const secondDirectionAdjusted of [false, true]) {
 
     const assertRestored = async () => {
       expect(savedParents(server)).toEqual([
-        [101, 102],
-        [102, 103],
-        [103, 203],
-        [201, null],
-        [202, 201],
-        [203, 202],
-        [301, null],
+        [101n, 102n],
+        [102n, 103n],
+        [103n, 203n],
+        [201n, null],
+        [202n, 201n],
+        [203n, 202n],
+        [301n, null],
       ]);
       expect(server.snapshot().find(({ id }) => id === 201)?.confidence).toBe(
         2,
@@ -641,7 +654,7 @@ for (const secondDirectionAdjusted of [false, true]) {
           topology(await readGraph(page, ids, "Skeletons", true)),
         )
         .toEqual(savedTopology(server));
-      expect((await readGraph(page, [201]))[0]?.confidence).toBe(25);
+      expect((await readGraph(page, [201n]))[0]?.confidence).toBe(25);
     };
     const restoredSegmentIds = [];
     for (let cycle = 0; cycle < 2; ++cycle) {
@@ -666,7 +679,7 @@ for (const secondDirectionAdjusted of [false, true]) {
       (await readQueue(page)).recent.every(({ status }) => status === "saved"),
     ).toBe(true);
     await ui.reload([
-      ...new Set(server.snapshot().map(({ skeletonId }) => skeletonId)),
+      ...new Set(server.snapshot().map(({ skeletonId }) => BigInt(skeletonId))),
     ]);
     await assertRestored();
   });
@@ -681,12 +694,12 @@ for (const action of ["Undo Merge", "Reroot then Undo"] as const) {
     await ui.open(server.sourceUrl);
     await reverseNextMerge(page);
     const held = server.holdNextMutation("skeleton/join");
-    await ui.merge(103, 203);
+    await ui.merge(103n, 203n);
     await held.received;
     if (action === "Undo Merge") {
       await ui.undo();
     } else {
-      await ui.reroot(102);
+      await ui.reroot(102n);
     }
     held.release();
     await ui.waitSaved();
@@ -703,12 +716,12 @@ for (const action of ["Undo Merge", "Reroot then Undo"] as const) {
       action === "Undo Merge"
         ? INITIAL_PARENTS
         : [
-            [101, 102],
-            [102, 103],
-            [103, 203],
-            [201, null],
-            [202, 201],
-            [203, 202],
+            [101n, 102n],
+            [102n, 103n],
+            [103n, 203n],
+            [201n, null],
+            [202n, 201n],
+            [203n, 202n],
           ];
     expect(savedParents(server)).toEqual(expectedParents);
     await expect
@@ -733,16 +746,16 @@ for (const action of ["Delete", "Split", "Confidence"] as const) {
     await ui.open(server.sourceUrl);
     await reverseNextMerge(page);
     const held = server.holdNextMutation("skeleton/join");
-    await ui.merge(103, 203);
+    await ui.merge(103n, 203n);
     await held.received;
-    expect((await readGraph(page, [202]))[0]).toMatchObject({
-      parentId: 203,
+    expect((await readGraph(page, [202n]))[0]).toMatchObject({
+      parentId: 203n,
       confidence: 75,
     });
     if (action === "Split") {
-      await ui.split(202);
+      await ui.split(202n);
     } else {
-      await ui.selectNode(202);
+      await ui.selectNode(202n);
       await ui.runEdit(async () => {
         if (action === "Delete") {
           await page
@@ -772,21 +785,21 @@ for (const action of ["Delete", "Split", "Confidence"] as const) {
         radius: 40,
       });
       expect(savedParents(server)).toEqual([
-        [101, 102],
-        [102, 103],
-        [103, 203],
-        [201, null],
-        ...(action === "Delete" ? [] : [[202, 201]]),
-        [203, restored.id],
-        ...(action === "Delete" ? [[restored.id, 201]] : []),
+        [101n, 102n],
+        [102n, 103n],
+        [103n, 203n],
+        [201n, null],
+        ...(action === "Delete" ? [] : [[202n, 201n]]),
+        [203n, BigInt(restored.id)],
+        ...(action === "Delete" ? [[BigInt(restored.id), 201n]] : []),
       ]);
-      const ids = saved.map(({ id }) => id);
+      const ids = saved.map(({ id }) => BigInt(id));
       await expect
         .poll(async () =>
           topology(await readGraph(page, ids, "Skeletons", true)),
         )
         .toEqual(savedTopology(server));
-      expect((await readGraph(page, [restored.id]))[0]).toMatchObject({
+      expect((await readGraph(page, [BigInt(restored.id)]))[0]).toMatchObject({
         confidence: 25,
         radius: 40,
       });
@@ -813,7 +826,7 @@ for (const action of ["Delete", "Split", "Confidence"] as const) {
       (await readQueue(page)).recent.every(({ status }) => status === "saved"),
     ).toBe(true);
     const segmentIds = [
-      ...new Set(server.snapshot().map(({ skeletonId }) => skeletonId)),
+      ...new Set(server.snapshot().map(({ skeletonId }) => BigInt(skeletonId))),
     ];
     await ui.reload(segmentIds);
     await assertRestored();
@@ -828,18 +841,18 @@ test("reroot reverses the full path and preserves values through Undo and Redo",
   await ui.open(server.sourceUrl);
   const initial = await readGraph(page, IDS, "Skeletons", true);
   const initialSaved = server.snapshot();
-  await ui.reroot(103);
+  await ui.reroot(103n);
   await ui.waitSaved();
   expect(savedParents(server)).toEqual(REROOT_PARENTS);
   await expect
     .poll(async () => parentMap(await readGraph(page, IDS, "Skeletons", true)))
     .toEqual([
-      [101, 102],
-      [102, 103],
-      [103, null],
-      [201, null],
-      [202, 201],
-      [203, 202],
+      [101n, 102n],
+      [102n, 103n],
+      [103n, null],
+      [201n, null],
+      [202n, 201n],
+      [203n, 202n],
     ]);
   await ui.undo();
   await ui.waitSaved();

@@ -37,14 +37,14 @@ type MergeTargetLoad =
  */
 export class SpatialSkeletonMergeTargetPrefetch {
   private target:
-    | { readonly segmentId: number; readonly load: MergeTargetLoad }
+    | { readonly segmentId: bigint; readonly load: MergeTargetLoad }
     | undefined = undefined;
 
   constructor(private readonly state: SpatialSkeletonState) {}
 
   setTarget(
     skeletonLayer: SpatiallyIndexedSkeletonLayer,
-    segmentId: number,
+    segmentId: bigint,
   ): void {
     const { target } = this;
     if (

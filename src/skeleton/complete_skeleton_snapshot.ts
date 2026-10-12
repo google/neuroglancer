@@ -33,7 +33,7 @@ export type CompleteSkeletonNodeChanges = Readonly<
 export type CompleteSkeletonNodePatch =
   | {
       readonly kind: "update";
-      readonly nodeId: number;
+      readonly nodeId: bigint;
       readonly changes: CompleteSkeletonNodeChanges;
     }
   | {
@@ -42,11 +42,11 @@ export type CompleteSkeletonNodePatch =
     }
   | {
       readonly kind: "delete";
-      readonly nodeId: number;
+      readonly nodeId: bigint;
     };
 
 export interface CompleteSkeletonNodeOverride {
-  readonly nodeId: number;
+  readonly nodeId: bigint;
   readonly changes: CompleteSkeletonNodeChanges;
 }
 
@@ -58,7 +58,7 @@ export interface CompleteSkeletonSnapshotMergeComponent {
    * substantially smaller than storing one node patch per node in the losing
    * skeleton of a merge.
    */
-  readonly segmentId?: number;
+  readonly segmentId?: bigint;
 }
 
 export interface CompleteSkeletonSnapshotSplit {
@@ -70,7 +70,7 @@ export interface CompleteSkeletonSnapshotSplit {
 
 interface SnapshotProjection {
   readonly nodeCount: number;
-  getNode(nodeId: number): SpatiallyIndexedSkeletonNode | undefined;
+  getNode(nodeId: bigint): SpatiallyIndexedSkeletonNode | undefined;
   forEachNode(callback: (node: SpatiallyIndexedSkeletonNode) => void): void;
 }
 
@@ -79,9 +79,9 @@ const COMPLETE_SKELETON_PROJECTION_REBASE_DEPTH = 64;
 
 export interface CompleteSkeletonSnapshotRemapping {
   /** Physical node-id substitutions. Parent references are remapped too. */
-  readonly nodeIds?: ReadonlyMap<number, number>;
+  readonly nodeIds?: ReadonlyMap<bigint, bigint>;
   /** Physical segment-id substitutions. */
-  readonly segmentIds?: ReadonlyMap<number, number>;
+  readonly segmentIds?: ReadonlyMap<bigint, bigint>;
 }
 
 function cloneSpatialSkeletonVector(
@@ -121,7 +121,7 @@ function updateNode(
 class BaseSnapshotProjection implements SnapshotProjection {
   readonly nodeCount: number;
   readonly nodes: readonly SpatiallyIndexedSkeletonNode[];
-  private readonly nodeById = new Map<number, SpatiallyIndexedSkeletonNode>();
+  private readonly nodeById = new Map<bigint, SpatiallyIndexedSkeletonNode>();
 
   constructor(nodes: readonly SpatiallyIndexedSkeletonNode[]) {
     const copiedNodes: SpatiallyIndexedSkeletonNode[] = [];
@@ -139,7 +139,7 @@ class BaseSnapshotProjection implements SnapshotProjection {
     this.nodeCount = copiedNodes.length;
   }
 
-  getNode(nodeId: number) {
+  getNode(nodeId: bigint) {
     return this.nodeById.get(nodeId);
   }
 
@@ -151,7 +151,7 @@ class BaseSnapshotProjection implements SnapshotProjection {
 /** Indexed flat storage which reuses an already-frozen materialized array. */
 class FlatSnapshotProjection implements SnapshotProjection {
   readonly nodeCount: number;
-  private readonly nodeById = new Map<number, SpatiallyIndexedSkeletonNode>();
+  private readonly nodeById = new Map<bigint, SpatiallyIndexedSkeletonNode>();
 
   constructor(readonly nodes: readonly SpatiallyIndexedSkeletonNode[]) {
     for (const node of nodes) {
@@ -165,7 +165,7 @@ class FlatSnapshotProjection implements SnapshotProjection {
     this.nodeCount = nodes.length;
   }
 
-  getNode(nodeId: number) {
+  getNode(nodeId: bigint) {
     return this.nodeById.get(nodeId);
   }
 
@@ -177,17 +177,17 @@ class FlatSnapshotProjection implements SnapshotProjection {
 class PatchSnapshotProjection implements SnapshotProjection {
   readonly nodeCount: number;
   private readonly patchedNodeById = new Map<
-    number,
+    bigint,
     SpatiallyIndexedSkeletonNode | undefined
   >();
-  private readonly insertedNodeIds: readonly number[];
+  private readonly insertedNodeIds: readonly bigint[];
 
   constructor(
     private readonly source: SnapshotProjection,
     patches: readonly CompleteSkeletonNodePatch[],
   ) {
-    const insertedNodeIds: number[] = [];
-    const insertedNodeIdSet = new Set<number>();
+    const insertedNodeIds: bigint[] = [];
+    const insertedNodeIdSet = new Set<bigint>();
 
     for (const patch of patches) {
       const nodeId = patch.kind === "insert" ? patch.node.nodeId : patch.nodeId;
@@ -239,7 +239,7 @@ class PatchSnapshotProjection implements SnapshotProjection {
     this.insertedNodeIds = Object.freeze(insertedNodeIds);
   }
 
-  getNode(nodeId: number) {
+  getNode(nodeId: bigint) {
     return this.patchedNodeById.has(nodeId)
       ? this.patchedNodeById.get(nodeId)
       : this.source.getNode(nodeId);
@@ -262,7 +262,7 @@ class PatchSnapshotProjection implements SnapshotProjection {
 }
 
 interface MembershipPartition {
-  readonly selectedNodeIds: ReadonlySet<number>;
+  readonly selectedNodeIds: ReadonlySet<bigint>;
 }
 
 class MembershipSnapshotProjection implements SnapshotProjection {
@@ -278,11 +278,11 @@ class MembershipSnapshotProjection implements SnapshotProjection {
       : source.nodeCount - partition.selectedNodeIds.size;
   }
 
-  private includes(nodeId: number) {
+  private includes(nodeId: bigint) {
     return this.partition.selectedNodeIds.has(nodeId) === this.selectMembers;
   }
 
-  getNode(nodeId: number) {
+  getNode(nodeId: bigint) {
     return this.includes(nodeId) ? this.source.getNode(nodeId) : undefined;
   }
 
@@ -302,13 +302,13 @@ class MembershipSnapshotProjection implements SnapshotProjection {
  */
 class RemapSnapshotProjection implements SnapshotProjection {
   readonly nodeCount: number;
-  private readonly sourceNodeIdByRemappedNodeId = new Map<number, number>();
+  private readonly sourceNodeIdByRemappedNodeId = new Map<bigint, bigint>();
   private readonly remappedNodeBySourceNodeId = new Map<
-    number,
+    bigint,
     SpatiallyIndexedSkeletonNode
   >();
-  private readonly nodeIdRemappings: ReadonlyMap<number, number>;
-  private readonly segmentIdRemappings: ReadonlyMap<number, number>;
+  private readonly nodeIdRemappings: ReadonlyMap<bigint, bigint>;
+  private readonly segmentIdRemappings: ReadonlyMap<bigint, bigint>;
 
   constructor(
     private readonly source: SnapshotProjection,
@@ -332,7 +332,7 @@ class RemapSnapshotProjection implements SnapshotProjection {
     });
   }
 
-  private remapNodeId(nodeId: number) {
+  private remapNodeId(nodeId: bigint) {
     return this.nodeIdRemappings.get(nodeId) ?? nodeId;
   }
 
@@ -364,7 +364,7 @@ class RemapSnapshotProjection implements SnapshotProjection {
     return remappedNode;
   }
 
-  getNode(nodeId: number) {
+  getNode(nodeId: bigint) {
     const sourceNodeId = this.sourceNodeIdByRemappedNodeId.get(nodeId);
     if (sourceNodeId === undefined) return undefined;
     const node = this.source.getNode(sourceNodeId);
@@ -378,13 +378,13 @@ class RemapSnapshotProjection implements SnapshotProjection {
 
 interface NormalizedMergeComponent {
   readonly projection: SnapshotProjection;
-  readonly segmentId?: number;
-  readonly remappedNodeById: Map<number, SpatiallyIndexedSkeletonNode>;
+  readonly segmentId?: bigint;
+  readonly remappedNodeById: Map<bigint, SpatiallyIndexedSkeletonNode>;
 }
 
 class MergeSnapshotProjection implements SnapshotProjection {
   readonly nodeCount: number;
-  private readonly componentIndexByNodeId = new Map<number, number>();
+  private readonly componentIndexByNodeId = new Map<bigint, number>();
 
   constructor(
     private readonly components: readonly NormalizedMergeComponent[],
@@ -408,7 +408,7 @@ class MergeSnapshotProjection implements SnapshotProjection {
     component: NormalizedMergeComponent,
     node: SpatiallyIndexedSkeletonNode,
   ) {
-    const segmentId = component.segmentId;
+    const { segmentId } = component;
     if (segmentId === undefined || segmentId === node.segmentId) return node;
     let remappedNode = component.remappedNodeById.get(node.nodeId);
     if (remappedNode === undefined) {
@@ -418,7 +418,7 @@ class MergeSnapshotProjection implements SnapshotProjection {
     return remappedNode;
   }
 
-  getNode(nodeId: number) {
+  getNode(nodeId: bigint) {
     const componentIndex = this.componentIndexByNodeId.get(nodeId);
     if (componentIndex === undefined) return undefined;
     const component = this.components[componentIndex];
@@ -500,7 +500,7 @@ export class CompleteSkeletonSnapshotHandle {
 
   static split(
     source: CompleteSkeletonSnapshotHandle,
-    selectedNodeIds: Iterable<number>,
+    selectedNodeIds: Iterable<bigint>,
   ): CompleteSkeletonSnapshotSplit {
     source.prepareForDerivation();
     const selectedNodeIdSet = new Set(selectedNodeIds);
@@ -543,7 +543,7 @@ export class CompleteSkeletonSnapshotHandle {
     const normalizedComponents = components.map(({ snapshot, segmentId }) => ({
       projection: snapshot.projection,
       segmentId,
-      remappedNodeById: new Map<number, SpatiallyIndexedSkeletonNode>(),
+      remappedNodeById: new Map<bigint, SpatiallyIndexedSkeletonNode>(),
     }));
     let projection: SnapshotProjection = new MergeSnapshotProjection(
       normalizedComponents,
@@ -590,7 +590,7 @@ export class CompleteSkeletonSnapshotHandle {
   }
 
   /** Resolves a node without constructing a concrete snapshot array. */
-  getNode(nodeId: number) {
+  getNode(nodeId: bigint) {
     return this.projection.getNode(nodeId);
   }
 
@@ -640,7 +640,7 @@ export function patchCompleteSkeletonSnapshot(
 
 export function splitCompleteSkeletonSnapshot(
   source: CompleteSkeletonSnapshotHandle,
-  selectedNodeIds: Iterable<number>,
+  selectedNodeIds: Iterable<bigint>,
 ) {
   return CompleteSkeletonSnapshotHandle.split(source, selectedNodeIds);
 }

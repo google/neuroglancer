@@ -56,8 +56,14 @@ import django
 
 django.setup()
 from django.contrib.auth import get_user_model
+from django.db import connection
 from rest_framework.authtoken.models import Token
 from catmaid.models import Project
+
+# Start skeleton and treenode IDs above 2^32 so a client that truncates them to 32 bits fails.
+with connection.cursor() as cursor:
+    for sequence in ('concept_id_seq', 'location_id_seq'):
+        cursor.execute('SELECT setval(%s, %s)', [sequence, 2**32 + 1])
 
 user = get_user_model().objects.create_superuser(
     username='neuroglancer-test', email='', password=None

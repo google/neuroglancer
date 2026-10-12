@@ -22,7 +22,7 @@ export function edgeColorPathsGlsl(path: SkeletonColorPath): string {
   if (path === "dynamic") {
     return `
 vec4 segmentColor() {
-  return getSegmentAppearance(vSegmentValue);
+  return getSegmentAppearance(uint64_t(vSegmentId));
 }
 void emitRGB(vec3 color) {
   vec4 baseColor = segmentColor();
@@ -55,7 +55,7 @@ export function nodeColorPathsGlsl(path: SkeletonColorPath): string {
   if (path === "dynamic") {
     return `
 vec4 segmentColor() {
-  return getSegmentAppearance(vSegmentValue);
+  return getSegmentAppearance(uint64_t(vSegmentId));
 }
 void emitRGBA(vec4 color) {
   vec4 baseColor = segmentColor();

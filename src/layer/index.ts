@@ -1142,8 +1142,8 @@ export class LayerManager extends RefCounted {
 }
 
 export interface PickedSpatialSkeletonState {
-  nodeId?: number;
-  segmentId?: number;
+  nodeId?: bigint;
+  segmentId?: bigint;
   position?: Float32Array;
 }
 

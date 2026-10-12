@@ -97,7 +97,7 @@ function makeOptimisticQueue(): SpatialSkeletonOptimisticEditQueue {
 
 function getCachedSegmentRevisions(
   state: SpatialSkeletonState,
-  segmentIds: Iterable<number>,
+  segmentIds: Iterable<bigint>,
 ) {
   return new Map(
     [...segmentIds].map((segmentId) => [
@@ -110,13 +110,13 @@ function getCachedSegmentRevisions(
 function adoptPreparedProjectionSnapshots(
   state: SpatialSkeletonState,
   snapshots: readonly (readonly [
-    number,
+    bigint,
     CompleteSkeletonSnapshotHandle | undefined,
   ])[],
   options: {
-    readonly expectedRevisions?: ReadonlyMap<number, number>;
+    readonly expectedRevisions?: ReadonlyMap<bigint, number>;
     readonly notify?: boolean;
-    readonly retiredSegmentIds?: ReadonlySet<number>;
+    readonly retiredSegmentIds?: ReadonlySet<bigint>;
   } = {},
 ) {
   const presentation = state.spatialSkeletonPresentation.value;
@@ -167,20 +167,21 @@ describe("skeleton/spatial_skeleton_manager", () => {
     (alreadyAbsent) => {
       const state = new SpatialSkeletonState();
       state.replaceCachedSegmentSnapshots([
-        [11, [{ nodeId: 1, segmentId: 11, position: [1, 2, 3] }]],
-        [17, [{ nodeId: 2, segmentId: 17, position: [4, 5, 6] }]],
+        [11n, [{ nodeId: 1n, segmentId: 11n, position: [1, 2, 3] }]],
+        [17n, [{ nodeId: 2n, segmentId: 17n, position: [4, 5, 6] }]],
       ]);
-      if (alreadyAbsent) state.replaceCachedSegmentSnapshots([[11, undefined]]);
-      const revision = state.getCachedSegmentRevision(11);
-      const previous = state.getCachedSegmentSnapshotHandle(11);
-      const untouched = state.getCachedSegmentSnapshotHandle(17);
+      if (alreadyAbsent)
+        state.replaceCachedSegmentSnapshots([[11n, undefined]]);
+      const revision = state.getCachedSegmentRevision(11n);
+      const previous = state.getCachedSegmentSnapshotHandle(11n);
+      const untouched = state.getCachedSegmentSnapshotHandle(17n);
       const presentation = state.spatialSkeletonPresentation.value;
       const notifications = vi.fn();
       state.spatialSkeletonPresentation.changed.add(notifications);
       const prepared = state.prepareSpatialSkeletonProjectionStatePublication({
-        snapshots: [[11, undefined]],
-        expectedRevisions: getCachedSegmentRevisions(state, [11]),
-        retiredSegmentIds: new Set([11]),
+        snapshots: [[11n, undefined]],
+        expectedRevisions: getCachedSegmentRevisions(state, [11n]),
+        retiredSegmentIds: new Set([11n]),
         activeLogicalOwners: [],
         numericAliases: [],
         provisionalNodeIds: [],
@@ -188,11 +189,11 @@ describe("skeleton/spatial_skeleton_manager", () => {
         notify: true,
       })!;
 
-      expect(state.getCachedSegmentRevision(11)).toBe(revision);
-      expect(state.getCachedSegmentSnapshotHandle(11)).toBe(previous);
+      expect(state.getCachedSegmentRevision(11n)).toBe(revision);
+      expect(state.getCachedSegmentSnapshotHandle(11n)).toBe(previous);
       expect(state.spatialSkeletonPresentation.value).toBe(presentation);
       expect(notifications).not.toHaveBeenCalled();
-      expect(prepared.cacheRevisions.get(11)).toBeGreaterThan(revision);
+      expect(prepared.cacheRevisions.get(11n)).toBeGreaterThan(revision);
 
       state.runSpatialSkeletonPresentationTransaction(() => {
         expect(
@@ -200,18 +201,20 @@ describe("skeleton/spatial_skeleton_manager", () => {
             prepared,
           ),
         ).toBeDefined();
-        expect(state.getCachedSegmentRevision(11)).toBe(
-          prepared.cacheRevisions.get(11),
+        expect(state.getCachedSegmentRevision(11n)).toBe(
+          prepared.cacheRevisions.get(11n),
         );
-        expect(state.getCachedNode(1)).toBeUndefined();
+        expect(state.getCachedNode(1n)).toBeUndefined();
       });
       state.finalizePreparedSpatialSkeletonProjectionStatePublication(prepared);
-      expect(state.getCachedSegmentSnapshotHandle(11)).toBeUndefined();
+      expect(state.getCachedSegmentSnapshotHandle(11n)).toBeUndefined();
       expect(state.spatialSkeletonPresentation.value.removedSegmentIds).toEqual(
-        [11],
+        [11n],
       );
-      expect(state.getCachedSegmentSnapshotHandle(17)).toBe(untouched);
-      expect(state.getCachedSegmentRevision(17)).toBe(untouched!.cacheRevision);
+      expect(state.getCachedSegmentSnapshotHandle(17n)).toBe(untouched);
+      expect(state.getCachedSegmentRevision(17n)).toBe(
+        untouched!.cacheRevision,
+      );
       expect(notifications).toHaveBeenCalledTimes(1);
     },
   );
@@ -219,34 +222,34 @@ describe("skeleton/spatial_skeleton_manager", () => {
   it("distinguishes projection removal from eviction and clears it on restoration or runtime reset", () => {
     const state = new SpatialSkeletonState();
     const snapshot = createCompleteSkeletonSnapshot([
-      { nodeId: 1, segmentId: 17, position: [1, 2, 3] },
+      { nodeId: 1n, segmentId: 17n, position: [1, 2, 3] },
     ]);
-    adoptPreparedProjectionSnapshots(state, [[17, snapshot]]);
+    adoptPreparedProjectionSnapshots(state, [[17n, snapshot]]);
     state.evictInactiveSegmentNodes([]);
     expect(state.spatialSkeletonPresentation.value.removedSegmentIds).toEqual(
       [],
     );
     // Even an already-absent cache entry must record explicit removal.
-    adoptPreparedProjectionSnapshots(state, [[17, undefined]], {
+    adoptPreparedProjectionSnapshots(state, [[17n, undefined]], {
       notify: false,
     });
     expect(state.spatialSkeletonPresentation.value.removedSegmentIds).toEqual([
-      17,
+      17n,
     ]);
     state.evictInactiveSegmentNodes([]);
     expect(state.spatialSkeletonPresentation.value.removedSegmentIds).toEqual([
-      17,
+      17n,
     ]);
-    adoptPreparedProjectionSnapshots(state, [[17, snapshot]]);
+    adoptPreparedProjectionSnapshots(state, [[17n, snapshot]]);
     expect(state.spatialSkeletonPresentation.value.removedSegmentIds).toEqual(
       [],
     );
-    adoptPreparedProjectionSnapshots(state, [[17, undefined]]);
-    state.replaceCachedSegmentSnapshots([[17, snapshot.materialize()]]);
+    adoptPreparedProjectionSnapshots(state, [[17n, undefined]]);
+    state.replaceCachedSegmentSnapshots([[17n, snapshot.materialize()]]);
     expect(state.spatialSkeletonPresentation.value.removedSegmentIds).toEqual(
       [],
     );
-    adoptPreparedProjectionSnapshots(state, [[17, undefined]]);
+    adoptPreparedProjectionSnapshots(state, [[17n, undefined]]);
     state.clearRuntimeState();
     expect(state.spatialSkeletonPresentation.value.removedSegmentIds).toEqual(
       [],
@@ -257,71 +260,73 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const state = new SpatialSkeletonState();
     const retiredRead = deferred<SpatiallyIndexedSkeletonNode[]>();
     const unrelatedRead = deferred<SpatiallyIndexedSkeletonNode[]>();
-    const signals = new Map<number, AbortSignal>();
+    const signals = new Map<bigint, AbortSignal>();
     const layer = {
       source: {
         readonly: false,
         listSkeletons: async () => [],
-        getSkeleton: (id: number, options: { signal: AbortSignal }) => {
+        getSkeleton: (id: bigint, options: { signal: AbortSignal }) => {
           signals.set(id, options.signal);
           // Deliberately ignore cancellation to exercise a late source result.
-          return (id === 17 ? retiredRead : unrelatedRead).promise;
+          return (id === 17n ? retiredRead : unrelatedRead).promise;
         },
         fetchNodes: async () => [],
         getSpatialIndexMetadata: async () => null,
       },
     } as any;
-    const read = state.getFullSegmentNodes(layer, 17, {
+    const read = state.getFullSegmentNodes(layer, 17n, {
       retainWhileInactive: true,
     });
-    const other = state.getFullSegmentNodes(layer, 29, {
+    const other = state.getFullSegmentNodes(layer, 29n, {
       retainWhileInactive: true,
     });
     const aborted = expect(read).rejects.toMatchObject({ name: "AbortError" });
     await flushMicrotasks();
-    const revisions = getCachedSegmentRevisions(state, [17, 29]);
+    const revisions = getCachedSegmentRevisions(state, [17n, 29n]);
     const prepared = state.prepareSpatialSkeletonProjectionStatePublication({
-      snapshots: [[17, undefined]],
+      snapshots: [[17n, undefined]],
       expectedRevisions: revisions,
-      retiredSegmentIds: new Set([17]),
+      retiredSegmentIds: new Set([17n]),
       activeLogicalOwners: [],
       numericAliases: [],
       provisionalNodeIds: [],
       preparationIntentIdsToRemove: [],
       notify: true,
     })!;
-    expect(signals.get(17)?.aborted).toBe(false);
-    expect(state.getCachedSegmentRevision(17)).toBe(revisions.get(17));
+    expect(signals.get(17n)?.aborted).toBe(false);
+    expect(state.getCachedSegmentRevision(17n)).toBe(revisions.get(17n));
     state.runSpatialSkeletonPresentationTransaction(() => {
       expect(
         state.adoptPreparedSpatialSkeletonProjectionStatePublication(prepared),
       ).toBeDefined();
     });
-    expect(signals.get(17)?.aborted).toBe(false);
+    expect(signals.get(17n)?.aborted).toBe(false);
     state.finalizePreparedSpatialSkeletonProjectionStatePublication(prepared);
     await aborted;
-    expect(signals.get(17)?.aborted).toBe(true);
-    expect(signals.get(29)?.aborted).toBe(false);
-    expect(state.getCachedSegmentRevision(17)).toBeGreaterThan(
-      revisions.get(17)!,
+    expect(signals.get(17n)?.aborted).toBe(true);
+    expect(signals.get(29n)?.aborted).toBe(false);
+    expect(state.getCachedSegmentRevision(17n)).toBeGreaterThan(
+      revisions.get(17n)!,
     );
-    expect(state.getCachedSegmentRevision(29)).toBe(revisions.get(29));
+    expect(state.getCachedSegmentRevision(29n)).toBe(revisions.get(29n));
 
-    retiredRead.resolve([{ nodeId: 1, segmentId: 17, position: [1, 2, 3] }]);
+    retiredRead.resolve([{ nodeId: 1n, segmentId: 17n, position: [1, 2, 3] }]);
     await flushMicrotasks();
-    expect(state.getCachedNode(1)).toBeUndefined();
-    expect(state.getCachedSegmentNodes(17)).toBeUndefined();
-    unrelatedRead.resolve([{ nodeId: 2, segmentId: 29, position: [4, 5, 6] }]);
-    await expect(other).resolves.toMatchObject([{ nodeId: 2 }]);
-    expect(state.getCachedNode(2)).toBeDefined();
+    expect(state.getCachedNode(1n)).toBeUndefined();
+    expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
+    unrelatedRead.resolve([
+      { nodeId: 2n, segmentId: 29n, position: [4, 5, 6] },
+    ]);
+    await expect(other).resolves.toMatchObject([{ nodeId: 2n }]);
+    expect(state.getCachedNode(2n)).toBeDefined();
   });
 
   it("rejects stale retirement preparation without deleting a newer snapshot", () => {
     const state = new SpatialSkeletonState();
     const prepared = state.prepareSpatialSkeletonProjectionStatePublication({
-      snapshots: [[17, undefined]],
-      expectedRevisions: getCachedSegmentRevisions(state, [17]),
-      retiredSegmentIds: new Set([17]),
+      snapshots: [[17n, undefined]],
+      expectedRevisions: getCachedSegmentRevisions(state, [17n]),
+      retiredSegmentIds: new Set([17n]),
       activeLogicalOwners: [],
       numericAliases: [],
       provisionalNodeIds: [],
@@ -329,32 +334,32 @@ describe("skeleton/spatial_skeleton_manager", () => {
       notify: true,
     })!;
     state.replaceCachedSegmentSnapshots([
-      [17, [{ nodeId: 1, segmentId: 17, position: [1, 2, 3] }]],
+      [17n, [{ nodeId: 1n, segmentId: 17n, position: [1, 2, 3] }]],
     ]);
-    const current = state.getCachedSegmentSnapshotHandle(17);
-    const revision = state.getCachedSegmentRevision(17);
+    const current = state.getCachedSegmentSnapshotHandle(17n);
+    const revision = state.getCachedSegmentRevision(17n);
     const presentation = state.spatialSkeletonPresentation.value;
     expect(
       state.adoptPreparedSpatialSkeletonProjectionStatePublication(prepared),
     ).toBeUndefined();
-    expect(state.getCachedSegmentSnapshotHandle(17)).toBe(current);
-    expect(state.getCachedSegmentRevision(17)).toBe(revision);
+    expect(state.getCachedSegmentSnapshotHandle(17n)).toBe(current);
+    expect(state.getCachedSegmentRevision(17n)).toBe(revision);
     expect(state.spatialSkeletonPresentation.value).toBe(presentation);
   });
 
   it("requires an explicit empty replacement for every retired segment", () => {
     const state = new SpatialSkeletonState();
     const snapshot = createCompleteSkeletonSnapshot([
-      { nodeId: 1, segmentId: 17, position: [1, 2, 3] },
+      { nodeId: 1n, segmentId: 17n, position: [1, 2, 3] },
     ]);
-    const revision = state.getCachedSegmentRevision(17);
+    const revision = state.getCachedSegmentRevision(17n);
     const presentation = state.spatialSkeletonPresentation.value;
-    for (const snapshots of [[], [[17, snapshot]]] as const) {
+    for (const snapshots of [[], [[17n, snapshot]]] as const) {
       expect(() =>
         state.prepareSpatialSkeletonProjectionStatePublication({
           snapshots,
-          expectedRevisions: getCachedSegmentRevisions(state, [17]),
-          retiredSegmentIds: new Set([17]),
+          expectedRevisions: getCachedSegmentRevisions(state, [17n]),
+          retiredSegmentIds: new Set([17n]),
           activeLogicalOwners: [],
           numericAliases: [],
           provisionalNodeIds: [],
@@ -363,8 +368,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
         }),
       ).toThrow(/Retired spatial skeleton segment 17 must be removed/);
     }
-    expect(state.getCachedSegmentRevision(17)).toBe(revision);
-    expect(state.getCachedSegmentNodes(17)).toBeUndefined();
+    expect(state.getCachedSegmentRevision(17n)).toBe(revision);
+    expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
     expect(state.spatialSkeletonPresentation.value).toBe(presentation);
   });
 
@@ -389,48 +394,48 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const publishAuthoritativeRead = vi.fn(() => true);
     (state as any).optimisticProjectionRuntime = { publishAuthoritativeRead };
     (state as any).optimisticEditQueue = {
-      ownsAuthoritativeReadSegment: (segmentId: number) => segmentId === 17,
+      ownsAuthoritativeReadSegment: (segmentId: bigint) => segmentId === 17n,
     };
 
     expect(
       (state as any).publishAuthoritativeReadSnapshots(
         new Map([
           [
-            11,
+            11n,
             [
               {
-                nodeId: 101,
-                segmentId: 11,
+                nodeId: 101n,
+                segmentId: 11n,
                 position: new Float32Array([1, 2, 3]),
               },
             ],
           ],
         ]),
-        { expectedRevisions: new Map([[11, 0]]) },
+        { expectedRevisions: new Map([[11n, 0]]) },
       ),
     ).toBe(true);
     expect(publishAuthoritativeRead).not.toHaveBeenCalled();
-    expect(state.getCachedSegmentNodes(11)).toHaveLength(1);
+    expect(state.getCachedSegmentNodes(11n)).toHaveLength(1);
 
     expect(
       (state as any).publishAuthoritativeReadSnapshots(
         new Map([
           [
-            17,
+            17n,
             [
               {
-                nodeId: 202,
-                segmentId: 17,
+                nodeId: 202n,
+                segmentId: 17n,
                 position: new Float32Array([4, 5, 6]),
               },
             ],
           ],
         ]),
-        { expectedRevisions: new Map([[17, 0]]) },
+        { expectedRevisions: new Map([[17n, 0]]) },
       ),
     ).toBe(true);
     expect(publishAuthoritativeRead).toHaveBeenCalledTimes(1);
-    expect(state.getCachedSegmentNodes(17)).toBeUndefined();
+    expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
   });
 
   it("defers old datasource cleanup without blocking replacement engine installation", async () => {
@@ -475,7 +480,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     state.editMode.value = true;
     state.mergeMode.value = true;
     state.splitMode.value = true;
-    state.setMergeAnchor(17);
+    state.setMergeAnchor(17n);
     state.suppressSelectedNodeHighlight.value = true;
     const versionBeforeFatal = state.optimisticEditQueueVersion.value;
     const cause = new Error("ambiguous transport");
@@ -535,9 +540,9 @@ describe("skeleton/spatial_skeleton_manager", () => {
 
   it("retires a segment and aborts an in-flight retained read", async () => {
     const state = new SpatialSkeletonState();
-    const segmentId = 17;
+    const segmentId = 17n;
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 5,
+      nodeId: 5n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
     };
@@ -551,7 +556,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     let requestSignal: AbortSignal | undefined;
     let resolveLateRead!: (nodes: SpatiallyIndexedSkeletonNode[]) => void;
     const getSkeleton = vi.fn(
-      (_segmentId: number, options?: { signal?: AbortSignal }) => {
+      (_segmentId: bigint, options?: { signal?: AbortSignal }) => {
         requestSignal = options?.signal;
         return new Promise<SpatiallyIndexedSkeletonNode[]>((resolve) => {
           resolveLateRead = resolve;
@@ -610,9 +615,9 @@ describe("skeleton/spatial_skeleton_manager", () => {
         direction: "execute",
         kind: "merge",
         lifecycle: "preparing",
-        segmentIds: [11, -1],
-        endpointNodeIds: [101, -2],
-        lastKnownPositions: [{ nodeId: 101, position: capturedPosition }],
+        segmentIds: [11n, 12n],
+        endpointNodeIds: [101n, 102n],
+        lastKnownPositions: [{ nodeId: 101n, position: capturedPosition }],
       }),
     ).toBe(true);
     capturedPosition[0] = 99;
@@ -628,8 +633,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
         direction: "redo",
         kind: "delete",
         lifecycle: "preparing",
-        segmentIds: [17],
-        nodeId: 202,
+        segmentIds: [17n],
+        nodeId: 202n,
       }),
     ).toBe(true);
     expect(
@@ -656,8 +661,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
       direction: "execute",
       kind: "reroot",
       lifecycle: "preparing",
-      segmentIds: [11],
-      rootNodeId: 101,
+      segmentIds: [11n],
+      rootNodeId: 101n,
     });
 
     expect(state.clearRuntimeState()).toBe(true);
@@ -673,10 +678,10 @@ describe("skeleton/spatial_skeleton_manager", () => {
         direction: "undo",
         kind: "restore",
         lifecycle: "preparing",
-        segmentIds: [11],
-        nodeId: 101,
+        segmentIds: [11n],
+        nodeId: 101n,
         lastKnownPositions: [
-          { nodeId: 101, position: new Float32Array([1, 2, 3]) },
+          { nodeId: 101n, position: new Float32Array([1, 2, 3]) },
         ],
       }),
     ).toBe(true);
@@ -684,7 +689,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       expect.objectContaining({
         intentId: 7,
         kind: "restore",
-        nodeId: 101,
+        nodeId: 101n,
       }),
     ]);
   });
@@ -697,20 +702,20 @@ describe("skeleton/spatial_skeleton_manager", () => {
       direction: "execute",
       kind: "split",
       lifecycle: "preparing",
-      segmentIds: [11],
-      cutNodeId: 101,
+      segmentIds: [11n],
+      cutNodeId: 101n,
     });
     const handle = createCompleteSkeletonSnapshot([
       {
-        nodeId: 101,
-        segmentId: 11,
+        nodeId: 101n,
+        segmentId: 11n,
         position: new Float32Array([1, 2, 3]),
       },
     ]);
     const observed: Array<{
       revision: number;
       preparations: number;
-      exactSegments: number[];
+      exactSegments: bigint[];
     }> = [];
     state.spatialSkeletonPresentation.changed.add(() => {
       const presentation = state.spatialSkeletonPresentation.value;
@@ -730,11 +735,11 @@ describe("skeleton/spatial_skeleton_manager", () => {
       stableId: "result",
     };
     const prepared = state.prepareSpatialSkeletonProjectionStatePublication({
-      snapshots: [[11, handle]],
-      expectedRevisions: getCachedSegmentRevisions(state, [11]),
-      activeLogicalOwners: [{ segmentId: 11, logicalHandle: resultSegment }],
+      snapshots: [[11n, handle]],
+      expectedRevisions: getCachedSegmentRevisions(state, [11n]),
+      activeLogicalOwners: [{ segmentId: 11n, logicalHandle: resultSegment }],
       numericAliases: [
-        { logicalHandle: resultSegment, segmentId: 11, authoritative: true },
+        { logicalHandle: resultSegment, segmentId: 11n, authoritative: true },
       ],
       provisionalNodeIds: [],
       preparationIntentIdsToRemove: [9],
@@ -751,14 +756,14 @@ describe("skeleton/spatial_skeleton_manager", () => {
       {
         revision: 2,
         preparations: 0,
-        exactSegments: [11],
+        exactSegments: [11n],
       },
     ]);
     expect(nodeNotifications).toBe(1);
     expect(state.spatialSkeletonPresentation.value.activeLogicalOwners).toEqual(
       [
         expect.objectContaining({
-          segmentId: 11,
+          segmentId: 11n,
           logicalHandle: { kind: "segment", stableId: "result" },
         }),
       ],
@@ -992,10 +997,10 @@ describe("skeleton/spatial_skeleton_manager", () => {
 
   it("clears the full skeleton cache before notifying node data listeners", () => {
     const state = new SpatialSkeletonState();
-    const cachedSegmentId = 11;
+    const cachedSegmentId = 11n;
     (state as any).fullSegmentNodeCache.set(cachedSegmentId, [
       {
-        nodeId: 1,
+        nodeId: 1n,
         segmentId: cachedSegmentId,
         position: new Float32Array([1, 2, 3]),
       },
@@ -1021,11 +1026,11 @@ describe("skeleton/spatial_skeleton_manager", () => {
     state.replaceCachedSegmentSnapshots(
       [
         [
-          11,
+          11n,
           [
             {
-              nodeId: 5,
-              segmentId: 11,
+              nodeId: 5n,
+              segmentId: 11n,
               position: new Float32Array([1, 2, 3]),
             },
           ],
@@ -1033,14 +1038,14 @@ describe("skeleton/spatial_skeleton_manager", () => {
       ],
       { notify: false },
     );
-    state.setPendingNodePosition(5, [4, 5, 6]);
+    state.setPendingNodePosition(5n, [4, 5, 6]);
     const nodeDataVersion = state.nodeDataVersion.value;
     const pendingNodePositionVersion = state.pendingNodePositionVersion.value;
 
     expect(state.clearInspectedSkeletonCache()).toBe(true);
-    expect(state.getCachedSegmentNodes(11)).toBeUndefined();
-    expect(state.getCachedNode(5)).toBeUndefined();
-    expect(state.getPendingNodePosition(5)).toBeUndefined();
+    expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
+    expect(state.getCachedNode(5n)).toBeUndefined();
+    expect(state.getPendingNodePosition(5n)).toBeUndefined();
     expect(state.nodeDataVersion.value).toBe(nodeDataVersion + 1);
     expect(state.pendingNodePositionVersion.value).toBe(
       pendingNodePositionVersion + 1,
@@ -1049,18 +1054,18 @@ describe("skeleton/spatial_skeleton_manager", () => {
 
   it("keeps only the active interaction position", () => {
     const state = new SpatialSkeletonState();
-    expect(state.setPendingNodePosition(5, [1, 2, 3])).toBe(true);
-    expect(state.setPendingNodePosition(5, [1, 2, 3])).toBe(false);
-    expect(Array.from(state.getPendingNodePosition(5)!)).toEqual([1, 2, 3]);
+    expect(state.setPendingNodePosition(5n, [1, 2, 3])).toBe(true);
+    expect(state.setPendingNodePosition(5n, [1, 2, 3])).toBe(false);
+    expect(Array.from(state.getPendingNodePosition(5n)!)).toEqual([1, 2, 3]);
 
     // Pointer events keep reporting the originally picked id if that identity
     // is remapped mid-drag, so updates preserve the active identity.
-    expect(state.setPendingNodePosition(6, [4, 5, 6])).toBe(true);
-    expect(Array.from(state.getPendingNodePosition(5)!)).toEqual([4, 5, 6]);
-    expect(state.getPendingNodePosition(6)).toBeUndefined();
-    expect([...state.getPendingNodeIds()]).toEqual([5]);
+    expect(state.setPendingNodePosition(6n, [4, 5, 6])).toBe(true);
+    expect(Array.from(state.getPendingNodePosition(5n)!)).toEqual([4, 5, 6]);
+    expect(state.getPendingNodePosition(6n)).toBeUndefined();
+    expect([...state.getPendingNodeIds()]).toEqual([5n]);
     expect(state.clearPendingNodePositions()).toBe(true);
-    expect(state.setPendingNodePosition(6, [7, 8, 9])).toBe(true);
+    expect(state.setPendingNodePosition(6n, [7, 8, 9])).toBe(true);
     expect(state.clearPendingNodePositions()).toBe(true);
     expect([...state.getPendingNodeIds()]).toEqual([]);
   });
@@ -1068,55 +1073,57 @@ describe("skeleton/spatial_skeleton_manager", () => {
   it("remaps the active interaction position by node id", () => {
     const state = new SpatialSkeletonState();
 
-    state.setPendingNodePosition(1_000_000_000, [9, 9, 9]);
+    state.setPendingNodePosition(1_000_000_000n, [9, 9, 9]);
     const version = state.pendingNodePositionVersion.value;
 
     expect(
-      state.remapPendingNodePositions(new Map([[1_000_000_000, 20]])),
+      state.remapPendingNodePositions(new Map([[1_000_000_000n, 20n]])),
     ).toBe(true);
     expect(state.pendingNodePositionVersion.value).toBe(version + 1);
-    expect(state.getPendingNodePosition(1_000_000_000)).toBeUndefined();
-    expect(Array.from(state.getPendingNodePosition(20)!)).toEqual([9, 9, 9]);
-    expect(state.setPendingNodePosition(1_000_000_000, [10, 10, 10])).toBe(
+    expect(state.getPendingNodePosition(1_000_000_000n)).toBeUndefined();
+    expect(Array.from(state.getPendingNodePosition(20n)!)).toEqual([9, 9, 9]);
+    expect(state.setPendingNodePosition(1_000_000_000n, [10, 10, 10])).toBe(
       true,
     );
-    expect(state.getPendingNodePosition(1_000_000_000)).toBeUndefined();
-    expect(Array.from(state.getPendingNodePosition(20)!)).toEqual([10, 10, 10]);
+    expect(state.getPendingNodePosition(1_000_000_000n)).toBeUndefined();
+    expect(Array.from(state.getPendingNodePosition(20n)!)).toEqual([
+      10, 10, 10,
+    ]);
   });
 
   it("atomically repartitions cached segments from immutable replacement input", () => {
     const state = new SpatialSkeletonState();
     const originalNodes = [
       {
-        nodeId: 1,
-        segmentId: 11,
+        nodeId: 1n,
+        segmentId: 11n,
         position: new Float32Array([1, 1, 1]),
         parentNodeId: undefined,
       },
       {
-        nodeId: 2,
-        segmentId: 11,
+        nodeId: 2n,
+        segmentId: 11n,
         position: new Float32Array([2, 2, 2]),
-        parentNodeId: 1,
+        parentNodeId: 1n,
       },
       {
-        nodeId: 3,
-        segmentId: 11,
+        nodeId: 3n,
+        segmentId: 11n,
         position: new Float32Array([3, 3, 3]),
-        parentNodeId: 2,
+        parentNodeId: 2n,
       },
     ];
-    state.replaceCachedSegmentSnapshots([[11, originalNodes] as const], {
+    state.replaceCachedSegmentSnapshots([[11n, originalNodes] as const], {
       notify: false,
     });
 
     // Replacement clones keep the caller's immutable input independent.
-    (state.getCachedNode(2)!.position as Float32Array)[0] = 99;
+    (state.getCachedNode(2n)!.position as Float32Array)[0] = 99;
     expect(originalNodes[1].position).toEqual(new Float32Array([2, 2, 2]));
 
     const splitRoot = {
-      ...state.getCachedNode(2)!,
-      segmentId: 999,
+      ...state.getCachedNode(2n)!,
+      segmentId: 999n,
       position: new Float32Array([2, 2, 2]),
       parentNodeId: undefined,
     };
@@ -1124,25 +1131,25 @@ describe("skeleton/spatial_skeleton_manager", () => {
     state.nodeDataVersion.changed.add(() => {
       notificationSnapshots.push({
         originalNodeIds: state
-          .getCachedSegmentNodes(11)
+          .getCachedSegmentNodes(11n)
           ?.map((node) => node.nodeId),
         splitNodeIds: state
-          .getCachedSegmentNodes(17)
+          .getCachedSegmentNodes(17n)
           ?.map((node) => node.nodeId),
-        splitRootSegmentId: state.getCachedNode(2)?.segmentId,
+        splitRootSegmentId: state.getCachedNode(2n)?.segmentId,
       });
     });
 
     expect(
       state.replaceCachedSegmentSnapshots([
-        [11, [state.getCachedNode(1)!]] as const,
+        [11n, [state.getCachedNode(1n)!]] as const,
         [
-          17,
+          17n,
           [
             splitRoot,
             {
-              ...state.getCachedNode(3)!,
-              segmentId: 999,
+              ...state.getCachedNode(3n)!,
+              segmentId: 999n,
             },
           ],
         ] as const,
@@ -1151,29 +1158,29 @@ describe("skeleton/spatial_skeleton_manager", () => {
 
     expect(notificationSnapshots).toEqual([
       {
-        originalNodeIds: [1],
-        splitNodeIds: [2, 3],
-        splitRootSegmentId: 17,
+        originalNodeIds: [1n],
+        splitNodeIds: [2n, 3n],
+        splitRootSegmentId: 17n,
       },
     ]);
-    expect(state.getCachedNode(3)).toBe(state.getCachedSegmentNodes(17)?.[1]);
-    expect(state.getCachedNode(2)?.segmentId).toBe(17);
+    expect(state.getCachedNode(3n)).toBe(state.getCachedSegmentNodes(17n)?.[1]);
+    expect(state.getCachedNode(2n)?.segmentId).toBe(17n);
 
     // Replacement inputs are cloned and cannot mutate the live cache later.
     splitRoot.position[0] = 123;
-    expect(state.getCachedNode(2)?.position).toEqual(
+    expect(state.getCachedNode(2n)?.position).toEqual(
       new Float32Array([2, 2, 2]),
     );
 
     expect(
       state.replaceCachedSegmentSnapshots([
-        [11, originalNodes] as const,
-        [17, undefined] as const,
+        [11n, originalNodes] as const,
+        [17n, undefined] as const,
       ]),
     ).toBe(true);
-    expect(state.getCachedSegmentNodes(17)).toBeUndefined();
-    expect(state.getCachedNode(2)?.segmentId).toBe(11);
-    expect(state.getCachedNode(2)?.position).toEqual(
+    expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
+    expect(state.getCachedNode(2n)?.segmentId).toBe(11n);
+    expect(state.getCachedNode(2n)?.position).toEqual(
       new Float32Array([2, 2, 2]),
     );
   });
@@ -1183,11 +1190,11 @@ describe("skeleton/spatial_skeleton_manager", () => {
     state.replaceCachedSegmentSnapshots(
       [
         [
-          11,
+          11n,
           [
             {
-              nodeId: 5,
-              segmentId: 11,
+              nodeId: 5n,
+              segmentId: 11n,
               position: new Float32Array([1, 2, 3]),
             },
           ],
@@ -1197,35 +1204,35 @@ describe("skeleton/spatial_skeleton_manager", () => {
     );
 
     const inspected = state.tryAcquireInputReference({
-      segmentId: 11,
-      nodeId: 5,
+      segmentId: 11n,
+      nodeId: 5n,
     });
     expect(inspected?.snapshot).toEqual(
-      state.getCachedSegmentSnapshotHandle(11),
+      state.getCachedSegmentSnapshotHandle(11n),
     );
-    expect(inspected?.snapshot.handle.getNode(5)?.segmentId).toBe(11);
+    expect(inspected?.snapshot.handle.getNode(5n)?.segmentId).toBe(11n);
     inspected?.release();
     expect(
       state.tryAcquireInputReference({
-        segmentId: 11,
-        nodeId: 6,
+        segmentId: 11n,
+        nodeId: 6n,
       }),
     ).toBeUndefined();
     expect(
       state.tryAcquireInputReference({
-        segmentId: 17,
-        nodeId: 5,
+        segmentId: 17n,
+        nodeId: 5n,
       }),
     ).toBeUndefined();
     expect(() =>
       state.tryAcquireInputReference({
-        segmentId: 11,
-        nodeId: 0,
+        segmentId: 11n,
+        nodeId: 0n,
       }),
     ).toThrowError("Invalid spatial skeleton node id: 0");
     expect(() =>
       state.tryAcquireInputReference({
-        segmentId: 0,
+        segmentId: 0n,
       }),
     ).toThrowError("Invalid spatial skeleton segment id: 0");
   });
@@ -1235,21 +1242,21 @@ describe("skeleton/spatial_skeleton_manager", () => {
     state.replaceCachedSegmentSnapshots(
       [
         [
-          11,
+          11n,
           [
             {
-              nodeId: 5,
-              segmentId: 11,
+              nodeId: 5n,
+              segmentId: 11n,
               position: new Float32Array([1, 2, 3]),
             },
           ],
         ],
         [
-          17,
+          17n,
           [
             {
-              nodeId: 7,
-              segmentId: 17,
+              nodeId: 7n,
+              segmentId: 17n,
               position: new Float32Array([4, 5, 6]),
             },
           ],
@@ -1258,8 +1265,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
       { notify: false },
     );
     const requirement = {
-      segmentId: 11,
-      nodeId: 5,
+      segmentId: 11n,
+      nodeId: 5n,
     } as const;
     const firstInput = state.tryAcquireInputReference(requirement)!;
     const secondInput = state.acquireInputReference(
@@ -1270,18 +1277,18 @@ describe("skeleton/spatial_skeleton_manager", () => {
     expect(firstInput.isCurrent()).toBe(true);
     expect(secondInput.isCurrent()).toBe(true);
     expect(state.evictInactiveSegmentNodes([])).toBe(true);
-    expect(state.getCachedSegmentNodes(11)).toHaveLength(1);
-    expect(state.getCachedSegmentNodes(17)).toBeUndefined();
+    expect(state.getCachedSegmentNodes(11n)).toHaveLength(1);
+    expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
 
     firstInput.release();
     firstInput.release();
     expect(firstInput.isCurrent()).toBe(false);
     expect(state.evictInactiveSegmentNodes([])).toBe(false);
-    expect(state.getCachedSegmentNodes(11)).toHaveLength(1);
+    expect(state.getCachedSegmentNodes(11n)).toHaveLength(1);
 
     secondInput.release();
     expect(state.evictInactiveSegmentNodes([])).toBe(true);
-    expect(state.getCachedSegmentNodes(11)).toBeUndefined();
+    expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
   });
 
   it("invalidates an input reference when its snapshot is replaced", () => {
@@ -1289,11 +1296,11 @@ describe("skeleton/spatial_skeleton_manager", () => {
     state.replaceCachedSegmentSnapshots(
       [
         [
-          11,
+          11n,
           [
             {
-              nodeId: 5,
-              segmentId: 11,
+              nodeId: 5n,
+              segmentId: 11n,
               position: new Float32Array([1, 2, 3]),
             },
           ],
@@ -1302,18 +1309,18 @@ describe("skeleton/spatial_skeleton_manager", () => {
       { notify: false },
     );
     const inputReference = state.acquireInputReference({
-      segmentId: 11,
-      nodeId: 5,
+      segmentId: 11n,
+      nodeId: 5n,
     });
 
     expect(
       state.replaceCachedSegmentSnapshots([
         [
-          11,
+          11n,
           [
             {
-              nodeId: 5,
-              segmentId: 11,
+              nodeId: 5n,
+              segmentId: 11n,
               position: new Float32Array([4, 5, 6]),
             },
           ],
@@ -1322,15 +1329,15 @@ describe("skeleton/spatial_skeleton_manager", () => {
     ).toBe(true);
     expect(inputReference.isCurrent()).toBe(false);
     expect(state.evictInactiveSegmentNodes([])).toBe(true);
-    expect(state.getCachedSegmentNodes(11)).toBeUndefined();
+    expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
     inputReference.release();
   });
 
   it("reports typed snapshot requirement failures without starting a read", () => {
     const state = new SpatialSkeletonState();
     const coldRequirement = {
-      segmentId: 11,
-      nodeId: 5,
+      segmentId: 11n,
+      nodeId: 5n,
     } as const;
 
     expect(() =>
@@ -1355,7 +1362,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       );
     }
 
-    state.replaceCachedSegmentSnapshots([[11, []]], { notify: false });
+    state.replaceCachedSegmentSnapshots([[11n, []]], { notify: false });
     try {
       state.acquireInputReference(coldRequirement);
     } catch (error) {
@@ -1371,50 +1378,50 @@ describe("skeleton/spatial_skeleton_manager", () => {
     state.replaceCachedSegmentSnapshots(
       [
         [
-          11,
+          11n,
           [
             {
-              nodeId: 1,
-              segmentId: 11,
+              nodeId: 1n,
+              segmentId: 11n,
               position: new Float32Array([1, 1, 1]),
             },
             {
-              nodeId: 2,
-              segmentId: 11,
+              nodeId: 2n,
+              segmentId: 11n,
               position: new Float32Array([2, 2, 2]),
-              parentNodeId: 1,
+              parentNodeId: 1n,
             },
           ],
         ] as const,
       ],
       { notify: false },
     );
-    const baseline = state.getCachedSegmentSnapshotHandle(11)!;
+    const baseline = state.getCachedSegmentSnapshotHandle(11n)!;
     const projected = patchCompleteSkeletonSnapshot(baseline.handle, [
       {
         kind: "update",
-        nodeId: 1,
+        nodeId: 1n,
         changes: { confidence: 75 },
       },
     ]);
-    const expectedRevisions = getCachedSegmentRevisions(state, [11]);
+    const expectedRevisions = getCachedSegmentRevisions(state, [11n]);
 
     expect(projected.materializationCount).toBe(0);
     expect(
-      adoptPreparedProjectionSnapshots(state, [[11, projected]], {
+      adoptPreparedProjectionSnapshots(state, [[11n, projected]], {
         expectedRevisions,
         notify: false,
       }),
     ).toBe(true);
     const materialized = projected.materialize();
     expect(projected.materializationCount).toBe(1);
-    expect(state.getCachedSegmentNodes(11)).toBe(materialized);
+    expect(state.getCachedSegmentNodes(11n)).toBe(materialized);
     expect(projected.materialize()).toBe(materialized);
     expect(projected.materializationCount).toBe(1);
 
-    const adopted = state.getCachedSegmentSnapshotHandle(11)!;
+    const adopted = state.getCachedSegmentSnapshotHandle(11n)!;
     expect(adopted.handle).toBe(projected);
-    expect(adopted.cacheRevision).toBe(state.getCachedSegmentRevision(11));
+    expect(adopted.cacheRevision).toBe(state.getCachedSegmentRevision(11n));
     expect(adopted.cacheRevision).toBeGreaterThan(baseline.cacheRevision);
   });
 
@@ -1423,11 +1430,11 @@ describe("skeleton/spatial_skeleton_manager", () => {
     state.replaceCachedSegmentSnapshots(
       [
         [
-          11,
+          11n,
           [
             {
-              nodeId: 1,
-              segmentId: 11,
+              nodeId: 1n,
+              segmentId: 11n,
               position: new Float32Array([1, 1, 1]),
             },
           ],
@@ -1435,17 +1442,17 @@ describe("skeleton/spatial_skeleton_manager", () => {
       ],
       { notify: false },
     );
-    const baseline = state.getCachedSegmentSnapshotHandle(11)!;
+    const baseline = state.getCachedSegmentSnapshotHandle(11n)!;
     const projected = patchCompleteSkeletonSnapshot(baseline.handle, [
       {
         kind: "update",
-        nodeId: 1,
+        nodeId: 1n,
         changes: { position: [7, 8, 9] },
       },
     ]);
     const prepared = state.prepareSpatialSkeletonProjectionStatePublication({
-      snapshots: [[11, projected]],
-      expectedRevisions: getCachedSegmentRevisions(state, [11]),
+      snapshots: [[11n, projected]],
+      expectedRevisions: getCachedSegmentRevisions(state, [11n]),
       activeLogicalOwners: [],
       numericAliases: [],
       provisionalNodeIds: [],
@@ -1454,7 +1461,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     })!;
 
     expect(projected.materializationCount).toBe(1);
-    expect(state.getCachedSegmentSnapshotHandle(11)?.handle).toBe(
+    expect(state.getCachedSegmentSnapshotHandle(11n)?.handle).toBe(
       baseline.handle,
     );
     let adopted:
@@ -1469,8 +1476,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
 
     expect(adopted).toBeDefined();
     expect(projected.materializationCount).toBe(1);
-    expect(state.getCachedSegmentSnapshotHandle(11)?.handle).toBe(projected);
-    expect(state.getCachedNode(1)?.position).toEqual([7, 8, 9]);
+    expect(state.getCachedSegmentSnapshotHandle(11n)?.handle).toBe(projected);
+    expect(state.getCachedNode(1n)?.position).toEqual([7, 8, 9]);
     expect(() =>
       state.adoptPreparedSpatialSkeletonProjectionStatePublication(prepared),
     ).toThrow(/already adopted/);
@@ -1485,18 +1492,18 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const state = new SpatialSkeletonState();
     state.replaceCachedSegmentSnapshots(
       [
-        [11, [{ nodeId: 1, segmentId: 11, position: [1, 1, 1] }]],
-        [17, [{ nodeId: 2, segmentId: 17, position: [2, 2, 2] }]],
+        [11n, [{ nodeId: 1n, segmentId: 11n, position: [1, 1, 1] }]],
+        [17n, [{ nodeId: 2n, segmentId: 17n, position: [2, 2, 2] }]],
       ],
       { notify: false },
     );
-    const baseline = state.getCachedSegmentSnapshotHandle(11)!;
+    const baseline = state.getCachedSegmentSnapshotHandle(11n)!;
     const projected = patchCompleteSkeletonSnapshot(baseline.handle, [
-      { kind: "update", nodeId: 1, changes: { confidence: 70 } },
+      { kind: "update", nodeId: 1n, changes: { confidence: 70 } },
     ]);
     const prepared = state.prepareSpatialSkeletonProjectionStatePublication({
-      snapshots: [[11, projected]],
-      expectedRevisions: getCachedSegmentRevisions(state, [11]),
+      snapshots: [[11n, projected]],
+      expectedRevisions: getCachedSegmentRevisions(state, [11n]),
       activeLogicalOwners: [],
       numericAliases: [],
       provisionalNodeIds: [],
@@ -1505,32 +1512,32 @@ describe("skeleton/spatial_skeleton_manager", () => {
     })!;
     state.replaceCachedSegmentSnapshots([
       [
-        11,
+        11n,
         [
           {
-            nodeId: 1,
-            segmentId: 11,
+            nodeId: 1n,
+            segmentId: 11n,
             position: new Float32Array([3, 3, 3]),
           },
         ],
       ],
     ]);
-    const beforeStaleAdoption = state.getCachedSegmentSnapshotHandle(11)!;
+    const beforeStaleAdoption = state.getCachedSegmentSnapshotHandle(11n)!;
 
     expect(
       state.adoptPreparedSpatialSkeletonProjectionStatePublication(prepared),
     ).toBeUndefined();
-    expect(state.getCachedSegmentSnapshotHandle(11)).toBe(beforeStaleAdoption);
-    expect(state.getCachedNode(1)?.confidence).toBeUndefined();
+    expect(state.getCachedSegmentSnapshotHandle(11n)).toBe(beforeStaleAdoption);
+    expect(state.getCachedNode(1n)?.confidence).toBeUndefined();
 
     const duplicateOwner = createCompleteSkeletonSnapshot([
-      { nodeId: 2, segmentId: 11, position: [9, 9, 9] },
+      { nodeId: 2n, segmentId: 11n, position: [9, 9, 9] },
     ]);
     const presentation = state.spatialSkeletonPresentation.value;
     expect(() =>
       state.prepareSpatialSkeletonProjectionStatePublication({
-        snapshots: [[11, duplicateOwner]],
-        expectedRevisions: getCachedSegmentRevisions(state, [11]),
+        snapshots: [[11n, duplicateOwner]],
+        expectedRevisions: getCachedSegmentRevisions(state, [11n]),
         activeLogicalOwners: [],
         numericAliases: [],
         provisionalNodeIds: [],
@@ -1538,7 +1545,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
         notify: true,
       }),
     ).toThrow(/node 2 is present in both segment 17 and segment 11/);
-    expect(state.getCachedSegmentSnapshotHandle(11)).toBe(beforeStaleAdoption);
+    expect(state.getCachedSegmentSnapshotHandle(11n)).toBe(beforeStaleAdoption);
     expect(state.spatialSkeletonPresentation.value).toBe(presentation);
   });
 
@@ -1546,47 +1553,49 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const state = new SpatialSkeletonState();
     const baseline = createCompleteSkeletonSnapshot([
       {
-        nodeId: 1,
-        segmentId: 11,
+        nodeId: 1n,
+        segmentId: 11n,
         position: new Float32Array([1, 1, 1]),
       },
       {
-        nodeId: 2,
-        segmentId: 11,
+        nodeId: 2n,
+        segmentId: 11n,
         position: new Float32Array([2, 2, 2]),
-        parentNodeId: 1,
+        parentNodeId: 1n,
       },
     ]);
     expect(
-      adoptPreparedProjectionSnapshots(state, [[11, baseline]], {
+      adoptPreparedProjectionSnapshots(state, [[11n, baseline]], {
         notify: false,
       }),
     ).toBe(true);
     const projected = patchCompleteSkeletonSnapshot(baseline, [
       {
         kind: "update",
-        nodeId: 1,
+        nodeId: 1n,
         changes: { radius: 4 },
       },
     ]);
 
     expect(
-      adoptPreparedProjectionSnapshots(state, [[11, projected]], {
+      adoptPreparedProjectionSnapshots(state, [[11n, projected]], {
         notify: false,
       }),
     ).toBe(true);
-    expect(state.getCachedSegmentNodes(11)?.[1]).toBe(baseline.getNode(2));
-    expect(state.getCachedSegmentNodes(11)?.[0]).not.toBe(baseline.getNode(1));
+    expect(state.getCachedSegmentNodes(11n)?.[1]).toBe(baseline.getNode(2n));
+    expect(state.getCachedSegmentNodes(11n)?.[0]).not.toBe(
+      baseline.getNode(1n),
+    );
   });
 
   it("retains sixty-four lazy patch handles and materializes only the adopted revision", () => {
     const state = new SpatialSkeletonState();
     const baseline = createCompleteSkeletonSnapshot(
       Array.from({ length: 128 }, (_, index) => ({
-        nodeId: index + 1,
-        segmentId: 11,
+        nodeId: BigInt(index + 1),
+        segmentId: 11n,
         position: new Float32Array([index, index + 1, index + 2]),
-        parentNodeId: index === 0 ? undefined : index,
+        parentNodeId: index === 0 ? undefined : BigInt(index),
       })),
     );
     const revisions = [baseline];
@@ -1595,7 +1604,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
         patchCompleteSkeletonSnapshot(revisions.at(-1)!, [
           {
             kind: "update",
-            nodeId,
+            nodeId: BigInt(nodeId),
             changes: { confidence: nodeId },
           },
         ]),
@@ -1607,7 +1616,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     ).toBe(true);
     const projected = revisions.at(-1)!;
     expect(
-      adoptPreparedProjectionSnapshots(state, [[11, projected]], {
+      adoptPreparedProjectionSnapshots(state, [[11n, projected]], {
         notify: false,
       }),
     ).toBe(true);
@@ -1617,35 +1626,35 @@ describe("skeleton/spatial_skeleton_manager", () => {
         .slice(1, -1)
         .every((handle) => handle.materializationCount === 0),
     ).toBe(true);
-    expect(state.getCachedSegmentNodes(11)).toBe(projected.materialize());
-    expect(state.getCachedNode(64)?.confidence).toBe(64);
-    expect(state.getCachedNode(65)).toBe(baseline.getNode(65));
+    expect(state.getCachedSegmentNodes(11n)).toBe(projected.materialize());
+    expect(state.getCachedNode(64n)?.confidence).toBe(64);
+    expect(state.getCachedNode(65n)).toBe(baseline.getNode(65n));
   });
 
   it("rejects stale trusted adoption before materializing and supports deletion", () => {
     const state = new SpatialSkeletonState();
     const baseline = createCompleteSkeletonSnapshot([
       {
-        nodeId: 1,
-        segmentId: 11,
+        nodeId: 1n,
+        segmentId: 11n,
         position: new Float32Array([1, 2, 3]),
       },
     ]);
-    adoptPreparedProjectionSnapshots(state, [[11, baseline]], {
+    adoptPreparedProjectionSnapshots(state, [[11n, baseline]], {
       notify: false,
     });
-    const expectedRevisions = getCachedSegmentRevisions(state, [11]);
+    const expectedRevisions = getCachedSegmentRevisions(state, [11n]);
     const stale = patchCompleteSkeletonSnapshot(baseline, [
-      { kind: "update", nodeId: 1, changes: { radius: 8 } },
+      { kind: "update", nodeId: 1n, changes: { radius: 8 } },
     ]);
     expect(
       state.replaceCachedSegmentSnapshots([
         [
-          11,
+          11n,
           [
             {
-              nodeId: 1,
-              segmentId: 11,
+              nodeId: 1n,
+              segmentId: 11n,
               position: new Float32Array([4, 5, 6]),
             },
           ],
@@ -1654,43 +1663,43 @@ describe("skeleton/spatial_skeleton_manager", () => {
     ).toBe(true);
 
     expect(
-      adoptPreparedProjectionSnapshots(state, [[11, stale]], {
+      adoptPreparedProjectionSnapshots(state, [[11n, stale]], {
         expectedRevisions,
         notify: false,
       }),
     ).toBe(false);
     expect(stale.materializationCount).toBe(0);
 
-    const deletionRevision = getCachedSegmentRevisions(state, [11]);
+    const deletionRevision = getCachedSegmentRevisions(state, [11n]);
     expect(
-      adoptPreparedProjectionSnapshots(state, [[11, undefined]], {
+      adoptPreparedProjectionSnapshots(state, [[11n, undefined]], {
         expectedRevisions: deletionRevision,
         notify: false,
       }),
     ).toBe(true);
-    expect(state.getCachedSegmentNodes(11)).toBeUndefined();
-    expect(state.getCachedSegmentSnapshotHandle(11)).toBeUndefined();
+    expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
+    expect(state.getCachedSegmentSnapshotHandle(11n)).toBeUndefined();
   });
 
   it("distinguishes known-empty and uncached segment snapshots", () => {
     const state = new SpatialSkeletonState();
 
-    expect(state.getCachedSegmentNodes(21)).toBeUndefined();
+    expect(state.getCachedSegmentNodes(21n)).toBeUndefined();
     expect(
-      state.replaceCachedSegmentSnapshots([[21, []] as const], {
+      state.replaceCachedSegmentSnapshots([[21n, []] as const], {
         notify: false,
       }),
     ).toBe(true);
-    expect(state.getCachedSegmentNodes(21)).toEqual([]);
+    expect(state.getCachedSegmentNodes(21n)).toEqual([]);
 
     expect(
-      state.replaceCachedSegmentSnapshots([[21, undefined]], {
+      state.replaceCachedSegmentSnapshots([[21n, undefined]], {
         notify: false,
       }),
     ).toBe(true);
-    expect(state.getCachedSegmentNodes(21)).toBeUndefined();
+    expect(state.getCachedSegmentNodes(21n)).toBeUndefined();
     expect(
-      state.replaceCachedSegmentSnapshots([[21, undefined]], {
+      state.replaceCachedSegmentSnapshots([[21n, undefined]], {
         notify: false,
       }),
     ).toBe(false);
@@ -1701,21 +1710,21 @@ describe("skeleton/spatial_skeleton_manager", () => {
     state.replaceCachedSegmentSnapshots(
       [
         [
-          11,
+          11n,
           [
             {
-              nodeId: 1,
-              segmentId: 11,
+              nodeId: 1n,
+              segmentId: 11n,
               position: new Float32Array([1, 1, 1]),
             },
           ],
         ] as const,
         [
-          13,
+          13n,
           [
             {
-              nodeId: 2,
-              segmentId: 13,
+              nodeId: 2n,
+              segmentId: 13n,
               position: new Float32Array([2, 2, 2]),
             },
           ],
@@ -1723,30 +1732,30 @@ describe("skeleton/spatial_skeleton_manager", () => {
       ],
       { notify: false },
     );
-    const beforeSegment11 = state.getCachedSegmentNodes(11);
-    const beforeSegment13 = state.getCachedSegmentNodes(13);
-    const beforeHandle11 = state.getCachedSegmentSnapshotHandle(11);
-    const beforeHandle13 = state.getCachedSegmentSnapshotHandle(13);
+    const beforeSegment11 = state.getCachedSegmentNodes(11n);
+    const beforeSegment13 = state.getCachedSegmentNodes(13n);
+    const beforeHandle11 = state.getCachedSegmentSnapshotHandle(11n);
+    const beforeHandle13 = state.getCachedSegmentSnapshotHandle(13n);
     const nodeDataVersion = state.nodeDataVersion.value;
 
     expect(() =>
       state.replaceCachedSegmentSnapshots([
         [
-          11,
+          11n,
           [
             {
-              nodeId: 3,
-              segmentId: 11,
+              nodeId: 3n,
+              segmentId: 11n,
               position: new Float32Array([3, 3, 3]),
             },
           ],
         ] as const,
         [
-          13,
+          13n,
           [
             {
-              nodeId: 3,
-              segmentId: 13,
+              nodeId: 3n,
+              segmentId: 13n,
               position: new Float32Array([4, 4, 4]),
             },
           ],
@@ -1754,13 +1763,13 @@ describe("skeleton/spatial_skeleton_manager", () => {
       ]),
     ).toThrow("node 3 is present in both segment 11 and segment 13");
 
-    expect(state.getCachedSegmentNodes(11)).toBe(beforeSegment11);
-    expect(state.getCachedSegmentNodes(13)).toBe(beforeSegment13);
-    expect(state.getCachedSegmentSnapshotHandle(11)).toBe(beforeHandle11);
-    expect(state.getCachedSegmentSnapshotHandle(13)).toBe(beforeHandle13);
-    expect(state.getCachedNode(1)?.segmentId).toBe(11);
-    expect(state.getCachedNode(2)?.segmentId).toBe(13);
-    expect(state.getCachedNode(3)).toBeUndefined();
+    expect(state.getCachedSegmentNodes(11n)).toBe(beforeSegment11);
+    expect(state.getCachedSegmentNodes(13n)).toBe(beforeSegment13);
+    expect(state.getCachedSegmentSnapshotHandle(11n)).toBe(beforeHandle11);
+    expect(state.getCachedSegmentSnapshotHandle(13n)).toBe(beforeHandle13);
+    expect(state.getCachedNode(1n)?.segmentId).toBe(11n);
+    expect(state.getCachedNode(2n)?.segmentId).toBe(13n);
+    expect(state.getCachedNode(3n)).toBeUndefined();
     expect(state.nodeDataVersion.value).toBe(nodeDataVersion);
   });
 
@@ -1769,36 +1778,36 @@ describe("skeleton/spatial_skeleton_manager", () => {
     state.replaceCachedSegmentSnapshots(
       [
         [
-          11,
+          11n,
           [
             {
-              nodeId: 1,
-              segmentId: 11,
+              nodeId: 1n,
+              segmentId: 11n,
               position: new Float32Array([1, 1, 1]),
             },
           ],
         ] as const,
         [
-          13,
+          13n,
           [
             {
-              nodeId: 2,
-              segmentId: 13,
+              nodeId: 2n,
+              segmentId: 13n,
               position: new Float32Array([2, 2, 2]),
             },
             {
-              nodeId: 3,
-              segmentId: 13,
+              nodeId: 3n,
+              segmentId: 13n,
               position: new Float32Array([3, 3, 3]),
-              parentNodeId: 2,
+              parentNodeId: 2n,
             },
           ],
         ] as const,
       ],
       { notify: false },
     );
-    const unaffectedNodes = state.getCachedSegmentNodes(13)!;
-    const unaffectedNode = state.getCachedNode(2);
+    const unaffectedNodes = state.getCachedSegmentNodes(13n)!;
+    const unaffectedNode = state.getCachedNode(2n);
     const iterateUnaffected = vi.fn(
       (): IterableIterator<SpatiallyIndexedSkeletonNode> => {
         throw new Error("unaffected segment was iterated");
@@ -1812,11 +1821,11 @@ describe("skeleton/spatial_skeleton_manager", () => {
     expect(
       state.replaceCachedSegmentSnapshots([
         [
-          11,
+          11n,
           [
             {
-              nodeId: 1,
-              segmentId: 11,
+              nodeId: 1n,
+              segmentId: 11n,
               position: new Float32Array([4, 5, 6]),
             },
           ],
@@ -1825,9 +1834,9 @@ describe("skeleton/spatial_skeleton_manager", () => {
     ).toBe(true);
 
     expect(iterateUnaffected).not.toHaveBeenCalled();
-    expect(state.getCachedNode(2)).toBe(unaffectedNode);
-    expect(state.getCachedNode(3)?.segmentId).toBe(13);
-    expect(state.getCachedNode(1)?.position).toEqual(
+    expect(state.getCachedNode(2n)).toBe(unaffectedNode);
+    expect(state.getCachedNode(3n)?.segmentId).toBe(13n);
+    expect(state.getCachedNode(1n)?.position).toEqual(
       new Float32Array([4, 5, 6]),
     );
   });
@@ -1837,21 +1846,21 @@ describe("skeleton/spatial_skeleton_manager", () => {
     state.replaceCachedSegmentSnapshots(
       [
         [
-          11,
+          11n,
           [
             {
-              nodeId: 1,
-              segmentId: 11,
+              nodeId: 1n,
+              segmentId: 11n,
               position: new Float32Array([1, 1, 1]),
             },
           ],
         ] as const,
         [
-          13,
+          13n,
           [
             {
-              nodeId: 2,
-              segmentId: 13,
+              nodeId: 2n,
+              segmentId: 13n,
               position: new Float32Array([2, 2, 2]),
             },
           ],
@@ -1859,22 +1868,22 @@ describe("skeleton/spatial_skeleton_manager", () => {
       ],
       { notify: false },
     );
-    const segment11Nodes = state.getCachedSegmentNodes(11);
-    const segment13Nodes = state.getCachedSegmentNodes(13);
-    const node1 = state.getCachedNode(1);
-    const node2 = state.getCachedNode(2);
-    const segment11Revision = state.getCachedSegmentRevision(11);
-    const segment13Revision = state.getCachedSegmentRevision(13);
+    const segment11Nodes = state.getCachedSegmentNodes(11n);
+    const segment13Nodes = state.getCachedSegmentNodes(13n);
+    const node1 = state.getCachedNode(1n);
+    const node2 = state.getCachedNode(2n);
+    const segment11Revision = state.getCachedSegmentRevision(11n);
+    const segment13Revision = state.getCachedSegmentRevision(13n);
     const nodeDataVersion = state.nodeDataVersion.value;
 
     expect(() =>
       state.replaceCachedSegmentSnapshots([
         [
-          11,
+          11n,
           [
             {
-              nodeId: 2,
-              segmentId: 11,
+              nodeId: 2n,
+              segmentId: 11n,
               position: new Float32Array([9, 9, 9]),
             },
           ],
@@ -1882,12 +1891,12 @@ describe("skeleton/spatial_skeleton_manager", () => {
       ]),
     ).toThrow("node 2 is present in both segment 13 and segment 11");
 
-    expect(state.getCachedSegmentNodes(11)).toBe(segment11Nodes);
-    expect(state.getCachedSegmentNodes(13)).toBe(segment13Nodes);
-    expect(state.getCachedNode(1)).toBe(node1);
-    expect(state.getCachedNode(2)).toBe(node2);
-    expect(state.getCachedSegmentRevision(11)).toBe(segment11Revision);
-    expect(state.getCachedSegmentRevision(13)).toBe(segment13Revision);
+    expect(state.getCachedSegmentNodes(11n)).toBe(segment11Nodes);
+    expect(state.getCachedSegmentNodes(13n)).toBe(segment13Nodes);
+    expect(state.getCachedNode(1n)).toBe(node1);
+    expect(state.getCachedNode(2n)).toBe(node2);
+    expect(state.getCachedSegmentRevision(11n)).toBe(segment11Revision);
+    expect(state.getCachedSegmentRevision(13n)).toBe(segment13Revision);
     expect(state.nodeDataVersion.value).toBe(nodeDataVersion);
   });
 
@@ -1896,10 +1905,10 @@ describe("skeleton/spatial_skeleton_manager", () => {
     let resolveFetch:
       | ((
           value: Array<{
-            nodeId: number;
-            parentNodeId?: number;
+            nodeId: bigint;
+            parentNodeId?: bigint;
             position: Float32Array;
-            segmentId: number;
+            segmentId: bigint;
             isTrueEnd: boolean;
           }>,
         ) => void)
@@ -1908,10 +1917,10 @@ describe("skeleton/spatial_skeleton_manager", () => {
       () =>
         new Promise<
           Array<{
-            nodeId: number;
-            parentNodeId?: number;
+            nodeId: bigint;
+            parentNodeId?: bigint;
             position: Float32Array;
-            segmentId: number;
+            segmentId: bigint;
             isTrueEnd: boolean;
           }>
         >((resolve) => {
@@ -1929,37 +1938,37 @@ describe("skeleton/spatial_skeleton_manager", () => {
     } as any;
 
     const pending = state
-      .getFullSegmentNodes(skeletonLayer, 11)
+      .getFullSegmentNodes(skeletonLayer, 11n)
       .catch((error) => error);
 
     state.evictInactiveSegmentNodes([]);
     resolveFetch?.([
       {
-        nodeId: 5,
+        nodeId: 5n,
         parentNodeId: undefined,
         position: new Float32Array([1, 2, 3]),
-        segmentId: 11,
+        segmentId: 11n,
         isTrueEnd: false,
       },
     ]);
 
     await expect(pending).resolves.toMatchObject({ name: "AbortError" });
-    expect(state.getCachedSegmentNodes(11)).toBeUndefined();
-    expect(state.getCachedNode(5)).toBeUndefined();
+    expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
+    expect(state.getCachedNode(5n)).toBeUndefined();
   });
 
   it("tracks monotonic segment revisions across atomic replacement and clearing", () => {
     const state = new SpatialSkeletonState();
-    const initialRevision = state.getCachedSegmentRevision(11);
+    const initialRevision = state.getCachedSegmentRevision(11n);
 
     state.replaceCachedSegmentSnapshots(
       [
         [
-          11,
+          11n,
           [
             {
-              nodeId: 5,
-              segmentId: 11,
+              nodeId: 5n,
+              segmentId: 11n,
               position: new Float32Array([1, 2, 3]),
             },
           ],
@@ -1967,18 +1976,18 @@ describe("skeleton/spatial_skeleton_manager", () => {
       ],
       { notify: false },
     );
-    const replacedRevision = state.getCachedSegmentRevision(11);
+    const replacedRevision = state.getCachedSegmentRevision(11n);
     expect(replacedRevision).toBeGreaterThan(initialRevision);
 
     expect(
       state.replaceCachedSegmentSnapshots(
         [
           [
-            11,
+            11n,
             [
               {
-                nodeId: 5,
-                segmentId: 11,
+                nodeId: 5n,
+                segmentId: 11n,
                 position: new Float32Array([4, 5, 6]),
               },
             ],
@@ -1987,11 +1996,11 @@ describe("skeleton/spatial_skeleton_manager", () => {
         { notify: false },
       ),
     ).toBe(true);
-    const secondReplacementRevision = state.getCachedSegmentRevision(11);
+    const secondReplacementRevision = state.getCachedSegmentRevision(11n);
     expect(secondReplacementRevision).toBeGreaterThan(replacedRevision);
 
     expect(state.clearInspectedSkeletonCache()).toBe(true);
-    expect(state.getCachedSegmentRevision(11)).toBeGreaterThan(
+    expect(state.getCachedSegmentRevision(11n)).toBeGreaterThan(
       secondReplacementRevision,
     );
   });
@@ -2001,11 +2010,11 @@ describe("skeleton/spatial_skeleton_manager", () => {
     state.replaceCachedSegmentSnapshots(
       [
         [
-          11,
+          11n,
           [
             {
-              nodeId: 5,
-              segmentId: 11,
+              nodeId: 5n,
+              segmentId: 11n,
               position: new Float32Array([1, 2, 3]),
             },
           ],
@@ -2013,32 +2022,32 @@ describe("skeleton/spatial_skeleton_manager", () => {
       ],
       { notify: false },
     );
-    const expectedRevisions = getCachedSegmentRevisions(state, [11]);
+    const expectedRevisions = getCachedSegmentRevisions(state, [11n]);
     expect(
       state.replaceCachedSegmentSnapshots([
         [
-          11,
+          11n,
           [
             {
-              nodeId: 5,
-              segmentId: 11,
+              nodeId: 5n,
+              segmentId: 11n,
               position: new Float32Array([4, 5, 6]),
             },
           ],
         ],
       ]),
     ).toBe(true);
-    const previewRevision = state.getCachedSegmentRevision(11);
+    const previewRevision = state.getCachedSegmentRevision(11n);
 
     expect(
       state.replaceCachedSegmentSnapshots(
         [
           [
-            11,
+            11n,
             [
               {
-                nodeId: 5,
-                segmentId: 11,
+                nodeId: 5n,
+                segmentId: 11n,
                 position: new Float32Array([7, 8, 9]),
               },
             ],
@@ -2047,10 +2056,10 @@ describe("skeleton/spatial_skeleton_manager", () => {
         { expectedRevisions },
       ),
     ).toBe(false);
-    expect(state.getCachedNode(5)?.position).toEqual(
+    expect(state.getCachedNode(5n)?.position).toEqual(
       new Float32Array([4, 5, 6]),
     );
-    expect(state.getCachedSegmentRevision(11)).toBe(previewRevision);
+    expect(state.getCachedSegmentRevision(11n)).toBe(previewRevision);
   });
 
   it("does not publish a retained read over a newer atomic replacement", async () => {
@@ -2060,7 +2069,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       | ((nodes: SpatiallyIndexedSkeletonNode[]) => void)
       | undefined;
     const getSkeleton = vi.fn(
-      (_segmentId: number, options?: { signal?: AbortSignal }) =>
+      (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
         new Promise<SpatiallyIndexedSkeletonNode[]>((resolve, reject) => {
           receivedSignal = options?.signal;
           resolveFetch = resolve;
@@ -2080,18 +2089,18 @@ describe("skeleton/spatial_skeleton_manager", () => {
         getSpatialIndexMetadata: async () => null,
       },
     } as any;
-    const pending = state.getFullSegmentNodes(skeletonLayer, 11, {
+    const pending = state.getFullSegmentNodes(skeletonLayer, 11n, {
       retainWhileInactive: true,
     });
 
     state.replaceCachedSegmentSnapshots(
       [
         [
-          11,
+          11n,
           [
             {
-              nodeId: 5,
-              segmentId: 11,
+              nodeId: 5n,
+              segmentId: 11n,
               position: new Float32Array([4, 5, 6]),
             },
           ],
@@ -2104,22 +2113,22 @@ describe("skeleton/spatial_skeleton_manager", () => {
 
     resolveFetch?.([
       {
-        nodeId: 5,
-        segmentId: 11,
+        nodeId: 5n,
+        segmentId: 11n,
         position: new Float32Array([7, 8, 9]),
       },
     ]);
     await expect(pending).resolves.toEqual([
       {
-        nodeId: 5,
-        segmentId: 11,
+        nodeId: 5n,
+        segmentId: 11n,
         position: new Float32Array([7, 8, 9]),
         parentNodeId: undefined,
         description: undefined,
         isTrueEnd: false,
       },
     ]);
-    expect(state.getCachedNode(5)?.position).toEqual(
+    expect(state.getCachedNode(5n)?.position).toEqual(
       new Float32Array([4, 5, 6]),
     );
   });
@@ -2129,7 +2138,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const owner = {};
     let receivedSignal: AbortSignal | undefined;
     const getSkeleton = vi.fn(
-      (_segmentId: number, options?: { signal?: AbortSignal }) =>
+      (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
         new Promise<never>(() => {
           receivedSignal = options?.signal;
           // Deliberately ignore AbortSignal. The manager's owner-release race
@@ -2146,7 +2155,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       },
     } as any;
     const outcome = state
-      .getFullSegmentNodes(skeletonLayer, 11, {
+      .getFullSegmentNodes(skeletonLayer, 11n, {
         requestOwner: owner,
         retainWhileInactive: true,
       })
@@ -2169,7 +2178,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const secondOwner = {};
     let receivedSignal: AbortSignal | undefined;
     const getSkeleton = vi.fn(
-      (_segmentId: number, options?: { signal?: AbortSignal }) =>
+      (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
         new Promise<never>((_resolve, reject) => {
           receivedSignal = options?.signal;
           options?.signal?.addEventListener(
@@ -2189,12 +2198,12 @@ describe("skeleton/spatial_skeleton_manager", () => {
       },
     } as any;
     const firstOutcome = state
-      .getFullSegmentNodes(skeletonLayer, 11, {
+      .getFullSegmentNodes(skeletonLayer, 11n, {
         requestOwner: firstOwner,
       })
       .catch((error) => error);
     const secondOutcome = state
-      .getFullSegmentNodes(skeletonLayer, 11, {
+      .getFullSegmentNodes(skeletonLayer, 11n, {
         requestOwner: secondOwner,
       })
       .catch((error) => error);
@@ -2216,7 +2225,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       | ((nodes: SpatiallyIndexedSkeletonNode[]) => void)
       | undefined;
     const getSkeleton = vi.fn(
-      (_segmentId: number, options?: { signal?: AbortSignal }) =>
+      (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
         new Promise<SpatiallyIndexedSkeletonNode[]>((resolve, reject) => {
           receivedSignal = options?.signal;
           resolveFetch = resolve;
@@ -2236,26 +2245,26 @@ describe("skeleton/spatial_skeleton_manager", () => {
         getSpatialIndexMetadata: async () => null,
       },
     } as any;
-    const commandFetch = state.getFullSegmentNodes(skeletonLayer, 11, {
+    const commandFetch = state.getFullSegmentNodes(skeletonLayer, 11n, {
       requestOwner: owner,
       retainWhileInactive: true,
     });
-    const visualFetch = state.getFullSegmentNodes(skeletonLayer, 11);
+    const visualFetch = state.getFullSegmentNodes(skeletonLayer, 11n);
 
     expect(getSkeleton).toHaveBeenCalledTimes(1);
     expect(state.releaseFullSegmentNodeFetchOwner(owner)).toBe(true);
     expect(receivedSignal?.aborted).toBe(false);
     resolveFetch?.([
       {
-        nodeId: 5,
-        segmentId: 11,
+        nodeId: 5n,
+        segmentId: 11n,
         position: new Float32Array([1, 2, 3]),
       },
     ]);
 
     await expect(commandFetch).resolves.toHaveLength(1);
     await expect(visualFetch).resolves.toHaveLength(1);
-    expect(state.getCachedSegmentNodes(11)).toHaveLength(1);
+    expect(state.getCachedSegmentNodes(11n)).toHaveLength(1);
   });
 
   it("times out an underlying full-segment source request", async () => {
@@ -2264,7 +2273,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       const state = new SpatialSkeletonState();
       let receivedSignal: AbortSignal | undefined;
       const getSkeleton = vi.fn(
-        (_segmentId: number, options?: { signal?: AbortSignal }) =>
+        (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
           new Promise<never>(() => {
             receivedSignal = options?.signal;
             // Deliberately ignore AbortSignal. The deadline itself must reject
@@ -2282,7 +2291,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
               getSpatialIndexMetadata: async () => null,
             },
           } as any,
-          11,
+          11n,
         )
         .then(
           () => undefined,
@@ -2316,14 +2325,14 @@ describe("skeleton/spatial_skeleton_manager", () => {
     } as any;
 
     await expect(
-      state.getFullSegmentNodes(skeletonLayer, 11, {
+      state.getFullSegmentNodes(skeletonLayer, 11n, {
         retainWhileInactive: true,
       }),
     ).rejects.toThrow("temporary read failure");
     expect(getSkeleton).toHaveBeenCalledTimes(1);
 
     await expect(
-      state.getFullSegmentNodes(skeletonLayer, 11, {
+      state.getFullSegmentNodes(skeletonLayer, 11n, {
         retainWhileInactive: true,
       }),
     ).resolves.toEqual([]);
@@ -2335,7 +2344,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     try {
       const state = new SpatialSkeletonState();
       const getSkeleton = vi.fn(
-        (_segmentId: number, _options?: { signal?: AbortSignal }) => {
+        (_segmentId: bigint, _options?: { signal?: AbortSignal }) => {
           if (getSkeleton.mock.calls.length === 2) return Promise.resolve([]);
           return new Promise<never>(() => {});
         },
@@ -2350,7 +2359,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
             getSpatialIndexMetadata: async () => null,
           },
         } as any,
-        11,
+        11n,
         { retainWhileInactive: true },
       );
       const timedOut = pending.catch((error: unknown) => error);
@@ -2368,7 +2377,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
               getSpatialIndexMetadata: async () => null,
             },
           } as any,
-          11,
+          11n,
           { retainWhileInactive: true },
         ),
       ).resolves.toEqual([]);
@@ -2381,7 +2390,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
   it("aborts command-owned hydration after a source reset", async () => {
     const state = new SpatialSkeletonState();
     const getSkeleton = vi.fn(
-      (_segmentId: number, _options?: { signal?: AbortSignal }) =>
+      (_segmentId: bigint, _options?: { signal?: AbortSignal }) =>
         new Promise<never>(() => {}),
     );
     const pending = state.getFullSegmentNodes(
@@ -2394,7 +2403,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
           getSpatialIndexMetadata: async () => null,
         },
       } as any,
-      11,
+      11n,
       { retainWhileInactive: true },
     );
 
@@ -2407,7 +2416,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const state = new SpatialSkeletonState();
     let receivedSignal: AbortSignal | undefined;
     const getSkeleton = vi.fn(
-      (_segmentId: number, options?: { signal?: AbortSignal }) =>
+      (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
         new Promise<never>((_resolve, reject) => {
           receivedSignal = options?.signal;
           options?.signal?.addEventListener(
@@ -2428,22 +2437,22 @@ describe("skeleton/spatial_skeleton_manager", () => {
           getSpatialIndexMetadata: async () => null,
         },
       } as any,
-      11,
+      11n,
     );
 
     expect(receivedSignal?.aborted).toBe(false);
     expect(state.clearInspectedSkeletonCache()).toBe(true);
     expect(receivedSignal?.aborted).toBe(true);
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
-    expect(state.getCachedSegmentNodes(11)).toBeUndefined();
-    expect(state.getCachedNode(11)).toBeUndefined();
+    expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
+    expect(state.getCachedNode(11n)).toBeUndefined();
   });
 
   it("aborts pending full segment fetches when a segment is evicted", async () => {
     const state = new SpatialSkeletonState();
     let receivedSignal: AbortSignal | undefined;
     const getSkeleton = vi.fn(
-      (_segmentId: number, options?: { signal?: AbortSignal }) =>
+      (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
         new Promise<never>((_resolve, reject) => {
           receivedSignal = options?.signal;
           options?.signal?.addEventListener(
@@ -2464,36 +2473,36 @@ describe("skeleton/spatial_skeleton_manager", () => {
           getSpatialIndexMetadata: async () => null,
         },
       } as any,
-      11,
+      11n,
     );
 
     expect(receivedSignal?.aborted).toBe(false);
     expect(state.evictInactiveSegmentNodes([])).toBe(false);
     expect(receivedSignal?.aborted).toBe(true);
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
-    expect(state.getCachedSegmentNodes(11)).toBeUndefined();
-    expect(state.getCachedNode(11)).toBeUndefined();
+    expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
+    expect(state.getCachedNode(11n)).toBeUndefined();
   });
 
   it("retains exact optimistic projection segments during visual eviction", () => {
     const state = new SpatialSkeletonState();
     state.replaceCachedSegmentSnapshots([
       [
-        11,
+        11n,
         [
           {
-            nodeId: 5,
-            segmentId: 11,
+            nodeId: 5n,
+            segmentId: 11n,
             position: new Float32Array([1, 2, 3]),
           },
         ],
       ],
       [
-        17,
+        17n,
         [
           {
-            nodeId: 7,
-            segmentId: 17,
+            nodeId: 7n,
+            segmentId: 17n,
             position: new Float32Array([4, 5, 6]),
           },
         ],
@@ -2503,14 +2512,14 @@ describe("skeleton/spatial_skeleton_manager", () => {
       canUndo: () => false,
       canRedo: () => false,
       hasUnconfirmedActions: () => true,
-      getProtectedProjectionSegmentIds: () => [11],
+      getProtectedProjectionSegmentIds: () => [11n],
       undoLatest: () => resolvedOptimisticExecution(false),
       redoLatest: () => resolvedOptimisticExecution(false),
     };
 
     expect(state.evictInactiveSegmentNodes([])).toBe(true);
-    expect(state.getCachedSegmentNodes(11)).toHaveLength(1);
-    expect(state.getCachedSegmentNodes(17)).toBeUndefined();
+    expect(state.getCachedSegmentNodes(11n)).toHaveLength(1);
+    expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
   });
 
   it("retains a pending visual fetch when a command joins it", async () => {
@@ -2520,7 +2529,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       | ((nodes: SpatiallyIndexedSkeletonNode[]) => void)
       | undefined;
     const getSkeleton = vi.fn(
-      (_segmentId: number, options?: { signal?: AbortSignal }) =>
+      (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
         new Promise<SpatiallyIndexedSkeletonNode[]>((resolve, reject) => {
           receivedSignal = options?.signal;
           resolveFetch = resolve;
@@ -2541,8 +2550,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
       },
     } as any;
 
-    const visualFetch = state.getFullSegmentNodes(skeletonLayer, 11);
-    const commandFetch = state.getFullSegmentNodes(skeletonLayer, 11, {
+    const visualFetch = state.getFullSegmentNodes(skeletonLayer, 11n);
+    const commandFetch = state.getFullSegmentNodes(skeletonLayer, 11n, {
       retainWhileInactive: true,
     });
 
@@ -2552,8 +2561,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
 
     const fetchedNodes: SpatiallyIndexedSkeletonNode[] = [
       {
-        nodeId: 5,
-        segmentId: 11,
+        nodeId: 5n,
+        segmentId: 11n,
         position: new Float32Array([1, 2, 3]),
         isTrueEnd: false,
       },
@@ -2562,16 +2571,16 @@ describe("skeleton/spatial_skeleton_manager", () => {
 
     await expect(visualFetch).resolves.toEqual(fetchedNodes);
     await expect(commandFetch).resolves.toEqual(fetchedNodes);
-    expect(state.getCachedSegmentNodes(11)?.map((node) => node.nodeId)).toEqual(
-      [5],
-    );
+    expect(
+      state.getCachedSegmentNodes(11n)?.map((node) => node.nodeId),
+    ).toEqual([5n]);
   });
 
   it("aborts a pending fetch before atomically replacing its segment", async () => {
     const state = new SpatialSkeletonState();
     let receivedSignal: AbortSignal | undefined;
     const getSkeleton = vi.fn(
-      (_segmentId: number, options?: { signal?: AbortSignal }) =>
+      (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
         new Promise<never>((_resolve, reject) => {
           receivedSignal = options?.signal;
           options?.signal?.addEventListener(
@@ -2591,7 +2600,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
           getSpatialIndexMetadata: async () => null,
         },
       } as any,
-      11,
+      11n,
     );
     let notifications = 0;
     state.nodeDataVersion.changed.add(() => {
@@ -2602,11 +2611,11 @@ describe("skeleton/spatial_skeleton_manager", () => {
     expect(
       state.replaceCachedSegmentSnapshots([
         [
-          11,
+          11n,
           [
             {
-              nodeId: 5,
-              segmentId: 11,
+              nodeId: 5n,
+              segmentId: 11n,
               position: new Float32Array([1, 2, 3]),
             },
           ],
@@ -2616,10 +2625,10 @@ describe("skeleton/spatial_skeleton_manager", () => {
 
     expect(receivedSignal?.aborted).toBe(true);
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
-    expect(state.getCachedSegmentNodes(11)?.map((node) => node.nodeId)).toEqual(
-      [5],
-    );
-    expect(state.getCachedNode(5)).toBe(state.getCachedSegmentNodes(11)?.[0]);
+    expect(
+      state.getCachedSegmentNodes(11n)?.map((node) => node.nodeId),
+    ).toEqual([5n]);
+    expect(state.getCachedNode(5n)).toBe(state.getCachedSegmentNodes(11n)?.[0]);
     expect(notifications).toBe(1);
   });
 
@@ -2627,10 +2636,10 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const state = new SpatialSkeletonState();
     const getSkeleton = vi.fn(async () => [
       {
-        nodeId: 5,
+        nodeId: 5n,
         parentNodeId: undefined,
         position: new Float32Array([1, 2, 3]),
-        segmentId: 11,
+        segmentId: 11n,
         isTrueEnd: false,
       },
     ]);
@@ -2648,23 +2657,23 @@ describe("skeleton/spatial_skeleton_manager", () => {
       notifications += 1;
     });
 
-    await expect(state.getFullSegmentNodes(skeletonLayer, 11)).resolves.toEqual(
-      [
-        {
-          nodeId: 5,
-          segmentId: 11,
-          position: new Float32Array([1, 2, 3]),
-          parentNodeId: undefined,
-          description: undefined,
-          isTrueEnd: false,
-        },
-      ],
-    );
+    await expect(
+      state.getFullSegmentNodes(skeletonLayer, 11n),
+    ).resolves.toEqual([
+      {
+        nodeId: 5n,
+        segmentId: 11n,
+        position: new Float32Array([1, 2, 3]),
+        parentNodeId: undefined,
+        description: undefined,
+        isTrueEnd: false,
+      },
+    ]);
 
     expect(notifications).toBe(1);
-    expect(state.getCachedNode(5)).toEqual({
-      nodeId: 5,
-      segmentId: 11,
+    expect(state.getCachedNode(5n)).toEqual({
+      nodeId: 5n,
+      segmentId: 11n,
       position: new Float32Array([1, 2, 3]),
       parentNodeId: undefined,
       description: undefined,
@@ -2676,10 +2685,10 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const state = new SpatialSkeletonState();
     const getSkeleton = vi.fn(async () => [
       {
-        nodeId: 5,
+        nodeId: 5n,
         parentNodeId: undefined,
         position: new Float32Array([1, 2, 3]),
-        segmentId: 11,
+        segmentId: 11n,
         isTrueEnd: false,
       },
     ]);
@@ -2695,12 +2704,12 @@ describe("skeleton/spatial_skeleton_manager", () => {
             getSpatialIndexMetadata: async () => null,
           },
         } as any,
-        11,
+        11n,
       ),
     ).resolves.toEqual([
       {
-        nodeId: 5,
-        segmentId: 11,
+        nodeId: 5n,
+        segmentId: 11n,
         position: new Float32Array([1, 2, 3]),
         parentNodeId: undefined,
         description: undefined,
@@ -2709,9 +2718,9 @@ describe("skeleton/spatial_skeleton_manager", () => {
     ]);
 
     expect(getSkeleton).toHaveBeenCalledTimes(1);
-    expect(state.getCachedNode(5)).toEqual({
-      nodeId: 5,
-      segmentId: 11,
+    expect(state.getCachedNode(5n)).toEqual({
+      nodeId: 5n,
+      segmentId: 11n,
       position: new Float32Array([1, 2, 3]),
       parentNodeId: undefined,
       description: undefined,
@@ -2722,10 +2731,10 @@ describe("skeleton/spatial_skeleton_manager", () => {
   it("stores merge anchor state only when the node id is valid", () => {
     const state = new SpatialSkeletonState();
 
-    expect(state.setMergeAnchor(5)).toBe(true);
-    expect(state.mergeAnchorNodeId.value).toBe(5);
+    expect(state.setMergeAnchor(5n)).toBe(true);
+    expect(state.mergeAnchorNodeId.value).toBe(5n);
 
-    expect(state.setMergeAnchor(0)).toBe(true);
+    expect(state.setMergeAnchor(0n)).toBe(true);
     expect(state.mergeAnchorNodeId.value).toBeUndefined();
   });
 
@@ -2733,22 +2742,22 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const resolvers: Array<
       (
         value: Array<{
-          nodeId: number;
-          parentNodeId?: number;
+          nodeId: bigint;
+          parentNodeId?: bigint;
           position: Float32Array;
-          segmentId: number;
+          segmentId: bigint;
           isTrueEnd: boolean;
         }>,
       ) => void
     > = [];
     const getSkeleton = vi.fn(
-      (_segmentId: number, options?: { signal?: AbortSignal }) =>
+      (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
         new Promise<
           Array<{
-            nodeId: number;
-            parentNodeId?: number;
+            nodeId: bigint;
+            parentNodeId?: bigint;
             position: Float32Array;
-            segmentId: number;
+            segmentId: bigint;
             isTrueEnd: boolean;
           }>
         >((resolve, reject) => {
@@ -2785,7 +2794,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const state = new SpatialSkeletonState();
     const { skeletonLayer, getSkeleton, resolvers } = makeLimiterTestLayer(2);
 
-    const pending = [11, 12, 13, 14].map((segmentId) =>
+    const pending = [11n, 12n, 13n, 14n].map((segmentId) =>
       state.getFullSegmentNodes(skeletonLayer, segmentId),
     );
 
@@ -2805,11 +2814,11 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const state = new SpatialSkeletonState();
     const { skeletonLayer, getSkeleton, resolvers } = makeLimiterTestLayer(1);
 
-    const first = state.getFullSegmentNodes(skeletonLayer, 11);
-    void state.getFullSegmentNodes(skeletonLayer, 12).catch(() => undefined);
-    void state.getFullSegmentNodes(skeletonLayer, 13).catch(() => undefined);
+    const first = state.getFullSegmentNodes(skeletonLayer, 11n);
+    void state.getFullSegmentNodes(skeletonLayer, 12n).catch(() => undefined);
+    void state.getFullSegmentNodes(skeletonLayer, 13n).catch(() => undefined);
     void state
-      .getFullSegmentNodes(skeletonLayer, 13, {
+      .getFullSegmentNodes(skeletonLayer, 13n, {
         retainWhileInactive: true,
         requestOwner: {},
       })
@@ -2819,7 +2828,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     resolvers[0]([]);
     await first;
     expect(getSkeleton).toHaveBeenCalledTimes(2);
-    expect(getSkeleton.mock.calls[1][0]).toBe(13);
+    expect(getSkeleton.mock.calls[1][0]).toBe(13n);
   });
 
   it("starts queued display reads in order again once an edit stops awaiting one", async () => {
@@ -2827,11 +2836,11 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const { skeletonLayer, getSkeleton, resolvers } = makeLimiterTestLayer(1);
     const requestOwner = {};
 
-    const first = state.getFullSegmentNodes(skeletonLayer, 11);
-    void state.getFullSegmentNodes(skeletonLayer, 12).catch(() => undefined);
-    void state.getFullSegmentNodes(skeletonLayer, 13).catch(() => undefined);
+    const first = state.getFullSegmentNodes(skeletonLayer, 11n);
+    void state.getFullSegmentNodes(skeletonLayer, 12n).catch(() => undefined);
+    void state.getFullSegmentNodes(skeletonLayer, 13n).catch(() => undefined);
     void state
-      .getFullSegmentNodes(skeletonLayer, 13, {
+      .getFullSegmentNodes(skeletonLayer, 13n, {
         retainWhileInactive: true,
         requestOwner,
       })
@@ -2841,15 +2850,15 @@ describe("skeleton/spatial_skeleton_manager", () => {
     resolvers[0]([]);
     await first;
     expect(getSkeleton).toHaveBeenCalledTimes(2);
-    expect(getSkeleton.mock.calls[1][0]).toBe(12);
+    expect(getSkeleton.mock.calls[1][0]).toBe(12n);
   });
 
   it("releases a limiter slot when a non-cooperative source times out", async () => {
     vi.useFakeTimers();
     try {
       const state = new SpatialSkeletonState();
-      const getSkeleton = vi.fn((segmentId: number) =>
-        segmentId === 11 ? new Promise<never>(() => {}) : Promise.resolve([]),
+      const getSkeleton = vi.fn((segmentId: bigint) =>
+        segmentId === 11n ? new Promise<never>(() => {}) : Promise.resolve([]),
       );
       const skeletonLayer = {
         source: {
@@ -2866,9 +2875,9 @@ describe("skeleton/spatial_skeleton_manager", () => {
         },
       } as any;
       const firstOutcome = state
-        .getFullSegmentNodes(skeletonLayer, 11)
+        .getFullSegmentNodes(skeletonLayer, 11n)
         .catch((error) => error);
-      const second = state.getFullSegmentNodes(skeletonLayer, 12);
+      const second = state.getFullSegmentNodes(skeletonLayer, 12n);
 
       expect(getSkeleton).toHaveBeenCalledTimes(1);
       await vi.advanceTimersByTimeAsync(120_000);
@@ -2888,7 +2897,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
 
     for (let segmentId = 1; segmentId <= 10; ++segmentId) {
       void state
-        .getFullSegmentNodes(skeletonLayer, segmentId)
+        .getFullSegmentNodes(skeletonLayer, BigInt(segmentId))
         .catch(() => undefined);
     }
 
@@ -2899,11 +2908,11 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const state = new SpatialSkeletonState();
     const { skeletonLayer, getSkeleton, resolvers } = makeLimiterTestLayer(1);
 
-    const first = state.getFullSegmentNodes(skeletonLayer, 11);
-    const queued = state.getFullSegmentNodes(skeletonLayer, 12);
+    const first = state.getFullSegmentNodes(skeletonLayer, 11n);
+    const queued = state.getFullSegmentNodes(skeletonLayer, 12n);
     expect(getSkeleton).toHaveBeenCalledTimes(1);
 
-    expect(state.evictInactiveSegmentNodes([11])).toBe(false);
+    expect(state.evictInactiveSegmentNodes([11n])).toBe(false);
     await expect(queued).rejects.toMatchObject({ name: "AbortError" });
 
     resolvers[0]([]);

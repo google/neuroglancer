@@ -24,7 +24,7 @@ import {
 } from "#src/skeleton/optimistic_edit/api.js";
 
 interface TestMutation {
-  readonly nodeId: number;
+  readonly nodeId: bigint;
 }
 
 function makeAdapter(
@@ -44,7 +44,7 @@ function makeAdapter(
   };
 }
 
-const mutation = { nodeId: 17 };
+const mutation = { nodeId: 17n };
 const context: SpatialSkeletonMutationContext = {
   intent: "execute",
   operationId: 4,

@@ -16,9 +16,12 @@
 
 import { describe, expect, it } from "vitest";
 
+import { numChunkStatistics } from "#src/chunk_manager/base.js";
+import type { SpatiallyIndexedSkeletonSourceBackend } from "#src/skeleton/backend.js";
 import {
   getSpatiallyIndexedSkeletonChunkPriority,
   getSpatiallyIndexedSkeletonRenderPriority,
+  SpatiallyIndexedSkeletonChunk,
   SPATIALLY_INDEXED_SKELETON_PRIORITY_BOOST,
 } from "#src/skeleton/backend.js";
 import {
@@ -115,5 +118,48 @@ describe("skeleton/backend chunk priority", () => {
         farChunk,
       ),
     );
+  });
+});
+
+function makeSpatialSkeletonChunk() {
+  const chunk = new SpatiallyIndexedSkeletonChunk();
+  chunk.source = {
+    statistics: new Float64Array(numChunkStatistics),
+    chunkManager: {
+      queueManager: {
+        adjustCapacitiesForChunk() {},
+        scheduleUpdate() {},
+        moveChunkToFrontend() {},
+        updateChunkState() {},
+      },
+    },
+  } as unknown as SpatiallyIndexedSkeletonSourceBackend;
+  chunk.chunkGridPosition = Float32Array.of(0, 0, 0);
+  return chunk;
+}
+
+describe("skeleton/backend spatial chunk memory", () => {
+  it("counts every array a spatial skeleton chunk sends to the frontend toward its memory budget", () => {
+    const chunk = makeSpatialSkeletonChunk();
+    chunk.vertexPositions = Float32Array.of(1, 2, 3, 4, 5, 6);
+    chunk.indices = Uint32Array.of(0, 1);
+    chunk.nodeIds = BigUint64Array.of(2n ** 63n, 7n);
+    chunk.segmentIds = BigUint64Array.of(2n ** 40n, 2n ** 40n);
+    chunk.downloadSucceeded();
+
+    const transfers: ArrayBuffer[] = [];
+    chunk.serialize({}, transfers);
+    const transferredBytes = transfers.reduce(
+      (total, buffer) => total + buffer.byteLength,
+      0,
+    );
+    const positionBytes = 2 * 3 * 4;
+    const indexBytes = 2 * 4;
+    const nodeIdBytes = 2 * 8;
+    const segmentIdBytes = 2 * 8;
+    expect(transferredBytes).toBe(
+      positionBytes + indexBytes + nodeIdBytes + segmentIdBytes,
+    );
+    expect(chunk.systemMemoryBytes).toBe(transferredBytes);
   });
 });

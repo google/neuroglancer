@@ -30,8 +30,8 @@ function makeNode(
   overrides: Partial<SpatiallyIndexedSkeletonNode> = {},
 ): SpatiallyIndexedSkeletonNode {
   return {
-    nodeId: 1,
-    segmentId: 1,
+    nodeId: 1n,
+    segmentId: 1n,
     position: new Float32Array([0, 0, 0]),
     isTrueEnd: false,
     ...overrides,
@@ -47,17 +47,17 @@ describe("skeleton node types", () => {
       ),
     ).toBe("root");
     expect(
-      classifySpatialSkeletonDisplayNodeType(makeNode({ parentNodeId: 1 }), 2),
+      classifySpatialSkeletonDisplayNodeType(makeNode({ parentNodeId: 1n }), 2),
     ).toBe("branchStart");
     expect(
-      classifySpatialSkeletonDisplayNodeType(makeNode({ parentNodeId: 1 }), 1),
+      classifySpatialSkeletonDisplayNodeType(makeNode({ parentNodeId: 1n }), 1),
     ).toBe("regular");
     expect(
-      classifySpatialSkeletonDisplayNodeType(makeNode({ parentNodeId: 1 }), 0),
+      classifySpatialSkeletonDisplayNodeType(makeNode({ parentNodeId: 1n }), 0),
     ).toBe("virtualEnd");
     expect(
       classifySpatialSkeletonDisplayNodeType(
-        makeNode({ parentNodeId: 1 }),
+        makeNode({ parentNodeId: 1n }),
         0,
         false,
       ),

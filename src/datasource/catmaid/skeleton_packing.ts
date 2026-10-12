@@ -18,9 +18,9 @@ import type { SpatiallyIndexedSkeletonNodeBase } from "#src/skeleton/api.js";
 
 interface PackedCatmaidSkeletonData {
   vertexPositions: Float32Array;
-  segmentIds: Uint32Array;
+  segmentIds: BigUint64Array;
   indices: Uint32Array;
-  nodeIds: Int32Array;
+  nodeIds: BigUint64Array;
 }
 
 export function packCatmaidSkeletonNodes(
@@ -28,10 +28,10 @@ export function packCatmaidSkeletonNodes(
 ): PackedCatmaidSkeletonData {
   const numVertices = nodes.length;
   const vertexPositions = new Float32Array(numVertices * 3);
-  const segmentIds = new Uint32Array(numVertices);
-  const nodeIds = new Int32Array(numVertices);
+  const segmentIds = new BigUint64Array(numVertices);
+  const nodeIds = new BigUint64Array(numVertices);
   const indices: number[] = [];
-  const nodeMap = new Map<number, number>();
+  const nodeMap = new Map<bigint, number>();
 
   for (let i = 0; i < numVertices; ++i) {
     const node = nodes[i];

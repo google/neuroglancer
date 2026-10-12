@@ -39,8 +39,8 @@ import {
 } from "#src/ui/skeleton_edit_tool_shortcuts.js";
 
 export interface SpatialSkeletonToolPointInfo {
-  nodeId: number;
-  segmentId?: number;
+  nodeId: bigint;
+  segmentId?: bigint;
   position?: ArrayLike<number>;
 }
 

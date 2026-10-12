@@ -23,15 +23,15 @@ import {
 
 describe("getCatmaidQueueInputRequirements", () => {
   it("deduplicates required endpoints", () => {
-    const endpoint = { segmentId: 7, nodeId: 11 };
+    const endpoint = { segmentId: 7n, nodeId: 11n };
     expect(getCatmaidQueueInputRequirements(endpoint, endpoint)).toEqual({
       required: [endpoint],
     });
   });
 
   it("declares the Merge destination as loadable", () => {
-    const source = { segmentId: 7, nodeId: 11 };
-    const target = { segmentId: 8, nodeId: 12 };
+    const source = { segmentId: 7n, nodeId: 11n };
+    const target = { segmentId: 8n, nodeId: 12n };
     expect(getCatmaidMergeQueueInputRequirements(source, target)).toEqual({
       required: [source],
       loadable: [target],
@@ -39,7 +39,7 @@ describe("getCatmaidQueueInputRequirements", () => {
   });
 
   it("does not expose a duplicate required endpoint as loadable", () => {
-    const endpoint = { segmentId: 7, nodeId: 11 };
+    const endpoint = { segmentId: 7n, nodeId: 11n };
     expect(getCatmaidMergeQueueInputRequirements(endpoint, endpoint)).toEqual({
       required: [endpoint],
     });

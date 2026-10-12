@@ -29,10 +29,10 @@ import {
 
 export function materializePhysicalSpatialSkeletonWorkspace(
   workspace: SpatialSkeletonProjectionWorkspace,
-  mappings: SpatialSkeletonLogicalHandleMappings<number, number>,
+  mappings: SpatialSkeletonLogicalHandleMappings<bigint, bigint>,
 ) {
   const result = new Map<
-    number,
+    bigint,
     {
       readonly segment: SpatialSkeletonLogicalSegmentHandle;
       readonly snapshot: CompleteSkeletonSnapshotHandle;
@@ -40,13 +40,9 @@ export function materializePhysicalSpatialSkeletonWorkspace(
   >();
   for (const entry of workspace.segments) {
     const segmentId = mappings.resolveSegment(entry.segment);
-    if (
-      !Number.isSafeInteger(segmentId) ||
-      segmentId === undefined ||
-      segmentId <= 0
-    ) {
+    if (segmentId === undefined || segmentId === 0n) {
       throw new SpatialSkeletonProjectionValidationError(
-        `Logical segment ${entry.segment.stableId} requires a positive numeric id for publication.`,
+        `Logical segment ${entry.segment.stableId} requires a nonzero id for publication.`,
       );
     }
     if (result.has(segmentId)) {
@@ -61,8 +57,8 @@ export function materializePhysicalSpatialSkeletonWorkspace(
 
 export function ownsPhysicalSpatialSkeletonSegment(
   workspace: SpatialSkeletonProjectionWorkspace,
-  mappings: SpatialSkeletonLogicalHandleMappings<number, number>,
-  segmentId: number,
+  mappings: SpatialSkeletonLogicalHandleMappings<bigint, bigint>,
+  segmentId: bigint,
 ) {
   return workspace.segments.some(
     ({ segment }) => mappings.resolveSegment(segment) === segmentId,
@@ -71,8 +67,8 @@ export function ownsPhysicalSpatialSkeletonSegment(
 
 export function remapSpatialSkeletonProjectionWorkspace(
   workspace: SpatialSkeletonProjectionWorkspace,
-  nodeIds: ReadonlyMap<number, number>,
-  segmentIds: ReadonlyMap<number, number>,
+  nodeIds: ReadonlyMap<bigint, bigint>,
+  segmentIds: ReadonlyMap<bigint, bigint>,
 ) {
   if (nodeIds.size === 0 && segmentIds.size === 0) return workspace;
   return new SpatialSkeletonProjectionWorkspace(

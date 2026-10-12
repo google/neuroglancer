@@ -23,8 +23,8 @@ import type { SpatialSkeletonPreparationIntent } from "#src/skeleton/spatial_ske
 import { buildSpatialSkeletonSegmentRenderState } from "#src/ui/skeleton_tab_render.js";
 
 function makeNode(
-  nodeId: number,
-  parentNodeId: number | undefined,
+  nodeId: bigint,
+  parentNodeId: bigint | undefined,
   options: {
     description?: string;
     isTrueEnd?: boolean;
@@ -32,9 +32,13 @@ function makeNode(
 ): SpatiallyIndexedSkeletonNode {
   return {
     nodeId,
-    segmentId: 20380,
+    segmentId: 20380n,
     parentNodeId,
-    position: new Float32Array([nodeId, nodeId + 1, nodeId + 2]),
+    position: new Float32Array([
+      Number(nodeId),
+      Number(nodeId) + 1,
+      Number(nodeId) + 2,
+    ]),
     description: options.description,
     isTrueEnd: options.isTrueEnd ?? false,
   };
@@ -85,7 +89,7 @@ function makePreparation(
     direction: "execute",
     kind: "merge",
     lifecycle: "preparing",
-    segmentIds: [20380],
+    segmentIds: [20380n],
     ...options,
   };
 }
@@ -94,13 +98,13 @@ describe("spatial skeleton node id presentation", () => {
   it("replaces only a provisional node id with a Preview placeholder", async () => {
     const getNodeIdPresentation = await getSpatialSkeletonNodeIdPresentation();
 
-    expect(getNodeIdPresentation(0x7fff_ffff, [0x7fff_ffff])).toEqual({
+    expect(getNodeIdPresentation(2n ** 63n + 1n, [2n ** 63n + 1n])).toEqual({
       label: "Preview",
       tooltip:
         "Preview node. The skeleton source has not yet confirmed its permanent node ID.",
       provisional: true,
     });
-    expect(getNodeIdPresentation(42, [0x7fff_ffff])).toEqual({
+    expect(getNodeIdPresentation(42n, [2n ** 63n + 1n])).toEqual({
       label: "42",
       tooltip: undefined,
       provisional: false,
@@ -111,53 +115,61 @@ describe("spatial skeleton node id presentation", () => {
 describe("spatial skeleton edit tab render state", () => {
   it("shows only directly matching nodes for text filtering", () => {
     const graph = buildSpatiallyIndexedSkeletonNavigationGraph([
-      makeNode(1, undefined),
-      makeNode(2, 1),
-      makeNode(3, 2),
-      makeNode(4, 2),
+      makeNode(1n, undefined),
+      makeNode(2n, 1n),
+      makeNode(3n, 2n),
+      makeNode(4n, 2n),
     ]);
 
-    const state = buildSpatialSkeletonSegmentRenderState(20380, graph, {
+    const state = buildSpatialSkeletonSegmentRenderState(20380n, graph, {
       filterText: "target",
       nodeFilterType: SpatialSkeletonNodeFilterType.NONE,
       getNodeDescription(node) {
-        return node.nodeId === 4 ? "target" : undefined;
+        return node.nodeId === 4n ? "target" : undefined;
       },
     });
 
     expect(state.matchedNodeCount).toBe(1);
     expect(state.displayedNodeCount).toBe(1);
     expect(state.branchCount).toBe(1);
-    expect(state.rows.map((row) => row.node.nodeId)).toEqual([4]);
+    expect(state.rows.map((row) => row.node.nodeId)).toEqual([4n]);
   });
 
   it("does not match coordinates, segment ids, or true-end state in the search filter", () => {
     const graph = buildSpatiallyIndexedSkeletonNavigationGraph([
-      makeNode(101, undefined, { isTrueEnd: true }),
-      makeNode(102, 101),
+      makeNode(101n, undefined, { isTrueEnd: true }),
+      makeNode(102n, 101n),
     ]);
 
-    const byCoordinates = buildSpatialSkeletonSegmentRenderState(20380, graph, {
-      filterText: "101 102 103",
-      nodeFilterType: SpatialSkeletonNodeFilterType.NONE,
-      getNodeDescription() {
-        return undefined;
+    const byCoordinates = buildSpatialSkeletonSegmentRenderState(
+      20380n,
+      graph,
+      {
+        filterText: "101 102 103",
+        nodeFilterType: SpatialSkeletonNodeFilterType.NONE,
+        getNodeDescription() {
+          return undefined;
+        },
       },
-    });
-    const bySegmentId = buildSpatialSkeletonSegmentRenderState(20380, graph, {
+    );
+    const bySegmentId = buildSpatialSkeletonSegmentRenderState(20380n, graph, {
       filterText: "20380",
       nodeFilterType: SpatialSkeletonNodeFilterType.NONE,
       getNodeDescription() {
         return undefined;
       },
     });
-    const byTrueEndText = buildSpatialSkeletonSegmentRenderState(20380, graph, {
-      filterText: "true end",
-      nodeFilterType: SpatialSkeletonNodeFilterType.NONE,
-      getNodeDescription() {
-        return undefined;
+    const byTrueEndText = buildSpatialSkeletonSegmentRenderState(
+      20380n,
+      graph,
+      {
+        filterText: "true end",
+        nodeFilterType: SpatialSkeletonNodeFilterType.NONE,
+        getNodeDescription() {
+          return undefined;
+        },
       },
-    });
+    );
 
     expect(byCoordinates.matchedNodeCount).toBe(0);
     expect(byCoordinates.displayedNodeCount).toBe(0);
@@ -169,12 +181,12 @@ describe("spatial skeleton edit tab render state", () => {
 
   it("counts hidden regular nodes in the ratio while omitting them from collapsed rows", () => {
     const graph = buildSpatiallyIndexedSkeletonNavigationGraph([
-      makeNode(10, undefined),
-      makeNode(11, 10),
-      makeNode(12, 11),
+      makeNode(10n, undefined),
+      makeNode(11n, 10n),
+      makeNode(12n, 11n),
     ]);
 
-    const state = buildSpatialSkeletonSegmentRenderState(20380, graph, {
+    const state = buildSpatialSkeletonSegmentRenderState(20380n, graph, {
       filterText: "",
       nodeFilterType: SpatialSkeletonNodeFilterType.DEFAULT,
       getNodeDescription() {
@@ -185,17 +197,17 @@ describe("spatial skeleton edit tab render state", () => {
     expect(state.matchedNodeCount).toBe(3);
     expect(state.displayedNodeCount).toBe(2);
     expect(state.branchCount).toBe(1);
-    expect(state.rows.map((row) => row.node.nodeId)).toEqual([10, 12]);
+    expect(state.rows.map((row) => row.node.nodeId)).toEqual([10n, 12n]);
   });
 
   it("shows all nodes including regular chain nodes when filter is None", () => {
     const graph = buildSpatiallyIndexedSkeletonNavigationGraph([
-      makeNode(10, undefined),
-      makeNode(11, 10),
-      makeNode(12, 11),
+      makeNode(10n, undefined),
+      makeNode(11n, 10n),
+      makeNode(12n, 11n),
     ]);
 
-    const state = buildSpatialSkeletonSegmentRenderState(20380, graph, {
+    const state = buildSpatialSkeletonSegmentRenderState(20380n, graph, {
       filterText: "",
       nodeFilterType: SpatialSkeletonNodeFilterType.NONE,
       getNodeDescription() {
@@ -205,17 +217,17 @@ describe("spatial skeleton edit tab render state", () => {
 
     expect(state.matchedNodeCount).toBe(3);
     expect(state.displayedNodeCount).toBe(3);
-    expect(state.rows.map((row) => row.node.nodeId)).toEqual([10, 11, 12]);
+    expect(state.rows.map((row) => row.node.nodeId)).toEqual([10n, 11n, 12n]);
   });
 
   it("treats node-type-only matches as disconnected visible branches", () => {
     const graph = buildSpatiallyIndexedSkeletonNavigationGraph([
-      makeNode(20, undefined),
-      makeNode(21, 20),
-      makeNode(22, 20),
+      makeNode(20n, undefined),
+      makeNode(21n, 20n),
+      makeNode(22n, 20n),
     ]);
 
-    const state = buildSpatialSkeletonSegmentRenderState(20380, graph, {
+    const state = buildSpatialSkeletonSegmentRenderState(20380n, graph, {
       filterText: "",
       nodeFilterType: SpatialSkeletonNodeFilterType.VIRTUAL_END,
       getNodeDescription() {
@@ -226,27 +238,27 @@ describe("spatial skeleton edit tab render state", () => {
     expect(state.matchedNodeCount).toBe(2);
     expect(state.displayedNodeCount).toBe(2);
     expect(state.branchCount).toBe(2);
-    expect(state.rows.map((row) => row.node.nodeId)).toEqual([21, 22]);
+    expect(state.rows.map((row) => row.node.nodeId)).toEqual([21n, 22n]);
   });
 
   it("filters to nodes with non-empty descriptions", () => {
     const graph = buildSpatiallyIndexedSkeletonNavigationGraph([
-      makeNode(30, undefined),
-      makeNode(31, 30),
-      makeNode(32, 30),
-      makeNode(33, 30),
+      makeNode(30n, undefined),
+      makeNode(31n, 30n),
+      makeNode(32n, 30n),
+      makeNode(33n, 30n),
     ]);
 
-    const state = buildSpatialSkeletonSegmentRenderState(20380, graph, {
+    const state = buildSpatialSkeletonSegmentRenderState(20380n, graph, {
       filterText: "",
       nodeFilterType: SpatialSkeletonNodeFilterType.HAS_DESCRIPTION,
       getNodeDescription(node) {
         switch (node.nodeId) {
-          case 31:
+          case 31n:
             return "has description";
-          case 32:
+          case 32n:
             return "";
-          case 33:
+          case 33n:
             return "   ";
           default:
             return undefined;
@@ -257,7 +269,7 @@ describe("spatial skeleton edit tab render state", () => {
     expect(state.matchedNodeCount).toBe(1);
     expect(state.displayedNodeCount).toBe(1);
     expect(state.branchCount).toBe(1);
-    expect(state.rows.map((row) => row.node.nodeId)).toEqual([31]);
+    expect(state.rows.map((row) => row.node.nodeId)).toEqual([31n]);
   });
 });
 
@@ -266,12 +278,12 @@ describe("spatial skeleton edit tab virtual list items", () => {
     const buildSpatialSkeletonVirtualListItems =
       await getBuildSpatialSkeletonVirtualListItems();
     const graph = buildSpatiallyIndexedSkeletonNavigationGraph([
-      makeNode(1, undefined),
-      makeNode(2, 1),
-      makeNode(3, 2),
+      makeNode(1n, undefined),
+      makeNode(2n, 1n),
+      makeNode(3n, 2n),
     ]);
     const segmentState = {
-      ...buildSpatialSkeletonSegmentRenderState(20380, graph, {
+      ...buildSpatialSkeletonSegmentRenderState(20380n, graph, {
         filterText: "",
         nodeFilterType: SpatialSkeletonNodeFilterType.DEFAULT,
         getNodeDescription() {
@@ -295,9 +307,9 @@ describe("spatial skeleton edit tab virtual list items", () => {
       flattened.items
         .filter((item) => item.kind === "node")
         .map((item) => item.row.node.nodeId),
-    ).toEqual([1, 3]);
-    expect(flattened.listIndexByNodeId.get(1)).toBe(1);
-    expect(flattened.listIndexByNodeId.get(3)).toBe(2);
+    ).toEqual([1n, 3n]);
+    expect(flattened.listIndexByNodeId.get(1n)).toBe(1);
+    expect(flattened.listIndexByNodeId.get(3n)).toBe(2);
   });
 
   it("returns one empty row when no selected segment rows are available", async () => {
@@ -322,13 +334,13 @@ describe("spatial skeleton edit tab virtual list items", () => {
     const buildSpatialSkeletonVirtualListItems =
       await getBuildSpatialSkeletonVirtualListItems();
     const leafCount = 10001;
-    const nodes = [makeNode(1, undefined)];
+    const nodes = [makeNode(1n, undefined)];
     for (let i = 0; i < leafCount; ++i) {
-      nodes.push(makeNode(i + 2, 1));
+      nodes.push(makeNode(BigInt(i + 2), 1n));
     }
     const graph = buildSpatiallyIndexedSkeletonNavigationGraph(nodes);
     const segmentState = {
-      ...buildSpatialSkeletonSegmentRenderState(20380, graph, {
+      ...buildSpatialSkeletonSegmentRenderState(20380n, graph, {
         filterText: "",
         nodeFilterType: SpatialSkeletonNodeFilterType.NONE,
         getNodeDescription() {
@@ -345,7 +357,9 @@ describe("spatial skeleton edit tab virtual list items", () => {
 
     expect(segmentState.displayedNodeCount).toBeGreaterThan(10_000);
     expect(flattened.items.length).toBe(segmentState.displayedNodeCount + 1);
-    expect(flattened.listIndexByNodeId.get(leafCount + 1)).toBe(leafCount + 1);
+    expect(flattened.listIndexByNodeId.get(BigInt(leafCount + 1))).toBe(
+      leafCount + 1,
+    );
   });
 });
 
@@ -386,7 +400,7 @@ describe("spatial skeleton edit tab empty list text", () => {
     const getEmptyListText = await getSpatialSkeletonEmptyListText();
 
     const text = getEmptyListText({
-      activeSegmentId: 20380,
+      activeSegmentId: 20380n,
       selectedSegmentDetailsUnavailable: false,
       segmentState: undefined,
       filterText: "",
@@ -399,10 +413,10 @@ describe("spatial skeleton edit tab empty list text", () => {
   it("reports no matching nodes when a filter excludes all loaded nodes", async () => {
     const getEmptyListText = await getSpatialSkeletonEmptyListText();
     const graph = buildSpatiallyIndexedSkeletonNavigationGraph([
-      makeNode(1, undefined),
+      makeNode(1n, undefined),
     ]);
     const segmentState = {
-      ...buildSpatialSkeletonSegmentRenderState(20380, graph, {
+      ...buildSpatialSkeletonSegmentRenderState(20380n, graph, {
         filterText: "no-match",
         nodeFilterType: SpatialSkeletonNodeFilterType.DEFAULT,
         getNodeDescription() {
@@ -413,7 +427,7 @@ describe("spatial skeleton edit tab empty list text", () => {
     };
 
     const text = getEmptyListText({
-      activeSegmentId: 20380,
+      activeSegmentId: 20380n,
       selectedSegmentDetailsUnavailable: false,
       segmentState,
       filterText: "no-match",
@@ -449,21 +463,21 @@ describe("spatial skeleton edit tab preparation status", () => {
           intentId: 3,
           sequence: 3,
           kind: "split",
-          segmentIds: [20380],
+          segmentIds: [20380n],
         }),
         makePreparation({
           intentId: 1,
           sequence: 1,
-          segmentIds: [20380, 20381],
+          segmentIds: [20380n, 20381n],
         }),
         makePreparation({
           intentId: 2,
           sequence: 2,
           kind: "reroot",
-          segmentIds: [999],
+          segmentIds: [999n],
         }),
       ],
-      selectedSegmentId: 20380,
+      selectedSegmentId: 20380n,
       hasExactTopology: true,
     });
 
@@ -482,10 +496,10 @@ describe("spatial skeleton edit tab preparation status", () => {
         makePreparation({
           direction: "undo",
           kind: "split",
-          segmentIds: [20380],
+          segmentIds: [20380n],
         }),
       ],
-      selectedSegmentId: 20380,
+      selectedSegmentId: 20380n,
       hasExactTopology: false,
     });
 
@@ -506,7 +520,7 @@ describe("spatial skeleton edit tab preparation status", () => {
           kind: "merge",
         }),
       ],
-      selectedSegmentId: 20380,
+      selectedSegmentId: 20380n,
       hasExactTopology: true,
     });
 
@@ -522,13 +536,13 @@ describe("spatial skeleton edit tab preparation status", () => {
     const state = getPreparationState({
       preparations: [
         makePreparation({
-          segmentIds: [20380],
+          segmentIds: [20380n],
           logicalSegmentHandles: [
             { kind: "segment", stableId: "segment:selected" },
           ],
         }),
       ],
-      selectedSegmentId: 20381,
+      selectedSegmentId: 20381n,
       selectedLogicalSegmentStableId: "segment:selected",
       hasExactTopology: true,
     });

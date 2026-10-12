@@ -452,7 +452,7 @@ export class SpatialSkeletonOptimisticQueueEngine<
     ];
   }
 
-  ownsAuthoritativeReadSegment(segmentId: number) {
+  ownsAuthoritativeReadSegment(segmentId: bigint) {
     return this.options.projection.ownsAuthoritativeReadSegment(segmentId);
   }
 
@@ -1366,7 +1366,7 @@ export class SpatialSkeletonOptimisticQueueEngine<
       ) {
         continue;
       }
-      const submission = runtime.submission;
+      const { submission } = runtime;
       const canceledBeforeCommit =
         submission === undefined ||
         submission.cancelBeforeCommit(cancellationError);

@@ -30,10 +30,10 @@ interface SpatialSkeletonViewerHoverMouseStateLike<TRenderLayer> {
 }
 
 export interface SpatialSkeletonHoverInfo {
-  readonly nodeId: number;
+  readonly nodeId: bigint;
   // A hover is only reported once both ids resolve, so consumers (e.g. outline colouring, which
   // derives from the hovered segment) can rely on the segment being known.
-  readonly segmentId: number;
+  readonly segmentId: bigint;
   // Model-space position of the picked node, carried so the highlight overlay can
   // still be placed when the node's skeleton is not currently loaded/cached.
   readonly position?: Float32Array;
@@ -43,54 +43,33 @@ interface SpatialSkeletonViewerHoverLayerLike<TRenderLayer> {
   renderLayers: readonly TRenderLayer[];
 }
 
-const MAX_SAFE_INTEGER_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
-
-function parseSelectionStateStringId(value: unknown) {
-  if (typeof value !== "string") {
-    return undefined;
-  }
+function parseSelectionStateId(value: unknown) {
   try {
     const parsedValue = parseUint64(value);
-    return parsedValue > 0n ? parsedValue : undefined;
+    return parsedValue !== 0n ? parsedValue : undefined;
   } catch {
     return undefined;
   }
 }
 
-function normalizeSelectionStateStringId(value: unknown) {
-  const parsedValue = parseSelectionStateStringId(value);
-  if (parsedValue === undefined || parsedValue > MAX_SAFE_INTEGER_BIGINT) {
-    return undefined;
-  }
-  return Number(parsedValue);
+function parseSelectionStateStringId(value: unknown) {
+  return typeof value === "string" ? parseSelectionStateId(value) : undefined;
 }
 
 function getSelectionIdString(value: unknown) {
   return parseSelectionStateStringId(value)?.toString();
 }
 
-function normalizeSelectionStateValueId(value: unknown) {
-  try {
-    const parsedValue = parseUint64(value);
-    if (parsedValue <= 0n || parsedValue > MAX_SAFE_INTEGER_BIGINT) {
-      return undefined;
-    }
-    return Number(parsedValue);
-  } catch {
-    return undefined;
-  }
-}
-
 export function getNodeIdFromLayerSelectionState(
   state: { nodeId?: unknown; value?: unknown } | undefined,
 ) {
-  return normalizeSelectionStateStringId(state?.nodeId);
+  return parseSelectionStateStringId(state?.nodeId);
 }
 
 export function getSegmentIdFromLayerSelectionValue(
   state: { nodeId?: unknown; value?: unknown } | undefined,
 ) {
-  return normalizeSelectionStateValueId(state?.value);
+  return parseSelectionStateId(state?.value);
 }
 
 export function hasSpatialSkeletonNodeSelection(
@@ -104,7 +83,7 @@ function getSpatialSkeletonHoverInfoFromViewerHover<TRenderLayer>(
   layer: SpatialSkeletonViewerHoverLayerLike<TRenderLayer>,
 ): SpatialSkeletonHoverInfo | undefined {
   if (!mouseState.active) return undefined;
-  const pickedRenderLayer = mouseState.pickedRenderLayer;
+  const { pickedRenderLayer } = mouseState;
   if (pickedRenderLayer !== null) {
     if (
       pickedRenderLayer === undefined ||
@@ -113,7 +92,7 @@ function getSpatialSkeletonHoverInfoFromViewerHover<TRenderLayer>(
       return undefined;
     }
   }
-  const pickedSpatialSkeleton = mouseState.pickedSpatialSkeleton;
+  const { pickedSpatialSkeleton } = mouseState;
   const nodeId = pickedSpatialSkeleton?.nodeId;
   if (nodeId === undefined) return undefined;
   const segmentId = pickedSpatialSkeleton?.segmentId;
