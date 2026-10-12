@@ -101,6 +101,10 @@ export abstract class SliceViewRenderLayer<
   renderScaleTarget: WatchableValueInterface<number>;
   renderScaleHistogram?: RenderScaleHistogram;
 
+  // Set on a layer that another layer draws from its own `draw`, so that the
+  // slice view does not also draw it by itself.
+  drawnByHostLayer = false;
+
   // This is only used by `ImageRenderLayer` currently, but is defined here because
   // `sliceview/frontend.ts` is responsible for providing the texture buffers used for accumulating
   // histograms.

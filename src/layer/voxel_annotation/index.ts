@@ -179,7 +179,6 @@ export class VoxelEditingContext
       this.primaryRenderLayer instanceof SegmentationRenderLayer &&
       this.previewRenderLayer instanceof SegmentationRenderLayer
     ) {
-      this.previewRenderLayer.forceHiddenFromMainRenderLoop = true;
       this.primaryRenderLayer.setVoxelEditingPreviewLayer(
         this.previewRenderLayer,
       );
