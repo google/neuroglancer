@@ -35,10 +35,7 @@ import {
   getChunkTransformParameters,
 } from "#src/render_coordinate_transform.js";
 import type { RenderedDataPanel } from "#src/rendered_data_panel.js";
-import type {
-  SliceViewSourceOptions,
-  SliceViewRenderLayer,
-} from "#src/sliceview/base.js";
+import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
 import { DataType } from "#src/sliceview/base.js";
 import { SliceViewPanel } from "#src/sliceview/panel.js";
 import type { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
@@ -71,10 +68,7 @@ import {
 } from "#src/voxel_annotation/base.js";
 import type { VoxelEditingControllerHost } from "#src/voxel_annotation/frontend.js";
 import { VoxelEditingController } from "#src/voxel_annotation/frontend.js";
-import {
-  forEachVisiblePreviewChunk,
-  PreviewMultiscaleSource,
-} from "#src/voxel_annotation/preview_multiscale_chunk_source.js";
+import { PreviewMultiscaleSource } from "#src/voxel_annotation/preview_multiscale_chunk_source.js";
 
 const VOXEL_EDITING_JSON_KEY = "voxelEditing";
 const PAINT_VALUE_JSON_KEY = "paintValue";
@@ -190,12 +184,6 @@ export class VoxelEditingContext
         this.previewRenderLayer,
       );
     }
-
-    // since we only allow drawing at max res, we can lock the preview render layer to it
-    (
-      this.previewRenderLayer as SliceViewRenderLayer
-    ).getForcedSourceIndexOverride = () => 0;
-    this.previewRenderLayer.forEachVisibleChunk = forEachVisiblePreviewChunk;
 
     this.hostLayer.addRenderLayer(this.previewRenderLayer);
 

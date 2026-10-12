@@ -15,14 +15,7 @@
  */
 
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
-import { forEachPlaneIntersectingVolumetricChunk } from "#src/sliceview/base.js";
-import type { ChunkLayout } from "#src/sliceview/chunk_layout.js";
-import type {
-  FrontendTransformedSource,
-  SliceView,
-  SliceViewChunk,
-  SliceViewSingleResolutionSource,
-} from "#src/sliceview/frontend.js";
+import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
 import type {
   VolumeChunkSpecification,
   VolumeSourceOptions,
@@ -77,31 +70,4 @@ export class PreviewMultiscaleSource extends MultiscaleVolumeChunkSource {
       });
     });
   }
-}
-
-function* chunkGridPositions(chunks: Iterable<SliceViewChunk>) {
-  for (const chunk of chunks) {
-    yield chunk.chunkGridPosition;
-  }
-}
-
-// The preview source only holds the chunks being edited, and it is rendered at
-// the finest scale whatever the zoom: visit those chunks instead of walking the
-// whole finest-scale grid under the viewport.
-export function forEachVisiblePreviewChunk(
-  sliceView: SliceView,
-  tsource: FrontendTransformedSource,
-  chunkLayout: ChunkLayout,
-  callback: (key: string) => void,
-) {
-  forEachPlaneIntersectingVolumetricChunk(
-    sliceView.projectionParameters.value,
-    tsource.renderLayer.localPosition.value,
-    tsource,
-    chunkLayout,
-    () => {
-      callback(tsource.curPositionInChunks.join());
-    },
-    chunkGridPositions(tsource.source.chunks.values()),
-  );
 }

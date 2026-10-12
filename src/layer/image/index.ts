@@ -80,6 +80,7 @@ import {
   VolumeRenderingRenderLayer,
 } from "#src/volume_rendering/volume_render_layer.js";
 import { EMPTY_VOXEL_VALUE } from "#src/voxel_annotation/base.js";
+import { VoxelEditingPreviewRenderLayerMixin } from "#src/voxel_annotation/preview_render_layer.js";
 import type { ParameterizedShaderGetterResult } from "#src/webgl/dynamic_shader.js";
 import { makeWatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import type { ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
@@ -127,6 +128,9 @@ export interface ImageLayerSelectionState extends UserLayerSelectionState {
   value: any;
 }
 
+class ImagePreviewRenderLayer extends VoxelEditingPreviewRenderLayerMixin(
+  ImageRenderLayer,
+) {}
 const Base = UserLayerWithVoxelEditingMixin(
   UserLayerWithAnnotationsMixin(UserLayer),
 );
@@ -230,7 +234,7 @@ void main() {
     );
     this.registerDisposer(shaderControlState);
 
-    return new ImageRenderLayer(source, {
+    return new ImagePreviewRenderLayer(source, {
       opacity: new TrackableValue(1.0, verifyFloat01),
       blendMode: new TrackableEnum(BLEND_MODES, BLEND_MODES.ADDITIVE),
       shaderControlState: shaderControlState,
