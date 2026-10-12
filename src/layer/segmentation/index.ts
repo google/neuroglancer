@@ -816,7 +816,7 @@ export interface SpatialSkeletonFindPathContext {
   readonly annotationController: SpatialSkeletonFindPathAnnotationController;
 }
 
-function normalizeOptionalId(value: bigint | undefined) {
+function undefinedIfZero(value: bigint | undefined) {
   return value === 0n ? undefined : value;
 }
 
@@ -1004,15 +1004,14 @@ export class SegmentationUserLayer extends Base {
       position?: ArrayLike<number>;
     } = {},
   ) => {
-    const normalizedNodeId = normalizeOptionalId(nodeId);
-    if (normalizedNodeId === undefined) {
+    if (nodeId === 0n) {
       return;
     }
     const selectedNodeInfo =
-      this.getSpatiallyIndexedSkeletonLayer()?.getNode(normalizedNodeId);
+      this.getSpatiallyIndexedSkeletonLayer()?.getNode(nodeId);
     const requestedSegmentId =
       options.segmentId ?? selectedNodeInfo?.segmentId ?? undefined;
-    const segmentId = normalizeOptionalId(requestedSegmentId);
+    const segmentId = undefinedIfZero(requestedSegmentId);
     const previousSelectedInfo = this.selectedSpatialSkeletonNodeInfo.value;
     // Keep a model-space position available even when the node isn't currently
     // cached, so the highlight overlay can still be placed: prefer the explicit
@@ -1020,20 +1019,20 @@ export class SegmentationUserLayer extends Base {
     const selectedNodePosition =
       options.position ??
       selectedNodeInfo?.position ??
-      (previousSelectedInfo?.nodeId === normalizedNodeId
+      (previousSelectedInfo?.nodeId === nodeId
         ? previousSelectedInfo.position
         : undefined);
     const selectedGlobalPosition =
       this.getGlobalSelectionPositionFromModelPosition(selectedNodePosition);
     this.selectedSpatialSkeletonNodeInfo.value = {
-      nodeId: normalizedNodeId,
+      nodeId,
       segmentId,
       position: copyOptionalSpatialSkeletonPosition(selectedNodePosition),
     };
     this.captureSpatialSkeletonSelectionState(
       (state) => {
-        state.nodeId = normalizedNodeId.toString();
-        state.value = segmentId === undefined ? undefined : segmentId;
+        state.nodeId = nodeId.toString();
+        state.value = segmentId;
         return true;
       },
       pin,
@@ -2600,9 +2599,9 @@ export class SegmentationUserLayer extends Base {
     ) {
       return;
     }
-    const nodeId = normalizeOptionalId(pickedSpatialSkeleton.nodeId);
+    const nodeId = undefinedIfZero(pickedSpatialSkeleton.nodeId);
     state.nodeId = nodeId === undefined ? undefined : nodeId.toString();
-    const segmentId = normalizeOptionalId(pickedSpatialSkeleton.segmentId);
+    const segmentId = undefinedIfZero(pickedSpatialSkeleton.segmentId);
     if (segmentId !== undefined) {
       state.value = segmentId;
     }
