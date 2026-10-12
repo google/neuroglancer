@@ -42,7 +42,7 @@ export function materializePhysicalSpatialSkeletonWorkspace(
     const segmentId = mappings.resolveSegment(entry.segment);
     if (segmentId === undefined || segmentId === 0n) {
       throw new SpatialSkeletonProjectionValidationError(
-        `Logical segment ${entry.segment.stableId} requires a positive numeric id for publication.`,
+        `Logical segment ${entry.segment.stableId} requires a nonzero id for publication.`,
       );
     }
     if (result.has(segmentId)) {

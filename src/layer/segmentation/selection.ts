@@ -46,7 +46,7 @@ interface SpatialSkeletonViewerHoverLayerLike<TRenderLayer> {
 function parseSelectionStateId(value: unknown) {
   try {
     const parsedValue = parseUint64(value);
-    return parsedValue > 0n ? parsedValue : undefined;
+    return parsedValue !== 0n ? parsedValue : undefined;
   } catch {
     return undefined;
   }

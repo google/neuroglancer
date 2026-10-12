@@ -735,7 +735,7 @@ class StateOwnedSpatialSkeletonProvisionalNumericIdService
       kind === "node"
         ? policy.allocateNodeId(intentId)
         : policy.allocateSegmentId(intentId);
-    if (id <= 0n) {
+    if (id === 0n) {
       throw new SpatialSkeletonOptimisticDatasourceContractError(
         `The datasource provisional ${kind} ID policy returned invalid ID ${id}.`,
       );
@@ -1366,7 +1366,7 @@ export class SpatialSkeletonState
     }
     const nextProvisionalNodeIds = new Set<bigint>();
     for (const nodeId of provisionalNodeIds) {
-      if (nodeId <= 0n) {
+      if (nodeId === 0n) {
         throw new RangeError(
           `Invalid spatial skeleton provisional node id: ${nodeId}`,
         );
@@ -1710,7 +1710,7 @@ export class SpatialSkeletonState
    * presence alone.
    */
   getCachedSegmentRevision(segmentId: bigint) {
-    if (segmentId <= 0n) {
+    if (segmentId === 0n) {
       throw new RangeError(`Invalid spatial skeleton segment id: ${segmentId}`);
     }
     return this.getCurrentCachedSegmentRevision(segmentId);
@@ -1725,7 +1725,7 @@ export class SpatialSkeletonState
   getCachedSegmentSnapshotHandle(
     segmentId: bigint,
   ): SpatialSkeletonCachedSegmentSnapshotHandle | undefined {
-    if (segmentId <= 0n) {
+    if (segmentId === 0n) {
       throw new RangeError(`Invalid spatial skeleton segment id: ${segmentId}`);
     }
     const entry = this.fullSegmentSnapshotHandles.get(segmentId);
@@ -1751,7 +1751,7 @@ export class SpatialSkeletonState
       }
     | undefined {
     const { segmentId, nodeId } = requirement;
-    if (nodeId !== undefined && nodeId <= 0n) {
+    if (nodeId === 0n) {
       throw new RangeError(`Invalid spatial skeleton node id: ${nodeId}`);
     }
     const snapshot = this.getCachedSegmentSnapshotHandle(segmentId);
@@ -1883,7 +1883,7 @@ export class SpatialSkeletonState
       }
     >();
     for (const [segmentId, snapshot] of snapshots) {
-      if (segmentId <= 0n) {
+      if (segmentId === 0n) {
         throw new RangeError(
           `Invalid spatial skeleton segment id: ${segmentId}`,
         );
@@ -1898,7 +1898,7 @@ export class SpatialSkeletonState
       }
       const clonedNodes: SpatiallyIndexedSkeletonNode[] = [];
       for (const node of snapshot) {
-        if (node.nodeId <= 0n) {
+        if (node.nodeId === 0n) {
           throw new RangeError(
             `Invalid spatial skeleton node id: ${node.nodeId}`,
           );
@@ -2004,7 +2004,7 @@ export class SpatialSkeletonState
       CompleteSkeletonSnapshotHandle | undefined
     >();
     for (const [segmentId, handle] of request.snapshots) {
-      if (segmentId <= 0n) {
+      if (segmentId === 0n) {
         throw new RangeError(
           `Invalid spatial skeleton segment id: ${segmentId}`,
         );
@@ -2050,7 +2050,7 @@ export class SpatialSkeletonState
       }
       const nodes = handle.materialize();
       for (const node of nodes) {
-        if (node.nodeId <= 0n) {
+        if (node.nodeId === 0n) {
           throw new RangeError(
             `Invalid spatial skeleton node id: ${node.nodeId}`,
           );
@@ -2518,7 +2518,7 @@ export class SpatialSkeletonState
     const activeSegmentIdSet = new Set(activeSegmentIds);
     for (const segmentId of this.optimisticEditQueue?.getProtectedProjectionSegmentIds() ??
       []) {
-      if (segmentId > 0n) {
+      if (segmentId !== 0n) {
         activeSegmentIdSet.add(segmentId);
       }
     }

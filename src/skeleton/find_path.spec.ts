@@ -83,6 +83,9 @@ describe("SkeletonFindPathState", () => {
     [],
     { source: { nodeId: "01", segmentId: "1", position: [1, 2, 3] } },
     { source: { nodeId: "1", segmentId: "-1", position: [1, 2, 3] } },
+    { source: { nodeId: "0", segmentId: "1", position: [1, 2, 3] } },
+    { target: { nodeId: "1", segmentId: "0", position: [1, 2, 3] } },
+    { result: [{ nodeId: "0", position: [1, 2, 3] }] },
     {
       source: {
         nodeId: "18446744073709551616",

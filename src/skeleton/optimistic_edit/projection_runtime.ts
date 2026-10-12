@@ -252,9 +252,9 @@ function validateNumericBindings(
     ...(update?.nodes ?? []),
     ...(update?.segments ?? []),
   ]) {
-    if (physicalId <= 0n) {
+    if (physicalId === 0n) {
       throw new SpatialSkeletonProjectionValidationError(
-        `${context} requires positive numeric ids; received ${physicalId}.`,
+        `${context} requires nonzero ids; received ${physicalId}.`,
       );
     }
   }
@@ -477,9 +477,9 @@ export class SpatialSkeletonOptimisticProjectionRuntime
     // Validate the complete request before allocating or binding anything so
     // callers never observe a partially-applied batch.
     for (const nodeId of nodeIds) {
-      if (nodeId <= 0n) {
+      if (nodeId === 0n) {
         throw new RangeError(
-          `A spatial skeleton node identity requires a positive numeric id; received ${nodeId}.`,
+          `A spatial skeleton node identity requires a nonzero id; received ${nodeId}.`,
         );
       }
       if (requestedNodeIds.has(nodeId)) continue;
@@ -525,9 +525,9 @@ export class SpatialSkeletonOptimisticProjectionRuntime
   }
 
   getOrCreateSegmentHandle(segmentId: bigint) {
-    if (segmentId <= 0n) {
+    if (segmentId === 0n) {
       throw new RangeError(
-        `A spatial skeleton segment identity requires a positive numeric id; received ${segmentId}.`,
+        `A spatial skeleton segment identity requires a nonzero id; received ${segmentId}.`,
       );
     }
     const retainedOwner =
@@ -958,7 +958,7 @@ export class SpatialSkeletonOptimisticProjectionRuntime
       SpatialSkeletonAuthoritativeReadSnapshot
     >();
     for (const { segmentId, snapshot } of snapshots) {
-      if (segmentId <= 0n) {
+      if (segmentId === 0n) {
         throw new SpatialSkeletonProjectionValidationError(
           `An authoritative spatial skeleton read has invalid segment id ${segmentId}.`,
         );
@@ -970,7 +970,7 @@ export class SpatialSkeletonOptimisticProjectionRuntime
       }
       if (snapshot !== undefined) {
         for (const node of snapshot.materialize()) {
-          if (node.nodeId <= 0n) {
+          if (node.nodeId === 0n) {
             throw new SpatialSkeletonProjectionValidationError(
               `Authoritative segment ${segmentId} contains invalid node id ${node.nodeId}.`,
             );
@@ -1310,9 +1310,9 @@ export class SpatialSkeletonOptimisticProjectionRuntime
     const provisionalNodeIds = new Set<bigint>();
     for (const overlay of mappings.cloneSnapshot().overlays) {
       for (const [, nodeId] of overlay.nodes) {
-        if (nodeId <= 0n) {
+        if (nodeId === 0n) {
           throw new SpatialSkeletonProjectionValidationError(
-            `A provisional node requires a positive numeric id; received ${nodeId}.`,
+            `A provisional node requires a nonzero id; received ${nodeId}.`,
           );
         }
         provisionalNodeIds.add(nodeId);
@@ -1561,7 +1561,7 @@ export class SpatialSkeletonOptimisticProjectionRuntime
       "A retained spatial skeleton inspection",
     );
     for (const [segmentId, expectedRevision] of seed.expectedCacheRevisions) {
-      if (segmentId <= 0n) {
+      if (segmentId === 0n) {
         throw new SpatialSkeletonProjectionValidationError(
           `A retained inspection has invalid segment id ${segmentId}.`,
         );

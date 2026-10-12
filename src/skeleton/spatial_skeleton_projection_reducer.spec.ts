@@ -74,7 +74,7 @@ function fixture(): Fixture {
       [segmentA, 10n],
       [segmentB, 20n],
       [segmentC, 30n],
-      [splitSegment, -30n],
+      [splitSegment, 31n],
     ],
   });
   const nodes = Object.fromEntries(
@@ -481,7 +481,7 @@ describe("spatial skeleton projection reducer", () => {
       ).toEqual(
         downstreamIds.map((id) => ({
           ...sourceById.get(id)!,
-          segmentId: -30n,
+          segmentId: 31n,
           ...(id === cutNodeId ? { parentNodeId: undefined } : {}),
         })),
       );

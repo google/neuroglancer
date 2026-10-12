@@ -1004,7 +1004,7 @@ export function getActiveProvisionalSpatialSkeletonSegmentIds(
   for (const alias of presentation.numericAliases) {
     if (
       alias.authoritative !== false ||
-      alias.segmentId <= 0n ||
+      alias.segmentId === 0n ||
       activeOwners.get(alias.segmentId) !== alias.logicalHandle.stableId
     ) {
       continue;
@@ -3524,7 +3524,7 @@ export class SpatiallyIndexedSkeletonLayer
   }
 
   getNode(nodeId: bigint): SpatiallyIndexedSkeletonNode | undefined {
-    if (nodeId <= 0n) return undefined;
+    if (nodeId === 0n) return undefined;
     return this.getCachedNodeSnapshot(nodeId);
   }
 

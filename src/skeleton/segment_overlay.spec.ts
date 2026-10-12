@@ -119,7 +119,7 @@ describe("mergeSpatiallyIndexedSkeletonOverlaySegmentIds", () => {
 
   it("ignores invalid segment ids", () => {
     expect(
-      mergeSpatiallyIndexedSkeletonOverlaySegmentIds([1n, 0n, -2n], [4n]),
+      mergeSpatiallyIndexedSkeletonOverlaySegmentIds([1n, 0n], [4n]),
     ).toEqual([1n, 4n]);
   });
 });

@@ -66,7 +66,7 @@ describe("layer/segmentation/selection", () => {
     ).toBe(7n);
     expect(
       getNodeIdFromLayerSelectionState({
-        nodeId: -1n,
+        nodeId: 0n,
       }),
     ).toBeUndefined();
     expect(
@@ -151,7 +151,7 @@ describe("layer/segmentation/selection", () => {
     mouseState = {
       active: true,
       pickedRenderLayer: renderLayerA,
-      pickedSpatialSkeleton: { nodeId: -1n },
+      pickedSpatialSkeleton: { nodeId: 0n },
     };
     trigger();
     expect(hoverState.value).toBeUndefined();

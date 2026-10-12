@@ -166,7 +166,7 @@ export interface SpatialSkeletonOptimisticIdentityService {
   ): SpatialSkeletonLogicalHandleMappingResolution<bigint>;
 }
 
-/** Optional datasource policy for locally-presented positive numeric ids. */
+/** Optional datasource policy for locally-presented nonzero ids. */
 export interface SpatialSkeletonProvisionalNumericIdPolicy {
   allocateNodeId(intentId: number): bigint;
   allocateSegmentId(intentId: number): bigint;

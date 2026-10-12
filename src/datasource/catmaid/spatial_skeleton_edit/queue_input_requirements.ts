@@ -32,7 +32,7 @@ export function getCatmaidQueueInputRequirement(
       : (context.identities.resolveSegment(
           context.identities.getOrCreateSegmentHandle(stableSegmentId),
         ) ?? stableSegmentId);
-  if (segmentId === undefined || segmentId <= 0n) {
+  if (segmentId === undefined || segmentId === 0n) {
     return undefined;
   }
   const nodeId =
@@ -43,7 +43,7 @@ export function getCatmaidQueueInputRequirement(
         ) ?? stableNodeId);
   return {
     segmentId,
-    nodeId: nodeId !== undefined && nodeId > 0n ? nodeId : undefined,
+    nodeId: nodeId === 0n ? undefined : nodeId,
   };
 }
 

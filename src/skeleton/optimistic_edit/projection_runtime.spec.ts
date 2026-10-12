@@ -257,7 +257,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
 
     const beforeInvalidBatch = runtime.mappingRevision;
     expect(() => runtime.getOrCreateNodeHandles([13n, 0n, 14n])).toThrow(
-      /positive numeric id/,
+      /requires a nonzero id/,
     );
     expect(runtime.mappingRevision).toBe(beforeInvalidBatch);
 
@@ -1350,10 +1350,10 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
           parent: nodes.root,
           position: [4, 4, 4],
         },
-        // Trusted cache adoption only accepts positive numeric identities.
-        provisionalBindings: { nodes: [[nodes.added, -1n]] },
+        // Trusted cache adoption only accepts nonzero identities.
+        provisionalBindings: { nodes: [[nodes.added, 0n]] },
       }),
-    ).toThrow(/positive numeric id/);
+    ).toThrow(/requires nonzero ids/);
     expect(state.getCachedSegmentSnapshotHandle(10n)?.handle).toBe(
       baselineHandle,
     );

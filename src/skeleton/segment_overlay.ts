@@ -116,7 +116,7 @@ export function mergeSpatiallyIndexedSkeletonOverlaySegmentIds(
 ) {
   const mergedSegmentIds = new Set<bigint>();
   for (const segmentId of [...activeSegmentIds, ...retainedSegmentIds]) {
-    if (segmentId <= 0n) continue;
+    if (segmentId === 0n) continue;
     mergedSegmentIds.add(segmentId);
   }
   return [...mergedSegmentIds].sort(bigintCompare);

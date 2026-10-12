@@ -615,8 +615,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
         direction: "execute",
         kind: "merge",
         lifecycle: "preparing",
-        segmentIds: [11n, -1n],
-        endpointNodeIds: [101n, -2n],
+        segmentIds: [11n, 12n],
+        endpointNodeIds: [101n, 102n],
         lastKnownPositions: [{ nodeId: 101n, position: capturedPosition }],
       }),
     ).toBe(true);
