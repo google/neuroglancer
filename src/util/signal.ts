@@ -28,6 +28,7 @@
  */
 export class Signal<Callable extends Function = () => void> {
   private handlers = new Set<Callable>();
+  private handlerErrorReporter: ((error: unknown) => void) | undefined;
 
   /**
    * Count of number of times this signal has been dispatched.  This is incremented each time
@@ -40,10 +41,47 @@ export class Signal<Callable extends Function = () => void> {
     this.dispatch = <Callable>(<Function>function (this: any) {
       ++obj.count;
       obj.handlers.forEach((handler) => {
-        // eslint-disable-next-line prefer-rest-params
-        handler.apply(this, arguments);
+        const reportError = obj.handlerErrorReporter;
+        if (reportError === undefined) {
+          // eslint-disable-next-line prefer-rest-params
+          handler.apply(this, arguments);
+          return;
+        }
+        try {
+          // eslint-disable-next-line prefer-rest-params
+          handler.apply(this, arguments);
+        } catch (error) {
+          try {
+            reportError(error);
+          } catch {
+            // Error reporting is deliberately best effort in this opt-in
+            // mode. A reporter must not prevent later observers from seeing
+            // an already-adopted state transition.
+          }
+        }
       });
     });
+  }
+
+  /**
+   * Runs `callback` with per-handler error isolation for dispatches of this
+   * signal. Normal `dispatch` semantics remain unchanged outside the callback.
+   *
+   * This is intentionally opt-in for publication boundaries that have already
+   * committed their model state and therefore cannot safely let an observer
+   * exception masquerade as an adoption failure.
+   */
+  runWithHandlerErrorReporting<T>(
+    reportError: (error: unknown) => void,
+    callback: () => T,
+  ): T {
+    const previous = this.handlerErrorReporter;
+    this.handlerErrorReporter = reportError;
+    try {
+      return callback();
+    } finally {
+      this.handlerErrorReporter = previous;
+    }
   }
 
   /**

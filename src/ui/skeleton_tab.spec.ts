@@ -19,6 +19,7 @@ import { describe, expect, it } from "vitest";
 import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
 import { buildSpatiallyIndexedSkeletonNavigationGraph } from "#src/skeleton/navigation_graph.js";
 import { SpatialSkeletonNodeFilterType } from "#src/skeleton/node_types.js";
+import type { SpatialSkeletonPreparationIntent } from "#src/skeleton/spatial_skeleton_manager.js";
 import { buildSpatialSkeletonSegmentRenderState } from "#src/ui/skeleton_tab_render.js";
 
 function makeNode(
@@ -39,7 +40,7 @@ function makeNode(
   };
 }
 
-async function getBuildSpatialSkeletonVirtualListItems() {
+function stubWebGLContext() {
   const webglContextStub = new Proxy(
     {},
     {
@@ -49,9 +50,63 @@ async function getBuildSpatialSkeletonVirtualListItems() {
   (
     globalThis as { WebGL2RenderingContext?: unknown }
   ).WebGL2RenderingContext ??= webglContextStub;
+}
+
+async function getBuildSpatialSkeletonVirtualListItems() {
+  stubWebGLContext();
   return (await import("#src/ui/skeleton_tab.js"))
     .buildSpatialSkeletonVirtualListItems;
 }
+
+async function getSpatialSkeletonEmptyListText() {
+  stubWebGLContext();
+  return (await import("#src/ui/skeleton_tab.js"))
+    .getSpatialSkeletonEmptyListText;
+}
+
+async function getSpatialSkeletonDetailsPreparationState() {
+  stubWebGLContext();
+  return (await import("#src/ui/skeleton_tab.js"))
+    .getSpatialSkeletonDetailsPreparationState;
+}
+
+async function getSpatialSkeletonNodeIdPresentation() {
+  stubWebGLContext();
+  return (await import("#src/ui/skeleton_tab.js"))
+    .getSpatialSkeletonNodeIdPresentation;
+}
+
+function makePreparation(
+  options: Partial<SpatialSkeletonPreparationIntent> = {},
+): SpatialSkeletonPreparationIntent {
+  return {
+    intentId: 1,
+    sequence: 1,
+    direction: "execute",
+    kind: "merge",
+    lifecycle: "preparing",
+    segmentIds: [20380],
+    ...options,
+  };
+}
+
+describe("spatial skeleton node id presentation", () => {
+  it("replaces only a provisional node id with a Preview placeholder", async () => {
+    const getNodeIdPresentation = await getSpatialSkeletonNodeIdPresentation();
+
+    expect(getNodeIdPresentation(0x7fff_ffff, [0x7fff_ffff])).toEqual({
+      label: "Preview",
+      tooltip:
+        "Preview node. The skeleton source has not yet confirmed its permanent node ID.",
+      provisional: true,
+    });
+    expect(getNodeIdPresentation(42, [0x7fff_ffff])).toEqual({
+      label: "42",
+      tooltip: undefined,
+      provisional: false,
+    });
+  });
+});
 
 describe("spatial skeleton edit tab render state", () => {
   it("shows only directly matching nodes for text filtering", () => {
@@ -291,5 +346,193 @@ describe("spatial skeleton edit tab virtual list items", () => {
     expect(segmentState.displayedNodeCount).toBeGreaterThan(10_000);
     expect(flattened.items.length).toBe(segmentState.displayedNodeCount + 1);
     expect(flattened.listIndexByNodeId.get(leafCount + 1)).toBe(leafCount + 1);
+  });
+});
+
+describe("spatial skeleton edit tab empty list text", () => {
+  it("explains how to obtain node details when a hovered or selected skeleton has no complete details", async () => {
+    const getEmptyListText = await getSpatialSkeletonEmptyListText();
+
+    const text = getEmptyListText({
+      activeSegmentId: undefined,
+      selectedSegmentDetailsUnavailable: true,
+      segmentState: undefined,
+      filterText: "",
+      nodeFilterType: SpatialSkeletonNodeFilterType.DEFAULT,
+    });
+
+    expect(text).toContain("show it in Seg or double-click one of its nodes");
+    expect(text).toContain("allow its details to finish loading");
+    expect(text).not.toMatch(/is selected|non-visible/i);
+  });
+
+  it("asks the user to hover over or select a node when there is no skeleton context", async () => {
+    const getEmptyListText = await getSpatialSkeletonEmptyListText();
+
+    const text = getEmptyListText({
+      activeSegmentId: undefined,
+      selectedSegmentDetailsUnavailable: false,
+      segmentState: undefined,
+      filterText: "",
+      nodeFilterType: SpatialSkeletonNodeFilterType.DEFAULT,
+    });
+
+    expect(text).toBe(
+      "Hover over or select a skeleton node to view its skeleton's nodes.",
+    );
+  });
+
+  it("reports no loaded nodes for an active segment with no cached nodes, regardless of visibility", async () => {
+    const getEmptyListText = await getSpatialSkeletonEmptyListText();
+
+    const text = getEmptyListText({
+      activeSegmentId: 20380,
+      selectedSegmentDetailsUnavailable: false,
+      segmentState: undefined,
+      filterText: "",
+      nodeFilterType: SpatialSkeletonNodeFilterType.DEFAULT,
+    });
+
+    expect(text).toBe("No loaded nodes.");
+  });
+
+  it("reports no matching nodes when a filter excludes all loaded nodes", async () => {
+    const getEmptyListText = await getSpatialSkeletonEmptyListText();
+    const graph = buildSpatiallyIndexedSkeletonNavigationGraph([
+      makeNode(1, undefined),
+    ]);
+    const segmentState = {
+      ...buildSpatialSkeletonSegmentRenderState(20380, graph, {
+        filterText: "no-match",
+        nodeFilterType: SpatialSkeletonNodeFilterType.DEFAULT,
+        getNodeDescription() {
+          return undefined;
+        },
+      }),
+      segmentLabel: undefined,
+    };
+
+    const text = getEmptyListText({
+      activeSegmentId: 20380,
+      selectedSegmentDetailsUnavailable: false,
+      segmentState,
+      filterText: "no-match",
+      nodeFilterType: SpatialSkeletonNodeFilterType.DEFAULT,
+    });
+
+    expect(text).toBe("No matching nodes.");
+  });
+
+  it("does not claim zero nodes while the complete preview is preparing", async () => {
+    const getEmptyListText = await getSpatialSkeletonEmptyListText();
+
+    const text = getEmptyListText({
+      activeSegmentId: undefined,
+      selectedSegmentDetailsUnavailable: true,
+      segmentState: undefined,
+      filterText: "",
+      nodeFilterType: SpatialSkeletonNodeFilterType.DEFAULT,
+      preparationActive: true,
+    });
+
+    expect(text).toBe("Preparing the complete skeleton preview…");
+  });
+});
+
+describe("spatial skeleton edit tab preparation status", () => {
+  it("shows the earliest overlapping preparation and counts only later overlapping edits", async () => {
+    const getPreparationState =
+      await getSpatialSkeletonDetailsPreparationState();
+    const state = getPreparationState({
+      preparations: [
+        makePreparation({
+          intentId: 3,
+          sequence: 3,
+          kind: "split",
+          segmentIds: [20380],
+        }),
+        makePreparation({
+          intentId: 1,
+          sequence: 1,
+          segmentIds: [20380, 20381],
+        }),
+        makePreparation({
+          intentId: 2,
+          sequence: 2,
+          kind: "reroot",
+          segmentIds: [999],
+        }),
+      ],
+      selectedSegmentId: 20380,
+      hasExactTopology: true,
+    });
+
+    expect(state?.preparation.intentId).toBe(1);
+    expect(state?.statusText).toBe("Preparing merge preview…");
+    expect(state?.laterEditCount).toBe(1);
+    expect(state?.detailText).toMatch(/last complete skeleton/i);
+    expect(state?.statusText).not.toContain("20380");
+  });
+
+  it("uses Undo wording and hides derived details until the split preview is exact", async () => {
+    const getPreparationState =
+      await getSpatialSkeletonDetailsPreparationState();
+    const state = getPreparationState({
+      preparations: [
+        makePreparation({
+          direction: "undo",
+          kind: "split",
+          segmentIds: [20380],
+        }),
+      ],
+      selectedSegmentId: 20380,
+      hasExactTopology: false,
+    });
+
+    expect(state?.statusText).toBe("Preparing Undo preview for split…");
+    expect(state?.detailText).toBe("Preparing the complete skeleton preview…");
+    expect(state?.controlsDisabledReason).toBe(
+      "Available after the exact split preview finishes preparing.",
+    );
+  });
+
+  it("uses Redo wording while the exact preview is preparing", async () => {
+    const getPreparationState =
+      await getSpatialSkeletonDetailsPreparationState();
+    const state = getPreparationState({
+      preparations: [
+        makePreparation({
+          direction: "redo",
+          kind: "merge",
+        }),
+      ],
+      selectedSegmentId: 20380,
+      hasExactTopology: true,
+    });
+
+    expect(state?.statusText).toBe("Preparing Redo preview for merge…");
+    expect(state?.controlsDisabledReason).toBe(
+      "Available after the exact merge preview finishes preparing.",
+    );
+  });
+
+  it("keeps status attached to logical selection when a physical merge alias changes", async () => {
+    const getPreparationState =
+      await getSpatialSkeletonDetailsPreparationState();
+    const state = getPreparationState({
+      preparations: [
+        makePreparation({
+          segmentIds: [20380],
+          logicalSegmentHandles: [
+            { kind: "segment", stableId: "segment:selected" },
+          ],
+        }),
+      ],
+      selectedSegmentId: 20381,
+      selectedLogicalSegmentStableId: "segment:selected",
+      hasExactTopology: true,
+    });
+
+    expect(state?.statusText).toBe("Preparing merge preview…");
   });
 });

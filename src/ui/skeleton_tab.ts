@@ -52,6 +52,7 @@ import {
 import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
 import {
   SpatialSkeletonActions,
+  SpatialSkeletonHistoryActions,
   type SpatialSkeletonAction,
 } from "#src/skeleton/command_protocol.js";
 import {
@@ -80,6 +81,8 @@ import {
   SpatialSkeletonDisplayNodeType,
   SpatialSkeletonNodeFilterType,
 } from "#src/skeleton/node_types.js";
+import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/optimistic_edit/fatal.js";
+import type { SpatialSkeletonPreparationIntent } from "#src/skeleton/spatial_skeleton_manager.js";
 import { StatusMessage } from "#src/status.js";
 import { observeWatchable, registerNested } from "#src/trackable_value.js";
 import { formatKeyStroke } from "#src/ui/command.js";
@@ -118,7 +121,106 @@ const NO_SEGMENT_SELECTED_MESSAGE = "No segment/skeleton is selected.";
 const NO_NODE_SELECTED_MESSAGE =
   "No skeleton node is selected, only go to root is supported on skeleton edges.";
 const NAVIGATE_FROM_SPATIAL_INDEX_MESSAGE =
-  "A non-visible segment is selected. Make it visible to use skeleton navigation features.";
+  "To use skeleton navigation, show this skeleton in Seg or double-click one of its nodes, then allow its details to finish loading.";
+const PROVISIONAL_NODE_ID_TOOLTIP =
+  "Preview node. The skeleton source has not yet confirmed its permanent node ID.";
+const SKELETON_DETAILS_UNAVAILABLE_LIST_MESSAGE =
+  "To view this skeleton's nodes, show it in Seg or double-click one of its nodes, then allow its details to finish loading.";
+const PREPARATION_PENDING_LIST_MESSAGE =
+  "Preparing the complete skeleton preview…";
+
+export function getSpatialSkeletonNodeIdPresentation(
+  nodeId: number,
+  provisionalNodeIds: readonly number[],
+) {
+  return provisionalNodeIds.includes(nodeId)
+    ? {
+        label: "Preview",
+        tooltip: PROVISIONAL_NODE_ID_TOOLTIP,
+        provisional: true,
+      }
+    : { label: String(nodeId), tooltip: undefined, provisional: false };
+}
+
+const PREPARATION_ACTION_LABELS: Record<
+  SpatialSkeletonPreparationIntent["kind"],
+  string
+> = {
+  merge: "merge",
+  split: "split",
+  delete: "node deletion",
+  restore: "node restoration",
+  reroot: "reroot",
+};
+
+export interface SpatialSkeletonDetailsPreparationState {
+  readonly preparation: SpatialSkeletonPreparationIntent;
+  readonly statusText: string;
+  readonly detailText: string;
+  readonly controlsDisabledReason: string;
+  readonly laterEditCount: number;
+}
+
+function getPreparationStatusText(
+  preparation: SpatialSkeletonPreparationIntent,
+) {
+  const action = PREPARATION_ACTION_LABELS[preparation.kind];
+  switch (preparation.direction) {
+    case "undo":
+      return `Preparing Undo preview for ${action}…`;
+    case "redo":
+      return `Preparing Redo preview for ${action}…`;
+    default:
+      return `Preparing ${action} preview…`;
+  }
+}
+
+function getPreparationControlsDisabledReason(
+  preparation: SpatialSkeletonPreparationIntent,
+) {
+  const action = PREPARATION_ACTION_LABELS[preparation.kind];
+  return `Available after the exact ${action} preview finishes preparing.`;
+}
+
+/**
+ * Returns the earliest preparation that can change the selected skeleton.
+ * Match physical IDs or logical identity across remapping. Neither is shown
+ * in the status, so temporary IDs stay out of user-facing messages.
+ */
+export function getSpatialSkeletonDetailsPreparationState(options: {
+  preparations: readonly SpatialSkeletonPreparationIntent[];
+  selectedSegmentId: number | undefined;
+  selectedLogicalSegmentStableId?: string;
+  hasExactTopology: boolean;
+}): SpatialSkeletonDetailsPreparationState | undefined {
+  const {
+    selectedSegmentId,
+    selectedLogicalSegmentStableId,
+    hasExactTopology,
+  } = options;
+  if (selectedSegmentId === undefined) return undefined;
+  const overlapping = options.preparations
+    .filter(
+      (preparation) =>
+        preparation.segmentIds.includes(selectedSegmentId) ||
+        (selectedLogicalSegmentStableId !== undefined &&
+          preparation.logicalSegmentHandles?.some(
+            (handle) => handle.stableId === selectedLogicalSegmentStableId,
+          )),
+    )
+    .sort((a, b) => a.sequence - b.sequence);
+  const preparation = overlapping[0];
+  if (preparation === undefined) return undefined;
+  return {
+    preparation,
+    statusText: getPreparationStatusText(preparation),
+    detailText: hasExactTopology
+      ? "The last complete skeleton is shown below while the requested preview is prepared."
+      : PREPARATION_PENDING_LIST_MESSAGE,
+    controlsDisabledReason: getPreparationControlsDisabledReason(preparation),
+    laterEditCount: overlapping.length - 1,
+  };
+}
 
 export type SegmentDisplayState = SpatialSkeletonSegmentRenderState & {
   segmentLabel: string | undefined;
@@ -145,6 +247,42 @@ export function buildSpatialSkeletonVirtualListItems(
     items.push({ kind: "empty", text: emptyText });
   }
   return { items, listIndexByNodeId };
+}
+
+export function getSpatialSkeletonEmptyListText(options: {
+  activeSegmentId: number | undefined;
+  selectedSegmentDetailsUnavailable: boolean;
+  segmentState: SegmentDisplayState | undefined;
+  filterText: string;
+  nodeFilterType: SpatialSkeletonNodeFilterType;
+  preparationActive?: boolean;
+}): string {
+  const {
+    activeSegmentId,
+    selectedSegmentDetailsUnavailable,
+    segmentState,
+    filterText,
+    nodeFilterType,
+    preparationActive = false,
+  } = options;
+  if (preparationActive && segmentState === undefined) {
+    return PREPARATION_PENDING_LIST_MESSAGE;
+  }
+  if (activeSegmentId === undefined) {
+    return selectedSegmentDetailsUnavailable
+      ? SKELETON_DETAILS_UNAVAILABLE_LIST_MESSAGE
+      : "Hover over or select a skeleton node to view its skeleton's nodes.";
+  }
+  if (
+    segmentState === undefined ||
+    segmentState.totalNodeCount === 0 ||
+    (filterText.length === 0 &&
+      (nodeFilterType === SpatialSkeletonNodeFilterType.DEFAULT ||
+        nodeFilterType === SpatialSkeletonNodeFilterType.NONE))
+  ) {
+    return "No loaded nodes.";
+  }
+  return "No matching nodes.";
 }
 
 interface SpatiallyIndexedSkeletonNavigationApi {
@@ -232,7 +370,10 @@ export class SpatialSkeletonEditTab extends Tab {
           try {
             await undoSpatialSkeletonCommand(layer);
           } catch (error) {
-            showSpatialSkeletonActionError("undo", error);
+            showSpatialSkeletonActionError(
+              SpatialSkeletonHistoryActions.undo,
+              error,
+            );
           }
         })();
       },
@@ -247,7 +388,10 @@ export class SpatialSkeletonEditTab extends Tab {
           try {
             await redoSpatialSkeletonCommand(layer);
           } catch (error) {
-            showSpatialSkeletonActionError("redo", error);
+            showSpatialSkeletonActionError(
+              SpatialSkeletonHistoryActions.redo,
+              error,
+            );
           }
         })();
       },
@@ -292,6 +436,23 @@ export class SpatialSkeletonEditTab extends Tab {
     nodeFilterTypeRow.appendChild(nodeFilterTypeWidget.element);
     const nodesNavigationBar = document.createElement("div");
     nodesNavigationBar.className = "neuroglancer-skeleton-navigation-bar";
+    const preparationStatus = document.createElement("div");
+    preparationStatus.className = "neuroglancer-skeleton-preparation-status";
+    preparationStatus.hidden = true;
+    preparationStatus.setAttribute("role", "status");
+    preparationStatus.setAttribute("aria-live", "polite");
+    const preparationStatusTitle = document.createElement("div");
+    preparationStatusTitle.className =
+      "neuroglancer-skeleton-preparation-status-title";
+    const preparationStatusDetail = document.createElement("div");
+    preparationStatusDetail.className =
+      "neuroglancer-skeleton-preparation-status-detail";
+    const preparationStatusQueue = document.createElement("div");
+    preparationStatusQueue.className =
+      "neuroglancer-skeleton-preparation-status-queue";
+    preparationStatus.appendChild(preparationStatusTitle);
+    preparationStatus.appendChild(preparationStatusDetail);
+    preparationStatus.appendChild(preparationStatusQueue);
     const nodesSummaryBar = document.createElement("div");
     nodesSummaryBar.className = "neuroglancer-skeleton-summary-bar";
     const nodesSummary = document.createElement("div");
@@ -331,6 +492,7 @@ export class SpatialSkeletonEditTab extends Tab {
     nodesNavigationBar.appendChild(navTools);
     nodesNavigationBar.appendChild(toolbarActions);
     nodesSection.appendChild(nodesNavigationBar);
+    nodesSection.appendChild(preparationStatus);
     nodesSummaryBar.appendChild(nodesSummary);
     nodesSection.appendChild(nodesSummaryBar);
     nodesSection.appendChild(nodesList.element);
@@ -370,12 +532,16 @@ export class SpatialSkeletonEditTab extends Tab {
 
     let allNodes: SpatiallyIndexedSkeletonNode[] = [];
     let activeSegmentId: number | undefined;
+    let selectedSegmentDetailsUnavailable = false;
     let nodesBySegment = new Map<number, SpatiallyIndexedSkeletonNode[]>();
     let inspectionAllowed = false;
     let navigationAllowed = false;
     let trueEndEditingAllowed = false;
     let nodeDeletionAllowed = false;
     let nodeRerootAllowed = false;
+    let detailsPreparationState:
+      | SpatialSkeletonDetailsPreparationState
+      | undefined;
     let pendingScrollToSelectedNode = false;
     const MAX_SCROLL_RETRY_FRAMES = 6;
     const SCROLL_CENTER_EPSILON = 2;
@@ -591,6 +757,53 @@ export class SpatialSkeletonEditTab extends Tab {
           (entry) => entry.layer === layer,
         )?.state;
       return getSegmentIdFromLayerSelectionValue(layerSelectionState);
+    };
+
+    const getDetailsPreparationState = () => {
+      const selectedSegmentId = getSelectedSegmentId();
+      const presentation = skeletonState.spatialSkeletonPresentation.value;
+      return getSpatialSkeletonDetailsPreparationState({
+        preparations: presentation.preparations,
+        selectedSegmentId,
+        selectedLogicalSegmentStableId:
+          selectedSegmentId === undefined
+            ? undefined
+            : presentation.activeLogicalOwners.find(
+                (owner) => owner.segmentId === selectedSegmentId,
+              )?.logicalHandle.stableId,
+        hasExactTopology:
+          selectedSegmentId !== undefined &&
+          skeletonState.getCachedSegmentNodes(selectedSegmentId) !== undefined,
+      });
+    };
+
+    const updatePreparationStatus = () => {
+      detailsPreparationState = getDetailsPreparationState();
+      const state = detailsPreparationState;
+      preparationStatus.hidden = state === undefined;
+      if (state === undefined) {
+        preparationStatus.removeAttribute("data-lifecycle");
+        preparationStatusTitle.textContent = "";
+        preparationStatusDetail.textContent = "";
+        preparationStatusQueue.textContent = "";
+        return;
+      }
+      preparationStatus.dataset.lifecycle = state.preparation.lifecycle;
+      preparationStatusTitle.textContent = state.statusText;
+      preparationStatusDetail.textContent = state.detailText;
+      preparationStatusQueue.textContent =
+        state.laterEditCount === 0
+          ? ""
+          : `${state.laterEditCount} later edit${
+              state.laterEditCount === 1 ? "" : "s"
+            } queued`;
+    };
+
+    const ensureTopologyControlsAvailable = () => {
+      const reason = detailsPreparationState?.controlsDisabledReason;
+      if (reason === undefined) return true;
+      StatusMessage.showTemporaryMessage(reason);
+      return false;
     };
 
     const addVisibleSegmentIds = (segmentIds: Set<number>) => {
@@ -873,6 +1086,9 @@ export class SpatialSkeletonEditTab extends Tab {
       requireNode?: true,
     ): SpatiallyIndexedSkeletonNode | undefined;
     function getSelectedNavigationContext(requireNode: boolean = true) {
+      if (!ensureTopologyControlsAvailable()) {
+        return undefined;
+      }
       // Inspect actions NA, message handled in ensureActionsAllowed
       if (
         !ensureActionsAllowed(SpatialSkeletonActions.inspect, {
@@ -918,6 +1134,7 @@ export class SpatialSkeletonEditTab extends Tab {
       node: SpatiallyIndexedSkeletonNode,
       present: boolean,
     ) => {
+      if (!ensureTopologyControlsAvailable()) return;
       if (!ensureActionsAllowed(SpatialSkeletonActions.editNodeTrueEnd)) return;
       if (pendingTrueEndNodes.has(node.nodeId)) return;
       if (present) {
@@ -997,6 +1214,7 @@ export class SpatialSkeletonEditTab extends Tab {
     };
 
     const deleteNode = (node: SpatiallyIndexedSkeletonNode) => {
+      if (!ensureTopologyControlsAvailable()) return;
       if (!ensureActionsAllowed(SpatialSkeletonActions.deleteNodes)) return;
       if (pendingDeleteNodes.has(node.nodeId)) {
         return;
@@ -1018,7 +1236,10 @@ export class SpatialSkeletonEditTab extends Tab {
           await executeSpatialSkeletonDeleteNode(layer, node);
           refreshNodes();
         } catch (error) {
-          showSpatialSkeletonActionError("delete node", error);
+          showSpatialSkeletonActionError(
+            SpatialSkeletonActions.deleteNodes,
+            error,
+          );
           updateDisplay();
         } finally {
           pendingDeleteNodes.delete(node.nodeId);
@@ -1028,6 +1249,7 @@ export class SpatialSkeletonEditTab extends Tab {
     };
 
     const rerootNode = (node: SpatiallyIndexedSkeletonNode) => {
+      if (!ensureTopologyControlsAvailable()) return;
       if (
         !ensureActionsAllowed(SpatialSkeletonActions.reroot, {
           requireVisibleChunks: false,
@@ -1054,7 +1276,11 @@ export class SpatialSkeletonEditTab extends Tab {
         try {
           await layer.rerootSpatialSkeletonNode(node);
         } catch (error) {
-          showSpatialSkeletonActionError("set node as root", error);
+          showSpatialSkeletonActionError(
+            SpatialSkeletonActions.reroot,
+            error,
+            "set node as root",
+          );
         } finally {
           pendingRerootNodes.delete(node.nodeId);
           updateDisplay();
@@ -1227,6 +1453,9 @@ export class SpatialSkeletonEditTab extends Tab {
       goChildButton,
       goUnfinishedBranchButton,
     ];
+    const gatedControlDefaultTitles = new Map(
+      gatedControls.map((control) => [control, control.title] as const),
+    );
 
     const makeRowActionButton = (
       svg: string,
@@ -1335,11 +1564,31 @@ export class SpatialSkeletonEditTab extends Tab {
       segmentIdCell.className = "neuroglancer-skeleton-node-id";
       const segmentChip = document.createElement("span");
       segmentChip.className = "neuroglancer-skeleton-node-segment-chip";
-      const segmentChipColors = getSegmentChipColors(segmentState.segmentId);
-      segmentChip.textContent = String(segmentState.segmentId);
+      const segmentAlias =
+        skeletonState.spatialSkeletonPresentation.value.numericAliases.find(
+          (alias) => alias.segmentId === segmentState.segmentId,
+        );
+      const segmentChipColors =
+        segmentAlias?.authoritative === false
+          ? { background: "rgb(255, 0, 0)", foreground: "#ffffff" }
+          : getSegmentChipColors(segmentState.segmentId);
+      const hideNumericSegmentId =
+        detailsPreparationState !== undefined ||
+        segmentAlias?.authoritative === false;
+      segmentChip.textContent =
+        segmentAlias?.authoritative === false
+          ? "Preview"
+          : hideNumericSegmentId
+            ? "Updating"
+            : String(segmentState.segmentId);
       segmentChip.style.backgroundColor = segmentChipColors.background;
       segmentChip.style.color = segmentChipColors.foreground;
-      segmentChip.title = getSegmentSelectionTitle(segmentState.segmentId);
+      segmentChip.title =
+        segmentAlias?.authoritative === false
+          ? "Preview skeleton. Red means the skeleton source has not yet confirmed its permanent skeleton ID."
+          : detailsPreparationState !== undefined
+            ? "Showing the last complete skeleton while the requested preview is prepared. Selection and pinning remain available."
+            : getSegmentSelectionTitle(segmentState.segmentId);
       bindSegmentSelectionControls(segmentChip, segmentState.segmentId);
       segmentIdCell.appendChild(segmentChip);
       const segmentMeta = document.createElement("div");
@@ -1474,8 +1723,10 @@ export class SpatialSkeletonEditTab extends Tab {
       typeIcon.className = `neuroglancer-skeleton-node-type${canChangeType ? "-toggle" : ""}`;
       const toggleToName = nodeIsTrueEnd ? "Virtual end" : "True end";
       const fullTitle =
-        typeButtonTitle +
-        (canChangeType ? ` (click to toggle to ${toggleToName})` : "");
+        canChangeType && detailsPreparationState !== undefined
+          ? detailsPreparationState.controlsDisabledReason
+          : typeButtonTitle +
+            (canChangeType ? ` (click to toggle to ${toggleToName})` : "");
       typeIcon.title = fullTitle;
       if (typeIcon instanceof HTMLButtonElement) {
         typeIcon.type = "button";
@@ -1496,7 +1747,15 @@ export class SpatialSkeletonEditTab extends Tab {
 
       const idCell = document.createElement("span");
       idCell.className = "neuroglancer-skeleton-node-id";
-      idCell.textContent = String(node.nodeId);
+      const nodeIdPresentation = getSpatialSkeletonNodeIdPresentation(
+        node.nodeId,
+        skeletonState.spatialSkeletonPresentation.value.provisionalNodeIds,
+      );
+      idCell.textContent = nodeIdPresentation.label;
+      idCell.dataset.provisional = String(nodeIdPresentation.provisional);
+      if (nodeIdPresentation.tooltip !== undefined) {
+        idCell.title = nodeIdPresentation.tooltip;
+      }
 
       const coordinatesCell = document.createElement("div");
       coordinatesCell.className = "neuroglancer-skeleton-node-coordinate-cell";
@@ -1521,7 +1780,9 @@ export class SpatialSkeletonEditTab extends Tab {
       const actions = document.createElement("div");
       actions.className = "neuroglancer-skeleton-node-actions";
       let deleteActionTitle = "Delete node";
-      if (pendingDeleteNodes.has(node.nodeId)) {
+      if (detailsPreparationState !== undefined) {
+        deleteActionTitle = detailsPreparationState.controlsDisabledReason;
+      } else if (pendingDeleteNodes.has(node.nodeId)) {
         deleteActionTitle = "Deleting node";
       }
       actions.appendChild(
@@ -1595,24 +1856,15 @@ export class SpatialSkeletonEditTab extends Tab {
       }
     };
 
-    const getEmptyListText = (
-      segmentState: SegmentDisplayState | undefined,
-    ) => {
-      if (activeSegmentId === undefined) {
-        return "Select a skeleton segment to inspect editable nodes.";
-      }
-      if (
-        segmentState === undefined ||
-        segmentState.totalNodeCount === 0 ||
-        (getFilterText().length === 0 &&
-          (nodeFilterTypeModel.value ===
-            SpatialSkeletonNodeFilterType.DEFAULT ||
-            nodeFilterTypeModel.value === SpatialSkeletonNodeFilterType.NONE))
-      ) {
-        return "No loaded nodes.";
-      }
-      return "No matching nodes.";
-    };
+    const getEmptyListText = (segmentState: SegmentDisplayState | undefined) =>
+      getSpatialSkeletonEmptyListText({
+        activeSegmentId,
+        selectedSegmentDetailsUnavailable,
+        segmentState,
+        filterText: getFilterText(),
+        nodeFilterType: nodeFilterTypeModel.value,
+        preparationActive: detailsPreparationState !== undefined,
+      });
 
     const updateList = (segmentState: SegmentDisplayState | undefined) => {
       const flattened = buildSpatialSkeletonVirtualListItems(
@@ -1638,6 +1890,11 @@ export class SpatialSkeletonEditTab extends Tab {
       segmentState: SegmentDisplayState | undefined,
       summarySuffix = "",
     ) => {
+      if (detailsPreparationState !== undefined && segmentState === undefined) {
+        nodesSummary.textContent = PREPARATION_PENDING_LIST_MESSAGE;
+        nodesSummary.removeAttribute("title");
+        return;
+      }
       const branchCount = segmentState?.branchCount ?? 0;
       const nodeCount = segmentState?.displayedNodeCount ?? 0;
       nodesSummary.textContent = `${branchCount} branch${branchCount === 1 ? "" : "es"}, ${nodeCount} node${
@@ -1651,6 +1908,7 @@ export class SpatialSkeletonEditTab extends Tab {
     };
 
     const updateDisplay = (summarySuffix = loadedNodeSummarySuffix) => {
+      updatePreparationStatus();
       const segmentState = buildSegmentDisplayState();
       summarizeNodeState(segmentState, summarySuffix);
       updateList(segmentState);
@@ -1690,6 +1948,9 @@ export class SpatialSkeletonEditTab extends Tab {
         cachedSelectedSegmentNodes === undefined
           ? undefined
           : selectedSegmentId;
+      selectedSegmentDetailsUnavailable =
+        selectedSegmentId !== undefined &&
+        cachedSelectedSegmentNodes === undefined;
       loadedNodeSummarySuffix = "";
       if (
         skeletonLayer === undefined ||
@@ -1723,6 +1984,9 @@ export class SpatialSkeletonEditTab extends Tab {
     };
 
     const updateGateStatus = () => {
+      updatePreparationStatus();
+      const topologyControlsDisabledReason =
+        detailsPreparationState?.controlsDisabledReason;
       const nextInspectionAllowed =
         layer.getSpatialSkeletonActionsDisabledReason(
           SpatialSkeletonActions.inspect,
@@ -1730,16 +1994,20 @@ export class SpatialSkeletonEditTab extends Tab {
             requireVisibleChunks: false,
           },
         ) === undefined;
-      const nextNavigationAllowed = nextInspectionAllowed;
+      const nextNavigationAllowed =
+        nextInspectionAllowed && topologyControlsDisabledReason === undefined;
       const nextTrueEndEditingAllowed =
+        topologyControlsDisabledReason === undefined &&
         layer.getSpatialSkeletonActionsDisabledReason(
           SpatialSkeletonActions.editNodeTrueEnd,
         ) === undefined;
       const nextNodeDeletionAllowed =
+        topologyControlsDisabledReason === undefined &&
         layer.getSpatialSkeletonActionsDisabledReason(
           SpatialSkeletonActions.deleteNodes,
         ) === undefined;
       const nextNodeRerootAllowed =
+        topologyControlsDisabledReason === undefined &&
         layer.getSpatialSkeletonActionsDisabledReason(
           SpatialSkeletonActions.reroot,
           {
@@ -1760,9 +2028,21 @@ export class SpatialSkeletonEditTab extends Tab {
       nodeRerootAllowed = nextNodeRerootAllowed;
 
       filterInput.disabled = !inspectionAllowed;
-      nodeFilterTypeWidget.element.disabled = !inspectionAllowed;
+      nodeFilterTypeWidget.element.disabled =
+        !inspectionAllowed || topologyControlsDisabledReason !== undefined;
+      nodeFilterTypeWidget.element.title =
+        topologyControlsDisabledReason ?? "Filter loaded nodes by node type";
+      nodeFilterTypeWidget.element.setAttribute(
+        "aria-label",
+        nodeFilterTypeWidget.element.title,
+      );
       for (const control of gatedControls) {
         control.disabled = !navigationAllowed;
+        control.title =
+          topologyControlsDisabledReason ??
+          gatedControlDefaultTitles.get(control) ??
+          "Skeleton navigation";
+        control.setAttribute("aria-label", control.title);
       }
       if (gateStateChanged) {
         updateDisplay();
@@ -1773,24 +2053,28 @@ export class SpatialSkeletonEditTab extends Tab {
       const { commandHistory } = layer.spatialSkeletonState;
       const undoLabel = commandHistory.undoLabel.value;
       const redoLabel = commandHistory.redoLabel.value;
-      const busy = commandHistory.isBusy.value;
       const canUndoOptimistic =
         layer.spatialSkeletonState.canUndoOptimisticEdit();
-      undoButton.disabled =
-        busy || (!canUndoOptimistic && !commandHistory.canUndo.value);
-      redoButton.disabled = busy || !commandHistory.canRedo.value;
-      undoButton.title = busy
-        ? "Wait for the current skeleton edit to finish."
-        : canUndoOptimistic
-          ? "Undo latest optimistic edit."
+      const canRedoOptimistic =
+        layer.spatialSkeletonState.canRedoOptimisticEdit();
+      const reloadRequired =
+        layer.spatialSkeletonState.getOptimisticEditFatalState() !== undefined;
+      undoButton.disabled = !canUndoOptimistic;
+      redoButton.disabled = !canRedoOptimistic;
+      undoButton.title = reloadRequired
+        ? SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON
+        : !canUndoOptimistic
+          ? "Nothing to undo."
           : undoLabel === undefined
-            ? "Nothing to undo."
+            ? "Undo latest optimistic edit."
             : `Undo ${undoLabel}`;
-      redoButton.title = busy
-        ? "Wait for the current skeleton edit to finish."
-        : redoLabel === undefined
+      redoButton.title = reloadRequired
+        ? SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON
+        : !canRedoOptimistic
           ? "Nothing to redo."
-          : `Redo ${redoLabel}`;
+          : redoLabel === undefined
+            ? "Redo latest optimistic edit."
+            : `Redo ${redoLabel}`;
       undoButton.setAttribute("aria-label", undoButton.title);
       redoButton.setAttribute("aria-label", redoButton.title);
     };
@@ -1853,12 +2137,6 @@ export class SpatialSkeletonEditTab extends Tab {
       }),
     );
     this.registerDisposer(
-      layer.spatialSkeletonState.commandHistory.isBusy.changed.add(() => {
-        updateGateStatus();
-        updateHistoryButtons();
-      }),
-    );
-    this.registerDisposer(
       layer.spatialSkeletonState.commandHistory.undoLabel.changed.add(() => {
         updateHistoryButtons();
       }),
@@ -1882,6 +2160,7 @@ export class SpatialSkeletonEditTab extends Tab {
         } else {
           updateDisplay();
         }
+        updateGateStatus();
       }),
     );
     this.registerDisposer(
@@ -1926,8 +2205,9 @@ export class SpatialSkeletonEditTab extends Tab {
       }),
     );
     this.registerDisposer(
-      layer.spatialSkeletonNodeDataVersion.changed.add(() => {
+      skeletonState.spatialSkeletonPresentation.changed.add(() => {
         refreshNodes();
+        updateGateStatus();
       }),
     );
     this.registerDisposer(

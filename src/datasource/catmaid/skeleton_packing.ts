@@ -14,17 +14,13 @@
  * limitations under the License.
  */
 
-import type {
-  SpatiallyIndexedSkeletonNodeBase,
-  SpatialSkeletonSourceState,
-} from "#src/skeleton/api.js";
+import type { SpatiallyIndexedSkeletonNodeBase } from "#src/skeleton/api.js";
 
 interface PackedCatmaidSkeletonData {
   vertexPositions: Float32Array;
   segmentIds: Uint32Array;
   indices: Uint32Array;
   nodeIds: Int32Array;
-  sourceStates: Array<SpatialSkeletonSourceState | undefined>;
 }
 
 export function packCatmaidSkeletonNodes(
@@ -34,9 +30,6 @@ export function packCatmaidSkeletonNodes(
   const vertexPositions = new Float32Array(numVertices * 3);
   const segmentIds = new Uint32Array(numVertices);
   const nodeIds = new Int32Array(numVertices);
-  const sourceStates = new Array<SpatialSkeletonSourceState | undefined>(
-    numVertices,
-  );
   const indices: number[] = [];
   const nodeMap = new Map<number, number>();
 
@@ -48,7 +41,6 @@ export function packCatmaidSkeletonNodes(
     vertexPositions[i * 3 + 1] = node.position[1];
     vertexPositions[i * 3 + 2] = node.position[2];
     segmentIds[i] = node.segmentId;
-    sourceStates[i] = node.sourceState;
   }
 
   for (let i = 0; i < numVertices; ++i) {
@@ -65,6 +57,5 @@ export function packCatmaidSkeletonNodes(
     segmentIds,
     indices: new Uint32Array(indices),
     nodeIds,
-    sourceStates,
   };
 }

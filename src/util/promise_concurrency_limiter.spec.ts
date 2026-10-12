@@ -159,4 +159,34 @@ describe("PromiseConcurrencyLimiter", () => {
     controller.abort();
     expect(b.started).toBe(true);
   });
+
+  test("starts a prioritized task ahead of tasks queued before it", async () => {
+    const limiter = new PromiseConcurrencyLimiter(() => 1);
+    const a = makeDeferredTask();
+    const b = makeDeferredTask();
+    const c = makeDeferredTask();
+    const aPromise = limiter.run(a.task);
+    void limiter.run(b.task);
+    void limiter.run(c.task, { isPrioritized: () => true });
+    a.resolve();
+    await aPromise;
+    expect(c.started).toBe(true);
+    expect(b.started).toBe(false);
+  });
+
+  test("starts a task prioritized after it was queued ahead of the others", async () => {
+    const limiter = new PromiseConcurrencyLimiter(() => 1);
+    const a = makeDeferredTask();
+    const b = makeDeferredTask();
+    const c = makeDeferredTask();
+    let cPrioritized = false;
+    const aPromise = limiter.run(a.task);
+    void limiter.run(b.task, { isPrioritized: () => false });
+    void limiter.run(c.task, { isPrioritized: () => cPrioritized });
+    cPrioritized = true;
+    a.resolve();
+    await aPromise;
+    expect(c.started).toBe(true);
+    expect(b.started).toBe(false);
+  });
 });

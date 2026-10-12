@@ -20,14 +20,12 @@ import type { CredentialsProvider } from "#src/credentials_provider/index.js";
 import type {
   SpatialSkeletonBounds,
   SpatialSkeletonSpatialIndexLevel,
-  SpatialSkeletonSourceState,
   SpatialSkeletonVector,
   SpatiallyIndexedSkeletonMetadata,
   SpatiallyIndexedSkeletonNode,
   SpatiallyIndexedSkeletonNodeBase,
 } from "#src/skeleton/api.js";
 import { SpatialSkeletonEditConflictError } from "#src/skeleton/edit_errors.js";
-import type { SpatiallyIndexedSkeletonNavigationTarget } from "#src/skeleton/navigation_graph.js";
 import { validateSpatialSkeletonLimitZeroOnlyFinest } from "#src/skeleton/source_selection.js";
 import {
   getDefaultSpatiallyIndexedSkeletonChunkSize,
@@ -58,60 +56,19 @@ export const credentialsKey = "CATMAID";
 const CATMAID_NO_MATCHING_NODE_PROVIDER_ERROR =
   "Could not find matching node provider for request";
 const CATMAID_STATE_MATCHING_ERROR_TYPE = "StateMatchingError";
-const CATMAID_MIN_SUPPORTED_RELEASE_TAG = "2026.05.06";
-const CATMAID_MIN_SUPPORTED_COMMITS_AFTER_RELEASE_TAG = 11;
-export const CATMAID_MIN_SUPPORTED_GIT_DESCRIBE_VERSION = `${CATMAID_MIN_SUPPORTED_RELEASE_TAG}.dev${CATMAID_MIN_SUPPORTED_COMMITS_AFTER_RELEASE_TAG}+g...`;
 
-type CatmaidStatePayload = object;
 type CatmaidFetchPriority = "high" | "low" | "auto";
 type CatmaidRequestInit = RequestInit & { priority?: CatmaidFetchPriority };
-
-export type CatmaidNodeSourceState = { readonly revisionToken: string };
 export type CatmaidRank3Vector = readonly [number, number, number];
 
-export interface CatmaidEditNodeContext {
-  nodeId: number;
-  parentNodeId?: number;
-  revisionToken: string;
-}
-
-export interface CatmaidEditParentContext {
-  nodeId: number;
-  revisionToken: string;
-}
-
-export interface CatmaidEditContext {
-  node?: CatmaidEditNodeContext;
-  parent?: CatmaidEditParentContext;
-  children?: readonly CatmaidEditParentContext[];
-  nodes?: readonly CatmaidEditParentContext[];
-}
-
-export interface CatmaidSkeletonNodeSourceStateUpdate {
-  nodeId: number;
-  sourceState: SpatialSkeletonSourceState;
-}
-
-export interface CatmaidSkeletonEditResult {
-  nodeSourceStateUpdates?: readonly CatmaidSkeletonNodeSourceStateUpdate[];
-}
-
-export interface CatmaidAddNodeResult extends CatmaidSkeletonEditResult {
+export interface CatmaidAddNodeResult {
   nodeId: number;
   segmentId: number;
-  sourceState?: SpatialSkeletonSourceState;
-  parentSourceState?: SpatialSkeletonSourceState;
 }
 
 export type CatmaidInsertNodeResult = CatmaidAddNodeResult;
 
-export interface CatmaidNodeSourceStateResult
-  extends CatmaidSkeletonEditResult {
-  sourceState?: SpatialSkeletonSourceState;
-}
-
-export interface CatmaidDescriptionUpdateResult
-  extends CatmaidNodeSourceStateResult {
+export interface CatmaidDescriptionUpdateResult {
   description?: string;
 }
 
@@ -119,117 +76,47 @@ export interface CatmaidDescriptionUpdateOptions {
   isTrueEnd?: boolean;
 }
 
-export interface CatmaidAddNodeOptions {
-  nocheck?: boolean;
-  signal?: AbortSignal;
-}
-
-export interface CatmaidMoveNodeOptions {
-  nocheck?: boolean;
-}
-
-export interface CatmaidMergeSkeletonOptions {
-  nocheck?: boolean;
-}
-
-export interface CatmaidSplitSkeletonOptions {
-  nocheck?: boolean;
-}
-
-export interface CatmaidRerootSkeletonOptions {
-  nocheck?: boolean;
-}
-
-export type CatmaidDeleteNodeResult = CatmaidSkeletonEditResult;
-
-export type CatmaidRerootResult = CatmaidSkeletonEditResult;
-
-export interface CatmaidMergeResult extends CatmaidSkeletonEditResult {
+export interface CatmaidMergeResult {
   resultSegmentId: number | undefined;
   deletedSegmentId: number | undefined;
   directionAdjusted: boolean;
 }
 
-export interface CatmaidSplitResult extends CatmaidSkeletonEditResult {
+export interface CatmaidSplitResult {
   existingSegmentId: number | undefined;
   newSegmentId: number | undefined;
 }
 
 export interface CatmaidSpatialSkeletonEditApi {
-  getSkeletonRootNode(
-    skeletonId: number,
-  ): Promise<SpatiallyIndexedSkeletonNavigationTarget>;
   addNode(
-    skeletonId: number,
     x: number,
     y: number,
     z: number,
     parentId?: number,
-    editContext?: CatmaidEditContext,
-    options?: CatmaidAddNodeOptions,
   ): Promise<CatmaidAddNodeResult>;
-  deleteNode(
-    nodeId: number,
-    options: CatmaidDeleteNodeOptions,
-  ): Promise<CatmaidDeleteNodeResult>;
-  moveNode(
-    nodeId: number,
-    x: number,
-    y: number,
-    z: number,
-    editContext?: CatmaidEditContext,
-    options?: CatmaidMoveNodeOptions,
-  ): Promise<CatmaidNodeSourceStateResult>;
-  splitSkeleton(
-    nodeId: number,
-    editContext?: CatmaidEditContext,
-    options?: CatmaidSplitSkeletonOptions,
-  ): Promise<CatmaidSplitResult>;
+  deleteNode(nodeId: number): Promise<void>;
+  moveNode(nodeId: number, x: number, y: number, z: number): Promise<void>;
+  splitSkeleton(nodeId: number): Promise<CatmaidSplitResult>;
   mergeSkeletons(
     fromNodeId: number,
     toNodeId: number,
-    editContext?: CatmaidEditContext,
-    options?: CatmaidMergeSkeletonOptions,
   ): Promise<CatmaidMergeResult>;
-  toggleTrueEnd(
-    nodeId: number,
-    nextIsTrueEnd: boolean,
-  ): Promise<CatmaidNodeSourceStateResult>;
+  toggleTrueEnd(nodeId: number, nextIsTrueEnd: boolean): Promise<void>;
   insertNode(
-    skeletonId: number,
     x: number,
     y: number,
     z: number,
     parentId: number,
     childNodeIds: readonly number[],
-    editContext?: CatmaidEditContext,
   ): Promise<CatmaidInsertNodeResult>;
-  rerootSkeleton(
-    nodeId: number,
-    editContext?: CatmaidEditContext,
-    options?: CatmaidRerootSkeletonOptions,
-  ): Promise<CatmaidRerootResult>;
+  rerootSkeleton(nodeId: number): Promise<void>;
   updateDescription(
     nodeId: number,
     description: string,
     options?: CatmaidDescriptionUpdateOptions,
   ): Promise<CatmaidDescriptionUpdateResult>;
-  updateRadius(
-    nodeId: number,
-    radius: number,
-    editContext?: CatmaidEditContext,
-  ): Promise<CatmaidNodeSourceStateResult>;
-  updateConfidence(
-    nodeId: number,
-    confidence: number,
-    editContext?: CatmaidEditContext,
-  ): Promise<CatmaidNodeSourceStateResult>;
-}
-
-interface CatmaidDeleteNodeOptions {
-  childNodeIds?: readonly number[];
-  editContext?: CatmaidEditContext;
-  nocheck?: boolean;
+  updateRadius(nodeId: number, radius: number): Promise<void>;
+  updateConfidence(nodeId: number, confidence: number): Promise<void>;
 }
 
 class CatmaidNotFoundError extends Error {
@@ -248,32 +135,6 @@ export class CatmaidStateValidationError extends SpatialSkeletonEditConflictErro
     );
     this.name = "CatmaidStateValidationError";
   }
-}
-
-export function makeCatmaidNodeSourceState(
-  revisionToken: string | undefined,
-): CatmaidNodeSourceState | undefined {
-  return revisionToken === undefined ? undefined : { revisionToken };
-}
-
-export function getCatmaidRevisionToken(
-  sourceState: unknown,
-): string | undefined {
-  if (typeof sourceState === "string") {
-    return sourceState.trim().length === 0 ? undefined : sourceState;
-  }
-  if (
-    sourceState !== null &&
-    typeof sourceState === "object" &&
-    typeof (sourceState as { revisionToken?: unknown }).revisionToken ===
-      "string"
-  ) {
-    const revisionToken = (
-      sourceState as { revisionToken: string }
-    ).revisionToken.trim();
-    return revisionToken.length === 0 ? undefined : revisionToken;
-  }
-  return undefined;
 }
 
 export const CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES = [
@@ -323,8 +184,12 @@ function getCatmaidErrorMessage(payload: unknown): string | undefined {
   ) {
     return undefined;
   }
-  const value = payload as { error?: unknown };
-  return typeof value.error === "string" ? value.error.trim() : undefined;
+  const value = payload as { error?: unknown; detail?: unknown };
+  // CATMAID's exception middleware uses detail for a traceback, even when error is blank.
+  const message = Object.hasOwn(value, "error") ? value.error : value.detail;
+  return typeof message === "string" && message.trim().length > 0
+    ? message.trim()
+    : undefined;
 }
 
 function isCatmaidNotFoundPayload(payload: unknown): boolean {
@@ -425,7 +290,7 @@ function parseCatmaidLabelNodeReference(entry: unknown):
   const nodeId = Math.round(Number(rawNodeId));
   if (!Number.isSafeInteger(nodeId) || nodeId <= 0) return undefined;
   const time = Array.isArray(entry)
-    ? getComparableCatmaidRevisionTime(entry[1])
+    ? getCatmaidLabelTimestamp(entry[1])
     : undefined;
   return { nodeId, time };
 }
@@ -785,34 +650,16 @@ function appendScalarList(
   }
 }
 
-function appendCatmaidState(
-  body: URLSearchParams,
-  state?: CatmaidStatePayload,
-) {
-  if (state === undefined) {
-    return;
-  }
-  body.append("state", JSON.stringify(state));
+function appendUncheckedCatmaidState(body: URLSearchParams) {
+  // CATMAID requires an explicit state policy. Queue ordering and local cache
+  // revisions do not depend on server edition timestamps.
+  body.append("state", JSON.stringify({ nocheck: true }));
 }
 
-function normalizeCatmaidRevisionToken(value: unknown): string | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    const milliseconds = Math.abs(value) < 1e12 ? value * 1000 : value;
-    return new Date(milliseconds).toISOString();
-  }
-  if (typeof value === "string") {
-    const normalizedValue = value.trim();
-    if (normalizedValue.length > 0) {
-      return normalizedValue;
-    }
-  }
-  return undefined;
-}
-
-const CATMAID_TIMESTAMP_WITH_SPACE_PATTERN =
+const CATMAID_LABEL_TIMESTAMP_WITH_SPACE_PATTERN =
   /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}(?:\.\d+)?)(Z|[+-]\d{2}:\d{2})$/;
 
-function getComparableCatmaidRevisionTime(value: unknown) {
+function getCatmaidLabelTimestamp(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
   }
@@ -824,391 +671,12 @@ function getComparableCatmaidRevisionTime(value: unknown) {
     return undefined;
   }
   const parsedValue = Date.parse(
-    normalizedValue.replace(CATMAID_TIMESTAMP_WITH_SPACE_PATTERN, "$1T$2$3"),
+    normalizedValue.replace(
+      CATMAID_LABEL_TIMESTAMP_WITH_SPACE_PATTERN,
+      "$1T$2$3",
+    ),
   );
   return Number.isFinite(parsedValue) ? parsedValue : undefined;
-}
-
-function parseCatmaidSkeletonRootTarget(
-  response: any,
-): SpatiallyIndexedSkeletonNavigationTarget {
-  if (!response || typeof response !== "object" || Array.isArray(response)) {
-    throw new Error(
-      "CATMAID skeleton root endpoint returned an unexpected response format.",
-    );
-  }
-
-  const { root_id, x, y, z } = response as Record<string, unknown>;
-  const nodeId = Number(root_id);
-  const px = Number(x);
-  const py = Number(y);
-  const pz = Number(z);
-
-  if (
-    Number.isSafeInteger(nodeId) &&
-    nodeId > 0 &&
-    Number.isFinite(px) &&
-    Number.isFinite(py) &&
-    Number.isFinite(pz)
-  ) {
-    return { nodeId, position: [px, py, pz] };
-  }
-
-  throw new Error(
-    "CATMAID skeleton root endpoint returned an unexpected response format.",
-  );
-}
-
-function requireCatmaidRevisionToken(
-  revisionToken: string | undefined,
-  operation: string,
-  role: string,
-) {
-  if (revisionToken === undefined) {
-    throw new Error(
-      `CATMAID ${operation} is missing the required ${role} revision state.`,
-    );
-  }
-  return revisionToken;
-}
-
-function buildCatmaidNodeState(
-  operation: string,
-  editContext?: CatmaidEditContext,
-  expectedNodeId?: number,
-) {
-  const node = editContext?.node;
-  if (node === undefined) {
-    throw new Error(`CATMAID ${operation} requires inspected node state.`);
-  }
-  if (expectedNodeId !== undefined && node.nodeId !== expectedNodeId) {
-    throw new Error(
-      `CATMAID ${operation} node state does not match requested node id ${expectedNodeId}.`,
-    );
-  }
-  return {
-    edition_time: requireCatmaidRevisionToken(
-      node.revisionToken,
-      operation,
-      "node",
-    ),
-  };
-}
-
-function buildCatmaidMultiNodeState(
-  operation: string,
-  editContext?: CatmaidEditContext,
-  expectedNodeIds?: readonly number[],
-) {
-  const nodes =
-    editContext?.nodes ??
-    (editContext?.node === undefined ? undefined : [editContext.node]);
-  if (nodes === undefined || nodes.length === 0) {
-    throw new Error(`CATMAID ${operation} requires inspected node state.`);
-  }
-  if (
-    expectedNodeIds !== undefined &&
-    (nodes.length !== expectedNodeIds.length ||
-      nodes.some((node, index) => node.nodeId !== expectedNodeIds[index]))
-  ) {
-    throw new Error(
-      `CATMAID ${operation} node state does not match the requested node ids.`,
-    );
-  }
-  return nodes.map((node): [number, string] => [
-    node.nodeId,
-    requireCatmaidRevisionToken(node.revisionToken, operation, "node"),
-  ]);
-}
-
-function buildCatmaidAddNodeState(
-  parentId: number | undefined,
-  editContext?: CatmaidEditContext,
-) {
-  if (parentId === undefined) {
-    return {
-      parent: [-1, ""],
-    };
-  }
-  const parentNode = editContext?.node;
-  if (parentNode === undefined) {
-    throw new Error(
-      "CATMAID add-node with a parent requires inspected parent state.",
-    );
-  }
-  if (parentNode.nodeId !== parentId) {
-    throw new Error(
-      `CATMAID add-node parent state does not match requested parent id ${parentId}.`,
-    );
-  }
-  return {
-    parent: [
-      parentNode.nodeId,
-      requireCatmaidRevisionToken(
-        parentNode.revisionToken,
-        "add-node",
-        "parent",
-      ),
-    ],
-  };
-}
-
-function buildCatmaidNeighborhoodState(
-  operation: string,
-  editContext?: CatmaidEditContext,
-  options: {
-    expectedNodeId?: number;
-    expectedChildIds?: readonly number[];
-  } = {},
-) {
-  const node = editContext?.node;
-  if (node === undefined) {
-    throw new Error(`CATMAID ${operation} requires inspected node state.`);
-  }
-  if (
-    options.expectedNodeId !== undefined &&
-    node.nodeId !== options.expectedNodeId
-  ) {
-    throw new Error(
-      `CATMAID ${operation} node state does not match requested node id ${options.expectedNodeId}.`,
-    );
-  }
-  if (
-    node.parentNodeId === undefined
-      ? editContext?.parent !== undefined
-      : editContext?.parent === undefined
-  ) {
-    throw new Error(
-      `CATMAID ${operation} parent state does not match the cached skeleton neighborhood.`,
-    );
-  }
-  if (
-    editContext?.parent !== undefined &&
-    node.parentNodeId !== editContext.parent.nodeId
-  ) {
-    throw new Error(
-      `CATMAID ${operation} parent state does not match the cached skeleton neighborhood.`,
-    );
-  }
-  const childStates = editContext?.children ?? [];
-  const expectedChildIds = options.expectedChildIds;
-  if (
-    expectedChildIds !== undefined &&
-    childStates.length !== expectedChildIds.length
-  ) {
-    throw new Error(
-      `CATMAID ${operation} requires revision state for all direct child nodes.`,
-    );
-  }
-  if (
-    expectedChildIds !== undefined &&
-    childStates.some((child, index) => child.nodeId !== expectedChildIds[index])
-  ) {
-    throw new Error(
-      `CATMAID ${operation} child state does not match the cached skeleton neighborhood.`,
-    );
-  }
-  return {
-    edition_time: requireCatmaidRevisionToken(
-      node.revisionToken,
-      operation,
-      "node",
-    ),
-    ...(editContext?.parent === undefined
-      ? {}
-      : {
-          parent: [
-            editContext.parent.nodeId,
-            requireCatmaidRevisionToken(
-              editContext.parent.revisionToken,
-              operation,
-              "parent",
-            ),
-          ],
-        }),
-    children: childStates.map((child): [number, string] => [
-      child.nodeId,
-      requireCatmaidRevisionToken(child.revisionToken, operation, "child"),
-    ]),
-    links: [],
-  };
-}
-
-function buildCatmaidInsertNodeState(
-  parentId: number,
-  childNodeIds: readonly number[],
-  editContext?: CatmaidEditContext,
-) {
-  const parentNode = editContext?.node;
-  if (parentNode === undefined) {
-    throw new Error("CATMAID insert-node requires inspected parent state.");
-  }
-  if (parentNode.nodeId !== parentId) {
-    throw new Error(
-      `CATMAID insert-node parent state does not match requested parent id ${parentId}.`,
-    );
-  }
-  const childStates = editContext?.children ?? [];
-  if (childStates.length !== childNodeIds.length) {
-    throw new Error(
-      "CATMAID insert-node requires revision state for all reattached child nodes.",
-    );
-  }
-  if (
-    childStates.some((child, index) => child.nodeId !== childNodeIds[index])
-  ) {
-    throw new Error(
-      "CATMAID insert-node child state does not match the requested child ids.",
-    );
-  }
-  return {
-    edition_time: requireCatmaidRevisionToken(
-      parentNode.revisionToken,
-      "insert-node",
-      "parent",
-    ),
-    children: childStates.map((child): [number, string] => [
-      child.nodeId,
-      requireCatmaidRevisionToken(child.revisionToken, "insert-node", "child"),
-    ]),
-    links: [],
-  };
-}
-
-function getCatmaidSingleNodeRevisionResult(
-  revisionToken: string | undefined,
-): CatmaidNodeSourceStateResult {
-  const sourceState = makeCatmaidNodeSourceState(revisionToken);
-  return sourceState === undefined ? {} : { sourceState };
-}
-
-function parseCatmaidMoveRevisionToken(
-  response: any,
-  nodeId: number,
-): string | undefined {
-  const updatedRows = Array.isArray(response?.old_treenodes)
-    ? response.old_treenodes
-    : [];
-  for (const row of updatedRows) {
-    if (!Array.isArray(row) || Number(row[0]) !== nodeId) continue;
-    return normalizeCatmaidRevisionToken(row[1]);
-  }
-  return normalizeCatmaidRevisionToken(response?.edition_time);
-}
-
-function parseCatmaidUpdatedNodesRevisionToken(
-  response: any,
-  nodeId: number,
-): string | undefined {
-  const updatedNodes = response?.updated_nodes;
-  if (updatedNodes !== null && typeof updatedNodes === "object") {
-    const directMatch = (updatedNodes as Record<string, any>)[nodeId];
-    const directRevision = normalizeCatmaidRevisionToken(
-      directMatch?.edition_time,
-    );
-    if (directRevision !== undefined) {
-      return directRevision;
-    }
-  }
-  return normalizeCatmaidRevisionToken(response?.edition_time);
-}
-
-function parseCatmaidConfidenceRevisionToken(
-  response: any,
-  nodeId: number,
-): string | undefined {
-  const directRevision = parseCatmaidUpdatedNodesRevisionToken(
-    response,
-    nodeId,
-  );
-  if (directRevision !== undefined) {
-    return directRevision;
-  }
-  const updatedPartners = response?.updated_partners;
-  if (updatedPartners === null || typeof updatedPartners !== "object") {
-    return undefined;
-  }
-  for (const value of Object.values(updatedPartners as Record<string, any>)) {
-    const revisionToken = normalizeCatmaidRevisionToken(value?.edition_time);
-    if (revisionToken !== undefined) {
-      return revisionToken;
-    }
-  }
-  return undefined;
-}
-
-function parseCatmaidChildRevisionUpdates(
-  value: unknown,
-): readonly CatmaidSkeletonNodeSourceStateUpdate[] {
-  const revisionUpdates: CatmaidSkeletonNodeSourceStateUpdate[] = [];
-  const children = Array.isArray(value) ? value : [];
-  for (const child of children) {
-    if (!Array.isArray(child) || child.length < 2) continue;
-    const nodeId = Number(child[0]);
-    const revisionToken = normalizeCatmaidRevisionToken(child[1]);
-    if (!Number.isFinite(nodeId) || revisionToken === undefined) continue;
-    revisionUpdates.push({
-      nodeId: Math.round(nodeId),
-      sourceState: { revisionToken },
-    });
-  }
-  return revisionUpdates;
-}
-
-function parseCatmaidDeleteRevisionUpdates(
-  response: any,
-): readonly CatmaidSkeletonNodeSourceStateUpdate[] {
-  return parseCatmaidChildRevisionUpdates(response?.children);
-}
-
-function parseCatmaidServerVersionFromResponse(
-  response: unknown,
-): string | undefined {
-  if (response === null || typeof response !== "object") {
-    return undefined;
-  }
-  const version = (response as Record<string, unknown>).SERVER_VERSION;
-  return typeof version === "string" && version.trim().length > 0
-    ? version.trim()
-    : undefined;
-}
-
-interface CatmaidGitDescribeVersion {
-  releaseTag: string;
-  commitsAfterReleaseTag: number;
-  commitHash: string;
-}
-
-function parseCatmaidGitDescribeVersion(
-  version: string | undefined,
-): CatmaidGitDescribeVersion | undefined {
-  const match = version?.match(
-    /^(\d{4}\.\d{2}\.\d{2})\.dev(\d+)\+g([0-9a-fA-F]+)$/,
-  );
-  if (match == null) {
-    return undefined;
-  }
-  return {
-    releaseTag: match[1],
-    commitsAfterReleaseTag: Number(match[2]),
-    commitHash: match[3],
-  };
-}
-
-function isCatmaidServerVersionSupported(version: string | undefined) {
-  const parsed = parseCatmaidGitDescribeVersion(version);
-  if (parsed === undefined) {
-    return false;
-  }
-  const releaseComparison = parsed.releaseTag.localeCompare(
-    CATMAID_MIN_SUPPORTED_RELEASE_TAG,
-  );
-  return (
-    releaseComparison > 0 ||
-    (releaseComparison === 0 &&
-      parsed.commitsAfterReleaseTag >=
-        CATMAID_MIN_SUPPORTED_COMMITS_AFTER_RELEASE_TAG)
-  );
 }
 
 function fetchWithCatmaidCredentials(
@@ -1257,13 +725,22 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     if (!(error instanceof HttpError) || error.response === undefined) {
       return error;
     }
-    const payload = await tryReadErrorPayload(error.response.clone());
+    let payload: unknown;
+    try {
+      payload = await tryReadJsonPayload(error.response.clone());
+    } catch {
+      // Optional message enrichment must preserve the original HTTP diagnostics.
+      return error;
+    }
     if (isCatmaidStateMatchingErrorPayload(payload)) {
       return new CatmaidStateValidationError(getCatmaidErrorMessage(payload));
     }
     if (error.status === 404 && isCatmaidNotFoundPayload(payload)) {
-      const detail = (payload as { detail: string }).detail;
-      return new CatmaidNotFoundError(detail);
+      return new CatmaidNotFoundError(getCatmaidErrorMessage(payload));
+    }
+    const message = getCatmaidErrorMessage(payload);
+    if (message !== undefined) {
+      error.message = `${error.message} ${message}`;
     }
     return error;
   }
@@ -1321,31 +798,6 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     return response.json();
   }
 
-  private async fetchServerEndpoint(endpoint: string): Promise<any> {
-    const baseUrl = this.baseUrl.replace(/\/$/, "");
-    const url = `${baseUrl}/${endpoint}`;
-
-    let response: Response;
-    try {
-      if (this.credentialsProvider) {
-        response = await fetchWithCatmaidCredentials(
-          this.credentialsProvider,
-          url,
-          {},
-        );
-      } else {
-        response = await fetch(url);
-        if (!response.ok) {
-          throw HttpError.fromResponse(response);
-        }
-      }
-    } catch (error) {
-      throw await this.normalizeFetchError(error);
-    }
-
-    return response.json();
-  }
-
   private async isNoMatchingNodeProviderHttpError(
     error: unknown,
   ): Promise<boolean> {
@@ -1358,20 +810,6 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
 
   async listSkeletons(): Promise<number[]> {
     return this.fetchProjectEndpoint("skeletons/");
-  }
-
-  async validateServerVersion(): Promise<void> {
-    const version = parseCatmaidServerVersionFromResponse(
-      await this.fetchServerEndpoint("version"),
-    );
-    if (isCatmaidServerVersionSupported(version)) {
-      return;
-    }
-    throw new Error(
-      `CATMAID server ${this.baseUrl} version ${
-        version ?? "unknown"
-      } is not supported. Version ${CATMAID_MIN_SUPPORTED_GIT_DESCRIBE_VERSION} or later by git-describe semantics is required for compact-detail with_edition_times support.`,
-    );
   }
 
   private async listStacks(): Promise<{ id: number }[]> {
@@ -1509,13 +947,20 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     let data: any;
     try {
       data = await this.fetchProjectEndpoint(
-        `skeletons/${skeletonId}/compact-detail?with_tags=true&with_edition_times=true`,
+        `skeletons/${skeletonId}/compact-detail?with_tags=true`,
         {
           signal,
         },
       );
     } catch (error) {
-      if (error instanceof CatmaidNotFoundError) {
+      if (
+        error instanceof CatmaidNotFoundError ||
+        (error instanceof HttpError && error.status === 404)
+      ) {
+        // A compact-detail 404 is authoritative absence regardless of which
+        // CATMAID error payload (or empty body) accompanied it.  Keep this
+        // endpoint-specific instead of treating every CATMAID 404 as an
+        // empty resource.
         return [];
       } else {
         throw error;
@@ -1539,9 +984,6 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
         : undefined,
       description: descriptionByNodeId.get(Number(n[0])),
       isTrueEnd: trueEndByNodeId.has(Number(n[0])),
-      sourceState: makeCatmaidNodeSourceState(
-        normalizeCatmaidRevisionToken(n[8]),
-      ),
     }));
   }
 
@@ -1610,9 +1052,6 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
         parentNodeId: n[1] ?? undefined,
         position: new Float32Array([n[2], n[3], n[4]]),
         segmentId: n[7],
-        sourceState: makeCatmaidNodeSourceState(
-          normalizeCatmaidRevisionToken(n[8]),
-        ),
       }),
     );
 
@@ -1633,9 +1072,6 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
               parentNodeId: n[1] ?? undefined,
               position: new Float32Array([n[2], n[3], n[4]]),
               segmentId: n[7],
-              sourceState: makeCatmaidNodeSourceState(
-                normalizeCatmaidRevisionToken(n[8]),
-              ),
             });
           }
         }
@@ -1650,56 +1086,22 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     x: number,
     y: number,
     z: number,
-    editContext?: CatmaidEditContext,
-    options: CatmaidMoveNodeOptions = {},
-  ): Promise<CatmaidNodeSourceStateResult> {
+  ): Promise<void> {
     const body = new URLSearchParams();
     appendNodeUpdateRows(body, "t", [[nodeId, x, y, z]]);
-    if (options.nocheck === true) {
-      appendCatmaidState(body, { nocheck: true });
-    } else {
-      appendCatmaidState(
-        body,
-        buildCatmaidMultiNodeState("move-node", editContext, [nodeId]),
-      );
-    }
+    appendUncheckedCatmaidState(body);
 
-    const response = await this.fetchProjectEndpoint(`node/update`, {
+    await this.fetchProjectEndpoint(`node/update`, {
       method: "POST",
       body: body,
     });
-    return getCatmaidSingleNodeRevisionResult(
-      parseCatmaidMoveRevisionToken(response, nodeId),
-    );
   }
 
-  async getSkeletonRootNode(
-    skeletonId: number,
-  ): Promise<SpatiallyIndexedSkeletonNavigationTarget> {
-    const response = await this.fetchProjectEndpoint(
-      `skeletons/${skeletonId}/root`,
-    );
-    return parseCatmaidSkeletonRootTarget(response);
-  }
-
-  async rerootSkeleton(
-    nodeId: number,
-    editContext?: CatmaidEditContext,
-    options: CatmaidRerootSkeletonOptions = {},
-  ): Promise<CatmaidRerootResult> {
+  async rerootSkeleton(nodeId: number): Promise<void> {
     const body = new URLSearchParams({
       treenode_id: nodeId.toString(),
     });
-    if (options.nocheck === true) {
-      appendCatmaidState(body, { nocheck: true });
-    } else {
-      appendCatmaidState(
-        body,
-        buildCatmaidNeighborhoodState("reroot-skeleton", editContext, {
-          expectedNodeId: nodeId,
-        }),
-      );
-    }
+    appendUncheckedCatmaidState(body);
     const response = await this.fetchProjectEndpoint(`skeleton/reroot`, {
       method: "POST",
       body,
@@ -1709,60 +1111,13 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
         "CATMAID skeleton/reroot did not return the requested new root.",
       );
     }
-    // The `nocheck` path is used for optimistic compensation, where no cached revision tokens are
-    // being reconciled, so CATMAID is not asked for an edition time either.
-    if (options.nocheck === true) {
-      return {};
-    }
-    // Rerooting rewrites the parent links along the path from the old root to the new one, bumping
-    // the edition time of every node on that path. CATMAID reports a single edition time for the
-    // operation, which applies to all of them; without it the cached revision tokens for those nodes
-    // would go stale and the next edit would be rejected as out of date.
-    const revisionToken = normalizeCatmaidRevisionToken(response?.edition_time);
-    if (revisionToken === undefined) {
-      throw new Error(
-        "CATMAID skeleton/reroot did not return the new root edition_time.",
-      );
-    }
-    const sourceState = makeCatmaidNodeSourceState(revisionToken)!;
-    const nodeSourceStateUpdates = (editContext?.nodes ?? []).map(
-      ({ nodeId: affectedNodeId }) => ({
-        nodeId: affectedNodeId,
-        sourceState,
-      }),
-    );
-    return nodeSourceStateUpdates.length === 0
-      ? {}
-      : { nodeSourceStateUpdates };
   }
 
-  async deleteNode(
-    nodeId: number,
-    options: CatmaidDeleteNodeOptions = {},
-  ): Promise<CatmaidDeleteNodeResult> {
-    const { childNodeIds = [], editContext } = options;
-    const normalizedChildIds = [
-      ...new Set(
-        childNodeIds
-          .map((value) => Number(value))
-          .filter((value) => Number.isFinite(value))
-          .map((value) => Math.round(value)),
-      ),
-    ].sort((a, b) => a - b);
+  async deleteNode(nodeId: number): Promise<void> {
     const body = new URLSearchParams({
       treenode_id: nodeId.toString(),
     });
-    if (options.nocheck === true) {
-      appendCatmaidState(body, { nocheck: true });
-    } else {
-      appendCatmaidState(
-        body,
-        buildCatmaidNeighborhoodState("delete-node", editContext, {
-          expectedNodeId: nodeId,
-          expectedChildIds: normalizedChildIds,
-        }),
-      );
-    }
+    appendUncheckedCatmaidState(body);
     const response = await this.fetchProjectEndpoint(`treenode/delete`, {
       method: "POST",
       body: body,
@@ -1770,19 +1125,13 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     if (response?.success === undefined) {
       throw new Error("Delete endpoint returned an unexpected response.");
     }
-    return {
-      nodeSourceStateUpdates: parseCatmaidDeleteRevisionUpdates(response),
-    };
   }
 
   async addNode(
-    skeletonId: number,
     x: number,
     y: number,
     z: number,
     parentId?: number,
-    editContext?: CatmaidEditContext,
-    options: CatmaidAddNodeOptions = {},
   ): Promise<CatmaidAddNodeResult> {
     const body = new URLSearchParams({
       x: x.toString(),
@@ -1790,19 +1139,11 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
       z: z.toString(),
       parent_id: (parentId ?? -1).toString(),
     });
-    if (Number.isSafeInteger(skeletonId) && skeletonId > 0) {
-      body.append("skeleton_id", skeletonId.toString());
-    }
-    if (options.nocheck === true) {
-      appendCatmaidState(body, { nocheck: true });
-    } else {
-      appendCatmaidState(body, buildCatmaidAddNodeState(parentId, editContext));
-    }
+    appendUncheckedCatmaidState(body);
 
     const res = await this.fetchProjectEndpoint(`treenode/create`, {
       method: "POST",
       body: body,
-      signal: options.signal,
     });
     const treenodeId = Number(res?.treenode_id);
     const nextSkeletonId = Number(res?.skeleton_id);
@@ -1819,23 +1160,15 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     return {
       nodeId: Math.round(treenodeId),
       segmentId: Math.round(nextSkeletonId),
-      sourceState: makeCatmaidNodeSourceState(
-        normalizeCatmaidRevisionToken(res?.edition_time),
-      ),
-      parentSourceState: makeCatmaidNodeSourceState(
-        normalizeCatmaidRevisionToken(res?.parent_edition_time),
-      ),
     };
   }
 
   async insertNode(
-    skeletonId: number,
     x: number,
     y: number,
     z: number,
     parentId: number,
     childNodeIds: readonly number[],
-    editContext?: CatmaidEditContext,
   ): Promise<CatmaidInsertNodeResult> {
     const normalizedChildIds = [
       ...new Set(
@@ -1857,14 +1190,8 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
       parent_id: parentId.toString(),
       child_id: normalizedChildIds[0].toString(),
     });
-    if (Number.isSafeInteger(skeletonId) && skeletonId > 0) {
-      body.append("skeleton_id", skeletonId.toString());
-    }
     appendScalarList(body, "takeover_child_ids", normalizedChildIds.slice(1));
-    appendCatmaidState(
-      body,
-      buildCatmaidInsertNodeState(parentId, normalizedChildIds, editContext),
-    );
+    appendUncheckedCatmaidState(body);
 
     const response = await this.fetchProjectEndpoint(`treenode/insert`, {
       method: "POST",
@@ -1885,15 +1212,6 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     return {
       nodeId: Math.round(treenodeId),
       segmentId: Math.round(nextSkeletonId),
-      sourceState: makeCatmaidNodeSourceState(
-        normalizeCatmaidRevisionToken(response?.edition_time),
-      ),
-      parentSourceState: makeCatmaidNodeSourceState(
-        normalizeCatmaidRevisionToken(response?.parent_edition_time),
-      ),
-      nodeSourceStateUpdates: parseCatmaidChildRevisionUpdates(
-        response?.child_edition_times,
-      ),
     };
   }
 
@@ -2010,117 +1328,57 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
       options.isTrueEnd === true
         ? [...descriptionUpdate.labels, CATMAID_TRUE_END_LABEL]
         : descriptionUpdate.labels;
-    const response = await this.replaceNodeLabels(nodeId, labels);
+    await this.replaceNodeLabels(nodeId, labels);
     return {
-      ...getCatmaidSingleNodeRevisionResult(
-        normalizeCatmaidRevisionToken(response?.edition_time),
-      ),
       description: descriptionUpdate.description,
     };
   }
 
-  private async addTrueEndLabel(
-    nodeId: number,
-  ): Promise<CatmaidNodeSourceStateResult> {
-    const response = await this.addNodeLabel(nodeId, CATMAID_TRUE_END_LABEL);
-    return getCatmaidSingleNodeRevisionResult(
-      normalizeCatmaidRevisionToken((response as any)?.edition_time),
-    );
+  async toggleTrueEnd(nodeId: number, nextIsTrueEnd: boolean): Promise<void> {
+    if (nextIsTrueEnd) {
+      await this.addNodeLabel(nodeId, CATMAID_TRUE_END_LABEL);
+    } else {
+      await this.removeNodeLabel(nodeId, CATMAID_TRUE_END_LABEL);
+    }
   }
 
-  private async removeTrueEndLabel(
-    nodeId: number,
-  ): Promise<CatmaidNodeSourceStateResult> {
-    const response = await this.removeNodeLabel(nodeId, CATMAID_TRUE_END_LABEL);
-    return getCatmaidSingleNodeRevisionResult(
-      normalizeCatmaidRevisionToken((response as any)?.edition_time),
-    );
-  }
-
-  toggleTrueEnd(
-    nodeId: number,
-    nextIsTrueEnd: boolean,
-  ): Promise<CatmaidNodeSourceStateResult> {
-    return nextIsTrueEnd
-      ? this.addTrueEndLabel(nodeId)
-      : this.removeTrueEndLabel(nodeId);
-  }
-
-  async updateRadius(
-    nodeId: number,
-    radius: number,
-    editContext?: CatmaidEditContext,
-  ): Promise<CatmaidNodeSourceStateResult> {
+  async updateRadius(nodeId: number, radius: number): Promise<void> {
     if (!Number.isFinite(radius)) {
       throw new Error("Radius must be a finite number.");
     }
     const body = new URLSearchParams({
       radius: radius.toString(),
     });
-    appendCatmaidState(
+    appendUncheckedCatmaidState(body);
+    await this.fetchProjectEndpoint(`treenode/${nodeId}/radius`, {
+      method: "POST",
       body,
-      buildCatmaidNodeState("update-radius", editContext, nodeId),
-    );
-    const response = await this.fetchProjectEndpoint(
-      `treenode/${nodeId}/radius`,
-      {
-        method: "POST",
-        body,
-      },
-    );
-    return getCatmaidSingleNodeRevisionResult(
-      parseCatmaidUpdatedNodesRevisionToken(response, nodeId),
-    );
+    });
   }
 
-  async updateConfidence(
-    nodeId: number,
-    confidence: number,
-    editContext?: CatmaidEditContext,
-  ): Promise<CatmaidNodeSourceStateResult> {
+  async updateConfidence(nodeId: number, confidence: number): Promise<void> {
     if (!Number.isFinite(confidence) || confidence < 0 || confidence > 100) {
       throw new Error("Confidence must be between 0 and 100.");
     }
     const body = new URLSearchParams({
       new_confidence: mapPercentConfidenceToCatmaid(confidence).toString(),
     });
-    appendCatmaidState(
+    appendUncheckedCatmaidState(body);
+    await this.fetchProjectEndpoint(`treenodes/${nodeId}/confidence`, {
+      method: "POST",
       body,
-      buildCatmaidNodeState("update-confidence", editContext, nodeId),
-    );
-    const response = await this.fetchProjectEndpoint(
-      `treenodes/${nodeId}/confidence`,
-      {
-        method: "POST",
-        body,
-      },
-    );
-    return getCatmaidSingleNodeRevisionResult(
-      parseCatmaidConfidenceRevisionToken(response, nodeId),
-    );
+    });
   }
 
   async mergeSkeletons(
     fromNodeId: number,
     toNodeId: number,
-    editContext?: CatmaidEditContext,
-    options: CatmaidMergeSkeletonOptions = {},
   ): Promise<CatmaidMergeResult> {
     const body = new URLSearchParams({
       from_id: fromNodeId.toString(),
       to_id: toNodeId.toString(),
     });
-    if (options.nocheck === true) {
-      appendCatmaidState(body, { nocheck: true });
-    } else {
-      appendCatmaidState(
-        body,
-        buildCatmaidMultiNodeState("merge-skeleton", editContext, [
-          fromNodeId,
-          toNodeId,
-        ]),
-      );
-    }
+    appendUncheckedCatmaidState(body);
     const response = await this.fetchProjectEndpoint(`skeleton/join`, {
       method: "POST",
       body,
@@ -2138,25 +1396,12 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     };
   }
 
-  async splitSkeleton(
-    nodeId: number,
-    editContext?: CatmaidEditContext,
-    options: CatmaidSplitSkeletonOptions = {},
-  ): Promise<CatmaidSplitResult> {
+  async splitSkeleton(nodeId: number): Promise<CatmaidSplitResult> {
     const body = new URLSearchParams({
       treenode_id: nodeId.toString(),
       downstream_annotation_map: JSON.stringify({}),
     });
-    if (options.nocheck === true) {
-      appendCatmaidState(body, { nocheck: true });
-    } else {
-      appendCatmaidState(
-        body,
-        buildCatmaidNeighborhoodState("split-skeleton", editContext, {
-          expectedNodeId: nodeId,
-        }),
-      );
-    }
+    appendUncheckedCatmaidState(body);
     const response = await this.fetchProjectEndpoint(`skeleton/split`, {
       method: "POST",
       body,

@@ -28,6 +28,11 @@ export const DEFAULT_STATUS_DELAY = 200;
 
 export type Delay = boolean | number;
 
+export interface StatusMessageAction {
+  readonly label: string;
+  readonly callback: () => void;
+}
+
 function getStatusContainer() {
   if (statusContainer === undefined) {
     statusContainer = document.createElement("ul");
@@ -203,12 +208,13 @@ export class StatusMessage {
     return promise;
   }
 
-  setErrorMessage(message: string) {
+  setErrorMessage(message: string, action?: StatusMessageAction) {
     this.element.textContent = message + " ";
     const button = document.createElement("button");
-    button.textContent = "Dismiss";
+    button.textContent = action?.label ?? "Dismiss";
     button.addEventListener("click", () => {
       this.dispose();
+      action?.callback();
     });
     this.element.appendChild(button);
   }
@@ -220,9 +226,12 @@ export class StatusMessage {
     return msg;
   }
 
-  static showErrorMessage(message: string): StatusMessage {
+  static showErrorMessage(
+    message: string,
+    action?: StatusMessageAction,
+  ): StatusMessage {
     const msg = new StatusMessage();
-    msg.setErrorMessage(message);
+    msg.setErrorMessage(message, action);
     msg.setVisible(true);
     return msg;
   }

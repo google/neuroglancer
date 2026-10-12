@@ -19,14 +19,17 @@ interface QueuedTask {
   reject: (reason: unknown) => void;
   signal: AbortSignal | undefined;
   abortListener: (() => void) | undefined;
+  isPrioritized: (() => boolean) | undefined;
 }
 
 /**
  * Limits the number of concurrently running promise-returning tasks.
  *
  * Tasks submitted while under the limit start synchronously; the rest queue
- * in FIFO order and start as running tasks settle. The limit is re-read at
- * each dispatch, so it may change dynamically.
+ * in FIFO order and start as running tasks settle. A queued task whose
+ * `isPrioritized` callback returns true at dispatch time starts before every
+ * non-prioritized task. The limit is re-read at each dispatch, so it may
+ * change dynamically.
  */
 export class PromiseConcurrencyLimiter {
   private runningCount = 0;
@@ -40,9 +43,9 @@ export class PromiseConcurrencyLimiter {
 
   run<T>(
     task: () => Promise<T>,
-    options: { signal?: AbortSignal } = {},
+    options: { signal?: AbortSignal; isPrioritized?: () => boolean } = {},
   ): Promise<T> {
-    const { signal } = options;
+    const { signal, isPrioritized } = options;
     if (signal?.aborted) {
       return Promise.reject(signal.reason);
     }
@@ -57,6 +60,7 @@ export class PromiseConcurrencyLimiter {
         reject,
         signal,
         abortListener: undefined,
+        isPrioritized,
       };
       if (signal !== undefined) {
         const abortListener = () => {
@@ -94,7 +98,10 @@ export class PromiseConcurrencyLimiter {
       this.queue.length > 0 &&
       this.runningCount < Math.max(1, this.getLimit())
     ) {
-      const entry = this.queue.shift()!;
+      const prioritizedIndex = this.queue.findIndex(
+        (queuedTask) => queuedTask.isPrioritized?.() ?? false,
+      );
+      const [entry] = this.queue.splice(Math.max(0, prioritizedIndex), 1);
       if (entry.abortListener !== undefined) {
         entry.signal!.removeEventListener("abort", entry.abortListener);
       }

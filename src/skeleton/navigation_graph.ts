@@ -27,7 +27,6 @@ export interface SpatiallyIndexedSkeletonNavigationTarget {
 export interface SpatiallyIndexedSkeletonOpenLeaf
   extends SpatiallyIndexedSkeletonNavigationTarget {
   distance: number;
-  creationTime?: string;
 }
 
 export interface SpatiallyIndexedSkeletonNavigationGraph {

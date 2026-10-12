@@ -22,7 +22,6 @@ import {
   CHUNK_LAYER_STATISTICS_RPC_ID,
   CHUNK_MANAGER_RPC_ID,
   CHUNK_QUEUE_MANAGER_RPC_ID,
-  CHUNK_SOURCE_INVALIDATE_KEYS_RPC_ID,
   CHUNK_SOURCE_INVALIDATE_RPC_ID,
   ChunkState,
   REQUEST_CHUNK_STATISTICS_RPC_ID,
@@ -243,13 +242,6 @@ export class ChunkQueueManager extends SharedObject {
     }
     if (update.promise !== undefined) {
       this.handleFetch_(source, update);
-    } else if (update.keys !== undefined) {
-      for (const chunkKey of update.keys as string[]) {
-        if (source.chunks.has(chunkKey)) {
-          source.deleteChunk(chunkKey);
-          visibleChunksChanged = true;
-        }
-      }
     } else if (update.id === undefined) {
       // Invalidate source.
       for (const chunkKey of source.chunks.keys()) {
@@ -491,21 +483,6 @@ export class ChunkSource extends SharedObject {
    */
   invalidateCache(): void {
     this.rpc!.invoke(CHUNK_SOURCE_INVALIDATE_RPC_ID, { id: this.rpcId });
-  }
-
-  /**
-   * Invalidates the cached chunks named by `keys`, leaving the rest of the cache intact.  Keys are
-   * the `Chunk.key` values the source assigns.  Operates asynchronously.
-   */
-  invalidateCacheKeys(keys: Iterable<string>): void {
-    const uniqueKeys = [...new Set(keys)];
-    if (uniqueKeys.length === 0) {
-      return;
-    }
-    this.rpc!.invoke(CHUNK_SOURCE_INVALIDATE_KEYS_RPC_ID, {
-      id: this.rpcId,
-      keys: uniqueKeys,
-    });
   }
 
   static encodeOptions(_options: object): { [key: string]: any } {

@@ -16,140 +16,234 @@
 
 import { describe, expect, it } from "vitest";
 
-import { SpatialSkeletonCommandHistory } from "#src/skeleton/command_history.js";
-import { type SpatialSkeletonCommand } from "#src/skeleton/command_protocol.js";
+import {
+  createSpatialSkeletonOptimisticHistoryPort,
+  SpatialSkeletonCommandHistory,
+} from "#src/skeleton/command_history.js";
+import {
+  SpatialSkeletonActions,
+  type SpatialSkeletonEditCommand,
+} from "#src/skeleton/command_protocol.js";
 
-function deferred() {
-  let resolve: (() => void) | undefined;
-  const promise = new Promise<void>((innerResolve) => {
-    resolve = innerResolve;
-  });
+function command(label: string): SpatialSkeletonEditCommand {
   return {
-    promise,
-    resolve: () => resolve?.(),
+    action: SpatialSkeletonActions.moveNodes,
+    label,
+    payload: Object.freeze({}),
+    getQueueInputRequirements: () => ({ required: [] }),
   };
 }
 
 describe("skeleton/command_history", () => {
-  it("serializes execution, updates labels, and truncates redo on a new edit", async () => {
+  it("projects staged execute, undo, and redo as a LIFO suffix", () => {
     const history = new SpatialSkeletonCommandHistory();
-    const events: string[] = [];
-    const firstExecute = deferred();
-    const firstCommand: SpatialSkeletonCommand = {
-      label: "First command",
-      execute: async () => {
-        events.push("first:start");
-        await firstExecute.promise;
-        events.push("first:end");
-      },
-      undo: async () => {
-        events.push("first:undo");
-      },
-    };
-    const secondCommand: SpatialSkeletonCommand = {
-      label: "Second command",
-      execute: async () => {
-        events.push("second:execute");
-      },
-      undo: async () => {
-        events.push("second:undo");
-      },
-    };
-    const thirdCommand: SpatialSkeletonCommand = {
-      label: "Third command",
-      execute: async () => {
-        events.push("third:execute");
-      },
-      undo: async () => {
-        events.push("third:undo");
-      },
-    };
+    const first = history.stageExecute("First");
+    const second = history.stageExecute("Second");
 
-    const firstPromise = history.execute(firstCommand);
-    const secondPromise = history.execute(secondCommand);
+    expect(history.undoLabel.value).toBe("Second");
+    const undoSecond = history.stageUndo()!;
+    expect(undoSecond).toMatchObject({
+      kind: "undo",
+      entryId: second.entryId,
+      semanticDependencyTransitionIds: [second.transitionId],
+    });
+    expect(history.undoLabel.value).toBe("First");
+    expect(history.redoLabel.value).toBe("Second");
 
-    expect(history.isBusy.value).toBe(true);
-    expect(events).toEqual(["first:start"]);
-
-    firstExecute.resolve();
-    await firstPromise;
-    await secondPromise;
-
-    expect(events).toEqual(["first:start", "first:end", "second:execute"]);
-    expect(history.canUndo.value).toBe(true);
-    expect(history.undoLabel.value).toBe("Second command");
-
-    await history.undo();
-
-    expect(events).toEqual([
-      "first:start",
-      "first:end",
-      "second:execute",
-      "second:undo",
+    const undoFirst = history.stageUndo()!;
+    expect(undoFirst.semanticDependencyTransitionIds).toEqual([
+      undoSecond.transitionId,
     ]);
-    expect(history.canRedo.value).toBe(true);
-    expect(history.redoLabel.value).toBe("Second command");
+    const redoFirst = history.stageRedo()!;
+    expect(redoFirst).toMatchObject({
+      kind: "redo",
+      entryId: first.entryId,
+      semanticDependencyTransitionIds: [undoFirst.transitionId],
+    });
+  });
 
-    await history.execute(thirdCommand);
+  it("advances only the confirmed prefix when a later no-op settles first", () => {
+    const history = new SpatialSkeletonCommandHistory();
+    const first = history.stageExecute("First");
+    const second = history.stageExecute("Second");
 
-    expect(events).toEqual([
-      "first:start",
-      "first:end",
-      "second:execute",
-      "second:undo",
-      "third:execute",
-    ]);
+    history.confirm(second);
+    expect(history.getStagedTransitions()).toEqual([first, second]);
+    history.confirm(first);
+    expect(history.getStagedTransitions()).toEqual([]);
+    expect(history.undoLabel.value).toBe("Second");
+  });
+
+  it("abandons only the newest pre-admission transition", () => {
+    const history = new SpatialSkeletonCommandHistory();
+    const original = history.stageExecute("Original");
+    history.confirm(original);
+    const undo = history.stageUndo()!;
+    history.confirm(undo);
+
+    const replacement = history.stageExecute("Replacement");
     expect(history.canRedo.value).toBe(false);
-    expect(history.redoLabel.value).toBeUndefined();
-    expect(history.undoLabel.value).toBe("Third command");
-  });
-
-  it("keeps remapped node and segment ids across undo and redo", async () => {
-    const history = new SpatialSkeletonCommandHistory();
-    let nextNodeId = 100;
-    let nextSegmentId = 200;
-    const command: SpatialSkeletonCommand = {
-      label: "Remap ids",
-      execute: async ({ mappings }) => {
-        mappings.remapNodeId(11, nextNodeId++);
-        mappings.remapSegmentId(21, nextSegmentId++);
-      },
-      undo: async ({ mappings }) => {
-        mappings.remapNodeId(11, nextNodeId++);
-        mappings.remapSegmentId(21, nextSegmentId++);
-      },
-    };
-
-    await history.execute(command);
-    expect(history.mappings.resolveNodeId(11)).toBe(100);
-    expect(history.mappings.resolveSegmentId(21)).toBe(200);
-    expect(history.mappings.getStableNodeId(100)).toBe(11);
-    expect(history.mappings.getStableSegmentId(200)).toBe(21);
-
-    await history.undo();
-    expect(history.mappings.resolveNodeId(11)).toBe(101);
-    expect(history.mappings.resolveSegmentId(21)).toBe(201);
-
-    await history.redo();
-    expect(history.mappings.resolveNodeId(11)).toBe(102);
-    expect(history.mappings.resolveSegmentId(21)).toBe(202);
-  });
-
-  it("restores mapping state if an operation fails", async () => {
-    const history = new SpatialSkeletonCommandHistory();
-    history.mappings.remapNodeId(11, 99);
-
-    const failingCommand: SpatialSkeletonCommand = {
-      label: "Failing command",
-      execute: async ({ mappings }) => {
-        mappings.remapNodeId(11, 100);
-        throw new Error("boom");
-      },
-      undo: async () => {},
-    };
-
-    await expect(history.execute(failingCommand)).rejects.toThrow("boom");
-    expect(history.mappings.resolveNodeId(11)).toBe(99);
+    history.abandonLatest(replacement);
     expect(history.canUndo.value).toBe(false);
+    expect(history.redoLabel.value).toBe("Original");
+
+    const first = history.stageExecute("First");
+    const second = history.stageExecute("Second");
+    expect(() => history.abandonLatest(first)).toThrow(/latest staged/);
+    history.abandonLatest(second);
+    history.abandonLatest(first);
+  });
+
+  it("explicitly resets confirmed and staged state", () => {
+    const history = new SpatialSkeletonCommandHistory();
+    const confirmed = history.stageExecute("Confirmed");
+    history.confirm(confirmed);
+    const failed = history.stageExecute("Failed");
+    history.stageExecute("Canceled later");
+
+    expect(history.reset()).toBe(true);
+    expect(history.canUndo.value).toBe(false);
+    expect(history.canRedo.value).toBe(false);
+    expect(history.getRetainedEntryIds()).toEqual([]);
+    expect(history.getStagedTransitions()).toEqual([]);
+
+    expect(() => history.confirm(failed)).not.toThrow();
+    expect(history.reset()).toBe(false);
+  });
+
+  it("applies one capacity bound to confirmed and projected stacks", () => {
+    const history = new SpatialSkeletonCommandHistory({ capacity: 3 });
+    const tickets = Array.from({ length: 5 }, (_, index) =>
+      history.stageExecute(`Command ${index + 1}`),
+    );
+    for (const ticket of tickets) history.confirm(ticket);
+
+    expect(history.getRetainedEntryIds()).toEqual(
+      tickets.slice(-3).map(({ entryId }) => entryId),
+    );
+    expect([
+      history.stageUndo(),
+      history.stageUndo(),
+      history.stageUndo(),
+    ]).not.toContain(undefined);
+    expect(history.stageUndo()).toBeUndefined();
+  });
+
+  it("restores Redo and capacity entries displaced by a rejected Execute", () => {
+    const history = new SpatialSkeletonCommandHistory({ capacity: 2 });
+    const first = history.stageExecute("First");
+    history.confirm(first);
+    const second = history.stageExecute("Second");
+    history.confirm(second);
+    history.confirm(history.stageUndo()!);
+    const failed = history.stageExecute("Failed");
+    const later = history.stageExecute("Later");
+    expect(history.canRedo.value).toBe(false);
+
+    history.rollbackFrom(failed);
+    expect(history.undoLabel.value).toBe("First");
+    expect(history.redoLabel.value).toBe("Second");
+    expect(history.getRetainedEntryIds()).toEqual([
+      first.entryId,
+      second.entryId,
+    ]);
+    history.confirm(later);
+    expect(history.redoLabel.value).toBe("Second");
+    const redo = history.stageRedo()!;
+    expect(redo.transitionId).toBeGreaterThan(later.transitionId);
+    history.confirm(redo);
+    expect(history.undoLabel.value).toBe("Second");
+
+    const overflow = history.stageExecute("Overflow");
+    history.rollbackFrom(overflow);
+    history.confirm(history.stageUndo()!);
+    history.confirm(history.stageUndo()!);
+    expect(history.stageUndo()).toBeUndefined();
+    expect(history.redoLabel.value).toBe("First");
+  });
+
+  it.each(["undo", "redo"] as const)(
+    "restores the source stack after rejected %s",
+    (kind) => {
+      const history = new SpatialSkeletonCommandHistory();
+      const original = history.stageExecute("Original");
+      history.confirm(original);
+      if (kind === "redo") history.confirm(history.stageUndo()!);
+      const failed = (
+        kind === "undo" ? history.stageUndo() : history.stageRedo()
+      )!;
+      history.stageExecute("Canceled later");
+      history.rollbackFrom(failed);
+      expect(history.canUndo.value).toBe(kind === "undo");
+      expect(history.canRedo.value).toBe(kind === "redo");
+      const retry = (
+        kind === "undo" ? history.stageUndo() : history.stageRedo()
+      )!;
+      expect(retry.entryId).toBe(original.entryId);
+      history.confirm(retry);
+      expect(history.canUndo.value).toBe(kind === "redo");
+      expect(history.canRedo.value).toBe(kind === "undo");
+    },
+  );
+
+  it("retains staged recipes and confirmations only before the rollback boundary", () => {
+    const history = new SpatialSkeletonCommandHistory({ capacity: 2 });
+    const pending = history.stageExecute("Still saving");
+    const reverted = history.stageExecute("Reverted before failure");
+    const undo = history.stageUndo()!;
+    history.confirm(reverted);
+    history.confirm(undo);
+    const failed = history.stageExecute("Failed");
+    const later = history.stageExecute("Reverted after failure");
+    const laterUndo = history.stageUndo()!;
+    history.confirm(later);
+    history.confirm(laterUndo);
+    expect(history.getRetainedEntryIds()).toContain(reverted.entryId);
+
+    history.rollbackFrom(failed);
+    expect(history.getStagedTransitions()).toEqual([pending, reverted, undo]);
+    expect(history.undoLabel.value).toBe("Still saving");
+    expect(history.redoLabel.value).toBe("Reverted before failure");
+    history.confirm(later);
+    history.confirm(laterUndo);
+    history.confirm(pending);
+    expect(history.getStagedTransitions()).toEqual([]);
+    expect(history.getRetainedEntryIds()).toEqual([
+      pending.entryId,
+      reverted.entryId,
+    ]);
+    expect(history.redoLabel.value).toBe("Reverted before failure");
+  });
+
+  it("rejects a missing rollback boundary instead of silently losing history", () => {
+    const history = new SpatialSkeletonCommandHistory();
+    const confirmed = history.stageExecute("Saved");
+    history.confirm(confirmed);
+    expect(() => history.rollbackFrom(confirmed)).toThrow(/rollback boundary/);
+    expect(history.undoLabel.value).toBe("Saved");
+  });
+
+  it("exposes the direct-cutover history port", () => {
+    const history = new SpatialSkeletonCommandHistory();
+    const port = createSpatialSkeletonOptimisticHistoryPort(history);
+    const execute = port.stageExecute(command("Move node"));
+    const undo = port.stageUndo()!;
+
+    expect(port.getTicketId(execute)).toBe(execute.transitionId);
+    expect(port.getEntryId(undo)).toBe(execute.entryId);
+    expect(port.getSemanticDependencyTicketIds(undo)).toEqual([
+      execute.transitionId,
+    ]);
+    port.reset();
+    expect(() => port.confirm(execute)).not.toThrow();
+  });
+
+  it("resets history when its source changes", () => {
+    const history = new SpatialSkeletonCommandHistory();
+    history.stageExecute("Move");
+    expect(history.setSource({ id: 1 })).toBe(true);
+    expect(history.canUndo.value).toBe(false);
+    expect(history.setSource(history)).toBe(true);
+    expect(history.setSource(history)).toBe(false);
   });
 });

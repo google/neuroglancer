@@ -14,6 +14,24 @@
  * limitations under the License.
  */
 
-// Flip this locally to register the Queue tab while developing or inspecting
-// optimistic edit transitions. This does not control optimistic edit behavior.
-export const OPTIMISTIC_EDIT_QUEUE_DEBUG = false;
+import type { CatmaidIntegrationConfig } from "./catmaid_integration_fixture.js";
+
+interface ProjectOwner {
+  createProject(
+    name: string,
+  ): Promise<{ config: CatmaidIntegrationConfig; close(): Promise<void> }>;
+}
+
+/** The project must outlive browser requests, even when setup or a test throws. */
+export async function withCatmaidProject<T>(
+  owner: ProjectOwner,
+  title: string,
+  body: (config: CatmaidIntegrationConfig) => Promise<T>,
+) {
+  const project = await owner.createProject(title);
+  try {
+    return await body(project.config);
+  } finally {
+    await project.close();
+  }
+}

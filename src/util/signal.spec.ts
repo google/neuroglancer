@@ -14,10 +14,32 @@
  * limitations under the License.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { NullarySignal, Signal } from "#src/util/signal.js";
 
 describe("signal", () => {
+  it("optionally isolates handler failures without changing normal dispatch", () => {
+    const signal = new Signal<() => void>();
+    const error = new Error("observer failed");
+    const first = vi.fn(() => {
+      throw error;
+    });
+    const second = vi.fn();
+    const reportError = vi.fn();
+    signal.add(first);
+    signal.add(second);
+
+    expect(() => signal.dispatch()).toThrow(error);
+    expect(second).not.toHaveBeenCalled();
+
+    signal.runWithHandlerErrorReporting(reportError, () => signal.dispatch());
+
+    expect(first).toHaveBeenCalledTimes(2);
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(reportError).toHaveBeenCalledWith(error);
+    expect(() => signal.dispatch()).toThrow(error);
+  });
+
   it("should invoke the handler when dispatched", () => {
     const signal = new Signal();
     const results: any[][] = [];

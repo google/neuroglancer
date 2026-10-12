@@ -116,6 +116,53 @@ export default tseslint.config(
     },
   },
   {
+    files: ["src/skeleton/optimistic_edit/**/*.ts"],
+
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["./", "../"],
+              message: "Relative imports are not allowed.",
+            },
+            {
+              regex: "^(?:#src/|src/)datasource(?:/|$)",
+              message:
+                "Generic optimistic edit modules must not depend on datasource implementations.",
+            },
+          ],
+        },
+      ],
+      "max-lines": [
+        "error",
+        {
+          max: 1500,
+          skipBlankLines: true,
+          skipComments: true,
+        },
+      ],
+    },
+  },
+  {
+    files: [
+      "src/datasource/catmaid/spatial_skeleton_edit/**/*.ts",
+      "src/datasource/catmaid/spatial_skeleton_commands.ts",
+    ],
+
+    rules: {
+      "max-lines": [
+        "error",
+        {
+          max: 1500,
+          skipBlankLines: true,
+          skipComments: true,
+        },
+      ],
+    },
+  },
+  {
     files: ["build_tools/**/*.cjs"],
     languageOptions: {
       sourceType: "commonjs",

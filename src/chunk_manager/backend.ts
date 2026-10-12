@@ -23,7 +23,6 @@ import {
   CHUNK_LAYER_STATISTICS_RPC_ID,
   CHUNK_MANAGER_RPC_ID,
   CHUNK_QUEUE_MANAGER_RPC_ID,
-  CHUNK_SOURCE_INVALIDATE_KEYS_RPC_ID,
   CHUNK_SOURCE_INVALIDATE_RPC_ID,
   ChunkDownloadStatistics,
   ChunkMemoryStatistics,
@@ -1127,37 +1126,6 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     this.rpc!.invoke("Chunk.update", { source: source.rpcId });
     this.scheduleUpdate();
   }
-
-  /**
-   * Like {@link invalidateSourceCache}, but limited to the chunks named by `keys`.  Keys are the
-   * `Chunk.key` values the source assigns; keys naming no cached chunk are ignored.
-   */
-  invalidateSourceCacheKeys(source: ChunkSource, keys: readonly string[]) {
-    const invalidatedKeys: string[] = [];
-    for (const key of keys) {
-      const chunk = source.chunks.get(key);
-      if (chunk === undefined) continue;
-      switch (chunk.state) {
-        case ChunkState.DOWNLOADING:
-          cancelChunkDownload(chunk);
-          break;
-        case ChunkState.SYSTEM_MEMORY_WORKER:
-          chunk.freeSystemMemory();
-          break;
-      }
-      // Note: After calling this, chunk may no longer be valid.
-      this.updateChunkState(chunk, ChunkState.QUEUED);
-      invalidatedKeys.push(key);
-    }
-    if (invalidatedKeys.length === 0) {
-      return;
-    }
-    this.rpc!.invoke("Chunk.update", {
-      source: source.rpcId,
-      keys: invalidatedKeys,
-    });
-    this.scheduleUpdate();
-  }
 }
 
 export class ChunkRenderLayerBackend
@@ -1408,11 +1376,6 @@ export function withChunkManager<
 registerRPC(CHUNK_SOURCE_INVALIDATE_RPC_ID, function (x) {
   const source = <ChunkSource>this.get(x.id);
   source.chunkManager.queueManager.invalidateSourceCache(source);
-});
-
-registerRPC(CHUNK_SOURCE_INVALIDATE_KEYS_RPC_ID, function (x) {
-  const source = <ChunkSource>this.get(x.id);
-  source.chunkManager.queueManager.invalidateSourceCacheKeys(source, x.keys);
 });
 
 registerPromiseRPC(

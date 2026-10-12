@@ -14,11 +14,10 @@
  * limitations under the License.
  */
 
-import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import {
   SpatialSkeletonActions,
-  type SpatialSkeletonCommand,
   type SpatialSkeletonAction,
+  type SpatialSkeletonEditCommand,
 } from "#src/skeleton/command_protocol.js";
 
 export type SpatialSkeletonCommandPayload = object;
@@ -28,17 +27,15 @@ export interface SpatialSkeletonEditCommandFactory<
 > {
   readonly action: TAction;
   createCommand(
-    layer: SegmentationUserLayer,
     payload: SpatialSkeletonCommandPayload,
-  ): SpatialSkeletonCommand;
+  ): SpatialSkeletonEditCommand;
 }
 
 type SpatialSkeletonEditCommandFactoryCandidate = {
   action?: unknown;
   createCommand?: (
-    layer: SegmentationUserLayer,
     payload: SpatialSkeletonCommandPayload,
-  ) => SpatialSkeletonCommand;
+  ) => SpatialSkeletonEditCommand;
 };
 
 export function isSpatialSkeletonEditCommandFactory<

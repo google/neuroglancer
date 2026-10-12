@@ -40,10 +40,13 @@ import {
   SKELETON_TOGGLE_TRUE_END,
 } from "#src/skeleton/actions.js";
 import type {
-  SpatialSkeletonSourceState,
+  SpatiallyIndexedSkeletonNode,
   SpatialSkeletonVector,
 } from "#src/skeleton/api.js";
-import { SpatialSkeletonActions } from "#src/skeleton/command_protocol.js";
+import {
+  SpatialSkeletonActions,
+  type SpatialSkeletonAction,
+} from "#src/skeleton/command_protocol.js";
 import {
   executeSpatialSkeletonAddNode,
   executeSpatialSkeletonDeleteNode,
@@ -74,6 +77,7 @@ import {
   classifySpatialSkeletonDisplayNodeType,
   SpatialSkeletonDisplayNodeType,
 } from "#src/skeleton/node_types.js";
+import type { SpatialSkeletonOptimisticEditExecution } from "#src/skeleton/optimistic_edit/types.js";
 import { StatusMessage } from "#src/status.js";
 import { makeAnnotationListElement } from "#src/ui/annotations.js";
 import {
@@ -101,6 +105,7 @@ import {
   renderSpatialSkeletonShortcut,
   SPATIAL_SKELETON_EDIT_TOOL_NAME,
 } from "#src/ui/skeleton_edit_tool_shortcuts.js";
+import { SpatialSkeletonMergeTargetPrefetch } from "#src/ui/skeleton_merge_target_prefetch.js";
 import type { ToolActivation } from "#src/ui/tool.js";
 import {
   LayerTool,
@@ -215,21 +220,12 @@ function bindSpatialSkeletonToolMouseControls<
       capture: true,
     });
     activation.registerDisposer(() => {
+      delete panel.element.dataset.skeletonPressMode;
       panel.element.removeEventListener("mousedown", captureMousedown, {
         capture: true,
       });
     });
   }
-}
-
-function waitForNextAnimationFrame() {
-  return new Promise<void>((resolve) => {
-    if (typeof requestAnimationFrame !== "function") {
-      window.setTimeout(resolve, 0);
-      return;
-    }
-    requestAnimationFrame(() => resolve());
-  });
 }
 
 function makeSpatialSkeletonToolStatus(
@@ -270,7 +266,6 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
         nodeId: number;
         segmentId?: number;
         position?: Float32Array;
-        sourceState?: SpatialSkeletonSourceState;
       }
     | undefined {
     if (!this.mouseState.updateUnconditionally() || !this.mouseState.active) {
@@ -287,7 +282,6 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     }
     const segmentIdRaw = pickedSpatialSkeleton?.segmentId;
     const position = pickedSpatialSkeleton?.position;
-    const sourceState = pickedSpatialSkeleton?.sourceState;
     return {
       nodeId: nodeIdRaw,
       segmentId:
@@ -298,7 +292,6 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
         position instanceof Float32Array
           ? new Float32Array(position)
           : undefined,
-      sourceState,
     };
   }
 
@@ -315,11 +308,6 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
       return undefined;
     }
     return segmentIdRaw;
-  }
-
-  protected selectSegmentByNumber(value: number) {
-    if (!Number.isFinite(value)) return;
-    this.layer.selectSegment(BigInt(Math.round(value)), false);
   }
 
   protected pinSegmentByNumber(value: number) {
@@ -345,9 +333,9 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     const resolvedNodeInfo = skeletonLayer.getNode(nodeHit.nodeId);
     return {
       nodeId: nodeHit.nodeId,
-      segmentId: nodeHit.segmentId ?? resolvedNodeInfo?.segmentId,
-      position: nodeHit.position ?? resolvedNodeInfo?.position,
-      sourceState: nodeHit.sourceState ?? resolvedNodeInfo?.sourceState,
+      segmentId: resolvedNodeInfo?.segmentId ?? nodeHit.segmentId,
+      position: resolvedNodeInfo?.position ?? nodeHit.position,
+      parentNodeId: resolvedNodeInfo?.parentNodeId,
     };
   }
 
@@ -358,7 +346,6 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
         nodeId: number;
         segmentId?: number;
         position?: SpatialSkeletonVector;
-        sourceState?: SpatialSkeletonSourceState;
       }
     | undefined {
     const nodeHit = this.getPickedSpatialSkeletonNode();
@@ -370,9 +357,8 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
       this.layer.spatialSkeletonState.getCachedNode(nodeHit.nodeId);
     return {
       nodeId: nodeHit.nodeId,
-      segmentId: nodeHit.segmentId ?? resolvedNodeInfo?.segmentId,
-      position: nodeHit.position ?? resolvedNodeInfo?.position,
-      sourceState: nodeHit.sourceState ?? resolvedNodeInfo?.sourceState,
+      segmentId: resolvedNodeInfo?.segmentId ?? nodeHit.segmentId,
+      position: resolvedNodeInfo?.position ?? nodeHit.position,
     };
   }
 
@@ -457,10 +443,8 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     onReady?: () => void,
   ) {
     const handleStateChanged = () => {
-      const disabledReason = this.layer.getSpatialSkeletonActionsDisabledReason(
-        requiredActions,
-        { ignoreCommandBusy: true },
-      );
+      const disabledReason =
+        this.layer.getSpatialSkeletonActionsDisabledReason(requiredActions);
       if (disabledReason === undefined) {
         onReady?.();
         return;
@@ -512,6 +496,10 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
   private readonly dragModelSpacePosition = vec3.create();
   private readonly dragGlobalAnchorPosition = vec3.create();
   private readonly dragGlobalPosition = vec3.create();
+  private readonly mergeTargetPrefetch = new SpatialSkeletonMergeTargetPrefetch(
+    this.layer.spatialSkeletonState,
+  );
+  private mergeTargetHoverRelease: (() => boolean) | undefined = undefined;
 
   private handleRankChanged(rank: number) {
     if (rank === this.curChunkRank) return;
@@ -552,34 +540,80 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     );
   }
 
+  private resolveInspectedNode(
+    skeletonLayer: SpatiallyIndexedSkeletonLayer,
+    nodeId: number,
+    segmentId: number | undefined,
+  ) {
+    const resolvedSegmentId =
+      // Spatial browse cells may still describe a node's pre-edit owner.
+      // Complete inspected data owns topology; the pick is only a fallback
+      // for nodes whose skeleton has not been inspected yet.
+      skeletonLayer.getNode(nodeId)?.segmentId ??
+      this.layer.spatialSkeletonState.getCachedNode(nodeId)?.segmentId ??
+      segmentId;
+    if (resolvedSegmentId === undefined) {
+      return {
+        segmentId: undefined,
+        inspected: false,
+        node: undefined,
+      };
+    }
+    const snapshot =
+      this.layer.spatialSkeletonState.getCachedSegmentSnapshotHandle(
+        resolvedSegmentId,
+      );
+    return {
+      segmentId: resolvedSegmentId,
+      inspected: snapshot !== undefined,
+      node: snapshot?.handle.getNode(nodeId),
+    };
+  }
+
+  private requireInspectedNode(
+    skeletonLayer: SpatiallyIndexedSkeletonLayer,
+    nodeId: number,
+    segmentId: number | undefined,
+  ): SpatiallyIndexedSkeletonNode | undefined {
+    const resolved = this.resolveInspectedNode(
+      skeletonLayer,
+      nodeId,
+      segmentId,
+    );
+    if (!resolved.inspected) {
+      if (resolved.segmentId === undefined) {
+        StatusMessage.showTemporaryMessage(
+          `Unable to resolve the skeleton for node ${nodeId}.`,
+        );
+      } else {
+        StatusMessage.showTemporaryMessage(
+          `Inspect skeleton ${resolved.segmentId} before editing it.`,
+        );
+      }
+      return undefined;
+    }
+    if (resolved.node === undefined) {
+      StatusMessage.showTemporaryMessage(
+        `Node ${nodeId} is not available in inspected skeleton ${resolved.segmentId}.`,
+      );
+      return undefined;
+    }
+    return resolved.node;
+  }
+
   private getSelectedParentNodeForAdd(
     skeletonLayer: SpatiallyIndexedSkeletonLayer,
     parentNodeId: number | undefined,
   ) {
-    if (parentNodeId === undefined) {
-      return undefined;
-    }
-    return (
-      this.layer.spatialSkeletonState.getCachedNode(parentNodeId) ??
-      skeletonLayer.getNode(parentNodeId)
-    );
-  }
-
-  private getAddNodeBlockedReason(
-    skeletonLayer: SpatiallyIndexedSkeletonLayer,
-    parentNodeId: number | undefined,
-  ) {
-    if (parentNodeId === undefined) {
-      return undefined;
-    }
-    const selectedParentNode = this.getSelectedParentNodeForAdd(
+    if (parentNodeId === undefined) return undefined;
+    const selectedNode = this.layer.selectedSpatialSkeletonNodeInfo.value;
+    return this.requireInspectedNode(
       skeletonLayer,
       parentNodeId,
+      selectedNode?.nodeId === parentNodeId
+        ? selectedNode.segmentId
+        : undefined,
     );
-    if (selectedParentNode !== undefined && selectedParentNode.isTrueEnd) {
-      return `Node ${parentNodeId} is marked as a true end. Clear the true end state before appending a child node.`;
-    }
-    return undefined;
   }
 
   private bindClearSelectionAction(activation: ToolActivation<this>) {
@@ -617,7 +651,10 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
   // Activation-scoped state — reset at the start of each activate() call.
   private currentMode: SkeletonEditMode = SkeletonEditMode.Default;
   private dragInProgress = false;
+  private activeDragBrowseExclusionRelease: (() => boolean) | undefined;
   private pending = false;
+  /** Invalidates delayed callbacks from prior modes or tool activations. */
+  private interactionGeneration = 0;
   private createPlacedThisHold = false;
   // One-shot guards: prevent repeated fires while a key is held down.
   private mergeKeyHeld = false;
@@ -627,8 +664,6 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
   // First node picked in insert mode; the next pick must be its parent or one
   // of its children.
   private insertAnchorNodeId: number | undefined = undefined;
-  // Lets a request that outlives its activation leave newer state alone.
-  private currentActivation: ToolActivation<this> | undefined = undefined;
   // Modifier-held state drives cursor indicators and blocks node actions.
   private shiftHeld = false;
   // While held, the shift-driven "add node" cursor/status must be
@@ -643,6 +678,44 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
   private setStatusText:
     | ((text: SpatialSkeletonToolStatusText) => void)
     | undefined = undefined;
+
+  private advanceInteractionGeneration() {
+    this.interactionGeneration = (this.interactionGeneration ?? 0) + 1;
+  }
+
+  /** Starts one mode-owned action and releases its interaction on admission. */
+  private startPendingAction(
+    actionLabel: SpatialSkeletonAction,
+    start: () => SpatialSkeletonOptimisticEditExecution<void>,
+    release: () => void,
+  ) {
+    const generation = this.interactionGeneration ?? 0;
+    this.interactionGeneration = generation;
+    this.pending = true;
+    let execution: SpatialSkeletonOptimisticEditExecution<void>;
+    try {
+      execution = start();
+    } catch (error) {
+      if (this.interactionGeneration === generation) {
+        this.pending = false;
+        release();
+      }
+      showSpatialSkeletonActionError(actionLabel, error);
+      return undefined;
+    }
+    void execution.catch((error) => {
+      showSpatialSkeletonActionError(actionLabel, error);
+    });
+    const releaseIfCurrent = () => {
+      if (this.interactionGeneration !== generation) return;
+      this.pending = false;
+      release();
+    };
+    // Admission rejection also releases the interaction. The action promise
+    // above reports the actual failure to the user.
+    void execution.acceptedByQueue.then(releaseIfCurrent, releaseIfCurrent);
+    return execution;
+  }
 
   // --- Cursor helpers ---
 
@@ -675,7 +748,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     } else if (this.shiftHeld && !this.ctrlHeld) {
       this.setModeAttribute("add");
     } else {
-      this.setModeAttribute("default");
+      this.setModeAttribute(undefined);
     }
   }
 
@@ -817,7 +890,52 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     this.renderStatus();
   }
 
+  private handleMergeAnchorChanged() {
+    if (
+      this.currentMode !== SkeletonEditMode.Merge ||
+      this.layer.spatialSkeletonState.mergeAnchorNodeId.value === undefined
+    ) {
+      this.stopMergeTargetPrefetch();
+      return;
+    }
+    this.mergeTargetHoverRelease ??= this.mouseState.changed.add(() =>
+      this.prefetchHoveredMergeTarget(),
+    );
+    this.prefetchHoveredMergeTarget();
+  }
+
+  private stopMergeTargetPrefetch() {
+    this.mergeTargetHoverRelease?.();
+    this.mergeTargetHoverRelease = undefined;
+    this.mergeTargetPrefetch.clear();
+  }
+
+  /** Hovering empty space or the anchor's own skeleton keeps the last target. */
+  private prefetchHoveredMergeTarget() {
+    if (this.pending) return;
+    // Forcing a pick update here would re-dispatch the mouse-state signal.
+    const { mouseState } = this;
+    if (!mouseState.active) return;
+    const { spatialSkeletonState } = this.layer;
+    const anchorNodeId = spatialSkeletonState.mergeAnchorNodeId.value;
+    const hoveredSegmentId = mouseState.pickedSpatialSkeleton?.segmentId;
+    if (
+      anchorNodeId === undefined ||
+      typeof hoveredSegmentId !== "number" ||
+      !Number.isSafeInteger(hoveredSegmentId) ||
+      hoveredSegmentId <= 0 ||
+      hoveredSegmentId ===
+        spatialSkeletonState.getCachedNode(anchorNodeId)?.segmentId
+    ) {
+      return;
+    }
+    const skeletonLayer = this.layer.getSpatiallyIndexedSkeletonLayer();
+    if (skeletonLayer === undefined) return;
+    this.mergeTargetPrefetch.setTarget(skeletonLayer, hoveredSegmentId);
+  }
+
   private enterMerge() {
+    this.advanceInteractionGeneration();
     // Merge always starts without an active anchor — it can never begin with a
     // pre-set anchor. The anchor is set solely by the first in-mode pick
     // (handleMergeFirstPick), which also sets the selected node. Entering merge
@@ -832,6 +950,9 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
 
   private exitMerge() {
     if (this.currentMode !== SkeletonEditMode.Merge) return;
+    this.advanceInteractionGeneration();
+    this.pending = false;
+    this.stopMergeTargetPrefetch();
     this.layer.clearSpatialSkeletonMergeAnchor();
     this.layer.spatialSkeletonMergeMode.value = false;
     this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value = false;
@@ -850,6 +971,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
   }
 
   private enterInsert() {
+    this.advanceInteractionGeneration();
     this.resetInsertToFreshState();
     this.currentMode = SkeletonEditMode.Insert;
     this.updateModeAttribute();
@@ -858,6 +980,8 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
 
   private exitInsert() {
     if (this.currentMode !== SkeletonEditMode.Insert) return;
+    this.advanceInteractionGeneration();
+    this.pending = false;
     this.insertAnchorNodeId = undefined;
     this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value = false;
     this.currentMode = SkeletonEditMode.Default;
@@ -866,6 +990,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
   }
 
   private enterCreate() {
+    this.advanceInteractionGeneration();
     this.currentMode = SkeletonEditMode.Create;
     this.createPlacedThisHold = false;
     this.updateModeAttribute();
@@ -874,6 +999,8 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
 
   private exitCreate() {
     if (this.currentMode !== SkeletonEditMode.Create) return;
+    this.advanceInteractionGeneration();
+    this.pending = false;
     this.currentMode = SkeletonEditMode.Default;
     this.createPlacedThisHold = false;
     this.updateModeAttribute();
@@ -881,6 +1008,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
   }
 
   private enterSplit() {
+    this.advanceInteractionGeneration();
     this.currentMode = SkeletonEditMode.Split;
     this.layer.spatialSkeletonSplitMode.value = true;
     // In split mode the selected-node highlight stays hidden until the user
@@ -892,6 +1020,8 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
 
   private exitSplit() {
     if (this.currentMode !== SkeletonEditMode.Split) return;
+    this.advanceInteractionGeneration();
+    this.pending = false;
     this.currentMode = SkeletonEditMode.Default;
     this.layer.spatialSkeletonSplitMode.value = false;
     this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value = false;
@@ -900,6 +1030,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
   }
 
   private enterDelete() {
+    this.advanceInteractionGeneration();
     this.currentMode = SkeletonEditMode.Delete;
     this.updateModeAttribute();
     this.renderStatus();
@@ -907,6 +1038,8 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
 
   private exitDelete() {
     if (this.currentMode !== SkeletonEditMode.Delete) return;
+    this.advanceInteractionGeneration();
+    this.pending = false;
     this.currentMode = SkeletonEditMode.Default;
     this.updateModeAttribute();
     this.clearStatus();
@@ -938,7 +1071,11 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
         SpatialSkeletonActions.moveNodes,
       ) === undefined;
     const nodeInfo = canMove
-      ? skeletonLayer.getNode(pickedNode.nodeId)
+      ? this.resolveInspectedNode(
+          skeletonLayer,
+          pickedNode.nodeId,
+          pickedNode.segmentId,
+        ).node
       : undefined;
 
     const pickedPosition = this.mouseState.position;
@@ -955,16 +1092,36 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     }
     this.layer.selectSpatialSkeletonNode(pickedNode.nodeId, true, pickedNode);
 
-    if (nodeInfo === undefined || !hasPickedPosition) {
+    if (!canMove || !hasPickedPosition) {
       return; // Can't drag: done after the select above.
+    }
+    if (nodeInfo === undefined) {
+      this.reportUninspectedNodeOnDrag(
+        event,
+        skeletonLayer,
+        pickedNode.nodeId,
+        pickedNode.segmentId,
+      );
+      return;
     }
 
     // Arm drag: if threshold exceeded, move the node.
+    // Document-level drag callbacks may outlive this tool activation.
+    const generation = this.interactionGeneration;
     let totalDeltaX = 0;
     let totalDeltaY = 0;
     let dragStarted = false;
     let finished = false;
     let moved = false;
+    // Acknowledging an earlier edit can replace the node or its skeleton ID
+    // between mousedown and mouseup, including before the first drag event.
+    const state = this.layer.spatialSkeletonState;
+    const identities = state.getOptimisticEditingIdentityService();
+    const nodeHandle = identities.getOrCreateNodeHandle(nodeInfo.nodeId);
+    const resolveDragNode = () => {
+      const nodeId = identities.resolveNode(nodeHandle);
+      return nodeId === undefined ? undefined : state.getCachedNode(nodeId);
+    };
 
     this.dragModelSpacePosition.set(nodeInfo.position);
     vec3.set(
@@ -977,8 +1134,11 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     startRelativeMouseDrag(
       event,
       (_dragEvent, deltaX, deltaY) => {
+        if (finished || this.interactionGeneration !== generation) return;
         totalDeltaX += deltaX;
         totalDeltaY += deltaY;
+        const currentNode = resolveDragNode();
+        if (currentNode === undefined) return;
         if (!dragStarted) {
           const thresholdSq = DRAG_START_DISTANCE_PX * DRAG_START_DISTANCE_PX;
           if (
@@ -989,7 +1149,10 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
           }
           dragStarted = true;
           this.dragInProgress = true;
-          skeletonLayer!.markSegmentEdited(nodeInfo!.segmentId);
+          this.layer.spatialSkeletonState.clearPendingNodePositions();
+          this.activeDragBrowseExclusionRelease?.();
+          this.activeDragBrowseExclusionRelease =
+            skeletonLayer.beginTemporaryBrowseExclusion(currentNode.segmentId);
           panel.element.dataset.skeletonPressMode = "move";
           this.setStatus(getSpatialSkeletonMovingStatusText());
         }
@@ -1013,7 +1176,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
         if (modelPosition === undefined) return;
         const previewChanged =
           this.layer.spatialSkeletonState.setPendingNodePosition(
-            pickedNode.nodeId,
+            currentNode.nodeId,
             modelPosition,
           );
         if (!previewChanged) return;
@@ -1021,7 +1184,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
         this.dragModelSpacePosition.set(modelPosition);
       },
       (_finishEvent) => {
-        if (finished) return;
+        if (finished || this.interactionGeneration !== generation) return;
         finished = true;
         if (this.dragInProgress) {
           this.dragInProgress = false;
@@ -1029,60 +1192,104 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
           this.clearStatus();
         }
         if (!dragStarted) return; // Pure click: selection already happened on mousedown.
+        const releaseBrowseExclusion = this.activeDragBrowseExclusionRelease;
+        this.activeDragBrowseExclusionRelease = undefined;
         if (moved) {
-          void executeSpatialSkeletonMoveNode(this.layer, {
-            node: nodeInfo!,
-            nextPositionInModelSpace: new Float32Array(
-              this.dragModelSpacePosition,
-            ),
-          })
-            .then(() => {
-              this.layer.spatialSkeletonState.clearPendingNodePosition(
-                pickedNode.nodeId,
-              );
-            })
-            .catch((error) => {
-              this.layer.spatialSkeletonState.clearPendingNodePosition(
-                pickedNode.nodeId,
-              );
-              showSpatialSkeletonActionError("move node", error);
+          // The queue is mandatory for every editable source. Remove only the
+          // gesture-owned drag overlay before admission; the engine publishes
+          // the exact preview and owns it from that point onward.
+          this.layer.spatialSkeletonState.clearPendingNodePositions();
+          let execution: SpatialSkeletonOptimisticEditExecution<void>;
+          try {
+            const currentNode = resolveDragNode();
+            if (currentNode === undefined) {
+              throw new Error("The dragged node is no longer available.");
+            }
+            execution = executeSpatialSkeletonMoveNode(this.layer, {
+              node: currentNode,
+              nextPositionInModelSpace: new Float32Array(
+                this.dragModelSpacePosition,
+              ),
             });
+          } catch (error) {
+            releaseBrowseExclusion?.();
+            showSpatialSkeletonActionError(
+              SpatialSkeletonActions.moveNodes,
+              error,
+            );
+            return;
+          }
+          // The exact-preview promise resolves only after the projection has
+          // adopted the move and permanently retained/excluded the segment.
+          // Rejection means no exact preview owns the display, so release the
+          // temporary exclusion along the same path.
+          void execution.then(
+            () => releaseBrowseExclusion?.(),
+            (error) => {
+              releaseBrowseExclusion?.();
+              this.layer.spatialSkeletonState.clearPendingNodePositions();
+              showSpatialSkeletonActionError(
+                SpatialSkeletonActions.moveNodes,
+                error,
+              );
+            },
+          );
           return;
         }
-        this.layer.spatialSkeletonState.clearPendingNodePosition(
-          pickedNode.nodeId,
-        );
+        this.layer.spatialSkeletonState.clearPendingNodePositions();
+        releaseBrowseExclusion?.();
       },
     );
+  }
+
+  private reportUninspectedNodeOnDrag(
+    event: MouseEvent,
+    skeletonLayer: SpatiallyIndexedSkeletonLayer,
+    nodeId: number,
+    segmentId: number | undefined,
+  ) {
+    const generation = this.interactionGeneration;
+    let dragDistanceSquared = 0;
+    let reported = false;
+    startRelativeMouseDrag(event, (_dragEvent, deltaX, deltaY) => {
+      if (reported || this.interactionGeneration !== generation) return;
+      dragDistanceSquared += deltaX * deltaX + deltaY * deltaY;
+      if (
+        dragDistanceSquared <
+        DRAG_START_DISTANCE_PX * DRAG_START_DISTANCE_PX
+      ) {
+        return;
+      }
+      reported = true;
+      this.requireInspectedNode(skeletonLayer, nodeId, segmentId);
+    });
   }
 
   private executeSplitOnNode(pickedNode: {
     nodeId: number;
     segmentId: number;
     position?: SpatialSkeletonVector;
+    parentNodeId?: number;
   }) {
     this.pinSegmentByNumber(pickedNode.segmentId);
     this.layer.selectSpatialSkeletonNode(pickedNode.nodeId, true, pickedNode);
     // A node was clicked: reveal the selected-node highlight for it.
     this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value = false;
-    this.pending = true;
-    void (async () => {
-      try {
-        await executeSpatialSkeletonSplit(this.layer, {
+    this.startPendingAction(
+      SpatialSkeletonActions.splitSkeletons,
+      () =>
+        executeSpatialSkeletonSplit(this.layer, {
           nodeId: pickedNode.nodeId,
           segmentId: pickedNode.segmentId,
-        });
-      } catch (error) {
-        showSpatialSkeletonActionError("split skeleton", error);
-      } finally {
-        this.pending = false;
+          position: pickedNode.position,
+          parentNodeId: pickedNode.parentNodeId,
+        }),
+      () => {
         // Reset to a fresh split so it prompts for the next node (the user may
-        // still be holding s) rather than lingering on a "splitting…" status.
-        if (this.currentMode === SkeletonEditMode.Split) {
-          this.resetSplitToFreshState();
-        }
-      }
-    })();
+        // still be holding s) rather than waiting for hydration/confirmation.
+        this.resetSplitToFreshState();
+      },
+    );
   }
 
   private handleSplitPick() {
@@ -1096,15 +1303,22 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       );
       return;
     }
-    const pickedNode = this.resolvePickedNodeSelection(skeletonLayer);
-    if (pickedNode === undefined || pickedNode.segmentId === undefined) {
+    const pickedNode = this.getPickedSpatialSkeletonNode();
+    if (pickedNode === undefined) {
       StatusMessage.showTemporaryMessage("Click a skeleton node to split.");
       return;
     }
+    const nodeInfo = this.requireInspectedNode(
+      skeletonLayer,
+      pickedNode.nodeId,
+      pickedNode.segmentId,
+    );
+    if (nodeInfo === undefined) return;
     this.executeSplitOnNode({
-      nodeId: pickedNode.nodeId,
-      segmentId: pickedNode.segmentId,
-      position: pickedNode.position,
+      nodeId: nodeInfo.nodeId,
+      segmentId: nodeInfo.segmentId,
+      position: nodeInfo.position,
+      parentNodeId: nodeInfo.parentNodeId,
     });
   }
 
@@ -1116,24 +1330,28 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       );
       return;
     }
-    const pickedNode = this.resolvePickedNodeSelectionForMerge(skeletonLayer);
-    if (pickedNode === undefined || pickedNode.segmentId === undefined) {
+    const pickedNode = this.getPickedSpatialSkeletonNode();
+    if (pickedNode === undefined) {
       StatusMessage.showTemporaryMessage(
         "Click a skeleton node to set as merge anchor.",
       );
       return;
     }
-    if (!this.isSpatialSkeletonSegmentVisible(pickedNode.segmentId)) {
+    const nodeInfo = this.requireInspectedNode(
+      skeletonLayer,
+      pickedNode.nodeId,
+      pickedNode.segmentId,
+    );
+    if (nodeInfo === undefined) return;
+    if (!this.isSpatialSkeletonSegmentVisible(nodeInfo.segmentId)) {
       StatusMessage.showTemporaryMessage(
-        `Make skeleton ${pickedNode.segmentId} visible before merging.`,
+        `Make skeleton ${nodeInfo.segmentId} visible before merging.`,
       );
       return;
     }
-    if (pickedNode.segmentId !== undefined) {
-      this.pinSegmentByNumber(pickedNode.segmentId);
-    }
-    this.layer.selectSpatialSkeletonNode(pickedNode.nodeId, true, pickedNode);
-    this.layer.setSpatialSkeletonMergeAnchor(pickedNode.nodeId);
+    this.pinSegmentByNumber(nodeInfo.segmentId);
+    this.layer.selectSpatialSkeletonNode(nodeInfo.nodeId, true, nodeInfo);
+    this.layer.setSpatialSkeletonMergeAnchor(nodeInfo.nodeId);
     // First click made: reveal the selected-node highlight for the from node.
     this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value = false;
     this.renderStatus();
@@ -1165,14 +1383,19 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       this.handleMergeFirstPick();
       return;
     }
-    const anchorNodeInfo =
-      skeletonLayer.getNode(anchorNodeId) ??
-      this.layer.spatialSkeletonState.getCachedNode(anchorNodeId);
+    const selectedNode = this.layer.selectedSpatialSkeletonNodeInfo.value;
+    const anchorNodeInfo = this.requireInspectedNode(
+      skeletonLayer,
+      anchorNodeId,
+      selectedNode?.nodeId === anchorNodeId
+        ? selectedNode.segmentId
+        : undefined,
+    );
+    if (anchorNodeInfo === undefined) return;
     const firstNode = {
       nodeId: anchorNodeId,
-      segmentId: anchorNodeInfo?.segmentId,
-      position: anchorNodeInfo?.position,
-      sourceState: anchorNodeInfo?.sourceState,
+      segmentId: anchorNodeInfo.segmentId,
+      position: anchorNodeInfo.position,
     };
 
     const pickedNode = this.resolvePickedNodeSelectionForMerge(skeletonLayer);
@@ -1193,9 +1416,19 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
         );
         return;
       }
-      this.pinSegmentByNumber(pickedNode.segmentId);
-      this.layer.selectSpatialSkeletonNode(pickedNode.nodeId, true, pickedNode);
-      this.layer.setSpatialSkeletonMergeAnchor(pickedNode.nodeId);
+      const reanchoredNode = this.requireInspectedNode(
+        skeletonLayer,
+        pickedNode.nodeId,
+        pickedNode.segmentId,
+      );
+      if (reanchoredNode === undefined) return;
+      this.pinSegmentByNumber(reanchoredNode.segmentId);
+      this.layer.selectSpatialSkeletonNode(
+        reanchoredNode.nodeId,
+        true,
+        reanchoredNode,
+      );
+      this.layer.setSpatialSkeletonMergeAnchor(reanchoredNode.nodeId);
       this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value = false;
       this.renderStatus();
       StatusMessage.showTemporaryMessage(
@@ -1204,12 +1437,6 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       return;
     }
 
-    if (firstNode.segmentId === undefined) {
-      StatusMessage.showTemporaryMessage(
-        "Unable to resolve merge anchor segment.",
-      );
-      return;
-    }
     if (!this.isSpatialSkeletonSegmentVisible(firstNode.segmentId)) {
       StatusMessage.showTemporaryMessage(
         `The first node selected for a merge operation must be from a visible skeleton. Make skeleton ${firstNode.segmentId} visible in the Seg tab or by double-clicking it in the viewer.`,
@@ -1220,30 +1447,23 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
 
     this.pinSegmentByNumber(pickedNode.segmentId);
     this.layer.selectSpatialSkeletonNode(pickedNode.nodeId, true, pickedNode);
-    this.pending = true;
-
-    void (async () => {
-      try {
-        await waitForNextAnimationFrame();
-        await executeSpatialSkeletonMerge(
+    this.startPendingAction(
+      SpatialSkeletonActions.mergeSkeletons,
+      () =>
+        executeSpatialSkeletonMerge(
           this.layer,
           {
             nodeId: firstNode.nodeId,
-            segmentId: firstNode.segmentId!,
+            segmentId: firstNode.segmentId,
             position: firstNode.position,
-            sourceState: firstNode.sourceState,
           },
           {
             nodeId: pickedNode.nodeId,
-            segmentId: pickedNode.segmentId!,
+            segmentId: pickedNode.segmentId,
             position: pickedNode.position,
-            sourceState: pickedNode.sourceState,
           },
-        );
-      } catch (error) {
-        showSpatialSkeletonActionError("merge skeletons", error);
-      } finally {
-        this.pending = false;
+        ),
+      () => {
         // If the user released M while the merge was in flight, exitMerge has
         // already left merge mode and restored the highlight — do not re-hide
         // it here (that would leave the selection permanently hidden). Only
@@ -1253,8 +1473,8 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
         if (this.currentMode === SkeletonEditMode.Merge) {
           this.resetMergeToFreshState();
         }
-      }
-    })();
+      },
+    );
   }
 
   private handleInsertPick() {
@@ -1343,27 +1563,21 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
         (Number(parentNode.position[i]) + Number(childNode.position[i])) / 2;
     }
 
-    const requestActivation = this.currentActivation;
-    this.pending = true;
     this.setStatus(getSpatialSkeletonInsertingStatusText());
-    void executeSpatialSkeletonInsertNode(this.layer, {
-      skeletonId: parentNode.segmentId,
-      parentNodeId: parentNode.nodeId,
-      childNodeIds: [childNode.nodeId],
-      positionInModelSpace: midpoint,
-    })
-      .catch((error) => {
-        showSpatialSkeletonActionError("insert node", error);
-      })
-      .finally(() => {
-        if (this.currentActivation !== requestActivation) return;
-        this.pending = false;
-        // Releasing i mid-flight already exited insert mode and restored the
-        // highlight; only re-arm for the next pick while still in insert mode.
-        if (this.currentMode === SkeletonEditMode.Insert) {
+    this.startPendingAction(
+      SpatialSkeletonActions.insertNodes,
+      () =>
+        executeSpatialSkeletonInsertNode(this.layer, {
+          skeletonId: parentNode.segmentId,
+          parentNodeId: parentNode.nodeId,
+          childNodeIds: [childNode.nodeId],
+          positionInModelSpace: midpoint,
+        }),
+      () => {
+        if (this.currentMode === SkeletonEditMode.Insert)
           this.resetInsertToFreshState();
-        }
-      });
+      },
+    );
   }
 
   private handleCreatePlace() {
@@ -1395,23 +1609,17 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     }
 
     this.createPlacedThisHold = true;
-    this.pending = true;
     this.setStatus(getSpatialSkeletonCreatingStatusText());
-
-    void (async () => {
-      try {
-        await executeSpatialSkeletonAddNode(this.layer, {
+    this.startPendingAction(
+      SpatialSkeletonActions.addNodes,
+      () =>
+        executeSpatialSkeletonAddNode(this.layer, {
           skeletonId: 0,
           parentNodeId: undefined,
           positionInModelSpace: new Float32Array(clickPosition),
-        });
-      } catch (error) {
-        showSpatialSkeletonActionError("create skeleton", error);
-      } finally {
-        this.pending = false;
-        this.renderStatus();
-      }
-    })();
+        }),
+      () => this.renderStatus(),
+    );
   }
 
   // --- Action implementations ---
@@ -1549,15 +1757,6 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       );
       return;
     }
-    const addNodeBlockedReason = this.getAddNodeBlockedReason(
-      skeletonLayer,
-      selectedParentNodeId,
-    );
-    if (addNodeBlockedReason !== undefined) {
-      StatusMessage.showTemporaryMessage(addNodeBlockedReason);
-      return;
-    }
-
     const clickStartPosition =
       this.getMousePositionInSkeletonCoordinates(skeletonLayer);
     if (clickStartPosition === undefined) {
@@ -1587,30 +1786,26 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
           );
           return;
         }
-        const blockedReason = this.getAddNodeBlockedReason(
-          skeletonLayer,
-          currentParentNodeId,
-        );
-        if (blockedReason !== undefined) {
-          StatusMessage.showTemporaryMessage(blockedReason);
-          return;
-        }
         const selectedParentNode = this.getSelectedParentNodeForAdd(
           skeletonLayer,
           currentParentNodeId,
         );
+        if (selectedParentNode === undefined) return;
         const clickPositionInModelSpace =
           this.getMousePositionInSkeletonCoordinates(skeletonLayer);
         if (clickPositionInModelSpace === undefined) return;
         void (async () => {
           try {
             await executeSpatialSkeletonAddNode(this.layer, {
-              skeletonId: selectedParentNode?.segmentId ?? 0,
+              skeletonId: selectedParentNode.segmentId,
               parentNodeId: currentParentNodeId,
               positionInModelSpace: new Float32Array(clickPositionInModelSpace),
             });
           } catch (error) {
-            showSpatialSkeletonActionError("create node", error);
+            showSpatialSkeletonActionError(
+              SpatialSkeletonActions.addNodes,
+              error,
+            );
           }
         })();
       },
@@ -1640,32 +1835,28 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       StatusMessage.showTemporaryMessage("Click a skeleton node to delete.");
       return;
     }
-    const nodeInfo = skeletonLayer.getNode(pickedNode.nodeId);
-    if (nodeInfo === undefined) {
-      StatusMessage.showTemporaryMessage(
-        `Unable to resolve node ${pickedNode.nodeId} for deletion.`,
-      );
-      return;
-    }
-    this.pending = true;
+    const nodeInfo = this.requireInspectedNode(
+      skeletonLayer,
+      pickedNode.nodeId,
+      pickedNode.segmentId,
+    );
+    if (nodeInfo === undefined) return;
     this.setStatus(getSpatialSkeletonDeletingStatusText());
-    void this.layer
-      .getSpatialSkeletonDeleteOperationContext(nodeInfo)
-      .then(() => executeSpatialSkeletonDeleteNode(this.layer, nodeInfo))
-      .catch((error) => {
-        showSpatialSkeletonActionError("delete node", error);
-      })
-      .finally(() => {
-        this.pending = false;
-        this.renderStatus();
-      });
+    this.startPendingAction(
+      SpatialSkeletonActions.deleteNodes,
+      () => executeSpatialSkeletonDeleteNode(this.layer, nodeInfo),
+      () => this.renderStatus(),
+    );
   }
 
   activate(activation: ToolActivation<this>) {
     const { layer } = this;
     // 1. Reset all activation-scoped state.
+    this.advanceInteractionGeneration();
     this.currentMode = SkeletonEditMode.Default;
     this.dragInProgress = false;
+    this.activeDragBrowseExclusionRelease?.();
+    this.activeDragBrowseExclusionRelease = undefined;
     this.pending = false;
     this.createPlacedThisHold = false;
     this.mergeKeyHeld = false;
@@ -1691,7 +1882,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     // 3. Precondition checks.
     const disabledReason = layer.getSpatialSkeletonActionsDisabledReason(
       [SpatialSkeletonActions.addNodes, SpatialSkeletonActions.moveNodes],
-      { ignoreCommandBusy: true, requireVisibleChunks: false },
+      { requireVisibleChunks: false },
     );
     if (disabledReason !== undefined) {
       StatusMessage.showTemporaryMessage(disabledReason);
@@ -1713,18 +1904,22 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       return;
     }
 
-    // 4. Register disposer: clear statusBody, reset mode attribute, and
+    // 4. Register disposer: clear setStatusText, reset mode attribute, and
     //    deactivate layer-level mode flags.
-    this.currentActivation = activation;
     activation.registerDisposer(() => {
-      this.currentActivation = undefined;
+      this.advanceInteractionGeneration();
       this.setStatusText = undefined;
+      this.currentMode = SkeletonEditMode.Default;
+      this.pending = false;
+      this.stopMergeTargetPrefetch();
+      this.dragInProgress = false;
+      this.activeDragBrowseExclusionRelease?.();
+      this.activeDragBrowseExclusionRelease = undefined;
       this.setModeAttribute(undefined);
       layer.spatialSkeletonMergeMode.value = false;
       layer.spatialSkeletonSplitMode.value = false;
       layer.spatialSkeletonSuppressSelectedNodeHighlight.value = false;
       layer.spatialSkeletonState.clearPendingNodePositions();
-      this.currentMode = SkeletonEditMode.Default;
       this.insertAnchorNodeId = undefined;
     });
 
@@ -1750,9 +1945,10 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       layer.manager.root.selectionState.changed.add(() => this.renderStatus()),
     );
     activation.registerDisposer(
-      layer.spatialSkeletonState.mergeAnchorNodeId.changed.add(() =>
-        this.renderStatus(),
-      ),
+      layer.spatialSkeletonState.mergeAnchorNodeId.changed.add(() => {
+        this.handleMergeAnchorChanged();
+        this.renderStatus();
+      }),
     );
     activation.registerDisposer(
       layer.displayState.segmentationGroupState.value.visibleSegments.changed.add(
@@ -1765,7 +1961,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       layer.layersChanged.add(() => {
         const reason = layer.getSpatialSkeletonActionsDisabledReason(
           [SpatialSkeletonActions.addNodes, SpatialSkeletonActions.moveNodes],
-          { ignoreCommandBusy: true, requireVisibleChunks: false },
+          { requireVisibleChunks: false },
         );
         if (reason !== undefined) {
           StatusMessage.showTemporaryMessage(reason);
@@ -1773,6 +1969,20 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
         }
       }),
     );
+    const optimisticQueueVersion =
+      layer.spatialSkeletonState.optimisticEditQueueVersion;
+    if (optimisticQueueVersion !== undefined) {
+      activation.registerDisposer(
+        optimisticQueueVersion.changed.add(() => {
+          if (
+            layer.spatialSkeletonState.getOptimisticEditFatalState() !==
+            undefined
+          ) {
+            activation.cancel();
+          }
+        }),
+      );
+    }
 
     // 9. Global key/mouse listeners — thin lambda wrappers delegating to class methods.
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1807,7 +2017,9 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     };
     // mousemove catches modifiers pressed/released while keyboard focus is
     // outside the panel (e.g. a text input elsewhere in the UI).
-    const onMouseMove = (event: MouseEvent) => this.syncModifiers(event);
+    const onMouseMove = (event: MouseEvent) => {
+      this.syncModifiers(event);
+    };
     const onBlur = () => {
       this.mergeKeyHeld = false;
       this.splitKeyHeld = false;
@@ -1894,68 +2106,44 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     );
     activation.bindAction(SKELETON_TOGGLE_TRUE_END, () => {
       const skeletonLayer = this.getActiveSpatiallyIndexedSkeletonLayer();
-      const nodeId = this.layer.selectedSpatialSkeletonNodeInfo.value?.nodeId;
-      if (nodeId === undefined) return;
-      const node =
-        skeletonLayer?.getNode(nodeId) ??
-        this.layer.spatialSkeletonState.getCachedNode(nodeId);
+      if (skeletonLayer === undefined) return;
+      const selectedNode = this.layer.selectedSpatialSkeletonNodeInfo.value;
+      if (selectedNode === undefined) return;
+      const node = this.requireInspectedNode(
+        skeletonLayer,
+        selectedNode.nodeId,
+        selectedNode.segmentId,
+      );
       if (node === undefined) {
-        StatusMessage.showTemporaryMessage(
-          `Node ${nodeId} is not available in the skeleton cache.`,
-        );
         return;
       }
       const nextIsTrueEnd = !(node.isTrueEnd ?? false);
-      if (nextIsTrueEnd) {
-        if (node.parentNodeId === undefined) {
-          StatusMessage.showTemporaryMessage(
-            "Cannot set the root node as a true end.",
-          );
-          return;
-        }
-        const cachedSegmentNodes =
-          this.layer.spatialSkeletonState.getCachedSegmentNodes(node.segmentId);
-        if (cachedSegmentNodes !== undefined) {
-          const hasChildren = cachedSegmentNodes.some(
-            (candidate) => candidate.parentNodeId === node.nodeId,
-          );
-          if (hasChildren) {
-            StatusMessage.showTemporaryMessage(
-              "Only leaf nodes can be marked as true ends.",
-            );
-            return;
-          }
-        }
-      }
       void executeSpatialSkeletonNodeTrueEndUpdate(this.layer, {
         node,
         nextIsTrueEnd,
       }).catch((error) =>
-        showSpatialSkeletonActionError("toggle true end", error),
+        showSpatialSkeletonActionError(
+          SpatialSkeletonActions.editNodeTrueEnd,
+          error,
+        ),
       );
     });
     activation.bindAction(SKELETON_REROOT, () => {
       const skeletonLayer = this.getActiveSpatiallyIndexedSkeletonLayer();
-      const nodeId = this.layer.selectedSpatialSkeletonNodeInfo.value?.nodeId;
-      if (nodeId === undefined) return;
-      const node =
-        skeletonLayer?.getNode(nodeId) ??
-        this.layer.spatialSkeletonState.getCachedNode(nodeId);
-      if (node === undefined) {
-        StatusMessage.showTemporaryMessage(
-          `Node ${nodeId} is not available in the skeleton cache.`,
-        );
-        return;
-      }
-      if (node.isTrueEnd) {
-        StatusMessage.showTemporaryMessage(
-          "Cannot set a true end node as root. Clear the true end state first.",
-        );
-        return;
-      }
+      if (skeletonLayer === undefined) return;
+      const selectedNode = this.layer.selectedSpatialSkeletonNodeInfo.value;
+      if (selectedNode === undefined) return;
+      const node = this.requireInspectedNode(
+        skeletonLayer,
+        selectedNode.nodeId,
+        selectedNode.segmentId,
+      );
+      if (node === undefined) return;
       void this.layer
         .rerootSpatialSkeletonNode(node)
-        .catch((error) => showSpatialSkeletonActionError("reroot", error));
+        .catch((error) =>
+          showSpatialSkeletonActionError(SpatialSkeletonActions.reroot, error),
+        );
     });
 
     // 12. Initial render.

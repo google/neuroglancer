@@ -18,74 +18,78 @@ import type {
   EditableSpatiallyIndexedSkeletonSource,
   SpatiallyIndexedSkeletonNode,
 } from "#src/skeleton/api.js";
-import type {
-  SpatialSkeletonCommandPayload,
-  SpatialSkeletonEditCommandFactory,
-} from "#src/skeleton/command_factories.js";
+import type { SpatialSkeletonCommandPayload } from "#src/skeleton/command_factories.js";
 import {
   SpatialSkeletonActions,
+  SpatialSkeletonHistoryActions,
   type SpatialSkeletonAction,
-  type SpatialSkeletonCommand,
+  type SpatialSkeletonErrorAction,
+  type SpatialSkeletonEditCommand,
 } from "#src/skeleton/command_protocol.js";
 import { getSpatialSkeletonActionErrorMessage } from "#src/skeleton/edit_errors.js";
+import { ensureSpatialSkeletonOptimisticEditQueue } from "#src/skeleton/optimistic_edit/host.js";
+import { prepareAndSubmitSpatialSkeletonEdit } from "#src/skeleton/queue_admission.js";
 import {
-  getEditableSpatiallyIndexedSkeletonSource,
   getSpatialSkeletonEditCommandFactoryForAction,
-  isSpatialSkeletonOptimisticEditState,
   type SpatialSkeletonLayerContext,
+  type SpatialSkeletonOptimisticEditExecution,
 } from "#src/skeleton/spatial_skeleton_manager.js";
 import { StatusMessage } from "#src/status.js";
-
-interface SpatialSkeletonSourceAccess {
-  source: object;
-}
-
-function getEditSource(
-  layer: SpatialSkeletonLayerContext,
-): EditableSpatiallyIndexedSkeletonSource {
-  const source = getEditableSpatiallyIndexedSkeletonSource(
-    layer.getSpatiallyIndexedSkeletonLayer(),
-  );
-  if (source === undefined) {
-    throw new Error(
-      "Unable to resolve editable skeleton source for the active layer.",
-    );
-  }
-  return source;
-}
-
-export function getSpatialSkeletonEditCommandFactory(
-  value: SpatialSkeletonSourceAccess | undefined,
-  action: SpatialSkeletonAction,
-): SpatialSkeletonEditCommandFactory | undefined {
-  const source = getEditableSpatiallyIndexedSkeletonSource(value);
-  if (source === undefined) return undefined;
-  return getSpatialSkeletonEditCommandFactoryForAction(source, action);
-}
+import { withPromiseProperties } from "#src/util/promise.js";
 
 function executeCommand(
   layer: SpatialSkeletonLayerContext,
-  command: SpatialSkeletonCommand,
-) {
-  if (command.executeOptimistically !== undefined) {
-    return command.executeOptimistically({
-      mappings: layer.spatialSkeletonState.commandHistory.mappings,
-    });
-  }
-  return layer.spatialSkeletonState.commandHistory.execute(command);
-}
-
-async function executeCommandWithPendingMessage<T>(
-  promise: Promise<T>,
-  message: string,
-) {
-  const status = StatusMessage.showMessage(message);
-  return promise.finally(() => status.dispose());
-}
-
-export function showSpatialSkeletonActionError(action: string, error: unknown) {
-  const { message, requiresDismissal } = getSpatialSkeletonActionErrorMessage(
+  command: SpatialSkeletonEditCommand,
+  action?: SpatialSkeletonAction,
+): SpatialSkeletonOptimisticEditExecution<void> {
+  return prepareAndSubmitSpatialSkeletonEdit(
+    layer,
+    command,
+    (queueInput) =>
+      layer.spatialSkeletonState.executeOptimisticEdit(command, queueInput),
     action,
+  );
+}
+
+function withPendingMessage<T>(
+  execution: SpatialSkeletonOptimisticEditExecution<T>,
+  message: string,
+): SpatialSkeletonOptimisticEditExecution<T> {
+  const status = StatusMessage.showMessage(message);
+  // finally() creates a new preview promise, so carry its other milestones over.
+  return withPromiseProperties(
+    execution.finally(() => status.dispose()),
+    {
+      acceptedByQueue: execution.acceptedByQueue,
+      settled: execution.settled,
+    },
+  );
+}
+
+const spatialSkeletonErrorLabels: Record<SpatialSkeletonErrorAction, string> = {
+  [SpatialSkeletonActions.inspect]: "inspect skeleton",
+  [SpatialSkeletonActions.addNodes]: "create node",
+  [SpatialSkeletonActions.insertNodes]: "insert node",
+  [SpatialSkeletonActions.moveNodes]: "move node",
+  [SpatialSkeletonActions.deleteNodes]: "delete node",
+  [SpatialSkeletonActions.reroot]: "reroot",
+  [SpatialSkeletonActions.editNodeDescription]: "update node description",
+  [SpatialSkeletonActions.editNodeTrueEnd]: "toggle true end",
+  [SpatialSkeletonActions.editNodeRadius]: "update node radius",
+  [SpatialSkeletonActions.editNodeConfidence]: "update node confidence",
+  [SpatialSkeletonActions.mergeSkeletons]: "merge skeletons",
+  [SpatialSkeletonActions.splitSkeletons]: "split skeleton",
+  [SpatialSkeletonHistoryActions.undo]: "undo",
+  [SpatialSkeletonHistoryActions.redo]: "redo",
+};
+
+export function showSpatialSkeletonActionError(
+  action: SpatialSkeletonErrorAction,
+  error: unknown,
+  label = spatialSkeletonErrorLabels[action],
+) {
+  const { message, requiresDismissal } = getSpatialSkeletonActionErrorMessage(
+    label,
     error,
   );
   return requiresDismissal
@@ -99,18 +103,25 @@ function createSpatialSkeletonCommand(
   payload: SpatialSkeletonCommandPayload,
   unsupportedMessage: string,
 ) {
-  const source = getEditSource(layer);
-  const commandFactory = getSpatialSkeletonEditCommandFactory(
-    { source },
+  // Source capabilities are validated when the layer enables editing. Dispatch
+  // checks the current write permission and resolves the requested factory.
+  const source = layer.getSpatiallyIndexedSkeletonLayer()?.source as
+    | EditableSpatiallyIndexedSkeletonSource
+    | undefined;
+  if (source?.readonly !== false) {
+    throw new Error(unsupportedMessage);
+  }
+  const commandFactory = getSpatialSkeletonEditCommandFactoryForAction(
+    source,
     action,
   );
   if (commandFactory === undefined) {
     throw new Error(unsupportedMessage);
   }
-  // The concrete createCommand implementations expect the full layer type; the
-  // cast is safe because in practice layer always satisfies those requirements.
-
-  return commandFactory.createCommand(layer as any, payload);
+  // Queue ownership is a generic source capability. Install the state-owned
+  // engine before constructing the datasource-specific intent descriptor.
+  ensureSpatialSkeletonOptimisticEditQueue(layer, source);
+  return commandFactory.createCommand(payload);
 }
 
 interface SpatialSkeletonExecutionMetadata {
@@ -211,6 +222,7 @@ function executeSpatialSkeletonAction(
   action: SpatialSkeletonAction,
   payload: SpatialSkeletonCommandPayload,
 ) {
+  layer.spatialSkeletonState.assertOptimisticEditingAllowed();
   const metadata = spatialSkeletonExecutionMetadata.get(action);
   if (metadata === undefined) {
     throw new Error(`Unsupported spatial skeleton edit action: ${action}`);
@@ -221,10 +233,10 @@ function executeSpatialSkeletonAction(
     payload,
     metadata.unsupportedMessage,
   );
-  const execution = executeCommand(layer, command);
+  const execution = executeCommand(layer, command, action);
   return metadata.pendingMessage === undefined
     ? execution
-    : executeCommandWithPendingMessage(execution, metadata.pendingMessage);
+    : withPendingMessage(execution, metadata.pendingMessage);
 }
 
 export function executeSpatialSkeletonAddNode(
@@ -349,65 +361,18 @@ export function executeSpatialSkeletonMerge(
   );
 }
 
-export async function undoSpatialSkeletonCommand(
+export function undoSpatialSkeletonCommand(
   layer: SpatialSkeletonLayerContext,
-) {
-  const { commandHistory } = layer.spatialSkeletonState;
-  if (commandHistory.isBusy.value) {
-    StatusMessage.showTemporaryMessage(
-      "Wait for the current skeleton edit to finish.",
-    );
-    return false;
-  }
-  const optimisticEditState = isSpatialSkeletonOptimisticEditState(
-    layer.spatialSkeletonState,
-  )
-    ? layer.spatialSkeletonState
-    : undefined;
-  if (optimisticEditState?.canUndoOptimisticEdit() === true) {
-    return optimisticEditState.undoLatestOptimisticEdit();
-  }
-  if (!commandHistory.canUndo.value) {
-    return false;
-  }
-  const undoLabel = commandHistory.undoLabel.value;
-  const pendingMessage =
-    undoLabel !== undefined ? `Undoing ${undoLabel}...` : "Undoing...";
-  return executeCommandWithPendingMessage(
-    commandHistory.undo(),
-    pendingMessage,
-  );
+): SpatialSkeletonOptimisticEditExecution<boolean> {
+  const state = layer.spatialSkeletonState;
+  state.assertOptimisticEditingAllowed();
+  return state.undoLatestOptimisticEdit();
 }
 
-export async function redoSpatialSkeletonCommand(
+export function redoSpatialSkeletonCommand(
   layer: SpatialSkeletonLayerContext,
-) {
-  const { commandHistory } = layer.spatialSkeletonState;
-  if (commandHistory.isBusy.value) {
-    StatusMessage.showTemporaryMessage(
-      "Wait for the current skeleton edit to finish.",
-    );
-    return false;
-  }
-  const optimisticEditState = isSpatialSkeletonOptimisticEditState(
-    layer.spatialSkeletonState,
-  )
-    ? layer.spatialSkeletonState
-    : undefined;
-  if (optimisticEditState?.hasUnconfirmedOptimisticEdits() === true) {
-    StatusMessage.showTemporaryMessage(
-      "Wait for pending optimistic skeleton edits to finish.",
-    );
-    return false;
-  }
-  if (!commandHistory.canRedo.value) {
-    return false;
-  }
-  const redoLabel = commandHistory.redoLabel.value;
-  const pendingMessage =
-    redoLabel !== undefined ? `Redoing ${redoLabel}...` : "Redoing...";
-  return executeCommandWithPendingMessage(
-    commandHistory.redo(),
-    pendingMessage,
-  );
+): SpatialSkeletonOptimisticEditExecution<boolean> {
+  const state = layer.spatialSkeletonState;
+  state.assertOptimisticEditingAllowed();
+  return state.redoLatestOptimisticEdit();
 }

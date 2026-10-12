@@ -18,7 +18,7 @@
  * @file GPU geometry and segment retention used for the skeleton overlay rendering pass.
  */
 
-// Scratch buffer for GPU-upload-only arrays (segmentIds, selected, edge indices,
+// Scratch buffer for GPU-upload-only arrays (segmentIds, edge indices,
 // edge segmentIds). Grown monotonically; safe to reuse because SkeletonOverlayChunk
 // uploads these to the GPU synchronously and does not retain CPU references to them.
 // TODO (SKM): allow to clear or reduce this memory

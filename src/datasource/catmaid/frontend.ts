@@ -86,8 +86,6 @@ export class CatmaidSpatiallyIndexedSkeletonSource extends WithParameters(
   private readonly spatialSkeletonEditCommands =
     new CatmaidSpatialSkeletonEditCommands({
       getClient: () => this.client,
-      getOptimisticSkeletonEdits: (layer) =>
-        layer.optimisticSkeletonEdits.value,
     });
   private client_?: CatmaidClient;
 
@@ -99,6 +97,10 @@ export class CatmaidSpatiallyIndexedSkeletonSource extends WithParameters(
     return this.readonly
       ? undefined
       : CATMAID_SPATIAL_SKELETON_CONFIDENCE_CONFIGURATION;
+  }
+
+  get optimisticEditing() {
+    return this.editableSpatialSkeletonEditCommands?.optimisticEditing;
   }
 
   private get editableSpatialSkeletonEditCommands() {
@@ -185,10 +187,6 @@ export class CatmaidSpatiallyIndexedSkeletonSource extends WithParameters(
       cacheProvider: this.parameters.catmaidParameters.cacheProvider,
       signal: options.signal,
     });
-  }
-
-  getSkeletonRootNode(skeletonId: number) {
-    return this.client.getSkeletonRootNode(skeletonId);
   }
 }
 
@@ -329,13 +327,7 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
       credentialsProvider,
     );
 
-    await options.registry.chunkManager.memoize.getAsync(
-      { type: "catmaid:version", baseUrl },
-      options,
-      () => client.validateServerVersion(),
-    );
-
-    // Fetch metadata-derived values through the generic source interface.
+    // Fetch project metadata, cache-provider configuration, and skeleton IDs concurrently.
     const [spatialIndexMetadata, cacheProvider, skeletonIds] =
       await Promise.all([
         options.registry.chunkManager.memoize.getAsync(

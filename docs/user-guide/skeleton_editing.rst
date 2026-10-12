@@ -1,35 +1,486 @@
-Skeleton Editing
+.. _optimistic-skeleton-edit-queue:
+
+Skeleton editing
 ================
 
-Neuroglancer supports interactive editing of skeleton annotations, including
-adding, inserting, moving, and deleting nodes, as well as merging and splitting
-skeletons.
+When you edit a skeleton, Neuroglancer shows a preview of the result and saves
+it to CATMAID in the background. This lets you continue tracing while earlier
+changes save. It applies to adding, moving, and deleting nodes; changing node
+properties; rerooting; splitting and merging skeletons; and Undo and Redo.
+
+.. _skeleton-queue-edit-gestures:
+
+Edit a skeleton
+---------------
+
+1. Open your writable CATMAID layer. Make the skeleton visible in **Seg**, or
+   double-click one of its nodes in the viewport.
+2. **Hover over or select a node** to show that skeleton's node list in
+   **Skeleton**. Allow its details to finish loading. Making the skeleton
+   visible alone does not choose which skeleton's nodes the panel shows.
+3. Activate **Skeleton editing** and make your edits. The preview appears as
+   soon as it is ready; you can continue editing while earlier changes save.
+4. Open the layer's **Queue** tab to check progress. **Saved** confirms that
+   CATMAID saved the action and Neuroglancer applied the result locally.
+
+For example, add a node and then add a child to it before the first save
+finishes. Both appear in the preview. Neuroglancer saves them in order and
+attaches the child to the correct parent once CATMAID returns its saved ID.
+
+You can keep selecting, navigating, filtering, pinning, and changing visibility
+while edits save. You can also use Undo and Redo when their controls are
+available.
+
+.. _skeleton-editing-tools:
+
+Activate Skeleton editing
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Activate **Skeleton editing** from the Skeleton tab. To assign it a shortcut,
+click its key-binding box and press a free key, such as **E**. **Shift+E** then
+activates the tool. Moving, adding, merging, splitting, creating a skeleton,
+inserting, and deleting are modes of this one tool.
+
+Use these gestures with **Skeleton editing** active and the pointer over a
+viewport. Click means left-click. Release **M**, **S**, **N**, **D**, or **I**
+to leave that mode after completing the gesture.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Action
+     - Gesture
+   * - Select a node
+     - Click the node.
+   * - Move a node
+     - Drag the node to its new position.
+   * - Add a child
+     - Select its parent, then **Shift+click** where the child should go.
+   * - Merge skeletons
+     - Hold **M**, click the source node, then click the target node in the
+       other skeleton.
+   * - Split a skeleton
+     - Hold **S**, then click a non-root node that is not marked as a true
+       end. That node and its descendants become a separate skeleton.
+   * - Create a new skeleton
+     - Hold **N**, then click empty space to place its root node.
+   * - Insert a node
+     - Hold **I**, then click two directly connected nodes to insert a node
+       at the midpoint of their edge.
+   * - Delete a node
+     - Hold **D**, then click the node to delete.
+
+.. _skeleton-editing-insert:
+
+Inserting a Node
+~~~~~~~~~~~~~~~~
+
+Hold :kbd:`I` and click two directly connected nodes: one must be the parent of
+the other. The order of the two clicks does not matter. A new node is inserted
+at the midpoint of the edge between them; it becomes a child of the parent node
+and the new parent of the child node.
+
+Because a node can have only one parent, two nodes that are not directly
+connected are rejected and nothing is changed. The first node you clicked stays
+selected so you can pick one of its neighbours instead. Both nodes must belong
+to a visible skeleton.
+
+Merge and split rules
+~~~~~~~~~~~~~~~~~~~~~
+
+Merge joins two skeletons through the source and target nodes you choose.
+Start with the source skeleton visible and its node details available.
+Neuroglancer fetches the target skeleton's details if needed before previewing
+the merge. CATMAID decides which skeleton ID survives, and Neuroglancer follows
+the saved result.
+
+Split cuts the connection between the selected node and its parent. The
+selected node becomes the root of a new skeleton with all its descendants;
+the rest stays in the original skeleton. This produces two skeletons, even
+when the selected node is a branch point or a leaf. The selected node must
+have a parent and must not be marked as a true end. Its complete skeleton
+details must be available before the split can start.
+
+Rerooting, node properties, Undo, and Redo are also available through the
+**Skeleton** controls.
+
+.. _skeleton-editing-tab:
+
+Inspect and navigate skeletons
+------------------------------
+
+The **Skeleton** tab is available for CATMAID layers with the spatially indexed
+skeleton subsource active. Hover over or select a node to choose which
+skeleton's details appear. Make the skeleton visible in **Seg**, or double-click
+one of its nodes, to request its complete details. Making it visible alone
+does not choose its node list. Previously fetched details may remain available
+after a skeleton is hidden.
+
+Find nodes by ID or description, or filter the list to show leaves, virtual
+ends, true ends, or nodes with descriptions. Pin a selection to keep its
+details in the panel while navigating elsewhere.
+
+Navigate the tree
+~~~~~~~~~~~~~~~~~
+
+The Skeleton toolbar provides controls to:
+
+- Go to the root.
+- Go to the start or end of the current branch.
+- Cycle through nodes at the current level.
+- Go to the parent or a child of the current node.
+- Go to the nearest leaf that is not marked as a true end.
+
+In the node list, right-click a node to move to it, or left-click to select it
+and move to it.
+
+.. _skeleton-node-types:
+
+Node types
+~~~~~~~~~~
+
+Node symbols indicate their place in the skeleton:
+
+- **Root:** the root node of the skeleton.
+- **Regular node:** an interior node along a branch.
+- **Branch point:** a node with more than one child.
+- **Virtual end:** a leaf that has not been marked as a true end.
+- **True end:** a leaf marked by a reviewer as the end of a branch.
+
+For a visible skeleton, click a leaf's type icon in the node list to toggle
+between virtual end and true end.
+
+.. _skeleton-node-properties:
+
+Node properties
+~~~~~~~~~~~~~~~
+
+Show the skeleton, then select a node in its node list or use **Ctrl+right-click**
+in the viewport (**Cmd+right-click** on macOS). The selected node's controls
+let you change its radius, confidence, or free-text description. Depending on
+the node, you can also delete it, change its end type, or make it the root.
+
+These changes preview and save through the same queue as edits made in the
+viewport. A read-only source still allows inspection, but disables editing.
+
+Understand the visual cues
+--------------------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Cue
+     - Meaning
+   * - **Dashed yellow rings and lines**
+     - A structural preview is being prepared. Rings mark known affected
+       nodes; lines indicate the connection or path involved. The previous
+       complete structure stays visible until the preview is ready.
+   * - **Preview** in red
+     - A new node or skeleton has a temporary identity while CATMAID assigns
+       its saved ID. You can continue editing it. Red here does not indicate
+       an error.
+   * - **Updating** beside the skeleton
+     - The panel retains the last complete shape while the next preview is
+       being prepared. This shape can already include earlier edits that are
+       still saving.
+
+The letters or symbols inside dashed yellow rings identify the requested
+change: **S** for split, **M** for merge, **R** for reroot, **×** for delete,
+and **+** for restore, such as undoing a deletion. These cues disappear when
+the complete preview replaces them, which may happen before the save finishes.
+On small skeletons, preparation may finish too quickly to see the cues.
+
+Here are examples of when they appear:
+
+- **Split a branch:** while the split preview is being prepared, yellow **S**
+  rings mark the cut node and its parent, with a dashed line along the
+  connection being cut. The branch still looks attached during preparation.
+  **Updating** in Skeleton means the list still describes that earlier shape.
+  Once the preview is ready, the branch appears as a separate skeleton and
+  the yellow cues disappear, even if Queue still says Saving.
+- **Merge two skeletons:** yellow **M** rings mark the two chosen endpoints,
+  with a dashed line showing the intended join while its preview is prepared.
+  Once joined in the preview, the combined skeleton shows **Preview** in red
+  until CATMAID confirms its saved skeleton ID. You can keep editing it.
+- **Delete a node or undo a deletion:** a yellow **×** marks the node being
+  deleted; **+** marks where a deleted node is being restored while that
+  preview is prepared.
+- **Choose a new root:** yellow **R** markers identify the requested root and
+  the known path involved in rerooting while the preview is prepared.
+- **Create a skeleton or add a child:** the new skeleton or node can show
+  **Preview** in place of its ID while its save is pending. It is already
+  available for further editing, such as adding another child.
+
+A visible preview or a permanent numeric ID alone does not confirm that all
+pending edits have saved. Use **Queue** to check completion.
+
+Check progress in Queue
+-----------------------
+
+**Pending edits** shows unfinished actions in the order you requested them.
+Completed actions move to **Recent activity**.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 35 35
+
+   * - Status
+     - Where it appears
+     - What it means
+   * - **Preparing**
+     - Pending edits
+     - Neuroglancer is building the preview. Some controls may briefly be
+       unavailable.
+   * - **Queued**
+     - Pending edits
+     - Your preview is ready and waiting for its turn to save.
+   * - **Saving**
+     - Pending edits
+     - CATMAID is processing the action.
+   * - **Reconciling**
+     - Pending edits
+     - CATMAID has replied and Neuroglancer is applying the saved result
+       locally. This is usually brief.
+   * - **Saved**
+     - Recent activity
+     - CATMAID saved the action and Neuroglancer applied the result locally.
+   * - **Reverted**
+     - Recent activity
+     - Pending actions canceled each other locally, such as an edit followed
+       by Undo, without saving those actions.
+   * - **Not saved**
+     - Recent activity
+     - The action failed or was canceled. See the failure guidance below
+       before trying again.
+   * - **Reload required**
+     - Pending edits and a persistent alert
+     - Neuroglancer cannot reliably match its local skeleton to CATMAID.
+       Editing, Undo, and Redo are blocked until you reload and inspect the
+       saved result.
+
+Recent activity keeps **64 completed actions by default**, ordered newest
+requested action first. Once there are more than 64, the oldest rows leave
+the list; rows do not expire after a set amount of time. Removing a row does
+not remove a saved change or decide whether it can still be undone.
+
+**Undo and Redo each add their own activity row.** For example, moving a node
+and then undoing the move produces a Move row and an Undo row. Undo does not
+delete the Move row. Both count toward the 64-row limit, even if they cancel
+locally and show Reverted.
+
+.. _skeleton-editing-undo:
+
+.. _skeleton-queue-undo-redo:
+
+Undo and Redo
+-------------
+
+Use **Undo** and **Redo** in the Skeleton toolbar. Undo works backwards through
+your latest edits, including changes that are still waiting to save.
+The page retains the edit information they need, so you do not have to show
+a hidden skeleton again before using Undo or Redo.
+
+- **Before saving starts:** Undo can remove the preview without sending the
+  edit to CATMAID. Recent activity may show Reverted. Redo can reapply it.
+- **While saving is in progress:** Undo can restore the earlier appearance
+  immediately. The original save finishes first, then Neuroglancer saves the
+  undo. Wait for both to finish before treating the result as saved.
+- **After an edit is saved:** Undo and Redo create their own previews and save
+  in turn, just like other actions.
+
+For example, create a new skeleton, then click Undo and Redo while its first
+save is still in progress. The node disappears and reappears immediately.
+It stays visible while the original creation, Undo, and Redo save in order.
+Wait for the queue to finish before leaving the page.
+
+Undo/Redo retains **64 original edits by default**, shared between what you
+can undo and what you can redo. Undo and Redo move an existing edit between
+those two groups; they do not use another history slot. New edits enter this
+history as soon as they are accepted, before saving finishes.
+
+**History controls what the Undo and Redo buttons can do. Recent activity is
+a log of what happened.** Both default to 64, but they count different things:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 35 35
+
+   * - What you do, starting with empty history
+     - Undo/Redo choices
+     - Recent activity after the actions finish
+   * - Move one node, then Undo it
+     - One original edit is retained: nothing to Undo, one move to Redo.
+     - Two rows: Move and Undo.
+   * - Move one node, then repeat Undo followed by Redo 32 times
+     - Still one original edit: one move to Undo, nothing to Redo.
+     - 65 actions have completed. Only the latest 64 rows are shown; the
+       original Move row has left the log, but the move is still available to
+       Undo.
+   * - Make 65 consecutive new edits, allowing them to save
+     - Only the latest 64 edits can be undone. The first edit has left
+       history.
+     - Only the latest 64 actions are shown.
+
+Making a new edit after Undo clears the Redo choices immediately. If the new edit is rejected without changing CATMAID and recovery
+succeeds, those Redo choices return. Reloading the page or replacing the
+skeleton layer clears history. A disabled button's tooltip explains why the
+action is currently unavailable.
+
+Undoing a split or merge restores the structure, but CATMAID may assign new
+skeleton or node IDs. One Undo can require several saving steps. All those
+steps must succeed before the Undo is marked Saved.
+
+When the queue is full
+----------------------
+
+The queue accepts **64 unfinished actions by default**. Actions count while
+preparing, waiting to save, saving, or applying the saved result locally.
+Undo and Redo normally each count as an action; an action with several server
+steps still counts as one.
+
+At that limit, a new edit is not accepted. Wait until a pending action finishes
+or is canceled, then try again. Saved actions and Recent activity rows do not
+occupy queue space.
+Undo may still be available at the limit if it can cancel an unsent action
+locally and free space.
+
+If something needs attention
+----------------------------
+
+An action asks you to inspect the skeleton
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Make the skeleton visible in **Seg**, or double-click one of its nodes. Hover
+over or select a node so its node list appears in **Skeleton**, wait for the
+details to finish loading, then repeat the action. A few points in the viewport
+can be shown before the full skeleton details needed for editing are available.
+
+An action rejected with this inspection message has not added anything to
+Queue or history. When a merge needs to fetch the second skeleton's details,
+it waits up to two minutes. If that fetch fails, no merge is queued; you can
+show the second skeleton's details and try again.
+
+A save is taking a long time
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A warning appears if a save request takes more than **30 seconds**. The
+warning does not cancel the request or mean it failed. Check your connection
+and Queue, and let the pending request finish before repeating that action.
+
+What happens when an action fails
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The status depends on what happened to the saved data and whether Neuroglancer
+can restore a reliable local view:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 35 35
+
+   * - Status
+     - When it appears
+     - Can I make a new edit?
+   * - **Not saved**
+     - The action was rejected without changing CATMAID, and Neuroglancer
+       successfully removed its preview and canceled later pending actions.
+       Those canceled actions also show Not saved.
+     - **Yes.** Read the error and correct the cause first. The queue accepts
+       new actions after recovery finishes.
+   * - **Reload required**
+     - The save outcome is uncertain, an action only partly saved, or
+       Neuroglancer cannot reliably apply or roll back the result locally.
+     - **No.** The queue rejects new edits, Undo, and Redo until the page is
+       reloaded. Waiting for queue space does not clear this state.
+
+If a Reload required alert appears alongside a Not saved row, follow the
+alert: editing stays blocked until reload.
+
+When an edit fails without changing CATMAID and recovery succeeds,
+Neuroglancer removes its preview and every later pending preview. This includes
+later edits to other skeletons in the layer. **Earlier changes and their
+Undo/Redo choices remain available.** An earlier edit that is still saving
+continues normally.
+
+For example:
+
+1. You change a node's description from “unreviewed” to “checked” and wait for Saved.
+2. You move that node from position A to position B, then add a child before
+   the move finishes saving.
+3. CATMAID rejects the move. Neuroglancer removes the move preview and cancels
+   the pending child. The node returns to A, the child disappears, and both
+   actions show Not saved. The saved description is still “checked”.
+4. After correcting the cause of the error, you can use Undo to restore the
+   description to “unreviewed”, or continue with a new edit.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Action that was rejected
+     - What happens to Undo/Redo after successful recovery
+   * - A new edit
+     - That edit and later actions leave history. Earlier Undo choices remain,
+       and any Redo choices cleared by the rejected edit return. Redo does not
+       retry the failed new edit.
+   * - Undo
+     - The original edit returns to Undo. After correcting the cause, you can
+       try Undo again.
+   * - Redo
+     - The original edit returns to Redo. After correcting the cause, you can
+       try Redo again.
+
+Read the error, inspect the remaining skeleton, and correct the problem before
+continuing. Canceled actions are not retried automatically. Recent activity
+keeps its record of completed actions; it does not determine which edits can
+be undone or redone. If recovery requires a reload, the entire Undo/Redo history
+is cleared instead.
+
+**If Reload required is present**, use **Reload page** in the alert. Show the
+affected skeletons in **Seg**, then hover over or select their nodes to check
+what CATMAID saved before repeating an action. Selection, navigation, and
+inspection remain available while editing is blocked. Replacing the layer
+does not clear the alert; Neuroglancer does not automatically retry or undo
+an uncertain result.
+
+Before you leave
+----------------
+
+Wait until Pending edits is empty and check Recent activity for failures
+before closing the page, reloading, or removing the layer. An empty pending
+list alone does not mean every action succeeded.
+
+Closing or replacing the layer discards actions that have not started saving.
+Requests already sent may still change CATMAID. Removing the layer is therefore
+not a way to undo an edit. After an unexpected interruption, show the affected
+skeletons and check the saved result before continuing.
 
 .. _skeleton-editing-sources:
 
-Supported Sources
------------------
+Source setup
+------------
 
-Skeleton editing is currently only supported on CATMAID data sources. See the
-CATMAID documentation to set up a CATMAID server. At minimum you will need:
+If your writable CATMAID layer is already configured, use it as described above.
+This section covers connecting a source and configuring its display.
 
-- CATMAID ``2026.05.06.dev11+g...`` or later by git-describe semantics.
-- A CATMAID project
-- A linked project stack
-- CATMAID read permissions for anonymous access or for the account associated
-  with a personal API token
-- CATMAID edit permissions for that account when editing is enabled
-- Cross-origin access for the Neuroglancer origin and authorization headers
-- Skeletons initialised for that project
+CATMAID requirements
+~~~~~~~~~~~~~~~~~~~~
 
-The project stack dimensions and resolution are used to inform the bounding box
-of the data in neuroglancer as their product. Skeletons in CATMAID are in 1 nm
-units.
+Skeleton editing currently supports CATMAID sources. The server needs:
 
-The linked CATMAID stack may define spatial skeleton metadata. When present,
-Neuroglancer uses this metadata to build the spatially indexed skeleton source
-required for editing. Add a ``spatial`` array to the stack metadata, with one
-entry for each spatial index level:
+- CATMAID ``2026.05.06.dev11+g...`` or later by git-describe version ordering.
+- A CATMAID project and a linked project stack.
+- CATMAID read permissions for anonymous access or a personal API token.
+- CATMAID edit permissions for the token account when editing is enabled.
+- Cross-origin access for the Neuroglancer origin and authorization headers.
+- Skeletons initialized for that project.
+
+CATMAID coordinates are in nanometers. Neuroglancer uses the linked stack's
+dimensions multiplied by its resolution to determine the project bounds.
+
+The linked stack can define spatial skeleton metadata, with one entry in
+``spatial`` for each index level:
 
 .. code-block:: json
 
@@ -48,17 +499,14 @@ entry for each spatial index level:
      "read_only": false
    }
 
-``chunk_size`` is specified in CATMAID project-space nanometers. ``limit`` is
-the maximum node count expected for that spatial level and is required. A
-``limit`` of ``0`` is allowed only on the finest spatial level and means that
-level is complete/unlimited.
-``cache_provider`` is optional and, when present, is passed to CATMAID node-list
-requests. If ``read_only`` is not set to ``false``, Neuroglancer treats the
-source as read-only: skeletons can be inspected, but edit actions are disabled.
+``chunk_size`` uses CATMAID project-space nanometers. Each level requires a
+``limit``, the maximum expected node count. A limit of ``0`` means complete,
+unlimited results and is allowed only on the finest level. The optional
+``cache_provider`` is passed to CATMAID's node-list requests.
 
-If ``spatial`` is absent or empty, Neuroglancer derives a default chunk size
-from the CATMAID project-space bounds and uses ``limit: 0`` for the generated
-spatial level.
+Set ``read_only`` to ``false`` to allow editing. Otherwise the source supports
+inspection only. If ``spatial`` is absent or empty, Neuroglancer derives a
+default chunk size from the project bounds and uses ``limit: 0``.
 
 After setting this up, enter
 ``catmaid:<your-catmaid-server-url>/<your-catmaid-project-id>`` as a data
@@ -70,122 +518,26 @@ current browser tab. Python-hosted viewers can configure the token with
 
 .. _skeleton-editing-subsources:
 
-Layer Subsources
-----------------
+Layer subsources and display
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The data source exposes a single spatially indexed skeleton subsource, which is
 required for editing.
+The **Seg** tab controls skeleton visibility by ID or by an assigned label.
 
-In the **Render** tab you can adjust:
+Showing a skeleton requests its complete nodes and details. Allow that request
+to finish. Otherwise, the viewport may show only the points supplied by the
+spatial index for the current view. **Spacing (cross section)** and
+**Spacing (projection)** control the selected index level.
 
-- **Opacity (3d)** — controls the opacity of fully loaded, visible skeletons.
-- **Hidden Opacity (3d)** — controls the opacity of hidden skeletons, which represent
-  spatially indexed indicators of nodes in space.
+In **Render**, **Opacity (3d)** controls fully loaded visible skeletons.
+**Hidden Opacity (3d)** controls the spatially indexed indicators for hidden
+skeletons.
 
-When you make a skeleton visible, a full fetch is triggered and you are guaranteed
-to see all nodes and details of that skeleton. Otherwise you see whatever is
-provided by the spatial index level selected for the current view. The selected
-level is controlled via the **Spacing (cross section)** and
-**Spacing (projection)** settings.
+.. _skeleton-editing-find-path:
 
-The **Seg** tab works as normal for a segmentation layer, allowing you to set the
-visibility of segments/skeletons by their ID or by label if one has been assigned.
-
-.. _skeleton-editing-tab:
-
-Skeleton Tab
-------------
-
-The **Skeleton** tab is used for editing and viewing information about skeletons.
-It is only available for CATMAID sources with an active spatially indexed skeleton
-subsource, and only visible skeletons appear here. If the CATMAID stack metadata
-does not set ``read_only`` to ``false``, inspection remains available but edit
-actions are disabled.
-
-You can find a node by ID or by description, and filter nodes to show only:
-
-- Leaves
-- Virtual ends
-- True ends
-- Nodes with descriptions
-
-You can also pick a subset of the visible skeletons to display information about in this menu.
-
-Skeleton Navigation
-~~~~~~~~~~~~~~~~~~~
-
-The skeleton tab provides buttons for navigating through the skeleton tree:
-
-- Go to the root
-- Go to the start of the current branch
-- Go to the end of the current branch
-- Cycle through nodes at the current level
-- Go to the parent or child of the current node (if there are multiple children,
-  one is chosen at random)
-- Go to the nearest node that is a leaf but not marked as a true end
-
-You can also interact with nodes in the details viewer by right-clicking to move
-to a node, or left-clicking to select it and move to it.
-
-.. _skeleton-node-types:
-
-Node Types
-----------
-
-Nodes use symbols to indicate their type:
-
-- **Root** — the root node of the skeleton
-- **Regular node** — an interior node along a branch
-- **Branch point** — a node with more than one child
-- **Virtual end** — a leaf node that has not been marked as a true end
-- **True end** — a leaf node manually marked by a reviewer as the end of a branch
-
-You can toggle a node between virtual end and true end by clicking its type icon
-in the skeleton tab table. This only applies to visible segments.
-
-.. _skeleton-node-properties:
-
-Node Properties
----------------
-
-To edit the detailed properties of a node, first make the segment visible, then
-select the node by either:
-
-- Right-clicking on it in the viewer while holding :kbd:`Control`
-- Left-clicking on it in the skeleton tab table
-
-Once a node is selected, you can:
-
-- Delete the node *
-- Change the node type *
-- Make the node the root of the skeleton *
-- Change the radius
-- Change the confidence level
-- Add or edit a free-text description
-
-.. note::
-   * These actions can also be performed from the skeleton tab table.
-
-.. _skeleton-editing-tools:
-
-Editing Tools
--------------
-
-Structural edits are made with the **Edit** tool in the skeleton tab. The
-skeleton tab also provides a **Find Path** inspection tool for spatially indexed
-skeletons. Unlike the Edit tool, **Find Path** is available for read-only
-sources.
-
-To bind a tool, click on it in the UI and hold down a key. To activate the tool,
-press :kbd:`Shift` + the bound key. For example, if you bind :kbd:`E` to the Edit
-tool, pressing :kbd:`Shift+E` activates it.
-
-An important concept throughout editing is the *selected node*. The selected node
-is highlighted with a border in the viewer, highlighted in the skeleton tab table,
-and its details are shown in the selection details panel.
-
-Find Path Tool
-~~~~~~~~~~~~~~
+Find Path
+---------
 
 Click **Find Path** in the skeleton tab, then left-click the source node followed
 by the target node. You may also hold :kbd:`Shift` while selecting. Both
@@ -211,100 +563,3 @@ Edit tool.
 The spatial skeleton tool supports one active spatial skeleton datasource per
 segmentation layer. Switching Find Path to another datasource while the layer
 is loaded is not supported. Find Path state is saved with its datasource.
-
-Edit Tool
-~~~~~~~~~
-
-While the Edit tool is active, a plain left click never rotates or pans the
-view. Navigate with the middle mouse button, or hold :kbd:`Control` (:kbd:`Cmd`
-on macOS) with the left mouse button as a trackpad-friendly alternative. The
-status bar lists the actions available in the current state.
-
-- **Select a node** — left-click it.
-- **Move a node** — left-click a node and drag it to the new location. This does
-  not use picking to snap to nearby objects.
-- **Add a child node** — select an existing node, then :kbd:`Shift`-click where
-  you want to place the new node. The new node is added as a child of the
-  selected node. A node marked as a true end cannot be given a child until the
-  true end mark is cleared.
-- **Show a skeleton** — double-click a node of a non-visible skeleton to make the
-  skeleton visible.
-- **Pin a node selection** — :kbd:`Control` + right-click a node.
-
-The remaining edits are momentary modes. Hold the mode key, click in the viewer,
-and release the key to return to normal editing. While a mode key is held the
-cursor changes and the status bar describes what the next click does. A mode
-stays active for as long as the key is held, so several edits of the same kind
-can be made in one hold.
-
-- **New skeleton** — hold :kbd:`N` and click in empty space to add a root node
-  with no parent. One skeleton is created per key hold.
-- **Delete a node** — hold :kbd:`D` and click the node to delete.
-- **Merge skeletons** — hold :kbd:`M`; see :ref:`skeleton-editing-merge`.
-- **Insert a node** — hold :kbd:`I`; see :ref:`skeleton-editing-insert`.
-- **Split a skeleton** — hold :kbd:`S`; see :ref:`skeleton-editing-split`.
-
-For CATMAID sources, adding child nodes is optimistic by default: the node is
-previewed locally before CATMAID confirms it. If CATMAID rejects the request,
-the preview is rolled back. Starting a new skeleton uses the normal
-command-history path because CATMAID does not perform parent state checks for
-that request. The **Source** tab includes a **Use CATMAID state checks** checkbox
-below the source URL for the non-optimistic mode that sends CATMAID revision
-state and waits for server confirmation. The **Skeleton** tab shows a compact
-optimistic edit queue debug panel while optimistic mode is enabled or queued
-actions are present.
-
-.. _skeleton-editing-merge:
-
-Merging Skeletons
-~~~~~~~~~~~~~~~~~
-
-Hold :kbd:`M` and click the "from" node first, then the "to" node. You must
-merge from a visible skeleton, but the "to" node may belong to a non-visible
-skeleton. Clicking a second node on the same skeleton as the "from" node moves
-the "from" node there instead of merging.
-The surviving skeleton ID will be the ID of the skeleton containing the "from"
-node. The only exception to this is if the CATMAID skeleton has annotations, and one of the skeletons is annotated as ``stable`` -- in this case, the surviving skeleton ID is from the one that was annotated as ``stable``. It is not currently possible to set these annotations within neuroglancer.
-
-.. _skeleton-editing-insert:
-
-Inserting a Node
-~~~~~~~~~~~~~~~~
-
-Hold :kbd:`I` and click two directly connected nodes: one must be the parent of
-the other. The order of the two clicks does not matter. A new node is inserted
-at the midpoint of the edge between them; it becomes a child of the parent node
-and the new parent of the child node.
-
-Because a node can have only one parent, two nodes that are not directly
-connected are rejected and nothing is changed. The first node you clicked stays
-selected so you can pick one of its neighbours instead. Both nodes must belong
-to a visible skeleton.
-
-.. _skeleton-editing-split:
-
-Splitting a Skeleton
-~~~~~~~~~~~~~~~~~~~~
-
-Hold :kbd:`S` and click the node at which to split. The selected node
-is included in the newly created skeleton, not the surviving original skeleton.
-The edge between the selected node and its parent is deleted, and the selected
-node becomes the root of the new skeleton. A split always produces exactly two
-skeletons, regardless of whether the selected node is a branch point or a leaf.
-You can only split visible skeletons.
-
-.. _skeleton-editing-undo:
-
-Undo and Redo
--------------
-
-The skeleton tab provides **Undo** and **Redo** buttons. When any operation is
-performed, its inverse is stored in the history. Note that the inverse of an
-atomic operation is not necessarily atomic: for example, undoing a merge involves
-a split followed by a reroot. Without the reroot step, the split skeleton could
-end up with a different root than it had before the merge.
-
-Undo does not restore the skeleton ID to its pre-operation value, so a merge
-followed by an undo will result in one of the skeletons having a new ID compared
-to before the merge (specifically, the skeleton that did not "survive" the
-original merge).

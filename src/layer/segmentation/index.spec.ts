@@ -49,6 +49,98 @@ const { SegmentSelectionState } = await import(
   "#src/segmentation_display_state/frontend.js"
 );
 
+const { TrackableDataSelectionState } = await import("#src/layer/index.js");
+const { CatmaidSpatialSkeletonEditCommands } = await import(
+  "#src/datasource/catmaid/spatial_skeleton_commands.js"
+);
+const { SpatialSkeletonState } = await import(
+  "#src/skeleton/spatial_skeleton_manager.js"
+);
+const { executeSpatialSkeletonDeleteNode } = await import(
+  "#src/skeleton/commands.js"
+);
+
+function makeQueuedSelectionLayer(pin = true) {
+  const layer = Object.create(SegmentationUserLayer.prototype);
+  const selectionState: any = {
+    value: undefined,
+    pin: new WatchableValue(pin),
+    coordinateSpace: { value: {} },
+    location: { visible: true },
+    captureSingleLayerState:
+      TrackableDataSelectionState.prototype.captureSingleLayerState,
+  };
+  const state = new SpatialSkeletonState();
+  const group = {
+    visibleSegments: new Set<bigint>(),
+    temporaryVisibleSegments: new Set<bigint>(),
+    selectedSegments: new Set<bigint>(),
+    useTemporaryVisibleSegments: { value: false },
+  };
+  Object.defineProperty(layer, "manager", {
+    value: { root: { selectionState } },
+  });
+  const commands = new CatmaidSpatialSkeletonEditCommands({
+    getClient: () => client as any,
+  });
+  const client = {
+    baseUrl: "https://catmaid.example.test",
+    projectId: 1,
+    addNode: vi.fn(),
+    deleteNode: vi.fn(),
+    getSkeleton: vi.fn(async () => []),
+  };
+  const source = {
+    readonly: false,
+    optimisticEditing: commands.optimisticEditing,
+    addNodesCommand: commands.addNodesCommand,
+    deleteNodesCommand: commands.deleteNodesCommand,
+    getSkeleton: client.getSkeleton,
+  };
+  const skeletonLayer = {
+    source,
+    getNode: (id: number) => state.getCachedNode(id),
+    retainOverlaySegment: vi.fn(),
+    remapOverlaySegments: vi.fn(),
+  };
+  Object.assign(layer, {
+    spatialSkeletonState: state,
+    displayState: {
+      segmentationGroupState: { value: group },
+      segmentSelectionState: { baseValue: 999n },
+    },
+    selectedSpatialSkeletonNodeInfo: new WatchableValue(undefined),
+    getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
+    initializeSelectionState: (value: any) => {
+      value.nodeId = undefined;
+      value.value = undefined;
+    },
+    selectSegment: (id: bigint, pin: boolean) =>
+      selectionState.captureSingleLayerState(
+        layer,
+        (value: any) => {
+          value.value = id;
+          return true;
+        },
+        pin,
+      ),
+    selectSpatialSkeletonNode: (nodeId: number, pin: boolean, options: any) => {
+      layer.selectedSpatialSkeletonNodeInfo.value = { nodeId, ...options };
+      (layer as any).captureSpatialSkeletonSelectionState((value: any) => {
+        value.nodeId = String(nodeId);
+        value.value = BigInt(options.segmentId);
+        return true;
+      }, pin);
+    },
+    clearSpatialSkeletonNodeSelection: (pin: boolean) => {
+      layer.selectedSpatialSkeletonNodeInfo.value = undefined;
+      (layer as any).captureSpatialSkeletonSelectionState(() => true, pin);
+    },
+    moveViewToSpatialSkeletonNodePosition: vi.fn(),
+  });
+  return { layer, selectionState, state, group, client, skeletonLayer };
+}
+
 function makeEditableSpatialSkeletonSource(
   options: {
     confidenceConfiguration?: boolean;
@@ -67,8 +159,10 @@ function makeEditableSpatialSkeletonSource(
   });
   return {
     readonly: false,
+    optimisticEditing: {
+      createDriver: vi.fn(),
+    },
     addNodesCommand: makeCommand(SpatialSkeletonActions.addNodes),
-    insertNodesCommand: makeCommand(SpatialSkeletonActions.insertNodes),
     moveNodesCommand: makeCommand(SpatialSkeletonActions.moveNodes),
     deleteNodesCommand: makeCommand(SpatialSkeletonActions.deleteNodes),
     editNodeDescriptionCommand: makeCommand(
@@ -85,10 +179,6 @@ function makeEditableSpatialSkeletonSource(
     getSkeleton: async () => [],
     fetchNodes: async () => [],
     getSpatialIndexMetadata: async () => null,
-    getSkeletonRootNode: async () => ({
-      nodeId: 1,
-      position: [0, 0, 0],
-    }),
     ...(options.confidenceConfiguration !== true
       ? {}
       : {
@@ -115,22 +205,21 @@ function makeSpatialSkeletonActionGateLayer(options: {
   visibleChunksLoaded?: boolean;
   visibleChunksNeeded?: number;
   visibleChunksAvailable?: number;
-  commandBusy?: boolean;
-  canQueueOptimisticAction?: (action: string) => boolean;
+  fatalState?: object;
+  driverSetupError?: unknown;
 }) {
   return Object.assign(Object.create(SegmentationUserLayer.prototype), {
     getSpatiallyIndexedSkeletonLayer: () =>
       makeSpatialSkeletonLayerWithSource(options.source),
     spatialSkeletonState: {
-      commandHistory: {
-        isBusy: new WatchableValue(options.commandBusy ?? false),
-      },
-      hasUnconfirmedOptimisticEdits: vi.fn(() => false),
-      ...(options.canQueueOptimisticAction === undefined
-        ? {}
-        : { canQueueOptimisticAction: options.canQueueOptimisticAction }),
+      ensureOptimisticEditingEngine: vi.fn(() => {
+        if (options.driverSetupError !== undefined) {
+          throw options.driverSetupError;
+        }
+        return {};
+      }),
+      getOptimisticEditFatalState: vi.fn(() => options.fatalState),
     },
-    optimisticSkeletonEdits: new WatchableValue(true),
     spatialSkeletonVisibleChunksLoaded: new WatchableValue(
       options.visibleChunksLoaded ?? true,
     ),
@@ -185,7 +274,228 @@ describe("layer/segmentation spatial skeleton chunk stats", () => {
   });
 });
 
+describe("layer/segmentation spatial skeleton source teardown", () => {
+  it("disposes the queue before clearing its inspected snapshot cache", () => {
+    const order: string[] = [];
+    const layer = Object.assign(
+      Object.create(SegmentationUserLayer.prototype),
+      {
+        renderLayers: [],
+        spatialSkeletonState: {
+          updateCommandHistorySource: vi.fn(() => order.push("dispose")),
+          clearInspectedSkeletonCache: vi.fn(() => order.push("clear")),
+        },
+      },
+    );
+
+    layer.updateSpatialSkeletonSourceState();
+
+    expect(order).toEqual(["dispose", "clear"]);
+    expect(
+      layer.spatialSkeletonState.updateCommandHistorySource,
+    ).toHaveBeenCalledWith(undefined);
+  });
+});
+
+describe("layer/segmentation optimistic projection UI hints", () => {
+  it("migrates persistent, temporary, selected, and current identities together", () => {
+    const group = {
+      visibleSegments: new Set([100n]),
+      temporaryVisibleSegments: new Set([100n]),
+      selectedSegments: new Set([100n]),
+    };
+    const selectedSpatialSkeletonNodeInfo = new WatchableValue<any>({
+      nodeId: 10,
+      segmentId: 100,
+      position: [1, 2, 3],
+    });
+    const selectSpatialSkeletonNode = vi.fn();
+    const retainOverlaySegment = vi.fn();
+    const remapOverlaySegments = vi.fn();
+    const remapPendingNodePositions = vi.fn();
+    const layer = Object.assign(
+      Object.create(SegmentationUserLayer.prototype),
+      {
+        displayState: {
+          segmentationGroupState: { value: group },
+          segmentSelectionState: { baseValue: 100n },
+        },
+        selectedSpatialSkeletonNodeInfo,
+        selectSpatialSkeletonNode,
+        selectSegment: vi.fn(),
+        clearSpatialSkeletonNodeSelection: vi.fn(),
+        spatialSkeletonState: {
+          getCachedNode: vi.fn(),
+          remapPendingNodePositions,
+        },
+        managedLayer: {
+          manager: { root: { selectionState: { pin: { value: true } } } },
+        },
+        getSpatiallyIndexedSkeletonLayer: () => ({
+          retainOverlaySegment,
+          remapOverlaySegments,
+        }),
+      },
+    );
+
+    layer.applySpatialSkeletonProjectionUiHints({
+      nodeIdRemappings: new Map([[10, 20]]),
+      segmentIdRemappings: new Map([[100, 200]]),
+      segmentVisibility: [],
+      retainSegmentIds: [200],
+    });
+
+    for (const set of [
+      group.visibleSegments,
+      group.temporaryVisibleSegments,
+      group.selectedSegments,
+    ]) {
+      expect(set.has(100n)).toBe(false);
+      expect(set.has(200n)).toBe(true);
+    }
+    expect(selectedSpatialSkeletonNodeInfo.value).toEqual({
+      nodeId: 20,
+      segmentId: 200,
+      position: [1, 2, 3],
+    });
+    expect(selectSpatialSkeletonNode).not.toHaveBeenCalled();
+    expect(remapPendingNodePositions).toHaveBeenCalledWith(new Map([[10, 20]]));
+    expect(remapOverlaySegments).toHaveBeenCalledWith(new Map([[100, 200]]));
+    expect(retainOverlaySegment).toHaveBeenCalledWith(200);
+  });
+
+  it.each([true, false])(
+    "remaps a stored segment-only selection while preserving pin %s, position, and other layers",
+    (pin) => {
+      const { layer, selectionState } = makeQueuedSelectionLayer(pin);
+      const otherEntry = { layer: {}, state: { value: 42n } };
+      const position = new Float32Array([1, 2, 3]);
+      selectionState.value = {
+        layers: [{ layer, state: { value: 4294967290n } }, otherEntry],
+        position,
+      };
+      layer.applySpatialSkeletonProjectionUiHints({
+        nodeIdRemappings: new Map(),
+        segmentIdRemappings: new Map([[4294967290, 114]]),
+        segmentVisibility: [],
+        retainSegmentIds: [],
+      });
+      expect(selectionState.value.layers[0].state.value).toBe(114n);
+      expect(selectionState.value.layers[1]).toBe(otherEntry);
+      expect(selectionState.value.position).toBe(position);
+      expect(selectionState.pin.value).toBe(pin);
+    },
+  );
+
+  it.each([true, false])(
+    "applies restored node hints while preserving pin %s",
+    (pin) => {
+      const { layer, selectionState } = makeQueuedSelectionLayer(pin);
+      layer.applySpatialSkeletonProjectionUiHints({
+        nodeIdRemappings: new Map(),
+        segmentIdRemappings: new Map(),
+        segmentVisibility: [
+          { segmentId: 87, visible: true, deselect: false, select: "preserve" },
+        ],
+        selectedNode: {
+          kind: "select",
+          nodeId: 725,
+          segmentId: 87,
+          pin: "preserve",
+          moveView: false,
+        },
+        retainSegmentIds: [87],
+      });
+      expect(selectionState.value.layers[0].state).toEqual({
+        nodeId: "725",
+        value: 87n,
+      });
+      expect(selectionState.pin.value).toBe(pin);
+    },
+  );
+
+  it("restores visibility and the pinned node after a final-node rejection through the real queue", async () => {
+    const { layer, state, selectionState, group, client } =
+      makeQueuedSelectionLayer();
+    const node = {
+      nodeId: 725,
+      segmentId: 87,
+      position: new Float32Array([4, 5, 6]),
+    };
+    state.replaceCachedSegmentSnapshots([[87, [node]]]);
+    group.visibleSegments.add(87n);
+    layer.selectSpatialSkeletonNode(node.nodeId, true, node);
+    let rejectDelete!: (error: Error) => void;
+    client.deleteNode.mockImplementation(
+      () =>
+        new Promise((_, reject) => {
+          rejectDelete = reject;
+        }),
+    );
+    const execution = executeSpatialSkeletonDeleteNode(layer, node);
+    await execution;
+    for (let i = 0; i < 20 && rejectDelete === undefined; i++)
+      await Promise.resolve();
+    expect(selectionState.value.layers[0].state.nodeId).toBeUndefined();
+    expect(group.visibleSegments.has(87n)).toBe(false);
+    // A plain provider rejection must be classified as definitive, as HTTP 409 is.
+    const { HttpError } = await import("#src/util/http_request.js");
+    rejectDelete(
+      new HttpError(
+        "https://catmaid.example.test/1/treenode/delete",
+        409,
+        "Conflict",
+      ),
+    );
+    expect(await execution.settled).toMatchObject({
+      outcome: "unchanged",
+      reason: "rejected",
+    });
+    expect(selectionState.value.layers[0].state).toEqual({
+      nodeId: "725",
+      value: 87n,
+    });
+    expect(group.visibleSegments.has(87n)).toBe(true);
+    expect(state.getCachedNode(725)).toMatchObject(node);
+    expect(
+      state.spatialSkeletonPresentation.value.removedSegmentIds,
+    ).not.toContain(87);
+    expect(state.getOptimisticEditFatalState()).toBeUndefined();
+    state.dispose();
+  });
+});
+
 describe("layer/segmentation spatial skeleton action gating", () => {
+  it("blocks every edit after Reload required but keeps inspection available", () => {
+    const layer = makeSpatialSkeletonActionGateLayer({
+      source: makeEditableSpatialSkeletonSource({ rerootCommand: true }),
+      visibleChunksLoaded: false,
+      fatalState: {
+        reason: "authority-indeterminate",
+        authority: "indeterminate",
+      },
+    });
+
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason(
+        SpatialSkeletonActions.moveNodes,
+        { requireVisibleChunks: true },
+      ),
+    ).toBe("Reload the page before making more skeleton edits.");
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason([
+        SpatialSkeletonActions.inspect,
+        SpatialSkeletonActions.splitSkeletons,
+      ]),
+    ).toBe("Reload the page before making more skeleton edits.");
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason(
+        SpatialSkeletonActions.inspect,
+        { requireVisibleChunks: false },
+      ),
+    ).toBeUndefined();
+  });
+
   it("does not require a specific grid level for skeleton actions", () => {
     const layer = makeSpatialSkeletonActionGateLayer({
       source: makeEditableSpatialSkeletonSource({
@@ -214,63 +524,18 @@ describe("layer/segmentation spatial skeleton action gating", () => {
     ).toBeUndefined();
   });
 
-  it("blocks edit actions while a skeleton edit is in flight", () => {
-    const layer = makeSpatialSkeletonActionGateLayer({
-      source: makeEditableSpatialSkeletonSource({
-        rerootCommand: true,
-      }),
-      commandBusy: true,
-    });
-
-    expect(
-      layer.getSpatialSkeletonActionsDisabledReason(
-        SpatialSkeletonActions.moveNodes,
-      ),
-    ).toBe("Wait for the current skeleton edit to finish.");
-    expect(
-      layer.getSpatialSkeletonActionsDisabledReason([
-        SpatialSkeletonActions.inspect,
-        SpatialSkeletonActions.addNodes,
-      ]),
-    ).toBe("Wait for the current skeleton edit to finish.");
-    expect(
-      layer.getSpatialSkeletonActionsDisabledReason(
-        SpatialSkeletonActions.inspect,
-      ),
-    ).toBeUndefined();
-    expect(
-      layer.getSpatialSkeletonActionsDisabledReason(
-        SpatialSkeletonActions.moveNodes,
-        {
-          ignoreCommandBusy: true,
-        },
-      ),
-    ).toBeUndefined();
-  });
-
-  it("allows queued optimistic edits and blocks stateful edits while optimistic skeleton edits are unconfirmed", () => {
+  it("allows every factory-advertised edit and inspection", () => {
     const layer = makeSpatialSkeletonActionGateLayer({
       source: makeEditableSpatialSkeletonSource({
         confidenceConfiguration: true,
         rerootCommand: true,
       }),
     });
-    layer.spatialSkeletonState.hasUnconfirmedOptimisticEdits.mockReturnValue(
-      true,
-    );
 
     for (const action of [
       SpatialSkeletonActions.addNodes,
       SpatialSkeletonActions.moveNodes,
       SpatialSkeletonActions.deleteNodes,
-    ]) {
-      expect(
-        layer.getSpatialSkeletonActionsDisabledReason(action),
-      ).toBeUndefined();
-    }
-
-    for (const action of [
-      SpatialSkeletonActions.insertNodes,
       SpatialSkeletonActions.mergeSkeletons,
       SpatialSkeletonActions.splitSkeletons,
       SpatialSkeletonActions.reroot,
@@ -279,72 +544,22 @@ describe("layer/segmentation spatial skeleton action gating", () => {
       SpatialSkeletonActions.editNodeRadius,
       SpatialSkeletonActions.editNodeConfidence,
     ]) {
-      expect(layer.getSpatialSkeletonActionsDisabledReason(action)).toBe(
-        "Wait for pending optimistic skeleton edits to finish.",
-      );
+      expect(
+        layer.getSpatialSkeletonActionsDisabledReason(action),
+      ).toBeUndefined();
     }
-  });
-
-  it("allows optimistic merge and split actions when the queue advertises support", () => {
-    const canQueueOptimisticAction = vi.fn(
-      (action: string) =>
-        action === SpatialSkeletonActions.mergeSkeletons ||
-        action === SpatialSkeletonActions.splitSkeletons,
-    );
-    const layer = makeSpatialSkeletonActionGateLayer({
-      source: makeEditableSpatialSkeletonSource({
-        confidenceConfiguration: true,
-        rerootCommand: true,
-      }),
-      canQueueOptimisticAction,
-    });
-    layer.spatialSkeletonState.hasUnconfirmedOptimisticEdits.mockReturnValue(
-      true,
-    );
 
     expect(
       layer.getSpatialSkeletonActionsDisabledReason(
-        SpatialSkeletonActions.mergeSkeletons,
+        SpatialSkeletonActions.inspect,
       ),
     ).toBeUndefined();
     expect(
-      layer.getSpatialSkeletonActionsDisabledReason(
-        SpatialSkeletonActions.splitSkeletons,
-      ),
+      layer.getSpatialSkeletonActionsDisabledReason([
+        SpatialSkeletonActions.inspect,
+        SpatialSkeletonActions.addNodes,
+      ]),
     ).toBeUndefined();
-    expect(
-      layer.getSpatialSkeletonActionsDisabledReason(
-        SpatialSkeletonActions.reroot,
-      ),
-    ).toBe("Wait for pending optimistic skeleton edits to finish.");
-    expect(canQueueOptimisticAction).toHaveBeenCalledWith(
-      SpatialSkeletonActions.mergeSkeletons,
-    );
-    expect(canQueueOptimisticAction).toHaveBeenCalledWith(
-      SpatialSkeletonActions.splitSkeletons,
-    );
-    expect(canQueueOptimisticAction).toHaveBeenCalledWith(
-      SpatialSkeletonActions.reroot,
-    );
-  });
-
-  it("blocks merge and split when optimistic queue support is unavailable", () => {
-    const layer = makeSpatialSkeletonActionGateLayer({
-      source: makeEditableSpatialSkeletonSource(),
-      canQueueOptimisticAction: () => false,
-    });
-    layer.spatialSkeletonState.hasUnconfirmedOptimisticEdits.mockReturnValue(
-      true,
-    );
-
-    for (const action of [
-      SpatialSkeletonActions.mergeSkeletons,
-      SpatialSkeletonActions.splitSkeletons,
-    ]) {
-      expect(layer.getSpatialSkeletonActionsDisabledReason(action)).toBe(
-        "Wait for pending optimistic skeleton edits to finish.",
-      );
-    }
   });
 
   it("still reports visible chunk loading when requested", () => {
@@ -380,6 +595,26 @@ describe("layer/segmentation spatial skeleton action gating", () => {
     ).toBe(
       "The active spatial skeleton source does not support skeleton rerooting.",
     );
+  });
+
+  it("treats an invalid datasource driver registration as inspect-only", () => {
+    const layer = makeSpatialSkeletonActionGateLayer({
+      source: makeEditableSpatialSkeletonSource(),
+      driverSetupError: new Error("invalid registration"),
+    });
+
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason(
+        SpatialSkeletonActions.moveNodes,
+      ),
+    ).toBe(
+      "The active spatial skeleton source does not support node movement.",
+    );
+    expect(
+      layer.getSpatialSkeletonActionsDisabledReason(
+        SpatialSkeletonActions.inspect,
+      ),
+    ).toBeUndefined();
   });
 
   it("requires confidence configuration for confidence edit support", () => {
@@ -487,6 +722,45 @@ describe("layer/segmentation spatial skeleton selection serialization", () => {
     expect(state.nodeId).toBeUndefined();
     expect(state.value).toBeUndefined();
     expect(layer.selectionStateToJson(state, false)).toEqual({});
+  });
+
+  it("reconciles a retired skeleton ID with the selected node owner", () => {
+    const layer = Object.create(SegmentationUserLayer.prototype);
+    const otherEntry = { layer: {}, state: { value: 42n } };
+    const position = new Float32Array([1, 2, 3]);
+    const selectionState = {
+      pin: { value: true },
+      value: {
+        position,
+        layers: [
+          { layer, state: { nodeId: "210701784", value: 6369475n } },
+          otherEntry,
+        ],
+      },
+    };
+    Object.defineProperty(layer, "manager", {
+      value: { root: { selectionState } },
+    });
+    layer.getSpatiallyIndexedSkeletonLayer = () => undefined;
+    const getCachedNode = vi.fn(() => ({
+      nodeId: 210701784,
+      segmentId: 6368977,
+    }));
+    layer.spatialSkeletonState = { getCachedNode };
+    layer.reconcileSpatialSkeletonSelectionOwnership();
+    expect(selectionState.value.layers[0].state).toEqual({
+      nodeId: "210701784",
+      value: 6368977n,
+    });
+    expect(selectionState.value.layers[1]).toBe(otherEntry);
+    expect(selectionState.value.position).toBe(position);
+    expect(selectionState.pin.value).toBe(true);
+    const reconciled = selectionState.value;
+    layer.reconcileSpatialSkeletonSelectionOwnership();
+    expect(selectionState.value).toBe(reconciled);
+    getCachedNode.mockReturnValue(undefined as any);
+    layer.reconcileSpatialSkeletonSelectionOwnership();
+    expect(selectionState.value).toBe(reconciled);
   });
 
   it("captures and clears spatial skeleton nodes using nodeId and segment value", () => {
@@ -640,6 +914,27 @@ describe("layer/segmentation spatial skeleton selection serialization", () => {
     expect(parent.textContent).not.toContain("Unavailable");
     expect(parent.textContent).not.toContain("Radius");
     expect(parent.textContent).not.toContain("Confidence");
+
+    (layer.spatialSkeletonState as any).spatialSkeletonPresentation = {
+      value: { provisionalNodeIds: [22242672] },
+    };
+    const provisionalParent = document.createElement("div");
+    expect(
+      (layer as any).displaySpatialSkeletonSelection(
+        state,
+        provisionalParent,
+        context,
+      ),
+    ).toBe(true);
+    expect(provisionalParent.textContent).toContain("Preview");
+    expect(provisionalParent.textContent).not.toContain("22242672");
+    expect(
+      [...provisionalParent.querySelectorAll<HTMLElement>("[title]")].find(
+        (element) => element.textContent === "Preview",
+      )?.title,
+    ).toBe(
+      "Preview node. The skeleton source has not yet confirmed its permanent node ID.",
+    );
   });
 });
 
@@ -775,8 +1070,14 @@ describe("layer/segmentation spatial skeleton find-path state", () => {
         spatialSkeletonState: {
           nodeDataVersion: new WatchableValue(0),
           markNodeDataChanged: vi.fn(),
+          hasUnconfirmedOptimisticEdits: vi.fn(() => false),
         },
       },
+    );
+    const activated = { registerDisposer: vi.fn() };
+    (layer as any).registerSpatialSkeletonFindPathInvalidation(
+      context,
+      activated,
     );
     return { layer, context };
   }
@@ -834,6 +1135,20 @@ describe("layer/segmentation spatial skeleton find-path state", () => {
     layer.spatialSkeletonState.nodeDataVersion.value++;
 
     expect(active.findPathState.toJSON()).toEqual(serializedFindPathState);
+  });
+
+  it("invalidates an inactive Find Path result when the optimistic cache changes", () => {
+    const { active, inactive, layer } = makeLayerWithLoadedFindPathResult();
+    layer.spatialSkeletonState.hasUnconfirmedOptimisticEdits.mockReturnValue(
+      true,
+    );
+
+    layer.spatialSkeletonState.nodeDataVersion.value++;
+
+    expect(active.findPathState.result).toBeUndefined();
+    expect(active.findPathState.source?.nodeId).toBe(1n);
+    expect(active.findPathState.target?.nodeId).toBe(3n);
+    expect(inactive.findPathState.toJSON()).toEqual(serializedFindPathState);
   });
 
   it("invalidates only the active datasource result after a skeleton data change", () => {

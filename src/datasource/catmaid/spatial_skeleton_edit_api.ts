@@ -16,108 +16,75 @@
 
 import type {
   CatmaidAddNodeResult,
-  CatmaidDeleteNodeResult,
   CatmaidDescriptionUpdateResult,
   CatmaidInsertNodeResult,
   CatmaidMergeResult,
-  CatmaidNodeSourceStateResult,
-  CatmaidRerootResult,
-  CatmaidSkeletonEditResult,
-  CatmaidSkeletonNodeSourceStateUpdate,
   CatmaidSplitResult,
 } from "#src/datasource/catmaid/api.js";
-import type {
-  SpatiallyIndexedSkeletonNode,
-  SpatialSkeletonVector,
-} from "#src/skeleton/api.js";
+import type { SpatialSkeletonVector } from "#src/skeleton/api.js";
 
 // CATMAID owns these payloads; the generic skeleton API only promises named edit operations.
-export type CatmaidSpatialSkeletonNodeSourceStateUpdate =
-  CatmaidSkeletonNodeSourceStateUpdate;
-
-export type CatmaidSpatialSkeletonEditResult = CatmaidSkeletonEditResult;
-
 export interface CatmaidSpatialSkeletonAddNodeRequest {
-  segmentId: number;
   position: SpatialSkeletonVector;
-  parentNode?: SpatiallyIndexedSkeletonNode;
-  nocheck?: boolean;
-  signal?: AbortSignal;
+  parentNodeId?: number;
 }
 
 export type CatmaidSpatialSkeletonAddNodeResult = CatmaidAddNodeResult;
 
 export interface CatmaidSpatialSkeletonInsertNodeRequest {
-  segmentId: number;
   position: SpatialSkeletonVector;
-  parentNode: SpatiallyIndexedSkeletonNode;
-  childNodes: readonly SpatiallyIndexedSkeletonNode[];
+  parentNodeId: number;
+  childNodeIds: readonly number[];
 }
 
 export type CatmaidSpatialSkeletonInsertNodeResult = CatmaidInsertNodeResult;
 
 export interface CatmaidSpatialSkeletonMoveNodeRequest {
-  node: SpatiallyIndexedSkeletonNode;
+  nodeId: number;
   position: SpatialSkeletonVector;
-  nocheck?: boolean;
 }
-
-export type CatmaidSpatialSkeletonNodeSourceStateResult =
-  CatmaidNodeSourceStateResult;
 
 export interface CatmaidSpatialSkeletonDeleteNodeRequest {
-  node: SpatiallyIndexedSkeletonNode;
-  childNodes: readonly SpatiallyIndexedSkeletonNode[];
-  segmentNodes: readonly SpatiallyIndexedSkeletonNode[];
-  nocheck?: boolean;
+  nodeId: number;
 }
 
-export type CatmaidSpatialSkeletonDeleteNodeResult = CatmaidDeleteNodeResult;
-
 export interface CatmaidSpatialSkeletonSplitRequest {
-  node: SpatiallyIndexedSkeletonNode;
-  segmentNodes: readonly SpatiallyIndexedSkeletonNode[];
-  nocheck?: boolean;
+  nodeId: number;
 }
 
 export type CatmaidSpatialSkeletonSplitResult = CatmaidSplitResult;
 
 export interface CatmaidSpatialSkeletonMergeRequest {
-  fromNode: SpatiallyIndexedSkeletonNode;
-  toNode: SpatiallyIndexedSkeletonNode;
-  nocheck?: boolean;
+  fromNodeId: number;
+  toNodeId: number;
 }
 
 export type CatmaidSpatialSkeletonMergeResult = CatmaidMergeResult;
 
 export interface CatmaidSpatialSkeletonRerootRequest {
-  node: SpatiallyIndexedSkeletonNode;
-  segmentNodes: readonly SpatiallyIndexedSkeletonNode[];
-  nocheck?: boolean;
+  nodeId: number;
 }
 
-export type CatmaidSpatialSkeletonRerootResult = CatmaidRerootResult;
-
 export interface CatmaidSpatialSkeletonDescriptionUpdateRequest {
-  node: SpatiallyIndexedSkeletonNode;
+  nodeId: number;
   description: string;
-  isTrueEnd?: boolean;
+  isTrueEnd: boolean;
 }
 
 export type CatmaidSpatialSkeletonDescriptionUpdateResult =
   CatmaidDescriptionUpdateResult;
 
 export interface CatmaidSpatialSkeletonTrueEndUpdateRequest {
-  node: SpatiallyIndexedSkeletonNode;
+  nodeId: number;
   isTrueEnd: boolean;
 }
 
 export interface CatmaidSpatialSkeletonRadiusUpdateRequest {
-  node: SpatiallyIndexedSkeletonNode;
+  nodeId: number;
   radius: number;
 }
 
 export interface CatmaidSpatialSkeletonConfidenceUpdateRequest {
-  node: SpatiallyIndexedSkeletonNode;
+  nodeId: number;
   confidence: number;
 }

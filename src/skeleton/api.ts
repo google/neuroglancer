@@ -16,28 +16,20 @@
 
 import type {
   SpatialSkeletonAddNodesCommandFactory,
+  SpatialSkeletonInsertNodesCommandFactory,
   SpatialSkeletonDeleteNodesCommandFactory,
   SpatialSkeletonEditNodeDescriptionCommandFactory,
   SpatialSkeletonEditNodeConfidenceCommandFactory,
   SpatialSkeletonEditNodeRadiusCommandFactory,
   SpatialSkeletonEditNodeTrueEndCommandFactory,
-  SpatialSkeletonInsertNodesCommandFactory,
   SpatialSkeletonMergeSkeletonsCommandFactory,
   SpatialSkeletonMoveNodesCommandFactory,
   SpatialSkeletonRerootCommandFactory,
   SpatialSkeletonSplitSkeletonsCommandFactory,
 } from "#src/skeleton/command_factories.js";
+import type { SpatialSkeletonOptimisticEditingProvider } from "#src/skeleton/optimistic_edit/api.js";
 
 export type SpatialSkeletonVector = ArrayLike<number>;
-
-// Provider-specific node state that crosses the worker boundary must remain structured-cloneable.
-export type SpatialSkeletonSourceState =
-  | null
-  | boolean
-  | number
-  | string
-  | readonly SpatialSkeletonSourceState[]
-  | { readonly [key: string]: SpatialSkeletonSourceState };
 
 export interface SpatialSkeletonBounds {
   lowerBounds: SpatialSkeletonVector;
@@ -59,7 +51,6 @@ export interface SpatiallyIndexedSkeletonNodeBase {
   segmentId: number;
   position: SpatialSkeletonVector;
   parentNodeId?: number;
-  sourceState?: SpatialSkeletonSourceState;
 }
 
 export interface SpatiallyIndexedSkeletonNode
@@ -99,12 +90,14 @@ export interface SpatiallyIndexedSkeletonSource {
 export interface EditableSpatiallyIndexedSkeletonSource
   extends SpatiallyIndexedSkeletonSource {
   readonly readonly: false;
+  /** Required datasource adapter for the generic optimistic edit queue host. */
+  readonly optimisticEditing: SpatialSkeletonOptimisticEditingProvider;
   readonly addNodesCommand: SpatialSkeletonAddNodesCommandFactory;
+  readonly insertNodesCommand?: SpatialSkeletonInsertNodesCommandFactory;
   readonly deleteNodesCommand: SpatialSkeletonDeleteNodesCommandFactory;
   readonly moveNodesCommand: SpatialSkeletonMoveNodesCommandFactory;
   readonly splitSkeletonsCommand: SpatialSkeletonSplitSkeletonsCommandFactory;
   readonly mergeSkeletonsCommand: SpatialSkeletonMergeSkeletonsCommandFactory;
-  readonly insertNodesCommand?: SpatialSkeletonInsertNodesCommandFactory;
   readonly rerootCommand?: SpatialSkeletonRerootCommandFactory;
   readonly editNodeDescriptionCommand?: SpatialSkeletonEditNodeDescriptionCommandFactory;
   readonly editNodeTrueEndCommand?: SpatialSkeletonEditNodeTrueEndCommandFactory;

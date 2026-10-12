@@ -68,6 +68,22 @@ describe("buildSpatiallyIndexedSkeletonOverlayGeometry", () => {
     expect([...geometry.pickEdgeSegmentIds]).toEqual([11]);
   });
 
+  it("preserves the maximum provisional node id used for picking", () => {
+    const maxSignedInt32 = 0x7fff_ffff;
+    const geometry = buildSpatiallyIndexedSkeletonOverlayGeometry([
+      [
+        {
+          nodeId: maxSignedInt32,
+          segmentId: 11,
+          position: new Float32Array([1, 2, 3]),
+        },
+      ],
+    ]);
+
+    expect(geometry.nodeIds[0]).toBe(maxSignedInt32);
+    expect(geometry.nodeIds[0]).toBeGreaterThan(0);
+  });
+
   it("returns a nodeIndex map aligned with the packed vertex order", () => {
     const geometry = buildSpatiallyIndexedSkeletonOverlayGeometry([
       [
