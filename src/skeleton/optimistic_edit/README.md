@@ -285,7 +285,7 @@ The engine passes Execute drivers one datasource-neutral bundle:
 
 ```ts
 interface SpatialSkeletonQueueSegmentInput {
-  readonly segmentId: number;
+  readonly segmentId: bigint;
   readonly snapshot: CompleteSkeletonSnapshotHandle;
   readonly cacheRevision: number;
 }
