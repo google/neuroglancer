@@ -43,11 +43,6 @@ interface SpatialSkeletonViewerHoverLayerLike<TRenderLayer> {
   renderLayers: readonly TRenderLayer[];
 }
 
-export enum SpatialSkeletonSelectionRecoveryStatus {
-  PENDING = "pending",
-  FAILED = "failed",
-}
-
 const MAX_SAFE_INTEGER_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 
 function parseSelectionStateStringId(value: unknown) {
@@ -86,17 +81,6 @@ function normalizeSelectionStateValueId(value: unknown) {
   }
 }
 
-function getSelectionValueIdString(value: unknown) {
-  try {
-    const parsedValue = parseUint64(value);
-    return parsedValue > 0n && parsedValue <= MAX_SAFE_INTEGER_BIGINT
-      ? parsedValue.toString()
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 export function getNodeIdFromLayerSelectionState(
   state: { nodeId?: unknown; value?: unknown } | undefined,
 ) {
@@ -109,73 +93,10 @@ export function getSegmentIdFromLayerSelectionValue(
   return normalizeSelectionStateValueId(state?.value);
 }
 
-export function getSpatialSkeletonSelectionRecoveryKey(
-  state: { nodeId?: unknown; value?: unknown } | undefined,
-) {
-  const nodeId = getSelectionIdString(state?.nodeId);
-  const segmentId = getSelectionValueIdString(state?.value);
-  if (nodeId === undefined || segmentId === undefined) {
-    return undefined;
-  }
-  return `${nodeId}:${segmentId}`;
-}
-
-export function getSpatialSkeletonMissingSelectionDisplayState(
-  state: { nodeId?: unknown; value?: unknown } | undefined,
-  options: {
-    hasInspectableSource: boolean;
-    hasCachedSegment: boolean;
-    recoveryStatus: SpatialSkeletonSelectionRecoveryStatus | undefined;
-  },
-) {
-  const recoveryKey = getSpatialSkeletonSelectionRecoveryKey(state);
-  if (recoveryKey === undefined) {
-    return {
-      recoveryKey,
-      recoveryStatus: undefined,
-      shouldRequestRecovery: false,
-      loading: false,
-    };
-  }
-  const { hasInspectableSource, hasCachedSegment, recoveryStatus } = options;
-  if (recoveryStatus === SpatialSkeletonSelectionRecoveryStatus.PENDING) {
-    return {
-      recoveryKey,
-      recoveryStatus,
-      shouldRequestRecovery: false,
-      loading: true,
-    };
-  }
-  const shouldRequestRecovery =
-    !hasCachedSegment && hasInspectableSource && recoveryStatus === undefined;
-  return {
-    recoveryKey,
-    recoveryStatus,
-    shouldRequestRecovery,
-    loading: shouldRequestRecovery,
-  };
-}
-
 export function hasSpatialSkeletonNodeSelection(
   state: { nodeId?: unknown; value?: unknown } | undefined,
 ) {
   return getSelectionIdString(state?.nodeId) !== undefined;
-}
-
-export function getNodeIdFromViewerSelection<TLayer>(
-  selection:
-    | {
-        layers: readonly {
-          layer: TLayer;
-          state: { nodeId?: unknown; value?: unknown };
-        }[];
-      }
-    | undefined,
-  layer: TLayer,
-) {
-  return getNodeIdFromLayerSelectionState(
-    selection?.layers.find((entry) => entry.layer === layer)?.state,
-  );
 }
 
 function getSpatialSkeletonHoverInfoFromViewerHover<TRenderLayer>(

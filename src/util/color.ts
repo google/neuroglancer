@@ -142,6 +142,24 @@ export function serializeColor(x: vec3 | vec4) {
   return result;
 }
 
+// Converts an sRGB color component to the gamma-expanded ("linear") value.
+export function srgbGammaExpand(value: number) {
+  return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+}
+
+// Computes the relative luminance according to Web Content Accessibility Guidelines (WCAG) 2.0
+//
+// https://www.w3.org/TR/WCAG20/#relativeluminancedef
+//
+// @param color sRGB color
+export function getRelativeLuminance(color: ArrayLike<number>) {
+  return (
+    0.2126 * srgbGammaExpand(color[0]) +
+    0.7152 * srgbGammaExpand(color[1]) +
+    0.0722 * srgbGammaExpand(color[2])
+  );
+}
+
 // Determines whether a white background would provide higher contrast than a black background for
 // the given foreground color.
 //
@@ -151,24 +169,6 @@ export function serializeColor(x: vec3 | vec4) {
 // https://stackoverflow.com/a/3943023
 export function useWhiteBackground(foregroundColor: vec3 | vec4) {
   return getRelativeLuminance(foregroundColor) <= 0.179;
-}
-
-// Computes the relative luminance according to Web Content Accessibility Guidelines (WCAG) 2.0
-//
-// https://www.w3.org/TR/WCAG20/#relativeluminancedef
-//
-// @param color sRGB color
-export function getRelativeLuminance(color: ArrayLike<number>) {
-  // Converts an sRGB color component to the gamma-expanded ("linear") value.
-  function srgbGammaExpand(value: number) {
-    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-  }
-
-  return (
-    0.2126 * srgbGammaExpand(color[0]) +
-    0.7152 * srgbGammaExpand(color[1]) +
-    0.0722 * srgbGammaExpand(color[2])
-  );
 }
 
 export function getContrastRatio(

@@ -1003,10 +1003,10 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
         "hiddenObjectAlpha", optional(float, 0.5)
     )
     skeleton_cross_section_spacing = skeletonCrossSectionSpacing = wrapped_property(
-        "skeletonCrossSectionSpacing", optional(float, 1)
+        "skeletonCrossSectionSpacing", optional(float, 8)
     )
     skeleton_perspective_spacing = skeletonPerspectiveSpacing = wrapped_property(
-        "skeletonPerspectiveSpacing", optional(float, 1)
+        "skeletonPerspectiveSpacing", optional(float, 8)
     )
     segment_colors = segmentColors = wrapped_property(
         "segmentColors", typed_map(key_type=np.uint64, value_type=str)

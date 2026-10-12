@@ -67,7 +67,6 @@ import {
 import { getCssColor, SegmentColorHash } from "#src/segment_color.js";
 import {
   addSegmentToVisibleSets,
-  getVisibleSegments,
   removeSegmentFromVisibleSets,
 } from "#src/segmentation_display_state/base.js";
 import type {
@@ -1066,70 +1065,12 @@ export class SegmentationUserLayer extends Base {
     return true;
   }
 
-  inspectSpatialSkeletonSegment = (
-    segmentId: number,
-    options: { secondary?: boolean } = {},
-  ) => {
-    void options;
-    const normalizedSegmentId = Math.round(Number(segmentId));
-    if (
-      !Number.isSafeInteger(normalizedSegmentId) ||
-      normalizedSegmentId <= 0
-    ) {
-      return false;
-    }
-    const visibleSegments = getVisibleSegments(
-      this.displayState.segmentationGroupState.value,
-    );
-    if (visibleSegments.has(BigInt(normalizedSegmentId))) {
-      return false;
-    }
-    addSegmentToVisibleSets(
-      this.displayState.segmentationGroupState.value,
-      BigInt(normalizedSegmentId),
-    );
-    return true;
-  };
-
   setSpatialSkeletonMergeAnchor = (nodeId: number | undefined) => {
     return this.spatialSkeletonState.setMergeAnchor(nodeId);
   };
 
   clearSpatialSkeletonMergeAnchor = () => {
     return this.spatialSkeletonState.clearMergeAnchor();
-  };
-
-  ensureSpatialSkeletonInspectionFromSelection = () => {
-    const selectedNodeId = this.selectedSpatialSkeletonNodeInfo.value?.nodeId;
-    const selectedNode =
-      selectedNodeId === undefined
-        ? undefined
-        : this.spatialSkeletonState.getCachedNode(selectedNodeId);
-    const visibleSegments = getVisibleSegments(
-      this.displayState.segmentationGroupState.value,
-    );
-    if (
-      selectedNode !== undefined &&
-      visibleSegments.has(BigInt(selectedNode.segmentId))
-    ) {
-      return selectedNode.segmentId;
-    }
-    const selectedSegmentValue =
-      this.displayState.segmentSelectionState.baseValue ?? undefined;
-    const selectedSegmentId =
-      selectedSegmentValue === undefined
-        ? undefined
-        : Number(selectedSegmentValue);
-    if (
-      selectedSegmentId === undefined ||
-      !Number.isSafeInteger(selectedSegmentId) ||
-      selectedSegmentId <= 0
-    ) {
-      return undefined;
-    }
-    return visibleSegments.has(BigInt(selectedSegmentId))
-      ? selectedSegmentId
-      : undefined;
   };
 
   clearSpatialSkeletonNodeSelection = (

@@ -20,13 +20,9 @@ import type { LayerSelectedValues } from "#src/layer/index.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import {
   getNodeIdFromLayerSelectionState,
-  getNodeIdFromViewerSelection,
   getSegmentIdFromLayerSelectionValue,
-  getSpatialSkeletonMissingSelectionDisplayState,
-  getSpatialSkeletonSelectionRecoveryKey,
   hasSpatialSkeletonNodeSelection,
   SpatialSkeletonHoverState,
-  SpatialSkeletonSelectionRecoveryStatus,
 } from "#src/layer/segmentation/selection.js";
 
 describe("layer/segmentation/selection", () => {
@@ -79,60 +75,9 @@ describe("layer/segmentation/selection", () => {
       }),
     ).toBe(9);
     expect(
-      getSpatialSkeletonSelectionRecoveryKey({
-        nodeId: "23",
-        value: 7n,
-      }),
-    ).toBe("23:7");
-    expect(
       getNodeIdFromLayerSelectionState({
         nodeId: "18446744073709551615",
       }),
-    ).toBeUndefined();
-    expect(
-      getSpatialSkeletonSelectionRecoveryKey({
-        nodeId: 23,
-      }),
-    ).toBeUndefined();
-  });
-
-  it("extracts the selected node id for the matching layer", () => {
-    const layerA = {};
-    const layerB = {};
-    expect(
-      getNodeIdFromViewerSelection(
-        {
-          layers: [
-            {
-              layer: layerA,
-              state: {},
-            },
-            {
-              layer: layerB,
-              state: {
-                nodeId: "31",
-                value: 8n,
-              },
-            },
-          ],
-        },
-        layerB,
-      ),
-    ).toBe(31);
-    expect(
-      getNodeIdFromViewerSelection(
-        {
-          layers: [
-            {
-              layer: layerA,
-              state: {
-                nodeId: 4,
-              },
-            },
-          ],
-        },
-        layerB,
-      ),
     ).toBeUndefined();
   });
 
@@ -212,97 +157,5 @@ describe("layer/segmentation/selection", () => {
     expect(hoverState.value).toBeUndefined();
 
     hoverState.dispose();
-  });
-
-  it("requests selection recovery only when a full-segment fetch can help", () => {
-    expect(
-      getSpatialSkeletonMissingSelectionDisplayState(
-        {
-          nodeId: "31",
-          value: 8n,
-        },
-        {
-          hasInspectableSource: true,
-          hasCachedSegment: false,
-          recoveryStatus: undefined,
-        },
-      ),
-    ).toEqual({
-      recoveryKey: "31:8",
-      recoveryStatus: undefined,
-      shouldRequestRecovery: true,
-      loading: true,
-    });
-    expect(
-      getSpatialSkeletonMissingSelectionDisplayState(
-        {
-          nodeId: "31",
-          value: 8n,
-        },
-        {
-          hasInspectableSource: true,
-          hasCachedSegment: false,
-          recoveryStatus: SpatialSkeletonSelectionRecoveryStatus.PENDING,
-        },
-      ),
-    ).toEqual({
-      recoveryKey: "31:8",
-      recoveryStatus: SpatialSkeletonSelectionRecoveryStatus.PENDING,
-      shouldRequestRecovery: false,
-      loading: true,
-    });
-    expect(
-      getSpatialSkeletonMissingSelectionDisplayState(
-        {
-          nodeId: "31",
-          value: 8n,
-        },
-        {
-          hasInspectableSource: true,
-          hasCachedSegment: true,
-          recoveryStatus: undefined,
-        },
-      ),
-    ).toEqual({
-      recoveryKey: "31:8",
-      recoveryStatus: undefined,
-      shouldRequestRecovery: false,
-      loading: false,
-    });
-    expect(
-      getSpatialSkeletonMissingSelectionDisplayState(
-        {
-          nodeId: "31",
-          value: 8n,
-        },
-        {
-          hasInspectableSource: true,
-          hasCachedSegment: false,
-          recoveryStatus: SpatialSkeletonSelectionRecoveryStatus.FAILED,
-        },
-      ),
-    ).toEqual({
-      recoveryKey: "31:8",
-      recoveryStatus: SpatialSkeletonSelectionRecoveryStatus.FAILED,
-      shouldRequestRecovery: false,
-      loading: false,
-    });
-    expect(
-      getSpatialSkeletonMissingSelectionDisplayState(
-        {
-          nodeId: 31,
-        },
-        {
-          hasInspectableSource: true,
-          hasCachedSegment: false,
-          recoveryStatus: undefined,
-        },
-      ),
-    ).toEqual({
-      recoveryKey: undefined,
-      recoveryStatus: undefined,
-      shouldRequestRecovery: false,
-      loading: false,
-    });
   });
 });

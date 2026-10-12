@@ -81,12 +81,6 @@
 }
 
 /* Per-mode cursor indicators — driven by data-skeleton-edit-mode on the panel element */
-.neuroglancer-rendered-data-panel[data-skeleton-edit-mode="default"] {
-  cursor:
-    url("./images/crosshair_cursor.svg") 20 20,
-    crosshair;
-}
-
 .neuroglancer-rendered-data-panel[data-skeleton-edit-mode="add"] {
   cursor:
     url("./images/add_node_cursor.svg") 20 20,
