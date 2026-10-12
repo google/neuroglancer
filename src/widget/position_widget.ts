@@ -74,6 +74,7 @@ import {
 } from "#src/util/keyboard_bindings.js";
 import { EventActionMap, MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { formatScaleWithUnit, parseScale } from "#src/util/si_units.js";
+import { formatPositionText } from "#src/util/spatial_units.js";
 import { TrackableEnum } from "#src/util/trackable_enum.js";
 import { getWheelZoomAmount } from "#src/util/wheel_zoom.js";
 import type { Viewer } from "#src/viewer.js";
@@ -291,6 +292,17 @@ function updateScaleElementStyle(scaleElement: HTMLInputElement) {
   const { value } = scaleElement;
   updateInputFieldWidth(scaleElement);
   scaleElement.parentElement!.dataset.isEmpty = value === "" ? "true" : "false";
+}
+
+export function copyPositionToClipboard(position: Position) {
+  const result = setClipboard(
+    position.valid ? formatPositionText(position.value) : "",
+  );
+  StatusMessage.showTemporaryMessage(
+    result
+      ? "Position copied to clipboard"
+      : "Failed to copy position to clipboard",
+  );
 }
 
 export class PositionWidget extends RefCounted {
@@ -1075,14 +1087,7 @@ export class PositionWidget extends RefCounted {
     if (copyButton) {
       const copyButton = makeCopyButton({
         title: "Copy position to clipboard",
-        onClick: () => {
-          const result = setClipboard(this.getPositionText());
-          StatusMessage.showTemporaryMessage(
-            result
-              ? "Position copied to clipboard"
-              : "Failed to copy position to clipboard",
-          );
-        },
+        onClick: () => copyPositionToClipboard(position),
       });
       copyButton.addEventListener("dragstart", (event) => {
         event.dataTransfer!.setData(
@@ -1261,7 +1266,7 @@ export class PositionWidget extends RefCounted {
   private getPositionText() {
     const { position } = this;
     if (position.valid) {
-      return position.value.map((x) => Math.floor(x)).join(", ");
+      return formatPositionText(position.value);
     }
     return "";
   }
