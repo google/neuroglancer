@@ -1188,15 +1188,18 @@ export class Viewer extends RefCounted implements ViewerState {
     }
 
     this.bindAction("help", () => this.toggleHelpPanel());
-    for (const [action, location] of [
-      ["toggle-layer-list-panel", this.layerListPanelState.location],
-      ["toggle-selection-details-panel", this.selectionDetailsState.location],
-      ["toggle-settings-panel", this.settingsPanelState.location],
-    ] as const) {
-      this.bindAction(action, () => {
-        location.visible = !location.visible;
-      });
-    }
+    this.bindAction("toggle-layer-list-panel", () => {
+      const { location } = this.layerListPanelState;
+      location.visible = !location.visible;
+    });
+    this.bindAction("toggle-selection-details-panel", () => {
+      const { location } = this.selectionDetailsState;
+      location.visible = !location.visible;
+    });
+    this.bindAction("toggle-settings-panel", () => {
+      const { location } = this.settingsPanelState;
+      location.visible = !location.visible;
+    });
     this.bindAction("toggle-layer-side-panel", () => {
       this.selectedLayer.visible = !this.selectedLayer.visible;
     });
