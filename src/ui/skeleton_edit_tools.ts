@@ -271,7 +271,7 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     if (!this.mouseState.updateUnconditionally() || !this.mouseState.active) {
       return undefined;
     }
-    const pickedSpatialSkeleton = this.mouseState.pickedSpatialSkeleton;
+    const { pickedSpatialSkeleton } = this.mouseState;
     const nodeId = pickedSpatialSkeleton?.nodeId;
     if (nodeId === undefined || nodeId === 0n) {
       return undefined;
@@ -2507,7 +2507,7 @@ export class SpatialSkeletonFindPathTool extends SpatialSkeletonToolBase {
           segmentId: pickedNode.segmentId,
           position: new Float32Array(pickedNode.position),
         };
-        const state = context.state;
+        const { state } = context;
         const otherEndpoint =
           state.source === undefined ? state.target : state.source;
         if (otherEndpoint !== undefined) {

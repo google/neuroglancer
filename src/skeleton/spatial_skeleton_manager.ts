@@ -592,7 +592,7 @@ function normalizeSpatialSkeletonPreparationIntent(
       `Invalid preparation sequence: ${preparation.sequence}`,
     );
   }
-  const direction = preparation.direction;
+  const { direction } = preparation;
   if (direction !== "execute" && direction !== "undo" && direction !== "redo") {
     throw new TypeError(`Invalid preparation direction: ${direction}`);
   }
@@ -725,7 +725,7 @@ class StateOwnedSpatialSkeletonProvisionalNumericIdService
   }
 
   private allocate(kind: "node" | "segment", intentId: number) {
-    const policy = this.policy;
+    const { policy } = this;
     if (policy === undefined) {
       throw new SpatialSkeletonOptimisticDatasourceContractError(
         `This spatial skeleton datasource did not register a provisional numeric-ID policy for ${kind} creation.`,

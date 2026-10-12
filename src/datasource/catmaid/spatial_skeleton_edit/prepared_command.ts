@@ -42,7 +42,7 @@ export function resolveCatmaidPreparedCommand(
       node.segmentId;
     return Object.freeze({ ...node, nodeId, segmentId });
   };
-  const payload = command.payload;
+  const { payload } = command;
   let resolved: CatmaidSpatialSkeletonCommandPayload;
   switch (payload.kind) {
     case "merge":
@@ -56,7 +56,7 @@ export function resolveCatmaidPreparedCommand(
       };
       break;
     case "add-node": {
-      const options = payload.options;
+      const { options } = payload;
       if (options.parentNodeId === undefined) return command;
       const parent = resolveNode({
         nodeId: options.parentNodeId,

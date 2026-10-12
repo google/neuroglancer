@@ -62,7 +62,7 @@ function getAuthorityFailureMessage(
   entry: SpatialSkeletonOptimisticEditQueueEntry,
 ) {
   const presentation = entry.authorityPresentation;
-  const authorityReason = entry.lifecycle.authorityReason;
+  const { authorityReason } = entry.lifecycle;
   if (
     presentation === undefined ||
     (authorityReason !== "not-started" && authorityReason !== "rejected")
@@ -105,7 +105,7 @@ export class SpatialSkeletonOptimisticAuthorityNotificationController {
     const entries = getOptimisticEditQueueEntries(this.layer);
     const runningKeys = new Set<string>();
     for (const entry of entries) {
-      const operationId = entry.operationId;
+      const { operationId } = entry;
       const warning = entry.authorityPresentation?.stalledWarning;
       if (
         operationId === undefined ||
@@ -157,7 +157,7 @@ export class SpatialSkeletonOptimisticAuthorityNotificationController {
     // Recent activity list. A large rejected closure can otherwise push its
     // root outside the capacity-bounded activity window before this observer runs.
     for (const entry of entries) {
-      const operationId = entry.operationId;
+      const { operationId } = entry;
       // The root rejection always records the closure size, including zero.
       // Dependants have no count and must not emit duplicate notifications.
       if (

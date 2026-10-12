@@ -408,7 +408,7 @@ class MergeSnapshotProjection implements SnapshotProjection {
     component: NormalizedMergeComponent,
     node: SpatiallyIndexedSkeletonNode,
   ) {
-    const segmentId = component.segmentId;
+    const { segmentId } = component;
     if (segmentId === undefined || segmentId === node.segmentId) return node;
     let remappedNode = component.remappedNodeById.get(node.nodeId);
     if (remappedNode === undefined) {

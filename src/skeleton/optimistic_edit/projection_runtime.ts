@@ -752,7 +752,7 @@ export class SpatialSkeletonOptimisticProjectionRuntime
     const active = new Map(this.activeIntents);
     const removedIntents: RuntimeIntentProjection[] = [];
     for (const artifact of request.rollbackIntents) {
-      const intentId = artifact.intentId;
+      const { intentId } = artifact;
       const removed = active.get(intentId);
       if (removed !== undefined) {
         removedIntents.push(removed);
@@ -762,7 +762,7 @@ export class SpatialSkeletonOptimisticProjectionRuntime
     }
     let replayChanged = false;
     for (const artifact of sortedArtifacts(request.replayIntents)) {
-      const intentId = artifact.intentId;
+      const { intentId } = artifact;
       const existing = active.get(intentId);
       if (existing?.projection === artifact.projection) continue;
       replayChanged = true;
@@ -808,7 +808,7 @@ export class SpatialSkeletonOptimisticProjectionRuntime
       SpatialSkeletonProjectionInverseDelta
     >,
   ) {
-    const intentId = publication.intentId;
+    const { intentId } = publication;
     const committed = this.activeIntents.get(intentId);
     if (committed === undefined) {
       throw new SpatialSkeletonProjectionRuntimeStateError(

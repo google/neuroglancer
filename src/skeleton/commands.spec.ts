@@ -3138,8 +3138,8 @@ describe("spatial_skeleton_commands", () => {
       positionInModelSpace: new Float32Array([7, 8, 9]),
     });
     const previewRoot = spatialSkeletonState.getCachedNode(2n ** 63n + 1n)!;
-    const tempSegment = BigInt(previewRoot.segmentId);
-    const realSegment = BigInt(realSegmentId);
+    const tempSegment = previewRoot.segmentId;
+    const realSegment = realSegmentId;
     const groupState = layer.displayState.segmentationGroupState.value;
 
     // Simulate changes made while CATMAID is still creating the skeleton: the

@@ -605,7 +605,7 @@ export class SpatialSkeletonEditTab extends Tab {
     const formatNodeCoordinates = (position: ArrayLike<number>): string[] => {
       const transform = getSkeletonTransform();
       if (transform !== undefined) {
-        const rank = transform.rank;
+        const { rank } = transform;
         const modelPos = new Float32Array(rank);
         for (let i = 0; i < Math.min(position.length, rank); i++) {
           modelPos[i] = Number(position[i]);
@@ -719,21 +719,20 @@ export class SpatialSkeletonEditTab extends Tab {
       element: HTMLElement,
       segmentId: bigint,
     ) => {
-      const id = segmentId;
       const hasSegmentSelectionModifiers = (event: MouseEvent) =>
         event.ctrlKey && !event.altKey;
       element.addEventListener("mousedown", (event: MouseEvent) => {
         if (event.button !== 2 || !hasSegmentSelectionModifiers(event)) {
           return;
         }
-        layer.selectSegment(id, event.shiftKey ? "force-unpin" : true);
+        layer.selectSegment(segmentId, event.shiftKey ? "force-unpin" : true);
         event.preventDefault();
         event.stopPropagation();
       });
       element.addEventListener("contextmenu", (event: MouseEvent) => {
         if (!hasSegmentSelectionModifiers(event)) return;
         if (event.button !== 2) {
-          layer.selectSegment(id, event.shiftKey ? "force-unpin" : true);
+          layer.selectSegment(segmentId, event.shiftKey ? "force-unpin" : true);
         }
         event.preventDefault();
         event.stopPropagation();
@@ -1060,7 +1059,7 @@ export class SpatialSkeletonEditTab extends Tab {
         return;
       }
       pendingScrollToSelectedNode = true;
-      const position = target.position;
+      const { position } = target;
       layer.selectSpatialSkeletonNode(target.nodeId, true, { position });
       moveViewToNodePosition(position);
       updateDisplay();
@@ -1634,7 +1633,7 @@ export class SpatialSkeletonEditTab extends Tab {
         row.title =
           "Click to move to node and pin selection. Right-click to move to node. Ctrl+right-click to pin selection without moving.";
         row.addEventListener("click", (event: MouseEvent) => {
-          const target = event.target;
+          const { target } = event;
           if (
             target instanceof HTMLElement &&
             target.closest(
@@ -1653,7 +1652,7 @@ export class SpatialSkeletonEditTab extends Tab {
           selectNode(node, { moveView: true, pin: true });
         });
         row.addEventListener("contextmenu", (event: MouseEvent) => {
-          const target = event.target;
+          const { target } = event;
           if (
             target instanceof HTMLElement &&
             target.closest(

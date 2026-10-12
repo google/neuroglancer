@@ -541,7 +541,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       if (!mouseState.updateUnconditionally()) {
         return undefined;
       }
-      const pickedSpatialSkeleton = mouseState.pickedSpatialSkeleton;
+      const { pickedSpatialSkeleton } = mouseState;
       const pickedNodeId = pickedSpatialSkeleton?.nodeId;
       if (pickedNodeId === undefined || pickedNodeId === 0n) {
         return undefined;

@@ -1377,7 +1377,7 @@ function setMouseStatePositionFromSpatialSkeletonNode(
   nodePosition: Float32Array,
   transform: RenderLayerTransform,
 ) {
-  const rank = transform.rank;
+  const { rank } = transform;
   const modelPosition = new Float32Array(rank);
   for (let i = 0; i < Math.min(nodePosition.length, rank); ++i) {
     const v = nodePosition[i];
@@ -3111,7 +3111,7 @@ export class SpatiallyIndexedSkeletonLayer
         }),
       );
     }
-    const pendingNodePositionVersion = options.pendingNodePositionVersion;
+    const { pendingNodePositionVersion } = options;
     if (pendingNodePositionVersion?.changed) {
       this.registerDisposer(
         pendingNodePositionVersion.changed.add(() => {
@@ -3120,7 +3120,7 @@ export class SpatiallyIndexedSkeletonLayer
         }),
       );
     }
-    const inspectionState = this.inspectionState;
+    const { inspectionState } = this;
     if (inspectionState !== undefined) {
       const presentation = inspectionState.spatialSkeletonPresentation;
       this.registerDisposer(

@@ -124,11 +124,11 @@ function makeQueuedSelectionLayer(pin = true) {
         },
         pin,
       ),
-    selectSpatialSkeletonNode: (nodeId: number, pin: boolean, options: any) => {
+    selectSpatialSkeletonNode: (nodeId: bigint, pin: boolean, options: any) => {
       layer.selectedSpatialSkeletonNodeInfo.value = { nodeId, ...options };
       (layer as any).captureSpatialSkeletonSelectionState((value: any) => {
         value.nodeId = String(nodeId);
-        value.value = BigInt(options.segmentId);
+        value.value = options.segmentId;
         return true;
       }, pin);
     },

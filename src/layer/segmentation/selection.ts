@@ -83,7 +83,7 @@ function getSpatialSkeletonHoverInfoFromViewerHover<TRenderLayer>(
   layer: SpatialSkeletonViewerHoverLayerLike<TRenderLayer>,
 ): SpatialSkeletonHoverInfo | undefined {
   if (!mouseState.active) return undefined;
-  const pickedRenderLayer = mouseState.pickedRenderLayer;
+  const { pickedRenderLayer } = mouseState;
   if (pickedRenderLayer !== null) {
     if (
       pickedRenderLayer === undefined ||
@@ -92,7 +92,7 @@ function getSpatialSkeletonHoverInfoFromViewerHover<TRenderLayer>(
       return undefined;
     }
   }
-  const pickedSpatialSkeleton = mouseState.pickedSpatialSkeleton;
+  const { pickedSpatialSkeleton } = mouseState;
   const nodeId = pickedSpatialSkeleton?.nodeId;
   if (nodeId === undefined) return undefined;
   const segmentId = pickedSpatialSkeleton?.segmentId;

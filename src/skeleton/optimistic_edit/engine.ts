@@ -1366,7 +1366,7 @@ export class SpatialSkeletonOptimisticQueueEngine<
       ) {
         continue;
       }
-      const submission = runtime.submission;
+      const { submission } = runtime;
       const canceledBeforeCommit =
         submission === undefined ||
         submission.cancelBeforeCommit(cancellationError);

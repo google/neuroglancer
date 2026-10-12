@@ -949,7 +949,7 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
   private getSpatialSkeletonReadonlyFromMetadataInfo(
     info: CatmaidStackInfo,
   ): boolean {
-    const metadata = info.metadata;
+    const { metadata } = info;
     return (
       parseOptionalCatmaidBoolean(
         metadata?.read_only,

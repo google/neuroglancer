@@ -556,7 +556,7 @@ function makeDragHarness({ inspected = true } = {}) {
     displayState: {
       ...makeSkeletonRenderingOptions(),
       segmentationGroupState: {
-        value: makeVisibleSegmentsState([BigInt(original.segmentId)]),
+        value: makeVisibleSegmentsState([original.segmentId]),
       },
     },
     spatialSkeletonEditMode: makeModeWatchable(),

@@ -70,7 +70,7 @@ function buildNavigationGraphDerivedState(
   const sortPriorityByNodeId = new Map<bigint, number>();
   for (const [nodeId, node] of graph.nodeById) {
     const childCount = graph.childrenByParent.get(nodeId)?.length ?? 0;
-    const parentNodeId = node.parentNodeId;
+    const { parentNodeId } = node;
     const parentInTree =
       parentNodeId !== undefined && graph.nodeById.has(parentNodeId);
     const sortPriority =
@@ -116,7 +116,7 @@ export function buildSpatiallyIndexedSkeletonNavigationGraph(
 
   const childrenByParent = new Map<bigint, bigint[]>();
   for (const node of nodeById.values()) {
-    const parentNodeId = node.parentNodeId;
+    const { parentNodeId } = node;
     if (parentNodeId === undefined || !nodeById.has(parentNodeId)) continue;
     let children = childrenByParent.get(parentNodeId);
     if (children === undefined) {
@@ -131,7 +131,7 @@ export function buildSpatiallyIndexedSkeletonNavigationGraph(
 
   const rootNodeIds: bigint[] = [];
   for (const node of nodeById.values()) {
-    const parentNodeId = node.parentNodeId;
+    const { parentNodeId } = node;
     if (parentNodeId === undefined || !nodeById.has(parentNodeId)) {
       rootNodeIds.push(node.nodeId);
     }

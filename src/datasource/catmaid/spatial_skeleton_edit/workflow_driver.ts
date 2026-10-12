@@ -211,7 +211,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
   }
 
   describeIntent(input: CatmaidSpatialSkeletonCommandDescriptor) {
-    const payload = input.payload;
+    const { payload } = input;
     return Object.freeze({
       kind: this.getQueueKind(payload.kind),
       commandLabel: input.label,
@@ -878,7 +878,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
     if (command.payload.kind !== "delete-node") {
       throw new Error("Invalid delete recipe.");
     }
-    const segmentId = command.payload.node.segmentId;
+    const { segmentId } = command.payload.node;
     const entry = this.requireQueueInputSegment(queueInput, segmentId);
     const rawDeleted = entry.snapshot.getNode(command.payload.node.nodeId);
     if (rawDeleted === undefined) {
@@ -931,7 +931,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
     command: CatmaidSpatialSkeletonCommandDescriptor,
     queueInput: SpatialSkeletonQueueInput,
   ): CatmaidAttributeSemantic {
-    const payload = command.payload;
+    const { payload } = command;
     if (
       payload.kind !== "description" &&
       payload.kind !== "true-end" &&
@@ -940,7 +940,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
     ) {
       throw new Error("Invalid CATMAID attribute recipe.");
     }
-    const options = payload.options;
+    const { options } = payload;
     const capture = this.captureSegments(
       queueInput,
       [options.node.segmentId],
@@ -998,7 +998,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
   ): CatmaidRerootSemantic {
     if (command.payload.kind !== "reroot")
       throw new Error("Invalid reroot recipe.");
-    const segmentId = command.payload.node.segmentId;
+    const { segmentId } = command.payload.node;
     const entry = this.requireQueueInputSegment(queueInput, segmentId);
     const path = this.getPathToRoot(
       entry.snapshot,
@@ -1031,7 +1031,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
   ): CatmaidSplitSemantic {
     if (command.payload.kind !== "split")
       throw new Error("Invalid split recipe.");
-    const segmentId = command.payload.node.segmentId;
+    const { segmentId } = command.payload.node;
     const entry = this.requireQueueInputSegment(queueInput, segmentId);
     const target = entry.snapshot.getNode(command.payload.node.nodeId);
     if (target === undefined) {

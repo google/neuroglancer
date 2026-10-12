@@ -58,7 +58,7 @@ export class CatmaidSpatiallyIndexedSkeletonSourceBackend extends WithParameters
       chunkDataSize,
     );
     const catmaidLod = this.parameters.catmaidLod ?? 0;
-    const cacheProvider = this.parameters.catmaidParameters.cacheProvider;
+    const { cacheProvider } = this.parameters.catmaidParameters;
     const nodes = await this.client.fetchNodes(bounds, catmaidLod, {
       cacheProvider,
       signal,

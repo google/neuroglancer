@@ -57,7 +57,7 @@ export abstract class CatmaidWorkflowAuthorityDriverBase {
     const steps = makeSteps(workflow.semantic, workflow.direction);
     const step = steps[context.committedAttempts.length];
     if (step === undefined) return undefined;
-    const committedAttempts = context.committedAttempts;
+    const { committedAttempts } = context;
     return Object.freeze({
       materializeMutation: () =>
         this.makeMutationRequest(
@@ -210,7 +210,7 @@ export abstract class CatmaidWorkflowAuthorityDriverBase {
         const semantic = step.semantic as
           | CatmaidCreatedNodeSemantic
           | CatmaidDeleteNodeSemantic;
-        const parent = semantic.parent;
+        const { parent } = semantic;
         return {
           kind: "add-node",
           request: {
