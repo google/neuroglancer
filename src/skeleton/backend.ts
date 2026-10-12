@@ -266,11 +266,11 @@ export class SpatiallyIndexedSkeletonChunk
   }
 
   downloadSucceeded() {
-    this.systemMemoryBytes = this.gpuMemoryBytes =
+    this.gpuMemoryBytes =
       this.indices!.byteLength +
       getVertexAttributeBytes(this) +
-      this.nodeIds!.byteLength +
       this.segmentIds!.byteLength;
+    this.systemMemoryBytes = this.gpuMemoryBytes + this.nodeIds!.byteLength;
     super.downloadSucceeded();
   }
 }
