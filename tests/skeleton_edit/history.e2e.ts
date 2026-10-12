@@ -113,9 +113,11 @@ test("[E2E-22] mixed history remains LIFO across replacement IDs and clears the 
   // keep following that logical node through the backend identity change.
   await ui.undo();
   await ui.waitSaved();
-  const replacement = transport.mutations.findLast(
-    (record) => record.endpoint === "treenode/create",
-  )!.response.treenode_id;
+  const replacement = BigInt(
+    transport.mutations.findLast(
+      (record) => record.endpoint === "treenode/create",
+    )!.response.treenode_id,
+  );
   expect(replacement).not.toBe(ids.Aleaf);
   const splitRestored = remap(split, ids.Aleaf, replacement);
   const resizedRestored = remap(resized, ids.Aleaf, replacement);
@@ -136,9 +138,11 @@ test("[E2E-22] mixed history remains LIFO across replacement IDs and clears the 
   );
   await ui.undo();
   await ui.waitSaved();
-  const next = transport.mutations.findLast(
-    (record) => record.endpoint === "treenode/create",
-  )!.response.treenode_id;
+  const next = BigInt(
+    transport.mutations.findLast(
+      (record) => record.endpoint === "treenode/create",
+    )!.response.treenode_id,
+  );
   const restored = remap(split, ids.Aleaf, next);
   await real.persisted(restored);
   expect((await readQueue(ui.page)).canRedo).toBe(true);

@@ -93,9 +93,9 @@ export interface SpatialSkeletonOptimisticEditQueue {
     fatalState: SpatialSkeletonOptimisticFatalState,
   ): void;
   /** Complete projected segments that visual cache eviction must retain. */
-  getProtectedProjectionSegmentIds(): readonly number[];
+  getProtectedProjectionSegmentIds(): readonly bigint[];
   /** True when an ordinary read must update active or retained history state. */
-  ownsAuthoritativeReadSegment(segmentId: number): boolean;
+  ownsAuthoritativeReadSegment(segmentId: bigint): boolean;
   undoLatest(): SpatialSkeletonOptimisticEditExecution;
   redoLatest(): SpatialSkeletonOptimisticEditExecution;
   getSnapshot(): readonly SpatialSkeletonOptimisticEditQueueEntry[];

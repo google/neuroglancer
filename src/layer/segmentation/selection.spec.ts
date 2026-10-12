@@ -40,12 +40,12 @@ describe("layer/segmentation/selection", () => {
     ).toBe(true);
     expect(
       hasSpatialSkeletonNodeSelection({
-        nodeId: 17,
+        nodeId: 17n,
       }),
     ).toBe(false);
     expect(
       hasSpatialSkeletonNodeSelection({
-        nodeId: 0,
+        nodeId: 0n,
       }),
     ).toBe(false);
     expect(hasSpatialSkeletonNodeSelection({})).toBe(false);
@@ -57,28 +57,28 @@ describe("layer/segmentation/selection", () => {
         nodeId: "23",
         value: 7n,
       }),
-    ).toBe(23);
+    ).toBe(23n);
     expect(
       getSegmentIdFromLayerSelectionValue({
         nodeId: "23",
         value: "7",
       }),
-    ).toBe(7);
+    ).toBe(7n);
     expect(
       getNodeIdFromLayerSelectionState({
-        nodeId: -1,
+        nodeId: -1n,
       }),
     ).toBeUndefined();
     expect(
       getSegmentIdFromLayerSelectionValue({
         value: "9",
       }),
-    ).toBe(9);
+    ).toBe(9n);
     expect(
       getNodeIdFromLayerSelectionState({
         nodeId: "18446744073709551615",
       }),
-    ).toBeUndefined();
+    ).toBe(18446744073709551615n);
   });
 
   it("extracts the hovered node id only for matching render layers", () => {
@@ -119,7 +119,7 @@ describe("layer/segmentation/selection", () => {
     mouseState = {
       active: true,
       pickedRenderLayer: renderLayerA,
-      pickedSpatialSkeleton: { nodeId: 31 },
+      pickedSpatialSkeleton: { nodeId: 31n },
     };
     trigger();
     expect(hoverState.value).toBeUndefined();
@@ -127,15 +127,15 @@ describe("layer/segmentation/selection", () => {
     mouseState = {
       active: true,
       pickedRenderLayer: renderLayerA,
-      pickedSpatialSkeleton: { nodeId: 31, segmentId: 7 },
+      pickedSpatialSkeleton: { nodeId: 31n, segmentId: 7n },
     };
     trigger();
-    expect(hoverState.value).toEqual({ nodeId: 31, segmentId: 7 });
+    expect(hoverState.value).toEqual({ nodeId: 31n, segmentId: 7n });
 
     mouseState = {
       active: true,
       pickedRenderLayer: renderLayerB,
-      pickedSpatialSkeleton: { nodeId: 31 },
+      pickedSpatialSkeleton: { nodeId: 31n },
     };
     trigger();
     expect(hoverState.value).toBeUndefined();
@@ -143,7 +143,7 @@ describe("layer/segmentation/selection", () => {
     mouseState = {
       active: false,
       pickedRenderLayer: renderLayerA,
-      pickedSpatialSkeleton: { nodeId: 31 },
+      pickedSpatialSkeleton: { nodeId: 31n },
     };
     trigger();
     expect(hoverState.value).toBeUndefined();
@@ -151,7 +151,7 @@ describe("layer/segmentation/selection", () => {
     mouseState = {
       active: true,
       pickedRenderLayer: renderLayerA,
-      pickedSpatialSkeleton: { nodeId: -1 },
+      pickedSpatialSkeleton: { nodeId: -1n },
     };
     trigger();
     expect(hoverState.value).toBeUndefined();

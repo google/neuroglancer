@@ -20,10 +20,10 @@ import type {
 } from "#src/skeleton/api.js";
 
 export interface CatmaidSpatialSkeletonAddNodeCommandOptions {
-  skeletonId: number;
-  parentNodeId: number | undefined;
+  skeletonId: bigint;
+  parentNodeId: bigint | undefined;
   positionInModelSpace: SpatialSkeletonVector;
-  childNodeIds?: readonly number[];
+  childNodeIds?: readonly bigint[];
 }
 
 export interface CatmaidSpatialSkeletonMoveNodeCommandOptions {
@@ -52,8 +52,8 @@ export interface CatmaidSpatialSkeletonNodeConfidenceCommandOptions {
 }
 
 export interface CatmaidSpatialSkeletonMergeEndpoint {
-  nodeId: number;
-  segmentId: number;
+  nodeId: bigint;
+  segmentId: bigint;
   position?: SpatialSkeletonVector;
 }
 
@@ -123,6 +123,14 @@ function isOptionalFiniteNumber(value: number | undefined) {
   return value === undefined || isFiniteNumber(value);
 }
 
+function isId(value: bigint | undefined) {
+  return typeof value === "bigint";
+}
+
+function isOptionalId(value: bigint | undefined) {
+  return value === undefined || isId(value);
+}
+
 function isSpatialSkeletonVector(
   value: object | undefined,
 ): value is SpatialSkeletonVector {
@@ -136,20 +144,20 @@ function isSpatiallyIndexedSkeletonNodePayload(
 ): value is SpatiallyIndexedSkeletonNode {
   if (value === undefined) return false;
   const candidate = value as {
-    nodeId?: number;
-    segmentId?: number;
+    nodeId?: bigint;
+    segmentId?: bigint;
     position?: object;
-    parentNodeId?: number;
+    parentNodeId?: bigint;
     radius?: number;
     confidence?: number;
     description?: string;
     isTrueEnd?: boolean;
   };
   return (
-    isFiniteNumber(candidate.nodeId) &&
-    isFiniteNumber(candidate.segmentId) &&
+    isId(candidate.nodeId) &&
+    isId(candidate.segmentId) &&
     isSpatialSkeletonVector(candidate.position) &&
-    isOptionalFiniteNumber(candidate.parentNodeId) &&
+    isOptionalId(candidate.parentNodeId) &&
     isOptionalFiniteNumber(candidate.radius) &&
     isOptionalFiniteNumber(candidate.confidence) &&
     (candidate.description === undefined ||
@@ -164,13 +172,13 @@ function isCatmaidMergeEndpoint(
 ): value is CatmaidSpatialSkeletonMergeEndpoint {
   if (value === undefined) return false;
   const candidate = value as {
-    nodeId?: number;
-    segmentId?: number;
+    nodeId?: bigint;
+    segmentId?: bigint;
     position?: object;
   };
   return (
-    isFiniteNumber(candidate.nodeId) &&
-    isFiniteNumber(candidate.segmentId) &&
+    isId(candidate.nodeId) &&
+    isId(candidate.segmentId) &&
     (candidate.position === undefined ||
       isSpatialSkeletonVector(candidate.position))
   );
@@ -193,13 +201,13 @@ export function requireCatmaidAddNodeCommandOptions(payload: object) {
     "add-node",
     (candidate): candidate is CatmaidSpatialSkeletonAddNodeCommandOptions => {
       const options = candidate as {
-        skeletonId?: number;
-        parentNodeId?: number;
+        skeletonId?: bigint;
+        parentNodeId?: bigint;
         positionInModelSpace?: object;
       };
       return (
-        isFiniteNumber(options.skeletonId) &&
-        isOptionalFiniteNumber(options.parentNodeId) &&
+        isId(options.skeletonId) &&
+        isOptionalId(options.parentNodeId) &&
         isSpatialSkeletonVector(options.positionInModelSpace)
       );
     },
@@ -212,7 +220,7 @@ export function requireCatmaidInsertNodeCommandOptions(payload: object) {
     options.parentNodeId === undefined ||
     !Array.isArray(options.childNodeIds) ||
     options.childNodeIds.length === 0 ||
-    !options.childNodeIds.every(isFiniteNumber) ||
+    !options.childNodeIds.every(isId) ||
     new Set(options.childNodeIds).size !== options.childNodeIds.length
   ) {
     throw new Error("CATMAID insert-node command received an invalid payload.");
@@ -334,15 +342,15 @@ export function requireCatmaidRerootCommandPayload(payload: object) {
     > &
       Partial<Pick<SpatiallyIndexedSkeletonNode, "position">> => {
       const node = candidate as {
-        nodeId?: number;
-        segmentId?: number;
-        parentNodeId?: number;
+        nodeId?: bigint;
+        segmentId?: bigint;
+        parentNodeId?: bigint;
         position?: object;
       };
       return (
-        isFiniteNumber(node.nodeId) &&
-        isFiniteNumber(node.segmentId) &&
-        isOptionalFiniteNumber(node.parentNodeId) &&
+        isId(node.nodeId) &&
+        isId(node.segmentId) &&
+        isOptionalId(node.parentNodeId) &&
         (node.position === undefined || isSpatialSkeletonVector(node.position))
       );
     },
@@ -360,15 +368,15 @@ export function requireCatmaidSplitCommandPayload(payload: object) {
         Pick<SpatiallyIndexedSkeletonNode, "parentNodeId" | "position">
       > => {
       const node = candidate as {
-        nodeId?: number;
-        segmentId?: number;
-        parentNodeId?: number;
+        nodeId?: bigint;
+        segmentId?: bigint;
+        parentNodeId?: bigint;
         position?: object;
       };
       return (
-        isFiniteNumber(node.nodeId) &&
-        isFiniteNumber(node.segmentId) &&
-        isOptionalFiniteNumber(node.parentNodeId) &&
+        isId(node.nodeId) &&
+        isId(node.segmentId) &&
+        isOptionalId(node.parentNodeId) &&
         (node.position === undefined || isSpatialSkeletonVector(node.position))
       );
     },

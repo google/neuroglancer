@@ -47,10 +47,10 @@ export interface SpatialSkeletonSpatialIndexLevel {
 }
 
 export interface SpatiallyIndexedSkeletonNodeBase {
-  nodeId: number;
-  segmentId: number;
+  nodeId: bigint;
+  segmentId: bigint;
   position: SpatialSkeletonVector;
-  parentNodeId?: number;
+  parentNodeId?: bigint;
 }
 
 export interface SpatiallyIndexedSkeletonNode
@@ -73,9 +73,9 @@ export interface SpatialSkeletonConfidenceConfiguration {
 
 export interface SpatiallyIndexedSkeletonSource {
   readonly readonly: boolean;
-  listSkeletons(): Promise<number[]>;
+  listSkeletons(): Promise<bigint[]>;
   getSkeleton(
-    skeletonId: number,
+    skeletonId: bigint,
     options?: { signal?: AbortSignal },
   ): Promise<SpatiallyIndexedSkeletonNode[]>;
   getSpatialIndexMetadata(): Promise<SpatiallyIndexedSkeletonMetadata | null>;

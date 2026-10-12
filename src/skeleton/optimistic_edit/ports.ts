@@ -33,15 +33,15 @@ export interface SpatialSkeletonOptimisticPreparationDescriptor {
   readonly kind: "merge" | "split" | "delete" | "restore" | "reroot";
   readonly logicalNodeHandles?: readonly SpatialSkeletonLogicalNodeHandle[];
   readonly logicalSegmentHandles?: readonly SpatialSkeletonLogicalSegmentHandle[];
-  readonly segmentIds?: readonly number[];
-  readonly nodeId?: number;
-  readonly endpointNodeIds?: readonly number[];
-  readonly cutNodeId?: number;
-  readonly cutParentNodeId?: number;
-  readonly rootNodeId?: number;
-  readonly pathNodeIds?: readonly number[];
+  readonly segmentIds?: readonly bigint[];
+  readonly nodeId?: bigint;
+  readonly endpointNodeIds?: readonly bigint[];
+  readonly cutNodeId?: bigint;
+  readonly cutParentNodeId?: bigint;
+  readonly rootNodeId?: bigint;
+  readonly pathNodeIds?: readonly bigint[];
   readonly lastKnownPositions?: readonly {
-    readonly nodeId: number;
+    readonly nodeId: bigint;
     readonly position: ArrayLike<number>;
   }[];
 }
@@ -320,8 +320,8 @@ export interface SpatialSkeletonOptimisticProjectionPort<
   /** Updates the bounded history-owned baseline after history replay changes. */
   setRetainedHistoryProjections(projections: readonly TProjection[]): void;
   /** True when an ordinary read must be folded into active/history state. */
-  ownsAuthoritativeReadSegment(segmentId: number): boolean;
-  getProtectedSegmentIds(): readonly number[];
+  ownsAuthoritativeReadSegment(segmentId: bigint): boolean;
+  getProtectedSegmentIds(): readonly bigint[];
 }
 
 /** Narrow command-history boundary; datasource drivers never receive it. */

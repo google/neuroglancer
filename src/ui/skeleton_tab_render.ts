@@ -49,7 +49,7 @@ export interface SpatialSkeletonSegmentRenderRow {
 }
 
 export interface SpatialSkeletonSegmentRenderState {
-  segmentId: number;
+  segmentId: bigint;
   totalNodeCount: number;
   matchedNodeCount: number;
   displayedNodeCount: number;
@@ -65,7 +65,7 @@ interface NodeClassification {
 }
 
 export function buildSpatialSkeletonSegmentRenderState(
-  segmentId: number,
+  segmentId: bigint,
   graph: SpatiallyIndexedSkeletonNavigationGraph,
   options: {
     filterText: string;
@@ -88,7 +88,7 @@ export function buildSpatialSkeletonSegmentRenderState(
   }
 
   // Classify each node once; reused for filter matching and row building.
-  const classificationById = new Map<number, NodeClassification>();
+  const classificationById = new Map<bigint, NodeClassification>();
   for (const [nodeId, node] of nodeById) {
     const children = childrenByParent.get(nodeId) ?? [];
     const parentInTree =
@@ -104,7 +104,7 @@ export function buildSpatialSkeletonSegmentRenderState(
   }
 
   // Stage 1: does this node match the user's text and type filters?
-  const matchesSearchFilter = (nodeId: number): boolean => {
+  const matchesSearchFilter = (nodeId: bigint): boolean => {
     const info = classificationById.get(nodeId);
     if (info === undefined) return false;
     const { node, type, isLeaf, description } = info;
@@ -121,7 +121,7 @@ export function buildSpatialSkeletonSegmentRenderState(
   const matchedNodeIds = getFlatListNodeIds(graph, {
     collapseRegularNodesForOrdering: true,
   }).filter(matchesSearchFilter);
-  const matchedNodeIdSet = new Set<number>(matchedNodeIds);
+  const matchedNodeIdSet = new Set<bigint>(matchedNodeIds);
 
   // branchCount uses all matched nodes (including collapsed ones) for correct topology.
   let branchCount = 0;
@@ -152,7 +152,7 @@ export function buildSpatialSkeletonSegmentRenderState(
     options.filterText.length > 0 ||
     options.nodeFilterType !== SpatialSkeletonNodeFilterType.DEFAULT;
 
-  const isCollapsedFromDisplay = (nodeId: number): boolean => {
+  const isCollapsedFromDisplay = (nodeId: bigint): boolean => {
     if (hasActiveFilter) return false;
     const info = classificationById.get(nodeId);
     if (info === undefined) return true;

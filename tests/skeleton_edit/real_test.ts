@@ -16,6 +16,7 @@
 
 import { expect } from "@playwright/test";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+import { bigintCompare } from "#src/util/bigint.js";
 import type { Viewer } from "#src/viewer.js";
 import {
   CatmaidIntegrationFixture,
@@ -30,39 +31,50 @@ import {
   SkeletonEditPage,
   readGraph,
   readQueue,
+  type ViewerNode,
 } from "./skeleton_edit_page.js";
 
-export type ModelNode = Omit<CatmaidTestNode, "skeletonId">;
-export function model(nodes: CatmaidTestNode[]): ModelNode[] {
+type ViewerTestNode = Omit<CatmaidTestNode, "id" | "parentId" | "skeletonId"> &
+  ViewerNode;
+export type ModelNode = Omit<ViewerTestNode, "skeletonId">;
+function viewerIds(node: CatmaidTestNode): ViewerTestNode {
+  return {
+    ...node,
+    id: BigInt(node.id),
+    parentId: node.parentId === null ? null : BigInt(node.parentId),
+    skeletonId: BigInt(node.skeletonId),
+  };
+}
+export function model(nodes: ViewerTestNode[]): ModelNode[] {
   return nodes
     .map(({ skeletonId: _skeletonId, ...node }) => ({
       ...node,
       position: [...node.position],
     }))
-    .sort((a, b) => a.id - b.id);
+    .sort((a, b) => bigintCompare(a.id, b.id));
 }
 export function change(
   nodes: ModelNode[],
-  id: number,
+  id: bigint,
   patch: Partial<ModelNode>,
 ) {
   return nodes.map((node) => ({ ...node, ...(node.id === id ? patch : {}) }));
 }
-export function remap(nodes: ModelNode[], from: number, to: number) {
+export function remap(nodes: ModelNode[], from: bigint, to: bigint) {
   return nodes
     .map((node) => ({
       ...node,
       id: node.id === from ? to : node.id,
       parentId: node.parentId === from ? to : node.parentId,
     }))
-    .sort((a, b) => a.id - b.id);
+    .sort((a, b) => bigintCompare(a.id, b.id));
 }
 export function groups(nodes: ModelNode[]) {
   const byId = new Map(nodes.map((node) => [node.id, node]));
-  const components = new Map<number, number[]>();
+  const components = new Map<bigint, bigint[]>();
   for (const node of nodes) {
     let root = node;
-    const visited = new Set<number>();
+    const visited = new Set<bigint>();
     while (root.parentId !== null) {
       if (visited.has(root.id)) throw new Error("Cyclic expected graph");
       visited.add(root.id);
@@ -73,8 +85,8 @@ export function groups(nodes: ModelNode[]) {
     components.set(root.id, [...(components.get(root.id) ?? []), node.id]);
   }
   return [...components.values()]
-    .map((ids) => ids.sort((a, b) => a - b))
-    .sort((a, b) => a[0] - b[0]);
+    .map((ids) => ids.sort(bigintCompare))
+    .sort((a, b) => bigintCompare(a[0], b[0]));
 }
 
 export class RealSkeletonPage extends SkeletonEditPage {
@@ -105,7 +117,7 @@ export class RealSkeletonPage extends SkeletonEditPage {
     const [node] = await readGraph(this.page, [selection!.id]);
     expect(node).toBeDefined();
     expect(node.skeletonId).toBe(selection!.skeletonId);
-    return node as CatmaidTestNode;
+    return node as ViewerTestNode;
   }
   async createRoot(dx = 0, dy = 0) {
     const center = await this.panelCenter();
@@ -120,7 +132,7 @@ export class RealSkeletonPage extends SkeletonEditPage {
     });
     return this.selected();
   }
-  async addChild(parentId?: number, dx = 35, dy = 20) {
+  async addChild(parentId?: bigint, dx = 35, dy = 20) {
     if (parentId !== undefined) await this.selectNode(parentId);
     const center = await this.panelCenter();
     await this.runEdit(async () => {
@@ -143,7 +155,7 @@ export class RealSkeletonPage extends SkeletonEditPage {
     });
     return this.selected();
   }
-  async deleteNode(id: number) {
+  async deleteNode(id: bigint) {
     await this.selectNode(id);
     await this.runEdit(() =>
       this.page
@@ -153,7 +165,7 @@ export class RealSkeletonPage extends SkeletonEditPage {
         .click(),
     );
   }
-  async mergeAtPosition(sourceId: number, targetPosition: number[]) {
+  async mergeAtPosition(sourceId: bigint, targetPosition: number[]) {
     await this.selectNode(sourceId);
     const source = await this.selected();
     const center = await this.panelCenter();
@@ -171,7 +183,7 @@ export class RealSkeletonPage extends SkeletonEditPage {
       }
     });
   }
-  async confidence(id: number, value: number) {
+  async confidence(id: bigint, value: number) {
     await this.selectNode(id);
     await this.runEdit(async () => {
       await this.page
@@ -181,7 +193,7 @@ export class RealSkeletonPage extends SkeletonEditPage {
         .selectOption(String(value));
     });
   }
-  async description(id: number, value: string) {
+  async description(id: bigint, value: string) {
     await this.selectNode(id);
     const input = this.page.getByRole("textbox", {
       name: "Description",
@@ -192,7 +204,7 @@ export class RealSkeletonPage extends SkeletonEditPage {
       await input.press("Tab");
     });
   }
-  async trueEnd(id: number) {
+  async trueEnd(id: bigint) {
     await this.selectNode(id);
     await this.runEdit(() =>
       this.page
@@ -204,22 +216,27 @@ export class RealSkeletonPage extends SkeletonEditPage {
 
 export class RealSession {
   readonly ui: RealSkeletonPage;
-  readonly knownIds = new Set<number>();
+  readonly knownIds = new Set<bigint>();
   constructor(
     readonly api: CatmaidIntegrationFixture,
     readonly transport: CatmaidTransport,
     page: ConstructorParameters<typeof SkeletonEditPage>[0],
   ) {
     this.ui = new RealSkeletonPage(page);
-    api.initial.forEach((node) => this.knownIds.add(node.id));
+    this.initial.forEach((node) => this.knownIds.add(node.id));
+  }
+  get initial() {
+    return this.api.initial.map(viewerIds);
   }
   get original() {
-    return model(this.api.initial);
+    return model(this.initial);
   }
   get ids() {
-    return this.api.ids;
+    return Object.fromEntries(
+      Object.entries(this.api.ids).map(([name, id]) => [name, BigInt(id)]),
+    );
   }
-  async moved(before: ModelNode[], id: number, dx = 25, dy = 15) {
+  async moved(before: ModelNode[], id: bigint, dx = 25, dy = 15) {
     await this.ui.move(id, dx, dy);
     const position = (await this.ui.selected()).position;
     const initial = before.find((node) => node.id === id)!.position;
@@ -231,10 +248,10 @@ export class RealSession {
       ).toBeLessThanOrEqual(10);
     return change(before, id, { position });
   }
-  async open(inspectIds?: number[]) {
+  async open(inspectIds?: bigint[]) {
     await this.ui.open(
       this.api.datasourceUrl,
-      [...new Set(this.api.initial.map((node) => node.skeletonId))],
+      [...new Set(this.initial.map((node) => node.skeletonId))],
       false,
       [2000, 2000, 1000],
       inspectIds,
@@ -243,7 +260,7 @@ export class RealSession {
   async preview(expected: ModelNode[]) {
     expected.forEach((node) => this.knownIds.add(node.id));
     const desired = [...expected]
-      .sort((a, b) => a.id - b.id)
+      .sort((a, b) => bigintCompare(a.id, b.id))
       .map((node) => ({ ...node, position: node.position.map(Math.fround) }));
     await expect
       .poll(async () =>
@@ -253,7 +270,7 @@ export class RealSession {
             [...this.knownIds],
             "Skeletons",
             true,
-          )) as CatmaidTestNode[],
+          )) as ViewerTestNode[],
         ),
       )
       .toEqual(desired);
@@ -263,7 +280,7 @@ export class RealSession {
       "Skeletons",
       true,
     );
-    const components = new Map<number, number[]>();
+    const components = new Map<bigint, bigint[]>();
     for (const node of graph)
       components.set(node.skeletonId, [
         ...(components.get(node.skeletonId) ?? []),
@@ -271,22 +288,22 @@ export class RealSession {
       ]);
     expect(
       [...components.values()]
-        .map((ids) => ids.sort((a, b) => a - b))
-        .sort((a, b) => a[0] - b[0]),
+        .map((ids) => ids.sort(bigintCompare))
+        .sort((a, b) => bigintCompare(a[0], b[0])),
     ).toEqual(groups(expected));
   }
   async persisted(expected: ModelNode[], browser = true) {
     const desired = [...expected]
-      .sort((a, b) => a.id - b.id)
+      .sort((a, b) => bigintCompare(a.id, b.id))
       .map((node) => ({ ...node, position: node.position.map(Math.fround) }));
-    const actual = await this.api.snapshot();
+    const actual = (await this.api.snapshot()).map(viewerIds);
     expect(
       model(actual).map((node) => ({
         ...node,
         position: node.position.map(Math.fround),
       })),
     ).toEqual(desired);
-    const components = new Map<number, number[]>();
+    const components = new Map<bigint, bigint[]>();
     for (const node of actual)
       components.set(node.skeletonId, [
         ...(components.get(node.skeletonId) ?? []),
@@ -294,8 +311,8 @@ export class RealSession {
       ]);
     expect(
       [...components.values()]
-        .map((ids) => ids.sort((a, b) => a - b))
-        .sort((a, b) => a[0] - b[0]),
+        .map((ids) => ids.sort(bigintCompare))
+        .sort((a, b) => bigintCompare(a[0], b[0])),
     ).toEqual(groups(expected));
     if (browser) {
       await this.preview(expected);
@@ -331,7 +348,9 @@ export class RealSession {
   }
   async reload(expected: ModelNode[]) {
     const saved = await this.api.snapshot();
-    await this.ui.reload([...new Set(saved.map((node) => node.skeletonId))]);
+    await this.ui.reload([
+      ...new Set(saved.map((node) => BigInt(node.skeletonId))),
+    ]);
     await this.persisted(expected);
     expect(await readQueue(this.ui.page)).toMatchObject({
       pending: false,
@@ -355,11 +374,11 @@ export class RealSession {
         .layer as SegmentationUserLayer;
       return [
         ...layer.displayState.segmentationGroupState.value.visibleSegments,
-      ].map(Number);
+      ];
     });
-    expect(visible.sort((a, b) => a - b)).toEqual(
-      [...new Set(current.map((node) => node.skeletonId))].sort(
-        (a, b) => a - b,
+    expect(visible.sort(bigintCompare)).toEqual(
+      [...new Set(current.map((node) => BigInt(node.skeletonId)))].sort(
+        bigintCompare,
       ),
     );
   }

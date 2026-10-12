@@ -27,14 +27,14 @@ import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js"
 import { SpatialSkeletonProjectionWorkspace } from "#src/skeleton/spatial_skeleton_projection_reducer.js";
 
 it("fences a read started during final-node deletion when deletion becomes authoritative", () => {
-  const root = { nodeId: 1, segmentId: 10, position: [1, 2, 3] };
+  const root = { nodeId: 1n, segmentId: 10n, position: [1, 2, 3] };
   const snapshot = createCompleteSkeletonSnapshot([root]);
   const state = new SpatialSkeletonState();
-  state.replaceCachedSegmentSnapshots([[10, [root]]]);
+  state.replaceCachedSegmentSnapshots([[10n, [root]]]);
   const segment = spatialSkeletonLogicalSegment("singleton");
   const node = spatialSkeletonLogicalNode("root");
-  const mappings = new SpatialSkeletonLogicalHandleMappings<number, number>();
-  mappings.apply({ segments: [[segment, 10]], nodes: [[node, 1]] });
+  const mappings = new SpatialSkeletonLogicalHandleMappings<bigint, bigint>();
+  mappings.apply({ segments: [[segment, 10n]], nodes: [[node, 1n]] });
   const runtime = new SpatialSkeletonOptimisticProjectionRuntime(state, {
     retainedHistoryWorkspace: new SpatialSkeletonProjectionWorkspace([
       { segment, snapshot },
@@ -45,11 +45,11 @@ it("fences a read started during final-node deletion when deletion becomes autho
     delta: { kind: "delete", segment, node },
   });
   runtime.publishExact(1, deletion.projection);
-  expect(state.getCachedNode(1)).toBeUndefined();
+  expect(state.getCachedNode(1n)).toBeUndefined();
   // Rendering can start another read after the preview evicts the complete
   // snapshot, while CATMAID still has the node. Hold that read's old response.
   const expectedCacheRevisions = new Map([
-    [10, state.getCachedSegmentRevision(10)],
+    [10n, state.getCachedSegmentRevision(10n)],
   ]);
   runtime.publishAuthoritative({
     intentId: 1,
@@ -57,32 +57,32 @@ it("fences a read started during final-node deletion when deletion becomes autho
     activePreviews: [],
   });
   expect(
-    runtime.publishAuthoritativeRead([{ segmentId: 10, snapshot }], {
+    runtime.publishAuthoritativeRead([{ segmentId: 10n, snapshot }], {
       expectedCacheRevisions,
     }),
   ).toBe(false);
-  expect(state.getCachedNode(1)).toBeUndefined();
+  expect(state.getCachedNode(1n)).toBeUndefined();
 });
 
 it.each([false, true])(
   "fences a retained Merge target read after confirmation (evict survivor: %s)",
   async (evictSurvivor) => {
     const node = (
-      nodeId: number,
-      segmentId: number,
-      parentNodeId?: number,
+      nodeId: bigint,
+      segmentId: bigint,
+      parentNodeId?: bigint,
     ) => ({
       nodeId,
       segmentId,
       parentNodeId,
-      position: [nodeId, 2, 3],
+      position: [Number(nodeId), 2, 3],
     });
-    const firstNodes = [node(101, 11), node(102, 11, 101)];
-    const secondNodes = [node(201, 17), node(202, 17, 201)];
+    const firstNodes = [node(101n, 11n), node(102n, 11n, 101n)];
+    const secondNodes = [node(201n, 17n), node(202n, 17n, 201n)];
     const state = new SpatialSkeletonState();
     state.replaceCachedSegmentSnapshots([
-      [11, firstNodes],
-      [17, secondNodes],
+      [11n, firstNodes],
+      [17n, secondNodes],
     ]);
     const first = spatialSkeletonLogicalSegment("first");
     const second = spatialSkeletonLogicalSegment("second");
@@ -102,32 +102,32 @@ it.each([false, true])(
         segments: [
           {
             segment: first,
-            snapshot: state.getCachedSegmentSnapshotHandle(11)!.handle,
+            snapshot: state.getCachedSegmentSnapshotHandle(11n)!.handle,
           },
           {
             segment: second,
-            snapshot: state.getCachedSegmentSnapshotHandle(17)!.handle,
+            snapshot: state.getCachedSegmentSnapshotHandle(17n)!.handle,
           },
         ],
         authoritativeBindings: {
           segments: [
-            [first, 11],
-            [second, 17],
+            [first, 11n],
+            [second, 17n],
           ],
           nodes: [
-            [from, 102],
-            [to, 201],
+            [from, 102n],
+            [to, 201n],
           ],
         },
         expectedCacheRevisions: new Map(
-          [11, 17].map((id) => [id, state.getCachedSegmentRevision(id)]),
+          [11n, 17n].map((id) => [id, state.getCachedSegmentRevision(id)]),
         ),
       },
     });
     runtime.publishExact(1, prepared.projection);
-    expect(state.getCachedSegmentNodes(17)).toBeUndefined();
+    expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
     const expectedCacheRevisions = new Map([
-      [17, state.getCachedSegmentRevision(17)],
+      [17n, state.getCachedSegmentRevision(17n)],
     ]);
     let release!: (nodes: typeof secondNodes) => void;
     const response = new Promise<typeof secondNodes>((resolve) => {
@@ -135,7 +135,7 @@ it.each([false, true])(
     });
     // The source deliberately ignores cancellation and delivers its old topology.
     const getSkeleton = vi.fn(
-      (_segmentId: number, _options: { signal: AbortSignal }) => response,
+      (_segmentId: bigint, _options: { signal: AbortSignal }) => response,
     );
     const layer = {
       source: {
@@ -147,7 +147,7 @@ it.each([false, true])(
       },
     } as any;
     const read = state
-      .getFullSegmentNodes(layer, 17, { retainWhileInactive: true })
+      .getFullSegmentNodes(layer, 17n, { retainWhileInactive: true })
       .then(
         () => undefined,
         (error) => error,
@@ -158,21 +158,21 @@ it.each([false, true])(
       reconciliation: {
         bindings: {
           segments: [
-            [first, 11],
-            [second, 11],
+            [first, 11n],
+            [second, 11n],
           ],
         },
-        retiredSegmentIds: [17],
+        retiredSegmentIds: [17n],
       },
       activePreviews: [],
     });
     expect(getSkeleton.mock.calls[0][1].signal.aborted).toBe(true);
     expect(await read).toMatchObject({ name: "AbortError" });
-    expect(state.getCachedSegmentRevision(17)).toBeGreaterThan(
-      expectedCacheRevisions.get(17)!,
+    expect(state.getCachedSegmentRevision(17n)).toBeGreaterThan(
+      expectedCacheRevisions.get(17n)!,
     );
-    expect(runtime.resolveSegment(first)).toBe(11);
-    expect(runtime.resolveSegment(second)).toBe(11);
+    expect(runtime.resolveSegment(first)).toBe(11n);
+    expect(runtime.resolveSegment(second)).toBe(11n);
     if (evictSurvivor) state.evictInactiveSegmentNodes([]);
     release(secondNodes);
     await response;
@@ -181,20 +181,20 @@ it.each([false, true])(
       runtime.publishAuthoritativeRead(
         [
           {
-            segmentId: 17,
+            segmentId: 17n,
             snapshot: createCompleteSkeletonSnapshot(secondNodes),
           },
         ],
         { expectedCacheRevisions },
       ),
     ).toBe(false);
-    expect(state.getCachedSegmentNodes(17)).toBeUndefined();
+    expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
     if (evictSurvivor) {
-      expect(state.getCachedNode(201)).toBeUndefined();
+      expect(state.getCachedNode(201n)).toBeUndefined();
     } else {
-      expect(state.getCachedNode(201)).toMatchObject({
-        segmentId: 11,
-        parentNodeId: 102,
+      expect(state.getCachedNode(201n)).toMatchObject({
+        segmentId: 11n,
+        parentNodeId: 102n,
       });
     }
   },

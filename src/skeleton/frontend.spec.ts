@@ -16,6 +16,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 
+import { buildSpatiallyIndexedSkeletonOverlayGeometry } from "#src/skeleton/segment_overlay.js";
 import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { Uint64Set } from "#src/uint64_set.js";
 import { getContrastRatio } from "#src/util/color.js";
@@ -53,27 +54,27 @@ describe("getActiveProvisionalSpatialSkeletonSegmentIds", () => {
       removedSegmentIds: [],
       activeLogicalOwners: [
         {
-          segmentId: 17,
+          segmentId: 17n,
           logicalHandle: { kind: "segment" as const, stableId: "split-output" },
         },
         {
-          segmentId: 23,
+          segmentId: 23n,
           logicalHandle: { kind: "segment" as const, stableId: "confirmed" },
         },
       ],
       numericAliases: [
         {
-          segmentId: 17,
+          segmentId: 17n,
           logicalHandle: { kind: "segment" as const, stableId: "split-output" },
           authoritative: false,
         },
         {
-          segmentId: 23,
+          segmentId: 23n,
           logicalHandle: { kind: "segment" as const, stableId: "confirmed" },
           authoritative: true,
         },
         {
-          segmentId: 31,
+          segmentId: 31n,
           logicalHandle: { kind: "segment" as const, stableId: "stale" },
           authoritative: false,
         },
@@ -83,7 +84,7 @@ describe("getActiveProvisionalSpatialSkeletonSegmentIds", () => {
     };
 
     expect(getActiveProvisionalSpatialSkeletonSegmentIds(presentation)).toEqual(
-      [17],
+      [17n],
     );
     expect(
       getActiveProvisionalSpatialSkeletonSegmentIds({
@@ -151,11 +152,11 @@ describe("buildSpatialSkeletonPreparationVisuals", () => {
           direction: "execute",
           kind: "merge",
           lifecycle: "preparing",
-          segmentIds: [11, 17],
-          endpointNodeIds: [101, 202],
+          segmentIds: [11n, 17n],
+          endpointNodeIds: [101n, 202n],
           lastKnownPositions: [
-            { nodeId: 101, position: new Float32Array([1, 2, 3]) },
-            { nodeId: 202, position: new Float32Array([4, 5, 6]) },
+            { nodeId: 101n, position: new Float32Array([1, 2, 3]) },
+            { nodeId: 202n, position: new Float32Array([4, 5, 6]) },
           ],
         },
       ],
@@ -169,8 +170,8 @@ describe("buildSpatialSkeletonPreparationVisuals", () => {
     ]);
     expect(visuals[2]).toMatchObject({
       type: "connector",
-      fromNodeId: 101,
-      toNodeId: 202,
+      fromNodeId: 101n,
+      toNodeId: 202n,
     });
   });
 
@@ -183,11 +184,11 @@ describe("buildSpatialSkeletonPreparationVisuals", () => {
           direction: "execute",
           kind: "split",
           lifecycle: "preparing",
-          segmentIds: [11],
-          cutNodeId: 101,
-          cutParentNodeId: 99,
+          segmentIds: [11n],
+          cutNodeId: 101n,
+          cutParentNodeId: 99n,
           lastKnownPositions: [
-            { nodeId: 101, position: new Float32Array([1, 2, 3]) },
+            { nodeId: 101n, position: new Float32Array([1, 2, 3]) },
           ],
         },
       ],
@@ -198,7 +199,7 @@ describe("buildSpatialSkeletonPreparationVisuals", () => {
     expect(visuals[0]).toMatchObject({
       type: "marker",
       cueKind: "split",
-      nodeId: 101,
+      nodeId: 101n,
     });
   });
 
@@ -211,15 +212,15 @@ describe("buildSpatialSkeletonPreparationVisuals", () => {
           direction: "execute",
           kind: "split",
           lifecycle: "preparing",
-          segmentIds: [11],
-          cutNodeId: 101,
-          cutParentNodeId: 99,
+          segmentIds: [11n],
+          cutNodeId: 101n,
+          cutParentNodeId: 99n,
           lastKnownPositions: [
-            { nodeId: 101, position: new Float32Array([1, 2, 3]) },
+            { nodeId: 101n, position: new Float32Array([1, 2, 3]) },
           ],
         },
       ],
-      (nodeId) => (nodeId === 99 ? new Float32Array([4, 5, 6]) : undefined),
+      (nodeId) => (nodeId === 99n ? new Float32Array([4, 5, 6]) : undefined),
     );
 
     expect(visuals.map((visual: { type: string }) => visual.type)).toEqual([
@@ -229,8 +230,8 @@ describe("buildSpatialSkeletonPreparationVisuals", () => {
     ]);
     expect(visuals[2]).toMatchObject({
       type: "connector",
-      fromNodeId: 99,
-      toNodeId: 101,
+      fromNodeId: 99n,
+      toNodeId: 101n,
     });
   });
 
@@ -243,10 +244,10 @@ describe("buildSpatialSkeletonPreparationVisuals", () => {
           direction: "undo",
           kind: "delete",
           lifecycle: "preparing",
-          segmentIds: [11],
-          nodeId: 101,
+          segmentIds: [11n],
+          nodeId: 101n,
           lastKnownPositions: [
-            { nodeId: 101, position: new Float32Array([1, 2, 3]) },
+            { nodeId: 101n, position: new Float32Array([1, 2, 3]) },
           ],
         },
       ],
@@ -269,10 +270,10 @@ describe("buildSpatialSkeletonPreparationVisuals", () => {
           direction: "undo",
           kind: "restore",
           lifecycle: "preparing",
-          segmentIds: [11],
-          nodeId: 101,
+          segmentIds: [11n],
+          nodeId: 101n,
           lastKnownPositions: [
-            { nodeId: 101, position: new Float32Array([1, 2, 3]) },
+            { nodeId: 101n, position: new Float32Array([1, 2, 3]) },
           ],
         },
       ],
@@ -283,26 +284,26 @@ describe("buildSpatialSkeletonPreparationVisuals", () => {
       expect.objectContaining({
         type: "marker",
         cueKind: "restore",
-        nodeId: 101,
+        nodeId: 101n,
       }),
     ]);
   });
 });
 
 describe("SpatiallyIndexedSkeletonLayer inspection overlay chunks", () => {
-  function makeNode(nodeId: number, segmentId: number) {
+  function makeNode(nodeId: bigint, segmentId: bigint) {
     return {
       nodeId,
       segmentId,
-      position: new Float32Array([nodeId, 0, 0]),
+      position: new Float32Array([Number(nodeId), 0, 0]),
     };
   }
 
   function makeLayer(
-    cache: Map<number, readonly ReturnType<typeof makeNode>[]>,
+    cache: Map<bigint, readonly ReturnType<typeof makeNode>[]>,
   ) {
     const createdChunks: Array<{
-      segmentId: number;
+      segmentId: bigint;
       dispose: ReturnType<typeof vi.fn>;
     }> = [];
     const layer = Object.assign(
@@ -319,7 +320,7 @@ describe("SpatiallyIndexedSkeletonLayer inspection overlay chunks", () => {
             .spatialSkeletonPresentation,
           nodeDataVersion: { value: 0 },
           pendingNodePositionVersion: { value: 0 },
-          getCachedSegmentNodes: (segmentId: number) => cache.get(segmentId),
+          getCachedSegmentNodes: (segmentId: bigint) => cache.get(segmentId),
           getFullSegmentNodes: vi.fn(),
           evictInactiveSegmentNodes: vi.fn(),
         },
@@ -331,18 +332,18 @@ describe("SpatiallyIndexedSkeletonLayer inspection overlay chunks", () => {
         pendingOverlaySegmentLoads: new Set(),
         temporaryBrowseExclusions: new Set(),
         browseExcludedSegmentIdsVersion: 0,
-        retainedOverlaySegments: new Map<number, number>(),
+        retainedOverlaySegments: new Map<bigint, number>(),
         retainedOverlaySegmentIdsVersion: 0,
         overlaySegmentTouchCounter: 0,
         maxRetainedOverlaySegments: 16,
         redrawNeeded: { dispatch: vi.fn() },
         pendingNodePositionVersion: { value: 0 },
-        getOverlayRenderSegmentIds: () => [11, 17],
+        getOverlayRenderSegmentIds: () => [11n, 17n],
         requestOverlaySegmentLoad: vi.fn(),
         createOverlaySegmentChunk: vi.fn(
           (nodes: readonly ReturnType<typeof makeNode>[]) => {
             const chunk = {
-              segmentId: nodes[0]?.segmentId ?? 0,
+              segmentId: nodes[0]?.segmentId ?? 0n,
               dispose: vi.fn(),
             };
             createdChunks.push(chunk);
@@ -355,9 +356,9 @@ describe("SpatiallyIndexedSkeletonLayer inspection overlay chunks", () => {
   }
 
   it("rebuilds only a changed segment", () => {
-    const cache = new Map<number, readonly ReturnType<typeof makeNode>[]>([
-      [11, [makeNode(1, 11)]],
-      [17, [makeNode(2, 17)]],
+    const cache = new Map<bigint, readonly ReturnType<typeof makeNode>[]>([
+      [11n, [makeNode(1n, 11n)]],
+      [17n, [makeNode(2n, 17n)]],
     ]);
     const { layer, createdChunks } = makeLayer(cache);
 
@@ -367,7 +368,7 @@ describe("SpatiallyIndexedSkeletonLayer inspection overlay chunks", () => {
     const old11 = initial[0];
     const unchanged17 = initial[1];
 
-    cache.set(11, [makeNode(1, 11), makeNode(3, 11)]);
+    cache.set(11n, [makeNode(1n, 11n), makeNode(3n, 11n)]);
     layer.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber = 2;
     const updated = layer.resolveSourceBackedOverlayChunks();
 
@@ -379,32 +380,32 @@ describe("SpatiallyIndexedSkeletonLayer inspection overlay chunks", () => {
   });
 
   it("keeps the last complete chunk while refreshed data is missing", () => {
-    const cache = new Map<number, readonly ReturnType<typeof makeNode>[]>([
-      [11, [makeNode(1, 11)]],
-      [17, [makeNode(2, 17)]],
+    const cache = new Map<bigint, readonly ReturnType<typeof makeNode>[]>([
+      [11n, [makeNode(1n, 11n)]],
+      [17n, [makeNode(2n, 17n)]],
     ]);
     const { layer } = makeLayer(cache);
     const initial = layer.resolveSourceBackedOverlayChunks();
 
-    cache.delete(11);
+    cache.delete(11n);
     layer.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber = 2;
     const whileLoading = layer.resolveSourceBackedOverlayChunks();
 
     expect(whileLoading[0]).toBe(initial[0]);
     expect(initial[0].dispose).not.toHaveBeenCalled();
-    expect(layer.requestOverlaySegmentLoad).toHaveBeenCalledWith(11);
+    expect(layer.requestOverlaySegmentLoad).toHaveBeenCalledWith(11n);
   });
 
   it("keeps the previous chunk when a replacement build fails", () => {
-    const cache = new Map<number, readonly ReturnType<typeof makeNode>[]>([
-      [11, [makeNode(1, 11)]],
-      [17, [makeNode(2, 17)]],
+    const cache = new Map<bigint, readonly ReturnType<typeof makeNode>[]>([
+      [11n, [makeNode(1n, 11n)]],
+      [17n, [makeNode(2n, 17n)]],
     ]);
     const { layer } = makeLayer(cache);
     const initial = layer.resolveSourceBackedOverlayChunks();
     const old11 = initial[0];
 
-    cache.set(11, [makeNode(3, 11)]);
+    cache.set(11n, [makeNode(3n, 11n)]);
     layer.createOverlaySegmentChunk.mockImplementationOnce(() => {
       throw new Error("GPU upload failed");
     });
@@ -416,15 +417,15 @@ describe("SpatiallyIndexedSkeletonLayer inspection overlay chunks", () => {
   });
 
   it("disposes an inactive segment chunk and releases its cache claim", () => {
-    const cache = new Map<number, readonly ReturnType<typeof makeNode>[]>([
-      [11, [makeNode(1, 11)]],
-      [17, [makeNode(2, 17)]],
+    const cache = new Map<bigint, readonly ReturnType<typeof makeNode>[]>([
+      [11n, [makeNode(1n, 11n)]],
+      [17n, [makeNode(2n, 17n)]],
     ]);
     const { layer } = makeLayer(cache);
     const initial = layer.resolveSourceBackedOverlayChunks();
     const old11 = initial[0];
 
-    layer.getOverlayRenderSegmentIds = () => [17];
+    layer.getOverlayRenderSegmentIds = () => [17n];
     layer.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber = 2;
     const updated = layer.resolveSourceBackedOverlayChunks();
 
@@ -432,124 +433,165 @@ describe("SpatiallyIndexedSkeletonLayer inspection overlay chunks", () => {
     expect(old11.dispose).toHaveBeenCalledOnce();
     expect(
       layer.inspectionState.evictInactiveSegmentNodes,
-    ).toHaveBeenLastCalledWith([17]);
+    ).toHaveBeenLastCalledWith([17n]);
   });
 
   it("atomically remaps retained provisional overlay identities", () => {
     const { layer } = makeLayer(new Map());
-    const tempSegmentId = 0xffff_fff8;
+    const tempSegmentId = 2n ** 63n + 6n;
     layer.retainedOverlaySegments = new Map([
-      [11, 1],
-      [17, 2],
+      [11n, 1],
+      [17n, 2],
       [tempSegmentId, 3],
-      [23, 4],
+      [23n, 4],
     ]);
-    layer.pendingOverlaySegmentLoads = new Set([tempSegmentId, 41]);
+    layer.pendingOverlaySegmentLoads = new Set([tempSegmentId, 41n]);
 
     expect(
       layer.remapOverlaySegments(
         new Map([
-          [tempSegmentId, 23],
-          [17, 11],
+          [tempSegmentId, 23n],
+          [17n, 11n],
         ]),
       ),
     ).toBe(true);
 
     expect([...layer.retainedOverlaySegments.entries()]).toEqual([
-      [11, 2],
-      [23, 4],
+      [11n, 2],
+      [23n, 4],
     ]);
-    expect([...layer.pendingOverlaySegmentLoads]).toEqual([41]);
+    expect([...layer.pendingOverlaySegmentLoads]).toEqual([41n]);
     expect(layer.overlayRebuildFrame).toBe(-1);
     expect(layer.redrawNeeded.dispatch).toHaveBeenCalledOnce();
   });
 
   it("preserves distinct owners when a remap destination is also a source", () => {
     const { layer } = makeLayer(new Map());
-    const provisional = 0xffff_fff8;
+    const provisional = 2n ** 63n + 6n;
     layer.retainedOverlaySegments = new Map([
-      [11, 1],
+      [11n, 1],
       [provisional, 2],
     ]);
     layer.remapOverlaySegments(
       new Map([
-        [11, provisional],
-        [provisional, 17],
+        [11n, provisional],
+        [provisional, 17n],
       ]),
     );
     expect([...layer.retainedOverlaySegments]).toEqual([
       [provisional, 1],
-      [17, 2],
+      [17n, 2],
     ]);
   });
 });
 
 describe("resolveSpatiallyIndexedSkeletonSegmentPick", () => {
   it("returns the node segment id for direct node picks", () => {
-    const chunk = {
+    const geometry = {
       indices: new Uint32Array([0, 1, 1, 2]),
       numVertices: 3,
+      segmentIds: new BigUint64Array([11n, 13n, 17n]),
     };
-    const segmentIds = new Uint32Array([11, 13, 17]);
 
     expect(
-      resolveSpatiallyIndexedSkeletonSegmentPick(chunk, segmentIds, 1, "node"),
-    ).toBe(13);
+      resolveSpatiallyIndexedSkeletonSegmentPick(geometry, 1, "node"),
+    ).toBe(13n);
   });
 
   it("returns the first valid endpoint segment id for direct edge picks", () => {
-    const chunk = {
+    const geometry = {
       indices: new Uint32Array([0, 1, 1, 2]),
       numVertices: 3,
+      segmentIds: new BigUint64Array([0n, 19n, 23n]),
     };
-    const segmentIds = new Uint32Array([0, 19, 23]);
 
     expect(
-      resolveSpatiallyIndexedSkeletonSegmentPick(chunk, segmentIds, 0, "edge"),
-    ).toBe(19);
+      resolveSpatiallyIndexedSkeletonSegmentPick(geometry, 0, "edge"),
+    ).toBe(19n);
     expect(
-      resolveSpatiallyIndexedSkeletonSegmentPick(chunk, segmentIds, 1, "edge"),
-    ).toBe(19);
+      resolveSpatiallyIndexedSkeletonSegmentPick(geometry, 1, "edge"),
+    ).toBe(19n);
   });
 
   it("returns undefined for out-of-range direct picks", () => {
-    const chunk = {
+    const geometry = {
       indices: new Uint32Array([0, 1]),
       numVertices: 2,
+      segmentIds: new BigUint64Array([5n, 7n]),
     };
-    const segmentIds = new Uint32Array([5, 7]);
 
     expect(
-      resolveSpatiallyIndexedSkeletonSegmentPick(chunk, segmentIds, 4, "node"),
+      resolveSpatiallyIndexedSkeletonSegmentPick(geometry, 4, "node"),
     ).toBeUndefined();
     expect(
-      resolveSpatiallyIndexedSkeletonSegmentPick(chunk, segmentIds, 2, "edge"),
+      resolveSpatiallyIndexedSkeletonSegmentPick(geometry, 2, "edge"),
     ).toBeUndefined();
   });
 });
 
 describe("SpatiallyIndexedSkeletonLayer browse node picks", () => {
   it("resolves browse node picks with node identity and position", () => {
-    const positions = new Float32Array([1, 2, 3, 4, 5, 6]);
-    const segmentIds = new Uint32Array([11, 17]);
-    const vertexBytes = new Uint8Array(
-      positions.byteLength + segmentIds.byteLength,
-    );
-    vertexBytes.set(new Uint8Array(positions.buffer), 0);
-    vertexBytes.set(new Uint8Array(segmentIds.buffer), positions.byteLength);
-    const chunk = {
-      vertexAttributes: vertexBytes,
-      vertexAttributeOffsets: new Uint32Array([0, positions.byteLength]),
-      numVertices: 2,
+    const geometry = {
       indices: new Uint32Array([0, 1]),
-      nodeIds: new Int32Array([101, 202]),
+      numVertices: 2,
+      nodeIds: new BigUint64Array([101n, 202n]),
+      nodePositions: new Float32Array([1, 2, 3, 4, 5, 6]),
+      segmentIds: new BigUint64Array([11n, 17n]),
     };
     const layer = Object.create(SpatiallyIndexedSkeletonLayer.prototype);
 
-    expect((layer as any).resolveNodePickFromChunk(chunk, 1)).toEqual({
-      nodeId: 202,
-      segmentId: 17,
+    expect(layer.resolveNodePick(geometry, 1)).toEqual({
+      nodeId: 202n,
+      segmentId: 17n,
       position: new Float32Array([4, 5, 6]),
+    });
+  });
+
+  it("picks the skeleton and node whose IDs are above 2^32", () => {
+    const geometry = buildSpatiallyIndexedSkeletonOverlayGeometry([
+      [
+        {
+          nodeId: 2n ** 32n + 7n,
+          segmentId: 2n ** 63n + 5n,
+          position: [1, 2, 3],
+        },
+        {
+          nodeId: 2n ** 32n + 9n,
+          segmentId: 2n ** 63n + 5n,
+          position: [4, 5, 6],
+          parentNodeId: 2n ** 32n + 7n,
+        },
+      ],
+    ]);
+    const base = Object.assign(
+      Object.create(SpatiallyIndexedSkeletonLayer.prototype),
+      { displayState: { transform: { value: { error: "no transform" } } } },
+    );
+    const pickGeometry = { ...geometry, nodePositions: geometry.positions };
+    const nodeMouseState: any = {};
+    SliceViewPanelSpatiallyIndexedSkeletonLayer.prototype.updateMouseState.call(
+      { base } as any,
+      nodeMouseState,
+      0n,
+      1,
+      { kind: "segment-node", geometry: pickGeometry },
+    );
+    const edgeMouseState: any = {};
+    SliceViewPanelSpatiallyIndexedSkeletonLayer.prototype.updateMouseState.call(
+      { base } as any,
+      edgeMouseState,
+      0n,
+      0,
+      { kind: "segment-edge", geometry: pickGeometry },
+    );
+
+    expect(nodeMouseState.pickedSpatialSkeleton).toEqual({
+      nodeId: 2n ** 32n + 9n,
+      segmentId: 2n ** 63n + 5n,
+      position: new Float32Array([4, 5, 6]),
+    });
+    expect(edgeMouseState.pickedSpatialSkeleton).toEqual({
+      segmentId: 2n ** 63n + 5n,
     });
   });
 });
@@ -559,11 +601,11 @@ describe("spatial node picks after a skeleton ownership change", () => {
     PerspectiveViewSpatiallyIndexedSkeletonLayer,
     SliceViewPanelSpatiallyIndexedSkeletonLayer,
   ])("uses inspected ownership for both pick formats in %s", (RenderLayer) => {
-    const nodeId = 210684811;
-    const oldSegmentId = 6368542;
+    const nodeId = 210684811n;
+    const oldSegmentId = 6368542n;
     const node = {
       nodeId,
-      segmentId: 6368977,
+      segmentId: 6368977n,
       position: new Float32Array([7, 8, 9]),
     };
     const getCachedNodeInfo = vi.fn(() => node);
@@ -575,29 +617,17 @@ describe("spatial node picks after a skeleton ownership change", () => {
       },
     );
     const rawPosition = new Float32Array([1, 2, 3]);
-    const rawSegmentIds = new Uint32Array([oldSegmentId]);
-    const vertexAttributes = new Uint8Array(
-      rawPosition.byteLength + rawSegmentIds.byteLength,
-    );
-    vertexAttributes.set(new Uint8Array(rawPosition.buffer), 0);
-    vertexAttributes.set(
-      new Uint8Array(rawSegmentIds.buffer),
-      rawPosition.byteLength,
-    );
-    const chunk = {
-      vertexAttributes,
-      vertexAttributeOffsets: new Uint32Array([0, rawPosition.byteLength]),
+    const rawSegmentIds = new BigUint64Array([oldSegmentId]);
+    const geometry = {
+      indices: new Uint32Array(),
       numVertices: 1,
-      nodeIds: new Int32Array([nodeId]),
+      nodeIds: new BigUint64Array([nodeId]),
+      nodePositions: rawPosition,
+      segmentIds: rawSegmentIds,
     };
     const pickFormats = [
-      {
-        kind: "node",
-        nodeIds: new Int32Array([nodeId]),
-        segmentIds: rawSegmentIds,
-        nodePositions: rawPosition,
-      },
-      { kind: "segment-node", chunk },
+      { kind: "node", geometry },
+      { kind: "segment-node", geometry },
     ];
     for (const data of pickFormats) {
       const mouseState: any = {};
@@ -652,7 +682,7 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
     const layer = Object.assign(
       Object.create(SpatiallyIndexedSkeletonLayer.prototype),
       {
-        selectedNodeInfo: { value: { nodeId: 101 } },
+        selectedNodeInfo: { value: { nodeId: 101n } },
         selectedNodeOutlineColor: vec3.create(),
         highlightedNodeOutlineColor: vec3.create(),
         nodeOutlineColorGeneration: 0,
@@ -681,7 +711,7 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
       color[2] = 0;
       return color;
     });
-    const selectedNodeId = { value: 101 };
+    const selectedNodeId = { value: 101n };
     const displayState = {
       segmentationColorGroupState: {
         value: {
@@ -700,7 +730,7 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
     const layer = Object.assign(
       Object.create(SpatiallyIndexedSkeletonLayer.prototype),
       {
-        selectedNodeInfo: { value: { nodeId: 101 } },
+        selectedNodeInfo: { value: { nodeId: 101n } },
         selectedNodeOutlineColor: vec3.create(),
         highlightedNodeOutlineColor: vec3.create(),
         nodeOutlineColorGeneration: 0,
@@ -710,7 +740,7 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
     );
 
     (layer as any).updateNodeOutlineColorPair();
-    selectedNodeId.value = 202;
+    selectedNodeId.value = 202n;
     ++(layer as any).nodeOutlineColorGeneration;
     (layer as any).updateNodeOutlineColorPair();
 
@@ -742,7 +772,7 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
     const layer = Object.assign(
       Object.create(SpatiallyIndexedSkeletonLayer.prototype),
       {
-        selectedNodeInfo: { value: { nodeId: 101 } },
+        selectedNodeInfo: { value: { nodeId: 101n } },
         selectedNodeOutlineColor: vec3.create(),
         highlightedNodeOutlineColor: vec3.create(),
         nodeOutlineColorGeneration: 0,
@@ -780,8 +810,8 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
     const layer = Object.assign(
       Object.create(SpatiallyIndexedSkeletonLayer.prototype),
       {
-        selectedNodeInfo: { value: { nodeId: 101, segmentId: 101 } },
-        hoveredNodeInfo: { value: { nodeId: 303, segmentId: 202 } },
+        selectedNodeInfo: { value: { nodeId: 101n, segmentId: 101n } },
+        hoveredNodeInfo: { value: { nodeId: 303n, segmentId: 202n } },
         selectedNodeOutlineColor: vec3.create(),
         highlightedNodeOutlineColor: vec3.create(),
         nodeOutlineColorGeneration: 0,
@@ -818,15 +848,15 @@ describe("SpatiallyIndexedSkeletonLayer browse exclusions", () => {
   function makeLayer(
     options: {
       maxRetained?: number;
-      visible?: readonly number[];
-      cached?: readonly number[];
-      existingChunks?: readonly number[];
+      visible?: readonly bigint[];
+      cached?: readonly bigint[];
+      existingChunks?: readonly bigint[];
     } = {},
   ) {
     const visibleSegments = new Uint64Set();
-    visibleSegments.add((options.visible ?? []).map(BigInt));
+    visibleSegments.add([...(options.visible ?? [])]);
     const temporaryVisibleSegments = new Uint64Set();
-    const cachedNodes = new Map<number, readonly unknown[]>(
+    const cachedNodes = new Map<bigint, readonly unknown[]>(
       (options.cached ?? []).map((segmentId) => [segmentId, [{}]]),
     );
     const nodeDataVersion = { value: 0 };
@@ -846,7 +876,7 @@ describe("SpatiallyIndexedSkeletonLayer browse exclusions", () => {
           spatialSkeletonPresentation: new SpatialSkeletonState()
             .spatialSkeletonPresentation,
           nodeDataVersion,
-          getCachedSegmentNodes: (segmentId: number) =>
+          getCachedSegmentNodes: (segmentId: bigint) =>
             cachedNodes.get(segmentId),
         },
         overlaySegmentChunks: new Map(
@@ -855,7 +885,7 @@ describe("SpatiallyIndexedSkeletonLayer browse exclusions", () => {
         failedOverlaySegmentBuilds: new Map(),
         overlayRenderChunks: [],
         pendingOverlayPositionKeys: new Map(),
-        pendingOverlaySegmentLoads: new Set<number>(),
+        pendingOverlaySegmentLoads: new Set<bigint>(),
         overlayRebuildFrame: 0,
         temporaryBrowseExclusions: new Set(),
         browseExcludedSegmentIdsVersion: 0,
@@ -864,7 +894,7 @@ describe("SpatiallyIndexedSkeletonLayer browse exclusions", () => {
         cachedBrowseExcludedVisibleGeneration: -1,
         cachedBrowseExcludedNodeDataVersion: undefined,
         browseExcludedSegments: new Uint64Set(),
-        retainedOverlaySegments: new Map<number, number>(),
+        retainedOverlaySegments: new Map<bigint, number>(),
         retainedOverlaySegmentIdsVersion: 0,
         overlaySegmentTouchCounter: 0,
         maxRetainedOverlaySegments: options.maxRetained ?? 24,
@@ -882,12 +912,12 @@ describe("SpatiallyIndexedSkeletonLayer browse exclusions", () => {
   it("uses the retained LRU as permanent browse ownership", () => {
     const { layer } = makeLayer({ maxRetained: 2 });
 
-    expect(layer.retainOverlaySegment(11)).toBe(true);
-    expect(layer.retainOverlaySegment(17)).toBe(true);
-    expect(layer.retainOverlaySegment(11)).toBe(false);
-    expect(layer.retainOverlaySegment(23)).toBe(true);
+    expect(layer.retainOverlaySegment(11n)).toBe(true);
+    expect(layer.retainOverlaySegment(17n)).toBe(true);
+    expect(layer.retainOverlaySegment(11n)).toBe(false);
+    expect(layer.retainOverlaySegment(23n)).toBe(true);
 
-    expect([...layer.retainedOverlaySegments.keys()]).toEqual([11, 23]);
+    expect([...layer.retainedOverlaySegments.keys()]).toEqual([11n, 23n]);
     const excludedSegments = layer.getBrowsePassExcludedSegments();
     expect(excludedSegments).toBeInstanceOf(Uint64Set);
     expect(getExcludedSegmentIds(layer)).toEqual([11n, 23n]);
@@ -896,35 +926,37 @@ describe("SpatiallyIndexedSkeletonLayer browse exclusions", () => {
 
   it("strictly evicts the oldest layer ownership on the 25th retain", () => {
     const { layer } = makeLayer();
-    for (let segmentId = 1; segmentId <= 25; ++segmentId) {
+    for (let segmentId = 1n; segmentId <= 25n; ++segmentId) {
       layer.retainOverlaySegment(segmentId);
     }
 
     // Layer retention deliberately has no queue-settlement exemption: every
     // retain participates in the same strict default-cap LRU.
-    const expected = Array.from({ length: 24 }, (_, index) => index + 2);
+    const expected = Array.from({ length: 24 }, (_, index) =>
+      BigInt(index + 2),
+    );
     expect([...layer.retainedOverlaySegments.keys()]).toEqual(expected);
-    expect(getExcludedSegmentIds(layer)).toEqual(expected.map(BigInt));
+    expect(getExcludedSegmentIds(layer)).toEqual(expected);
   });
 
   it("keeps a cold visible segment in browse until its exact overlay is ready", () => {
     const { layer, cachedNodes, nodeDataVersion } = makeLayer({
-      visible: [29],
+      visible: [29n],
     });
 
     expect(layer.getBrowsePassExcludedSegments()).toBeUndefined();
 
-    cachedNodes.set(29, [{}]);
+    cachedNodes.set(29n, [{}]);
     ++nodeDataVersion.value;
     expect([...layer.getBrowsePassExcludedSegments()]).toEqual([29n]);
 
-    cachedNodes.delete(29);
-    layer.overlaySegmentChunks.set(29, {});
+    cachedNodes.delete(29n);
+    layer.overlaySegmentChunks.set(29n, {});
     ++nodeDataVersion.value;
     ++layer.browseExcludedSegmentIdsVersion;
     expect([...layer.getBrowsePassExcludedSegments()]).toEqual([29n]);
 
-    layer.overlaySegmentChunks.delete(29);
+    layer.overlaySegmentChunks.delete(29n);
     ++layer.browseExcludedSegmentIdsVersion;
     expect(layer.getBrowsePassExcludedSegments()).toBeUndefined();
   });
@@ -932,15 +964,15 @@ describe("SpatiallyIndexedSkeletonLayer browse exclusions", () => {
   it("keeps a render-ready visible LRU victim excluded until it is hidden", () => {
     const { layer, visibleSegments } = makeLayer({
       maxRetained: 2,
-      visible: [11],
-      cached: [11],
+      visible: [11n],
+      cached: [11n],
     });
 
-    layer.retainOverlaySegment(11);
-    layer.retainOverlaySegment(17);
-    layer.retainOverlaySegment(23);
+    layer.retainOverlaySegment(11n);
+    layer.retainOverlaySegment(17n);
+    layer.retainOverlaySegment(23n);
 
-    expect([...layer.retainedOverlaySegments.keys()]).toEqual([17, 23]);
+    expect([...layer.retainedOverlaySegments.keys()]).toEqual([17n, 23n]);
     expect(getExcludedSegmentIds(layer)).toEqual([11n, 17n, 23n]);
 
     visibleSegments.delete(11n);
@@ -948,22 +980,21 @@ describe("SpatiallyIndexedSkeletonLayer browse exclusions", () => {
   });
 
   it("does not apply the retained cap to render-ready visible segments", () => {
-    const visibleSegmentIds = Array.from(
-      { length: 30 },
-      (_, index) => index + 1,
+    const visibleSegmentIds = Array.from({ length: 30 }, (_, index) =>
+      BigInt(index + 1),
     );
     const { layer } = makeLayer({
       maxRetained: 2,
       visible: visibleSegmentIds,
       cached: visibleSegmentIds,
     });
-    layer.retainOverlaySegment(101);
-    layer.retainOverlaySegment(102);
-    layer.retainOverlaySegment(103);
+    layer.retainOverlaySegment(101n);
+    layer.retainOverlaySegment(102n);
+    layer.retainOverlaySegment(103n);
 
-    expect([...layer.retainedOverlaySegments.keys()]).toEqual([102, 103]);
+    expect([...layer.retainedOverlaySegments.keys()]).toEqual([102n, 103n]);
     expect(getExcludedSegmentIds(layer)).toEqual([
-      ...visibleSegmentIds.map(BigInt),
+      ...visibleSegmentIds,
       102n,
       103n,
     ]);
@@ -972,28 +1003,28 @@ describe("SpatiallyIndexedSkeletonLayer browse exclusions", () => {
   it("releases drag-only exclusions without retiring adopted ownership", () => {
     const { layer } = makeLayer();
 
-    const releaseCanceledDrag = layer.beginTemporaryBrowseExclusion(29);
+    const releaseCanceledDrag = layer.beginTemporaryBrowseExclusion(29n);
     expect([...layer.getBrowsePassExcludedSegments()]).toEqual([29n]);
     expect([...layer.retainedOverlaySegments]).toEqual([]);
     expect(releaseCanceledDrag()).toBe(true);
     expect(releaseCanceledDrag()).toBe(false);
     expect(layer.getBrowsePassExcludedSegments()).toBeUndefined();
 
-    const releaseAdoptedDrag = layer.beginTemporaryBrowseExclusion(31);
-    layer.retainOverlaySegment(31);
+    const releaseAdoptedDrag = layer.beginTemporaryBrowseExclusion(31n);
+    layer.retainOverlaySegment(31n);
     expect(releaseAdoptedDrag()).toBe(true);
     expect([...layer.getBrowsePassExcludedSegments()]).toEqual([31n]);
   });
 
   it("keeps an evicted segment excluded while a drag token still owns it", () => {
     const { layer } = makeLayer({ maxRetained: 2 });
-    layer.retainOverlaySegment(11);
-    layer.retainOverlaySegment(17);
-    const release = layer.beginTemporaryBrowseExclusion(11);
+    layer.retainOverlaySegment(11n);
+    layer.retainOverlaySegment(17n);
+    const release = layer.beginTemporaryBrowseExclusion(11n);
 
-    layer.retainOverlaySegment(23);
+    layer.retainOverlaySegment(23n);
 
-    expect([...layer.retainedOverlaySegments.keys()]).toEqual([17, 23]);
+    expect([...layer.retainedOverlaySegments.keys()]).toEqual([17n, 23n]);
     expect(getExcludedSegmentIds(layer)).toEqual([11n, 17n, 23n]);
     expect(release()).toBe(true);
     expect(getExcludedSegmentIds(layer)).toEqual([17n, 23n]);
@@ -1002,8 +1033,8 @@ describe("SpatiallyIndexedSkeletonLayer browse exclusions", () => {
   it("remaps and releases an active drag exclusion", () => {
     const { layer } = makeLayer();
 
-    const release = layer.beginTemporaryBrowseExclusion(41);
-    expect(layer.remapOverlaySegments(new Map([[41, 43]]))).toBe(true);
+    const release = layer.beginTemporaryBrowseExclusion(41n);
+    expect(layer.remapOverlaySegments(new Map([[41n, 43n]]))).toBe(true);
     expect([...layer.getBrowsePassExcludedSegments()]).toEqual([43n]);
     expect(release()).toBe(true);
     expect(layer.getBrowsePassExcludedSegments()).toBeUndefined();
@@ -1011,33 +1042,33 @@ describe("SpatiallyIndexedSkeletonLayer browse exclusions", () => {
 
   it("preserves the newest recency when remapped identities collide", () => {
     const { layer } = makeLayer({ maxRetained: 2 });
-    const provisionalSegmentId = 0xffff_fff8;
+    const provisionalSegmentId = 2n ** 63n + 6n;
     layer.retainedOverlaySegments = new Map([
-      [11, 8],
-      [17, 6],
+      [11n, 8],
+      [17n, 6],
       [provisionalSegmentId, 3],
     ]);
     layer.overlaySegmentTouchCounter = 8;
 
     expect(
-      layer.remapOverlaySegments(new Map([[11, provisionalSegmentId]])),
+      layer.remapOverlaySegments(new Map([[11n, provisionalSegmentId]])),
     ).toBe(true);
     expect([...layer.retainedOverlaySegments.entries()]).toEqual([
       [provisionalSegmentId, 8],
-      [17, 6],
+      [17n, 6],
     ]);
 
-    layer.retainOverlaySegment(23);
+    layer.retainOverlaySegment(23n);
     expect([...layer.retainedOverlaySegments.keys()]).toEqual([
       provisionalSegmentId,
-      23,
+      23n,
     ]);
   });
 
   it("clears retained and temporary ownership together on runtime reset", () => {
     const { layer } = makeLayer();
-    layer.retainOverlaySegment(41);
-    const release = layer.beginTemporaryBrowseExclusion(43);
+    layer.retainOverlaySegment(41n);
+    const release = layer.beginTemporaryBrowseExclusion(43n);
     expect(getExcludedSegmentIds(layer)).toEqual([41n, 43n]);
 
     expect(layer.clearOverlayRuntimeState()).toBe(true);
@@ -1052,9 +1083,9 @@ describe("SpatiallyIndexedSkeletonLayer browse exclusions", () => {
 describe("SpatiallyIndexedSkeletonLayer projected removals", () => {
   function makeRenderer() {
     const state = new SpatialSkeletonState();
-    const node = { nodeId: 1, segmentId: 23, position: [1, 2, 3] };
-    state.replaceCachedSegmentSnapshots([[23, [node]]]);
-    const snapshot = state.getCachedSegmentSnapshotHandle(23)!.handle;
+    const node = { nodeId: 1n, segmentId: 23n, position: [1, 2, 3] };
+    state.replaceCachedSegmentSnapshots([[23n, [node]]]);
+    const snapshot = state.getCachedSegmentSnapshotHandle(23n)!.handle;
     const oldChunk = { dispose: vi.fn(), pickNodeIds: [1] };
     const replacementChunk = { dispose: vi.fn(), pickNodeIds: [1] };
     const visibleSegments = new Uint64Set();
@@ -1073,12 +1104,12 @@ describe("SpatiallyIndexedSkeletonLayer projected removals", () => {
             },
           },
         },
-        retainedOverlaySegments: new Map([[23, 1]]),
+        retainedOverlaySegments: new Map([[23n, 1]]),
         retainedOverlaySegmentIdsVersion: 1,
         overlayRebuildFrame: -1,
         overlaySegmentChunks: new Map([
           [
-            23,
+            23n,
             {
               nodes: snapshot.materialize(),
               pendingPositionKey: "",
@@ -1100,8 +1131,10 @@ describe("SpatiallyIndexedSkeletonLayer projected removals", () => {
     function publish(handle: typeof snapshot | undefined) {
       const presentation = state.spatialSkeletonPresentation.value;
       const prepared = state.prepareSpatialSkeletonProjectionStatePublication({
-        snapshots: [[23, handle]],
-        expectedRevisions: new Map([[23, state.getCachedSegmentRevision(23)]]),
+        snapshots: [[23n, handle]],
+        expectedRevisions: new Map([
+          [23n, state.getCachedSegmentRevision(23n)],
+        ]),
         activeLogicalOwners: presentation.activeLogicalOwners,
         numericAliases: presentation.numericAliases,
         provisionalNodeIds: presentation.provisionalNodeIds,
@@ -1149,14 +1182,14 @@ describe("SpatiallyIndexedSkeletonLayer projected removals", () => {
     const { state, layer, oldChunk, snapshot, publish } = makeRenderer();
     state.evictInactiveSegmentNodes([]);
     expect(layer.resolveSourceBackedOverlayChunks()).toEqual([oldChunk]);
-    expect(layer.requestOverlaySegmentLoad).toHaveBeenCalledWith(23);
-    const previousRevision = state.getCachedSegmentRevision(23);
+    expect(layer.requestOverlaySegmentLoad).toHaveBeenCalledWith(23n);
+    const previousRevision = state.getCachedSegmentRevision(23n);
     publish(snapshot);
-    expect(state.getCachedSegmentRevision(23)).toBeGreaterThan(
+    expect(state.getCachedSegmentRevision(23n)).toBeGreaterThan(
       previousRevision,
     );
     // The cache revision fences reads; array identity determines GPU geometry.
-    expect(state.getCachedSegmentNodes(23)).toBe(snapshot.materialize());
+    expect(state.getCachedSegmentNodes(23n)).toBe(snapshot.materialize());
     expect(layer.resolveSourceBackedOverlayChunks()).toEqual([oldChunk]);
     expect(layer.createOverlaySegmentChunk).not.toHaveBeenCalled();
   });

@@ -102,7 +102,7 @@ export type CatmaidOptimisticMutation<
     readonly kind: K;
     readonly request: CatmaidOptimisticMutationMap[K]["request"];
   } & (K extends "merge"
-    ? { readonly inputSegmentIds: readonly [number, number] }
+    ? { readonly inputSegmentIds: readonly [bigint, bigint] }
     : object);
 }[TKind];
 

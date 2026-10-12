@@ -66,6 +66,7 @@ export type {
   SpatialSkeletonProjectionUiHints,
   SpatialSkeletonResolvedProjectionUiHints,
 } from "#src/skeleton/optimistic_edit/projection_ui_hints.js";
+import { bigintCompare } from "#src/util/bigint.js";
 
 /**
  * Structural state boundary needed for one immutable projection adoption.
@@ -83,7 +84,7 @@ export interface SpatialSkeletonProjectionPublicationTarget
   ): SpatialSkeletonPreparedProjectionStatePublication | undefined;
   adoptPreparedSpatialSkeletonProjectionStatePublication(
     publication: SpatialSkeletonPreparedProjectionStatePublication,
-  ): { readonly cacheRevisions: ReadonlyMap<number, number> } | undefined;
+  ): { readonly cacheRevisions: ReadonlyMap<bigint, number> } | undefined;
   finalizePreparedSpatialSkeletonProjectionStatePublication(
     publication: SpatialSkeletonPreparedProjectionStatePublication,
     reportError?: (error: unknown) => void,
@@ -94,10 +95,10 @@ export interface SpatialSkeletonProjectionPublicationTarget
 export interface SpatialSkeletonProjectionInspectionSeed {
   readonly segments: readonly SpatialSkeletonProjectionSegmentSnapshot[];
   readonly authoritativeBindings: SpatialSkeletonLogicalHandleMappingUpdate<
-    number,
-    number
+    bigint,
+    bigint
   >;
-  readonly expectedCacheRevisions: ReadonlyMap<number, number>;
+  readonly expectedCacheRevisions: ReadonlyMap<bigint, number>;
 }
 
 /** Generic exact-preview input produced from retained inspected command data. */
@@ -111,8 +112,8 @@ export interface SpatialSkeletonProjectionIntentDelta {
   readonly inspectionSeed?: SpatialSkeletonProjectionInspectionSeed;
   /** Numeric identities that exist only until authority returns its bindings. */
   readonly provisionalBindings?: SpatialSkeletonLogicalHandleMappingUpdate<
-    number,
-    number
+    bigint,
+    bigint
   >;
   /** Applied once, after the exact model preview has been adopted. */
   readonly uiHints?: SpatialSkeletonProjectionUiHints;
@@ -127,10 +128,10 @@ export interface SpatialSkeletonProjectionIntentDelta {
  * request payloads, and lifecycle data deliberately do not belong here.
  */
 export interface SpatialSkeletonAuthoritativeReconciliation {
-  readonly bindings?: SpatialSkeletonLogicalHandleMappingUpdate<number, number>;
+  readonly bindings?: SpatialSkeletonLogicalHandleMappingUpdate<bigint, bigint>;
   readonly retiredResources?: readonly SpatialSkeletonLogicalResourceHandle[];
   /** Deleted physical IDs; their logical handles may remain bound for Undo. */
-  readonly retiredSegmentIds?: readonly number[];
+  readonly retiredSegmentIds?: readonly bigint[];
   /**
    * Rare authoritative replacement for the preview delta. The runtime applies
    * exactly one delta to the pre-commit baseline so the resulting canonical
@@ -147,33 +148,33 @@ export interface SpatialSkeletonAuthoritativeReconciliation {
  * by the shared state cache, not by a datasource workflow.
  */
 export interface SpatialSkeletonAuthoritativeReadSnapshot {
-  readonly segmentId: number;
+  readonly segmentId: bigint;
   readonly snapshot: CompleteSkeletonSnapshotHandle | undefined;
 }
 
 export interface SpatialSkeletonAuthoritativeReadPublicationOptions {
   /** Cache revisions captured when the underlying GET began. */
-  readonly expectedCacheRevisions: ReadonlyMap<number, number>;
+  readonly expectedCacheRevisions: ReadonlyMap<bigint, number>;
   readonly notify?: boolean;
 }
 
 export interface SpatialSkeletonPreparedProjectionPublication {
   readonly generation: number;
   readonly cacheChanges: readonly (readonly [
-    number,
+    bigint,
     CompleteSkeletonSnapshotHandle | undefined,
   ])[];
-  readonly expectedCacheRevisions: ReadonlyMap<number, number>;
+  readonly expectedCacheRevisions: ReadonlyMap<bigint, number>;
   readonly activeLogicalOwners: readonly SpatialSkeletonPresentationLogicalOwner[];
   readonly numericAliases: readonly SpatialSkeletonPresentationNumericAlias[];
-  readonly provisionalNodeIds: readonly number[];
+  readonly provisionalNodeIds: readonly bigint[];
   readonly preparationIntentIdsToRemove: readonly number[];
   readonly notify: boolean;
 }
 
 export class SpatialSkeletonProjectionPublicationFenceError extends Error {
   constructor(
-    readonly segmentId: number,
+    readonly segmentId: bigint,
     readonly expectedRevision: number,
     readonly actualRevision: number,
   ) {
@@ -193,7 +194,7 @@ export class SpatialSkeletonProjectionRuntimeStateError extends Error {
 
 export interface SpatialSkeletonProjectionRuntimeOptions {
   readonly retainedHistoryWorkspace?: SpatialSkeletonProjectionWorkspace;
-  readonly mappings?: SpatialSkeletonLogicalHandleMappings<number, number>;
+  readonly mappings?: SpatialSkeletonLogicalHandleMappings<bigint, bigint>;
   readonly uiHints?: SpatialSkeletonProjectionUiHintPort;
   readonly onAuxiliaryError?: (error: unknown) => void;
 }
@@ -209,17 +210,17 @@ interface PreparedRuntimePublication {
   /** Revision of the live identity map from which this candidate was derived. */
   readonly expectedMappingRevision: number;
   readonly publicValue: SpatialSkeletonPreparedProjectionPublication;
-  readonly mappings: SpatialSkeletonLogicalHandleMappings<number, number>;
+  readonly mappings: SpatialSkeletonLogicalHandleMappings<bigint, bigint>;
   readonly activeIntents: Map<number, RuntimeIntentProjection>;
   readonly retainedHistoryWorkspace: SpatialSkeletonProjectionWorkspace;
   readonly projectedWorkspace: SpatialSkeletonProjectionWorkspace;
   readonly statePublication: SpatialSkeletonPreparedProjectionStatePublication;
-  readonly publishedCacheRevisions: Map<number, number>;
+  readonly publishedCacheRevisions: Map<bigint, number>;
 }
 
 function cloneBindings(
-  update: SpatialSkeletonLogicalHandleMappingUpdate<number, number> | undefined,
-): SpatialSkeletonLogicalHandleMappingUpdate<number, number> | undefined {
+  update: SpatialSkeletonLogicalHandleMappingUpdate<bigint, bigint> | undefined,
+): SpatialSkeletonLogicalHandleMappingUpdate<bigint, bigint> | undefined {
   if (update === undefined) return undefined;
   const nodes = update.nodes?.map(
     ([handle, physicalId]) =>
@@ -236,7 +237,7 @@ function cloneBindings(
 }
 
 function hasBindings(
-  update: SpatialSkeletonLogicalHandleMappingUpdate<number, number> | undefined,
+  update: SpatialSkeletonLogicalHandleMappingUpdate<bigint, bigint> | undefined,
 ) {
   return (
     (update?.nodes?.length ?? 0) !== 0 || (update?.segments?.length ?? 0) !== 0
@@ -244,14 +245,14 @@ function hasBindings(
 }
 
 function validateNumericBindings(
-  update: SpatialSkeletonLogicalHandleMappingUpdate<number, number> | undefined,
+  update: SpatialSkeletonLogicalHandleMappingUpdate<bigint, bigint> | undefined,
   context: string,
 ) {
   for (const [, physicalId] of [
     ...(update?.nodes ?? []),
     ...(update?.segments ?? []),
   ]) {
-    if (!Number.isSafeInteger(physicalId) || physicalId <= 0) {
+    if (physicalId <= 0n) {
       throw new SpatialSkeletonProjectionValidationError(
         `${context} requires positive numeric ids; received ${physicalId}.`,
       );
@@ -260,11 +261,11 @@ function validateNumericBindings(
 }
 
 function bindingEntriesEqual(
-  actual: readonly (readonly [string, number])[],
+  actual: readonly (readonly [string, bigint])[],
   expected:
     | readonly (readonly [
         SpatialSkeletonLogicalNodeHandle | SpatialSkeletonLogicalSegmentHandle,
-        number,
+        bigint,
       ])[]
     | undefined,
 ) {
@@ -392,12 +393,12 @@ export class SpatialSkeletonOptimisticProjectionRuntime
       SpatialSkeletonProjectionInverseDelta
     >
 {
-  private mappingsValue: SpatialSkeletonLogicalHandleMappings<number, number>;
+  private mappingsValue: SpatialSkeletonLogicalHandleMappings<bigint, bigint>;
   private retainedHistoryWorkspaceValue: SpatialSkeletonProjectionWorkspace;
   private projectedWorkspaceValue: SpatialSkeletonProjectionWorkspace;
   private retainedHistorySegmentKeys = new Set<string>();
   private activeIntents = new Map<number, RuntimeIntentProjection>();
-  private publishedCacheRevisions = new Map<number, number>();
+  private publishedCacheRevisions = new Map<bigint, number>();
   private preparedExact = new Map<
     number,
     {
@@ -408,11 +409,11 @@ export class SpatialSkeletonOptimisticProjectionRuntime
   >();
   private generationValue = 0;
   private readonly physicalNodeHandles = new Map<
-    number,
+    bigint,
     SpatialSkeletonLogicalNodeHandle
   >();
   private readonly physicalSegmentHandles = new Map<
-    number,
+    bigint,
     SpatialSkeletonLogicalSegmentHandle
   >();
   private readonly projectionArtifactListeners = new Set<
@@ -428,7 +429,7 @@ export class SpatialSkeletonOptimisticProjectionRuntime
   ) {
     this.mappingsValue = (
       options.mappings ??
-      new SpatialSkeletonLogicalHandleMappings<number, number>()
+      new SpatialSkeletonLogicalHandleMappings<bigint, bigint>()
     ).clone();
     this.retainedHistoryWorkspaceValue =
       options.retainedHistoryWorkspace ??
@@ -466,17 +467,17 @@ export class SpatialSkeletonOptimisticProjectionRuntime
     return this.mappingsValue.resolveNode(handle);
   }
 
-  getOrCreateNodeHandle(nodeId: number) {
+  getOrCreateNodeHandle(nodeId: bigint) {
     return this.getOrCreateNodeHandles([nodeId]).get(nodeId)!;
   }
 
-  getOrCreateNodeHandles(nodeIds: readonly number[]) {
-    const uniqueNodeIds: number[] = [];
-    const requestedNodeIds = new Set<number>();
+  getOrCreateNodeHandles(nodeIds: readonly bigint[]) {
+    const uniqueNodeIds: bigint[] = [];
+    const requestedNodeIds = new Set<bigint>();
     // Validate the complete request before allocating or binding anything so
     // callers never observe a partially-applied batch.
     for (const nodeId of nodeIds) {
-      if (!Number.isSafeInteger(nodeId) || nodeId <= 0) {
+      if (nodeId <= 0n) {
         throw new RangeError(
           `A spatial skeleton node identity requires a positive numeric id; received ${nodeId}.`,
         );
@@ -486,8 +487,8 @@ export class SpatialSkeletonOptimisticProjectionRuntime
       uniqueNodeIds.push(nodeId);
     }
 
-    const result = new Map<number, SpatialSkeletonLogicalNodeHandle>();
-    const unresolvedNodeIds: number[] = [];
+    const result = new Map<bigint, SpatialSkeletonLogicalNodeHandle>();
+    const unresolvedNodeIds: bigint[] = [];
     for (const nodeId of uniqueNodeIds) {
       const existing = this.physicalNodeHandles.get(nodeId);
       // Preserve the logical identity originally interned for this lookup even
@@ -504,7 +505,7 @@ export class SpatialSkeletonOptimisticProjectionRuntime
 
     const mappedNodes = this.mappingsValue.findFirstNodes(unresolvedNodeIds);
     const newBindings: Array<
-      readonly [SpatialSkeletonLogicalNodeHandle, number]
+      readonly [SpatialSkeletonLogicalNodeHandle, bigint]
     > = [];
     for (const nodeId of unresolvedNodeIds) {
       const mapped = mappedNodes.get(nodeId);
@@ -523,8 +524,8 @@ export class SpatialSkeletonOptimisticProjectionRuntime
     return result;
   }
 
-  getOrCreateSegmentHandle(segmentId: number) {
-    if (!Number.isSafeInteger(segmentId) || segmentId <= 0) {
+  getOrCreateSegmentHandle(segmentId: bigint) {
+    if (segmentId <= 0n) {
       throw new RangeError(
         `A spatial skeleton segment identity requires a positive numeric id; received ${segmentId}.`,
       );
@@ -582,7 +583,7 @@ export class SpatialSkeletonOptimisticProjectionRuntime
     ]);
   }
 
-  ownsAuthoritativeReadSegment(segmentId: number) {
+  ownsAuthoritativeReadSegment(segmentId: bigint) {
     return (
       this.retainedHistoryWorkspaceValue.segments.some(
         ({ segment }) =>
@@ -773,7 +774,7 @@ export class SpatialSkeletonOptimisticProjectionRuntime
     }
     if (removedIntents.length === 0 && !replayChanged) return;
     const rollbackIds = removedIntents.map(({ intentId }) => intentId);
-    const restoredHistorySegmentIds = new Set<number>();
+    const restoredHistorySegmentIds = new Set<bigint>();
     for (const { projection } of removedIntents) {
       for (const handle of getProjectionSegmentHandles(projection.delta)) {
         const segmentId =
@@ -847,8 +848,8 @@ export class SpatialSkeletonOptimisticProjectionRuntime
     });
 
     const mappings = this.mappingsValue.clone();
-    const nodeRemappings = new Map<number, number>();
-    const segmentRemappings = new Map<number, number>();
+    const nodeRemappings = new Map<bigint, bigint>();
+    const segmentRemappings = new Map<bigint, bigint>();
     const bindingRemappings = [
       [publication.reconciliation.bindings?.nodes, nodeRemappings],
       [publication.reconciliation.bindings?.segments, segmentRemappings],
@@ -953,11 +954,11 @@ export class SpatialSkeletonOptimisticProjectionRuntime
     snapshots: Iterable<SpatialSkeletonAuthoritativeReadSnapshot>,
   ) {
     const bySegmentId = new Map<
-      number,
+      bigint,
       SpatialSkeletonAuthoritativeReadSnapshot
     >();
     for (const { segmentId, snapshot } of snapshots) {
-      if (!Number.isSafeInteger(segmentId) || segmentId <= 0) {
+      if (segmentId <= 0n) {
         throw new SpatialSkeletonProjectionValidationError(
           `An authoritative spatial skeleton read has invalid segment id ${segmentId}.`,
         );
@@ -969,7 +970,7 @@ export class SpatialSkeletonOptimisticProjectionRuntime
       }
       if (snapshot !== undefined) {
         for (const node of snapshot.materialize()) {
-          if (!Number.isSafeInteger(node.nodeId) || node.nodeId <= 0) {
+          if (node.nodeId <= 0n) {
             throw new SpatialSkeletonProjectionValidationError(
               `Authoritative segment ${segmentId} contains invalid node id ${node.nodeId}.`,
             );
@@ -1004,7 +1005,7 @@ export class SpatialSkeletonOptimisticProjectionRuntime
   private publishNormalizedAuthoritativeRead(
     snapshots: readonly SpatialSkeletonAuthoritativeReadSnapshot[],
     options: {
-      readonly acceptedCacheRevisions: ReadonlyMap<number, number>;
+      readonly acceptedCacheRevisions: ReadonlyMap<bigint, number>;
       readonly notify?: boolean;
     },
   ) {
@@ -1077,8 +1078,8 @@ export class SpatialSkeletonOptimisticProjectionRuntime
   }
 
   private createFreshAuthoritativeSegmentHandle(
-    mappings: SpatialSkeletonLogicalHandleMappings<number, number>,
-    segmentId: number,
+    mappings: SpatialSkeletonLogicalHandleMappings<bigint, bigint>,
+    segmentId: bigint,
   ) {
     const base = `authority:${segmentId}`;
     for (let suffix = 0; ; ++suffix) {
@@ -1091,8 +1092,8 @@ export class SpatialSkeletonOptimisticProjectionRuntime
   }
 
   private createFreshAuthoritativeNodeHandle(
-    mappings: SpatialSkeletonLogicalHandleMappings<number, number>,
-    nodeId: number,
+    mappings: SpatialSkeletonLogicalHandleMappings<bigint, bigint>,
+    nodeId: bigint,
   ) {
     const base = `authority:${nodeId}`;
     for (let suffix = 0; ; ++suffix) {
@@ -1106,15 +1107,15 @@ export class SpatialSkeletonOptimisticProjectionRuntime
 
   private preparePublication(options: {
     readonly activeIntents: ReadonlyMap<number, RuntimeIntentProjection>;
-    readonly mappings?: SpatialSkeletonLogicalHandleMappings<number, number>;
+    readonly mappings?: SpatialSkeletonLogicalHandleMappings<bigint, bigint>;
     readonly retainedHistoryWorkspace?: SpatialSkeletonProjectionWorkspace;
     /** History snapshots that must be written during this adoption only. */
-    readonly publishHistorySegmentIds?: readonly number[];
+    readonly publishHistorySegmentIds?: readonly bigint[];
     /** Confirmed deletions must fence reads even when their preview is absent. */
-    readonly retiredSegmentIds?: ReadonlySet<number>;
+    readonly retiredSegmentIds?: ReadonlySet<bigint>;
     readonly preparationIntentIdsToRemove: readonly number[];
     /** Revisions captured when an authoritative read began. */
-    readonly acceptedCacheRevisions?: ReadonlyMap<number, number>;
+    readonly acceptedCacheRevisions?: ReadonlyMap<bigint, number>;
     readonly notify?: boolean;
     readonly precedingArtifacts?: readonly SpatialSkeletonProjectionIntentArtifact<
       SpatialSkeletonProjectionIntentDelta,
@@ -1206,13 +1207,13 @@ export class SpatialSkeletonOptimisticProjectionRuntime
       mappings,
     );
     const cacheChanges = new Map<
-      number,
+      bigint,
       CompleteSkeletonSnapshotHandle | undefined
     >();
     const publishHistorySegmentIds = new Set(
       options.publishHistorySegmentIds ?? [],
     );
-    const retiredSegmentIds = options.retiredSegmentIds ?? new Set<number>();
+    const retiredSegmentIds = options.retiredSegmentIds ?? new Set<bigint>();
     const candidateSegmentIds = new Set([
       ...retiredSegmentIds,
       ...currentPhysical.keys(),
@@ -1242,7 +1243,7 @@ export class SpatialSkeletonOptimisticProjectionRuntime
       }
     }
 
-    const expectedCacheRevisions = new Map<number, number>();
+    const expectedCacheRevisions = new Map<bigint, number>();
     for (const segmentId of cacheChanges.keys()) {
       const currentRevision = this.target.getCachedSegmentRevision(segmentId);
       const publishedRevision = this.publishedCacheRevisions.get(segmentId);
@@ -1301,15 +1302,15 @@ export class SpatialSkeletonOptimisticProjectionRuntime
         }),
       );
     }
-    activeLogicalOwners.sort((a, b) => a.segmentId - b.segmentId);
+    activeLogicalOwners.sort((a, b) => bigintCompare(a.segmentId, b.segmentId));
     numericAliases.sort((a, b) =>
       a.logicalHandle.stableId.localeCompare(b.logicalHandle.stableId),
     );
 
-    const provisionalNodeIds = new Set<number>();
+    const provisionalNodeIds = new Set<bigint>();
     for (const overlay of mappings.cloneSnapshot().overlays) {
       for (const [, nodeId] of overlay.nodes) {
-        if (!Number.isSafeInteger(nodeId) || nodeId <= 0) {
+        if (nodeId <= 0n) {
           throw new SpatialSkeletonProjectionValidationError(
             `A provisional node requires a positive numeric id; received ${nodeId}.`,
           );
@@ -1329,7 +1330,7 @@ export class SpatialSkeletonOptimisticProjectionRuntime
         activeLogicalOwners: Object.freeze(activeLogicalOwners),
         numericAliases: Object.freeze(numericAliases),
         provisionalNodeIds: Object.freeze(
-          [...provisionalNodeIds].sort((a, b) => a - b),
+          [...provisionalNodeIds].sort(bigintCompare),
         ),
         preparationIntentIdsToRemove,
         notify: options.notify ?? true,
@@ -1385,11 +1386,11 @@ export class SpatialSkeletonOptimisticProjectionRuntime
     publication: PreparedRuntimePublication,
     options: {
       readonly uiHints?: SpatialSkeletonProjectionUiHints;
-      readonly nodeIdRemappings?: ReadonlyMap<number, number>;
-      readonly segmentIdRemappings?: ReadonlyMap<number, number>;
+      readonly nodeIdRemappings?: ReadonlyMap<bigint, bigint>;
+      readonly segmentIdRemappings?: ReadonlyMap<bigint, bigint>;
       readonly fallbackUiHintMappings?: SpatialSkeletonLogicalHandleMappings<
-        number,
-        number
+        bigint,
+        bigint
       >;
     } = {},
   ) {
@@ -1496,7 +1497,7 @@ export class SpatialSkeletonOptimisticProjectionRuntime
   }
 
   private reconcileMappingOverlays(
-    mappings: SpatialSkeletonLogicalHandleMappings<number, number>,
+    mappings: SpatialSkeletonLogicalHandleMappings<bigint, bigint>,
     active: ReadonlyMap<number, RuntimeIntentProjection>,
   ) {
     const desired = new Set(
@@ -1560,7 +1561,7 @@ export class SpatialSkeletonOptimisticProjectionRuntime
       "A retained spatial skeleton inspection",
     );
     for (const [segmentId, expectedRevision] of seed.expectedCacheRevisions) {
-      if (!Number.isSafeInteger(segmentId) || segmentId <= 0) {
+      if (segmentId <= 0n) {
         throw new SpatialSkeletonProjectionValidationError(
           `A retained inspection has invalid segment id ${segmentId}.`,
         );
@@ -1591,10 +1592,10 @@ export class SpatialSkeletonOptimisticProjectionRuntime
         | SpatialSkeletonLogicalNodeHandle
         | SpatialSkeletonLogicalSegmentHandle,
     >(
-      bindings: readonly (readonly [THandle, number])[] | undefined,
-      resolve: (handle: THandle) => number | undefined,
+      bindings: readonly (readonly [THandle, bigint])[] | undefined,
+      resolve: (handle: THandle) => bigint | undefined,
     ) => {
-      const result: (readonly [THandle, number])[] = [];
+      const result: (readonly [THandle, bigint])[] = [];
       for (const [handle, physicalId] of bindings ?? []) {
         const current = resolve(handle);
         if (current !== undefined && current !== physicalId) {
@@ -1658,7 +1659,7 @@ export class SpatialSkeletonOptimisticProjectionRuntime
 
   /** Retires authority without deleting a later intent's provisional overlay. */
   private retireAuthoritativeBinding(
-    mappings: SpatialSkeletonLogicalHandleMappings<number, number>,
+    mappings: SpatialSkeletonLogicalHandleMappings<bigint, bigint>,
     resource: SpatialSkeletonLogicalResourceHandle,
   ) {
     const snapshot = mappings.cloneSnapshot();

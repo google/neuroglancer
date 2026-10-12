@@ -99,7 +99,7 @@ function makeQueuedSelectionLayer(pin = true) {
   };
   const skeletonLayer = {
     source,
-    getNode: (id: number) => state.getCachedNode(id),
+    getNode: (id: bigint) => state.getCachedNode(id),
     retainOverlaySegment: vi.fn(),
     remapOverlaySegments: vi.fn(),
   };
@@ -305,8 +305,8 @@ describe("layer/segmentation optimistic projection UI hints", () => {
       selectedSegments: new Set([100n]),
     };
     const selectedSpatialSkeletonNodeInfo = new WatchableValue<any>({
-      nodeId: 10,
-      segmentId: 100,
+      nodeId: 10n,
+      segmentId: 100n,
       position: [1, 2, 3],
     });
     const selectSpatialSkeletonNode = vi.fn();
@@ -339,10 +339,10 @@ describe("layer/segmentation optimistic projection UI hints", () => {
     );
 
     layer.applySpatialSkeletonProjectionUiHints({
-      nodeIdRemappings: new Map([[10, 20]]),
-      segmentIdRemappings: new Map([[100, 200]]),
+      nodeIdRemappings: new Map([[10n, 20n]]),
+      segmentIdRemappings: new Map([[100n, 200n]]),
       segmentVisibility: [],
-      retainSegmentIds: [200],
+      retainSegmentIds: [200n],
     });
 
     for (const set of [
@@ -354,14 +354,16 @@ describe("layer/segmentation optimistic projection UI hints", () => {
       expect(set.has(200n)).toBe(true);
     }
     expect(selectedSpatialSkeletonNodeInfo.value).toEqual({
-      nodeId: 20,
-      segmentId: 200,
+      nodeId: 20n,
+      segmentId: 200n,
       position: [1, 2, 3],
     });
     expect(selectSpatialSkeletonNode).not.toHaveBeenCalled();
-    expect(remapPendingNodePositions).toHaveBeenCalledWith(new Map([[10, 20]]));
-    expect(remapOverlaySegments).toHaveBeenCalledWith(new Map([[100, 200]]));
-    expect(retainOverlaySegment).toHaveBeenCalledWith(200);
+    expect(remapPendingNodePositions).toHaveBeenCalledWith(
+      new Map([[10n, 20n]]),
+    );
+    expect(remapOverlaySegments).toHaveBeenCalledWith(new Map([[100n, 200n]]));
+    expect(retainOverlaySegment).toHaveBeenCalledWith(200n);
   });
 
   it.each([true, false])(
@@ -376,7 +378,7 @@ describe("layer/segmentation optimistic projection UI hints", () => {
       };
       layer.applySpatialSkeletonProjectionUiHints({
         nodeIdRemappings: new Map(),
-        segmentIdRemappings: new Map([[4294967290, 114]]),
+        segmentIdRemappings: new Map([[4294967290n, 114n]]),
         segmentVisibility: [],
         retainSegmentIds: [],
       });
@@ -395,16 +397,21 @@ describe("layer/segmentation optimistic projection UI hints", () => {
         nodeIdRemappings: new Map(),
         segmentIdRemappings: new Map(),
         segmentVisibility: [
-          { segmentId: 87, visible: true, deselect: false, select: "preserve" },
+          {
+            segmentId: 87n,
+            visible: true,
+            deselect: false,
+            select: "preserve",
+          },
         ],
         selectedNode: {
           kind: "select",
-          nodeId: 725,
-          segmentId: 87,
+          nodeId: 725n,
+          segmentId: 87n,
           pin: "preserve",
           moveView: false,
         },
-        retainSegmentIds: [87],
+        retainSegmentIds: [87n],
       });
       expect(selectionState.value.layers[0].state).toEqual({
         nodeId: "725",
@@ -418,11 +425,11 @@ describe("layer/segmentation optimistic projection UI hints", () => {
     const { layer, state, selectionState, group, client } =
       makeQueuedSelectionLayer();
     const node = {
-      nodeId: 725,
-      segmentId: 87,
+      nodeId: 725n,
+      segmentId: 87n,
       position: new Float32Array([4, 5, 6]),
     };
-    state.replaceCachedSegmentSnapshots([[87, [node]]]);
+    state.replaceCachedSegmentSnapshots([[87n, [node]]]);
     group.visibleSegments.add(87n);
     layer.selectSpatialSkeletonNode(node.nodeId, true, node);
     let rejectDelete!: (error: Error) => void;
@@ -456,10 +463,10 @@ describe("layer/segmentation optimistic projection UI hints", () => {
       value: 87n,
     });
     expect(group.visibleSegments.has(87n)).toBe(true);
-    expect(state.getCachedNode(725)).toMatchObject(node);
+    expect(state.getCachedNode(725n)).toMatchObject(node);
     expect(
       state.spatialSkeletonPresentation.value.removedSegmentIds,
-    ).not.toContain(87);
+    ).not.toContain(87n);
     expect(state.getOptimisticEditFatalState()).toBeUndefined();
     state.dispose();
   });
@@ -743,8 +750,8 @@ describe("layer/segmentation spatial skeleton selection serialization", () => {
     });
     layer.getSpatiallyIndexedSkeletonLayer = () => undefined;
     const getCachedNode = vi.fn(() => ({
-      nodeId: 210701784,
-      segmentId: 6368977,
+      nodeId: 210701784n,
+      segmentId: 6368977n,
     }));
     layer.spatialSkeletonState = { getCachedNode };
     layer.reconcileSpatialSkeletonSelectionOwnership();
@@ -827,7 +834,7 @@ describe("layer/segmentation spatial skeleton selection serialization", () => {
       active: true,
       position: new Float32Array(0),
       pickedRenderLayer: renderLayer,
-      pickedSpatialSkeleton: { nodeId: 31, segmentId: 9 },
+      pickedSpatialSkeleton: { nodeId: 31n, segmentId: 9n },
     } as any);
 
     expect(state.nodeId).toBe("31");
@@ -861,7 +868,7 @@ describe("layer/segmentation spatial skeleton selection serialization", () => {
       active: true,
       position: new Float32Array(0),
       pickedRenderLayer: otherRenderLayer,
-      pickedSpatialSkeleton: { nodeId: 31, segmentId: 9 },
+      pickedSpatialSkeleton: { nodeId: 31n, segmentId: 9n },
     } as any);
 
     expect(state.nodeId).toBeUndefined();
@@ -916,7 +923,7 @@ describe("layer/segmentation spatial skeleton selection serialization", () => {
     expect(parent.textContent).not.toContain("Confidence");
 
     (layer.spatialSkeletonState as any).spatialSkeletonPresentation = {
-      value: { provisionalNodeIds: [22242672] },
+      value: { provisionalNodeIds: [22242672n] },
     };
     const provisionalParent = document.createElement("div");
     expect(
@@ -1024,14 +1031,14 @@ describe("layer/segmentation spatial skeleton node navigation helpers", () => {
       configurable: true,
     });
     const node = {
-      nodeId: 31,
-      segmentId: 9,
+      nodeId: 31n,
+      segmentId: 9n,
       position: new Float32Array([4, 5, 6]),
     };
 
     expect(layer.selectAndMoveToSpatialSkeletonNode(node)).toBe(true);
-    expect(selectSpatialSkeletonNode).toHaveBeenCalledWith(31, true, {
-      segmentId: 9,
+    expect(selectSpatialSkeletonNode).toHaveBeenCalledWith(31n, true, {
+      segmentId: 9n,
       position: new Float32Array([4, 5, 6]),
     });
     expect(moveViewToSpatialSkeletonNodePosition).toHaveBeenCalledWith(

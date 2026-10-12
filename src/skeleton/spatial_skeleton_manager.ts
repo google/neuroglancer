@@ -79,6 +79,7 @@ import {
   type SpatialSkeletonOptimisticEditState,
 } from "#src/skeleton/optimistic_edit/types.js";
 import { WatchableValue } from "#src/trackable_value.js";
+import { bigintCompare } from "#src/util/bigint.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { PromiseConcurrencyLimiter } from "#src/util/promise_concurrency_limiter.js";
 
@@ -150,7 +151,7 @@ export type SpatialSkeletonPreparationLifecycle = "preparing";
  * they are therefore truthful last-known locations, not invented topology.
  */
 export interface SpatialSkeletonPreparationPosition {
-  readonly nodeId: number;
+  readonly nodeId: bigint;
   readonly position: Float32Array;
 }
 
@@ -169,13 +170,13 @@ export interface SpatialSkeletonPreparationIntent {
   readonly lifecycle: SpatialSkeletonPreparationLifecycle;
   readonly logicalNodeHandles?: readonly SpatialSkeletonLogicalNodeHandle[];
   readonly logicalSegmentHandles?: readonly SpatialSkeletonLogicalSegmentHandle[];
-  readonly segmentIds: readonly number[];
-  readonly nodeId?: number;
-  readonly endpointNodeIds?: readonly number[];
-  readonly cutNodeId?: number;
-  readonly cutParentNodeId?: number;
-  readonly rootNodeId?: number;
-  readonly pathNodeIds?: readonly number[];
+  readonly segmentIds: readonly bigint[];
+  readonly nodeId?: bigint;
+  readonly endpointNodeIds?: readonly bigint[];
+  readonly cutNodeId?: bigint;
+  readonly cutParentNodeId?: bigint;
+  readonly rootNodeId?: bigint;
+  readonly pathNodeIds?: readonly bigint[];
   readonly lastKnownPositions?: readonly SpatialSkeletonPreparationPosition[];
 }
 
@@ -208,26 +209,26 @@ export interface SpatialSkeletonCachedSegmentSnapshotHandle {
  * reference's cache-retention registration and is idempotent.
  */
 export interface SpatialSkeletonInputReference {
-  readonly segmentId: number;
+  readonly segmentId: bigint;
   readonly snapshot: SpatialSkeletonCachedSegmentSnapshotHandle;
   isCurrent(): boolean;
   release(): void;
 }
 
 export interface SpatialSkeletonPresentationExactSegment {
-  readonly segmentId: number;
+  readonly segmentId: bigint;
   readonly snapshot: SpatialSkeletonCachedSegmentSnapshotHandle;
 }
 
 export interface SpatialSkeletonPresentationLogicalOwner {
-  readonly segmentId: number;
+  readonly segmentId: bigint;
   readonly logicalHandle: SpatialSkeletonLogicalSegmentHandle;
 }
 
 export interface SpatialSkeletonPresentationNumericAlias {
   readonly logicalHandle: SpatialSkeletonLogicalSegmentHandle;
   /** Numeric id shown to rendering, picking, and user-facing selection. */
-  readonly segmentId: number;
+  readonly segmentId: bigint;
   /** False while the numeric id exists only in the local optimistic projection. */
   readonly authoritative?: boolean;
 }
@@ -242,11 +243,11 @@ export interface SpatialSkeletonPresentationSnapshot {
   readonly revision: number;
   readonly exactSegmentSnapshots: readonly SpatialSkeletonPresentationExactSegment[];
   /** Explicit projection removals, including pending deletions and retired IDs. */
-  readonly removedSegmentIds: readonly number[];
+  readonly removedSegmentIds: readonly bigint[];
   readonly activeLogicalOwners: readonly SpatialSkeletonPresentationLogicalOwner[];
   readonly numericAliases: readonly SpatialSkeletonPresentationNumericAlias[];
   /** Node ids that exist only in the local optimistic projection. */
-  readonly provisionalNodeIds: readonly number[];
+  readonly provisionalNodeIds: readonly bigint[];
   readonly preparations: readonly SpatialSkeletonPreparationIntent[];
 }
 
@@ -262,26 +263,26 @@ const preparedSpatialSkeletonProjectionStatePublicationBrand = Symbol(
 export interface SpatialSkeletonPreparedProjectionStatePublication {
   readonly [preparedSpatialSkeletonProjectionStatePublicationBrand]: true;
   /** Planned post-adoption revisions, prepared with the cache maps. */
-  readonly cacheRevisions: ReadonlyMap<number, number>;
+  readonly cacheRevisions: ReadonlyMap<bigint, number>;
 }
 
 /** Complete state-facing portion of one immutable optimistic publication. */
 export interface SpatialSkeletonProjectionStatePublicationRequest {
   readonly snapshots: Iterable<
-    readonly [number, CompleteSkeletonSnapshotHandle | undefined]
+    readonly [bigint, CompleteSkeletonSnapshotHandle | undefined]
   >;
-  readonly expectedRevisions: ReadonlyMap<number, number>;
+  readonly expectedRevisions: ReadonlyMap<bigint, number>;
   /** Confirmed deletions advance revisions even for already-absent snapshots. */
-  readonly retiredSegmentIds?: ReadonlySet<number>;
+  readonly retiredSegmentIds?: ReadonlySet<bigint>;
   readonly activeLogicalOwners: Iterable<SpatialSkeletonPresentationLogicalOwner>;
   readonly numericAliases: Iterable<SpatialSkeletonPresentationNumericAlias>;
-  readonly provisionalNodeIds: Iterable<number>;
+  readonly provisionalNodeIds: Iterable<bigint>;
   readonly preparationIntentIdsToRemove: Iterable<number>;
   readonly notify: boolean;
 }
 
 export interface SpatialSkeletonAdoptedProjectionStatePublication {
-  readonly cacheRevisions: ReadonlyMap<number, number>;
+  readonly cacheRevisions: ReadonlyMap<bigint, number>;
 }
 
 function hasFunction<T extends string>(
@@ -417,35 +418,18 @@ export function editableSpatiallyIndexedSkeletonSourceSupportsAction(
 
 export function normalizeSpatiallyIndexedSkeletonNode(
   node: SpatiallyIndexedSkeletonNode,
-  fallbackSegmentId: number,
+  fallbackSegmentId: bigint,
 ): SpatiallyIndexedSkeletonNode | undefined {
-  const nodeId = Number(node.nodeId);
-  const segmentIdValue = Number(node.segmentId);
   const x = Number(node.position[0]);
   const y = Number(node.position[1]);
   const z = Number(node.position[2]);
-  if (
-    !Number.isFinite(nodeId) ||
-    !Number.isFinite(segmentIdValue) ||
-    !Number.isFinite(x) ||
-    !Number.isFinite(y) ||
-    !Number.isFinite(z)
-  ) {
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
     return undefined;
   }
-  const parentNodeId =
-    node.parentNodeId === undefined ||
-    !Number.isFinite(Number(node.parentNodeId))
-      ? undefined
-      : Math.round(Number(node.parentNodeId));
   return {
     ...node,
-    nodeId: Math.round(nodeId),
-    segmentId: Math.round(
-      Number.isFinite(segmentIdValue) ? segmentIdValue : fallbackSegmentId,
-    ),
+    segmentId: node.segmentId ?? fallbackSegmentId,
     position: new Float32Array([x, y, z]),
-    parentNodeId,
     description:
       typeof node.description === "string" && node.description.length > 0
         ? node.description
@@ -519,33 +503,33 @@ interface SpatialSkeletonPreparedProjectionStatePublicationImplementation
   readonly owner: object;
   readonly expectedCacheRevisionClock: number;
   readonly expectedPresentation: SpatialSkeletonPresentationSnapshot;
-  readonly expectedRevisions: ReadonlyMap<number, number>;
-  readonly cacheRevisions: ReadonlyMap<number, number>;
+  readonly expectedRevisions: ReadonlyMap<bigint, number>;
+  readonly cacheRevisions: ReadonlyMap<bigint, number>;
   readonly nextCacheRevisionClock: number;
-  readonly nextFullSegmentNodeRevisions: Map<number, number>;
+  readonly nextFullSegmentNodeRevisions: Map<bigint, number>;
   readonly nextFullSegmentNodeCache: Map<
-    number,
+    bigint,
     SpatiallyIndexedSkeletonNode[]
   >;
   readonly nextFullSegmentSnapshotHandles: Map<
-    number,
+    bigint,
     SpatialSkeletonCachedSegmentSnapshotHandle
   >;
-  readonly nextCachedNodesById: Map<number, SpatiallyIndexedSkeletonNode>;
+  readonly nextCachedNodesById: Map<bigint, SpatiallyIndexedSkeletonNode>;
   readonly nextPresentationLogicalOwners: Map<
-    number,
+    bigint,
     SpatialSkeletonLogicalSegmentHandle
   >;
   readonly nextPresentationNumericAliases: Map<
     string,
-    { readonly segmentId: number; readonly authoritative: boolean }
+    { readonly segmentId: bigint; readonly authoritative: boolean }
   >;
-  readonly nextPresentationProvisionalNodeIds: Set<number>;
-  readonly nextPresentationRemovedSegmentIds: Set<number>;
+  readonly nextPresentationProvisionalNodeIds: Set<bigint>;
+  readonly nextPresentationRemovedSegmentIds: Set<bigint>;
   readonly nextPreparationsById: Map<number, SpatialSkeletonPreparationIntent>;
-  readonly changedSegmentIds: readonly number[];
-  readonly abortSegmentIds: readonly number[];
-  readonly retiredSegmentIds: ReadonlySet<number>;
+  readonly changedSegmentIds: readonly bigint[];
+  readonly abortSegmentIds: readonly bigint[];
+  readonly retiredSegmentIds: ReadonlySet<bigint>;
   readonly notifyNodeData: boolean;
   readonly presentation?: SpatialSkeletonPresentationSnapshot;
 }
@@ -558,12 +542,19 @@ function normalizePreparationId(value: number, label: string) {
   return normalized;
 }
 
+function normalizePreparationNodeId(value: bigint, label: string) {
+  if (value === 0n) {
+    throw new RangeError(`Invalid ${label}: ${value}`);
+  }
+  return value;
+}
+
 function normalizePreparationNodeIds(
-  values: readonly number[] | undefined,
+  values: readonly bigint[] | undefined,
   label: string,
 ) {
   if (values === undefined) return undefined;
-  return values.map((value) => normalizePreparationId(value, label));
+  return values.map((value) => normalizePreparationNodeId(value, label));
 }
 
 function normalizeSpatialSkeletonPreparationIntent(
@@ -607,8 +598,8 @@ function normalizeSpatialSkeletonPreparationIntent(
   if (direction !== "execute" && direction !== "undo" && direction !== "redo") {
     throw new TypeError(`Invalid preparation direction: ${direction}`);
   }
-  const normalizeOptionalId = (value: number | undefined, label: string) =>
-    value === undefined ? undefined : normalizePreparationId(value, label);
+  const normalizeOptionalId = (value: bigint | undefined, label: string) =>
+    value === undefined ? undefined : normalizePreparationNodeId(value, label);
   const lastKnownPositions = preparation.lastKnownPositions?.map((entry) => {
     const position = new Float32Array([
       Number(entry.position[0]),
@@ -621,7 +612,7 @@ function normalizeSpatialSkeletonPreparationIntent(
       );
     }
     return Object.freeze({
-      nodeId: normalizePreparationId(entry.nodeId, "preparation node id"),
+      nodeId: normalizePreparationNodeId(entry.nodeId, "preparation node id"),
       position,
     });
   });
@@ -746,7 +737,7 @@ class StateOwnedSpatialSkeletonProvisionalNumericIdService
       kind === "node"
         ? policy.allocateNodeId(intentId)
         : policy.allocateSegmentId(intentId);
-    if (!Number.isSafeInteger(id) || id <= 0) {
+    if (id <= 0n) {
       throw new SpatialSkeletonOptimisticDatasourceContractError(
         `The datasource provisional ${kind} ID policy returned invalid ID ${id}.`,
       );
@@ -784,7 +775,7 @@ export class SpatialSkeletonState
   readonly editMode = new WatchableValue(false);
   readonly mergeMode = new WatchableValue(false);
   readonly splitMode = new WatchableValue(false);
-  readonly mergeAnchorNodeId = new WatchableValue<number | undefined>(
+  readonly mergeAnchorNodeId = new WatchableValue<bigint | undefined>(
     undefined,
   );
   // When true, the selected-node highlight is hidden even if a node is
@@ -814,22 +805,22 @@ export class SpatialSkeletonState
     );
   /** The single pointer-drag coordinate rendered before queue admission. */
   private pendingNodePosition:
-    | { nodeId: number; position: Float32Array }
+    | { nodeId: bigint; position: Float32Array }
     | undefined;
   private spatialSkeletonPreparationsById = new Map<
     number,
     SpatialSkeletonPreparationIntent
   >();
   private presentationLogicalOwners = new Map<
-    number,
+    bigint,
     SpatialSkeletonLogicalSegmentHandle
   >();
   private presentationNumericAliases = new Map<
     string,
-    { readonly segmentId: number; readonly authoritative: boolean }
+    { readonly segmentId: bigint; readonly authoritative: boolean }
   >();
-  private presentationProvisionalNodeIds = new Set<number>();
-  private presentationRemovedSegmentIds = new Set<number>();
+  private presentationProvisionalNodeIds = new Set<bigint>();
+  private presentationRemovedSegmentIds = new Set<bigint>();
   private presentationTransactionDepth = 0;
   private presentationPublicationPending = false;
   private preparedPresentationPublication:
@@ -843,12 +834,12 @@ export class SpatialSkeletonState
   private readonly adoptedProjectionStatePublications = new WeakSet<object>();
   /** Complete node arrays for the current cached versions of skeletons. */
   private fullSegmentNodeCache = new Map<
-    number,
+    bigint,
     SpatiallyIndexedSkeletonNode[]
   >();
   /** Immutable views of those versions, paired with local cache revisions. */
   private fullSegmentSnapshotHandles = new Map<
-    number,
+    bigint,
     SpatialSkeletonCachedSegmentSnapshotHandle
   >();
   /**
@@ -857,7 +848,7 @@ export class SpatialSkeletonState
    * releasing that input reference removes only its token.
    */
   private queueInputReferenceRegistrations = new Map<
-    number,
+    bigint,
     Map<object, SpatialSkeletonCachedSegmentSnapshotHandle>
   >();
   /**
@@ -867,9 +858,9 @@ export class SpatialSkeletonState
    */
   private fullSegmentNodeRevisionClock = 0;
   private fullSegmentNodeRevisionFloor = 0;
-  private fullSegmentNodeRevisions = new Map<number, number>();
+  private fullSegmentNodeRevisions = new Map<bigint, number>();
   private pendingFullSegmentNodeFetches = new Map<
-    number,
+    bigint,
     {
       promise: Promise<SpatiallyIndexedSkeletonNode[]>;
       abortController: AbortController;
@@ -892,7 +883,7 @@ export class SpatialSkeletonState
       itemLimit ?? Number.POSITIVE_INFINITY,
     );
   });
-  private cachedNodesById = new Map<number, SpatiallyIndexedSkeletonNode>();
+  private cachedNodesById = new Map<bigint, SpatiallyIndexedSkeletonNode>();
   /**
    * First-wins, layer-scoped editing latch. It deliberately is not part of
    * queue or datasource runtime state: clearing either cannot make editing
@@ -1147,21 +1138,21 @@ export class SpatialSkeletonState
   private prepareSpatialSkeletonPresentationPublication(
     options: {
       readonly fullSegmentSnapshotHandles?: ReadonlyMap<
-        number,
+        bigint,
         SpatialSkeletonCachedSegmentSnapshotHandle
       >;
-      readonly fullSegmentNodeRevisions?: ReadonlyMap<number, number>;
+      readonly fullSegmentNodeRevisions?: ReadonlyMap<bigint, number>;
       readonly fullSegmentNodeRevisionFloor?: number;
       readonly logicalOwners?: ReadonlyMap<
-        number,
+        bigint,
         SpatialSkeletonLogicalSegmentHandle
       >;
       readonly numericAliases?: ReadonlyMap<
         string,
-        { readonly segmentId: number; readonly authoritative: boolean }
+        { readonly segmentId: bigint; readonly authoritative: boolean }
       >;
-      readonly provisionalNodeIds?: ReadonlySet<number>;
-      readonly removedSegmentIds?: ReadonlySet<number>;
+      readonly provisionalNodeIds?: ReadonlySet<bigint>;
+      readonly removedSegmentIds?: ReadonlySet<bigint>;
       readonly preparationsById?: ReadonlyMap<
         number,
         SpatialSkeletonPreparationIntent
@@ -1187,7 +1178,7 @@ export class SpatialSkeletonState
           snapshot.cacheRevision ===
           Math.max(revisionFloor, revisions.get(segmentId) ?? 0),
       )
-      .sort(([a], [b]) => a - b)
+      .sort(([a], [b]) => bigintCompare(a, b))
       .map(([segmentId, snapshot]) =>
         Object.freeze({
           segmentId,
@@ -1197,7 +1188,7 @@ export class SpatialSkeletonState
     const activeLogicalOwners = [
       ...(options.logicalOwners ?? this.presentationLogicalOwners),
     ]
-      .sort(([a], [b]) => a - b)
+      .sort(([a], [b]) => bigintCompare(a, b))
       .map(([segmentId, logicalHandle]) =>
         Object.freeze({ segmentId, logicalHandle }),
       );
@@ -1217,7 +1208,7 @@ export class SpatialSkeletonState
       );
     const provisionalNodeIds = [
       ...(options.provisionalNodeIds ?? this.presentationProvisionalNodeIds),
-    ].sort((a, b) => a - b);
+    ].sort(bigintCompare);
     return Object.freeze({
       revision:
         options.revision ?? this.spatialSkeletonPresentation.value.revision + 1,
@@ -1225,7 +1216,7 @@ export class SpatialSkeletonState
       removedSegmentIds: Object.freeze(
         [
           ...(options.removedSegmentIds ?? this.presentationRemovedSegmentIds),
-        ].sort((a, b) => a - b),
+        ].sort(bigintCompare),
       ),
       activeLogicalOwners: Object.freeze(activeLogicalOwners),
       numericAliases: Object.freeze(numericAliases),
@@ -1335,11 +1326,11 @@ export class SpatialSkeletonState
   private prepareSpatialSkeletonPresentationIdentities(
     activeLogicalOwners: Iterable<SpatialSkeletonPresentationLogicalOwner>,
     numericAliases: Iterable<SpatialSkeletonPresentationNumericAlias>,
-    provisionalNodeIds: Iterable<number> = [],
+    provisionalNodeIds: Iterable<bigint> = [],
   ) {
-    const nextOwners = new Map<number, SpatialSkeletonLogicalSegmentHandle>();
+    const nextOwners = new Map<bigint, SpatialSkeletonLogicalSegmentHandle>();
     for (const { segmentId, logicalHandle } of activeLogicalOwners) {
-      if (!Number.isSafeInteger(segmentId) || segmentId === 0) {
+      if (segmentId === 0n) {
         throw new RangeError(
           `Invalid spatial skeleton presentation segment id: ${segmentId}`,
         );
@@ -1356,10 +1347,10 @@ export class SpatialSkeletonState
     }
     const nextAliases = new Map<
       string,
-      { readonly segmentId: number; readonly authoritative: boolean }
+      { readonly segmentId: bigint; readonly authoritative: boolean }
     >();
     for (const { logicalHandle, segmentId, authoritative } of numericAliases) {
-      if (!Number.isSafeInteger(segmentId) || segmentId === 0) {
+      if (segmentId === 0n) {
         throw new RangeError(
           `Invalid spatial skeleton presentation alias: ${segmentId}`,
         );
@@ -1375,9 +1366,9 @@ export class SpatialSkeletonState
         authoritative: authoritative ?? true,
       });
     }
-    const nextProvisionalNodeIds = new Set<number>();
+    const nextProvisionalNodeIds = new Set<bigint>();
     for (const nodeId of provisionalNodeIds) {
-      if (!Number.isSafeInteger(nodeId) || nodeId <= 0) {
+      if (nodeId <= 0n) {
         throw new RangeError(
           `Invalid spatial skeleton provisional node id: ${nodeId}`,
         );
@@ -1517,7 +1508,7 @@ export class SpatialSkeletonState
       : [pending.nodeId].values();
   }
 
-  getPendingNodePosition(nodeId: number) {
+  getPendingNodePosition(nodeId: bigint) {
     const normalizedNodeId = this.normalizeNodeId(nodeId);
     const pending = this.pendingNodePosition;
     if (pending === undefined || pending.nodeId !== normalizedNodeId) {
@@ -1526,16 +1517,11 @@ export class SpatialSkeletonState
     return pending.position;
   }
 
-  private normalizeNodeId(nodeId: number | undefined) {
-    if (nodeId === undefined) return undefined;
-    const normalizedNodeId = Math.round(Number(nodeId));
-    if (!Number.isSafeInteger(normalizedNodeId) || normalizedNodeId <= 0) {
-      return undefined;
-    }
-    return normalizedNodeId;
+  private normalizeNodeId(nodeId: bigint | undefined) {
+    return nodeId === undefined || nodeId === 0n ? undefined : nodeId;
   }
 
-  setMergeAnchor(nodeId: number | undefined) {
+  setMergeAnchor(nodeId: bigint | undefined) {
     const normalizedNodeId = this.normalizeNodeId(nodeId);
     if (this.mergeAnchorNodeId.value === normalizedNodeId) {
       return false;
@@ -1548,7 +1534,7 @@ export class SpatialSkeletonState
     return this.setMergeAnchor(undefined);
   }
 
-  setPendingNodePosition(nodeId: number, position: ArrayLike<number>) {
+  setPendingNodePosition(nodeId: bigint, position: ArrayLike<number>) {
     const normalizedNodeId = this.normalizeNodeId(nodeId);
     const x = Number(position[0]);
     const y = Number(position[1]);
@@ -1586,13 +1572,13 @@ export class SpatialSkeletonState
    * Moves the active drag coordinate when a provisional node id is reconciled
    * to its authoritative id.
    */
-  remapPendingNodePositions(remappings: ReadonlyMap<number, number>) {
+  remapPendingNodePositions(remappings: ReadonlyMap<bigint, bigint>) {
     const pending = this.pendingNodePosition;
     if (remappings.size === 0 || pending === undefined) {
       return false;
     }
-    const resolveNodeId = (nodeId: number) => {
-      const visited = new Set<number>();
+    const resolveNodeId = (nodeId: bigint) => {
+      const visited = new Set<bigint>();
       let current = nodeId;
       while (!visited.has(current)) {
         visited.add(current);
@@ -1715,7 +1701,7 @@ export class SpatialSkeletonState
     this.requestSpatialSkeletonPresentationPublication();
   }
 
-  getCachedSegmentNodes(segmentId: number) {
+  getCachedSegmentNodes(segmentId: bigint) {
     return this.fullSegmentNodeCache.get(segmentId);
   }
 
@@ -1725,8 +1711,8 @@ export class SpatialSkeletonState
    * allowing callers to fence asynchronous work without relying on cache
    * presence alone.
    */
-  getCachedSegmentRevision(segmentId: number) {
-    if (!Number.isSafeInteger(segmentId) || segmentId <= 0) {
+  getCachedSegmentRevision(segmentId: bigint) {
+    if (segmentId <= 0n) {
       throw new RangeError(`Invalid spatial skeleton segment id: ${segmentId}`);
     }
     return this.getCurrentCachedSegmentRevision(segmentId);
@@ -1739,9 +1725,9 @@ export class SpatialSkeletonState
    * derived asynchronously from the handle.
    */
   getCachedSegmentSnapshotHandle(
-    segmentId: number,
+    segmentId: bigint,
   ): SpatialSkeletonCachedSegmentSnapshotHandle | undefined {
-    if (!Number.isSafeInteger(segmentId) || segmentId <= 0) {
+    if (segmentId <= 0n) {
       throw new RangeError(`Invalid spatial skeleton segment id: ${segmentId}`);
     }
     const entry = this.fullSegmentSnapshotHandles.get(segmentId);
@@ -1762,15 +1748,12 @@ export class SpatialSkeletonState
     requirement: SpatialSkeletonQueueInputRequirement,
   ):
     | {
-        readonly segmentId: number;
+        readonly segmentId: bigint;
         readonly snapshot: SpatialSkeletonCachedSegmentSnapshotHandle;
       }
     | undefined {
     const { segmentId, nodeId } = requirement;
-    if (
-      nodeId !== undefined &&
-      (!Number.isSafeInteger(nodeId) || nodeId <= 0)
-    ) {
+    if (nodeId !== undefined && nodeId <= 0n) {
       throw new RangeError(`Invalid spatial skeleton node id: ${nodeId}`);
     }
     const snapshot = this.getCachedSegmentSnapshotHandle(segmentId);
@@ -1866,7 +1849,7 @@ export class SpatialSkeletonState
     );
   }
 
-  getCachedNode(nodeId: number) {
+  getCachedNode(nodeId: bigint) {
     return this.cachedNodesById.get(nodeId);
   }
 
@@ -1881,7 +1864,7 @@ export class SpatialSkeletonState
    */
   replaceCachedSegmentSnapshots(
     snapshots: Iterable<
-      readonly [number, SpatialSkeletonCachedSegmentSnapshot]
+      readonly [bigint, SpatialSkeletonCachedSegmentSnapshot]
     >,
     options: {
       notify?: boolean;
@@ -1890,11 +1873,11 @@ export class SpatialSkeletonState
        * segment still has the captured revision.  The check and the complete
        * cache replacement occur synchronously as one atomic operation.
        */
-      expectedRevisions?: ReadonlyMap<number, number>;
+      expectedRevisions?: ReadonlyMap<bigint, number>;
     } = {},
   ) {
     const replacements = new Map<
-      number,
+      bigint,
       {
         nodes: readonly SpatiallyIndexedSkeletonNode[] | undefined;
         handle: CompleteSkeletonSnapshotHandle | undefined;
@@ -1902,7 +1885,7 @@ export class SpatialSkeletonState
       }
     >();
     for (const [segmentId, snapshot] of snapshots) {
-      if (!Number.isSafeInteger(segmentId) || segmentId <= 0) {
+      if (segmentId <= 0n) {
         throw new RangeError(
           `Invalid spatial skeleton segment id: ${segmentId}`,
         );
@@ -1917,7 +1900,7 @@ export class SpatialSkeletonState
       }
       const clonedNodes: SpatiallyIndexedSkeletonNode[] = [];
       for (const node of snapshot) {
-        if (!Number.isSafeInteger(node.nodeId) || node.nodeId <= 0) {
+        if (node.nodeId <= 0n) {
           throw new RangeError(
             `Invalid spatial skeleton node id: ${node.nodeId}`,
           );
@@ -1940,12 +1923,12 @@ export class SpatialSkeletonState
   /** Routes only queue-owned reads through projection/history state. */
   private publishAuthoritativeReadSnapshots(
     snapshots: ReadonlyMap<
-      number,
+      bigint,
       readonly SpatiallyIndexedSkeletonNode[] | undefined
     >,
     options: {
       readonly notify?: boolean;
-      readonly expectedRevisions: ReadonlyMap<number, number>;
+      readonly expectedRevisions: ReadonlyMap<bigint, number>;
     },
   ) {
     const runtime = this.optimisticProjectionRuntime;
@@ -1956,11 +1939,11 @@ export class SpatialSkeletonState
       });
     }
     const owned = new Map<
-      number,
+      bigint,
       readonly SpatiallyIndexedSkeletonNode[] | undefined
     >();
     const ordinary = new Map<
-      number,
+      bigint,
       readonly SpatiallyIndexedSkeletonNode[] | undefined
     >();
     for (const [segmentId, snapshot] of snapshots) {
@@ -2019,11 +2002,11 @@ export class SpatialSkeletonState
     request: SpatialSkeletonProjectionStatePublicationRequest,
   ): SpatialSkeletonPreparedProjectionStatePublication | undefined {
     const handles = new Map<
-      number,
+      bigint,
       CompleteSkeletonSnapshotHandle | undefined
     >();
     for (const [segmentId, handle] of request.snapshots) {
-      if (!Number.isSafeInteger(segmentId) || segmentId <= 0) {
+      if (segmentId <= 0n) {
         throw new RangeError(
           `Invalid spatial skeleton segment id: ${segmentId}`,
         );
@@ -2055,7 +2038,7 @@ export class SpatialSkeletonState
     }
 
     const replacements = new Map<
-      number,
+      bigint,
       SpatialSkeletonCachedSegmentReplacement
     >();
     for (const [segmentId, handle] of handles) {
@@ -2069,7 +2052,7 @@ export class SpatialSkeletonState
       }
       const nodes = handle.materialize();
       for (const node of nodes) {
-        if (!Number.isSafeInteger(node.nodeId) || node.nodeId <= 0) {
+        if (node.nodeId <= 0n) {
           throw new RangeError(
             `Invalid spatial skeleton node id: ${node.nodeId}`,
           );
@@ -2150,7 +2133,7 @@ export class SpatialSkeletonState
     const expectedCacheRevisionClock = this.fullSegmentNodeRevisionClock;
     let nextCacheRevisionClock = expectedCacheRevisionClock;
     const nextFullSegmentNodeRevisions = new Map(this.fullSegmentNodeRevisions);
-    const cacheRevisions = new Map<number, number>();
+    const cacheRevisions = new Map<bigint, number>();
     for (const segmentId of changedSegmentIds) {
       const cacheRevision = ++nextCacheRevisionClock;
       nextFullSegmentNodeRevisions.set(segmentId, cacheRevision);
@@ -2323,7 +2306,7 @@ export class SpatialSkeletonState
 
   private publishCachedSegmentSnapshotReplacements(
     replacements: ReadonlyMap<
-      number,
+      bigint,
       {
         nodes: readonly SpatiallyIndexedSkeletonNode[] | undefined;
         handle: CompleteSkeletonSnapshotHandle | undefined;
@@ -2332,7 +2315,7 @@ export class SpatialSkeletonState
     >,
     options: {
       notify?: boolean;
-      expectedRevisions?: ReadonlyMap<number, number>;
+      expectedRevisions?: ReadonlyMap<bigint, number>;
     },
   ) {
     if (replacements.size === 0) return false;
@@ -2348,7 +2331,7 @@ export class SpatialSkeletonState
       }
     }
 
-    const changedSegmentIds: number[] = [];
+    const changedSegmentIds: bigint[] = [];
     for (const [segmentId, replacement] of replacements) {
       const currentHandle = this.fullSegmentSnapshotHandles.get(segmentId);
       if (
@@ -2376,7 +2359,7 @@ export class SpatialSkeletonState
     // are installed.  `nextChangedNodesById` additionally rejects duplicates
     // between (or within) the replacements themselves.
     const nextChangedNodesById = new Map<
-      number,
+      bigint,
       SpatiallyIndexedSkeletonNode
     >();
     for (const [segmentId, replacement] of replacements) {
@@ -2461,7 +2444,7 @@ export class SpatialSkeletonState
     return true;
   }
 
-  private deleteCachedSegment(segmentId: number) {
+  private deleteCachedSegment(segmentId: bigint) {
     const previousSegmentNodes = this.fullSegmentNodeCache.get(segmentId);
     if (previousSegmentNodes === undefined) return false;
     for (const node of previousSegmentNodes) {
@@ -2477,7 +2460,7 @@ export class SpatialSkeletonState
   }
 
   private abortPendingFullSegmentNodeFetch(
-    segmentId: number,
+    segmentId: bigint,
     message: string,
     options: { preserveRetained?: boolean } = {},
   ) {
@@ -2520,24 +2503,24 @@ export class SpatialSkeletonState
     return released;
   }
 
-  private getCurrentCachedSegmentRevision(segmentId: number) {
+  private getCurrentCachedSegmentRevision(segmentId: bigint) {
     return Math.max(
       this.fullSegmentNodeRevisionFloor,
       this.fullSegmentNodeRevisions.get(segmentId) ?? 0,
     );
   }
 
-  private advanceCachedSegmentRevision(segmentId: number) {
+  private advanceCachedSegmentRevision(segmentId: bigint) {
     const revision = ++this.fullSegmentNodeRevisionClock;
     this.fullSegmentNodeRevisions.set(segmentId, revision);
     return revision;
   }
 
-  evictInactiveSegmentNodes(activeSegmentIds: Iterable<number>) {
+  evictInactiveSegmentNodes(activeSegmentIds: Iterable<bigint>) {
     const activeSegmentIdSet = new Set(activeSegmentIds);
     for (const segmentId of this.optimisticEditQueue?.getProtectedProjectionSegmentIds() ??
       []) {
-      if (Number.isSafeInteger(segmentId) && segmentId > 0) {
+      if (segmentId > 0n) {
         activeSegmentIdSet.add(segmentId);
       }
     }
@@ -2589,7 +2572,7 @@ export class SpatialSkeletonState
 
   async getFullSegmentNodes(
     skeletonLayer: SpatiallyIndexedSkeletonLayer,
-    segmentId: number,
+    segmentId: bigint,
     options: {
       retainWhileInactive?: boolean;
       /**
@@ -2692,7 +2675,7 @@ export class SpatialSkeletonState
             if (mappedNode === undefined) continue;
             normalizedNodes.push(mappedNode);
           }
-          normalizedNodes.sort((a, b) => a.nodeId - b.nodeId);
+          normalizedNodes.sort((a, b) => bigintCompare(a.nodeId, b.nodeId));
           if (
             this.getCurrentCachedSegmentRevision(segmentId) === fetchRevision &&
             pendingFetch.promise !== undefined &&

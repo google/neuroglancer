@@ -271,7 +271,7 @@ function createQueueInput(
   bindings: readonly QueueInputBinding[],
 ): SpatialSkeletonQueueInput {
   const segments = new Map<
-    number,
+    bigint,
     SpatialSkeletonQueueInput["segments"][number]
   >();
   for (const { reference } of bindings) {

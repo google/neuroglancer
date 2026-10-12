@@ -69,7 +69,7 @@ describe("CatmaidClient authenticated requests", () => {
     vi.stubGlobal("fetch", fetchMock);
     const client = new CatmaidClient("https://catmaid.example", 1, provider);
 
-    await expect(client.listSkeletons()).resolves.toEqual([17]);
+    await expect(client.listSkeletons()).resolves.toEqual([17n]);
     expect(provider.calls).toHaveLength(2);
     expect(provider.calls[1]).toMatchObject({
       credentials: { kind: "anonymous" },
@@ -109,7 +109,7 @@ describe("CatmaidClient authenticated requests", () => {
     vi.stubGlobal("fetch", fetchMock);
     const client = new CatmaidClient("https://catmaid.example", 1, provider);
 
-    await expect(client.listSkeletons()).resolves.toEqual([23]);
+    await expect(client.listSkeletons()).resolves.toEqual([23n]);
     expect(provider.calls).toHaveLength(2);
     expect(provider.calls[1]).toMatchObject({
       credentials: { token: "expired-token", kind: "personal" },

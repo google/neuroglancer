@@ -27,14 +27,14 @@ describe("spatial skeleton edit errors", () => {
   it("preserves a typed inspection error as the user-facing action message", () => {
     const error = new SpatialSkeletonInspectionRequiredError(
       {
-        segmentId: 11,
-        nodeId: 5,
+        segmentId: 11n,
+        nodeId: 5n,
       },
       SpatialSkeletonActions.moveNodes,
     );
 
     expect(isSpatialSkeletonInspectionRequiredError(error)).toBe(true);
-    expect(error).toMatchObject({ segmentId: 11, nodeId: 5 });
+    expect(error).toMatchObject({ segmentId: 11n, nodeId: 5n });
     expect(getSpatialSkeletonActionErrorMessage("move node", error)).toEqual({
       message: "Inspect skeleton 11 before node movement.",
       requiresDismissal: false,
@@ -44,8 +44,8 @@ describe("spatial skeleton edit errors", () => {
   it("distinguishes a missing node from a cold complete snapshot", () => {
     const error = new SpatialSkeletonInspectionRequiredError(
       {
-        segmentId: 11,
-        nodeId: 5,
+        segmentId: 11n,
+        nodeId: 5n,
       },
       undefined,
       "node-unavailable",

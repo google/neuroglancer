@@ -18,50 +18,25 @@
  * @file GPU geometry and segment retention used for the skeleton overlay rendering pass.
  */
 
-// Scratch buffer for GPU-upload-only arrays (segmentIds, edge indices,
-// edge segmentIds). Grown monotonically; safe to reuse because SkeletonOverlayChunk
-// uploads these to the GPU synchronously and does not retain CPU references to them.
-// TODO (SKM): allow to clear or reduce this memory
-let gpuScratchBuffer = new ArrayBuffer(0);
-let gpuScratchCapacity = 0; // in vertices
-
-// Layout per capacity-slot (cap = gpuScratchCapacity):
-//   [0,       cap*4)  — segmentIds  (Uint32, 4 B/vertex)
-//   [cap*4,   cap*12) — edgeIndices (Uint32 pairs, 8 B/vertex max)
-//   [cap*12,  cap*16) — edgeSegIds  (Uint32, 4 B/vertex max)
-function ensureGpuScratch(numVertices: number) {
-  if (numVertices > gpuScratchCapacity) {
-    const cap = Math.max(numVertices, gpuScratchCapacity * 2, 64);
-    gpuScratchBuffer = new ArrayBuffer(cap * 16);
-    gpuScratchCapacity = cap;
-  }
-  const cap = gpuScratchCapacity;
-  return {
-    segmentIds: new Uint32Array(gpuScratchBuffer, 0, numVertices),
-    edgeIndices: new Uint32Array(gpuScratchBuffer, cap * 4, numVertices * 2),
-    edgeSegIds: new Uint32Array(gpuScratchBuffer, cap * 12, numVertices),
-  };
-}
+import { bigintCompare } from "#src/util/bigint.js";
 
 export interface SpatiallyIndexedSkeletonOverlayNodeLike {
-  nodeId: number;
-  segmentId: number;
+  nodeId: bigint;
+  segmentId: bigint;
   position: ArrayLike<number>;
-  parentNodeId?: number;
+  parentNodeId?: bigint;
 }
 
 export interface SpatiallyIndexedSkeletonOverlayGeometry {
   positions: Float32Array;
-  segmentIds: Uint32Array;
-  nodeIds: Int32Array;
-  pickSegmentIds: Uint32Array;
-  pickEdgeSegmentIds: Uint32Array;
+  segmentIds: BigUint64Array;
+  nodeIds: BigUint64Array;
   indices: Uint32Array;
   numVertices: number;
   // Maps nodeId to its packed vertex index. Retained by the overlay chunk so a
   // live node drag can override just the moving vertex's position via a shader
   // uniform, rather than rebuilding or re-uploading the geometry.
-  nodeIndex: ReadonlyMap<number, number>;
+  nodeIndex: ReadonlyMap<bigint, number>;
 }
 
 // Writes xyz node positions (one vertex per node, in `orderedNodes` order) into
@@ -71,7 +46,7 @@ export interface SpatiallyIndexedSkeletonOverlayGeometry {
 function writeSpatiallyIndexedSkeletonOverlayNodePositions(
   orderedNodes: readonly SpatiallyIndexedSkeletonOverlayNodeLike[],
   positions: Float32Array,
-  getPendingNodePosition?: (nodeId: number) => ArrayLike<number> | undefined,
+  getPendingNodePosition?: (nodeId: bigint) => ArrayLike<number> | undefined,
 ) {
   for (let index = 0; index < orderedNodes.length; ++index) {
     const node = orderedNodes[index];
@@ -86,11 +61,11 @@ function writeSpatiallyIndexedSkeletonOverlayNodePositions(
 export function buildSpatiallyIndexedSkeletonOverlayGeometry(
   segmentNodeSets: readonly (readonly SpatiallyIndexedSkeletonOverlayNodeLike[])[],
   options: {
-    getPendingNodePosition?: (nodeId: number) => ArrayLike<number> | undefined;
+    getPendingNodePosition?: (nodeId: bigint) => ArrayLike<number> | undefined;
   } = {},
 ): SpatiallyIndexedSkeletonOverlayGeometry {
   const { getPendingNodePosition } = options;
-  const nodeIndex = new Map<number, number>();
+  const nodeIndex = new Map<bigint, number>();
   const orderedNodes: SpatiallyIndexedSkeletonOverlayNodeLike[] = [];
 
   for (const segmentNodes of segmentNodeSets) {
@@ -102,60 +77,32 @@ export function buildSpatiallyIndexedSkeletonOverlayGeometry(
   }
 
   const numVertices = orderedNodes.length;
-
-  // CPU-retained arrays: freshly allocated each build because SkeletonOverlayChunk
-  // holds references to them for the lifetime of the chunk.
   const positions = new Float32Array(numVertices * 3);
-  const nodeIds = new Int32Array(numVertices);
-  const pickSegmentIds = new Uint32Array(numVertices);
-
-  // GPU-upload-only arrays: backed by a reusable scratch buffer. The views are
-  // valid until SkeletonOverlayChunk uploads them to the GPU (synchronous), after
-  // which this buffer is safe to reuse on the next build.
-  const scratch = ensureGpuScratch(numVertices);
-  const { segmentIds, edgeIndices, edgeSegIds } = scratch;
-
+  const nodeIds = new BigUint64Array(numVertices);
+  const segmentIds = new BigUint64Array(numVertices);
   writeSpatiallyIndexedSkeletonOverlayNodePositions(
     orderedNodes,
     positions,
     getPendingNodePosition,
   );
   orderedNodes.forEach((node, index) => {
-    segmentIds[index] = Math.max(0, Math.round(Number(node.segmentId)));
-    pickSegmentIds[index] = segmentIds[index];
-    nodeIds[index] = Math.round(Number(node.nodeId));
+    segmentIds[index] = node.segmentId;
+    nodeIds[index] = node.nodeId;
   });
 
-  let edgeCount = 0;
-  orderedNodes.forEach((node) => {
-    const childIndex = nodeIndex.get(node.nodeId);
-    if (childIndex === undefined) return;
-    const parentNodeId = node.parentNodeId;
-    if (
-      parentNodeId === undefined ||
-      !Number.isSafeInteger(parentNodeId) ||
-      parentNodeId <= 0
-    ) {
-      return;
-    }
-    const parentIndex = nodeIndex.get(parentNodeId);
+  const indices: number[] = [];
+  orderedNodes.forEach((node, childIndex) => {
+    if (node.parentNodeId === undefined) return;
+    const parentIndex = nodeIndex.get(node.parentNodeId);
     if (parentIndex === undefined) return;
-    edgeIndices[edgeCount * 2] = childIndex;
-    edgeIndices[edgeCount * 2 + 1] = parentIndex;
-    edgeSegIds[edgeCount] = segmentIds[childIndex] || segmentIds[parentIndex];
-    edgeCount++;
+    indices.push(childIndex, parentIndex);
   });
 
   return {
     positions,
-    // Subarray views into the scratch: consumed immediately by GPU upload.
-    segmentIds: segmentIds.subarray(0, numVertices),
+    segmentIds,
     nodeIds,
-    pickSegmentIds,
-    // Compact copy: CPU-retained by SkeletonOverlayChunk for edge picking.
-    pickEdgeSegmentIds: edgeSegIds.slice(0, edgeCount),
-    // Subarray view: consumed immediately by GLBuffer.fromData.
-    indices: edgeIndices.subarray(0, edgeCount * 2),
+    indices: new Uint32Array(indices),
     numVertices,
     nodeIndex,
   };
@@ -163,25 +110,16 @@ export function buildSpatiallyIndexedSkeletonOverlayGeometry(
 
 export const DEFAULT_MAX_RETAINED_OVERLAY_SEGMENTS = 24;
 
-function normalizeSegmentId(segmentId: number) {
-  const normalizedSegmentId = Math.round(Number(segmentId));
-  if (!Number.isSafeInteger(normalizedSegmentId) || normalizedSegmentId <= 0) {
-    return undefined;
-  }
-  return normalizedSegmentId;
-}
-
 export function mergeSpatiallyIndexedSkeletonOverlaySegmentIds(
-  activeSegmentIds: readonly number[],
-  retainedSegmentIds: readonly number[],
+  activeSegmentIds: readonly bigint[],
+  retainedSegmentIds: readonly bigint[],
 ) {
-  const mergedSegmentIds = new Set<number>();
+  const mergedSegmentIds = new Set<bigint>();
   for (const segmentId of [...activeSegmentIds, ...retainedSegmentIds]) {
-    const normalizedSegmentId = normalizeSegmentId(segmentId);
-    if (normalizedSegmentId === undefined) continue;
-    mergedSegmentIds.add(normalizedSegmentId);
+    if (segmentId <= 0n) continue;
+    mergedSegmentIds.add(segmentId);
   }
-  return [...mergedSegmentIds].sort((a, b) => a - b);
+  return [...mergedSegmentIds].sort(bigintCompare);
 }
 
 /**
@@ -189,9 +127,9 @@ export function mergeSpatiallyIndexedSkeletonOverlaySegmentIds(
  * entries first.
  */
 function trimRetainedOverlaySegments(
-  retainedSegments: Map<number, number>,
+  retainedSegments: Map<bigint, number>,
   maxRetained: number,
-): Map<number, number> {
+): Map<bigint, number> {
   const excess = retainedSegments.size - maxRetained;
   if (excess <= 0) {
     return retainedSegments;
@@ -212,19 +150,18 @@ function trimRetainedOverlaySegments(
  * order of `touchCounter` values across entries matters.
  */
 export function retainSpatiallyIndexedSkeletonOverlaySegment(
-  retainedSegments: ReadonlyMap<number, number>,
-  segmentId: number,
+  retainedSegments: ReadonlyMap<bigint, number>,
+  segmentId: bigint,
   touchCounter: number,
   options: {
     maxRetained?: number;
   } = {},
-): Map<number, number> {
-  const normalizedSegmentId = normalizeSegmentId(segmentId);
-  if (normalizedSegmentId === undefined) {
+): Map<bigint, number> {
+  if (segmentId === 0n) {
     return new Map(retainedSegments);
   }
   const nextRetainedSegments = new Map(retainedSegments);
-  nextRetainedSegments.set(normalizedSegmentId, touchCounter);
+  nextRetainedSegments.set(segmentId, touchCounter);
   const maxRetained = Math.max(
     1,
     Math.round(options.maxRetained ?? DEFAULT_MAX_RETAINED_OVERLAY_SEGMENTS),

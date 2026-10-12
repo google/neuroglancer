@@ -75,11 +75,11 @@ for (const trigger of ["description blur", "save acknowledgement"] as const) {
         exact: true,
       });
       if (trigger === "description blur") {
-        await ui.selectNode(102);
+        await ui.selectNode(102n);
         await input.fill("saved before deleting");
       } else {
         const held = backend.holdNextMutation("node/update");
-        await ui.move(102, 15, 15);
+        await ui.move(102n, 15, 15);
         await held.received;
         await input.focus();
         held.release();
@@ -106,7 +106,7 @@ for (const trigger of ["description blur", "save acknowledgement"] as const) {
           "treenode/delete",
         ]);
       await ui.waitSaved();
-      expect(await readGraph(page, [102])).toEqual([]);
+      expect(await readGraph(page, [102n])).toEqual([]);
       expect(backend.snapshot().some(({ id }) => id === 102)).toBe(false);
       expect(
         (await readQueue(page)).recent.map(({ status }) => status),
@@ -122,7 +122,7 @@ test("Delete survives a Move acknowledgement during a press without a focused ed
     const ui = new SkeletonEditPage(page);
     await ui.open(backend.sourceUrl);
     const held = backend.holdNextMutation("node/update");
-    await ui.move(102, 15, 15);
+    await ui.move(102n, 15, 15);
     await held.received;
     await expect(
       page.getByRole("textbox", { name: "Description", exact: true }),
@@ -152,7 +152,7 @@ test("Delete survives a Move acknowledgement during a press without a focused ed
       "node/update",
       "treenode/delete",
     ]);
-    expect(await readGraph(page, [102])).toEqual([]);
+    expect(await readGraph(page, [102n])).toEqual([]);
     expect(backend.snapshot().some(({ id }) => id === 102)).toBe(false);
     expect((await readQueue(page)).recent.map(({ status }) => status)).toEqual([
       "saved",
@@ -168,7 +168,7 @@ test("Confidence keeps keyboard focus through a Move acknowledgement", async ({
     const ui = new SkeletonEditPage(page);
     await ui.open(backend.sourceUrl);
     const held = backend.holdNextMutation("node/update");
-    await ui.move(102, 15, 15);
+    await ui.move(102n, 15, 15);
     await held.received;
     // Finish rendering the initial Move preview before entering Confidence.
     const redraw = () =>
@@ -194,7 +194,7 @@ test("Confidence keeps keyboard focus through a Move acknowledgement", async ({
     await expect(confidence).toBeFocused();
     await ui.runEdit(() => page.keyboard.press("ArrowUp"));
     await ui.waitSaved();
-    expect((await readGraph(page, [102]))[0].confidence).toBe(75);
+    expect((await readGraph(page, [102n]))[0].confidence).toBe(75);
     expect(backend.snapshot().find(({ id }) => id === 102)?.confidence).toBe(4);
     expect(backend.mutations.map(({ path }) => path)).toEqual([
       "node/update",
@@ -213,8 +213,8 @@ test("Description can return to its original value while switching between prope
   await withBackend(testInfo, async (backend) => {
     const ui = new SkeletonEditPage(page);
     await ui.open(backend.sourceUrl);
-    await ui.selectNode(102);
-    const [original] = await readGraph(page, [102]);
+    await ui.selectNode(102n);
+    const [original] = await readGraph(page, [102n]);
     const description = page.getByRole("textbox", {
       name: "Description",
       exact: true,
@@ -228,7 +228,7 @@ test("Description can return to its original value while switching between prope
     });
     await ui.waitSaved();
     await expect(radius).toBeFocused();
-    expect((await readGraph(page, [102]))[0].description).toBe("Checked");
+    expect((await readGraph(page, [102n]))[0].description).toBe("Checked");
 
     await ui.runEdit(async () => {
       await description.click();
@@ -237,7 +237,7 @@ test("Description can return to its original value while switching between prope
     });
     await ui.waitSaved();
     expect(await editor!.evaluate((element) => element.isConnected)).toBe(true);
-    expect((await readGraph(page, [102]))[0].description).toBe(
+    expect((await readGraph(page, [102n]))[0].description).toBe(
       original.description,
     );
     expect(backend.mutations.map(({ body }) => body.tags)).toEqual([
@@ -259,12 +259,14 @@ test("Description can return to its original value while switching between prope
 
     await ui.undo();
     await ui.waitSaved();
-    expect((await readGraph(page, [102]))[0].description).toBe(
+    expect((await readGraph(page, [102n]))[0].description).toBe(
       original.description,
     );
     await ui.redo();
     await ui.waitSaved();
-    expect((await readGraph(page, [102]))[0].description).toBe("Checked again");
+    expect((await readGraph(page, [102n]))[0].description).toBe(
+      "Checked again",
+    );
   });
 });
 
@@ -274,8 +276,8 @@ test("a rejected Radius can be retried while switching between property editors"
   await withBackend(testInfo, async (backend) => {
     const ui = new SkeletonEditPage(page);
     await ui.open(backend.sourceUrl);
-    await ui.selectNode(102);
-    const [original] = await readGraph(page, [102]);
+    await ui.selectNode(102n);
+    const [original] = await readGraph(page, [102n]);
     const description = page.getByRole("textbox", {
       name: "Description",
       exact: true,
@@ -306,12 +308,12 @@ test("a rejected Radius can be retried while switching between property editors"
       await intercepted.promise;
       await expect(description).toBeFocused();
       await expect(radius).toBeEnabled();
-      expect((await readGraph(page, [102]))[0].radius).toBe(80);
+      expect((await readGraph(page, [102n]))[0].radius).toBe(80);
     } finally {
       blocked.resolve();
     }
     await expect.poll(async () => (await readQueue(page)).pending).toBe(false);
-    expect((await readGraph(page, [102]))[0].radius).toBe(original.radius);
+    expect((await readGraph(page, [102n]))[0].radius).toBe(original.radius);
     expect((await readQueue(page)).recent[0].status).toBe("not-saved");
     expect(backend.mutations).toHaveLength(0);
 
@@ -323,7 +325,7 @@ test("a rejected Radius can be retried while switching between property editors"
     });
     await ui.waitSaved();
     expect(await editor!.evaluate((element) => element.isConnected)).toBe(true);
-    expect((await readGraph(page, [102]))[0].radius).toBe(80);
+    expect((await readGraph(page, [102n]))[0].radius).toBe(80);
     expect(backend.snapshot().find(({ id }) => id === 102)?.radius).toBe(80);
     expect(backend.mutations.map(({ path }) => path)).toEqual([
       "treenode/102/radius",
@@ -334,7 +336,7 @@ test("a rejected Radius can be retried while switching between property editors"
     ]);
     await ui.undo();
     await ui.waitSaved();
-    expect((await readGraph(page, [102]))[0].radius).toBe(original.radius);
+    expect((await readGraph(page, [102n]))[0].radius).toBe(original.radius);
   });
 });
 
@@ -345,8 +347,8 @@ for (const field of ["Confidence", "True End"] as const) {
     await withBackend(testInfo, async (backend) => {
       const ui = new SkeletonEditPage(page);
       await ui.open(backend.sourceUrl);
-      await ui.selectNode(103);
-      const [original] = await readGraph(page, [103]);
+      await ui.selectNode(103n);
+      const [original] = await readGraph(page, [103n]);
       const property = field === "Confidence" ? "confidence" : "isTrueEnd";
       const nextValue = field === "Confidence" ? 75 : true;
       const description = page.getByRole("textbox", {
@@ -418,7 +420,7 @@ for (const field of ["Confidence", "True End"] as const) {
         await radius.focus();
         await radius.press("Tab");
         await expect(confidence).toBeFocused();
-        expect((await readGraph(page, [103]))[0][property]).toBe(nextValue);
+        expect((await readGraph(page, [103n]))[0][property]).toBe(nextValue);
       } finally {
         blocked.resolve();
       }
@@ -427,7 +429,7 @@ for (const field of ["Confidence", "True End"] as const) {
         .toBe(false);
       await redraw();
       await expect(confidence).toBeFocused();
-      expect((await readGraph(page, [103]))[0][property]).toBe(
+      expect((await readGraph(page, [103n]))[0][property]).toBe(
         original[property],
       );
       expect((await readQueue(page)).canRedo).toBe(true);
@@ -460,20 +462,20 @@ for (const field of ["Confidence", "True End"] as const) {
       await expect(redo).toBeEnabled();
       await ui.redo();
       await ui.waitSaved();
-      expect((await readGraph(page, [103]))[0].description).toBe(
+      expect((await readGraph(page, [103n]))[0].description).toBe(
         "keep this Redo",
       );
 
       // The previously rejected value remains a valid new edit and Undo target.
       await ui.runEdit(changeProperty);
       await ui.waitSaved();
-      expect((await readGraph(page, [103]))[0][property]).toBe(nextValue);
+      expect((await readGraph(page, [103n]))[0][property]).toBe(nextValue);
       const saved = backend.snapshot().find(({ id }) => id === 103)!;
       if (field === "Confidence") expect(saved.confidence).toBe(4);
       else expect(saved.labels).toContain("ends");
       await ui.undo();
       await ui.waitSaved();
-      expect((await readGraph(page, [103]))[0][property]).toBe(
+      expect((await readGraph(page, [103n]))[0][property]).toBe(
         original[property],
       );
     });
@@ -486,8 +488,8 @@ test("a rejected move cancels its child and preserves Undo of a saved descriptio
   await withBackend(testInfo, async (backend) => {
     const ui = new SkeletonEditPage(page);
     await ui.open(backend.sourceUrl);
-    await ui.selectNode(102);
-    const [original] = await readGraph(page, [102]);
+    await ui.selectNode(102n);
+    const [original] = await readGraph(page, [102n]);
     await ui.runEdit(async () => {
       const description = page.getByRole("textbox", {
         name: "Description",
@@ -522,9 +524,9 @@ test("a rejected move cancels its child and preserves Undo of a saved descriptio
       { times: 1 },
     );
     try {
-      await ui.move(102, 24, 16);
+      await ui.move(102n, 24, 16);
       await intercepted;
-      expect((await readGraph(page, [102]))[0].position).not.toEqual(
+      expect((await readGraph(page, [102n]))[0].position).not.toEqual(
         original.position,
       );
       const center = await ui.panelCenter();
@@ -538,7 +540,7 @@ test("a rejected move cancels its child and preserves Undo of a saved descriptio
       });
       await expect
         .poll(
-          async () => (await readGraph(page, [102], "Skeletons", true)).length,
+          async () => (await readGraph(page, [102n], "Skeletons", true)).length,
         )
         .toBe(4);
       expect(backend.mutations).toHaveLength(1);
@@ -546,11 +548,11 @@ test("a rejected move cancels its child and preserves Undo of a saved descriptio
       release();
     }
     await expect.poll(async () => (await readQueue(page)).pending).toBe(false);
-    expect((await readGraph(page, [102]))[0]).toMatchObject({
+    expect((await readGraph(page, [102n]))[0]).toMatchObject({
       position: original.position,
       description: "checked",
     });
-    expect(await readGraph(page, [102], "Skeletons", true)).toHaveLength(3);
+    expect(await readGraph(page, [102n], "Skeletons", true)).toHaveLength(3);
     expect((await readQueue(page)).recent.map(({ status }) => status)).toEqual([
       "not-saved",
       "not-saved",
@@ -564,17 +566,17 @@ test("a rejected move cancels its child and preserves Undo of a saved descriptio
     await ui.showSkeleton();
     await ui.undo();
     await ui.waitSaved();
-    expect((await readGraph(page, [102]))[0].description).toBe(
+    expect((await readGraph(page, [102n]))[0].description).toBe(
       original.description,
     );
-    await ui.move(102, 12, 8);
+    await ui.move(102n, 12, 8);
     await ui.waitSaved();
-    const [saved] = await readGraph(page, [102]);
+    const [saved] = await readGraph(page, [102n]);
     expect(saved.position).not.toEqual(original.position);
     expect(backend.mutations).toHaveLength(3);
     await page.reload();
-    await ui.inspect(10);
-    expect((await readGraph(page, [102]))[0]).toMatchObject({
+    await ui.inspect(10n);
+    expect((await readGraph(page, [102n]))[0]).toMatchObject({
       position: saved.position,
       description: original.description,
     });
@@ -587,16 +589,16 @@ test("a move previews immediately and queued Undo cancels its write until Redo",
   await withBackend(testInfo, async (backend) => {
     const ui = new SkeletonEditPage(page);
     await ui.open(backend.sourceUrl);
-    const [originalA, originalB] = await readGraph(page, [102, 202]);
+    const [originalA, originalB] = await readGraph(page, [102n, 202n]);
     const held = backend.holdNextMutation("node/update");
-    await ui.move(102, 24, 16);
+    await ui.move(102n, 24, 16);
     await held.received;
-    const [movedA] = await readGraph(page, [102]);
+    const [movedA] = await readGraph(page, [102n]);
     expect(movedA.position).not.toEqual(originalA.position);
     expect((await readQueue(page)).pending).toBe(true);
 
-    await ui.move(202, 18, 12);
-    const [movedB] = await readGraph(page, [202]);
+    await ui.move(202n, 18, 12);
+    const [movedB] = await readGraph(page, [202n]);
     expect(movedB.position).not.toEqual(originalB.position);
     expect(backend.mutations).toHaveLength(1);
     expect(backend.snapshot().find((node) => node.id === 202)).toMatchObject({
@@ -613,7 +615,7 @@ test("a move previews immediately and queued Undo cancels its write until Redo",
     await ui.showSkeleton();
     await ui.undo();
     await expect
-      .poll(async () => (await readGraph(page, [202]))[0].position)
+      .poll(async () => (await readGraph(page, [202n]))[0].position)
       .toEqual(originalB.position);
     expect(backend.mutations).toHaveLength(1);
     held.release();
@@ -623,7 +625,9 @@ test("a move previews immediately and queued Undo cancels its write until Redo",
     await ui.redo();
     await ui.waitSaved();
     await expect.poll(() => backend.mutations.length).toBe(2);
-    expect((await readGraph(page, [202]))[0].position).toEqual(movedB.position);
+    expect((await readGraph(page, [202n]))[0].position).toEqual(
+      movedB.position,
+    );
     expect(backend.snapshot().find((node) => node.id === 102)).toMatchObject({
       x: movedA.position[0],
       y: movedA.position[1],
@@ -646,16 +650,16 @@ test("Undo of a saving move previews its inverse and submits it after acknowledg
   await withBackend(testInfo, async (backend) => {
     const ui = new SkeletonEditPage(page);
     await ui.open(backend.sourceUrl);
-    const [original] = await readGraph(page, [102]);
+    const [original] = await readGraph(page, [102n]);
     const held = backend.holdNextMutation("node/update");
-    await ui.move(102, 30, 20);
+    await ui.move(102n, 30, 20);
     await held.received;
-    const [moved] = await readGraph(page, [102]);
+    const [moved] = await readGraph(page, [102n]);
     expect(moved.position).not.toEqual(original.position);
 
     await ui.undo();
     await expect
-      .poll(async () => (await readGraph(page, [102]))[0].position)
+      .poll(async () => (await readGraph(page, [102n]))[0].position)
       .toEqual(original.position);
     expect((await readQueue(page)).pending).toBe(true);
     expect(backend.mutations).toHaveLength(1);
@@ -675,7 +679,7 @@ test("Undo of a saving move previews its inverse and submits it after acknowledg
     await ui.redo();
     await ui.waitSaved();
     expect(backend.mutations).toHaveLength(3);
-    expect((await readGraph(page, [102]))[0].position).toEqual(moved.position);
+    expect((await readGraph(page, [102n]))[0].position).toEqual(moved.position);
     expect(backend.mutations.map((mutation) => mutation.path)).toEqual([
       "node/update",
       "node/update",
@@ -691,8 +695,8 @@ for (const field of ["radius", "confidence", "description"] as const) {
     await withBackend(testInfo, async (backend) => {
       const ui = new SkeletonEditPage(page);
       await ui.open(backend.sourceUrl);
-      await ui.selectNode(102);
-      const [original] = await readGraph(page, [102]);
+      await ui.selectNode(102n);
+      const [original] = await readGraph(page, [102n]);
       const nextValue =
         field === "radius"
           ? 80
@@ -707,7 +711,7 @@ for (const field of ["radius", "confidence", "description"] as const) {
             : "label/treenode/102/update";
       const held = backend.holdNextMutation(path);
       if (field === "radius") {
-        await ui.radius(102, Number(nextValue));
+        await ui.radius(102n, Number(nextValue));
       } else {
         await ui.runEdit(async () => {
           if (field === "confidence") {
@@ -728,7 +732,7 @@ for (const field of ["radius", "confidence", "description"] as const) {
       }
       await held.received;
       await expect
-        .poll(async () => (await readGraph(page, [102]))[0][field])
+        .poll(async () => (await readGraph(page, [102n]))[0][field])
         .toBe(nextValue);
       expect((await readQueue(page)).pending).toBe(true);
       held.release();
@@ -738,20 +742,20 @@ for (const field of ["radius", "confidence", "description"] as const) {
       await ui.undo();
       await ui.waitSaved();
       await expect
-        .poll(async () => (await readGraph(page, [102]))[0][field])
+        .poll(async () => (await readGraph(page, [102n]))[0][field])
         .toBe(original[field]);
       expect(backend.mutations).toHaveLength(2);
       await ui.redo();
       await ui.waitSaved();
       await expect
-        .poll(async () => (await readGraph(page, [102]))[0][field])
+        .poll(async () => (await readGraph(page, [102n]))[0][field])
         .toBe(nextValue);
       expect(backend.mutations).toHaveLength(3);
 
       await page.reload();
-      await ui.inspect(10);
+      await ui.inspect(10n);
       await expect
-        .poll(async () => (await readGraph(page, [102]))[0][field])
+        .poll(async () => (await readGraph(page, [102n]))[0][field])
         .toBe(nextValue);
       expect((await readQueue(page)).canUndo).toBe(false);
       expect((await readQueue(page)).canRedo).toBe(false);
@@ -765,26 +769,26 @@ test("true-end labels survive Undo, Redo, and a fresh inspection", async ({
   await withBackend(testInfo, async (backend) => {
     const ui = new SkeletonEditPage(page);
     await ui.open(backend.sourceUrl);
-    await ui.selectNode(103);
+    await ui.selectNode(103n);
     await ui.runEdit(() =>
       page.getByRole("radio", { name: "Flag True end", exact: true }).check(),
     );
     await expect
-      .poll(async () => (await readGraph(page, [103]))[0].isTrueEnd)
+      .poll(async () => (await readGraph(page, [103n]))[0].isTrueEnd)
       .toBe(true);
     await ui.waitSaved();
     expect(backend.mutations).toHaveLength(1);
     await ui.undo();
     await ui.waitSaved();
-    expect((await readGraph(page, [103]))[0].isTrueEnd).toBe(false);
+    expect((await readGraph(page, [103n]))[0].isTrueEnd).toBe(false);
     expect(backend.mutations).toHaveLength(2);
     await ui.redo();
     await ui.waitSaved();
-    expect((await readGraph(page, [103]))[0].isTrueEnd).toBe(true);
+    expect((await readGraph(page, [103n]))[0].isTrueEnd).toBe(true);
     expect(backend.mutations).toHaveLength(3);
     await page.reload();
-    await ui.inspect(10);
-    expect((await readGraph(page, [103]))[0].isTrueEnd).toBe(true);
+    await ui.inspect(10n);
+    expect((await readGraph(page, [103n]))[0].isTrueEnd).toBe(true);
     expect(
       backend.snapshot().find((node) => node.id === 103)?.labels,
     ).toContain("ends");
@@ -797,8 +801,8 @@ test("deleting a leaf restores its parent and position under a fresh ID on Undo"
   await withBackend(testInfo, async (backend) => {
     const ui = new SkeletonEditPage(page);
     await ui.open(backend.sourceUrl);
-    await ui.selectNode(103);
-    const [original] = await readGraph(page, [103]);
+    await ui.selectNode(103n);
+    const [original] = await readGraph(page, [103n]);
     const held = backend.holdNextMutation("treenode/delete");
     await ui.runEdit(() =>
       page
@@ -808,7 +812,7 @@ test("deleting a leaf restores its parent and position under a fresh ID on Undo"
         .click(),
     );
     await held.received;
-    expect(await readGraph(page, [103])).toEqual([]);
+    expect(await readGraph(page, [103n])).toEqual([]);
     held.release();
     await ui.waitSaved();
     expect(backend.mutations).toHaveLength(1);
@@ -816,14 +820,14 @@ test("deleting a leaf restores its parent and position under a fresh ID on Undo"
     await ui.waitSaved();
     const restored = backend.snapshot().find((node) => node.id > 1000)!;
     expect(restored).toMatchObject({
-      parentId: original.parentId,
-      skeletonId: original.skeletonId,
+      parentId: Number(original.parentId),
+      skeletonId: Number(original.skeletonId),
       x: original.position[0],
       y: original.position[1],
       z: original.position[2],
     });
-    expect((await readGraph(page, [restored.id]))[0]).toMatchObject({
-      id: restored.id,
+    expect((await readGraph(page, [BigInt(restored.id)]))[0]).toMatchObject({
+      id: BigInt(restored.id),
       parentId: original.parentId,
       skeletonId: original.skeletonId,
       position: original.position,
@@ -837,7 +841,7 @@ test("deleting a leaf restores its parent and position under a fresh ID on Undo"
     ]);
     expect(restored.radius).toBe(original.radius);
     expect(restored.confidence).toBe(5);
-    expect((await readGraph(page, [restored.id]))[0]).toMatchObject({
+    expect((await readGraph(page, [BigInt(restored.id)]))[0]).toMatchObject({
       radius: original.radius,
       confidence: original.confidence,
     });
@@ -846,7 +850,7 @@ test("deleting a leaf restores its parent and position under a fresh ID on Undo"
     expect(backend.mutations).toHaveLength(5);
     expect(backend.mutations[4].body.treenode_id).toBe(String(restored.id));
     expect(backend.snapshot()).toHaveLength(5);
-    expect(await readGraph(page, [103, restored.id])).toEqual([]);
+    expect(await readGraph(page, [103n, BigInt(restored.id)])).toEqual([]);
   });
 });
 
@@ -856,14 +860,14 @@ test("two layers preview independently while mutations share one FIFO", async ({
   await withBackend(testInfo, async (backend) => {
     const first = new SkeletonEditPage(page);
     const second = new SkeletonEditPage(page, "Second");
-    await first.open(backend.sourceUrl, [10, 20], true);
-    await second.inspect(20);
+    await first.open(backend.sourceUrl, [10n, 20n], true);
+    await second.inspect(20n);
     const held = backend.holdNextMutation("treenode/101/radius");
-    await first.radius(101, 80);
+    await first.radius(101n, 80);
     await held.received;
-    await second.radius(201, 120);
-    expect((await readGraph(page, [101]))[0].radius).toBe(80);
-    expect((await readGraph(page, [201], "Second"))[0].radius).toBe(120);
+    await second.radius(201n, 120);
+    expect((await readGraph(page, [101n]))[0].radius).toBe(80);
+    expect((await readGraph(page, [201n], "Second"))[0].radius).toBe(120);
     expect((await readQueue(page)).pending).toBe(true);
     expect((await readQueue(page, "Second")).pending).toBe(true);
     expect(backend.mutations).toHaveLength(1);
@@ -922,7 +926,7 @@ test("a new root and pending child chain survive full Undo and Redo with fresh I
     await held.received;
     const previewRoot = await selectedNode();
     expect(previewRoot.parentId).toBeNull();
-    expect([10, 20]).not.toContain(previewRoot.skeletonId);
+    expect([10n, 20n]).not.toContain(previewRoot.skeletonId);
     const childPoint = { x: center.x + 40, y: center.y + 30 };
     await ui.runEdit(async () => {
       await page.keyboard.down("Shift");
@@ -966,9 +970,9 @@ test("a new root and pending child chain survive full Undo and Redo with fresh I
     expect(originalChild.parentId).toBe(originalRoot.id);
     expect(backend.mutations[1].body.parent_id).toBe(String(originalRoot.id));
     expect(backend.mutations[2].body["t[0][0]"]).toBe(String(originalChild.id));
-    expect((await readGraph(page, [originalChild.id]))[0].position).toEqual(
-      movedPreviewChild.position,
-    );
+    expect(
+      (await readGraph(page, [BigInt(originalChild.id)]))[0].position,
+    ).toEqual(movedPreviewChild.position);
     expect(await readGraph(page, [previewRoot.id, previewChild.id])).toEqual(
       [],
     );
@@ -979,9 +983,12 @@ test("a new root and pending child chain survive full Undo and Redo with fresh I
     }
     expect(backend.mutations).toHaveLength(6);
     expect(backend.snapshot()).toHaveLength(6);
-    expect(await readGraph(page, [originalRoot.id, originalChild.id])).toEqual(
-      [],
-    );
+    expect(
+      await readGraph(page, [
+        BigInt(originalRoot.id),
+        BigInt(originalChild.id),
+      ]),
+    ).toEqual([]);
     for (let step = 0; step < 3; ++step) {
       await ui.redo();
       await ui.waitSaved();
@@ -1006,9 +1013,11 @@ test("a new root and pending child chain survive full Undo and Redo with fresh I
     expect(backend.mutations[7].body.parent_id).toBe(String(restoredRoot.id));
     expect(backend.mutations[8].body["t[0][0]"]).toBe(String(restoredChild.id));
     expect(backend.snapshot()).toHaveLength(8);
-    expect((await readGraph(page, [restoredChild.id]))[0]).toMatchObject({
-      parentId: restoredRoot.id,
-      skeletonId: restoredRoot.skeletonId,
+    expect(
+      (await readGraph(page, [BigInt(restoredChild.id)]))[0],
+    ).toMatchObject({
+      parentId: BigInt(restoredRoot.id),
+      skeletonId: BigInt(restoredRoot.skeletonId),
       position: movedPreviewChild.position,
     });
   });
@@ -1020,8 +1029,8 @@ test("inserting a node previews the edge and persists through Undo, Redo, and re
   await withBackend(testInfo, async (backend) => {
     const ui = new SkeletonEditPage(page);
     await ui.open(backend.sourceUrl);
-    await ui.selectNode(101);
-    const [parent, child] = await readGraph(page, [101, 102]);
+    await ui.selectNode(101n);
+    const [parent, child] = await readGraph(page, [101n, 102n]);
     const center = await ui.panelCenter();
     const scale = await page.evaluate(
       () =>
@@ -1043,11 +1052,11 @@ test("inserting a node previews the edge and persists through Undo, Redo, and re
       }
     });
     await held.received;
-    const provisional = (await readGraph(page, [101], ui.layerName, true)).find(
-      (node) => node.id >= 1_000_000_000,
-    )!;
-    expect(provisional.parentId).toBe(101);
-    expect((await readGraph(page, [102]))[0].parentId).toBe(provisional.id);
+    const provisional = (
+      await readGraph(page, [101n], ui.layerName, true)
+    ).find((node) => node.id >= 1_000_000_000n)!;
+    expect(provisional.parentId).toBe(101n);
+    expect((await readGraph(page, [102n]))[0].parentId).toBe(provisional.id);
     held.release();
     await ui.waitSaved();
     const inserted = backend
@@ -1074,6 +1083,8 @@ test("inserting a node previews the edge and persists through Undo, Redo, and re
     expect(replacementId).not.toBe(inserted.id);
     await page.reload();
     await ui.inspect(parent.skeletonId);
-    expect((await readGraph(page, [102]))[0].parentId).toBe(replacementId);
+    expect((await readGraph(page, [102n]))[0].parentId).toBe(
+      BigInt(replacementId),
+    );
   });
 });

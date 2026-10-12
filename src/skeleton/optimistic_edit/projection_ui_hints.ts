@@ -65,10 +65,10 @@ export interface SpatialSkeletonProjectionUiHints {
 
 /** Fully-resolved single call made after the skeleton model was adopted. */
 export interface SpatialSkeletonResolvedProjectionUiHints {
-  readonly nodeIdRemappings: ReadonlyMap<number, number>;
-  readonly segmentIdRemappings: ReadonlyMap<number, number>;
+  readonly nodeIdRemappings: ReadonlyMap<bigint, bigint>;
+  readonly segmentIdRemappings: ReadonlyMap<bigint, bigint>;
   readonly segmentVisibility: readonly {
-    readonly segmentId: number;
+    readonly segmentId: bigint;
     readonly visible: boolean;
     readonly deselect: boolean;
     readonly select?: SpatialSkeletonProjectionSelectionPin;
@@ -76,14 +76,14 @@ export interface SpatialSkeletonResolvedProjectionUiHints {
   readonly selectedNode?:
     | {
         readonly kind: "select" | "refresh-if-selected";
-        readonly nodeId: number;
-        readonly segmentId?: number;
+        readonly nodeId: bigint;
+        readonly segmentId?: bigint;
         readonly position?: SpatialSkeletonVector;
         readonly pin: SpatialSkeletonProjectionSelectionPin;
         readonly moveView: boolean;
       }
     | { readonly kind: "clear" };
-  readonly retainSegmentIds: readonly number[];
+  readonly retainSegmentIds: readonly bigint[];
 }
 
 /** Layer-owned adapter for best-effort selection and visibility effects. */
@@ -174,13 +174,13 @@ export function mergeSpatialSkeletonProjectionUiHints(
 interface SpatialSkeletonProjectionUiHintApplicationOptions {
   readonly port: SpatialSkeletonProjectionUiHintPort | undefined;
   readonly hints: SpatialSkeletonProjectionUiHints | undefined;
-  readonly mappings: SpatialSkeletonLogicalHandleMappings<number, number>;
+  readonly mappings: SpatialSkeletonLogicalHandleMappings<bigint, bigint>;
   readonly fallbackMappings?: SpatialSkeletonLogicalHandleMappings<
-    number,
-    number
+    bigint,
+    bigint
   >;
-  readonly nodeIdRemappings?: ReadonlyMap<number, number>;
-  readonly segmentIdRemappings?: ReadonlyMap<number, number>;
+  readonly nodeIdRemappings?: ReadonlyMap<bigint, bigint>;
+  readonly segmentIdRemappings?: ReadonlyMap<bigint, bigint>;
   readonly createResolutionError: (
     resource: "node" | "segment",
     stableId: string,

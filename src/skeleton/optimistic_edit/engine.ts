@@ -452,7 +452,7 @@ export class SpatialSkeletonOptimisticQueueEngine<
     ];
   }
 
-  ownsAuthoritativeReadSegment(segmentId: number) {
+  ownsAuthoritativeReadSegment(segmentId: bigint) {
     return this.options.projection.ownsAuthoritativeReadSegment(segmentId);
   }
 

@@ -25,7 +25,7 @@ export function resolveCatmaidPreparedCommand(
   queueInput: SpatialSkeletonQueueInput,
   identity: SpatialSkeletonOptimisticIdentityService,
 ): CatmaidSpatialSkeletonCommandDescriptor {
-  const resolveNode = <T extends { nodeId: number; segmentId: number }>(
+  const resolveNode = <T extends { nodeId: bigint; segmentId: bigint }>(
     node: T,
   ): T => {
     const nodeId =

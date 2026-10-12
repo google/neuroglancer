@@ -15,12 +15,13 @@
  */
 
 import { expect } from "@playwright/test";
+import { bigintCompare } from "#src/util/bigint.js";
 import type { Viewer } from "#src/viewer.js";
 import { test, change, type RealSkeletonPage } from "./real_test.js";
 
 test.use({ preset: "branch" });
 
-async function expectListedNodes(ui: RealSkeletonPage, ids: number[]) {
+async function expectListedNodes(ui: RealSkeletonPage, ids: bigint[]) {
   await expect
     .poll(async () =>
       (
@@ -30,16 +31,16 @@ async function expectListedNodes(ui: RealSkeletonPage, ids: number[]) {
           )
           .allTextContents()
       )
-        .map(Number)
-        .sort((a, b) => a - b),
+        .map(BigInt)
+        .sort(bigintCompare),
     )
-    .toEqual([...ids].sort((a, b) => a - b));
+    .toEqual([...ids].sort(bigintCompare));
 }
 
 async function filter(
   ui: RealSkeletonPage,
   label: string,
-  ids: number[],
+  ids: bigint[],
   query = "",
 ) {
   await ui.page
@@ -51,7 +52,7 @@ async function filter(
   await expectListedNodes(ui, ids);
 }
 
-async function navigate(ui: RealSkeletonPage, action: string, id: number) {
+async function navigate(ui: RealSkeletonPage, action: string, id: bigint) {
   await ui.page
     .getByRole("button", { name: new RegExp(`^Go to ${action}`) })
     .click();
@@ -68,7 +69,7 @@ async function navigate(ui: RealSkeletonPage, action: string, id: number) {
     .toEqual(node.position);
 }
 
-async function expectRootRow(ui: RealSkeletonPage, id: number) {
+async function expectRootRow(ui: RealSkeletonPage, id: bigint) {
   await expect(
     ui.page.locator(
       '.neuroglancer-skeleton-tree-row[data-node-type="root"] .neuroglancer-skeleton-node-id',

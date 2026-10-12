@@ -18,21 +18,22 @@
  * @file Utility functions for array queries on arrays of spatially indexed skeleton nodes, usually performed by traversing the tree.
  */
 import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import { bigintCompare } from "#src/util/bigint.js";
 
 export function findSpatiallyIndexedSkeletonNode(
   segmentNodes: readonly SpatiallyIndexedSkeletonNode[],
-  nodeId: number,
+  nodeId: bigint,
 ) {
   return segmentNodes.find((node) => node.nodeId === nodeId);
 }
 
 export function getSpatiallyIndexedSkeletonDirectChildren(
   segmentNodes: readonly SpatiallyIndexedSkeletonNode[],
-  nodeId: number,
+  nodeId: bigint,
 ) {
   return segmentNodes
     .filter((node) => node.parentNodeId === nodeId)
-    .sort((a, b) => a.nodeId - b.nodeId);
+    .sort((a, b) => bigintCompare(a.nodeId, b.nodeId));
 }
 
 export function getSpatiallyIndexedSkeletonNodeParent(

@@ -263,8 +263,8 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
 
   protected getPickedSpatialSkeletonNode():
     | {
-        nodeId: number;
-        segmentId?: number;
+        nodeId: bigint;
+        segmentId?: bigint;
         position?: Float32Array;
       }
     | undefined {
@@ -272,22 +272,14 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
       return undefined;
     }
     const pickedSpatialSkeleton = this.mouseState.pickedSpatialSkeleton;
-    const nodeIdRaw = pickedSpatialSkeleton?.nodeId;
-    if (
-      typeof nodeIdRaw !== "number" ||
-      !Number.isSafeInteger(nodeIdRaw) ||
-      nodeIdRaw <= 0
-    ) {
+    const nodeId = pickedSpatialSkeleton?.nodeId;
+    if (nodeId === undefined || nodeId === 0n) {
       return undefined;
     }
-    const segmentIdRaw = pickedSpatialSkeleton?.segmentId;
     const position = pickedSpatialSkeleton?.position;
     return {
-      nodeId: nodeIdRaw,
-      segmentId:
-        typeof segmentIdRaw === "number" && Number.isSafeInteger(segmentIdRaw)
-          ? segmentIdRaw
-          : undefined,
+      nodeId,
+      segmentId: pickedSpatialSkeleton?.segmentId,
       position:
         position instanceof Float32Array
           ? new Float32Array(position)
@@ -299,28 +291,14 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     if (!this.mouseState.updateUnconditionally() || !this.mouseState.active) {
       return undefined;
     }
-    const segmentIdRaw = this.mouseState.pickedSpatialSkeleton?.segmentId;
-    if (
-      typeof segmentIdRaw !== "number" ||
-      !Number.isSafeInteger(segmentIdRaw) ||
-      segmentIdRaw <= 0
-    ) {
-      return undefined;
-    }
-    return segmentIdRaw;
+    const segmentId = this.mouseState.pickedSpatialSkeleton?.segmentId;
+    return segmentId === 0n ? undefined : segmentId;
   }
 
-  protected pinSegmentByNumber(value: number) {
-    if (!Number.isFinite(value)) return;
-    this.layer.selectSegment(BigInt(Math.round(value)), true);
-  }
-
-  protected isSpatialSkeletonSegmentVisible(segmentId: number | bigint) {
+  protected isSpatialSkeletonSegmentVisible(segmentId: bigint) {
     return getVisibleSegments(
       this.layer.displayState.segmentationGroupState.value,
-    ).has(
-      typeof segmentId === "bigint" ? segmentId : BigInt(Math.round(segmentId)),
-    );
+    ).has(segmentId);
   }
 
   protected resolvePickedNodeSelection(
@@ -343,8 +321,8 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     skeletonLayer: SpatiallyIndexedSkeletonLayer,
   ):
     | {
-        nodeId: number;
-        segmentId?: number;
+        nodeId: bigint;
+        segmentId?: bigint;
         position?: SpatialSkeletonVector;
       }
     | undefined {
@@ -404,11 +382,11 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
             return;
           }
           this.layer.clearSpatialSkeletonNodeSelection(false);
-          this.pinSegmentByNumber(pickedSegmentId);
+          this.layer.selectSegment(pickedSegmentId, true);
           return;
         }
         if (pickedNode.segmentId !== undefined) {
-          this.pinSegmentByNumber(pickedNode.segmentId);
+          this.layer.selectSegment(pickedNode.segmentId, true);
         }
         this.layer.selectSpatialSkeletonNode(
           pickedNode.nodeId,
@@ -542,8 +520,8 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
 
   private resolveInspectedNode(
     skeletonLayer: SpatiallyIndexedSkeletonLayer,
-    nodeId: number,
-    segmentId: number | undefined,
+    nodeId: bigint,
+    segmentId: bigint | undefined,
   ) {
     const resolvedSegmentId =
       // Spatial browse cells may still describe a node's pre-edit owner.
@@ -572,8 +550,8 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
 
   private requireInspectedNode(
     skeletonLayer: SpatiallyIndexedSkeletonLayer,
-    nodeId: number,
-    segmentId: number | undefined,
+    nodeId: bigint,
+    segmentId: bigint | undefined,
   ): SpatiallyIndexedSkeletonNode | undefined {
     const resolved = this.resolveInspectedNode(
       skeletonLayer,
@@ -603,7 +581,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
 
   private getSelectedParentNodeForAdd(
     skeletonLayer: SpatiallyIndexedSkeletonLayer,
-    parentNodeId: number | undefined,
+    parentNodeId: bigint | undefined,
   ) {
     if (parentNodeId === undefined) return undefined;
     const selectedNode = this.layer.selectedSpatialSkeletonNodeInfo.value;
@@ -663,7 +641,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
   private insertKeyHeld = false;
   // First node picked in insert mode; the next pick must be its parent or one
   // of its children.
-  private insertAnchorNodeId: number | undefined = undefined;
+  private insertAnchorNodeId: bigint | undefined = undefined;
   // Modifier-held state drives cursor indicators and blocks node actions.
   private shiftHeld = false;
   // While held, the shift-driven "add node" cursor/status must be
@@ -921,9 +899,8 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     const hoveredSegmentId = mouseState.pickedSpatialSkeleton?.segmentId;
     if (
       anchorNodeId === undefined ||
-      typeof hoveredSegmentId !== "number" ||
-      !Number.isSafeInteger(hoveredSegmentId) ||
-      hoveredSegmentId <= 0 ||
+      hoveredSegmentId === undefined ||
+      hoveredSegmentId === 0n ||
       hoveredSegmentId ===
         spatialSkeletonState.getCachedNode(anchorNodeId)?.segmentId
     ) {
@@ -1088,7 +1065,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     // Select immediately on mousedown so it always happens even if the drag
     // finish callback never fires (e.g. pointer capture lost).
     if (pickedNode.segmentId !== undefined) {
-      this.pinSegmentByNumber(pickedNode.segmentId);
+      this.layer.selectSegment(pickedNode.segmentId, true);
     }
     this.layer.selectSpatialSkeletonNode(pickedNode.nodeId, true, pickedNode);
 
@@ -1245,8 +1222,8 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
   private reportUninspectedNodeOnDrag(
     event: MouseEvent,
     skeletonLayer: SpatiallyIndexedSkeletonLayer,
-    nodeId: number,
-    segmentId: number | undefined,
+    nodeId: bigint,
+    segmentId: bigint | undefined,
   ) {
     const generation = this.interactionGeneration;
     let dragDistanceSquared = 0;
@@ -1266,12 +1243,12 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
   }
 
   private executeSplitOnNode(pickedNode: {
-    nodeId: number;
-    segmentId: number;
+    nodeId: bigint;
+    segmentId: bigint;
     position?: SpatialSkeletonVector;
-    parentNodeId?: number;
+    parentNodeId?: bigint;
   }) {
-    this.pinSegmentByNumber(pickedNode.segmentId);
+    this.layer.selectSegment(pickedNode.segmentId, true);
     this.layer.selectSpatialSkeletonNode(pickedNode.nodeId, true, pickedNode);
     // A node was clicked: reveal the selected-node highlight for it.
     this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value = false;
@@ -1349,7 +1326,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       );
       return;
     }
-    this.pinSegmentByNumber(nodeInfo.segmentId);
+    this.layer.selectSegment(nodeInfo.segmentId, true);
     this.layer.selectSpatialSkeletonNode(nodeInfo.nodeId, true, nodeInfo);
     this.layer.setSpatialSkeletonMergeAnchor(nodeInfo.nodeId);
     // First click made: reveal the selected-node highlight for the from node.
@@ -1422,7 +1399,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
         pickedNode.segmentId,
       );
       if (reanchoredNode === undefined) return;
-      this.pinSegmentByNumber(reanchoredNode.segmentId);
+      this.layer.selectSegment(reanchoredNode.segmentId, true);
       this.layer.selectSpatialSkeletonNode(
         reanchoredNode.nodeId,
         true,
@@ -1445,7 +1422,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       return;
     }
 
-    this.pinSegmentByNumber(pickedNode.segmentId);
+    this.layer.selectSegment(pickedNode.segmentId, true);
     this.layer.selectSpatialSkeletonNode(pickedNode.nodeId, true, pickedNode);
     this.startPendingAction(
       SpatialSkeletonActions.mergeSkeletons,
@@ -1614,7 +1591,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       SpatialSkeletonActions.addNodes,
       () =>
         executeSpatialSkeletonAddNode(this.layer, {
-          skeletonId: 0,
+          skeletonId: 0n,
           parentNodeId: undefined,
           positionInModelSpace: new Float32Array(clickPosition),
         }),
@@ -2156,7 +2133,7 @@ export { SpatialSkeletonEditTool as SpatialSkeletonEditModeTool };
 
 function getSpatialSkeletonFindPathNodeTypeLabel(
   graph: SpatiallyIndexedSkeletonNavigationGraph,
-  nodeId: number,
+  nodeId: bigint,
 ) {
   const node = graph.nodeById.get(nodeId);
   if (node === undefined) return undefined;
@@ -2185,12 +2162,10 @@ export function getSpatialSkeletonFindPathEndpointDescription(
   endpoint: SkeletonFindPathEndpoint,
   graph: SpatiallyIndexedSkeletonNavigationGraph | undefined,
 ) {
-  const nodeId = Number(endpoint.nodeId);
-  const nodeType = Number.isSafeInteger(nodeId)
-    ? graph === undefined
+  const nodeType =
+    graph === undefined
       ? undefined
-      : getSpatialSkeletonFindPathNodeTypeLabel(graph, nodeId)
-    : undefined;
+      : getSpatialSkeletonFindPathNodeTypeLabel(graph, endpoint.nodeId);
   return nodeType === undefined
     ? endpointName
     : `${endpointName} · ${nodeType}`;
@@ -2302,10 +2277,10 @@ export class SpatialSkeletonFindPathTool extends SpatialSkeletonToolBase {
           [],
         );
         if (endpoint !== undefined) {
-          const segmentId = Number(endpoint.segmentId);
-          const cachedSegmentNodes = Number.isSafeInteger(segmentId)
-            ? layer.spatialSkeletonState.getCachedSegmentNodes(segmentId)
-            : undefined;
+          const cachedSegmentNodes =
+            layer.spatialSkeletonState.getCachedSegmentNodes(
+              endpoint.segmentId,
+            );
           const graph =
             cachedSegmentNodes === undefined
               ? undefined
@@ -2400,20 +2375,9 @@ export class SpatialSkeletonFindPathTool extends SpatialSkeletonToolBase {
         return false;
       }
 
-      const segmentId = Number(source.segmentId);
-      const sourceNodeId = Number(source.nodeId);
-      const targetNodeId = Number(target.nodeId);
-      if (
-        !Number.isSafeInteger(segmentId) ||
-        !Number.isSafeInteger(sourceNodeId) ||
-        !Number.isSafeInteger(targetNodeId)
-      ) {
-        showPathStatus(
-          "The selected endpoint IDs are not supported by this spatial skeleton source.",
-          announce,
-        );
-        return false;
-      }
+      const { segmentId } = source;
+      const sourceNodeId = source.nodeId;
+      const targetNodeId = target.nodeId;
       const cachedSegmentNodes =
         layer.spatialSkeletonState.getCachedSegmentNodes(segmentId);
       if (cachedSegmentNodes === undefined) {
@@ -2446,7 +2410,7 @@ export class SpatialSkeletonFindPathTool extends SpatialSkeletonToolBase {
         }
         state.setResult(
           path.map(({ nodeId, position }) => ({
-            nodeId: BigInt(nodeId),
+            nodeId: nodeId,
             position: new Float32Array(position),
           })),
         );
@@ -2539,8 +2503,8 @@ export class SpatialSkeletonFindPathTool extends SpatialSkeletonToolBase {
           return;
         }
         const endpoint: SkeletonFindPathEndpoint = {
-          nodeId: BigInt(pickedNode.nodeId),
-          segmentId: BigInt(pickedNode.segmentId),
+          nodeId: pickedNode.nodeId,
+          segmentId: pickedNode.segmentId,
           position: new Float32Array(pickedNode.position),
         };
         const state = context.state;

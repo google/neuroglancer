@@ -214,6 +214,7 @@ import { Uint64Map } from "#src/uint64_map.js";
 import { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import { Uint64Set } from "#src/uint64_set.js";
 import { gatherUpdate } from "#src/util/array.js";
+import { bigintCompare } from "#src/util/bigint.js";
 import {
   packColor,
   parseRGBColorSpecification,
@@ -297,11 +298,11 @@ function formatSpatialSkeletonEditableNumber(
 
 function getSpatialSkeletonSegmentChipColors(
   displayState: SegmentationDisplayState | undefined | null,
-  segmentId: number,
+  segmentId: bigint,
 ) {
   const color = getBaseObjectColor(
     displayState,
-    BigInt(segmentId),
+    segmentId,
     new Float32Array(4),
   );
   const r = Math.round(color[0] * 255);
@@ -317,9 +318,9 @@ function getSpatialSkeletonSegmentChipColors(
 function bindSpatialSkeletonSegmentSelection(
   element: HTMLElement,
   selectSegment: (id: bigint, pin: true | "force-unpin") => void,
-  segmentId: number,
+  segmentId: bigint,
 ) {
-  const id = BigInt(segmentId);
+  const id = segmentId;
   const hasSegmentSelectionModifiers = (event: MouseEvent) =>
     event.ctrlKey && !event.altKey && !event.metaKey;
   element.addEventListener("mousedown", (event: MouseEvent) => {
@@ -805,8 +806,8 @@ interface SegmentationActionContext extends LayerActionContext {
 }
 
 interface SelectedSpatialSkeletonNodeInfo {
-  nodeId: number;
-  segmentId?: number;
+  nodeId: bigint;
+  segmentId?: bigint;
   position?: Float32Array;
 }
 
@@ -816,12 +817,8 @@ export interface SpatialSkeletonFindPathContext {
   readonly annotationController: SpatialSkeletonFindPathAnnotationController;
 }
 
-function normalizeOptionalPositiveSafeInteger(value: unknown) {
-  if (value === undefined) return undefined;
-  const normalized = Math.round(Number(value));
-  return Number.isSafeInteger(normalized) && normalized > 0
-    ? normalized
-    : undefined;
+function normalizeOptionalId(value: bigint | undefined) {
+  return value === 0n ? undefined : value;
 }
 
 function copyOptionalSpatialSkeletonPosition(
@@ -840,16 +837,14 @@ function spatialSkeletonUiHintPin(
 
 function remapSpatialSkeletonSegmentSet(
   set: Pick<Uint64Set, "add" | "delete" | "has">,
-  remappings: ReadonlyMap<number, number>,
+  remappings: ReadonlyMap<bigint, bigint>,
 ) {
   const presentTargets = new Set<bigint>();
   for (const [from, to] of remappings) {
-    if (from === to) continue;
-    const fromValue = BigInt(from);
-    if (set.has(fromValue)) presentTargets.add(BigInt(to));
+    if (from !== to && set.has(from)) presentTargets.add(to);
   }
   for (const [from, to] of remappings) {
-    if (from !== to) set.delete(BigInt(from));
+    if (from !== to) set.delete(from);
   }
   for (const target of presentTargets) set.add(target);
 }
@@ -945,7 +940,7 @@ export class SegmentationUserLayer extends Base {
         candidate === entry
           ? {
               ...candidate,
-              state: { ...candidate.state, value: BigInt(node.segmentId) },
+              state: { ...candidate.state, value: node.segmentId },
             }
           : candidate,
       ),
@@ -1003,14 +998,14 @@ export class SegmentationUserLayer extends Base {
   }
 
   selectSpatialSkeletonNode = (
-    nodeId: number,
+    nodeId: bigint,
     pin: boolean | "toggle" | "force-unpin" = false,
     options: {
-      segmentId?: number;
+      segmentId?: bigint;
       position?: ArrayLike<number>;
     } = {},
   ) => {
-    const normalizedNodeId = normalizeOptionalPositiveSafeInteger(nodeId);
+    const normalizedNodeId = normalizeOptionalId(nodeId);
     if (normalizedNodeId === undefined) {
       return;
     }
@@ -1018,7 +1013,7 @@ export class SegmentationUserLayer extends Base {
       this.getSpatiallyIndexedSkeletonLayer()?.getNode(normalizedNodeId);
     const requestedSegmentId =
       options.segmentId ?? selectedNodeInfo?.segmentId ?? undefined;
-    const segmentId = normalizeOptionalPositiveSafeInteger(requestedSegmentId);
+    const segmentId = normalizeOptionalId(requestedSegmentId);
     const previousSelectedInfo = this.selectedSpatialSkeletonNodeInfo.value;
     // Keep a model-space position available even when the node isn't currently
     // cached, so the highlight overlay can still be placed: prefer the explicit
@@ -1039,7 +1034,7 @@ export class SegmentationUserLayer extends Base {
     this.captureSpatialSkeletonSelectionState(
       (state) => {
         state.nodeId = normalizedNodeId.toString();
-        state.value = segmentId === undefined ? undefined : BigInt(segmentId);
+        state.value = segmentId === undefined ? undefined : segmentId;
         return true;
       },
       pin,
@@ -1065,7 +1060,7 @@ export class SegmentationUserLayer extends Base {
     return true;
   }
 
-  setSpatialSkeletonMergeAnchor = (nodeId: number | undefined) => {
+  setSpatialSkeletonMergeAnchor = (nodeId: bigint | undefined) => {
     return this.spatialSkeletonState.setMergeAnchor(nodeId);
   };
 
@@ -1130,9 +1125,7 @@ export class SegmentationUserLayer extends Base {
           state: {
             ...entry.state,
             ...(nextNodeId === undefined ? {} : { nodeId: String(nextNodeId) }),
-            ...(nextSegmentId === undefined
-              ? {}
-              : { value: BigInt(nextSegmentId) }),
+            ...(nextSegmentId === undefined ? {} : { value: nextSegmentId }),
           },
         };
       });
@@ -1161,7 +1154,7 @@ export class SegmentationUserLayer extends Base {
     }
 
     for (const visibility of hints.segmentVisibility) {
-      const segmentId = BigInt(visibility.segmentId);
+      const segmentId = visibility.segmentId;
       if (visibility.visible) {
         addSegmentToVisibleSets(group, segmentId, { includeTemporary: true });
       } else {
@@ -1723,7 +1716,7 @@ export class SegmentationUserLayer extends Base {
     return undefined;
   }
 
-  getCachedSpatialSkeletonSegmentNodesForEdit(segmentId: number) {
+  getCachedSpatialSkeletonSegmentNodesForEdit(segmentId: bigint) {
     const segmentNodes =
       this.spatialSkeletonState.getCachedSegmentNodes(segmentId);
     if (segmentNodes === undefined) {
@@ -2563,7 +2556,7 @@ export class SegmentationUserLayer extends Base {
           }
           openLeaves.sort((a, b) =>
             a.distance === b.distance
-              ? a.nodeId - b.nodeId
+              ? bigintCompare(a.nodeId, b.nodeId)
               : a.distance - b.distance,
           );
           const leaf = openLeaves[0];
@@ -2608,15 +2601,11 @@ export class SegmentationUserLayer extends Base {
     ) {
       return;
     }
-    const nodeId = normalizeOptionalPositiveSafeInteger(
-      pickedSpatialSkeleton.nodeId,
-    );
+    const nodeId = normalizeOptionalId(pickedSpatialSkeleton.nodeId);
     state.nodeId = nodeId === undefined ? undefined : nodeId.toString();
-    const segmentId = normalizeOptionalPositiveSafeInteger(
-      pickedSpatialSkeleton.segmentId,
-    );
+    const segmentId = normalizeOptionalId(pickedSpatialSkeleton.segmentId);
     if (segmentId !== undefined) {
-      state.value = BigInt(segmentId);
+      state.value = segmentId;
     }
   }
 
@@ -2783,8 +2772,8 @@ export class SegmentationUserLayer extends Base {
     };
 
     const appendSegmentAndNodeIds = (
-      segmentId: number,
-      nodeId: number,
+      segmentId: bigint,
+      nodeId: bigint,
       selectSegment = this.selectSegment,
     ) => {
       const segmentChipColors = getSpatialSkeletonSegmentChipColors(
@@ -3030,7 +3019,7 @@ export class SegmentationUserLayer extends Base {
     appendSegmentAndNodeIds(segmentId, fullNodeInfo.nodeId, (id, pin) => {
       // A focused editor may keep this view through permanent-ID assignment.
       if (propertyIdentity !== undefined) {
-        id = BigInt(getCachedNodeForSelectionEdit().segmentId);
+        id = getCachedNodeForSelectionEdit().segmentId;
       }
       this.selectSegment(id, pin);
     });

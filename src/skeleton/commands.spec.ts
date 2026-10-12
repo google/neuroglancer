@@ -58,6 +58,7 @@ import { SpatialSkeletonOptimisticProjectionRuntime } from "#src/skeleton/optimi
 import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { StatusMessage } from "#src/status.js";
 import { SpatialSkeletonOptimisticAuthorityNotificationController } from "#src/ui/skeleton_optimistic_edit_queue_tab.js";
+import { bigintCompare } from "#src/util/bigint.js";
 import { HttpError } from "#src/util/http_request.js";
 
 function cloneNode(
@@ -79,37 +80,41 @@ function cloneNodes(
 
 function cachedTopologyForTest(
   state: SpatialSkeletonState,
-  segmentIds: readonly number[],
+  segmentIds: readonly bigint[],
 ) {
   return segmentIds
     .flatMap((segmentId) => state.getCachedSegmentNodes(segmentId) ?? [])
     .map((node) => [node.nodeId, node.segmentId, node.parentNodeId ?? null])
-    .sort((a, b) => a[0]! - b[0]!);
+    .sort((a, b) => bigintCompare(a[0]!, b[0]!));
 }
 
 function makeRootRestorationNodesForTest(): SpatiallyIndexedSkeletonNode[] {
   // A0 -> A1 and B0 -> B1 -> B2, with off-path branches at B1 and B2.
   // Attaching A1 to B2 must reverse the entire B0/B1/B2 path.
   return [
-    [101, 11, undefined],
-    [102, 11, 101],
-    [201, 17, undefined],
-    [202, 17, 201],
-    [203, 17, 202],
-    [204, 17, 202],
-    [205, 17, 203],
+    [101n, 11n, undefined],
+    [102n, 11n, 101n],
+    [201n, 17n, undefined],
+    [202n, 17n, 201n],
+    [203n, 17n, 202n],
+    [204n, 17n, 202n],
+    [205n, 17n, 203n],
   ].map(([nodeId, segmentId, parentNodeId]) => ({
     nodeId: nodeId!,
     segmentId: segmentId!,
     parentNodeId,
-    position: new Float32Array([nodeId!, nodeId! + 1, nodeId! + 2]),
+    position: new Float32Array([
+      Number(nodeId!),
+      Number(nodeId!) + 1,
+      Number(nodeId!) + 2,
+    ]),
     isTrueEnd: false,
   }));
 }
 
 function replaceCachedSegmentForTest(
   state: SpatialSkeletonState,
-  segmentId: number,
+  segmentId: bigint,
   nodes: readonly SpatiallyIndexedSkeletonNode[] | undefined,
 ) {
   state.replaceCachedSegmentSnapshots([[segmentId, nodes]], {
@@ -121,7 +126,7 @@ function seedCachedNodesForTest(
   state: SpatialSkeletonState,
   nodes: readonly SpatiallyIndexedSkeletonNode[],
 ) {
-  const nodesBySegment = new Map<number, SpatiallyIndexedSkeletonNode[]>();
+  const nodesBySegment = new Map<bigint, SpatiallyIndexedSkeletonNode[]>();
   for (const node of nodes) {
     const segmentNodes = nodesBySegment.get(node.segmentId) ?? [];
     segmentNodes.push(cloneNode(node));
@@ -246,16 +251,14 @@ function expectReloadRequired(
   );
 }
 
-function makeDisplayState(visibleSegmentIds: readonly number[]) {
+function makeDisplayState(visibleSegmentIds: readonly bigint[]) {
   return {
     segmentSelectionState: {
       baseValue: undefined as bigint | undefined,
     },
     segmentationGroupState: {
       value: {
-        visibleSegments: new Set(
-          visibleSegmentIds.map((segmentId) => BigInt(segmentId)),
-        ),
+        visibleSegments: new Set(visibleSegmentIds),
         selectedSegments: new Set<bigint>(),
         segmentEquivalences: {},
         temporaryVisibleSegments: new Set<bigint>(),
@@ -286,8 +289,8 @@ function makePinnedManager() {
 
 function makeAvailableInputReferences() {
   const makeRetainedInput = (requirement: {
-    segmentId: number;
-    nodeId?: number;
+    segmentId: bigint;
+    nodeId?: bigint;
   }) => ({
     segmentId: requirement.segmentId,
     snapshot: {},
@@ -335,12 +338,12 @@ function makeOptimisticAddNodeTestLayer(options: {
   updateRadius?: ReturnType<typeof vi.fn>;
   updateConfidence?: ReturnType<typeof vi.fn>;
   initialNodes: readonly SpatiallyIndexedSkeletonNode[];
-  segmentId: number;
-  segmentIds?: readonly number[];
+  segmentId: bigint;
+  segmentIds?: readonly bigint[];
 }) {
   const spatialSkeletonState = new SpatialSkeletonState();
   const initialNodesBySegment = new Map<
-    number,
+    bigint,
     SpatiallyIndexedSkeletonNode[]
   >();
   for (const node of options.initialNodes) {
@@ -354,7 +357,7 @@ function makeOptimisticAddNodeTestLayer(options: {
   );
   const getSkeleton =
     options.getSkeleton ??
-    vi.fn(async (requestedSegmentId: number) =>
+    vi.fn(async (requestedSegmentId: bigint) =>
       (
         spatialSkeletonState.getCachedSegmentNodes(requestedSegmentId) ??
         options.initialNodes.filter(
@@ -400,7 +403,7 @@ function makeOptimisticAddNodeTestLayer(options: {
   const chunkSource = { invalidateCache: invalidateWholeSourceCache };
   const skeletonLayer = {
     source: skeletonSource,
-    getNode: vi.fn((nodeId: number) =>
+    getNode: vi.fn((nodeId: bigint) =>
       spatialSkeletonState.getCachedNode(nodeId),
     ),
     retainOverlaySegment: vi.fn(),
@@ -410,8 +413,8 @@ function makeOptimisticAddNodeTestLayer(options: {
   const selectedSpatialSkeletonNodeInfo = {
     value: undefined as
       | {
-          nodeId: number;
-          segmentId?: number;
+          nodeId: bigint;
+          segmentId?: bigint;
           position?: ArrayLike<number>;
         }
       | undefined,
@@ -422,7 +425,7 @@ function makeOptimisticAddNodeTestLayer(options: {
     selectedSpatialSkeletonNodeInfo,
     spatialSkeletonState,
     getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
-    getCachedSpatialSkeletonSegmentNodesForEdit: (requestedSegmentId: number) =>
+    getCachedSpatialSkeletonSegmentNodesForEdit: (requestedSegmentId: bigint) =>
       spatialSkeletonState.getCachedSegmentNodes(requestedSegmentId) ?? [],
     async getSpatialSkeletonDeleteOperationContext(
       node: SpatiallyIndexedSkeletonNode,
@@ -453,9 +456,9 @@ function makeOptimisticAddNodeTestLayer(options: {
     selectAndMoveToSpatialSkeletonNode: vi.fn(),
     selectSpatialSkeletonNode: vi.fn(
       (
-        nodeId: number,
+        nodeId: bigint,
         _pin: boolean,
-        nodeInfo?: { segmentId?: number; position?: ArrayLike<number> },
+        nodeInfo?: { segmentId?: bigint; position?: ArrayLike<number> },
       ) => {
         selectedSpatialSkeletonNodeInfo.value = {
           nodeId,
@@ -471,19 +474,19 @@ function makeOptimisticAddNodeTestLayer(options: {
   };
   Object.assign(layer, {
     applySpatialSkeletonProjectionUiHints: (hints: {
-      nodeIdRemappings: ReadonlyMap<number, number>;
-      segmentIdRemappings: ReadonlyMap<number, number>;
+      nodeIdRemappings: ReadonlyMap<bigint, bigint>;
+      segmentIdRemappings: ReadonlyMap<bigint, bigint>;
       segmentVisibility: readonly {
-        segmentId: number;
+        segmentId: bigint;
         visible: boolean;
       }[];
-      retainSegmentIds: readonly number[];
+      retainSegmentIds: readonly bigint[];
       selectedNode?:
         | { kind: "clear" }
         | {
             kind: "select" | "refresh-if-selected";
-            nodeId: number;
-            segmentId?: number;
+            nodeId: bigint;
+            segmentId?: bigint;
             position?: ArrayLike<number>;
           };
     }) => {
@@ -495,8 +498,8 @@ function makeOptimisticAddNodeTestLayer(options: {
         group.selectedSegments,
       ]) {
         for (const [from, to] of hints.segmentIdRemappings) {
-          if (!set.delete(BigInt(from))) continue;
-          set.add(BigInt(to));
+          if (!set.delete(from)) continue;
+          set.add(to);
         }
       }
       const selected = layer.selectedSpatialSkeletonNodeInfo.value;
@@ -613,8 +616,8 @@ describe("spatial_skeleton_commands", () => {
       }),
     };
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 17,
-      segmentId: 23,
+      nodeId: 17n,
+      segmentId: 23n,
       position: new Float32Array([1, 2, 3]),
     };
     const nextPositionInModelSpace = new Float32Array([7, 8, 9]);
@@ -659,8 +662,8 @@ describe("spatial_skeleton_commands", () => {
     expect(() =>
       executeSpatialSkeletonNodeDescriptionUpdate(layer as any, {
         node: {
-          nodeId: 17,
-          segmentId: 23,
+          nodeId: 17n,
+          segmentId: 23n,
           position: new Float32Array([1, 2, 3]),
         },
         nextDescription: "next",
@@ -686,8 +689,8 @@ describe("spatial_skeleton_commands", () => {
       }),
     };
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 17,
-      segmentId: 23,
+      nodeId: 17n,
+      segmentId: 23n,
       position: new Float32Array([1, 2, 3]),
     };
 
@@ -834,18 +837,18 @@ describe("spatial_skeleton_commands", () => {
       getSpatiallyIndexedSkeletonLayer: () => ({ source }),
     };
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 17,
-      segmentId: 23,
+      nodeId: 17n,
+      segmentId: 23n,
       position: new Float32Array([1, 2, 3]),
     };
-    const firstNode = { nodeId: 17, segmentId: 23 };
-    const secondNode = { nodeId: 29, segmentId: 31 };
+    const firstNode = { nodeId: 17n, segmentId: 23n };
+    const secondNode = { nodeId: 29n, segmentId: 31n };
     const cases = [
       {
         commandFactory: source.addNodesCommand,
         execute: () =>
           executeSpatialSkeletonAddNode(layer as any, {
-            skeletonId: 23,
+            skeletonId: 23n,
             positionInModelSpace: new Float32Array([4, 5, 6]),
           }),
         pendingMessage: "Creating node...",
@@ -948,8 +951,8 @@ describe("spatial_skeleton_commands", () => {
 
   it("previews insertion and reconciles fresh IDs through Undo and Redo", async () => {
     suppressStatusMessages();
-    let resolveInsert!: (result: { nodeId: number; segmentId: number }) => void;
-    const heldInsert = new Promise<{ nodeId: number; segmentId: number }>(
+    let resolveInsert!: (result: { nodeId: bigint; segmentId: bigint }) => void;
+    const heldInsert = new Promise<{ nodeId: bigint; segmentId: bigint }>(
       (resolve) => {
         resolveInsert = resolve;
       },
@@ -957,17 +960,17 @@ describe("spatial_skeleton_commands", () => {
     const insertNode = vi
       .fn()
       .mockReturnValueOnce(heldInsert)
-      .mockResolvedValueOnce({ nodeId: 4, segmentId: 23 });
+      .mockResolvedValueOnce({ nodeId: 4n, segmentId: 23n });
     const deleteNode = vi.fn().mockResolvedValue({});
     const parent = {
-      nodeId: 1,
-      segmentId: 23,
+      nodeId: 1n,
+      segmentId: 23n,
       position: new Float32Array([0, 0, 0]),
     };
     const child = {
-      nodeId: 2,
-      segmentId: 23,
-      parentNodeId: 1,
+      nodeId: 2n,
+      segmentId: 23n,
+      parentNodeId: 1n,
       position: new Float32Array([2, 4, 6]),
     };
     const { layer, spatialSkeletonState: state } =
@@ -975,42 +978,42 @@ describe("spatial_skeleton_commands", () => {
         insertNode,
         deleteNode,
         initialNodes: [parent, child],
-        segmentId: 23,
+        segmentId: 23n,
       });
     const execution = executeSpatialSkeletonInsertNode(layer as any, {
-      skeletonId: 23,
-      parentNodeId: 1,
-      childNodeIds: [2],
+      skeletonId: 23n,
+      parentNodeId: 1n,
+      childNodeIds: [2n],
       positionInModelSpace: [1, 2, 3],
     });
     await execution;
     const preview = state
-      .getCachedSegmentNodes(23)!
-      .find((node) => node.nodeId !== 1 && node.nodeId !== 2)!;
-    expect(preview).toMatchObject({ parentNodeId: 1, position: [1, 2, 3] });
-    expect(state.getCachedNode(2)?.parentNodeId).toBe(preview.nodeId);
+      .getCachedSegmentNodes(23n)!
+      .find((node) => node.nodeId !== 1n && node.nodeId !== 2n)!;
+    expect(preview).toMatchObject({ parentNodeId: 1n, position: [1, 2, 3] });
+    expect(state.getCachedNode(2n)?.parentNodeId).toBe(preview.nodeId);
     expect(
       state.spatialSkeletonPresentation.value.provisionalNodeIds,
     ).toContain(preview.nodeId);
-    resolveInsert({ nodeId: 3, segmentId: 23 });
+    resolveInsert({ nodeId: 3n, segmentId: 23n });
     await execution.settled;
-    expect(state.getCachedNode(3)?.parentNodeId).toBe(1);
-    expect(state.getCachedNode(2)?.parentNodeId).toBe(3);
+    expect(state.getCachedNode(3n)?.parentNodeId).toBe(1n);
+    expect(state.getCachedNode(2n)?.parentNodeId).toBe(3n);
 
     const undo = undoSpatialSkeletonCommand(layer as any);
     await undo;
     await undo.settled;
-    expect(state.getCachedNode(3)).toBeUndefined();
-    expect(state.getCachedNode(2)?.parentNodeId).toBe(1);
-    expect(deleteNode).toHaveBeenCalledWith(3);
+    expect(state.getCachedNode(3n)).toBeUndefined();
+    expect(state.getCachedNode(2n)?.parentNodeId).toBe(1n);
+    expect(deleteNode).toHaveBeenCalledWith(3n);
 
     const redo = redoSpatialSkeletonCommand(layer as any);
     await redo;
     await redo.settled;
-    expect(state.getCachedNode(4)?.parentNodeId).toBe(1);
-    expect(state.getCachedNode(2)?.parentNodeId).toBe(4);
+    expect(state.getCachedNode(4n)?.parentNodeId).toBe(1n);
+    expect(state.getCachedNode(2n)?.parentNodeId).toBe(4n);
     expect(insertNode).toHaveBeenCalledTimes(2);
-    expect(insertNode).toHaveBeenLastCalledWith(1, 2, 3, 1, [2]);
+    expect(insertNode).toHaveBeenLastCalledWith(1, 2, 3, 1n, [2n]);
   });
 
   it("rejects an insertion if the admitted child is no longer attached to its parent", async () => {
@@ -1019,40 +1022,40 @@ describe("spatial_skeleton_commands", () => {
     const { layer, spatialSkeletonState: state } =
       makeOptimisticAddNodeTestLayer({
         insertNode,
-        segmentId: 23,
+        segmentId: 23n,
         initialNodes: [
-          { nodeId: 1, segmentId: 23, position: [0, 0, 0] },
-          { nodeId: 2, segmentId: 23, parentNodeId: 1, position: [1, 1, 1] },
-          { nodeId: 3, segmentId: 23, parentNodeId: 2, position: [2, 2, 2] },
+          { nodeId: 1n, segmentId: 23n, position: [0, 0, 0] },
+          { nodeId: 2n, segmentId: 23n, parentNodeId: 1n, position: [1, 1, 1] },
+          { nodeId: 3n, segmentId: 23n, parentNodeId: 2n, position: [2, 2, 2] },
         ],
       });
     const execution = executeSpatialSkeletonInsertNode(layer as any, {
-      skeletonId: 23,
-      parentNodeId: 1,
-      childNodeIds: [3],
+      skeletonId: 23n,
+      parentNodeId: 1n,
+      childNodeIds: [3n],
       positionInModelSpace: [1, 1, 1],
     });
     await expect(execution).rejects.toThrow("Node 3 is not a child of node 1.");
     expect(insertNode).not.toHaveBeenCalled();
-    expect(state.getCachedNode(3)?.parentNodeId).toBe(2);
+    expect(state.getCachedNode(3n)?.parentNodeId).toBe(2n);
   });
 
   it("captures insertion children immutably and rejects malformed insertion payloads", () => {
     const commands = makeCatmaidEditCommands();
-    const childNodeIds = [2];
+    const childNodeIds = [2n];
     const command = commands.insertNodesCommand.createCommand({
-      skeletonId: 23,
-      parentNodeId: 1,
+      skeletonId: 23n,
+      parentNodeId: 1n,
       childNodeIds,
       positionInModelSpace: [1, 2, 3],
     });
-    childNodeIds.push(3);
-    expect((command as any).payload.options.childNodeIds).toEqual([2]);
-    for (const children of [[], [2, 2], [NaN]]) {
+    childNodeIds.push(3n);
+    expect((command as any).payload.options.childNodeIds).toEqual([2n]);
+    for (const children of [[], [2n, 2n], [NaN]]) {
       expect(() =>
         commands.insertNodesCommand.createCommand({
-          skeletonId: 23,
-          parentNodeId: 1,
+          skeletonId: 23n,
+          parentNodeId: 1n,
           childNodeIds: children,
           positionInModelSpace: [1, 2, 3],
         }),
@@ -1063,8 +1066,8 @@ describe("spatial_skeleton_commands", () => {
   it("creates CATMAID commands from valid opaque payloads", () => {
     const commandSource = makeCatmaidEditCommands();
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 17,
-      segmentId: 23,
+      nodeId: 17n,
+      segmentId: 23n,
       position: new Float32Array([1, 2, 3]),
     };
 
@@ -1094,8 +1097,8 @@ describe("spatial_skeleton_commands", () => {
   it("defers malformed coordinate contents beyond command construction", () => {
     const commandSource = makeCatmaidEditCommands();
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 17,
-      segmentId: 23,
+      nodeId: 17n,
+      segmentId: 23n,
       position: new Float32Array([1, 2, 3]),
     };
 
@@ -1111,15 +1114,15 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
     const showTemporaryMessage = vi.mocked(StatusMessage.showTemporaryMessage);
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const parentNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
     let resolveFirstAdd:
-      | ((value: { nodeId: number; segmentId: number }) => void)
+      | ((value: { nodeId: bigint; segmentId: bigint }) => void)
       | undefined;
     const firstAddPromise = new Promise<any>((resolve) => {
       resolveFirstAdd = resolve;
@@ -1148,11 +1151,11 @@ describe("spatial_skeleton_commands", () => {
     expect(
       spatialSkeletonState
         .getCachedSegmentNodes(segmentId)!
-        .filter((node) => node.nodeId >= 1_000_000_000),
+        .filter((node) => node.nodeId >= 2n ** 63n),
     ).toHaveLength(2);
     expect(
       spatialSkeletonState.spatialSkeletonPresentation.value.provisionalNodeIds,
-    ).toEqual([0x7fff_fffe, 0x7fff_ffff]);
+    ).toEqual([2n ** 63n + 1n, 2n ** 63n + 2n]);
 
     await undoSpatialSkeletonCommand(layer as any);
 
@@ -1161,11 +1164,11 @@ describe("spatial_skeleton_commands", () => {
     expect(
       spatialSkeletonState
         .getCachedSegmentNodes(segmentId)!
-        .filter((node) => node.nodeId >= 1_000_000_000),
+        .filter((node) => node.nodeId >= 2n ** 63n),
     ).toHaveLength(1);
     expect(
       spatialSkeletonState.spatialSkeletonPresentation.value.provisionalNodeIds,
-    ).toEqual([0x7fff_ffff]);
+    ).toEqual([2n ** 63n + 1n]);
     expect(spatialSkeletonState.getOptimisticEditQueueRecentActivity()).toEqual(
       [
         expect.objectContaining({
@@ -1182,7 +1185,7 @@ describe("spatial_skeleton_commands", () => {
     );
 
     resolveFirstAdd!({
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
     });
     await waitForMicrotasks(20);
@@ -1194,9 +1197,9 @@ describe("spatial_skeleton_commands", () => {
   it("reapplies a coalesced pending add when it is redone", async () => {
     suppressStatusMessages();
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const parentNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
@@ -1209,7 +1212,7 @@ describe("spatial_skeleton_commands", () => {
       .fn()
       .mockReturnValueOnce(blockingAdd)
       .mockResolvedValueOnce({
-        nodeId: 3,
+        nodeId: 3n,
         segmentId,
       });
     const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
@@ -1244,13 +1247,13 @@ describe("spatial_skeleton_commands", () => {
     expect(addNode).toHaveBeenCalledTimes(1);
 
     resolveBlockingAdd!({
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
     });
     await waitForMicrotasks(40);
 
     expect(addNode).toHaveBeenCalledTimes(2);
-    expect(spatialSkeletonState.getCachedNode(3)).toMatchObject({
+    expect(spatialSkeletonState.getCachedNode(3n)).toMatchObject({
       parentNodeId: parentNode.nodeId,
       position: new Float32Array([10, 11, 12]),
     });
@@ -1259,14 +1262,14 @@ describe("spatial_skeleton_commands", () => {
   it("submits an optimistic add from its inspected parent after cache invalidation", async () => {
     suppressStatusMessages();
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const parentNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
-    let resolveAdd!: (value: { nodeId: number; segmentId: number }) => void;
+    let resolveAdd!: (value: { nodeId: bigint; segmentId: bigint }) => void;
     const addNode = vi.fn(
       () =>
         new Promise<any>((resolve) => {
@@ -1296,7 +1299,7 @@ describe("spatial_skeleton_commands", () => {
     expect(getSkeleton).not.toHaveBeenCalled();
 
     resolveAdd({
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
     });
     await waitForMicrotasks(20);
@@ -1305,9 +1308,9 @@ describe("spatial_skeleton_commands", () => {
   it("removes a rejected in-flight add and its queued Undo from history", async () => {
     suppressStatusMessages();
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const parentNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
@@ -1320,7 +1323,7 @@ describe("spatial_skeleton_commands", () => {
       .fn()
       .mockReturnValueOnce(firstAdd)
       .mockResolvedValueOnce({
-        nodeId: 3,
+        nodeId: 3n,
         segmentId,
       });
     const deleteNode = vi.fn();
@@ -1353,7 +1356,7 @@ describe("spatial_skeleton_commands", () => {
     expect(spatialSkeletonState.commandHistory.canRedo.value).toBe(false);
     await expect(redoSpatialSkeletonCommand(layer as any)).resolves.toBe(false);
     expect(addNode).toHaveBeenCalledTimes(1);
-    expect(spatialSkeletonState.getCachedNode(3)).toBeUndefined();
+    expect(spatialSkeletonState.getCachedNode(3n)).toBeUndefined();
   });
 
   it.each(["split", "delete"] as const)(
@@ -1361,11 +1364,11 @@ describe("spatial_skeleton_commands", () => {
     async (kind) => {
       suppressStatusMessages();
       const nodes = [
-        { nodeId: 101, segmentId: 11, position: new Float32Array([1, 2, 3]) },
+        { nodeId: 101n, segmentId: 11n, position: new Float32Array([1, 2, 3]) },
         {
-          nodeId: 102,
-          segmentId: 11,
-          parentNodeId: 101,
+          nodeId: 102n,
+          segmentId: 11n,
+          parentNodeId: 101n,
           position: new Float32Array([4, 5, 6]),
         },
       ];
@@ -1373,7 +1376,7 @@ describe("spatial_skeleton_commands", () => {
       const splitSkeleton = vi
         .fn()
         .mockReturnValueOnce(firstSave.promise)
-        .mockResolvedValue({ existingSegmentId: 11, newSegmentId: 23 });
+        .mockResolvedValue({ existingSegmentId: 11n, newSegmentId: 23n });
       const deleteNode = vi
         .fn()
         .mockReturnValueOnce(firstSave.promise)
@@ -1381,20 +1384,22 @@ describe("spatial_skeleton_commands", () => {
       const mergeSkeletons = vi
         .fn()
         .mockResolvedValueOnce({
-          resultSegmentId: 11,
-          deletedSegmentId: 17,
+          resultSegmentId: 11n,
+          deletedSegmentId: 17n,
           directionAdjusted: false,
         })
         .mockResolvedValue({
-          resultSegmentId: 11,
-          deletedSegmentId: 23,
+          resultSegmentId: 11n,
+          deletedSegmentId: 23n,
           directionAdjusted: false,
         });
-      const addNode = vi.fn().mockResolvedValue({ nodeId: 202, segmentId: 11 });
+      const addNode = vi
+        .fn()
+        .mockResolvedValue({ nodeId: 202n, segmentId: 11n });
       const { layer, spatialSkeletonState: state } =
         makeOptimisticAddNodeTestLayer({
           initialNodes: nodes,
-          segmentId: 11,
+          segmentId: 11n,
           splitSkeleton,
           deleteNode,
           mergeSkeletons,
@@ -1414,7 +1419,7 @@ describe("spatial_skeleton_commands", () => {
 
       firstSave.resolve(
         kind === "split"
-          ? { existingSegmentId: 11, newSegmentId: 17 }
+          ? { existingSegmentId: 11n, newSegmentId: 17n }
           : undefined,
       );
       const settlements = await Promise.all([
@@ -1431,19 +1436,19 @@ describe("spatial_skeleton_commands", () => {
       expect(state.commandHistory.canUndo.value).toBe(true);
       expect(state.commandHistory.canRedo.value).toBe(false);
       if (kind === "split") {
-        expect(splitSkeleton.mock.calls).toEqual([[102], [102]]);
-        expect(mergeSkeletons).toHaveBeenCalledWith(101, 102);
-        expect(state.getCachedNode(102)).toMatchObject({
-          segmentId: 23,
+        expect(splitSkeleton.mock.calls).toEqual([[102n], [102n]]);
+        expect(mergeSkeletons).toHaveBeenCalledWith(101n, 102n);
+        expect(state.getCachedNode(102n)).toMatchObject({
+          segmentId: 23n,
           parentNodeId: undefined,
         });
-        expect(state.getCachedSegmentNodes(17)).toBeUndefined();
+        expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
       } else {
-        expect(deleteNode.mock.calls).toEqual([[102], [202]]);
-        expect(addNode).toHaveBeenCalledWith(4, 5, 6, 101);
+        expect(deleteNode.mock.calls).toEqual([[102n], [202n]]);
+        expect(addNode).toHaveBeenCalledWith(4, 5, 6, 101n);
         expect(
-          state.getCachedSegmentNodes(11)?.map(({ nodeId }) => nodeId),
-        ).toEqual([101]);
+          state.getCachedSegmentNodes(11n)?.map(({ nodeId }) => nodeId),
+        ).toEqual([101n]);
       }
       expect(
         state
@@ -1454,10 +1459,12 @@ describe("spatial_skeleton_commands", () => {
       const nextUndo = undoSpatialSkeletonCommand(layer as any);
       await nextUndo;
       expect((await nextUndo.settled).outcome).toBe("committed");
-      expect(state.getCachedNode(kind === "split" ? 102 : 202)).toMatchObject({
-        segmentId: 11,
-        parentNodeId: 101,
-      });
+      expect(state.getCachedNode(kind === "split" ? 102n : 202n)).toMatchObject(
+        {
+          segmentId: 11n,
+          parentNodeId: 101n,
+        },
+      );
       expect(state.commandHistory.canRedo.value).toBe(true);
     },
   );
@@ -1467,19 +1474,19 @@ describe("spatial_skeleton_commands", () => {
     async (newRoot) => {
       suppressStatusMessages();
       const parent = {
-        nodeId: 101,
-        segmentId: 11,
+        nodeId: 101n,
+        segmentId: 11n,
         position: new Float32Array([1, 2, 3]),
       };
       const firstAdd = Promise.withResolvers<{
-        nodeId: number;
-        segmentId: number;
+        nodeId: bigint;
+        segmentId: bigint;
       }>();
       const firstDelete = Promise.withResolvers<void>();
       const addNode = vi
         .fn()
         .mockReturnValueOnce(firstAdd.promise)
-        .mockResolvedValue({ nodeId: 202, segmentId: newRoot ? 23 : 11 });
+        .mockResolvedValue({ nodeId: 202n, segmentId: newRoot ? 23n : 11n });
       const deleteNode = vi
         .fn()
         .mockReturnValueOnce(firstDelete.promise)
@@ -1487,13 +1494,13 @@ describe("spatial_skeleton_commands", () => {
       const { layer, spatialSkeletonState: state } =
         makeOptimisticAddNodeTestLayer({
           initialNodes: [parent],
-          segmentId: 11,
+          segmentId: 11n,
           addNode,
           deleteNode,
         });
       const add = executeSpatialSkeletonAddNode(layer as any, {
-        skeletonId: newRoot ? 0 : 11,
-        parentNodeId: newRoot ? undefined : 101,
+        skeletonId: newRoot ? 0n : 11n,
+        parentNodeId: newRoot ? undefined : 101n,
         positionInModelSpace: new Float32Array([4, 5, 6]),
       });
       await add;
@@ -1501,38 +1508,38 @@ describe("spatial_skeleton_commands", () => {
       await undo;
       const redo = redoSpatialSkeletonCommand(layer as any);
       await redo;
-      const previewNodeId = 0x8000_0000 - 3;
+      const previewNodeId = 2n ** 63n + 3n;
       const preview = state.getCachedNode(previewNodeId)!;
       expect(preview).toBeDefined();
       // This fixture applies remaps but leaves visibility hints to the caller.
       const visible =
         layer.displayState.segmentationGroupState.value.visibleSegments;
-      visible.add(BigInt(preview.segmentId));
+      visible.add(preview.segmentId);
 
-      firstAdd.resolve({ nodeId: 201, segmentId: newRoot ? 17 : 11 });
+      firstAdd.resolve({ nodeId: 201n, segmentId: newRoot ? 17n : 11n });
       expect((await add.settled).outcome).toBe("committed");
       await waitForMicrotasks();
-      expect(deleteNode).toHaveBeenCalledWith(201);
+      expect(deleteNode).toHaveBeenCalledWith(201n);
       expect(addNode).toHaveBeenCalledTimes(1);
-      expect(state.getCachedNode(201)).toBeUndefined();
+      expect(state.getCachedNode(201n)).toBeUndefined();
       expect(state.getCachedNode(previewNodeId)).toMatchObject({
         segmentId: preview.segmentId,
         position: preview.position,
       });
-      expect(visible.has(BigInt(preview.segmentId))).toBe(true);
+      expect(visible.has(preview.segmentId)).toBe(true);
       expect(layer.selectedSpatialSkeletonNodeInfo.value).toMatchObject({
         nodeId: previewNodeId,
         segmentId: preview.segmentId,
       });
-      if (newRoot) expect(state.getCachedSegmentNodes(17)).toBeUndefined();
+      if (newRoot) expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
 
       firstDelete.resolve();
       expect((await undo.settled).outcome).toBe("committed");
       expect((await redo.settled).outcome).toBe("committed");
       expect(state.getCachedNode(previewNodeId)).toBeUndefined();
-      expect(state.getCachedNode(202)).toMatchObject({
-        segmentId: newRoot ? 23 : 11,
-        parentNodeId: newRoot ? undefined : 101,
+      expect(state.getCachedNode(202n)).toMatchObject({
+        segmentId: newRoot ? 23n : 11n,
+        parentNodeId: newRoot ? undefined : 101n,
         position: [4, 5, 6],
       });
       expect(state.getOptimisticEditFatalState()).toBeUndefined();
@@ -1548,8 +1555,8 @@ describe("spatial_skeleton_commands", () => {
       const nextUndo = undoSpatialSkeletonCommand(layer as any);
       await nextUndo;
       expect((await nextUndo.settled).outcome).toBe("committed");
-      expect(deleteNode.mock.calls).toEqual([[201], [202]]);
-      expect(state.getCachedNode(202)).toBeUndefined();
+      expect(deleteNode.mock.calls).toEqual([[201n], [202n]]);
+      expect(state.getCachedNode(202n)).toBeUndefined();
       expect(state.commandHistory.canRedo.value).toBe(true);
     },
   );
@@ -1557,9 +1564,9 @@ describe("spatial_skeleton_commands", () => {
   it("cancels queued undo and redo when the original add is rejected", async () => {
     suppressStatusMessages();
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const parentNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
@@ -1572,7 +1579,7 @@ describe("spatial_skeleton_commands", () => {
       .fn()
       .mockReturnValueOnce(firstAdd)
       .mockResolvedValueOnce({
-        nodeId: 3,
+        nodeId: 3n,
         segmentId,
       });
     const deleteNode = vi.fn();
@@ -1603,7 +1610,7 @@ describe("spatial_skeleton_commands", () => {
 
     expect(deleteNode).not.toHaveBeenCalled();
     expect(addNode).toHaveBeenCalledTimes(1);
-    expect(spatialSkeletonState.getCachedNode(3)).toBeUndefined();
+    expect(spatialSkeletonState.getCachedNode(3n)).toBeUndefined();
     expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(false);
     expect(spatialSkeletonState.commandHistory.canRedo.value).toBe(false);
   });
@@ -1611,9 +1618,9 @@ describe("spatial_skeleton_commands", () => {
   it("preserves temporary parent identity across coalesced add-chain redo", async () => {
     suppressStatusMessages();
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const rootNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
@@ -1626,11 +1633,11 @@ describe("spatial_skeleton_commands", () => {
       .fn()
       .mockReturnValueOnce(blockingAdd)
       .mockResolvedValueOnce({
-        nodeId: 3,
+        nodeId: 3n,
         segmentId,
       })
       .mockResolvedValueOnce({
-        nodeId: 4,
+        nodeId: 4n,
         segmentId,
       });
     const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
@@ -1681,17 +1688,17 @@ describe("spatial_skeleton_commands", () => {
     expect(addNode).toHaveBeenCalledTimes(1);
 
     resolveBlockingAdd!({
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
     });
     await redoChild.settled;
 
     expect(addNode).toHaveBeenCalledTimes(3);
-    expect(spatialSkeletonState.getCachedNode(3)).toMatchObject({
+    expect(spatialSkeletonState.getCachedNode(3n)).toMatchObject({
       parentNodeId: rootNode.nodeId,
     });
-    expect(spatialSkeletonState.getCachedNode(4)).toMatchObject({
-      parentNodeId: 3,
+    expect(spatialSkeletonState.getCachedNode(4n)).toMatchObject({
+      parentNodeId: 3n,
     });
   });
 
@@ -1699,15 +1706,15 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
     const showTemporaryMessage = vi.mocked(StatusMessage.showTemporaryMessage);
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const parentNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
     let resolveAdd:
-      | ((value: { nodeId: number; segmentId: number }) => void)
+      | ((value: { nodeId: bigint; segmentId: bigint }) => void)
       | undefined;
     const addPromise = new Promise<any>((resolve) => {
       resolveAdd = resolve;
@@ -1738,16 +1745,16 @@ describe("spatial_skeleton_commands", () => {
     expect(
       spatialSkeletonState
         .getCachedSegmentNodes(segmentId)!
-        .some((node) => node.nodeId >= 1_000_000_000),
+        .some((node) => node.nodeId >= 2n ** 63n),
     ).toBe(false);
 
     resolveAdd!({
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
     });
     await waitForMicrotasks(10);
 
-    expect(deleteNode).toHaveBeenCalledWith(2);
+    expect(deleteNode).toHaveBeenCalledWith(2n);
     expect(showTemporaryMessage).not.toHaveBeenCalled();
     expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(false);
   });
@@ -1756,14 +1763,14 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
     const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const parentNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
-    let resolveAdd!: (value: { nodeId: number; segmentId: number }) => void;
+    let resolveAdd!: (value: { nodeId: bigint; segmentId: bigint }) => void;
     const addPromise = new Promise<any>((resolve) => {
       resolveAdd = resolve;
     });
@@ -1788,7 +1795,7 @@ describe("spatial_skeleton_commands", () => {
     const disposal = queue.dispose();
 
     resolveAdd({
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
     });
     await disposal;
@@ -1817,15 +1824,15 @@ describe("spatial_skeleton_commands", () => {
   it("keeps replacement previews immediate but fences their POST after a disposed add commits", async () => {
     suppressStatusMessages();
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const parentNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
     let resolveFirstAdd:
-      | ((value: { nodeId: number; segmentId: number }) => void)
+      | ((value: { nodeId: bigint; segmentId: bigint }) => void)
       | undefined;
     const firstAddPromise = new Promise<any>((resolve) => {
       resolveFirstAdd = resolve;
@@ -1834,7 +1841,7 @@ describe("spatial_skeleton_commands", () => {
       .fn()
       .mockReturnValueOnce(firstAddPromise)
       .mockResolvedValueOnce({
-        nodeId: 3,
+        nodeId: 3n,
         segmentId,
       });
     const deleteNode = vi.fn();
@@ -1856,7 +1863,7 @@ describe("spatial_skeleton_commands", () => {
     expect(addNode).toHaveBeenCalledTimes(1);
     const retiredTempNode = spatialSkeletonState
       .getCachedSegmentNodes(segmentId)!
-      .find((node) => node.nodeId >= 1_000_000_000);
+      .find((node) => node.nodeId >= 2n ** 63n);
     expect(retiredTempNode).toBeDefined();
     const retiredTempNodeId = retiredTempNode!.nodeId;
 
@@ -1894,7 +1901,7 @@ describe("spatial_skeleton_commands", () => {
 
     const replacementTempNodeId = spatialSkeletonState
       .getCachedSegmentNodes(segmentId)!
-      .find((node) => node.nodeId >= 1_000_000_000)!.nodeId;
+      .find((node) => node.nodeId >= 2n ** 63n)!.nodeId;
 
     // The replacement queue publishes its local preview immediately, but its
     // POST cannot pass the disposed queue's still-active source lane.
@@ -1907,7 +1914,7 @@ describe("spatial_skeleton_commands", () => {
     });
 
     resolveFirstAdd!({
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
     });
     await disposal;
@@ -1916,22 +1923,22 @@ describe("spatial_skeleton_commands", () => {
     expect(deleteNode).not.toHaveBeenCalled();
     expect(addNode).toHaveBeenCalledTimes(1);
     expectReloadRequired(spatialSkeletonState, "committed");
-    expect(spatialSkeletonState.getCachedNode(2)).toBeUndefined();
+    expect(spatialSkeletonState.getCachedNode(2n)).toBeUndefined();
   });
 
   it("runs replacement writes FIFO after a disposed request is definitively rejected", async () => {
     suppressStatusMessages();
 
-    const firstSegmentId = 23;
-    const secondSegmentId = 29;
+    const firstSegmentId = 23n;
+    const secondSegmentId = 29n;
     const firstParent: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId: firstSegmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
     const secondParent: SpatiallyIndexedSkeletonNode = {
-      nodeId: 10,
+      nodeId: 10n,
       segmentId: secondSegmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
@@ -1944,11 +1951,11 @@ describe("spatial_skeleton_commands", () => {
       .fn()
       .mockReturnValueOnce(oldAdd)
       .mockResolvedValueOnce({
-        nodeId: 3,
+        nodeId: 3n,
         segmentId: firstSegmentId,
       })
       .mockResolvedValueOnce({
-        nodeId: 30,
+        nodeId: 30n,
         segmentId: secondSegmentId,
       });
     const deleteNode = vi.fn();
@@ -2011,11 +2018,11 @@ describe("spatial_skeleton_commands", () => {
     expect(addNode).toHaveBeenCalledTimes(3);
     expect(addNode.mock.calls[1]).toEqual([10, 11, 12, firstParent.nodeId]);
     expect(addNode.mock.calls[2]).toEqual([13, 14, 15, secondParent.nodeId]);
-    expect(spatialSkeletonState.getCachedNode(3)).toMatchObject({
+    expect(spatialSkeletonState.getCachedNode(3n)).toMatchObject({
       segmentId: firstSegmentId,
       parentNodeId: firstParent.nodeId,
     });
-    expect(spatialSkeletonState.getCachedNode(30)).toMatchObject({
+    expect(spatialSkeletonState.getCachedNode(30n)).toMatchObject({
       segmentId: secondSegmentId,
       parentNodeId: secondParent.nodeId,
     });
@@ -2024,9 +2031,9 @@ describe("spatial_skeleton_commands", () => {
   it("releases a disposed source lane after an explicit CATMAID rejection", async () => {
     suppressStatusMessages();
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
@@ -2080,9 +2087,9 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
     const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
@@ -2138,9 +2145,9 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
     const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
@@ -2253,11 +2260,11 @@ describe("spatial_skeleton_commands", () => {
       addNode,
       getSkeleton,
       initialNodes: [],
-      segmentId: 23,
+      segmentId: 23n,
     });
 
     await executeSpatialSkeletonAddNode(layer as any, {
-      skeletonId: 0,
+      skeletonId: 0n,
       parentNodeId: undefined,
       positionInModelSpace: new Float32Array([1, 2, 3]),
     });
@@ -2292,15 +2299,15 @@ describe("spatial_skeleton_commands", () => {
   it("requires a page reload when an outcome-unknown split has no new skeleton id", async () => {
     suppressStatusMessages();
     const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
-    const segmentId = 23;
+    const segmentId = 23n;
     const root: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       parentNodeId: undefined,
       position: new Float32Array([1, 2, 3]),
     };
     const child: SpatiallyIndexedSkeletonNode = {
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
       parentNodeId: root.nodeId,
       position: new Float32Array([4, 5, 6]),
@@ -2347,9 +2354,9 @@ describe("spatial_skeleton_commands", () => {
   it("does not adopt or reverse a late commit after changing history source", async () => {
     suppressStatusMessages();
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const parentNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
@@ -2384,17 +2391,17 @@ describe("spatial_skeleton_commands", () => {
     expect(
       spatialSkeletonState
         .getCachedSegmentNodes(segmentId)
-        ?.some((node) => node.nodeId >= 1_000_000_000),
+        ?.some((node) => node.nodeId >= 2n ** 63n),
     ).toBe(false);
 
     resolveAdd!({
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
     });
     await disposal;
 
     expect(deleteNode).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.getCachedNode(2)).toBeUndefined();
+    expect(spatialSkeletonState.getCachedNode(2n)).toBeUndefined();
     expectReloadRequired(spatialSkeletonState, "committed");
   });
 
@@ -2405,15 +2412,15 @@ describe("spatial_skeleton_commands", () => {
       suppressStatusMessages();
       const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
 
-      const segmentId = 23;
+      const segmentId = 23n;
       const parentNode: SpatiallyIndexedSkeletonNode = {
-        nodeId: 1,
+        nodeId: 1n,
         segmentId,
         position: new Float32Array([4, 5, 6]),
         isTrueEnd: false,
       };
       let resolveAdd:
-        | ((value: { nodeId: number; segmentId: number }) => void)
+        | ((value: { nodeId: bigint; segmentId: bigint }) => void)
         | undefined;
       const addPromise = new Promise<any>((resolve) => {
         resolveAdd = resolve;
@@ -2447,12 +2454,12 @@ describe("spatial_skeleton_commands", () => {
       expect(spatialSkeletonState.hasUnconfirmedOptimisticEdits()).toBe(true);
       expect(spatialSkeletonState.getCachedSegmentNodes(segmentId)).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ nodeId: 0x7fff_ffff }),
+          expect.objectContaining({ nodeId: 2n ** 63n + 1n }),
         ]),
       );
 
       resolveAdd!({
-        nodeId: 2,
+        nodeId: 2n,
         segmentId,
       });
       await waitForMicrotasks(5);
@@ -2466,9 +2473,9 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
     const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const parentNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
@@ -2493,7 +2500,7 @@ describe("spatial_skeleton_commands", () => {
 
     const optimisticParent = spatialSkeletonState
       .getCachedSegmentNodes(segmentId)!
-      .find((node) => node.nodeId >= 1_000_000_000);
+      .find((node) => node.nodeId >= 2n ** 63n);
     expect(optimisticParent).toBeDefined();
 
     await executeSpatialSkeletonAddNode(layer as any, {
@@ -2519,7 +2526,7 @@ describe("spatial_skeleton_commands", () => {
     expect(
       spatialSkeletonState
         .getCachedSegmentNodes(segmentId)!
-        .filter((node) => node.nodeId >= 1_000_000_000),
+        .filter((node) => node.nodeId >= 2n ** 63n),
     ).toHaveLength(3);
 
     rejectFirstAdd!(new Error("server rejected"));
@@ -2531,16 +2538,16 @@ describe("spatial_skeleton_commands", () => {
     expect(
       spatialSkeletonState
         .getCachedSegmentNodes(segmentId)!
-        .some((node) => node.nodeId >= 1_000_000_000),
+        .some((node) => node.nodeId >= 2n ** 63n),
     ).toBe(false);
   });
 
   it("rolls back a move queued against a pending optimistic add when the add is rejected", async () => {
     suppressStatusMessages();
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const parentNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
@@ -2567,7 +2574,7 @@ describe("spatial_skeleton_commands", () => {
 
     const optimisticNode = spatialSkeletonState
       .getCachedSegmentNodes(segmentId)!
-      .find((node) => node.nodeId >= 1_000_000_000);
+      .find((node) => node.nodeId >= 2n ** 63n);
     expect(optimisticNode).toBeDefined();
 
     await executeSpatialSkeletonMoveNode(layer as any, {
@@ -2590,7 +2597,7 @@ describe("spatial_skeleton_commands", () => {
     expect(
       spatialSkeletonState
         .getCachedSegmentNodes(segmentId)!
-        .some((node) => node.nodeId >= 1_000_000_000),
+        .some((node) => node.nodeId >= 2n ** 63n),
     ).toBe(false);
   });
 
@@ -2599,8 +2606,8 @@ describe("spatial_skeleton_commands", () => {
     async (input) => {
       suppressStatusMessages();
       const node = {
-        nodeId: 1,
-        segmentId: 23,
+        nodeId: 1n,
+        segmentId: 23n,
         position: [1, 2, 3],
         description: "before",
       };
@@ -2610,18 +2617,18 @@ describe("spatial_skeleton_commands", () => {
       const { layer, spatialSkeletonState: state } =
         makeOptimisticAddNodeTestLayer({
           initialNodes: [node],
-          segmentId: 23,
+          segmentId: 23n,
           updateDescription,
         });
       await executeSpatialSkeletonNodeDescriptionUpdate(layer as any, {
         node,
         nextDescription: input,
       }).settled;
-      expect(state.getCachedNode(1)!.description).toBeUndefined();
+      expect(state.getCachedNode(1n)!.description).toBeUndefined();
       await undoSpatialSkeletonCommand(layer as any).settled;
-      expect(state.getCachedNode(1)!.description).toBe("before");
+      expect(state.getCachedNode(1n)!.description).toBe("before");
       await redoSpatialSkeletonCommand(layer as any).settled;
-      expect(state.getCachedNode(1)!.description).toBeUndefined();
+      expect(state.getCachedNode(1n)!.description).toBeUndefined();
       expect(updateDescription.mock.calls.map((call) => call[1])).toEqual([
         input,
         "before",
@@ -2632,9 +2639,9 @@ describe("spatial_skeleton_commands", () => {
 
   it("keeps a saved description undoable after rejecting a move and canceling its child", async () => {
     suppressStatusMessages();
-    const segmentId = 23;
+    const segmentId = 23n;
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       description: "unreviewed",
@@ -2671,13 +2678,13 @@ describe("spatial_skeleton_commands", () => {
     );
     await description.settled;
     const move = executeSpatialSkeletonMoveNode(layer as any, {
-      node: state.getCachedNode(1)!,
+      node: state.getCachedNode(1n)!,
       nextPositionInModelSpace: new Float32Array([4, 5, 6]),
     });
     await move;
     const child = executeSpatialSkeletonAddNode(layer as any, {
       skeletonId: segmentId,
-      parentNodeId: 1,
+      parentNodeId: 1n,
       positionInModelSpace: new Float32Array([7, 8, 9]),
     });
     await child;
@@ -2692,8 +2699,8 @@ describe("spatial_skeleton_commands", () => {
     );
     await Promise.all([move.settled, child.settled]);
     expect(state.getCachedSegmentNodes(segmentId)).toHaveLength(1);
-    expect(Array.from(state.getCachedNode(1)!.position)).toEqual([1, 2, 3]);
-    expect(state.getCachedNode(1)!.description).toBe("checked");
+    expect(Array.from(state.getCachedNode(1n)!.position)).toEqual([1, 2, 3]);
+    expect(state.getCachedNode(1n)!.description).toBe("checked");
     expect(addNode).not.toHaveBeenCalled();
     expect(
       state.getOptimisticEditQueueRecentActivity().map(({ status }) => status),
@@ -2703,24 +2710,24 @@ describe("spatial_skeleton_commands", () => {
     expect(state.commandHistory.canRedo.value).toBe(false);
 
     await undoSpatialSkeletonCommand(layer as any).settled;
-    expect(state.getCachedNode(1)!.description).toBe("unreviewed");
-    expect(updateDescription).toHaveBeenLastCalledWith(1, "unreviewed", {
+    expect(state.getCachedNode(1n)!.description).toBe("unreviewed");
+    expect(updateDescription).toHaveBeenLastCalledWith(1n, "unreviewed", {
       isTrueEnd: false,
     });
     await executeSpatialSkeletonMoveNode(layer as any, {
-      node: state.getCachedNode(1)!,
+      node: state.getCachedNode(1n)!,
       nextPositionInModelSpace: new Float32Array([10, 11, 12]),
     }).settled;
-    expect(Array.from(state.getCachedNode(1)!.position)).toEqual([10, 11, 12]);
+    expect(Array.from(state.getCachedNode(1n)!.position)).toEqual([10, 11, 12]);
     expect(moveNode).toHaveBeenCalledTimes(2);
   });
 
   it("retains a definitive rejection and its canceled suffix in recent activity", async () => {
     suppressStatusMessages();
     const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
-    const segmentId = 23;
+    const segmentId = 23n;
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
@@ -2787,9 +2794,9 @@ describe("spatial_skeleton_commands", () => {
 
   it("restores the node and shows the provider's instructions when a queued move is rejected", async () => {
     suppressStatusMessages();
-    const segmentId = 23;
+    const segmentId = 23n;
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
@@ -2823,13 +2830,13 @@ describe("spatial_skeleton_commands", () => {
       await execution;
       await waitForMicrotasks();
       expect(
-        Array.from(spatialSkeletonState.getCachedNode(1)!.position),
+        Array.from(spatialSkeletonState.getCachedNode(1n)!.position),
       ).toEqual([4, 5, 6]);
       rejectMove(error);
       await execution.settled;
       await waitForMicrotasks(10);
       expect(
-        Array.from(spatialSkeletonState.getCachedNode(1)!.position),
+        Array.from(spatialSkeletonState.getCachedNode(1n)!.position),
       ).toEqual([1, 2, 3]);
       expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(false);
       expect(spatialSkeletonState.hasUnconfirmedOptimisticEdits()).toBe(false);
@@ -2844,10 +2851,10 @@ describe("spatial_skeleton_commands", () => {
   it("keeps interaction overlays separate while remapping an optimistic move", async () => {
     suppressStatusMessages();
 
-    const segmentId = 23;
-    const realNodeId = 20;
+    const segmentId = 23n;
+    const realNodeId = 20n;
     const parentNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
@@ -2880,7 +2887,7 @@ describe("spatial_skeleton_commands", () => {
     });
     const optimisticNode = spatialSkeletonState
       .getCachedSegmentNodes(segmentId)!
-      .find((node) => node.nodeId >= 1_000_000_000)!;
+      .find((node) => node.nodeId >= 2n ** 63n)!;
     spatialSkeletonState.setPendingNodePosition(
       optimisticNode.nodeId,
       [8, 8, 8],
@@ -2942,9 +2949,9 @@ describe("spatial_skeleton_commands", () => {
   it("rolls back a delete queued against a pending optimistic add when the add is rejected", async () => {
     suppressStatusMessages();
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const parentNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
@@ -2971,7 +2978,7 @@ describe("spatial_skeleton_commands", () => {
 
     const optimisticNode = spatialSkeletonState
       .getCachedSegmentNodes(segmentId)!
-      .find((node) => node.nodeId >= 1_000_000_000);
+      .find((node) => node.nodeId >= 2n ** 63n);
     expect(optimisticNode).toBeDefined();
 
     await executeSpatialSkeletonDeleteNode(layer as any, optimisticNode!);
@@ -2989,7 +2996,7 @@ describe("spatial_skeleton_commands", () => {
     expect(
       spatialSkeletonState
         .getCachedSegmentNodes(segmentId)!
-        .some((node) => node.nodeId >= 1_000_000_000),
+        .some((node) => node.nodeId >= 2n ** 63n),
     ).toBe(false);
   });
 
@@ -2997,15 +3004,15 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
     const showTemporaryMessage = vi.mocked(StatusMessage.showTemporaryMessage);
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const parentNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
     const addNode = vi.fn().mockResolvedValue({
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
     });
     const deleteNode = vi.fn().mockResolvedValue({});
@@ -3033,8 +3040,8 @@ describe("spatial_skeleton_commands", () => {
         }),
       }),
     ]);
-    expect(spatialSkeletonState.getCachedNode(2)).toMatchObject({
-      nodeId: 2,
+    expect(spatialSkeletonState.getCachedNode(2n)).toMatchObject({
+      nodeId: 2n,
       segmentId,
       parentNodeId: parentNode.nodeId,
     });
@@ -3044,15 +3051,15 @@ describe("spatial_skeleton_commands", () => {
     await undoSpatialSkeletonCommand(layer as any);
     await waitForMicrotasks();
 
-    expect(deleteNode).toHaveBeenCalledWith(2);
-    expect(spatialSkeletonState.getCachedNode(2)).toBeUndefined();
+    expect(deleteNode).toHaveBeenCalledWith(2n);
+    expect(spatialSkeletonState.getCachedNode(2n)).toBeUndefined();
   });
 
   it("previews and reconciles root add-node when optimistic edits are enabled", async () => {
     suppressStatusMessages();
     const showTemporaryMessage = vi.mocked(StatusMessage.showTemporaryMessage);
 
-    const segmentId = 23;
+    const segmentId = 23n;
     let resolveAdd: ((value: any) => void) | undefined;
     const addNode = vi.fn().mockReturnValue(
       new Promise((resolve) => {
@@ -3066,7 +3073,7 @@ describe("spatial_skeleton_commands", () => {
     });
 
     await executeSpatialSkeletonAddNode(layer as any, {
-      skeletonId: 0,
+      skeletonId: 0n,
       parentNodeId: undefined,
       positionInModelSpace: new Float32Array([7, 8, 9]),
     });
@@ -3077,14 +3084,14 @@ describe("spatial_skeleton_commands", () => {
     expect(pendingEntry).toMatchObject({
       kind: "addNode",
     });
-    const previewRoot = spatialSkeletonState.getCachedNode(0x7fff_ffff)!;
+    const previewRoot = spatialSkeletonState.getCachedNode(2n ** 63n + 1n)!;
     expect(previewRoot).toMatchObject({
       parentNodeId: undefined,
     });
     expect(previewRoot.segmentId).toBeGreaterThan(0);
 
     resolveAdd!({
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
     });
     await waitForMicrotasks(20);
@@ -3098,8 +3105,8 @@ describe("spatial_skeleton_commands", () => {
       }),
     ]);
     expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(true);
-    expect(spatialSkeletonState.getCachedNode(2)).toMatchObject({
-      nodeId: 2,
+    expect(spatialSkeletonState.getCachedNode(2n)).toMatchObject({
+      nodeId: 2n,
       segmentId,
       parentNodeId: undefined,
     });
@@ -3109,8 +3116,8 @@ describe("spatial_skeleton_commands", () => {
   it("preserves current root display membership when its temporary id commits", async () => {
     suppressStatusMessages();
 
-    const realSegmentId = 23;
-    const realNodeId = 2;
+    const realSegmentId = 23n;
+    const realNodeId = 2n;
     let resolveAdd: ((value: any) => void) | undefined;
     const addNode = vi.fn(
       () =>
@@ -3126,11 +3133,11 @@ describe("spatial_skeleton_commands", () => {
     });
 
     await executeSpatialSkeletonAddNode(layer as any, {
-      skeletonId: 0,
+      skeletonId: 0n,
       parentNodeId: undefined,
       positionInModelSpace: new Float32Array([7, 8, 9]),
     });
-    const previewRoot = spatialSkeletonState.getCachedNode(0x7fff_ffff)!;
+    const previewRoot = spatialSkeletonState.getCachedNode(2n ** 63n + 1n)!;
     const tempSegment = BigInt(previewRoot.segmentId);
     const realSegment = BigInt(realSegmentId);
     const groupState = layer.displayState.segmentationGroupState.value;
@@ -3162,8 +3169,8 @@ describe("spatial_skeleton_commands", () => {
   it("rolls back a child add and split after its root temp segment is reconciled", async () => {
     suppressStatusMessages();
     const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
-    const realSegmentId = 23;
-    const realRootNodeId = 101;
+    const realSegmentId = 23n;
+    const realRootNodeId = 101n;
     let resolveRootAdd: ((value: any) => void) | undefined;
     let rejectChildAdd: ((error: Error) => void) | undefined;
     const addNode = vi
@@ -3189,11 +3196,11 @@ describe("spatial_skeleton_commands", () => {
     });
 
     await executeSpatialSkeletonAddNode(layer as any, {
-      skeletonId: 0,
+      skeletonId: 0n,
       parentNodeId: undefined,
       positionInModelSpace: new Float32Array([1, 2, 3]),
     });
-    const previewRoot = spatialSkeletonState.getCachedNode(0x7fff_ffff)!;
+    const previewRoot = spatialSkeletonState.getCachedNode(2n ** 63n + 1n)!;
     const tempRootNodeId = previewRoot.nodeId;
     const tempRootSegmentId = previewRoot.segmentId;
 
@@ -3282,19 +3289,19 @@ describe("spatial_skeleton_commands", () => {
     async (kind, directionAdjusted) => {
       suppressStatusMessages();
       const nodes: SpatiallyIndexedSkeletonNode[] = [
-        { nodeId: 101, segmentId: 11, position: new Float32Array([1, 2, 3]) },
+        { nodeId: 101n, segmentId: 11n, position: new Float32Array([1, 2, 3]) },
         {
-          nodeId: 102,
-          segmentId: 11,
-          parentNodeId: 101,
+          nodeId: 102n,
+          segmentId: 11n,
+          parentNodeId: 101n,
           position: new Float32Array([4, 5, 6]),
         },
-        { nodeId: 201, segmentId: 17, position: new Float32Array([7, 8, 9]) },
+        { nodeId: 201n, segmentId: 17n, position: new Float32Array([7, 8, 9]) },
       ];
       const inputResult =
         kind === "new root"
-          ? { nodeId: 301, segmentId: 23 }
-          : { existingSegmentId: 11, newSegmentId: 23 };
+          ? { nodeId: 301n, segmentId: 23n }
+          : { existingSegmentId: 11n, newSegmentId: 23n };
       let resolveInput!: (value: typeof inputResult) => void;
       const saveInput = vi.fn(
         () =>
@@ -3303,8 +3310,8 @@ describe("spatial_skeleton_commands", () => {
           }),
       );
       let resolveMerge!: (value: {
-        resultSegmentId: number;
-        deletedSegmentId: number;
+        resultSegmentId: bigint;
+        deletedSegmentId: bigint;
         directionAdjusted: boolean;
       }) => void;
       const mergeSkeletons = vi.fn(
@@ -3317,8 +3324,8 @@ describe("spatial_skeleton_commands", () => {
       const { layer, spatialSkeletonState: state } =
         makeOptimisticAddNodeTestLayer({
           initialNodes: nodes,
-          segmentId: 11,
-          segmentIds: [11, 17],
+          segmentId: 11n,
+          segmentIds: [11n, 17n],
           addNode: saveInput,
           splitSkeleton: saveInput,
           mergeSkeletons,
@@ -3327,13 +3334,13 @@ describe("spatial_skeleton_commands", () => {
       const input =
         kind === "new root"
           ? executeSpatialSkeletonAddNode(layer as any, {
-              skeletonId: 0,
+              skeletonId: 0n,
               positionInModelSpace: new Float32Array([10, 11, 12]),
             })
           : executeSpatialSkeletonSplit(layer as any, nodes[1]);
       await input;
       const inputNode = state.getCachedNode(
-        kind === "new root" ? 0x7fff_ffff : 102,
+        kind === "new root" ? 2n ** 63n + 1n : 102n,
       )!;
       const merge = executeSpatialSkeletonMerge(
         layer as any,
@@ -3341,15 +3348,15 @@ describe("spatial_skeleton_commands", () => {
         nodes[2],
       );
       await merge;
-      const previewId = state.getCachedNode(201)!.segmentId;
+      const previewId = state.getCachedNode(201n)!.segmentId;
       const group = layer.displayState.segmentationGroupState.value;
-      const expectCompletePreview = (nodeId: number) => {
+      const expectCompletePreview = (nodeId: bigint) => {
         expect(previewId).not.toBe(inputNode.segmentId);
         expect(cachedTopologyForTest(state, [previewId])).toEqual(
           [
             [nodeId, previewId, null],
-            [201, previewId, nodeId],
-          ].sort((a, b) => a[0]! - b[0]!),
+            [201n, previewId, nodeId],
+          ].sort((a, b) => bigintCompare(a[0]!, b[0]!)),
         );
         expect(
           state.spatialSkeletonPresentation.value.numericAliases,
@@ -3359,9 +3366,7 @@ describe("spatial_skeleton_commands", () => {
             authoritative: false,
           }),
         );
-        expect(group.visibleSegments).toEqual(
-          new Set([11n, BigInt(previewId)]),
-        );
+        expect(group.visibleSegments).toEqual(new Set([11n, previewId]));
         expect(layer.selectedSpatialSkeletonNodeInfo.value?.segmentId).toBe(
           previewId,
         );
@@ -3374,8 +3379,8 @@ describe("spatial_skeleton_commands", () => {
         outcome: "committed",
       });
       await vi.waitFor(() => expect(mergeSkeletons).toHaveBeenCalledTimes(1));
-      const savedNodeId = kind === "new root" ? 301 : 102;
-      expect(mergeSkeletons).toHaveBeenCalledWith(savedNodeId, 201);
+      const savedNodeId = kind === "new root" ? 301n : 102n;
+      expect(mergeSkeletons).toHaveBeenCalledWith(savedNodeId, 201n);
       expectCompletePreview(savedNodeId);
 
       const position = new Float32Array([15, 16, 17]);
@@ -3385,10 +3390,10 @@ describe("spatial_skeleton_commands", () => {
       });
       await move;
       expect(moveNode).not.toHaveBeenCalled();
-      const resultSegmentId = directionAdjusted ? 17 : 23;
+      const resultSegmentId = directionAdjusted ? 17n : 23n;
       resolveMerge({
         resultSegmentId,
-        deletedSegmentId: directionAdjusted ? 23 : 17,
+        deletedSegmentId: directionAdjusted ? 23n : 17n,
         directionAdjusted,
       });
       await expect(merge.settled).resolves.toMatchObject({
@@ -3399,17 +3404,15 @@ describe("spatial_skeleton_commands", () => {
       });
       expect(state.getCachedNode(savedNodeId)).toMatchObject({
         segmentId: resultSegmentId,
-        parentNodeId: directionAdjusted ? 201 : undefined,
+        parentNodeId: directionAdjusted ? 201n : undefined,
         position,
       });
-      expect(state.getCachedNode(201)).toMatchObject({
+      expect(state.getCachedNode(201n)).toMatchObject({
         segmentId: resultSegmentId,
         parentNodeId: directionAdjusted ? undefined : savedNodeId,
       });
       expect(state.getCachedSegmentNodes(previewId)).toBeUndefined();
-      expect(group.visibleSegments).toEqual(
-        new Set([11n, BigInt(resultSegmentId)]),
-      );
+      expect(group.visibleSegments).toEqual(new Set([11n, resultSegmentId]));
       expect(state.getOptimisticEditFatalState()).toBeUndefined();
     },
   );
@@ -3417,11 +3420,11 @@ describe("spatial_skeleton_commands", () => {
   it("restores real root and existing skeleton when a remapped dependent merge is rejected", async () => {
     suppressStatusMessages();
     const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
-    const existingSegmentId = 17;
-    const realRootSegmentId = 23;
-    const realRootNodeId = 101;
+    const existingSegmentId = 17n;
+    const realRootSegmentId = 23n;
+    const realRootNodeId = 101n;
     const existingRoot: SpatiallyIndexedSkeletonNode = {
-      nodeId: 201,
+      nodeId: 201n,
       segmentId: existingSegmentId,
       position: new Float32Array([7, 8, 9]),
       isTrueEnd: false,
@@ -3449,11 +3452,11 @@ describe("spatial_skeleton_commands", () => {
     });
 
     await executeSpatialSkeletonAddNode(layer as any, {
-      skeletonId: 0,
+      skeletonId: 0n,
       parentNodeId: undefined,
       positionInModelSpace: new Float32Array([1, 2, 3]),
     });
-    const tempRoot = spatialSkeletonState.getCachedNode(0x7fff_ffff)!;
+    const tempRoot = spatialSkeletonState.getCachedNode(2n ** 63n + 1n)!;
     const tempRootNodeId = tempRoot.nodeId;
     const tempRootSegmentId = tempRoot.segmentId;
 
@@ -3531,9 +3534,9 @@ describe("spatial_skeleton_commands", () => {
   it("requires reload after a committed add cannot publish locally", async () => {
     suppressStatusMessages();
     const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
-    const segmentId = 23;
+    const segmentId = 23n;
     const parentNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
     };
@@ -3561,7 +3564,7 @@ describe("spatial_skeleton_commands", () => {
     await vi.waitFor(() => expect(addNode).toHaveBeenCalledTimes(1));
     const tempNodeId = spatialSkeletonState
       .getCachedSegmentNodes(segmentId)!
-      .find((node) => node.nodeId >= 1_000_000_000)!.nodeId;
+      .find((node) => node.nodeId >= 2n ** 63n)!.nodeId;
     replaceCachedSegmentForTest(
       spatialSkeletonState,
       segmentId,
@@ -3573,7 +3576,7 @@ describe("spatial_skeleton_commands", () => {
       ),
     );
     resolveAdd({
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
     });
     await waitForMicrotasks(20);
@@ -3613,12 +3616,12 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
 
     let resolveFirstAdd!: (value: {
-      nodeId: number;
-      segmentId: number;
+      nodeId: bigint;
+      segmentId: bigint;
     }) => void;
     const firstAdd = new Promise<{
-      nodeId: number;
-      segmentId: number;
+      nodeId: bigint;
+      segmentId: bigint;
     }>((resolve) => {
       resolveFirstAdd = resolve;
     });
@@ -3626,20 +3629,20 @@ describe("spatial_skeleton_commands", () => {
       .fn()
       .mockReturnValueOnce(firstAdd)
       .mockResolvedValueOnce({
-        nodeId: 3,
-        segmentId: 29,
+        nodeId: 3n,
+        segmentId: 29n,
       });
     const deleteNode = vi.fn();
     const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
       addNode,
       deleteNode,
       initialNodes: [],
-      segmentId: 23,
-      segmentIds: [23, 29],
+      segmentId: 23n,
+      segmentIds: [23n, 29n],
     });
 
     await executeSpatialSkeletonAddNode(layer as any, {
-      skeletonId: 0,
+      skeletonId: 0n,
       parentNodeId: undefined,
       positionInModelSpace: new Float32Array([1, 2, 3]),
     });
@@ -3650,7 +3653,7 @@ describe("spatial_skeleton_commands", () => {
     spatialSkeletonState.clearRuntimeState();
     const disposal = oldQueue.dispose();
     const replacement = executeSpatialSkeletonAddNode(layer as any, {
-      skeletonId: 0,
+      skeletonId: 0n,
       parentNodeId: undefined,
       positionInModelSpace: new Float32Array([4, 5, 6]),
     });
@@ -3667,8 +3670,8 @@ describe("spatial_skeleton_commands", () => {
     });
 
     resolveFirstAdd({
-      nodeId: 2,
-      segmentId: 23,
+      nodeId: 2n,
+      segmentId: 23n,
     });
     await disposal;
     await waitForMicrotasks(10);
@@ -3676,29 +3679,29 @@ describe("spatial_skeleton_commands", () => {
     expect(deleteNode).not.toHaveBeenCalled();
     expect(addNode).toHaveBeenCalledTimes(1);
     expectReloadRequired(spatialSkeletonState, "committed");
-    expect(spatialSkeletonState.getCachedNode(2)).toBeUndefined();
+    expect(spatialSkeletonState.getCachedNode(2n)).toBeUndefined();
   });
 
   it("retains restored topology when a later split is rejected", async () => {
     suppressStatusMessages();
 
-    const segmentId = 23;
-    const insertedNodeId = 4;
+    const segmentId = 23n;
+    const insertedNodeId = 4n;
     const rootNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
     const deletedNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 3,
+      nodeId: 3n,
       segmentId,
       parentNodeId: rootNode.nodeId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
     const childNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
       parentNodeId: deletedNode.nodeId,
       position: new Float32Array([7, 8, 9]),
@@ -3771,11 +3774,11 @@ describe("spatial_skeleton_commands", () => {
   it("queues optimistic undo and redo for every node attribute edit", async () => {
     suppressStatusMessages();
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
-      parentNodeId: 10,
+      parentNodeId: 10n,
       position: new Float32Array([1, 2, 3]),
       description: "before",
       isTrueEnd: false,
@@ -3783,7 +3786,7 @@ describe("spatial_skeleton_commands", () => {
       confidence: 50,
     };
     const rootNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 10,
+      nodeId: 10n,
       segmentId,
       position: new Float32Array([0, 0, 0]),
       isTrueEnd: false,
@@ -3874,34 +3877,34 @@ describe("spatial_skeleton_commands", () => {
       const { layer, spatialSkeletonState: state } =
         makeOptimisticAddNodeTestLayer({
           initialNodes: [],
-          segmentId: 23,
+          segmentId: 23n,
           addNode: vi
             .fn()
-            .mockResolvedValueOnce({ nodeId: 1, segmentId: 23 })
-            .mockResolvedValueOnce({ nodeId: 2, segmentId: 23 })
-            .mockResolvedValueOnce({ nodeId: 3, segmentId: 24 }),
+            .mockResolvedValueOnce({ nodeId: 1n, segmentId: 23n })
+            .mockResolvedValueOnce({ nodeId: 2n, segmentId: 23n })
+            .mockResolvedValueOnce({ nodeId: 3n, segmentId: 24n }),
           rerootSkeleton: vi.fn(async () => undefined),
           mergeSkeletons: vi.fn(async () => ({
-            resultSegmentId: 24,
-            deletedSegmentId: 23,
+            resultSegmentId: 24n,
+            deletedSegmentId: 23n,
           })),
           splitSkeleton: vi.fn(async () => ({
-            existingSegmentId: 24,
-            newSegmentId: 25,
+            existingSegmentId: 24n,
+            newSegmentId: 25n,
           })),
           updateConfidence,
         });
       await executeSpatialSkeletonAddNode(layer as any, {
-        skeletonId: 0,
+        skeletonId: 0n,
         parentNodeId: undefined,
         positionInModelSpace: [1, 2, 3],
       }).settled;
       await executeSpatialSkeletonAddNode(layer as any, {
-        skeletonId: 23,
-        parentNodeId: 1,
+        skeletonId: 23n,
+        parentNodeId: 1n,
         positionInModelSpace: [4, 5, 6],
       }).settled;
-      for (const id of [1, 2]) {
+      for (const id of [1n, 2n]) {
         expect(state.getCachedNode(id)).toMatchObject({
           radius: 0,
           confidence: 0,
@@ -3911,33 +3914,33 @@ describe("spatial_skeleton_commands", () => {
       if (operation === "reroot") {
         await executeSpatialSkeletonReroot(
           layer as any,
-          state.getCachedNode(2)!,
+          state.getCachedNode(2n)!,
         ).settled;
       } else {
         await executeSpatialSkeletonAddNode(layer as any, {
-          skeletonId: 0,
+          skeletonId: 0n,
           parentNodeId: undefined,
           positionInModelSpace: [7, 8, 9],
         }).settled;
         await executeSpatialSkeletonMerge(
           layer as any,
-          state.getCachedNode(3)!,
-          state.getCachedNode(2)!,
+          state.getCachedNode(3n)!,
+          state.getCachedNode(2n)!,
         ).settled;
       }
       await undoSpatialSkeletonCommand(layer as any).settled;
       expect(updateConfidence).toHaveBeenCalledTimes(1);
-      expect(updateConfidence).toHaveBeenCalledWith(1, 0);
-      expect(state.getCachedNode(1)).toMatchObject({
+      expect(updateConfidence).toHaveBeenCalledWith(1n, 0);
+      expect(state.getCachedNode(1n)).toMatchObject({
         parentNodeId: undefined,
         confidence: 0,
       });
-      expect(state.getCachedNode(2)).toMatchObject({
-        parentNodeId: 1,
+      expect(state.getCachedNode(2n)).toMatchObject({
+        parentNodeId: 1n,
         confidence: 0,
       });
-      expect(state.getCachedNode(1)!.segmentId).toBe(
-        operation === "reroot" ? 23 : 25,
+      expect(state.getCachedNode(1n)!.segmentId).toBe(
+        operation === "reroot" ? 23n : 25n,
       );
       expect(state.getOptimisticEditFatalState()).toBeUndefined();
     },
@@ -3946,22 +3949,22 @@ describe("spatial_skeleton_commands", () => {
   it("previews optimistic reroot undo and redo from complete snapshots", async () => {
     suppressStatusMessages();
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const rootNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
     const middleNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
     const leafNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 3,
+      nodeId: 3n,
       segmentId,
       parentNodeId: middleNode.nodeId,
       position: new Float32Array([7, 8, 9]),
@@ -4005,34 +4008,34 @@ describe("spatial_skeleton_commands", () => {
   it("restores every parent link across branched reroot undo and redo", async () => {
     suppressStatusMessages();
     const nodes = makeRootRestorationNodesForTest().filter(
-      (node) => node.segmentId === 17,
+      (node) => node.segmentId === 17n,
     );
     const rerootSkeleton = vi.fn().mockResolvedValue({});
     const getSkeleton = vi.fn();
     const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
       initialNodes: nodes,
-      segmentId: 17,
+      segmentId: 17n,
       rerootSkeleton,
       getSkeleton,
     });
     const originalTopology = [
-      [201, 17, null],
-      [202, 17, 201],
-      [203, 17, 202],
-      [204, 17, 202],
-      [205, 17, 203],
+      [201n, 17n, null],
+      [202n, 17n, 201n],
+      [203n, 17n, 202n],
+      [204n, 17n, 202n],
+      [205n, 17n, 203n],
     ];
     const rerootedTopology = [
-      [201, 17, 202],
-      [202, 17, 203],
-      [203, 17, null],
-      [204, 17, 202],
-      [205, 17, 203],
+      [201n, 17n, 202n],
+      [202n, 17n, 203n],
+      [203n, 17n, null],
+      [204n, 17n, 202n],
+      [205n, 17n, 203n],
     ];
 
     const reroot = executeSpatialSkeletonReroot(layer as any, nodes[2]!);
     await reroot;
-    expect(cachedTopologyForTest(spatialSkeletonState, [17])).toEqual(
+    expect(cachedTopologyForTest(spatialSkeletonState, [17n])).toEqual(
       rerootedTopology,
     );
     await expect(reroot.settled).resolves.toMatchObject({
@@ -4041,32 +4044,32 @@ describe("spatial_skeleton_commands", () => {
 
     const undo = undoSpatialSkeletonCommand(layer as any);
     await expect(undo).resolves.toBe(true);
-    expect(cachedTopologyForTest(spatialSkeletonState, [17])).toEqual(
+    expect(cachedTopologyForTest(spatialSkeletonState, [17n])).toEqual(
       originalTopology,
     );
     await expect(undo.settled).resolves.toMatchObject({ outcome: "committed" });
 
     const redo = redoSpatialSkeletonCommand(layer as any);
     await expect(redo).resolves.toBe(true);
-    expect(cachedTopologyForTest(spatialSkeletonState, [17])).toEqual(
+    expect(cachedTopologyForTest(spatialSkeletonState, [17n])).toEqual(
       rerootedTopology,
     );
     await expect(redo.settled).resolves.toMatchObject({ outcome: "committed" });
-    expect(cachedTopologyForTest(spatialSkeletonState, [17])).toEqual(
+    expect(cachedTopologyForTest(spatialSkeletonState, [17n])).toEqual(
       rerootedTopology,
     );
-    expect(rerootSkeleton.mock.calls).toEqual([[203], [201], [203]]);
+    expect(rerootSkeleton.mock.calls).toEqual([[203n], [201n], [203n]]);
     expect(getSkeleton).not.toHaveBeenCalled();
   });
 
   it("restores both split components through undo and redo with a fresh skeleton ID", async () => {
     suppressStatusMessages();
     const nodes = makeRootRestorationNodesForTest().filter(
-      (node) => node.segmentId === 17,
+      (node) => node.segmentId === 17n,
     );
     let resolveSplit!: (result: {
-      existingSegmentId: number;
-      newSegmentId: number;
+      existingSegmentId: bigint;
+      newSegmentId: bigint;
     }) => void;
     const splitSkeleton = vi.fn(
       () =>
@@ -4075,49 +4078,49 @@ describe("spatial_skeleton_commands", () => {
         }),
     );
     const mergeSkeletons = vi.fn().mockResolvedValue({
-      resultSegmentId: 17,
-      deletedSegmentId: 31,
+      resultSegmentId: 17n,
+      deletedSegmentId: 31n,
       directionAdjusted: false,
     });
     const getSkeleton = vi.fn();
     const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
       initialNodes: nodes,
-      segmentId: 17,
+      segmentId: 17n,
       splitSkeleton,
       mergeSkeletons,
       getSkeleton,
     });
-    const expectSplitTopology = (splitSegmentId: number) => {
+    const expectSplitTopology = (splitSegmentId: bigint) => {
       expect(
-        cachedTopologyForTest(spatialSkeletonState, [17, splitSegmentId]),
+        cachedTopologyForTest(spatialSkeletonState, [17n, splitSegmentId]),
       ).toEqual([
-        [201, 17, null],
-        [202, splitSegmentId, null],
-        [203, splitSegmentId, 202],
-        [204, splitSegmentId, 202],
-        [205, splitSegmentId, 203],
+        [201n, 17n, null],
+        [202n, splitSegmentId, null],
+        [203n, splitSegmentId, 202n],
+        [204n, splitSegmentId, 202n],
+        [205n, splitSegmentId, 203n],
       ]);
     };
     const expectOriginalTopology = () => {
-      expect(cachedTopologyForTest(spatialSkeletonState, [17])).toEqual([
-        [201, 17, null],
-        [202, 17, 201],
-        [203, 17, 202],
-        [204, 17, 202],
-        [205, 17, 203],
+      expect(cachedTopologyForTest(spatialSkeletonState, [17n])).toEqual([
+        [201n, 17n, null],
+        [202n, 17n, 201n],
+        [203n, 17n, 202n],
+        [204n, 17n, 202n],
+        [205n, 17n, 203n],
       ]);
     };
 
     const split = executeSpatialSkeletonSplit(layer as any, nodes[1]!);
     await split;
-    const firstPreviewId = spatialSkeletonState.getCachedNode(202)!.segmentId;
-    expect(firstPreviewId).not.toBe(17);
+    const firstPreviewId = spatialSkeletonState.getCachedNode(202n)!.segmentId;
+    expect(firstPreviewId).not.toBe(17n);
     expectSplitTopology(firstPreviewId);
-    resolveSplit({ existingSegmentId: 17, newSegmentId: 31 });
+    resolveSplit({ existingSegmentId: 17n, newSegmentId: 31n });
     await expect(split.settled).resolves.toMatchObject({
       outcome: "committed",
     });
-    expectSplitTopology(31);
+    expectSplitTopology(31n);
     expect(
       spatialSkeletonState.getCachedSegmentNodes(firstPreviewId),
     ).toBeUndefined();
@@ -4127,22 +4130,22 @@ describe("spatial_skeleton_commands", () => {
     expectOriginalTopology();
     await expect(undo.settled).resolves.toMatchObject({ outcome: "committed" });
     expectOriginalTopology();
-    expect(spatialSkeletonState.getCachedSegmentNodes(31)).toBeUndefined();
+    expect(spatialSkeletonState.getCachedSegmentNodes(31n)).toBeUndefined();
 
     const redo = redoSpatialSkeletonCommand(layer as any);
     await expect(redo).resolves.toBe(true);
-    const redoPreviewId = spatialSkeletonState.getCachedNode(202)!.segmentId;
-    expect(redoPreviewId).not.toBe(17);
+    const redoPreviewId = spatialSkeletonState.getCachedNode(202n)!.segmentId;
+    expect(redoPreviewId).not.toBe(17n);
     expectSplitTopology(redoPreviewId);
-    resolveSplit({ existingSegmentId: 17, newSegmentId: 37 });
+    resolveSplit({ existingSegmentId: 17n, newSegmentId: 37n });
     await expect(redo.settled).resolves.toMatchObject({ outcome: "committed" });
-    expectSplitTopology(37);
-    expect(spatialSkeletonState.getCachedSegmentNodes(31)).toBeUndefined();
+    expectSplitTopology(37n);
+    expect(spatialSkeletonState.getCachedSegmentNodes(31n)).toBeUndefined();
     expect(
       spatialSkeletonState.getCachedSegmentNodes(redoPreviewId),
     ).toBeUndefined();
-    expect(splitSkeleton.mock.calls).toEqual([[202], [202]]);
-    expect(mergeSkeletons.mock.calls).toEqual([[201, 202]]);
+    expect(splitSkeleton.mock.calls).toEqual([[202n], [202n]]);
+    expect(mergeSkeletons.mock.calls).toEqual([[201n, 202n]]);
     expect(getSkeleton).not.toHaveBeenCalled();
   });
 
@@ -4152,61 +4155,61 @@ describe("spatial_skeleton_commands", () => {
     const mergeSkeletons = vi
       .fn()
       .mockResolvedValueOnce({
-        resultSegmentId: 11,
-        deletedSegmentId: 17,
+        resultSegmentId: 11n,
+        deletedSegmentId: 17n,
         directionAdjusted: false,
       })
       .mockResolvedValueOnce({
-        resultSegmentId: 11,
-        deletedSegmentId: 19,
+        resultSegmentId: 11n,
+        deletedSegmentId: 19n,
         directionAdjusted: false,
       });
     const splitSkeleton = vi
       .fn()
-      .mockResolvedValueOnce({ existingSegmentId: 11, newSegmentId: 19 })
-      .mockResolvedValueOnce({ existingSegmentId: 11, newSegmentId: 23 });
+      .mockResolvedValueOnce({ existingSegmentId: 11n, newSegmentId: 19n })
+      .mockResolvedValueOnce({ existingSegmentId: 11n, newSegmentId: 23n });
     const rerootSkeleton = vi.fn().mockResolvedValue({});
     const getSkeleton = vi.fn();
     const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
       initialNodes: nodes,
-      segmentId: 11,
-      segmentIds: [11, 17],
+      segmentId: 11n,
+      segmentIds: [11n, 17n],
       mergeSkeletons,
       splitSkeleton,
       rerootSkeleton,
       getSkeleton,
     });
-    const expectRestoredTopology = (restoredSegmentId: number) => {
+    const expectRestoredTopology = (restoredSegmentId: bigint) => {
       expect(
-        cachedTopologyForTest(spatialSkeletonState, [11, restoredSegmentId]),
+        cachedTopologyForTest(spatialSkeletonState, [11n, restoredSegmentId]),
       ).toEqual([
-        [101, 11, null],
-        [102, 11, 101],
-        [201, restoredSegmentId, null],
-        [202, restoredSegmentId, 201],
-        [203, restoredSegmentId, 202],
-        [204, restoredSegmentId, 202],
-        [205, restoredSegmentId, 203],
+        [101n, 11n, null],
+        [102n, 11n, 101n],
+        [201n, restoredSegmentId, null],
+        [202n, restoredSegmentId, 201n],
+        [203n, restoredSegmentId, 202n],
+        [204n, restoredSegmentId, 202n],
+        [205n, restoredSegmentId, 203n],
       ]);
     };
     const mergedTopology = [
-      [101, 11, null],
-      [102, 11, 101],
-      [201, 11, 202],
-      [202, 11, 203],
-      [203, 11, 102],
-      [204, 11, 202],
-      [205, 11, 203],
+      [101n, 11n, null],
+      [102n, 11n, 101n],
+      [201n, 11n, 202n],
+      [202n, 11n, 203n],
+      [203n, 11n, 102n],
+      [204n, 11n, 202n],
+      [205n, 11n, 203n],
     ];
 
-    for (const [cycle, restoredSegmentId] of [19, 23].entries()) {
+    for (const [cycle, restoredSegmentId] of [19n, 23n].entries()) {
       const merge =
         cycle === 0
           ? executeSpatialSkeletonMerge(layer as any, nodes[1]!, nodes[4]!)
           : redoSpatialSkeletonCommand(layer as any);
       await merge;
       const mergedPreviewId =
-        spatialSkeletonState.getCachedNode(101)!.segmentId;
+        spatialSkeletonState.getCachedNode(101n)!.segmentId;
       expect(
         cachedTopologyForTest(spatialSkeletonState, [mergedPreviewId]),
       ).toEqual(
@@ -4219,15 +4222,15 @@ describe("spatial_skeleton_commands", () => {
       await expect(merge.settled).resolves.toMatchObject({
         outcome: "committed",
       });
-      expect(cachedTopologyForTest(spatialSkeletonState, [11])).toEqual(
+      expect(cachedTopologyForTest(spatialSkeletonState, [11n])).toEqual(
         mergedTopology,
       );
 
       const undo = undoSpatialSkeletonCommand(layer as any);
       await expect(undo).resolves.toBe(true);
       const restoredPreviewId =
-        spatialSkeletonState.getCachedNode(201)!.segmentId;
-      expect(restoredPreviewId).not.toBe(11);
+        spatialSkeletonState.getCachedNode(201n)!.segmentId;
+      expect(restoredPreviewId).not.toBe(11n);
       expectRestoredTopology(restoredPreviewId);
       await expect(undo.settled).resolves.toMatchObject({
         outcome: "committed",
@@ -4236,14 +4239,14 @@ describe("spatial_skeleton_commands", () => {
       expect(spatialSkeletonState.commandHistory.canRedo.value).toBe(true);
     }
 
-    expect(spatialSkeletonState.getCachedSegmentNodes(17)).toBeUndefined();
-    expect(spatialSkeletonState.getCachedSegmentNodes(19)).toBeUndefined();
+    expect(spatialSkeletonState.getCachedSegmentNodes(17n)).toBeUndefined();
+    expect(spatialSkeletonState.getCachedSegmentNodes(19n)).toBeUndefined();
     expect(mergeSkeletons.mock.calls).toEqual([
-      [102, 203],
-      [102, 203],
+      [102n, 203n],
+      [102n, 203n],
     ]);
-    expect(splitSkeleton.mock.calls).toEqual([[203], [203]]);
-    expect(rerootSkeleton.mock.calls).toEqual([[201], [201]]);
+    expect(splitSkeleton.mock.calls).toEqual([[203n], [203n]]);
+    expect(rerootSkeleton.mock.calls).toEqual([[201n], [201n]]);
     expect(getSkeleton).not.toHaveBeenCalled();
   });
 
@@ -4254,14 +4257,14 @@ describe("spatial_skeleton_commands", () => {
     const mergeSkeletons = vi.fn(async () => {
       requestOrder.push("merge");
       return {
-        resultSegmentId: 11,
-        deletedSegmentId: 17,
+        resultSegmentId: 11n,
+        deletedSegmentId: 17n,
         directionAdjusted: false,
       };
     });
     let resolveSplit!: (result: {
-      existingSegmentId: number;
-      newSegmentId: number;
+      existingSegmentId: bigint;
+      newSegmentId: bigint;
     }) => void;
     const splitSkeleton = vi.fn(() => {
       requestOrder.push("split");
@@ -4282,8 +4285,8 @@ describe("spatial_skeleton_commands", () => {
     });
     const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
       initialNodes: nodes,
-      segmentId: 11,
-      segmentIds: [11, 17],
+      segmentId: 11n,
+      segmentIds: [11n, 17n],
       mergeSkeletons,
       splitSkeleton,
       rerootSkeleton,
@@ -4302,19 +4305,19 @@ describe("spatial_skeleton_commands", () => {
     void undo.settled.then(undoSettled);
     await expect(undo).resolves.toBe(true);
     const move = executeSpatialSkeletonMoveNode(layer as any, {
-      node: spatialSkeletonState.getCachedNode(201)!,
+      node: spatialSkeletonState.getCachedNode(201n)!,
       nextPositionInModelSpace: new Float32Array([40, 50, 60]),
     });
     await move;
     expect(
-      Array.from(spatialSkeletonState.getCachedNode(201)!.position),
+      Array.from(spatialSkeletonState.getCachedNode(201n)!.position),
     ).toEqual([40, 50, 60]);
     expect(moveNode).not.toHaveBeenCalled();
     expect(rerootSkeleton).not.toHaveBeenCalled();
     expect(undoSettled).not.toHaveBeenCalled();
 
-    resolveSplit({ existingSegmentId: 11, newSegmentId: 19 });
-    await vi.waitFor(() => expect(rerootSkeleton).toHaveBeenCalledWith(201));
+    resolveSplit({ existingSegmentId: 11n, newSegmentId: 19n });
+    await vi.waitFor(() => expect(rerootSkeleton).toHaveBeenCalledWith(201n));
     await waitForMicrotasks(10);
     // The split has committed, but the server still has B2 as root. Neither
     // Undo's settled promise nor a later write may pass this reroot barrier.
@@ -4328,32 +4331,32 @@ describe("spatial_skeleton_commands", () => {
     expect(undoSettled).toHaveBeenCalledTimes(1);
     expect(requestOrder).toEqual(["merge", "split", "reroot", "move"]);
     expect(moveNode).toHaveBeenCalledTimes(1);
-    expect(cachedTopologyForTest(spatialSkeletonState, [11, 19])).toEqual([
-      [101, 11, null],
-      [102, 11, 101],
-      [201, 19, null],
-      [202, 19, 201],
-      [203, 19, 202],
-      [204, 19, 202],
-      [205, 19, 203],
+    expect(cachedTopologyForTest(spatialSkeletonState, [11n, 19n])).toEqual([
+      [101n, 11n, null],
+      [102n, 11n, 101n],
+      [201n, 19n, null],
+      [202n, 19n, 201n],
+      [203n, 19n, 202n],
+      [204n, 19n, 202n],
+      [205n, 19n, 203n],
     ]);
     expect(
-      Array.from(spatialSkeletonState.getCachedNode(201)!.position),
+      Array.from(spatialSkeletonState.getCachedNode(201n)!.position),
     ).toEqual([40, 50, 60]);
   });
 
   it("retains a bounded settled queue row with its undo recipe", async () => {
     suppressStatusMessages();
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const parentNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
     const addNode = vi.fn().mockResolvedValue({
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
     });
     const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
@@ -4390,18 +4393,18 @@ describe("spatial_skeleton_commands", () => {
   it("retains committed optimistic dependencies until their pending dependents settle", async () => {
     suppressStatusMessages();
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const parentNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
     let resolveParentAdd:
-      | ((value: { nodeId: number; segmentId: number }) => void)
+      | ((value: { nodeId: bigint; segmentId: bigint }) => void)
       | undefined;
     let resolveChildAdd:
-      | ((value: { nodeId: number; segmentId: number }) => void)
+      | ((value: { nodeId: bigint; segmentId: bigint }) => void)
       | undefined;
     const parentAddPromise = new Promise<any>((resolve) => {
       resolveParentAdd = resolve;
@@ -4428,7 +4431,7 @@ describe("spatial_skeleton_commands", () => {
 
     const optimisticParent = spatialSkeletonState
       .getCachedSegmentNodes(segmentId)!
-      .find((node) => node.nodeId >= 1_000_000_000);
+      .find((node) => node.nodeId >= 2n ** 63n);
     expect(optimisticParent).toBeDefined();
 
     await executeSpatialSkeletonAddNode(layer as any, {
@@ -4439,7 +4442,7 @@ describe("spatial_skeleton_commands", () => {
     await waitForMicrotasks();
 
     resolveParentAdd!({
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
     });
     await waitForMicrotasks(10);
@@ -4462,7 +4465,7 @@ describe("spatial_skeleton_commands", () => {
     );
 
     resolveChildAdd!({
-      nodeId: 3,
+      nodeId: 3n,
       segmentId,
     });
     await waitForMicrotasks(5);
@@ -4477,8 +4480,8 @@ describe("spatial_skeleton_commands", () => {
   it("restores a rejected sole-root deletion without reloading", async () => {
     suppressStatusMessages();
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 725,
-      segmentId: 87,
+      nodeId: 725n,
+      segmentId: 87n,
       position: new Float32Array([4, 5, 6]),
     };
     let rejectDelete!: (error: unknown) => void;
@@ -4525,18 +4528,18 @@ describe("spatial_skeleton_commands", () => {
   it("restores a pending delete rollback with a remapped real parent id", async () => {
     suppressStatusMessages();
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const rootNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
     let resolveParentAdd:
-      | ((value: { nodeId: number; segmentId: number }) => void)
+      | ((value: { nodeId: bigint; segmentId: bigint }) => void)
       | undefined;
     let resolveChildAdd:
-      | ((value: { nodeId: number; segmentId: number }) => void)
+      | ((value: { nodeId: bigint; segmentId: bigint }) => void)
       | undefined;
     const parentAddPromise = new Promise<any>((resolve) => {
       resolveParentAdd = resolve;
@@ -4563,7 +4566,7 @@ describe("spatial_skeleton_commands", () => {
 
     const optimisticParent = spatialSkeletonState
       .getCachedSegmentNodes(segmentId)!
-      .find((node) => node.nodeId >= 1_000_000_000);
+      .find((node) => node.nodeId >= 2n ** 63n);
     expect(optimisticParent).toBeDefined();
 
     await executeSpatialSkeletonAddNode(layer as any, {
@@ -4582,7 +4585,7 @@ describe("spatial_skeleton_commands", () => {
     await waitForMicrotasks();
 
     resolveParentAdd!({
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
     });
     await waitForMicrotasks(5);
@@ -4593,11 +4596,11 @@ describe("spatial_skeleton_commands", () => {
       spatialSkeletonState.getCachedNode(optimisticChild!.nodeId),
     ).toMatchObject({
       nodeId: optimisticChild!.nodeId,
-      parentNodeId: 2,
+      parentNodeId: 2n,
     });
 
     resolveChildAdd!({
-      nodeId: 3,
+      nodeId: 3n,
       segmentId,
     });
     await waitForMicrotasks(5);
@@ -4606,15 +4609,15 @@ describe("spatial_skeleton_commands", () => {
   it("removes a pending optimistic move-node preview without sending it", async () => {
     suppressStatusMessages();
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const parentNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
     let resolveAdd:
-      | ((value: { nodeId: number; segmentId: number }) => void)
+      | ((value: { nodeId: bigint; segmentId: bigint }) => void)
       | undefined;
     const addPromise = new Promise<any>((resolve) => {
       resolveAdd = resolve;
@@ -4658,7 +4661,7 @@ describe("spatial_skeleton_commands", () => {
     await moveUndo;
 
     resolveAdd!({
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
     });
     await waitForMicrotasks(5);
@@ -4668,9 +4671,9 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
     const showTemporaryMessage = vi.mocked(StatusMessage.showTemporaryMessage);
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
@@ -4726,9 +4729,9 @@ describe("spatial_skeleton_commands", () => {
   it("fences later writes while an explicit move undo is ambiguous", async () => {
     suppressStatusMessages();
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
@@ -4820,9 +4823,9 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
     const showTemporaryMessage = vi.mocked(StatusMessage.showTemporaryMessage);
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
@@ -4865,8 +4868,8 @@ describe("spatial_skeleton_commands", () => {
   it("undoes directly from retained history after manager-cache eviction", async () => {
     suppressStatusMessages();
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
-      segmentId: 23,
+      nodeId: 1n,
+      segmentId: 23n,
       position: new Float32Array([4, 5, 6]),
     };
     const getSkeleton = vi.fn();
@@ -4905,8 +4908,8 @@ describe("spatial_skeleton_commands", () => {
   it("redoes directly from retained history after manager-cache eviction", async () => {
     suppressStatusMessages();
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
-      segmentId: 23,
+      nodeId: 1n,
+      segmentId: 23n,
       position: new Float32Array([4, 5, 6]),
     };
     const getSkeleton = vi.fn();
@@ -4951,9 +4954,9 @@ describe("spatial_skeleton_commands", () => {
 
   it("releases journal capacity after more than 64 sequential confirmations", async () => {
     suppressStatusMessages();
-    const segmentId = 23;
+    const segmentId = 23n;
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([0, 0, 0]),
       isTrueEnd: false,
@@ -4991,9 +4994,9 @@ describe("spatial_skeleton_commands", () => {
 
   it("releases journal capacity after more than 64 pending execute-undo coalesces", async () => {
     suppressStatusMessages();
-    const segmentId = 23;
+    const segmentId = 23n;
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([0, 0, 0]),
       isTrueEnd: false,
@@ -5045,14 +5048,14 @@ describe("spatial_skeleton_commands", () => {
 
   it("keeps previewing to the 64-intent limit and resumes after a held POST", async () => {
     suppressStatusMessages();
-    const segmentId = 23;
+    const segmentId = 23n;
     const nodes = Array.from(
       { length: 65 },
       (_, index) =>
         ({
-          nodeId: index + 1,
+          nodeId: BigInt(index + 1),
           segmentId,
-          parentNodeId: index === 0 ? undefined : index,
+          parentNodeId: index === 0 ? undefined : BigInt(index),
           position: new Float32Array([index, 0, 0]),
           isTrueEnd: false,
         }) satisfies SpatiallyIndexedSkeletonNode,
@@ -5122,9 +5125,9 @@ describe("spatial_skeleton_commands", () => {
   it("keeps the latest optimistic move preview when an older move commits", async () => {
     suppressStatusMessages();
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
@@ -5185,29 +5188,29 @@ describe("spatial_skeleton_commands", () => {
   it("removes a pending optimistic delete-node preview without sending it", async () => {
     suppressStatusMessages();
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const rootNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
     const deletedNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
     const childNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 3,
+      nodeId: 3n,
       segmentId,
       parentNodeId: deletedNode.nodeId,
       position: new Float32Array([7, 8, 9]),
       isTrueEnd: false,
     };
     let resolveAdd:
-      | ((value: { nodeId: number; segmentId: number }) => void)
+      | ((value: { nodeId: bigint; segmentId: bigint }) => void)
       | undefined;
     const addPromise = new Promise<any>((resolve) => {
       resolveAdd = resolve;
@@ -5252,7 +5255,7 @@ describe("spatial_skeleton_commands", () => {
     ).toBe(deletedNode.nodeId);
 
     resolveAdd!({
-      nodeId: 4,
+      nodeId: 4n,
       segmentId,
     });
     await waitForMicrotasks(5);
@@ -5262,15 +5265,15 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
     const showTemporaryMessage = vi.mocked(StatusMessage.showTemporaryMessage);
 
-    const segmentId = 23;
+    const segmentId = 23n;
     const rootNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
     const deletedNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,
       position: new Float32Array([4, 5, 6]),
@@ -5278,7 +5281,7 @@ describe("spatial_skeleton_commands", () => {
     };
     const deleteNode = vi.fn().mockResolvedValue({});
     const addNode = vi.fn().mockResolvedValue({
-      nodeId: 20,
+      nodeId: 20n,
       segmentId,
     });
     const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
@@ -5303,53 +5306,53 @@ describe("spatial_skeleton_commands", () => {
     expect(
       spatialSkeletonState
         .getCachedSegmentNodes(segmentId)
-        ?.some((node) => node.nodeId >= 1_000_000_000),
+        ?.some((node) => node.nodeId >= 2n ** 63n),
     ).toBe(true);
     await undo.settled;
     expect(addNode).toHaveBeenCalledWith(4, 5, 6, rootNode.nodeId);
-    expect(spatialSkeletonState.getCachedNode(20)).toMatchObject({
-      nodeId: 20,
+    expect(spatialSkeletonState.getCachedNode(20n)).toMatchObject({
+      nodeId: 20n,
       parentNodeId: rootNode.nodeId,
     });
   });
 
   it("previews and reconciles an optimistic skeleton split with nocheck", async () => {
     suppressStatusMessages();
-    const segmentId = 23;
-    const newSegmentId = 31;
+    const segmentId = 23n;
+    const newSegmentId = 31n;
     const rootNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
     const splitNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
     const childNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 3,
+      nodeId: 3n,
       segmentId,
       parentNodeId: splitNode.nodeId,
       position: new Float32Array([7, 8, 9]),
       isTrueEnd: false,
     };
     let resolveSplit:
-      | ((result: { existingSegmentId: number; newSegmentId: number }) => void)
+      | ((result: { existingSegmentId: bigint; newSegmentId: bigint }) => void)
       | undefined;
     const splitSkeleton = vi.fn(
       () =>
         new Promise<{
-          existingSegmentId: number;
-          newSegmentId: number;
+          existingSegmentId: bigint;
+          newSegmentId: bigint;
         }>((resolve) => {
           resolveSplit = resolve;
         }),
     );
-    const getSkeleton = vi.fn(async (requestedSegmentId: number) => {
+    const getSkeleton = vi.fn(async (requestedSegmentId: bigint) => {
       if (requestedSegmentId === segmentId) return [rootNode];
       if (requestedSegmentId === newSegmentId) {
         return [
@@ -5437,15 +5440,15 @@ describe("spatial_skeleton_commands", () => {
 
   it("undoes a retained split without hydrating an evicted manager cache", async () => {
     suppressStatusMessages();
-    const segmentId = 23;
-    const newSegmentId = 31;
+    const segmentId = 23n;
+    const newSegmentId = 31n;
     const rootNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
     };
     const splitNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,
       position: new Float32Array([4, 5, 6]),
@@ -5465,7 +5468,7 @@ describe("spatial_skeleton_commands", () => {
       resultSegmentId: segmentId,
       deletedSegmentId: newSegmentId,
     });
-    const getSkeleton = vi.fn(async (requestedSegmentId: number) =>
+    const getSkeleton = vi.fn(async (requestedSegmentId: bigint) =>
       requestedSegmentId === segmentId ? [rootNode] : splitSideNodes,
     );
     const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
@@ -5501,29 +5504,29 @@ describe("spatial_skeleton_commands", () => {
 
   it("merges back an explicitly undone in-flight optimistic split", async () => {
     suppressStatusMessages();
-    const segmentId = 23;
-    const splitSegmentId = 31;
+    const segmentId = 23n;
+    const splitSegmentId = 31n;
     const rootNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
     const splitNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
     let resolveSplit:
-      | ((result: { existingSegmentId: number; newSegmentId: number }) => void)
+      | ((result: { existingSegmentId: bigint; newSegmentId: bigint }) => void)
       | undefined;
     const splitSkeleton = vi.fn(
       () =>
         new Promise<{
-          existingSegmentId: number;
-          newSegmentId: number;
+          existingSegmentId: bigint;
+          newSegmentId: bigint;
         }>((resolve) => {
           resolveSplit = resolve;
         }),
@@ -5533,7 +5536,7 @@ describe("spatial_skeleton_commands", () => {
       deletedSegmentId: splitSegmentId,
       directionAdjusted: false,
     });
-    const getSkeleton = vi.fn(async (requestedSegmentId: number) =>
+    const getSkeleton = vi.fn(async (requestedSegmentId: bigint) =>
       requestedSegmentId === segmentId ? [rootNode, splitNode] : [],
     );
     const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
@@ -5569,47 +5572,47 @@ describe("spatial_skeleton_commands", () => {
 
   it("retains the source lane without merging back a disposed split that commits", async () => {
     suppressStatusMessages();
-    const segmentId = 23;
-    const splitSegmentId = 31;
-    const independentSegmentId = 41;
+    const segmentId = 23n;
+    const splitSegmentId = 31n;
+    const independentSegmentId = 41n;
     const rootNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
     const splitNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
     const independentRoot: SpatiallyIndexedSkeletonNode = {
-      nodeId: 10,
+      nodeId: 10n,
       segmentId: independentSegmentId,
       position: new Float32Array([7, 8, 9]),
       isTrueEnd: false,
     };
     let resolveSplit!: (result: {
-      existingSegmentId: number;
-      newSegmentId: number;
+      existingSegmentId: bigint;
+      newSegmentId: bigint;
     }) => void;
     const splitSkeleton = vi.fn(
       () =>
         new Promise<{
-          existingSegmentId: number;
-          newSegmentId: number;
+          existingSegmentId: bigint;
+          newSegmentId: bigint;
         }>((resolve) => {
           resolveSplit = resolve;
         }),
     );
     const mergeSkeletons = vi.fn();
     const addNode = vi.fn().mockResolvedValue({
-      nodeId: 11,
+      nodeId: 11n,
       segmentId: independentSegmentId,
     });
-    const getSkeleton = vi.fn(async (requestedSegmentId: number) => {
+    const getSkeleton = vi.fn(async (requestedSegmentId: bigint) => {
       if (requestedSegmentId === segmentId) return [rootNode, splitNode];
       if (requestedSegmentId === independentSegmentId) {
         return [independentRoot];
@@ -5652,7 +5655,7 @@ describe("spatial_skeleton_commands", () => {
     expect(
       spatialSkeletonState
         .getCachedSegmentNodes(independentSegmentId)
-        ?.some((node) => node.nodeId >= 1_000_000_000),
+        ?.some((node) => node.nodeId >= 2n ** 63n),
     ).toBe(true);
 
     resolveSplit({
@@ -5666,34 +5669,34 @@ describe("spatial_skeleton_commands", () => {
     expect(getSkeleton).not.toHaveBeenCalled();
     expect(addNode).not.toHaveBeenCalled();
     expectReloadRequired(spatialSkeletonState, "committed");
-    expect(spatialSkeletonState.getCachedNode(11)).toBeUndefined();
+    expect(spatialSkeletonState.getCachedNode(11n)).toBeUndefined();
   });
 
   it("keeps an optimistic merge visible while reconciling a reversed direction", async () => {
     suppressStatusMessages();
-    const firstSegmentId = 11;
-    const secondSegmentId = 17;
+    const firstSegmentId = 11n;
+    const secondSegmentId = 17n;
     const firstRoot: SpatiallyIndexedSkeletonNode = {
-      nodeId: 101,
+      nodeId: 101n,
       segmentId: firstSegmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
     const firstNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 102,
+      nodeId: 102n,
       segmentId: firstSegmentId,
       parentNodeId: firstRoot.nodeId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
     const secondRoot: SpatiallyIndexedSkeletonNode = {
-      nodeId: 201,
+      nodeId: 201n,
       segmentId: secondSegmentId,
       position: new Float32Array([7, 8, 9]),
       isTrueEnd: false,
     };
     const secondNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 202,
+      nodeId: 202n,
       segmentId: secondSegmentId,
       parentNodeId: secondRoot.nodeId,
       position: new Float32Array([10, 11, 12]),
@@ -5701,16 +5704,16 @@ describe("spatial_skeleton_commands", () => {
     };
     let resolveMerge:
       | ((result: {
-          resultSegmentId: number;
-          deletedSegmentId: number;
+          resultSegmentId: bigint;
+          deletedSegmentId: bigint;
           directionAdjusted: boolean;
         }) => void)
       | undefined;
     const mergeSkeletons = vi.fn(
       () =>
         new Promise<{
-          resultSegmentId: number;
-          deletedSegmentId: number;
+          resultSegmentId: bigint;
+          deletedSegmentId: bigint;
           directionAdjusted: boolean;
         }>((resolve) => {
           resolveMerge = resolve;
@@ -5751,8 +5754,8 @@ describe("spatial_skeleton_commands", () => {
     );
 
     const publishedReconciliationFrames: Array<{
-      first: number[] | undefined;
-      second: number[] | undefined;
+      first: bigint[] | undefined;
+      second: bigint[] | undefined;
     }> = [];
     const unsubscribePresentation =
       spatialSkeletonState.spatialSkeletonPresentation.changed.add(() => {
@@ -5763,7 +5766,7 @@ describe("spatial_skeleton_commands", () => {
           second: spatialSkeletonState
             .getCachedSegmentNodes(secondSegmentId)
             ?.map((node) => node.nodeId)
-            .sort((a, b) => a - b),
+            .sort(bigintCompare),
         });
       });
 
@@ -5779,7 +5782,7 @@ describe("spatial_skeleton_commands", () => {
       spatialSkeletonState
         .getCachedSegmentNodes(secondSegmentId)
         ?.map((node) => node.nodeId)
-        .sort((a, b) => a - b),
+        .sort(bigintCompare),
     ).toEqual([
       firstRoot.nodeId,
       firstNode.nodeId,
@@ -5814,16 +5817,16 @@ describe("spatial_skeleton_commands", () => {
 
   it("retains a hidden merge target fetch while resolving an optimistic preview", async () => {
     suppressStatusMessages();
-    const firstSegmentId = 11;
-    const secondSegmentId = 17;
+    const firstSegmentId = 11n;
+    const secondSegmentId = 17n;
     const firstNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 101,
+      nodeId: 101n,
       segmentId: firstSegmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
     const secondNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 201,
+      nodeId: 201n,
       segmentId: secondSegmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
@@ -5839,7 +5842,7 @@ describe("spatial_skeleton_commands", () => {
       parentNodeId: firstNode.nodeId,
     };
     const getSkeleton = vi.fn(
-      (requestedSegmentId: number, options?: { signal?: AbortSignal }) => {
+      (requestedSegmentId: bigint, options?: { signal?: AbortSignal }) => {
         if (requestedSegmentId !== secondSegmentId) {
           return Promise.resolve(
             requestedSegmentId === firstSegmentId
@@ -5924,18 +5927,18 @@ describe("spatial_skeleton_commands", () => {
   it("orders a cold merge, a warm merge, and a property edit using the preceding projected ownership", async () => {
     suppressStatusMessages();
     const first = {
-      nodeId: 101,
-      segmentId: 11,
+      nodeId: 101n,
+      segmentId: 11n,
       position: new Float32Array([1, 2, 3]),
     };
     const target = {
-      nodeId: 201,
-      segmentId: 17,
+      nodeId: 201n,
+      segmentId: 17n,
       position: new Float32Array([4, 5, 6]),
     };
     const warm = {
-      nodeId: 301,
-      segmentId: 23,
+      nodeId: 301n,
+      segmentId: 23n,
       position: new Float32Array([7, 8, 9]),
     };
     let resolveRead!: (nodes: SpatiallyIndexedSkeletonNode[]) => void;
@@ -5948,19 +5951,19 @@ describe("spatial_skeleton_commands", () => {
     const mergeSkeletons = vi
       .fn()
       .mockResolvedValueOnce({
-        resultSegmentId: 11,
-        deletedSegmentId: 17,
+        resultSegmentId: 11n,
+        deletedSegmentId: 17n,
         directionAdjusted: false,
       })
       .mockResolvedValueOnce({
-        resultSegmentId: 11,
-        deletedSegmentId: 23,
+        resultSegmentId: 11n,
+        deletedSegmentId: 23n,
         directionAdjusted: false,
       });
     const updateRadius = vi.fn().mockResolvedValue(undefined);
     const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
       initialNodes: [first, warm],
-      segmentId: 11,
+      segmentId: 11n,
       getSkeleton,
       mergeSkeletons,
       updateRadius,
@@ -5983,7 +5986,7 @@ describe("spatial_skeleton_commands", () => {
         .map(({ operationId }) => operationId),
     ).toEqual([1, 2, 3]);
     expect(spatialSkeletonState.getCachedNode(first.nodeId)?.segmentId).toBe(
-      11,
+      11n,
     );
     expect(mergeSkeletons).not.toHaveBeenCalled();
     expect(updateRadius).not.toHaveBeenCalled();
@@ -5992,20 +5995,20 @@ describe("spatial_skeleton_commands", () => {
     await Promise.all([coldMerge, warmMerge, radius]);
     await Promise.all([coldMerge.settled, warmMerge.settled, radius.settled]);
     expect(mergeSkeletons.mock.calls).toEqual([
-      [101, 201],
-      [101, 301],
+      [101n, 201n],
+      [101n, 301n],
     ]);
-    expect(updateRadius).toHaveBeenCalledWith(101, 50);
+    expect(updateRadius).toHaveBeenCalledWith(101n, 50);
     expect(mergeSkeletons.mock.invocationCallOrder[1]).toBeLessThan(
       updateRadius.mock.invocationCallOrder[0],
     );
     expect(
       spatialSkeletonState
-        .getCachedSegmentNodes(11)
+        .getCachedSegmentNodes(11n)
         ?.map(({ nodeId }) => nodeId)
         .sort(),
-    ).toEqual([101, 201, 301]);
-    expect(spatialSkeletonState.getCachedNode(101)?.radius).toBe(50);
+    ).toEqual([101n, 201n, 301n]);
+    expect(spatialSkeletonState.getCachedNode(101n)?.radius).toBe(50);
   });
 
   it("reacquires a cold merge source when an earlier save reverses skeleton ownership", async () => {
@@ -6013,13 +6016,13 @@ describe("spatial_skeleton_commands", () => {
     const nodes = makeRootRestorationNodesForTest();
     nodes[2].confidence = 25;
     const target = {
-      nodeId: 301,
-      segmentId: 23,
+      nodeId: 301n,
+      segmentId: 23n,
       position: new Float32Array([301, 302, 303]),
     };
     let resolveFirst!: (result: {
-      resultSegmentId: number;
-      deletedSegmentId: number;
+      resultSegmentId: bigint;
+      deletedSegmentId: bigint;
       directionAdjusted: boolean;
     }) => void;
     let resolveRead!: (nodes: SpatiallyIndexedSkeletonNode[]) => void;
@@ -6032,8 +6035,8 @@ describe("spatial_skeleton_commands", () => {
           }),
       )
       .mockResolvedValueOnce({
-        resultSegmentId: 17,
-        deletedSegmentId: 23,
+        resultSegmentId: 17n,
+        deletedSegmentId: 23n,
         directionAdjusted: false,
       });
     const getSkeleton = vi.fn(
@@ -6044,14 +6047,14 @@ describe("spatial_skeleton_commands", () => {
     );
     const splitSkeleton = vi
       .fn()
-      .mockResolvedValue({ existingSegmentId: 17, newSegmentId: 29 });
+      .mockResolvedValue({ existingSegmentId: 17n, newSegmentId: 29n });
     const rerootSkeleton = vi.fn().mockResolvedValue(undefined);
     const updateConfidence = vi.fn().mockResolvedValue(undefined);
     const { layer, spatialSkeletonState: state } =
       makeOptimisticAddNodeTestLayer({
         initialNodes: nodes,
-        segmentId: 11,
-        segmentIds: [11, 17],
+        segmentId: 11n,
+        segmentIds: [11n, 17n],
         mergeSkeletons,
         getSkeleton,
         splitSkeleton,
@@ -6062,43 +6065,43 @@ describe("spatial_skeleton_commands", () => {
     await first;
     const waiting = executeSpatialSkeletonMerge(
       layer as any,
-      state.getCachedNode(102)!,
+      state.getCachedNode(102n)!,
       target,
     );
     await waiting.acceptedByQueue;
     await waitForMicrotasks(12);
     expect(getSkeleton).toHaveBeenCalledOnce();
     resolveFirst({
-      resultSegmentId: 17,
-      deletedSegmentId: 11,
+      resultSegmentId: 17n,
+      deletedSegmentId: 11n,
       directionAdjusted: true,
     });
     await first.settled;
-    expect(state.getCachedNode(102)?.segmentId).toBe(17);
+    expect(state.getCachedNode(102n)?.segmentId).toBe(17n);
     resolveRead([target]);
     await waiting;
     await expect(waiting.settled).resolves.toMatchObject({
       outcome: "committed",
     });
     expect(getSkeleton).toHaveBeenCalledOnce();
-    expect(mergeSkeletons).toHaveBeenLastCalledWith(102, 301);
-    expect(cachedTopologyForTest(state, [17])).toEqual([
-      [101, 17, 102],
-      [102, 17, 203],
-      [201, 17, null],
-      [202, 17, 201],
-      [203, 17, 202],
-      [204, 17, 202],
-      [205, 17, 203],
-      [301, 17, 102],
+    expect(mergeSkeletons).toHaveBeenLastCalledWith(102n, 301n);
+    expect(cachedTopologyForTest(state, [17n])).toEqual([
+      [101n, 17n, 102n],
+      [102n, 17n, 203n],
+      [201n, 17n, null],
+      [202n, 17n, 201n],
+      [203n, 17n, 202n],
+      [204n, 17n, 202n],
+      [205n, 17n, 203n],
+      [301n, 17n, 102n],
     ]);
     await undoSpatialSkeletonCommand(layer as any).settled;
-    expect(state.getCachedNode(201)).toMatchObject({
-      segmentId: 17,
+    expect(state.getCachedNode(201n)).toMatchObject({
+      segmentId: 17n,
       confidence: 25,
     });
-    expect(state.getCachedNode(301)).toMatchObject({
-      segmentId: 29,
+    expect(state.getCachedNode(301n)).toMatchObject({
+      segmentId: 29n,
       parentNodeId: undefined,
     });
     expect(state.getOptimisticEditFatalState()).toBeUndefined();
@@ -6107,13 +6110,13 @@ describe("spatial_skeleton_commands", () => {
   it("redos a cold merge canceled before recipe construction using retained complete inputs", async () => {
     suppressStatusMessages();
     const first = {
-      nodeId: 101,
-      segmentId: 11,
+      nodeId: 101n,
+      segmentId: 11n,
       position: new Float32Array([1, 2, 3]),
     };
     const target = {
-      nodeId: 201,
-      segmentId: 17,
+      nodeId: 201n,
+      segmentId: 17n,
       position: new Float32Array([4, 5, 6]),
     };
     let resolveOldRead!: (nodes: SpatiallyIndexedSkeletonNode[]) => void;
@@ -6127,13 +6130,13 @@ describe("spatial_skeleton_commands", () => {
       )
       .mockResolvedValue([target]);
     const mergeSkeletons = vi.fn().mockResolvedValue({
-      resultSegmentId: 11,
-      deletedSegmentId: 17,
+      resultSegmentId: 11n,
+      deletedSegmentId: 17n,
       directionAdjusted: false,
     });
     const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
       initialNodes: [first],
-      segmentId: 11,
+      segmentId: 11n,
       getSkeleton,
       mergeSkeletons,
     });
@@ -6147,27 +6150,27 @@ describe("spatial_skeleton_commands", () => {
     const redo = redoSpatialSkeletonCommand(layer as any);
     await redo;
     await redo.settled;
-    expect(mergeSkeletons).toHaveBeenCalledWith(101, 201);
-    expect(spatialSkeletonState.getCachedNode(201)).toMatchObject({
-      segmentId: 11,
-      parentNodeId: 101,
+    expect(mergeSkeletons).toHaveBeenCalledWith(101n, 201n);
+    expect(spatialSkeletonState.getCachedNode(201n)).toMatchObject({
+      segmentId: 11n,
+      parentNodeId: 101n,
     });
     resolveOldRead([target]);
     await waitForMicrotasks(12);
-    expect(spatialSkeletonState.getCachedNode(201)?.segmentId).toBe(11);
+    expect(spatialSkeletonState.getCachedNode(201n)?.segmentId).toBe(11n);
     expect(mergeSkeletons).toHaveBeenCalledOnce();
   });
 
   it("redos a merge canceled after compilation but before exact-preview publication", async () => {
     suppressStatusMessages();
     const first = {
-      nodeId: 101,
-      segmentId: 11,
+      nodeId: 101n,
+      segmentId: 11n,
       position: new Float32Array([1, 2, 3]),
     };
     const target = {
-      nodeId: 201,
-      segmentId: 17,
+      nodeId: 201n,
+      segmentId: 17n,
       position: new Float32Array([4, 5, 6]),
     };
     let releasePreview!: () => void;
@@ -6192,15 +6195,15 @@ describe("spatial_skeleton_commands", () => {
         return prepared;
       });
     const mergeSkeletons = vi.fn().mockResolvedValue({
-      resultSegmentId: 11,
-      deletedSegmentId: 17,
+      resultSegmentId: 11n,
+      deletedSegmentId: 17n,
       directionAdjusted: false,
     });
     const { layer, spatialSkeletonState: state } =
       makeOptimisticAddNodeTestLayer({
         initialNodes: [first, target],
-        segmentId: 11,
-        segmentIds: [11, 17],
+        segmentId: 11n,
+        segmentIds: [11n, 17n],
         mergeSkeletons,
       });
     try {
@@ -6216,14 +6219,14 @@ describe("spatial_skeleton_commands", () => {
       await expect(redo.settled).resolves.toMatchObject({
         outcome: "committed",
       });
-      expect(state.getCachedNode(201)).toMatchObject({
-        segmentId: 11,
-        parentNodeId: 101,
+      expect(state.getCachedNode(201n)).toMatchObject({
+        segmentId: 11n,
+        parentNodeId: 101n,
       });
       releasePreview();
       await waitForMicrotasks(12);
       expect(mergeSkeletons).toHaveBeenCalledOnce();
-      expect(state.getCachedNode(201)?.segmentId).toBe(11);
+      expect(state.getCachedNode(201n)?.segmentId).toBe(11n);
       expect(state.getOptimisticEditFatalState()).toBeUndefined();
     } finally {
       releasePreview();
@@ -6234,13 +6237,13 @@ describe("spatial_skeleton_commands", () => {
   it("rejects a cold merge source without loading either participant", async () => {
     suppressStatusMessages();
     const firstNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 101,
-      segmentId: 11,
+      nodeId: 101n,
+      segmentId: 11n,
       position: new Float32Array([1, 2, 3]),
     };
     const secondNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 201,
-      segmentId: 17,
+      nodeId: 201n,
+      segmentId: 17n,
       position: new Float32Array([4, 5, 6]),
     };
     const getSkeleton = vi.fn();
@@ -6274,8 +6277,8 @@ describe("spatial_skeleton_commands", () => {
   it("rejects a node action when only its picked node is known", async () => {
     suppressStatusMessages();
     const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 101,
-      segmentId: 23,
+      nodeId: 101n,
+      segmentId: 23n,
       position: new Float32Array([1, 2, 3]),
     };
     const getSkeleton = vi.fn();
@@ -6304,32 +6307,32 @@ describe("spatial_skeleton_commands", () => {
 
   it("keeps an active drag above an older move during merge replay", async () => {
     suppressStatusMessages();
-    const firstSegmentId = 11;
-    const secondSegmentId = 17;
+    const firstSegmentId = 11n;
+    const secondSegmentId = 17n;
     const firstNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 101,
+      nodeId: 101n,
       segmentId: firstSegmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
     const secondNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 201,
+      nodeId: 201n,
       segmentId: secondSegmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
     let resolveMerge:
       | ((result: {
-          resultSegmentId: number;
-          deletedSegmentId: number;
+          resultSegmentId: bigint;
+          deletedSegmentId: bigint;
           directionAdjusted: boolean;
         }) => void)
       | undefined;
     const mergeSkeletons = vi.fn(
       () =>
         new Promise<{
-          resultSegmentId: number;
-          deletedSegmentId: number;
+          resultSegmentId: bigint;
+          deletedSegmentId: bigint;
           directionAdjusted: boolean;
         }>((resolve) => {
           resolveMerge = resolve;
@@ -6337,7 +6340,7 @@ describe("spatial_skeleton_commands", () => {
     );
     const moveNode = vi.fn(() => new Promise(() => {}));
     const getSkeleton = vi.fn(
-      (_segmentId: number, options?: { signal?: AbortSignal }) =>
+      (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
         new Promise<SpatiallyIndexedSkeletonNode[]>((_resolve, reject) => {
           options?.signal?.addEventListener(
             "abort",
@@ -6416,16 +6419,16 @@ describe("spatial_skeleton_commands", () => {
     try {
       suppressStatusMessages();
       const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
-      const firstSegmentId = 11;
-      const secondSegmentId = 17;
+      const firstSegmentId = 11n;
+      const secondSegmentId = 17n;
       const firstNode: SpatiallyIndexedSkeletonNode = {
-        nodeId: 101,
+        nodeId: 101n,
         segmentId: firstSegmentId,
         position: new Float32Array([1, 2, 3]),
         isTrueEnd: false,
       };
       const secondNode: SpatiallyIndexedSkeletonNode = {
-        nodeId: 201,
+        nodeId: 201n,
         segmentId: secondSegmentId,
         position: new Float32Array([4, 5, 6]),
         isTrueEnd: false,
@@ -6466,33 +6469,33 @@ describe("spatial_skeleton_commands", () => {
 
   it("splits back an explicitly undone in-flight optimistic merge", async () => {
     suppressStatusMessages();
-    const firstSegmentId = 11;
-    const secondSegmentId = 17;
-    const restoredSegmentId = 19;
+    const firstSegmentId = 11n;
+    const secondSegmentId = 17n;
+    const restoredSegmentId = 19n;
     const firstNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 101,
+      nodeId: 101n,
       segmentId: firstSegmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
     const secondNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 201,
+      nodeId: 201n,
       segmentId: secondSegmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
     let resolveMerge:
       | ((result: {
-          resultSegmentId: number;
-          deletedSegmentId: number;
+          resultSegmentId: bigint;
+          deletedSegmentId: bigint;
           directionAdjusted: boolean;
         }) => void)
       | undefined;
     const mergeSkeletons = vi.fn(
       () =>
         new Promise<{
-          resultSegmentId: number;
-          deletedSegmentId: number;
+          resultSegmentId: bigint;
+          deletedSegmentId: bigint;
           directionAdjusted: boolean;
         }>((resolve) => {
           resolveMerge = resolve;
@@ -6502,7 +6505,7 @@ describe("spatial_skeleton_commands", () => {
       existingSegmentId: firstSegmentId,
       newSegmentId: restoredSegmentId,
     });
-    const getSkeleton = vi.fn(async (requestedSegmentId: number) => {
+    const getSkeleton = vi.fn(async (requestedSegmentId: bigint) => {
       if (requestedSegmentId === firstSegmentId) return [firstNode];
       if (requestedSegmentId === restoredSegmentId) {
         return [{ ...secondNode, segmentId: restoredSegmentId }];
@@ -6561,25 +6564,25 @@ describe("spatial_skeleton_commands", () => {
 
   it("keeps rapid chained merge undos logically distinct while the first split is in flight", async () => {
     suppressStatusMessages();
-    const resultSegmentId = 11;
-    const firstDeletedSegmentId = 17;
-    const secondDeletedSegmentId = 23;
-    const firstRestoredSegmentId = 19;
-    const secondRestoredSegmentId = 29;
+    const resultSegmentId = 11n;
+    const firstDeletedSegmentId = 17n;
+    const secondDeletedSegmentId = 23n;
+    const firstRestoredSegmentId = 19n;
+    const secondRestoredSegmentId = 29n;
     const firstRoot: SpatiallyIndexedSkeletonNode = {
-      nodeId: 101,
+      nodeId: 101n,
       segmentId: resultSegmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
     const secondRoot: SpatiallyIndexedSkeletonNode = {
-      nodeId: 201,
+      nodeId: 201n,
       segmentId: firstDeletedSegmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
     const thirdRoot: SpatiallyIndexedSkeletonNode = {
-      nodeId: 301,
+      nodeId: 301n,
       segmentId: secondDeletedSegmentId,
       position: new Float32Array([7, 8, 9]),
       isTrueEnd: false,
@@ -6597,15 +6600,15 @@ describe("spatial_skeleton_commands", () => {
         directionAdjusted: false,
       });
     const splitResolvers: Array<
-      (result: { existingSegmentId: number; newSegmentId: number }) => void
+      (result: { existingSegmentId: bigint; newSegmentId: bigint }) => void
     > = [];
     const splitSkeleton = vi.fn(
-      (_nodeId: number) =>
-        new Promise<{ existingSegmentId: number; newSegmentId: number }>(
+      (_nodeId: bigint) =>
+        new Promise<{ existingSegmentId: bigint; newSegmentId: bigint }>(
           (resolve) => splitResolvers.push(resolve),
         ),
     );
-    const getSkeleton = vi.fn(async (segmentId: number) => {
+    const getSkeleton = vi.fn(async (segmentId: bigint) => {
       if (segmentId === resultSegmentId) {
         const nodes = [cloneNode(firstRoot)];
         if (splitSkeleton.mock.calls.length < 2) {
@@ -6759,8 +6762,8 @@ describe("spatial_skeleton_commands", () => {
       suppressStatusMessages();
       const nodes = makeRootRestorationNodesForTest();
       let resolveMerge!: (result: {
-        resultSegmentId: number;
-        deletedSegmentId: number;
+        resultSegmentId: bigint;
+        deletedSegmentId: bigint;
         directionAdjusted: boolean;
       }) => void;
       const mergeSkeletons = vi
@@ -6772,20 +6775,20 @@ describe("spatial_skeleton_commands", () => {
             }),
         )
         .mockResolvedValue({
-          resultSegmentId: 17,
-          deletedSegmentId: 23,
+          resultSegmentId: 17n,
+          deletedSegmentId: 23n,
           directionAdjusted: false,
         });
       const splitSkeleton = vi
         .fn()
-        .mockResolvedValueOnce({ existingSegmentId: 17, newSegmentId: 23 })
-        .mockResolvedValueOnce({ existingSegmentId: 17, newSegmentId: 29 });
+        .mockResolvedValueOnce({ existingSegmentId: 17n, newSegmentId: 23n })
+        .mockResolvedValueOnce({ existingSegmentId: 17n, newSegmentId: 29n });
       const rerootSkeleton = vi.fn(async () => undefined);
       const { layer, spatialSkeletonState: state } =
         makeOptimisticAddNodeTestLayer({
           initialNodes: nodes,
-          segmentId: 11,
-          segmentIds: [11, 17],
+          segmentId: 11n,
+          segmentIds: [11n, 17n],
           mergeSkeletons,
           splitSkeleton,
           rerootSkeleton,
@@ -6805,8 +6808,8 @@ describe("spatial_skeleton_commands", () => {
       if (queuedRedo !== undefined) await queuedRedo;
 
       resolveMerge({
-        resultSegmentId: 17,
-        deletedSegmentId: 11,
+        resultSegmentId: 17n,
+        deletedSegmentId: 11n,
         directionAdjusted: true,
       });
       await expect(merge.settled).resolves.toMatchObject({
@@ -6816,17 +6819,17 @@ describe("spatial_skeleton_commands", () => {
         outcome: "committed",
       });
       expect(state.getOptimisticEditFatalState()).toBeUndefined();
-      expect(splitSkeleton).toHaveBeenCalledWith(102);
-      expect(rerootSkeleton).toHaveBeenCalledWith(101);
+      expect(splitSkeleton).toHaveBeenCalledWith(102n);
+      expect(rerootSkeleton).toHaveBeenCalledWith(101n);
       if (!queueRedo) {
-        expect(cachedTopologyForTest(state, [17, 23])).toEqual([
-          [101, 23, null],
-          [102, 23, 101],
-          [201, 17, null],
-          [202, 17, 201],
-          [203, 17, 202],
-          [204, 17, 202],
-          [205, 17, 203],
+        expect(cachedTopologyForTest(state, [17n, 23n])).toEqual([
+          [101n, 23n, null],
+          [102n, 23n, 101n],
+          [201n, 17n, null],
+          [202n, 17n, 201n],
+          [203n, 17n, 202n],
+          [204n, 17n, 202n],
+          [205n, 17n, 203n],
         ]);
       }
       const redo = queuedRedo ?? redoSpatialSkeletonCommand(layer as any);
@@ -6834,19 +6837,19 @@ describe("spatial_skeleton_commands", () => {
       await expect(redo.settled).resolves.toMatchObject({
         outcome: "committed",
       });
-      expect(state.getCachedNode(102)?.parentNodeId).toBe(203);
+      expect(state.getCachedNode(102n)?.parentNodeId).toBe(203n);
       const undoAgain = undoSpatialSkeletonCommand(layer as any);
       await undoAgain;
       await expect(undoAgain.settled).resolves.toMatchObject({
         outcome: "committed",
       });
-      expect(splitSkeleton.mock.calls).toEqual([[102], [102]]);
-      expect(state.getCachedNode(101)).toMatchObject({
-        segmentId: 29,
+      expect(splitSkeleton.mock.calls).toEqual([[102n], [102n]]);
+      expect(state.getCachedNode(101n)).toMatchObject({
+        segmentId: 29n,
         parentNodeId: undefined,
       });
-      expect(state.getCachedNode(201)).toMatchObject({
-        segmentId: 17,
+      expect(state.getCachedNode(201n)).toMatchObject({
+        segmentId: 17n,
         parentNodeId: undefined,
       });
       expect(state.getOptimisticEditFatalState()).toBeUndefined();
@@ -6861,8 +6864,8 @@ describe("spatial_skeleton_commands", () => {
       nodes[0].confidence = 60;
       nodes[2].confidence = confidence;
       let resolveMerge!: (result: {
-        resultSegmentId: number;
-        deletedSegmentId: number;
+        resultSegmentId: bigint;
+        deletedSegmentId: bigint;
         directionAdjusted: boolean;
       }) => void;
       const mergeSkeletons = vi.fn(
@@ -6876,8 +6879,8 @@ describe("spatial_skeleton_commands", () => {
       const { layer, spatialSkeletonState: state } =
         makeOptimisticAddNodeTestLayer({
           initialNodes: nodes,
-          segmentId: 11,
-          segmentIds: [11, 17],
+          segmentId: 11n,
+          segmentIds: [11n, 17n],
           mergeSkeletons,
           rerootSkeleton,
           updateConfidence,
@@ -6890,12 +6893,12 @@ describe("spatial_skeleton_commands", () => {
       await merge;
       const reroot = executeSpatialSkeletonReroot(
         layer as any,
-        state.getCachedNode(102)!,
+        state.getCachedNode(102n)!,
       );
       await reroot;
       resolveMerge({
-        resultSegmentId: 17,
-        deletedSegmentId: 11,
+        resultSegmentId: 17n,
+        deletedSegmentId: 11n,
         directionAdjusted: true,
       });
       await expect(merge.settled).resolves.toMatchObject({
@@ -6911,11 +6914,11 @@ describe("spatial_skeleton_commands", () => {
         await expect(undo.settled).resolves.toMatchObject({
           outcome: "committed",
         });
-        expect(state.getCachedNode(201)).toMatchObject({
+        expect(state.getCachedNode(201n)).toMatchObject({
           parentNodeId: undefined,
           confidence,
         });
-        expect(state.getCachedNode(102)?.parentNodeId).toBe(203);
+        expect(state.getCachedNode(102n)?.parentNodeId).toBe(203n);
         if (cycle === 0) {
           const redo = redoSpatialSkeletonCommand(layer as any);
           await redo;
@@ -6924,13 +6927,18 @@ describe("spatial_skeleton_commands", () => {
           });
         }
       }
-      expect(rerootSkeleton.mock.calls).toEqual([[102], [201], [102], [201]]);
+      expect(rerootSkeleton.mock.calls).toEqual([
+        [102n],
+        [201n],
+        [102n],
+        [201n],
+      ]);
       expect(updateConfidence.mock.calls).toEqual(
         confidence === 100
           ? []
           : [
-              [201, confidence],
-              [201, confidence],
+              [201n, confidence],
+              [201n, confidence],
             ],
       );
       expect(state.getOptimisticEditFatalState()).toBeUndefined();
@@ -6945,8 +6953,8 @@ describe("spatial_skeleton_commands", () => {
       nodes[3].confidence = 25;
       nodes[4].confidence = 75;
       let resolveMerge!: (result: {
-        resultSegmentId: number;
-        deletedSegmentId: number;
+        resultSegmentId: bigint;
+        deletedSegmentId: bigint;
         directionAdjusted: boolean;
       }) => void;
       const mergeSkeletons = vi
@@ -6958,30 +6966,30 @@ describe("spatial_skeleton_commands", () => {
             }),
         )
         .mockResolvedValueOnce({
-          resultSegmentId: 17,
-          deletedSegmentId: 23,
+          resultSegmentId: 17n,
+          deletedSegmentId: 23n,
           directionAdjusted: false,
         })
         .mockResolvedValueOnce({
-          resultSegmentId: 17,
-          deletedSegmentId: 29,
+          resultSegmentId: 17n,
+          deletedSegmentId: 29n,
           directionAdjusted: false,
         });
       const deleteNode = vi.fn().mockResolvedValue(undefined);
       const insertNode = vi
         .fn()
-        .mockResolvedValueOnce({ nodeId: 302, segmentId: 17 })
-        .mockResolvedValueOnce({ nodeId: 402, segmentId: 17 });
+        .mockResolvedValueOnce({ nodeId: 302n, segmentId: 17n })
+        .mockResolvedValueOnce({ nodeId: 402n, segmentId: 17n });
       const splitSkeleton = vi
         .fn()
-        .mockResolvedValueOnce({ existingSegmentId: 17, newSegmentId: 23 })
-        .mockResolvedValueOnce({ existingSegmentId: 17, newSegmentId: 29 });
+        .mockResolvedValueOnce({ existingSegmentId: 17n, newSegmentId: 23n })
+        .mockResolvedValueOnce({ existingSegmentId: 17n, newSegmentId: 29n });
       const updateConfidence = vi.fn().mockResolvedValue(undefined);
       const { layer, spatialSkeletonState: state } =
         makeOptimisticAddNodeTestLayer({
           initialNodes: nodes,
-          segmentId: 11,
-          segmentIds: [11, 17],
+          segmentId: 11n,
+          segmentIds: [11n, 17n],
           mergeSkeletons,
           deleteNode,
           insertNode,
@@ -6994,8 +7002,8 @@ describe("spatial_skeleton_commands", () => {
         nodes[4],
       );
       await merge;
-      const target = state.getCachedNode(202)!;
-      expect(target).toMatchObject({ parentNodeId: 203, confidence: 75 });
+      const target = state.getCachedNode(202n)!;
+      expect(target).toMatchObject({ parentNodeId: 203n, confidence: 75 });
       const edit =
         kind === "delete"
           ? executeSpatialSkeletonDeleteNode(layer as any, target)
@@ -7010,8 +7018,8 @@ describe("spatial_skeleton_commands", () => {
       expect(splitSkeleton).not.toHaveBeenCalled();
       expect(updateConfidence).not.toHaveBeenCalled();
       resolveMerge({
-        resultSegmentId: 17,
-        deletedSegmentId: 11,
+        resultSegmentId: 17n,
+        deletedSegmentId: 11n,
         directionAdjusted: true,
       });
       await expect(merge.settled).resolves.toMatchObject({
@@ -7027,16 +7035,17 @@ describe("spatial_skeleton_commands", () => {
         await expect(undo.settled).resolves.toMatchObject({
           outcome: "committed",
         });
-        const restoredId = kind === "delete" ? 302 + cycle * 100 : 202;
-        expect(cachedTopologyForTest(state, [17])).toEqual([
-          [101, 17, 102],
-          [102, 17, 203],
-          [201, 17, null],
-          ...(kind === "delete" ? [] : [[202, 17, 201]]),
-          [203, 17, restoredId],
-          [204, 17, restoredId],
-          [205, 17, 203],
-          ...(kind === "delete" ? [[restoredId, 17, 201]] : []),
+        const restoredId =
+          kind === "delete" ? 302n + BigInt(cycle) * 100n : 202n;
+        expect(cachedTopologyForTest(state, [17n])).toEqual([
+          [101n, 17n, 102n],
+          [102n, 17n, 203n],
+          [201n, 17n, null],
+          ...(kind === "delete" ? [] : [[202n, 17n, 201n]]),
+          [203n, 17n, restoredId],
+          [204n, 17n, restoredId],
+          [205n, 17n, 203n],
+          ...(kind === "delete" ? [[restoredId, 17n, 201n]] : []),
         ]);
         expect(state.getCachedNode(restoredId)?.confidence).toBe(25);
         if (kind === "delete") {
@@ -7045,8 +7054,8 @@ describe("spatial_skeleton_commands", () => {
             202,
             203,
             204,
-            201,
-            [203, 204],
+            201n,
+            [203n, 204n],
           );
           expect(updateConfidence).toHaveBeenNthCalledWith(
             cycle + 1,
@@ -7054,11 +7063,11 @@ describe("spatial_skeleton_commands", () => {
             25,
           );
         } else if (kind === "split") {
-          expect(mergeSkeletons).toHaveBeenNthCalledWith(cycle + 2, 201, 202);
+          expect(mergeSkeletons).toHaveBeenNthCalledWith(cycle + 2, 201n, 202n);
         } else {
           expect(updateConfidence).toHaveBeenNthCalledWith(
             cycle * 2 + 2,
-            202,
+            202n,
             25,
           );
         }
@@ -7069,11 +7078,11 @@ describe("spatial_skeleton_commands", () => {
             outcome: "committed",
           });
           if (kind === "delete") {
-            expect(deleteNode.mock.calls).toEqual([[202], [302]]);
+            expect(deleteNode.mock.calls).toEqual([[202n], [302n]]);
           } else if (kind === "split") {
-            expect(splitSkeleton.mock.calls).toEqual([[202], [202]]);
+            expect(splitSkeleton.mock.calls).toEqual([[202n], [202n]]);
           } else {
-            expect(updateConfidence).toHaveBeenLastCalledWith(202, 50);
+            expect(updateConfidence).toHaveBeenLastCalledWith(202n, 50);
           }
         }
       }
@@ -7089,13 +7098,13 @@ describe("spatial_skeleton_commands", () => {
       nodes[0].confidence = 60;
       nodes[2].confidence = 25;
       nodes.push({
-        nodeId: 301,
-        segmentId: 23,
+        nodeId: 301n,
+        segmentId: 23n,
         position: new Float32Array([301, 302, 303]),
       });
       let resolveFirst!: (result: {
-        resultSegmentId: number;
-        deletedSegmentId: number;
+        resultSegmentId: bigint;
+        deletedSegmentId: bigint;
         directionAdjusted: boolean;
       }) => void;
       const mergeSkeletons = vi
@@ -7107,26 +7116,26 @@ describe("spatial_skeleton_commands", () => {
             }),
         )
         .mockResolvedValueOnce({
-          resultSegmentId: 23,
-          deletedSegmentId: 17,
+          resultSegmentId: 23n,
+          deletedSegmentId: 17n,
           directionAdjusted: secondDirectionAdjusted,
         })
         .mockResolvedValueOnce({
-          resultSegmentId: 23,
-          deletedSegmentId: 29,
+          resultSegmentId: 23n,
+          deletedSegmentId: 29n,
           directionAdjusted: false,
         });
       const splitSkeleton = vi
         .fn()
-        .mockResolvedValueOnce({ existingSegmentId: 23, newSegmentId: 29 })
-        .mockResolvedValueOnce({ existingSegmentId: 23, newSegmentId: 31 });
+        .mockResolvedValueOnce({ existingSegmentId: 23n, newSegmentId: 29n })
+        .mockResolvedValueOnce({ existingSegmentId: 23n, newSegmentId: 31n });
       const rerootSkeleton = vi.fn().mockResolvedValue(undefined);
       const updateConfidence = vi.fn().mockResolvedValue(undefined);
       const { layer, spatialSkeletonState: state } =
         makeOptimisticAddNodeTestLayer({
           initialNodes: nodes,
-          segmentId: 11,
-          segmentIds: [11, 17, 23],
+          segmentId: 11n,
+          segmentIds: [11n, 17n, 23n],
           mergeSkeletons,
           splitSkeleton,
           rerootSkeleton,
@@ -7140,14 +7149,14 @@ describe("spatial_skeleton_commands", () => {
       await first;
       const second = executeSpatialSkeletonMerge(
         layer as any,
-        state.getCachedNode(secondDirectionAdjusted ? 102 : 301)!,
-        state.getCachedNode(secondDirectionAdjusted ? 301 : 102)!,
+        state.getCachedNode(secondDirectionAdjusted ? 102n : 301n)!,
+        state.getCachedNode(secondDirectionAdjusted ? 301n : 102n)!,
       );
       await second;
       expect(mergeSkeletons).toHaveBeenCalledTimes(1);
       resolveFirst({
-        resultSegmentId: 17,
-        deletedSegmentId: 11,
+        resultSegmentId: 17n,
+        deletedSegmentId: 11n,
         directionAdjusted: true,
       });
       await waitForMicrotasks(16);
@@ -7165,27 +7174,27 @@ describe("spatial_skeleton_commands", () => {
         await expect(undo.settled).resolves.toMatchObject({
           outcome: "committed",
         });
-        const restoredSegmentId = cycle === 0 ? 29 : 31;
-        expect(cachedTopologyForTest(state, [restoredSegmentId, 23])).toEqual([
-          [101, restoredSegmentId, 102],
-          [102, restoredSegmentId, 203],
-          [201, restoredSegmentId, null],
-          [202, restoredSegmentId, 201],
-          [203, restoredSegmentId, 202],
-          [204, restoredSegmentId, 202],
-          [205, restoredSegmentId, 203],
-          [301, 23, null],
+        const restoredSegmentId = cycle === 0 ? 29n : 31n;
+        expect(cachedTopologyForTest(state, [restoredSegmentId, 23n])).toEqual([
+          [101n, restoredSegmentId, 102n],
+          [102n, restoredSegmentId, 203n],
+          [201n, restoredSegmentId, null],
+          [202n, restoredSegmentId, 201n],
+          [203n, restoredSegmentId, 202n],
+          [204n, restoredSegmentId, 202n],
+          [205n, restoredSegmentId, 203n],
+          [301n, 23n, null],
         ]);
-        expect(state.getCachedNode(201)?.confidence).toBe(25);
-        expect(rerootSkeleton).toHaveBeenNthCalledWith(cycle + 1, 201);
-        expect(updateConfidence).toHaveBeenNthCalledWith(cycle + 1, 201, 25);
+        expect(state.getCachedNode(201n)?.confidence).toBe(25);
+        expect(rerootSkeleton).toHaveBeenNthCalledWith(cycle + 1, 201n);
+        expect(updateConfidence).toHaveBeenNthCalledWith(cycle + 1, 201n, 25);
         if (cycle === 0) {
           const redo = redoSpatialSkeletonCommand(layer as any);
           await redo;
           await expect(redo.settled).resolves.toMatchObject({
             outcome: "committed",
           });
-          expect(mergeSkeletons).toHaveBeenLastCalledWith(301, 102);
+          expect(mergeSkeletons).toHaveBeenLastCalledWith(301n, 102n);
         }
       }
       expect(state.getOptimisticEditFatalState()).toBeUndefined();
@@ -7194,17 +7203,17 @@ describe("spatial_skeleton_commands", () => {
 
   it("undoes a reversed merge with the original losing logical segment", async () => {
     suppressStatusMessages();
-    const firstSegmentId = 11;
-    const winningSegmentId = 17;
-    const restoredSegmentId = 19;
+    const firstSegmentId = 11n;
+    const winningSegmentId = 17n;
+    const restoredSegmentId = 19n;
     const firstRoot: SpatiallyIndexedSkeletonNode = {
-      nodeId: 101,
+      nodeId: 101n,
       segmentId: firstSegmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
     const secondRoot: SpatiallyIndexedSkeletonNode = {
-      nodeId: 201,
+      nodeId: 201n,
       segmentId: winningSegmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
@@ -7215,11 +7224,11 @@ describe("spatial_skeleton_commands", () => {
       directionAdjusted: true,
     });
     let resolveSplit:
-      | ((result: { existingSegmentId: number; newSegmentId: number }) => void)
+      | ((result: { existingSegmentId: bigint; newSegmentId: bigint }) => void)
       | undefined;
     const splitSkeleton = vi.fn(
       () =>
-        new Promise<{ existingSegmentId: number; newSegmentId: number }>(
+        new Promise<{ existingSegmentId: bigint; newSegmentId: bigint }>(
           (resolve) => {
             resolveSplit = resolve;
           },
@@ -7290,23 +7299,23 @@ describe("spatial_skeleton_commands", () => {
   ])("requires reload when merge undo's reroot fails: %s", async (error) => {
     suppressStatusMessages();
 
-    const firstSegmentId = 11;
-    const secondSegmentId = 17;
-    const restoredSegmentId = 19;
+    const firstSegmentId = 11n;
+    const secondSegmentId = 17n;
+    const restoredSegmentId = 19n;
     const firstRoot: SpatiallyIndexedSkeletonNode = {
-      nodeId: 101,
+      nodeId: 101n,
       segmentId: firstSegmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
     const secondRoot: SpatiallyIndexedSkeletonNode = {
-      nodeId: 201,
+      nodeId: 201n,
       segmentId: secondSegmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
     const secondAttach: SpatiallyIndexedSkeletonNode = {
-      nodeId: 202,
+      nodeId: 202n,
       segmentId: secondSegmentId,
       parentNodeId: secondRoot.nodeId,
       position: new Float32Array([7, 8, 9]),
@@ -7383,15 +7392,15 @@ describe("spatial_skeleton_commands", () => {
 
   it("rolls back an optimistic move that depends on a rejected split", async () => {
     suppressStatusMessages();
-    const segmentId = 23;
+    const segmentId = 23n;
     const rootNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 1,
+      nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
     const splitNode: SpatiallyIndexedSkeletonNode = {
-      nodeId: 2,
+      nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,
       position: new Float32Array([4, 5, 6]),

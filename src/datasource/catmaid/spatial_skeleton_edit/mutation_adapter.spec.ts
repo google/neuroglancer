@@ -29,8 +29,8 @@ function makeOperations(
 ): CatmaidSpatialSkeletonEditOperations {
   return {
     mutationScope: {},
-    commitAddNode: vi.fn(async () => ({ nodeId: 101, segmentId: 10 })),
-    commitInsertNode: vi.fn(async () => ({ nodeId: 102, segmentId: 10 })),
+    commitAddNode: vi.fn(async () => ({ nodeId: 101n, segmentId: 10n })),
+    commitInsertNode: vi.fn(async () => ({ nodeId: 102n, segmentId: 10n })),
     commitMoveNode: vi.fn(async () => undefined),
     commitDeleteNode: vi.fn(async () => undefined),
     commitReroot: vi.fn(async () => undefined),
@@ -39,13 +39,13 @@ function makeOperations(
     commitRadius: vi.fn(async () => undefined),
     commitConfidence: vi.fn(async () => undefined),
     commitMerge: vi.fn(async () => ({
-      resultSegmentId: 10,
-      deletedSegmentId: 20,
+      resultSegmentId: 10n,
+      deletedSegmentId: 20n,
       directionAdjusted: false,
     })),
     commitSplit: vi.fn(async () => ({
-      existingSegmentId: 10,
-      newSegmentId: 20,
+      existingSegmentId: 10n,
+      newSegmentId: 20n,
     })),
     ...overrides,
   };
@@ -78,7 +78,7 @@ describe("CATMAID optimistic mutation adapter", () => {
         {
           kind: "move-node",
           request: {
-            nodeId: 4,
+            nodeId: 4n,
             position: new Float32Array([8, 9, 10]),
           },
         },
@@ -86,14 +86,14 @@ describe("CATMAID optimistic mutation adapter", () => {
       ),
     ).resolves.toEqual({ status: "committed", result });
     expect(commitMoveNode).toHaveBeenCalledWith({
-      nodeId: 4,
+      nodeId: 4n,
       position: new Float32Array([8, 9, 10]),
     });
   });
 
   it("uses the generic cancellation signal only before CATMAID dispatch", async () => {
     const controller = new AbortController();
-    const commitAddNode = vi.fn(async () => ({ nodeId: 1, segmentId: 2 }));
+    const commitAddNode = vi.fn(async () => ({ nodeId: 1n, segmentId: 2n }));
     const adapter = new CatmaidSpatialSkeletonOptimisticMutationAdapter(
       makeOperations({ commitAddNode }),
     );
@@ -129,7 +129,7 @@ describe("CATMAID optimistic mutation adapter", () => {
     const mutation = {
       kind: "move-node" as const,
       request: {
-        nodeId: 4,
+        nodeId: 4n,
         position: new Float32Array([8, 9, 10]),
       },
     };
@@ -155,7 +155,7 @@ describe("CATMAID optimistic mutation adapter", () => {
       {
         kind: "move-node",
         request: {
-          nodeId: 4,
+          nodeId: 4n,
           position: new Float32Array([8, 9, 10]),
         },
       },

@@ -16,6 +16,7 @@
 
 import { expect, type Page } from "@playwright/test";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+import { bigintCompare } from "#src/util/bigint.js";
 import type { Viewer } from "#src/viewer.js";
 
 const SEGMENT_INPUT =
@@ -32,13 +33,19 @@ export interface GraphNode {
   isTrueEnd?: boolean;
 }
 
+export type ViewerNode = Omit<GraphNode, "id" | "parentId" | "skeletonId"> & {
+  id: bigint;
+  parentId: bigint | null;
+  skeletonId: bigint;
+};
+
 /** All edits use the UI. This helper only reads the existing public viewer state. */
 export async function readGraph(
   page: Page,
-  ids: number[],
+  ids: bigint[],
   layerName = "Skeletons",
   completeComponents = false,
-) {
+): Promise<ViewerNode[]> {
   return page.evaluate(
     ({ ids, layerName, completeComponents }) => {
       const viewer = (window as unknown as { viewer: Viewer }).viewer;
@@ -72,7 +79,7 @@ export async function readGraph(
               ]
             : [];
         })
-        .sort((a, b) => a.id - b.id);
+        .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     },
     { ids, layerName, completeComponents },
   );
@@ -85,11 +92,11 @@ export async function readRenderedNodeIds(page: Page, layerName = "Skeletons") {
     const layer = viewer.layerManager.getLayerByName(layerName)!
       .layer as SegmentationUserLayer;
     const renderer = layer.getSpatiallyIndexedSkeletonLayer() as unknown as {
-      overlayRenderChunks: readonly { pickNodeIds: Int32Array }[];
+      overlayRenderChunks: readonly { nodeIds: BigUint64Array }[];
     };
     return renderer.overlayRenderChunks
-      .flatMap(({ pickNodeIds }) => Array.from(pickNodeIds, (id) => id >>> 0))
-      .sort((a, b) => a - b);
+      .flatMap(({ nodeIds }) => Array.from(nodeIds))
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   }, layerName);
 }
 
@@ -108,7 +115,7 @@ export async function readQueue(page: Page, layerName = "Skeletons") {
   }, layerName);
 }
 
-export function parentMap(nodes: GraphNode[]) {
+export function parentMap(nodes: ViewerNode[]) {
   return nodes.map(({ id, parentId }) => [id, parentId]);
 }
 
@@ -148,12 +155,12 @@ export class SkeletonEditPage {
 
   async open(
     sourceUrl: string,
-    segmentIds = [10, 20],
+    segmentIds = [10n, 20n],
     secondLayer = false,
     position = [2000, 2000, 1000],
     inspectIds = segmentIds,
   ) {
-    const layer = (name: string, segments: number[], key: string) => ({
+    const layer = (name: string, segments: bigint[], key: string) => ({
       type: "segmentation",
       name,
       source: sourceUrl,
@@ -196,7 +203,7 @@ export class SkeletonEditPage {
         .click({ modifiers: ["Control"] });
   }
 
-  async inspect(segmentId: number) {
+  async inspect(segmentId: bigint) {
     await this.selectLayer();
     await this.page.getByText("Seg.", { exact: true }).click();
     await this.page
@@ -218,7 +225,7 @@ export class SkeletonEditPage {
       .selectOption({ label: "None" });
   }
 
-  async selectNode(id: number) {
+  async selectNode(id: bigint) {
     const [node] = await readGraph(this.page, [id], this.layerName);
     if (!node)
       throw new Error(
@@ -254,7 +261,7 @@ export class SkeletonEditPage {
     ).toBeVisible();
   }
 
-  async split(id: number) {
+  async split(id: bigint) {
     await this.selectNode(id);
     const center = await this.panelCenter();
     await this.page.mouse.move(center.x, center.y);
@@ -268,7 +275,7 @@ export class SkeletonEditPage {
     });
   }
 
-  async merge(sourceId: number, targetId: number) {
+  async merge(sourceId: bigint, targetId: bigint) {
     // Center the camera on the source. With the fixed orthogonal view and scale,
     // the other node's pixel location is derived from its inspected position.
     await this.selectNode(sourceId);
@@ -335,7 +342,7 @@ export class SkeletonEditPage {
     await this.page.getByText("Skeleton", { exact: true }).click();
   }
 
-  async radius(id: number, value: number) {
+  async radius(id: bigint, value: number) {
     await this.selectNode(id);
     await this.runEdit(async () => {
       await this.page.getByRole("spinbutton").fill(String(value));
@@ -343,7 +350,7 @@ export class SkeletonEditPage {
     });
   }
 
-  async move(id: number, dx: number, dy: number) {
+  async move(id: bigint, dx: number, dy: number) {
     await this.selectNode(id);
     const center = await this.panelCenter();
     await this.page.mouse.move(center.x, center.y);
@@ -354,14 +361,14 @@ export class SkeletonEditPage {
     });
   }
 
-  async reroot(id: number) {
+  async reroot(id: bigint) {
     await this.selectNode(id);
     await this.runEdit(() =>
       this.page.getByRole("button", { name: "Origin", exact: true }).click(),
     );
   }
 
-  async reload(segmentIds: number[]) {
+  async reload(segmentIds: bigint[]) {
     // URL serialization is debounced independently of mutation acknowledgement.
     // Reload only after the visible segments contain the saved permanent IDs.
     await expect
@@ -375,12 +382,12 @@ export class SkeletonEditPage {
               ?.segments ?? [];
           return segments
             .filter((id) => !id.startsWith("!"))
-            .map(Number)
-            .sort((a, b) => a - b);
+            .map(BigInt)
+            .sort(bigintCompare);
         },
         { message: "Reload must use the saved segment IDs in the URL" },
       )
-      .toEqual([...segmentIds].sort((a, b) => a - b));
+      .toEqual([...segmentIds].sort(bigintCompare));
     await this.page.reload();
     this.lastOperationId = undefined;
     await expect(

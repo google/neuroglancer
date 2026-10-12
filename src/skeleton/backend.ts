@@ -252,7 +252,8 @@ export class SpatiallyIndexedSkeletonChunk
   vertexPositions: Float32Array | null = null;
   vertexAttributes: TypedNumberArray[] | null = null;
   indices: Uint32Array | null = null;
-  nodeIds: Int32Array | undefined;
+  nodeIds: BigUint64Array | undefined;
+  segmentIds: BigUint64Array | undefined;
 
   freeSystemMemory() {
     freeSkeletonChunkSystemMemory(this);
@@ -266,7 +267,9 @@ export class SpatiallyIndexedSkeletonChunk
 
   downloadSucceeded() {
     this.systemMemoryBytes = this.gpuMemoryBytes =
-      this.indices!.byteLength + getVertexAttributeBytes(this);
+      this.indices!.byteLength +
+      getVertexAttributeBytes(this) +
+      this.segmentIds!.byteLength;
     super.downloadSucceeded();
   }
 }

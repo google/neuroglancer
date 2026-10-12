@@ -155,7 +155,7 @@ function freezeNode(node: SpatiallyIndexedSkeletonNode) {
 }
 
 function makeRetainedNode(
-  capturedNodeId: number,
+  capturedNodeId: bigint,
   handle: SpatialSkeletonLogicalNodeHandle,
 ): CatmaidRetainedNode {
   return Object.freeze({
@@ -176,14 +176,17 @@ function getDirection(
   return intent === "undo" ? "inverse" : "forward";
 }
 
+// CATMAID IDs are Postgres int8, so an ID from 2^63 is never a real one.
+const CATMAID_FIRST_PROVISIONAL_ID = 2n ** 63n;
+
 /** Deterministic, state-free policy; the generic identity service owns use. */
 export const CATMAID_PROVISIONAL_NUMERIC_ID_POLICY: SpatialSkeletonProvisionalNumericIdPolicy =
   Object.freeze({
     allocateNodeId(intentId: number) {
-      return 0x8000_0000 - intentId;
+      return CATMAID_FIRST_PROVISIONAL_ID + BigInt(intentId);
     },
     allocateSegmentId(intentId: number) {
-      return 0xffff_fffe - intentId;
+      return CATMAID_FIRST_PROVISIONAL_ID + BigInt(intentId);
     },
   });
 
@@ -684,8 +687,8 @@ export class CatmaidSpatialSkeletonWorkflowDriver
 
   private captureSegments(
     queueInput: SpatialSkeletonQueueInput,
-    segmentIds: readonly number[],
-    eagerNodeIds: readonly number[],
+    segmentIds: readonly bigint[],
+    eagerNodeIds: readonly bigint[],
   ) {
     const captured: CatmaidCapturedSegment[] = [];
     for (const segmentId of new Set(segmentIds)) {
@@ -722,16 +725,16 @@ export class CatmaidSpatialSkeletonWorkflowDriver
 
   private getRetainedNode(
     capture: {
-      readonly retainedNodes: ReadonlyMap<number, CatmaidRetainedNode>;
+      readonly retainedNodes: ReadonlyMap<bigint, CatmaidRetainedNode>;
     },
-    nodeId: number,
+    nodeId: bigint,
   ) {
     return capture.retainedNodes.get(nodeId)!;
   }
 
   private requireQueueInputSegment(
     queueInput: SpatialSkeletonQueueInput,
-    segmentId: number,
+    segmentId: bigint,
   ) {
     const entry = queueInput.segments.find(
       (candidate) => candidate.segmentId === segmentId,
@@ -746,10 +749,10 @@ export class CatmaidSpatialSkeletonWorkflowDriver
 
   private getPathToRoot(
     snapshot: CompleteSkeletonSnapshotHandle,
-    targetNodeId: number,
+    targetNodeId: bigint,
   ) {
     const path: SpatiallyIndexedSkeletonNode[] = [];
-    const seen = new Set<number>();
+    const seen = new Set<bigint>();
     let current = snapshot.getNode(targetNodeId);
     if (current === undefined) {
       throw new Error(`CATMAID queue input is missing node ${targetNodeId}.`);
@@ -776,7 +779,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
     capture: ReturnType<
       CatmaidSpatialSkeletonWorkflowDriver["captureSegments"]
     >,
-    nodeId: number,
+    nodeId: bigint,
   ) {
     for (const { snapshot } of capture.capturedSegments) {
       const node = snapshot.getNode(nodeId);
@@ -797,7 +800,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
       options.parentNodeId === undefined
         ? {
             capturedSegments: Object.freeze([]),
-            retainedNodes: new Map<number, CatmaidRetainedNode>(),
+            retainedNodes: new Map<bigint, CatmaidRetainedNode>(),
           }
         : this.captureSegments(
             queueInput,
@@ -883,7 +886,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
         `CATMAID queue input is missing node ${command.payload.node.nodeId}.`,
       );
     }
-    const childIds: number[] = [];
+    const childIds: bigint[] = [];
     entry.snapshot.forEachNode((candidate) => {
       if (candidate.parentNodeId === rawDeleted.nodeId) {
         childIds.push(candidate.nodeId);
@@ -1339,10 +1342,10 @@ export class CatmaidSpatialSkeletonWorkflowDriver
       ? this.captureRetainedInspectionSeed(semantic)
       : undefined;
     const nodeBindings: Array<
-      readonly [SpatialSkeletonLogicalNodeHandle, number]
+      readonly [SpatialSkeletonLogicalNodeHandle, bigint]
     > = [];
     const segmentBindings: Array<
-      readonly [SpatialSkeletonLogicalSegmentHandle, number]
+      readonly [SpatialSkeletonLogicalSegmentHandle, bigint]
     > = [];
     if (semantic.kind === "add-node" && direction === "forward") {
       nodeBindings.push([
@@ -1416,12 +1419,12 @@ export class CatmaidSpatialSkeletonWorkflowDriver
       readonly snapshot: CompleteSkeletonSnapshotHandle;
     }> = [];
     const nodeBindings: Array<
-      readonly [SpatialSkeletonLogicalNodeHandle, number]
+      readonly [SpatialSkeletonLogicalNodeHandle, bigint]
     > = [];
     const segmentBindings: Array<
-      readonly [SpatialSkeletonLogicalSegmentHandle, number]
+      readonly [SpatialSkeletonLogicalSegmentHandle, bigint]
     > = [];
-    const expectedCacheRevisions = new Map<number, number>();
+    const expectedCacheRevisions = new Map<bigint, number>();
     const seenNodes = new Set<string>();
     const seenSegments = new Set<string>();
     for (const captured of semantic.capturedSegments) {

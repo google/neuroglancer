@@ -130,6 +130,7 @@ import {
 } from "#src/trackable_value.js";
 import { Uint64Set } from "#src/uint64_set.js";
 import { gatherUpdate } from "#src/util/array.js";
+import { bigintCompare } from "#src/util/bigint.js";
 import {
   getContrastRatio,
   getRelativeLuminance,
@@ -181,11 +182,7 @@ import type {
   ShaderProgram,
   ShaderSamplerType,
 } from "#src/webgl/shader.js";
-import {
-  dataTypeShaderDefinition,
-  getShaderType,
-  glsl_string,
-} from "#src/webgl/shader_lib.js";
+import { getShaderType, glsl_string } from "#src/webgl/shader_lib.js";
 import type { ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
 import {
   addControlsToBuilder,
@@ -258,6 +255,7 @@ interface VertexAttributeRenderInfo extends VertexAttributeInfo {
 }
 
 const vertexAttributeSamplerSymbols: symbol[] = [];
+const segmentIdSamplerSymbol = Symbol("SkeletonShader.segmentIdTextureUnit");
 
 const vertexPositionTextureFormat = computeTextureFormat(
   new TextureFormat(),
@@ -290,13 +288,18 @@ interface SkeletonShaderContext {
 
 interface SkeletonGPUGeometry {
   vertexAttributeTextures: (WebGLTexture | null)[];
+  segmentIdTexture?: WebGLTexture | null;
   indexBuffer: GLBuffer;
   numIndices: number;
   numVertices: number;
-  pickNodeIds?: Int32Array;
-  pickNodePositions?: Float32Array;
-  pickSegmentIds?: Uint32Array;
-  pickEdgeSegmentIds?: Uint32Array;
+}
+
+interface SkeletonPickGeometry {
+  readonly indices: Uint32Array;
+  readonly numVertices: number;
+  readonly nodeIds: BigUint64Array;
+  readonly nodePositions: Float32Array;
+  readonly segmentIds: BigUint64Array;
 }
 
 interface PackedSkeletonGeometry {
@@ -304,28 +307,19 @@ interface PackedSkeletonGeometry {
   indices: Uint32Array;
   numVertices: number;
   vertexAttributeOffsets: Uint32Array;
-  nodeIds?: Int32Array;
 }
 
-type SpatiallyIndexedSkeletonPickData =
-  | {
-      kind: "node";
-      nodeIds: Int32Array;
-      nodePositions: Float32Array;
-      segmentIds: Uint32Array;
-    }
-  | {
-      kind: "edge";
-      segmentIds: Uint32Array;
-    }
-  | {
-      kind: "segment-node";
-      chunk: SpatiallyIndexedSkeletonChunk;
-    }
-  | {
-      kind: "segment-edge";
-      chunk: SpatiallyIndexedSkeletonChunk;
-    };
+interface PackedSpatiallyIndexedSkeletonGeometry
+  extends PackedSkeletonGeometry {
+  nodeIds: BigUint64Array;
+  segmentIds: BigUint64Array;
+}
+
+interface SpatiallyIndexedSkeletonPickData {
+  // Only overlay node picks ("node") move the mouse position onto the node.
+  readonly kind: "node" | "edge" | "segment-node" | "segment-edge";
+  readonly geometry: SkeletonPickGeometry;
+}
 
 interface SkeletonGeometry {
   vertexMain: string;
@@ -337,7 +331,6 @@ class RenderHelper extends RefCounted {
     "vertexData",
   );
   private vertexIdHelper;
-  private segmentAttributeIndex: number | undefined;
   private visibleSegmentsShaderManager = new HashSetShaderManager(
     "visibleSegments",
   );
@@ -405,39 +398,16 @@ void spatialChunkCull() {
     }
   }
 
-  // TODO (SKM): segmentAttribute is UINT32 but segments can be UINT64.
-  // Change segmentAttribute.dataType to DataType.UINT64, update vSegmentValue
-  // from `highp uint` (flat) to `highp uvec2` (flat), update
-  // getSegmentAppearanceId to take uvec2 directly, and getSegmentAppearance
-  // signature accordingly. Also pull segmentAttribute and selectedNodeAttribute
-  // out of vertexAttributes entirely (they are internal, not user-defined).
   private finalizeShaderBuilder(
     builder: ShaderBuilder,
     shaderBuilderState: ShaderControlsBuilderState,
-    skeletonParams: SkeletonShaderParameters,
     vertexMain: string,
     fragmentSetup = "",
   ): void {
     builder.addFragmentCode(glsl_COLORMAPS);
     const { vertexAttributes } = this;
     const numAttributes = vertexAttributes.length;
-    if (
-      skeletonParams.dynamicSegmentAppearance &&
-      this.segmentAttributeIndex !== undefined
-    ) {
-      const segInfo = vertexAttributes[this.segmentAttributeIndex];
-      builder.addFragmentCode(dataTypeShaderDefinition[segInfo.dataType]);
-      builder.addFragmentCode(
-        `#define ${segInfo.name} ${segInfo.glslDataType}(vSegmentValue)\n`,
-      );
-      builder.addFragmentCode(
-        `#define prop_${segInfo.name}() ${segInfo.glslDataType}(vSegmentValue)\n`,
-      );
-    }
     for (let i = 1; i < numAttributes; ++i) {
-      if (i === this.segmentAttributeIndex) {
-        continue;
-      }
       const info = vertexAttributes[i];
       builder.addVarying(`highp ${info.glslDataType}`, `vCustom${i}`);
       vertexMain += `vCustom${i} = readAttribute${i}(vertexIndex);\n`;
@@ -485,7 +455,20 @@ void spatialChunkCull() {
     if (params.hoverHighlight) {
       builder.addUniform("highp uvec2", "uHoveredSegmentId");
     }
-    builder.addVarying("highp uint", "vSegmentValue", "flat");
+    builder.addTextureSampler(
+      "usampler2D",
+      "uSegmentIdSampler",
+      segmentIdSamplerSymbol,
+    );
+    builder.addVertexCode(
+      this.textureAccessHelper.getAccessor(
+        "readSegmentId",
+        "uSegmentIdSampler",
+        DataType.UINT64,
+        1,
+      ),
+    );
+    builder.addVarying("highp uvec2", "vSegmentId", "flat");
 
     const statedColorFragment = params.hasSegmentStatedColors
       ? `
@@ -514,9 +497,6 @@ void spatialChunkCull() {
       : "";
 
     builder.addFragmentCode(`
-uint64_t getSegmentAppearanceId(highp uint segmentValue) {
-  return uint64_t(uvec2(segmentValue, 0u));
-}
 vec3 getSegmentBaseColor(uint64_t segmentId) {
 ${statedColorFragment}
 ${defaultColorFragment}
@@ -535,8 +515,7 @@ float getSegmentLookupAlpha(uint64_t segmentId) {
   bool isVisible = ${this.visibleSegmentsShaderManager.hasFunctionName}(segmentId);
   return isVisible ? uVisibleAlpha : uHiddenAlpha;
 }
-vec4 getSegmentAppearance(highp uint segmentValue) {
-  uint64_t segmentId = getSegmentAppearanceId(segmentValue);
+vec4 getSegmentAppearance(uint64_t segmentId) {
   return vec4(getSegmentLookupColor(segmentId), getSegmentLookupAlpha(segmentId));
 }
 `);
@@ -648,11 +627,6 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
         `Skeleton has ${this.vertexAttributes.length} vertex attributes but device only supports ${maxTextureImageUnits} shader texture units`,
       );
     }
-    const segmentAttrIndex = this.vertexAttributes.findIndex(
-      (x) => x.name === segmentAttribute.name,
-    );
-    this.segmentAttributeIndex =
-      segmentAttrIndex >= 0 ? segmentAttrIndex : undefined;
 
     const segmentationGroupState =
       base.displayState.segmentationGroupState.value;
@@ -722,20 +696,12 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
     );
   }
 
-  private dynamicColorPath(skeletonParams: SkeletonShaderParameters): boolean {
-    return (
-      skeletonParams.dynamicSegmentAppearance &&
-      this.segmentAttributeIndex !== undefined
-    );
-  }
-
-  // Vertex-shader assignment of `vSegmentValue`, read by the dynamic color path.
-  private readSegmentValueGlsl(
+  private readSegmentIdGlsl(
     skeletonParams: SkeletonShaderParameters,
     indexExpression: string,
   ): string {
-    if (!this.dynamicColorPath(skeletonParams)) return "";
-    return `vSegmentValue = toRaw(readAttribute${this.segmentAttributeIndex}(${indexExpression}));\n`;
+    if (!skeletonParams.dynamicSegmentAppearance) return "";
+    return `vSegmentId = readSegmentId(${indexExpression}).value;\n`;
   }
 
   private defineEdgeShader(
@@ -745,7 +711,7 @@ vec4 getSegmentAppearance(highp uint segmentValue) {
   ) {
     this.defineCommonShader(builder, shaderBuilderState, skeletonParams);
     const geometry = this.defineEdgeLineBillboard(builder, skeletonParams);
-    const path = this.dynamicColorPath(skeletonParams) ? "dynamic" : "legacy";
+    const path = skeletonParams.dynamicSegmentAppearance ? "dynamic" : "legacy";
     builder.addFragmentCode(`
 float getCrossSectionFade() {
   return ${this.getCrossSectionFadeFactor()};
@@ -756,7 +722,6 @@ float getCrossSectionFade() {
     this.finalizeShaderBuilder(
       builder,
       shaderBuilderState,
-      skeletonParams,
       geometry.vertexMain,
       geometry.fragmentSetup,
     );
@@ -769,13 +734,12 @@ float getCrossSectionFade() {
   ) {
     this.defineCommonShader(builder, shaderBuilderState, skeletonParams);
     const geometry = this.defineNodeCircleBillboard(builder, skeletonParams);
-    const path = this.dynamicColorPath(skeletonParams) ? "dynamic" : "legacy";
+    const path = skeletonParams.dynamicSegmentAppearance ? "dynamic" : "legacy";
     builder.addFragmentCode(nodeColorPathsGlsl(path));
     builder.addFragmentCode(glsl_string);
     this.finalizeShaderBuilder(
       builder,
       shaderBuilderState,
-      skeletonParams,
       geometry.vertexMain,
       geometry.fragmentSetup,
     );
@@ -802,7 +766,7 @@ highp uint vertexIndex = aVertexIndex.x * (1u - lineEndpointIndex) + aVertexInde
       vertexMain += `vCullPos = mix(vertexA, vertexB, float(lineEndpointIndex));\n`;
       fragmentSetup = `spatialChunkCull();\n`;
     }
-    vertexMain += this.readSegmentValueGlsl(skeletonParams, "aVertexIndex.x");
+    vertexMain += this.readSegmentIdGlsl(skeletonParams, "aVertexIndex.x");
     return { vertexMain, fragmentSetup };
   }
 
@@ -823,7 +787,7 @@ highp vec3 vertexPosition = applyNodePositionOverride(vertexIndex, readAttribute
       vertexMain += `vCullPos = vertexPosition;\n`;
       fragmentSetup = `spatialChunkCull();\n`;
     }
-    vertexMain += this.readSegmentValueGlsl(skeletonParams, "vertexIndex");
+    vertexMain += this.readSegmentIdGlsl(skeletonParams, "vertexIndex");
     vertexMain += `emitCircle(uProjection * vec4(vertexPosition, 1.0), uNodeDiameter, 0.0);\n`;
     return { vertexMain, fragmentSetup };
   }
@@ -952,6 +916,16 @@ highp vec3 vertexPosition = applyNodePositionOverride(vertexIndex, readAttribute
         vertexAttributeTextures[i],
       );
     }
+    if (edgeShader.textureUnits.has(segmentIdSamplerSymbol)) {
+      gl.activeTexture(
+        WebGL2RenderingContext.TEXTURE0 +
+          edgeShader.textureUnit(segmentIdSamplerSymbol),
+      );
+      gl.bindTexture(
+        WebGL2RenderingContext.TEXTURE_2D,
+        skeletonGpuGeometry.segmentIdTexture ?? null,
+      );
+    }
 
     {
       edgeShader.bind();
@@ -986,10 +960,14 @@ highp vec3 vertexPosition = applyNodePositionOverride(vertexIndex, readAttribute
     clearedTextureUnits.clear();
     for (const shader of shaders) {
       if (shader === null) continue;
-      for (let i = 0; i < numAttributes; ++i) {
-        const curTextureUnit =
-          shader.textureUnit(vertexAttributeSamplerSymbols[i]) +
-          WebGL2RenderingContext.TEXTURE0;
+      const textureUnits = vertexAttributeSamplerSymbols
+        .slice(0, numAttributes)
+        .map((symbol) => shader.textureUnit(symbol));
+      if (shader.textureUnits.has(segmentIdSamplerSymbol)) {
+        textureUnits.push(shader.textureUnit(segmentIdSamplerSymbol));
+      }
+      for (const textureUnit of textureUnits) {
+        const curTextureUnit = textureUnit + WebGL2RenderingContext.TEXTURE0;
         if (clearedTextureUnits.has(curTextureUnit)) continue;
         clearedTextureUnits.add(curTextureUnit);
         gl.activeTexture(curTextureUnit);
@@ -1021,26 +999,25 @@ export function setSpatialSkeletonModesToLinesAndPoints(layer: {
  */
 export function getActiveProvisionalSpatialSkeletonSegmentIds(
   presentation: SpatialSkeletonPresentationSnapshot,
-): number[] {
+): bigint[] {
   const activeOwners = new Map(
     presentation.activeLogicalOwners.map(({ segmentId, logicalHandle }) => [
       segmentId,
       logicalHandle.stableId,
     ]),
   );
-  const provisionalSegmentIds = new Set<number>();
+  const provisionalSegmentIds = new Set<bigint>();
   for (const alias of presentation.numericAliases) {
     if (
       alias.authoritative !== false ||
-      !Number.isSafeInteger(alias.segmentId) ||
-      alias.segmentId <= 0 ||
+      alias.segmentId <= 0n ||
       activeOwners.get(alias.segmentId) !== alias.logicalHandle.stableId
     ) {
       continue;
     }
     provisionalSegmentIds.add(alias.segmentId);
   }
-  return [...provisionalSegmentIds].sort((a, b) => a - b);
+  return [...provisionalSegmentIds].sort(bigintCompare);
 }
 
 export class TrackableSkeletonRenderMode extends TrackableEnum<SkeletonRenderMode> {
@@ -1098,7 +1075,7 @@ export type SpatialSkeletonPreparationVisual =
       readonly intentId: number;
       readonly cueKind: SpatialSkeletonPreparationIntent["kind"];
       readonly lifecycle: SpatialSkeletonPreparationIntent["lifecycle"];
-      readonly nodeId: number;
+      readonly nodeId: bigint;
       readonly position: Float32Array;
     }
   | {
@@ -1106,8 +1083,8 @@ export type SpatialSkeletonPreparationVisual =
       readonly intentId: number;
       readonly cueKind: SpatialSkeletonPreparationIntent["kind"];
       readonly lifecycle: SpatialSkeletonPreparationIntent["lifecycle"];
-      readonly fromNodeId: number;
-      readonly toNodeId: number;
+      readonly fromNodeId: bigint;
+      readonly toNodeId: bigint;
       readonly from: Float32Array;
       readonly to: Float32Array;
     };
@@ -1119,7 +1096,7 @@ export type SpatialSkeletonPreparationVisual =
  */
 export function buildSpatialSkeletonPreparationVisuals(
   preparations: readonly SpatialSkeletonPreparationIntent[],
-  getLivePosition: (nodeId: number) => ArrayLike<number> | undefined,
+  getLivePosition: (nodeId: bigint) => ArrayLike<number> | undefined,
 ): SpatialSkeletonPreparationVisual[] {
   const visuals: SpatialSkeletonPreparationVisual[] = [];
   for (const cue of preparations) {
@@ -1129,8 +1106,8 @@ export function buildSpatialSkeletonPreparationVisuals(
         position,
       ]) ?? [],
     );
-    const resolvedPositions = new Map<number, Float32Array>();
-    const resolve = (nodeId: number) => {
+    const resolvedPositions = new Map<bigint, Float32Array>();
+    const resolve = (nodeId: bigint) => {
       const existing = resolvedPositions.get(nodeId);
       if (existing !== undefined) return existing;
       const candidate =
@@ -1145,8 +1122,8 @@ export function buildSpatialSkeletonPreparationVisuals(
       resolvedPositions.set(nodeId, position);
       return position;
     };
-    const markedNodeIds = new Set<number>();
-    const addMarker = (nodeId: number | undefined) => {
+    const markedNodeIds = new Set<bigint>();
+    const addMarker = (nodeId: bigint | undefined) => {
       if (nodeId === undefined || markedNodeIds.has(nodeId)) return;
       const position = resolve(nodeId);
       if (position === undefined) return;
@@ -1162,8 +1139,8 @@ export function buildSpatialSkeletonPreparationVisuals(
     };
     const connectedPairs = new Set<string>();
     const addConnector = (
-      fromNodeId: number | undefined,
-      toNodeId: number | undefined,
+      fromNodeId: bigint | undefined,
+      toNodeId: bigint | undefined,
     ) => {
       if (
         fromNodeId === undefined ||
@@ -1189,7 +1166,7 @@ export function buildSpatialSkeletonPreparationVisuals(
         to,
       });
     };
-    const addKnownPath = (nodeIds: readonly number[] | undefined) => {
+    const addKnownPath = (nodeIds: readonly bigint[] | undefined) => {
       if (nodeIds === undefined) return;
       for (const nodeId of nodeIds) addMarker(nodeId);
       for (let i = 1; i < nodeIds.length; ++i) {
@@ -1809,13 +1786,36 @@ const vertexPositionAttribute: VertexAttributeRenderInfo = {
   glslDataType: "vec3",
 };
 
-const segmentAttribute: VertexAttributeRenderInfo = {
-  dataType: DataType.UINT32,
-  numComponents: 1,
-  name: "segment",
-  webglDataType: WebGL2RenderingContext.UNSIGNED_INT,
-  glslDataType: getShaderType(DataType.UINT32, 1),
-};
+const overlayPositionTextureFormat = computeTextureFormat(
+  new TextureFormat(),
+  DataType.FLOAT32,
+  3,
+);
+
+const segmentIdTextureFormat = computeTextureFormat(
+  new TextureFormat(),
+  DataType.UINT64,
+  1,
+);
+
+function uploadSegmentIdTexture(
+  gl: GL,
+  segmentIds: BigUint64Array,
+): WebGLTexture {
+  const texture = gl.createTexture();
+  gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
+  setOneDimensionalTextureData(
+    gl,
+    segmentIdTextureFormat,
+    new Uint8Array(
+      segmentIds.buffer,
+      segmentIds.byteOffset,
+      segmentIds.byteLength,
+    ),
+  );
+  gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
+  return texture;
+}
 
 interface SkeletonChunkBase extends SkeletonGPUGeometry {
   vertexAttributes: Uint8Array;
@@ -1899,7 +1899,7 @@ export class SkeletonChunk extends Chunk implements SkeletonChunkBase {
 
 export class SpatiallyIndexedSkeletonChunk
   extends SliceViewChunk
-  implements SkeletonChunkBase
+  implements SkeletonChunkBase, SkeletonPickGeometry
 {
   declare source: SpatiallyIndexedSkeletonSource;
   vertexAttributes: Uint8Array;
@@ -1909,11 +1909,14 @@ export class SpatiallyIndexedSkeletonChunk
   numVertices: number;
   vertexAttributeOffsets: Uint32Array;
   vertexAttributeTextures: (WebGLTexture | null)[] = [];
-  nodeIds: Int32Array;
+  segmentIdTexture: WebGLTexture | null = null;
+  readonly nodeIds: BigUint64Array;
+  readonly nodePositions: Float32Array;
+  readonly segmentIds: BigUint64Array;
 
   constructor(
     source: SpatiallyIndexedSkeletonSource,
-    chunkData: PackedSkeletonGeometry,
+    chunkData: PackedSpatiallyIndexedSkeletonGeometry,
   ) {
     super(source, chunkData);
     this.vertexAttributes = chunkData.vertexAttributes;
@@ -1921,23 +1924,31 @@ export class SpatiallyIndexedSkeletonChunk
     this.numVertices = chunkData.numVertices;
     this.numIndices = indices.length;
     this.vertexAttributeOffsets = chunkData.vertexAttributeOffsets;
-    this.nodeIds = chunkData.nodeIds ?? new Int32Array(0);
+    this.nodeIds = chunkData.nodeIds;
+    this.nodePositions = new Float32Array(
+      this.vertexAttributes.buffer,
+      this.vertexAttributes.byteOffset + this.vertexAttributeOffsets[0],
+      this.numVertices * 3,
+    );
+    this.segmentIds = chunkData.segmentIds;
   }
 
   copyToGPU(gl: GL) {
     super.copyToGPU(gl);
     uploadSkeletonChunkToGPU(gl, this);
+    this.segmentIdTexture = uploadSegmentIdTexture(gl, this.segmentIds);
   }
 
   freeGPUMemory(gl: GL) {
     super.freeGPUMemory(gl);
     freeSkeletonChunkGPUMemory(gl, this);
+    gl.deleteTexture(this.segmentIdTexture);
+    this.segmentIdTexture = null;
   }
 }
 
 const spatiallyIndexedSkeletonTextureAttributeSpecs = Object.freeze([
   { name: "position", dataType: DataType.FLOAT32, numComponents: 3 },
-  { name: "segment", dataType: DataType.UINT32, numComponents: 1 },
 ]);
 
 export class SpatiallyIndexedSkeletonSource extends SliceViewChunkSource<
@@ -1949,7 +1960,7 @@ export class SpatiallyIndexedSkeletonSource extends SliceViewChunkSource<
 
   constructor(chunkManager: ChunkManager, options: any) {
     super(chunkManager, options);
-    this.vertexAttributes = [vertexPositionAttribute, segmentAttribute];
+    this.vertexAttributes = [vertexPositionAttribute];
   }
 
   get attributeTextureFormats() {
@@ -1969,7 +1980,7 @@ export class SpatiallyIndexedSkeletonSource extends SliceViewChunkSource<
     return { ...base, chunkLayout: spec.chunkLayout.toObject() };
   }
 
-  getChunk(chunkData: PackedSkeletonGeometry) {
+  getChunk(chunkData: PackedSpatiallyIndexedSkeletonGeometry) {
     return new SpatiallyIndexedSkeletonChunk(this, chunkData);
   }
 }
@@ -2045,8 +2056,8 @@ type SpatiallyIndexedSkeletonSourceEntry =
   SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>;
 
 interface SelectedSkeletonNodeInfo {
-  readonly nodeId: number;
-  readonly segmentId?: number;
+  readonly nodeId: bigint;
+  readonly segmentId?: bigint;
   readonly position?: Float32Array;
 }
 
@@ -2062,10 +2073,10 @@ interface SpatiallyIndexedSkeletonLayerOptions {
     SelectedSkeletonNodeInfo | undefined
   >;
   pendingNodePositionVersion?: WatchableValueInterface<number>;
-  getPendingNodePosition?: (nodeId: number) => ArrayLike<number> | undefined;
+  getPendingNodePosition?: (nodeId: bigint) => ArrayLike<number> | undefined;
   // Node ids that currently have a pending (drag) position override.
-  getPendingNodeIds?: () => Iterable<number>;
-  getCachedNode?: (nodeId: number) => SpatiallyIndexedSkeletonNode | undefined;
+  getPendingNodeIds?: () => Iterable<bigint>;
+  getCachedNode?: (nodeId: bigint) => SpatiallyIndexedSkeletonNode | undefined;
   // Transforms a node's model-space position into the global coordinate space
   // used by the panels, so node highlights can be projected to screen.
   resolveGlobalPosition?: (
@@ -2080,67 +2091,62 @@ interface SpatiallyIndexedSkeletonInspectionState {
   readonly pendingNodePositionVersion: WatchableValueInterface<number>;
   readonly spatialSkeletonPresentation: WatchableValueInterface<SpatialSkeletonPresentationSnapshot>;
   getCachedSegmentNodes(
-    segmentId: number,
+    segmentId: bigint,
   ): readonly SpatiallyIndexedSkeletonNode[] | undefined;
   getFullSegmentNodes(
     skeletonLayer: SpatiallyIndexedSkeletonLayer,
-    segmentId: number,
+    segmentId: bigint,
   ): Promise<readonly SpatiallyIndexedSkeletonNode[]>;
-  evictInactiveSegmentNodes(activeSegmentIds: Iterable<number>): void;
+  evictInactiveSegmentNodes(activeSegmentIds: Iterable<bigint>): void;
 }
 
-class SkeletonOverlayChunk implements SkeletonGPUGeometry {
+class SkeletonOverlayChunk
+  implements SkeletonGPUGeometry, SkeletonPickGeometry
+{
   readonly vertexAttributeTextures: (WebGLTexture | null)[];
+  readonly segmentIdTexture: WebGLTexture;
   readonly indexBuffer: GLBuffer;
   readonly numIndices: number;
   readonly numVertices: number;
-  readonly pickNodeIds: Int32Array;
-  readonly pickNodePositions: Float32Array;
-  readonly pickSegmentIds: Uint32Array;
-  readonly pickEdgeSegmentIds: Uint32Array;
+  readonly indices: Uint32Array;
+  readonly nodeIds: BigUint64Array;
+  readonly nodePositions: Float32Array;
+  readonly segmentIds: BigUint64Array;
   // Maps nodeId to packed vertex index, used to target a live node drag's
   // position override to the correct vertex via a shader uniform (no rebuild).
-  readonly nodeIndex: ReadonlyMap<number, number>;
+  readonly nodeIndex: ReadonlyMap<bigint, number>;
 
   constructor(
     gl: GL,
     geometry: SpatiallyIndexedSkeletonOverlayGeometry,
-    formats: TextureFormat[],
+    positionTextureFormat: TextureFormat,
   ) {
-    const attributeBuffers = [
+    const positionTexture = gl.createTexture();
+    gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, positionTexture);
+    setOneDimensionalTextureData(
+      gl,
+      positionTextureFormat,
       new Uint8Array(
         geometry.positions.buffer,
         geometry.positions.byteOffset,
         geometry.positions.byteLength,
       ),
-      new Uint8Array(
-        geometry.segmentIds.buffer,
-        geometry.segmentIds.byteOffset,
-        geometry.segmentIds.byteLength,
-      ),
-    ];
-    const overlayTextures: (WebGLTexture | null)[] =
-      (this.vertexAttributeTextures = []);
-    for (let i = 0; i < attributeBuffers.length; i++) {
-      const texture = gl.createTexture();
-      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
-      setOneDimensionalTextureData(gl, formats[i], attributeBuffers[i]);
-      overlayTextures[i] = texture;
-    }
+    );
     gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
+    this.vertexAttributeTextures = [positionTexture];
+    this.segmentIdTexture = uploadSegmentIdTexture(gl, geometry.segmentIds);
     this.indexBuffer = GLBuffer.fromData(
       gl,
       geometry.indices,
       WebGL2RenderingContext.ARRAY_BUFFER,
       WebGL2RenderingContext.STATIC_DRAW,
     );
+    this.indices = geometry.indices;
     this.numIndices = geometry.indices.length;
     this.numVertices = geometry.numVertices;
-    this.pickNodeIds = geometry.nodeIds;
-    // positions and nodePositions were identical — reuse positions for picking.
-    this.pickNodePositions = geometry.positions;
-    this.pickSegmentIds = geometry.pickSegmentIds;
-    this.pickEdgeSegmentIds = geometry.pickEdgeSegmentIds;
+    this.nodeIds = geometry.nodeIds;
+    this.nodePositions = geometry.positions;
+    this.segmentIds = geometry.segmentIds;
     this.nodeIndex = geometry.nodeIndex;
   }
 
@@ -2148,6 +2154,7 @@ class SkeletonOverlayChunk implements SkeletonGPUGeometry {
     for (const texture of this.vertexAttributeTextures) {
       if (texture) gl.deleteTexture(texture);
     }
+    gl.deleteTexture(this.segmentIdTexture);
     this.indexBuffer.dispose();
   }
 }
@@ -2216,37 +2223,29 @@ export interface SpatiallyIndexedSkeletonLayerDisplayState
 }
 
 export function resolveSpatiallyIndexedSkeletonSegmentPick(
-  chunk: { indices: Uint32Array; numVertices: number },
-  segmentIds: Uint32Array,
+  geometry: Pick<
+    SkeletonPickGeometry,
+    "indices" | "numVertices" | "segmentIds"
+  >,
   pickedOffset: number,
   kind: "node" | "edge",
-) {
-  if (pickedOffset < 0) return undefined;
+): bigint | undefined {
+  const { indices, segmentIds } = geometry;
+  let segmentId: bigint | undefined;
   if (kind === "node") {
-    if (
-      pickedOffset >= segmentIds.length ||
-      pickedOffset >= chunk.numVertices
-    ) {
+    if (pickedOffset < 0 || pickedOffset >= geometry.numVertices) {
       return undefined;
     }
-    const segmentId = segmentIds[pickedOffset];
-    return Number.isSafeInteger(segmentId) && segmentId > 0
-      ? segmentId
-      : undefined;
+    segmentId = segmentIds[pickedOffset];
+  } else {
+    const indexOffset = pickedOffset * 2;
+    if (pickedOffset < 0 || indexOffset + 1 >= indices.length) {
+      return undefined;
+    }
+    segmentId =
+      segmentIds[indices[indexOffset]] || segmentIds[indices[indexOffset + 1]];
   }
-  const indexOffset = pickedOffset * 2;
-  if (indexOffset + 1 >= chunk.indices.length) {
-    return undefined;
-  }
-  const vertexA = chunk.indices[indexOffset];
-  const vertexB = chunk.indices[indexOffset + 1];
-  let segmentId = segmentIds[vertexA];
-  if (!Number.isSafeInteger(segmentId) || segmentId <= 0) {
-    segmentId = segmentIds[vertexB];
-  }
-  return Number.isSafeInteger(segmentId) && segmentId > 0
-    ? segmentId
-    : undefined;
+  return segmentId === 0n ? undefined : segmentId;
 }
 
 export class SpatiallyIndexedSkeletonLayer
@@ -2269,13 +2268,6 @@ export class SpatiallyIndexedSkeletonLayer
   >;
   rpc: RPC | undefined;
 
-  private overlayAttributeTextureFormats_?: TextureFormat[];
-  private get overlayAttributeTextureFormats(): TextureFormat[] {
-    return (this.overlayAttributeTextureFormats_ ??= this.vertexAttributes.map(
-      ({ dataType, numComponents }) =>
-        computeTextureFormat(new TextureFormat(), dataType, numComponents),
-    ));
-  }
   private selectedNodeInfo:
     | WatchableValueInterface<SelectedSkeletonNodeInfo | undefined>
     | undefined;
@@ -2286,16 +2278,16 @@ export class SpatiallyIndexedSkeletonLayer
     | WatchableValueInterface<SelectedSkeletonNodeInfo | undefined>
     | undefined;
   private getPendingNodePositionOverride:
-    | ((nodeId: number) => ArrayLike<number> | undefined)
+    | ((nodeId: bigint) => ArrayLike<number> | undefined)
     | undefined;
   private pendingNodePositionVersion:
     | WatchableValueInterface<number>
     | undefined;
   // Node ids with a live pending (drag) position. Used to target the shader
   // position override without scanning all nodes; one entry during a drag.
-  private getPendingNodeIds: (() => Iterable<number>) | undefined;
+  private getPendingNodeIds: (() => Iterable<bigint>) | undefined;
   private getCachedNodeInfo:
-    | ((nodeId: number) => SpatiallyIndexedSkeletonNode | undefined)
+    | ((nodeId: bigint) => SpatiallyIndexedSkeletonNode | undefined)
     | undefined;
   private resolveGlobalPosition:
     | ((modelPosition: ArrayLike<number>) => Float32Array | undefined)
@@ -2306,16 +2298,16 @@ export class SpatiallyIndexedSkeletonLayer
   // replaces only the segment arrays that changed rather than disposing and
   // rebuilding one aggregate scene-wide overlay chunk.
   private overlaySegmentChunks = new Map<
-    number,
+    bigint,
     SkeletonOverlaySegmentChunkEntry
   >();
   private failedOverlaySegmentBuilds = new Map<
-    number,
+    bigint,
     SkeletonOverlaySegmentVersion
   >();
   private overlayRenderChunks: SkeletonOverlayChunk[] = [];
   private pendingOverlayPositionKeys = new Map<
-    number,
+    bigint,
     {
       nodes: readonly SpatiallyIndexedSkeletonNode[];
       globalVersion: number | undefined;
@@ -2323,12 +2315,12 @@ export class SpatiallyIndexedSkeletonLayer
     }
   >();
   private overlayRebuildFrame = -1;
-  private pendingOverlaySegmentLoads = new Set<number>();
+  private pendingOverlaySegmentLoads = new Set<bigint>();
   private browseExcludedSegments = new Uint64Set();
   readonly provisionalSegmentIds = this.registerDisposer(new Uint64Set());
   private gpuBrowseExcludedSegmentsHashTable: GPUHashTable<HashSetUint64>;
   private readonly temporaryBrowseExclusions = new Set<{
-    segmentId: number;
+    segmentId: bigint;
   }>();
   // Bumped whenever retained ownership, a temporary exclusion, or existing
   // overlay-chunk readiness changes. Visible-set and complete-node-cache
@@ -2344,14 +2336,14 @@ export class SpatiallyIndexedSkeletonLayer
     | undefined;
   // Segment id -> last-touched sequence number; doubles as pool membership
   // (key) and recency (value).
-  private retainedOverlaySegments: Map<number, number> = new Map();
+  private retainedOverlaySegments: Map<bigint, number> = new Map();
   // Shared sequence counter assigned to each touch.
   private overlaySegmentTouchCounter = 0;
   // Bumped when the set of keys in `retainedOverlaySegments` changes, so the
   // merged render segment-id list can be cached across frames. Recency-only
   // touches don't bump this, since the merged, sorted list is unaffected.
   private retainedOverlaySegmentIdsVersion = 0;
-  private cachedOverlayRenderSegmentIds: number[] = [];
+  private cachedOverlayRenderSegmentIds: bigint[] = [];
   private cachedOverlayRenderVisibleSet: Uint64Set | undefined;
   private cachedOverlayRenderVisibleGeneration = -1;
   private cachedOverlayRenderRetainedVersion = -1;
@@ -2369,9 +2361,7 @@ export class SpatiallyIndexedSkeletonLayer
     presentation: SpatialSkeletonPresentationSnapshot,
   ) {
     const nextIds = getActiveProvisionalSpatialSkeletonSegmentIds(presentation);
-    const currentIds = [...this.provisionalSegmentIds]
-      .map(Number)
-      .sort((a, b) => a - b);
+    const currentIds = [...this.provisionalSegmentIds].sort(bigintCompare);
     if (
       nextIds.length === currentIds.length &&
       nextIds.every((segmentId, index) => segmentId === currentIds[index])
@@ -2380,7 +2370,7 @@ export class SpatiallyIndexedSkeletonLayer
     }
     this.provisionalSegmentIds.clear();
     if (nextIds.length !== 0) {
-      this.provisionalSegmentIds.add(nextIds.map(BigInt));
+      this.provisionalSegmentIds.add(nextIds);
     }
     return true;
   }
@@ -2464,7 +2454,7 @@ export class SpatiallyIndexedSkeletonLayer
     return changed;
   }
 
-  private requestOverlaySegmentLoad(segmentId: number) {
+  private requestOverlaySegmentLoad(segmentId: bigint) {
     if (
       this.inspectionState === undefined ||
       this.pendingOverlaySegmentLoads.has(segmentId)
@@ -2486,7 +2476,7 @@ export class SpatiallyIndexedSkeletonLayer
   }
 
   private getOverlayPendingPositionKey(
-    segmentId: number,
+    segmentId: bigint,
     nodes: readonly SpatiallyIndexedSkeletonNode[],
   ) {
     const getPendingNodePosition = this.getPendingNodePositionOverride;
@@ -2521,18 +2511,12 @@ export class SpatiallyIndexedSkeletonLayer
     const segments = getVisibleSegments(
       this.displayState.segmentationGroupState.value,
     );
-    const segmentIds: number[] = [];
+    const segmentIds: bigint[] = [];
     for (const segmentId of segments.keys()) {
-      const normalizedSegmentId = Number(segmentId);
-      if (
-        !Number.isSafeInteger(normalizedSegmentId) ||
-        normalizedSegmentId <= 0
-      ) {
-        continue;
-      }
-      segmentIds.push(normalizedSegmentId);
+      if (segmentId === 0n) continue;
+      segmentIds.push(segmentId);
     }
-    segmentIds.sort((a, b) => a - b);
+    segmentIds.sort(bigintCompare);
     return segmentIds;
   }
 
@@ -2542,7 +2526,7 @@ export class SpatiallyIndexedSkeletonLayer
   ): Float32Array | undefined {
     const segmentId =
       nodeInfo.segmentId !== undefined
-        ? BigInt(nodeInfo.segmentId)
+        ? nodeInfo.segmentId
         : this.displayState.segmentSelectionState.baseValue;
     if (segmentId === undefined) {
       return undefined;
@@ -2622,15 +2606,13 @@ export class SpatiallyIndexedSkeletonLayer
    * layer visibility, so visibility remapping alone cannot retire a
    * provisional overlay target.
    */
-  remapOverlaySegments(remappings: ReadonlyMap<number, number>) {
+  remapOverlaySegments(remappings: ReadonlyMap<bigint, bigint>) {
     if (remappings.size === 0) return false;
-    const resolveSegmentId = (segmentId: number) => {
+    const resolveSegmentId = (segmentId: bigint) => {
       // Each mapping connects pre-publication to post-publication identities.
       // A destination may also be a source for another skeleton in this batch.
       const next = remappings.get(segmentId);
-      return next !== undefined && Number.isSafeInteger(next) && next > 0
-        ? next
-        : segmentId;
+      return next !== undefined && next !== 0n ? next : segmentId;
     };
 
     let changed = false;
@@ -2646,8 +2628,8 @@ export class SpatiallyIndexedSkeletonLayer
     // Multiple provisional identities may collapse to one authoritative
     // segment. Preserve the newest touch so the merged identity keeps the
     // correct LRU position regardless of Map insertion order.
-    const remappedTouchCounters = new Map<number, number>();
-    let nextRetainedOverlaySegments = new Map<number, number>();
+    const remappedTouchCounters = new Map<bigint, number>();
+    let nextRetainedOverlaySegments = new Map<bigint, number>();
     for (const [segmentId, touchCounter] of this.retainedOverlaySegments) {
       const resolvedSegmentId = resolveSegmentId(segmentId);
       changed ||= resolvedSegmentId !== segmentId;
@@ -2694,7 +2676,7 @@ export class SpatiallyIndexedSkeletonLayer
    * membership change invalidates overlay rendering and browse exclusions.
    */
   private applyRetainedOverlaySegments(
-    nextRetainedOverlaySegments: Map<number, number>,
+    nextRetainedOverlaySegments: Map<bigint, number>,
   ): boolean {
     const previousRetainedOverlaySegments = this.retainedOverlaySegments;
     this.retainedOverlaySegments = nextRetainedOverlaySegments;
@@ -2712,20 +2694,14 @@ export class SpatiallyIndexedSkeletonLayer
     return true;
   }
 
-  retainOverlaySegment(segmentId: number) {
-    const normalizedSegmentId = Math.round(Number(segmentId));
-    if (
-      !Number.isSafeInteger(normalizedSegmentId) ||
-      normalizedSegmentId <= 0
-    ) {
-      return false;
-    }
+  retainOverlaySegment(segmentId: bigint) {
+    if (segmentId === 0n) return false;
     // Refresh recency on every edit, not just the first, so a segment under
     // continuous editing doesn't age out of the pool between retains.
     const changed = this.applyRetainedOverlaySegments(
       retainSpatiallyIndexedSkeletonOverlaySegment(
         this.retainedOverlaySegments,
-        normalizedSegmentId,
+        segmentId,
         ++this.overlaySegmentTouchCounter,
         { maxRetained: this.maxRetainedOverlaySegments },
       ),
@@ -2741,15 +2717,9 @@ export class SpatiallyIndexedSkeletonLayer
    * coordinate. The returned release is idempotent and does not retain the
    * segment as edited; an adopted exact projection does that separately.
    */
-  beginTemporaryBrowseExclusion(segmentId: number): () => boolean {
-    const normalizedSegmentId = Math.round(Number(segmentId));
-    if (
-      !Number.isSafeInteger(normalizedSegmentId) ||
-      normalizedSegmentId <= 0
-    ) {
-      return () => false;
-    }
-    const exclusion = { segmentId: normalizedSegmentId };
+  beginTemporaryBrowseExclusion(segmentId: bigint): () => boolean {
+    if (segmentId === 0n) return () => false;
+    const exclusion = { segmentId };
     this.temporaryBrowseExclusions.add(exclusion);
     ++this.browseExcludedSegmentIdsVersion;
     this.redrawNeeded.dispatch();
@@ -2844,11 +2814,7 @@ export class SpatiallyIndexedSkeletonLayer
       return undefined;
     }
     this.browseExcludedSegments.clear();
-    this.browseExcludedSegments.add(
-      [...segmentIds]
-        .sort((a, b) => a - b)
-        .map((segmentId) => BigInt(segmentId)),
-    );
+    this.browseExcludedSegments.add([...segmentIds].sort(bigintCompare));
     this.cachedBrowseExcludedResult = this.browseExcludedSegments;
     return this.browseExcludedSegments;
   }
@@ -2862,7 +2828,7 @@ export class SpatiallyIndexedSkeletonLayer
     return new SkeletonOverlayChunk(
       this.gl,
       geometry,
-      this.overlayAttributeTextureFormats,
+      overlayPositionTextureFormat,
     );
   }
 
@@ -3251,7 +3217,7 @@ export class SpatiallyIndexedSkeletonLayer
     return view === "2d" ? this.sources2d : this.sources;
   }
 
-  private getCachedNodeSnapshot(nodeId: number) {
+  private getCachedNodeSnapshot(nodeId: bigint) {
     const cachedNode = this.getCachedNodeInfo?.(nodeId);
     if (cachedNode === undefined) {
       return undefined;
@@ -3289,7 +3255,7 @@ export class SpatiallyIndexedSkeletonLayer
       if (nodeId === undefined) return;
       const segmentId = info?.segmentId;
       if (segmentId !== undefined) {
-        const effectiveAlpha = visibleSegments.has(BigInt(segmentId))
+        const effectiveAlpha = visibleSegments.has(segmentId)
           ? objectAlpha
           : hiddenObjectAlpha;
         if (effectiveAlpha <= 0) return;
@@ -3401,75 +3367,25 @@ export class SpatiallyIndexedSkeletonLayer
     ];
   }
 
-  private getChunkPositionAndSegmentArrays(
-    chunk: SpatiallyIndexedSkeletonChunk,
-  ) {
-    const offsets = chunk.vertexAttributeOffsets;
-    if (!offsets || offsets.length < 2) return undefined;
-    const positions = new Float32Array(
-      chunk.vertexAttributes.buffer,
-      chunk.vertexAttributes.byteOffset + offsets[0],
-      chunk.numVertices * 3,
-    );
-    const segmentIds = new Uint32Array(
-      chunk.vertexAttributes.buffer,
-      chunk.vertexAttributes.byteOffset + offsets[1],
-      chunk.numVertices,
-    );
-    return { positions, segmentIds };
-  }
-
-  resolveSegmentPickFromChunk(
-    chunk: SpatiallyIndexedSkeletonChunk,
-    pickedOffset: number,
-    kind: "node" | "edge",
-  ) {
-    const data = this.getChunkPositionAndSegmentArrays(chunk);
-    if (data === undefined) {
-      return undefined;
-    }
-    return resolveSpatiallyIndexedSkeletonSegmentPick(
-      chunk,
-      data.segmentIds,
-      pickedOffset,
-      kind,
-    );
-  }
-
-  resolveNodePickFromChunk(
-    chunk: SpatiallyIndexedSkeletonChunk,
-    pickedOffset: number,
-  ) {
-    const data = this.getChunkPositionAndSegmentArrays(chunk);
-    if (
-      data === undefined ||
-      pickedOffset < 0 ||
-      pickedOffset >= chunk.numVertices ||
-      pickedOffset >= chunk.nodeIds.length
-    ) {
-      return undefined;
-    }
-    const nodeId = chunk.nodeIds[pickedOffset];
-    if (!Number.isSafeInteger(nodeId) || nodeId <= 0) {
-      return undefined;
-    }
+  resolveNodePick(geometry: SkeletonPickGeometry, pickedOffset: number) {
     const segmentId = resolveSpatiallyIndexedSkeletonSegmentPick(
-      chunk,
-      data.segmentIds,
+      geometry,
       pickedOffset,
       "node",
     );
-    if (segmentId === undefined) {
-      return undefined;
-    }
-    const baseOffset = pickedOffset * 3;
+    if (segmentId === undefined) return undefined;
+    const nodeId = geometry.nodeIds[pickedOffset];
+    // A pick buffer can outlive a topology update or come from a stale
+    // spatial cell. Use the complete node snapshot whenever it is available.
     const cachedNode = this.getCachedNodeSnapshot(nodeId);
+    const baseOffset = pickedOffset * 3;
     return {
       nodeId,
       segmentId: cachedNode?.segmentId ?? segmentId,
-      position:
+      position: new Float32Array(
         cachedNode?.position ??
-        data.positions.subarray(baseOffset, baseOffset + 3),
+          geometry.nodePositions.subarray(baseOffset, baseOffset + 3),
+      ),
     };
   }
 
@@ -3621,8 +3537,8 @@ export class SpatiallyIndexedSkeletonLayer
     return ready;
   }
 
-  getNode(nodeId: number): SpatiallyIndexedSkeletonNode | undefined {
-    if (!Number.isSafeInteger(nodeId) || nodeId <= 0) return undefined;
+  getNode(nodeId: bigint): SpatiallyIndexedSkeletonNode | undefined {
+    if (nodeId <= 0n) return undefined;
     return this.getCachedNodeSnapshot(nodeId);
   }
 
@@ -3771,7 +3687,7 @@ export class SpatiallyIndexedSkeletonLayer
             0n,
             {
               kind: "segment-edge",
-              chunk,
+              geometry: chunk,
             } satisfies SpatiallyIndexedSkeletonPickData,
           );
           edgePickStride = 1;
@@ -3783,7 +3699,7 @@ export class SpatiallyIndexedSkeletonLayer
             0n,
             {
               kind: "segment-node",
-              chunk,
+              geometry: chunk,
             } satisfies SpatiallyIndexedSkeletonPickData,
           );
           nodePickStride = 1;
@@ -3911,15 +3827,14 @@ export class SpatiallyIndexedSkeletonLayer
     for (const overlayChunk of overlayChunks) {
       if (renderContext.emitPickID) {
         const edgePickId =
-          overlayChunk.numIndices > 0 &&
-          overlayChunk.pickEdgeSegmentIds.length > 0
+          overlayChunk.numIndices > 0
             ? renderContext.pickIDs.register(
                 layer,
-                overlayChunk.pickEdgeSegmentIds.length,
+                overlayChunk.numIndices / 2,
                 0n,
                 {
                   kind: "edge",
-                  segmentIds: overlayChunk.pickEdgeSegmentIds,
+                  geometry: overlayChunk,
                 } satisfies SpatiallyIndexedSkeletonPickData,
               )
             : 0;
@@ -3939,9 +3854,7 @@ export class SpatiallyIndexedSkeletonLayer
                 0n,
                 {
                   kind: "node",
-                  nodeIds: overlayChunk.pickNodeIds,
-                  nodePositions: overlayChunk.pickNodePositions,
-                  segmentIds: overlayChunk.pickSegmentIds,
+                  geometry: overlayChunk,
                 } satisfies SpatiallyIndexedSkeletonPickData,
               )
             : 0;
@@ -4037,14 +3950,7 @@ export class SpatiallyIndexedSkeletonLayer
 function transformSpatiallyIndexedSkeletonPickedValue(
   pickState: PickState,
 ): bigint | undefined {
-  const pickedSegmentId = pickState.pickedSpatialSkeleton?.segmentId;
-  if (
-    typeof pickedSegmentId === "number" &&
-    Number.isSafeInteger(pickedSegmentId)
-  ) {
-    return BigInt(pickedSegmentId);
-  }
-  return undefined;
+  return pickState.pickedSpatialSkeleton?.segmentId;
 }
 
 function updateSpatiallyIndexedSkeletonMouseState(
@@ -4054,76 +3960,29 @@ function updateSpatiallyIndexedSkeletonMouseState(
   data: SpatiallyIndexedSkeletonPickData | undefined,
 ): void {
   if (data === undefined) return;
-  if (data.kind === "node") {
-    if (
-      pickedOffset < 0 ||
-      pickedOffset >= data.nodeIds.length ||
-      pickedOffset >= data.segmentIds.length
-    ) {
-      return;
-    }
-    const segmentId = data.segmentIds[pickedOffset];
-    if (!Number.isSafeInteger(segmentId) || segmentId <= 0) {
-      return;
-    }
-    mouseState.pickedSpatialSkeleton = { segmentId };
-    const nodeId = data.nodeIds[pickedOffset];
-    if (!Number.isSafeInteger(nodeId) || nodeId <= 0) return;
-    // A pick buffer can outlive a topology update or come from a stale
-    // spatial cell. Use the complete node snapshot whenever it is available.
-    const cachedNode = base.getNode(nodeId);
-    const nodePosition = new Float32Array(
-      cachedNode?.position ??
-        data.nodePositions.subarray(pickedOffset * 3, pickedOffset * 3 + 3),
-    );
-    mouseState.pickedSpatialSkeleton = {
-      nodeId,
-      segmentId: cachedNode?.segmentId ?? segmentId,
-      position: nodePosition,
-    };
-    const transform = base.displayState.transform.value;
-    if (transform.error === undefined) {
-      setMouseStatePositionFromSpatialSkeletonNode(
-        mouseState,
-        nodePosition,
-        transform,
-      );
-    }
-    return;
-  }
-  if (data.kind === "edge") {
-    if (pickedOffset < 0 || pickedOffset >= data.segmentIds.length) {
-      return;
-    }
-    const segmentId = data.segmentIds[pickedOffset];
-    if (Number.isSafeInteger(segmentId) && segmentId > 0) {
-      mouseState.pickedSpatialSkeleton = { segmentId };
-    }
-    return;
-  }
-  if (data.kind === "segment-node" || data.kind === "segment-edge") {
-    if (data.kind === "segment-node") {
-      const pickedNode = base.resolveNodePickFromChunk(
-        data.chunk,
-        pickedOffset,
-      );
-      if (pickedNode !== undefined) {
-        mouseState.pickedSpatialSkeleton = {
-          nodeId: pickedNode.nodeId,
-          segmentId: pickedNode.segmentId,
-          position: new Float32Array(pickedNode.position),
-        };
-      }
-      return;
-    }
-    const segmentId = base.resolveSegmentPickFromChunk(
-      data.chunk,
+  const { geometry } = data;
+  if (data.kind === "edge" || data.kind === "segment-edge") {
+    const segmentId = resolveSpatiallyIndexedSkeletonSegmentPick(
+      geometry,
       pickedOffset,
       "edge",
     );
     if (segmentId !== undefined) {
       mouseState.pickedSpatialSkeleton = { segmentId };
     }
+    return;
+  }
+  const pickedNode = base.resolveNodePick(geometry, pickedOffset);
+  if (pickedNode === undefined) return;
+  mouseState.pickedSpatialSkeleton = pickedNode;
+  if (data.kind === "segment-node") return;
+  const transform = base.displayState.transform.value;
+  if (transform.error === undefined) {
+    setMouseStatePositionFromSpatialSkeletonNode(
+      mouseState,
+      pickedNode.position,
+      transform,
+    );
   }
 }
 

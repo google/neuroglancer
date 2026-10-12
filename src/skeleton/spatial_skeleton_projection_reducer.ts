@@ -188,17 +188,17 @@ export interface SpatialSkeletonProjectionApplyResult {
 
 /** Cache snapshot access used to capture the projection baseline. */
 export interface SpatialSkeletonProjectionSnapshotHandleSource {
-  getCachedSegmentSnapshotHandle(segmentId: number):
+  getCachedSegmentSnapshotHandle(segmentId: bigint):
     | {
         readonly handle: CompleteSkeletonSnapshotHandle;
         readonly cacheRevision: number;
       }
     | undefined;
-  getCachedSegmentRevision(segmentId: number): number;
+  getCachedSegmentRevision(segmentId: bigint): number;
 }
 
 export type SpatialSkeletonProjectionLogicalMappings = Pick<
-  SpatialSkeletonLogicalHandleMappings<number, number>,
+  SpatialSkeletonLogicalHandleMappings<bigint, bigint>,
   "resolveNode" | "resolveSegment" | "findNodes"
 >;
 
@@ -225,11 +225,6 @@ function requireNodeId(
       `Logical node ${handle.stableId} has no physical mapping.`,
     );
   }
-  if (!Number.isSafeInteger(nodeId)) {
-    throw new SpatialSkeletonProjectionValidationError(
-      `Logical node ${handle.stableId} maps to invalid node id ${nodeId}.`,
-    );
-  }
   return nodeId;
 }
 
@@ -243,17 +238,12 @@ function requireSegmentId(
       `Logical segment ${handle.stableId} has no physical mapping.`,
     );
   }
-  if (!Number.isSafeInteger(segmentId)) {
-    throw new SpatialSkeletonProjectionValidationError(
-      `Logical segment ${handle.stableId} maps to invalid segment id ${segmentId}.`,
-    );
-  }
   return segmentId;
 }
 
 function requireNodeHandle(
   mappings: ProjectionMappings,
-  nodeId: number,
+  nodeId: bigint,
   context: string,
 ) {
   const handles = mappings.findNodes(nodeId);
@@ -468,7 +458,7 @@ function requireNode(
 
 function getChildren(
   snapshot: CompleteSkeletonSnapshotHandle,
-  parentNodeId: number,
+  parentNodeId: bigint,
 ) {
   const result: SpatiallyIndexedSkeletonNode[] = [];
   snapshot.forEachNode((node) => {
@@ -479,10 +469,10 @@ function getChildren(
 
 function getPathToRoot(
   snapshot: CompleteSkeletonSnapshotHandle,
-  startNodeId: number,
+  startNodeId: bigint,
 ) {
   const result: SpatiallyIndexedSkeletonNode[] = [];
-  const seen = new Set<number>();
+  const seen = new Set<bigint>();
   let node = snapshot.getNode(startNodeId);
   while (node !== undefined) {
     if (seen.has(node.nodeId)) {
@@ -505,14 +495,14 @@ function getPathToRoot(
 
 function getSubtreeNodeIds(
   snapshot: CompleteSkeletonSnapshotHandle,
-  rootNodeId: number,
+  rootNodeId: bigint,
 ) {
   if (snapshot.getNode(rootNodeId) === undefined) {
     throw new SpatialSkeletonProjectionValidationError(
       `Cannot collect a subtree rooted at missing node ${rootNodeId}.`,
     );
   }
-  const childrenByParent = new Map<number, number[]>();
+  const childrenByParent = new Map<bigint, bigint[]>();
   snapshot.forEachNode((node) => {
     if (node.parentNodeId === undefined) return;
     let children = childrenByParent.get(node.parentNodeId);
@@ -522,7 +512,7 @@ function getSubtreeNodeIds(
     }
     children.push(node.nodeId);
   });
-  const result = new Set<number>();
+  const result = new Set<bigint>();
   const pending = [rootNodeId];
   while (pending.length !== 0) {
     const nodeId = pending.pop()!;
@@ -539,7 +529,7 @@ function getSubtreeNodeIds(
 
 function rerootSnapshot(
   snapshot: CompleteSkeletonSnapshotHandle,
-  targetNodeId: number,
+  targetNodeId: bigint,
 ) {
   const target = snapshot.getNode(targetNodeId);
   if (target === undefined) {
@@ -609,7 +599,7 @@ function applyAdd(
   const nodeId = requireNodeId(mappings, delta.node);
   const segmentId = requireSegmentId(mappings, delta.segment);
   const existingEntry = projection.resolveSegment(delta.segment, mappings);
-  let parentNodeId: number | undefined;
+  let parentNodeId: bigint | undefined;
   if (delta.parent === undefined) {
     if (existingEntry !== undefined) {
       throw new SpatialSkeletonProjectionValidationError(
@@ -854,9 +844,9 @@ function applyReroot(
 
 function remapSingleSnapshotSegment(
   snapshot: CompleteSkeletonSnapshotHandle,
-  segmentId: number,
+  segmentId: bigint,
   overrides: readonly {
-    nodeId: number;
+    nodeId: bigint;
     changes: CompleteSkeletonNodeChanges;
   }[] = [],
 ) {

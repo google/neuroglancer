@@ -31,8 +31,8 @@ import {
 } from "#src/skeleton/navigation_graph.js";
 
 function makeNode(
-  nodeId: number,
-  parentNodeId: number | undefined,
+  nodeId: bigint,
+  parentNodeId: bigint | undefined,
   options: {
     description?: string;
     isTrueEnd?: boolean;
@@ -40,8 +40,12 @@ function makeNode(
 ): SpatiallyIndexedSkeletonNode {
   return {
     nodeId,
-    segmentId: 42,
-    position: new Float32Array([nodeId, nodeId + 0.5, nodeId + 1]),
+    segmentId: 42n,
+    position: new Float32Array([
+      Number(nodeId),
+      Number(nodeId) + 0.5,
+      Number(nodeId) + 1,
+    ]),
     parentNodeId,
     description: options.description,
     isTrueEnd: options.isTrueEnd ?? false,
@@ -50,144 +54,154 @@ function makeNode(
 
 describe("skeleton/navigation", () => {
   const graph = buildSpatiallyIndexedSkeletonNavigationGraph([
-    makeNode(1, undefined),
-    makeNode(2, 1),
-    makeNode(3, 2),
-    makeNode(4, 3),
-    makeNode(5, 4, { description: "checkpoint" }),
-    makeNode(6, 5),
-    makeNode(7, 3),
-    makeNode(8, 3),
-    makeNode(9, 8),
-    makeNode(10, 9, { isTrueEnd: true }),
-    makeNode(11, 9),
+    makeNode(1n, undefined),
+    makeNode(2n, 1n),
+    makeNode(3n, 2n),
+    makeNode(4n, 3n),
+    makeNode(5n, 4n, { description: "checkpoint" }),
+    makeNode(6n, 5n),
+    makeNode(7n, 3n),
+    makeNode(8n, 3n),
+    makeNode(9n, 8n),
+    makeNode(10n, 9n, { isTrueEnd: true }),
+    makeNode(11n, 9n),
   ]);
 
   it("finds the skeleton root and branch starts", () => {
-    expect(getSkeletonRootNode(graph).nodeId).toBe(1);
-    expect(getBranchStart(graph, 6).nodeId).toBe(3);
-    expect(getBranchStart(graph, 3).nodeId).toBe(1);
-    expect(getBranchStart(graph, 2).nodeId).toBe(1);
-    expect(getBranchStart(graph, 1).nodeId).toBe(1);
+    expect(getSkeletonRootNode(graph).nodeId).toBe(1n);
+    expect(getBranchStart(graph, 6n).nodeId).toBe(3n);
+    expect(getBranchStart(graph, 3n).nodeId).toBe(1n);
+    expect(getBranchStart(graph, 2n).nodeId).toBe(1n);
+    expect(getBranchStart(graph, 1n).nodeId).toBe(1n);
   });
 
   it("walks a degenerate, unbranched skeleton to the root", () => {
     const chainGraph = buildSpatiallyIndexedSkeletonNavigationGraph([
-      makeNode(1, undefined),
-      makeNode(2, 1),
-      makeNode(3, 2),
-      makeNode(4, 3),
+      makeNode(1n, undefined),
+      makeNode(2n, 1n),
+      makeNode(3n, 2n),
+      makeNode(4n, 3n),
     ]);
 
-    expect(getBranchStart(chainGraph, 4).nodeId).toBe(1);
-    expect(getBranchStart(chainGraph, 3).nodeId).toBe(1);
-    expect(getBranchStart(chainGraph, 2).nodeId).toBe(1);
-    expect(getBranchStart(chainGraph, 1).nodeId).toBe(1);
+    expect(getBranchStart(chainGraph, 4n).nodeId).toBe(1n);
+    expect(getBranchStart(chainGraph, 3n).nodeId).toBe(1n);
+    expect(getBranchStart(chainGraph, 2n).nodeId).toBe(1n);
+    expect(getBranchStart(chainGraph, 1n).nodeId).toBe(1n);
   });
 
   it("walks past a branch point to the previous branch point or root", () => {
     const nestedForkGraph = buildSpatiallyIndexedSkeletonNavigationGraph([
-      makeNode(1, undefined),
-      makeNode(2, 1),
-      makeNode(3, 2),
-      makeNode(4, 2),
-      makeNode(5, 3),
-      makeNode(6, 3),
+      makeNode(1n, undefined),
+      makeNode(2n, 1n),
+      makeNode(3n, 2n),
+      makeNode(4n, 2n),
+      makeNode(5n, 3n),
+      makeNode(6n, 3n),
     ]);
 
-    expect(getBranchStart(nestedForkGraph, 6).nodeId).toBe(3);
-    expect(getBranchStart(nestedForkGraph, 3).nodeId).toBe(2);
-    expect(getBranchStart(nestedForkGraph, 2).nodeId).toBe(1);
-    expect(getBranchStart(nestedForkGraph, 1).nodeId).toBe(1);
+    expect(getBranchStart(nestedForkGraph, 6n).nodeId).toBe(3n);
+    expect(getBranchStart(nestedForkGraph, 3n).nodeId).toBe(2n);
+    expect(getBranchStart(nestedForkGraph, 2n).nodeId).toBe(1n);
+    expect(getBranchStart(nestedForkGraph, 1n).nodeId).toBe(1n);
   });
 
   it("prefers a downstream branch over a leaf for branch-end navigation", () => {
     const preferenceGraph = buildSpatiallyIndexedSkeletonNavigationGraph([
-      makeNode(1, undefined),
-      makeNode(2, 1),
-      makeNode(3, 1),
-      makeNode(4, 3),
-      makeNode(5, 4),
-      makeNode(6, 4),
+      makeNode(1n, undefined),
+      makeNode(2n, 1n),
+      makeNode(3n, 1n),
+      makeNode(4n, 3n),
+      makeNode(5n, 4n),
+      makeNode(6n, 4n),
     ]);
 
-    expect(getBranchEnd(preferenceGraph, 1).nodeId).toBe(4);
-    expect(getBranchEnd(preferenceGraph, 3).nodeId).toBe(4);
-    expect(getBranchEnd(preferenceGraph, 2).nodeId).toBe(2);
+    expect(getBranchEnd(preferenceGraph, 1n).nodeId).toBe(4n);
+    expect(getBranchEnd(preferenceGraph, 3n).nodeId).toBe(4n);
+    expect(getBranchEnd(preferenceGraph, 2n).nodeId).toBe(2n);
   });
 
   it("randomly resolves ties between equally preferred branch-end candidates", () => {
     const tiedGraph = buildSpatiallyIndexedSkeletonNavigationGraph([
-      makeNode(1, undefined),
-      makeNode(2, 1),
-      makeNode(3, 2),
-      makeNode(4, 2),
-      makeNode(5, 1),
-      makeNode(6, 5),
-      makeNode(7, 5),
+      makeNode(1n, undefined),
+      makeNode(2n, 1n),
+      makeNode(3n, 2n),
+      makeNode(4n, 2n),
+      makeNode(5n, 1n),
+      makeNode(6n, 5n),
+      makeNode(7n, 5n),
     ]);
 
-    expect(getBranchEnd(tiedGraph, 1, { random: () => 0 }).nodeId).toBe(2);
-    expect(getBranchEnd(tiedGraph, 1, { random: () => 0.99 }).nodeId).toBe(5);
+    expect(getBranchEnd(tiedGraph, 1n, { random: () => 0 }).nodeId).toBe(2n);
+    expect(getBranchEnd(tiedGraph, 1n, { random: () => 0.99 }).nodeId).toBe(5n);
   });
 
   it("orders flat-list rows in leaf-first pre-order", () => {
     const listGraph = buildSpatiallyIndexedSkeletonNavigationGraph([
-      makeNode(1, undefined),
-      makeNode(2, 1),
-      makeNode(3, 1),
-      makeNode(4, 1),
-      makeNode(5, 2),
-      makeNode(6, 4),
-      makeNode(7, 4),
-      makeNode(8, 1, { isTrueEnd: true }),
-      makeNode(9, 8),
+      makeNode(1n, undefined),
+      makeNode(2n, 1n),
+      makeNode(3n, 1n),
+      makeNode(4n, 1n),
+      makeNode(5n, 2n),
+      makeNode(6n, 4n),
+      makeNode(7n, 4n),
+      makeNode(8n, 1n, { isTrueEnd: true }),
+      makeNode(9n, 8n),
     ]);
 
-    expect(getFlatListNodeIds(listGraph)).toEqual([1, 3, 8, 9, 4, 6, 7, 2, 5]);
+    expect(getFlatListNodeIds(listGraph)).toEqual([
+      1n,
+      3n,
+      8n,
+      9n,
+      4n,
+      6n,
+      7n,
+      2n,
+      5n,
+    ]);
   });
 
   it("orders flat-list rows by collapsed branches in leaf-first pre-order", () => {
     const listGraph = buildSpatiallyIndexedSkeletonNavigationGraph([
-      makeNode(1, undefined),
-      makeNode(2, 1),
-      makeNode(3, 2),
-      makeNode(4, 3),
-      makeNode(5, 3),
-      makeNode(6, 2),
-      makeNode(7, 6),
+      makeNode(1n, undefined),
+      makeNode(2n, 1n),
+      makeNode(3n, 2n),
+      makeNode(4n, 3n),
+      makeNode(5n, 3n),
+      makeNode(6n, 2n),
+      makeNode(7n, 6n),
     ]);
 
     expect(
       getFlatListNodeIds(listGraph, {
         collapseRegularNodesForOrdering: true,
       }),
-    ).toEqual([1, 2, 6, 7, 3, 4, 5]);
+    ).toEqual([1n, 2n, 6n, 7n, 3n, 4n, 5n]);
   });
 
   it("keeps a branch adjacent to its own leaf-first descendants", () => {
     const listGraph = buildSpatiallyIndexedSkeletonNavigationGraph([
-      makeNode(1, undefined),
-      makeNode(2, 1),
-      makeNode(3, 1),
-      makeNode(4, 2),
-      makeNode(5, 2),
-      makeNode(6, 3),
-      makeNode(7, 3),
+      makeNode(1n, undefined),
+      makeNode(2n, 1n),
+      makeNode(3n, 1n),
+      makeNode(4n, 2n),
+      makeNode(5n, 2n),
+      makeNode(6n, 3n),
+      makeNode(7n, 3n),
     ]);
 
     expect(
       getFlatListNodeIds(listGraph, {
         collapseRegularNodesForOrdering: true,
       }),
-    ).toEqual([1, 2, 4, 5, 3, 6, 7]);
+    ).toEqual([1n, 2n, 4n, 5n, 3n, 6n, 7n]);
   });
 
   it("returns deterministic direct parent and child navigation targets", () => {
-    expect(getParentNode(graph, 6)?.nodeId).toBe(5);
-    expect(getParentNode(graph, 1)).toBeUndefined();
-    expect(getChildNode(graph, 3)?.nodeId).toBe(7);
-    expect(getChildNode(graph, 11)).toBeUndefined();
+    expect(getParentNode(graph, 6n)?.nodeId).toBe(5n);
+    expect(getParentNode(graph, 1n)).toBeUndefined();
+    expect(getChildNode(graph, 3n)?.nodeId).toBe(7n);
+    expect(getChildNode(graph, 11n)).toBeUndefined();
   });
 
   describe("getPathBetweenNodes", () => {
@@ -195,53 +209,65 @@ describe("skeleton/navigation", () => {
       path?.map(({ nodeId }) => nodeId);
 
     it("returns endpoint-inclusive paths across direct edges and branches", () => {
-      expect(getNodeIds(getPathBetweenNodes(graph, 5, 6))).toEqual([5, 6]);
-      expect(getNodeIds(getPathBetweenNodes(graph, 6, 7))).toEqual([
-        6, 5, 4, 3, 7,
+      expect(getNodeIds(getPathBetweenNodes(graph, 5n, 6n))).toEqual([5n, 6n]);
+      expect(getNodeIds(getPathBetweenNodes(graph, 6n, 7n))).toEqual([
+        6n,
+        5n,
+        4n,
+        3n,
+        7n,
       ]);
     });
 
     it("finds the same route in reverse order", () => {
-      expect(getNodeIds(getPathBetweenNodes(graph, 7, 6))).toEqual([
-        7, 3, 4, 5, 6,
+      expect(getNodeIds(getPathBetweenNodes(graph, 7n, 6n))).toEqual([
+        7n,
+        3n,
+        4n,
+        5n,
+        6n,
       ]);
     });
 
     it("returns a singleton path only for an existing node", () => {
-      const path = getPathBetweenNodes(graph, 3, 3);
-      expect(getNodeIds(path)).toEqual([3]);
-      expect(path?.[0].position).toBe(graph.nodeById.get(3)?.position);
-      expect(getPathBetweenNodes(graph, 99, 99)).toBeUndefined();
+      const path = getPathBetweenNodes(graph, 3n, 3n);
+      expect(getNodeIds(path)).toEqual([3n]);
+      expect(path?.[0].position).toBe(graph.nodeById.get(3n)?.position);
+      expect(getPathBetweenNodes(graph, 99n, 99n)).toBeUndefined();
     });
 
     it("returns undefined for missing or disconnected nodes", () => {
       const disconnectedGraph = buildSpatiallyIndexedSkeletonNavigationGraph([
-        makeNode(1, undefined),
-        makeNode(2, 1),
-        makeNode(3, undefined),
-        makeNode(4, 3),
+        makeNode(1n, undefined),
+        makeNode(2n, 1n),
+        makeNode(3n, undefined),
+        makeNode(4n, 3n),
       ]);
 
-      expect(getPathBetweenNodes(disconnectedGraph, 1, 99)).toBeUndefined();
-      expect(getPathBetweenNodes(disconnectedGraph, 99, 1)).toBeUndefined();
-      expect(getPathBetweenNodes(disconnectedGraph, 1, 4)).toBeUndefined();
+      expect(getPathBetweenNodes(disconnectedGraph, 1n, 99n)).toBeUndefined();
+      expect(getPathBetweenNodes(disconnectedGraph, 99n, 1n)).toBeUndefined();
+      expect(getPathBetweenNodes(disconnectedGraph, 1n, 4n)).toBeUndefined();
     });
 
     it("is cycle-safe and chooses deterministic shortest paths", () => {
       const cycleGraph = buildSpatiallyIndexedSkeletonNavigationGraph([
-        makeNode(1, 4),
-        makeNode(2, 1),
-        makeNode(3, 2),
-        makeNode(4, 3),
+        makeNode(1n, 4n),
+        makeNode(2n, 1n),
+        makeNode(3n, 2n),
+        makeNode(4n, 3n),
       ]);
 
       // Both 1-2-3 and 1-4-3 are shortest paths. Node 2 is visited first.
-      expect(getNodeIds(getPathBetweenNodes(cycleGraph, 1, 3))).toEqual([
-        1, 2, 3,
+      expect(getNodeIds(getPathBetweenNodes(cycleGraph, 1n, 3n))).toEqual([
+        1n,
+        2n,
+        3n,
       ]);
       // The ascending-neighbor tie break applies independently in reverse.
-      expect(getNodeIds(getPathBetweenNodes(cycleGraph, 3, 1))).toEqual([
-        3, 2, 1,
+      expect(getNodeIds(getPathBetweenNodes(cycleGraph, 3n, 1n))).toEqual([
+        3n,
+        2n,
+        1n,
       ]);
     });
 
@@ -249,65 +275,65 @@ describe("skeleton/navigation", () => {
       const nodeCount = 10_000;
       const chainGraph = buildSpatiallyIndexedSkeletonNavigationGraph(
         Array.from({ length: nodeCount }, (_, index) =>
-          makeNode(index + 1, index === 0 ? undefined : index),
+          makeNode(BigInt(index + 1), index === 0 ? undefined : BigInt(index)),
         ),
       );
 
-      const path = getPathBetweenNodes(chainGraph, 1, nodeCount);
+      const path = getPathBetweenNodes(chainGraph, 1n, BigInt(nodeCount));
       expect(path).toHaveLength(nodeCount);
-      expect(path?.[0].nodeId).toBe(1);
-      expect(path?.[nodeCount - 1].nodeId).toBe(nodeCount);
+      expect(path?.[0].nodeId).toBe(1n);
+      expect(path?.[nodeCount - 1].nodeId).toBe(BigInt(nodeCount));
     });
   });
 
   it("cycles through collapsed-level nodes and skips regular nodes", () => {
     const collapsedGraph = buildSpatiallyIndexedSkeletonNavigationGraph([
-      makeNode(1, undefined),
-      makeNode(2, 1),
-      makeNode(3, 2),
-      makeNode(4, 1),
-      makeNode(5, 1),
-      makeNode(6, 4),
-      makeNode(7, 4),
+      makeNode(1n, undefined),
+      makeNode(2n, 1n),
+      makeNode(3n, 2n),
+      makeNode(4n, 1n),
+      makeNode(5n, 1n),
+      makeNode(6n, 4n),
+      makeNode(7n, 4n),
     ]);
 
-    expect(getNextCollapsedLevelNode(collapsedGraph, 1).nodeId).toBe(1);
-    expect(getNextCollapsedLevelNode(collapsedGraph, 2).nodeId).toBe(2);
-    expect(getNextCollapsedLevelNode(collapsedGraph, 5).nodeId).toBe(4);
-    expect(getNextCollapsedLevelNode(collapsedGraph, 4).nodeId).toBe(3);
-    expect(getNextCollapsedLevelNode(collapsedGraph, 3).nodeId).toBe(5);
+    expect(getNextCollapsedLevelNode(collapsedGraph, 1n).nodeId).toBe(1n);
+    expect(getNextCollapsedLevelNode(collapsedGraph, 2n).nodeId).toBe(2n);
+    expect(getNextCollapsedLevelNode(collapsedGraph, 5n).nodeId).toBe(4n);
+    expect(getNextCollapsedLevelNode(collapsedGraph, 4n).nodeId).toBe(3n);
+    expect(getNextCollapsedLevelNode(collapsedGraph, 3n).nodeId).toBe(5n);
   });
 
   it("cycles collapsed-level nodes using collapsed leaf-first ordering", () => {
     const collapsedGraph = buildSpatiallyIndexedSkeletonNavigationGraph([
-      makeNode(1, undefined),
-      makeNode(2, 1),
-      makeNode(3, 2),
-      makeNode(4, 3),
-      makeNode(5, 3),
-      makeNode(6, 2),
-      makeNode(7, 6),
+      makeNode(1n, undefined),
+      makeNode(2n, 1n),
+      makeNode(3n, 2n),
+      makeNode(4n, 3n),
+      makeNode(5n, 3n),
+      makeNode(6n, 2n),
+      makeNode(7n, 6n),
     ]);
 
-    expect(getNextCollapsedLevelNode(collapsedGraph, 6).nodeId).toBe(6);
-    expect(getNextCollapsedLevelNode(collapsedGraph, 7).nodeId).toBe(3);
-    expect(getNextCollapsedLevelNode(collapsedGraph, 3).nodeId).toBe(7);
+    expect(getNextCollapsedLevelNode(collapsedGraph, 6n).nodeId).toBe(6n);
+    expect(getNextCollapsedLevelNode(collapsedGraph, 7n).nodeId).toBe(3n);
+    expect(getNextCollapsedLevelNode(collapsedGraph, 3n).nodeId).toBe(7n);
   });
 
   it("finds unfinished leaves from any selected node and filters closed ends", () => {
     expect(
-      getOpenLeaves(graph, 3).map((leaf) => [leaf.nodeId, leaf.distance]),
+      getOpenLeaves(graph, 3n).map((leaf) => [leaf.nodeId, leaf.distance]),
     ).toEqual([
-      [7, 1],
-      [6, 3],
-      [11, 3],
+      [7n, 1],
+      [6n, 3],
+      [11n, 3],
     ]);
     expect(
-      getOpenLeaves(graph, 1).map((leaf) => [leaf.nodeId, leaf.distance]),
+      getOpenLeaves(graph, 1n).map((leaf) => [leaf.nodeId, leaf.distance]),
     ).toEqual([
-      [7, 3],
-      [6, 5],
-      [11, 5],
+      [7n, 3],
+      [6n, 5],
+      [11n, 5],
     ]);
   });
 });

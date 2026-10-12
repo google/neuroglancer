@@ -35,25 +35,26 @@ import {
   type SpatialSkeletonProjectionDelta,
   type SpatialSkeletonProjectionForwardDelta,
 } from "#src/skeleton/spatial_skeleton_projection_reducer.js";
+import { bigintCompare } from "#src/util/bigint.js";
 
 function node(
-  nodeId: number,
-  segmentId: number,
-  parentNodeId?: number,
+  nodeId: bigint,
+  segmentId: bigint,
+  parentNodeId?: bigint,
   options: Partial<SpatiallyIndexedSkeletonNode> = {},
 ): SpatiallyIndexedSkeletonNode {
   return {
     nodeId,
     segmentId,
     parentNodeId,
-    position: [nodeId, nodeId + 0.25, nodeId + 0.5],
-    confidence: parentNodeId === undefined ? 100 : 70 + (nodeId % 20),
+    position: [Number(nodeId), Number(nodeId) + 0.25, Number(nodeId) + 0.5],
+    confidence: parentNodeId === undefined ? 100 : 70 + Number(nodeId % 20n),
     ...options,
   };
 }
 
 interface Fixture {
-  mappings: SpatialSkeletonLogicalHandleMappings<number, number>;
+  mappings: SpatialSkeletonLogicalHandleMappings<bigint, bigint>;
   baseline: SpatialSkeletonProjectionWorkspace;
   segmentA: SpatialSkeletonLogicalSegmentHandle;
   segmentB: SpatialSkeletonLogicalSegmentHandle;
@@ -63,17 +64,17 @@ interface Fixture {
 }
 
 function fixture(): Fixture {
-  const mappings = new SpatialSkeletonLogicalHandleMappings<number, number>();
+  const mappings = new SpatialSkeletonLogicalHandleMappings<bigint, bigint>();
   const segmentA = spatialSkeletonLogicalSegment("A");
   const segmentB = spatialSkeletonLogicalSegment("B");
   const segmentC = spatialSkeletonLogicalSegment("C");
   const splitSegment = spatialSkeletonLogicalSegment("A:split");
   mappings.apply({
     segments: [
-      [segmentA, 10],
-      [segmentB, 20],
-      [segmentC, 30],
-      [splitSegment, -30],
+      [segmentA, 10n],
+      [segmentB, 20n],
+      [segmentC, 30n],
+      [splitSegment, -30n],
     ],
   });
   const nodes = Object.fromEntries(
@@ -85,25 +86,25 @@ function fixture(): Fixture {
   mappings.apply({
     nodes: Object.entries(nodes).map(([key, handle]) => [
       handle,
-      Number(key.slice(1)),
+      BigInt(key.slice(1)),
     ]),
   });
   const baseline = new SpatialSkeletonProjectionWorkspace([
     {
       segment: segmentA,
       snapshot: createCompleteSkeletonSnapshot([
-        node(1, 10),
-        node(2, 10, 1),
-        node(3, 10, 2),
-        node(4, 10, 2),
+        node(1n, 10n),
+        node(2n, 10n, 1n),
+        node(3n, 10n, 2n),
+        node(4n, 10n, 2n),
       ]),
     },
     {
       segment: segmentB,
       snapshot: createCompleteSkeletonSnapshot([
-        node(10, 20),
-        node(11, 20, 10),
-        node(12, 20, 11),
+        node(10n, 20n),
+        node(11n, 20n, 10n),
+        node(12n, 20n, 11n),
       ]),
     },
   ]);
@@ -134,7 +135,7 @@ function normalized(projection: SpatialSkeletonProjectionWorkspace) {
           description: value.description,
           isTrueEnd: value.isTrueEnd,
         }))
-        .sort((a, b) => a.nodeId - b.nodeId),
+        .sort((a, b) => bigintCompare(a.nodeId, b.nodeId)),
     }))
     .sort((a, b) => a.segment.localeCompare(b.segment));
 }
@@ -142,7 +143,7 @@ function normalized(projection: SpatialSkeletonProjectionWorkspace) {
 function deepenSnapshotToCheckpointBoundary(
   projection: SpatialSkeletonProjectionWorkspace,
   segment: SpatialSkeletonLogicalSegmentHandle,
-  nodeId: number,
+  nodeId: bigint,
 ) {
   let snapshot = projection.getSegment(segment)!.snapshot;
   for (let depth = 1; depth < 64; ++depth) {
@@ -274,7 +275,7 @@ describe("spatial skeleton projection reducer", () => {
     expect(checkpoint).toHaveLength(1);
     expect(revisions.at(-1)?.materializationCount).toBe(0);
     const latestNodes = projection.getSegment(segmentA)?.snapshot.materialize();
-    expect(latestNodes?.find(({ nodeId }) => nodeId === 1)?.position).toEqual([
+    expect(latestNodes?.find(({ nodeId }) => nodeId === 1n)?.position).toEqual([
       63, 64, 65,
     ]);
     expect(
@@ -335,7 +336,7 @@ describe("spatial skeleton projection reducer", () => {
       const checkpointInput = deepenSnapshotToCheckpointBoundary(
         state.baseline,
         state.segmentA,
-        1,
+        1n,
       );
       const before = normalized(checkpointInput);
       const forwardDelta = delta(state);
@@ -367,7 +368,7 @@ describe("spatial skeleton projection reducer", () => {
     const checkpointInput = deepenSnapshotToCheckpointBoundary(
       state.baseline,
       state.segmentA,
-      1,
+      1n,
     );
     const before = normalized(checkpointInput);
     const forwardDelta = {
@@ -384,7 +385,7 @@ describe("spatial skeleton projection reducer", () => {
     );
 
     const provisionalNodeId = state.mappings.resolveNode(state.nodes.n100)!;
-    const authoritativeNodeId = 900;
+    const authoritativeNodeId = 900n;
     const authoritativeSnapshot = remapCompleteSkeletonSnapshot(
       executed.projection.getSegment(state.segmentA)!.snapshot,
       { nodeIds: new Map([[provisionalNodeId, authoritativeNodeId]]) },
@@ -398,7 +399,7 @@ describe("spatial skeleton projection reducer", () => {
       authoritativeProjection
         .getSegment(state.segmentA)
         ?.snapshot?.getNode(authoritativeNodeId),
-    ).toMatchObject({ parentNodeId: 3, position: [40, 41, 42] });
+    ).toMatchObject({ parentNodeId: 3n, position: [40, 41, 42] });
 
     const undone = applySpatialSkeletonProjectionDelta(
       authoritativeProjection,
@@ -428,15 +429,15 @@ describe("spatial skeleton projection reducer", () => {
   it.each([
     {
       name: "branch",
-      cutNodeId: 2,
-      remainderIds: [1, 5, 6],
-      downstreamIds: [2, 3, 4, 7],
+      cutNodeId: 2n,
+      remainderIds: [1n, 5n, 6n],
+      downstreamIds: [2n, 3n, 4n, 7n],
     },
     {
       name: "leaf",
-      cutNodeId: 4,
-      remainderIds: [1, 2, 3, 5, 6, 7],
-      downstreamIds: [4],
+      cutNodeId: 4n,
+      remainderIds: [1n, 2n, 3n, 5n, 6n, 7n],
+      downstreamIds: [4n],
     },
   ])(
     "splits a $name into exact partitions and preserves other branches",
@@ -445,13 +446,13 @@ describe("spatial skeleton projection reducer", () => {
         fixture();
       // 1 -> 2 -> {3 -> 7, 4}; 1 -> 5 -> 6.
       const sourceNodes = [
-        node(1, 10),
-        node(2, 10, 1, { radius: 12, description: "branch" }),
-        node(3, 10, 2),
-        node(4, 10, 2),
-        node(5, 10, 1),
-        node(6, 10, 5),
-        node(7, 10, 3, { isTrueEnd: true }),
+        node(1n, 10n),
+        node(2n, 10n, 1n, { radius: 12, description: "branch" }),
+        node(3n, 10n, 2n),
+        node(4n, 10n, 2n),
+        node(5n, 10n, 1n),
+        node(6n, 10n, 5n),
+        node(7n, 10n, 3n, { isTrueEnd: true }),
       ];
       const snapshot = createCompleteSkeletonSnapshot(sourceNodes);
       const input = baseline.withChanges([{ segment: segmentA, snapshot }]);
@@ -480,7 +481,7 @@ describe("spatial skeleton projection reducer", () => {
       ).toEqual(
         downstreamIds.map((id) => ({
           ...sourceById.get(id)!,
-          segmentId: -30,
+          segmentId: -30n,
           ...(id === cutNodeId ? { parentNodeId: undefined } : {}),
         })),
       );
@@ -503,10 +504,10 @@ describe("spatial skeleton projection reducer", () => {
   it.each([
     {
       name: "missing node",
-      cutNodeId: 100,
+      cutNodeId: 100n,
       error: /not present in the expected segment/,
     },
-    { name: "topology cycle", cutNodeId: 2, error: /topology cycle/ },
+    { name: "topology cycle", cutNodeId: 2n, error: /topology cycle/ },
   ])(
     "rejects a Split with a $name without changing its input",
     ({ name, cutNodeId, error }) => {
@@ -517,9 +518,9 @@ describe("spatial skeleton projection reducer", () => {
               {
                 segment: segmentA,
                 snapshot: createCompleteSkeletonSnapshot([
-                  node(1, 10, 3),
-                  node(2, 10, 1),
-                  node(3, 10, 2),
+                  node(1n, 10n, 3n),
+                  node(2n, 10n, 1n),
+                  node(3n, 10n, 2n),
                 ]),
               },
             ])
@@ -642,26 +643,26 @@ describe("spatial skeleton projection reducer", () => {
   it("replays stable logical deltas against remapped node and reversed-winner ids", () => {
     const { mappings, segmentA, segmentB, nodes } = fixture();
     const resultSegment = spatialSkeletonLogicalSegment("merge:result");
-    mappings.bindSegment(resultSegment, 20);
+    mappings.bindSegment(resultSegment, 20n);
     // CATMAID chose B as the physical winner. Both old logical segment handles
     // now alias the single result owner; queued deltas are unchanged.
     mappings.apply({
       segments: [
-        [segmentA, 20],
-        [segmentB, 20],
+        [segmentA, 20n],
+        [segmentB, 20n],
       ],
-      nodes: [[nodes.n3, 303]],
+      nodes: [[nodes.n3, 303n]],
     });
     const baseline = new SpatialSkeletonProjectionWorkspace([
       {
         segment: resultSegment,
         snapshot: createCompleteSkeletonSnapshot([
-          node(1, 20),
-          node(2, 20, 1),
-          node(303, 20, 2),
-          node(10, 20, 303),
-          node(11, 20, 10),
-          node(12, 20, 11),
+          node(1n, 20n),
+          node(2n, 20n, 1n),
+          node(303n, 20n, 2n),
+          node(10n, 20n, 303n),
+          node(11n, 20n, 10n),
+          node(12n, 20n, 11n),
         ]),
       },
     ]);
@@ -677,7 +678,7 @@ describe("spatial skeleton projection reducer", () => {
       mappings,
     );
     expect(
-      folded.projection.getSegment(resultSegment)?.snapshot.getNode(303)
+      folded.projection.getSegment(resultSegment)?.snapshot.getNode(303n)
         ?.position,
     ).toEqual([7, 8, 9]);
     expect(delta.node).toBe(nodes.n3);
@@ -686,8 +687,8 @@ describe("spatial skeleton projection reducer", () => {
 
   it("deterministically maintains baseline + valid intents through success, rejection, remap, undo, and redo", () => {
     type EagerNode = {
-      nodeId: number;
-      parentNodeId?: number;
+      nodeId: bigint;
+      parentNodeId?: bigint;
       position: number[];
       radius?: number;
       confidence?: number;
@@ -714,23 +715,23 @@ describe("spatial skeleton projection reducer", () => {
     const modelNodes = [1, 2, 3, 4].map((id) =>
       spatialSkeletonLogicalNode(`model-node:${id}`),
     );
-    const mappings = new SpatialSkeletonLogicalHandleMappings<number, number>();
+    const mappings = new SpatialSkeletonLogicalHandleMappings<bigint, bigint>();
     let idEpoch = 0;
     const bindEpoch = () => {
-      const segmentId = 500 + idEpoch * 100;
+      const segmentId = BigInt(500 + idEpoch * 100);
       mappings.apply({
         segments: [[modelSegment, segmentId]],
         nodes: modelNodes.map((handle, index) => [
           handle,
-          index + 1 + idEpoch * 1000,
+          BigInt(index + 1 + idEpoch * 1000),
         ]),
       });
       return segmentId;
     };
     let segmentId = bindEpoch();
     let confirmed: EagerNode[] = modelNodes.map((_, index) => ({
-      nodeId: index + 1,
-      parentNodeId: index === 0 ? undefined : index,
+      nodeId: BigInt(index + 1),
+      parentNodeId: index === 0 ? undefined : BigInt(index),
       position: [index + 1, index + 2, index + 3],
       confidence: index === 0 ? 100 : 75,
     }));
@@ -853,11 +854,11 @@ describe("spatial skeleton projection reducer", () => {
         segmentId = bindEpoch();
         confirmed = confirmed.map((value, index) => ({
           ...value,
-          nodeId: index + 1 + idEpoch * 1000,
+          nodeId: BigInt(index + 1 + idEpoch * 1000),
           parentNodeId:
             value.parentNodeId === undefined
               ? undefined
-              : value.parentNodeId + 1000,
+              : value.parentNodeId + 1000n,
         }));
         baseline = buildBaseline();
       }

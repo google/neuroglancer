@@ -159,13 +159,13 @@ export class CatmaidSpatiallyIndexedSkeletonSource extends WithParameters(
   }
 
   getSkeleton(
-    skeletonId: number,
+    skeletonId: bigint,
     options?: { signal?: AbortSignal },
   ): Promise<SpatiallyIndexedSkeletonNode[]> {
     return this.client.getSkeleton(skeletonId, options);
   }
 
-  listSkeletons(): Promise<number[]> {
+  listSkeletons(): Promise<bigint[]> {
     return this.client.listSkeletons();
   }
 
@@ -410,10 +410,7 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
         sourceReadonly,
       );
     // Create SegmentPropertyMap
-    const ids = new BigUint64Array(skeletonIds.length);
-    for (let i = 0; i < skeletonIds.length; ++i) {
-      ids[i] = BigInt(skeletonIds[i]);
-    }
+    const ids = BigUint64Array.from(skeletonIds);
 
     const propertyMap = new SegmentPropertyMap({
       inlineProperties: normalizeInlineSegmentPropertyMap({

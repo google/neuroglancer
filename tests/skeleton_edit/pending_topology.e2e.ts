@@ -45,7 +45,7 @@ for (const [number, operation, preset] of [
             );
       const movedId = operation === "Split" ? ids.Aside : ids.Bside;
       const radiusId = operation === "Split" ? ids.Atip : ids.Btip;
-      const initialSegment = real.api.initial.find(
+      const initialSegment = real.initial.find(
         (node) => node.id === movedId,
       )!.skeletonId;
       const forward = transport.hold(endpoint);

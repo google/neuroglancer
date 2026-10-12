@@ -39,26 +39,26 @@ import {
 
 describe("spatial_skeleton_tool_messages", () => {
   it("formats tool points with node and segment ids", () => {
-    expect(formatSpatialSkeletonToolPoint({ nodeId: 17, segmentId: 9 })).toBe(
+    expect(formatSpatialSkeletonToolPoint({ nodeId: 17n, segmentId: 9n })).toBe(
       "Node 17, segment 9",
     );
-    expect(formatSpatialSkeletonToolPoint({ nodeId: 17 })).toBe("Node 17");
+    expect(formatSpatialSkeletonToolPoint({ nodeId: 17n })).toBe("Node 17");
     expect(
       getSpatialSkeletonToolPointStatusFields({
-        nodeId: 17,
-        segmentId: 9,
+        nodeId: 17n,
+        segmentId: 9n,
       }),
     ).toEqual([
       { label: "Node ID:", value: "17" },
       { label: "Segment ID:", value: "9" },
     ]);
-    expect(getSpatialSkeletonToolPointStatusFields({ nodeId: 17 })).toEqual([
+    expect(getSpatialSkeletonToolPointStatusFields({ nodeId: 17n })).toEqual([
       { label: "Node ID:", value: "17" },
     ]);
     expect(
       getSpatialSkeletonToolPointSummaryRow({
-        nodeId: 17,
-        segmentId: 9,
+        nodeId: 17n,
+        segmentId: 9n,
         position: [100.2, 200.7, 300.1],
       }),
     ).toEqual({

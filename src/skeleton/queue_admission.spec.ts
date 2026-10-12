@@ -47,14 +47,14 @@ function optimisticExecution<T>(
   return execution as SpatialSkeletonOptimisticEditExecution<T>;
 }
 
-function makeHarness(initialSegments: readonly number[] = []) {
+function makeHarness(initialSegments: readonly bigint[] = []) {
   const cachedSegments = new Set(initialSegments);
   const revisions = new Map(initialSegments.map((segmentId) => [segmentId, 1]));
   const snapshotHandles = new Map(
     initialSegments.map((segmentId) => [segmentId, { segmentId }]),
   );
-  const releases: number[] = [];
-  const getFullSegmentNodes = vi.fn(async (_layer, segmentId: number) => {
+  const releases: bigint[] = [];
+  const getFullSegmentNodes = vi.fn(async (_layer, segmentId: bigint) => {
     cachedSegments.add(segmentId);
     return [];
   });
@@ -104,7 +104,7 @@ function makeHarness(initialSegments: readonly number[] = []) {
     spatialSkeletonState: state,
     getSpatiallyIndexedSkeletonLayer: () => ({}),
   };
-  const replaceCachedSegment = (segmentId: number) => {
+  const replaceCachedSegment = (segmentId: bigint) => {
     cachedSegments.add(segmentId);
     revisions.set(segmentId, (revisions.get(segmentId) ?? 0) + 1);
     snapshotHandles.set(segmentId, { segmentId });
@@ -135,12 +135,12 @@ function makeCommand(
 
 describe("spatial skeleton queue input preparation", () => {
   it("submits the input policy immediately, without starting a target read", async () => {
-    const { layer, state } = makeHarness([11]);
+    const { layer, state } = makeHarness([11n]);
     const submitted = optimisticExecution(Promise.resolve());
     const submit = vi.fn(() => submitted);
     const execution = prepareAndSubmitSpatialSkeletonEdit(
       layer,
-      makeCommand([{ segmentId: 11 }], [{ segmentId: 21 }]),
+      makeCommand([{ segmentId: 11n }], [{ segmentId: 21n }]),
       submit,
     );
     expect(execution).toBe(submitted);
@@ -150,12 +150,12 @@ describe("spatial skeleton queue input preparation", () => {
   });
 
   it("keeps input bundles frozen, deduplicated, and pinned until released", async () => {
-    const { layer, releases } = makeHarness([11, 21]);
+    const { layer, releases } = makeHarness([11n, 21n]);
     const policy = createSpatialSkeletonQueueInputPreparation(
       layer,
       makeCommand(
-        [{ segmentId: 11 }, { segmentId: 11, nodeId: 12 }],
-        [{ segmentId: 21 }],
+        [{ segmentId: 11n }, { segmentId: 11n, nodeId: 12n }],
+        [{ segmentId: 21n }],
       ),
     );
     const releaseAdmission = policy.validate("execute");
@@ -164,7 +164,8 @@ describe("spatial skeleton queue input preparation", () => {
       "execute",
     );
     expect(prepared.input.segments.map(({ segmentId }) => segmentId)).toEqual([
-      11, 21,
+      11n,
+      21n,
     ]);
     expect(Object.isFrozen(prepared.input)).toBe(true);
     expect(Object.isFrozen(prepared.input.segments)).toBe(true);
@@ -175,14 +176,14 @@ describe("spatial skeleton queue input preparation", () => {
     prepared.release();
     releaseAdmission();
     releaseAdmission();
-    expect(releases).toEqual([11, 11, 21, 11, 11]);
+    expect(releases).toEqual([11n, 11n, 21n, 11n, 11n]);
   });
 
   it("rejects missing required inspection without fetching", () => {
     const { layer, state } = makeHarness();
     const policy = createSpatialSkeletonQueueInputPreparation(
       layer,
-      makeCommand([{ segmentId: 11 }], [{ segmentId: 21 }]),
+      makeCommand([{ segmentId: 11n }], [{ segmentId: 21n }]),
     );
     expect(() => policy.validate("execute")).toThrow(
       SpatialSkeletonInspectionRequiredError,
@@ -208,13 +209,13 @@ describe("spatial skeleton queue input preparation", () => {
   });
 
   it("acquires the current source version when its ordered turn arrives", async () => {
-    const { layer, replaceCachedSegment, releases } = makeHarness([11]);
+    const { layer, replaceCachedSegment, releases } = makeHarness([11n]);
     const policy = createSpatialSkeletonQueueInputPreparation(
       layer,
-      makeCommand([{ segmentId: 11 }]),
+      makeCommand([{ segmentId: 11n }]),
     );
     const release = policy.validate("execute");
-    replaceCachedSegment(11);
+    replaceCachedSegment(11n);
     const prepared = await policy.acquire(
       new AbortController().signal,
       "execute",
@@ -223,31 +224,31 @@ describe("spatial skeleton queue input preparation", () => {
     prepared.assertCurrent();
     prepared.release();
     release();
-    expect(releases).toEqual([11, 11]);
+    expect(releases).toEqual([11n, 11n]);
   });
 
   it("uses current node ownership after an earlier queued merge", async () => {
-    const { layer, state } = makeHarness([11, 21]);
+    const { layer, state } = makeHarness([11n, 21n]);
     const policy = createSpatialSkeletonQueueInputPreparation(
       layer,
-      makeCommand([{ segmentId: 11, nodeId: 12 }]),
+      makeCommand([{ segmentId: 11n, nodeId: 12n }]),
     );
     const release = policy.validate("execute");
-    expect(policy.getProtectedSegmentIds()).toEqual([11]);
-    state.getCachedNode.mockReturnValue({ nodeId: 12, segmentId: 21 } as any);
-    expect(policy.getProtectedSegmentIds()).toEqual([21]);
+    expect(policy.getProtectedSegmentIds()).toEqual([11n]);
+    state.getCachedNode.mockReturnValue({ nodeId: 12n, segmentId: 21n } as any);
+    expect(policy.getProtectedSegmentIds()).toEqual([21n]);
     const prepared = await policy.acquire(
       new AbortController().signal,
       "execute",
     );
-    expect(prepared.input.segments[0].segmentId).toBe(21);
+    expect(prepared.input.segments[0].segmentId).toBe(21n);
     prepared.release();
     release();
   });
 
   it("rejects an unexpected source replacement during a target download", async () => {
     const { layer, state, cachedSegments, replaceCachedSegment, releases } =
-      makeHarness([11]);
+      makeHarness([11n]);
     const read = createDeferred<void>();
     state.getFullSegmentNodes.mockImplementationOnce(async (_layer, id) => {
       await read.promise;
@@ -256,30 +257,30 @@ describe("spatial skeleton queue input preparation", () => {
     });
     const policy = createSpatialSkeletonQueueInputPreparation(
       layer,
-      makeCommand([{ segmentId: 11 }], [{ segmentId: 21 }]),
+      makeCommand([{ segmentId: 11n }], [{ segmentId: 21n }]),
     );
     const acquiring = policy.acquire(new AbortController().signal, "execute");
-    replaceCachedSegment(11);
+    replaceCachedSegment(11n);
     read.resolve();
     await expect(acquiring).rejects.toMatchObject({
       reason: "snapshot-changed",
     });
-    expect(releases).toEqual([11]);
+    expect(releases).toEqual([11n]);
   });
 
   it("rechecks endpoint requirements after a download", async () => {
-    const { layer, state, cachedSegments } = makeHarness([11]);
+    const { layer, state, cachedSegments } = makeHarness([11n]);
     const read = createDeferred<void>();
     state.getFullSegmentNodes.mockImplementationOnce(async (_layer, id) => {
       await read.promise;
       cachedSegments.add(id);
       return [];
     });
-    let target = 21;
+    let target = 21n;
     const command = {
       ...makeCommand([]),
       getQueueInputRequirements: () => ({
-        required: [{ segmentId: 11 }],
+        required: [{ segmentId: 11n }],
         loadable: [{ segmentId: target }],
       }),
     };
@@ -287,7 +288,7 @@ describe("spatial skeleton queue input preparation", () => {
       layer,
       command,
     ).acquire(new AbortController().signal, "execute");
-    target = 31;
+    target = 31n;
     read.resolve();
     await expect(acquiring).rejects.toMatchObject({
       reason: "requirements-changed",
@@ -295,7 +296,7 @@ describe("spatial skeleton queue input preparation", () => {
   });
 
   it("releases a canceled read owner promptly and ignores a late response", async () => {
-    const { layer, state, cachedSegments, releases } = makeHarness([11]);
+    const { layer, state, cachedSegments, releases } = makeHarness([11n]);
     const read = createDeferred<void>();
     state.getFullSegmentNodes.mockImplementationOnce(async (_layer, id) => {
       await read.promise;
@@ -305,24 +306,24 @@ describe("spatial skeleton queue input preparation", () => {
     const controller = new AbortController();
     const acquiring = createSpatialSkeletonQueueInputPreparation(
       layer,
-      makeCommand([{ segmentId: 11 }], [{ segmentId: 21 }]),
+      makeCommand([{ segmentId: 11n }], [{ segmentId: 21n }]),
     ).acquire(controller.signal, "execute");
     const reason = new DOMException("Canceled", "AbortError");
     controller.abort(reason);
     await expect(acquiring).rejects.toBe(reason);
     expect(state.releaseFullSegmentNodeFetchOwner).toHaveBeenCalled();
-    expect(releases).toEqual([11]);
+    expect(releases).toEqual([11n]);
     read.resolve();
     await Promise.resolve();
-    expect(releases).toEqual([11]);
+    expect(releases).toEqual([11n]);
   });
 
   it("supports loadable inputs for any action and preserves their order", async () => {
-    const { layer, state } = makeHarness([11]);
+    const { layer, state } = makeHarness([11n]);
     const command = {
       ...makeCommand(
-        [{ segmentId: 11 }],
-        [{ segmentId: 31 }, { segmentId: 21 }],
+        [{ segmentId: 11n }],
+        [{ segmentId: 31n }, { segmentId: 21n }],
       ),
       action: SpatialSkeletonActions.editNodeRadius,
     };
@@ -331,29 +332,31 @@ describe("spatial skeleton queue input preparation", () => {
       command,
     ).acquire(new AbortController().signal, "execute");
     expect(state.getFullSegmentNodes.mock.calls.map((call) => call[1])).toEqual(
-      [31, 21],
+      [31n, 21n],
     );
     expect(prepared.input.segments.map(({ segmentId }) => segmentId)).toEqual([
-      11, 31, 21,
+      11n,
+      31n,
+      21n,
     ]);
     prepared.release();
   });
 
   it("releases all pinned inputs on a failed download", async () => {
-    const { layer, state, releases } = makeHarness([11]);
+    const { layer, state, releases } = makeHarness([11n]);
     const error = new Error("Unavailable");
     state.getFullSegmentNodes.mockRejectedValueOnce(error);
     await expect(
       createSpatialSkeletonQueueInputPreparation(
         layer,
-        makeCommand([{ segmentId: 11 }], [{ segmentId: 21 }]),
+        makeCommand([{ segmentId: 11n }], [{ segmentId: 21n }]),
       ).acquire(new AbortController().signal, "execute"),
     ).rejects.toBe(error);
-    expect(releases).toEqual([11]);
+    expect(releases).toEqual([11n]);
   });
 
   it("checks the fatal gate before validation and after loading", async () => {
-    const { layer, state, cachedSegments, setFatalState } = makeHarness([11]);
+    const { layer, state, cachedSegments, setFatalState } = makeHarness([11n]);
     const read = createDeferred<void>();
     state.getFullSegmentNodes.mockImplementationOnce(async (_layer, id) => {
       await read.promise;
@@ -362,7 +365,7 @@ describe("spatial skeleton queue input preparation", () => {
     });
     const policy = createSpatialSkeletonQueueInputPreparation(
       layer,
-      makeCommand([{ segmentId: 11 }], [{ segmentId: 21 }]),
+      makeCommand([{ segmentId: 11n }], [{ segmentId: 21n }]),
     );
     const acquiring = policy.acquire(new AbortController().signal, "execute");
     setFatalState({
@@ -379,20 +382,21 @@ describe("spatial skeleton queue input preparation", () => {
     );
   });
   it("reacquires an evicted source for Redo of an accepted unprepared intent", async () => {
-    const { layer, state, cachedSegments } = makeHarness([11]);
+    const { layer, state, cachedSegments } = makeHarness([11n]);
     const policy = createSpatialSkeletonQueueInputPreparation(
       layer,
-      makeCommand([{ segmentId: 11 }], [{ segmentId: 21 }]),
+      makeCommand([{ segmentId: 11n }], [{ segmentId: 21n }]),
     );
     policy.validate("execute")();
-    cachedSegments.delete(11);
+    cachedSegments.delete(11n);
     const release = policy.validate("redo");
     const prepared = await policy.acquire(new AbortController().signal, "redo");
     expect(state.getFullSegmentNodes.mock.calls.map((call) => call[1])).toEqual(
-      [11, 21],
+      [11n, 21n],
     );
     expect(prepared.input.segments.map(({ segmentId }) => segmentId)).toEqual([
-      11, 21,
+      11n,
+      21n,
     ]);
     prepared.release();
     release();

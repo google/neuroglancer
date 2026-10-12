@@ -33,8 +33,8 @@ export type SpatialSkeletonInspectionRequiredReason =
  */
 export class SpatialSkeletonInspectionRequiredError extends Error {
   readonly requirement: SpatialSkeletonQueueInputRequirement;
-  readonly segmentId: number;
-  readonly nodeId: number | undefined;
+  readonly segmentId: bigint;
+  readonly nodeId: bigint | undefined;
 
   constructor(
     requirement: SpatialSkeletonQueueInputRequirement,

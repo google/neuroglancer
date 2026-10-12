@@ -270,7 +270,7 @@ test.describe("creation", () => {
     expect(created).toHaveLength(3);
     let saved = preview;
     [root, middle, leaf].forEach((node, i) => {
-      saved = remap(saved, node.id, created[i].response.treenode_id);
+      saved = remap(saved, node.id, BigInt(created[i].response.treenode_id));
     });
     expect(created[1].body.parent_id).toBe(
       String(created[0].response.treenode_id),
@@ -282,15 +282,21 @@ test.describe("creation", () => {
       String(created[2].response.treenode_id),
     );
     await real.saved(saved);
-    expect((await ui.selected()).id).toBe(created[2].response.treenode_id);
+    expect((await ui.selected()).id).toBe(
+      BigInt(created[2].response.treenode_id),
+    );
     await real.visibleCurrentSegments();
-    const beforeMove = change(saved, created[2].response.treenode_id, {
+    const beforeMove = change(saved, BigInt(created[2].response.treenode_id), {
       position: leaf.position,
     });
     const undoSteps = [
       beforeMove,
-      beforeMove.filter((node) => node.id !== created[2].response.treenode_id),
-      beforeMove.filter((node) => node.id === created[0].response.treenode_id),
+      beforeMove.filter(
+        (node) => node.id !== BigInt(created[2].response.treenode_id),
+      ),
+      beforeMove.filter(
+        (node) => node.id === BigInt(created[0].response.treenode_id),
+      ),
       [],
     ];
     for (const expected of undoSteps) {
@@ -310,11 +316,11 @@ test.describe("creation", () => {
     for (let i = 0; i < 3; ++i) {
       await ui.redo();
       await ui.waitSaved();
-      const id = transport.mutations.at(-1)!.response.treenode_id;
-      redone = remap(redone, created[i].response.treenode_id, id);
+      const id = BigInt(transport.mutations.at(-1)!.response.treenode_id);
+      redone = remap(redone, BigInt(created[i].response.treenode_id), id);
       const remainingIds = created
         .slice(i + 1)
-        .map((record) => record.response.treenode_id);
+        .map((record) => BigInt(record.response.treenode_id));
       await real.persisted(
         redone.filter((node) => !remainingIds.includes(node.id)),
       );
@@ -331,15 +337,15 @@ test.describe("creation", () => {
       );
       restored = remap(
         restored,
-        record.response.treenode_id,
-        recreated[i].response.treenode_id,
+        BigInt(record.response.treenode_id),
+        BigInt(recreated[i].response.treenode_id),
       );
     });
     await real.persisted(restored);
     await real.visibleCurrentSegments();
 
-    const [rootId, middleId] = recreated.map(
-      (record) => record.response.treenode_id,
+    const [rootId, middleId] = recreated.map((record) =>
+      BigInt(record.response.treenode_id),
     );
     await test.step("new root confidence survives reroot and repeated Undo/Redo", async () => {
       const rerooted = change(
@@ -421,11 +427,11 @@ test.describe("creation", () => {
       const creation = transport.hold("treenode/create", "afterResponse");
       const provisional = await ui.createRoot(-100, -80);
       const acknowledgement = await creation.reached;
-      const permanentId = acknowledgement.response.treenode_id;
+      const permanentId = BigInt(acknowledgement.response.treenode_id);
       const center = await ui.panelCenter();
       // Creating the root centers the viewport on its provisional preview.
       const start = center;
-      const dragPosition = (id: number) =>
+      const dragPosition = (id: bigint) =>
         ui.page.evaluate((id) => {
           const layer = (
             window as unknown as { viewer: Viewer }
@@ -493,7 +499,7 @@ test.describe("creation", () => {
       const creation = transport.hold("treenode/create", "afterResponse");
       const provisional = await ui.createRoot(100, -80);
       const acknowledgement = await creation.reached;
-      const permanentId = acknowledgement.response.treenode_id;
+      const permanentId = BigInt(acknowledgement.response.treenode_id);
       await real.pending([...restored, ...model([provisional])]);
       await ui.page
         .getByRole("textbox", { name: "Enter node ID or description" })
@@ -564,9 +570,11 @@ test.describe("creation", () => {
       );
       await ui.undo();
       await ui.waitSaved();
-      const replacementId = transport.mutations
-        .filter((record) => record.endpoint === "treenode/create")
-        .at(-1)!.response.treenode_id;
+      const replacementId = BigInt(
+        transport.mutations
+          .filter((record) => record.endpoint === "treenode/create")
+          .at(-1)!.response.treenode_id,
+      );
       expect(replacementId).not.toBe(permanentId);
       const recreated = remap(created, permanentId, replacementId);
       const recreatedDescription = remap(described, permanentId, replacementId);
@@ -582,9 +590,11 @@ test.describe("creation", () => {
       );
       await ui.undo();
       await ui.waitSaved();
-      const finalId = transport.mutations
-        .filter((record) => record.endpoint === "treenode/create")
-        .at(-1)!.response.treenode_id;
+      const finalId = BigInt(
+        transport.mutations
+          .filter((record) => record.endpoint === "treenode/create")
+          .at(-1)!.response.treenode_id,
+      );
       expect(finalId).not.toBe(replacementId);
       restored = remap(described, permanentId, finalId);
       await real.saved(restored);
@@ -609,7 +619,7 @@ test("[E2E-07] adding children branches an existing tree without changing its or
     await real.persisted(expected, false);
     gate.release();
     await ui.waitSaved();
-    const id = transport.mutations.at(-1)!.response.treenode_id;
+    const id = BigInt(transport.mutations.at(-1)!.response.treenode_id);
     expected = remap(next, preview.id, id);
     await real.saved(expected);
     expect((await ui.selected()).id).toBe(id);
@@ -627,11 +637,11 @@ test("[E2E-07] adding children branches an existing tree without changing its or
   expected = remap(
     expected,
     firstChild.id,
-    transport.mutations.at(-1)!.response.treenode_id,
+    BigInt(transport.mutations.at(-1)!.response.treenode_id),
   );
   const secondChild = expected.find(
     (node) =>
-      node.id !== transport.mutations.at(-1)!.response.treenode_id &&
+      node.id !== BigInt(transport.mutations.at(-1)!.response.treenode_id) &&
       !original.some((originalNode) => originalNode.id === node.id),
   )!;
   await real.persisted(expected.filter((node) => node.id !== secondChild.id));
@@ -641,7 +651,7 @@ test("[E2E-07] adding children branches an existing tree without changing its or
   expected = remap(
     expected,
     oldId,
-    transport.mutations.at(-1)!.response.treenode_id,
+    BigInt(transport.mutations.at(-1)!.response.treenode_id),
   );
   await real.persisted(expected);
   await real.visibleCurrentSegments();
@@ -699,7 +709,7 @@ for (const item of deletions)
       const restore = transport.hold(restoreEndpoint, "afterResponse");
       await ui.undo();
       const creation = await restore.reached;
-      const restoredId = creation.response.treenode_id;
+      const restoredId = BigInt(creation.response.treenode_id);
       expect(restoredId).not.toBe(id);
       // Before the acknowledgement, Undo uses a provisional node identity.
       const selected = await ui.selected();
@@ -751,9 +761,11 @@ for (const item of deletions)
       );
       await ui.undo();
       await ui.waitSaved();
-      const nextId = transport.mutations
-        .filter((record) => record.endpoint === restoreEndpoint)
-        .at(-1)!.response.treenode_id;
+      const nextId = BigInt(
+        transport.mutations
+          .filter((record) => record.endpoint === restoreEndpoint)
+          .at(-1)!.response.treenode_id,
+      );
       await real.persisted(remap(original, id, nextId));
       await real.visibleCurrentSegments();
       await real.reload(remap(original, id, nextId));
@@ -808,7 +820,7 @@ test.describe("root with one child", () => {
       path: testInfo.outputPath("former-root-restoration.png"),
     });
     restore.release();
-    const replacement = request.response.treenode_id;
+    const replacement = BigInt(request.response.treenode_id);
     expect(replacement).not.toBe(ids.Aroot);
     await real.saved(remap(rerooted, ids.Aroot, replacement));
     await ui.undo();
@@ -822,9 +834,11 @@ test.describe("root with one child", () => {
     );
     await ui.undo();
     await ui.waitSaved();
-    const next = transport.mutations.findLast(
-      (record) => record.endpoint === "treenode/create",
-    )!.response.treenode_id;
+    const next = BigInt(
+      transport.mutations.findLast(
+        (record) => record.endpoint === "treenode/create",
+      )!.response.treenode_id,
+    );
     await real.saved(remap(rerooted, ids.Aroot, next));
     await ui.undo();
     await real.saved(remap(original, ids.Aroot, next));

@@ -17,12 +17,12 @@
 import { expect } from "@playwright/test";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import type { Viewer } from "#src/viewer.js";
-import { test, change, type RealSession } from "./real_test.js";
+import { test, change, model, remap, type RealSession } from "./real_test.js";
 import { readGraph, readQueue } from "./skeleton_edit_page.js";
 
 // Hold a real response captured while CATMAID still has the skeleton removed by
 // the preview. Confirmation must retire its physical ID even with no snapshot.
-async function holdRetiringSegmentRead(real: RealSession, segmentId: number) {
+async function holdRetiringSegmentRead(real: RealSession, segmentId: bigint) {
   const { ui, transport } = real;
   const gate = transport.hold(
     `skeletons/${segmentId}/compact-detail`,
@@ -106,7 +106,7 @@ for (const [number, preset] of [
       gate.release();
       let graph = await real.saved(split);
       let splitId = graph.find((node) => node.id === ids.Amiddle)!.skeletonId;
-      expect(splitId).not.toBe(real.api.initial[0].skeletonId);
+      expect(splitId).not.toBe(real.initial[0].skeletonId);
       await real.visibleCurrentSegments();
       for (let cycle = 0; cycle < 2; ++cycle) {
         const join = transport.hold("skeleton/join");
@@ -150,7 +150,7 @@ test.describe("merge at root", () => {
     await real.pending(merged);
     await real.persisted(original, false);
     expect((await ui.selected()).id).toBe(ids.Broot);
-    const targetId = real.api.initial.find(
+    const targetId = real.initial.find(
       (node) => node.id === ids.Broot,
     )!.skeletonId;
     const expectRetired = await holdRetiringSegmentRead(real, targetId);
@@ -201,7 +201,7 @@ test.describe("branched merge", () => {
     forward.release();
     await real.saved(merged);
     await real.visibleCurrentSegments();
-    let previousTargetSkeleton = real.api.initial.find(
+    let previousTargetSkeleton = real.initial.find(
       (node) => node.id === ids.Broot,
     )!.skeletonId;
     for (let cycle = 0; cycle < 2; ++cycle) {
@@ -273,10 +273,10 @@ test("[E2E-17] cold Merge target is prepared before preview and before the CATMA
   real,
 }) => {
   const { ui, ids, original, transport } = real;
-  const sourceSkeleton = real.api.initial.find(
+  const sourceSkeleton = real.initial.find(
     (node) => node.id === ids.Aroot,
   )!.skeletonId;
-  const targetSkeleton = real.api.initial.find(
+  const targetSkeleton = real.initial.find(
     (node) => node.id === ids.Broot,
   )!.skeletonId;
   const endpoint = `skeletons/${targetSkeleton}/compact-detail`;
@@ -311,7 +311,7 @@ test("[E2E-17] cold Merge target is prepared before preview and before the CATMA
   await real.preview(
     original.filter(
       (node) =>
-        real.api.initial.find((saved) => saved.id === node.id)!.skeletonId ===
+        real.initial.find((saved) => saved.id === node.id)!.skeletonId ===
         sourceSkeleton,
     ),
   );
@@ -392,4 +392,106 @@ test.describe("branched reroot", () => {
     ).toEqual([String(ids.Aside), String(ids.Aroot), String(ids.Aside)]);
     await real.reload(rerooted);
   });
+});
+
+test("[E2E-28] skeletons and nodes with IDs above 2^32 keep their exact IDs through create, merge and split", async ({
+  real,
+}) => {
+  const { ui, ids, original, transport } = real;
+  for (const node of real.initial) {
+    expect(node.id).toBeGreaterThan(2n ** 32n);
+    expect(node.skeletonId).toBeGreaterThan(2n ** 32n);
+  }
+  await real.open();
+
+  const root = await ui.createRoot();
+  await ui.waitSaved();
+  const [created] = transport.mutations.filter(
+    (record) => record.endpoint === "treenode/create",
+  );
+  const rootId = BigInt(created.response.treenode_id);
+  expect(rootId).toBeGreaterThan(2n ** 32n);
+  const withRoot = remap([...original, ...model([root])], root.id, rootId);
+  await real.saved(withRoot);
+  expect((await ui.selected()).skeletonId).toBe(
+    BigInt(created.response.skeleton_id),
+  );
+
+  const merged = change(withRoot, ids.Broot, { parentId: ids.Amiddle });
+  await ui.merge(ids.Amiddle, ids.Broot);
+  await real.saved(merged);
+
+  const split = change(merged, ids.Broot, { parentId: null });
+  await ui.split(ids.Broot);
+  const graph = await real.saved(split);
+  const splitSkeletonId = graph.find(
+    (node) => node.id === ids.Broot,
+  )!.skeletonId;
+  expect(splitSkeletonId).toBeGreaterThan(2n ** 32n);
+  await real.visibleCurrentSegments();
+  await real.reload(split);
+});
+
+test("[E2E-29] hovering a hidden skeleton above 2^32 reports its exact skeleton and node", async ({
+  real,
+}) => {
+  const { ui, ids } = real;
+  await ui.open(real.api.datasourceUrl, [], false, [2000, 2000, 1000], []);
+  await ui.page.evaluate(() => {
+    const layer = (
+      window as unknown as { viewer: Viewer }
+    ).viewer.layerManager.getLayerByName("Skeletons")!
+      .layer as SegmentationUserLayer;
+    layer.displayState.hiddenObjectAlpha.value = 1;
+  });
+  const node = real.initial.find(({ id }) => id === ids.Amiddle)!;
+  const center = await ui.panelCenter();
+  await ui.page.mouse.move(
+    center.x + (node.position[0] - 2000) / 10,
+    center.y + (node.position[1] - 2000) / 10,
+  );
+  await expect
+    .poll(() =>
+      ui.page.evaluate(() => {
+        const picked = (window as unknown as { viewer: Viewer }).viewer
+          .mouseState.pickedSpatialSkeleton;
+        return { nodeId: picked?.nodeId, segmentId: picked?.segmentId };
+      }),
+    )
+    .toEqual({ nodeId: node.id, segmentId: node.skeletonId });
+});
+
+test("[E2E-30] a visible skeleton above 2^32 is drawn when hidden skeletons are transparent", async ({
+  real,
+}) => {
+  const { ui, ids } = real;
+  const node = real.initial.find(({ id }) => id === ids.Amiddle)!;
+  await ui.open(
+    real.api.datasourceUrl,
+    [node.skeletonId],
+    false,
+    [2000, 2000, 1000],
+    [],
+  );
+  await ui.page.evaluate(() => {
+    const layer = (
+      window as unknown as { viewer: Viewer }
+    ).viewer.layerManager.getLayerByName("Skeletons")!
+      .layer as SegmentationUserLayer;
+    layer.displayState.hiddenObjectAlpha.value = 0;
+  });
+  const center = await ui.panelCenter();
+  await ui.page.mouse.move(
+    center.x + (node.position[0] - 2000) / 10,
+    center.y + (node.position[1] - 2000) / 10,
+  );
+  await expect
+    .poll(() =>
+      ui.page.evaluate(
+        () =>
+          (window as unknown as { viewer: Viewer }).viewer.mouseState
+            .pickedSpatialSkeleton?.nodeId,
+      ),
+    )
+    .toBe(node.id);
 });

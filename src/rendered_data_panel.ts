@@ -67,10 +67,10 @@ const tempVec3 = vec3.create();
 
 interface SpatialSkeletonSelectableLayer {
   selectSpatialSkeletonNode: (
-    nodeId: number,
+    nodeId: bigint,
     pin: boolean | "toggle" | "force-unpin",
     options?: {
-      segmentId?: number;
+      segmentId?: bigint;
       position?: ArrayLike<number>;
     },
   ) => void;
@@ -543,11 +543,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       }
       const pickedSpatialSkeleton = mouseState.pickedSpatialSkeleton;
       const pickedNodeId = pickedSpatialSkeleton?.nodeId;
-      if (
-        typeof pickedNodeId !== "number" ||
-        !Number.isSafeInteger(pickedNodeId) ||
-        pickedNodeId <= 0
-      ) {
+      if (pickedNodeId === undefined || pickedNodeId === 0n) {
         return undefined;
       }
       const pickedLayer = mouseState.pickedRenderLayer?.userLayer;
@@ -558,12 +554,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       return {
         layer: pickedLayer,
         nodeId: pickedNodeId,
-        segmentId:
-          typeof pickedSegmentId === "number" &&
-          Number.isSafeInteger(pickedSegmentId) &&
-          pickedSegmentId > 0
-            ? pickedSegmentId
-            : undefined,
+        segmentId: pickedSegmentId === 0n ? undefined : pickedSegmentId,
         position: pickedSpatialSkeleton?.position ?? mouseState.position,
       };
     };

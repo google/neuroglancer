@@ -90,8 +90,8 @@ function controlledProvider(cleanup = vi.fn()) {
   const commits: ControlledCommit[] = [];
   const provider: SpatialSkeletonOptimisticEditingProvider = {
     createDriver: ({ identities }) => {
-      const segment = identities.getOrCreateSegmentHandle(11);
-      const node = identities.getOrCreateNodeHandle(21);
+      const segment = identities.getOrCreateSegmentHandle(11n);
+      const node = identities.getOrCreateNodeHandle(21n);
       return {
         driver: {
           describeIntent: () => ({ kind: "test", commandLabel: "Test" }),

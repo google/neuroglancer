@@ -23,22 +23,22 @@ describe("datasource/catmaid/skeleton_packing", () => {
   it("packs vertex, segment, index, and pick-node data", () => {
     const nodes: SpatiallyIndexedSkeletonNodeBase[] = [
       {
-        nodeId: 1,
+        nodeId: 1n,
         parentNodeId: undefined,
         position: new Float32Array([1, 2, 3]),
-        segmentId: 10,
+        segmentId: 10n,
       },
       {
-        nodeId: 2,
-        parentNodeId: 1,
+        nodeId: 2n,
+        parentNodeId: 1n,
         position: new Float32Array([4, 5, 6]),
-        segmentId: 10,
+        segmentId: 10n,
       },
       {
-        nodeId: 3,
-        parentNodeId: 99,
+        nodeId: 3n,
+        parentNodeId: 99n,
         position: new Float32Array([7, 8, 9]),
-        segmentId: 11,
+        segmentId: 11n,
       },
     ];
 
@@ -47,24 +47,34 @@ describe("datasource/catmaid/skeleton_packing", () => {
     expect(packed.vertexPositions).toEqual(
       Float32Array.of(1, 2, 3, 4, 5, 6, 7, 8, 9),
     );
-    expect(packed.segmentIds).toEqual(Uint32Array.of(10, 10, 11));
+    expect(packed.segmentIds).toEqual(BigUint64Array.of(10n, 10n, 11n));
     expect(packed.indices).toEqual(Uint32Array.of(1, 0));
-    expect(packed.nodeIds).toEqual(Int32Array.of(1, 2, 3));
+    expect(packed.nodeIds).toEqual(BigUint64Array.of(1n, 2n, 3n));
   });
 
-  it("preserves large segment ids exactly", () => {
-    const largeSegmentId = 16_777_217;
+  it("keeps skeleton and node IDs above 2^32 exact in a packed chunk", () => {
     const nodes: SpatiallyIndexedSkeletonNodeBase[] = [
       {
-        nodeId: 1,
-        parentNodeId: undefined,
+        nodeId: 2n ** 53n + 1n,
         position: new Float32Array([1, 2, 3]),
-        segmentId: largeSegmentId,
+        segmentId: 2n ** 63n + 5n,
+      },
+      {
+        nodeId: 4_294_967_297n,
+        parentNodeId: 2n ** 53n + 1n,
+        position: new Float32Array([4, 5, 6]),
+        segmentId: 2n ** 63n + 5n,
       },
     ];
 
     const packed = packCatmaidSkeletonNodes(nodes);
 
-    expect(packed.segmentIds).toEqual(Uint32Array.of(largeSegmentId));
+    expect(packed.segmentIds).toEqual(
+      BigUint64Array.of(2n ** 63n + 5n, 2n ** 63n + 5n),
+    );
+    expect(packed.nodeIds).toEqual(
+      BigUint64Array.of(2n ** 53n + 1n, 4_294_967_297n),
+    );
+    expect(packed.indices).toEqual(Uint32Array.of(1, 0));
   });
 });
