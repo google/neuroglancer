@@ -615,12 +615,6 @@ vec4 getSegmentAppearance(uint64_t segmentId) {
   ) {
     super();
     this.vertexIdHelper = this.registerDisposer(VertexIdHelper.get(this.gl));
-    const { maxTextureImageUnits } = this.gl;
-    if (this.vertexAttributes.length > maxTextureImageUnits) {
-      console.warn(
-        `Skeleton has ${this.vertexAttributes.length} vertex attributes but device only supports ${maxTextureImageUnits} shader texture units`,
-      );
-    }
 
     const segmentationGroupState =
       base.displayState.segmentationGroupState.value;
