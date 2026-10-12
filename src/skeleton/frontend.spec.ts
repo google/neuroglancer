@@ -854,7 +854,7 @@ describe("SpatiallyIndexedSkeletonLayer hovered node outline color", () => {
       Object.create(SpatiallyIndexedSkeletonLayer.prototype),
       {
         selectedNodeInfo: { value: undefined },
-        hoveredNodeInfo: { value: { nodeId: 303, segmentId: 202 } },
+        hoveredNodeInfo: { value: { nodeId: 303n, segmentId: 202n } },
         selectedNodeOutlineColor: vec3.create(),
         highlightedNodeOutlineColor: vec3.create(),
         nodeOutlineColorGeneration: 0,
