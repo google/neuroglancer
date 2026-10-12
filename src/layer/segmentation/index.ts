@@ -139,6 +139,7 @@ import {
   EMPTY_VOXEL_VALUE,
   type PaintValueGetter,
 } from "#src/voxel_annotation/base.js";
+import { VoxelEditingPreviewRenderLayerMixin } from "#src/voxel_annotation/preview_render_layer.js";
 import { makeWatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import { registerLayerShaderControlsTool } from "#src/widget/shader_controls.js";
@@ -589,6 +590,9 @@ interface SegmentationActionContext extends LayerActionContext {
   segmentationToggleSegmentState?: boolean | undefined;
 }
 
+class SegmentationPreviewRenderLayer extends VoxelEditingPreviewRenderLayerMixin(
+  SegmentationRenderLayer,
+) {}
 const Base = UserLayerWithVoxelEditingMixin(
   UserLayerWithAnnotationsMixin(UserLayer),
 );
@@ -623,7 +627,7 @@ export class SegmentationUserLayer extends Base {
     source: MultiscaleVolumeChunkSource,
     transform: WatchableValueInterface<RenderLayerTransformOrError>,
   ): SegmentationRenderLayer {
-    return new SegmentationRenderLayer(source, {
+    return new SegmentationPreviewRenderLayer(source, {
       ...this.displayState,
       transform: transform,
       renderScaleTarget: this.sliceViewRenderScaleTarget,

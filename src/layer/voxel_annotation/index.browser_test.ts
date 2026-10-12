@@ -431,6 +431,20 @@ describe("Voxel Editing Utilities", () => {
     });
   });
 
+  describe("Preview render layer", () => {
+    it("Scale: only keeps the finest source", () => {
+      const { userLayer, loadedSubsource } = createLayer();
+      const preview =
+        userLayer.editingContexts.get(loadedSubsource)!.previewRenderLayer!;
+      const sources = [{}, {}, {}] as any[];
+      const kept = Array.from(
+        preview.filterVisibleSources(undefined as any, sources),
+      );
+      expect(kept).toHaveLength(1);
+      expect(kept[0]).toBe(sources[0]);
+    });
+  });
+
   describe("Layer controls", () => {
     it("Palette: listed only while a source has writing enabled", () => {
       const { userLayer } = createLayer();
