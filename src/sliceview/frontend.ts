@@ -420,7 +420,7 @@ export class SliceView extends Base {
     visibleLayerList.length = 0;
     for (const renderLayer of this.layerManager.readyRenderLayers()) {
       if (renderLayer instanceof SliceViewRenderLayer) {
-        if (!renderLayer.forceHiddenFromMainRenderLoop) {
+        if (!renderLayer.drawnByHostLayer) {
           visibleLayerList.push(renderLayer);
         }
         let layerInfo = visibleLayers.get(renderLayer);
@@ -709,12 +709,6 @@ export interface SliceViewChunkSource {
   // TypeScript supports mixins with abstact classes.
   getChunk(x: any): any;
 }
-
-/*
-export class SliceViewChunk extends Chunk {
-  // MOVED to chunk_base.ts to avoid import loop
-}
-*/
 
 /**
  * Helper for rendering a SliceView that has been pre-rendered to a texture.

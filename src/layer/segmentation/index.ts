@@ -592,7 +592,9 @@ interface SegmentationActionContext extends LayerActionContext {
 
 class SegmentationPreviewRenderLayer extends VoxelEditingPreviewRenderLayerMixin(
   SegmentationRenderLayer,
-) {}
+) {
+  drawnByHostLayer = true;
+}
 const Base = UserLayerWithVoxelEditingMixin(
   UserLayerWithAnnotationsMixin(UserLayer),
 );

@@ -71,7 +71,6 @@ export class RenderLayer extends RefCounted {
   layerChanged = new NullarySignal();
   redrawNeeded = new NullarySignal();
   layerChunkProgressInfo = new LayerChunkProgressInfo();
-  forceHiddenFromMainRenderLoop = false;
 
   handleAction(_action: string) {
     // Do nothing by default.

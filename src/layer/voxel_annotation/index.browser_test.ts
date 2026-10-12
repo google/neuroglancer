@@ -443,6 +443,13 @@ describe("Voxel Editing Utilities", () => {
       expect(kept).toHaveLength(1);
       expect(kept[0]).toBe(sources[0]);
     });
+
+    it("Segmentation: drawn by its host layer", () => {
+      const { userLayer, loadedSubsource } = createLayer();
+      const preview =
+        userLayer.editingContexts.get(loadedSubsource)!.previewRenderLayer!;
+      expect(preview.drawnByHostLayer).toBe(true);
+    });
   });
 
   describe("Layer controls", () => {

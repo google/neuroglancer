@@ -490,6 +490,9 @@ uint64_t getMappedObjectId(uint64_t value) {
   }
 
   draw(renderContext: SliceViewRenderContext) {
+    // The preview is drawn first, into the same depth buffer: the depth test
+    // then rejects this layer's fragments wherever the preview drew, so the
+    // preview replaces the data instead of blending with it.
     if (this.voxelEditingPreviewLayer) {
       this.voxelEditingPreviewLayer.draw(renderContext);
     }
