@@ -15,9 +15,6 @@
 
 import neuroglancer
 import numpy as np
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.wait import WebDriverWait
 
 
 def test_invlerp(webdriver):
@@ -190,12 +187,17 @@ void main() {
 
 
 def read_hidden_count(driver):
+    from selenium.webdriver.common.by import By
+
     return driver.find_element(
         By.CSS_SELECTOR, ".neuroglancer-shader-controls-hidden-count"
     ).text
 
 
 def expect_hidden_count(webdriver, text):
+    from selenium.common.exceptions import NoSuchElementException, TimeoutException
+    from selenium.webdriver.support.wait import WebDriverWait
+
     webdriver.sync()
     try:
         WebDriverWait(
@@ -206,6 +208,8 @@ def expect_hidden_count(webdriver, text):
 
 
 def test_hidden_controls_follow_the_shaders_that_draw(webdriver):
+    from selenium.webdriver.common.by import By
+
     with webdriver.viewer.txn() as s:
         s.dimensions = neuroglancer.CoordinateSpace(
             names=["x", "y", "z"], units="nm", scales=[1, 1, 1]
