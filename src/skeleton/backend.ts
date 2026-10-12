@@ -269,6 +269,7 @@ export class SpatiallyIndexedSkeletonChunk
     this.systemMemoryBytes = this.gpuMemoryBytes =
       this.indices!.byteLength +
       getVertexAttributeBytes(this) +
+      this.nodeIds!.byteLength +
       this.segmentIds!.byteLength;
     super.downloadSucceeded();
   }

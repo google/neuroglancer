@@ -418,7 +418,6 @@ export function editableSpatiallyIndexedSkeletonSourceSupportsAction(
 
 export function normalizeSpatiallyIndexedSkeletonNode(
   node: SpatiallyIndexedSkeletonNode,
-  fallbackSegmentId: bigint,
 ): SpatiallyIndexedSkeletonNode | undefined {
   const x = Number(node.position[0]);
   const y = Number(node.position[1]);
@@ -428,7 +427,6 @@ export function normalizeSpatiallyIndexedSkeletonNode(
   }
   return {
     ...node,
-    segmentId: node.segmentId ?? fallbackSegmentId,
     position: new Float32Array([x, y, z]),
     description:
       typeof node.description === "string" && node.description.length > 0
@@ -2668,10 +2666,8 @@ export class SpatialSkeletonState
           }
           const normalizedNodes: SpatiallyIndexedSkeletonNode[] = [];
           for (const fetchedNode of fetchedNodes) {
-            const mappedNode = normalizeSpatiallyIndexedSkeletonNode(
-              fetchedNode,
-              segmentId,
-            );
+            const mappedNode =
+              normalizeSpatiallyIndexedSkeletonNode(fetchedNode);
             if (mappedNode === undefined) continue;
             normalizedNodes.push(mappedNode);
           }
