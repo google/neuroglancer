@@ -131,7 +131,6 @@ import {
 import { Uint64Set } from "#src/uint64_set.js";
 import { gatherUpdate } from "#src/util/array.js";
 import {
-  getContrastRatio,
   getRelativeLuminance,
   getSaturation,
   pickHighestContrastColor,
@@ -142,7 +141,7 @@ import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import type { ValueOrError } from "#src/util/error.js";
 import { makeValueOrError, valueOrThrow } from "#src/util/error.js";
-import { kOneVec4, mat4, vec3, type vec4 } from "#src/util/geom.js";
+import { kOneVec4, kZeroVec, mat4, vec3, type vec4 } from "#src/util/geom.js";
 import { verifyFinitePositiveFloat } from "#src/util/json.js";
 import * as matrix from "#src/util/matrix.js";
 import { getObjectId } from "#src/util/object_id.js";
@@ -234,11 +233,6 @@ const SELECTED_NODE_OUTLINE_DIAMETER_FRACTION = "0.5";
 // logic in getObjectColor (segmentation_display_state/frontend.ts).
 const HIGHLIGHTED_NODE_BORDER_SATURATION_FACTOR = 0.5;
 const HIGHLIGHTED_NODE_BORDER_SATURATION_THRESHOLD = 0.5;
-const HIGHLIGHTED_NODE_BORDER_MIN_CONTRAST_RATIO = 3;
-const HIGHLIGHTED_NODE_BORDER_FALLBACK_COLORS: readonly vec3[] = [
-  vec3.fromValues(0, 0, 0),
-  vec3.fromValues(1, 1, 1),
-];
 
 // Muted colors for the selected (pinned) node -- less vibrant.
 const SELECTED_NODE_HIGHLIGHT_COLORS: readonly vec3[] = [
@@ -1343,8 +1337,10 @@ class SkeletonNodeHighlightOverlay extends RefCounted implements PanelOverlay {
       renderOptions.lineWidth.value,
       targetIsSliceView,
     );
-    const { width, logicalWidth } = panel.renderViewport;
-    const cssPerDevicePixel = width > 0 ? logicalWidth / width : 1;
+    // Clipping shrinks the drawn region, not the pixels, so this stays 1 unless screenshots are scaled.
+    const { logicalWidth } = panel.renderViewport;
+    const cssPerDevicePixel =
+      logicalWidth > 0 ? panel.element.clientWidth / logicalWidth : 1;
     const coordinateSpace = panel.navigationState.coordinateSpace.value;
     updateSkeletonHighlightOverlay(
       this.layer.computePanelOverlayPrimitives(diameter, borderWidth),
@@ -2591,18 +2587,8 @@ export class SpatiallyIndexedSkeletonLayer
         HIGHLIGHTED_NODE_BORDER_SATURATION_THRESHOLD
           ? 1.0 - HIGHLIGHTED_NODE_BORDER_SATURATION_FACTOR
           : 1.0 + HIGHLIGHTED_NODE_BORDER_SATURATION_FACTOR;
-      const saturatedColor = saturateColor(
-        hoveredSegmentColor,
-        saturationFactor,
-      );
       this.highlightedNodeOutlineColor.set(
-        getContrastRatio(saturatedColor, hoveredSegmentColor) >=
-          HIGHLIGHTED_NODE_BORDER_MIN_CONTRAST_RATIO
-          ? saturatedColor
-          : pickHighestContrastColor(
-              HIGHLIGHTED_NODE_BORDER_FALLBACK_COLORS,
-              hoveredSegmentColor,
-            ),
+        saturateColor(hoveredSegmentColor, saturationFactor),
       );
     } else {
       vec3.copy(
@@ -3846,9 +3832,9 @@ export class SpatiallyIndexedSkeletonLayer
   }
 
   // Sets the shader position override to the one node currently being dragged
-  // (if any) that belongs to `overlayChunk`. Reads the live pending state each
-  // draw; leaves the override disabled (as beginLayer set it) when no dragged
-  // node maps into this chunk.
+  // (if any) that belongs to `overlayChunk`, and disables it otherwise: the
+  // uniform persists across chunks, and a stale index would move the vertex with
+  // that index in another skeleton's chunk.
   private applyOverlayNodePositionOverride(
     gl: GL,
     renderHelper: RenderHelper,
@@ -3864,28 +3850,32 @@ export class SpatiallyIndexedSkeletonLayer
     ) {
       return;
     }
+    let overrideVertexIndex = -1;
+    let overridePosition: ArrayLike<number> = kZeroVec;
     for (const nodeId of getPendingNodeIds()) {
       const vertexIndex = overlayChunk.nodeIndex.get(nodeId);
       if (vertexIndex === undefined) continue;
       const position = getPendingNodePosition(nodeId);
       if (position === undefined) continue;
-      edgeShader.bind();
-      renderHelper.setNodePositionOverride(
-        gl,
-        edgeShader,
-        vertexIndex,
-        position,
-      );
-      nodeShader.bind();
-      renderHelper.setNodePositionOverride(
-        gl,
-        nodeShader,
-        vertexIndex,
-        position,
-      );
+      overrideVertexIndex = vertexIndex;
+      overridePosition = position;
       // Exactly one node is dragged at a time.
-      return;
+      break;
     }
+    edgeShader.bind();
+    renderHelper.setNodePositionOverride(
+      gl,
+      edgeShader,
+      overrideVertexIndex,
+      overridePosition,
+    );
+    nodeShader.bind();
+    renderHelper.setNodePositionOverride(
+      gl,
+      nodeShader,
+      overrideVertexIndex,
+      overridePosition,
+    );
   }
 
   private drawInspectionOverlayPass(

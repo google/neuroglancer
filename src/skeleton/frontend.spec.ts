@@ -805,6 +805,96 @@ describe("SpatiallyIndexedSkeletonLayer selected node outline color", () => {
   });
 });
 
+describe("SpatiallyIndexedSkeletonLayer hovered node outline color", () => {
+  it("keeps the hovered outline tinted by its segment rather than black or white", () => {
+    const segmentColor = vec3.fromValues(0, 1, 0);
+    const displayState = {
+      segmentationColorGroupState: {
+        value: {
+          segmentStatedColors: new Map([[202n, 0x00ff00n]]),
+          segmentDefaultColor: { value: undefined },
+          segmentColorHash: { compute: vi.fn() },
+        },
+      },
+      saturation: { value: 1 },
+      hoverHighlight: { value: true },
+      segmentSelectionState: { isSelected: vi.fn(() => false), baseValue: 0n },
+    };
+    const layer = Object.assign(
+      Object.create(SpatiallyIndexedSkeletonLayer.prototype),
+      {
+        selectedNodeInfo: { value: undefined },
+        hoveredNodeInfo: { value: { nodeId: 303, segmentId: 202 } },
+        selectedNodeOutlineColor: vec3.create(),
+        highlightedNodeOutlineColor: vec3.create(),
+        nodeOutlineColorGeneration: 0,
+        cachedNodeOutlineColorGeneration: -1,
+        displayState,
+      },
+    );
+
+    (layer as any).updateNodeOutlineColorPair();
+    const highlightedColor = [...(layer as any).highlightedNodeOutlineColor];
+
+    expect(highlightedColor).not.toEqual([0, 0, 0]);
+    expect(highlightedColor).not.toEqual([1, 1, 1]);
+    expect(highlightedColor).not.toEqual([...segmentColor]);
+    expect(highlightedColor[1]).toBeGreaterThan(highlightedColor[0]);
+    expect(highlightedColor[1]).toBeGreaterThan(highlightedColor[2]);
+  });
+});
+
+describe("SpatiallyIndexedSkeletonLayer node drag override", () => {
+  it("moves the dragged node only in its own skeleton's chunk, not the same vertex index in later chunks", () => {
+    const draggedNodeId = 7;
+    const draggedChunk = { nodeIndex: new Map([[draggedNodeId, 2]]) };
+    const otherSkeletonChunk = { nodeIndex: new Map([[99, 2]]) };
+    const overrideIndexAtDraw: number[] = [];
+    let currentOverrideIndex = -1;
+    const renderHelper = {
+      setNodePositionOverride: vi.fn(
+        (_gl: unknown, _shader: unknown, vertexIndex: number) => {
+          currentOverrideIndex = vertexIndex;
+        },
+      ),
+      drawSkeletons: vi.fn(() => {
+        overrideIndexAtDraw.push(currentOverrideIndex);
+      }),
+    };
+    const shader = { bind: vi.fn() };
+    const layer = Object.assign(
+      Object.create(SpatiallyIndexedSkeletonLayer.prototype),
+      {
+        getPendingNodeIds: () => [draggedNodeId],
+        getPendingNodePositionOverride: (nodeId: number) =>
+          nodeId === draggedNodeId ? new Float32Array([1, 2, 3]) : undefined,
+        resolveSourceBackedOverlayChunks: () => [
+          draggedChunk,
+          otherSkeletonChunk,
+        ],
+        beginSkeletonRenderPass: () => ({
+          gl: {},
+          edgeShader: shader,
+          nodeShader: shader,
+          skeletonParams: {},
+        }),
+        endSkeletonRenderPass: vi.fn(),
+      },
+    );
+
+    (layer as any).drawInspectionOverlayPass(
+      { emitPickID: false, projectionParameters: {} },
+      {},
+      renderHelper,
+      undefined,
+      1,
+      5,
+    );
+
+    expect(overrideIndexAtDraw).toEqual([2, -1]);
+  });
+});
+
 describe("SpatiallyIndexedSkeletonLayer browse exclusions", () => {
   function getExcludedSegmentIds(layer: any) {
     const excluded = layer.getBrowsePassExcludedSegments() as
