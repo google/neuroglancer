@@ -18,25 +18,7 @@ import type {
   SpatialSkeletonShortcut,
   SpatialSkeletonToolStatusText,
 } from "#src/ui/skeleton_edit_tool_shortcuts.js";
-import {
-  ADD_NODE_ACTION,
-  DELETE_ACTION,
-  DELETE_CLICK_ACTION,
-  EXIT_CREATE_ACTION,
-  EXIT_DELETE_ACTION,
-  EXIT_INSERT_ACTION,
-  EXIT_MERGE_ACTION,
-  EXIT_SPLIT_ACTION,
-  INSERT_ACTION,
-  MERGE_ACTION,
-  MOVE_ACTION,
-  NEW_SKELETON_ACTION,
-  PLACE_ACTION,
-  SELECT_ACTION,
-  SHOW_SKELETON_ACTION,
-  SPATIAL_SKELETON_ROTATE_PAN_ACTION,
-  SPLIT_ACTION,
-} from "#src/ui/skeleton_edit_tool_shortcuts.js";
+import { SKELETON_EDIT_SHORTCUTS } from "#src/ui/skeleton_edit_tool_shortcuts.js";
 
 export interface SpatialSkeletonToolPointInfo {
   nodeId: bigint;
@@ -137,42 +119,42 @@ export function getSpatialSkeletonDefaultStatusText(
       return {
         status: "No selection",
         actions: [
-          SELECT_ACTION,
-          MOVE_ACTION,
-          MERGE_ACTION,
-          INSERT_ACTION,
-          SPLIT_ACTION,
-          NEW_SKELETON_ACTION,
-          DELETE_ACTION,
-          SPATIAL_SKELETON_ROTATE_PAN_ACTION,
+          SKELETON_EDIT_SHORTCUTS.select,
+          SKELETON_EDIT_SHORTCUTS.move,
+          SKELETON_EDIT_SHORTCUTS.merge,
+          SKELETON_EDIT_SHORTCUTS.insert,
+          SKELETON_EDIT_SHORTCUTS.split,
+          SKELETON_EDIT_SHORTCUTS.newSkeleton,
+          SKELETON_EDIT_SHORTCUTS.deleteMode,
+          SKELETON_EDIT_SHORTCUTS.rotatePan,
         ],
       };
     case "selected-visible":
       return {
         status: shiftHeld ? "Ready to place new node" : "Node selected",
         actions: [
-          SELECT_ACTION,
-          MOVE_ACTION,
-          ADD_NODE_ACTION,
-          MERGE_ACTION,
-          INSERT_ACTION,
-          SPLIT_ACTION,
-          NEW_SKELETON_ACTION,
-          DELETE_ACTION,
-          SPATIAL_SKELETON_ROTATE_PAN_ACTION,
+          SKELETON_EDIT_SHORTCUTS.select,
+          SKELETON_EDIT_SHORTCUTS.move,
+          SKELETON_EDIT_SHORTCUTS.addNode,
+          SKELETON_EDIT_SHORTCUTS.merge,
+          SKELETON_EDIT_SHORTCUTS.insert,
+          SKELETON_EDIT_SHORTCUTS.split,
+          SKELETON_EDIT_SHORTCUTS.newSkeleton,
+          SKELETON_EDIT_SHORTCUTS.deleteMode,
+          SKELETON_EDIT_SHORTCUTS.rotatePan,
         ],
       };
     case "selected-hidden":
       return {
         status: "Node selected from non-visible skeleton",
         actions: [
-          SHOW_SKELETON_ACTION,
-          MERGE_ACTION,
-          INSERT_ACTION,
-          SPLIT_ACTION,
-          NEW_SKELETON_ACTION,
-          DELETE_ACTION,
-          SPATIAL_SKELETON_ROTATE_PAN_ACTION,
+          SKELETON_EDIT_SHORTCUTS.show,
+          SKELETON_EDIT_SHORTCUTS.merge,
+          SKELETON_EDIT_SHORTCUTS.insert,
+          SKELETON_EDIT_SHORTCUTS.split,
+          SKELETON_EDIT_SHORTCUTS.newSkeleton,
+          SKELETON_EDIT_SHORTCUTS.deleteMode,
+          SKELETON_EDIT_SHORTCUTS.rotatePan,
         ],
       };
   }
@@ -181,7 +163,7 @@ export function getSpatialSkeletonDefaultStatusText(
 export function getSpatialSkeletonMovingStatusText(): SpatialSkeletonToolStatusText {
   return {
     status: "Moving node",
-    actions: [SPATIAL_SKELETON_ROTATE_PAN_ACTION],
+    actions: [SKELETON_EDIT_SHORTCUTS.rotatePan],
   };
 }
 
@@ -196,8 +178,8 @@ function withExitHint(
   exitAction: SpatialSkeletonShortcut,
 ): SpatialSkeletonShortcut[] {
   return canExitWithKey
-    ? [action, exitAction, SPATIAL_SKELETON_ROTATE_PAN_ACTION]
-    : [action, SPATIAL_SKELETON_ROTATE_PAN_ACTION];
+    ? [action, exitAction, SKELETON_EDIT_SHORTCUTS.rotatePan]
+    : [action, SKELETON_EDIT_SHORTCUTS.rotatePan];
 }
 
 export function getSpatialSkeletonMergeStatusText(
@@ -208,20 +190,28 @@ export function getSpatialSkeletonMergeStatusText(
     case "no-from-node":
       return {
         status: "Merge · click a node to merge from",
-        actions: withExitHint(SELECT_ACTION, canExitWithKey, EXIT_MERGE_ACTION),
+        actions: withExitHint(
+          SKELETON_EDIT_SHORTCUTS.select,
+          canExitWithKey,
+          SKELETON_EDIT_SHORTCUTS.exitMerge,
+        ),
       };
     case "from-node-visible":
       return {
         status: "Merge · click a node to merge to",
-        actions: withExitHint(SELECT_ACTION, canExitWithKey, EXIT_MERGE_ACTION),
+        actions: withExitHint(
+          SKELETON_EDIT_SHORTCUTS.select,
+          canExitWithKey,
+          SKELETON_EDIT_SHORTCUTS.exitMerge,
+        ),
       };
     case "from-node-hidden":
       return {
         status: "Merge · make the from-node skeleton visible",
         actions: withExitHint(
-          SHOW_SKELETON_ACTION,
+          SKELETON_EDIT_SHORTCUTS.show,
           canExitWithKey,
-          EXIT_MERGE_ACTION,
+          SKELETON_EDIT_SHORTCUTS.exitMerge,
         ),
       };
   }
@@ -230,7 +220,7 @@ export function getSpatialSkeletonMergeStatusText(
 export function getSpatialSkeletonMergingStatusText(): SpatialSkeletonToolStatusText {
   return {
     status: "Merge · merging nodes…",
-    actions: [SPATIAL_SKELETON_ROTATE_PAN_ACTION],
+    actions: [SKELETON_EDIT_SHORTCUTS.rotatePan],
   };
 }
 
@@ -245,14 +235,18 @@ export function getSpatialSkeletonInsertStatusText(
       state === "no-first-node"
         ? "Insert · click the first node"
         : "Insert · click the parent or a child of the first node",
-    actions: withExitHint(SELECT_ACTION, canExitWithKey, EXIT_INSERT_ACTION),
+    actions: withExitHint(
+      SKELETON_EDIT_SHORTCUTS.select,
+      canExitWithKey,
+      SKELETON_EDIT_SHORTCUTS.exitInsert,
+    ),
   };
 }
 
 export function getSpatialSkeletonInsertingStatusText(): SpatialSkeletonToolStatusText {
   return {
     status: "Insert · inserting node…",
-    actions: [SPATIAL_SKELETON_ROTATE_PAN_ACTION],
+    actions: [SKELETON_EDIT_SHORTCUTS.rotatePan],
   };
 }
 
@@ -261,14 +255,18 @@ export function getSpatialSkeletonSplitIdleStatusText(
 ): SpatialSkeletonToolStatusText {
   return {
     status: "Split · click a node to form the root of a new skeleton",
-    actions: withExitHint(SELECT_ACTION, canExitWithKey, EXIT_SPLIT_ACTION),
+    actions: withExitHint(
+      SKELETON_EDIT_SHORTCUTS.select,
+      canExitWithKey,
+      SKELETON_EDIT_SHORTCUTS.exitSplit,
+    ),
   };
 }
 
 export function getSpatialSkeletonSplittingStatusText(): SpatialSkeletonToolStatusText {
   return {
     status: "Split · splitting node…",
-    actions: [SPATIAL_SKELETON_ROTATE_PAN_ACTION],
+    actions: [SKELETON_EDIT_SHORTCUTS.rotatePan],
   };
 }
 
@@ -278,9 +276,9 @@ export function getSpatialSkeletonDeleteIdleStatusText(
   return {
     status: "Delete · no selected nodes",
     actions: withExitHint(
-      DELETE_CLICK_ACTION,
+      SKELETON_EDIT_SHORTCUTS.deleteNode,
       canExitWithKey,
-      EXIT_DELETE_ACTION,
+      SKELETON_EDIT_SHORTCUTS.exitDelete,
     ),
   };
 }
@@ -288,7 +286,7 @@ export function getSpatialSkeletonDeleteIdleStatusText(
 export function getSpatialSkeletonDeletingStatusText(): SpatialSkeletonToolStatusText {
   return {
     status: "Delete · deleting node…",
-    actions: [SPATIAL_SKELETON_ROTATE_PAN_ACTION],
+    actions: [SKELETON_EDIT_SHORTCUTS.rotatePan],
   };
 }
 
@@ -297,13 +295,17 @@ export function getSpatialSkeletonCreateIdleStatusText(
 ): SpatialSkeletonToolStatusText {
   return {
     status: "Create · ready to place",
-    actions: withExitHint(PLACE_ACTION, canExitWithKey, EXIT_CREATE_ACTION),
+    actions: withExitHint(
+      SKELETON_EDIT_SHORTCUTS.place,
+      canExitWithKey,
+      SKELETON_EDIT_SHORTCUTS.exitCreate,
+    ),
   };
 }
 
 export function getSpatialSkeletonCreatingStatusText(): SpatialSkeletonToolStatusText {
   return {
     status: "Create · creating skeleton…",
-    actions: [SPATIAL_SKELETON_ROTATE_PAN_ACTION],
+    actions: [SKELETON_EDIT_SHORTCUTS.rotatePan],
   };
 }

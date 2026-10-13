@@ -41,7 +41,11 @@ import {
 import { buildSpatiallyIndexedSkeletonNavigationGraph } from "#src/skeleton/navigation_graph.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
-import { getDefaultSkeletonFindPathToolBindings } from "#src/ui/default_input_event_bindings.js";
+import {
+  EventActionMap,
+  registerActionListener,
+} from "#src/util/event_action_map.js";
+import { MouseEventBinder } from "#src/util/mouse_bindings.js";
 import * as mouseDrag from "#src/util/mouse_drag.js";
 import { NullarySignal } from "#src/util/signal.js";
 
@@ -61,6 +65,8 @@ if (!("WebGL2RenderingContext" in globalThis)) {
 
 const { setSpatialSkeletonModesToLinesAndPoints, SkeletonRenderMode } =
   await import("#src/skeleton/frontend.js");
+const { PerspectivePanel } = await import("#src/perspective_view/panel.js");
+const { SliceViewPanel } = await import("#src/sliceview/panel.js");
 const { SpatialSkeletonEditTool } = await import(
   "#src/ui/skeleton_edit_tools.js"
 );
@@ -202,6 +208,7 @@ function makeToolActivation() {
     },
     bindAction: vi.fn((action: string, handler: (event: any) => void) => {
       actions.set(action, handler);
+      disposers.push(registerActionListener(window, action, handler));
     }),
     registerDisposer(disposer: unknown) {
       disposers.push(disposer);
@@ -221,6 +228,33 @@ function makeToolActivation() {
   const readStatusElement = () =>
     disposers.find((disposer) => disposer instanceof StatusMessage)!.element;
   return { activation, actions, dispose, readStatusElement };
+}
+
+function makePanel(panelClass: { prototype: object }) {
+  return Object.assign(Object.create(panelClass.prototype), {
+    element: document.createElement("div"),
+  }) as { element: HTMLElement };
+}
+
+function makeBoundPanel(
+  panelClass: { prototype: object },
+  activation: { inputEventMapBinder: { mock: { calls: unknown[][] } } },
+) {
+  const panel = makePanel(panelClass);
+  const inputEventMap = new EventActionMap();
+  for (const [boundMap] of activation.inputEventMapBinder.mock.calls) {
+    inputEventMap.addParent(
+      boundMap as EventActionMap,
+      Number.POSITIVE_INFINITY,
+    );
+  }
+  const binder = new MouseEventBinder(panel.element, inputEventMap);
+  document.body.appendChild(panel.element);
+  const dispose = () => {
+    binder.dispose();
+    panel.element.remove();
+  };
+  return { panel, dispose };
 }
 
 function makeEditToolHarness() {
@@ -254,7 +288,10 @@ function makeEditToolHarness() {
           },
         },
         selectionState: { value: undefined, changed: makeChangedSignal() },
-        display: { panels: [] },
+        display: {
+          panels: new Set(),
+          container: document.createElement("div"),
+        },
       },
     },
     getSpatiallyIndexedSkeletonLayer: () => ({ getNode: vi.fn() }),
@@ -269,8 +306,15 @@ function makeEditToolHarness() {
     layer,
     mergeTargetPrefetch: makeMergeTargetPrefetch(),
   });
+  Object.assign(activation, { tool });
   SpatialSkeletonEditTool.prototype.activate.call(tool, activation as any);
-  return { layer, actions, dispose, statusMessage: readStatusElement() };
+  return {
+    layer,
+    activation,
+    actions,
+    dispose,
+    statusMessage: readStatusElement(),
+  };
 }
 
 function readFullText(element: HTMLElement) {
@@ -290,15 +334,14 @@ function readStatusText(statusMessage: HTMLElement) {
 
 function readHints(statusMessage: HTMLElement) {
   return Array.from(
-    statusMessage.querySelectorAll(".neuroglancer-annotation-entry-tool-chip"),
+    statusMessage.querySelectorAll(".neuroglancer-tool-status-chip"),
     (chip) => ({
       key: chip
-        .querySelector(".neuroglancer-annotation-entry-tool-chip-key")
+        .querySelector(".neuroglancer-tool-status-chip-key")
         ?.textContent?.replace(/\s+/g, " ")
         .trim(),
-      label: chip.querySelector(
-        ".neuroglancer-annotation-entry-tool-chip-label",
-      )?.textContent,
+      label: chip.querySelector(".neuroglancer-tool-status-chip-label")
+        ?.textContent,
     }),
   );
 }
@@ -408,7 +451,10 @@ function makeFindPathToolHarness(
     manager: {
       root: {
         layerSelectedValues: { mouseState },
-        display: { panels: [] },
+        display: {
+          panels: new Set(),
+          container: document.createElement("div"),
+        },
       },
     },
     getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
@@ -572,7 +618,10 @@ function makeDragHarness({ inspected = true } = {}) {
       root: {
         layerSelectedValues: { mouseState },
         selectionState: { value: undefined, changed: makeChangedSignal() },
-        display: { panels: [] },
+        display: {
+          panels: new Set(),
+          container: document.createElement("div"),
+        },
       },
     },
     getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
@@ -598,7 +647,7 @@ function makeDragHarness({ inspected = true } = {}) {
     .mockImplementation(() => {});
   const event = new MouseEvent("mousedown");
   const panel = {
-    element: { dataset: {} },
+    element: document.createElement("div"),
     translateDataPointByViewportPixels: (
       result: Float32Array,
       anchor: Float32Array,
@@ -720,7 +769,7 @@ describe("spatial_skeleton_edit_tool", () => {
           " click Select drag Move" +
           " hold + m Merge hold + i Insert hold + s Split" +
           " hold + n New skeleton hold + d Delete" +
-          " middle click / ctrl click Rotate/pan",
+          " middle drag / ctrl drag Rotate/pan",
       );
     } finally {
       harness.dispose();
@@ -772,7 +821,7 @@ describe("spatial_skeleton_edit_tool", () => {
       );
       expect(readHints(harness.statusMessage)).toEqual([
         { key: "click", label: "Select" },
-        { key: "middle click / ctrl click", label: "Rotate/pan" },
+        { key: "middle drag / ctrl drag", label: "Rotate/pan" },
       ]);
     } finally {
       harness.dispose();
@@ -847,7 +896,10 @@ describe("spatial_skeleton_edit_tool", () => {
         root: {
           layerSelectedValues: { mouseState },
           selectionState: { value: undefined, changed: makeChangedSignal() },
-          display: { panels: [] },
+          display: {
+            panels: new Set(),
+            container: document.createElement("div"),
+          },
         },
       },
       getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
@@ -956,7 +1008,10 @@ describe("spatial_skeleton_edit_tool", () => {
         root: {
           layerSelectedValues: { mouseState },
           selectionState: { value: undefined, changed: makeChangedSignal() },
-          display: { panels: [] },
+          display: {
+            panels: new Set(),
+            container: document.createElement("div"),
+          },
         },
       },
       getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
@@ -1287,7 +1342,10 @@ describe("spatial_skeleton_edit_tool", () => {
             changed: makeChangedSignal(),
             unpin: vi.fn(),
           },
-          display: { panels: [] },
+          display: {
+            panels: new Set(),
+            container: document.createElement("div"),
+          },
         },
       },
       getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
@@ -1690,7 +1748,10 @@ describe("spatial_skeleton_edit_tool", () => {
             changed: makeChangedSignal(),
             unpin: vi.fn(),
           },
-          display: { panels: [] },
+          display: {
+            panels: new Set(),
+            container: document.createElement("div"),
+          },
         },
       },
       getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
@@ -1811,22 +1872,88 @@ describe("spatial_skeleton_edit_tool", () => {
     }
   });
 
-  it("uses regular clicks for Find Path and preserves skeleton navigation chords", () => {
-    const bindings = getDefaultSkeletonFindPathToolBindings();
+  it("selects a node with a left click in a panel created after a layout change", () => {
+    const { tool, layer, original } = makeDragHarness();
+    const { activation, dispose } = makeToolActivation();
+    SpatialSkeletonEditTool.prototype.activate.call(tool, activation as any);
+    const { panel, dispose: removePanel } = makeBoundPanel(
+      SliceViewPanel,
+      activation,
+    );
+    try {
+      layer.manager.root.display.panels.add(panel);
 
-    expect(bindings.get("at:mousedown0")?.action).toBe(
-      SKELETON_FIND_PATH_SELECT_ENDPOINT,
-    );
-    expect(bindings.get("at:shift+mousedown0")?.action).toBe(
-      SKELETON_FIND_PATH_SELECT_ENDPOINT,
-    );
-    expect(bindings.get("at:control+mousedown0")?.action).toBe(
-      "rotate-via-mouse-drag",
-    );
-    expect(bindings.get("at:control+shift+mousedown0")?.action).toBe(
-      "translate-via-mouse-drag",
-    );
-    expect(bindings.get("at:mousedown1")?.action).toBe("rotate-via-mouse-drag");
+      panel.element.dispatchEvent(
+        new MouseEvent("mousedown", { button: 0, bubbles: true }),
+      );
+
+      expect(layer.selectSpatialSkeletonNode).toHaveBeenCalledWith(
+        original.nodeId,
+        true,
+        original,
+      );
+    } finally {
+      removePanel();
+      dispose();
+    }
+  });
+
+  it("shows the mode cursor on panels created after a layout change", () => {
+    suppressStatusMessages();
+    const harness = makeEditToolHarness();
+    try {
+      harness.actions.get(SKELETON_ENTER_MERGE_MODE)?.({});
+      const { container } = harness.layer.manager.root.display;
+      const panelElement = document.createElement("div");
+      panelElement.classList.add("neuroglancer-rendered-data-panel");
+      container.appendChild(panelElement);
+
+      expect(
+        panelElement.matches(
+          '[data-skeleton-edit-mode="merge"] .neuroglancer-rendered-data-panel',
+        ),
+      ).toBe(true);
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  it("pans a 2D panel and rotates a 3D panel with a middle drag", () => {
+    suppressStatusMessages();
+    const harness = makeEditToolHarness();
+    const slice = makeBoundPanel(SliceViewPanel, harness.activation);
+    const perspective = makeBoundPanel(PerspectivePanel, harness.activation);
+    const receivedActions = (panel: { element: HTMLElement }) => {
+      const received: string[] = [];
+      for (const action of [
+        "rotate-via-mouse-drag",
+        "translate-via-mouse-drag",
+      ]) {
+        panel.element.addEventListener(`action:${action}`, () =>
+          received.push(action),
+        );
+      }
+      return received;
+    };
+    try {
+      harness.layer.manager.root.display.panels.add(slice.panel);
+      harness.layer.manager.root.display.panels.add(perspective.panel);
+      const sliceActions = receivedActions(slice.panel);
+      const perspectiveActions = receivedActions(perspective.panel);
+
+      for (const { panel } of [slice, perspective]) {
+        panel.element.dispatchEvent(
+          new MouseEvent("mousedown", { button: 1, bubbles: true }),
+        );
+      }
+
+      expect(sliceActions).toEqual(["translate-via-mouse-drag"]);
+      expect(perspectiveActions).toEqual(["rotate-via-mouse-drag"]);
+    } finally {
+      slice.dispose();
+      perspective.dispose();
+      harness.dispose();
+    }
   });
 
   it("shows no generic bindings line in the Find Path status", () => {
@@ -2266,7 +2393,10 @@ describe("spatial_skeleton_edit_tool", () => {
         root: {
           layerSelectedValues: { mouseState },
           selectionState: { value: undefined, changed: makeChangedSignal() },
-          display: { panels: [] },
+          display: {
+            panels: new Set(),
+            container: document.createElement("div"),
+          },
         },
       },
       getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
@@ -2478,8 +2608,15 @@ describe("spatial_skeleton_edit_tool", () => {
     it.each([false, true])(
       `cancels a ${startMoving ? "moving" : "pressed"} node drag on deactivation (reactivate: %s)`,
       (reactivate) => {
-        const { tool, state, source, start, event, releaseBrowseExclusion } =
-          makeDragHarness();
+        const {
+          tool,
+          state,
+          source,
+          start,
+          event,
+          panel,
+          releaseBrowseExclusion,
+        } = makeDragHarness();
         const first = makeToolActivation();
         const second = makeToolActivation();
         tool.activate(first.activation);
@@ -2490,6 +2627,7 @@ describe("spatial_skeleton_edit_tool", () => {
         tool.mergeTargetHoverRelease = releaseMergeHover;
         first.dispose();
         expect(tool.dragInProgress).toBe(false);
+        expect(panel.element.dataset.skeletonPressMode).toBeUndefined();
         expect(releaseMergeHover).toHaveBeenCalledOnce();
         expect(tool.mergeTargetPrefetch.clear).toHaveBeenCalledTimes(
           prefetchClears + 1,
@@ -2520,6 +2658,7 @@ describe("spatial_skeleton_edit_tool", () => {
               clears + 1,
             );
             expect(tool.dragInProgress).toBe(true);
+            expect(panel.element.dataset.skeletonPressMode).toBe("move");
             current.finish(event, 0, 0);
             expect(source.moveNodesCommand.createCommand).toHaveBeenCalledTimes(
               1,
@@ -2579,7 +2718,10 @@ describe("spatial_skeleton_edit_tool", () => {
         root: {
           layerSelectedValues: { mouseState },
           selectionState: { value: undefined, changed: makeChangedSignal() },
-          display: { panels: [] },
+          display: {
+            panels: new Set(),
+            container: document.createElement("div"),
+          },
         },
       },
       getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
