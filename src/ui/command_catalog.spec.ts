@@ -82,6 +82,7 @@ function makeContext(
       getLayerByName: () => undefined,
     },
     selectedLayer: {},
+    toolPalettes: { changedShallow: noopSignal, palettes: new Set() },
     inputEventBindings,
     commandRegistry,
   } as unknown as CommandCatalogContext;
@@ -302,6 +303,51 @@ describe("layer command shortcuts", () => {
       expect(
         catalog.commands.map((entry) => [entry.command.id, entry.shortcut]),
       ).toContainEqual(["toggle-pick-layer-1", "alt+1"]);
+    } finally {
+      catalog.dispose();
+    }
+  });
+});
+
+describe("CommandCatalog tool palettes", () => {
+  function makePalette(name: string, visible = false) {
+    return {
+      name: { value: name, changed: new Signal() },
+      location: { visible },
+    };
+  }
+
+  function makePaletteContext(palettes: ReturnType<typeof makePalette>[]) {
+    const context = makeContext();
+    (context as unknown as { toolPalettes: unknown }).toolPalettes = {
+      changedShallow: noopSignal,
+      palettes: new Set(palettes),
+    };
+    return context;
+  }
+
+  it("lists a toggle for each tool palette", () => {
+    const palette = makePalette("Palette");
+    const catalog = new CommandCatalog(makePaletteContext([palette]));
+    try {
+      const entries = catalog.filter("", "Toggle Tool Palette");
+      expect(entries.map((entry) => entry.label)).toStrictEqual(["Palette"]);
+      entries[0].command.invoke({ dispatchTarget: new EventTarget() });
+      expect(palette.location.visible).toBe(true);
+    } finally {
+      catalog.dispose();
+    }
+  });
+
+  it("updates the label when a palette is renamed", async () => {
+    const palette = makePalette("Palette");
+    const catalog = new CommandCatalog(makePaletteContext([palette]));
+    try {
+      palette.name.value = "Shaders";
+      palette.name.changed.dispatch();
+      await nextAnimationFrame();
+      const entries = catalog.filter("", "Toggle Tool Palette");
+      expect(entries.map((entry) => entry.label)).toStrictEqual(["Shaders"]);
     } finally {
       catalog.dispose();
     }

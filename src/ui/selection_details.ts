@@ -30,6 +30,7 @@ import { setClipboard } from "#src/util/clipboard.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { commandOrControlLabel } from "#src/util/platform.js";
+import { formatPositionText } from "#src/util/spatial_units.js";
 import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
@@ -108,9 +109,7 @@ export class SelectionDetailsPanel extends SidePanel {
             );
             const copyButton = makeCopyButton({
               title: "Copy position",
-              onClick: () => {
-                setClipboard(position!.map((x) => Math.floor(x)).join(", "));
-              },
+              onClick: () => copySelectionPositionToClipboard(state),
             });
             positionElement.appendChild(copyButton);
             const {
@@ -207,4 +206,12 @@ export class SelectionDetailsPanel extends SidePanel {
     this.state.value = undefined;
     this.state.pin.value = true;
   }
+}
+
+export function copySelectionPositionToClipboard(
+  state: TrackableDataSelectionState,
+) {
+  const position = state.value?.position;
+  if (position === undefined) return;
+  setClipboard(formatPositionText(position));
 }

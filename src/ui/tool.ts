@@ -861,7 +861,13 @@ export function makeToolActivationStatusMessage(
   activation: ToolActivation,
   options: { showBindings?: boolean } = {},
 ) {
-  const message = activation.registerDisposer(new StatusMessage(false));
+  const message = activation.registerDisposer(
+    new StatusMessage(
+      /*delay=*/ false,
+      /*modal=*/ false,
+      /*insertAtBottom=*/ true,
+    ),
+  );
   message.element.classList.add("neuroglancer-tool-status");
   const content = document.createElement("div");
   content.classList.add("neuroglancer-tool-status-content");
