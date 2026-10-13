@@ -17,7 +17,6 @@
 import {
   SKELETON_ADD_NODE,
   SKELETON_CLEAR_SELECTION,
-  SKELETON_CYCLE_BRANCHES,
   SKELETON_DRAG_VIEW,
   SKELETON_EDIT_AT_MOUSE,
   SKELETON_ENTER_CREATE,
@@ -26,17 +25,7 @@ import {
   SKELETON_ENTER_MERGE_MODE,
   SKELETON_ENTER_SPLIT_MODE,
   SKELETON_FIND_PATH_SELECT_ENDPOINT,
-  SKELETON_GO_BRANCH_END,
-  SKELETON_GO_BRANCH_START,
-  SKELETON_GO_CHILD,
-  SKELETON_GO_PARENT,
-  SKELETON_GO_ROOT,
-  SKELETON_GO_UNFINISHED,
   SKELETON_PIN_NODE,
-  SKELETON_REDO,
-  SKELETON_REROOT,
-  SKELETON_TOGGLE_TRUE_END,
-  SKELETON_UNDO,
 } from "#src/skeleton/actions.js";
 import { EventActionMap } from "#src/util/event_action_map.js";
 import type { InputEventBindings } from "#src/viewer.js";
@@ -212,39 +201,6 @@ export function getDefaultSliceViewPanelBindings() {
   return defaultSliceViewPanelBindings;
 }
 
-let defaultSkeletonTabBindings: EventActionMap | undefined;
-export function getDefaultSkeletonTabBindings() {
-  if (defaultSkeletonTabBindings === undefined) {
-    defaultSkeletonTabBindings = EventActionMap.fromObject(
-      {
-        keyr: SKELETON_GO_ROOT,
-        "shift+keyr": SKELETON_REROOT,
-        keyb: SKELETON_GO_BRANCH_END,
-        "control+keyb": SKELETON_GO_BRANCH_START,
-        bracketleft: SKELETON_GO_PARENT,
-        bracketright: SKELETON_GO_CHILD,
-        keyl: SKELETON_CYCLE_BRANCHES,
-        keyf: SKELETON_GO_UNFINISHED,
-        "control+keyz": { action: SKELETON_UNDO, preventDefault: true },
-        "control+shift+keyz": { action: SKELETON_REDO, preventDefault: true },
-      },
-      { label: "Skeleton Tab" },
-    );
-  }
-  return defaultSkeletonTabBindings;
-}
-
-let defaultSkeletonListBindings: EventActionMap | undefined;
-export function getDefaultSkeletonListBindings() {
-  if (defaultSkeletonListBindings === undefined) {
-    defaultSkeletonListBindings = EventActionMap.fromObject({
-      keyt: SKELETON_TOGGLE_TRUE_END,
-      "shift+keyr": SKELETON_REROOT,
-    });
-  }
-  return defaultSkeletonListBindings;
-}
-
 let defaultSkeletonEditToolBindings: EventActionMap | undefined;
 let defaultSkeletonToolNavigationBindings: EventActionMap | undefined;
 
@@ -309,20 +265,6 @@ export function getDefaultSkeletonEditAuxBindings() {
     });
   }
   return defaultSkeletonEditAuxBindings;
-}
-
-let defaultSkeletonEditNodeBindings: EventActionMap | undefined;
-export function getDefaultSkeletonEditNodeBindings() {
-  if (defaultSkeletonEditNodeBindings === undefined) {
-    defaultSkeletonEditNodeBindings = EventActionMap.fromObject(
-      {
-        keyt: SKELETON_TOGGLE_TRUE_END,
-        "shift+keyr": SKELETON_REROOT,
-      },
-      { label: "Skeleton Edit (node)" },
-    );
-  }
-  return defaultSkeletonEditNodeBindings;
 }
 
 export function setDefaultInputEventBindings(

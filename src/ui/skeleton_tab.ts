@@ -36,19 +36,6 @@ import {
   getVisibleSegments,
 } from "#src/segmentation_display_state/base.js";
 import { getBaseObjectColor } from "#src/segmentation_display_state/frontend.js";
-import {
-  SKELETON_CYCLE_BRANCHES,
-  SKELETON_GO_BRANCH_END,
-  SKELETON_GO_BRANCH_START,
-  SKELETON_GO_CHILD,
-  SKELETON_GO_PARENT,
-  SKELETON_GO_ROOT,
-  SKELETON_GO_UNFINISHED,
-  SKELETON_REDO,
-  SKELETON_REROOT,
-  SKELETON_TOGGLE_TRUE_END,
-  SKELETON_UNDO,
-} from "#src/skeleton/actions.js";
 import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
 import {
   SpatialSkeletonActions,
@@ -85,11 +72,6 @@ import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/opti
 import type { SpatialSkeletonPreparationIntent } from "#src/skeleton/spatial_skeleton_manager.js";
 import { StatusMessage } from "#src/status.js";
 import { observeWatchable, registerNested } from "#src/trackable_value.js";
-import { formatKeyStroke } from "#src/ui/command.js";
-import {
-  getDefaultSkeletonListBindings,
-  getDefaultSkeletonTabBindings,
-} from "#src/ui/default_input_event_bindings.js";
 import {
   SPATIAL_SKELETON_EDIT_MODE_TOOL_ID,
   SPATIAL_SKELETON_FIND_PATH_TOOL_ID,
@@ -99,16 +81,9 @@ import {
   type SpatialSkeletonSegmentRenderRow,
   type SpatialSkeletonSegmentRenderState,
 } from "#src/ui/skeleton_tab_render.js";
-import {
-  CONTEXTUAL_PANEL_BINDING_PRIORITY,
-  makeToolButton,
-} from "#src/ui/tool.js";
+import { makeToolButton } from "#src/ui/tool.js";
 import type { ArraySpliceOp } from "#src/util/array.js";
 import { bigintCompare } from "#src/util/bigint.js";
-import {
-  registerActionListener,
-  KeyboardEventBinder,
-} from "#src/util/keyboard_bindings.js";
 import * as matrix from "#src/util/matrix.js";
 import { formatScaleWithUnitAsString } from "#src/util/si_units.js";
 import { Signal } from "#src/util/signal.js";
@@ -334,17 +309,6 @@ export class SpatialSkeletonEditTab extends Tab {
     const toolbarActions = document.createElement("div");
     toolbarActions.className = "neuroglancer-skeleton-toolbar-actions";
 
-    const tabBindings = getDefaultSkeletonTabBindings();
-    const keyHintFor = (action: string): string => {
-      for (const [, eventAction] of tabBindings.entries()) {
-        if (eventAction.action === action) {
-          const key = eventAction.originalEventIdentifier;
-          if (key !== undefined) return ` (${formatKeyStroke(key)})`;
-        }
-      }
-      return "";
-    };
-
     const makeIconButton = (
       parent: HTMLElement,
       svg: string,
@@ -361,42 +325,32 @@ export class SpatialSkeletonEditTab extends Tab {
       parent.appendChild(button);
       return button;
     };
-    const undoButton = makeIconButton(
-      toolbarActions,
-      svg_undo,
-      `Undo${keyHintFor(SKELETON_UNDO)}`,
-      () => {
-        if (undoButton.disabled) return;
-        void (async () => {
-          try {
-            await undoSpatialSkeletonCommand(layer);
-          } catch (error) {
-            showSpatialSkeletonActionError(
-              SpatialSkeletonHistoryActions.undo,
-              error,
-            );
-          }
-        })();
-      },
-    );
-    const redoButton = makeIconButton(
-      toolbarActions,
-      svg_redo,
-      `Redo${keyHintFor(SKELETON_REDO)}`,
-      () => {
-        if (redoButton.disabled) return;
-        void (async () => {
-          try {
-            await redoSpatialSkeletonCommand(layer);
-          } catch (error) {
-            showSpatialSkeletonActionError(
-              SpatialSkeletonHistoryActions.redo,
-              error,
-            );
-          }
-        })();
-      },
-    );
+    const undoButton = makeIconButton(toolbarActions, svg_undo, "Undo", () => {
+      if (undoButton.disabled) return;
+      void (async () => {
+        try {
+          await undoSpatialSkeletonCommand(layer);
+        } catch (error) {
+          showSpatialSkeletonActionError(
+            SpatialSkeletonHistoryActions.undo,
+            error,
+          );
+        }
+      })();
+    });
+    const redoButton = makeIconButton(toolbarActions, svg_redo, "Redo", () => {
+      if (redoButton.disabled) return;
+      void (async () => {
+        try {
+          await redoSpatialSkeletonCommand(layer);
+        } catch (error) {
+          showSpatialSkeletonActionError(
+            SpatialSkeletonHistoryActions.redo,
+            error,
+          );
+        }
+      })();
+    });
     const navTools = document.createElement("div");
     navTools.className = "neuroglancer-skeleton-nav-tools";
 
@@ -497,39 +451,7 @@ export class SpatialSkeletonEditTab extends Tab {
     nodesSummaryBar.appendChild(nodesSummary);
     nodesSection.appendChild(nodesSummaryBar);
     nodesSection.appendChild(nodesList.element);
-    // tabIndex=-1 makes nodesSection programmatically focusable so that clicking
-    // anywhere in the section (buttons, labels, whitespace) focuses it, which
-    // causes shouldIgnoreEvent to hit the el===this.target fast-path and allow
-    // all keyboard shortcuts without needing a list row to be focused.
-    nodesSection.tabIndex = -1;
     element.appendChild(nodesSection);
-
-    const sectionKeyBinder = this.registerDisposer(
-      new KeyboardEventBinder(nodesSection, getDefaultSkeletonTabBindings()),
-    );
-    // modifierShortcutsAreGlobal=true (the default) blocks Alt/Ctrl shortcuts
-    // when a BUTTON child (nav or undo/redo buttons) has focus.  Setting false
-    // lets those shortcuts through while still blocking them in the filter INPUT.
-    sectionKeyBinder.modifierShortcutsAreGlobal = false;
-
-    const listKeyBinder = this.registerDisposer(
-      new KeyboardEventBinder(
-        nodesList.element,
-        getDefaultSkeletonListBindings(),
-      ),
-    );
-    listKeyBinder.modifierShortcutsAreGlobal = false;
-
-    // Add the tab navigation map to the viewer's slice and perspective view
-    // panels so shortcuts work when the user's focus is on a viewport, not just
-    // the sidebar.  Scoped to this Tab's lifetime via `this` as the context.
-    // Bound below `USER_TOOL_BINDING_PRIORITY` so that a tool the user has bound
-    // to one of these letters still wins while the tab is open.
-    layer.manager.root.toolBinder.bindInputEventMap(
-      getDefaultSkeletonTabBindings(),
-      this,
-      CONTEXTUAL_PANEL_BINDING_PRIORITY,
-    );
 
     let allNodes: SpatiallyIndexedSkeletonNode[] = [];
     let activeSegmentId: bigint | undefined;
@@ -553,7 +475,6 @@ export class SpatialSkeletonEditTab extends Tab {
     let hoveredViewerNodeId: bigint | undefined;
     let hoveredListNodeId: bigint | undefined;
     const pendingDeleteNodes = new Set<bigint>();
-    const pendingRerootNodes = new Set<bigint>();
     const pendingTrueEndNodes = new Set<bigint>();
     const listIndexByNodeId = new Map<bigint, number>();
     const skeletonState = layer.spatialSkeletonState;
@@ -1244,50 +1165,10 @@ export class SpatialSkeletonEditTab extends Tab {
       })();
     };
 
-    const rerootNode = (node: SpatiallyIndexedSkeletonNode) => {
-      if (!ensureTopologyControlsAvailable()) return;
-      if (
-        !ensureActionsAllowed(SpatialSkeletonActions.reroot, {
-          requireVisibleChunks: false,
-        })
-      ) {
-        return;
-      }
-      if (node.parentNodeId === undefined) {
-        StatusMessage.showTemporaryMessage("Selected node is already root.");
-        return;
-      }
-      if (node.isTrueEnd) {
-        StatusMessage.showTemporaryMessage(
-          "Cannot set a true end node as root. Clear the true end state first.",
-        );
-        return;
-      }
-      if (pendingRerootNodes.has(node.nodeId)) {
-        return;
-      }
-      pendingRerootNodes.add(node.nodeId);
-      updateDisplay();
-      void (async () => {
-        try {
-          await layer.rerootSpatialSkeletonNode(node);
-        } catch (error) {
-          showSpatialSkeletonActionError(
-            SpatialSkeletonActions.reroot,
-            error,
-            "set node as root",
-          );
-        } finally {
-          pendingRerootNodes.delete(node.nodeId);
-          updateDisplay();
-        }
-      })();
-    };
-
     const goRootButton = makeIconButton(
       navTools,
       svg_origin,
-      `Go to root${keyHintFor(SKELETON_GO_ROOT)}`,
+      "Go to root",
       () => {
         const segmentId = getSelectedNavigationContext(
           false /* requireNode */,
@@ -1311,7 +1192,7 @@ export class SpatialSkeletonEditTab extends Tab {
     const goBranchStartButton = makeIconButton(
       navTools,
       svg_chevrons_left,
-      `Go to start of branch${keyHintFor(SKELETON_GO_BRANCH_START)}`,
+      "Go to start of branch",
       () => {
         const selectedNode = getSelectedNavigationContext();
         if (selectedNode === undefined) return;
@@ -1333,7 +1214,7 @@ export class SpatialSkeletonEditTab extends Tab {
     const goTreeEndButton = makeIconButton(
       navTools,
       svg_chevrons_right,
-      `Go to end of branch${keyHintFor(SKELETON_GO_BRANCH_END)}`,
+      "Go to end of branch",
       () => {
         const selectedNode = getSelectedNavigationContext();
         if (selectedNode === undefined) return;
@@ -1355,7 +1236,7 @@ export class SpatialSkeletonEditTab extends Tab {
     const cycleBranchesButton = makeIconButton(
       navTools,
       svg_retweet,
-      `Cycle through level nodes${keyHintFor(SKELETON_CYCLE_BRANCHES)}`,
+      "Cycle through level nodes",
       () => {
         const selectedNode = getSelectedNavigationContext();
         if (selectedNode === undefined) return;
@@ -1379,7 +1260,7 @@ export class SpatialSkeletonEditTab extends Tab {
     const goParentButton = makeIconButton(
       navTools,
       svg_arrow_left,
-      `Go to parent${keyHintFor(SKELETON_GO_PARENT)}`,
+      "Go to parent",
       () => {
         const selectedNode = getSelectedNavigationContext();
         if (selectedNode === undefined) return;
@@ -1408,7 +1289,7 @@ export class SpatialSkeletonEditTab extends Tab {
     const goChildButton = makeIconButton(
       navTools,
       svg_arrow_right,
-      `Go to child${keyHintFor(SKELETON_GO_CHILD)}`,
+      "Go to child",
       () => {
         const selectedNode = getSelectedNavigationContext();
         if (selectedNode === undefined) return;
@@ -1435,7 +1316,7 @@ export class SpatialSkeletonEditTab extends Tab {
     const goUnfinishedBranchButton = makeIconButton(
       navTools,
       svg_chevron_right,
-      `Go to nearest unfinished leaf node${keyHintFor(SKELETON_GO_UNFINISHED)}`,
+      "Go to nearest unfinished leaf node",
       () => {
         goToClosestUnfinishedBranch();
       },
@@ -2227,36 +2108,6 @@ export class SpatialSkeletonEditTab extends Tab {
         updateDisplay();
       }),
     );
-    // List-level: node mutations
-    this.registerDisposer(
-      registerActionListener(
-        nodesList.element,
-        SKELETON_TOGGLE_TRUE_END,
-        () => {
-          const selectedNodeId =
-            layer.selectedSpatialSkeletonNodeInfo.value?.nodeId;
-          if (selectedNodeId === undefined) return;
-          const selectedNode = allNodes.find(
-            (node) => node.nodeId === selectedNodeId,
-          );
-          if (selectedNode === undefined) return;
-          updateTrueEndLabel(selectedNode, !(selectedNode.isTrueEnd ?? false));
-        },
-      ),
-    );
-    this.registerDisposer(
-      registerActionListener(nodesList.element, SKELETON_REROOT, () => {
-        const selectedNodeId =
-          layer.selectedSpatialSkeletonNodeInfo.value?.nodeId;
-        if (selectedNodeId === undefined) return;
-        const selectedNode = allNodes.find(
-          (node) => node.nodeId === selectedNodeId,
-        );
-        if (selectedNode === undefined) return;
-        rerootNode(selectedNode);
-      }),
-    );
-
     updateGateStatus();
     updateHistoryButtons();
     updateHoveredViewerNode();

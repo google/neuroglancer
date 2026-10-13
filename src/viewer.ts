@@ -72,17 +72,6 @@ import {
 import { overlaysOpen } from "#src/overlay.js";
 import { ScreenshotHandler } from "#src/python_integration/screenshots.js";
 import { allRenderLayerRoles, RenderLayerRole } from "#src/renderlayer.js";
-import {
-  SKELETON_CYCLE_BRANCHES,
-  SKELETON_GO_BRANCH_END,
-  SKELETON_GO_BRANCH_START,
-  SKELETON_GO_CHILD,
-  SKELETON_GO_PARENT,
-  SKELETON_GO_ROOT,
-  SKELETON_GO_UNFINISHED,
-  SKELETON_REDO,
-  SKELETON_UNDO,
-} from "#src/skeleton/actions.js";
 import { StatusMessage } from "#src/status.js";
 import {
   ElementVisibilityFromTrackableBoolean,
@@ -108,12 +97,7 @@ import { SelectionDetailsPanel } from "#src/ui/selection_details.js";
 import { SidePanelManager } from "#src/ui/side_panel.js";
 import { StateEditorDialog } from "#src/ui/state_editor.js";
 import { StatisticsDisplayState, StatisticsPanel } from "#src/ui/statistics.js";
-import {
-  ACTIVE_TOOL_BINDING_PRIORITY,
-  GlobalToolBinder,
-  LocalToolBinder,
-  USER_TOOL_BINDING_PRIORITY,
-} from "#src/ui/tool.js";
+import { GlobalToolBinder, LocalToolBinder } from "#src/ui/tool.js";
 import {
   MultiToolPaletteDropdownButton,
   MultiToolPaletteManager,
@@ -690,24 +674,6 @@ export class Viewer extends RefCounted implements ViewerState {
     this.showLayerDialog = showLayerDialog;
     this.resetStateWhenEmpty = resetStateWhenEmpty;
 
-    // Letters the user has bound a tool to take precedence over the built-in
-    // binding for the same letter.  All three root maps are needed: the panel
-    // maps for letters claimed by the data panel bindings (e.g. `keyr`) while a
-    // panel has focus, and the global map for letters claimed by the global
-    // bindings (e.g. `keyl`) while focus is elsewhere.
-    for (const rootEventActionMap of [
-      this.inputEventBindings.global,
-      this.inputEventBindings.sliceView,
-      this.inputEventBindings.perspectiveView,
-    ]) {
-      this.registerDisposer(
-        rootEventActionMap.addParent(
-          this.globalToolBinder.boundKeyEventActionMap,
-          USER_TOOL_BINDING_PRIORITY,
-        ),
-      );
-    }
-
     this.layerSpecification = new TopLevelLayerListSpecification(
       this.display,
       this.dataSourceProvider,
@@ -1205,22 +1171,6 @@ export class Viewer extends RefCounted implements ViewerState {
       });
     }
 
-    for (const action of [
-      SKELETON_GO_ROOT,
-      SKELETON_GO_PARENT,
-      SKELETON_GO_CHILD,
-      SKELETON_GO_BRANCH_START,
-      SKELETON_GO_BRANCH_END,
-      SKELETON_CYCLE_BRANCHES,
-      SKELETON_GO_UNFINISHED,
-      SKELETON_UNDO,
-      SKELETON_REDO,
-    ]) {
-      this.bindAction(action, () => {
-        this.layerManager.invokeAction(action);
-      });
-    }
-
     for (const action of ["select", "star"]) {
       this.bindAction(action, () => {
         this.mouseState.updateUnconditionally();
@@ -1310,15 +1260,17 @@ export class Viewer extends RefCounted implements ViewerState {
   private toolInputEventMapBinder = (
     inputEventMap: EventActionMap,
     context: RefCounted,
-    priority: number = ACTIVE_TOOL_BINDING_PRIORITY,
   ) => {
     context.registerDisposer(
-      this.inputEventBindings.sliceView.addParent(inputEventMap, priority),
+      this.inputEventBindings.sliceView.addParent(
+        inputEventMap,
+        Number.POSITIVE_INFINITY,
+      ),
     );
     context.registerDisposer(
       this.inputEventBindings.perspectiveView.addParent(
         inputEventMap,
-        priority,
+        Number.POSITIVE_INFINITY,
       ),
     );
   };

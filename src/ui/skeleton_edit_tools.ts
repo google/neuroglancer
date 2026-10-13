@@ -39,8 +39,6 @@ import {
   SKELETON_ENTER_SPLIT_MODE,
   SKELETON_FIND_PATH_SELECT_ENDPOINT,
   SKELETON_PIN_NODE,
-  SKELETON_REROOT,
-  SKELETON_TOGGLE_TRUE_END,
 } from "#src/skeleton/actions.js";
 import type {
   SpatiallyIndexedSkeletonNode,
@@ -56,7 +54,6 @@ import {
   executeSpatialSkeletonInsertNode,
   executeSpatialSkeletonMerge,
   executeSpatialSkeletonMoveNode,
-  executeSpatialSkeletonNodeTrueEndUpdate,
   executeSpatialSkeletonSplit,
   showSpatialSkeletonActionError,
 } from "#src/skeleton/commands.js";
@@ -86,7 +83,6 @@ import { makeAnnotationListElement } from "#src/ui/annotations.js";
 import {
   getDefaultAnnotationListBindings,
   getDefaultSkeletonEditAuxBindings,
-  getDefaultSkeletonEditNodeBindings,
   getDefaultSkeletonEditToolBindings,
   getDefaultSkeletonFindPathToolBindings,
 } from "#src/ui/default_input_event_bindings.js";
@@ -1886,7 +1882,6 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     // 6. Bind event maps.
     activation.bindInputEventMap(getDefaultSkeletonEditToolBindings());
     activation.bindInputEventMap(getDefaultSkeletonEditAuxBindings());
-    activation.bindInputEventMap(getDefaultSkeletonEditNodeBindings());
     this.bindPinnedSelectionAction(activation, {
       showNodeSelectionMessage: false,
     });
@@ -2029,48 +2024,6 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     activation.bindAction(SKELETON_ENTER_INSERT_MODE, () =>
       this.onEnterInsertModeAction(),
     );
-    activation.bindAction(SKELETON_TOGGLE_TRUE_END, () => {
-      const skeletonLayer = this.getActiveSpatiallyIndexedSkeletonLayer();
-      if (skeletonLayer === undefined) return;
-      const selectedNode = this.layer.selectedSpatialSkeletonNodeInfo.value;
-      if (selectedNode === undefined) return;
-      const node = this.requireInspectedNode(
-        skeletonLayer,
-        selectedNode.nodeId,
-        selectedNode.segmentId,
-      );
-      if (node === undefined) {
-        return;
-      }
-      const nextIsTrueEnd = !(node.isTrueEnd ?? false);
-      void executeSpatialSkeletonNodeTrueEndUpdate(this.layer, {
-        node,
-        nextIsTrueEnd,
-      }).catch((error) =>
-        showSpatialSkeletonActionError(
-          SpatialSkeletonActions.editNodeTrueEnd,
-          error,
-        ),
-      );
-    });
-    activation.bindAction(SKELETON_REROOT, () => {
-      const skeletonLayer = this.getActiveSpatiallyIndexedSkeletonLayer();
-      if (skeletonLayer === undefined) return;
-      const selectedNode = this.layer.selectedSpatialSkeletonNodeInfo.value;
-      if (selectedNode === undefined) return;
-      const node = this.requireInspectedNode(
-        skeletonLayer,
-        selectedNode.nodeId,
-        selectedNode.segmentId,
-      );
-      if (node === undefined) return;
-      void this.layer
-        .rerootSpatialSkeletonNode(node)
-        .catch((error) =>
-          showSpatialSkeletonActionError(SpatialSkeletonActions.reroot, error),
-        );
-    });
-
     // 12. Initial render.
     this.renderStatus();
   }
