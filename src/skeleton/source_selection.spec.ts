@@ -16,6 +16,7 @@
 
 import { describe, expect, it } from "vitest";
 
+import { RenderScaleHistogram } from "#src/render_scale_statistics.js";
 import {
   getSpatialSkeletonSourceScalesByLimit,
   selectSpatialSkeletonSourceByLimit,
@@ -129,8 +130,44 @@ describe("skeleton/source_selection", () => {
 
     expect(selection?.source).toBe("complete-finest");
     expect(selection?.physicalDensity).toBe(Number.POSITIVE_INFINITY);
-    expect(selection?.physicalSpacing).toBe(Number.POSITIVE_INFINITY);
-    expect(selection?.pixelSpacing).toBe(Number.POSITIVE_INFINITY);
+    expect(selection?.physicalSpacing).toBe(0);
+    expect(selection?.pixelSpacing).toBe(0);
+  });
+
+  it("places the zero-limit finest source left of every capped source in the histogram", () => {
+    const [coarse, finest] = getSpatialSkeletonSourceScalesByLimit(
+      [
+        {
+          source: "coarse",
+          index: 0,
+          physicalVolume: 1000,
+          limit: 10,
+          sliceFraction: 1,
+        },
+        {
+          source: "complete-finest",
+          index: 1,
+          physicalVolume: 125,
+          limit: 0,
+          sliceFraction: 1,
+        },
+      ],
+      1000,
+      100,
+    );
+    const histogram = new RenderScaleHistogram();
+    histogram.add(coarse.physicalSpacing, coarse.pixelSpacing, 1, 0);
+    histogram.add(finest.physicalSpacing, finest.pixelSpacing, 1, 0);
+
+    const binOf = (spacing: number) => {
+      const rowStart =
+        histogram.spatialScales.get(spacing)! * 2 * histogram.numBins;
+      return histogram.value
+        .slice(rowStart, rowStart + histogram.numBins)
+        .findIndex((count) => count > 0);
+    };
+    expect(binOf(finest.physicalSpacing)).toBe(0);
+    expect(binOf(coarse.physicalSpacing)).toBeGreaterThan(0);
   });
 
   it("does not select a finest zero-limit source if a coarser source satisfies the target", () => {

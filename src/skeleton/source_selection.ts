@@ -55,8 +55,7 @@ function makeSpatialSkeletonSourceSelection<T>(
   effectiveVolume: number,
   viewportArea: number,
 ): SpatialSkeletonSourceDensitySelection<T> {
-  const hasKnownDensity =
-    Number.isFinite(physicalDensity) && physicalDensity > 0;
+  const hasKnownDensity = physicalDensity > 0;
   return {
     ...source,
     physicalDensity,

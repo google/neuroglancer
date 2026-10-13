@@ -57,6 +57,17 @@ function formatPixelNumber(x: number) {
   return Math.round(x) + "";
 }
 
+export function formatSpatialScaleLabel(spatialScale: number) {
+  if (spatialScale === 0) return "all nodes";
+  if (Number.isFinite(spatialScale)) {
+    return formatScaleWithUnitAsString(spatialScale, "m", {
+      precision: 2,
+      elide1: false,
+    });
+  }
+  return "unknown";
+}
+
 export interface RenderScaleWidgetOptions {
   histogram: RenderScaleHistogram;
   target: TrackableValueInterface<number>;
@@ -295,15 +306,8 @@ export class RenderScaleWidget extends RefCounted {
         totalPresent += histogramData[index];
         totalNotPresent += histogramData[index + numBins];
       }
-      if (Number.isFinite(hoverSpatialScale)) {
-        this.legendSpatialScale.textContent = formatScaleWithUnitAsString(
-          hoverSpatialScale,
-          "m",
-          { precision: 2, elide1: false },
-        );
-      } else {
-        this.legendSpatialScale.textContent = "unknown";
-      }
+      this.legendSpatialScale.textContent =
+        formatSpatialScaleLabel(hoverSpatialScale);
     } else {
       this.legendSpatialScale.textContent = "";
     }
@@ -315,7 +319,7 @@ export class RenderScaleWidget extends RefCounted {
     const spatialScaleColors = sortedSpatialScales.map((spatialScale) => {
       const saturation = spatialScale === hoverSpatialScale ? 0.5 : 1;
       let hue;
-      if (Number.isFinite(spatialScale)) {
+      if (Number.isFinite(spatialScale) && spatialScale > 0) {
         hue = (((Math.log2(spatialScale) * 0.1) % 1) + 1) % 1;
       } else {
         hue = 0;
