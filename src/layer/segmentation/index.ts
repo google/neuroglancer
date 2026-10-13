@@ -1224,6 +1224,7 @@ export class SegmentationUserLayer extends Base {
 
   displayState = new SegmentationUserLayerDisplayState(this);
   readonly spatialSkeletonEditMode = this.spatialSkeletonState.editMode;
+  readonly hasEditableSpatialSkeletonSource: WatchableValueInterface<boolean>;
   readonly spatialSkeletonMergeMode = this.spatialSkeletonState.mergeMode;
   readonly spatialSkeletonSplitMode = this.spatialSkeletonState.splitMode;
   readonly spatialSkeletonSuppressSelectedNodeHighlight =
@@ -1398,9 +1399,27 @@ export class SegmentationUserLayer extends Base {
       getter: () => new SpatialSkeletonEditTab(this),
       hidden: hideSpatialSkeletonEditTab,
     });
+    this.hasEditableSpatialSkeletonSource = this.registerDisposer(
+      makeCachedLazyDerivedWatchableValue(
+        (layers) =>
+          layers.some(
+            (layer) =>
+              (layer instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer ||
+                layer instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer) &&
+              getEditableSpatiallyIndexedSkeletonSource(layer.base) !==
+                undefined,
+          ),
+        { changed: this.layersChanged, value: this.renderLayers },
+      ),
+    );
     registerSpatialSkeletonOptimisticEditQueueTab(
       this,
-      hideSpatialSkeletonEditTab,
+      this.registerDisposer(
+        makeCachedDerivedWatchableValue(
+          (hasEditableSource) => !hasEditableSource,
+          [this.hasEditableSpatialSkeletonSource],
+        ),
+      ),
     );
     const hideGraphTab = this.registerDisposer(
       makeCachedDerivedWatchableValue(

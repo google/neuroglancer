@@ -66,6 +66,9 @@ const { SpatialSkeletonEditTool } = await import(
 );
 const {
   getSpatialSkeletonFindPathEndpointDescription,
+  makeSpatialSkeletonToolLister,
+  SPATIAL_SKELETON_EDIT_MODE_TOOL_ID,
+  SPATIAL_SKELETON_FIND_PATH_TOOL_ID,
   SpatialSkeletonFindPathTool,
 } = await import("#src/ui/skeleton_edit_tools.js");
 
@@ -631,6 +634,37 @@ function makeDragHarness({ inspected = true } = {}) {
     },
   };
 }
+
+describe("spatial skeleton tool lister", () => {
+  const makeListerLayer = (hasEditableSource: boolean) =>
+    ({
+      getSpatiallyIndexedSkeletonLayer: () => ({}),
+      getSpatialSkeletonFindPathContext: () => ({}),
+      hasEditableSpatialSkeletonSource: { value: hasEditableSource },
+      layersChanged: makeChangedSignal(),
+    }) as any;
+
+  it("offers no edit mode tool for a read-only skeleton source", () => {
+    const listEditTools = makeSpatialSkeletonToolLister(
+      SPATIAL_SKELETON_EDIT_MODE_TOOL_ID,
+    );
+
+    expect(listEditTools(makeListerLayer(false))).toEqual([]);
+    expect(listEditTools(makeListerLayer(true))).toEqual([
+      { type: SPATIAL_SKELETON_EDIT_MODE_TOOL_ID },
+    ]);
+  });
+
+  it("keeps the find path tool for a read-only skeleton source", () => {
+    const listFindPathTools = makeSpatialSkeletonToolLister(
+      SPATIAL_SKELETON_FIND_PATH_TOOL_ID,
+    );
+
+    expect(listFindPathTools(makeListerLayer(false))).toEqual([
+      { type: SPATIAL_SKELETON_FIND_PATH_TOOL_ID },
+    ]);
+  });
+});
 
 describe("spatial_skeleton_edit_tool", () => {
   afterEach(() => {

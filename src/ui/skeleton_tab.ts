@@ -1712,7 +1712,9 @@ export class SpatialSkeletonEditTab extends Tab {
           ? "Removing true end"
           : "Setting true end"
         : typeIconTitle;
-      const canChangeType = isLeaf || nodeIsTrueEnd;
+      const canChangeType =
+        layer.hasEditableSpatialSkeletonSource.value &&
+        (isLeaf || nodeIsTrueEnd);
       const typeIcon = canChangeType
         ? document.createElement("button")
         : document.createElement("span");
@@ -1781,14 +1783,16 @@ export class SpatialSkeletonEditTab extends Tab {
       } else if (pendingDeleteNodes.has(node.nodeId)) {
         deleteActionTitle = "Deleting node";
       }
-      actions.appendChild(
-        makeRowActionButton(
-          svg_bin,
-          deleteActionTitle,
-          () => deleteNode(node),
-          !nodeDeletionAllowed || pendingDeleteNodes.has(node.nodeId),
-        ),
-      );
+      if (layer.hasEditableSpatialSkeletonSource.value) {
+        actions.appendChild(
+          makeRowActionButton(
+            svg_bin,
+            deleteActionTitle,
+            () => deleteNode(node),
+            !nodeDeletionAllowed || pendingDeleteNodes.has(node.nodeId),
+          ),
+        );
+      }
 
       row.appendChild(typeIcon);
       row.appendChild(idCell);
@@ -2092,6 +2096,13 @@ export class SpatialSkeletonEditTab extends Tab {
       }),
     );
 
+    this.registerDisposer(
+      observeWatchable((hasEditableSource) => {
+        undoButton.hidden = !hasEditableSource;
+        redoButton.hidden = !hasEditableSource;
+        updateDisplay();
+      }, layer.hasEditableSpatialSkeletonSource),
+    );
     this.registerDisposer(
       observeWatchable(() => updateGateStatus(), layer.spatialSkeletonEditMode),
     );

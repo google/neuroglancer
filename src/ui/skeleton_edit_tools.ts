@@ -2548,7 +2548,7 @@ export class SpatialSkeletonFindPathTool extends SpatialSkeletonToolBase {
   }
 }
 
-function makeSpatialSkeletonToolLister(toolId: string) {
+export function makeSpatialSkeletonToolLister(toolId: string) {
   return (layer: SegmentationUserLayer, onChange?: () => void) => {
     if (onChange !== undefined) {
       layer.layersChanged.addOnce(onChange);
@@ -2556,7 +2556,9 @@ function makeSpatialSkeletonToolLister(toolId: string) {
     if (
       layer.getSpatiallyIndexedSkeletonLayer() === undefined ||
       (toolId === SPATIAL_SKELETON_FIND_PATH_TOOL_ID &&
-        layer.getSpatialSkeletonFindPathContext() === undefined)
+        layer.getSpatialSkeletonFindPathContext() === undefined) ||
+      (toolId === SPATIAL_SKELETON_EDIT_MODE_TOOL_ID &&
+        !layer.hasEditableSpatialSkeletonSource.value)
     ) {
       return [];
     }
