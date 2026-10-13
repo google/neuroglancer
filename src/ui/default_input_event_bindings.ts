@@ -18,6 +18,8 @@ import {
   SKELETON_ADD_NODE,
   SKELETON_CLEAR_SELECTION,
   SKELETON_CYCLE_BRANCHES,
+  SKELETON_DRAG_VIEW,
+  SKELETON_EDIT_AT_MOUSE,
   SKELETON_ENTER_CREATE,
   SKELETON_ENTER_DELETE_MODE,
   SKELETON_ENTER_INSERT_MODE,
@@ -249,9 +251,10 @@ let defaultSkeletonToolNavigationBindings: EventActionMap | undefined;
 export function getDefaultSkeletonToolNavigationBindings() {
   if (defaultSkeletonToolNavigationBindings === undefined) {
     defaultSkeletonToolNavigationBindings = EventActionMap.fromObject({
-      "at:mousedown1": "rotate-via-mouse-drag",
+      // Control+left mirrors middle drag for trackpads.
+      "at:mousedown1": SKELETON_DRAG_VIEW,
       "at:control+mousedown1": "translate-via-mouse-drag",
-      "at:control+mousedown0": "rotate-via-mouse-drag",
+      "at:control+mousedown0": SKELETON_DRAG_VIEW,
       "at:control+shift+mousedown0": "translate-via-mouse-drag",
     });
   }
@@ -262,6 +265,7 @@ export function getDefaultSkeletonEditToolBindings() {
   if (defaultSkeletonEditToolBindings === undefined) {
     defaultSkeletonEditToolBindings = EventActionMap.fromObject(
       {
+        "at:mousedown0": SKELETON_EDIT_AT_MOUSE,
         "at:shift+mousedown0": SKELETON_ADD_NODE,
         "at:keym": SKELETON_ENTER_MERGE_MODE,
         "at:keys": SKELETON_ENTER_SPLIT_MODE,

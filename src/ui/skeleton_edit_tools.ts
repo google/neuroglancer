@@ -17,6 +17,7 @@
 import "#src/ui/skeleton_edit_tools.css";
 
 import type { Annotation } from "#src/annotation/index.js";
+import type { DisplayContext } from "#src/display_context.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import {
   getSegmentIdFromLayerSelectionValue,
@@ -29,6 +30,8 @@ import { getVisibleSegments } from "#src/segmentation_display_state/base.js";
 import {
   SKELETON_ADD_NODE,
   SKELETON_CLEAR_SELECTION,
+  SKELETON_DRAG_VIEW,
+  SKELETON_EDIT_AT_MOUSE,
   SKELETON_ENTER_CREATE,
   SKELETON_ENTER_DELETE_MODE,
   SKELETON_ENTER_INSERT_MODE,
@@ -114,6 +117,7 @@ import {
 } from "#src/ui/tool.js";
 import { removeChildren } from "#src/util/dom.js";
 import type { ActionEvent } from "#src/util/event_action_map.js";
+import { dispatchEventAction } from "#src/util/event_action_map.js";
 import { vec3 } from "#src/util/geom.js";
 import { MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { startRelativeMouseDrag } from "#src/util/mouse_drag.js";
@@ -133,23 +137,6 @@ const enum SkeletonEditMode {
   Insert = 5,
 }
 
-// In edit mode, plain left click is selection-only — it never rotates or
-// pans. Navigation (rotate in perspective, pan in slice) is handled by
-// middle mouse (mousedown1), plus trackpad-friendly aliases on
-// control+left mouse. Control alone mirrors plain middle-click.
-// Control+shift mirrors control+middle-click. mousedown0 is therefore
-// handled only via the capture-phase DOM listeners in activate(). It is not
-// in the EventActionMap.
-//
-// mousedown1 / control?+mousedown0 → rotate-via-mouse-drag covers perspective
-// panels via the EventActionMap. Slice panels intercept middle mouse and the
-// control chords in the capture listener and call
-// translateByViewportPixels directly, consuming the event before
-// MouseEventBinder can dispatch this action.
-//
-// Default bindings are defined in getDefaultSkeletonEditToolBindings() /
-// getDefaultSkeletonEditAuxBindings() in default_input_event_bindings.ts.
-
 const DRAG_START_DISTANCE_PX = 2;
 
 const MERGE_EXIT_KEY_CODE = getSpatialSkeletonModeKeyCode(
@@ -168,64 +155,37 @@ const INSERT_EXIT_KEY_CODE = getSpatialSkeletonModeKeyCode(
   SKELETON_ENTER_INSERT_MODE,
 );
 
-/**
- * Preserves the skeleton tools' middle-mouse and control+left-click controls
- * when a tool claims regular left click as its primary interaction.
- */
-function bindSpatialSkeletonToolMouseControls<
-  T extends LayerTool<SegmentationUserLayer>,
->(
-  activation: ToolActivation<T>,
-  layer: SegmentationUserLayer,
-  onPrimaryMousedown?: (event: MouseEvent, panel: RenderedDataPanel) => void,
-) {
-  for (const panel of layer.manager.root.display.panels) {
-    if (!(panel instanceof RenderedDataPanel)) continue;
-    const captureMousedown = (event: MouseEvent) => {
-      // Perspective navigation is dispatched through the active tool's input
-      // map. Slice navigation is performed directly here.
-      const isNavigationGesture =
-        event.button === 1 || (event.button === 0 && event.ctrlKey);
-      if (isNavigationGesture) {
-        if (panel instanceof PerspectivePanel) {
-          panel.element.dataset.skeletonPressMode = "rotate";
-          const onMouseUp = () => {
-            delete panel.element.dataset.skeletonPressMode;
-            window.removeEventListener("mouseup", onMouseUp);
-          };
-          window.addEventListener("mouseup", onMouseUp);
-        } else {
-          event.stopPropagation();
-          event.preventDefault();
-          panel.element.dataset.skeletonPressMode = "pan";
-          startRelativeMouseDrag(
-            event,
-            (_dragEvent, deltaX, deltaY) => {
-              panel.context.flagContinuousCameraMotion();
-              panel.translateByViewportPixels(deltaX, deltaY);
-            },
-            () => {
-              delete panel.element.dataset.skeletonPressMode;
-            },
-          );
-        }
-        return;
-      }
-
-      if (event.button === 0) {
-        onPrimaryMousedown?.(event, panel);
-      }
-    };
-    panel.element.addEventListener("mousedown", captureMousedown, {
-      capture: true,
-    });
-    activation.registerDisposer(() => {
-      delete panel.element.dataset.skeletonPressMode;
-      panel.element.removeEventListener("mousedown", captureMousedown, {
-        capture: true,
-      });
-    });
+function getActionPanel(
+  display: DisplayContext,
+  event: ActionEvent<MouseEvent>,
+): RenderedDataPanel | undefined {
+  for (const panel of display.panels) {
+    if (panel.element === event.target && panel instanceof RenderedDataPanel) {
+      return panel;
+    }
   }
+  return undefined;
+}
+
+function bindSpatialSkeletonViewDrag<
+  T extends LayerTool<SegmentationUserLayer>,
+>(activation: ToolActivation<T>) {
+  activation.bindAction(
+    SKELETON_DRAG_VIEW,
+    (event: ActionEvent<MouseEvent>) => {
+      const panel = getActionPanel(
+        activation.tool.layer.manager.root.display,
+        event,
+      );
+      if (panel === undefined) return;
+      dispatchEventAction(event.detail, event.detail, {
+        action:
+          panel instanceof PerspectivePanel
+            ? "rotate-via-mouse-drag"
+            : "translate-via-mouse-drag",
+      });
+    },
+  );
 }
 
 function makeSpatialSkeletonToolStatus(
@@ -628,7 +588,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
 
   // Activation-scoped state — reset at the start of each activate() call.
   private currentMode: SkeletonEditMode = SkeletonEditMode.Default;
-  private dragInProgress = false;
+  private draggedPanel: RenderedDataPanel | undefined;
   private activeDragBrowseExclusionRelease: (() => boolean) | undefined;
   private pending = false;
   /** Invalidates delayed callbacks from prior modes or tool activations. */
@@ -697,15 +657,22 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
 
   // --- Cursor helpers ---
 
+  private get dragInProgress() {
+    return this.draggedPanel !== undefined;
+  }
+
+  private endDrag() {
+    if (this.draggedPanel === undefined) return;
+    delete this.draggedPanel.element.dataset.skeletonPressMode;
+    this.draggedPanel = undefined;
+  }
+
   private setModeAttribute(mode: string | undefined) {
-    const { display } = this.layer.manager.root;
-    for (const panel of display.panels) {
-      if (!(panel instanceof RenderedDataPanel)) continue;
-      if (mode === undefined) {
-        delete panel.element.dataset.skeletonEditMode;
-      } else {
-        panel.element.dataset.skeletonEditMode = mode;
-      }
+    const { dataset } = this.layer.manager.root.display.container;
+    if (mode === undefined) {
+      delete dataset.skeletonEditMode;
+    } else {
+      dataset.skeletonEditMode = mode;
     }
   }
 
@@ -1030,18 +997,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       ? this.getPickedSpatialSkeletonNode()
       : undefined;
 
-    if (pickedNode === undefined) {
-      // Off-node left click: consume so NG's rotate/pan actions don't fire.
-      // Navigation is handled exclusively by middle mouse in edit mode.
-      event.stopPropagation();
-      event.preventDefault();
-      return;
-    }
-
-    // On a node: consume the event so NG doesn't also start a rotate/pan.
-    event.stopPropagation();
-    event.preventDefault();
-    if (skeletonLayer === undefined) return;
+    if (pickedNode === undefined || skeletonLayer === undefined) return;
 
     const canMove =
       this.layer.getSpatialSkeletonActionsDisabledReason(
@@ -1125,12 +1081,12 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
             return;
           }
           dragStarted = true;
-          this.dragInProgress = true;
+          this.draggedPanel = panel;
+          panel.element.dataset.skeletonPressMode = "move";
           this.layer.spatialSkeletonState.clearPendingNodePositions();
           this.activeDragBrowseExclusionRelease?.();
           this.activeDragBrowseExclusionRelease =
             skeletonLayer.beginTemporaryBrowseExclusion(currentNode.segmentId);
-          panel.element.dataset.skeletonPressMode = "move";
           this.setStatus(getSpatialSkeletonMovingStatusText());
         }
         panel.translateDataPointByViewportPixels(
@@ -1164,8 +1120,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
         if (finished || this.interactionGeneration !== generation) return;
         finished = true;
         if (this.dragInProgress) {
-          this.dragInProgress = false;
-          delete panel.element.dataset.skeletonPressMode;
+          this.endDrag();
           this.clearStatus();
         }
         if (!dragStarted) return; // Pure click: selection already happened on mousedown.
@@ -1826,12 +1781,37 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     );
   }
 
+  private onEditAtMouseAction(event: ActionEvent<MouseEvent>) {
+    const panel = getActionPanel(this.layer.manager.root.display, event);
+    if (panel === undefined) return;
+    switch (this.currentMode) {
+      case SkeletonEditMode.Merge:
+        this.handleMergeSecondPick();
+        return;
+      case SkeletonEditMode.Split:
+        this.handleSplitPick();
+        return;
+      case SkeletonEditMode.Create:
+        this.handleCreatePlace();
+        return;
+      case SkeletonEditMode.Delete:
+        this.handleDeletePick();
+        return;
+      case SkeletonEditMode.Insert:
+        this.handleInsertPick();
+        return;
+      case SkeletonEditMode.Default:
+        this.handleDefaultMousedown(event.detail, panel);
+        return;
+    }
+  }
+
   activate(activation: ToolActivation<this>) {
     const { layer } = this;
     // 1. Reset all activation-scoped state.
     this.advanceInteractionGeneration();
     this.currentMode = SkeletonEditMode.Default;
-    this.dragInProgress = false;
+    this.endDrag();
     this.activeDragBrowseExclusionRelease?.();
     this.activeDragBrowseExclusionRelease = undefined;
     this.pending = false;
@@ -1889,7 +1869,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       this.currentMode = SkeletonEditMode.Default;
       this.pending = false;
       this.stopMergeTargetPrefetch();
-      this.dragInProgress = false;
+      this.endDrag();
       this.activeDragBrowseExclusionRelease?.();
       this.activeDragBrowseExclusionRelease = undefined;
       this.setModeAttribute(undefined);
@@ -2023,44 +2003,12 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       window.removeEventListener("blur", onBlur);
     });
 
-    // 10. Share the navigation controls used by skeleton tools, while keeping
-    // the Edit tool's existing primary-click mode handling local.
-    bindSpatialSkeletonToolMouseControls(activation, layer, (event, panel) => {
-      // shift+mousedown0 is dispatched as the add-node action.
-      if (event.shiftKey) return;
-      if (this.currentMode === SkeletonEditMode.Merge) {
-        event.stopPropagation();
-        event.preventDefault();
-        this.handleMergeSecondPick();
-        return;
-      }
-      if (this.currentMode === SkeletonEditMode.Split) {
-        event.stopPropagation();
-        event.preventDefault();
-        this.handleSplitPick();
-        return;
-      }
-      if (this.currentMode === SkeletonEditMode.Create) {
-        event.stopPropagation();
-        event.preventDefault();
-        this.handleCreatePlace();
-        return;
-      }
-      if (this.currentMode === SkeletonEditMode.Delete) {
-        event.stopPropagation();
-        event.preventDefault();
-        this.handleDeletePick();
-        return;
-      }
-      if (this.currentMode === SkeletonEditMode.Insert) {
-        event.stopPropagation();
-        event.preventDefault();
-        this.handleInsertPick();
-        return;
-      }
-      // Default mode: only consume if hovering a node.
-      this.handleDefaultMousedown(event, panel);
-    });
+    // 10. Pointer gestures.
+    bindSpatialSkeletonViewDrag(activation);
+    activation.bindAction(
+      SKELETON_EDIT_AT_MOUSE,
+      (event: ActionEvent<MouseEvent>) => this.onEditAtMouseAction(event),
+    );
 
     // 11. Bind actions — thin one-liners delegating to class methods.
     activation.bindAction(SKELETON_ENTER_MERGE_MODE, () =>
@@ -2455,7 +2403,7 @@ export class SpatialSkeletonFindPathTool extends SpatialSkeletonToolBase {
       updateStatus,
     );
 
-    bindSpatialSkeletonToolMouseControls(activation, layer);
+    bindSpatialSkeletonViewDrag(activation);
     activation.bindInputEventMap(getDefaultSkeletonFindPathToolBindings());
     activation.bindAction(
       SKELETON_FIND_PATH_SELECT_ENDPOINT,

@@ -14,18 +14,22 @@
  * limitations under the License.
  */
 
-import "#src/ui/annotations.css";
-
 import {
   SKELETON_ADD_NODE,
+  SKELETON_DRAG_VIEW,
+  SKELETON_EDIT_AT_MOUSE,
   SKELETON_ENTER_CREATE,
   SKELETON_ENTER_DELETE_MODE,
   SKELETON_ENTER_INSERT_MODE,
   SKELETON_ENTER_MERGE_MODE,
   SKELETON_ENTER_SPLIT_MODE,
 } from "#src/skeleton/actions.js";
-import { getDefaultSkeletonEditToolBindings } from "#src/ui/default_input_event_bindings.js";
+import {
+  getDefaultRenderedDataPanelBindings,
+  getDefaultSkeletonEditToolBindings,
+} from "#src/ui/default_input_event_bindings.js";
 import svg_mouse from "#src/ui/images/mouse.svg?raw";
+import { makeToolStatusChip } from "#src/ui/tool.js";
 import type {
   ActionIdentifier,
   EventActionMap,
@@ -66,18 +70,43 @@ const MODIFIER_NAMES: Partial<Record<string, string>> = {
   meta: "meta",
 };
 
-const MOUSE_BUTTON_NAMES: Partial<Record<string, string>> = {
-  mousedown0: "click",
-  mousedown1: "middle click",
-  mousedown2: "right click",
+const enum Gesture {
+  Press,
+  Drag,
+  Hold,
+  Release,
+}
+
+const MOUSE_BUTTON_NAMES: Partial<
+  Record<Gesture, Partial<Record<string, string>>>
+> = {
+  [Gesture.Press]: {
+    mousedown0: "click",
+    mousedown1: "middle click",
+    mousedown2: "right click",
+    dblclick0: "double-click",
+  },
+  [Gesture.Drag]: {
+    mousedown0: "drag",
+    mousedown1: "middle drag",
+    mousedown2: "right drag",
+  },
+};
+
+const KEY_GESTURE_NAMES: Partial<Record<Gesture, string>> = {
+  [Gesture.Hold]: "hold",
+  [Gesture.Release]: "release",
 };
 
 function eventIdentifierToCombo(
   eventIdentifier: string,
+  gesture: Gesture,
 ): SpatialSkeletonShortcutCombo {
   const parts = eventIdentifier.split("+");
   const keyName = parts.pop()!;
   const combo: SpatialSkeletonShortcutCombo = [];
+  const keyGestureName = KEY_GESTURE_NAMES[gesture];
+  if (keyGestureName !== undefined) combo.push(key(keyGestureName));
   for (const modifier of parts) {
     // Optional modifiers ("shift?") do not need to be pressed.
     if (modifier.endsWith("?")) continue;
@@ -87,14 +116,15 @@ function eventIdentifierToCombo(
     }
     combo.push(key(modifierName));
   }
-  const mouseButtonName = MOUSE_BUTTON_NAMES[keyName];
-  if (mouseButtonName !== undefined) {
-    combo.push(mouseIcon, key(mouseButtonName));
-  } else if (keyName.startsWith("key")) {
+  if (keyName.startsWith("key") && gesture !== Gesture.Drag) {
     combo.push(key(keyName.slice(3)));
-  } else {
-    throw new Error(`Unsupported key in ${eventIdentifier}`);
+    return combo;
   }
+  const mouseButtonName = MOUSE_BUTTON_NAMES[gesture]?.[keyName];
+  if (mouseButtonName === undefined) {
+    throw new Error(`Unsupported gesture ${gesture} for ${eventIdentifier}`);
+  }
+  combo.push(mouseIcon, key(mouseButtonName));
   return combo;
 }
 
@@ -114,19 +144,6 @@ function boundEventIdentifiers(
   return Array.from(eventIdentifiers);
 }
 
-function boundShortcut(
-  label: string,
-  action: ActionIdentifier,
-): SpatialSkeletonShortcut {
-  return {
-    label,
-    combos: boundEventIdentifiers(
-      getDefaultSkeletonEditToolBindings(),
-      action,
-    ).map(eventIdentifierToCombo),
-  };
-}
-
 // Compare with `event.code.toLowerCase()`, as keyboard bindings do.
 export function getSpatialSkeletonModeKeyCode(
   action: ActionIdentifier,
@@ -142,83 +159,122 @@ export function getSpatialSkeletonModeKeyCode(
   return keyCode;
 }
 
-function holdShortcut(
-  label: string,
-  action: ActionIdentifier,
-): SpatialSkeletonShortcut {
-  const letter = getSpatialSkeletonModeKeyCode(action).slice(3);
-  return { label, combos: [[key("hold"), key(letter)]] };
+interface ShortcutSpecification {
+  readonly label: string;
+  readonly action: ActionIdentifier;
+  readonly gesture: Gesture;
 }
 
-function releaseShortcut(
-  label: string,
-  action: ActionIdentifier,
-): SpatialSkeletonShortcut {
-  const letter = getSpatialSkeletonModeKeyCode(action).slice(3);
-  return { label, combos: [[key("release"), key(letter)]] };
+function makeShortcuts<Name extends string>(
+  map: EventActionMap,
+  specifications: Record<Name, ShortcutSpecification>,
+): Record<Name, SpatialSkeletonShortcut> {
+  const shortcuts = {} as Record<Name, SpatialSkeletonShortcut>;
+  for (const name in specifications) {
+    const { label, action, gesture } = specifications[name];
+    shortcuts[name] = {
+      label,
+      combos: boundEventIdentifiers(map, action)
+        // The status bar shows mouse and key gestures only.
+        .filter((eventIdentifier) => !eventIdentifier.startsWith("touch"))
+        .map((eventIdentifier) =>
+          eventIdentifierToCombo(eventIdentifier, gesture),
+        ),
+    };
+  }
+  return shortcuts;
 }
 
-// These pointer gestures are handled by capture-phase listeners, not bindings.
-const CLICK = [mouseIcon, key("click")];
-const DRAG = [mouseIcon, key("drag")];
-const DOUBLE_CLICK = [mouseIcon, key("double-click")];
-
-export const SELECT_ACTION: SpatialSkeletonShortcut = {
-  label: "Select",
-  combos: [CLICK],
+export const SKELETON_EDIT_SHORTCUTS = {
+  ...makeShortcuts(getDefaultSkeletonEditToolBindings(), {
+    select: {
+      label: "Select",
+      action: SKELETON_EDIT_AT_MOUSE,
+      gesture: Gesture.Press,
+    },
+    move: {
+      label: "Move",
+      action: SKELETON_EDIT_AT_MOUSE,
+      gesture: Gesture.Drag,
+    },
+    place: {
+      label: "Place",
+      action: SKELETON_EDIT_AT_MOUSE,
+      gesture: Gesture.Press,
+    },
+    deleteNode: {
+      label: "Delete",
+      action: SKELETON_EDIT_AT_MOUSE,
+      gesture: Gesture.Press,
+    },
+    addNode: {
+      label: "Add node",
+      action: SKELETON_ADD_NODE,
+      gesture: Gesture.Press,
+    },
+    rotatePan: {
+      label: "Rotate/pan",
+      action: SKELETON_DRAG_VIEW,
+      gesture: Gesture.Drag,
+    },
+    merge: {
+      label: "Merge",
+      action: SKELETON_ENTER_MERGE_MODE,
+      gesture: Gesture.Hold,
+    },
+    insert: {
+      label: "Insert",
+      action: SKELETON_ENTER_INSERT_MODE,
+      gesture: Gesture.Hold,
+    },
+    split: {
+      label: "Split",
+      action: SKELETON_ENTER_SPLIT_MODE,
+      gesture: Gesture.Hold,
+    },
+    newSkeleton: {
+      label: "New skeleton",
+      action: SKELETON_ENTER_CREATE,
+      gesture: Gesture.Hold,
+    },
+    deleteMode: {
+      label: "Delete",
+      action: SKELETON_ENTER_DELETE_MODE,
+      gesture: Gesture.Hold,
+    },
+    exitMerge: {
+      label: "Exit merge",
+      action: SKELETON_ENTER_MERGE_MODE,
+      gesture: Gesture.Release,
+    },
+    exitInsert: {
+      label: "Exit insert",
+      action: SKELETON_ENTER_INSERT_MODE,
+      gesture: Gesture.Release,
+    },
+    exitSplit: {
+      label: "Exit split",
+      action: SKELETON_ENTER_SPLIT_MODE,
+      gesture: Gesture.Release,
+    },
+    exitCreate: {
+      label: "Exit create",
+      action: SKELETON_ENTER_CREATE,
+      gesture: Gesture.Release,
+    },
+    exitDelete: {
+      label: "Exit delete",
+      action: SKELETON_ENTER_DELETE_MODE,
+      gesture: Gesture.Release,
+    },
+  }),
+  ...makeShortcuts(getDefaultRenderedDataPanelBindings(), {
+    show: { label: "Show", action: "select", gesture: Gesture.Press },
+  }),
 };
-export const MOVE_ACTION: SpatialSkeletonShortcut = {
-  label: "Move",
-  combos: [DRAG],
-};
-export const SHOW_SKELETON_ACTION: SpatialSkeletonShortcut = {
-  label: "Show",
-  combos: [DOUBLE_CLICK],
-};
-export const PLACE_ACTION: SpatialSkeletonShortcut = {
-  label: "Place",
-  combos: [CLICK],
-};
-export const DELETE_CLICK_ACTION: SpatialSkeletonShortcut = {
-  label: "Delete",
-  combos: [CLICK],
-};
-export const ADD_NODE_ACTION = boundShortcut("Add node", SKELETON_ADD_NODE);
-export const SPATIAL_SKELETON_ROTATE_PAN_ACTION = boundShortcut(
-  "Rotate/pan",
-  "rotate-via-mouse-drag",
-);
-export const MERGE_ACTION = holdShortcut("Merge", SKELETON_ENTER_MERGE_MODE);
-export const INSERT_ACTION = holdShortcut("Insert", SKELETON_ENTER_INSERT_MODE);
-export const SPLIT_ACTION = holdShortcut("Split", SKELETON_ENTER_SPLIT_MODE);
-export const NEW_SKELETON_ACTION = holdShortcut(
-  "New skeleton",
-  SKELETON_ENTER_CREATE,
-);
-export const DELETE_ACTION = holdShortcut("Delete", SKELETON_ENTER_DELETE_MODE);
-export const EXIT_MERGE_ACTION = releaseShortcut(
-  "Exit merge",
-  SKELETON_ENTER_MERGE_MODE,
-);
-export const EXIT_INSERT_ACTION = releaseShortcut(
-  "Exit insert",
-  SKELETON_ENTER_INSERT_MODE,
-);
-export const EXIT_SPLIT_ACTION = releaseShortcut(
-  "Exit split",
-  SKELETON_ENTER_SPLIT_MODE,
-);
-export const EXIT_CREATE_ACTION = releaseShortcut(
-  "Exit create",
-  SKELETON_ENTER_CREATE,
-);
-export const EXIT_DELETE_ACTION = releaseShortcut(
-  "Exit delete",
-  SKELETON_ENTER_DELETE_MODE,
-);
 
 function appendCombo(
-  container: HTMLElement,
+  container: DocumentFragment,
   combo: SpatialSkeletonShortcutCombo,
 ) {
   combo.forEach((part, index) => {
@@ -238,17 +294,10 @@ function appendCombo(
 export function renderSpatialSkeletonShortcut(
   shortcut: SpatialSkeletonShortcut,
 ): HTMLElement {
-  const chip = document.createElement("div");
-  chip.classList.add("neuroglancer-annotation-entry-tool-chip");
-  const keyElement = document.createElement("span");
-  keyElement.classList.add("neuroglancer-annotation-entry-tool-chip-key");
+  const keyElement = document.createDocumentFragment();
   shortcut.combos.forEach((combo, index) => {
     if (index > 0) keyElement.append(" / ");
     appendCombo(keyElement, combo);
   });
-  const labelElement = document.createElement("span");
-  labelElement.classList.add("neuroglancer-annotation-entry-tool-chip-label");
-  labelElement.textContent = shortcut.label;
-  chip.append(keyElement, labelElement);
-  return chip;
+  return makeToolStatusChip(keyElement, shortcut.label);
 }

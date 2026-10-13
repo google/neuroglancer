@@ -35,6 +35,8 @@ export const SKELETON_TOGGLE_TRUE_END = "skeleton-toggle-true-end";
 export const SKELETON_REROOT = "skeleton-reroot";
 
 // --- Edit tool spatial actions ---
+export const SKELETON_EDIT_AT_MOUSE = "skeleton-edit-at-mouse";
+export const SKELETON_DRAG_VIEW = "skeleton-drag-view";
 export const SKELETON_ADD_NODE = "skeleton-add-node";
 // Merge (m): enters merge mode; click the anchor node, then the target node.
 export const SKELETON_ENTER_MERGE_MODE = "skeleton-enter-merge-mode";
