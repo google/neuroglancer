@@ -90,6 +90,13 @@ import {
   getDefaultSkeletonEditToolBindings,
   getDefaultSkeletonFindPathToolBindings,
 } from "#src/ui/default_input_event_bindings.js";
+import svg_addNodeCursor from "#src/ui/images/add_node_cursor.svg?raw";
+import svg_deleteCursor from "#src/ui/images/delete_cursor.svg?raw";
+import svg_dragCursor from "#src/ui/images/drag_cursor.svg?raw";
+import svg_insertNodeCursor from "#src/ui/images/insert_node_cursor.svg?raw";
+import svg_mergeCursor from "#src/ui/images/merge_cursor.svg?raw";
+import svg_newSkeletonCursor from "#src/ui/images/new_skeleton_cursor.svg?raw";
+import svg_splitCursor from "#src/ui/images/split_cursor.svg?raw";
 import {
   getSpatialSkeletonCreateIdleStatusText,
   getSpatialSkeletonCreatingStatusText,
@@ -115,6 +122,7 @@ import {
   makeToolActivationStatusMessageWithHeader,
   registerTool,
 } from "#src/ui/tool.js";
+import { setToolCursor, svgCursor } from "#src/ui/tool_cursor.js";
 import { removeChildren } from "#src/util/dom.js";
 import type { ActionEvent } from "#src/util/event_action_map.js";
 import { dispatchEventAction } from "#src/util/event_action_map.js";
@@ -138,6 +146,16 @@ const enum SkeletonEditMode {
 }
 
 const DRAG_START_DISTANCE_PX = 2;
+
+const ADD_NODE_CURSOR = svgCursor(svg_addNodeCursor, 20, "crosshair");
+const SUSTAINED_MODE_CURSORS = new Map<SkeletonEditMode, string>([
+  [SkeletonEditMode.Merge, svgCursor(svg_mergeCursor, 20, "crosshair")],
+  [SkeletonEditMode.Create, svgCursor(svg_newSkeletonCursor, 20, "crosshair")],
+  [SkeletonEditMode.Split, svgCursor(svg_splitCursor, 20, "crosshair")],
+  [SkeletonEditMode.Delete, svgCursor(svg_deleteCursor, 20, "crosshair")],
+  [SkeletonEditMode.Insert, svgCursor(svg_insertNodeCursor, 20, "crosshair")],
+]);
+const MOVE_CURSOR = svgCursor(svg_dragCursor, 20, "grabbing");
 
 const MERGE_EXIT_KEY_CODE = getSpatialSkeletonModeKeyCode(
   SKELETON_ENTER_MERGE_MODE,
@@ -588,7 +606,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
 
   // Activation-scoped state — reset at the start of each activate() call.
   private currentMode: SkeletonEditMode = SkeletonEditMode.Default;
-  private draggedPanel: RenderedDataPanel | undefined;
+  private dragInProgress = false;
   private activeDragBrowseExclusionRelease: (() => boolean) | undefined;
   private pending = false;
   /** Invalidates delayed callbacks from prior modes or tool activations. */
@@ -657,44 +675,25 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
 
   // --- Cursor helpers ---
 
-  private get dragInProgress() {
-    return this.draggedPanel !== undefined;
-  }
-
   private endDrag() {
-    if (this.draggedPanel === undefined) return;
-    delete this.draggedPanel.element.dataset.skeletonPressMode;
-    this.draggedPanel = undefined;
+    if (!this.dragInProgress) return;
+    this.dragInProgress = false;
+    this.updateModeCursor();
   }
 
-  private setModeAttribute(mode: string | undefined) {
-    const { dataset } = this.layer.manager.root.display.container;
-    if (mode === undefined) {
-      delete dataset.skeletonEditMode;
-    } else {
-      dataset.skeletonEditMode = mode;
-    }
+  private updateModeCursor() {
+    setToolCursor(
+      this.layer.manager.root.display.container,
+      this.getModeCursor(),
+    );
   }
 
-  // Recomputes the correct data-skeleton-edit-mode attribute from current
-  // mode + held modifiers so callers don't have to care about that interaction.
-  // Priority: sustained tool modes > shift (add cursor hint).
-  private updateModeAttribute() {
-    if (this.currentMode === SkeletonEditMode.Merge) {
-      this.setModeAttribute("merge");
-    } else if (this.currentMode === SkeletonEditMode.Create) {
-      this.setModeAttribute("create");
-    } else if (this.currentMode === SkeletonEditMode.Split) {
-      this.setModeAttribute("split");
-    } else if (this.currentMode === SkeletonEditMode.Delete) {
-      this.setModeAttribute("delete");
-    } else if (this.currentMode === SkeletonEditMode.Insert) {
-      this.setModeAttribute("insert");
-    } else if (this.shiftHeld && !this.ctrlHeld) {
-      this.setModeAttribute("add");
-    } else {
-      this.setModeAttribute(undefined);
-    }
+  private getModeCursor(): string | undefined {
+    if (this.dragInProgress) return MOVE_CURSOR;
+    return (
+      SUSTAINED_MODE_CURSORS.get(this.currentMode) ??
+      (this.shiftHeld && !this.ctrlHeld ? ADD_NODE_CURSOR : undefined)
+    );
   }
 
   // --- Status rendering ---
@@ -804,7 +803,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     if (this.shiftHeld === isShift && this.ctrlHeld === isCtrl) return;
     this.shiftHeld = isShift;
     this.ctrlHeld = isCtrl;
-    this.updateModeAttribute();
+    this.updateModeCursor();
     this.renderStatus();
   }
 
@@ -888,7 +887,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     this.resetMergeToFreshState();
     this.layer.spatialSkeletonMergeMode.value = true;
     this.currentMode = SkeletonEditMode.Merge;
-    this.updateModeAttribute();
+    this.updateModeCursor();
     this.renderStatus();
   }
 
@@ -901,7 +900,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     this.layer.spatialSkeletonMergeMode.value = false;
     this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value = false;
     this.currentMode = SkeletonEditMode.Default;
-    this.updateModeAttribute();
+    this.updateModeCursor();
     this.clearStatus();
   }
 
@@ -918,7 +917,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     this.advanceInteractionGeneration();
     this.resetInsertToFreshState();
     this.currentMode = SkeletonEditMode.Insert;
-    this.updateModeAttribute();
+    this.updateModeCursor();
     this.renderStatus();
   }
 
@@ -929,7 +928,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     this.insertAnchorNodeId = undefined;
     this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value = false;
     this.currentMode = SkeletonEditMode.Default;
-    this.updateModeAttribute();
+    this.updateModeCursor();
     this.clearStatus();
   }
 
@@ -937,7 +936,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     this.advanceInteractionGeneration();
     this.currentMode = SkeletonEditMode.Create;
     this.createPlacedThisHold = false;
-    this.updateModeAttribute();
+    this.updateModeCursor();
     this.renderStatus();
   }
 
@@ -947,7 +946,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     this.pending = false;
     this.currentMode = SkeletonEditMode.Default;
     this.createPlacedThisHold = false;
-    this.updateModeAttribute();
+    this.updateModeCursor();
     this.clearStatus();
   }
 
@@ -958,7 +957,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     // In split mode the selected-node highlight stays hidden until the user
     // clicks a node to split (or exits back to default mode).
     this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value = true;
-    this.updateModeAttribute();
+    this.updateModeCursor();
     this.renderStatus();
   }
 
@@ -969,14 +968,14 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     this.currentMode = SkeletonEditMode.Default;
     this.layer.spatialSkeletonSplitMode.value = false;
     this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value = false;
-    this.updateModeAttribute();
+    this.updateModeCursor();
     this.clearStatus();
   }
 
   private enterDelete() {
     this.advanceInteractionGeneration();
     this.currentMode = SkeletonEditMode.Delete;
-    this.updateModeAttribute();
+    this.updateModeCursor();
     this.renderStatus();
   }
 
@@ -985,7 +984,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     this.advanceInteractionGeneration();
     this.pending = false;
     this.currentMode = SkeletonEditMode.Default;
-    this.updateModeAttribute();
+    this.updateModeCursor();
     this.clearStatus();
   }
 
@@ -1081,8 +1080,8 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
             return;
           }
           dragStarted = true;
-          this.draggedPanel = panel;
-          panel.element.dataset.skeletonPressMode = "move";
+          this.dragInProgress = true;
+          this.updateModeCursor();
           this.layer.spatialSkeletonState.clearPendingNodePositions();
           this.activeDragBrowseExclusionRelease?.();
           this.activeDragBrowseExclusionRelease =
@@ -1861,7 +1860,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       return;
     }
 
-    // 4. Register disposer: clear setStatusText, reset mode attribute, and
+    // 4. Register disposer: clear setStatusText, clear the tool cursor, and
     //    deactivate layer-level mode flags.
     activation.registerDisposer(() => {
       this.advanceInteractionGeneration();
@@ -1872,7 +1871,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       this.endDrag();
       this.activeDragBrowseExclusionRelease?.();
       this.activeDragBrowseExclusionRelease = undefined;
-      this.setModeAttribute(undefined);
+      setToolCursor(this.layer.manager.root.display.container, undefined);
       layer.spatialSkeletonMergeMode.value = false;
       layer.spatialSkeletonSplitMode.value = false;
       layer.spatialSkeletonSuppressSelectedNodeHighlight.value = false;
@@ -1990,7 +1989,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       this.exitSplit();
       this.exitDelete();
       this.exitInsert();
-      this.updateModeAttribute();
+      this.updateModeCursor();
     };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
