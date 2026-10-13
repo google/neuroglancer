@@ -18,6 +18,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   SKELETON_ADD_NODE,
   SKELETON_CLEAR_SELECTION,
+  SKELETON_ENTER_CREATE,
+  SKELETON_ENTER_DELETE_MODE,
   SKELETON_ENTER_INSERT_MODE,
   SKELETON_ENTER_MERGE_MODE,
   SKELETON_ENTER_SPLIT_MODE,
@@ -41,6 +43,13 @@ import {
 import { buildSpatiallyIndexedSkeletonNavigationGraph } from "#src/skeleton/navigation_graph.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
+import svg_addNodeCursor from "#src/ui/images/add_node_cursor.svg?raw";
+import svg_deleteCursor from "#src/ui/images/delete_cursor.svg?raw";
+import svg_dragCursor from "#src/ui/images/drag_cursor.svg?raw";
+import svg_insertNodeCursor from "#src/ui/images/insert_node_cursor.svg?raw";
+import svg_mergeCursor from "#src/ui/images/merge_cursor.svg?raw";
+import svg_newSkeletonCursor from "#src/ui/images/new_skeleton_cursor.svg?raw";
+import svg_splitCursor from "#src/ui/images/split_cursor.svg?raw";
 import {
   EventActionMap,
   registerActionListener,
@@ -328,6 +337,10 @@ function readFullText(element: HTMLElement) {
     if (text !== "") words.push(text);
   }
   return words.join(" ");
+}
+
+function readToolCursor(element: HTMLElement) {
+  return element.style.getPropertyValue("--neuroglancer-tool-cursor");
 }
 
 function readStatusText(statusMessage: HTMLElement) {
@@ -635,6 +648,7 @@ function makeDragHarness({ inspected = true } = {}) {
   const tool = Object.assign(Object.create(SpatialSkeletonEditTool.prototype), {
     layer,
     mergeTargetPrefetch: makeMergeTargetPrefetch(),
+    dragInProgress: false,
     dragModelSpacePosition: new Float32Array(3),
     dragGlobalAnchorPosition: new Float32Array(3),
     dragGlobalPosition: new Float32Array(3),
@@ -1932,24 +1946,57 @@ describe("spatial_skeleton_edit_tool", () => {
     }
   });
 
-  it("shows the mode cursor on panels created after a layout change", () => {
+  it("shows the merge, create, split, delete and insert cursors while each mode is active", () => {
+    suppressStatusMessages();
+    for (const [action, svg] of [
+      [SKELETON_ENTER_MERGE_MODE, svg_mergeCursor],
+      [SKELETON_ENTER_CREATE, svg_newSkeletonCursor],
+      [SKELETON_ENTER_SPLIT_MODE, svg_splitCursor],
+      [SKELETON_ENTER_DELETE_MODE, svg_deleteCursor],
+      [SKELETON_ENTER_INSERT_MODE, svg_insertNodeCursor],
+    ]) {
+      const harness = makeEditToolHarness();
+      try {
+        harness.actions.get(action)?.({});
+
+        expect(
+          readToolCursor(harness.layer.manager.root.display.container),
+        ).toContain(encodeURIComponent(svg));
+      } finally {
+        harness.dispose();
+      }
+    }
+  });
+
+  it("shows the add-node cursor while shift is held without ctrl", () => {
     suppressStatusMessages();
     const harness = makeEditToolHarness();
+    const { container } = harness.layer.manager.root.display;
     try {
-      harness.actions.get(SKELETON_ENTER_MERGE_MODE)?.({});
-      const { container } = harness.layer.manager.root.display;
-      const panelElement = document.createElement("div");
-      panelElement.classList.add("neuroglancer-rendered-data-panel");
-      container.appendChild(panelElement);
+      window.dispatchEvent(new MouseEvent("mousemove", { shiftKey: true }));
+      expect(readToolCursor(container)).toContain(
+        encodeURIComponent(svg_addNodeCursor),
+      );
 
-      expect(
-        panelElement.matches(
-          '[data-skeleton-edit-mode="merge"] .neuroglancer-rendered-data-panel',
-        ),
-      ).toBe(true);
+      window.dispatchEvent(
+        new MouseEvent("mousemove", { shiftKey: true, ctrlKey: true }),
+      );
+      expect(readToolCursor(container)).toBe("");
     } finally {
       harness.dispose();
     }
+  });
+
+  it("restores the default panel cursor when the tool deactivates", () => {
+    suppressStatusMessages();
+    const harness = makeEditToolHarness();
+    const { container } = harness.layer.manager.root.display;
+    harness.actions.get(SKELETON_ENTER_MERGE_MODE)?.({});
+    expect(readToolCursor(container)).not.toBe("");
+
+    harness.dispose();
+
+    expect(readToolCursor(container)).toBe("");
   });
 
   it("pans a 2D panel and rotates a 3D panel with a middle drag", () => {
@@ -2638,6 +2685,21 @@ describe("spatial_skeleton_edit_tool", () => {
     );
   }
 
+  it("shows the move cursor while a node is dragged and clears it when the drag ends", () => {
+    const { layer, start, event } = makeDragHarness();
+    const { container } = layer.manager.root.display;
+    const { move, finish } = start();
+    expect(readToolCursor(container)).toBe("");
+
+    move(event, 10, 20);
+    expect(readToolCursor(container)).toContain(
+      encodeURIComponent(svg_dragCursor),
+    );
+
+    finish(event, 0, 0);
+    expect(readToolCursor(container)).toBe("");
+  });
+
   for (const startMoving of [false, true]) {
     it.each([false, true])(
       `cancels a ${startMoving ? "moving" : "pressed"} node drag on deactivation (reactivate: %s)`,
@@ -2648,7 +2710,7 @@ describe("spatial_skeleton_edit_tool", () => {
           source,
           start,
           event,
-          panel,
+          layer,
           releaseBrowseExclusion,
         } = makeDragHarness();
         const first = makeToolActivation();
@@ -2661,7 +2723,7 @@ describe("spatial_skeleton_edit_tool", () => {
         tool.mergeTargetHoverRelease = releaseMergeHover;
         first.dispose();
         expect(tool.dragInProgress).toBe(false);
-        expect(panel.element.dataset.skeletonPressMode).toBeUndefined();
+        expect(readToolCursor(layer.manager.root.display.container)).toBe("");
         expect(releaseMergeHover).toHaveBeenCalledOnce();
         expect(tool.mergeTargetPrefetch.clear).toHaveBeenCalledTimes(
           prefetchClears + 1,
@@ -2692,7 +2754,9 @@ describe("spatial_skeleton_edit_tool", () => {
               clears + 1,
             );
             expect(tool.dragInProgress).toBe(true);
-            expect(panel.element.dataset.skeletonPressMode).toBe("move");
+            expect(
+              readToolCursor(layer.manager.root.display.container),
+            ).toContain(encodeURIComponent(svg_dragCursor));
             current.finish(event, 0, 0);
             expect(source.moveNodesCommand.createCommand).toHaveBeenCalledTimes(
               1,
