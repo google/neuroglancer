@@ -23,8 +23,6 @@ import {
   SKELETON_ENTER_INSERT_MODE,
   SKELETON_ENTER_MERGE_MODE,
   SKELETON_ENTER_SPLIT_MODE,
-  SKELETON_REROOT,
-  SKELETON_TOGGLE_TRUE_END,
   SKELETON_FIND_PATH_SELECT_ENDPOINT,
 } from "#src/skeleton/actions.js";
 import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
@@ -2768,89 +2766,6 @@ describe("spatial_skeleton_edit_tool", () => {
       },
     );
   }
-
-  it("requires inspection for selected-node true-end and reroot actions", () => {
-    suppressStatusMessages();
-    const node: SpatiallyIndexedSkeletonNode = {
-      nodeId: 101n,
-      segmentId: 11n,
-      position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
-    };
-    const source = makeCommandSkeletonSource();
-    const skeletonLayer = {
-      source,
-      getNode: vi.fn(() => node),
-    };
-    const mouseState = {
-      pickedRenderLayer: undefined,
-      pickedSpatialSkeleton: undefined,
-      updateUnconditionally: vi.fn(() => true),
-      active: true,
-      changed: makeChangedSignal(),
-    };
-    const rerootSpatialSkeletonNode = vi.fn(async () => {});
-    const layer = {
-      displayState: {
-        ...makeSkeletonRenderingOptions(),
-        segmentationGroupState: {
-          value: makeVisibleSegmentsState([11n]),
-        },
-      },
-      spatialSkeletonEditMode: makeModeWatchable(),
-      spatialSkeletonMergeMode: makeModeWatchable(),
-      spatialSkeletonSplitMode: makeModeWatchable(),
-      spatialSkeletonSuppressSelectedNodeHighlight: makeModeWatchable(),
-      selectedSpatialSkeletonNodeInfo: {
-        value: { nodeId: node.nodeId, segmentId: node.segmentId },
-        changed: makeChangedSignal(),
-      },
-      spatialSkeletonState: {
-        commandHistory: new SpatialSkeletonCommandHistory(),
-        getCachedNode: vi.fn(),
-        getCachedSegmentSnapshotHandle: vi.fn(() => undefined),
-        mergeAnchorNodeId: { value: undefined, changed: makeChangedSignal() },
-        clearPendingNodePositions: vi.fn(),
-      },
-      manager: {
-        root: {
-          layerSelectedValues: { mouseState },
-          selectionState: { value: undefined, changed: makeChangedSignal() },
-          display: {
-            panels: new Set(),
-            container: document.createElement("div"),
-          },
-        },
-      },
-      getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
-      getSpatialSkeletonActionsDisabledReason: vi.fn(() => undefined),
-      rerootSpatialSkeletonNode,
-      clearSpatialSkeletonMergeAnchor: vi.fn(),
-      clearSpatialSkeletonNodeSelection: vi.fn(),
-      layersChanged: makeChangedSignal(),
-    };
-    const { activation, actions, dispose } = makeToolActivation();
-    const tool = Object.assign(
-      Object.create(SpatialSkeletonEditTool.prototype),
-      { layer, mergeTargetPrefetch: makeMergeTargetPrefetch() },
-    );
-
-    try {
-      SpatialSkeletonEditTool.prototype.activate.call(tool, activation as any);
-      actions.get(SKELETON_TOGGLE_TRUE_END)?.({});
-      actions.get(SKELETON_REROOT)?.({});
-
-      expect(
-        source.editNodeTrueEndCommand.createCommand,
-      ).not.toHaveBeenCalled();
-      expect(rerootSpatialSkeletonNode).not.toHaveBeenCalled();
-      expect(StatusMessage.showTemporaryMessage).toHaveBeenCalledWith(
-        `Inspect skeleton ${node.segmentId} before editing it.`,
-      );
-    } finally {
-      dispose();
-    }
-  });
 
   it("uses inspected ownership when a merge target pick has a retired skeleton ID", async () => {
     suppressStatusMessages();

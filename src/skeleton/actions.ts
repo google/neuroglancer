@@ -16,23 +16,8 @@
 
 // Neuroglancer event action identifier strings for all skeleton UI.
 // These are the "skeleton-*" prefixed action names used in EventActionMap bindings
-// and registerActionListener calls throughout the skeleton tab and edit tool.
+// and bindAction calls in the skeleton edit tools.
 // Default key bindings live in src/ui/default_input_event_bindings.ts.
-
-// --- Tab navigation ---
-export const SKELETON_GO_ROOT = "skeleton-go-root";
-export const SKELETON_GO_BRANCH_START = "skeleton-go-branch-start";
-export const SKELETON_GO_BRANCH_END = "skeleton-go-branch-end";
-export const SKELETON_GO_PARENT = "skeleton-go-parent";
-export const SKELETON_GO_CHILD = "skeleton-go-child";
-export const SKELETON_CYCLE_BRANCHES = "skeleton-cycle-branches";
-export const SKELETON_GO_UNFINISHED = "skeleton-go-unfinished-branch";
-export const SKELETON_UNDO = "skeleton-undo";
-export const SKELETON_REDO = "skeleton-redo";
-
-// --- Node mutations (tab list focus + edit tool viewer focus) ---
-export const SKELETON_TOGGLE_TRUE_END = "skeleton-toggle-true-end";
-export const SKELETON_REROOT = "skeleton-reroot";
 
 // --- Edit tool spatial actions ---
 export const SKELETON_EDIT_AT_MOUSE = "skeleton-edit-at-mouse";

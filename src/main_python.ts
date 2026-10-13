@@ -34,6 +34,7 @@ import { RemoteActionHandler } from "#src/python_integration/remote_actions.js";
 import { TrackableBasedStatusMessages } from "#src/python_integration/remote_status_messages.js";
 import { ScreenshotHandler } from "#src/python_integration/screenshots.js";
 import { VolumeRequestHandler } from "#src/python_integration/volume.js";
+import { SkeletonNodeCommands } from "#src/skeleton/node_commands.js";
 import { TrackableValue } from "#src/trackable_value.js";
 import { bindCommandPalette } from "#src/ui/command_palette.js";
 import {
@@ -231,5 +232,6 @@ volumeHandler.sendVolumeChunkResponseRequested.add((requestId, info) =>
 bindDefaultCopyHandler(viewer);
 bindDefaultPasteHandler(viewer);
 registerDefaultCommands(viewer.commandRegistry);
+viewer.registerDisposer(new SkeletonNodeCommands(viewer));
 bindCommandPalette(viewer);
 viewer.registerDisposer(bindTitle(viewer.title));
