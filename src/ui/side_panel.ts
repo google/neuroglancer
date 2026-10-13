@@ -23,6 +23,7 @@ import { TrackableSidePanelLocation } from "#src/ui/side_panel_location.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { updateChildren } from "#src/util/dom.js";
 import {
+  declareAllowedDropEffects,
   getDropEffect,
   getDropEffectFromModifiers,
   setDropEffect,
@@ -106,6 +107,7 @@ export class SidePanel extends RefCounted {
     element.classList.add("neuroglancer-side-panel");
     element.draggable = true;
     element.addEventListener("dragstart", (event: DragEvent) => {
+      declareAllowedDropEffects(event, "copyMove");
       this.sidePanelManager.startDrag(this.makeDragSource(), event);
       element.style.backgroundColor = "black";
       setTimeout(() => {
