@@ -834,20 +834,17 @@ export function get3dModelToDisplaySpaceMatrix(
 ) {
   out.fill(0);
   out[15] = 1;
-  let fullRank = true;
-  const { displayDimensionIndices } = displayDimensionRenderInfo;
+  const { displayDimensionIndices, displayRank, globalDimensionNames } =
+    displayDimensionRenderInfo;
   const { globalToRenderLayerDimensions, modelToRenderLayerTransform } =
     transform;
   const layerRank = transform.rank;
-  for (let displayDim = 0; displayDim < 3; ++displayDim) {
+  const missingDimensionNames: string[] = [];
+  for (let displayDim = 0; displayDim < displayRank; ++displayDim) {
     const globalDim = displayDimensionIndices[displayDim];
-    if (globalDim === -1) {
-      fullRank = false;
-      continue;
-    }
     const layerDim = globalToRenderLayerDimensions[globalDim];
     if (layerDim === -1) {
-      fullRank = false;
+      missingDimensionNames.push(globalDimensionNames[globalDim]);
       continue;
     }
     out[displayDim + 12] =
@@ -857,17 +854,27 @@ export function get3dModelToDisplaySpaceMatrix(
         modelToRenderLayerTransform[layerDim + (layerRank + 1) * modelDim];
     }
   }
-  if (!fullRank) {
-    const { globalDimensionNames } = displayDimensionRenderInfo;
-    const displayDimDesc = Array.from(
-      displayDimensionIndices.filter((i) => i !== -1),
-      (i) => globalDimensionNames[i],
+  if (missingDimensionNames.length > 0) {
+    const layerGlobalDimensionNames = globalDimensionNames
+      .filter((_, globalDim) => globalToRenderLayerDimensions[globalDim] !== -1)
+      .join(",\u00a0");
+    const missingDescription =
+      missingDimensionNames.length === 1
+        ? `Display dimension ${missingDimensionNames[0]} is not a dimension`
+        : `Display dimensions ${missingDimensionNames.join(",\u00a0")} are not dimensions`;
+    throw new Error(
+      `${missingDescription} of this layer (${layerGlobalDimensionNames}). ` +
+        "Choose display dimensions from the layer's dimensions.",
+    );
+  }
+  if (displayRank < 3) {
+    const displayDimensionNames = Array.from(
+      displayDimensionIndices.subarray(0, displayRank),
+      (globalDim) => globalDimensionNames[globalDim],
     ).join(",\u00a0");
     throw new Error(
-      `Transform from model dimensions (${transform.modelDimensionNames.join(
-        ",\u00a0",
-      )}) ` +
-        `to display dimensions (${displayDimDesc}) does not have full rank`,
+      `This layer needs 3 display dimensions, but there are ${displayRank} ` +
+        `(${displayDimensionNames})`,
     );
   }
 }
