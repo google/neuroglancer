@@ -225,16 +225,14 @@ void main() {
 `,
       this.fragmentMain,
     );
-    this.registerDisposer(wrappedFragmentMain);
 
     const shaderControlState = new ShaderControlState(
       wrappedFragmentMain,
       this.shaderControlState.dataContext,
       this.channelCoordinateSpaceCombiner,
     );
-    this.registerDisposer(shaderControlState);
 
-    return new ImagePreviewRenderLayer(source, {
+    const renderLayer = new ImagePreviewRenderLayer(source, {
       opacity: new TrackableValue(1.0, verifyFloat01),
       blendMode: new TrackableEnum(BLEND_MODES, BLEND_MODES.ADDITIVE),
       shaderControlState: shaderControlState,
@@ -245,6 +243,9 @@ void main() {
       localPosition: this.localPosition,
       channelCoordinateSpace: this.channelCoordinateSpace,
     });
+    renderLayer.registerDisposer(wrappedFragmentMain);
+    renderLayer.registerDisposer(shaderControlState);
+    return renderLayer;
   }
 
   addCoordinateSpace(
