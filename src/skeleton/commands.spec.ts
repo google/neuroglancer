@@ -17,7 +17,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type { SkeletonNode } from "#src/skeleton/api.js";
 import { SpatialSkeletonCommandHistory } from "#src/skeleton/command_history.js";
 import {
   SpatialSkeletonActions,
@@ -77,9 +77,7 @@ function makeWholeSkeletonReads(
   };
 }
 
-function cloneNode(
-  node: SpatiallyIndexedSkeletonNode,
-): SpatiallyIndexedSkeletonNode {
+function cloneNode(node: SkeletonNode): SkeletonNode {
   return {
     ...node,
     position: new Float32Array(node.position),
@@ -89,8 +87,8 @@ function cloneNode(
 }
 
 function cloneNodes(
-  nodes: readonly SpatiallyIndexedSkeletonNode[] | undefined,
-): SpatiallyIndexedSkeletonNode[] {
+  nodes: readonly SkeletonNode[] | undefined,
+): SkeletonNode[] {
   return (nodes ?? []).map((node) => cloneNode(node));
 }
 
@@ -104,7 +102,7 @@ function cachedTopologyForTest(
     .sort((a, b) => bigintCompare(a[0]!, b[0]!));
 }
 
-function makeRootRestorationNodesForTest(): SpatiallyIndexedSkeletonNode[] {
+function makeRootRestorationNodesForTest(): SkeletonNode[] {
   // A0 -> A1 and B0 -> B1 -> B2, with off-path branches at B1 and B2.
   // Attaching A1 to B2 must reverse the entire B0/B1/B2 path.
   return [
@@ -131,7 +129,7 @@ function makeRootRestorationNodesForTest(): SpatiallyIndexedSkeletonNode[] {
 function replaceCachedSegmentForTest(
   state: SpatialSkeletonState,
   segmentId: bigint,
-  nodes: readonly SpatiallyIndexedSkeletonNode[] | undefined,
+  nodes: readonly SkeletonNode[] | undefined,
 ) {
   state.replaceCachedSegmentSnapshots([[segmentId, nodes]], {
     notify: false,
@@ -140,9 +138,9 @@ function replaceCachedSegmentForTest(
 
 function seedCachedNodesForTest(
   state: SpatialSkeletonState,
-  nodes: readonly SpatiallyIndexedSkeletonNode[],
+  nodes: readonly SkeletonNode[],
 ) {
-  const nodesBySegment = new Map<bigint, SpatiallyIndexedSkeletonNode[]>();
+  const nodesBySegment = new Map<bigint, SkeletonNode[]>();
   for (const node of nodes) {
     const segmentNodes = nodesBySegment.get(node.segmentId) ?? [];
     segmentNodes.push(cloneNode(node));
@@ -351,15 +349,12 @@ function makeOptimisticAddNodeTestLayer(options: {
   toggleTrueEnd?: ReturnType<typeof vi.fn>;
   updateRadius?: ReturnType<typeof vi.fn>;
   updateConfidence?: ReturnType<typeof vi.fn>;
-  initialNodes: readonly SpatiallyIndexedSkeletonNode[];
+  initialNodes: readonly SkeletonNode[];
   segmentId: bigint;
   segmentIds?: readonly bigint[];
 }) {
   const spatialSkeletonState = new SpatialSkeletonState();
-  const initialNodesBySegment = new Map<
-    bigint,
-    SpatiallyIndexedSkeletonNode[]
-  >();
+  const initialNodesBySegment = new Map<bigint, SkeletonNode[]>();
   for (const node of options.initialNodes) {
     const segmentNodes = initialNodesBySegment.get(node.segmentId) ?? [];
     segmentNodes.push(node);
@@ -441,9 +436,7 @@ function makeOptimisticAddNodeTestLayer(options: {
     getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
     getCachedSpatialSkeletonSegmentNodesForEdit: (requestedSegmentId: bigint) =>
       spatialSkeletonState.getCachedSegmentNodes(requestedSegmentId) ?? [],
-    async getSpatialSkeletonDeleteOperationContext(
-      node: SpatiallyIndexedSkeletonNode,
-    ) {
+    async getSpatialSkeletonDeleteOperationContext(node: SkeletonNode) {
       const segmentNodes =
         spatialSkeletonState.getCachedSegmentNodes(node.segmentId) ?? [];
       const currentNode = findSpatiallyIndexedSkeletonNode(
@@ -629,7 +622,7 @@ describe("spatial_skeleton_commands", () => {
         },
       }),
     };
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 17n,
       segmentId: 23n,
       position: new Float32Array([1, 2, 3]),
@@ -702,7 +695,7 @@ describe("spatial_skeleton_commands", () => {
         },
       }),
     };
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 17n,
       segmentId: 23n,
       position: new Float32Array([1, 2, 3]),
@@ -850,7 +843,7 @@ describe("spatial_skeleton_commands", () => {
       },
       getSpatiallyIndexedSkeletonLayer: () => ({ source }),
     };
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 17n,
       segmentId: 23n,
       position: new Float32Array([1, 2, 3]),
@@ -1079,7 +1072,7 @@ describe("spatial_skeleton_commands", () => {
 
   it("creates CATMAID commands from valid opaque payloads", () => {
     const commandSource = makeCatmaidEditCommands();
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 17n,
       segmentId: 23n,
       position: new Float32Array([1, 2, 3]),
@@ -1110,7 +1103,7 @@ describe("spatial_skeleton_commands", () => {
 
   it("defers malformed coordinate contents beyond command construction", () => {
     const commandSource = makeCatmaidEditCommands();
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 17n,
       segmentId: 23n,
       position: new Float32Array([1, 2, 3]),
@@ -1129,7 +1122,7 @@ describe("spatial_skeleton_commands", () => {
     const showTemporaryMessage = vi.mocked(StatusMessage.showTemporaryMessage);
 
     const segmentId = 23n;
-    const parentNode: SpatiallyIndexedSkeletonNode = {
+    const parentNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
@@ -1212,7 +1205,7 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
 
     const segmentId = 23n;
-    const parentNode: SpatiallyIndexedSkeletonNode = {
+    const parentNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
@@ -1277,7 +1270,7 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
 
     const segmentId = 23n;
-    const parentNode: SpatiallyIndexedSkeletonNode = {
+    const parentNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
@@ -1323,7 +1316,7 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
 
     const segmentId = 23n;
-    const parentNode: SpatiallyIndexedSkeletonNode = {
+    const parentNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
@@ -1579,7 +1572,7 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
 
     const segmentId = 23n;
-    const parentNode: SpatiallyIndexedSkeletonNode = {
+    const parentNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
@@ -1633,7 +1626,7 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
 
     const segmentId = 23n;
-    const rootNode: SpatiallyIndexedSkeletonNode = {
+    const rootNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
@@ -1721,7 +1714,7 @@ describe("spatial_skeleton_commands", () => {
     const showTemporaryMessage = vi.mocked(StatusMessage.showTemporaryMessage);
 
     const segmentId = 23n;
-    const parentNode: SpatiallyIndexedSkeletonNode = {
+    const parentNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
@@ -1778,7 +1771,7 @@ describe("spatial_skeleton_commands", () => {
     const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
 
     const segmentId = 23n;
-    const parentNode: SpatiallyIndexedSkeletonNode = {
+    const parentNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
@@ -1839,7 +1832,7 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
 
     const segmentId = 23n;
-    const parentNode: SpatiallyIndexedSkeletonNode = {
+    const parentNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
@@ -1945,13 +1938,13 @@ describe("spatial_skeleton_commands", () => {
 
     const firstSegmentId = 23n;
     const secondSegmentId = 29n;
-    const firstParent: SpatiallyIndexedSkeletonNode = {
+    const firstParent: SkeletonNode = {
       nodeId: 1n,
       segmentId: firstSegmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
-    const secondParent: SpatiallyIndexedSkeletonNode = {
+    const secondParent: SkeletonNode = {
       nodeId: 10n,
       segmentId: secondSegmentId,
       position: new Float32Array([4, 5, 6]),
@@ -2046,7 +2039,7 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
 
     const segmentId = 23n;
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
@@ -2102,7 +2095,7 @@ describe("spatial_skeleton_commands", () => {
     const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
 
     const segmentId = 23n;
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
@@ -2160,7 +2153,7 @@ describe("spatial_skeleton_commands", () => {
     const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
 
     const segmentId = 23n;
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
@@ -2314,13 +2307,13 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
     const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
     const segmentId = 23n;
-    const root: SpatiallyIndexedSkeletonNode = {
+    const root: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       parentNodeId: undefined,
       position: new Float32Array([1, 2, 3]),
     };
-    const child: SpatiallyIndexedSkeletonNode = {
+    const child: SkeletonNode = {
       nodeId: 2n,
       segmentId,
       parentNodeId: root.nodeId,
@@ -2369,7 +2362,7 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
 
     const segmentId = 23n;
-    const parentNode: SpatiallyIndexedSkeletonNode = {
+    const parentNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
@@ -2427,7 +2420,7 @@ describe("spatial_skeleton_commands", () => {
       const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
 
       const segmentId = 23n;
-      const parentNode: SpatiallyIndexedSkeletonNode = {
+      const parentNode: SkeletonNode = {
         nodeId: 1n,
         segmentId,
         position: new Float32Array([4, 5, 6]),
@@ -2488,7 +2481,7 @@ describe("spatial_skeleton_commands", () => {
     const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
 
     const segmentId = 23n;
-    const parentNode: SpatiallyIndexedSkeletonNode = {
+    const parentNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
@@ -2560,7 +2553,7 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
 
     const segmentId = 23n;
-    const parentNode: SpatiallyIndexedSkeletonNode = {
+    const parentNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
@@ -2654,7 +2647,7 @@ describe("spatial_skeleton_commands", () => {
   it("keeps a saved description undoable after rejecting a move and canceling its child", async () => {
     suppressStatusMessages();
     const segmentId = 23n;
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
@@ -2740,7 +2733,7 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
     const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
     const segmentId = 23n;
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
@@ -2809,7 +2802,7 @@ describe("spatial_skeleton_commands", () => {
   it("restores the node and shows the provider's instructions when a queued move is rejected", async () => {
     suppressStatusMessages();
     const segmentId = 23n;
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
@@ -2867,7 +2860,7 @@ describe("spatial_skeleton_commands", () => {
 
     const segmentId = 23n;
     const realNodeId = 20n;
-    const parentNode: SpatiallyIndexedSkeletonNode = {
+    const parentNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
@@ -2964,7 +2957,7 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
 
     const segmentId = 23n;
-    const parentNode: SpatiallyIndexedSkeletonNode = {
+    const parentNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
@@ -3019,7 +3012,7 @@ describe("spatial_skeleton_commands", () => {
     const showTemporaryMessage = vi.mocked(StatusMessage.showTemporaryMessage);
 
     const segmentId = 23n;
-    const parentNode: SpatiallyIndexedSkeletonNode = {
+    const parentNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
@@ -3302,7 +3295,7 @@ describe("spatial_skeleton_commands", () => {
     "keeps a pending Merge complete when its %s input saves (reversed: %s)",
     async (kind, directionAdjusted) => {
       suppressStatusMessages();
-      const nodes: SpatiallyIndexedSkeletonNode[] = [
+      const nodes: SkeletonNode[] = [
         { nodeId: 101n, segmentId: 11n, position: new Float32Array([1, 2, 3]) },
         {
           nodeId: 102n,
@@ -3437,7 +3430,7 @@ describe("spatial_skeleton_commands", () => {
     const existingSegmentId = 17n;
     const realRootSegmentId = 23n;
     const realRootNodeId = 101n;
-    const existingRoot: SpatiallyIndexedSkeletonNode = {
+    const existingRoot: SkeletonNode = {
       nodeId: 201n,
       segmentId: existingSegmentId,
       position: new Float32Array([7, 8, 9]),
@@ -3549,7 +3542,7 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
     const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
     const segmentId = 23n;
-    const parentNode: SpatiallyIndexedSkeletonNode = {
+    const parentNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
@@ -3701,20 +3694,20 @@ describe("spatial_skeleton_commands", () => {
 
     const segmentId = 23n;
     const insertedNodeId = 4n;
-    const rootNode: SpatiallyIndexedSkeletonNode = {
+    const rootNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
-    const deletedNode: SpatiallyIndexedSkeletonNode = {
+    const deletedNode: SkeletonNode = {
       nodeId: 3n,
       segmentId,
       parentNodeId: rootNode.nodeId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
-    const childNode: SpatiallyIndexedSkeletonNode = {
+    const childNode: SkeletonNode = {
       nodeId: 2n,
       segmentId,
       parentNodeId: deletedNode.nodeId,
@@ -3789,7 +3782,7 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
 
     const segmentId = 23n;
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       parentNodeId: 10n,
@@ -3799,7 +3792,7 @@ describe("spatial_skeleton_commands", () => {
       radius: 4,
       confidence: 50,
     };
-    const rootNode: SpatiallyIndexedSkeletonNode = {
+    const rootNode: SkeletonNode = {
       nodeId: 10n,
       segmentId,
       position: new Float32Array([0, 0, 0]),
@@ -3964,20 +3957,20 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
 
     const segmentId = 23n;
-    const rootNode: SpatiallyIndexedSkeletonNode = {
+    const rootNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
-    const middleNode: SpatiallyIndexedSkeletonNode = {
+    const middleNode: SkeletonNode = {
       nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
-    const leafNode: SpatiallyIndexedSkeletonNode = {
+    const leafNode: SkeletonNode = {
       nodeId: 3n,
       segmentId,
       parentNodeId: middleNode.nodeId,
@@ -4363,7 +4356,7 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
 
     const segmentId = 23n;
-    const parentNode: SpatiallyIndexedSkeletonNode = {
+    const parentNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
@@ -4408,7 +4401,7 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
 
     const segmentId = 23n;
-    const parentNode: SpatiallyIndexedSkeletonNode = {
+    const parentNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
@@ -4493,7 +4486,7 @@ describe("spatial_skeleton_commands", () => {
 
   it("restores a rejected sole-root deletion without reloading", async () => {
     suppressStatusMessages();
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 725n,
       segmentId: 87n,
       position: new Float32Array([4, 5, 6]),
@@ -4543,7 +4536,7 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
 
     const segmentId = 23n;
-    const rootNode: SpatiallyIndexedSkeletonNode = {
+    const rootNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
@@ -4624,7 +4617,7 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
 
     const segmentId = 23n;
-    const parentNode: SpatiallyIndexedSkeletonNode = {
+    const parentNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
@@ -4686,7 +4679,7 @@ describe("spatial_skeleton_commands", () => {
     const showTemporaryMessage = vi.mocked(StatusMessage.showTemporaryMessage);
 
     const segmentId = 23n;
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
@@ -4744,7 +4737,7 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
 
     const segmentId = 23n;
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
@@ -4764,7 +4757,7 @@ describe("spatial_skeleton_commands", () => {
       .mockReturnValueOnce(undoRequest)
       .mockResolvedValueOnce({});
     const getSkeleton = vi.fn(
-      () => new Promise<readonly SpatiallyIndexedSkeletonNode[]>(() => {}),
+      () => new Promise<readonly SkeletonNode[]>(() => {}),
     );
     const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
       moveNode,
@@ -4838,7 +4831,7 @@ describe("spatial_skeleton_commands", () => {
     const showTemporaryMessage = vi.mocked(StatusMessage.showTemporaryMessage);
 
     const segmentId = 23n;
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
@@ -4881,7 +4874,7 @@ describe("spatial_skeleton_commands", () => {
 
   it("undoes directly from retained history after manager-cache eviction", async () => {
     suppressStatusMessages();
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 1n,
       segmentId: 23n,
       position: new Float32Array([4, 5, 6]),
@@ -4921,7 +4914,7 @@ describe("spatial_skeleton_commands", () => {
 
   it("redoes directly from retained history after manager-cache eviction", async () => {
     suppressStatusMessages();
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 1n,
       segmentId: 23n,
       position: new Float32Array([4, 5, 6]),
@@ -4969,7 +4962,7 @@ describe("spatial_skeleton_commands", () => {
   it("releases journal capacity after more than 64 sequential confirmations", async () => {
     suppressStatusMessages();
     const segmentId = 23n;
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([0, 0, 0]),
@@ -5009,7 +5002,7 @@ describe("spatial_skeleton_commands", () => {
   it("releases journal capacity after more than 64 pending execute-undo coalesces", async () => {
     suppressStatusMessages();
     const segmentId = 23n;
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([0, 0, 0]),
@@ -5072,7 +5065,7 @@ describe("spatial_skeleton_commands", () => {
           parentNodeId: index === 0 ? undefined : BigInt(index),
           position: new Float32Array([index, 0, 0]),
           isTrueEnd: false,
-        }) satisfies SpatiallyIndexedSkeletonNode,
+        }) satisfies SkeletonNode,
     );
     let resolveFirstMove: (() => void) | undefined;
     const heldMove = new Promise<void>((resolve) => {
@@ -5140,7 +5133,7 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
 
     const segmentId = 23n;
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
@@ -5203,20 +5196,20 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
 
     const segmentId = 23n;
-    const rootNode: SpatiallyIndexedSkeletonNode = {
+    const rootNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
-    const deletedNode: SpatiallyIndexedSkeletonNode = {
+    const deletedNode: SkeletonNode = {
       nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
-    const childNode: SpatiallyIndexedSkeletonNode = {
+    const childNode: SkeletonNode = {
       nodeId: 3n,
       segmentId,
       parentNodeId: deletedNode.nodeId,
@@ -5280,13 +5273,13 @@ describe("spatial_skeleton_commands", () => {
     const showTemporaryMessage = vi.mocked(StatusMessage.showTemporaryMessage);
 
     const segmentId = 23n;
-    const rootNode: SpatiallyIndexedSkeletonNode = {
+    const rootNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
-    const deletedNode: SpatiallyIndexedSkeletonNode = {
+    const deletedNode: SkeletonNode = {
       nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,
@@ -5334,20 +5327,20 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
     const segmentId = 23n;
     const newSegmentId = 31n;
-    const rootNode: SpatiallyIndexedSkeletonNode = {
+    const rootNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
-    const splitNode: SpatiallyIndexedSkeletonNode = {
+    const splitNode: SkeletonNode = {
       nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
-    const childNode: SpatiallyIndexedSkeletonNode = {
+    const childNode: SkeletonNode = {
       nodeId: 3n,
       segmentId,
       parentNodeId: splitNode.nodeId,
@@ -5456,12 +5449,12 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
     const segmentId = 23n;
     const newSegmentId = 31n;
-    const rootNode: SpatiallyIndexedSkeletonNode = {
+    const rootNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
     };
-    const splitNode: SpatiallyIndexedSkeletonNode = {
+    const splitNode: SkeletonNode = {
       nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,
@@ -5520,13 +5513,13 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
     const segmentId = 23n;
     const splitSegmentId = 31n;
-    const rootNode: SpatiallyIndexedSkeletonNode = {
+    const rootNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
-    const splitNode: SpatiallyIndexedSkeletonNode = {
+    const splitNode: SkeletonNode = {
       nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,
@@ -5589,20 +5582,20 @@ describe("spatial_skeleton_commands", () => {
     const segmentId = 23n;
     const splitSegmentId = 31n;
     const independentSegmentId = 41n;
-    const rootNode: SpatiallyIndexedSkeletonNode = {
+    const rootNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
-    const splitNode: SpatiallyIndexedSkeletonNode = {
+    const splitNode: SkeletonNode = {
       nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
-    const independentRoot: SpatiallyIndexedSkeletonNode = {
+    const independentRoot: SkeletonNode = {
       nodeId: 10n,
       segmentId: independentSegmentId,
       position: new Float32Array([7, 8, 9]),
@@ -5690,26 +5683,26 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
     const firstSegmentId = 11n;
     const secondSegmentId = 17n;
-    const firstRoot: SpatiallyIndexedSkeletonNode = {
+    const firstRoot: SkeletonNode = {
       nodeId: 101n,
       segmentId: firstSegmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
-    const firstNode: SpatiallyIndexedSkeletonNode = {
+    const firstNode: SkeletonNode = {
       nodeId: 102n,
       segmentId: firstSegmentId,
       parentNodeId: firstRoot.nodeId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
-    const secondRoot: SpatiallyIndexedSkeletonNode = {
+    const secondRoot: SkeletonNode = {
       nodeId: 201n,
       segmentId: secondSegmentId,
       position: new Float32Array([7, 8, 9]),
       isTrueEnd: false,
     };
-    const secondNode: SpatiallyIndexedSkeletonNode = {
+    const secondNode: SkeletonNode = {
       nodeId: 202n,
       segmentId: secondSegmentId,
       parentNodeId: secondRoot.nodeId,
@@ -5833,24 +5826,22 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
     const firstSegmentId = 11n;
     const secondSegmentId = 17n;
-    const firstNode: SpatiallyIndexedSkeletonNode = {
+    const firstNode: SkeletonNode = {
       nodeId: 101n,
       segmentId: firstSegmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
-    const secondNode: SpatiallyIndexedSkeletonNode = {
+    const secondNode: SkeletonNode = {
       nodeId: 201n,
       segmentId: secondSegmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
     let secondFetchSignal: AbortSignal | undefined;
-    let resolveSecondFetch:
-      | ((nodes: SpatiallyIndexedSkeletonNode[]) => void)
-      | undefined;
+    let resolveSecondFetch: ((nodes: SkeletonNode[]) => void) | undefined;
     let secondFetchResolved = false;
-    const mergedServerSecondNode: SpatiallyIndexedSkeletonNode = {
+    const mergedServerSecondNode: SkeletonNode = {
       ...secondNode,
       segmentId: firstSegmentId,
       parentNodeId: firstNode.nodeId,
@@ -5866,16 +5857,14 @@ describe("spatial_skeleton_commands", () => {
         }
         if (secondFetchResolved) return Promise.resolve([]);
         secondFetchSignal = options?.signal;
-        return new Promise<SpatiallyIndexedSkeletonNode[]>(
-          (resolve, reject) => {
-            resolveSecondFetch = resolve;
-            options?.signal?.addEventListener(
-              "abort",
-              () => reject(options.signal?.reason),
-              { once: true },
-            );
-          },
-        );
+        return new Promise<SkeletonNode[]>((resolve, reject) => {
+          resolveSecondFetch = resolve;
+          options?.signal?.addEventListener(
+            "abort",
+            () => reject(options.signal?.reason),
+            { once: true },
+          );
+        });
       },
     );
     const mergeSkeletons = vi.fn().mockResolvedValue({
@@ -5955,10 +5944,10 @@ describe("spatial_skeleton_commands", () => {
       segmentId: 23n,
       position: new Float32Array([7, 8, 9]),
     };
-    let resolveRead!: (nodes: SpatiallyIndexedSkeletonNode[]) => void;
+    let resolveRead!: (nodes: SkeletonNode[]) => void;
     const getSkeleton = vi.fn(
       () =>
-        new Promise<SpatiallyIndexedSkeletonNode[]>((resolve) => {
+        new Promise<SkeletonNode[]>((resolve) => {
           resolveRead = resolve;
         }),
     );
@@ -6039,7 +6028,7 @@ describe("spatial_skeleton_commands", () => {
       deletedSegmentId: bigint;
       directionAdjusted: boolean;
     }) => void;
-    let resolveRead!: (nodes: SpatiallyIndexedSkeletonNode[]) => void;
+    let resolveRead!: (nodes: SkeletonNode[]) => void;
     const mergeSkeletons = vi
       .fn()
       .mockImplementationOnce(
@@ -6055,7 +6044,7 @@ describe("spatial_skeleton_commands", () => {
       });
     const getSkeleton = vi.fn(
       () =>
-        new Promise<SpatiallyIndexedSkeletonNode[]>((resolve) => {
+        new Promise<SkeletonNode[]>((resolve) => {
           resolveRead = resolve;
         }),
     );
@@ -6133,12 +6122,12 @@ describe("spatial_skeleton_commands", () => {
       segmentId: 17n,
       position: new Float32Array([4, 5, 6]),
     };
-    let resolveOldRead!: (nodes: SpatiallyIndexedSkeletonNode[]) => void;
+    let resolveOldRead!: (nodes: SkeletonNode[]) => void;
     const getSkeleton = vi
       .fn()
       .mockImplementationOnce(
         () =>
-          new Promise<SpatiallyIndexedSkeletonNode[]>((resolve) => {
+          new Promise<SkeletonNode[]>((resolve) => {
             resolveOldRead = resolve;
           }),
       )
@@ -6250,12 +6239,12 @@ describe("spatial_skeleton_commands", () => {
 
   it("rejects a cold merge source without loading either participant", async () => {
     suppressStatusMessages();
-    const firstNode: SpatiallyIndexedSkeletonNode = {
+    const firstNode: SkeletonNode = {
       nodeId: 101n,
       segmentId: 11n,
       position: new Float32Array([1, 2, 3]),
     };
-    const secondNode: SpatiallyIndexedSkeletonNode = {
+    const secondNode: SkeletonNode = {
       nodeId: 201n,
       segmentId: 17n,
       position: new Float32Array([4, 5, 6]),
@@ -6290,7 +6279,7 @@ describe("spatial_skeleton_commands", () => {
 
   it("rejects a node action when only its picked node is known", async () => {
     suppressStatusMessages();
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 101n,
       segmentId: 23n,
       position: new Float32Array([1, 2, 3]),
@@ -6323,13 +6312,13 @@ describe("spatial_skeleton_commands", () => {
     suppressStatusMessages();
     const firstSegmentId = 11n;
     const secondSegmentId = 17n;
-    const firstNode: SpatiallyIndexedSkeletonNode = {
+    const firstNode: SkeletonNode = {
       nodeId: 101n,
       segmentId: firstSegmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
-    const secondNode: SpatiallyIndexedSkeletonNode = {
+    const secondNode: SkeletonNode = {
       nodeId: 201n,
       segmentId: secondSegmentId,
       position: new Float32Array([4, 5, 6]),
@@ -6355,7 +6344,7 @@ describe("spatial_skeleton_commands", () => {
     const moveNode = vi.fn(() => new Promise(() => {}));
     const getSkeleton = vi.fn(
       (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
-        new Promise<SpatiallyIndexedSkeletonNode[]>((_resolve, reject) => {
+        new Promise<SkeletonNode[]>((_resolve, reject) => {
           options?.signal?.addEventListener(
             "abort",
             () => reject(options.signal?.reason),
@@ -6435,13 +6424,13 @@ describe("spatial_skeleton_commands", () => {
       const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
       const firstSegmentId = 11n;
       const secondSegmentId = 17n;
-      const firstNode: SpatiallyIndexedSkeletonNode = {
+      const firstNode: SkeletonNode = {
         nodeId: 101n,
         segmentId: firstSegmentId,
         position: new Float32Array([1, 2, 3]),
         isTrueEnd: false,
       };
-      const secondNode: SpatiallyIndexedSkeletonNode = {
+      const secondNode: SkeletonNode = {
         nodeId: 201n,
         segmentId: secondSegmentId,
         position: new Float32Array([4, 5, 6]),
@@ -6486,13 +6475,13 @@ describe("spatial_skeleton_commands", () => {
     const firstSegmentId = 11n;
     const secondSegmentId = 17n;
     const restoredSegmentId = 19n;
-    const firstNode: SpatiallyIndexedSkeletonNode = {
+    const firstNode: SkeletonNode = {
       nodeId: 101n,
       segmentId: firstSegmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
-    const secondNode: SpatiallyIndexedSkeletonNode = {
+    const secondNode: SkeletonNode = {
       nodeId: 201n,
       segmentId: secondSegmentId,
       position: new Float32Array([4, 5, 6]),
@@ -6583,19 +6572,19 @@ describe("spatial_skeleton_commands", () => {
     const secondDeletedSegmentId = 23n;
     const firstRestoredSegmentId = 19n;
     const secondRestoredSegmentId = 29n;
-    const firstRoot: SpatiallyIndexedSkeletonNode = {
+    const firstRoot: SkeletonNode = {
       nodeId: 101n,
       segmentId: resultSegmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
-    const secondRoot: SpatiallyIndexedSkeletonNode = {
+    const secondRoot: SkeletonNode = {
       nodeId: 201n,
       segmentId: firstDeletedSegmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
-    const thirdRoot: SpatiallyIndexedSkeletonNode = {
+    const thirdRoot: SkeletonNode = {
       nodeId: 301n,
       segmentId: secondDeletedSegmentId,
       position: new Float32Array([7, 8, 9]),
@@ -7220,13 +7209,13 @@ describe("spatial_skeleton_commands", () => {
     const firstSegmentId = 11n;
     const winningSegmentId = 17n;
     const restoredSegmentId = 19n;
-    const firstRoot: SpatiallyIndexedSkeletonNode = {
+    const firstRoot: SkeletonNode = {
       nodeId: 101n,
       segmentId: firstSegmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
-    const secondRoot: SpatiallyIndexedSkeletonNode = {
+    const secondRoot: SkeletonNode = {
       nodeId: 201n,
       segmentId: winningSegmentId,
       position: new Float32Array([4, 5, 6]),
@@ -7316,19 +7305,19 @@ describe("spatial_skeleton_commands", () => {
     const firstSegmentId = 11n;
     const secondSegmentId = 17n;
     const restoredSegmentId = 19n;
-    const firstRoot: SpatiallyIndexedSkeletonNode = {
+    const firstRoot: SkeletonNode = {
       nodeId: 101n,
       segmentId: firstSegmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
-    const secondRoot: SpatiallyIndexedSkeletonNode = {
+    const secondRoot: SkeletonNode = {
       nodeId: 201n,
       segmentId: secondSegmentId,
       position: new Float32Array([4, 5, 6]),
       isTrueEnd: false,
     };
-    const secondAttach: SpatiallyIndexedSkeletonNode = {
+    const secondAttach: SkeletonNode = {
       nodeId: 202n,
       segmentId: secondSegmentId,
       parentNodeId: secondRoot.nodeId,
@@ -7407,13 +7396,13 @@ describe("spatial_skeleton_commands", () => {
   it("rolls back an optimistic move that depends on a rejected split", async () => {
     suppressStatusMessages();
     const segmentId = 23n;
-    const rootNode: SpatiallyIndexedSkeletonNode = {
+    const rootNode: SkeletonNode = {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
       isTrueEnd: false,
     };
-    const splitNode: SpatiallyIndexedSkeletonNode = {
+    const splitNode: SkeletonNode = {
       nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,

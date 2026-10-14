@@ -15,8 +15,8 @@
  */
 
 import type {
-  EditableSpatiallyIndexedSkeletonSource,
-  SpatiallyIndexedSkeletonNode,
+  EditableSkeletonSource,
+  SkeletonNode,
 } from "#src/skeleton/api.js";
 import type { SpatialSkeletonCommandPayload } from "#src/skeleton/command_factories.js";
 import {
@@ -106,7 +106,7 @@ function createSpatialSkeletonCommand(
   // Source capabilities are validated when the layer enables editing. Dispatch
   // checks the current write permission and resolves the requested factory.
   const source = layer.getSpatiallyIndexedSkeletonLayer()?.source as
-    | EditableSpatiallyIndexedSkeletonSource
+    | EditableSkeletonSource
     | undefined;
   if (source?.readonly !== false) {
     throw new Error(unsupportedMessage);
@@ -274,7 +274,7 @@ export function executeSpatialSkeletonMoveNode(
 
 export function executeSpatialSkeletonDeleteNode(
   layer: SpatialSkeletonLayerContext,
-  node: SpatiallyIndexedSkeletonNode,
+  node: SkeletonNode,
 ) {
   return executeSpatialSkeletonAction(
     layer,

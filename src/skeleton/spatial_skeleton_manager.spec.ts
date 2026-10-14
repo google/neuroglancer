@@ -16,10 +16,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import type {
-  SpatialSkeletonFragment,
-  SpatiallyIndexedSkeletonNode,
-} from "#src/skeleton/api.js";
+import type { SkeletonFragment, SkeletonNode } from "#src/skeleton/api.js";
 import { SpatialSkeletonActions } from "#src/skeleton/command_protocol.js";
 import {
   createCompleteSkeletonSnapshot,
@@ -180,10 +177,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function makeFragmentNode(
-  nodeId: bigint,
-  parentNodeId?: bigint,
-): SpatiallyIndexedSkeletonNode {
+function makeFragmentNode(nodeId: bigint, parentNodeId?: bigint): SkeletonNode {
   return {
     nodeId,
     segmentId: 7n,
@@ -193,7 +187,7 @@ function makeFragmentNode(
 }
 
 function makeFragmentedSkeletonLayer(
-  fragments: Record<string, SpatialSkeletonFragment | Error>,
+  fragments: Record<string, SkeletonFragment | Error>,
   manifestReady: Promise<void> = Promise.resolve(),
 ) {
   const requestedFragmentKeys: string[] = [];
@@ -312,8 +306,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
 
   it("confirmed retirement cancels a retained read while unrelated reads continue", async () => {
     const state = new SpatialSkeletonState();
-    const retiredRead = deferred<SpatiallyIndexedSkeletonNode[]>();
-    const unrelatedRead = deferred<SpatiallyIndexedSkeletonNode[]>();
+    const retiredRead = deferred<SkeletonNode[]>();
+    const unrelatedRead = deferred<SkeletonNode[]>();
     const signals = new Map<bigint, AbortSignal>();
     const layer = {
       source: {
@@ -594,7 +588,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
   it("retires a segment and aborts an in-flight retained read", async () => {
     const state = new SpatialSkeletonState();
     const segmentId = 17n;
-    const node: SpatiallyIndexedSkeletonNode = {
+    const node: SkeletonNode = {
       nodeId: 5n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
@@ -607,11 +601,11 @@ describe("skeleton/spatial_skeleton_manager", () => {
     });
     const beforeRevision = state.getCachedSegmentRevision(segmentId);
     let requestSignal: AbortSignal | undefined;
-    let resolveLateRead!: (nodes: SpatiallyIndexedSkeletonNode[]) => void;
+    let resolveLateRead!: (nodes: SkeletonNode[]) => void;
     const getSkeleton = vi.fn(
       (_segmentId: bigint, options?: { signal?: AbortSignal }) => {
         requestSignal = options?.signal;
-        return new Promise<SpatiallyIndexedSkeletonNode[]>((resolve) => {
+        return new Promise<SkeletonNode[]>((resolve) => {
           resolveLateRead = resolve;
         });
       },
@@ -1838,11 +1832,9 @@ describe("skeleton/spatial_skeleton_manager", () => {
     );
     const unaffectedNodes = state.getCachedSegmentNodes(13n)!;
     const unaffectedNode = state.getCachedNode(2n);
-    const iterateUnaffected = vi.fn(
-      (): IterableIterator<SpatiallyIndexedSkeletonNode> => {
-        throw new Error("unaffected segment was iterated");
-      },
-    );
+    const iterateUnaffected = vi.fn((): IterableIterator<SkeletonNode> => {
+      throw new Error("unaffected segment was iterated");
+    });
     Object.defineProperty(unaffectedNodes, Symbol.iterator, {
       configurable: true,
       value: iterateUnaffected,
@@ -2092,12 +2084,10 @@ describe("skeleton/spatial_skeleton_manager", () => {
   it("does not publish a retained read over a newer atomic replacement", async () => {
     const state = new SpatialSkeletonState();
     let receivedSignal: AbortSignal | undefined;
-    let resolveFetch:
-      | ((nodes: SpatiallyIndexedSkeletonNode[]) => void)
-      | undefined;
+    let resolveFetch: ((nodes: SkeletonNode[]) => void) | undefined;
     const getSkeleton = vi.fn(
       (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
-        new Promise<SpatiallyIndexedSkeletonNode[]>((resolve, reject) => {
+        new Promise<SkeletonNode[]>((resolve, reject) => {
           receivedSignal = options?.signal;
           resolveFetch = resolve;
           options?.signal?.addEventListener(
@@ -2242,12 +2232,10 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const state = new SpatialSkeletonState();
     const owner = {};
     let receivedSignal: AbortSignal | undefined;
-    let resolveFetch:
-      | ((nodes: SpatiallyIndexedSkeletonNode[]) => void)
-      | undefined;
+    let resolveFetch: ((nodes: SkeletonNode[]) => void) | undefined;
     const getSkeleton = vi.fn(
       (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
-        new Promise<SpatiallyIndexedSkeletonNode[]>((resolve, reject) => {
+        new Promise<SkeletonNode[]>((resolve, reject) => {
           receivedSignal = options?.signal;
           resolveFetch = resolve;
           options?.signal?.addEventListener(
@@ -2527,12 +2515,10 @@ describe("skeleton/spatial_skeleton_manager", () => {
   it("retains a pending visual fetch when a command joins it", async () => {
     const state = new SpatialSkeletonState();
     let receivedSignal: AbortSignal | undefined;
-    let resolveFetch:
-      | ((nodes: SpatiallyIndexedSkeletonNode[]) => void)
-      | undefined;
+    let resolveFetch: ((nodes: SkeletonNode[]) => void) | undefined;
     const getSkeleton = vi.fn(
       (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
-        new Promise<SpatiallyIndexedSkeletonNode[]>((resolve, reject) => {
+        new Promise<SkeletonNode[]>((resolve, reject) => {
           receivedSignal = options?.signal;
           resolveFetch = resolve;
           options?.signal?.addEventListener(
@@ -2559,7 +2545,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     expect(state.evictInactiveSegmentNodes([])).toBe(false);
     expect(receivedSignal?.aborted).toBe(false);
 
-    const fetchedNodes: SpatiallyIndexedSkeletonNode[] = [
+    const fetchedNodes: SkeletonNode[] = [
       {
         nodeId: 5n,
         segmentId: 11n,

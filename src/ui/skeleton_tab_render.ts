@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type { SkeletonNode } from "#src/skeleton/api.js";
 import {
   getFlatListNodeIds,
   type SpatiallyIndexedSkeletonNavigationGraph,
@@ -29,7 +29,7 @@ import {
 type SkeletonNodeType = SpatialSkeletonDisplayNodeType;
 
 function nodeMatchesFilter(
-  node: SpatiallyIndexedSkeletonNode,
+  node: SkeletonNode,
   filterText: string,
   description: string | undefined,
 ) {
@@ -43,7 +43,7 @@ function hasNonEmptyNodeDescription(description: string | undefined) {
 }
 
 export interface SpatialSkeletonSegmentRenderRow {
-  node: SpatiallyIndexedSkeletonNode;
+  node: SkeletonNode;
   type: SkeletonNodeType;
   isLeaf: boolean;
 }
@@ -58,7 +58,7 @@ export interface SpatialSkeletonSegmentRenderState {
 }
 
 interface NodeClassification {
-  node: SpatiallyIndexedSkeletonNode;
+  node: SkeletonNode;
   type: SkeletonNodeType;
   isLeaf: boolean;
   description: string | undefined;
@@ -70,9 +70,7 @@ export function buildSpatialSkeletonSegmentRenderState(
   options: {
     filterText: string;
     nodeFilterType: SpatialSkeletonNodeFilterType;
-    getNodeDescription: (
-      node: SpatiallyIndexedSkeletonNode,
-    ) => string | undefined;
+    getNodeDescription: (node: SkeletonNode) => string | undefined;
   },
 ): SpatialSkeletonSegmentRenderState {
   const { nodeById, childrenByParent } = graph;

@@ -16,7 +16,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type { SkeletonNode } from "#src/skeleton/api.js";
 import {
   buildSpatiallyIndexedSkeletonNavigationGraph,
   getBranchEnd,
@@ -37,7 +37,7 @@ function makeNode(
     description?: string;
     isTrueEnd?: boolean;
   } = {},
-): SpatiallyIndexedSkeletonNode {
+): SkeletonNode {
   return {
     nodeId,
     segmentId: 42n,

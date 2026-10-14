@@ -17,18 +17,18 @@
 /**
  * @file Utility functions for array queries on arrays of spatially indexed skeleton nodes, usually performed by traversing the tree.
  */
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type { SkeletonNode } from "#src/skeleton/api.js";
 import { bigintCompare } from "#src/util/bigint.js";
 
 export function findSpatiallyIndexedSkeletonNode(
-  segmentNodes: readonly SpatiallyIndexedSkeletonNode[],
+  segmentNodes: readonly SkeletonNode[],
   nodeId: bigint,
 ) {
   return segmentNodes.find((node) => node.nodeId === nodeId);
 }
 
 export function getSpatiallyIndexedSkeletonDirectChildren(
-  segmentNodes: readonly SpatiallyIndexedSkeletonNode[],
+  segmentNodes: readonly SkeletonNode[],
   nodeId: bigint,
 ) {
   return segmentNodes
@@ -37,8 +37,8 @@ export function getSpatiallyIndexedSkeletonDirectChildren(
 }
 
 export function getSpatiallyIndexedSkeletonNodeParent(
-  segmentNodes: readonly SpatiallyIndexedSkeletonNode[],
-  node: SpatiallyIndexedSkeletonNode,
+  segmentNodes: readonly SkeletonNode[],
+  node: SkeletonNode,
 ) {
   if (node.parentNodeId === undefined) {
     return undefined;

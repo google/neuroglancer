@@ -14,47 +14,44 @@
  * limitations under the License.
  */
 
-import type {
-  SpatiallyIndexedSkeletonNode,
-  SpatialSkeletonVector,
-} from "#src/skeleton/api.js";
+import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
 
 export interface CatmaidSpatialSkeletonAddNodeCommandOptions {
   skeletonId: bigint;
   parentNodeId: bigint | undefined;
-  positionInModelSpace: SpatialSkeletonVector;
+  positionInModelSpace: SkeletonVector;
   childNodeIds?: readonly bigint[];
 }
 
 export interface CatmaidSpatialSkeletonMoveNodeCommandOptions {
-  node: SpatiallyIndexedSkeletonNode;
-  nextPositionInModelSpace: SpatialSkeletonVector;
+  node: SkeletonNode;
+  nextPositionInModelSpace: SkeletonVector;
 }
 
 export interface CatmaidSpatialSkeletonNodeDescriptionCommandOptions {
-  node: SpatiallyIndexedSkeletonNode;
+  node: SkeletonNode;
   nextDescription?: string;
 }
 
 export interface CatmaidSpatialSkeletonNodeTrueEndCommandOptions {
-  node: SpatiallyIndexedSkeletonNode;
+  node: SkeletonNode;
   nextIsTrueEnd: boolean;
 }
 
 export interface CatmaidSpatialSkeletonNodeRadiusCommandOptions {
-  node: SpatiallyIndexedSkeletonNode;
+  node: SkeletonNode;
   nextRadius: number;
 }
 
 export interface CatmaidSpatialSkeletonNodeConfidenceCommandOptions {
-  node: SpatiallyIndexedSkeletonNode;
+  node: SkeletonNode;
   nextConfidence: number;
 }
 
 export interface CatmaidSpatialSkeletonMergeEndpoint {
   nodeId: bigint;
   segmentId: bigint;
-  position?: SpatialSkeletonVector;
+  position?: SkeletonVector;
 }
 
 export interface CatmaidSpatialSkeletonMergeCommandPayload {
@@ -74,15 +71,15 @@ export type CatmaidSpatialSkeletonCommandPayload =
     }
   | {
       readonly kind: "delete-node";
-      readonly node: SpatiallyIndexedSkeletonNode;
+      readonly node: SkeletonNode;
     }
   | {
       readonly kind: "reroot";
       readonly node: Pick<
-        SpatiallyIndexedSkeletonNode,
+        SkeletonNode,
         "nodeId" | "segmentId" | "parentNodeId"
       > &
-        Partial<Pick<SpatiallyIndexedSkeletonNode, "position">>;
+        Partial<Pick<SkeletonNode, "position">>;
     }
   | {
       readonly kind: "description";
@@ -102,13 +99,8 @@ export type CatmaidSpatialSkeletonCommandPayload =
     }
   | {
       readonly kind: "split";
-      readonly node: Pick<
-        SpatiallyIndexedSkeletonNode,
-        "nodeId" | "segmentId"
-      > &
-        Partial<
-          Pick<SpatiallyIndexedSkeletonNode, "parentNodeId" | "position">
-        >;
+      readonly node: Pick<SkeletonNode, "nodeId" | "segmentId"> &
+        Partial<Pick<SkeletonNode, "parentNodeId" | "position">>;
     }
   | {
       readonly kind: "merge";
@@ -133,7 +125,7 @@ function isOptionalId(value: bigint | undefined) {
 
 function isSpatialSkeletonVector(
   value: object | undefined,
-): value is SpatialSkeletonVector {
+): value is SkeletonVector {
   // Coordinate contents are consumed by the generic reducer or CATMAID
   // transport. Admission only requires the user-facing value to be present.
   return value !== undefined;
@@ -141,7 +133,7 @@ function isSpatialSkeletonVector(
 
 function isSpatiallyIndexedSkeletonNodePayload(
   value: object | undefined,
-): value is SpatiallyIndexedSkeletonNode {
+): value is SkeletonNode {
   if (value === undefined) return false;
   const candidate = value as {
     nodeId?: bigint;
@@ -337,10 +329,10 @@ export function requireCatmaidRerootCommandPayload(payload: object) {
     (
       candidate,
     ): candidate is Pick<
-      SpatiallyIndexedSkeletonNode,
+      SkeletonNode,
       "nodeId" | "segmentId" | "parentNodeId"
     > &
-      Partial<Pick<SpatiallyIndexedSkeletonNode, "position">> => {
+      Partial<Pick<SkeletonNode, "position">> => {
       const node = candidate as {
         nodeId?: bigint;
         segmentId?: bigint;
@@ -363,10 +355,8 @@ export function requireCatmaidSplitCommandPayload(payload: object) {
     "split",
     (
       candidate,
-    ): candidate is Pick<SpatiallyIndexedSkeletonNode, "nodeId" | "segmentId"> &
-      Partial<
-        Pick<SpatiallyIndexedSkeletonNode, "parentNodeId" | "position">
-      > => {
+    ): candidate is Pick<SkeletonNode, "nodeId" | "segmentId"> &
+      Partial<Pick<SkeletonNode, "parentNodeId" | "position">> => {
       const node = candidate as {
         nodeId?: bigint;
         segmentId?: bigint;

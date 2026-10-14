@@ -20,7 +20,7 @@ import {
   type CoordinateSpace,
   makeCoordinateSpace,
 } from "#src/coordinate_transform.js";
-import type { SpatialSkeletonSpatialIndexLevel } from "#src/skeleton/api.js";
+import type { SkeletonSpatialIndexLevel } from "#src/skeleton/api.js";
 import { buildSpatiallyIndexedSkeletonOverlayGeometry } from "#src/skeleton/segment_overlay.js";
 import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { Uint64Set } from "#src/uint64_set.js";
@@ -1327,7 +1327,7 @@ function makeLevelSourceRecorder() {
 
 function makeMultiscaleSource(
   coordinateSpace: CoordinateSpace,
-  spatial: SpatialSkeletonSpatialIndexLevel[],
+  spatial: SkeletonSpatialIndexLevel[],
 ) {
   const { requestedLevels, makeLevelSource } = makeLevelSourceRecorder();
   const source = new MultiscaleSpatiallyIndexedSkeletonSource(

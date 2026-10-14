@@ -17,7 +17,7 @@
 import { describe, expect, it } from "vitest";
 
 import { numChunkStatistics } from "#src/chunk_manager/base.js";
-import type { SpatiallyIndexedSkeletonNodeBase } from "#src/skeleton/api.js";
+import type { SkeletonNodeBase } from "#src/skeleton/api.js";
 import {
   getSpatiallyIndexedSkeletonChunkPriority,
   getSpatiallyIndexedSkeletonRenderPriority,
@@ -165,7 +165,7 @@ describe("skeleton/backend spatial chunk memory", () => {
   });
 });
 
-function makeCellSource(nodes: SpatiallyIndexedSkeletonNodeBase[]) {
+function makeCellSource(nodes: SkeletonNodeBase[]) {
   const source = Object.create(
     SpatiallyIndexedSkeletonSourceBackend.prototype,
   ) as SpatiallyIndexedSkeletonSourceBackend;

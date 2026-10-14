@@ -98,7 +98,7 @@ import type {
 import { SegmentationGraphSourceTab } from "#src/segmentation_graph/source.js";
 import { SharedDisjointUint64Sets } from "#src/shared_disjoint_sets.js";
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type { SkeletonNode } from "#src/skeleton/api.js";
 import {
   DEFAULT_SPATIAL_SKELETON_EDIT_ACTIONS,
   getSpatialSkeletonActionSupportLabel,
@@ -1016,9 +1016,7 @@ export class SegmentationUserLayer extends Base {
   };
 
   selectAndMoveToSpatialSkeletonNode(
-    node:
-      | Pick<SpatiallyIndexedSkeletonNode, "nodeId" | "segmentId" | "position">
-      | undefined,
+    node: Pick<SkeletonNode, "nodeId" | "segmentId" | "position"> | undefined,
     pin: boolean | "toggle" = this.manager.root.selectionState.pin.value,
   ) {
     if (node === undefined) {
@@ -1719,9 +1717,7 @@ export class SegmentationUserLayer extends Base {
     return segmentNodes;
   }
 
-  async getSpatialSkeletonDeleteOperationContext(
-    node: SpatiallyIndexedSkeletonNode,
-  ) {
+  async getSpatialSkeletonDeleteOperationContext(node: SkeletonNode) {
     const skeletonLayer = this.getSpatiallyIndexedSkeletonLayer();
     if (skeletonLayer === undefined) {
       throw new Error(
@@ -1767,13 +1763,13 @@ export class SegmentationUserLayer extends Base {
     };
   }
 
-  getSpatialSkeletonNodeDisplayDescription(node: SpatiallyIndexedSkeletonNode) {
+  getSpatialSkeletonNodeDisplayDescription(node: SkeletonNode) {
     return node.description?.length ? node.description : undefined;
   }
 
   async rerootSpatialSkeletonNode(
     node: Pick<
-      SpatiallyIndexedSkeletonNode,
+      SkeletonNode,
       "nodeId" | "segmentId" | "parentNodeId" | "position"
     >,
   ) {

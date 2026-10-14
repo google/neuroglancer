@@ -14,10 +14,7 @@
  * limitations under the License.
  */
 
-import type {
-  SpatialSkeletonVector,
-  SpatiallyIndexedSkeletonNode,
-} from "#src/skeleton/api.js";
+import type { SkeletonVector, SkeletonNode } from "#src/skeleton/api.js";
 import {
   createCompleteSkeletonSnapshot,
   mergeCompleteSkeletonSnapshots,
@@ -46,7 +43,7 @@ export interface SpatialSkeletonProjectionAddDelta {
   readonly segment: SpatialSkeletonLogicalSegmentHandle;
   readonly node: SpatialSkeletonLogicalNodeHandle;
   readonly parent?: SpatialSkeletonLogicalNodeHandle;
-  readonly position: SpatialSkeletonVector;
+  readonly position: SkeletonVector;
   readonly attributes?: SpatialSkeletonProjectionNodeAttributes;
 }
 
@@ -54,7 +51,7 @@ export interface SpatialSkeletonProjectionMoveDelta {
   readonly kind: "move";
   readonly segment: SpatialSkeletonLogicalSegmentHandle;
   readonly node: SpatialSkeletonLogicalNodeHandle;
-  readonly position: SpatialSkeletonVector;
+  readonly position: SkeletonVector;
 }
 
 export interface SpatialSkeletonProjectionDeleteDelta {
@@ -103,7 +100,7 @@ export interface SpatialSkeletonProjectionMergeDelta {
 interface SpatialSkeletonProjectionRestoredNode {
   readonly node: SpatialSkeletonLogicalNodeHandle;
   readonly parent: SpatialSkeletonLogicalNodeHandle | null;
-  readonly position: SpatialSkeletonVector;
+  readonly position: SkeletonVector;
   readonly attributes: SpatialSkeletonProjectionNodeAttributes;
 }
 
@@ -255,7 +252,7 @@ function requireNodeHandle(
   return handles[0];
 }
 
-function cloneVector(value: SpatialSkeletonVector) {
+function cloneVector(value: SkeletonVector) {
   const result = Array.from(value);
   if (
     result.length === 0 ||
@@ -292,7 +289,7 @@ function cloneAttributes(
 }
 
 function nodeAttributes(
-  node: SpatiallyIndexedSkeletonNode,
+  node: SkeletonNode,
 ): SpatialSkeletonProjectionNodeAttributes {
   return cloneAttributes({
     radius: node.radius,
@@ -460,7 +457,7 @@ function getChildren(
   snapshot: CompleteSkeletonSnapshotHandle,
   parentNodeId: bigint,
 ) {
-  const result: SpatiallyIndexedSkeletonNode[] = [];
+  const result: SkeletonNode[] = [];
   snapshot.forEachNode((node) => {
     if (node.parentNodeId === parentNodeId) result.push(node);
   });
@@ -471,7 +468,7 @@ function getPathToRoot(
   snapshot: CompleteSkeletonSnapshotHandle,
   startNodeId: bigint,
 ) {
-  const result: SpatiallyIndexedSkeletonNode[] = [];
+  const result: SkeletonNode[] = [];
   const seen = new Set<bigint>();
   let node = snapshot.getNode(startNodeId);
   while (node !== undefined) {
@@ -636,7 +633,7 @@ function applyAdd(
       "Cannot create a true end root node.",
     );
   }
-  const node: SpatiallyIndexedSkeletonNode = {
+  const node: SkeletonNode = {
     nodeId,
     segmentId,
     parentNodeId,
@@ -805,7 +802,7 @@ function applyNodeAttributes(
 }
 
 function topologyPatchesFromNodes(
-  nodes: readonly SpatiallyIndexedSkeletonNode[],
+  nodes: readonly SkeletonNode[],
   mappings: ProjectionMappings,
 ): readonly SpatialSkeletonProjectionTopologyPatch[] {
   return Object.freeze(
@@ -1058,7 +1055,7 @@ function applyRestoreDelete(
       requireNode(existingEntry.snapshot, child, mappings);
     }
   }
-  const restoredNode: SpatiallyIndexedSkeletonNode = {
+  const restoredNode: SkeletonNode = {
     nodeId,
     segmentId,
     parentNodeId,

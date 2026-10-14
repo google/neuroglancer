@@ -30,22 +30,21 @@ import type {
 } from "#src/skeleton/command_factories.js";
 import type { SpatialSkeletonOptimisticEditingProvider } from "#src/skeleton/optimistic_edit/api.js";
 
-export type SpatialSkeletonVector = ArrayLike<number>;
+export type SkeletonVector = ArrayLike<number>;
 
 export interface SpatialSkeletonBounds {
-  lowerBounds: SpatialSkeletonVector;
-  upperBounds: SpatialSkeletonVector;
+  lowerBounds: SkeletonVector;
+  upperBounds: SkeletonVector;
 }
 
-export interface SpatiallyIndexedSkeletonNodeBase {
+export interface SkeletonNodeBase {
   nodeId: bigint;
   segmentId: bigint;
-  position: SpatialSkeletonVector;
+  position: SkeletonVector;
   parentNodeId?: bigint;
 }
 
-export interface SpatiallyIndexedSkeletonNode
-  extends SpatiallyIndexedSkeletonNodeBase {
+export interface SkeletonNode extends SkeletonNodeBase {
   radius?: number;
   confidence?: number;
   description?: string;
@@ -53,9 +52,9 @@ export interface SpatiallyIndexedSkeletonNode
 }
 
 // One level is drawn at a time. A skeleton that a level leaves out is not drawn while that level is in use.
-export interface SpatialSkeletonSpatialIndexLevel {
+export interface SkeletonSpatialIndexLevel {
   // Cell `c` spans `c * chunkSize` to `(c + 1) * chunkSize`, counted from 0, not from the lower bound.
-  readonly chunkSize: SpatialSkeletonVector;
+  readonly chunkSize: SkeletonVector;
   // Largest expected node count in one cell. 0 means every node and is allowed only on the finest level.
   readonly limit: number;
 }
@@ -63,43 +62,43 @@ export interface SpatialSkeletonSpatialIndexLevel {
 export interface SpatiallyIndexedSkeletonMetadata {
   readonly coordinateSpace: CoordinateSpace;
   // From coarsest to finest.
-  readonly spatial: readonly SpatialSkeletonSpatialIndexLevel[];
+  readonly spatial: readonly SkeletonSpatialIndexLevel[];
 }
 
-export interface SpatialSkeletonConfidenceConfiguration {
+export interface SkeletonConfidenceConfiguration {
   values: readonly number[];
 }
 
-export interface SpatialSkeletonManifest {
+export interface SkeletonManifest {
   // Empty when the source has no skeleton with this id.
   // Each key names one read. The source chooses how much of the skeleton one read covers.
   readonly fragmentKeys: readonly string[];
 }
 
-export interface SpatialSkeletonParentLink {
+export interface SkeletonParentLink {
   readonly nodeId: bigint;
   readonly parentNodeId: bigint;
 }
 
-export interface SpatialSkeletonFragment {
+export interface SkeletonFragment {
   // Each node of a skeleton is in exactly one of its fragments.
   // A node's parentNodeId may name a node in another fragment.
-  readonly nodes: readonly SpatiallyIndexedSkeletonNode[];
+  readonly nodes: readonly SkeletonNode[];
   // Parents of nodes in other fragments, for a source that stores an edge with the parent.
-  readonly parentLinks?: readonly SpatialSkeletonParentLink[];
+  readonly parentLinks?: readonly SkeletonParentLink[];
 }
 
-export interface SpatiallyIndexedSkeletonSource {
+export interface SkeletonFragmentSource {
   readonly readonly: boolean;
   getSkeletonManifest(
     skeletonId: bigint,
     options?: { signal?: AbortSignal },
-  ): Promise<SpatialSkeletonManifest>;
+  ): Promise<SkeletonManifest>;
   getSkeletonFragment(
     skeletonId: bigint,
     fragmentKey: string,
     options?: { signal?: AbortSignal },
-  ): Promise<SpatialSkeletonFragment>;
+  ): Promise<SkeletonFragment>;
 }
 
 export interface SpatiallyIndexedSkeletonCellSource {
@@ -107,11 +106,10 @@ export interface SpatiallyIndexedSkeletonCellSource {
   fetchCell(
     cellGridPosition: Float32Array,
     options: { signal: AbortSignal },
-  ): Promise<SpatiallyIndexedSkeletonNodeBase[]>;
+  ): Promise<SkeletonNodeBase[]>;
 }
 
-export interface EditableSpatiallyIndexedSkeletonSource
-  extends SpatiallyIndexedSkeletonSource {
+export interface EditableSkeletonSource extends SkeletonFragmentSource {
   readonly readonly: false;
   /** Required datasource adapter for the generic optimistic edit queue host. */
   readonly optimisticEditing: SpatialSkeletonOptimisticEditingProvider;
@@ -126,5 +124,5 @@ export interface EditableSpatiallyIndexedSkeletonSource
   readonly editNodeTrueEndCommand?: SpatialSkeletonEditNodeTrueEndCommandFactory;
   readonly editNodeRadiusCommand?: SpatialSkeletonEditNodeRadiusCommandFactory;
   readonly editNodeConfidenceCommand?: SpatialSkeletonEditNodeConfidenceCommandFactory;
-  readonly spatialSkeletonConfidenceConfiguration?: SpatialSkeletonConfidenceConfiguration;
+  readonly spatialSkeletonConfidenceConfiguration?: SkeletonConfidenceConfiguration;
 }

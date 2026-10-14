@@ -16,7 +16,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type { SkeletonNode } from "#src/skeleton/api.js";
 import { NullarySignal } from "#src/util/signal.js";
 
 vi.mock("#src/skeleton/commands.js", async (importOriginal) => ({
@@ -51,7 +51,7 @@ const { SkeletonNodeCommands } = await import("#src/skeleton/node_commands.js");
 function makeNode(
   nodeId: bigint,
   parentNodeId: bigint | undefined,
-): SpatiallyIndexedSkeletonNode {
+): SkeletonNode {
   return {
     nodeId,
     segmentId: 42n,

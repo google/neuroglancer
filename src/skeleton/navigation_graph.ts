@@ -14,15 +14,12 @@
  * limitations under the License.
  */
 
-import type {
-  SpatiallyIndexedSkeletonNode,
-  SpatialSkeletonVector,
-} from "#src/skeleton/api.js";
+import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
 import { bigintCompare } from "#src/util/bigint.js";
 
 export interface SpatiallyIndexedSkeletonNavigationTarget {
   nodeId: bigint;
-  position: SpatialSkeletonVector;
+  position: SkeletonVector;
 }
 
 export interface SpatiallyIndexedSkeletonOpenLeaf
@@ -31,7 +28,7 @@ export interface SpatiallyIndexedSkeletonOpenLeaf
 }
 
 export interface SpatiallyIndexedSkeletonNavigationGraph {
-  nodeById: Map<bigint, SpatiallyIndexedSkeletonNode>;
+  nodeById: Map<bigint, SkeletonNode>;
   childrenByParent: Map<bigint, bigint[]>;
   rootNodeIds: bigint[];
 }
@@ -105,9 +102,9 @@ function getNavigationGraphDerivedState(
 }
 
 export function buildSpatiallyIndexedSkeletonNavigationGraph(
-  nodes: readonly SpatiallyIndexedSkeletonNode[],
+  nodes: readonly SkeletonNode[],
 ): SpatiallyIndexedSkeletonNavigationGraph {
-  const nodeById = new Map<bigint, SpatiallyIndexedSkeletonNode>();
+  const nodeById = new Map<bigint, SkeletonNode>();
   for (const node of nodes) {
     if (!nodeById.has(node.nodeId)) {
       nodeById.set(node.nodeId, node);

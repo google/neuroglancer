@@ -40,10 +40,7 @@ import {
   SKELETON_FIND_PATH_SELECT_ENDPOINT,
   SKELETON_PIN_NODE,
 } from "#src/skeleton/actions.js";
-import type {
-  SpatiallyIndexedSkeletonNode,
-  SpatialSkeletonVector,
-} from "#src/skeleton/api.js";
+import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
 import {
   SpatialSkeletonActions,
   type SpatialSkeletonAction,
@@ -297,7 +294,7 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     | {
         nodeId: bigint;
         segmentId?: bigint;
-        position?: SpatialSkeletonVector;
+        position?: SkeletonVector;
       }
     | undefined {
     const nodeHit = this.getPickedSpatialSkeletonNode();
@@ -526,7 +523,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     skeletonLayer: SpatiallyIndexedSkeletonLayer,
     nodeId: bigint,
     segmentId: bigint | undefined,
-  ): SpatiallyIndexedSkeletonNode | undefined {
+  ): SkeletonNode | undefined {
     const resolved = this.resolveInspectedNode(
       skeletonLayer,
       nodeId,
@@ -1195,7 +1192,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
   private executeSplitOnNode(pickedNode: {
     nodeId: bigint;
     segmentId: bigint;
-    position?: SpatialSkeletonVector;
+    position?: SkeletonVector;
     parentNodeId?: bigint;
   }) {
     this.layer.selectSegment(pickedNode.segmentId, true);

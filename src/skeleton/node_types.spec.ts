@@ -16,7 +16,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type { SkeletonNode } from "#src/skeleton/api.js";
 import {
   classifySpatialSkeletonDisplayNodeType,
   getSpatialSkeletonNodeFilterLabel,
@@ -26,9 +26,7 @@ import {
   SpatialSkeletonNodeFilterType,
 } from "#src/skeleton/node_types.js";
 
-function makeNode(
-  overrides: Partial<SpatiallyIndexedSkeletonNode> = {},
-): SpatiallyIndexedSkeletonNode {
+function makeNode(overrides: Partial<SkeletonNode> = {}): SkeletonNode {
   return {
     nodeId: 1n,
     segmentId: 1n,

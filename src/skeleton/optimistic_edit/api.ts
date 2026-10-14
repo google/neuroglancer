@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { EditableSpatiallyIndexedSkeletonSource } from "#src/skeleton/api.js";
+import type { EditableSkeletonSource } from "#src/skeleton/api.js";
 import type { SpatialSkeletonEditCommand } from "#src/skeleton/command_protocol.js";
 import type {
   SpatialSkeletonLogicalHandleMappingResolution,
@@ -128,7 +128,7 @@ export async function commitSpatialSkeletonMutation<TMutation, TResult>(
 }
 
 export interface SpatialSkeletonOptimisticEditingContext {
-  readonly source: EditableSpatiallyIndexedSkeletonSource;
+  readonly source: EditableSkeletonSource;
   /** State-owned logical identity service shared with projection reduction. */
   readonly identities: SpatialSkeletonOptimisticIdentityService;
   /** State-owned allocator facade configured from the returned registration. */

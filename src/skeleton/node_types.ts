@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type { SkeletonNode } from "#src/skeleton/api.js";
 
 export enum SpatialSkeletonDisplayNodeType {
   ROOT = "root",
@@ -33,7 +33,7 @@ export enum SpatialSkeletonNodeFilterType {
 }
 
 export function classifySpatialSkeletonDisplayNodeType(
-  node: SpatiallyIndexedSkeletonNode,
+  node: SkeletonNode,
   childCount: number | undefined,
   parentInTree = true,
 ): SpatialSkeletonDisplayNodeType {

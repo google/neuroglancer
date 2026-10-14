@@ -13,7 +13,7 @@ needed to describe and persist its workflows.
 ## Runtime structure
 
 ```text
-EditableSpatiallyIndexedSkeletonSource
+EditableSkeletonSource
   -> optimisticEditing.createDriver({ source, identities, provisionalIds })
                        |
                        v

@@ -73,9 +73,9 @@ import {
 } from "#src/segmentation_display_state/frontend.js";
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
 import type {
-  SpatialSkeletonSpatialIndexLevel,
+  SkeletonSpatialIndexLevel,
   SpatiallyIndexedSkeletonMetadata,
-  SpatiallyIndexedSkeletonNode,
+  SkeletonNode,
 } from "#src/skeleton/api.js";
 import {
   forEachSpatialSkeletonSourceScale,
@@ -2041,7 +2041,7 @@ export interface SpatialSkeletonLevelSourceOptions {
 
 function makeSpatialSkeletonLevelSpec(
   coordinateSpace: CoordinateSpace,
-  level: SpatialSkeletonSpatialIndexLevel,
+  level: SkeletonSpatialIndexLevel,
 ): SpatiallyIndexedSkeletonChunkSpecification {
   const { scales, bounds } = coordinateSpace;
   const chunkDataSize = Float32Array.from(level.chunkSize);
@@ -2136,7 +2136,7 @@ interface SpatiallyIndexedSkeletonLayerOptions {
   getPendingNodePosition?: (nodeId: bigint) => ArrayLike<number> | undefined;
   // Node ids that currently have a pending (drag) position override.
   getPendingNodeIds?: () => Iterable<bigint>;
-  getCachedNode?: (nodeId: bigint) => SpatiallyIndexedSkeletonNode | undefined;
+  getCachedNode?: (nodeId: bigint) => SkeletonNode | undefined;
   // Transforms a node's model-space position into the global coordinate space
   // used by the panels, so node highlights can be projected to screen.
   resolveGlobalPosition?: (
@@ -2150,13 +2150,11 @@ interface SpatiallyIndexedSkeletonInspectionState {
   readonly nodeDataVersion: WatchableValueInterface<number>;
   readonly pendingNodePositionVersion: WatchableValueInterface<number>;
   readonly spatialSkeletonPresentation: WatchableValueInterface<SpatialSkeletonPresentationSnapshot>;
-  getCachedSegmentNodes(
-    segmentId: bigint,
-  ): readonly SpatiallyIndexedSkeletonNode[] | undefined;
+  getCachedSegmentNodes(segmentId: bigint): readonly SkeletonNode[] | undefined;
   getFullSegmentNodes(
     skeletonLayer: SpatiallyIndexedSkeletonLayer,
     segmentId: bigint,
-  ): Promise<readonly SpatiallyIndexedSkeletonNode[]>;
+  ): Promise<readonly SkeletonNode[]>;
   evictInactiveSegmentNodes(activeSegmentIds: Iterable<bigint>): void;
 }
 
@@ -2240,7 +2238,7 @@ export function commitSpatiallyIndexedSkeletonOverlayReplacement<T>(
 }
 
 interface SkeletonOverlaySegmentVersion {
-  readonly nodes: readonly SpatiallyIndexedSkeletonNode[];
+  readonly nodes: readonly SkeletonNode[];
   readonly pendingPositionKey: string;
 }
 
@@ -2347,7 +2345,7 @@ export class SpatiallyIndexedSkeletonLayer
   // position override without scanning all nodes; one entry during a drag.
   private getPendingNodeIds: (() => Iterable<bigint>) | undefined;
   private getCachedNodeInfo:
-    | ((nodeId: bigint) => SpatiallyIndexedSkeletonNode | undefined)
+    | ((nodeId: bigint) => SkeletonNode | undefined)
     | undefined;
   private resolveGlobalPosition:
     | ((modelPosition: ArrayLike<number>) => Float32Array | undefined)
@@ -2369,7 +2367,7 @@ export class SpatiallyIndexedSkeletonLayer
   private pendingOverlayPositionKeys = new Map<
     bigint,
     {
-      nodes: readonly SpatiallyIndexedSkeletonNode[];
+      nodes: readonly SkeletonNode[];
       globalVersion: number | undefined;
       key: string;
     }
@@ -2537,7 +2535,7 @@ export class SpatiallyIndexedSkeletonLayer
 
   private getOverlayPendingPositionKey(
     segmentId: bigint,
-    nodes: readonly SpatiallyIndexedSkeletonNode[],
+    nodes: readonly SkeletonNode[],
   ) {
     const getPendingNodePosition = this.getPendingNodePositionOverride;
     if (getPendingNodePosition === undefined) return "";
@@ -2869,9 +2867,7 @@ export class SpatiallyIndexedSkeletonLayer
     return this.browseExcludedSegments;
   }
 
-  private createOverlaySegmentChunk(
-    nodes: readonly SpatiallyIndexedSkeletonNode[],
-  ) {
+  private createOverlaySegmentChunk(nodes: readonly SkeletonNode[]) {
     const geometry = buildSpatiallyIndexedSkeletonOverlayGeometry([nodes], {
       getPendingNodePosition: this.getPendingNodePositionOverride,
     });
@@ -3587,7 +3583,7 @@ export class SpatiallyIndexedSkeletonLayer
     return ready;
   }
 
-  getNode(nodeId: bigint): SpatiallyIndexedSkeletonNode | undefined {
+  getNode(nodeId: bigint): SkeletonNode | undefined {
     if (nodeId === 0n) return undefined;
     return this.getCachedNodeSnapshot(nodeId);
   }

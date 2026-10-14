@@ -16,7 +16,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type { SkeletonNode } from "#src/skeleton/api.js";
 import { buildSpatiallyIndexedSkeletonNavigationGraph } from "#src/skeleton/navigation_graph.js";
 import { SpatialSkeletonNodeFilterType } from "#src/skeleton/node_types.js";
 import type { SpatialSkeletonPreparationIntent } from "#src/skeleton/spatial_skeleton_manager.js";
@@ -29,7 +29,7 @@ function makeNode(
     description?: string;
     isTrueEnd?: boolean;
   } = {},
-): SpatiallyIndexedSkeletonNode {
+): SkeletonNode {
   return {
     nodeId,
     segmentId: 20380n,

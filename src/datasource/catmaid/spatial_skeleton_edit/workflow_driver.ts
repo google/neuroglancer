@@ -35,10 +35,7 @@ import type {
   CatmaidSplitSemantic,
   CatmaidWorkflow,
 } from "#src/datasource/catmaid/spatial_skeleton_edit/workflow_recipe.js";
-import type {
-  SpatiallyIndexedSkeletonNode,
-  SpatialSkeletonVector,
-} from "#src/skeleton/api.js";
+import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
 import {
   type SpatialSkeletonAction,
   type SpatialSkeletonEditCommand,
@@ -124,7 +121,7 @@ export interface CatmaidSpatialSkeletonCommandDescriptor
   readonly payload: CatmaidSpatialSkeletonCommandPayload;
 }
 
-function copyVector(value: ArrayLike<number>): SpatialSkeletonVector {
+function copyVector(value: ArrayLike<number>): SkeletonVector {
   return Object.freeze(Array.from(value));
 }
 
@@ -141,7 +138,7 @@ function uniqueResources(
   return Object.freeze([...resources.values()]);
 }
 
-function freezeNode(node: SpatiallyIndexedSkeletonNode) {
+function freezeNode(node: SkeletonNode) {
   return Object.freeze({
     nodeId: node.nodeId,
     segmentId: node.segmentId,
@@ -751,7 +748,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
     snapshot: CompleteSkeletonSnapshotHandle,
     targetNodeId: bigint,
   ) {
-    const path: SpatiallyIndexedSkeletonNode[] = [];
+    const path: SkeletonNode[] = [];
     const seen = new Set<bigint>();
     let current = snapshot.getNode(targetNodeId);
     if (current === undefined) {

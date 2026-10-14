@@ -15,11 +15,11 @@
  */
 
 import type {
-  EditableSpatiallyIndexedSkeletonSource,
-  SpatialSkeletonConfidenceConfiguration,
-  SpatialSkeletonParentLink,
-  SpatiallyIndexedSkeletonNode,
-  SpatiallyIndexedSkeletonSource,
+  EditableSkeletonSource,
+  SkeletonConfidenceConfiguration,
+  SkeletonParentLink,
+  SkeletonNode,
+  SkeletonFragmentSource,
 } from "#src/skeleton/api.js";
 import {
   getSpatialSkeletonEditCommandFactoryFromSource,
@@ -186,7 +186,7 @@ export interface SpatialSkeletonPreparationIntent {
  * uncached segment, while an empty array represents a known empty segment.
  */
 export type SpatialSkeletonCachedSegmentSnapshot =
-  | readonly SpatiallyIndexedSkeletonNode[]
+  | readonly SkeletonNode[]
   | undefined;
 
 /**
@@ -323,7 +323,7 @@ function isFiniteNumberArray(value: unknown): value is readonly number[] {
 
 function isSpatialSkeletonConfidenceConfiguration(
   value: unknown,
-): value is SpatialSkeletonConfidenceConfiguration {
+): value is SkeletonConfidenceConfiguration {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -344,7 +344,7 @@ function hasOptionalConfidenceConfiguration(value: unknown) {
 
 export function isSpatiallyIndexedSkeletonSource(
   value: unknown,
-): value is SpatiallyIndexedSkeletonSource {
+): value is SkeletonFragmentSource {
   return (
     typeof getProperty(value, "readonly") === "boolean" &&
     hasFunction(value, "getSkeletonManifest") &&
@@ -354,7 +354,7 @@ export function isSpatiallyIndexedSkeletonSource(
 
 export function isEditableSpatiallyIndexedSkeletonSource(
   value: unknown,
-): value is EditableSpatiallyIndexedSkeletonSource {
+): value is EditableSkeletonSource {
   return (
     isSpatiallyIndexedSkeletonSource(value) &&
     !value.readonly &&
@@ -370,7 +370,7 @@ export function isEditableSpatiallyIndexedSkeletonSource(
 
 export function getSpatiallyIndexedSkeletonSource(
   value: SpatialSkeletonSourceAccess | undefined,
-): SpatiallyIndexedSkeletonSource | undefined {
+): SkeletonFragmentSource | undefined {
   if (value === undefined) return undefined;
   return isSpatiallyIndexedSkeletonSource(value.source)
     ? value.source
@@ -385,7 +385,7 @@ export function isSpatiallyIndexedSkeletonSourceReadOnly(
 
 export function getEditableSpatiallyIndexedSkeletonSource(
   value: SpatialSkeletonSourceAccess | undefined,
-): EditableSpatiallyIndexedSkeletonSource | undefined {
+): EditableSkeletonSource | undefined {
   if (value === undefined) return undefined;
   return isEditableSpatiallyIndexedSkeletonSource(value.source)
     ? value.source
@@ -393,14 +393,14 @@ export function getEditableSpatiallyIndexedSkeletonSource(
 }
 
 export function getSpatialSkeletonEditCommandFactoryForAction(
-  source: EditableSpatiallyIndexedSkeletonSource,
+  source: EditableSkeletonSource,
   action: SpatialSkeletonAction,
 ) {
   return getSpatialSkeletonEditCommandFactoryFromSource(source, action);
 }
 
 export function editableSpatiallyIndexedSkeletonSourceSupportsAction(
-  source: EditableSpatiallyIndexedSkeletonSource,
+  source: EditableSkeletonSource,
   action: SpatialSkeletonAction,
 ) {
   const commandFactory = getSpatialSkeletonEditCommandFactoryForAction(
@@ -416,16 +416,16 @@ export function editableSpatiallyIndexedSkeletonSourceSupportsAction(
 }
 
 async function fetchCompleteSkeleton(
-  source: SpatiallyIndexedSkeletonSource,
+  source: SkeletonFragmentSource,
   skeletonId: bigint,
   options: { signal?: AbortSignal } = {},
-): Promise<SpatiallyIndexedSkeletonNode[]> {
+): Promise<SkeletonNode[]> {
   const { signal } = options;
   const { fragmentKeys } = await source.getSkeletonManifest(skeletonId, {
     signal,
   });
-  const nodesById = new Map<bigint, SpatiallyIndexedSkeletonNode>();
-  const parentLinks: SpatialSkeletonParentLink[] = [];
+  const nodesById = new Map<bigint, SkeletonNode>();
+  const parentLinks: SkeletonParentLink[] = [];
   // One request at a time, so that a limit on concurrent skeleton reads also limits requests.
   for (const fragmentKey of fragmentKeys) {
     signal?.throwIfAborted();
@@ -460,8 +460,8 @@ async function fetchCompleteSkeleton(
 }
 
 export function normalizeSpatiallyIndexedSkeletonNode(
-  node: SpatiallyIndexedSkeletonNode,
-): SpatiallyIndexedSkeletonNode | undefined {
+  node: SkeletonNode,
+): SkeletonNode | undefined {
   const x = Number(node.position[0]);
   const y = Number(node.position[1]);
   const z = Number(node.position[2]);
@@ -491,19 +491,14 @@ export function normalizeSpatiallyIndexedSkeletonNode(
   };
 }
 
-function cloneSpatiallyIndexedSkeletonNode(
-  node: SpatiallyIndexedSkeletonNode,
-): SpatiallyIndexedSkeletonNode {
+function cloneSpatiallyIndexedSkeletonNode(node: SkeletonNode): SkeletonNode {
   return {
     ...node,
     position: new Float32Array(node.position),
   };
 }
 
-function cachedSkeletonNodesEqual(
-  a: SpatiallyIndexedSkeletonNode,
-  b: SpatiallyIndexedSkeletonNode,
-) {
+function cachedSkeletonNodesEqual(a: SkeletonNode, b: SkeletonNode) {
   if (
     a.nodeId !== b.nodeId ||
     a.segmentId !== b.segmentId ||
@@ -523,8 +518,8 @@ function cachedSkeletonNodesEqual(
 }
 
 function cachedSegmentSnapshotsEqual(
-  a: readonly SpatiallyIndexedSkeletonNode[] | undefined,
-  b: readonly SpatiallyIndexedSkeletonNode[] | undefined,
+  a: readonly SkeletonNode[] | undefined,
+  b: readonly SkeletonNode[] | undefined,
 ) {
   if (a === undefined || b === undefined) return a === b;
   return (
@@ -534,7 +529,7 @@ function cachedSegmentSnapshotsEqual(
 }
 
 interface SpatialSkeletonCachedSegmentReplacement {
-  readonly nodes: readonly SpatiallyIndexedSkeletonNode[] | undefined;
+  readonly nodes: readonly SkeletonNode[] | undefined;
   readonly handle: CompleteSkeletonSnapshotHandle | undefined;
   readonly adoptHandleStorage: boolean;
 }
@@ -548,15 +543,12 @@ interface SpatialSkeletonPreparedProjectionStatePublicationImplementation
   readonly cacheRevisions: ReadonlyMap<bigint, number>;
   readonly nextCacheRevisionClock: number;
   readonly nextFullSegmentNodeRevisions: Map<bigint, number>;
-  readonly nextFullSegmentNodeCache: Map<
-    bigint,
-    SpatiallyIndexedSkeletonNode[]
-  >;
+  readonly nextFullSegmentNodeCache: Map<bigint, SkeletonNode[]>;
   readonly nextFullSegmentSnapshotHandles: Map<
     bigint,
     SpatialSkeletonCachedSegmentSnapshotHandle
   >;
-  readonly nextCachedNodesById: Map<bigint, SpatiallyIndexedSkeletonNode>;
+  readonly nextCachedNodesById: Map<bigint, SkeletonNode>;
   readonly nextPresentationLogicalOwners: Map<
     bigint,
     SpatialSkeletonLogicalSegmentHandle
@@ -874,10 +866,7 @@ export class SpatialSkeletonState
   private readonly projectionStatePublicationOwner = {};
   private readonly adoptedProjectionStatePublications = new WeakSet<object>();
   /** Complete node arrays for the current cached versions of skeletons. */
-  private fullSegmentNodeCache = new Map<
-    bigint,
-    SpatiallyIndexedSkeletonNode[]
-  >();
+  private fullSegmentNodeCache = new Map<bigint, SkeletonNode[]>();
   /** Immutable views of those versions, paired with local cache revisions. */
   private fullSegmentSnapshotHandles = new Map<
     bigint,
@@ -903,7 +892,7 @@ export class SpatialSkeletonState
   private pendingFullSegmentNodeFetches = new Map<
     bigint,
     {
-      promise: Promise<SpatiallyIndexedSkeletonNode[]>;
+      promise: Promise<SkeletonNode[]>;
       abortController: AbortController;
       retainWhileInactive: boolean;
       /** Command/source instances currently awaiting this shared read. */
@@ -924,7 +913,7 @@ export class SpatialSkeletonState
       itemLimit ?? Number.POSITIVE_INFINITY,
     );
   });
-  private cachedNodesById = new Map<bigint, SpatiallyIndexedSkeletonNode>();
+  private cachedNodesById = new Map<bigint, SkeletonNode>();
   /**
    * First-wins, layer-scoped editing latch. It deliberately is not part of
    * queue or datasource runtime state: clearing either cannot make editing
@@ -934,7 +923,7 @@ export class SpatialSkeletonState
     | SpatialSkeletonOptimisticFatalState
     | undefined;
   private optimisticEditQueue?: StateOwnedSpatialSkeletonOptimisticEngine;
-  private optimisticEditSource?: EditableSpatiallyIndexedSkeletonSource;
+  private optimisticEditSource?: EditableSkeletonSource;
   private optimisticProjectionRuntime?: SpatialSkeletonOptimisticProjectionRuntime;
   private optimisticQueueSubscriptionCleanup?: () => void;
   private optimisticDatasourceCleanup?: () => void;
@@ -962,7 +951,7 @@ export class SpatialSkeletonState
    */
   ensureOptimisticEditingEngine(
     layer: SpatialSkeletonLayerContext,
-    source: EditableSpatiallyIndexedSkeletonSource,
+    source: EditableSkeletonSource,
     provider: SpatialSkeletonOptimisticEditingProvider,
   ): SpatialSkeletonOptimisticEditQueue {
     if (
@@ -1920,7 +1909,7 @@ export class SpatialSkeletonState
     const replacements = new Map<
       bigint,
       {
-        nodes: readonly SpatiallyIndexedSkeletonNode[] | undefined;
+        nodes: readonly SkeletonNode[] | undefined;
         handle: CompleteSkeletonSnapshotHandle | undefined;
         adoptHandleStorage: boolean;
       }
@@ -1939,7 +1928,7 @@ export class SpatialSkeletonState
         });
         continue;
       }
-      const clonedNodes: SpatiallyIndexedSkeletonNode[] = [];
+      const clonedNodes: SkeletonNode[] = [];
       for (const node of snapshot) {
         if (node.nodeId === 0n) {
           throw new RangeError(
@@ -1963,10 +1952,7 @@ export class SpatialSkeletonState
 
   /** Routes only queue-owned reads through projection/history state. */
   private publishAuthoritativeReadSnapshots(
-    snapshots: ReadonlyMap<
-      bigint,
-      readonly SpatiallyIndexedSkeletonNode[] | undefined
-    >,
+    snapshots: ReadonlyMap<bigint, readonly SkeletonNode[] | undefined>,
     options: {
       readonly notify?: boolean;
       readonly expectedRevisions: ReadonlyMap<bigint, number>;
@@ -1979,14 +1965,8 @@ export class SpatialSkeletonState
         expectedRevisions: options.expectedRevisions,
       });
     }
-    const owned = new Map<
-      bigint,
-      readonly SpatiallyIndexedSkeletonNode[] | undefined
-    >();
-    const ordinary = new Map<
-      bigint,
-      readonly SpatiallyIndexedSkeletonNode[] | undefined
-    >();
+    const owned = new Map<bigint, readonly SkeletonNode[] | undefined>();
+    const ordinary = new Map<bigint, readonly SkeletonNode[] | undefined>();
     for (const [segmentId, snapshot] of snapshots) {
       (this.optimisticEditQueue?.ownsAuthoritativeReadSegment(segmentId)
         ? owned
@@ -2166,7 +2146,7 @@ export class SpatialSkeletonState
       } else {
         nextFullSegmentNodeCache.set(
           segmentId,
-          replacement.nodes as SpatiallyIndexedSkeletonNode[],
+          replacement.nodes as SkeletonNode[],
         );
       }
     }
@@ -2349,7 +2329,7 @@ export class SpatialSkeletonState
     replacements: ReadonlyMap<
       bigint,
       {
-        nodes: readonly SpatiallyIndexedSkeletonNode[] | undefined;
+        nodes: readonly SkeletonNode[] | undefined;
         handle: CompleteSkeletonSnapshotHandle | undefined;
         adoptHandleStorage: boolean;
       }
@@ -2399,10 +2379,7 @@ export class SpatialSkeletonState
     // those old entries are removed below before the validated replacements
     // are installed.  `nextChangedNodesById` additionally rejects duplicates
     // between (or within) the replacements themselves.
-    const nextChangedNodesById = new Map<
-      bigint,
-      SpatiallyIndexedSkeletonNode
-    >();
+    const nextChangedNodesById = new Map<bigint, SkeletonNode>();
     for (const [segmentId, replacement] of replacements) {
       if (
         changedSegmentIdSet.has(segmentId) &&
@@ -2460,7 +2437,7 @@ export class SpatialSkeletonState
         // retaining the established type avoids widening unrelated callers.
         this.fullSegmentNodeCache.set(
           segmentId,
-          replacement.nodes as SpatiallyIndexedSkeletonNode[],
+          replacement.nodes as SkeletonNode[],
         );
       }
     }
@@ -2622,7 +2599,7 @@ export class SpatialSkeletonState
        */
       requestOwner?: object;
     } = {},
-  ): Promise<SpatiallyIndexedSkeletonNode[]> {
+  ): Promise<SkeletonNode[]> {
     const cached = this.fullSegmentNodeCache.get(segmentId);
     if (cached !== undefined) {
       return cached;
@@ -2651,7 +2628,7 @@ export class SpatialSkeletonState
     const fetchRevision = this.getCachedSegmentRevision(segmentId);
     const abortController = new AbortController();
     const pendingFetch: {
-      promise?: Promise<SpatiallyIndexedSkeletonNode[]>;
+      promise?: Promise<SkeletonNode[]>;
     } = {};
     this.fullSegmentNodeFetchLimitLayer = skeletonLayer;
     const fetchPromise = this.fullSegmentNodeFetchLimiter
@@ -2692,7 +2669,7 @@ export class SpatialSkeletonState
           // reject later because not every implementation observes its
           // signal. Keep that detached outcome observed.
           void sourceRequest.catch(() => undefined);
-          let fetchedNodes: SpatiallyIndexedSkeletonNode[];
+          let fetchedNodes: SkeletonNode[];
           try {
             fetchedNodes = await Promise.race([sourceRequest, aborted]);
           } finally {
@@ -2702,7 +2679,7 @@ export class SpatialSkeletonState
               rejectFromAbort,
             );
           }
-          const normalizedNodes: SpatiallyIndexedSkeletonNode[] = [];
+          const normalizedNodes: SkeletonNode[] = [];
           for (const fetchedNode of fetchedNodes) {
             const mappedNode =
               normalizeSpatiallyIndexedSkeletonNode(fetchedNode);

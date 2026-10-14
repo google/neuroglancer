@@ -48,10 +48,10 @@ import {
   normalizeInlineSegmentPropertyMap,
 } from "#src/segmentation_display_state/property_map.js";
 import type {
-  SpatialSkeletonConfidenceConfiguration,
-  SpatialSkeletonFragment,
-  SpatialSkeletonManifest,
-  SpatiallyIndexedSkeletonSource as SpatiallyIndexedSkeletonSourceApi,
+  SkeletonConfidenceConfiguration,
+  SkeletonFragment,
+  SkeletonManifest,
+  SkeletonFragmentSource,
 } from "#src/skeleton/api.js";
 import { SkeletonDataSourceState } from "#src/skeleton/find_path.js";
 import {
@@ -62,14 +62,14 @@ import "#src/datasource/catmaid/register_credentials_provider.js";
 
 const CATMAID_SPATIAL_SKELETON_CONFIDENCE_CONFIGURATION = {
   values: CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES,
-} satisfies SpatialSkeletonConfidenceConfiguration;
+} satisfies SkeletonConfidenceConfiguration;
 
 export class CatmaidSpatiallyIndexedSkeletonSource
   extends WithParameters(
     WithCredentialsProvider<CatmaidToken>()(SpatiallyIndexedSkeletonSource),
     CatmaidSkeletonSourceParameters,
   )
-  implements SpatiallyIndexedSkeletonSourceApi
+  implements SkeletonFragmentSource
 {
   private readonly spatialSkeletonEditCommands =
     new CatmaidSpatialSkeletonEditCommands({
@@ -147,7 +147,7 @@ export class CatmaidSpatiallyIndexedSkeletonSource
   }
 
   // One compact-detail request returns a whole skeleton.
-  async getSkeletonManifest(): Promise<SpatialSkeletonManifest> {
+  async getSkeletonManifest(): Promise<SkeletonManifest> {
     return { fragmentKeys: ["skeleton"] };
   }
 
@@ -155,7 +155,7 @@ export class CatmaidSpatiallyIndexedSkeletonSource
     skeletonId: bigint,
     _fragmentKey: string,
     options?: { signal?: AbortSignal },
-  ): Promise<SpatialSkeletonFragment> {
+  ): Promise<SkeletonFragment> {
     return { nodes: await this.client.getSkeleton(skeletonId, options) };
   }
 }
