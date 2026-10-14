@@ -37,6 +37,10 @@ import {
   getObjectKey,
 } from "#src/segmentation_display_state/base.js";
 import type { SharedWatchableValue } from "#src/shared_watchable_value.js";
+import type {
+  SpatiallyIndexedSkeletonCellSource,
+  SpatiallyIndexedSkeletonNodeBase,
+} from "#src/skeleton/api.js";
 import {
   forEachVisibleSpatialSkeletonChunk,
   SKELETON_LAYER_RPC_ID,
@@ -275,11 +279,55 @@ export class SpatiallyIndexedSkeletonChunk
   }
 }
 
+function packSpatiallyIndexedSkeletonNodes(
+  chunk: SpatiallyIndexedSkeletonChunk,
+  nodes: readonly SpatiallyIndexedSkeletonNodeBase[],
+) {
+  const numVertices = nodes.length;
+  const vertexPositions = new Float32Array(numVertices * 3);
+  const segmentIds = new BigUint64Array(numVertices);
+  const nodeIds = new BigUint64Array(numVertices);
+  const vertexIndexByNodeId = new Map<bigint, number>();
+  for (let vertexIndex = 0; vertexIndex < numVertices; ++vertexIndex) {
+    const node = nodes[vertexIndex];
+    vertexIndexByNodeId.set(node.nodeId, vertexIndex);
+    nodeIds[vertexIndex] = node.nodeId;
+    segmentIds[vertexIndex] = node.segmentId;
+    vertexPositions[vertexIndex * 3] = node.position[0];
+    vertexPositions[vertexIndex * 3 + 1] = node.position[1];
+    vertexPositions[vertexIndex * 3 + 2] = node.position[2];
+  }
+  const indices: number[] = [];
+  for (let vertexIndex = 0; vertexIndex < numVertices; ++vertexIndex) {
+    const { parentNodeId } = nodes[vertexIndex];
+    if (parentNodeId === undefined) continue;
+    const parentVertexIndex = vertexIndexByNodeId.get(parentNodeId);
+    if (parentVertexIndex !== undefined) {
+      indices.push(vertexIndex, parentVertexIndex);
+    }
+  }
+  chunk.vertexPositions = vertexPositions;
+  chunk.indices = new Uint32Array(indices);
+  chunk.nodeIds = nodeIds;
+  chunk.segmentIds = segmentIds;
+}
+
+// Mixins do not accept abstract classes, so subclasses supply fetchCell through this interface.
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging, @typescript-eslint/no-empty-object-type
+export interface SpatiallyIndexedSkeletonSourceBackend
+  extends SpatiallyIndexedSkeletonCellSource {}
+
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class SpatiallyIndexedSkeletonSourceBackend extends SliceViewChunkSourceBackend<
   SpatiallyIndexedSkeletonChunkSpecification,
   SpatiallyIndexedSkeletonChunk
 > {
   chunkConstructor = SpatiallyIndexedSkeletonChunk;
+
+  async download(chunk: SpatiallyIndexedSkeletonChunk, signal: AbortSignal) {
+    const nodes = await this.fetchCell(chunk.chunkGridPosition, { signal });
+    packSpatiallyIndexedSkeletonNodes(chunk, nodes);
+  }
 }
 
 interface SpatiallyIndexedSkeletonRenderLayerAttachmentState {

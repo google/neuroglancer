@@ -23,6 +23,7 @@ import {
   ChunkRenderLayerFrontend,
   ChunkSource,
 } from "#src/chunk_manager/frontend.js";
+import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import { hashCombine } from "#src/gpu_hash/hash_function.js";
 import type { HashMapUint64, HashSetUint64 } from "#src/gpu_hash/hash_table.js";
 import { GPUHashTable, HashSetShaderManager } from "#src/gpu_hash/shader.js";
@@ -71,7 +72,11 @@ import {
   SegmentationLayerSharedObject,
 } from "#src/segmentation_display_state/frontend.js";
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type {
+  SpatialSkeletonSpatialIndexLevel,
+  SpatiallyIndexedSkeletonMetadata,
+  SpatiallyIndexedSkeletonNode,
+} from "#src/skeleton/api.js";
 import {
   forEachSpatialSkeletonSourceScale,
   forEachVisibleSpatialSkeletonChunk,
@@ -94,16 +99,20 @@ import {
   edgeColorPathsGlsl,
   nodeColorPathsGlsl,
 } from "#src/skeleton/skeleton_shader_color.js";
-import type { SpatiallyIndexedSkeletonView } from "#src/skeleton/source_selection.js";
+import {
+  type SpatiallyIndexedSkeletonView,
+  validateSpatialSkeletonLimitZeroOnlyFinest,
+} from "#src/skeleton/source_selection.js";
 import type {
   SpatialSkeletonPreparationIntent,
   SpatialSkeletonPresentationSnapshot,
 } from "#src/skeleton/spatial_skeleton_manager.js";
 import {
+  makeSliceViewChunkSpecification,
   type SliceViewSourceOptions,
   type TransformedSource,
 } from "#src/sliceview/base.js";
-import type { ChunkLayout } from "#src/sliceview/chunk_layout.js";
+import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
 import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
 import {
   getVolumetricTransformedSources,
@@ -139,7 +148,7 @@ import {
 } from "#src/util/color.js";
 import { hsvToRgb } from "#src/util/colorspace.js";
 import { DataType } from "#src/util/data_type.js";
-import { RefCounted } from "#src/util/disposable.js";
+import { type Borrowed, RefCounted } from "#src/util/disposable.js";
 import type { ValueOrError } from "#src/util/error.js";
 import { makeValueOrError, valueOrThrow } from "#src/util/error.js";
 import { kOneVec4, kZeroVec, mat4, vec3, type vec4 } from "#src/util/geom.js";
@@ -2024,17 +2033,107 @@ export const SPATIAL_SKELETON_SOURCE_OPTIONS: SliceViewSourceOptions = {
   modelChannelDimensionIndices: [],
 };
 
-export abstract class MultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleSliceViewChunkSource<SpatiallyIndexedSkeletonSource> {
-  getPerspectiveSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] {
-    const sources = this.getSources(SPATIAL_SKELETON_SOURCE_OPTIONS);
-    const flattened: SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] =
-      [];
-    for (const scale of sources) {
-      if (scale.length > 0) {
-        flattened.push(scale[0]);
-      }
+export interface SpatialSkeletonLevelSourceOptions {
+  readonly coarseToFineIndex: number;
+  readonly levelCount: number;
+  readonly spec: SpatiallyIndexedSkeletonChunkSpecification;
+}
+
+function getSpatialSkeletonLevelSpacing(
+  level: SpatialSkeletonSpatialIndexLevel,
+) {
+  return Math.min(level.chunkSize[0], level.chunkSize[1], level.chunkSize[2]);
+}
+
+function sortSpatialSkeletonLevelsCoarseToFine(
+  levels: readonly SpatialSkeletonSpatialIndexLevel[],
+) {
+  const sortedLevels = [...levels].sort(
+    (a, b) =>
+      getSpatialSkeletonLevelSpacing(b) - getSpatialSkeletonLevelSpacing(a),
+  );
+  for (let levelIndex = 1; levelIndex < sortedLevels.length; ++levelIndex) {
+    if (
+      getSpatialSkeletonLevelSpacing(sortedLevels[levelIndex - 1]) ===
+      getSpatialSkeletonLevelSpacing(sortedLevels[levelIndex])
+    ) {
+      throw new Error(
+        "Spatial skeleton levels must not share the same cell spacing.",
+      );
     }
-    return flattened;
+  }
+  validateSpatialSkeletonLimitZeroOnlyFinest(sortedLevels);
+  return sortedLevels;
+}
+
+function makeSpatialSkeletonLevelSpec(
+  coordinateSpace: CoordinateSpace,
+  level: SpatialSkeletonSpatialIndexLevel,
+): SpatiallyIndexedSkeletonChunkSpecification {
+  const { scales, bounds } = coordinateSpace;
+  const chunkDataSize = Float32Array.from(level.chunkSize);
+  const chunkLayout = new ChunkLayout(
+    vec3.fromValues(chunkDataSize[0], chunkDataSize[1], chunkDataSize[2]),
+    mat4.fromScaling(
+      mat4.create(),
+      vec3.fromValues(scales[0], scales[1], scales[2]),
+    ),
+    3,
+  );
+  return {
+    ...makeSliceViewChunkSpecification({
+      rank: 3,
+      chunkDataSize,
+      lowerVoxelBound: Float32Array.from(bounds.lowerBounds),
+      upperVoxelBound: Float32Array.from(bounds.upperBounds),
+    }),
+    chunkLayout,
+    limit: level.limit,
+  };
+}
+
+export class MultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleSliceViewChunkSource<SpatiallyIndexedSkeletonSource> {
+  private readonly levels: readonly SpatialSkeletonSpatialIndexLevel[];
+
+  constructor(
+    chunkManager: Borrowed<ChunkManager>,
+    private readonly metadata: SpatiallyIndexedSkeletonMetadata,
+    private readonly makeLevelSource: (
+      options: SpatialSkeletonLevelSourceOptions,
+    ) => SpatiallyIndexedSkeletonSource,
+  ) {
+    super(chunkManager);
+    if (metadata.coordinateSpace.rank !== 3) {
+      throw new Error(
+        `Spatial skeleton coordinate space must have rank 3, not ${metadata.coordinateSpace.rank}.`,
+      );
+    }
+    this.levels = sortSpatialSkeletonLevelsCoarseToFine(metadata.spatial);
+  }
+
+  get rank() {
+    return 3;
+  }
+
+  getSources(
+    _options: SliceViewSourceOptions,
+  ): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[][] {
+    const { coordinateSpace } = this.metadata;
+    const levelCount = this.levels.length;
+    return [
+      this.levels.map((level, coarseToFineIndex) => ({
+        chunkSource: this.makeLevelSource({
+          coarseToFineIndex,
+          levelCount,
+          spec: makeSpatialSkeletonLevelSpec(coordinateSpace, level),
+        }),
+        chunkToMultiscaleTransform: mat4.create(),
+      })),
+    ];
+  }
+
+  getPerspectiveSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] {
+    return this.getSources(SPATIAL_SKELETON_SOURCE_OPTIONS)[0];
   }
 
   getSliceViewPanelSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] {

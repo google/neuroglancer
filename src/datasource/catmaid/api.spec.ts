@@ -88,7 +88,6 @@ describe("CatmaidClient skeleton editing methods", () => {
       spatial: [
         {
           chunkSize: [15, 15, 15],
-          gridShape: [2, 4, 8],
           limit: 1,
         },
       ],
@@ -134,7 +133,6 @@ describe("CatmaidClient skeleton editing methods", () => {
       spatial: [
         {
           chunkSize: [15, 15, 15],
-          gridShape: [2, 4, 8],
           limit: 0,
         },
       ],
@@ -157,7 +155,6 @@ describe("CatmaidClient skeleton editing methods", () => {
       spatial: [
         {
           chunkSize: [15, 15, 15],
-          gridShape: [2, 4, 8],
           limit: 0,
         },
       ],
@@ -206,27 +203,22 @@ describe("CatmaidClient skeleton editing methods", () => {
       spatial: [
         {
           chunkSize: [11168145, 11168145, 11168145],
-          gridShape: [1, 1, 1],
           limit: 500,
         },
         {
           chunkSize: [6632497, 6632497, 6632497],
-          gridShape: [1, 1, 1],
           limit: 500,
         },
         {
           chunkSize: [3939000, 3939000, 3939000],
-          gridShape: [1, 1, 1],
           limit: 7000,
         },
         {
           chunkSize: [2339000, 2339000, 2339000],
-          gridShape: [1, 1, 1],
           limit: 27500,
         },
         {
           chunkSize: [1500000, 1500000, 1500000],
-          gridShape: [1, 1, 1],
           limit: 70000,
         },
       ],
@@ -275,26 +267,6 @@ describe("CatmaidClient skeleton editing methods", () => {
     await expect(client.getSpatialIndexMetadata()).resolves.toMatchObject({
       spatial: [{ limit: 10 }, { limit: 0 }],
     });
-  });
-
-  it("rejects zero CATMAID spatial skeleton metadata limits on non-finest levels", async () => {
-    const client = new CatmaidClient("https://example.invalid", 1);
-    (client as any).listStacks = vi.fn().mockResolvedValue([{ id: 7 }]);
-    (client as any).getStackInfo = vi.fn().mockResolvedValue({
-      dimension: { x: 10, y: 20, z: 30 },
-      resolution: { x: 2, y: 3, z: 4 },
-      translation: { x: 5, y: 6, z: 7 },
-      metadata: {
-        spatial: [
-          { chunk_size: [30, 30, 30], limit: 0 },
-          { chunk_size: [15, 15, 15], limit: 10 },
-        ],
-      },
-    });
-
-    await expect(client.getSpatialIndexMetadata()).rejects.toThrow(
-      "Spatial skeleton limit: 0 is only supported on the finest source level.",
-    );
   });
 
   it("parses compact-detail rows with edition times and labels in one request", async () => {

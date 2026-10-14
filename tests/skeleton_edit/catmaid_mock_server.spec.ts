@@ -50,9 +50,7 @@ describe("stateful CATMAID browser test backend", () => {
       lowerBounds: [0, 0, 0],
       upperBounds: [10000, 10000, 10000],
       readonly: false,
-      spatial: [
-        { chunkSize: [10000, 10000, 10000], gridShape: [1, 1, 1], limit: 0 },
-      ],
+      spatial: [{ chunkSize: [10000, 10000, 10000], limit: 0 }],
     });
     const spatial = await client.fetchNodes({
       lowerBounds: [0, 0, 0],

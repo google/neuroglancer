@@ -17,11 +17,12 @@
 import { describe, expect, it } from "vitest";
 
 import { numChunkStatistics } from "#src/chunk_manager/base.js";
-import type { SpatiallyIndexedSkeletonSourceBackend } from "#src/skeleton/backend.js";
+import type { SpatiallyIndexedSkeletonNodeBase } from "#src/skeleton/api.js";
 import {
   getSpatiallyIndexedSkeletonChunkPriority,
   getSpatiallyIndexedSkeletonRenderPriority,
   SpatiallyIndexedSkeletonChunk,
+  SpatiallyIndexedSkeletonSourceBackend,
   SPATIALLY_INDEXED_SKELETON_PRIORITY_BOOST,
 } from "#src/skeleton/backend.js";
 import {
@@ -161,5 +162,66 @@ describe("skeleton/backend spatial chunk memory", () => {
       positionBytes + indexBytes + nodeIdBytes + segmentIdBytes,
     );
     expect(chunk.systemMemoryBytes).toBe(transferredBytes);
+  });
+});
+
+function makeCellSource(nodes: SpatiallyIndexedSkeletonNodeBase[]) {
+  const source = Object.create(
+    SpatiallyIndexedSkeletonSourceBackend.prototype,
+  ) as SpatiallyIndexedSkeletonSourceBackend;
+  source.fetchCell = async () => nodes;
+  return source;
+}
+
+function makeCellChunk() {
+  const chunk = new SpatiallyIndexedSkeletonChunk();
+  chunk.chunkGridPosition = Float32Array.of(0, 0, 0);
+  return chunk;
+}
+
+describe("skeleton/backend cell download", () => {
+  it("draws an edge to a parent only when the parent is in the same cell", async () => {
+    const source = makeCellSource([
+      { nodeId: 1n, position: [1, 2, 3], segmentId: 10n },
+      { nodeId: 2n, parentNodeId: 1n, position: [4, 5, 6], segmentId: 10n },
+      { nodeId: 3n, parentNodeId: 99n, position: [7, 8, 9], segmentId: 11n },
+    ]);
+    const chunk = makeCellChunk();
+
+    await source.download(chunk, new AbortController().signal);
+
+    expect(chunk.vertexPositions).toEqual(
+      Float32Array.of(1, 2, 3, 4, 5, 6, 7, 8, 9),
+    );
+    expect(chunk.segmentIds).toEqual(BigUint64Array.of(10n, 10n, 11n));
+    expect(chunk.indices).toEqual(Uint32Array.of(1, 0));
+    expect(chunk.nodeIds).toEqual(BigUint64Array.of(1n, 2n, 3n));
+  });
+
+  it("keeps skeleton and node IDs above 2^32 exact in a downloaded cell", async () => {
+    const source = makeCellSource([
+      {
+        nodeId: 2n ** 53n + 1n,
+        position: [1, 2, 3],
+        segmentId: 2n ** 63n + 5n,
+      },
+      {
+        nodeId: 4_294_967_297n,
+        parentNodeId: 2n ** 53n + 1n,
+        position: [4, 5, 6],
+        segmentId: 2n ** 63n + 5n,
+      },
+    ]);
+    const chunk = makeCellChunk();
+
+    await source.download(chunk, new AbortController().signal);
+
+    expect(chunk.segmentIds).toEqual(
+      BigUint64Array.of(2n ** 63n + 5n, 2n ** 63n + 5n),
+    );
+    expect(chunk.nodeIds).toEqual(
+      BigUint64Array.of(2n ** 53n + 1n, 4_294_967_297n),
+    );
+    expect(chunk.indices).toEqual(Uint32Array.of(1, 0));
   });
 });

@@ -15,7 +15,6 @@
  */
 
 import { makeDataBoundsBoundingBoxAnnotationSet } from "#src/annotation/index.js";
-import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { WithParameters } from "#src/chunk_manager/frontend.js";
 import {
   makeCoordinateSpace,
@@ -58,19 +57,7 @@ import { SkeletonDataSourceState } from "#src/skeleton/find_path.js";
 import {
   SpatiallyIndexedSkeletonSource,
   MultiscaleSpatiallyIndexedSkeletonSource,
-  SPATIAL_SKELETON_SOURCE_OPTIONS,
 } from "#src/skeleton/frontend.js";
-import {
-  buildSpatialSkeletonGridLevels,
-  type SpatialSkeletonGridLevel,
-  type SpatialSkeletonGridSize,
-} from "#src/skeleton/spatial_chunk_sizing.js";
-import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
-import { makeSliceViewChunkSpecification } from "#src/sliceview/base.js";
-import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
-import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
-import type { Borrowed } from "#src/util/disposable.js";
-import { mat4, vec3 } from "#src/util/geom.js";
 import "#src/datasource/catmaid/register_credentials_provider.js";
 
 const CATMAID_SPATIAL_SKELETON_CONFIDENCE_CONFIGURATION = {
@@ -173,113 +160,6 @@ export class CatmaidSpatiallyIndexedSkeletonSource
   }
 }
 
-export class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleSpatiallyIndexedSkeletonSource {
-  get rank(): number {
-    return 3;
-  }
-
-  private gridLevels: SpatialSkeletonGridLevel[];
-
-  constructor(
-    chunkManager: Borrowed<ChunkManager>,
-    private baseUrl: string,
-    private projectId: number,
-    private credentialsProvider: CredentialsProvider<CatmaidToken>,
-    private coordinateScaleFactorsInMeters: Float32Array,
-    private lowerBoundsInNanometers: Float32Array,
-    private upperBoundsInNanometers: Float32Array,
-    gridCellSizes: SpatialSkeletonGridSize[],
-    private cacheProvider?: string,
-    private sourceReadonly = true,
-  ) {
-    super(chunkManager);
-    this.gridLevels = buildSpatialSkeletonGridLevels(gridCellSizes);
-  }
-
-  getPerspectiveSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] {
-    const sources = this.getSources(SPATIAL_SKELETON_SOURCE_OPTIONS);
-    return sources.length > 0 ? sources[0] : [];
-  }
-
-  getSliceViewPanelSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] {
-    return this.getPerspectiveSources();
-  }
-
-  getSources(
-    _options: SliceViewSourceOptions,
-  ): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[][] {
-    const sources: SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] =
-      [];
-
-    for (const [
-      gridIndex,
-      { size: gridCellSize, limit },
-    ] of this.gridLevels.entries()) {
-      const catmaidLod = getCatmaidLodForSpatialIndexLevel(
-        gridIndex,
-        this.gridLevels.length,
-      );
-      const chunkDataSize = Uint32Array.from([
-        gridCellSize.x,
-        gridCellSize.y,
-        gridCellSize.z,
-      ]);
-
-      const chunkLayoutTransform = mat4.create();
-      mat4.fromScaling(
-        chunkLayoutTransform,
-        vec3.fromValues(
-          this.coordinateScaleFactorsInMeters[0],
-          this.coordinateScaleFactorsInMeters[1],
-          this.coordinateScaleFactorsInMeters[2],
-        ),
-      );
-
-      const chunkLayout = new ChunkLayout(
-        vec3.fromValues(chunkDataSize[0], chunkDataSize[1], chunkDataSize[2]),
-        chunkLayoutTransform,
-        3,
-      );
-
-      const spec = {
-        ...makeSliceViewChunkSpecification({
-          rank: 3,
-          chunkDataSize,
-          lowerVoxelBound: this.lowerBoundsInNanometers,
-          upperVoxelBound: this.upperBoundsInNanometers,
-        }),
-        chunkLayout,
-        limit,
-      };
-
-      const parameters = new CatmaidSkeletonSourceParameters();
-      parameters.catmaidParameters = new CatmaidDataSourceParameters();
-      parameters.catmaidParameters.url = this.baseUrl;
-      parameters.catmaidParameters.projectId = this.projectId;
-      parameters.catmaidParameters.cacheProvider = this.cacheProvider;
-      parameters.catmaidParameters.readonly = this.sourceReadonly;
-      parameters.gridIndex = gridIndex;
-      parameters.catmaidLod = catmaidLod;
-
-      const chunkSource = this.chunkManager.getChunkSource(
-        CatmaidSpatiallyIndexedSkeletonSource,
-        { parameters, spec, credentialsProvider: this.credentialsProvider },
-      );
-
-      // CATMAID grid cell sizes are already expressed in project-space nanometers.
-      // Use identity here; additional relative scaling would double-apply grid size
-      // and can skew per-grid visible chunk counts and requests.
-      const chunkToMultiscaleTransform = mat4.create();
-      sources.push({
-        chunkSource,
-        chunkToMultiscaleTransform,
-      });
-    }
-
-    return [sources];
-  }
-}
-
 export class CatmaidDataSourceProvider implements DataSourceProvider {
   get scheme() {
     return "catmaid";
@@ -340,58 +220,43 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
       spatial,
       readonly: sourceReadonly,
     } = spatialIndexMetadata;
-    const gridCellSizes = spatial.map(({ chunkSize, limit }) => ({
-      x: Number(chunkSize[0]),
-      y: Number(chunkSize[1]),
-      z: Number(chunkSize[2]),
-      limit,
-    }));
-
     // The model-space coordinates we emit are in nanometers, converted to meters for Neuroglancer.
-    const coordinateScaleFactors = Float64Array.from([1e-9, 1e-9, 1e-9]);
-
-    // Bounds and chunk sizes are represented in project-space nanometers.
-    const lowerBounds = Float64Array.from(projectLowerBounds);
-    const upperBounds = Float64Array.from(projectUpperBounds);
-
     const modelSpace = makeCoordinateSpace({
       names: ["x", "y", "z"],
       units: ["m", "m", "m"],
-      scales: coordinateScaleFactors,
+      scales: Float64Array.from([1e-9, 1e-9, 1e-9]),
       boundingBoxes: [
         {
           box: {
-            lowerBounds,
-            upperBounds,
+            lowerBounds: Float64Array.from(projectLowerBounds),
+            upperBounds: Float64Array.from(projectUpperBounds),
           },
           transform: Float64Array.from([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]),
         },
       ],
     });
 
-    const rank = 3;
-
-    const lowerCoordinateBound = new Float32Array(rank);
-    const upperCoordinateBound = new Float32Array(rank);
-    for (let i = 0; i < rank; ++i) {
-      lowerCoordinateBound[i] = lowerBounds[i];
-      upperCoordinateBound[i] = upperBounds[i];
-    }
-
-    // Create multiscale skeleton source to get individual sources
-    const multiscaleSource =
-      new CatmaidMultiscaleSpatiallyIndexedSkeletonSource(
-        options.registry.chunkManager,
-        baseUrl,
-        projectId,
-        credentialsProvider,
-        new Float32Array(coordinateScaleFactors),
-        lowerCoordinateBound,
-        upperCoordinateBound,
-        gridCellSizes,
-        cacheProvider,
-        sourceReadonly,
-      );
+    const multiscaleSource = new MultiscaleSpatiallyIndexedSkeletonSource(
+      options.registry.chunkManager,
+      { coordinateSpace: modelSpace, spatial },
+      ({ coarseToFineIndex, levelCount, spec }) => {
+        const parameters = new CatmaidSkeletonSourceParameters();
+        parameters.catmaidParameters = new CatmaidDataSourceParameters();
+        parameters.catmaidParameters.url = baseUrl;
+        parameters.catmaidParameters.projectId = projectId;
+        parameters.catmaidParameters.cacheProvider = cacheProvider;
+        parameters.catmaidParameters.readonly = sourceReadonly;
+        parameters.gridIndex = coarseToFineIndex;
+        parameters.catmaidLod = getCatmaidLodForSpatialIndexLevel(
+          coarseToFineIndex,
+          levelCount,
+        );
+        return options.registry.chunkManager.getChunkSource(
+          CatmaidSpatiallyIndexedSkeletonSource,
+          { parameters, spec, credentialsProvider },
+        );
+      },
+    );
     // Create SegmentPropertyMap
     const ids = BigUint64Array.from(skeletonIds);
 

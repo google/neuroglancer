@@ -39,14 +39,10 @@ describe("CatmaidSpatiallyIndexedSkeletonSourceBackend", () => {
         },
       },
     });
-    const chunk = {
-      chunkGridPosition: Float32Array.of(2, 3, 4),
-    };
-
-    await CatmaidSpatiallyIndexedSkeletonSourceBackend.prototype.download.call(
+    await CatmaidSpatiallyIndexedSkeletonSourceBackend.prototype.fetchCell.call(
       source,
-      chunk,
-      signal,
+      Float32Array.of(2, 3, 4),
+      { signal },
     );
 
     expect(fetchNodes).toHaveBeenCalledWith(

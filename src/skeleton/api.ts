@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import type {
   SpatialSkeletonAddNodesCommandFactory,
   SpatialSkeletonInsertNodesCommandFactory,
@@ -51,6 +52,20 @@ export interface SpatiallyIndexedSkeletonNode
   isTrueEnd?: boolean;
 }
 
+// Each level holds a complete sample of every skeleton, because one level is drawn at a time.
+export interface SpatialSkeletonSpatialIndexLevel {
+  // Cell `c` spans `c * chunkSize` to `(c + 1) * chunkSize`, counted from 0, not from the lower bound.
+  readonly chunkSize: SpatialSkeletonVector;
+  // Largest expected node count in one cell. 0 means every node and is allowed only on the finest level.
+  readonly limit: number;
+}
+
+export interface SpatiallyIndexedSkeletonMetadata {
+  readonly coordinateSpace: CoordinateSpace;
+  // In any order.
+  readonly spatial: readonly SpatialSkeletonSpatialIndexLevel[];
+}
+
 export interface SpatialSkeletonConfidenceConfiguration {
   values: readonly number[];
 }
@@ -72,6 +87,14 @@ export interface SpatiallyIndexedSkeletonSource {
     fragmentKey: string,
     options?: { signal?: AbortSignal },
   ): Promise<SpatiallyIndexedSkeletonNode[]>;
+}
+
+export interface SpatiallyIndexedSkeletonCellSource {
+  // Resolves to [] for an empty or missing cell.
+  fetchCell(
+    cellGridPosition: Float32Array,
+    options: { signal: AbortSignal },
+  ): Promise<SpatiallyIndexedSkeletonNodeBase[]>;
 }
 
 export interface EditableSpatiallyIndexedSkeletonSource
