@@ -55,7 +55,6 @@
   max-height: 30%;
   flex-shrink: 0;
   overflow: auto;
-  background-color: #333;
 }
 
 .neuroglancer-property-list-statistics:not(:empty) {

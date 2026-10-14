@@ -69,6 +69,7 @@ export interface AnnotationNumericPropSchema {
 
 export interface AnnotationEnumPropSchema {
   identifier: string;
+  dataType?: DataType;
   /** Raw numeric enum values (e.g. [0, 1, 2]). */
   enumValues: number[];
   /** Human-readable labels corresponding to each enumValue. */
@@ -125,6 +126,7 @@ export function buildAnnotationQuerySchema(
     if (numSpec.enumValues !== undefined && numSpec.enumValues.length > 0) {
       enumProps.push({
         identifier: spec.identifier,
+        dataType,
         enumValues: numSpec.enumValues,
         enumLabels: numSpec.enumLabels ?? numSpec.enumValues.map(String),
         description: spec.description ?? undefined,

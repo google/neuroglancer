@@ -120,6 +120,45 @@
 }
 
 .neuroglancer-annotation-filter-results
+  [data-filtered="true"]
+  > .neuroglancer-property-summary-header
+  > .neuroglancer-property-summary-name {
+  color: yellow;
+}
+
+.neuroglancer-annotation-filter-results
+  details[data-hidden="true"]:not([data-filtered="true"])
+  > .neuroglancer-property-summary-header,
+.neuroglancer-annotation-filter-results
+  .neuroglancer-property-summary-boolean[data-hidden="true"]:not(
+    [data-filtered="true"]
+  )
+  > .neuroglancer-property-summary-header
+  > span,
+.neuroglancer-annotation-filter-results
+  .neuroglancer-property-summary-boolean[data-hidden="true"]:not(
+    [data-filtered="true"]
+  )
+  > .neuroglancer-property-summary-boolean-count {
+  opacity: 0.5;
+}
+
+.neuroglancer-annotation-properties-header {
+  margin-bottom: 6px;
+  font-weight: bold;
+}
+
+.neuroglancer-annotation-layer-view
+  .neuroglancer-accordion-header-text
+  > .neuroglancer-property-list-statistics-count {
+  display: inline;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+
+.neuroglancer-annotation-filter-results
   .neuroglancer-property-list-categorical-property-options {
   margin-left: 8px;
 }
@@ -131,9 +170,76 @@
   gap: 4px;
 }
 
-.neuroglancer-annotation-filter-results
-  .neuroglancer-property-list-categorical-property-label {
+.neuroglancer-annotation-filter-results .neuroglancer-property-summary-header {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  cursor: pointer;
   font-weight: bold;
+  overflow-wrap: anywhere;
+  list-style: none;
+}
+
+.neuroglancer-annotation-filter-results
+  .neuroglancer-property-summary-header::-webkit-details-marker {
+  display: none;
+}
+
+.neuroglancer-annotation-filter-results
+  details
+  > .neuroglancer-property-summary-header::after {
+  content: "\25b8";
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.neuroglancer-annotation-filter-results
+  details[open]
+  > .neuroglancer-property-summary-header::after {
+  transform: rotate(90deg);
+}
+
+.neuroglancer-annotation-filter-results .neuroglancer-property-summary-type {
+  flex: 0 0 auto;
+}
+
+.neuroglancer-annotation-filter-results .neuroglancer-property-summary-boolean {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.neuroglancer-property-summary-boolean .neuroglancer-property-summary-header {
+  flex: 1;
+  min-width: 0;
+  cursor: default;
+}
+
+.neuroglancer-property-summary-boolean .neuroglancer-property-summary-name {
+  flex: 0 0 auto;
+}
+
+.neuroglancer-property-summary-boolean
+  .neuroglancer-segment-query-result-tag-list {
+  display: flex;
+  flex: 0 0 auto;
+}
+
+.neuroglancer-property-summary-boolean-count {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.neuroglancer-annotation-filter-results .neuroglancer-property-summary-type,
+.neuroglancer-annotation-filter-results
+  .neuroglancer-property-summary-description {
+  color: #aaa;
+  font-weight: normal;
+}
+
+.neuroglancer-annotation-filter-results
+  .neuroglancer-property-summary-property {
+  margin-bottom: 4px;
 }
 
 .neuroglancer-annotation-filter-results

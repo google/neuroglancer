@@ -31,7 +31,7 @@ import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { createPropertyListSummaryGroup } from "#src/ui/property_list.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
-import type { DataType } from "#src/util/data_type.js";
+import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { updateInputFieldWidth } from "#src/util/dom.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
@@ -113,6 +113,11 @@ export interface NumericalSummaryQueryResult {
 export interface NumericalPropertiesSummaryOptions {
   propertyLabelPosition?: "inline" | "above";
   showColumnToggle?: boolean;
+  showSortControl?: boolean;
+  expandableProperties?: boolean;
+  retainUnavailableProperties?: boolean;
+  isPropertyExpanded?: (id: string) => boolean;
+  onPropertyToggle?: (id: string, open: boolean) => void;
 }
 
 /** Per-property histogram produced by the data source. */
@@ -148,6 +153,42 @@ export interface IncludeExcludeChipGroup {
   key: string;
   label: string;
   chips: IncludeExcludeChip[];
+  description?: string;
+  typeLabel?: string;
+  boolean?: boolean;
+  filtered?: boolean;
+  hidden?: boolean;
+  open?: boolean;
+  onToggle?: (open: boolean) => void;
+}
+
+function createPropertySummaryHeader(
+  id: string,
+  description?: string,
+  typeLabel?: string,
+  expandable = true,
+) {
+  const header = document.createElement(expandable ? "summary" : "div");
+  header.classList.add("neuroglancer-property-summary-header");
+  const name = document.createElement("span");
+  name.classList.add("neuroglancer-property-summary-name");
+  name.textContent = id;
+  if (typeLabel !== undefined) {
+    const type = document.createElement("span");
+    type.classList.add("neuroglancer-property-summary-type");
+    type.textContent = typeLabel;
+    header.appendChild(type);
+  }
+  header.appendChild(name);
+  if (description) {
+    const descriptionElement = document.createElement("span");
+    descriptionElement.classList.add(
+      "neuroglancer-property-summary-description",
+    );
+    descriptionElement.textContent = ` ${description}`;
+    header.appendChild(descriptionElement);
+  }
+  return header;
 }
 
 // --- Private helpers ----------------------------------------------------------
@@ -339,12 +380,16 @@ export class NumericalPropertiesSummary extends RefCounted {
     let listElement: HTMLElement | undefined;
     let summaryElement: HTMLElement | undefined;
     if (properties.length > 0) {
-      listElement = document.createElement("details");
-      summaryElement = document.createElement("summary");
-      summaryElement.textContent = `${properties.length} numerical propert${
-        properties.length > 1 ? "ies" : "y"
-      }`;
-      listElement.appendChild(summaryElement);
+      listElement = document.createElement(
+        options.expandableProperties ? "div" : "details",
+      );
+      if (!options.expandableProperties) {
+        summaryElement = document.createElement("summary");
+        summaryElement.textContent = `${properties.length} numerical propert${
+          properties.length > 1 ? "ies" : "y"
+        }`;
+        listElement.appendChild(summaryElement);
+      }
       listElement.classList.add(
         "neuroglancer-segment-query-result-numerical-list",
       );
@@ -549,13 +594,16 @@ export class NumericalPropertiesSummary extends RefCounted {
     propertyLabel.classList.add(
       "neuroglancer-segment-query-result-numerical-plot-label",
     );
-    propertyLabel.append(property.id, sortIcon);
-    propertyLabel.addEventListener("click", () => {
-      if (!propertySummary.applicable) return;
-      const q = this.queryResult.value?.query;
-      if (q === undefined) return;
-      toggleSortOrder(q, this.setQuery, property.id);
-    });
+    propertyLabel.append(property.id);
+    if (this.options.showSortControl !== false) {
+      propertyLabel.appendChild(sortIcon);
+      propertyLabel.addEventListener("click", () => {
+        if (!propertySummary.applicable) return;
+        const q = this.queryResult.value?.query;
+        if (q === undefined) return;
+        toggleSortOrder(q, this.setQuery, property.id);
+      });
+    }
     if (property.description) propertyLabel.title = property.description;
     let columnCheckbox: HTMLInputElement | undefined;
     if (this.options.showColumnToggle !== false) {
@@ -645,7 +693,10 @@ export class NumericalPropertiesSummary extends RefCounted {
         if (columnCheckbox !== undefined) {
           spacers[1].appendChild(columnCheckbox);
         }
-        if (this.options.propertyLabelPosition !== "above") {
+        if (
+          !this.options.expandableProperties &&
+          this.options.propertyLabelPosition !== "above"
+        ) {
           spacers[1].appendChild(propertyLabel);
         }
         if (property.description) {
@@ -678,7 +729,10 @@ export class NumericalPropertiesSummary extends RefCounted {
       range: makeBoundElements("range"),
       window: makeBoundElements("window"),
     };
-    if (this.options.propertyLabelPosition === "above") {
+    if (
+      !this.options.expandableProperties &&
+      this.options.propertyLabelPosition === "above"
+    ) {
       propertyLabel.classList.add(
         "neuroglancer-segment-query-result-numerical-plot-label-above",
       );
@@ -687,10 +741,29 @@ export class NumericalPropertiesSummary extends RefCounted {
     plotContainer.appendChild(boundElements.range.container);
     plotContainer.appendChild(plotImg);
     plotContainer.appendChild(boundElements.window.container);
+    let element: HTMLElement = plotContainer;
+    if (this.options.expandableProperties) {
+      const details = document.createElement("details");
+      details.classList.add("neuroglancer-property-summary-property");
+      details.dataset.propertyId = property.id;
+      details.open = this.options.isPropertyExpanded?.(property.id) ?? false;
+      details.addEventListener("toggle", () =>
+        this.options.onPropertyToggle?.(property.id, details.open),
+      );
+      details.append(
+        createPropertySummaryHeader(
+          property.id,
+          property.description,
+          DataType[property.dataType].toLowerCase(),
+        ),
+        plotContainer,
+      );
+      element = details;
+    }
     const propertySummary: NumericalPropertySummaryWidget = {
       property,
       controller,
-      element: plotContainer,
+      element,
       plotImg,
       boundElements,
       bounds: {
@@ -734,7 +807,8 @@ export class NumericalPropertiesSummary extends RefCounted {
       ) ?? true;
     const applicabilityChanged = applicable !== summary.applicable;
     summary.applicable = applicable;
-    summary.element.style.display = applicable ? "" : "none";
+    summary.element.style.display =
+      applicable || this.options.retainUnavailableProperties ? "" : "none";
     summary.element.setAttribute("aria-disabled", `${!applicable}`);
     if (summary.columnCheckbox !== undefined) {
       summary.columnCheckbox.disabled = !applicable;
@@ -745,6 +819,11 @@ export class NumericalPropertiesSummary extends RefCounted {
       }
     }
     const query = this.queryResult.value?.query;
+    summary.element.dataset.filtered = String(
+      query?.numericalConstraints.some(
+        (constraint) => constraint.fieldId === property.id,
+      ) ?? false,
+    );
     if (summary.columnCheckbox !== undefined) {
       const isIncluded =
         property.columnToggleable === false ||
@@ -919,7 +998,12 @@ export class NumericalPropertiesSummary extends RefCounted {
  */
 export function renderIncludeExcludeChips(
   chips: IncludeExcludeChip[],
-  options: { showZeroCountToggles?: boolean; tree?: boolean } = {},
+  options: {
+    showZeroCountToggles?: boolean;
+    tree?: boolean;
+    showLabel?: boolean;
+    showCount?: boolean;
+  } = {},
 ): HTMLElement | undefined {
   if (chips.length === 0) return undefined;
   const list = document.createElement("div");
@@ -971,7 +1055,7 @@ export function renderIncludeExcludeChips(
     addToggleButton(true);
     addToggleButton(false);
 
-    if (chip.headerLabel !== undefined) {
+    if (options.showLabel !== false && chip.headerLabel !== undefined) {
       const tagArea = document.createElement("span");
       tagArea.style.gridColumn = "tag";
       tagArea.style.whiteSpace = "nowrap";
@@ -994,7 +1078,7 @@ export function renderIncludeExcludeChips(
         tagArea.appendChild(valSpan);
       }
       chipElement.appendChild(tagArea);
-    } else {
+    } else if (options.showLabel !== false) {
       const labelEl = document.createElement("span");
       labelEl.classList.add("neuroglancer-segment-query-result-tag-name");
       labelEl.textContent = chip.label;
@@ -1005,12 +1089,14 @@ export function renderIncludeExcludeChips(
       chipElement.appendChild(labelEl);
     }
 
-    const countEl = document.createElement("span");
-    countEl.classList.add("neuroglancer-segment-query-result-tag-count");
-    if (!inQuery) {
-      countEl.textContent = String(chip.count);
+    if (options.showCount !== false) {
+      const countEl = document.createElement("span");
+      countEl.classList.add("neuroglancer-segment-query-result-tag-count");
+      if (!inQuery) {
+        countEl.textContent = String(chip.count);
+      }
+      chipElement.appendChild(countEl);
     }
-    chipElement.appendChild(countEl);
     list.appendChild(chipElement);
   }
   return list;
@@ -1022,7 +1108,7 @@ export function renderCategoricalPropertiesSummary(options: {
   propertyCount: number;
   open?: boolean;
   onToggle?: (open: boolean) => void;
-}): HTMLDetailsElement | undefined {
+}): HTMLElement | undefined {
   let chipsElement: HTMLElement | undefined;
   if (options.groups !== undefined) {
     const groupsElement = document.createElement("div");
@@ -1032,28 +1118,65 @@ export function renderCategoricalPropertiesSummary(options: {
     for (const group of options.groups) {
       const groupChips = renderIncludeExcludeChips(group.chips, {
         showZeroCountToggles: true,
-        tree: true,
+        tree: !group.boolean,
+        showLabel: !group.boolean,
+        showCount: !group.boolean,
       });
       if (groupChips === undefined) continue;
+      if (group.boolean) {
+        const row = document.createElement("div");
+        row.classList.add(
+          "neuroglancer-property-summary-property",
+          "neuroglancer-property-summary-boolean",
+        );
+        row.dataset.propertyId = group.key;
+        row.dataset.filtered = String(group.filtered ?? false);
+        row.dataset.hidden = String(group.hidden ?? false);
+        const header = createPropertySummaryHeader(
+          group.label,
+          group.description,
+          group.typeLabel,
+          false,
+        );
+        header.insertBefore(
+          groupChips,
+          header.querySelector(".neuroglancer-property-summary-name"),
+        );
+        const count = document.createElement("span");
+        count.classList.add("neuroglancer-property-summary-boolean-count");
+        const chip = group.chips[0];
+        count.textContent = `(${chip.count}/${chip.totalCount})`;
+        row.append(header, count);
+        groupsElement.appendChild(row);
+        continue;
+      }
       groupChips.classList.add(
         "neuroglancer-property-list-categorical-property-options",
       );
-      const groupElement = document.createElement("div");
+      const groupElement = document.createElement("details");
       groupElement.classList.add(
         "neuroglancer-property-list-categorical-property",
+        "neuroglancer-property-summary-property",
       );
       groupElement.dataset.propertyId = group.key;
-      groupElement.setAttribute("role", "group");
-      groupElement.setAttribute("aria-label", group.label);
-      const groupLabel = document.createElement("div");
-      groupLabel.classList.add(
-        "neuroglancer-property-list-categorical-property-label",
+      groupElement.dataset.filtered = String(group.filtered ?? false);
+      groupElement.dataset.hidden = String(group.hidden ?? false);
+      groupElement.open = group.open ?? false;
+      groupElement.addEventListener("toggle", () =>
+        group.onToggle?.(groupElement.open),
       );
-      groupLabel.textContent = group.label;
-      groupElement.append(groupLabel, groupChips);
+      groupElement.append(
+        createPropertySummaryHeader(
+          group.label,
+          group.description,
+          group.typeLabel,
+        ),
+        groupChips,
+      );
       groupsElement.appendChild(groupElement);
     }
-    if (groupsElement.childElementCount !== 0) chipsElement = groupsElement;
+    if (groupsElement.childElementCount === 0) return undefined;
+    return groupsElement;
   } else {
     chipsElement = renderIncludeExcludeChips(options.chips ?? []);
   }

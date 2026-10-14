@@ -117,6 +117,8 @@ const ANNOTATION_LIST_HIDDEN_COORDINATES_KEY =
   "annotationListHiddenCoordinates";
 const ANNOTATION_LIST_TYPE_COLUMN_VISIBLE_KEY =
   "annotationListTypeColumnVisible";
+const ANNOTATION_LIST_DESCRIPTIONS_VISIBLE_KEY =
+  "annotationListDescriptionsVisible";
 const ANNOTATION_LIST_SORT_KEY = "annotationListSort";
 const ANNOTATION_LIST_QUERY_KEY = "annotationListQuery";
 const ANNOTATION_RELATIONSHIPS_JSON_KEY = "annotationRelationships";
@@ -569,6 +571,9 @@ export class AnnotationUserLayer extends Base {
     this.annotationListTypeColumnVisible.restoreState(
       specification[ANNOTATION_LIST_TYPE_COLUMN_VISIBLE_KEY],
     );
+    this.annotationListDescriptionsVisible.restoreState(
+      specification[ANNOTATION_LIST_DESCRIPTIONS_VISIBLE_KEY],
+    );
     const sortJson = verifyOptionalObjectProperty(
       specification,
       ANNOTATION_LIST_SORT_KEY,
@@ -878,6 +883,8 @@ export class AnnotationUserLayer extends Base {
     }
     x[ANNOTATION_LIST_TYPE_COLUMN_VISIBLE_KEY] =
       this.annotationListTypeColumnVisible.toJSON();
+    x[ANNOTATION_LIST_DESCRIPTIONS_VISIBLE_KEY] =
+      this.annotationListDescriptionsVisible.toJSON();
     const sortState = this.annotationListSortState.value;
     if (sortState !== null) {
       x[ANNOTATION_LIST_SORT_KEY] = sortState;
