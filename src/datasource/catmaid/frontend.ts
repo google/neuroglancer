@@ -49,8 +49,8 @@ import {
 } from "#src/segmentation_display_state/property_map.js";
 import type {
   SpatialSkeletonConfidenceConfiguration,
+  SpatialSkeletonFragment,
   SpatialSkeletonManifest,
-  SpatiallyIndexedSkeletonNode,
   SpatiallyIndexedSkeletonSource as SpatiallyIndexedSkeletonSourceApi,
 } from "#src/skeleton/api.js";
 import { SkeletonDataSourceState } from "#src/skeleton/find_path.js";
@@ -151,12 +151,12 @@ export class CatmaidSpatiallyIndexedSkeletonSource
     return { fragmentKeys: ["skeleton"] };
   }
 
-  getSkeletonFragment(
+  async getSkeletonFragment(
     skeletonId: bigint,
     _fragmentKey: string,
     options?: { signal?: AbortSignal },
-  ): Promise<SpatiallyIndexedSkeletonNode[]> {
-    return this.client.getSkeleton(skeletonId, options);
+  ): Promise<SpatialSkeletonFragment> {
+    return { nodes: await this.client.getSkeleton(skeletonId, options) };
   }
 }
 

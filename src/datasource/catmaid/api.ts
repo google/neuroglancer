@@ -874,7 +874,7 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     if (spatial.length === 0) {
       return [getDefaultCatmaidSpatialIndexLevel(bounds)];
     }
-    return spatial.map((level, index) => ({
+    const levels = spatial.map((level, index) => ({
       chunkSize: requireCatmaidPositiveRank3Vector(
         level?.chunk_size,
         `spatial skeleton metadata spatial[${index}].chunk_size`,
@@ -884,6 +884,10 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
         `spatial skeleton metadata spatial[${index}].limit`,
       ),
     }));
+    // CATMAID lists levels in any order.
+    const cellVolume = ({ chunkSize }: SpatialSkeletonSpatialIndexLevel) =>
+      chunkSize[0] * chunkSize[1] * chunkSize[2];
+    return levels.sort((a, b) => cellVolume(b) - cellVolume(a));
   }
 
   private getSpatialSkeletonReadonlyFromMetadataInfo(

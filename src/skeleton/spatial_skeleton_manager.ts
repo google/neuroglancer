@@ -17,6 +17,7 @@
 import type {
   EditableSpatiallyIndexedSkeletonSource,
   SpatialSkeletonConfidenceConfiguration,
+  SpatialSkeletonParentLink,
   SpatiallyIndexedSkeletonNode,
   SpatiallyIndexedSkeletonSource,
 } from "#src/skeleton/api.js";
@@ -423,20 +424,37 @@ async function fetchCompleteSkeleton(
   const { fragmentKeys } = await source.getSkeletonManifest(skeletonId, {
     signal,
   });
-  if (fragmentKeys.length === 1) {
-    signal?.throwIfAborted();
-    return source.getSkeletonFragment(skeletonId, fragmentKeys[0], { signal });
-  }
   const nodesById = new Map<bigint, SpatiallyIndexedSkeletonNode>();
+  const parentLinks: SpatialSkeletonParentLink[] = [];
   // One request at a time, so that a limit on concurrent skeleton reads also limits requests.
   for (const fragmentKey of fragmentKeys) {
     signal?.throwIfAborted();
     const fragment = await source.getSkeletonFragment(skeletonId, fragmentKey, {
       signal,
     });
-    for (const node of fragment) {
+    for (const node of fragment.nodes) {
+      if (nodesById.has(node.nodeId)) {
+        throw new Error(
+          `Skeleton ${skeletonId} has node ${node.nodeId} in more than one fragment.`,
+        );
+      }
       nodesById.set(node.nodeId, node);
     }
+    parentLinks.push(...(fragment.parentLinks ?? []));
+  }
+  for (const { nodeId, parentNodeId } of parentLinks) {
+    const node = nodesById.get(nodeId);
+    if (node === undefined) {
+      throw new Error(
+        `Skeleton ${skeletonId} links a parent to node ${nodeId}, which no fragment has.`,
+      );
+    }
+    if (node.parentNodeId !== undefined && node.parentNodeId !== parentNodeId) {
+      throw new Error(
+        `Skeleton ${skeletonId} gives node ${nodeId} two parents: ${node.parentNodeId} and ${parentNodeId}.`,
+      );
+    }
+    nodesById.set(nodeId, { ...node, parentNodeId });
   }
   return [...nodesById.values()];
 }

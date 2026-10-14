@@ -2039,33 +2039,6 @@ export interface SpatialSkeletonLevelSourceOptions {
   readonly spec: SpatiallyIndexedSkeletonChunkSpecification;
 }
 
-function getSpatialSkeletonLevelSpacing(
-  level: SpatialSkeletonSpatialIndexLevel,
-) {
-  return Math.min(level.chunkSize[0], level.chunkSize[1], level.chunkSize[2]);
-}
-
-function sortSpatialSkeletonLevelsCoarseToFine(
-  levels: readonly SpatialSkeletonSpatialIndexLevel[],
-) {
-  const sortedLevels = [...levels].sort(
-    (a, b) =>
-      getSpatialSkeletonLevelSpacing(b) - getSpatialSkeletonLevelSpacing(a),
-  );
-  for (let levelIndex = 1; levelIndex < sortedLevels.length; ++levelIndex) {
-    if (
-      getSpatialSkeletonLevelSpacing(sortedLevels[levelIndex - 1]) ===
-      getSpatialSkeletonLevelSpacing(sortedLevels[levelIndex])
-    ) {
-      throw new Error(
-        "Spatial skeleton levels must not share the same cell spacing.",
-      );
-    }
-  }
-  validateSpatialSkeletonLimitZeroOnlyFinest(sortedLevels);
-  return sortedLevels;
-}
-
 function makeSpatialSkeletonLevelSpec(
   coordinateSpace: CoordinateSpace,
   level: SpatialSkeletonSpatialIndexLevel,
@@ -2093,8 +2066,6 @@ function makeSpatialSkeletonLevelSpec(
 }
 
 export class MultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleSliceViewChunkSource<SpatiallyIndexedSkeletonSource> {
-  private readonly levels: readonly SpatialSkeletonSpatialIndexLevel[];
-
   constructor(
     chunkManager: Borrowed<ChunkManager>,
     private readonly metadata: SpatiallyIndexedSkeletonMetadata,
@@ -2108,7 +2079,7 @@ export class MultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleSliceVie
         `Spatial skeleton coordinate space must have rank 3, not ${metadata.coordinateSpace.rank}.`,
       );
     }
-    this.levels = sortSpatialSkeletonLevelsCoarseToFine(metadata.spatial);
+    validateSpatialSkeletonLimitZeroOnlyFinest(metadata.spatial);
   }
 
   get rank() {
@@ -2118,10 +2089,10 @@ export class MultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleSliceVie
   getSources(
     _options: SliceViewSourceOptions,
   ): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[][] {
-    const { coordinateSpace } = this.metadata;
-    const levelCount = this.levels.length;
+    const { coordinateSpace, spatial } = this.metadata;
+    const levelCount = spatial.length;
     return [
-      this.levels.map((level, coarseToFineIndex) => ({
+      spatial.map((level, coarseToFineIndex) => ({
         chunkSource: this.makeLevelSource({
           coarseToFineIndex,
           levelCount,

@@ -52,7 +52,7 @@ export interface SpatiallyIndexedSkeletonNode
   isTrueEnd?: boolean;
 }
 
-// Each level holds a complete sample of every skeleton, because one level is drawn at a time.
+// One level is drawn at a time. A skeleton that a level leaves out is not drawn while that level is in use.
 export interface SpatialSkeletonSpatialIndexLevel {
   // Cell `c` spans `c * chunkSize` to `(c + 1) * chunkSize`, counted from 0, not from the lower bound.
   readonly chunkSize: SpatialSkeletonVector;
@@ -62,7 +62,7 @@ export interface SpatialSkeletonSpatialIndexLevel {
 
 export interface SpatiallyIndexedSkeletonMetadata {
   readonly coordinateSpace: CoordinateSpace;
-  // In any order.
+  // From coarsest to finest.
   readonly spatial: readonly SpatialSkeletonSpatialIndexLevel[];
 }
 
@@ -72,7 +72,21 @@ export interface SpatialSkeletonConfidenceConfiguration {
 
 export interface SpatialSkeletonManifest {
   // Empty when the source has no skeleton with this id.
+  // Each key names one read. The source chooses how much of the skeleton one read covers.
   readonly fragmentKeys: readonly string[];
+}
+
+export interface SpatialSkeletonParentLink {
+  readonly nodeId: bigint;
+  readonly parentNodeId: bigint;
+}
+
+export interface SpatialSkeletonFragment {
+  // Each node of a skeleton is in exactly one of its fragments.
+  // A node's parentNodeId may name a node in another fragment.
+  readonly nodes: readonly SpatiallyIndexedSkeletonNode[];
+  // Parents of nodes in other fragments, for a source that stores an edge with the parent.
+  readonly parentLinks?: readonly SpatialSkeletonParentLink[];
 }
 
 export interface SpatiallyIndexedSkeletonSource {
@@ -81,12 +95,11 @@ export interface SpatiallyIndexedSkeletonSource {
     skeletonId: bigint,
     options?: { signal?: AbortSignal },
   ): Promise<SpatialSkeletonManifest>;
-  // A node's parentNodeId may name a node in another fragment.
   getSkeletonFragment(
     skeletonId: bigint,
     fragmentKey: string,
     options?: { signal?: AbortSignal },
-  ): Promise<SpatiallyIndexedSkeletonNode[]>;
+  ): Promise<SpatialSkeletonFragment>;
 }
 
 export interface SpatiallyIndexedSkeletonCellSource {

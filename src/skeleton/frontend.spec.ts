@@ -1339,25 +1339,19 @@ function makeMultiscaleSource(
 }
 
 describe("MultiscaleSpatiallyIndexedSkeletonSource", () => {
-  it("lists levels from coarsest to finest whatever order the metadata gives", () => {
+  it("draws levels that share one cell size in the order the metadata gives", () => {
     const { source, requestedLevels } = makeMultiscaleSource(
       makeNanometerSpace([0, 0, 0], [120, 120, 120]),
       [
-        { chunkSize: [10, 10, 10], limit: 0 },
         { chunkSize: [40, 40, 40], limit: 10 },
-        { chunkSize: [20, 20, 20], limit: 100 },
+        { chunkSize: [40, 40, 40], limit: 100 },
+        { chunkSize: [40, 40, 40], limit: 0 },
       ],
     );
 
     source.getPerspectiveSources();
 
-    expect(
-      requestedLevels.map(({ spec }) => Array.from(spec.chunkDataSize)),
-    ).toEqual([
-      [40, 40, 40],
-      [20, 20, 20],
-      [10, 10, 10],
-    ]);
+    expect(requestedLevels.map(({ spec }) => spec.limit)).toEqual([10, 100, 0]);
   });
 
   it("numbers cells from the origin, not from the lower bound", () => {
@@ -1398,15 +1392,6 @@ describe("MultiscaleSpatiallyIndexedSkeletonSource", () => {
     ).toThrow(
       "Spatial skeleton limit: 0 is only supported on the finest source level.",
     );
-  });
-
-  it("rejects two levels with the same cell spacing", () => {
-    expect(() =>
-      makeMultiscaleSource(makeNanometerSpace([0, 0, 0], [120, 120, 120]), [
-        { chunkSize: [20, 40, 40], limit: 10 },
-        { chunkSize: [20, 20, 20], limit: 0 },
-      ]),
-    ).toThrow("Spatial skeleton levels must not share the same cell spacing.");
   });
 
   it("rejects a coordinate space that is not 3-D", () => {

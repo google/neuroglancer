@@ -16,7 +16,10 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type {
+  SpatialSkeletonFragment,
+  SpatiallyIndexedSkeletonNode,
+} from "#src/skeleton/api.js";
 import { SpatialSkeletonActions } from "#src/skeleton/command_protocol.js";
 import {
   createCompleteSkeletonSnapshot,
@@ -45,11 +48,11 @@ function makeWholeSkeletonReads(
 ) {
   return {
     getSkeletonManifest: async () => ({ fragmentKeys: ["skeleton"] }),
-    getSkeletonFragment: (
+    getSkeletonFragment: async (
       skeletonId: bigint,
       _fragmentKey: string,
       options: { signal: AbortSignal },
-    ) => getSkeleton(skeletonId, options),
+    ) => ({ nodes: await getSkeleton(skeletonId, options) }),
   };
 }
 
@@ -190,7 +193,7 @@ function makeFragmentNode(
 }
 
 function makeFragmentedSkeletonLayer(
-  fragments: Record<string, SpatiallyIndexedSkeletonNode[] | Error>,
+  fragments: Record<string, SpatialSkeletonFragment | Error>,
   manifestReady: Promise<void> = Promise.resolve(),
 ) {
   const requestedFragmentKeys: string[] = [];
@@ -822,7 +825,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       ...makeEditableSourceCommands(),
       readonly: false,
       getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-      getSkeletonFragment: async () => [],
+      getSkeletonFragment: async () => ({ nodes: [] }),
     };
 
     expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
@@ -834,7 +837,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       mergeSkeletonsCommand: undefined,
       readonly: false,
       getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-      getSkeletonFragment: async () => [],
+      getSkeletonFragment: async () => ({ nodes: [] }),
     };
 
     expect(
@@ -849,7 +852,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       ...commands,
       readonly: false,
       getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-      getSkeletonFragment: async () => [],
+      getSkeletonFragment: async () => ({ nodes: [] }),
     };
 
     expect(
@@ -863,7 +866,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       moveNodesCommand: makeCommandFactory(SpatialSkeletonActions.addNodes),
       readonly: false,
       getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-      getSkeletonFragment: async () => [],
+      getSkeletonFragment: async () => ({ nodes: [] }),
     };
 
     expect(
@@ -876,7 +879,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       ...makeEditableSourceCommands(),
       readonly: false,
       getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-      getSkeletonFragment: async () => [],
+      getSkeletonFragment: async () => ({ nodes: [] }),
     };
 
     expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
@@ -888,7 +891,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       rerootCommand: makeCommandFactory(SpatialSkeletonActions.reroot),
       readonly: false,
       getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-      getSkeletonFragment: async () => [],
+      getSkeletonFragment: async () => ({ nodes: [] }),
     };
 
     expect(
@@ -922,7 +925,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       },
       readonly: false,
       getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-      getSkeletonFragment: async () => [],
+      getSkeletonFragment: async () => ({ nodes: [] }),
     };
 
     expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
@@ -947,7 +950,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       ),
       readonly: false,
       getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-      getSkeletonFragment: async () => [],
+      getSkeletonFragment: async () => ({ nodes: [] }),
     };
 
     expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
@@ -982,7 +985,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       ...makeEditableSourceCommands(),
       readonly: true,
       getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-      getSkeletonFragment: async () => [],
+      getSkeletonFragment: async () => ({ nodes: [] }),
     };
 
     expect(
@@ -1008,7 +1011,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const source = {
       readonly: false,
       getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-      getSkeletonFragment: async () => [],
+      getSkeletonFragment: async () => ({ nodes: [] }),
     };
 
     expect(isSpatiallyIndexedSkeletonSourceReadOnly({ source })).toBe(false);
@@ -2913,8 +2916,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
     it("returns the nodes of every fragment that the manifest lists", async () => {
       const state = new SpatialSkeletonState();
       const { layer } = makeFragmentedSkeletonLayer({
-        "0.0.0": [makeFragmentNode(1n), makeFragmentNode(2n, 1n)],
-        "0.0.1": [makeFragmentNode(3n, 2n)],
+        "0.0.0": { nodes: [makeFragmentNode(1n), makeFragmentNode(2n, 1n)] },
+        "0.0.1": { nodes: [makeFragmentNode(3n, 2n)] },
       });
 
       const nodes = await state.getFullSegmentNodes(layer, 7n);
@@ -2926,7 +2929,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     it("fails the whole read when one fragment fails", async () => {
       const state = new SpatialSkeletonState();
       const { layer } = makeFragmentedSkeletonLayer({
-        "0.0.0": [makeFragmentNode(1n)],
+        "0.0.0": { nodes: [makeFragmentNode(1n)] },
         "0.0.1": new Error("fragment missing"),
       });
 
@@ -2939,7 +2942,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       const state = new SpatialSkeletonState();
       const { layer, requestedFragmentKeys } = makeFragmentedSkeletonLayer({
         "0.0.0": new Error("fragment missing"),
-        "0.0.1": [makeFragmentNode(2n)],
+        "0.0.1": { nodes: [makeFragmentNode(2n)] },
       });
 
       await expect(state.getFullSegmentNodes(layer, 7n)).rejects.toThrow(
@@ -2952,7 +2955,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       const state = new SpatialSkeletonState();
       const manifestReady = deferred<void>();
       const { layer, requestedFragmentKeys } = makeFragmentedSkeletonLayer(
-        { "0.0.0": [makeFragmentNode(1n)] },
+        { "0.0.0": { nodes: [makeFragmentNode(1n)] } },
         manifestReady.promise,
       );
       const read = state.getFullSegmentNodes(layer, 7n);
@@ -2969,16 +2972,33 @@ describe("skeleton/spatial_skeleton_manager", () => {
       expect(requestedFragmentKeys).toEqual([]);
     });
 
-    it("returns each node once when two fragments both contain it", async () => {
+    it("rejects a skeleton that has one node in two fragments", async () => {
       const state = new SpatialSkeletonState();
       const { layer } = makeFragmentedSkeletonLayer({
-        "0.0.0": [makeFragmentNode(1n), makeFragmentNode(2n, 1n)],
-        "0.0.1": [makeFragmentNode(2n, 1n), makeFragmentNode(3n, 2n)],
+        "0.0.0": { nodes: [makeFragmentNode(1n), makeFragmentNode(2n, 1n)] },
+        "0.0.1": {
+          nodes: [makeFragmentNode(2n, 1n), makeFragmentNode(3n, 2n)],
+        },
+      });
+
+      await expect(state.getFullSegmentNodes(layer, 7n)).rejects.toThrow(
+        "Skeleton 7 has node 2 in more than one fragment.",
+      );
+    });
+
+    it("joins a node to a parent that another fragment links to it", async () => {
+      const state = new SpatialSkeletonState();
+      const { layer } = makeFragmentedSkeletonLayer({
+        "0.0.0": { nodes: [makeFragmentNode(3n)] },
+        "0.0.1": {
+          nodes: [makeFragmentNode(1n), makeFragmentNode(2n, 1n)],
+          parentLinks: [{ nodeId: 3n, parentNodeId: 2n }],
+        },
       });
 
       const nodes = await state.getFullSegmentNodes(layer, 7n);
 
-      expect(nodes.map((node) => node.nodeId)).toEqual([1n, 2n, 3n]);
+      expect(nodes.find((node) => node.nodeId === 3n)?.parentNodeId).toBe(2n);
     });
 
     it("returns no nodes for a skeleton the source does not have", async () => {

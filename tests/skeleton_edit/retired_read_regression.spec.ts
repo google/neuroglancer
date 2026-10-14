@@ -33,11 +33,11 @@ function makeWholeSkeletonReads(
 ) {
   return {
     getSkeletonManifest: async () => ({ fragmentKeys: ["skeleton"] }),
-    getSkeletonFragment: (
+    getSkeletonFragment: async (
       skeletonId: bigint,
       _fragmentKey: string,
       options: { signal: AbortSignal },
-    ) => getSkeleton(skeletonId, options),
+    ) => ({ nodes: await getSkeleton(skeletonId, options) }),
   };
 }
 

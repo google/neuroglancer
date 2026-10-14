@@ -29,11 +29,11 @@ function makeWholeSkeletonReads(
 ) {
   return {
     getSkeletonManifest: async () => ({ fragmentKeys: ["skeleton"] }),
-    getSkeletonFragment: (
+    getSkeletonFragment: async (
       skeletonId: bigint,
       _fragmentKey: string,
       options: { signal: AbortSignal },
-    ) => getSkeleton(skeletonId, options),
+    ) => ({ nodes: await getSkeleton(skeletonId, options) }),
   };
 }
 
@@ -192,7 +192,7 @@ function makeEditableSpatialSkeletonSource(
     mergeSkeletonsCommand: makeCommand(SpatialSkeletonActions.mergeSkeletons),
     splitSkeletonsCommand: makeCommand(SpatialSkeletonActions.splitSkeletons),
     getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-    getSkeletonFragment: async () => [],
+    getSkeletonFragment: async () => ({ nodes: [] }),
     ...(options.confidenceConfiguration !== true
       ? {}
       : {
