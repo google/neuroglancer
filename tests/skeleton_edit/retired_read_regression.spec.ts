@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-// Regression coverage for confirmed retirement; see the automated-test guide.
 import { expect, it, vi } from "vitest";
 import { createCompleteSkeletonSnapshot } from "#src/skeleton/complete_skeleton_snapshot.js";
 import {
@@ -25,6 +24,26 @@ import {
 import { SpatialSkeletonOptimisticProjectionRuntime } from "#src/skeleton/optimistic_edit/projection_runtime.js";
 import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { SpatialSkeletonProjectionWorkspace } from "#src/skeleton/spatial_skeleton_projection_reducer.js";
+
+function makeWholeSkeletonReads(
+  getSkeleton: (
+    skeletonId: bigint,
+    options: { signal: AbortSignal },
+  ) => unknown,
+) {
+  return {
+    getSkeletonManifest: async () => ({ fragmentKeys: ["skeleton"] }),
+    getSkeletonFragment: (
+      skeletonId: bigint,
+      _fragmentKey: string,
+      options: { signal: AbortSignal },
+    ) => getSkeleton(skeletonId, options),
+  };
+}
+
+async function flushMicrotasks() {
+  for (let i = 0; i < 10; ++i) await Promise.resolve();
+}
 
 it("fences a read started during final-node deletion when deletion becomes authoritative", () => {
   const root = { nodeId: 1n, segmentId: 10n, position: [1, 2, 3] };
@@ -140,10 +159,7 @@ it.each([false, true])(
     const layer = {
       source: {
         readonly: true,
-        listSkeletons: async () => [],
-        getSkeleton,
-        fetchNodes: async () => [],
-        getSpatialIndexMetadata: async () => null,
+        ...makeWholeSkeletonReads(getSkeleton),
       },
     } as any;
     const read = state
@@ -152,6 +168,7 @@ it.each([false, true])(
         () => undefined,
         (error) => error,
       );
+    await flushMicrotasks();
     expect(getSkeleton).toHaveBeenCalledOnce();
     runtime.publishAuthoritative({
       intentId: 1,

@@ -36,16 +36,6 @@ export interface SpatialSkeletonBounds {
   upperBounds: SpatialSkeletonVector;
 }
 
-export interface SpatialSkeletonGridCellIndex {
-  cell: SpatialSkeletonVector;
-}
-
-export interface SpatialSkeletonSpatialIndexLevel {
-  chunkSize: SpatialSkeletonVector;
-  gridShape: readonly number[];
-  limit: number;
-}
-
 export interface SpatiallyIndexedSkeletonNodeBase {
   nodeId: bigint;
   segmentId: bigint;
@@ -61,30 +51,27 @@ export interface SpatiallyIndexedSkeletonNode
   isTrueEnd?: boolean;
 }
 
-export interface SpatiallyIndexedSkeletonMetadata
-  extends SpatialSkeletonBounds {
-  spatial: readonly SpatialSkeletonSpatialIndexLevel[];
-  readonly readonly: boolean;
-}
-
 export interface SpatialSkeletonConfidenceConfiguration {
   values: readonly number[];
 }
 
+export interface SpatialSkeletonManifest {
+  // Empty when the source has no skeleton with this id.
+  readonly fragmentKeys: readonly string[];
+}
+
 export interface SpatiallyIndexedSkeletonSource {
   readonly readonly: boolean;
-  listSkeletons(): Promise<bigint[]>;
-  getSkeleton(
+  getSkeletonManifest(
     skeletonId: bigint,
     options?: { signal?: AbortSignal },
+  ): Promise<SpatialSkeletonManifest>;
+  // A node's parentNodeId may name a node in another fragment.
+  getSkeletonFragment(
+    skeletonId: bigint,
+    fragmentKey: string,
+    options?: { signal?: AbortSignal },
   ): Promise<SpatiallyIndexedSkeletonNode[]>;
-  getSpatialIndexMetadata(): Promise<SpatiallyIndexedSkeletonMetadata | null>;
-  fetchNodes(
-    cellIndex: SpatialSkeletonGridCellIndex,
-    options?: {
-      signal?: AbortSignal;
-    },
-  ): Promise<SpatiallyIndexedSkeletonNodeBase[]>;
 }
 
 export interface EditableSpatiallyIndexedSkeletonSource

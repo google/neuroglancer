@@ -560,10 +560,8 @@ function makeCommandSkeletonSource(overrides: Record<string, unknown> = {}) {
     splitSkeletonsCommand: makeCommandFactory(
       SpatialSkeletonActions.splitSkeletons,
     ),
-    listSkeletons: vi.fn(),
-    getSkeleton: vi.fn(),
-    fetchNodes: vi.fn(),
-    getSpatialIndexMetadata: vi.fn(),
+    getSkeletonManifest: vi.fn(),
+    getSkeletonFragment: vi.fn(),
     ...overrides,
   };
 }

@@ -346,10 +346,8 @@ export function isSpatiallyIndexedSkeletonSource(
 ): value is SpatiallyIndexedSkeletonSource {
   return (
     typeof getProperty(value, "readonly") === "boolean" &&
-    hasFunction(value, "listSkeletons") &&
-    hasFunction(value, "getSkeleton") &&
-    hasFunction(value, "getSpatialIndexMetadata") &&
-    hasFunction(value, "fetchNodes")
+    hasFunction(value, "getSkeletonManifest") &&
+    hasFunction(value, "getSkeletonFragment")
   );
 }
 
@@ -414,6 +412,33 @@ export function editableSpatiallyIndexedSkeletonSourceSupportsAction(
     metadata?.requiresConfidenceConfiguration !== true ||
     source.spatialSkeletonConfidenceConfiguration !== undefined
   );
+}
+
+async function fetchCompleteSkeleton(
+  source: SpatiallyIndexedSkeletonSource,
+  skeletonId: bigint,
+  options: { signal?: AbortSignal } = {},
+): Promise<SpatiallyIndexedSkeletonNode[]> {
+  const { signal } = options;
+  const { fragmentKeys } = await source.getSkeletonManifest(skeletonId, {
+    signal,
+  });
+  if (fragmentKeys.length === 1) {
+    signal?.throwIfAborted();
+    return source.getSkeletonFragment(skeletonId, fragmentKeys[0], { signal });
+  }
+  const nodesById = new Map<bigint, SpatiallyIndexedSkeletonNode>();
+  // One request at a time, so that a limit on concurrent skeleton reads also limits requests.
+  for (const fragmentKey of fragmentKeys) {
+    signal?.throwIfAborted();
+    const fragment = await source.getSkeletonFragment(skeletonId, fragmentKey, {
+      signal,
+    });
+    for (const node of fragment) {
+      nodesById.set(node.nodeId, node);
+    }
+  }
+  return [...nodesById.values()];
 }
 
 export function normalizeSpatiallyIndexedSkeletonNode(
@@ -2640,16 +2665,11 @@ export class SpatialSkeletonState
           abortController.signal.addEventListener("abort", rejectFromAbort, {
             once: true,
           });
-          let sourceRequest: Promise<SpatiallyIndexedSkeletonNode[]>;
-          try {
-            sourceRequest = Promise.resolve(
-              skeletonSource.getSkeleton(segmentId, {
-                signal: abortController.signal,
-              }),
-            );
-          } catch (error) {
-            sourceRequest = Promise.reject(error);
-          }
+          const sourceRequest = fetchCompleteSkeleton(
+            skeletonSource,
+            segmentId,
+            { signal: abortController.signal },
+          );
           // If abort/deadline wins the race, the source may still resolve or
           // reject later because not every implementation observes its
           // signal. Keep that detached outcome observed.

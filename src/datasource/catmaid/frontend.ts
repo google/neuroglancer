@@ -30,7 +30,6 @@ import type {
 import {
   CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES,
   credentialsKey,
-  getCatmaidSpatialSkeletonGridCellBounds,
 } from "#src/datasource/catmaid/api.js";
 import {
   CatmaidSkeletonSourceParameters,
@@ -51,10 +50,9 @@ import {
 } from "#src/segmentation_display_state/property_map.js";
 import type {
   SpatialSkeletonConfidenceConfiguration,
-  SpatialSkeletonGridCellIndex,
-  SpatiallyIndexedSkeletonMetadata,
+  SpatialSkeletonManifest,
   SpatiallyIndexedSkeletonNode,
-  SpatiallyIndexedSkeletonNodeBase,
+  SpatiallyIndexedSkeletonSource as SpatiallyIndexedSkeletonSourceApi,
 } from "#src/skeleton/api.js";
 import { SkeletonDataSourceState } from "#src/skeleton/find_path.js";
 import {
@@ -79,10 +77,13 @@ const CATMAID_SPATIAL_SKELETON_CONFIDENCE_CONFIGURATION = {
   values: CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES,
 } satisfies SpatialSkeletonConfidenceConfiguration;
 
-export class CatmaidSpatiallyIndexedSkeletonSource extends WithParameters(
-  WithCredentialsProvider<CatmaidToken>()(SpatiallyIndexedSkeletonSource),
-  CatmaidSkeletonSourceParameters,
-) {
+export class CatmaidSpatiallyIndexedSkeletonSource
+  extends WithParameters(
+    WithCredentialsProvider<CatmaidToken>()(SpatiallyIndexedSkeletonSource),
+    CatmaidSkeletonSourceParameters,
+  )
+  implements SpatiallyIndexedSkeletonSourceApi
+{
   private readonly spatialSkeletonEditCommands =
     new CatmaidSpatialSkeletonEditCommands({
       getClient: () => this.client,
@@ -158,35 +159,17 @@ export class CatmaidSpatiallyIndexedSkeletonSource extends WithParameters(
     ));
   }
 
-  getSkeleton(
+  // One compact-detail request returns a whole skeleton.
+  async getSkeletonManifest(): Promise<SpatialSkeletonManifest> {
+    return { fragmentKeys: ["skeleton"] };
+  }
+
+  getSkeletonFragment(
     skeletonId: bigint,
+    _fragmentKey: string,
     options?: { signal?: AbortSignal },
   ): Promise<SpatiallyIndexedSkeletonNode[]> {
     return this.client.getSkeleton(skeletonId, options);
-  }
-
-  listSkeletons(): Promise<bigint[]> {
-    return this.client.listSkeletons();
-  }
-
-  getSpatialIndexMetadata(): Promise<SpatiallyIndexedSkeletonMetadata | null> {
-    return this.client.getSpatialIndexMetadata();
-  }
-
-  fetchNodes(
-    cellIndex: SpatialSkeletonGridCellIndex,
-    options: {
-      signal?: AbortSignal;
-    } = {},
-  ): Promise<SpatiallyIndexedSkeletonNodeBase[]> {
-    const bounds = getCatmaidSpatialSkeletonGridCellBounds(
-      cellIndex.cell,
-      this.spec.chunkDataSize,
-    );
-    return this.client.fetchNodes(bounds, this.parameters.catmaidLod ?? 0, {
-      cacheProvider: this.parameters.catmaidParameters.cacheProvider,
-      signal: options.signal,
-    });
   }
 }
 

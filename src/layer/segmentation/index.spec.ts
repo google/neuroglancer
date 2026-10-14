@@ -21,6 +21,22 @@ import { SpatialSkeletonActions } from "#src/skeleton/command_protocol.js";
 import { SkeletonDataSourceState } from "#src/skeleton/find_path.js";
 import { WatchableValue } from "#src/trackable_value.js";
 
+function makeWholeSkeletonReads(
+  getSkeleton: (
+    skeletonId: bigint,
+    options: { signal: AbortSignal },
+  ) => unknown,
+) {
+  return {
+    getSkeletonManifest: async () => ({ fragmentKeys: ["skeleton"] }),
+    getSkeletonFragment: (
+      skeletonId: bigint,
+      _fragmentKey: string,
+      options: { signal: AbortSignal },
+    ) => getSkeleton(skeletonId, options),
+  };
+}
+
 if (!("WebGL2RenderingContext" in globalThis)) {
   Object.defineProperty(globalThis, "WebGL2RenderingContext", {
     value: new Proxy(class WebGL2RenderingContext {} as any, {
@@ -95,7 +111,7 @@ function makeQueuedSelectionLayer(pin = true) {
     optimisticEditing: commands.optimisticEditing,
     addNodesCommand: commands.addNodesCommand,
     deleteNodesCommand: commands.deleteNodesCommand,
-    getSkeleton: client.getSkeleton,
+    ...makeWholeSkeletonReads(client.getSkeleton),
   };
   const skeletonLayer = {
     source,
@@ -175,10 +191,8 @@ function makeEditableSpatialSkeletonSource(
     ),
     mergeSkeletonsCommand: makeCommand(SpatialSkeletonActions.mergeSkeletons),
     splitSkeletonsCommand: makeCommand(SpatialSkeletonActions.splitSkeletons),
-    listSkeletons: async () => [],
-    getSkeleton: async () => [],
-    fetchNodes: async () => [],
-    getSpatialIndexMetadata: async () => null,
+    getSkeletonManifest: async () => ({ fragmentKeys: [] }),
+    getSkeletonFragment: async () => [],
     ...(options.confidenceConfiguration !== true
       ? {}
       : {

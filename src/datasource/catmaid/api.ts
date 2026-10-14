@@ -19,9 +19,7 @@ import { fetchOkWithCredentials } from "#src/credentials_provider/http_request.j
 import type { CredentialsProvider } from "#src/credentials_provider/index.js";
 import type {
   SpatialSkeletonBounds,
-  SpatialSkeletonSpatialIndexLevel,
   SpatialSkeletonVector,
-  SpatiallyIndexedSkeletonMetadata,
   SpatiallyIndexedSkeletonNode,
   SpatiallyIndexedSkeletonNodeBase,
 } from "#src/skeleton/api.js";
@@ -34,6 +32,18 @@ import {
 import { bigintCompare } from "#src/util/bigint.js";
 import { HttpError } from "#src/util/http_request.js";
 import { parseUint64 } from "#src/util/json.js";
+
+export interface SpatialSkeletonSpatialIndexLevel {
+  chunkSize: SpatialSkeletonVector;
+  gridShape: readonly number[];
+  limit: number;
+}
+
+export interface SpatiallyIndexedSkeletonMetadata
+  extends SpatialSkeletonBounds {
+  spatial: readonly SpatialSkeletonSpatialIndexLevel[];
+  readonly readonly: boolean;
+}
 
 interface CatmaidStackInfo {
   dimension: { x: number; y: number; z: number };

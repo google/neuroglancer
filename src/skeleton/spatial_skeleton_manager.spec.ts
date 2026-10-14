@@ -37,6 +37,22 @@ import {
   type SpatialSkeletonOptimisticEditQueue,
 } from "#src/skeleton/spatial_skeleton_manager.js";
 
+function makeWholeSkeletonReads(
+  getSkeleton: (
+    skeletonId: bigint,
+    options: { signal: AbortSignal },
+  ) => unknown,
+) {
+  return {
+    getSkeletonManifest: async () => ({ fragmentKeys: ["skeleton"] }),
+    getSkeletonFragment: (
+      skeletonId: bigint,
+      _fragmentKey: string,
+      options: { signal: AbortSignal },
+    ) => getSkeleton(skeletonId, options),
+  };
+}
+
 function resolvedOptimisticExecution(
   value: boolean,
 ): SpatialSkeletonOptimisticEditExecution {
@@ -161,6 +177,41 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+function makeFragmentNode(
+  nodeId: bigint,
+  parentNodeId?: bigint,
+): SpatiallyIndexedSkeletonNode {
+  return {
+    nodeId,
+    segmentId: 7n,
+    position: new Float32Array([0, 0, 0]),
+    parentNodeId,
+  };
+}
+
+function makeFragmentedSkeletonLayer(
+  fragments: Record<string, SpatiallyIndexedSkeletonNode[] | Error>,
+  manifestReady: Promise<void> = Promise.resolve(),
+) {
+  const requestedFragmentKeys: string[] = [];
+  const layer = {
+    source: {
+      readonly: true,
+      async getSkeletonManifest() {
+        await manifestReady;
+        return { fragmentKeys: Object.keys(fragments) };
+      },
+      async getSkeletonFragment(_skeletonId: bigint, fragmentKey: string) {
+        requestedFragmentKeys.push(fragmentKey);
+        const fragment = fragments[fragmentKey];
+        if (fragment instanceof Error) throw fragment;
+        return fragment;
+      },
+    },
+  } as any;
+  return { layer, requestedFragmentKeys };
+}
+
 describe("skeleton/spatial_skeleton_manager", () => {
   it.each([false, true])(
     "prepares confirmed retirement atomically when the snapshot is already absent: %s",
@@ -264,14 +315,13 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const layer = {
       source: {
         readonly: false,
-        listSkeletons: async () => [],
-        getSkeleton: (id: bigint, options: { signal: AbortSignal }) => {
-          signals.set(id, options.signal);
-          // Deliberately ignore cancellation to exercise a late source result.
-          return (id === 17n ? retiredRead : unrelatedRead).promise;
-        },
-        fetchNodes: async () => [],
-        getSpatialIndexMetadata: async () => null,
+        ...makeWholeSkeletonReads(
+          (id: bigint, options: { signal: AbortSignal }) => {
+            signals.set(id, options.signal);
+            // Deliberately ignore cancellation to exercise a late source result.
+            return (id === 17n ? retiredRead : unrelatedRead).promise;
+          },
+        ),
       },
     } as any;
     const read = state.getFullSegmentNodes(layer, 17n, {
@@ -566,10 +616,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const skeletonLayer = {
       source: {
         readonly: false,
-        listSkeletons: async () => [],
-        getSkeleton,
-        fetchNodes: async () => [],
-        getSpatialIndexMetadata: async () => null,
+        ...makeWholeSkeletonReads(getSkeleton),
       },
     } as any;
 
@@ -774,10 +821,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const source = {
       ...makeEditableSourceCommands(),
       readonly: false,
-      listSkeletons: async () => [],
-      getSkeleton: async () => [],
-      fetchNodes: async () => [],
-      getSpatialIndexMetadata: async () => null,
+      getSkeletonManifest: async () => ({ fragmentKeys: [] }),
+      getSkeletonFragment: async () => [],
     };
 
     expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
@@ -788,10 +833,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
       ...makeEditableSourceCommands(),
       mergeSkeletonsCommand: undefined,
       readonly: false,
-      listSkeletons: async () => [],
-      getSkeleton: async () => [],
-      fetchNodes: async () => [],
-      getSpatialIndexMetadata: async () => null,
+      getSkeletonManifest: async () => ({ fragmentKeys: [] }),
+      getSkeletonFragment: async () => [],
     };
 
     expect(
@@ -805,10 +848,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const source = {
       ...commands,
       readonly: false,
-      listSkeletons: async () => [],
-      getSkeleton: async () => [],
-      fetchNodes: async () => [],
-      getSpatialIndexMetadata: async () => null,
+      getSkeletonManifest: async () => ({ fragmentKeys: [] }),
+      getSkeletonFragment: async () => [],
     };
 
     expect(
@@ -821,10 +862,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
       ...makeEditableSourceCommands(),
       moveNodesCommand: makeCommandFactory(SpatialSkeletonActions.addNodes),
       readonly: false,
-      listSkeletons: async () => [],
-      getSkeleton: async () => [],
-      fetchNodes: async () => [],
-      getSpatialIndexMetadata: async () => null,
+      getSkeletonManifest: async () => ({ fragmentKeys: [] }),
+      getSkeletonFragment: async () => [],
     };
 
     expect(
@@ -836,10 +875,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const source = {
       ...makeEditableSourceCommands(),
       readonly: false,
-      listSkeletons: async () => [],
-      getSkeleton: async () => [],
-      fetchNodes: async () => [],
-      getSpatialIndexMetadata: async () => null,
+      getSkeletonManifest: async () => ({ fragmentKeys: [] }),
+      getSkeletonFragment: async () => [],
     };
 
     expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
@@ -850,10 +887,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
       ...makeEditableSourceCommands(),
       rerootCommand: makeCommandFactory(SpatialSkeletonActions.reroot),
       readonly: false,
-      listSkeletons: async () => [],
-      getSkeleton: async () => [],
-      fetchNodes: async () => [],
-      getSpatialIndexMetadata: async () => null,
+      getSkeletonManifest: async () => ({ fragmentKeys: [] }),
+      getSkeletonFragment: async () => [],
     };
 
     expect(
@@ -886,10 +921,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
         values: [0, 50, 100],
       },
       readonly: false,
-      listSkeletons: async () => [],
-      getSkeleton: async () => [],
-      fetchNodes: async () => [],
-      getSpatialIndexMetadata: async () => null,
+      getSkeletonManifest: async () => ({ fragmentKeys: [] }),
+      getSkeletonFragment: async () => [],
     };
 
     expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
@@ -913,10 +946,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
         SpatialSkeletonActions.editNodeConfidence,
       ),
       readonly: false,
-      listSkeletons: async () => [],
-      getSkeleton: async () => [],
-      fetchNodes: async () => [],
-      getSpatialIndexMetadata: async () => null,
+      getSkeletonManifest: async () => ({ fragmentKeys: [] }),
+      getSkeletonFragment: async () => [],
     };
 
     expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
@@ -950,10 +981,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const source = {
       ...makeEditableSourceCommands(),
       readonly: true,
-      listSkeletons: async () => [],
-      getSkeleton: async () => [],
-      fetchNodes: async () => [],
-      getSpatialIndexMetadata: async () => null,
+      getSkeletonManifest: async () => ({ fragmentKeys: [] }),
+      getSkeletonFragment: async () => [],
     };
 
     expect(
@@ -978,10 +1007,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
   it("reads spatial skeleton source read-only state", () => {
     const source = {
       readonly: false,
-      listSkeletons: async () => [],
-      getSkeleton: async () => [],
-      fetchNodes: async () => [],
-      getSpatialIndexMetadata: async () => null,
+      getSkeletonManifest: async () => ({ fragmentKeys: [] }),
+      getSkeletonFragment: async () => [],
     };
 
     expect(isSpatiallyIndexedSkeletonSourceReadOnly({ source })).toBe(false);
@@ -1930,10 +1957,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const skeletonLayer = {
       source: {
         readonly: false,
-        listSkeletons: async () => [],
-        getSkeleton,
-        fetchNodes: async () => [],
-        getSpatialIndexMetadata: async () => null,
+        ...makeWholeSkeletonReads(getSkeleton),
       },
     } as any;
 
@@ -2083,15 +2107,13 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const skeletonLayer = {
       source: {
         readonly: false,
-        listSkeletons: async () => [],
-        getSkeleton,
-        fetchNodes: async () => [],
-        getSpatialIndexMetadata: async () => null,
+        ...makeWholeSkeletonReads(getSkeleton),
       },
     } as any;
     const pending = state.getFullSegmentNodes(skeletonLayer, 11n, {
       retainWhileInactive: true,
     });
+    await flushMicrotasks();
 
     state.replaceCachedSegmentSnapshots(
       [
@@ -2148,10 +2170,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const skeletonLayer = {
       source: {
         readonly: false,
-        listSkeletons: async () => [],
-        getSkeleton,
-        fetchNodes: async () => [],
-        getSpatialIndexMetadata: async () => null,
+        ...makeWholeSkeletonReads(getSkeleton),
       },
     } as any;
     const outcome = state
@@ -2163,6 +2182,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
         () => undefined,
         (error: unknown) => error,
       );
+    await flushMicrotasks();
 
     expect(receivedSignal?.aborted).toBe(false);
     expect(state.releaseFullSegmentNodeFetchOwner(owner)).toBe(true);
@@ -2191,10 +2211,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const skeletonLayer = {
       source: {
         readonly: false,
-        listSkeletons: async () => [],
-        getSkeleton,
-        fetchNodes: async () => [],
-        getSpatialIndexMetadata: async () => null,
+        ...makeWholeSkeletonReads(getSkeleton),
       },
     } as any;
     const firstOutcome = state
@@ -2207,6 +2224,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
         requestOwner: secondOwner,
       })
       .catch((error) => error);
+    await flushMicrotasks();
 
     expect(getSkeleton).toHaveBeenCalledTimes(1);
     expect(state.releaseFullSegmentNodeFetchOwner(firstOwner)).toBe(true);
@@ -2239,10 +2257,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const skeletonLayer = {
       source: {
         readonly: false,
-        listSkeletons: async () => [],
-        getSkeleton,
-        fetchNodes: async () => [],
-        getSpatialIndexMetadata: async () => null,
+        ...makeWholeSkeletonReads(getSkeleton),
       },
     } as any;
     const commandFetch = state.getFullSegmentNodes(skeletonLayer, 11n, {
@@ -2250,6 +2265,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       retainWhileInactive: true,
     });
     const visualFetch = state.getFullSegmentNodes(skeletonLayer, 11n);
+    await flushMicrotasks();
 
     expect(getSkeleton).toHaveBeenCalledTimes(1);
     expect(state.releaseFullSegmentNodeFetchOwner(owner)).toBe(true);
@@ -2285,10 +2301,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
           {
             source: {
               readonly: false,
-              listSkeletons: async () => [],
-              getSkeleton,
-              fetchNodes: async () => [],
-              getSpatialIndexMetadata: async () => null,
+              ...makeWholeSkeletonReads(getSkeleton),
             },
           } as any,
           11n,
@@ -2297,6 +2310,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
           () => undefined,
           (error: unknown) => error,
         );
+      await flushMicrotasks();
 
       expect(receivedSignal?.aborted).toBe(false);
       await vi.advanceTimersByTimeAsync(120_000);
@@ -2317,10 +2331,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const skeletonLayer = {
       source: {
         readonly: false,
-        listSkeletons: async () => [],
-        getSkeleton,
-        fetchNodes: async () => [],
-        getSpatialIndexMetadata: async () => null,
+        ...makeWholeSkeletonReads(getSkeleton),
       },
     } as any;
 
@@ -2353,10 +2364,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
         {
           source: {
             readonly: false,
-            listSkeletons: async () => [],
-            getSkeleton,
-            fetchNodes: async () => [],
-            getSpatialIndexMetadata: async () => null,
+            ...makeWholeSkeletonReads(getSkeleton),
           },
         } as any,
         11n,
@@ -2371,10 +2379,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
           {
             source: {
               readonly: false,
-              listSkeletons: async () => [],
-              getSkeleton,
-              fetchNodes: async () => [],
-              getSpatialIndexMetadata: async () => null,
+              ...makeWholeSkeletonReads(getSkeleton),
             },
           } as any,
           11n,
@@ -2397,15 +2402,13 @@ describe("skeleton/spatial_skeleton_manager", () => {
       {
         source: {
           readonly: false,
-          listSkeletons: async () => [],
-          getSkeleton,
-          fetchNodes: async () => [],
-          getSpatialIndexMetadata: async () => null,
+          ...makeWholeSkeletonReads(getSkeleton),
         },
       } as any,
       11n,
       { retainWhileInactive: true },
     );
+    await flushMicrotasks();
 
     expect(state.clearInspectedSkeletonCache()).toBe(true);
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
@@ -2431,14 +2434,12 @@ describe("skeleton/spatial_skeleton_manager", () => {
       {
         source: {
           readonly: false,
-          listSkeletons: async () => [],
-          getSkeleton,
-          fetchNodes: async () => [],
-          getSpatialIndexMetadata: async () => null,
+          ...makeWholeSkeletonReads(getSkeleton),
         },
       } as any,
       11n,
     );
+    await flushMicrotasks();
 
     expect(receivedSignal?.aborted).toBe(false);
     expect(state.clearInspectedSkeletonCache()).toBe(true);
@@ -2467,14 +2468,12 @@ describe("skeleton/spatial_skeleton_manager", () => {
       {
         source: {
           readonly: false,
-          listSkeletons: async () => [],
-          getSkeleton,
-          fetchNodes: async () => [],
-          getSpatialIndexMetadata: async () => null,
+          ...makeWholeSkeletonReads(getSkeleton),
         },
       } as any,
       11n,
     );
+    await flushMicrotasks();
 
     expect(receivedSignal?.aborted).toBe(false);
     expect(state.evictInactiveSegmentNodes([])).toBe(false);
@@ -2543,10 +2542,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const skeletonLayer = {
       source: {
         readonly: false,
-        listSkeletons: async () => [],
-        getSkeleton,
-        fetchNodes: async () => [],
-        getSpatialIndexMetadata: async () => null,
+        ...makeWholeSkeletonReads(getSkeleton),
       },
     } as any;
 
@@ -2554,6 +2550,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const commandFetch = state.getFullSegmentNodes(skeletonLayer, 11n, {
       retainWhileInactive: true,
     });
+    await flushMicrotasks();
 
     expect(getSkeleton).toHaveBeenCalledTimes(1);
     expect(state.evictInactiveSegmentNodes([])).toBe(false);
@@ -2594,10 +2591,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       {
         source: {
           readonly: false,
-          listSkeletons: async () => [],
-          getSkeleton,
-          fetchNodes: async () => [],
-          getSpatialIndexMetadata: async () => null,
+          ...makeWholeSkeletonReads(getSkeleton),
         },
       } as any,
       11n,
@@ -2606,6 +2600,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     state.nodeDataVersion.changed.add(() => {
       notifications += 1;
     });
+    await flushMicrotasks();
 
     expect(receivedSignal?.aborted).toBe(false);
     expect(
@@ -2646,10 +2641,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const skeletonLayer = {
       source: {
         readonly: false,
-        listSkeletons: async () => [],
-        getSkeleton,
-        fetchNodes: async () => [],
-        getSpatialIndexMetadata: async () => null,
+        ...makeWholeSkeletonReads(getSkeleton),
       },
     } as any;
     let notifications = 0;
@@ -2698,10 +2690,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
         {
           source: {
             readonly: false,
-            listSkeletons: async () => [],
-            getSkeleton,
-            fetchNodes: async () => [],
-            getSpatialIndexMetadata: async () => null,
+            ...makeWholeSkeletonReads(getSkeleton),
           },
         } as any,
         11n,
@@ -2772,10 +2761,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const skeletonLayer = {
       source: {
         readonly: false,
-        listSkeletons: async () => [],
-        getSkeleton,
-        fetchNodes: async () => [],
-        getSpatialIndexMetadata: async () => null,
+        ...makeWholeSkeletonReads(getSkeleton),
       },
       ...(itemLimit === undefined
         ? {}
@@ -2797,6 +2783,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const pending = [11n, 12n, 13n, 14n].map((segmentId) =>
       state.getFullSegmentNodes(skeletonLayer, segmentId),
     );
+    await flushMicrotasks();
 
     expect(getSkeleton).toHaveBeenCalledTimes(2);
     resolvers[0]([]);
@@ -2823,6 +2810,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
         requestOwner: {},
       })
       .catch(() => undefined);
+    await flushMicrotasks();
 
     expect(getSkeleton).toHaveBeenCalledTimes(1);
     resolvers[0]([]);
@@ -2846,6 +2834,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       })
       .catch(() => undefined);
     state.releaseFullSegmentNodeFetchOwner(requestOwner);
+    await flushMicrotasks();
 
     resolvers[0]([]);
     await first;
@@ -2863,10 +2852,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       const skeletonLayer = {
         source: {
           readonly: false,
-          listSkeletons: async () => [],
-          getSkeleton,
-          fetchNodes: async () => [],
-          getSpatialIndexMetadata: async () => null,
+          ...makeWholeSkeletonReads(getSkeleton),
         },
         chunkManager: {
           chunkQueueManager: {
@@ -2878,6 +2864,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
         .getFullSegmentNodes(skeletonLayer, 11n)
         .catch((error) => error);
       const second = state.getFullSegmentNodes(skeletonLayer, 12n);
+      await flushMicrotasks();
 
       expect(getSkeleton).toHaveBeenCalledTimes(1);
       await vi.advanceTimersByTimeAsync(120_000);
@@ -2891,7 +2878,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     }
   });
 
-  it("caps concurrent full segment fetches when no chunk manager is available", () => {
+  it("caps concurrent full segment fetches when no chunk manager is available", async () => {
     const state = new SpatialSkeletonState();
     const { skeletonLayer, getSkeleton } = makeLimiterTestLayer();
 
@@ -2900,6 +2887,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
         .getFullSegmentNodes(skeletonLayer, BigInt(segmentId))
         .catch(() => undefined);
     }
+    await flushMicrotasks();
 
     expect(getSkeleton).toHaveBeenCalledTimes(8);
   });
@@ -2910,6 +2898,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
 
     const first = state.getFullSegmentNodes(skeletonLayer, 11n);
     const queued = state.getFullSegmentNodes(skeletonLayer, 12n);
+    await flushMicrotasks();
     expect(getSkeleton).toHaveBeenCalledTimes(1);
 
     expect(state.evictInactiveSegmentNodes([11n])).toBe(false);
@@ -2918,5 +2907,85 @@ describe("skeleton/spatial_skeleton_manager", () => {
     resolvers[0]([]);
     await first;
     expect(getSkeleton).toHaveBeenCalledTimes(1);
+  });
+
+  describe("full skeleton read from a manifest", () => {
+    it("returns the nodes of every fragment that the manifest lists", async () => {
+      const state = new SpatialSkeletonState();
+      const { layer } = makeFragmentedSkeletonLayer({
+        "0.0.0": [makeFragmentNode(1n), makeFragmentNode(2n, 1n)],
+        "0.0.1": [makeFragmentNode(3n, 2n)],
+      });
+
+      const nodes = await state.getFullSegmentNodes(layer, 7n);
+
+      expect(nodes.map((node) => node.nodeId)).toEqual([1n, 2n, 3n]);
+      expect(nodes[2].parentNodeId).toBe(2n);
+    });
+
+    it("fails the whole read when one fragment fails", async () => {
+      const state = new SpatialSkeletonState();
+      const { layer } = makeFragmentedSkeletonLayer({
+        "0.0.0": [makeFragmentNode(1n)],
+        "0.0.1": new Error("fragment missing"),
+      });
+
+      await expect(state.getFullSegmentNodes(layer, 7n)).rejects.toThrow(
+        "fragment missing",
+      );
+    });
+
+    it("does not request the next fragment after one fails", async () => {
+      const state = new SpatialSkeletonState();
+      const { layer, requestedFragmentKeys } = makeFragmentedSkeletonLayer({
+        "0.0.0": new Error("fragment missing"),
+        "0.0.1": [makeFragmentNode(2n)],
+      });
+
+      await expect(state.getFullSegmentNodes(layer, 7n)).rejects.toThrow(
+        "fragment missing",
+      );
+      expect(requestedFragmentKeys).toEqual(["0.0.0"]);
+    });
+
+    it("requests no fragment once the read is aborted", async () => {
+      const state = new SpatialSkeletonState();
+      const manifestReady = deferred<void>();
+      const { layer, requestedFragmentKeys } = makeFragmentedSkeletonLayer(
+        { "0.0.0": [makeFragmentNode(1n)] },
+        manifestReady.promise,
+      );
+      const read = state.getFullSegmentNodes(layer, 7n);
+      const aborted = expect(read).rejects.toMatchObject({
+        name: "AbortError",
+      });
+      await flushMicrotasks();
+
+      state.clearInspectedSkeletonCache();
+      manifestReady.resolve();
+      await aborted;
+      await flushMicrotasks();
+
+      expect(requestedFragmentKeys).toEqual([]);
+    });
+
+    it("returns each node once when two fragments both contain it", async () => {
+      const state = new SpatialSkeletonState();
+      const { layer } = makeFragmentedSkeletonLayer({
+        "0.0.0": [makeFragmentNode(1n), makeFragmentNode(2n, 1n)],
+        "0.0.1": [makeFragmentNode(2n, 1n), makeFragmentNode(3n, 2n)],
+      });
+
+      const nodes = await state.getFullSegmentNodes(layer, 7n);
+
+      expect(nodes.map((node) => node.nodeId)).toEqual([1n, 2n, 3n]);
+    });
+
+    it("returns no nodes for a skeleton the source does not have", async () => {
+      const state = new SpatialSkeletonState();
+      const { layer } = makeFragmentedSkeletonLayer({});
+
+      expect(await state.getFullSegmentNodes(layer, 7n)).toEqual([]);
+    });
   });
 });

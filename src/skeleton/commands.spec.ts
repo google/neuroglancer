@@ -61,6 +61,22 @@ import { SpatialSkeletonOptimisticAuthorityNotificationController } from "#src/u
 import { bigintCompare } from "#src/util/bigint.js";
 import { HttpError } from "#src/util/http_request.js";
 
+function makeWholeSkeletonReads(
+  getSkeleton: (
+    skeletonId: bigint,
+    options: { signal: AbortSignal },
+  ) => unknown,
+) {
+  return {
+    getSkeletonManifest: async () => ({ fragmentKeys: ["skeleton"] }),
+    getSkeletonFragment: (
+      skeletonId: bigint,
+      _fragmentKey: string,
+      options: { signal: AbortSignal },
+    ) => getSkeleton(skeletonId, options),
+  };
+}
+
 function cloneNode(
   node: SpatiallyIndexedSkeletonNode,
 ): SpatiallyIndexedSkeletonNode {
@@ -199,10 +215,8 @@ function makeEditableSkeletonSource(overrides: Record<string, unknown> = {}) {
     editNodeConfidenceCommand: commands.editNodeConfidenceCommand,
     mergeSkeletonsCommand: commands.mergeSkeletonsCommand,
     splitSkeletonsCommand: commands.splitSkeletonsCommand,
-    listSkeletons: vi.fn(),
-    getSkeleton: vi.fn(),
-    fetchNodes: vi.fn(),
-    getSpatialIndexMetadata: vi.fn(),
+    getSkeletonManifest: vi.fn(),
+    getSkeletonFragment: vi.fn(),
     ...sourceOverrides,
   };
 }
@@ -397,7 +411,7 @@ function makeOptimisticAddNodeTestLayer(options: {
     mergeSkeletonsCommand: commands.mergeSkeletonsCommand,
     splitSkeletonsCommand: commands.splitSkeletonsCommand,
     optimisticEditing: commands.optimisticEditing,
-    getSkeleton,
+    ...makeWholeSkeletonReads(getSkeleton),
   };
   const invalidateWholeSourceCache = vi.fn();
   const chunkSource = { invalidateCache: invalidateWholeSourceCache };
