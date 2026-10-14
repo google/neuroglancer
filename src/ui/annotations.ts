@@ -145,6 +145,7 @@ import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { arraysEqual, type ArraySpliceOp } from "#src/util/array.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import { packColor } from "#src/util/color.js";
+import { DataType } from "#src/util/data_type.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { disposableOnce, RefCounted } from "#src/util/disposable.js";
 import { removeChildren } from "#src/util/dom.js";
@@ -485,7 +486,8 @@ export class AnnotationLayerView extends AccordionTab {
   private queryStatistics = createPropertyListStatisticsShell();
   private queryStatisticsElement = this.queryStatistics.count;
   private categoricalSummaryContainer = document.createElement("div");
-  private categoricalDetailsOpen = false;
+  private typeSummaryContainer = document.createElement("div");
+  private propertyDetailsOpen = new Map<string, boolean>();
   private numericalSummaryContainer = document.createElement("div");
   private derivedWarningElement = document.createElement("div");
   private loadedNoticeElement = document.createElement("div");
@@ -527,7 +529,11 @@ export class AnnotationLayerView extends AccordionTab {
   }
 
   private updateListOverflow = () => {
-    const { element } = this.virtualList;
+    const { element, scrollContent } = this.virtualList;
+    scrollContent.style.minWidth = `${Math.max(
+      element.clientWidth,
+      this.headerRow.scrollWidth,
+    )}px`;
     this.headerRow.style.transform = `translateX(${-element.scrollLeft}px)`;
     this.listContainer.dataset.overflowLeft = String(element.scrollLeft > 1);
     this.listContainer.dataset.overflowRight = String(
@@ -740,6 +746,10 @@ export class AnnotationLayerView extends AccordionTab {
     this.queryStatisticsElement.classList.add(
       "neuroglancer-property-list-status",
     );
+    const annotationHeader = this.sections
+      .find((section) => section.jsonKey === ANNOTATION_SECTION_JSON_KEY)!
+      .header.querySelector(".neuroglancer-accordion-header-text")!;
+    annotationHeader.append(" ", this.queryStatisticsElement);
     this.queryStatistics.content.classList.add(
       "neuroglancer-annotation-filter-results",
     );
@@ -754,15 +764,18 @@ export class AnnotationLayerView extends AccordionTab {
       "neuroglancer-annotation-loaded-notice",
     );
     this.loadedNoticeElement.style.display = "none";
+    const propertiesHeader = document.createElement("div");
+    propertiesHeader.classList.add("neuroglancer-annotation-properties-header");
+    propertiesHeader.textContent = "Properties";
     this.queryStatistics.content.append(
+      propertiesHeader,
+      this.typeSummaryContainer,
       this.numericalSummaryContainer,
       this.categoricalSummaryContainer,
       this.derivedWarningElement,
       this.loadedNoticeElement,
     );
     this.appendChild(this.queryStatistics.root, FILTER_SECTION_JSON_KEY);
-    this.appendChild(this.queryStatistics.separator, FILTER_SECTION_JSON_KEY);
-    this.appendChild(this.queryStatisticsElement, FILTER_SECTION_JSON_KEY);
 
     const debouncedQuery = this.registerCancellable(
       debounce(() => {
@@ -782,6 +795,7 @@ export class AnnotationLayerView extends AccordionTab {
 
     const { virtualList } = this;
     virtualList.element.classList.add("neuroglancer-annotation-list");
+    virtualList.scrollContent.style.width = "100%";
     virtualList.header.style.display = "none";
     this.listHeader.classList.add(
       "neuroglancer-annotation-list-header-container",
@@ -822,6 +836,7 @@ export class AnnotationLayerView extends AccordionTab {
     const overflowObserver = new ResizeObserver(this.updateListOverflow);
     overflowObserver.observe(virtualList.element);
     overflowObserver.observe(virtualList.scrollContent);
+    overflowObserver.observe(this.headerRow);
     this.registerDisposer(() => overflowObserver.disconnect());
     this.virtualList.element.addEventListener("mouseleave", () => {
       this.displayState.hoverState.value = undefined;
@@ -1286,6 +1301,16 @@ export class AnnotationLayerView extends AccordionTab {
     }[] = [
       {
         group: "Annotation",
+        label: "Descriptions",
+        visible: () => this.layer.annotationListDescriptionsVisible.value,
+        toggle: () => {
+          this.layer.annotationListDescriptionsVisible.value =
+            !this.layer.annotationListDescriptionsVisible.value;
+          this.forceUpdateView();
+        },
+      },
+      {
+        group: "Annotation",
         label: "Type",
         visible: () => this.layer.annotationListTypeColumnVisible.value,
         toggle: () => this.toggleTypeColumn(),
@@ -1507,8 +1532,14 @@ export class AnnotationLayerView extends AccordionTab {
       >,
       this.setNumericalSummaryQuery,
       {
-        propertyLabelPosition: "above",
         showColumnToggle: false,
+        showSortControl: false,
+        expandableProperties: true,
+        retainUnavailableProperties: true,
+        isPropertyExpanded: (id) => this.propertyDetailsOpen.get(id) ?? false,
+        onPropertyToggle: (id, open) => {
+          this.propertyDetailsOpen.set(id, open);
+        },
       },
     );
     this.numericalPropertiesSummary = summary;
@@ -1533,6 +1564,7 @@ export class AnnotationLayerView extends AccordionTab {
 
   private updateStatisticsVisibility() {
     const visible = [
+      this.typeSummaryContainer,
       this.categoricalSummaryContainer,
       this.numericalSummaryContainer,
       this.derivedWarningElement,
@@ -1676,18 +1708,26 @@ export class AnnotationLayerView extends AccordionTab {
     const { queryStatisticsElement } = this;
     removeChildren(queryStatisticsElement);
     const schema = this.annotationQuerySchema;
-    const hasProps = schema.enumProps.length > 0 || schema.boolProps.length > 0;
-    if (result.count < result.total) {
-      queryStatisticsElement.textContent = `${result.count} / ${result.total} annotations`;
-    } else {
-      queryStatisticsElement.textContent = `${result.total} annotations`;
-    }
-    if (!hasProps) {
-      this.updateStatisticsVisibility();
-      return;
-    }
+    queryStatisticsElement.textContent = `(${result.count}/${result.total})`;
     const items = this.annotationQueryItems;
     const indices = result.indices!;
+    const availablePropertyIds = new Set<string>();
+    for (const index of indices) {
+      for (const [id, value] of items[index].values) {
+        if (typeof value === "boolean" || !Number.isNaN(value)) {
+          availablePropertyIds.add(id);
+        }
+      }
+    }
+    removeChildren(this.typeSummaryContainer);
+    const numericalList = this.numericalPropertiesSummary?.listElement;
+    if (numericalList !== undefined) {
+      for (const summary of this.numericalPropertiesSummary!.properties) {
+        const available =
+          summary.applicable && availablePropertyIds.has(summary.property.id);
+        summary.element.dataset.hidden = String(!available);
+      }
+    }
     const groups: IncludeExcludeChipGroup[] = [];
     const lastQuery = this.annotationQueryResult.value?.query as
       | AnnotationFilterQuery
@@ -1710,7 +1750,7 @@ export class AnnotationLayerView extends AccordionTab {
         const isConstrained =
           (constraint?.include.includes(val) ?? false) ||
           (constraint?.exclude.includes(val) ?? false);
-        if (count === 0 && !isConstrained) continue;
+        if (count === 0 && !isConstrained && counts.size !== 0) continue;
         chips.push({
           key: `${fieldId}=${val}`,
           label,
@@ -1762,6 +1802,19 @@ export class AnnotationLayerView extends AccordionTab {
       groups.push({
         key: prop.identifier,
         label: prop.identifier,
+        description: prop.description,
+        typeLabel:
+          prop.dataType === undefined
+            ? `Enum(${new Set(prop.enumValues).size})`
+            : `${DataType[prop.dataType].toLowerCase()} Enum(${new Set(prop.enumValues).size})`,
+        filtered:
+          constraint !== undefined &&
+          (constraint.include.length !== 0 || constraint.exclude.length !== 0),
+        hidden: counts.size === 0,
+        open: this.propertyDetailsOpen.get(prop.identifier),
+        onToggle: (open) => {
+          this.propertyDetailsOpen.set(prop.identifier, open);
+        },
         chips,
       });
     }
@@ -1812,6 +1865,11 @@ export class AnnotationLayerView extends AccordionTab {
       groups.push({
         key: fieldId,
         label: fieldId,
+        description: prop.description,
+        typeLabel: "Boolean",
+        boolean: true,
+        filtered: constraint?.value !== undefined,
+        hidden: !availablePropertyIds.has(fieldId),
         chips,
       });
     }
@@ -1821,17 +1879,22 @@ export class AnnotationLayerView extends AccordionTab {
     const details = renderCategoricalPropertiesSummary({
       groups,
       propertyCount: numCategorical,
-      open: this.categoricalDetailsOpen,
-      onToggle: (open) => {
-        this.categoricalDetailsOpen = open;
-      },
     });
     if (details !== undefined) {
-      categoricalSummaryContainer.appendChild(details);
+      for (const property of Array.from(details.children)) {
+        const element = property as HTMLElement;
+        const container =
+          element.dataset.propertyId === "type"
+            ? this.typeSummaryContainer
+            : categoricalSummaryContainer;
+        container.appendChild(element);
+      }
       categoricalSummaryContainer.style.display = "";
     } else {
       categoricalSummaryContainer.style.display = "none";
     }
+    this.typeSummaryContainer.style.display =
+      this.typeSummaryContainer.childElementCount === 0 ? "none" : "";
     this.updateStatisticsVisibility();
   }
 
@@ -1976,7 +2039,7 @@ export class AnnotationLayerView extends AccordionTab {
       if (this.numDimColumns + shownColumns.length === 0) {
         gridTemplate += " [content] 0";
       }
-      gridTemplate += " [delete] 2ch";
+      gridTemplate += " [delete] minmax(max-content, 2ch)";
       this.gridTemplate = gridTemplate;
       headerRow.style.gridTemplateColumns = gridTemplate;
       this.prevCoordinateSpaceGeneration = this.curCoordinateSpaceGeneration;
@@ -3249,6 +3312,7 @@ export function UserLayerWithAnnotationsMixin<
     annotationListShownColumns = new WatchableValue<string[]>([]);
     annotationListHiddenCoordinates = new WatchableValue<string[]>([]);
     annotationListTypeColumnVisible = new TrackableBoolean(true);
+    annotationListDescriptionsVisible = new TrackableBoolean(true);
     annotationListSortState = new WatchableValue<{
       propertyId: string;
       order: "asc" | "desc";
@@ -3280,6 +3344,9 @@ export function UserLayerWithAnnotationsMixin<
         this.specificationChanged.dispatch,
       );
       this.annotationListTypeColumnVisible.changed.add(
+        this.specificationChanged.dispatch,
+      );
+      this.annotationListDescriptionsVisible.changed.add(
         this.specificationChanged.dispatch,
       );
       this.annotationListSortState.changed.add(
@@ -4337,7 +4404,7 @@ export function makeAnnotationListElement(
       element.appendChild(propCell);
     }
   }
-  if (annotation.description) {
+  if (annotation.description && layer.annotationListDescriptionsVisible.value) {
     ++numRows;
     const description = document.createElement("div");
     description.classList.add("neuroglancer-annotation-description");

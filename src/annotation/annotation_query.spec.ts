@@ -116,6 +116,7 @@ describe("buildAnnotationQuerySchema", () => {
   it("sets enum labels", () => {
     const schema = makeSchema();
     const statusProp = schema.enumProps[0];
+    expect(statusProp.dataType).toBe(DataType.UINT8);
     expect(statusProp.enumLabels).toEqual(["pending", "active", "done"]);
     expect(statusProp.enumValues).toEqual([0, 1, 2]);
   });
