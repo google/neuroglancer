@@ -17,11 +17,11 @@
 import { describe, expect, it } from "vitest";
 
 import { packCatmaidSkeletonNodes } from "#src/datasource/catmaid/skeleton_packing.js";
-import type { SpatiallyIndexedSkeletonNodeBase } from "#src/skeleton/api.js";
+import type { SkeletonNodeBase } from "#src/skeleton/api.js";
 
 describe("datasource/catmaid/skeleton_packing", () => {
   it("packs vertex, segment, index, and pick-node data", () => {
-    const nodes: SpatiallyIndexedSkeletonNodeBase[] = [
+    const nodes: SkeletonNodeBase[] = [
       {
         nodeId: 1n,
         parentNodeId: undefined,
@@ -53,7 +53,7 @@ describe("datasource/catmaid/skeleton_packing", () => {
   });
 
   it("keeps skeleton and node IDs above 2^32 exact in a packed chunk", () => {
-    const nodes: SpatiallyIndexedSkeletonNodeBase[] = [
+    const nodes: SkeletonNodeBase[] = [
       {
         nodeId: 2n ** 53n + 1n,
         position: new Float32Array([1, 2, 3]),

@@ -108,7 +108,7 @@ export class RealSkeletonPage extends SkeletonEditPage {
         window as unknown as { viewer: Viewer }
       ).viewer.layerManager.getLayerByName("Skeletons")!
         .layer as SegmentationUserLayer;
-      const selected = layer.selectedSpatialSkeletonNodeInfo.value;
+      const selected = layer.selectedSkeletonNodeInfo.value;
       return (
         selected && { id: selected.nodeId, skeletonId: selected.segmentId }
       );

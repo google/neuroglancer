@@ -53,8 +53,8 @@ import type {
   SpatialSkeletonConfidenceConfiguration,
   SpatialSkeletonGridCellIndex,
   SpatiallyIndexedSkeletonMetadata,
-  SpatiallyIndexedSkeletonNode,
-  SpatiallyIndexedSkeletonNodeBase,
+  SkeletonNode,
+  SkeletonNodeBase,
 } from "#src/skeleton/api.js";
 import { SkeletonDataSourceState } from "#src/skeleton/find_path.js";
 import {
@@ -161,7 +161,7 @@ export class CatmaidSpatiallyIndexedSkeletonSource extends WithParameters(
   getSkeleton(
     skeletonId: bigint,
     options?: { signal?: AbortSignal },
-  ): Promise<SpatiallyIndexedSkeletonNode[]> {
+  ): Promise<SkeletonNode[]> {
     return this.client.getSkeleton(skeletonId, options);
   }
 
@@ -178,7 +178,7 @@ export class CatmaidSpatiallyIndexedSkeletonSource extends WithParameters(
     options: {
       signal?: AbortSignal;
     } = {},
-  ): Promise<SpatiallyIndexedSkeletonNodeBase[]> {
+  ): Promise<SkeletonNodeBase[]> {
     const bounds = getCatmaidSpatialSkeletonGridCellBounds(
       cellIndex.cell,
       this.spec.chunkDataSize,

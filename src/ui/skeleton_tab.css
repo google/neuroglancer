@@ -119,6 +119,10 @@
   white-space: nowrap;
 }
 
+.neuroglancer-skeleton-filter-row .neuroglancer-tool-button[hidden] {
+  display: none;
+}
+
 .neuroglancer-skeleton-navigation-bar {
   display: flex;
   align-items: center;

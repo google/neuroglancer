@@ -21,34 +21,34 @@ import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import {
   getNodeIdFromLayerSelectionState,
   getSegmentIdFromLayerSelectionValue,
-  hasSpatialSkeletonNodeSelection,
-  SpatialSkeletonHoverState,
+  hasSkeletonNodeSelection,
+  SkeletonHoverState,
 } from "#src/layer/segmentation/selection.js";
 
 describe("layer/segmentation/selection", () => {
   it("recognizes field-based spatial skeleton node selections", () => {
     expect(
-      hasSpatialSkeletonNodeSelection({
+      hasSkeletonNodeSelection({
         nodeId: "17",
         value: 9n,
       }),
     ).toBe(true);
     expect(
-      hasSpatialSkeletonNodeSelection({
+      hasSkeletonNodeSelection({
         nodeId: "18446744073709551615",
       }),
     ).toBe(true);
     expect(
-      hasSpatialSkeletonNodeSelection({
+      hasSkeletonNodeSelection({
         nodeId: 17n,
       }),
     ).toBe(false);
     expect(
-      hasSpatialSkeletonNodeSelection({
+      hasSkeletonNodeSelection({
         nodeId: 0n,
       }),
     ).toBe(false);
-    expect(hasSpatialSkeletonNodeSelection({})).toBe(false);
+    expect(hasSkeletonNodeSelection({})).toBe(false);
   });
 
   it("extracts node and segment ids from a layer selection state", () => {
@@ -107,7 +107,7 @@ describe("layer/segmentation/selection", () => {
         return mouseState;
       },
     };
-    const hoverState = new SpatialSkeletonHoverState();
+    const hoverState = new SkeletonHoverState();
     hoverState.bindTo(
       layerSelectedValues as LayerSelectedValues,
       layer as SegmentationUserLayer,

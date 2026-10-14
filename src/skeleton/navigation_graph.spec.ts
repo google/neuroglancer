@@ -16,9 +16,9 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type { SkeletonNode } from "#src/skeleton/api.js";
 import {
-  buildSpatiallyIndexedSkeletonNavigationGraph,
+  buildSkeletonNavigationGraph,
   getBranchEnd,
   getBranchStart,
   getChildNode,
@@ -37,7 +37,7 @@ function makeNode(
     description?: string;
     isTrueEnd?: boolean;
   } = {},
-): SpatiallyIndexedSkeletonNode {
+): SkeletonNode {
   return {
     nodeId,
     segmentId: 42n,
@@ -53,7 +53,7 @@ function makeNode(
 }
 
 describe("skeleton/navigation", () => {
-  const graph = buildSpatiallyIndexedSkeletonNavigationGraph([
+  const graph = buildSkeletonNavigationGraph([
     makeNode(1n, undefined),
     makeNode(2n, 1n),
     makeNode(3n, 2n),
@@ -76,7 +76,7 @@ describe("skeleton/navigation", () => {
   });
 
   it("walks a degenerate, unbranched skeleton to the root", () => {
-    const chainGraph = buildSpatiallyIndexedSkeletonNavigationGraph([
+    const chainGraph = buildSkeletonNavigationGraph([
       makeNode(1n, undefined),
       makeNode(2n, 1n),
       makeNode(3n, 2n),
@@ -90,7 +90,7 @@ describe("skeleton/navigation", () => {
   });
 
   it("walks past a branch point to the previous branch point or root", () => {
-    const nestedForkGraph = buildSpatiallyIndexedSkeletonNavigationGraph([
+    const nestedForkGraph = buildSkeletonNavigationGraph([
       makeNode(1n, undefined),
       makeNode(2n, 1n),
       makeNode(3n, 2n),
@@ -106,7 +106,7 @@ describe("skeleton/navigation", () => {
   });
 
   it("prefers a downstream branch over a leaf for branch-end navigation", () => {
-    const preferenceGraph = buildSpatiallyIndexedSkeletonNavigationGraph([
+    const preferenceGraph = buildSkeletonNavigationGraph([
       makeNode(1n, undefined),
       makeNode(2n, 1n),
       makeNode(3n, 1n),
@@ -121,7 +121,7 @@ describe("skeleton/navigation", () => {
   });
 
   it("randomly resolves ties between equally preferred branch-end candidates", () => {
-    const tiedGraph = buildSpatiallyIndexedSkeletonNavigationGraph([
+    const tiedGraph = buildSkeletonNavigationGraph([
       makeNode(1n, undefined),
       makeNode(2n, 1n),
       makeNode(3n, 2n),
@@ -136,7 +136,7 @@ describe("skeleton/navigation", () => {
   });
 
   it("orders flat-list rows in leaf-first pre-order", () => {
-    const listGraph = buildSpatiallyIndexedSkeletonNavigationGraph([
+    const listGraph = buildSkeletonNavigationGraph([
       makeNode(1n, undefined),
       makeNode(2n, 1n),
       makeNode(3n, 1n),
@@ -162,7 +162,7 @@ describe("skeleton/navigation", () => {
   });
 
   it("orders flat-list rows by collapsed branches in leaf-first pre-order", () => {
-    const listGraph = buildSpatiallyIndexedSkeletonNavigationGraph([
+    const listGraph = buildSkeletonNavigationGraph([
       makeNode(1n, undefined),
       makeNode(2n, 1n),
       makeNode(3n, 2n),
@@ -180,7 +180,7 @@ describe("skeleton/navigation", () => {
   });
 
   it("keeps a branch adjacent to its own leaf-first descendants", () => {
-    const listGraph = buildSpatiallyIndexedSkeletonNavigationGraph([
+    const listGraph = buildSkeletonNavigationGraph([
       makeNode(1n, undefined),
       makeNode(2n, 1n),
       makeNode(3n, 1n),
@@ -237,7 +237,7 @@ describe("skeleton/navigation", () => {
     });
 
     it("returns undefined for missing or disconnected nodes", () => {
-      const disconnectedGraph = buildSpatiallyIndexedSkeletonNavigationGraph([
+      const disconnectedGraph = buildSkeletonNavigationGraph([
         makeNode(1n, undefined),
         makeNode(2n, 1n),
         makeNode(3n, undefined),
@@ -250,7 +250,7 @@ describe("skeleton/navigation", () => {
     });
 
     it("is cycle-safe and chooses deterministic shortest paths", () => {
-      const cycleGraph = buildSpatiallyIndexedSkeletonNavigationGraph([
+      const cycleGraph = buildSkeletonNavigationGraph([
         makeNode(1n, 4n),
         makeNode(2n, 1n),
         makeNode(3n, 2n),
@@ -273,7 +273,7 @@ describe("skeleton/navigation", () => {
 
     it("handles long chains iteratively", () => {
       const nodeCount = 10_000;
-      const chainGraph = buildSpatiallyIndexedSkeletonNavigationGraph(
+      const chainGraph = buildSkeletonNavigationGraph(
         Array.from({ length: nodeCount }, (_, index) =>
           makeNode(BigInt(index + 1), index === 0 ? undefined : BigInt(index)),
         ),
@@ -287,7 +287,7 @@ describe("skeleton/navigation", () => {
   });
 
   it("cycles through collapsed-level nodes and skips regular nodes", () => {
-    const collapsedGraph = buildSpatiallyIndexedSkeletonNavigationGraph([
+    const collapsedGraph = buildSkeletonNavigationGraph([
       makeNode(1n, undefined),
       makeNode(2n, 1n),
       makeNode(3n, 2n),
@@ -305,7 +305,7 @@ describe("skeleton/navigation", () => {
   });
 
   it("cycles collapsed-level nodes using collapsed leaf-first ordering", () => {
-    const collapsedGraph = buildSpatiallyIndexedSkeletonNavigationGraph([
+    const collapsedGraph = buildSkeletonNavigationGraph([
       makeNode(1n, undefined),
       makeNode(2n, 1n),
       makeNode(3n, 2n),

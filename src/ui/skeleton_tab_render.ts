@@ -14,22 +14,22 @@
  * limitations under the License.
  */
 
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type { SkeletonNode } from "#src/skeleton/api.js";
 import {
   getFlatListNodeIds,
-  type SpatiallyIndexedSkeletonNavigationGraph,
+  type SkeletonNavigationGraph,
 } from "#src/skeleton/navigation_graph.js";
 import {
-  classifySpatialSkeletonDisplayNodeType as classifyNodeType,
-  matchesSpatialSkeletonNodeFilter,
-  SpatialSkeletonDisplayNodeType,
-  SpatialSkeletonNodeFilterType,
+  classifySkeletonDisplayNodeType as classifyNodeType,
+  matchesSkeletonNodeFilter,
+  SkeletonDisplayNodeType,
+  SkeletonNodeFilterType,
 } from "#src/skeleton/node_types.js";
 
-type SkeletonNodeType = SpatialSkeletonDisplayNodeType;
+type SkeletonNodeType = SkeletonDisplayNodeType;
 
 function nodeMatchesFilter(
-  node: SpatiallyIndexedSkeletonNode,
+  node: SkeletonNode,
   filterText: string,
   description: string | undefined,
 ) {
@@ -42,39 +42,37 @@ function hasNonEmptyNodeDescription(description: string | undefined) {
   return (description?.trim().length ?? 0) > 0;
 }
 
-export interface SpatialSkeletonSegmentRenderRow {
-  node: SpatiallyIndexedSkeletonNode;
+export interface SkeletonSegmentRenderRow {
+  node: SkeletonNode;
   type: SkeletonNodeType;
   isLeaf: boolean;
 }
 
-export interface SpatialSkeletonSegmentRenderState {
+export interface SkeletonSegmentRenderState {
   segmentId: bigint;
   totalNodeCount: number;
   matchedNodeCount: number;
   displayedNodeCount: number;
   branchCount: number;
-  rows: readonly SpatialSkeletonSegmentRenderRow[];
+  rows: readonly SkeletonSegmentRenderRow[];
 }
 
 interface NodeClassification {
-  node: SpatiallyIndexedSkeletonNode;
+  node: SkeletonNode;
   type: SkeletonNodeType;
   isLeaf: boolean;
   description: string | undefined;
 }
 
-export function buildSpatialSkeletonSegmentRenderState(
+export function buildSkeletonSegmentRenderState(
   segmentId: bigint,
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
+  graph: SkeletonNavigationGraph,
   options: {
     filterText: string;
-    nodeFilterType: SpatialSkeletonNodeFilterType;
-    getNodeDescription: (
-      node: SpatiallyIndexedSkeletonNode,
-    ) => string | undefined;
+    nodeFilterType: SkeletonNodeFilterType;
+    getNodeDescription: (node: SkeletonNode) => string | undefined;
   },
-): SpatialSkeletonSegmentRenderState {
+): SkeletonSegmentRenderState {
   const { nodeById, childrenByParent } = graph;
   if (nodeById.size === 0) {
     return {
@@ -109,7 +107,7 @@ export function buildSpatialSkeletonSegmentRenderState(
     if (info === undefined) return false;
     const { node, type, isLeaf, description } = info;
     return (
-      matchesSpatialSkeletonNodeFilter(options.nodeFilterType, {
+      matchesSkeletonNodeFilter(options.nodeFilterType, {
         isLeaf,
         nodeHasDescription: hasNonEmptyNodeDescription(description),
         nodeIsTrueEnd: node.isTrueEnd ?? false,
@@ -150,19 +148,19 @@ export function buildSpatialSkeletonSegmentRenderState(
   // match is shown including regular chain nodes.
   const hasActiveFilter =
     options.filterText.length > 0 ||
-    options.nodeFilterType !== SpatialSkeletonNodeFilterType.DEFAULT;
+    options.nodeFilterType !== SkeletonNodeFilterType.DEFAULT;
 
   const isCollapsedFromDisplay = (nodeId: bigint): boolean => {
     if (hasActiveFilter) return false;
     const info = classificationById.get(nodeId);
     if (info === undefined) return true;
     return (
-      info.type === SpatialSkeletonDisplayNodeType.REGULAR &&
+      info.type === SkeletonDisplayNodeType.REGULAR &&
       !(info.node.isTrueEnd ?? false)
     );
   };
 
-  const rows: SpatialSkeletonSegmentRenderRow[] = [];
+  const rows: SkeletonSegmentRenderRow[] = [];
   for (const nodeId of matchedNodeIds) {
     if (isCollapsedFromDisplay(nodeId)) continue;
     const { node, type, isLeaf } = classificationById.get(nodeId)!;

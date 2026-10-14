@@ -14,10 +14,7 @@
  * limitations under the License.
  */
 
-import type {
-  SpatiallyIndexedSkeletonNode,
-  SpatialSkeletonVector,
-} from "#src/skeleton/api.js";
+import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
 
 export type CompleteSkeletonSnapshotKind =
   | "base"
@@ -27,7 +24,7 @@ export type CompleteSkeletonSnapshotKind =
   | "remap";
 
 export type CompleteSkeletonNodeChanges = Readonly<
-  Partial<Omit<SpatiallyIndexedSkeletonNode, "nodeId">>
+  Partial<Omit<SkeletonNode, "nodeId">>
 >;
 
 export type CompleteSkeletonNodePatch =
@@ -38,7 +35,7 @@ export type CompleteSkeletonNodePatch =
     }
   | {
       readonly kind: "insert";
-      readonly node: SpatiallyIndexedSkeletonNode;
+      readonly node: SkeletonNode;
     }
   | {
       readonly kind: "delete";
@@ -70,8 +67,8 @@ export interface CompleteSkeletonSnapshotSplit {
 
 interface SnapshotProjection {
   readonly nodeCount: number;
-  getNode(nodeId: bigint): SpatiallyIndexedSkeletonNode | undefined;
-  forEachNode(callback: (node: SpatiallyIndexedSkeletonNode) => void): void;
+  getNode(nodeId: bigint): SkeletonNode | undefined;
+  forEachNode(callback: (node: SkeletonNode) => void): void;
 }
 
 /** Private implementation bound, independent of queue and history limits. */
@@ -84,27 +81,23 @@ export interface CompleteSkeletonSnapshotRemapping {
   readonly segmentIds?: ReadonlyMap<bigint, bigint>;
 }
 
-function cloneSpatialSkeletonVector(
-  value: SpatialSkeletonVector,
-): SpatialSkeletonVector {
+function cloneSkeletonVector(value: SkeletonVector): SkeletonVector {
   return Object.freeze(Array.from(value));
 }
 
-function cloneNode(
-  node: SpatiallyIndexedSkeletonNode,
-): SpatiallyIndexedSkeletonNode {
-  const copy: SpatiallyIndexedSkeletonNode = {
+function cloneNode(node: SkeletonNode): SkeletonNode {
+  const copy: SkeletonNode = {
     ...node,
-    position: cloneSpatialSkeletonVector(node.position),
+    position: cloneSkeletonVector(node.position),
   };
   return Object.freeze(copy);
 }
 
 function updateNode(
-  node: SpatiallyIndexedSkeletonNode,
+  node: SkeletonNode,
   changes: CompleteSkeletonNodeChanges,
-): SpatiallyIndexedSkeletonNode {
-  const copy: SpatiallyIndexedSkeletonNode = {
+): SkeletonNode {
+  const copy: SkeletonNode = {
     ...node,
     ...changes,
     nodeId: node.nodeId,
@@ -113,18 +106,18 @@ function updateNode(
     if (changes.position === undefined) {
       throw new Error("A complete skeleton node position cannot be undefined.");
     }
-    copy.position = cloneSpatialSkeletonVector(changes.position);
+    copy.position = cloneSkeletonVector(changes.position);
   }
   return Object.freeze(copy);
 }
 
 class BaseSnapshotProjection implements SnapshotProjection {
   readonly nodeCount: number;
-  readonly nodes: readonly SpatiallyIndexedSkeletonNode[];
-  private readonly nodeById = new Map<bigint, SpatiallyIndexedSkeletonNode>();
+  readonly nodes: readonly SkeletonNode[];
+  private readonly nodeById = new Map<bigint, SkeletonNode>();
 
-  constructor(nodes: readonly SpatiallyIndexedSkeletonNode[]) {
-    const copiedNodes: SpatiallyIndexedSkeletonNode[] = [];
+  constructor(nodes: readonly SkeletonNode[]) {
+    const copiedNodes: SkeletonNode[] = [];
     for (const node of nodes) {
       if (this.nodeById.has(node.nodeId)) {
         throw new Error(
@@ -143,7 +136,7 @@ class BaseSnapshotProjection implements SnapshotProjection {
     return this.nodeById.get(nodeId);
   }
 
-  forEachNode(callback: (node: SpatiallyIndexedSkeletonNode) => void) {
+  forEachNode(callback: (node: SkeletonNode) => void) {
     for (const node of this.nodes) callback(node);
   }
 }
@@ -151,9 +144,9 @@ class BaseSnapshotProjection implements SnapshotProjection {
 /** Indexed flat storage which reuses an already-frozen materialized array. */
 class FlatSnapshotProjection implements SnapshotProjection {
   readonly nodeCount: number;
-  private readonly nodeById = new Map<bigint, SpatiallyIndexedSkeletonNode>();
+  private readonly nodeById = new Map<bigint, SkeletonNode>();
 
-  constructor(readonly nodes: readonly SpatiallyIndexedSkeletonNode[]) {
+  constructor(readonly nodes: readonly SkeletonNode[]) {
     for (const node of nodes) {
       if (this.nodeById.has(node.nodeId)) {
         throw new Error(
@@ -169,7 +162,7 @@ class FlatSnapshotProjection implements SnapshotProjection {
     return this.nodeById.get(nodeId);
   }
 
-  forEachNode(callback: (node: SpatiallyIndexedSkeletonNode) => void) {
+  forEachNode(callback: (node: SkeletonNode) => void) {
     for (const node of this.nodes) callback(node);
   }
 }
@@ -178,7 +171,7 @@ class PatchSnapshotProjection implements SnapshotProjection {
   readonly nodeCount: number;
   private readonly patchedNodeById = new Map<
     bigint,
-    SpatiallyIndexedSkeletonNode | undefined
+    SkeletonNode | undefined
   >();
   private readonly insertedNodeIds: readonly bigint[];
 
@@ -245,7 +238,7 @@ class PatchSnapshotProjection implements SnapshotProjection {
       : this.source.getNode(nodeId);
   }
 
-  forEachNode(callback: (node: SpatiallyIndexedSkeletonNode) => void) {
+  forEachNode(callback: (node: SkeletonNode) => void) {
     this.source.forEachNode((sourceNode) => {
       if (!this.patchedNodeById.has(sourceNode.nodeId)) {
         callback(sourceNode);
@@ -286,7 +279,7 @@ class MembershipSnapshotProjection implements SnapshotProjection {
     return this.includes(nodeId) ? this.source.getNode(nodeId) : undefined;
   }
 
-  forEachNode(callback: (node: SpatiallyIndexedSkeletonNode) => void) {
+  forEachNode(callback: (node: SkeletonNode) => void) {
     this.source.forEachNode((node) => {
       if (this.includes(node.nodeId)) callback(node);
     });
@@ -303,10 +296,7 @@ class MembershipSnapshotProjection implements SnapshotProjection {
 class RemapSnapshotProjection implements SnapshotProjection {
   readonly nodeCount: number;
   private readonly sourceNodeIdByRemappedNodeId = new Map<bigint, bigint>();
-  private readonly remappedNodeBySourceNodeId = new Map<
-    bigint,
-    SpatiallyIndexedSkeletonNode
-  >();
+  private readonly remappedNodeBySourceNodeId = new Map<bigint, SkeletonNode>();
   private readonly nodeIdRemappings: ReadonlyMap<bigint, bigint>;
   private readonly segmentIdRemappings: ReadonlyMap<bigint, bigint>;
 
@@ -336,7 +326,7 @@ class RemapSnapshotProjection implements SnapshotProjection {
     return this.nodeIdRemappings.get(nodeId) ?? nodeId;
   }
 
-  private resolveNode(node: SpatiallyIndexedSkeletonNode) {
+  private resolveNode(node: SkeletonNode) {
     const nodeId = this.remapNodeId(node.nodeId);
     const parentNodeId =
       node.parentNodeId === undefined
@@ -371,7 +361,7 @@ class RemapSnapshotProjection implements SnapshotProjection {
     return node === undefined ? undefined : this.resolveNode(node);
   }
 
-  forEachNode(callback: (node: SpatiallyIndexedSkeletonNode) => void) {
+  forEachNode(callback: (node: SkeletonNode) => void) {
     this.source.forEachNode((node) => callback(this.resolveNode(node)));
   }
 }
@@ -379,7 +369,7 @@ class RemapSnapshotProjection implements SnapshotProjection {
 interface NormalizedMergeComponent {
   readonly projection: SnapshotProjection;
   readonly segmentId?: bigint;
-  readonly remappedNodeById: Map<bigint, SpatiallyIndexedSkeletonNode>;
+  readonly remappedNodeById: Map<bigint, SkeletonNode>;
 }
 
 class MergeSnapshotProjection implements SnapshotProjection {
@@ -404,10 +394,7 @@ class MergeSnapshotProjection implements SnapshotProjection {
     this.nodeCount = nodeCount;
   }
 
-  private resolveNode(
-    component: NormalizedMergeComponent,
-    node: SpatiallyIndexedSkeletonNode,
-  ) {
+  private resolveNode(component: NormalizedMergeComponent, node: SkeletonNode) {
     const { segmentId } = component;
     if (segmentId === undefined || segmentId === node.segmentId) return node;
     let remappedNode = component.remappedNodeById.get(node.nodeId);
@@ -426,7 +413,7 @@ class MergeSnapshotProjection implements SnapshotProjection {
     return node === undefined ? undefined : this.resolveNode(component, node);
   }
 
-  forEachNode(callback: (node: SpatiallyIndexedSkeletonNode) => void) {
+  forEachNode(callback: (node: SkeletonNode) => void) {
     for (const component of this.components) {
       component.projection.forEachNode((node) =>
         callback(this.resolveNode(component, node)),
@@ -445,9 +432,7 @@ class MergeSnapshotProjection implements SnapshotProjection {
  */
 export class CompleteSkeletonSnapshotHandle {
   readonly kind: CompleteSkeletonSnapshotKind;
-  private materializedNodes:
-    | readonly SpatiallyIndexedSkeletonNode[]
-    | undefined;
+  private materializedNodes: readonly SkeletonNode[] | undefined;
   private materializationBuildCountValue = 0;
   private projectionDepth: number;
 
@@ -455,7 +440,7 @@ export class CompleteSkeletonSnapshotHandle {
     private projection: SnapshotProjection,
     kind: CompleteSkeletonSnapshotKind,
     projectionDepth: number,
-    materializedNodes?: readonly SpatiallyIndexedSkeletonNode[],
+    materializedNodes?: readonly SkeletonNode[],
   ) {
     this.kind = kind;
     this.projectionDepth = projectionDepth;
@@ -465,7 +450,7 @@ export class CompleteSkeletonSnapshotHandle {
     }
   }
 
-  static create(nodes: readonly SpatiallyIndexedSkeletonNode[]) {
+  static create(nodes: readonly SkeletonNode[]) {
     const projection = new BaseSnapshotProjection(nodes);
     return new CompleteSkeletonSnapshotHandle(
       projection,
@@ -543,7 +528,7 @@ export class CompleteSkeletonSnapshotHandle {
     const normalizedComponents = components.map(({ snapshot, segmentId }) => ({
       projection: snapshot.projection,
       segmentId,
-      remappedNodeById: new Map<bigint, SpatiallyIndexedSkeletonNode>(),
+      remappedNodeById: new Map<bigint, SkeletonNode>(),
     }));
     let projection: SnapshotProjection = new MergeSnapshotProjection(
       normalizedComponents,
@@ -595,16 +580,16 @@ export class CompleteSkeletonSnapshotHandle {
   }
 
   /** Iterates this projection without constructing a concrete snapshot array. */
-  forEachNode(callback: (node: SpatiallyIndexedSkeletonNode) => void) {
+  forEachNode(callback: (node: SkeletonNode) => void) {
     this.projection.forEachNode(callback);
   }
 
   /**
    * Returns a stable concrete array.  Subsequent calls return the same object.
    */
-  materialize(): readonly SpatiallyIndexedSkeletonNode[] {
+  materialize(): readonly SkeletonNode[] {
     if (this.materializedNodes === undefined) {
-      const nodes: SpatiallyIndexedSkeletonNode[] = [];
+      const nodes: SkeletonNode[] = [];
       this.projection.forEachNode((node) => nodes.push(node));
       if (nodes.length !== this.projection.nodeCount) {
         throw new Error(
@@ -625,9 +610,7 @@ export class CompleteSkeletonSnapshotHandle {
   }
 }
 
-export function createCompleteSkeletonSnapshot(
-  nodes: readonly SpatiallyIndexedSkeletonNode[],
-) {
+export function createCompleteSkeletonSnapshot(nodes: readonly SkeletonNode[]) {
   return CompleteSkeletonSnapshotHandle.create(nodes);
 }
 

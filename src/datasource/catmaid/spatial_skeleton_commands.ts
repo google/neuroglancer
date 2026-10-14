@@ -60,10 +60,7 @@ import type {
   CatmaidSpatialSkeletonSplitResult,
   CatmaidSpatialSkeletonTrueEndUpdateRequest,
 } from "#src/datasource/catmaid/spatial_skeleton_edit_api.js";
-import type {
-  SpatiallyIndexedSkeletonNode,
-  SpatialSkeletonVector,
-} from "#src/skeleton/api.js";
+import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
 import type { SpatialSkeletonEditCommandFactory } from "#src/skeleton/command_factories.js";
 import {
   SpatialSkeletonActions,
@@ -82,13 +79,13 @@ export interface CatmaidSpatialSkeletonEditCommandContext {
 }
 
 function getCatmaidEditPosition(
-  position: SpatialSkeletonVector,
+  position: SkeletonVector,
 ): readonly [number, number, number] {
   const value = Array.from(position, Number);
   return Object.freeze([value[0]!, value[1]!, value[2]!] as const);
 }
 
-function cloneNode(node: SpatiallyIndexedSkeletonNode) {
+function cloneNode(node: SkeletonNode) {
   return Object.freeze({
     ...node,
     position: getCatmaidEditPosition(node.position),

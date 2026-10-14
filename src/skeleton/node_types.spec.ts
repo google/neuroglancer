@@ -16,19 +16,17 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type { SkeletonNode } from "#src/skeleton/api.js";
 import {
-  classifySpatialSkeletonDisplayNodeType,
-  getSpatialSkeletonNodeFilterLabel,
-  getSpatialSkeletonNodeIconFilterType,
-  matchesSpatialSkeletonNodeFilter,
-  SpatialSkeletonDisplayNodeType,
-  SpatialSkeletonNodeFilterType,
+  classifySkeletonDisplayNodeType,
+  getSkeletonNodeFilterLabel,
+  getSkeletonNodeIconFilterType,
+  matchesSkeletonNodeFilter,
+  SkeletonDisplayNodeType,
+  SkeletonNodeFilterType,
 } from "#src/skeleton/node_types.js";
 
-function makeNode(
-  overrides: Partial<SpatiallyIndexedSkeletonNode> = {},
-): SpatiallyIndexedSkeletonNode {
+function makeNode(overrides: Partial<SkeletonNode> = {}): SkeletonNode {
   return {
     nodeId: 1n,
     segmentId: 1n,
@@ -41,26 +39,19 @@ function makeNode(
 describe("skeleton node types", () => {
   it("classifies display node types for roots, branches, regular nodes, and virtual ends", () => {
     expect(
-      classifySpatialSkeletonDisplayNodeType(
-        makeNode({ parentNodeId: undefined }),
-        0,
-      ),
+      classifySkeletonDisplayNodeType(makeNode({ parentNodeId: undefined }), 0),
     ).toBe("root");
     expect(
-      classifySpatialSkeletonDisplayNodeType(makeNode({ parentNodeId: 1n }), 2),
+      classifySkeletonDisplayNodeType(makeNode({ parentNodeId: 1n }), 2),
     ).toBe("branchStart");
     expect(
-      classifySpatialSkeletonDisplayNodeType(makeNode({ parentNodeId: 1n }), 1),
+      classifySkeletonDisplayNodeType(makeNode({ parentNodeId: 1n }), 1),
     ).toBe("regular");
     expect(
-      classifySpatialSkeletonDisplayNodeType(makeNode({ parentNodeId: 1n }), 0),
+      classifySkeletonDisplayNodeType(makeNode({ parentNodeId: 1n }), 0),
     ).toBe("virtualEnd");
     expect(
-      classifySpatialSkeletonDisplayNodeType(
-        makeNode({ parentNodeId: 1n }),
-        0,
-        false,
-      ),
+      classifySkeletonDisplayNodeType(makeNode({ parentNodeId: 1n }), 0, false),
     ).toBe("root");
   });
 
@@ -69,80 +60,62 @@ describe("skeleton node types", () => {
       isLeaf: true,
       nodeHasDescription: false,
       nodeIsTrueEnd: false,
-      nodeType: SpatialSkeletonDisplayNodeType.ROOT,
+      nodeType: SkeletonDisplayNodeType.ROOT,
     };
     const virtualEnd = {
       isLeaf: true,
       nodeHasDescription: false,
       nodeIsTrueEnd: false,
-      nodeType: SpatialSkeletonDisplayNodeType.VIRTUAL_END,
+      nodeType: SkeletonDisplayNodeType.VIRTUAL_END,
     };
     const trueEnd = {
       isLeaf: true,
       nodeHasDescription: false,
       nodeIsTrueEnd: true,
-      nodeType: SpatialSkeletonDisplayNodeType.VIRTUAL_END,
+      nodeType: SkeletonDisplayNodeType.VIRTUAL_END,
     };
     const describedNode = {
       isLeaf: false,
       nodeHasDescription: true,
       nodeIsTrueEnd: false,
-      nodeType: SpatialSkeletonDisplayNodeType.REGULAR,
+      nodeType: SkeletonDisplayNodeType.REGULAR,
     };
 
     expect(
-      matchesSpatialSkeletonNodeFilter(
-        SpatialSkeletonNodeFilterType.DEFAULT,
-        rootLeaf,
-      ),
+      matchesSkeletonNodeFilter(SkeletonNodeFilterType.DEFAULT, rootLeaf),
     ).toBe(true);
     expect(
-      matchesSpatialSkeletonNodeFilter(SpatialSkeletonNodeFilterType.DEFAULT, {
+      matchesSkeletonNodeFilter(SkeletonNodeFilterType.DEFAULT, {
         isLeaf: false,
         nodeHasDescription: false,
         nodeIsTrueEnd: false,
-        nodeType: SpatialSkeletonDisplayNodeType.REGULAR,
+        nodeType: SkeletonDisplayNodeType.REGULAR,
       }),
     ).toBe(true);
     expect(
-      matchesSpatialSkeletonNodeFilter(
-        SpatialSkeletonNodeFilterType.LEAF,
-        rootLeaf,
-      ),
+      matchesSkeletonNodeFilter(SkeletonNodeFilterType.LEAF, rootLeaf),
     ).toBe(true);
     expect(
-      matchesSpatialSkeletonNodeFilter(
-        SpatialSkeletonNodeFilterType.VIRTUAL_END,
-        rootLeaf,
-      ),
+      matchesSkeletonNodeFilter(SkeletonNodeFilterType.VIRTUAL_END, rootLeaf),
     ).toBe(true);
     expect(
-      matchesSpatialSkeletonNodeFilter(
-        SpatialSkeletonNodeFilterType.VIRTUAL_END,
-        virtualEnd,
-      ),
+      matchesSkeletonNodeFilter(SkeletonNodeFilterType.VIRTUAL_END, virtualEnd),
     ).toBe(true);
     expect(
-      matchesSpatialSkeletonNodeFilter(
-        SpatialSkeletonNodeFilterType.VIRTUAL_END,
-        trueEnd,
-      ),
+      matchesSkeletonNodeFilter(SkeletonNodeFilterType.VIRTUAL_END, trueEnd),
     ).toBe(false);
     expect(
-      matchesSpatialSkeletonNodeFilter(
-        SpatialSkeletonNodeFilterType.TRUE_END,
-        trueEnd,
-      ),
+      matchesSkeletonNodeFilter(SkeletonNodeFilterType.TRUE_END, trueEnd),
     ).toBe(true);
     expect(
-      matchesSpatialSkeletonNodeFilter(
-        SpatialSkeletonNodeFilterType.HAS_DESCRIPTION,
+      matchesSkeletonNodeFilter(
+        SkeletonNodeFilterType.HAS_DESCRIPTION,
         describedNode,
       ),
     ).toBe(true);
     expect(
-      matchesSpatialSkeletonNodeFilter(
-        SpatialSkeletonNodeFilterType.HAS_DESCRIPTION,
+      matchesSkeletonNodeFilter(
+        SkeletonNodeFilterType.HAS_DESCRIPTION,
         rootLeaf,
       ),
     ).toBe(false);
@@ -150,30 +123,28 @@ describe("skeleton node types", () => {
 
   it("reuses the terminal filter enum for row icon decisions", () => {
     expect(
-      getSpatialSkeletonNodeIconFilterType({
+      getSkeletonNodeIconFilterType({
         nodeIsTrueEnd: false,
-        nodeType: SpatialSkeletonDisplayNodeType.VIRTUAL_END,
+        nodeType: SkeletonDisplayNodeType.VIRTUAL_END,
       }),
-    ).toBe(SpatialSkeletonNodeFilterType.VIRTUAL_END);
+    ).toBe(SkeletonNodeFilterType.VIRTUAL_END);
     expect(
-      getSpatialSkeletonNodeIconFilterType({
+      getSkeletonNodeIconFilterType({
         nodeIsTrueEnd: true,
-        nodeType: SpatialSkeletonDisplayNodeType.REGULAR,
+        nodeType: SkeletonDisplayNodeType.REGULAR,
       }),
-    ).toBe(SpatialSkeletonNodeFilterType.TRUE_END);
+    ).toBe(SkeletonNodeFilterType.TRUE_END);
     expect(
-      getSpatialSkeletonNodeIconFilterType({
+      getSkeletonNodeIconFilterType({
         nodeIsTrueEnd: false,
-        nodeType: SpatialSkeletonDisplayNodeType.ROOT,
+        nodeType: SkeletonDisplayNodeType.ROOT,
       }),
     ).toBeUndefined();
+    expect(getSkeletonNodeFilterLabel(SkeletonNodeFilterType.TRUE_END)).toBe(
+      "True end",
+    );
     expect(
-      getSpatialSkeletonNodeFilterLabel(SpatialSkeletonNodeFilterType.TRUE_END),
-    ).toBe("True end");
-    expect(
-      getSpatialSkeletonNodeFilterLabel(
-        SpatialSkeletonNodeFilterType.HAS_DESCRIPTION,
-      ),
+      getSkeletonNodeFilterLabel(SkeletonNodeFilterType.HAS_DESCRIPTION),
     ).toBe("Has description");
   });
 });

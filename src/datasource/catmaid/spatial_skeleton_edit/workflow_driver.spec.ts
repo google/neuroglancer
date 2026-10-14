@@ -26,7 +26,7 @@ import {
   type CatmaidSpatialSkeletonCommandDescriptor,
   type CatmaidWorkflow,
 } from "#src/datasource/catmaid/spatial_skeleton_edit/workflow_driver.js";
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type { SkeletonNode } from "#src/skeleton/api.js";
 import {
   SpatialSkeletonActions,
   type SpatialSkeletonQueueInput,
@@ -128,7 +128,7 @@ function node(
   nodeId: number,
   segmentId: number,
   parentNodeId?: number,
-): SpatiallyIndexedSkeletonNode {
+): SkeletonNode {
   return {
     nodeId: BigInt(nodeId),
     segmentId: BigInt(segmentId),
@@ -138,7 +138,7 @@ function node(
 }
 
 function makeDriver(
-  nodesBySegment: ReadonlyMap<bigint, readonly SpatiallyIndexedSkeletonNode[]>,
+  nodesBySegment: ReadonlyMap<bigint, readonly SkeletonNode[]>,
 ) {
   currentQueueInput = Object.freeze({
     segments: Object.freeze(

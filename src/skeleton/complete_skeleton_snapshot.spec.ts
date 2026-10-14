@@ -16,7 +16,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type { SkeletonNode } from "#src/skeleton/api.js";
 import {
   createCompleteSkeletonSnapshot,
   mergeCompleteSkeletonSnapshots,
@@ -29,7 +29,7 @@ function makeNode(
   nodeId: bigint,
   segmentId: bigint,
   parentNodeId?: bigint,
-): SpatiallyIndexedSkeletonNode {
+): SkeletonNode {
   return {
     nodeId,
     segmentId,

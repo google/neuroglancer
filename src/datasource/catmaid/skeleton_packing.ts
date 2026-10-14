@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { SpatiallyIndexedSkeletonNodeBase } from "#src/skeleton/api.js";
+import type { SkeletonNodeBase } from "#src/skeleton/api.js";
 
 interface PackedCatmaidSkeletonData {
   vertexPositions: Float32Array;
@@ -24,7 +24,7 @@ interface PackedCatmaidSkeletonData {
 }
 
 export function packCatmaidSkeletonNodes(
-  nodes: readonly SpatiallyIndexedSkeletonNodeBase[],
+  nodes: readonly SkeletonNodeBase[],
 ): PackedCatmaidSkeletonData {
   const numVertices = nodes.length;
   const vertexPositions = new Float32Array(numVertices * 3);

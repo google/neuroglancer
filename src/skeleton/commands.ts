@@ -16,7 +16,7 @@
 
 import type {
   EditableSpatiallyIndexedSkeletonSource,
-  SpatiallyIndexedSkeletonNode,
+  SkeletonNode,
 } from "#src/skeleton/api.js";
 import type { SpatialSkeletonCommandPayload } from "#src/skeleton/command_factories.js";
 import {
@@ -274,7 +274,7 @@ export function executeSpatialSkeletonMoveNode(
 
 export function executeSpatialSkeletonDeleteNode(
   layer: SpatialSkeletonLayerContext,
-  node: SpatiallyIndexedSkeletonNode,
+  node: SkeletonNode,
 ) {
   return executeSpatialSkeletonAction(
     layer,

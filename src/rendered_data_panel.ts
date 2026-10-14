@@ -22,7 +22,7 @@ import { getAnnotationTypeRenderHandler } from "#src/annotation/type_handler.js"
 import { coordinateSpacesEqual } from "#src/coordinate_transform.js";
 import type { DisplayContext } from "#src/display_context.js";
 import { RenderedPanel } from "#src/display_context.js";
-import { hasSpatialSkeletonNodeSelection } from "#src/layer/segmentation/selection.js";
+import { hasSkeletonNodeSelection } from "#src/layer/segmentation/selection.js";
 import type { NavigationState } from "#src/navigation_state.js";
 import { PickIDManager } from "#src/object_picking.js";
 import type {
@@ -66,7 +66,7 @@ declare let NEUROGLANCER_SHOW_OBJECT_SELECTION_TOOLTIP: boolean | undefined;
 const tempVec3 = vec3.create();
 
 interface SpatialSkeletonSelectableLayer {
-  selectSpatialSkeletonNode: (
+  selectSkeletonNode: (
     nodeId: bigint,
     pin: boolean | "toggle" | "force-unpin",
     options?: {
@@ -74,9 +74,7 @@ interface SpatialSkeletonSelectableLayer {
       position?: ArrayLike<number>;
     },
   ) => void;
-  clearSpatialSkeletonNodeSelection: (
-    pin: boolean | "toggle" | "force-unpin",
-  ) => void;
+  clearSkeletonNodeSelection: (pin: boolean | "toggle" | "force-unpin") => void;
 }
 
 function isSpatialSkeletonSelectableLayer(
@@ -85,17 +83,15 @@ function isSpatialSkeletonSelectableLayer(
   return (
     typeof layer === "object" &&
     layer !== null &&
-    "selectSpatialSkeletonNode" in layer &&
-    typeof layer.selectSpatialSkeletonNode === "function" &&
-    "clearSpatialSkeletonNodeSelection" in layer &&
-    typeof layer.clearSpatialSkeletonNodeSelection === "function"
+    "selectSkeletonNode" in layer &&
+    typeof layer.selectSkeletonNode === "function" &&
+    "clearSkeletonNodeSelection" in layer &&
+    typeof layer.clearSkeletonNodeSelection === "function"
   );
 }
 
-function isSpatialSkeletonNodeSelectionValue(state: unknown) {
-  return hasSpatialSkeletonNodeSelection(
-    state as { nodeId?: unknown } | undefined,
-  );
+function isSkeletonNodeSelectionValue(state: unknown) {
+  return hasSkeletonNodeSelection(state as { nodeId?: unknown } | undefined);
 }
 
 export interface RenderedDataViewerState extends ViewerState {
@@ -567,11 +563,11 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       for (const { layer, state } of selectionValue.layers) {
         if (
           !isSpatialSkeletonSelectableLayer(layer) ||
-          !isSpatialSkeletonNodeSelectionValue(state)
+          !isSkeletonNodeSelectionValue(state)
         ) {
           continue;
         }
-        layer.clearSpatialSkeletonNodeSelection("force-unpin");
+        layer.clearSkeletonNodeSelection("force-unpin");
         return true;
       }
       return false;
@@ -580,14 +576,10 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     registerActionListener(element, "select-position", () => {
       const pickedSelection = getPickedSpatialSkeletonLayerSelection();
       if (pickedSelection !== undefined) {
-        pickedSelection.layer.selectSpatialSkeletonNode(
-          pickedSelection.nodeId,
-          true,
-          {
-            segmentId: pickedSelection.segmentId,
-            position: pickedSelection.position,
-          },
-        );
+        pickedSelection.layer.selectSkeletonNode(pickedSelection.nodeId, true, {
+          segmentId: pickedSelection.segmentId,
+          position: pickedSelection.position,
+        });
         return;
       }
       this.viewer.selectionDetailsState.select();

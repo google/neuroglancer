@@ -17,18 +17,18 @@
 /**
  * @file Utility functions for array queries on arrays of spatially indexed skeleton nodes, usually performed by traversing the tree.
  */
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type { SkeletonNode } from "#src/skeleton/api.js";
 import { bigintCompare } from "#src/util/bigint.js";
 
-export function findSpatiallyIndexedSkeletonNode(
-  segmentNodes: readonly SpatiallyIndexedSkeletonNode[],
+export function findSkeletonNode(
+  segmentNodes: readonly SkeletonNode[],
   nodeId: bigint,
 ) {
   return segmentNodes.find((node) => node.nodeId === nodeId);
 }
 
-export function getSpatiallyIndexedSkeletonDirectChildren(
-  segmentNodes: readonly SpatiallyIndexedSkeletonNode[],
+export function getSkeletonDirectChildren(
+  segmentNodes: readonly SkeletonNode[],
   nodeId: bigint,
 ) {
   return segmentNodes
@@ -36,12 +36,12 @@ export function getSpatiallyIndexedSkeletonDirectChildren(
     .sort((a, b) => bigintCompare(a.nodeId, b.nodeId));
 }
 
-export function getSpatiallyIndexedSkeletonNodeParent(
-  segmentNodes: readonly SpatiallyIndexedSkeletonNode[],
-  node: SpatiallyIndexedSkeletonNode,
+export function getSkeletonNodeParent(
+  segmentNodes: readonly SkeletonNode[],
+  node: SkeletonNode,
 ) {
   if (node.parentNodeId === undefined) {
     return undefined;
   }
-  return findSpatiallyIndexedSkeletonNode(segmentNodes, node.parentNodeId);
+  return findSkeletonNode(segmentNodes, node.parentNodeId);
 }

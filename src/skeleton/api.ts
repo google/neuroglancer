@@ -29,32 +29,31 @@ import type {
 } from "#src/skeleton/command_factories.js";
 import type { SpatialSkeletonOptimisticEditingProvider } from "#src/skeleton/optimistic_edit/api.js";
 
-export type SpatialSkeletonVector = ArrayLike<number>;
+export type SkeletonVector = ArrayLike<number>;
 
 export interface SpatialSkeletonBounds {
-  lowerBounds: SpatialSkeletonVector;
-  upperBounds: SpatialSkeletonVector;
+  lowerBounds: SkeletonVector;
+  upperBounds: SkeletonVector;
 }
 
 export interface SpatialSkeletonGridCellIndex {
-  cell: SpatialSkeletonVector;
+  cell: SkeletonVector;
 }
 
 export interface SpatialSkeletonSpatialIndexLevel {
-  chunkSize: SpatialSkeletonVector;
+  chunkSize: SkeletonVector;
   gridShape: readonly number[];
   limit: number;
 }
 
-export interface SpatiallyIndexedSkeletonNodeBase {
+export interface SkeletonNodeBase {
   nodeId: bigint;
   segmentId: bigint;
-  position: SpatialSkeletonVector;
+  position: SkeletonVector;
   parentNodeId?: bigint;
 }
 
-export interface SpatiallyIndexedSkeletonNode
-  extends SpatiallyIndexedSkeletonNodeBase {
+export interface SkeletonNode extends SkeletonNodeBase {
   radius?: number;
   confidence?: number;
   description?: string;
@@ -77,14 +76,14 @@ export interface SpatiallyIndexedSkeletonSource {
   getSkeleton(
     skeletonId: bigint,
     options?: { signal?: AbortSignal },
-  ): Promise<SpatiallyIndexedSkeletonNode[]>;
+  ): Promise<SkeletonNode[]>;
   getSpatialIndexMetadata(): Promise<SpatiallyIndexedSkeletonMetadata | null>;
   fetchNodes(
     cellIndex: SpatialSkeletonGridCellIndex,
     options?: {
       signal?: AbortSignal;
     },
-  ): Promise<SpatiallyIndexedSkeletonNodeBase[]>;
+  ): Promise<SkeletonNodeBase[]>;
 }
 
 export interface EditableSpatiallyIndexedSkeletonSource

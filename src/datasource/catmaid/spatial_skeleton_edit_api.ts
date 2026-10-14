@@ -21,18 +21,18 @@ import type {
   CatmaidMergeResult,
   CatmaidSplitResult,
 } from "#src/datasource/catmaid/api.js";
-import type { SpatialSkeletonVector } from "#src/skeleton/api.js";
+import type { SkeletonVector } from "#src/skeleton/api.js";
 
 // CATMAID owns these payloads; the generic skeleton API only promises named edit operations.
 export interface CatmaidSpatialSkeletonAddNodeRequest {
-  position: SpatialSkeletonVector;
+  position: SkeletonVector;
   parentNodeId?: bigint;
 }
 
 export type CatmaidSpatialSkeletonAddNodeResult = CatmaidAddNodeResult;
 
 export interface CatmaidSpatialSkeletonInsertNodeRequest {
-  position: SpatialSkeletonVector;
+  position: SkeletonVector;
   parentNodeId: bigint;
   childNodeIds: readonly bigint[];
 }
@@ -41,7 +41,7 @@ export type CatmaidSpatialSkeletonInsertNodeResult = CatmaidInsertNodeResult;
 
 export interface CatmaidSpatialSkeletonMoveNodeRequest {
   nodeId: bigint;
-  position: SpatialSkeletonVector;
+  position: SkeletonVector;
 }
 
 export interface CatmaidSpatialSkeletonDeleteNodeRequest {

@@ -16,7 +16,7 @@
 
 import type {
   SpatialSkeletonBounds,
-  SpatialSkeletonVector,
+  SkeletonVector,
 } from "#src/skeleton/api.js";
 
 const DEFAULT_SPATIALLY_INDEXED_SKELETON_MAX_CHUNKS = 64;
@@ -76,7 +76,7 @@ function validateFiniteOptions(
   }
 }
 
-function validateFiniteVector(vector: SpatialSkeletonVector, label: string) {
+function validateFiniteVector(vector: SkeletonVector, label: string) {
   for (let i = 0; i < vector.length; ++i) {
     const value = Number(vector[i]);
     if (!Number.isFinite(value)) {

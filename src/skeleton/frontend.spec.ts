@@ -16,11 +16,18 @@
 
 import { describe, expect, it, vi } from "vitest";
 
+import { ChunkState } from "#src/chunk_manager/base.js";
+import type { SkeletonNode } from "#src/skeleton/api.js";
+import {
+  buildSkeletonNavigationGraph,
+  getBranchEnd,
+} from "#src/skeleton/navigation_graph.js";
 import { buildSpatiallyIndexedSkeletonOverlayGeometry } from "#src/skeleton/segment_overlay.js";
 import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { Uint64Set } from "#src/uint64_set.js";
 import { getContrastRatio } from "#src/util/color.js";
 import { vec3 } from "#src/util/geom.js";
+import { NullarySignal } from "#src/util/signal.js";
 
 if (!("WebGL2RenderingContext" in globalThis)) {
   Object.defineProperty(globalThis, "WebGL2RenderingContext", {
@@ -40,6 +47,9 @@ const {
   buildSpatialSkeletonPreparationVisuals,
   commitSpatiallyIndexedSkeletonOverlayReplacement,
   getActiveProvisionalSpatialSkeletonSegmentIds,
+  getSkeletonChunkNodes,
+  SkeletonLayer,
+  SkeletonSource,
   SpatiallyIndexedSkeletonLayer,
   PerspectiveViewSpatiallyIndexedSkeletonLayer,
   SliceViewPanelSpatiallyIndexedSkeletonLayer,
@@ -1282,5 +1292,99 @@ describe("SpatiallyIndexedSkeletonLayer projected removals", () => {
     expect(state.getCachedSegmentNodes(23n)).toBe(snapshot.materialize());
     expect(layer.resolveSourceBackedOverlayChunks()).toEqual([oldChunk]);
     expect(layer.createOverlaySegmentChunk).not.toHaveBeenCalled();
+  });
+});
+
+function makePackedSkeletonChunk(
+  positions: readonly (readonly number[])[],
+  edges: readonly (readonly [number, number])[],
+) {
+  return {
+    numVertices: positions.length,
+    vertexAttributes: new Uint8Array(new Float32Array(positions.flat()).buffer),
+    vertexAttributeOffsets: new Uint32Array([0]),
+    indices: new Uint32Array(edges.flat()),
+  };
+}
+
+function getParentNodeIds(nodes: readonly SkeletonNode[]) {
+  return nodes.map((node) => [node.nodeId, node.parentNodeId]);
+}
+
+describe("skeleton nodes from a chunk", () => {
+  it("makes the source vertex of each edge the parent of the target vertex", () => {
+    const chunk = makePackedSkeletonChunk(
+      [
+        [0, 0, 0],
+        [10, 0, 0],
+        [20, 0, 0],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+      ],
+    );
+    const nodes = getSkeletonChunkNodes(7n, chunk);
+    expect(getParentNodeIds(nodes)).toEqual([
+      [0n, undefined],
+      [1n, 0n],
+      [2n, 1n],
+    ]);
+  });
+
+  it("tells listeners when a segment's skeleton enters or leaves memory", () => {
+    const source = Object.assign(Object.create(SkeletonSource.prototype), {
+      chunks: new Map(),
+      chunksChanged: new NullarySignal(),
+    });
+    const layer = Object.assign(Object.create(SkeletonLayer.prototype), {
+      source,
+    });
+    const listener = vi.fn();
+    layer.nodesChanged.add(listener);
+    const chunk = {
+      ...makePackedSkeletonChunk(
+        [
+          [0, 0, 0],
+          [10, 0, 0],
+        ],
+        [[0, 1]],
+      ),
+      state: ChunkState.SYSTEM_MEMORY,
+    };
+
+    source.addChunk("5", chunk);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(layer.getSegmentNodes(5n)).toHaveLength(2);
+
+    source.deleteChunk("5");
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(layer.getSegmentNodes(5n)).toBeUndefined();
+  });
+
+  it("cuts a loop in the edges so that branch navigation ends", () => {
+    const chunk = makePackedSkeletonChunk(
+      [
+        [0, 0, 0],
+        [10, 0, 0],
+        [20, 0, 0],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 0],
+      ],
+    );
+
+    const nodes = getSkeletonChunkNodes(7n, chunk);
+
+    expect(getParentNodeIds(nodes)).toEqual([
+      [0n, undefined],
+      [1n, 0n],
+      [2n, 1n],
+    ]);
+    expect(getBranchEnd(buildSkeletonNavigationGraph(nodes), 1n).nodeId).toBe(
+      2n,
+    );
   });
 });

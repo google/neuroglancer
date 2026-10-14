@@ -16,7 +16,8 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type { SkeletonNode } from "#src/skeleton/api.js";
+import { WatchableValue } from "#src/trackable_value.js";
 import { NullarySignal } from "#src/util/signal.js";
 
 vi.mock("#src/skeleton/commands.js", async (importOriginal) => ({
@@ -47,11 +48,14 @@ const { executeSpatialSkeletonNodeTrueEndUpdate } = await import(
 const { StatusMessage } = await import("#src/status.js");
 const { CommandRegistry } = await import("#src/ui/command_registry.js");
 const { SkeletonNodeCommands } = await import("#src/skeleton/node_commands.js");
+const { SkeletonNavigator } = await import(
+  "#src/skeleton/skeleton_navigator.js"
+);
 
 function makeNode(
   nodeId: bigint,
   parentNodeId: bigint | undefined,
-): SpatiallyIndexedSkeletonNode {
+): SkeletonNode {
   return {
     nodeId,
     segmentId: 42n,
@@ -61,14 +65,27 @@ function makeNode(
   };
 }
 
+function makeNodeAccess(nodes: readonly SkeletonNode[]) {
+  return new WatchableValue({
+    getSegmentNodes: () => nodes,
+    nodesChanged: new NullarySignal(),
+    hasPickableNodes: false,
+    displayState: { transform: new WatchableValue(undefined as any) },
+  });
+}
+
 function makeSkeletonLayer(selectedNodeId: bigint, { inspected = true } = {}) {
   const nodes = [makeNode(1n, undefined), makeNode(2n, 1n), makeNode(3n, 2n)];
   const layer = Object.create(SegmentationUserLayer.prototype);
-  const selectAndMoveToSpatialSkeletonNode = vi.fn();
+  const selectAndMoveToSkeletonNode = vi.fn();
   const rerootSpatialSkeletonNode = vi.fn(async () => true);
+  Object.defineProperty(layer, "manager", {
+    value: { root: { selectionState: { value: undefined } } },
+  });
   Object.assign(layer, {
+    skeletonNavigator: new SkeletonNavigator(makeNodeAccess(nodes)),
     getSpatialSkeletonActionsDisabledReason: () => undefined,
-    selectedSpatialSkeletonNodeInfo: {
+    selectedSkeletonNodeInfo: {
       value: { nodeId: selectedNodeId, segmentId: 42n },
     },
     spatialSkeletonState: {
@@ -87,15 +104,25 @@ function makeSkeletonLayer(selectedNodeId: bigint, { inspected = true } = {}) {
             }
           : undefined,
     },
-    selectAndMoveToSpatialSkeletonNode,
+    selectAndMoveToSkeletonNode,
     rerootSpatialSkeletonNode,
   });
   return {
     layer,
     nodes,
-    selectAndMoveToSpatialSkeletonNode,
+    selectAndMoveToSkeletonNode,
     rerootSpatialSkeletonNode,
   };
+}
+
+function makeReadOnlySkeletonLayer() {
+  const layer = Object.create(SegmentationUserLayer.prototype);
+  Object.assign(layer, {
+    skeletonNodeAccess: makeNodeAccess([makeNode(1n, undefined)]),
+    getSpatiallyIndexedSkeletonLayer: () => undefined,
+    spatialSkeletonState: { getOptimisticEditFatalState: () => undefined },
+  });
+  return layer;
 }
 
 function makeViewer(
@@ -132,7 +159,7 @@ describe("skeleton node commands", () => {
   });
 
   it("moves to the parent of the selected node", () => {
-    const { layer, selectAndMoveToSpatialSkeletonNode } = makeSkeletonLayer(3n);
+    const { layer, selectAndMoveToSkeletonNode } = makeSkeletonLayer(3n);
     const { viewer } = makeViewer([layer]);
     new SkeletonNodeCommands(viewer as any);
 
@@ -140,8 +167,9 @@ describe("skeleton node commands", () => {
       .get("skeleton-go-parent")!
       .invoke({ dispatchTarget: new EventTarget() });
 
-    expect(selectAndMoveToSpatialSkeletonNode).toHaveBeenCalledWith(
+    expect(selectAndMoveToSkeletonNode).toHaveBeenCalledWith(
       expect.objectContaining({ nodeId: 2n, segmentId: 42n }),
+      true,
     );
   });
 
@@ -155,9 +183,10 @@ describe("skeleton node commands", () => {
       .get("skeleton-go-root")!
       .invoke({ dispatchTarget: new EventTarget() });
 
-    expect(first.selectAndMoveToSpatialSkeletonNode).not.toHaveBeenCalled();
-    expect(second.selectAndMoveToSpatialSkeletonNode).toHaveBeenCalledWith(
+    expect(first.selectAndMoveToSkeletonNode).not.toHaveBeenCalled();
+    expect(second.selectAndMoveToSkeletonNode).toHaveBeenCalledWith(
       expect.objectContaining({ nodeId: 1n }),
+      true,
     );
   });
 
@@ -230,6 +259,43 @@ describe("skeleton node commands", () => {
       throw new Error("Editing is paused.");
     };
     const { viewer } = makeViewer([layer]);
+    new SkeletonNodeCommands(viewer as any);
+
+    viewer.commandRegistry
+      .get("skeleton-undo")!
+      .invoke({ dispatchTarget: new EventTarget() });
+
+    await vi.waitFor(() =>
+      expect(showMessage).toHaveBeenCalledWith(
+        expect.stringContaining("Editing is paused."),
+      ),
+    );
+  });
+
+  it("offers navigation commands but not edit commands for a read-only skeleton layer", () => {
+    const { viewer } = makeViewer([makeReadOnlySkeletonLayer()]);
+    new SkeletonNodeCommands(viewer as any);
+
+    expect(viewer.commandRegistry.get("skeleton-go-parent")!.enabled).toBe(
+      true,
+    );
+    expect(viewer.commandRegistry.get("skeleton-reroot")!.enabled).toBe(false);
+    expect(
+      viewer.commandRegistry.get("skeleton-toggle-true-end")!.enabled,
+    ).toBe(false);
+    expect(viewer.commandRegistry.get("skeleton-undo")!.enabled).toBe(false);
+  });
+
+  it("undoes on the editable layer while a read-only skeleton layer is also visible", async () => {
+    const showMessage = vi
+      .spyOn(StatusMessage, "showTemporaryMessage")
+      .mockImplementation(() => ({ dispose() {} }) as any);
+    showMessage.mockClear();
+    const { layer: editableLayer } = makeSkeletonLayer(3n);
+    editableLayer.spatialSkeletonState.assertOptimisticEditingAllowed = () => {
+      throw new Error("Editing is paused.");
+    };
+    const { viewer } = makeViewer([makeReadOnlySkeletonLayer(), editableLayer]);
     new SkeletonNodeCommands(viewer as any);
 
     viewer.commandRegistry

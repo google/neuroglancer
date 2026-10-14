@@ -71,7 +71,7 @@ import {
   SegmentationLayerSharedObject,
 } from "#src/segmentation_display_state/frontend.js";
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type { SkeletonNode } from "#src/skeleton/api.js";
 import {
   forEachSpatialSkeletonSourceScale,
   forEachVisibleSpatialSkeletonChunk,
@@ -90,6 +90,7 @@ import {
   mergeSpatiallyIndexedSkeletonOverlaySegmentIds,
   retainSpatiallyIndexedSkeletonOverlaySegment,
 } from "#src/skeleton/segment_overlay.js";
+import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
 import {
   edgeColorPathsGlsl,
   nodeColorPathsGlsl,
@@ -146,7 +147,7 @@ import { kOneVec4, kZeroVec, mat4, vec3, type vec4 } from "#src/util/geom.js";
 import { verifyFinitePositiveFloat } from "#src/util/json.js";
 import * as matrix from "#src/util/matrix.js";
 import { getObjectId } from "#src/util/object_id.js";
-import { NullarySignal } from "#src/util/signal.js";
+import { NullarySignal, type NullaryReadonlySignal } from "#src/util/signal.js";
 import type { Trackable } from "#src/util/trackable.js";
 import { CompoundTrackable } from "#src/util/trackable.js";
 import { TrackableEnum } from "#src/util/trackable_enum.js";
@@ -971,15 +972,6 @@ export enum SkeletonRenderMode {
   LINES_AND_POINTS = 1,
 }
 
-export function setSpatialSkeletonModesToLinesAndPoints(layer: {
-  displayState: { skeletonRenderingOptions: SkeletonRenderingOptions };
-}) {
-  layer.displayState.skeletonRenderingOptions.params2d.mode.value =
-    SkeletonRenderMode.LINES_AND_POINTS;
-  layer.displayState.skeletonRenderingOptions.params3d.mode.value =
-    SkeletonRenderMode.LINES_AND_POINTS;
-}
-
 /**
  * Returns active numeric aliases that exist only in the optimistic projection.
  * These ids are presentation state rather than datasource identities and receive a
@@ -1362,7 +1354,7 @@ function getSkeletonNodeHighlightRing(
   return { diameter: nodeDiameter + 2 * outline, borderWidth: outline };
 }
 
-function setMouseStatePositionFromSpatialSkeletonNode(
+function setMouseStatePositionFromSkeletonNode(
   mouseState: MouseSelectionState,
   nodePosition: Float32Array,
   transform: RenderLayerTransform,
@@ -1447,7 +1439,10 @@ export interface SkeletonLayerDisplayState extends SegmentationDisplayState3D {
   skeletonRenderingOptions: SkeletonRenderingOptions;
 }
 
-export class SkeletonLayer extends RefCounted implements SkeletonShaderContext {
+export class SkeletonLayer
+  extends RefCounted
+  implements SkeletonShaderContext, SkeletonNodeAccess
+{
   layerChunkProgressInfo = new LayerChunkProgressInfo();
   redrawNeeded = new NullarySignal();
   private sharedObject: SegmentationLayerSharedObject;
@@ -1518,6 +1513,23 @@ export class SkeletonLayer extends RefCounted implements SkeletonShaderContext {
 
   get gl() {
     return this.chunkManager.chunkQueueManager.gl;
+  }
+
+  readonly hasPickableNodes = false;
+
+  get nodesChanged() {
+    return this.source.chunksChanged;
+  }
+
+  getSegmentNodes(segmentId: bigint): readonly SkeletonNode[] | undefined {
+    const chunk = this.source.chunks.get(getObjectKey(segmentId));
+    if (chunk === undefined) return undefined;
+    let nodes = chunkNodes.get(chunk);
+    if (nodes === undefined) {
+      nodes = getSkeletonChunkNodes(segmentId, chunk);
+      chunkNodes.set(chunk, nodes);
+    }
+    return nodes;
   }
 
   draw(
@@ -1857,6 +1869,58 @@ function freeSkeletonChunkGPUMemory(gl: GL, chunk: SkeletonChunkBase) {
   vertexAttributeTextures.length = 0;
 }
 
+const chunkNodes = new WeakMap<SkeletonChunk, readonly SkeletonNode[]>();
+
+export function getSkeletonChunkNodes(
+  segmentId: bigint,
+  chunk: Pick<
+    SkeletonChunk,
+    "vertexAttributes" | "vertexAttributeOffsets" | "indices" | "numVertices"
+  >,
+): SkeletonNode[] {
+  const { numVertices, indices, vertexAttributes, vertexAttributeOffsets } =
+    chunk;
+  const positions = new Float32Array(
+    vertexAttributes.buffer,
+    vertexAttributes.byteOffset + vertexAttributeOffsets[0],
+    numVertices * 3,
+  );
+  const parentVertexByVertex = new Int32Array(numVertices).fill(-1);
+  // Union-find over accepted edges, so that parent links never form a loop.
+  const treeRootByVertex = Int32Array.from(
+    { length: numVertices },
+    (_, i) => i,
+  );
+  const findTreeRoot = (vertex: number) => {
+    while (treeRootByVertex[vertex] !== vertex) {
+      vertex = treeRootByVertex[vertex] =
+        treeRootByVertex[treeRootByVertex[vertex]];
+    }
+    return vertex;
+  };
+  for (let edgeOffset = 0; edgeOffset < indices.length; edgeOffset += 2) {
+    const sourceVertex = indices[edgeOffset];
+    const targetVertex = indices[edgeOffset + 1];
+    if (parentVertexByVertex[targetVertex] !== -1) continue;
+    const sourceTreeRoot = findTreeRoot(sourceVertex);
+    const targetTreeRoot = findTreeRoot(targetVertex);
+    if (sourceTreeRoot === targetTreeRoot) continue;
+    parentVertexByVertex[targetVertex] = sourceVertex;
+    treeRootByVertex[targetTreeRoot] = sourceTreeRoot;
+  }
+  const nodes: SkeletonNode[] = [];
+  for (let vertex = 0; vertex < numVertices; ++vertex) {
+    const parentVertex = parentVertexByVertex[vertex];
+    nodes.push({
+      nodeId: BigInt(vertex),
+      segmentId,
+      position: positions.subarray(vertex * 3, vertex * 3 + 3),
+      parentNodeId: parentVertex === -1 ? undefined : BigInt(parentVertex),
+    });
+  }
+  return nodes;
+}
+
 export class SkeletonChunk extends Chunk implements SkeletonChunkBase {
   declare source: SkeletonSource;
   vertexAttributes: Uint8Array;
@@ -2066,7 +2130,7 @@ interface SpatiallyIndexedSkeletonLayerOptions {
   getPendingNodePosition?: (nodeId: bigint) => ArrayLike<number> | undefined;
   // Node ids that currently have a pending (drag) position override.
   getPendingNodeIds?: () => Iterable<bigint>;
-  getCachedNode?: (nodeId: bigint) => SpatiallyIndexedSkeletonNode | undefined;
+  getCachedNode?: (nodeId: bigint) => SkeletonNode | undefined;
   // Transforms a node's model-space position into the global coordinate space
   // used by the panels, so node highlights can be projected to screen.
   resolveGlobalPosition?: (
@@ -2080,13 +2144,11 @@ interface SpatiallyIndexedSkeletonInspectionState {
   readonly nodeDataVersion: WatchableValueInterface<number>;
   readonly pendingNodePositionVersion: WatchableValueInterface<number>;
   readonly spatialSkeletonPresentation: WatchableValueInterface<SpatialSkeletonPresentationSnapshot>;
-  getCachedSegmentNodes(
-    segmentId: bigint,
-  ): readonly SpatiallyIndexedSkeletonNode[] | undefined;
+  getCachedSegmentNodes(segmentId: bigint): readonly SkeletonNode[] | undefined;
   getFullSegmentNodes(
     skeletonLayer: SpatiallyIndexedSkeletonLayer,
     segmentId: bigint,
-  ): Promise<readonly SpatiallyIndexedSkeletonNode[]>;
+  ): Promise<readonly SkeletonNode[]>;
   evictInactiveSegmentNodes(activeSegmentIds: Iterable<bigint>): void;
 }
 
@@ -2170,7 +2232,7 @@ export function commitSpatiallyIndexedSkeletonOverlayReplacement<T>(
 }
 
 interface SkeletonOverlaySegmentVersion {
-  readonly nodes: readonly SpatiallyIndexedSkeletonNode[];
+  readonly nodes: readonly SkeletonNode[];
   readonly pendingPositionKey: string;
 }
 
@@ -2240,7 +2302,7 @@ export function resolveSpatiallyIndexedSkeletonSegmentPick(
 
 export class SpatiallyIndexedSkeletonLayer
   extends RefCounted
-  implements SkeletonShaderContext
+  implements SkeletonShaderContext, SkeletonNodeAccess
 {
   layerChunkProgressInfo = new LayerChunkProgressInfo();
   redrawNeeded = new NullarySignal();
@@ -2277,13 +2339,14 @@ export class SpatiallyIndexedSkeletonLayer
   // position override without scanning all nodes; one entry during a drag.
   private getPendingNodeIds: (() => Iterable<bigint>) | undefined;
   private getCachedNodeInfo:
-    | ((nodeId: bigint) => SpatiallyIndexedSkeletonNode | undefined)
+    | ((nodeId: bigint) => SkeletonNode | undefined)
     | undefined;
   private resolveGlobalPosition:
     | ((modelPosition: ArrayLike<number>) => Float32Array | undefined)
     | undefined;
   readonly highlightMarkersChanged = new NullarySignal();
   private inspectionState: SpatiallyIndexedSkeletonInspectionState | undefined;
+  private readonly nodesChangedSignal: NullaryReadonlySignal;
   // Inspection geometry is cached per segment.  A node-data update therefore
   // replaces only the segment arrays that changed rather than disposing and
   // rebuilding one aggregate scene-wide overlay chunk.
@@ -2299,7 +2362,7 @@ export class SpatiallyIndexedSkeletonLayer
   private pendingOverlayPositionKeys = new Map<
     bigint,
     {
-      nodes: readonly SpatiallyIndexedSkeletonNode[];
+      nodes: readonly SkeletonNode[];
       globalVersion: number | undefined;
       key: string;
     }
@@ -2467,7 +2530,7 @@ export class SpatiallyIndexedSkeletonLayer
 
   private getOverlayPendingPositionKey(
     segmentId: bigint,
-    nodes: readonly SpatiallyIndexedSkeletonNode[],
+    nodes: readonly SkeletonNode[],
   ) {
     const getPendingNodePosition = this.getPendingNodePositionOverride;
     if (getPendingNodePosition === undefined) return "";
@@ -2799,9 +2862,7 @@ export class SpatiallyIndexedSkeletonLayer
     return this.browseExcludedSegments;
   }
 
-  private createOverlaySegmentChunk(
-    nodes: readonly SpatiallyIndexedSkeletonNode[],
-  ) {
+  private createOverlaySegmentChunk(nodes: readonly SkeletonNode[]) {
     const geometry = buildSpatiallyIndexedSkeletonOverlayGeometry([nodes], {
       getPendingNodePosition: this.getPendingNodePositionOverride,
     });
@@ -2963,6 +3024,9 @@ export class SpatiallyIndexedSkeletonLayer
     this.getCachedNodeInfo = options.getCachedNode;
     this.resolveGlobalPosition = options.resolveGlobalPosition;
     this.inspectionState = options.inspectionState;
+    this.nodesChangedSignal =
+      this.inspectionState?.spatialSkeletonPresentation.changed ??
+      new NullarySignal();
     const initialPresentation =
       this.inspectionState?.spatialSkeletonPresentation?.value;
     if (initialPresentation !== undefined) {
@@ -3517,7 +3581,17 @@ export class SpatiallyIndexedSkeletonLayer
     return ready;
   }
 
-  getNode(nodeId: bigint): SpatiallyIndexedSkeletonNode | undefined {
+  readonly hasPickableNodes = true;
+
+  get nodesChanged() {
+    return this.nodesChangedSignal;
+  }
+
+  getSegmentNodes(segmentId: bigint): readonly SkeletonNode[] | undefined {
+    return this.inspectionState?.getCachedSegmentNodes(segmentId);
+  }
+
+  getNode(nodeId: bigint): SkeletonNode | undefined {
     if (nodeId === 0n) return undefined;
     return this.getCachedNodeSnapshot(nodeId);
   }
@@ -3962,7 +4036,7 @@ function updateSpatiallyIndexedSkeletonMouseState(
   if (data.kind === "segment-node") return;
   const transform = base.displayState.transform.value;
   if (transform.error === undefined) {
-    setMouseStatePositionFromSpatialSkeletonNode(
+    setMouseStatePositionFromSkeletonNode(
       mouseState,
       pickedNode.position,
       transform,
@@ -4397,8 +4471,20 @@ export class SkeletonSource extends ChunkSource {
   }
 
   declare chunks: Map<string, SkeletonChunk>;
+  readonly chunksChanged = new NullarySignal();
+
   getChunk(x: PackedSkeletonGeometry) {
     return new SkeletonChunk(this, x);
+  }
+
+  addChunk(key: string, chunk: SkeletonChunk) {
+    super.addChunk(key, chunk);
+    this.chunksChanged.dispatch();
+  }
+
+  deleteChunk(key: string) {
+    super.deleteChunk(key);
+    this.chunksChanged.dispatch();
   }
 
   get vertexAttributes(): Map<string, VertexAttributeInfo> {
