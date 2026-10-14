@@ -1475,7 +1475,9 @@ export class SkeletonTab extends Tab {
         new Map<bigint, readonly SkeletonNode[]>([
           [segmentId, cachedSelectedSegmentNodes],
         ]),
-        " Using inspected full skeleton data.",
+        layer.skeletonNodeAccess.value?.areParentsInferred(segmentId)
+          ? "Parent and child are inferred, because this skeleton's edges have no direction."
+          : " Using inspected full skeleton data.",
       );
     };
 

@@ -70,6 +70,7 @@ function makeNodeAccess(nodes: readonly SkeletonNode[]) {
     getSegmentNodes: () => nodes,
     nodesChanged: new NullarySignal(),
     hasPickableNodes: false,
+    areParentsInferred: () => false,
     displayState: { transform: new WatchableValue(undefined as any) },
   });
 }

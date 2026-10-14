@@ -680,29 +680,32 @@ describe("layer/segmentation spatial skeleton action gating", () => {
   });
 });
 
-function makePrecomputedNodes(): SkeletonNode[] {
-  return [
-    { nodeId: 0n, segmentId: 7n, position: new Float32Array([4, 5, 6]) },
-    {
-      nodeId: 1n,
-      segmentId: 7n,
-      position: new Float32Array([10, 5, 6]),
-      parentNodeId: 0n,
-    },
-  ];
+function makePrecomputedNode(
+  nodeId: bigint,
+  position: readonly number[],
+  parentNodeId?: bigint,
+): SkeletonNode {
+  return {
+    nodeId,
+    segmentId: 7n,
+    position: new Float32Array(position),
+    parentNodeId,
+  };
 }
 
-function makePrecomputedSelectionLayer(
-  getSegmentNodes: () => readonly SkeletonNode[],
-) {
-  const nodesChanged = new NullarySignal();
-  const skeletonNodeAccess = new WatchableValue({
-    getSegmentNodes,
-    nodesChanged,
+function makeNodeAccess(nodes: readonly SkeletonNode[]) {
+  return new WatchableValue({
+    getSegmentNodes: () => nodes,
+    nodesChanged: new NullarySignal(),
     hasPickableNodes: false,
+    areParentsInferred: () => false,
     displayState: { transform: new WatchableValue(undefined as any) },
   });
-  const layer = Object.assign(Object.create(SegmentationUserLayer.prototype), {
+}
+
+function makePrecomputedSelectionLayer(nodes: readonly SkeletonNode[]) {
+  const skeletonNodeAccess = makeNodeAccess(nodes);
+  return Object.assign(Object.create(SegmentationUserLayer.prototype), {
     displayState: undefined,
     getSpatiallyIndexedSkeletonLayer: () => undefined,
     skeletonNodeAccess,
@@ -712,7 +715,6 @@ function makePrecomputedSelectionLayer(
     spatialSkeletonNodeDataVersion: new WatchableValue(0),
     spatialSkeletonState: { getCachedNode: () => undefined },
   });
-  return { layer, nodesChanged };
 }
 
 function makeSelectionContext() {
@@ -926,8 +928,10 @@ describe("layer/segmentation spatial skeleton selection serialization", () => {
   });
 
   it("shows the type and position of a selected precomputed node", () => {
-    const nodes = makePrecomputedNodes();
-    const { layer } = makePrecomputedSelectionLayer(() => nodes);
+    const layer = makePrecomputedSelectionLayer([
+      makePrecomputedNode(0n, [4, 5, 6]),
+      makePrecomputedNode(1n, [10, 5, 6], 0n),
+    ]);
     const parent = document.createElement("div");
 
     (layer as any).displaySpatialSkeletonSelection(
@@ -1015,25 +1019,14 @@ describe("layer/segmentation spatial skeleton selection serialization", () => {
 
 describe("layer/segmentation spatial skeleton node navigation helpers", () => {
   it("keeps the segment selected after going to a node of a precomputed skeleton", () => {
-    const nodes: SkeletonNode[] = [
-      { nodeId: 0n, segmentId: 7n, position: new Float32Array([0, 0, 0]) },
-      {
-        nodeId: 1n,
-        segmentId: 7n,
-        position: new Float32Array([1, 0, 0]),
-        parentNodeId: 0n,
-      },
-    ];
     const layer = Object.create(SegmentationUserLayer.prototype);
     Object.defineProperty(layer, "manager", {
       value: { root: { selectionState: { value: undefined } } },
     });
-    const skeletonNodeAccess = new WatchableValue({
-      getSegmentNodes: () => nodes,
-      nodesChanged: new NullarySignal(),
-      hasPickableNodes: false,
-      displayState: { transform: new WatchableValue(undefined as any) },
-    });
+    const skeletonNodeAccess = makeNodeAccess([
+      makePrecomputedNode(0n, [0, 0, 0]),
+      makePrecomputedNode(1n, [1, 0, 0], 0n),
+    ]);
     const selectSkeletonNode = vi.fn();
     Object.assign(layer, {
       skeletonNavigator: new SkeletonNavigator(skeletonNodeAccess),

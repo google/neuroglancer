@@ -27,10 +27,14 @@ import {
 import { WatchableValue } from "#src/trackable_value.js";
 import { NullarySignal } from "#src/util/signal.js";
 
-function makeNode(nodeId: bigint, parentNodeId?: bigint): SkeletonNode {
+function makeNode(
+  segmentId: bigint,
+  nodeId: bigint,
+  parentNodeId?: bigint,
+): SkeletonNode {
   return {
     nodeId,
-    segmentId: 7n,
+    segmentId,
     position: new Float32Array([Number(nodeId), 0, 0]),
     parentNodeId,
   };
@@ -43,6 +47,7 @@ function makeNodeAccess(
     getSegmentNodes,
     nodesChanged: new NullarySignal(),
     hasPickableNodes: false,
+    areParentsInferred: () => false,
     displayState: { transform: new WatchableValue(undefined as any) },
   };
   return new WatchableValue<SkeletonNodeAccess | undefined>(access);
@@ -54,7 +59,11 @@ function getNodeId(result: SkeletonNavigationResult) {
 
 describe("skeleton navigator", () => {
   it("goes to the parent, child and root of the selected node", () => {
-    const nodes = [makeNode(1n), makeNode(2n, 1n), makeNode(3n, 2n)];
+    const nodes = [
+      makeNode(7n, 1n),
+      makeNode(7n, 2n, 1n),
+      makeNode(7n, 3n, 2n),
+    ];
     const navigator = new SkeletonNavigator(makeNodeAccess(() => nodes));
     const selection = { segmentId: 7n, nodeId: 2n };
 
@@ -94,14 +103,14 @@ describe("skeleton navigator", () => {
   });
 
   it("goes to the new parent after the skeleton changes", () => {
-    let nodes = [makeNode(1n), makeNode(2n, 1n), makeNode(3n, 2n)];
+    let nodes = [makeNode(7n, 1n), makeNode(7n, 2n, 1n), makeNode(7n, 3n, 2n)];
     const navigator = new SkeletonNavigator(makeNodeAccess(() => nodes));
     const selection = { segmentId: 7n, nodeId: 3n };
     expect(
       getNodeId(navigator.navigate(SkeletonNavigation.PARENT, selection)),
     ).toBe(2n);
 
-    nodes = [makeNode(1n), makeNode(2n, 1n), makeNode(3n, 1n)];
+    nodes = [makeNode(7n, 1n), makeNode(7n, 2n, 1n), makeNode(7n, 3n, 1n)];
 
     expect(
       getNodeId(navigator.navigate(SkeletonNavigation.PARENT, selection)),

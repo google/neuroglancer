@@ -47,7 +47,7 @@ const {
   buildSpatialSkeletonPreparationVisuals,
   commitSpatiallyIndexedSkeletonOverlayReplacement,
   getActiveProvisionalSpatialSkeletonSegmentIds,
-  getSkeletonChunkNodes,
+  getSkeletonChunkTopology,
   SkeletonLayer,
   SkeletonSource,
   SpatiallyIndexedSkeletonLayer,
@@ -1307,12 +1307,69 @@ function makePackedSkeletonChunk(
   };
 }
 
+function makeSkeletonLayer() {
+  const source = Object.assign(Object.create(SkeletonSource.prototype), {
+    chunks: new Map(),
+    chunksChanged: new NullarySignal(),
+  });
+  const layer = Object.assign(Object.create(SkeletonLayer.prototype), {
+    source,
+  });
+  return { source, layer };
+}
+
 function getParentNodeIds(nodes: readonly SkeletonNode[]) {
   return nodes.map((node) => [node.nodeId, node.parentNodeId]);
 }
 
 describe("skeleton nodes from a chunk", () => {
-  it("makes the source vertex of each edge the parent of the target vertex", () => {
+  it("keeps the stored parents of a file whose edges form a tree", () => {
+    const chunk = makePackedSkeletonChunk(
+      [
+        [0, 0, 0],
+        [10, 0, 0],
+        [20, 0, 0],
+      ],
+      [
+        [2, 1],
+        [1, 0],
+      ],
+    );
+
+    const topology = getSkeletonChunkTopology(7n, chunk);
+
+    expect(getParentNodeIds(topology.nodes)).toEqual([
+      [0n, 1n],
+      [1n, 2n],
+      [2n, undefined],
+    ]);
+    expect(topology.parentsInferred).toBe(false);
+  });
+
+  it("infers parents from the lowest vertex when the edges have no direction", () => {
+    const chunk = makePackedSkeletonChunk(
+      [
+        [0, 0, 0],
+        [10, 0, 0],
+        [20, 0, 0],
+      ],
+      [
+        [0, 2],
+        [1, 2],
+      ],
+    );
+
+    const topology = getSkeletonChunkTopology(7n, chunk);
+
+    expect(getParentNodeIds(topology.nodes)).toEqual([
+      [0n, undefined],
+      [1n, 2n],
+      [2n, 0n],
+    ]);
+    expect(topology.parentsInferred).toBe(true);
+  });
+
+  it("cuts a loop in the edges so that branch navigation ends", () => {
     const chunk = makePackedSkeletonChunk(
       [
         [0, 0, 0],
@@ -1322,24 +1379,26 @@ describe("skeleton nodes from a chunk", () => {
       [
         [0, 1],
         [1, 2],
+        [2, 0],
       ],
     );
-    const nodes = getSkeletonChunkNodes(7n, chunk);
+
+    const { nodes } = getSkeletonChunkTopology(7n, chunk);
+
     expect(getParentNodeIds(nodes)).toEqual([
       [0n, undefined],
       [1n, 0n],
-      [2n, 1n],
+      [2n, 0n],
     ]);
+    expect(getBranchEnd(buildSkeletonNavigationGraph(nodes), 1n).nodeId).toBe(
+      1n,
+    );
   });
+});
 
+describe("precomputed skeleton layer", () => {
   it("tells listeners when a segment's skeleton enters or leaves memory", () => {
-    const source = Object.assign(Object.create(SkeletonSource.prototype), {
-      chunks: new Map(),
-      chunksChanged: new NullarySignal(),
-    });
-    const layer = Object.assign(Object.create(SkeletonLayer.prototype), {
-      source,
-    });
+    const { source, layer } = makeSkeletonLayer();
     const listener = vi.fn();
     layer.nodesChanged.add(listener);
     const chunk = {
@@ -1360,31 +1419,5 @@ describe("skeleton nodes from a chunk", () => {
     source.deleteChunk("5");
     expect(listener).toHaveBeenCalledTimes(2);
     expect(layer.getSegmentNodes(5n)).toBeUndefined();
-  });
-
-  it("cuts a loop in the edges so that branch navigation ends", () => {
-    const chunk = makePackedSkeletonChunk(
-      [
-        [0, 0, 0],
-        [10, 0, 0],
-        [20, 0, 0],
-      ],
-      [
-        [0, 1],
-        [1, 2],
-        [2, 0],
-      ],
-    );
-
-    const nodes = getSkeletonChunkNodes(7n, chunk);
-
-    expect(getParentNodeIds(nodes)).toEqual([
-      [0n, undefined],
-      [1n, 0n],
-      [2n, 1n],
-    ]);
-    expect(getBranchEnd(buildSkeletonNavigationGraph(nodes), 1n).nodeId).toBe(
-      2n,
-    );
   });
 });

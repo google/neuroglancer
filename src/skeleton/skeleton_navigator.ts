@@ -44,8 +44,8 @@ export interface SkeletonNodeAccess {
   // Undefined until every node of the segment is in memory.
   // Returns the same array while the nodes are unchanged.
   getSegmentNodes(segmentId: bigint): readonly SkeletonNode[] | undefined;
+  areParentsInferred(segmentId: bigint): boolean;
   readonly nodesChanged: NullaryReadonlySignal;
-  // Whether the viewer can hover over and select single nodes of this skeleton.
   readonly hasPickableNodes: boolean;
   readonly displayState: {
     readonly transform: WatchableValueInterface<RenderLayerTransformOrError>;
