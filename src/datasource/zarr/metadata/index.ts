@@ -20,7 +20,6 @@ import type { DataType } from "#src/util/data_type.js";
 export enum ChunkKeyEncoding {
   DEFAULT = 0,
   V2 = 1,
-  // `default` keys of `grid coordinate + chunkKeyOffset`:
   // https://github.com/zarr-developers/zarr-extensions/tree/main/chunk-key-encodings/offset
   OFFSET = 2,
 }
@@ -42,17 +41,12 @@ export interface ArrayMetadata {
   userAttributes: Record<string, unknown>;
   dimensionSeparator: DimensionSeparator;
   chunkKeyEncoding: ChunkKeyEncoding;
-  // One entry per dimension under `ChunkKeyEncoding.OFFSET`, otherwise
-  // `undefined`.
+  // One entry per dimension under `ChunkKeyEncoding.OFFSET`.
   chunkKeyOffset: number[] | undefined;
   codecs: CodecChainSpec;
 }
 
-/**
- * Formats the store key of the write chunk at `keyCoords` (one grid
- * coordinate per logical dimension) according to `metadata`'s chunk key
- * encoding.
- */
+/** Store key of the write chunk at grid coordinates `keyCoords`. */
 export function encodeChunkKey(
   metadata: Pick<
     ArrayMetadata,
