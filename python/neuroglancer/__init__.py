@@ -13,6 +13,8 @@
 # limitations under the License.
 
 
+import logging
+
 from . import (  # noqa: I001
     segment_colors,  # noqa: F401
     server,  # noqa: F401
@@ -120,3 +122,5 @@ from .viewer_state import (
     LayerGroupViewer,  # noqa: F401
     ViewerState,  # noqa: F401
 )
+
+logging.getLogger(__name__).addHandler(logging.NullHandler())
