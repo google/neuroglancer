@@ -971,15 +971,6 @@ export enum SkeletonRenderMode {
   LINES_AND_POINTS = 1,
 }
 
-export function setSpatialSkeletonModesToLinesAndPoints(layer: {
-  displayState: { skeletonRenderingOptions: SkeletonRenderingOptions };
-}) {
-  layer.displayState.skeletonRenderingOptions.params2d.mode.value =
-    SkeletonRenderMode.LINES_AND_POINTS;
-  layer.displayState.skeletonRenderingOptions.params3d.mode.value =
-    SkeletonRenderMode.LINES_AND_POINTS;
-}
-
 /**
  * Returns active numeric aliases that exist only in the optimistic projection.
  * These ids are presentation state rather than datasource identities and receive a
