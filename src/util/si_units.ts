@@ -79,6 +79,92 @@ export function pickSiPrefix(x: number): SiPrefix {
   return preferredSiPrefixes[Math.min(i, numPrefixes - 1)];
 }
 
+export interface DisplayUnit {
+  /** SI base units per displayed unit. */
+  scale: number;
+  /** Unit suffix shown to the user, such as `nm` or `µm^2`. */
+  suffix: string;
+}
+
+function splitPoweredUnit(unit: string) {
+  const match = unit.match(/^(.*?)(?:\^(\d+))?$/)!;
+  return { unit: match[1], power: Number(match[2] ?? 1) };
+}
+
+export function pickDisplayUnit(
+  bounds: readonly [number, number],
+  baseUnit: string,
+): DisplayUnit {
+  if (baseUnit === "") return { scale: 1, suffix: "" };
+  const { unit, power } = splitPoweredUnit(baseUnit);
+  const magnitude = Math.max(Math.abs(bounds[0]), Math.abs(bounds[1]));
+  const prefix = pickSiPrefix(
+    magnitude > 0 && Number.isFinite(magnitude) ? magnitude ** (1 / power) : 1,
+  );
+  return {
+    scale: 10 ** (prefix.exponent * power),
+    suffix: `${prefix.prefix}${unit}${power === 1 ? "" : `^${power}`}`,
+  };
+}
+
+export function parseValueWithUnit(
+  value: string,
+  baseUnit: string,
+  defaultUnit?: DisplayUnit,
+): number | undefined {
+  const match = value.match(
+    /^([+-]?(?:(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?))(.*)$/,
+  );
+  if (match === null) return undefined;
+  const numericValue = Number(match[1]);
+  if (!Number.isFinite(numericValue)) return undefined;
+  const suffix = match[2];
+  if (suffix === "") return numericValue * (defaultUnit?.scale ?? 1);
+  const { unit, power } = splitPoweredUnit(baseUnit);
+  for (const prefix of siPrefixesWithAlternatives) {
+    const expectedSuffix = `${prefix.prefix}${unit}${
+      power === 1 ? "" : `^${power}`
+    }`;
+    if (suffix === expectedSuffix) {
+      return numericValue * 10 ** (prefix.exponent * power);
+    }
+  }
+  return undefined;
+}
+
+export function formatValueWithUnit(
+  value: number,
+  displayUnit: DisplayUnit,
+  roundingDirection?: "down" | "up",
+): string {
+  const adjustedValue = value / displayUnit.scale;
+  if (roundingDirection !== undefined) {
+    const scaledValue = adjustedValue * 100;
+    const tolerance = Math.max(1, Math.abs(scaledValue)) * 1e-12;
+    const roundedValue =
+      roundingDirection === "down"
+        ? Math.floor(scaledValue + tolerance)
+        : Math.ceil(scaledValue - tolerance);
+    return `${(roundedValue / 100).toFixed(2)}${displayUnit.suffix}`;
+  }
+  const roundedValue = Number(adjustedValue.toFixed(2));
+  const tolerance = Math.max(1, Math.abs(adjustedValue)) * 1e-6;
+  const valueString =
+    Math.abs(adjustedValue - roundedValue) <= tolerance
+      ? adjustedValue.toFixed(2)
+      : adjustedValue.toString();
+  return `${valueString}${displayUnit.suffix}`;
+}
+
+export function roundValueToDisplayUnit(
+  value: number | bigint,
+  displayUnit: DisplayUnit,
+): number {
+  return (
+    Number((Number(value) / displayUnit.scale).toFixed(2)) * displayUnit.scale
+  );
+}
+
 interface FormatScaleWithUnitOptions {
   precision?: number;
   elide1?: boolean;

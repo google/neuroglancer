@@ -30,12 +30,11 @@ import {
   ANNOTATION_RENDER_LAYER_UPDATE_SEGMENTATION_RPC_ID,
   ANNOTATION_SPATIALLY_INDEXED_RENDER_LAYER_RPC_ID,
   forEachVisibleAnnotationChunk,
+  getAnnotationFilterAdjustedRenderScaleTarget,
 } from "#src/annotation/base.js";
-import type {
-  AnnotationGeometryChunkSource,
-  AnnotationGeometryData,
-} from "#src/annotation/frontend_source.js";
+import type { AnnotationGeometryChunkSource } from "#src/annotation/frontend_source.js";
 import {
+  AnnotationGeometryData,
   computeNumPickIds,
   MultiscaleAnnotationSource,
 } from "#src/annotation/frontend_source.js";
@@ -48,6 +47,7 @@ import {
   AnnotationSource,
   AnnotationType,
   annotationTypes,
+  filterSerializedAnnotations,
   formatAnnotationPropertyValue,
 } from "#src/annotation/index.js";
 import type {
@@ -354,6 +354,11 @@ export class AnnotationLayer extends RefCounted {
     this.registerDisposer(
       this.transform.changed.add(this.redrawNeeded.dispatch),
     );
+    this.registerDisposer(
+      this.state.displayState.filteredAnnotationIds.changed.add(
+        this.handleChangeAffectingBuffer,
+      ),
+    );
   }
 
   get gl() {
@@ -372,12 +377,19 @@ export class AnnotationLayer extends RefCounted {
           );
         }
         this.generation = generation;
+        const segFilt = segmentationFilter(this.segmentationStates.value);
+        const filteredIds = this.state.displayState.filteredAnnotationIds.value;
+        const filter =
+          filteredIds !== null || segFilt !== undefined
+            ? (annotation: AnnotationBase) => {
+                if (filteredIds !== null && !filteredIds.has(annotation.id))
+                  return false;
+                return segFilt === undefined || segFilt(annotation);
+              }
+            : undefined;
         const serializedAnnotations = (this.serializedAnnotations =
-          serializeAnnotationSet(
-            source,
-            segmentationFilter(this.segmentationStates.value),
-          ));
-        buffer.setData(this.serializedAnnotations.data);
+          serializeAnnotationSet(source, filter));
+        buffer.setData(serializedAnnotations.data);
         this.numPickIds = computeNumPickIds(serializedAnnotations);
       }
     }
@@ -477,6 +489,52 @@ function AnnotationRenderLayer<
     curRank = -1;
     private renderHelpers: AnnotationRenderHelper[] = [];
     private tempChunkPosition: Float32Array;
+    private filteredAnnotationIds: ReadonlySet<string> | null = null;
+    private filteredGeometryChunks = new Map<
+      AnnotationGeometryData,
+      {
+        sourceData: Uint8Array<ArrayBuffer>;
+        filteredData: AnnotationGeometryData;
+      }
+    >();
+
+    private clearFilteredGeometryChunks() {
+      for (const { filteredData } of this.filteredGeometryChunks.values()) {
+        filteredData.freeGPUMemory(this.gl);
+      }
+      this.filteredGeometryChunks.clear();
+    }
+
+    private getFilteredGeometryChunkData(chunk: AnnotationGeometryData) {
+      const filteredAnnotationIds =
+        this.base.state.displayState.filteredAnnotationIds.value;
+      if (filteredAnnotationIds === null) {
+        if (this.filteredAnnotationIds !== null) {
+          this.clearFilteredGeometryChunks();
+          this.filteredAnnotationIds = null;
+        }
+        return chunk;
+      }
+      if (filteredAnnotationIds !== this.filteredAnnotationIds) {
+        this.clearFilteredGeometryChunks();
+        this.filteredAnnotationIds = filteredAnnotationIds;
+      }
+      const sourceData = chunk.serializedAnnotations.data;
+      const existing = this.filteredGeometryChunks.get(chunk);
+      if (existing?.sourceData === sourceData) return existing.filteredData;
+      existing?.filteredData.freeGPUMemory(this.gl);
+      const propertySerializers =
+        this.base.source.annotationPropertySerializers;
+      const filteredData = new AnnotationGeometryData(
+        filterSerializedAnnotations(
+          chunk.serializedAnnotations,
+          propertySerializers,
+          (id) => filteredAnnotationIds.has(id),
+        ),
+      );
+      this.filteredGeometryChunks.set(chunk, { sourceData, filteredData });
+      return filteredData;
+    }
 
     handlePropertiesChanged = () => {
       this.handleRankChanged(true /* forceUpdate */);
@@ -529,6 +587,7 @@ function AnnotationRenderLayer<
         for (const helper of this.renderHelpers) {
           helper.dispose();
         }
+        this.clearFilteredGeometryChunks();
       });
       this.role = base.state.role;
       this.registerDisposer(base.redrawNeeded.add(this.redrawNeeded.dispatch));
@@ -616,6 +675,7 @@ function AnnotationRenderLayer<
       state: AnnotationChunkRenderParameters,
       drawFraction = 1,
     ) {
+      chunk = this.getFilteredGeometryChunkData(chunk);
       if (!chunk.bufferValid) {
         let { buffer } = chunk;
         if (buffer === undefined) {
@@ -986,7 +1046,15 @@ const SpatiallyIndexedAnnotationLayer = <
       renderScaleHistogram: RenderScaleHistogram;
     }) {
       super(options.annotationLayer, options.renderScaleHistogram);
-      this.renderScaleTarget = options.renderScaleTarget;
+      this.renderScaleTarget = this.registerDisposer(
+        makeCachedDerivedWatchableValue(
+          getAnnotationFilterAdjustedRenderScaleTarget,
+          [
+            options.renderScaleTarget,
+            this.base.state.displayState.filterMatchFraction,
+          ],
+        ),
+      );
       this.registerDisposer(
         this.renderScaleTarget.changed.add(this.redrawNeeded.dispatch),
       );

@@ -464,6 +464,8 @@ const SharedObjectWithSharedVisibility = withSharedVisibility(SharedObject);
 class SingleMeshLayerSharedObject extends SharedObjectWithSharedVisibility {}
 
 export class SingleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRenderLayerAttachmentState> {
+  isMesh = true;
+
   private shaderManager: SingleMeshShaderManager;
   private shaders = new Map<ShaderModule, ShaderProgram | null>();
   private sharedObject = this.registerDisposer(
@@ -600,6 +602,7 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensional
     const { gl } = this;
     const shaderManager = this.shaderManager!;
     shader.bind();
+    renderContext.bindEmitter?.(shader);
     shaderManager.beginLayer(gl, shader, renderContext);
     setControlsInShader(
       gl,

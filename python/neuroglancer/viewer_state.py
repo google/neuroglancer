@@ -1928,6 +1928,9 @@ class ViewerState(JsonObjectWrapper):
         "showAxisLines", optional(bool, True)
     )
     wire_frame = wireFrame = wrapped_property("wireFrame", optional(bool, False))
+    transparent_mesh_rendering_mode = transparentMeshRenderingMode = wrapped_property(
+        "transparentMeshRenderingMode", optional(str, "current")
+    )
     enable_adaptive_downsampling = enableAdaptiveDownsampling = wrapped_property(
         "enableAdaptiveDownsampling", optional(bool, True)
     )
