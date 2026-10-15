@@ -30,30 +30,29 @@ import type {
 } from "#src/skeleton/command_factories.js";
 import type { SpatialSkeletonOptimisticEditingProvider } from "#src/skeleton/optimistic_edit/api.js";
 
+// One number per dimension of the coordinate space, such as a position or a chunk size.
 export type SkeletonVector = ArrayLike<number>;
+// Keyed by vertex attribute id. Each value has one number per component.
 export type SkeletonNodeAttributes = Readonly<
   Record<string, ArrayLike<number>>
 >;
 
-/**
- * Vertex attribute ids that have a defined meaning. A source may also have attributes with other ids.
- **/
+// A source may also have vertex attributes with other ids.
 export enum SkeletonNodeAttribute {
   RADIUS = "radius",
   // As a percent, from 0 to 100.
   CONFIDENCE = "confidence",
-  // Non-zero on a leaf that marks where the branch is confirmed to end
-  // primarily used to track tracing review progress
+  // Non-zero on a leaf where the branch is confirmed to end.
   TRUE_END = "true_end",
 }
 
 export interface SkeletonNode {
-  nodeId: bigint;
-  segmentId: bigint;
-  position: SkeletonVector;
-  parentNodeId?: bigint;
-  attributes?: SkeletonNodeAttributes;
-  description?: string;
+  readonly nodeId: bigint;
+  readonly segmentId: bigint;
+  readonly position: SkeletonVector;
+  readonly parentNodeId?: bigint;
+  readonly attributes?: SkeletonNodeAttributes;
+  readonly description?: string;
 }
 
 export interface SkeletonEdge {
@@ -62,14 +61,14 @@ export interface SkeletonEdge {
 }
 
 export interface SkeletonSpatialIndexLevel {
-  // Cell `c` spans `c * chunkSize` to `(c + 1) * chunkSize`, counted from 0, not from the lower bound.
+  // Chunk `c` spans `c * chunkSize` to `(c + 1) * chunkSize`, counted from 0, not from the lower bound.
   readonly chunkSize: SkeletonVector;
-  // Largest expected node count in one cell. 0 means every node and is allowed only on the finest level.
+  // Largest expected node count in one chunk. 0 means every node and is allowed only on the finest level.
   readonly limit: number;
 }
 
-export interface SpatiallyIndexedSkeletonMetadata {
-  // Its bounds must be finite. They set the extent of the cell grid.
+export interface SkeletonSpatialIndexMetadata {
+  // Its bounds must be finite. They set the extent of the chunk grid.
   readonly coordinateSpace: CoordinateSpace;
   // Must be provided from coarsest to finest.
   readonly spatial: readonly SkeletonSpatialIndexLevel[];
@@ -101,24 +100,23 @@ export interface SkeletonFragmentSource {
   ): Promise<SkeletonFragment>;
 }
 
-export interface SpatiallyIndexedSkeletonCellSource {
-  // Resolves to [] for an empty or missing cell.
-  fetchCell(
-    cellGridPosition: Float32Array,
-    options: { signal: AbortSignal },
+export interface SkeletonSpatialIndexSource {
+  // Resolves to [] for an empty or missing chunk.
+  downloadChunk(
+    chunkGridPosition: Float32Array,
+    signal: AbortSignal,
   ): Promise<SkeletonNode[]>;
 }
 
 export interface EditableSkeletonSource extends SkeletonFragmentSource {
   readonly readonly: false;
-  /** Required datasource adapter for the generic optimistic edit queue host. */
   readonly optimisticEditing: SpatialSkeletonOptimisticEditingProvider;
   readonly addNodesCommand: SpatialSkeletonAddNodesCommandFactory;
-  readonly insertNodesCommand?: SpatialSkeletonInsertNodesCommandFactory;
-  readonly deleteNodesCommand: SpatialSkeletonDeleteNodesCommandFactory;
   readonly moveNodesCommand: SpatialSkeletonMoveNodesCommandFactory;
+  readonly deleteNodesCommand: SpatialSkeletonDeleteNodesCommandFactory;
   readonly splitSkeletonsCommand: SpatialSkeletonSplitSkeletonsCommandFactory;
   readonly mergeSkeletonsCommand: SpatialSkeletonMergeSkeletonsCommandFactory;
+  readonly insertNodesCommand?: SpatialSkeletonInsertNodesCommandFactory;
   readonly rerootCommand?: SpatialSkeletonRerootCommandFactory;
   readonly editNodeDescriptionCommand?: SpatialSkeletonEditNodeDescriptionCommandFactory;
   readonly editNodeTrueEndCommand?: SpatialSkeletonEditNodeTrueEndCommandFactory;

@@ -48,14 +48,14 @@ export class CatmaidSpatiallyIndexedSkeletonSourceBackend extends WithParameters
     super(args[0], args[1]);
   }
 
-  fetchCell(cellGridPosition: Float32Array, options: { signal: AbortSignal }) {
+  downloadChunk(chunkGridPosition: Float32Array, signal: AbortSignal) {
     const bounds = getCatmaidSpatialSkeletonGridCellBounds(
-      cellGridPosition,
+      chunkGridPosition,
       this.spec.chunkDataSize,
     );
     return this.client.fetchNodes(bounds, this.parameters.catmaidLod ?? 0, {
       cacheProvider: this.parameters.catmaidParameters.cacheProvider,
-      signal: options.signal,
+      signal,
     });
   }
 }

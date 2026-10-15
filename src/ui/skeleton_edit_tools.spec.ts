@@ -2042,7 +2042,7 @@ describe("spatial_skeleton_edit_tool", () => {
       makeFindPathNode(4n, 11n, 2n),
       makeFindPathNode(5n, 11n, 2n),
     ];
-    nodes[3].attributes = { true_end: [1] };
+    nodes[3] = { ...nodes[3], attributes: { true_end: [1] } };
     const graph = buildSpatiallyIndexedSkeletonNavigationGraph(nodes);
 
     expect(

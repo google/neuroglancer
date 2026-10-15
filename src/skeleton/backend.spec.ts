@@ -165,11 +165,11 @@ describe("skeleton/backend spatial chunk memory", () => {
   });
 });
 
-function makeCellSource(nodes: SkeletonNode[]) {
+function makeSpatialIndexSource(nodes: SkeletonNode[]) {
   const source = Object.create(
     SpatiallyIndexedSkeletonSourceBackend.prototype,
   ) as SpatiallyIndexedSkeletonSourceBackend;
-  source.fetchCell = async () => nodes;
+  source.downloadChunk = async () => nodes;
   return source;
 }
 
@@ -181,7 +181,7 @@ function makeCellChunk() {
 
 describe("skeleton/backend cell download", () => {
   it("draws an edge to a parent only when the parent is in the same cell", async () => {
-    const source = makeCellSource([
+    const source = makeSpatialIndexSource([
       { nodeId: 1n, position: [1, 2, 3], segmentId: 10n },
       { nodeId: 2n, parentNodeId: 1n, position: [4, 5, 6], segmentId: 10n },
       { nodeId: 3n, parentNodeId: 99n, position: [7, 8, 9], segmentId: 11n },
@@ -199,7 +199,7 @@ describe("skeleton/backend cell download", () => {
   });
 
   it("keeps skeleton and node IDs above 2^32 exact in a downloaded cell", async () => {
-    const source = makeCellSource([
+    const source = makeSpatialIndexSource([
       {
         nodeId: 2n ** 53n + 1n,
         position: [1, 2, 3],

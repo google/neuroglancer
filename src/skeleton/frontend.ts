@@ -74,7 +74,7 @@ import {
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
 import type {
   SkeletonSpatialIndexLevel,
-  SpatiallyIndexedSkeletonMetadata,
+  SkeletonSpatialIndexMetadata,
   SkeletonNode,
 } from "#src/skeleton/api.js";
 import {
@@ -2068,7 +2068,7 @@ function makeSpatialSkeletonLevelSpec(
 export class MultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleSliceViewChunkSource<SpatiallyIndexedSkeletonSource> {
   constructor(
     chunkManager: Borrowed<ChunkManager>,
-    private readonly metadata: SpatiallyIndexedSkeletonMetadata,
+    private readonly metadata: SkeletonSpatialIndexMetadata,
     private readonly makeLevelSource: (
       options: SpatialSkeletonLevelSourceOptions,
     ) => SpatiallyIndexedSkeletonSource,

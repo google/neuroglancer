@@ -54,7 +54,7 @@ describe("complete skeleton snapshots", () => {
     const first = snapshot.materialize();
 
     (input[0].position as Float32Array)[0] = 999;
-    input[0].attributes = { confidence: [100] };
+    input[0] = { ...input[0], attributes: { confidence: [100] } };
     input.pop();
 
     expect(snapshot.kind).toBe("base");

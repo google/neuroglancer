@@ -136,7 +136,7 @@ describe("SpatialSkeletonMergeTargetPrefetch", () => {
     expect(getSkeleton).toHaveBeenCalledTimes(1);
   });
 
-  it("cancels the previous target's download when the pointer moves to another skeleton", async () => {
+  it("never downloads the previous target when the pointer moves to another skeleton", async () => {
     const state = new SpatialSkeletonState();
     const { skeletonLayer, reads } = makeSkeletonLayer();
     const prefetch = new SpatialSkeletonMergeTargetPrefetch(state);

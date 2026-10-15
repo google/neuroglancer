@@ -39,10 +39,10 @@ describe("CatmaidSpatiallyIndexedSkeletonSourceBackend", () => {
         },
       },
     });
-    await CatmaidSpatiallyIndexedSkeletonSourceBackend.prototype.fetchCell.call(
+    await CatmaidSpatiallyIndexedSkeletonSourceBackend.prototype.downloadChunk.call(
       source,
       Float32Array.of(2, 3, 4),
-      { signal },
+      signal,
     );
 
     expect(fetchNodes).toHaveBeenCalledWith(

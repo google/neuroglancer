@@ -42,7 +42,9 @@ function makeWholeSkeletonReads(
 }
 
 async function flushMicrotasks() {
-  for (let i = 0; i < 10; ++i) await Promise.resolve();
+  for (let iteration = 0; iteration < 10; ++iteration) {
+    await Promise.resolve();
+  }
 }
 
 it("fences a read started during final-node deletion when deletion becomes authoritative", () => {

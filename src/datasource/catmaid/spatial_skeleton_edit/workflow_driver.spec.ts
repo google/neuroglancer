@@ -645,9 +645,15 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
   ] as const)(
     "restores %s root confidence %s using the current node ID",
     (kind, confidence) => {
-      const root = { confidence: [confidence] };
-      const first = [node(101, 11, undefined, root), node(102, 11, 101)];
-      const second = [node(201, 17, undefined, root), node(202, 17, 201)];
+      const rootAttributes = { confidence: [confidence] };
+      const first = [
+        node(101, 11, undefined, rootAttributes),
+        node(102, 11, 101),
+      ];
+      const second = [
+        node(201, 17, undefined, rootAttributes),
+        node(202, 17, 201),
+      ];
       const { driver, identities } = makeDriver(
         new Map([
           [11n, first],

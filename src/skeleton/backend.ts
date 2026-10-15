@@ -39,7 +39,7 @@ import {
 import type { SharedWatchableValue } from "#src/shared_watchable_value.js";
 import type {
   SkeletonNode,
-  SpatiallyIndexedSkeletonCellSource,
+  SkeletonSpatialIndexSource,
 } from "#src/skeleton/api.js";
 import {
   forEachVisibleSpatialSkeletonChunk,
@@ -312,10 +312,10 @@ function packSpatiallyIndexedSkeletonNodes(
   chunk.segmentIds = segmentIds;
 }
 
-// Mixins do not accept abstract classes, so subclasses supply fetchCell through this interface.
+// Mixins do not accept abstract classes, so subclasses supply downloadChunk through this interface.
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging, @typescript-eslint/no-empty-object-type
 export interface SpatiallyIndexedSkeletonSourceBackend
-  extends SpatiallyIndexedSkeletonCellSource {}
+  extends SkeletonSpatialIndexSource {}
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class SpatiallyIndexedSkeletonSourceBackend extends SliceViewChunkSourceBackend<
@@ -325,7 +325,7 @@ export class SpatiallyIndexedSkeletonSourceBackend extends SliceViewChunkSourceB
   chunkConstructor = SpatiallyIndexedSkeletonChunk;
 
   async download(chunk: SpatiallyIndexedSkeletonChunk, signal: AbortSignal) {
-    const nodes = await this.fetchCell(chunk.chunkGridPosition, { signal });
+    const nodes = await this.downloadChunk(chunk.chunkGridPosition, signal);
     packSpatiallyIndexedSkeletonNodes(chunk, nodes);
   }
 }

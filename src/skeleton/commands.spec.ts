@@ -5953,7 +5953,7 @@ describe("spatial_skeleton_commands", () => {
   it("reacquires a cold merge source when an earlier save reverses skeleton ownership", async () => {
     suppressStatusMessages();
     const nodes = makeRootRestorationNodesForTest();
-    nodes[2].attributes = { confidence: [25] };
+    nodes[2] = { ...nodes[2], attributes: { confidence: [25] } };
     const target = {
       nodeId: 301n,
       segmentId: 23n,
@@ -6791,8 +6791,8 @@ describe("spatial_skeleton_commands", () => {
     async (confidence) => {
       suppressStatusMessages();
       const nodes = makeRootRestorationNodesForTest();
-      nodes[0].attributes = { confidence: [60] };
-      nodes[2].attributes = { confidence: [confidence] };
+      nodes[0] = { ...nodes[0], attributes: { confidence: [60] } };
+      nodes[2] = { ...nodes[2], attributes: { confidence: [confidence] } };
       let resolveMerge!: (result: {
         resultSegmentId: bigint;
         deletedSegmentId: bigint;
@@ -6880,8 +6880,8 @@ describe("spatial_skeleton_commands", () => {
     async (kind) => {
       suppressStatusMessages();
       const nodes = makeRootRestorationNodesForTest();
-      nodes[3].attributes = { confidence: [25] };
-      nodes[4].attributes = { confidence: [75] };
+      nodes[3] = { ...nodes[3], attributes: { confidence: [25] } };
+      nodes[4] = { ...nodes[4], attributes: { confidence: [75] } };
       let resolveMerge!: (result: {
         resultSegmentId: bigint;
         deletedSegmentId: bigint;
@@ -7030,8 +7030,8 @@ describe("spatial_skeleton_commands", () => {
     async (secondDirectionAdjusted) => {
       suppressStatusMessages();
       const nodes = makeRootRestorationNodesForTest();
-      nodes[0].attributes = { confidence: [60] };
-      nodes[2].attributes = { confidence: [25] };
+      nodes[0] = { ...nodes[0], attributes: { confidence: [60] } };
+      nodes[2] = { ...nodes[2], attributes: { confidence: [25] } };
       nodes.push({
         nodeId: 301n,
         segmentId: 23n,
