@@ -2216,10 +2216,9 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
         managedLayer.dispose();
         const msg = new StatusMessage();
         msg.setErrorMessage(
-          `Error creating layer ${JSON.stringify(name)}: ` +
-            (e instanceof Error)
-            ? e.message
-            : "" + e,
+          `Error creating layer ${JSON.stringify(name)}: ${
+            e instanceof Error ? e.message : e
+          }`,
         );
       }
     }
@@ -2229,10 +2228,9 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
       } catch (e) {
         const msg = new StatusMessage();
         msg.setErrorMessage(
-          `Error creating layer ${JSON.stringify(name)}: ` +
-            (e instanceof Error)
-            ? e.message
-            : "" + e,
+          `Error creating layer ${JSON.stringify(managedLayer.name)}: ${
+            e instanceof Error ? e.message : e
+          }`,
         );
       }
     }
