@@ -89,7 +89,7 @@ import type {
 import {
   parameterizedContextDependentShaderGetter,
   parameterizedEmitterDependentShaderGetter,
-  shaderCodeWithLineDirective,
+  wrapUserShaderMain,
 } from "#src/webgl/dynamic_shader.js";
 import type {
   HistogramChannelSpecification,
@@ -521,9 +521,7 @@ void main() {
           addControlsToBuilder(shaderBuilderState, builder);
           builder.addFragmentCode(glsl_string);
           builder.addFragmentCode(
-            "\n#define main userMain\n" +
-              shaderCodeWithLineDirective(shaderBuilderState.parseResult.code) +
-              "\n#undef main\n",
+            wrapUserShaderMain(shaderBuilderState.parseResult.code),
           );
         },
       },
