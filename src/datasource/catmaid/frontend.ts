@@ -48,7 +48,6 @@ import {
   normalizeInlineSegmentPropertyMap,
 } from "#src/segmentation_display_state/property_map.js";
 import type {
-  SkeletonConfidenceConfiguration,
   SkeletonFragment,
   SkeletonManifest,
   SkeletonFragmentSource,
@@ -59,10 +58,6 @@ import {
   MultiscaleSpatiallyIndexedSkeletonSource,
 } from "#src/skeleton/frontend.js";
 import "#src/datasource/catmaid/register_credentials_provider.js";
-
-const CATMAID_SPATIAL_SKELETON_CONFIDENCE_CONFIGURATION = {
-  values: CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES,
-} satisfies SkeletonConfidenceConfiguration;
 
 export class CatmaidSpatiallyIndexedSkeletonSource
   extends WithParameters(
@@ -81,10 +76,8 @@ export class CatmaidSpatiallyIndexedSkeletonSource
     return this.parameters.catmaidParameters.readonly !== false;
   }
 
-  get spatialSkeletonConfidenceConfiguration() {
-    return this.readonly
-      ? undefined
-      : CATMAID_SPATIAL_SKELETON_CONFIDENCE_CONFIGURATION;
+  get confidenceValues() {
+    return this.readonly ? undefined : CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES;
   }
 
   get optimisticEditing() {
@@ -215,8 +208,7 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
     }
 
     const {
-      lowerBounds: projectLowerBounds,
-      upperBounds: projectUpperBounds,
+      bounds,
       spatial,
       readonly: sourceReadonly,
     } = spatialIndexMetadata;
@@ -227,10 +219,7 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
       scales: Float64Array.from([1e-9, 1e-9, 1e-9]),
       boundingBoxes: [
         {
-          box: {
-            lowerBounds: Float64Array.from(projectLowerBounds),
-            upperBounds: Float64Array.from(projectUpperBounds),
-          },
+          box: bounds,
           transform: Float64Array.from([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]),
         },
       ],

@@ -915,9 +915,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       editNodeConfidenceCommand: makeCommandFactory(
         SpatialSkeletonActions.editNodeConfidence,
       ),
-      spatialSkeletonConfidenceConfiguration: {
-        values: [0, 50, 100],
-      },
+      confidenceValues: [0, 50, 100],
       readonly: false,
       getSkeletonManifest: async () => ({ fragmentKeys: [] }),
       getSkeletonFragment: async () => ({ nodes: [] }),
@@ -929,15 +927,13 @@ describe("skeleton/spatial_skeleton_manager", () => {
       getEditableSpatiallyIndexedSkeletonSource({
         source: {
           ...source,
-          spatialSkeletonConfidenceConfiguration: {
-            values: [0, Number.NaN, 100],
-          },
+          confidenceValues: [0, Number.NaN, 100],
         },
       }),
     ).toBeUndefined();
   });
 
-  it("requires confidence configuration only for confidence edit support", () => {
+  it("supports confidence editing for a source that does not list its confidence values", () => {
     const source = {
       ...makeEditableSourceCommands(),
       editNodeConfidenceCommand: makeCommandFactory(
@@ -958,18 +954,6 @@ describe("skeleton/spatial_skeleton_manager", () => {
     expect(
       editableSpatiallyIndexedSkeletonSourceSupportsAction(
         source as any,
-        SpatialSkeletonActions.editNodeConfidence,
-      ),
-    ).toBe(false);
-
-    expect(
-      editableSpatiallyIndexedSkeletonSourceSupportsAction(
-        {
-          ...source,
-          spatialSkeletonConfidenceConfiguration: {
-            values: [0, 50, 100],
-          },
-        } as any,
         SpatialSkeletonActions.editNodeConfidence,
       ),
     ).toBe(true);
@@ -2970,7 +2954,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
         "0.0.0": { nodes: [makeFragmentNode(3n)] },
         "0.0.1": {
           nodes: [makeFragmentNode(1n), makeFragmentNode(2n, 1n)],
-          parentLinks: [{ nodeId: 3n, parentNodeId: 2n }],
+          crossFragmentEdges: [{ childNodeId: 3n, parentNodeId: 2n }],
         },
       });
 

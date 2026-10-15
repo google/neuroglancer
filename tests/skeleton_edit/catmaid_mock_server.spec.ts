@@ -48,14 +48,16 @@ describe("stateful CATMAID browser test backend", () => {
   it("serves real adapter initialization and spatial/full skeleton reads", async () => {
     expect(await client.listSkeletons()).toEqual([10n, 20n]);
     expect(await client.getSpatialIndexMetadata()).toMatchObject({
-      lowerBounds: [0, 0, 0],
-      upperBounds: [10000, 10000, 10000],
+      bounds: {
+        lowerBounds: Float64Array.of(0, 0, 0),
+        upperBounds: Float64Array.of(10000, 10000, 10000),
+      },
       readonly: false,
       spatial: [{ chunkSize: [10000, 10000, 10000], limit: 0 }],
     });
     const spatial = await client.fetchNodes({
-      lowerBounds: [0, 0, 0],
-      upperBounds: [10000, 10000, 10000],
+      lowerBounds: Float64Array.of(0, 0, 0),
+      upperBounds: Float64Array.of(10000, 10000, 10000),
     });
     expect(spatial.map((n) => n.nodeId)).toEqual([
       101n,

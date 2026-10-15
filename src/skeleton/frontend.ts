@@ -2079,6 +2079,12 @@ export class MultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleSliceVie
         `Spatial skeleton coordinate space must have rank 3, not ${metadata.coordinateSpace.rank}.`,
       );
     }
+    const { lowerBounds, upperBounds } = metadata.coordinateSpace.bounds;
+    if (![...lowerBounds, ...upperBounds].every(Number.isFinite)) {
+      throw new Error(
+        "Spatial skeleton coordinate space bounds must be finite.",
+      );
+    }
     validateSpatialSkeletonLimitZeroOnlyFinest(metadata.spatial);
   }
 

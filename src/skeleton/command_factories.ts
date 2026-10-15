@@ -70,7 +70,6 @@ export interface SpatialSkeletonEditCommandMetadata {
   readonly action: SpatialSkeletonAction;
   readonly commandProperty: SpatialSkeletonEditCommandProperty;
   readonly required: boolean;
-  readonly requiresConfidenceConfiguration?: boolean;
 }
 
 export const SPATIAL_SKELETON_EDIT_COMMAND_METADATA = [
@@ -118,7 +117,6 @@ export const SPATIAL_SKELETON_EDIT_COMMAND_METADATA = [
     action: SpatialSkeletonActions.editNodeConfidence,
     commandProperty: "editNodeConfidenceCommand",
     required: false,
-    requiresConfidenceConfiguration: true,
   },
   {
     action: SpatialSkeletonActions.mergeSkeletons,

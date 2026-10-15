@@ -31,33 +31,34 @@ import type {
 import type { SpatialSkeletonOptimisticEditingProvider } from "#src/skeleton/optimistic_edit/api.js";
 
 export type SkeletonVector = ArrayLike<number>;
-
-export interface SpatialSkeletonBounds {
-  lowerBounds: SkeletonVector;
-  upperBounds: SkeletonVector;
-}
-
-// Vertex attribute ids that have a defined meaning. A source may also have attributes with other ids.
-export enum SkeletonNodeAttribute {
-  RADIUS = "radius",
-  // From 0 to 100.
-  CONFIDENCE = "confidence",
-  // Non-zero on a leaf that marks where the skeleton really ends.
-  TRUE_END = "true_end",
-}
-
 export type SkeletonNodeAttributes = Readonly<
   Record<string, ArrayLike<number>>
 >;
+
+/**
+ * Vertex attribute ids that have a defined meaning. A source may also have attributes with other ids.
+ **/
+export enum SkeletonNodeAttribute {
+  RADIUS = "radius",
+  // As a percent, from 0 to 100.
+  CONFIDENCE = "confidence",
+  // Non-zero on a leaf that marks where the branch is confirmed to end
+  // primarily used to track tracing review progress
+  TRUE_END = "true_end",
+}
 
 export interface SkeletonNode {
   nodeId: bigint;
   segmentId: bigint;
   position: SkeletonVector;
   parentNodeId?: bigint;
-  // Keyed by vertex attribute id, with one element per component.
   attributes?: SkeletonNodeAttributes;
   description?: string;
+}
+
+export interface SkeletonEdge {
+  readonly parentNodeId: bigint;
+  readonly childNodeId: bigint;
 }
 
 export interface SkeletonSpatialIndexLevel {
@@ -68,13 +69,10 @@ export interface SkeletonSpatialIndexLevel {
 }
 
 export interface SpatiallyIndexedSkeletonMetadata {
+  // Its bounds must be finite. They set the extent of the cell grid.
   readonly coordinateSpace: CoordinateSpace;
-  // From coarsest to finest.
+  // Must be provided from coarsest to finest.
   readonly spatial: readonly SkeletonSpatialIndexLevel[];
-}
-
-export interface SkeletonConfidenceConfiguration {
-  values: readonly number[];
 }
 
 export interface SkeletonManifest {
@@ -83,17 +81,11 @@ export interface SkeletonManifest {
   readonly fragmentKeys: readonly string[];
 }
 
-export interface SkeletonParentLink {
-  readonly nodeId: bigint;
-  readonly parentNodeId: bigint;
-}
-
 export interface SkeletonFragment {
   // Each node of a skeleton is in exactly one of its fragments.
-  // A node's parentNodeId may name a node in another fragment.
+  // A node's optional parentNodeId may name a node in another fragment.
   readonly nodes: readonly SkeletonNode[];
-  // Parents of nodes in other fragments, for a source that stores an edge with the parent.
-  readonly parentLinks?: readonly SkeletonParentLink[];
+  readonly crossFragmentEdges?: readonly SkeletonEdge[];
 }
 
 export interface SkeletonFragmentSource {
@@ -132,5 +124,6 @@ export interface EditableSkeletonSource extends SkeletonFragmentSource {
   readonly editNodeTrueEndCommand?: SpatialSkeletonEditNodeTrueEndCommandFactory;
   readonly editNodeRadiusCommand?: SpatialSkeletonEditNodeRadiusCommandFactory;
   readonly editNodeConfidenceCommand?: SpatialSkeletonEditNodeConfidenceCommandFactory;
-  readonly spatialSkeletonConfidenceConfiguration?: SkeletonConfidenceConfiguration;
+  // The only confidence values the source can store. Without it, any value from 0 to 100.
+  readonly confidenceValues?: readonly number[];
 }

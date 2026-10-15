@@ -1402,4 +1402,13 @@ describe("MultiscaleSpatiallyIndexedSkeletonSource", () => {
       ),
     ).toThrow("Spatial skeleton coordinate space must have rank 3, not 4.");
   });
+
+  it("rejects a coordinate space with infinite bounds", () => {
+    expect(() =>
+      makeMultiscaleSource(
+        makeNanometerSpace([0, 0, 0], [120, 120, Number.POSITIVE_INFINITY]),
+        [{ chunkSize: [30, 30, 30], limit: 0 }],
+      ),
+    ).toThrow("Spatial skeleton coordinate space bounds must be finite.");
+  });
 });

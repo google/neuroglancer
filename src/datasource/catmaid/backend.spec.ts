@@ -47,8 +47,8 @@ describe("CatmaidSpatiallyIndexedSkeletonSourceBackend", () => {
 
     expect(fetchNodes).toHaveBeenCalledWith(
       {
-        lowerBounds: [20, 60, 120],
-        upperBounds: [30, 80, 150],
+        lowerBounds: Float64Array.of(20, 60, 120),
+        upperBounds: Float64Array.of(30, 80, 150),
       },
       0.5,
       {

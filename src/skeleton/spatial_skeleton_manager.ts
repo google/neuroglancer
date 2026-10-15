@@ -16,15 +16,13 @@
 
 import type {
   EditableSkeletonSource,
-  SkeletonConfidenceConfiguration,
-  SkeletonParentLink,
+  SkeletonEdge,
   SkeletonNode,
   SkeletonNodeAttributes,
   SkeletonFragmentSource,
 } from "#src/skeleton/api.js";
 import {
   getSpatialSkeletonEditCommandFactoryFromSource,
-  getSpatialSkeletonEditCommandMetadata,
   isSpatialSkeletonEditCommandFactory,
   SPATIAL_SKELETON_EDIT_COMMAND_METADATA,
 } from "#src/skeleton/command_factories.js";
@@ -322,24 +320,10 @@ function isFiniteNumberArray(value: unknown): value is readonly number[] {
   );
 }
 
-function isSpatialSkeletonConfidenceConfiguration(
-  value: unknown,
-): value is SkeletonConfidenceConfiguration {
+function hasOptionalConfidenceValues(value: unknown) {
+  const confidenceValues = getProperty(value, "confidenceValues");
   return (
-    typeof value === "object" &&
-    value !== null &&
-    isFiniteNumberArray(getProperty(value, "values"))
-  );
-}
-
-function hasOptionalConfidenceConfiguration(value: unknown) {
-  const configuration = getProperty(
-    value,
-    "spatialSkeletonConfidenceConfiguration",
-  );
-  return (
-    configuration === undefined ||
-    isSpatialSkeletonConfidenceConfiguration(configuration)
+    confidenceValues === undefined || isFiniteNumberArray(confidenceValues)
   );
 }
 
@@ -365,7 +349,7 @@ export function isEditableSpatiallyIndexedSkeletonSource(
     SPATIAL_SKELETON_EDIT_COMMAND_METADATA.every((metadata) =>
       hasValidCommandFactory(value, metadata),
     ) &&
-    hasOptionalConfidenceConfiguration(value)
+    hasOptionalConfidenceValues(value)
   );
 }
 
@@ -408,12 +392,7 @@ export function editableSpatiallyIndexedSkeletonSourceSupportsAction(
     source,
     action,
   );
-  if (commandFactory === undefined) return false;
-  const metadata = getSpatialSkeletonEditCommandMetadata(action);
-  return (
-    metadata?.requiresConfidenceConfiguration !== true ||
-    source.spatialSkeletonConfidenceConfiguration !== undefined
-  );
+  return commandFactory !== undefined;
 }
 
 async function fetchCompleteSkeleton(
@@ -426,7 +405,7 @@ async function fetchCompleteSkeleton(
     signal,
   });
   const nodesById = new Map<bigint, SkeletonNode>();
-  const parentLinks: SkeletonParentLink[] = [];
+  const parentLinks: SkeletonEdge[] = [];
   // One request at a time, so that a limit on concurrent skeleton reads also limits requests.
   for (const fragmentKey of fragmentKeys) {
     signal?.throwIfAborted();
@@ -441,9 +420,9 @@ async function fetchCompleteSkeleton(
       }
       nodesById.set(node.nodeId, node);
     }
-    parentLinks.push(...(fragment.parentLinks ?? []));
+    parentLinks.push(...(fragment.crossFragmentEdges ?? []));
   }
-  for (const { nodeId, parentNodeId } of parentLinks) {
+  for (const { childNodeId: nodeId, parentNodeId } of parentLinks) {
     const node = nodesById.get(nodeId);
     if (node === undefined) {
       throw new Error(

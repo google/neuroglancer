@@ -2941,8 +2941,7 @@ export class SegmentationUserLayer extends Base {
     } else {
       appendValue("Node type", nodeTypeLabel);
     }
-    const confidenceConfiguration =
-      editSource?.spatialSkeletonConfidenceConfiguration;
+    const confidenceValues = editSource?.confidenceValues;
     const setPropertyInputValidity = (
       input: HTMLInputElement | HTMLSelectElement,
       valid: boolean,
@@ -3036,11 +3035,9 @@ export class SegmentationUserLayer extends Base {
         ? "Unable to resolve editable skeleton source for the active layer."
         : cachedNodeInfo === undefined
           ? "Load the active skeleton in the Skeleton tab before editing confidence."
-          : confidenceConfiguration === undefined
-            ? "The active skeleton source does not provide confidence value configuration."
-            : this.getSpatialSkeletonActionsDisabledReason(
-                SpatialSkeletonActions.editNodeConfidence,
-              );
+          : this.getSpatialSkeletonActionsDisabledReason(
+              SpatialSkeletonActions.editNodeConfidence,
+            );
 
     if (radiusEditingDisabledReason() !== undefined) {
       appendValue(
@@ -3150,11 +3147,7 @@ export class SegmentationUserLayer extends Base {
       context.deferUpdatesWhileFocused(radiusInput, isPropertyEditorCurrent);
     }
 
-    const confidenceConfigurationValues = confidenceConfiguration?.values;
-    if (
-      confidenceEditingDisabledReason() !== undefined ||
-      confidenceConfigurationValues === undefined
-    ) {
+    if (confidenceEditingDisabledReason() !== undefined) {
       appendValue(
         "Confidence level",
         formatSpatialSkeletonEditableNumber(
@@ -3165,24 +3158,42 @@ export class SegmentationUserLayer extends Base {
     } else {
       let committedConfidence =
         getSkeletonNodeConfidence(completeNodeInfo) ?? 0;
-      const confidenceSelectValues = Array.from(
-        new Set([...confidenceConfigurationValues, committedConfidence]),
-      ).filter((value): value is number => Number.isFinite(value));
-      const confidenceControl = document.createElement("select");
+      const confidenceSelectValues =
+        confidenceValues === undefined
+          ? undefined
+          : Array.from(
+              new Set([...confidenceValues, committedConfidence]),
+            ).filter((value): value is number => Number.isFinite(value));
+      let confidenceControl: HTMLInputElement | HTMLSelectElement;
+      if (confidenceSelectValues === undefined) {
+        const confidenceInput = document.createElement("input");
+        confidenceInput.type = "number";
+        confidenceInput.min = "0";
+        confidenceInput.max = "100";
+        confidenceInput.step = "any";
+        confidenceControl = confidenceInput;
+      } else {
+        confidenceControl = document.createElement("select");
+        for (const value of confidenceSelectValues) {
+          const option = document.createElement("option");
+          option.value = value.toString();
+          option.textContent = formatSpatialSkeletonEditableNumber(value);
+          confidenceControl.appendChild(option);
+        }
+      }
       confidenceControl.className =
         "neuroglancer-selection-details-skeleton-properties-input";
-      for (const value of confidenceSelectValues) {
-        const option = document.createElement("option");
-        option.value = value.toString();
-        option.textContent = formatSpatialSkeletonEditableNumber(value);
-        confidenceControl.appendChild(option);
-      }
       confidenceControl.value = committedConfidence.toString();
       appendValue("Confidence level", confidenceControl);
       let confidenceSavePending = false;
       const getConfidenceValidationError = (confidence: number) => {
         if (!Number.isFinite(confidence)) {
           return "Confidence must be a finite number.";
+        }
+        if (confidenceSelectValues === undefined) {
+          return confidence >= 0 && confidence <= 100
+            ? undefined
+            : "Confidence must be from 0 to 100.";
         }
         return confidenceSelectValues.includes(confidence)
           ? undefined

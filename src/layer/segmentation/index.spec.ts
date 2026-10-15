@@ -159,7 +159,6 @@ function makeQueuedSelectionLayer(pin = true) {
 
 function makeEditableSpatialSkeletonSource(
   options: {
-    confidenceConfiguration?: boolean;
     rerootCommand?: boolean;
   } = {},
 ) {
@@ -193,13 +192,6 @@ function makeEditableSpatialSkeletonSource(
     splitSkeletonsCommand: makeCommand(SpatialSkeletonActions.splitSkeletons),
     getSkeletonManifest: async () => ({ fragmentKeys: [] }),
     getSkeletonFragment: async () => ({ nodes: [] }),
-    ...(options.confidenceConfiguration !== true
-      ? {}
-      : {
-          spatialSkeletonConfidenceConfiguration: {
-            values: [0, 50, 100],
-          },
-        }),
     ...(options.rerootCommand !== true
       ? {}
       : {
@@ -548,7 +540,6 @@ describe("layer/segmentation spatial skeleton action gating", () => {
   it("allows every factory-advertised edit and inspection", () => {
     const layer = makeSpatialSkeletonActionGateLayer({
       source: makeEditableSpatialSkeletonSource({
-        confidenceConfiguration: true,
         rerootCommand: true,
       }),
     });
@@ -638,25 +629,10 @@ describe("layer/segmentation spatial skeleton action gating", () => {
     ).toBeUndefined();
   });
 
-  it("requires confidence configuration for confidence edit support", () => {
+  it("allows confidence editing for a source that does not list its confidence values", () => {
     const layer = makeSpatialSkeletonActionGateLayer({
       source: makeEditableSpatialSkeletonSource(),
     });
-
-    expect(
-      layer.getSpatialSkeletonActionsDisabledReason(
-        SpatialSkeletonActions.editNodeConfidence,
-      ),
-    ).toBe(
-      "The active spatial skeleton source does not support node confidence editing.",
-    );
-
-    layer.getSpatiallyIndexedSkeletonLayer = () =>
-      makeSpatialSkeletonLayerWithSource(
-        makeEditableSpatialSkeletonSource({
-          confidenceConfiguration: true,
-        }),
-      );
 
     expect(
       layer.getSpatialSkeletonActionsDisabledReason(
