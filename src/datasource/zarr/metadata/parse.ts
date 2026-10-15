@@ -62,6 +62,15 @@ export function parseChunkShape(obj: unknown, rank: number): number[] {
   });
 }
 
+function verifyStrictInt(value: unknown): number {
+  if (!Number.isInteger(value)) {
+    throw new Error(
+      `Expected integer, but received: ${JSON.stringify(value)}.`,
+    );
+  }
+  return value as number;
+}
+
 export function parseDimensionSeparator(value: unknown): "/" | "." {
   if (value !== "." && value !== "/") {
     throw new Error(
@@ -256,20 +265,34 @@ export function parseV3Metadata(
       },
     );
 
-    const { configuration: dimensionSeparator, name: chunkKeyEncoding } =
-      verifyObjectProperty(obj, "chunk_key_encoding", (value) =>
-        parseNameAndConfiguration(
-          value,
-          (name) => verifyEnumString(name, ChunkKeyEncoding, /^(v2|default)$/),
-          (configuration, chunkKeyEncoding) =>
-            verifyOptionalObjectProperty(
-              configuration,
-              "separator",
-              parseDimensionSeparator,
-              chunkKeyEncoding === ChunkKeyEncoding.DEFAULT ? "/" : ".",
-            ),
-        ),
-      );
+    const {
+      configuration: { dimensionSeparator, chunkKeyOffset },
+      name: chunkKeyEncoding,
+    } = verifyObjectProperty(obj, "chunk_key_encoding", (value) =>
+      parseNameAndConfiguration(
+        value,
+        (name) =>
+          verifyEnumString(name, ChunkKeyEncoding, /^(v2|default|offset)$/),
+        (configuration, chunkKeyEncoding) => ({
+          dimensionSeparator: verifyOptionalObjectProperty(
+            configuration,
+            "separator",
+            parseDimensionSeparator,
+            chunkKeyEncoding === ChunkKeyEncoding.V2 ? "." : "/",
+          ),
+          chunkKeyOffset:
+            chunkKeyEncoding === ChunkKeyEncoding.OFFSET
+              ? verifyObjectProperty(configuration, "offset", (offset) =>
+                  parseFixedLengthArray(
+                    new Array<number>(rank),
+                    offset,
+                    verifyStrictInt,
+                  ),
+                )
+              : undefined,
+        }),
+      ),
+    );
 
     const fillValue = verifyObjectProperty(obj, "fill_value", (value) =>
       parseFillValue(dataType, value),
@@ -291,6 +314,7 @@ export function parseV3Metadata(
       dimensionUnits,
       chunkKeyEncoding,
       dimensionSeparator,
+      chunkKeyOffset,
       userAttributes,
       codecs,
     };
@@ -436,6 +460,7 @@ export function parseV2Metadata(
       userAttributes: attrs,
       dimensionSeparator,
       chunkKeyEncoding: ChunkKeyEncoding.V2,
+      chunkKeyOffset: undefined,
       codecs: codecChainSpec,
     };
   } catch (e) {
