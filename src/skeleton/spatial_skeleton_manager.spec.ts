@@ -24,6 +24,7 @@ import {
   type CompleteSkeletonSnapshotHandle,
 } from "#src/skeleton/complete_skeleton_snapshot.js";
 import { SpatialSkeletonInspectionRequiredError } from "#src/skeleton/edit_errors.js";
+import { getSkeletonNodeConfidence } from "#src/skeleton/node_attributes.js";
 import { SpatialSkeletonOptimisticReloadRequiredError } from "#src/skeleton/optimistic_edit/fatal.js";
 import { unchangedSpatialSkeletonOptimisticEditSettlement } from "#src/skeleton/optimistic_edit/lifecycle.js";
 import {
@@ -1425,7 +1426,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       {
         kind: "update",
         nodeId: 1n,
-        changes: { confidence: 75 },
+        changes: { attributes: { confidence: [75] } },
       },
     ]);
     const expectedRevisions = getCachedSegmentRevisions(state, [11n]);
@@ -1523,7 +1524,11 @@ describe("skeleton/spatial_skeleton_manager", () => {
     );
     const baseline = state.getCachedSegmentSnapshotHandle(11n)!;
     const projected = patchCompleteSkeletonSnapshot(baseline.handle, [
-      { kind: "update", nodeId: 1n, changes: { confidence: 70 } },
+      {
+        kind: "update",
+        nodeId: 1n,
+        changes: { attributes: { confidence: [70] } },
+      },
     ]);
     const prepared = state.prepareSpatialSkeletonProjectionStatePublication({
       snapshots: [[11n, projected]],
@@ -1552,7 +1557,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       state.adoptPreparedSpatialSkeletonProjectionStatePublication(prepared),
     ).toBeUndefined();
     expect(state.getCachedSegmentSnapshotHandle(11n)).toBe(beforeStaleAdoption);
-    expect(state.getCachedNode(1n)?.confidence).toBeUndefined();
+    expect(getSkeletonNodeConfidence(state.getCachedNode(1n)!)).toBeUndefined();
 
     const duplicateOwner = createCompleteSkeletonSnapshot([
       { nodeId: 2n, segmentId: 11n, position: [9, 9, 9] },
@@ -1597,7 +1602,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       {
         kind: "update",
         nodeId: 1n,
-        changes: { radius: 4 },
+        changes: { attributes: { radius: [4] } },
       },
     ]);
 
@@ -1629,7 +1634,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
           {
             kind: "update",
             nodeId: BigInt(nodeId),
-            changes: { confidence: nodeId },
+            changes: { attributes: { confidence: [nodeId] } },
           },
         ]),
       );
@@ -1651,7 +1656,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
         .every((handle) => handle.materializationCount === 0),
     ).toBe(true);
     expect(state.getCachedSegmentNodes(11n)).toBe(projected.materialize());
-    expect(state.getCachedNode(64n)?.confidence).toBe(64);
+    expect(getSkeletonNodeConfidence(state.getCachedNode(64n)!)).toBe(64);
     expect(state.getCachedNode(65n)).toBe(baseline.getNode(65n));
   });
 
@@ -1669,7 +1674,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     });
     const expectedRevisions = getCachedSegmentRevisions(state, [11n]);
     const stale = patchCompleteSkeletonSnapshot(baseline, [
-      { kind: "update", nodeId: 1n, changes: { radius: 8 } },
+      { kind: "update", nodeId: 1n, changes: { attributes: { radius: [8] } } },
     ]);
     expect(
       state.replaceCachedSegmentSnapshots([
@@ -1931,7 +1936,6 @@ describe("skeleton/spatial_skeleton_manager", () => {
             parentNodeId?: bigint;
             position: Float32Array;
             segmentId: bigint;
-            isTrueEnd: boolean;
           }>,
         ) => void)
       | undefined;
@@ -1943,7 +1947,6 @@ describe("skeleton/spatial_skeleton_manager", () => {
             parentNodeId?: bigint;
             position: Float32Array;
             segmentId: bigint;
-            isTrueEnd: boolean;
           }>
         >((resolve) => {
           resolveFetch = resolve as typeof resolveFetch;
@@ -1967,7 +1970,6 @@ describe("skeleton/spatial_skeleton_manager", () => {
         parentNodeId: undefined,
         position: new Float32Array([1, 2, 3]),
         segmentId: 11n,
-        isTrueEnd: false,
       },
     ]);
 
@@ -2140,7 +2142,6 @@ describe("skeleton/spatial_skeleton_manager", () => {
         position: new Float32Array([7, 8, 9]),
         parentNodeId: undefined,
         description: undefined,
-        isTrueEnd: false,
       },
     ]);
     expect(state.getCachedNode(5n)?.position).toEqual(
@@ -2550,7 +2551,6 @@ describe("skeleton/spatial_skeleton_manager", () => {
         nodeId: 5n,
         segmentId: 11n,
         position: new Float32Array([1, 2, 3]),
-        isTrueEnd: false,
       },
     ];
     resolveFetch?.(fetchedNodes);
@@ -2624,7 +2624,6 @@ describe("skeleton/spatial_skeleton_manager", () => {
         parentNodeId: undefined,
         position: new Float32Array([1, 2, 3]),
         segmentId: 11n,
-        isTrueEnd: false,
       },
     ]);
     const skeletonLayer = {
@@ -2647,7 +2646,6 @@ describe("skeleton/spatial_skeleton_manager", () => {
         position: new Float32Array([1, 2, 3]),
         parentNodeId: undefined,
         description: undefined,
-        isTrueEnd: false,
       },
     ]);
 
@@ -2658,7 +2656,6 @@ describe("skeleton/spatial_skeleton_manager", () => {
       position: new Float32Array([1, 2, 3]),
       parentNodeId: undefined,
       description: undefined,
-      isTrueEnd: false,
     });
   });
 
@@ -2670,7 +2667,6 @@ describe("skeleton/spatial_skeleton_manager", () => {
         parentNodeId: undefined,
         position: new Float32Array([1, 2, 3]),
         segmentId: 11n,
-        isTrueEnd: false,
       },
     ]);
 
@@ -2691,7 +2687,6 @@ describe("skeleton/spatial_skeleton_manager", () => {
         position: new Float32Array([1, 2, 3]),
         parentNodeId: undefined,
         description: undefined,
-        isTrueEnd: false,
       },
     ]);
 
@@ -2702,7 +2697,6 @@ describe("skeleton/spatial_skeleton_manager", () => {
       position: new Float32Array([1, 2, 3]),
       parentNodeId: undefined,
       description: undefined,
-      isTrueEnd: false,
     });
   });
 
@@ -2724,7 +2718,6 @@ describe("skeleton/spatial_skeleton_manager", () => {
           parentNodeId?: bigint;
           position: Float32Array;
           segmentId: bigint;
-          isTrueEnd: boolean;
         }>,
       ) => void
     > = [];
@@ -2736,7 +2729,6 @@ describe("skeleton/spatial_skeleton_manager", () => {
             parentNodeId?: bigint;
             position: Float32Array;
             segmentId: bigint;
-            isTrueEnd: boolean;
           }>
         >((resolve, reject) => {
           resolvers.push(resolve);

@@ -44,6 +44,10 @@ import {
   SpatialSkeletonEditRecoveryError,
 } from "#src/skeleton/edit_errors.js";
 import {
+  getSkeletonNodeConfidence,
+  getSkeletonNodeRadius,
+} from "#src/skeleton/node_attributes.js";
+import {
   findSpatiallyIndexedSkeletonNode,
   getSpatiallyIndexedSkeletonDirectChildren,
   getSpatiallyIndexedSkeletonNodeParent,
@@ -82,7 +86,6 @@ function cloneNode(node: SkeletonNode): SkeletonNode {
     ...node,
     position: new Float32Array(node.position),
     description: node.description,
-    isTrueEnd: node.isTrueEnd,
   };
 }
 
@@ -122,7 +125,6 @@ function makeRootRestorationNodesForTest(): SkeletonNode[] {
       Number(nodeId!) + 1,
       Number(nodeId!) + 2,
     ]),
-    isTrueEnd: false,
   }));
 }
 
@@ -1126,7 +1128,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let resolveFirstAdd:
       | ((value: { nodeId: bigint; segmentId: bigint }) => void)
@@ -1209,7 +1210,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let resolveBlockingAdd: ((value: any) => void) | undefined;
     const blockingAdd = new Promise<any>((resolve) => {
@@ -1274,7 +1274,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let resolveAdd!: (value: { nodeId: bigint; segmentId: bigint }) => void;
     const addNode = vi.fn(
@@ -1320,7 +1319,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let rejectFirstAdd: ((error: Error) => void) | undefined;
     const firstAdd = new Promise<any>((_resolve, reject) => {
@@ -1576,7 +1574,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let rejectFirstAdd: ((error: Error) => void) | undefined;
     const firstAdd = new Promise<any>((_resolve, reject) => {
@@ -1630,7 +1627,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     let resolveBlockingAdd: ((value: any) => void) | undefined;
     const blockingAdd = new Promise<any>((resolve) => {
@@ -1718,7 +1714,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let resolveAdd:
       | ((value: { nodeId: bigint; segmentId: bigint }) => void)
@@ -1775,7 +1770,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let resolveAdd!: (value: { nodeId: bigint; segmentId: bigint }) => void;
     const addPromise = new Promise<any>((resolve) => {
@@ -1836,7 +1830,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let resolveFirstAdd:
       | ((value: { nodeId: bigint; segmentId: bigint }) => void)
@@ -1942,13 +1935,11 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId: firstSegmentId,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     const secondParent: SkeletonNode = {
       nodeId: 10n,
       segmentId: secondSegmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let rejectOldAdd!: (reason: unknown) => void;
     const oldAdd = new Promise<any>((_resolve, reject) => {
@@ -2043,7 +2034,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     let rejectOldMove!: (reason: unknown) => void;
     const oldMove = new Promise<never>((_resolve, reject) => {
@@ -2099,7 +2089,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     let rejectOldMove!: (reason: unknown) => void;
     const oldMove = new Promise<never>((_resolve, reject) => {
@@ -2157,7 +2146,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     let rejectFirstMove!: (reason: unknown) => void;
     const firstMove = new Promise<never>((_resolve, reject) => {
@@ -2366,7 +2354,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let resolveAdd: ((value: any) => void) | undefined;
     const addNode = vi.fn(
@@ -2424,7 +2411,6 @@ describe("spatial_skeleton_commands", () => {
         nodeId: 1n,
         segmentId,
         position: new Float32Array([4, 5, 6]),
-        isTrueEnd: false,
       };
       let resolveAdd:
         | ((value: { nodeId: bigint; segmentId: bigint }) => void)
@@ -2485,7 +2471,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let rejectFirstAdd: ((error: Error) => void) | undefined;
     const firstAddPromise = new Promise<any>((_resolve, reject) => {
@@ -2557,7 +2542,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let rejectAdd: ((error: Error) => void) | undefined;
     const addPromise = new Promise<any>((_resolve, reject) => {
@@ -2652,7 +2636,6 @@ describe("spatial_skeleton_commands", () => {
       segmentId,
       position: new Float32Array([1, 2, 3]),
       description: "unreviewed",
-      isTrueEnd: false,
     };
     const updateDescription = vi.fn(async (_nodeId, description: string) => ({
       description,
@@ -2737,7 +2720,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     let rejectFirstMove!: (reason: unknown) => void;
     const moveNode = vi.fn(
@@ -2806,7 +2788,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     let rejectMove!: (error: unknown) => void;
     const moveNode = vi.fn(
@@ -2864,7 +2845,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let resolveAdd: ((result: any) => void) | undefined;
     const addNode = vi.fn(
@@ -2961,7 +2941,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let rejectAdd: ((error: Error) => void) | undefined;
     const addPromise = new Promise<any>((_resolve, reject) => {
@@ -3016,7 +2995,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     const addNode = vi.fn().mockResolvedValue({
       nodeId: 2n,
@@ -3434,7 +3412,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 201n,
       segmentId: existingSegmentId,
       position: new Float32Array([7, 8, 9]),
-      isTrueEnd: false,
     };
     let resolveRootAdd: ((value: any) => void) | undefined;
     const addNode = vi.fn(
@@ -3698,21 +3675,18 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     const deletedNode: SkeletonNode = {
       nodeId: 3n,
       segmentId,
       parentNodeId: rootNode.nodeId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     const childNode: SkeletonNode = {
       nodeId: 2n,
       segmentId,
       parentNodeId: deletedNode.nodeId,
       position: new Float32Array([7, 8, 9]),
-      isTrueEnd: false,
     };
     let resolveInsert: ((value: any) => void) | undefined;
     const insertNode = vi.fn(
@@ -3788,15 +3762,12 @@ describe("spatial_skeleton_commands", () => {
       parentNodeId: 10n,
       position: new Float32Array([1, 2, 3]),
       description: "before",
-      isTrueEnd: false,
-      radius: 4,
-      confidence: 50,
+      attributes: { radius: [4], confidence: [50] },
     };
     const rootNode: SkeletonNode = {
       nodeId: 10n,
       segmentId,
       position: new Float32Array([0, 0, 0]),
-      isTrueEnd: false,
     };
     const updateDescription = vi.fn(async (_nodeId, description: string) => ({
       description,
@@ -3870,9 +3841,7 @@ describe("spatial_skeleton_commands", () => {
     expect(updateConfidence).toHaveBeenCalledTimes(3);
     expect(spatialSkeletonState.getCachedNode(node.nodeId)).toMatchObject({
       description: "after",
-      isTrueEnd: true,
-      radius: 8,
-      confidence: 75,
+      attributes: { true_end: [1], radius: [8], confidence: [75] },
     });
   });
 
@@ -3913,9 +3882,7 @@ describe("spatial_skeleton_commands", () => {
       }).settled;
       for (const id of [1n, 2n]) {
         expect(state.getCachedNode(id)).toMatchObject({
-          radius: 0,
-          confidence: 0,
-          isTrueEnd: false,
+          attributes: { radius: [0], confidence: [0] },
         });
       }
       if (operation === "reroot") {
@@ -3940,11 +3907,11 @@ describe("spatial_skeleton_commands", () => {
       expect(updateConfidence).toHaveBeenCalledWith(1n, 0);
       expect(state.getCachedNode(1n)).toMatchObject({
         parentNodeId: undefined,
-        confidence: 0,
+        attributes: { confidence: [0] },
       });
       expect(state.getCachedNode(2n)).toMatchObject({
         parentNodeId: 1n,
-        confidence: 0,
+        attributes: { confidence: [0] },
       });
       expect(state.getCachedNode(1n)!.segmentId).toBe(
         operation === "reroot" ? 23n : 25n,
@@ -3961,21 +3928,18 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     const middleNode: SkeletonNode = {
       nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     const leafNode: SkeletonNode = {
       nodeId: 3n,
       segmentId,
       parentNodeId: middleNode.nodeId,
       position: new Float32Array([7, 8, 9]),
-      isTrueEnd: false,
     };
     const rerootSkeleton = vi.fn(async () => ({}));
     const getSkeleton = vi.fn(async () => []);
@@ -4360,7 +4324,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     const addNode = vi.fn().mockResolvedValue({
       nodeId: 2n,
@@ -4405,7 +4368,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let resolveParentAdd:
       | ((value: { nodeId: bigint; segmentId: bigint }) => void)
@@ -4540,7 +4502,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let resolveParentAdd:
       | ((value: { nodeId: bigint; segmentId: bigint }) => void)
@@ -4621,7 +4582,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let resolveAdd:
       | ((value: { nodeId: bigint; segmentId: bigint }) => void)
@@ -4683,7 +4643,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let resolveMove: (() => void) | undefined;
     const movePromise = new Promise<void>((resolve) => {
@@ -4741,7 +4700,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let resolveOriginalMove!: () => void;
     const originalMove = new Promise<void>((resolve) => {
@@ -4835,7 +4793,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     const moveNode = vi
       .fn()
@@ -4966,7 +4923,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([0, 0, 0]),
-      isTrueEnd: false,
     };
     const moveNode = vi.fn().mockResolvedValue({});
     const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
@@ -5006,7 +4962,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([0, 0, 0]),
-      isTrueEnd: false,
     };
     let resolveFirstMove: (() => void) | undefined;
     const moveNode = vi.fn(
@@ -5064,7 +5019,6 @@ describe("spatial_skeleton_commands", () => {
           segmentId,
           parentNodeId: index === 0 ? undefined : BigInt(index),
           position: new Float32Array([index, 0, 0]),
-          isTrueEnd: false,
         }) satisfies SkeletonNode,
     );
     let resolveFirstMove: (() => void) | undefined;
@@ -5137,7 +5091,6 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let resolveFirstMove: (() => void) | undefined;
     let resolveSecondMove: (() => void) | undefined;
@@ -5200,21 +5153,18 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     const deletedNode: SkeletonNode = {
       nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     const childNode: SkeletonNode = {
       nodeId: 3n,
       segmentId,
       parentNodeId: deletedNode.nodeId,
       position: new Float32Array([7, 8, 9]),
-      isTrueEnd: false,
     };
     let resolveAdd:
       | ((value: { nodeId: bigint; segmentId: bigint }) => void)
@@ -5277,14 +5227,12 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     const deletedNode: SkeletonNode = {
       nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     const deleteNode = vi.fn().mockResolvedValue({});
     const addNode = vi.fn().mockResolvedValue({
@@ -5331,21 +5279,18 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     const splitNode: SkeletonNode = {
       nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     const childNode: SkeletonNode = {
       nodeId: 3n,
       segmentId,
       parentNodeId: splitNode.nodeId,
       position: new Float32Array([7, 8, 9]),
-      isTrueEnd: false,
     };
     let resolveSplit:
       | ((result: { existingSegmentId: bigint; newSegmentId: bigint }) => void)
@@ -5517,14 +5462,12 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     const splitNode: SkeletonNode = {
       nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let resolveSplit:
       | ((result: { existingSegmentId: bigint; newSegmentId: bigint }) => void)
@@ -5586,20 +5529,17 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     const splitNode: SkeletonNode = {
       nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     const independentRoot: SkeletonNode = {
       nodeId: 10n,
       segmentId: independentSegmentId,
       position: new Float32Array([7, 8, 9]),
-      isTrueEnd: false,
     };
     let resolveSplit!: (result: {
       existingSegmentId: bigint;
@@ -5687,27 +5627,23 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 101n,
       segmentId: firstSegmentId,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     const firstNode: SkeletonNode = {
       nodeId: 102n,
       segmentId: firstSegmentId,
       parentNodeId: firstRoot.nodeId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     const secondRoot: SkeletonNode = {
       nodeId: 201n,
       segmentId: secondSegmentId,
       position: new Float32Array([7, 8, 9]),
-      isTrueEnd: false,
     };
     const secondNode: SkeletonNode = {
       nodeId: 202n,
       segmentId: secondSegmentId,
       parentNodeId: secondRoot.nodeId,
       position: new Float32Array([10, 11, 12]),
-      isTrueEnd: false,
     };
     let resolveMerge:
       | ((result: {
@@ -5830,13 +5766,11 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 101n,
       segmentId: firstSegmentId,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     const secondNode: SkeletonNode = {
       nodeId: 201n,
       segmentId: secondSegmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let secondFetchSignal: AbortSignal | undefined;
     let resolveSecondFetch: ((nodes: SkeletonNode[]) => void) | undefined;
@@ -6011,13 +5945,15 @@ describe("spatial_skeleton_commands", () => {
         ?.map(({ nodeId }) => nodeId)
         .sort(),
     ).toEqual([101n, 201n, 301n]);
-    expect(spatialSkeletonState.getCachedNode(101n)?.radius).toBe(50);
+    expect(
+      getSkeletonNodeRadius(spatialSkeletonState.getCachedNode(101n)!),
+    ).toBe(50);
   });
 
   it("reacquires a cold merge source when an earlier save reverses skeleton ownership", async () => {
     suppressStatusMessages();
     const nodes = makeRootRestorationNodesForTest();
-    nodes[2].confidence = 25;
+    nodes[2].attributes = { confidence: [25] };
     const target = {
       nodeId: 301n,
       segmentId: 23n,
@@ -6101,7 +6037,7 @@ describe("spatial_skeleton_commands", () => {
     await undoSpatialSkeletonCommand(layer as any).settled;
     expect(state.getCachedNode(201n)).toMatchObject({
       segmentId: 17n,
-      confidence: 25,
+      attributes: { confidence: [25] },
     });
     expect(state.getCachedNode(301n)).toMatchObject({
       segmentId: 29n,
@@ -6316,13 +6252,11 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 101n,
       segmentId: firstSegmentId,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     const secondNode: SkeletonNode = {
       nodeId: 201n,
       segmentId: secondSegmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let resolveMerge:
       | ((result: {
@@ -6428,13 +6362,11 @@ describe("spatial_skeleton_commands", () => {
         nodeId: 101n,
         segmentId: firstSegmentId,
         position: new Float32Array([1, 2, 3]),
-        isTrueEnd: false,
       };
       const secondNode: SkeletonNode = {
         nodeId: 201n,
         segmentId: secondSegmentId,
         position: new Float32Array([4, 5, 6]),
-        isTrueEnd: false,
       };
       const getSkeleton = vi
         .fn()
@@ -6479,13 +6411,11 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 101n,
       segmentId: firstSegmentId,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     const secondNode: SkeletonNode = {
       nodeId: 201n,
       segmentId: secondSegmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let resolveMerge:
       | ((result: {
@@ -6576,19 +6506,16 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 101n,
       segmentId: resultSegmentId,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     const secondRoot: SkeletonNode = {
       nodeId: 201n,
       segmentId: firstDeletedSegmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     const thirdRoot: SkeletonNode = {
       nodeId: 301n,
       segmentId: secondDeletedSegmentId,
       position: new Float32Array([7, 8, 9]),
-      isTrueEnd: false,
     };
     const mergeSkeletons = vi
       .fn()
@@ -6864,8 +6791,8 @@ describe("spatial_skeleton_commands", () => {
     async (confidence) => {
       suppressStatusMessages();
       const nodes = makeRootRestorationNodesForTest();
-      nodes[0].confidence = 60;
-      nodes[2].confidence = confidence;
+      nodes[0].attributes = { confidence: [60] };
+      nodes[2].attributes = { confidence: [confidence] };
       let resolveMerge!: (result: {
         resultSegmentId: bigint;
         deletedSegmentId: bigint;
@@ -6919,7 +6846,7 @@ describe("spatial_skeleton_commands", () => {
         });
         expect(state.getCachedNode(201n)).toMatchObject({
           parentNodeId: undefined,
-          confidence,
+          attributes: { confidence: [confidence] },
         });
         expect(state.getCachedNode(102n)?.parentNodeId).toBe(203n);
         if (cycle === 0) {
@@ -6953,8 +6880,8 @@ describe("spatial_skeleton_commands", () => {
     async (kind) => {
       suppressStatusMessages();
       const nodes = makeRootRestorationNodesForTest();
-      nodes[3].confidence = 25;
-      nodes[4].confidence = 75;
+      nodes[3].attributes = { confidence: [25] };
+      nodes[4].attributes = { confidence: [75] };
       let resolveMerge!: (result: {
         resultSegmentId: bigint;
         deletedSegmentId: bigint;
@@ -7006,7 +6933,10 @@ describe("spatial_skeleton_commands", () => {
       );
       await merge;
       const target = state.getCachedNode(202n)!;
-      expect(target).toMatchObject({ parentNodeId: 203n, confidence: 75 });
+      expect(target).toMatchObject({
+        parentNodeId: 203n,
+        attributes: { confidence: [75] },
+      });
       const edit =
         kind === "delete"
           ? executeSpatialSkeletonDeleteNode(layer as any, target)
@@ -7050,7 +6980,9 @@ describe("spatial_skeleton_commands", () => {
           [205n, 17n, 203n],
           ...(kind === "delete" ? [[restoredId, 17n, 201n]] : []),
         ]);
-        expect(state.getCachedNode(restoredId)?.confidence).toBe(25);
+        expect(
+          getSkeletonNodeConfidence(state.getCachedNode(restoredId)!),
+        ).toBe(25);
         if (kind === "delete") {
           expect(insertNode).toHaveBeenNthCalledWith(
             cycle + 1,
@@ -7098,8 +7030,8 @@ describe("spatial_skeleton_commands", () => {
     async (secondDirectionAdjusted) => {
       suppressStatusMessages();
       const nodes = makeRootRestorationNodesForTest();
-      nodes[0].confidence = 60;
-      nodes[2].confidence = 25;
+      nodes[0].attributes = { confidence: [60] };
+      nodes[2].attributes = { confidence: [25] };
       nodes.push({
         nodeId: 301n,
         segmentId: 23n,
@@ -7188,7 +7120,7 @@ describe("spatial_skeleton_commands", () => {
           [205n, restoredSegmentId, 203n],
           [301n, 23n, null],
         ]);
-        expect(state.getCachedNode(201n)?.confidence).toBe(25);
+        expect(getSkeletonNodeConfidence(state.getCachedNode(201n)!)).toBe(25);
         expect(rerootSkeleton).toHaveBeenNthCalledWith(cycle + 1, 201n);
         expect(updateConfidence).toHaveBeenNthCalledWith(cycle + 1, 201n, 25);
         if (cycle === 0) {
@@ -7213,13 +7145,11 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 101n,
       segmentId: firstSegmentId,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     const secondRoot: SkeletonNode = {
       nodeId: 201n,
       segmentId: winningSegmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     const mergeSkeletons = vi.fn().mockResolvedValue({
       resultSegmentId: winningSegmentId,
@@ -7309,20 +7239,17 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 101n,
       segmentId: firstSegmentId,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     const secondRoot: SkeletonNode = {
       nodeId: 201n,
       segmentId: secondSegmentId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     const secondAttach: SkeletonNode = {
       nodeId: 202n,
       segmentId: secondSegmentId,
       parentNodeId: secondRoot.nodeId,
       position: new Float32Array([7, 8, 9]),
-      isTrueEnd: false,
     };
     const mergeSkeletons = vi.fn().mockResolvedValue({
       resultSegmentId: firstSegmentId,
@@ -7400,14 +7327,12 @@ describe("spatial_skeleton_commands", () => {
       nodeId: 1n,
       segmentId,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     const splitNode: SkeletonNode = {
       nodeId: 2n,
       segmentId,
       parentNodeId: rootNode.nodeId,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     let rejectSplit: ((error: Error) => void) | undefined;
     const splitSkeleton = vi.fn(

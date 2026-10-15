@@ -10,6 +10,11 @@ import type {
   SpatialSkeletonLogicalNodeHandle,
   SpatialSkeletonLogicalSegmentHandle,
 } from "#src/skeleton/logical_identity.js";
+import {
+  getSkeletonNodeConfidence,
+  getSkeletonNodeRadius,
+  isSkeletonNodeTrueEnd,
+} from "#src/skeleton/node_attributes.js";
 import type { SpatialSkeletonProjectionNodeAttributes } from "#src/skeleton/spatial_skeleton_projection_reducer.js";
 
 export interface CatmaidCapturedSegment {
@@ -193,14 +198,14 @@ function getRestoreSteps(semantic: CatmaidDeleteNodeSemantic) {
   }
   if (
     semantic.deletedSnapshot.description === undefined &&
-    semantic.deletedSnapshot.isTrueEnd === true
+    isSkeletonNodeTrueEnd(semantic.deletedSnapshot)
   ) {
     result.push({ kind: "true-end", semantic });
   }
-  if (semantic.deletedSnapshot.radius !== undefined) {
+  if (getSkeletonNodeRadius(semantic.deletedSnapshot) !== undefined) {
     result.push({ kind: "radius", semantic });
   }
-  if (semantic.deletedSnapshot.confidence !== undefined) {
+  if (getSkeletonNodeConfidence(semantic.deletedSnapshot) !== undefined) {
     result.push({ kind: "confidence", semantic });
   }
   return Object.freeze(result);

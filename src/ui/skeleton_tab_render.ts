@@ -19,6 +19,7 @@ import {
   getFlatListNodeIds,
   type SpatiallyIndexedSkeletonNavigationGraph,
 } from "#src/skeleton/navigation_graph.js";
+import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
 import {
   classifySpatialSkeletonDisplayNodeType as classifyNodeType,
   matchesSpatialSkeletonNodeFilter,
@@ -110,7 +111,7 @@ export function buildSpatialSkeletonSegmentRenderState(
       matchesSpatialSkeletonNodeFilter(options.nodeFilterType, {
         isLeaf,
         nodeHasDescription: hasNonEmptyNodeDescription(description),
-        nodeIsTrueEnd: node.isTrueEnd ?? false,
+        nodeIsTrueEnd: isSkeletonNodeTrueEnd(node),
         nodeType: type,
       }) && nodeMatchesFilter(node, options.filterText, description)
     );
@@ -156,7 +157,7 @@ export function buildSpatialSkeletonSegmentRenderState(
     if (info === undefined) return true;
     return (
       info.type === SpatialSkeletonDisplayNodeType.REGULAR &&
-      !(info.node.isTrueEnd ?? false)
+      !isSkeletonNodeTrueEnd(info.node)
     );
   };
 

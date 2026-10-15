@@ -381,7 +381,6 @@ function makeFindPathNode(
       Number(nodeId) + 1,
       Number(nodeId) + 2,
     ]),
-    isTrueEnd: false,
   };
 }
 
@@ -567,7 +566,6 @@ function makeDragHarness({ inspected = true } = {}) {
     nodeId: 2147483647n,
     segmentId: 4294967293n,
     position: new Float32Array([1, 2, 3]),
-    isTrueEnd: false,
   };
   let currentNode = original;
   const handle = spatialSkeletonLogicalNode("dragged");
@@ -2044,7 +2042,7 @@ describe("spatial_skeleton_edit_tool", () => {
       makeFindPathNode(4n, 11n, 2n),
       makeFindPathNode(5n, 11n, 2n),
     ];
-    nodes[3].isTrueEnd = true;
+    nodes[3].attributes = { true_end: [1] };
     const graph = buildSpatiallyIndexedSkeletonNavigationGraph(nodes);
 
     expect(
@@ -2502,7 +2500,6 @@ describe("spatial_skeleton_edit_tool", () => {
       segmentId: 11n,
       parentNodeId: 100n,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     const source = makeCommandSkeletonSource();
     const skeletonLayer = {
@@ -2762,13 +2759,11 @@ describe("spatial_skeleton_edit_tool", () => {
       nodeId: 101n,
       segmentId: 11n,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     const toNode: SkeletonNode = {
       nodeId: 202n,
       segmentId: 17n,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     const mergeExecute = vi.fn(completedEditExecution);
     const mergeSkeletonsCommand = makeCommandFactory(

@@ -111,10 +111,6 @@ function isFiniteNumber(value: number | undefined) {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function isOptionalFiniteNumber(value: number | undefined) {
-  return value === undefined || isFiniteNumber(value);
-}
-
 function isId(value: bigint | undefined) {
   return typeof value === "bigint";
 }
@@ -140,22 +136,19 @@ function isSpatiallyIndexedSkeletonNodePayload(
     segmentId?: bigint;
     position?: object;
     parentNodeId?: bigint;
-    radius?: number;
-    confidence?: number;
+    attributes?: object;
     description?: string;
-    isTrueEnd?: boolean;
   };
   return (
     isId(candidate.nodeId) &&
     isId(candidate.segmentId) &&
     isSpatialSkeletonVector(candidate.position) &&
     isOptionalId(candidate.parentNodeId) &&
-    isOptionalFiniteNumber(candidate.radius) &&
-    isOptionalFiniteNumber(candidate.confidence) &&
+    (candidate.attributes === undefined ||
+      (typeof candidate.attributes === "object" &&
+        candidate.attributes !== null)) &&
     (candidate.description === undefined ||
-      typeof candidate.description === "string") &&
-    (candidate.isTrueEnd === undefined ||
-      typeof candidate.isTrueEnd === "boolean")
+      typeof candidate.description === "string")
   );
 }
 

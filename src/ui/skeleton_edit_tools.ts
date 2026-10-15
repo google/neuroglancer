@@ -70,6 +70,7 @@ import {
   getPathBetweenNodes,
   type SpatiallyIndexedSkeletonNavigationGraph,
 } from "#src/skeleton/navigation_graph.js";
+import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
 import {
   classifySpatialSkeletonDisplayNodeType,
   SpatialSkeletonDisplayNodeType,
@@ -2034,7 +2035,7 @@ function getSpatialSkeletonFindPathNodeTypeLabel(
 ) {
   const node = graph.nodeById.get(nodeId);
   if (node === undefined) return undefined;
-  if (node.isTrueEnd ?? false) return "True end";
+  if (isSkeletonNodeTrueEnd(node)) return "True end";
   const parentInTree =
     node.parentNodeId !== undefined && graph.nodeById.has(node.parentNodeId);
   const type = classifySpatialSkeletonDisplayNodeType(

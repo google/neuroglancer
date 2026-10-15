@@ -30,6 +30,12 @@ import {
   type SpatialSkeletonLogicalNodeHandle,
   type SpatialSkeletonLogicalSegmentHandle,
 } from "#src/skeleton/logical_identity.js";
+import {
+  getSkeletonNodeConfidence,
+  getSkeletonNodeRadius,
+  isSkeletonNodeTrueEnd,
+  setSkeletonNodeAttributes,
+} from "#src/skeleton/node_attributes.js";
 
 export interface SpatialSkeletonProjectionNodeAttributes {
   readonly radius?: number;
@@ -292,11 +298,38 @@ function nodeAttributes(
   node: SkeletonNode,
 ): SpatialSkeletonProjectionNodeAttributes {
   return cloneAttributes({
-    radius: node.radius,
-    confidence: node.confidence,
+    radius: getSkeletonNodeRadius(node),
+    confidence: getSkeletonNodeConfidence(node),
     description: node.description,
-    isTrueEnd: node.isTrueEnd,
+    isTrueEnd: isSkeletonNodeTrueEnd(node),
   });
+}
+
+function withConfidence(
+  node: SkeletonNode,
+  confidence: number | undefined,
+): CompleteSkeletonNodeChanges {
+  return {
+    attributes: setSkeletonNodeAttributes(node.attributes, { confidence }),
+  };
+}
+
+export function getSkeletonNodeChanges(
+  node: SkeletonNode | undefined,
+  changes: SpatialSkeletonProjectionAttributeChanges,
+): CompleteSkeletonNodeChanges {
+  const { description, ...attributeChanges } = changes;
+  return {
+    ...(Object.hasOwn(changes, "description") ? { description } : {}),
+    ...(Object.keys(attributeChanges).length === 0
+      ? {}
+      : {
+          attributes: setSkeletonNodeAttributes(
+            node?.attributes,
+            attributeChanges,
+          ),
+        }),
+  };
 }
 
 function validateAttributeValues(
@@ -534,7 +567,7 @@ function rerootSnapshot(
       `Cannot reroot at missing node ${targetNodeId}.`,
     );
   }
-  if (target.isTrueEnd === true) {
+  if (isSkeletonNodeTrueEnd(target)) {
     throw new SpatialSkeletonProjectionValidationError(
       "Cannot set a true end node as root. Clear the true end state first.",
     );
@@ -543,21 +576,21 @@ function rerootSnapshot(
   // CATMAID leaves an already-root attachment and its confidence unchanged.
   if (path.length === 1) return { snapshot, path };
   const patches: CompleteSkeletonNodePatch[] = [];
-  let downstreamConfidence = path[0].confidence;
+  let downstreamConfidence = getSkeletonNodeConfidence(path[0]);
   patches.push({
     kind: "update",
     nodeId: path[0].nodeId,
-    changes: { parentNodeId: undefined, confidence: 100 },
+    changes: { parentNodeId: undefined, ...withConfidence(path[0], 100) },
   });
   for (let index = 1; index < path.length; ++index) {
     const node = path[index];
-    const previousConfidence = node.confidence;
+    const previousConfidence = getSkeletonNodeConfidence(node);
     patches.push({
       kind: "update",
       nodeId: node.nodeId,
       changes: {
         parentNodeId: path[index - 1].nodeId,
-        confidence: downstreamConfidence ?? node.confidence,
+        ...withConfidence(node, downstreamConfidence ?? previousConfidence),
       },
     });
     downstreamConfidence = previousConfidence;
@@ -610,7 +643,7 @@ function applyAdd(
       );
     }
     const parent = requireNode(existingEntry.snapshot, delta.parent, mappings);
-    if (parent.isTrueEnd === true) {
+    if (isSkeletonNodeTrueEnd(parent)) {
       throw new SpatialSkeletonProjectionValidationError(
         "Cannot add a child under a true end node. Clear the true end state first.",
       );
@@ -638,7 +671,7 @@ function applyAdd(
     segmentId,
     parentNodeId,
     position: cloneVector(delta.position),
-    ...attributes,
+    ...getSkeletonNodeChanges(undefined, attributes),
   };
   const snapshot =
     existingEntry === undefined
@@ -769,6 +802,7 @@ function applyNodeAttributes(
       );
     }
   }
+  const current = nodeAttributes(node);
   const before: {
     radius?: number;
     confidence?: number;
@@ -778,11 +812,9 @@ function applyNodeAttributes(
   for (const key of Object.keys(
     delta.changes,
   ) as (keyof SpatialSkeletonProjectionNodeAttributes)[]) {
-    Object.assign(before, { [key]: node[key] });
+    Object.assign(before, { [key]: current[key] });
   }
-  const changes: CompleteSkeletonNodeChanges = {
-    ...delta.changes,
-  };
+  const changes = getSkeletonNodeChanges(node, delta.changes);
   const snapshot = patchCompleteSkeletonSnapshot(entry.snapshot, [
     { kind: "update", nodeId: node.nodeId, changes },
   ]);
@@ -812,7 +844,7 @@ function topologyPatchesFromNodes(
         node.parentNodeId === undefined
           ? null
           : requireNodeHandle(mappings, node.parentNodeId, "Topology parent"),
-      confidence: node.confidence,
+      confidence: getSkeletonNodeConfidence(node),
     })),
   );
 }
@@ -880,7 +912,7 @@ function applySplit(
       "Cannot split at the root node.",
     );
   }
-  if (node.isTrueEnd === true) {
+  if (isSkeletonNodeTrueEnd(node)) {
     throw new SpatialSkeletonProjectionValidationError(
       "Cannot split at a true end node because it would become a true end root.",
     );
@@ -969,7 +1001,7 @@ function applyMerge(
     delta.secondNode,
     mappings,
   );
-  if (firstNode.isTrueEnd === true) {
+  if (isSkeletonNodeTrueEnd(firstNode)) {
     throw new SpatialSkeletonProjectionValidationError(
       "Cannot merge under a true end node. Clear the true end state first.",
     );
@@ -1060,7 +1092,7 @@ function applyRestoreDelete(
     segmentId,
     parentNodeId,
     position: cloneVector(delta.snapshot.position),
-    ...cloneAttributes(delta.snapshot.attributes),
+    ...getSkeletonNodeChanges(undefined, delta.snapshot.attributes),
   };
   const snapshot =
     existingEntry === undefined
@@ -1107,7 +1139,7 @@ function applyRestoreTopology(
         node.parentNodeId === undefined
           ? null
           : requireNodeHandle(mappings, node.parentNodeId, "Restored parent"),
-      confidence: node.confidence,
+      confidence: getSkeletonNodeConfidence(node),
     });
     const parentNodeId =
       patch.parent === null ? undefined : requireNodeId(mappings, patch.parent);
@@ -1122,7 +1154,7 @@ function applyRestoreTopology(
     nodePatches.push({
       kind: "update",
       nodeId: node.nodeId,
-      changes: { parentNodeId, confidence: patch.confidence },
+      changes: { parentNodeId, ...withConfidence(node, patch.confidence) },
     });
   }
   const snapshot = patchCompleteSkeletonSnapshot(entry.snapshot, nodePatches);
@@ -1184,7 +1216,7 @@ function applyJoinSplit(
     delta.formerParent,
     mappings,
   );
-  if (formerParent.isTrueEnd === true) {
+  if (isSkeletonNodeTrueEnd(formerParent)) {
     throw new SpatialSkeletonProjectionValidationError(
       "Cannot restore a split below a true end parent.",
     );
@@ -1271,19 +1303,20 @@ function applyUnmerge(
   );
   const secondSnapshot = patchCompleteSkeletonSnapshot(
     detachedSecond,
-    delta.formerSecondTopology.map(
-      (patch): CompleteSkeletonNodePatch => ({
+    delta.formerSecondTopology.map((patch): CompleteSkeletonNodePatch => {
+      const node = requireNode(detachedSecond, patch.node, mappings);
+      return {
         kind: "update",
-        nodeId: requireNodeId(mappings, patch.node),
+        nodeId: node.nodeId,
         changes: {
           parentNodeId:
             patch.parent === null
               ? undefined
               : requireNodeId(mappings, patch.parent),
-          confidence: patch.confidence,
+          ...withConfidence(node, patch.confidence),
         },
-      }),
-    ),
+      };
+    }),
   );
   const segmentChanges: SpatialSkeletonProjectionSegmentChange[] = [
     ...(handlesEqual(entry.segment, delta.firstSegment) ||

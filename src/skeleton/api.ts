@@ -37,21 +37,29 @@ export interface SpatialSkeletonBounds {
   upperBounds: SkeletonVector;
 }
 
-export interface SkeletonNodeBase {
+// Vertex attribute ids that have a defined meaning. A source may also have attributes with other ids.
+export enum SkeletonNodeAttribute {
+  RADIUS = "radius",
+  // From 0 to 100.
+  CONFIDENCE = "confidence",
+  // Non-zero on a leaf that marks where the skeleton really ends.
+  TRUE_END = "true_end",
+}
+
+export type SkeletonNodeAttributes = Readonly<
+  Record<string, ArrayLike<number>>
+>;
+
+export interface SkeletonNode {
   nodeId: bigint;
   segmentId: bigint;
   position: SkeletonVector;
   parentNodeId?: bigint;
-}
-
-export interface SkeletonNode extends SkeletonNodeBase {
-  radius?: number;
-  confidence?: number;
+  // Keyed by vertex attribute id, with one element per component.
+  attributes?: SkeletonNodeAttributes;
   description?: string;
-  isTrueEnd?: boolean;
 }
 
-// One level is drawn at a time. A skeleton that a level leaves out is not drawn while that level is in use.
 export interface SkeletonSpatialIndexLevel {
   // Cell `c` spans `c * chunkSize` to `(c + 1) * chunkSize`, counted from 0, not from the lower bound.
   readonly chunkSize: SkeletonVector;
@@ -106,7 +114,7 @@ export interface SpatiallyIndexedSkeletonCellSource {
   fetchCell(
     cellGridPosition: Float32Array,
     options: { signal: AbortSignal },
-  ): Promise<SkeletonNodeBase[]>;
+  ): Promise<SkeletonNode[]>;
 }
 
 export interface EditableSkeletonSource extends SkeletonFragmentSource {

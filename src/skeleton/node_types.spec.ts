@@ -31,7 +31,6 @@ function makeNode(overrides: Partial<SkeletonNode> = {}): SkeletonNode {
     nodeId: 1n,
     segmentId: 1n,
     position: new Float32Array([0, 0, 0]),
-    isTrueEnd: false,
     ...overrides,
   };
 }

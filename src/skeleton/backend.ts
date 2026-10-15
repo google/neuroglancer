@@ -38,8 +38,8 @@ import {
 } from "#src/segmentation_display_state/base.js";
 import type { SharedWatchableValue } from "#src/shared_watchable_value.js";
 import type {
+  SkeletonNode,
   SpatiallyIndexedSkeletonCellSource,
-  SkeletonNodeBase,
 } from "#src/skeleton/api.js";
 import {
   forEachVisibleSpatialSkeletonChunk,
@@ -281,7 +281,7 @@ export class SpatiallyIndexedSkeletonChunk
 
 function packSpatiallyIndexedSkeletonNodes(
   chunk: SpatiallyIndexedSkeletonChunk,
-  nodes: readonly SkeletonNodeBase[],
+  nodes: readonly SkeletonNode[],
 ) {
   const numVertices = nodes.length;
   const vertexPositions = new Float32Array(numVertices * 3);

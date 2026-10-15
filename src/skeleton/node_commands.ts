@@ -38,6 +38,7 @@ import {
   getRandomChildNode,
   getSkeletonRootNode,
 } from "#src/skeleton/navigation_graph.js";
+import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
 import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/optimistic_edit/fatal.js";
 import { StatusMessage } from "#src/status.js";
 import { CallbackCommand } from "#src/ui/command.js";
@@ -320,7 +321,7 @@ const COMMAND_DEFINITIONS: readonly SkeletonNodeCommandDefinition[] = [
       try {
         await executeSpatialSkeletonNodeTrueEndUpdate(layer, {
           node,
-          nextIsTrueEnd: !(node.isTrueEnd ?? false),
+          nextIsTrueEnd: !isSkeletonNodeTrueEnd(node),
         });
       } catch (error) {
         showSpatialSkeletonActionError(

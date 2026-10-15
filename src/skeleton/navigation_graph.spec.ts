@@ -48,7 +48,7 @@ function makeNode(
     ]),
     parentNodeId,
     description: options.description,
-    isTrueEnd: options.isTrueEnd ?? false,
+    ...(options.isTrueEnd ? { attributes: { true_end: [1] } } : {}),
   };
 }
 

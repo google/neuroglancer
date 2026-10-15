@@ -18,6 +18,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CatmaidClient } from "#src/datasource/catmaid/api.js";
+import { getSkeletonNodeConfidence } from "#src/skeleton/node_attributes.js";
 import type { CatmaidMockServer } from "#tests/skeleton_edit/catmaid_mock_server.js";
 import {
   makeCatmaidTestNodes,
@@ -66,7 +67,11 @@ describe("stateful CATMAID browser test backend", () => {
     ]);
     const complete = await client.getSkeleton(10n);
     expect(
-      complete.map((n) => [n.nodeId, n.parentNodeId, n.confidence]),
+      complete.map((n) => [
+        n.nodeId,
+        n.parentNodeId,
+        getSkeletonNodeConfidence(n),
+      ]),
     ).toEqual([
       [101n, undefined, 100],
       [102n, 101n, 100],
@@ -123,8 +128,9 @@ describe("stateful CATMAID browser test backend", () => {
       [204, 202, 30],
     ]);
     expect(
-      (await client.getSkeleton(30n)).find((n) => n.nodeId === 204n)
-        ?.confidence,
+      getSkeletonNodeConfidence(
+        (await client.getSkeleton(30n)).find((n) => n.nodeId === 204n)!,
+      ),
     ).toBe(50);
     await client.mergeSkeletons(103n, 203n);
     expect(await client.splitSkeleton(203n)).toEqual({
@@ -152,8 +158,9 @@ describe("stateful CATMAID browser test backend", () => {
       confidence: 2,
     });
     expect(
-      (await client.getSkeleton(10n)).find(({ nodeId }) => nodeId === 201n)
-        ?.confidence,
+      getSkeletonNodeConfidence(
+        (await client.getSkeleton(10n)).find(({ nodeId }) => nodeId === 201n)!,
+      ),
     ).toBe(25);
   });
 
@@ -175,10 +182,8 @@ describe("stateful CATMAID browser test backend", () => {
     )!;
     expect(Array.from(savedChild.position)).toEqual([6100, 5200, 1000]);
     expect(savedChild).toMatchObject({
-      radius: 80,
-      confidence: 75,
       description: "Restored root fixture",
-      isTrueEnd: true,
+      attributes: { radius: [80], confidence: [75], true_end: [1] },
     });
     await client.deleteNode(child.nodeId);
     await client.deleteNode(root.nodeId);

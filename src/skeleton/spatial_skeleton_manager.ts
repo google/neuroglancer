@@ -19,6 +19,7 @@ import type {
   SkeletonConfidenceConfiguration,
   SkeletonParentLink,
   SkeletonNode,
+  SkeletonNodeAttributes,
   SkeletonFragmentSource,
 } from "#src/skeleton/api.js";
 import {
@@ -475,19 +476,6 @@ export function normalizeSpatiallyIndexedSkeletonNode(
       typeof node.description === "string" && node.description.length > 0
         ? node.description
         : undefined,
-    isTrueEnd: node.isTrueEnd ?? false,
-    ...((node.radius !== undefined && Number.isFinite(Number(node.radius))) ||
-    (node.confidence !== undefined && Number.isFinite(Number(node.confidence)))
-      ? {
-          ...(node.radius !== undefined && Number.isFinite(Number(node.radius))
-            ? { radius: Number(node.radius) }
-            : {}),
-          ...(node.confidence !== undefined &&
-          Number.isFinite(Number(node.confidence))
-            ? { confidence: Number(node.confidence) }
-            : {}),
-        }
-      : {}),
   };
 }
 
@@ -498,15 +486,30 @@ function cloneSpatiallyIndexedSkeletonNode(node: SkeletonNode): SkeletonNode {
   };
 }
 
+function skeletonNodeAttributesEqual(
+  a: SkeletonNodeAttributes | undefined,
+  b: SkeletonNodeAttributes | undefined,
+) {
+  const aIds = Object.keys(a ?? {});
+  if (aIds.length !== Object.keys(b ?? {}).length) return false;
+  for (const id of aIds) {
+    const aValue = a![id];
+    const bValue = b?.[id];
+    if (bValue === undefined || aValue.length !== bValue.length) return false;
+    for (let i = 0; i < aValue.length; ++i) {
+      if (aValue[i] !== bValue[i]) return false;
+    }
+  }
+  return true;
+}
+
 function cachedSkeletonNodesEqual(a: SkeletonNode, b: SkeletonNode) {
   if (
     a.nodeId !== b.nodeId ||
     a.segmentId !== b.segmentId ||
     a.parentNodeId !== b.parentNodeId ||
-    a.radius !== b.radius ||
-    a.confidence !== b.confidence ||
     a.description !== b.description ||
-    a.isTrueEnd !== b.isTrueEnd ||
+    !skeletonNodeAttributesEqual(a.attributes, b.attributes) ||
     a.position.length !== b.position.length
   ) {
     return false;

@@ -128,12 +128,14 @@ function node(
   nodeId: number,
   segmentId: number,
   parentNodeId?: number,
+  attributes?: SkeletonNode["attributes"],
 ): SkeletonNode {
   return {
     nodeId: BigInt(nodeId),
     segmentId: BigInt(segmentId),
     parentNodeId: parentNodeId === undefined ? undefined : BigInt(parentNodeId),
     position: Object.freeze([nodeId, nodeId + 1, nodeId + 2]),
+    attributes,
   };
 }
 
@@ -643,8 +645,9 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
   ] as const)(
     "restores %s root confidence %s using the current node ID",
     (kind, confidence) => {
-      const first = [{ ...node(101, 11), confidence }, node(102, 11, 101)];
-      const second = [{ ...node(201, 17), confidence }, node(202, 17, 201)];
+      const root = { confidence: [confidence] };
+      const first = [node(101, 11, undefined, root), node(102, 11, 101)];
+      const second = [node(201, 17, undefined, root), node(202, 17, 201)];
       const { driver, identities } = makeDriver(
         new Map([
           [11n, first],
@@ -716,11 +719,8 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
 
   it("materializes every CATMAID Execute request as its minimum scalar payload", () => {
     const richLeaf = Object.freeze({
-      ...node(3, 23, 2),
+      ...node(3, 23, 2, { true_end: [1], radius: [4], confidence: [80] }),
       description: "leaf",
-      isTrueEnd: true,
-      radius: 4,
-      confidence: 80,
     });
     const first = [node(100, 11), node(101, 11, 100)];
     const second = [node(200, 17), node(201, 17, 200)];
@@ -878,9 +878,8 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
 
   it("restores a deleted description and true-end label in one CATMAID request", () => {
     const deleted = Object.freeze({
-      ...node(2, 23, 1),
+      ...node(2, 23, 1, { true_end: [1] }),
       description: "terminal",
-      isTrueEnd: true,
     });
     const { driver, identities } = makeDriver(
       new Map([[23n, [node(1, 23), deleted]]]),
@@ -1164,7 +1163,7 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
             node.parentNodeId === undefined
               ? null
               : semantic.retainedNodes.get(node.parentNodeId)!,
-          confidence: node.confidence,
+          confidence: node.attributes?.confidence?.[0],
         })),
       } as SpatialSkeletonProjectionInverseDelta,
     };

@@ -62,6 +62,7 @@ import {
   type SpatiallyIndexedSkeletonOpenLeaf,
   type SpatiallyIndexedSkeletonNavigationGraph,
 } from "#src/skeleton/navigation_graph.js";
+import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
 import {
   getSpatialSkeletonNodeFilterLabel,
   getSpatialSkeletonNodeIconFilterType,
@@ -1569,7 +1570,7 @@ export class SpatialSkeletonEditTab extends Tab {
         row.setAttribute("aria-disabled", "true");
       }
 
-      const nodeIsTrueEnd = node.isTrueEnd ?? false;
+      const nodeIsTrueEnd = isSkeletonNodeTrueEnd(node);
       const iconFilterType = getSpatialSkeletonNodeIconFilterType({
         nodeIsTrueEnd,
         nodeType: type,

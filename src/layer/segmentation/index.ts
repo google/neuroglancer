@@ -133,6 +133,11 @@ import {
 } from "#src/skeleton/frontend.js";
 import type { SpatialSkeletonLogicalNodeHandle } from "#src/skeleton/logical_identity.js";
 import {
+  getSkeletonNodeConfidence,
+  getSkeletonNodeRadius,
+  isSkeletonNodeTrueEnd,
+} from "#src/skeleton/node_attributes.js";
+import {
   findSpatiallyIndexedSkeletonNode,
   getSpatiallyIndexedSkeletonDirectChildren,
   getSpatiallyIndexedSkeletonNodeParent,
@@ -2612,7 +2617,7 @@ export class SegmentationUserLayer extends Base {
           (candidate) => candidate.parentNodeId === completeNodeInfo.nodeId,
         )
         .map((candidate) => candidate.nodeId) ?? [];
-    const nodeHasTrueEnd = completeNodeInfo.isTrueEnd ?? false;
+    const nodeHasTrueEnd = isSkeletonNodeTrueEnd(completeNodeInfo);
     const nodeType = getSpatialSkeletonDisplayNodeType(
       completeNodeInfo,
       segmentNodes === undefined ? undefined : directChildNodeIds.length,
@@ -2640,7 +2645,7 @@ export class SegmentationUserLayer extends Base {
           ? "Load the active skeleton in the Skeleton tab before rerooting from Selection."
           : completeNodeInfo.parentNodeId === undefined
             ? "Selected node is already root."
-            : (completeNodeInfo.isTrueEnd ?? false)
+            : isSkeletonNodeTrueEnd(completeNodeInfo)
               ? "True end nodes cannot be set as root. Clear the true end state first."
               : this.getSpatialSkeletonActionsDisabledReason(
                   SpatialSkeletonActions.reroot,
@@ -2667,7 +2672,7 @@ export class SegmentationUserLayer extends Base {
         rerootPending ||
         completeNodeInfo === undefined ||
         completeNodeInfo.parentNodeId === undefined ||
-        (completeNodeInfo.isTrueEnd ?? false)
+        isSkeletonNodeTrueEnd(completeNodeInfo)
       ) {
         return;
       }
@@ -2900,7 +2905,7 @@ export class SegmentationUserLayer extends Base {
           let previousTrueEnd = committedTrueEnd;
           try {
             const currentNode = getCachedNodeForSelectionEdit();
-            previousTrueEnd = currentNode.isTrueEnd ?? false;
+            previousTrueEnd = isSkeletonNodeTrueEnd(currentNode);
             committedTrueEnd = previousTrueEnd;
             if (committedTrueEnd === nextTrueEnd) return;
             committedTrueEnd = nextTrueEnd;
@@ -3041,19 +3046,19 @@ export class SegmentationUserLayer extends Base {
       appendValue(
         "Radius",
         formatSpatialSkeletonEditableNumber(
-          completeNodeInfo.radius,
+          getSkeletonNodeRadius(completeNodeInfo),
           "Unavailable",
         ),
       );
     } else {
-      let committedRadius = completeNodeInfo.radius ?? 0;
+      let committedRadius = getSkeletonNodeRadius(completeNodeInfo) ?? 0;
       const radiusInput = document.createElement("input");
       radiusInput.className =
         "neuroglancer-selection-details-skeleton-properties-input";
       radiusInput.type = "number";
       radiusInput.step = "any";
       radiusInput.value = formatSpatialSkeletonEditableNumber(
-        completeNodeInfo.radius,
+        getSkeletonNodeRadius(completeNodeInfo),
       );
       appendValue("Radius", radiusInput);
       let radiusSavePending = false;
@@ -3099,7 +3104,7 @@ export class SegmentationUserLayer extends Base {
           try {
             const node = getCachedNodeForSelectionEdit();
             // A deferred view may outlive both a preview and its rollback.
-            committedRadius = node.radius ?? 0;
+            committedRadius = getSkeletonNodeRadius(node) ?? 0;
             if (radius === committedRadius) return;
             radiusSavePending = true;
             updateRadiusEditorState();
@@ -3153,14 +3158,13 @@ export class SegmentationUserLayer extends Base {
       appendValue(
         "Confidence level",
         formatSpatialSkeletonEditableNumber(
-          completeNodeInfo.confidence,
+          getSkeletonNodeConfidence(completeNodeInfo),
           "Unavailable",
         ),
       );
     } else {
-      let committedConfidence = Number.isFinite(completeNodeInfo.confidence)
-        ? Number(completeNodeInfo.confidence)
-        : 0;
+      let committedConfidence =
+        getSkeletonNodeConfidence(completeNodeInfo) ?? 0;
       const confidenceSelectValues = Array.from(
         new Set([...confidenceConfigurationValues, committedConfidence]),
       ).filter((value): value is number => Number.isFinite(value));
@@ -3230,9 +3234,7 @@ export class SegmentationUserLayer extends Base {
         void (async () => {
           try {
             const node = getCachedNodeForSelectionEdit();
-            committedConfidence = Number.isFinite(node.confidence)
-              ? Number(node.confidence)
-              : 0;
+            committedConfidence = getSkeletonNodeConfidence(node) ?? 0;
             if (confidence === committedConfidence) return;
             confidenceSavePending = true;
             updateConfidenceEditorState();

@@ -22,9 +22,9 @@ import type {
   SkeletonSpatialIndexLevel,
   SkeletonVector,
   SkeletonNode,
-  SkeletonNodeBase,
 } from "#src/skeleton/api.js";
 import { SpatialSkeletonEditConflictError } from "#src/skeleton/edit_errors.js";
+import { setSkeletonNodeAttributes } from "#src/skeleton/node_attributes.js";
 import { getDefaultSpatiallyIndexedSkeletonChunkSize } from "#src/skeleton/spatial_chunk_sizing.js";
 import { bigintCompare } from "#src/util/bigint.js";
 import { HttpError } from "#src/util/http_request.js";
@@ -698,7 +698,7 @@ function parseCatmaidId(value: unknown): bigint {
   return id;
 }
 
-function parseCatmaidNodeListRow(row: readonly any[]): SkeletonNodeBase {
+function parseCatmaidNodeListRow(row: readonly any[]): SkeletonNode {
   return {
     nodeId: parseCatmaidId(row[0]),
     parentNodeId: parseOptionalCatmaidId(row[1]),
@@ -962,12 +962,14 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
         parentNodeId: parseOptionalCatmaidId(n[1]),
         position: new Float32Array([n[3], n[4], n[5]]),
         segmentId: skeletonId,
-        radius: Number.isFinite(n[6]) ? n[6] : undefined,
-        confidence: Number.isFinite(n[7])
-          ? mapCatmaidConfidenceToPercent(n[7])
-          : undefined,
+        attributes: setSkeletonNodeAttributes(undefined, {
+          radius: Number.isFinite(n[6]) ? n[6] : undefined,
+          confidence: Number.isFinite(n[7])
+            ? mapCatmaidConfidenceToPercent(n[7])
+            : undefined,
+          isTrueEnd: trueEndByNodeId.has(nodeId),
+        }),
         description: descriptionByNodeId.get(nodeId),
-        isTrueEnd: trueEndByNodeId.has(nodeId),
       };
     });
   }
@@ -979,7 +981,7 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
       cacheProvider?: string;
       signal?: AbortSignal;
     } = {},
-  ): Promise<SkeletonNodeBase[]> {
+  ): Promise<SkeletonNode[]> {
     const { cacheProvider, signal } = options;
     const normalizedBoundingBox = normalizeBoundingBoxForNodeList(bounds);
     const params = new URLSearchParams({
@@ -1031,7 +1033,7 @@ export class CatmaidClient implements CatmaidSpatialSkeletonEditApi {
     }
 
     // Process first LOD level (data[0])
-    const nodes: SkeletonNodeBase[] = data[0].map((n: any[]) =>
+    const nodes: SkeletonNode[] = data[0].map((n: any[]) =>
       parseCatmaidNodeListRow(n),
     );
 
