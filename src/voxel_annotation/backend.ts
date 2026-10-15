@@ -14,15 +14,8 @@
  * limitations under the License.
  */
 
-import { ChunkState } from "#src/chunk_manager/base.js";
 import type { SharedWatchableValue } from "#src/shared_watchable_value.js";
-import { DataType } from "#src/sliceview/base.js";
-import { decodeChannel as decodeChannelUint32 } from "#src/sliceview/compressed_segmentation/decode_uint32.js";
-import { decodeChannel as decodeChannelUint64 } from "#src/sliceview/compressed_segmentation/decode_uint64.js";
-import type {
-  VolumeChunk,
-  VolumeChunkSource,
-} from "#src/sliceview/volume/backend.js";
+import type { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import type { TypedArray } from "#src/util/array.js";
 import { mat4, vec3 } from "#src/util/geom.js";
 import * as matrix from "#src/util/matrix.js";
@@ -51,6 +44,10 @@ import {
   parseLodChunkKey,
   makeChunkKey,
 } from "#src/voxel_annotation/base.js";
+import {
+  applyChunkEdits,
+  readChunkData,
+} from "#src/voxel_annotation/chunk_edits.js";
 import type { RPC } from "#src/worker_rpc.js";
 import {
   registerPromiseRPC,
@@ -67,37 +64,6 @@ for (let z = -1; z <= 1; z++) {
       if (x === 0 && y === 0 && z === 0) continue;
       OFFSETS_26_CONNECTED_BACKEND.push([x, y, z]);
     }
-  }
-}
-
-function getFlatChunkData(
-  chunk: VolumeChunk,
-  spec: any,
-): Uint32Array | BigUint64Array | TypedArray | null {
-  if (!chunk.data) return null;
-
-  if (!spec.compressedSegmentationBlockSize) {
-    return chunk.data as TypedArray;
-  }
-
-  const size = chunk.chunkDataSize!;
-  const numElements = size[0] * size[1] * size[2];
-  const compressedData = chunk.data as Uint32Array;
-  const baseOffset = compressedData.length > 0 ? compressedData[0] : 0;
-  const subchunkSize = spec.compressedSegmentationBlockSize;
-
-  if (spec.dataType === DataType.UINT32) {
-    const out = new Uint32Array(numElements);
-    if (baseOffset !== 0) {
-      decodeChannelUint32(out, compressedData, baseOffset, size, subchunkSize);
-    }
-    return out;
-  } else {
-    const out = new BigUint64Array(numElements);
-    if (baseOffset !== 0) {
-      decodeChannelUint64(out, compressedData, baseOffset, size, subchunkSize);
-    }
-    return out;
   }
 }
 
@@ -231,29 +197,12 @@ class BackendVoxelAccessor {
     cy: number,
     cz: number,
   ): Promise<ChunkContext> {
-    // Same pattern as `applyEdits`: only use the shared cache entry when its
-    // data is already resident (synchronous read, safe). Otherwise download
-    // into an isolated chunk the queue manager cannot dispose mid-download.
-    let chunk = this.source.chunks.get(key) as VolumeChunk | undefined;
-    if (
-      chunk === undefined ||
-      chunk.state > ChunkState.SYSTEM_MEMORY_WORKER ||
-      !chunk.data
-    ) {
-      chunk = this.source.getIsolatedChunk(new Float32Array([cx, cy, cz]));
-      try {
-        await this.source.download(chunk, new AbortController().signal);
-      } catch {
-        return this.createContext(key, null, cx, cy, cz, chunk);
-      }
-    }
-
-    if (!chunk.chunkDataSize) {
-      this.source.computeChunkBounds(chunk);
-    }
-
-    const flatData = getFlatChunkData(chunk, this.source.spec);
-    return this.createContext(key, flatData, cx, cy, cz, chunk);
+    const { data, chunkDataSize } = await readChunkData(
+      this.source,
+      key,
+      new Float32Array([cx, cy, cz]),
+    );
+    return this.createContext(key, data, cx, cy, cz, chunkDataSize);
   }
 
   private createContext(
@@ -262,9 +211,9 @@ class BackendVoxelAccessor {
     cx: number,
     cy: number,
     cz: number,
-    chunk: VolumeChunk,
+    chunkDataSize: Uint32Array | null,
   ): ChunkContext {
-    const size = chunk.chunkDataSize || this.chunkDimension;
+    const size = chunkDataSize || this.chunkDimension;
     const minX = cx * this.chunkDimension[0];
     const minY = cy * this.chunkDimension[1];
     const minZ = cz * this.chunkDimension[2];
@@ -436,7 +385,7 @@ export class VoxelEditingController extends SharedObject {
   private commitDebounceTimer: number | undefined;
   private readonly commitDebounceDelayMs: number = 300;
   // Serializes the LOD-0 writers (debounced flush, undo/redo): two
-  // concurrent applyEdits on the same chunk are isolated read-modify-writes,
+  // concurrent applyChunkEdits on the same chunk are isolated read-modify-writes,
   // so the last one would silently drop the other's voxels. Brush commits
   // stay a synchronous append; only their flush enters the chain.
   private opChain: Promise<unknown> = Promise.resolve();
@@ -600,7 +549,8 @@ export class VoxelEditingController extends SharedObject {
         const indices = Array.from(chunkEdits.keys());
         const values = Array.from(chunkEdits.values());
 
-        const change = await source.applyEdits(
+        const change = await applyChunkEdits(
+          source,
           parsedKey.chunkKey,
           indices,
           values,
@@ -878,7 +828,7 @@ export class VoxelEditingController extends SharedObject {
     // concurrent chains can compute from reads taken at different times and
     // land in the wrong order, durably overwriting the fresher parent with a
     // stale result. Serializing the compute alongside is accepted:
-    // applyEdits' network I/O dominates this lock anyway, and parallelism
+    // applyChunkEdits' network I/O dominates this lock anyway, and parallelism
     // across distinct parents is unaffected.
     return this.withChunkLock(parentKey, async () => {
       const childAccessor = this.getAccessor(childInfo.lodIndex);
@@ -913,7 +863,8 @@ export class VoxelEditingController extends SharedObject {
       }
 
       try {
-        await parentSource.applyEdits(
+        await applyChunkEdits(
+          parentSource,
           parentInfo.chunkKey,
           update.indices,
           update.values,
@@ -1258,7 +1209,8 @@ export class VoxelEditingController extends SharedObject {
 
       const valuesToApply = useOldValues ? change.oldValues : change.newValues;
       try {
-        await source.applyEdits(
+        await applyChunkEdits(
+          source,
           parsedKey.chunkKey,
           change.indices,
           valuesToApply,

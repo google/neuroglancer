@@ -1,9 +1,9 @@
+import type { Mock } from "vitest";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { DATA_TYPE_ARRAY_CONSTRUCTOR, DataType } from "#src/util/data_type.js";
 import { mat4 } from "#src/util/geom.js";
-import { HttpError } from "#src/util/http_request.js";
 import { VoxelEditingController } from "#src/voxel_annotation/backend.js";
 import {
   makeLodChunkKey,
@@ -14,6 +14,37 @@ import {
   BrushShape,
 } from "#src/voxel_annotation/base.js";
 import type { RPC } from "#src/worker_rpc.js";
+
+// applyChunkEdits is a module function: give each source its own spy, which
+// calls through to the real function unless a test stubs it, so tests can
+// stub and inspect the edits source by source.
+const applyChunkEditsMock = vi.hoisted(() => {
+  const spies = new WeakMap<object, Mock>();
+  const state = {
+    actual: undefined as ((...args: any[]) => any) | undefined,
+    spyFor(source: object): Mock {
+      let spy = spies.get(source);
+      if (spy === undefined) {
+        spy = vi.fn((...args: any[]) => state.actual!(source, ...args));
+        spies.set(source, spy);
+      }
+      return spy;
+    },
+  };
+  return state;
+});
+
+vi.mock("#src/voxel_annotation/chunk_edits.js", async (importOriginal) => {
+  const actual: any = await importOriginal();
+  applyChunkEditsMock.actual = actual.applyChunkEdits;
+  return {
+    ...actual,
+    applyChunkEdits: (source: object, ...args: any[]) =>
+      applyChunkEditsMock.spyFor(source)(...args),
+  };
+});
+
+const editsOf = (source: object) => applyChunkEditsMock.spyFor(source);
 
 const mockQueueManager = {
   sources: new Set(),
@@ -78,7 +109,6 @@ const createMockSource = (specOverride: any = {}) => {
     chunkManager: 0,
   });
   vi.spyOn(source, "getChunk");
-  vi.spyOn(source, "applyEdits");
   vi.spyOn(source, "download");
   vi.spyOn(source, "writeChunk");
   return source;
@@ -573,7 +603,7 @@ describe("VoxelEditingController: Downsampling Integration", () => {
     );
 
     parentSource = createMockSource();
-    // Parent/grandparent are absent from server storage: applyEdits creates
+    // Parent/grandparent are absent from server storage: applyChunkEdits creates
     // them as empty (zero-filled) chunks, matching the old zero-filled stubs.
 
     grandParentSource = createMockSource();
@@ -614,7 +644,7 @@ describe("VoxelEditingController: Downsampling Integration", () => {
 
     expect(childSource.download).toHaveBeenCalled();
 
-    expect(parentSource.applyEdits).toHaveBeenCalledWith(
+    expect(editsOf(parentSource)).toHaveBeenCalledWith(
       "0,0,0",
       expect.any(Array),
       expect.arrayContaining([1n]),
@@ -706,7 +736,7 @@ describe("VoxelEditingController: Downsampling Integration", () => {
     // a read made before that write, so the L1->L2 reload must keep claiming
     // seq 1 — claiming 5 would clear the preview over a parent lacking those
     // edits.
-    parentSource.applyEdits.mockImplementation(async () => {
+    editsOf(parentSource).mockImplementation(async () => {
       parentSource.serverStorage.set("0,0,0", new Uint8Array(8).fill(1).buffer);
       (controller as any).lastFlushedSeq.set(originKey, 5);
     });
@@ -714,7 +744,7 @@ describe("VoxelEditingController: Downsampling Integration", () => {
     (controller as any).enqueueDownsample(originKey);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(grandParentSource.applyEdits).toHaveBeenCalled();
+    expect(editsOf(grandParentSource)).toHaveBeenCalled();
     expect((controller as any).callChunkReload).toHaveBeenCalledWith(
       [makeLodChunkKey("0,0,0", 2)],
       false,
@@ -728,7 +758,7 @@ describe("VoxelEditingController: Downsampling Integration", () => {
 
     // After the L0->L1 write, the L1 chunk must read back as 1s so the L1->L2
     // step propagates. Simulate by publishing it to the mock server storage.
-    parentSource.applyEdits.mockImplementation(async () => {
+    editsOf(parentSource).mockImplementation(async () => {
       parentSource.serverStorage.set("0,0,0", new Uint8Array(8).fill(1).buffer);
     });
 
@@ -737,9 +767,9 @@ describe("VoxelEditingController: Downsampling Integration", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(parentSource.applyEdits).toHaveBeenCalled();
+    expect(editsOf(parentSource)).toHaveBeenCalled();
 
-    expect(grandParentSource.applyEdits).toHaveBeenCalled();
+    expect(editsOf(grandParentSource)).toHaveBeenCalled();
 
     const reloadCalls = (controller as any).callChunkReload.mock.calls;
     const keysReloaded = reloadCalls.flatMap((c: any) => c[0]);
@@ -758,7 +788,7 @@ describe("VoxelEditingController: Downsampling Integration", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(parentSource.applyEdits).toHaveBeenCalledTimes(1);
+    expect(editsOf(parentSource)).toHaveBeenCalledTimes(1);
   });
 
   it("Lazy Loading: Downloads child chunk if missing", async () => {
@@ -776,7 +806,7 @@ describe("VoxelEditingController: Downsampling Integration", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(childSource.download).toHaveBeenCalled();
-    expect(parentSource.applyEdits).toHaveBeenCalled();
+    expect(editsOf(parentSource)).toHaveBeenCalled();
   });
 
   it("Error Handling: Child download failure aborts chain gracefully", async () => {
@@ -790,7 +820,7 @@ describe("VoxelEditingController: Downsampling Integration", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(parentSource.applyEdits).not.toHaveBeenCalled();
+    expect(editsOf(parentSource)).not.toHaveBeenCalled();
 
     consoleSpy.mockRestore();
   });
@@ -799,16 +829,16 @@ describe("VoxelEditingController: Downsampling Integration", () => {
     setupIntegration(3);
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    parentSource.applyEdits.mockRejectedValue(new Error("Write Failed"));
+    editsOf(parentSource).mockRejectedValue(new Error("Write Failed"));
 
     const key = makeLodChunkKey("0,0,0", 0);
     (controller as any).enqueueDownsample(key);
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(parentSource.applyEdits).toHaveBeenCalled();
+    expect(editsOf(parentSource)).toHaveBeenCalled();
 
-    expect(grandParentSource.applyEdits).not.toHaveBeenCalled();
+    expect(editsOf(grandParentSource)).not.toHaveBeenCalled();
 
     expect(mockRpc.invoke).toHaveBeenCalledWith(
       "voxelEditing.failure",
@@ -831,14 +861,14 @@ describe("VoxelEditingController: flushPending", () => {
     vi.clearAllMocks();
 
     mockSource0 = createMockSource();
-    vi.spyOn(mockSource0, "applyEdits").mockResolvedValue({
+    editsOf(mockSource0).mockResolvedValue({
       indices: new Uint32Array([]),
       oldValues: new BigUint64Array([]),
       newValues: new BigUint64Array([]),
     });
 
     mockSource1 = createMockSource();
-    vi.spyOn(mockSource1, "applyEdits").mockResolvedValue({});
+    editsOf(mockSource1).mockResolvedValue({});
 
     (mockRpc.get as any).mockImplementation((id: number) => {
       if (id === 0) return mockChunkManager;
@@ -883,13 +913,13 @@ describe("VoxelEditingController: flushPending", () => {
 
     await vi.runAllTimersAsync();
 
-    expect(mockSource0.applyEdits).toHaveBeenCalledWith(
+    expect(editsOf(mockSource0)).toHaveBeenCalledWith(
       "0,0,0",
       [1, 2, 3],
       [42n, 60n, 70n],
     );
 
-    expect(mockSource0.applyEdits).toHaveBeenCalledWith("1,0,0", [5], [99n]);
+    expect(editsOf(mockSource0)).toHaveBeenCalledWith("1,0,0", [5], [99n]);
   });
 
   it("History: Updates stacks and notifies frontend correctly", async () => {
@@ -922,7 +952,7 @@ describe("VoxelEditingController: flushPending", () => {
     const validKey = makeLodChunkKey("0,0,0", 0);
     const failKey = makeLodChunkKey("1,0,0", 0);
 
-    mockSource0.applyEdits.mockImplementation((chunkKey: string) => {
+    editsOf(mockSource0).mockImplementation((chunkKey: string) => {
       if (chunkKey === "1,0,0") {
         return Promise.reject(new Error("Network Error"));
       }
@@ -942,13 +972,13 @@ describe("VoxelEditingController: flushPending", () => {
 
     await vi.runAllTimersAsync();
 
-    expect(mockSource0.applyEdits).toHaveBeenCalledWith(
+    expect(editsOf(mockSource0)).toHaveBeenCalledWith(
       "0,0,0",
       expect.anything(),
       expect.anything(),
     );
 
-    expect(mockSource0.applyEdits).toHaveBeenCalledWith(
+    expect(editsOf(mockSource0)).toHaveBeenCalledWith(
       "1,0,0",
       expect.anything(),
       expect.anything(),
@@ -982,7 +1012,7 @@ describe("VoxelEditingController: flushPending", () => {
 
     await vi.runAllTimersAsync();
 
-    expect(mockSource0.applyEdits).toHaveBeenCalledWith(
+    expect(editsOf(mockSource0)).toHaveBeenCalledWith(
       "0,0,0",
       expect.anything(),
       expect.anything(),
@@ -1017,7 +1047,7 @@ describe("VoxelEditingController: Undo/Redo", () => {
     vi.clearAllMocks();
 
     mockSource0 = createMockSource();
-    vi.spyOn(mockSource0, "applyEdits").mockResolvedValue({
+    editsOf(mockSource0).mockResolvedValue({
       indices: new Uint32Array([]),
       oldValues: new BigUint64Array([]),
       newValues: new BigUint64Array([]),
@@ -1047,7 +1077,7 @@ describe("VoxelEditingController: Undo/Redo", () => {
     const order: string[] = [];
     let releaseUndo!: () => void;
     const undoGate = new Promise<void>((resolve) => (releaseUndo = resolve));
-    mockSource0.applyEdits.mockImplementation(async () => {
+    editsOf(mockSource0).mockImplementation(async () => {
       if (order.length === 0) {
         order.push("undo-start");
         await undoGate;
@@ -1115,7 +1145,7 @@ describe("VoxelEditingController: Undo/Redo", () => {
     let releaseFirst!: () => void;
     const firstGate = new Promise<void>((resolve) => (releaseFirst = resolve));
     let calls = 0;
-    mockSource0.applyEdits.mockImplementation(async () => {
+    editsOf(mockSource0).mockImplementation(async () => {
       if (++calls === 1) await firstGate;
       return {
         indices: new Uint32Array([]),
@@ -1186,12 +1216,12 @@ describe("VoxelEditingController: Undo/Redo", () => {
 
     await controller.undo();
 
-    expect(mockSource0.applyEdits).toHaveBeenCalledWith(
+    expect(editsOf(mockSource0)).toHaveBeenCalledWith(
       "0,0,0",
       expect.any(Uint32Array),
       expect.any(BigUint64Array),
     );
-    const undoCallArgs = mockSource0.applyEdits.mock.calls[0];
+    const undoCallArgs = editsOf(mockSource0).mock.calls[0];
     expect(undoCallArgs[2][0]).toBe(10n);
 
     // A single rollback reload: the frontend purges the preview tags and the
@@ -1211,17 +1241,17 @@ describe("VoxelEditingController: Undo/Redo", () => {
     expect((controller as any).undoStack.length).toBe(0);
     expect((controller as any).redoStack.length).toBe(1);
 
-    mockSource0.applyEdits.mockClear();
+    editsOf(mockSource0).mockClear();
     (mockRpc.invoke as any).mockClear();
 
     await controller.redo();
 
-    expect(mockSource0.applyEdits).toHaveBeenCalledWith(
+    expect(editsOf(mockSource0)).toHaveBeenCalledWith(
       "0,0,0",
       expect.any(Uint32Array),
       expect.any(BigUint64Array),
     );
-    const redoCallArgs = mockSource0.applyEdits.mock.calls[0];
+    const redoCallArgs = editsOf(mockSource0).mock.calls[0];
     expect(redoCallArgs[2][0]).toBe(20n);
 
     expect((controller as any).callChunkReload).toHaveBeenCalledWith(
@@ -1263,7 +1293,7 @@ describe("VoxelEditingController: Undo/Redo", () => {
     };
     (controller as any).undoStack.push(editAction);
 
-    mockSource0.applyEdits.mockRejectedValue(new Error("Backend Write Failed"));
+    editsOf(mockSource0).mockRejectedValue(new Error("Backend Write Failed"));
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     await controller.undo();
@@ -1302,7 +1332,7 @@ describe("VoxelEditingController: Undo/Redo", () => {
     };
     (controller as any).redoStack.push(editAction);
 
-    mockSource0.applyEdits.mockRejectedValue(new Error("Backend Write Failed"));
+    editsOf(mockSource0).mockRejectedValue(new Error("Backend Write Failed"));
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     await controller.redo();
@@ -1352,13 +1382,13 @@ describe("VoxelEditingController: Undo/Redo", () => {
 
     await controller.undo();
 
-    expect(mockSource0.applyEdits).toHaveBeenCalledTimes(2);
-    expect(mockSource0.applyEdits).toHaveBeenCalledWith(
+    expect(editsOf(mockSource0)).toHaveBeenCalledTimes(2);
+    expect(editsOf(mockSource0)).toHaveBeenCalledWith(
       "0,0,0",
       expect.anything(),
       expect.anything(),
     );
-    expect(mockSource0.applyEdits).toHaveBeenCalledWith(
+    expect(editsOf(mockSource0)).toHaveBeenCalledWith(
       "1,0,0",
       expect.anything(),
       expect.anything(),
@@ -1395,7 +1425,7 @@ describe("VoxelEditingController: Tool Operations", () => {
       fillValue: EMPTY_VOXEL_VALUE,
     };
     mockSource = createMockSource({ ...spec });
-    vi.spyOn(mockSource, "applyEdits").mockResolvedValue({
+    editsOf(mockSource).mockResolvedValue({
       indices: new Uint32Array([]),
       oldValues: new BigUint64Array([]),
       newValues: new BigUint64Array([]),
@@ -1438,13 +1468,13 @@ describe("VoxelEditingController: Tool Operations", () => {
 
     await vi.runAllTimersAsync();
 
-    expect(mockSource.applyEdits).toHaveBeenCalledWith(
+    expect(editsOf(mockSource)).toHaveBeenCalledWith(
       "0,0,0",
       expect.any(Array),
       expect.any(Array),
     );
 
-    const call = (mockSource.applyEdits as any).mock.calls[0];
+    const call = editsOf(mockSource).mock.calls[0];
     const indices = call[1];
     const values = call[2];
     const indexSet = new Set(indices);
@@ -1476,7 +1506,7 @@ describe("VoxelEditingController: Tool Operations", () => {
 
     await vi.runAllTimersAsync();
 
-    const call = (mockSource.applyEdits as any).mock.calls[0];
+    const call = editsOf(mockSource).mock.calls[0];
     const indices = call[1];
     const values = call[2];
     const indexSet = new Set(indices);
@@ -1521,7 +1551,7 @@ describe("VoxelEditingController: Tool Operations", () => {
 
     await vi.runAllTimersAsync();
 
-    const call = (mockSource.applyEdits as any).mock.calls[0];
+    const call = editsOf(mockSource).mock.calls[0];
     const indices = call[1];
     expect(indices.length).toBe(9);
   });
@@ -1555,7 +1585,7 @@ describe("VoxelEditingController: Tool Operations", () => {
 
     await vi.runAllTimersAsync();
 
-    const call = (mockSource.applyEdits as any).mock.calls[0];
+    const call = editsOf(mockSource).mock.calls[0];
     const indices = call[1];
     expect(indices.length).toBe(9);
     for (const idx of indices) {
@@ -1605,7 +1635,7 @@ describe("VoxelEditingController: Tool Operations", () => {
 
     await vi.runAllTimersAsync();
 
-    expect(mockSource.applyEdits).not.toHaveBeenCalled();
+    expect(editsOf(mockSource)).not.toHaveBeenCalled();
   });
 
   it("floodFillPlane2D: Leak prevention (morphological)", async () => {
@@ -1642,8 +1672,8 @@ describe("VoxelEditingController: Tool Operations", () => {
 
     await vi.runAllTimersAsync();
 
-    expect(mockSource.applyEdits).toHaveBeenCalled();
-    const indices = (mockSource.applyEdits as any).mock.calls[0][1];
+    expect(editsOf(mockSource)).toHaveBeenCalled();
+    const indices = editsOf(mockSource).mock.calls[0][1];
     expect(indices.length).toBeLessThan(100);
     expect(indices.length).toBeGreaterThan(50);
   });
@@ -1678,7 +1708,7 @@ describe("VoxelEditingController: Tool Operations", () => {
     await vi.runAllTimersAsync();
 
     // Left chamber (4×8) + hole + right chamber (3×8).
-    const indices = (mockSource.applyEdits as any).mock.calls[0][1];
+    const indices = editsOf(mockSource).mock.calls[0][1];
     expect(indices.length).toBe(57);
   });
 
@@ -1720,7 +1750,7 @@ describe("VoxelEditingController: Tool Operations", () => {
     });
 
     expect(covered).toEqual([]);
-    expect(mockSource.applyEdits).not.toHaveBeenCalled();
+    expect(editsOf(mockSource)).not.toHaveBeenCalled();
   });
 
   it("performOperation: brush returns the covered voxel chunk keys", async () => {
@@ -1752,7 +1782,7 @@ describe("VoxelEditingController: Tool Operations", () => {
     });
 
     expect(covered).toEqual(["lod0#0,0,0"]);
-    expect(mockSource.applyEdits).not.toHaveBeenCalled();
+    expect(editsOf(mockSource)).not.toHaveBeenCalled();
   });
 
   it("performOperation: filtered brush leaves filtered-out chunks uncovered", async () => {
@@ -1770,63 +1800,7 @@ describe("VoxelEditingController: Tool Operations", () => {
     });
 
     expect(covered).toEqual([]);
-    expect(mockSource.applyEdits).not.toHaveBeenCalled();
-  });
-});
-
-describe("VolumeChunkSource.applyEdits: unreadable stored chunk", () => {
-  it("treats a corrupt (undecodable) chunk as empty and repairs it on write", async () => {
-    const source = createMockSource();
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    (source.download as any).mockRejectedValue(
-      new Error("Raw-format chunk is 0 bytes, but 8 * 1 = 8 bytes expected."),
-    );
-
-    const change = await source.applyEdits("0,0,0", [3], [7n]);
-
-    expect(source.writeChunk).toHaveBeenCalled();
-    const written = new Uint8Array(source.serverStorage.get("0,0,0")!);
-    expect(Array.from(written)).toEqual([0, 0, 0, 7, 0, 0, 0, 0]);
-    expect(Number((change.oldValues as any)[0])).toBe(0);
-    expect(warnSpy).toHaveBeenCalled();
-    warnSpy.mockRestore();
-  });
-
-  it("propagates transient (network) failures without writing", async () => {
-    const source = createMockSource();
-    (source.download as any).mockRejectedValue(
-      new HttpError("http://store/chunk", 503, "Service Unavailable"),
-    );
-
-    await expect(source.applyEdits("0,0,0", [3], [7n])).rejects.toThrow(
-      "HTTP error 503",
-    );
-    expect(source.writeChunk).not.toHaveBeenCalled();
-  });
-
-  it("fails closed on unrecognized read errors instead of repairing", async () => {
-    const source = createMockSource();
-    (source.download as any).mockRejectedValue(
-      new Error("some wrapped kvstore failure"),
-    );
-
-    await expect(source.applyEdits("0,0,0", [3], [7n])).rejects.toThrow(
-      "some wrapped kvstore failure",
-    );
-    expect(source.writeChunk).not.toHaveBeenCalled();
-  });
-
-  it("invalidates the shared backend cache entry after a successful write", async () => {
-    const source = createMockSource();
-    mockQueueManager.invalidateCachedChunks.mockClear();
-    source.serverStorage.set("0,0,0", new Uint8Array(8).fill(2).buffer);
-
-    await source.applyEdits("0,0,0", [3], [7n]);
-
-    expect(mockQueueManager.invalidateCachedChunks).toHaveBeenCalledWith(
-      source,
-      ["0,0,0"],
-    );
+    expect(editsOf(mockSource)).not.toHaveBeenCalled();
   });
 });
 
@@ -1897,7 +1871,7 @@ describe("BackendVoxelAccessor: mid-flight invalidation", () => {
       basis: { u: new Float32Array([1, 0, 0]), v: new Float32Array([0, 1, 0]) },
     });
 
-    expect(source.applyEdits).toHaveBeenCalledWith(
+    expect(editsOf(source)).toHaveBeenCalledWith(
       "0,0,0",
       [0],
       expect.arrayContaining([5n]),
