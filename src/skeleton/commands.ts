@@ -14,10 +14,7 @@
  * limitations under the License.
  */
 
-import type {
-  EditableSkeletonSource,
-  SkeletonNode,
-} from "#src/skeleton/api.js";
+import type { SkeletonNode } from "#src/skeleton/api.js";
 import type { SpatialSkeletonCommandPayload } from "#src/skeleton/command_factories.js";
 import {
   SpatialSkeletonActions,
@@ -103,12 +100,8 @@ function createSpatialSkeletonCommand(
   payload: SpatialSkeletonCommandPayload,
   unsupportedMessage: string,
 ) {
-  // Source capabilities are validated when the layer enables editing. Dispatch
-  // checks the current write permission and resolves the requested factory.
-  const source = layer.getSpatiallyIndexedSkeletonLayer()?.source as
-    | EditableSkeletonSource
-    | undefined;
-  if (source?.readonly !== false) {
+  const source = layer.getSpatiallyIndexedSkeletonLayer()?.editableSource;
+  if (source === undefined) {
     throw new Error(unsupportedMessage);
   }
   const commandFactory = getSpatialSkeletonEditCommandFactoryForAction(

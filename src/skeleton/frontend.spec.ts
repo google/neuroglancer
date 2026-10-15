@@ -25,7 +25,7 @@ import { buildSpatiallyIndexedSkeletonOverlayGeometry } from "#src/skeleton/segm
 import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { Uint64Set } from "#src/uint64_set.js";
 import { getContrastRatio } from "#src/util/color.js";
-import { vec3 } from "#src/util/geom.js";
+import { mat4, vec3 } from "#src/util/geom.js";
 
 if (!("WebGL2RenderingContext" in globalThis)) {
   Object.defineProperty(globalThis, "WebGL2RenderingContext", {
@@ -1316,26 +1316,33 @@ function makeNanometerSpace(
   });
 }
 
-function makeLevelSourceRecorder() {
-  const requestedLevels: any[] = [];
-  const makeLevelSource = (options: any) => {
-    requestedLevels.push(options);
-    return {} as any;
-  };
-  return { requestedLevels, makeLevelSource };
+class LevelRecordingSource extends MultiscaleSpatiallyIndexedSkeletonSource {
+  readonly fragmentSource = {} as any;
+  readonly editableSource = undefined;
+  readonly requestedLevels: any[] = [];
+
+  getSources() {
+    return [
+      this.getLevelSpecs().map((spec) => {
+        this.requestedLevels.push({ spec });
+        return {
+          chunkSource: {} as any,
+          chunkToMultiscaleTransform: mat4.create(),
+        };
+      }),
+    ];
+  }
 }
 
 function makeMultiscaleSource(
   coordinateSpace: CoordinateSpace,
   spatial: SkeletonSpatialIndexLevel[],
 ) {
-  const { requestedLevels, makeLevelSource } = makeLevelSourceRecorder();
-  const source = new MultiscaleSpatiallyIndexedSkeletonSource(
-    {} as any,
-    { coordinateSpace, spatial },
-    makeLevelSource,
-  );
-  return { source, requestedLevels };
+  const source = new LevelRecordingSource({} as any, {
+    modelSpace: coordinateSpace,
+    levels: spatial,
+  });
+  return { source, requestedLevels: source.requestedLevels };
 }
 
 describe("MultiscaleSpatiallyIndexedSkeletonSource", () => {

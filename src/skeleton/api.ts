@@ -30,7 +30,7 @@ import type {
 } from "#src/skeleton/command_factories.js";
 import type { SpatialSkeletonOptimisticEditingProvider } from "#src/skeleton/optimistic_edit/api.js";
 
-// One number per dimension of the coordinate space, such as a position or a chunk size.
+// One number per dimension of the model space, in its units, such as a position or a chunk size.
 export type SkeletonVector = ArrayLike<number>;
 // Keyed by vertex attribute id. Each value has one number per component.
 export type SkeletonNodeAttributes = Readonly<
@@ -68,15 +68,15 @@ export interface SkeletonSpatialIndexLevel {
 }
 
 export interface SkeletonSpatialIndexMetadata {
-  // Its bounds must be finite. They set the extent of the chunk grid.
-  readonly coordinateSpace: CoordinateSpace;
+  // Rank 3, with finite bounds. The bounds set the extent of the chunk grid.
+  readonly modelSpace: CoordinateSpace;
   // Must be provided from coarsest to finest.
-  readonly spatial: readonly SkeletonSpatialIndexLevel[];
+  readonly levels: readonly SkeletonSpatialIndexLevel[];
 }
 
 export interface SkeletonManifest {
-  // Empty when the source has no skeleton with this id.
   // Each key names one read. The source chooses how much of the skeleton one read covers.
+  // A missing skeleton may have keys whose fragments have no nodes.
   readonly fragmentKeys: readonly string[];
 }
 
@@ -88,28 +88,26 @@ export interface SkeletonFragment {
 }
 
 export interface SkeletonFragmentSource {
-  readonly readonly: boolean;
   getSkeletonManifest(
-    skeletonId: bigint,
-    options?: { signal?: AbortSignal },
+    segmentId: bigint,
+    signal: AbortSignal,
   ): Promise<SkeletonManifest>;
   getSkeletonFragment(
-    skeletonId: bigint,
+    segmentId: bigint,
     fragmentKey: string,
-    options?: { signal?: AbortSignal },
+    signal: AbortSignal,
   ): Promise<SkeletonFragment>;
 }
 
 export interface SkeletonSpatialIndexSource {
   // Resolves to [] for an empty or missing chunk.
   downloadChunk(
-    chunkGridPosition: Float32Array,
+    chunkGridPosition: SkeletonVector,
     signal: AbortSignal,
   ): Promise<SkeletonNode[]>;
 }
 
 export interface EditableSkeletonSource extends SkeletonFragmentSource {
-  readonly readonly: false;
   readonly optimisticEditing: SpatialSkeletonOptimisticEditingProvider;
   readonly addNodesCommand: SpatialSkeletonAddNodesCommandFactory;
   readonly moveNodesCommand: SpatialSkeletonMoveNodesCommandFactory;

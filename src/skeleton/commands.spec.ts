@@ -76,8 +76,8 @@ function makeWholeSkeletonReads(
     getSkeletonFragment: async (
       skeletonId: bigint,
       _fragmentKey: string,
-      options: { signal: AbortSignal },
-    ) => ({ nodes: await getSkeleton(skeletonId, options) }),
+      signal: AbortSignal,
+    ) => ({ nodes: await getSkeleton(skeletonId, { signal }) }),
   };
 }
 
@@ -202,7 +202,6 @@ function makeEditableSkeletonSource(overrides: Record<string, unknown> = {}) {
   }
   const commands = makeCatmaidEditCommands(makeCatmaidClient(clientOverrides));
   return {
-    readonly: false,
     optimisticEditing: commands.optimisticEditing,
     addNodesCommand: commands.addNodesCommand,
     insertNodesCommand: commands.insertNodesCommand,
@@ -413,7 +412,8 @@ function makeOptimisticAddNodeTestLayer(options: {
   const invalidateWholeSourceCache = vi.fn();
   const chunkSource = { invalidateCache: invalidateWholeSourceCache };
   const skeletonLayer = {
-    source: skeletonSource,
+    fragmentSource: skeletonSource,
+    editableSource: skeletonSource,
     getNode: vi.fn((nodeId: bigint) =>
       spatialSkeletonState.getCachedNode(nodeId),
     ),
@@ -614,7 +614,7 @@ describe("spatial_skeleton_commands", () => {
         executeOptimisticEdit,
       },
       getSpatiallyIndexedSkeletonLayer: () => ({
-        source: {
+        editableSource: {
           ...makeEditableSkeletonSource({
             moveNodesCommand: {
               action: SpatialSkeletonActions.moveNodes,
@@ -658,9 +658,8 @@ describe("spatial_skeleton_commands", () => {
         commandHistory: new SpatialSkeletonCommandHistory(),
       },
       getSpatiallyIndexedSkeletonLayer: () => ({
-        source: {
+        editableSource: {
           ...makeEditableSkeletonSource(),
-          readonly: false,
           editNodeDescriptionCommand: {
             action: SpatialSkeletonActions.editNodeDescription,
           },
@@ -689,11 +688,10 @@ describe("spatial_skeleton_commands", () => {
         commandHistory: new SpatialSkeletonCommandHistory(),
       },
       getSpatiallyIndexedSkeletonLayer: () => ({
-        source: {
+        editableSource: {
           ...makeEditableSkeletonSource({
             editNodeDescriptionCommand: undefined,
           }),
-          readonly: false,
         },
       }),
     };
@@ -718,7 +716,6 @@ describe("spatial_skeleton_commands", () => {
     (kind) => {
       const source = makeEditableSkeletonSource();
       const createCommand = vi.spyOn(source.moveNodesCommand, "createCommand");
-      source.readonly = true;
       const ensureOptimisticEditingEngine = vi.fn();
       const layer = {
         spatialSkeletonState: {
@@ -726,7 +723,7 @@ describe("spatial_skeleton_commands", () => {
           ensureOptimisticEditingEngine,
         },
         getSpatiallyIndexedSkeletonLayer: () =>
-          kind === "missing" ? undefined : { source },
+          kind === "missing" ? undefined : { fragmentSource: source },
       };
 
       expect(() => executeSpatialSkeletonMoveNode(layer as any, {})).toThrow(
@@ -774,7 +771,7 @@ describe("spatial_skeleton_commands", () => {
         ensureOptimisticEditingEngine: vi.fn(),
         executeOptimisticEdit: () => submitted,
       },
-      getSpatiallyIndexedSkeletonLayer: () => ({ source }),
+      getSpatiallyIndexedSkeletonLayer: () => ({ editableSource: source }),
     };
 
     const execution = executeSpatialSkeletonSplit(layer as any, {});
@@ -843,7 +840,7 @@ describe("spatial_skeleton_commands", () => {
         ensureOptimisticEditingEngine: vi.fn(() => ({})),
         executeOptimisticEdit,
       },
-      getSpatiallyIndexedSkeletonLayer: () => ({ source }),
+      getSpatiallyIndexedSkeletonLayer: () => ({ editableSource: source }),
     };
     const node: SkeletonNode = {
       nodeId: 17n,
@@ -1877,7 +1874,7 @@ describe("spatial_skeleton_commands", () => {
     const replacementCommands = makeCatmaidEditCommands(
       makeCatmaidClient({ addNode, deleteNode }),
     );
-    Object.assign(skeletonLayer.source, {
+    Object.assign(skeletonLayer.editableSource, {
       addNodesCommand: replacementCommands.addNodesCommand,
       deleteNodesCommand: replacementCommands.deleteNodesCommand,
       moveNodesCommand: replacementCommands.moveNodesCommand,

@@ -158,9 +158,6 @@ import type {
 } from "#src/skeleton/optimistic_edit/projection_runtime.js";
 import {
   editableSpatiallyIndexedSkeletonSourceSupportsAction,
-  getEditableSpatiallyIndexedSkeletonSource,
-  getSpatiallyIndexedSkeletonSource,
-  isSpatiallyIndexedSkeletonSourceReadOnly,
   SpatialSkeletonState,
 } from "#src/skeleton/spatial_skeleton_manager.js";
 import { DataType, VolumeType } from "#src/sliceview/volume/base.js";
@@ -1366,7 +1363,7 @@ export class SegmentationUserLayer extends Base {
             (layer) =>
               (layer instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer ||
                 layer instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer) &&
-              getSpatiallyIndexedSkeletonSource(layer.base) !== undefined,
+              layer.base.fragmentSource !== undefined,
           ),
         { changed: this.layersChanged, value: this.renderLayers },
       ),
@@ -1384,8 +1381,7 @@ export class SegmentationUserLayer extends Base {
             (layer) =>
               (layer instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer ||
                 layer instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer) &&
-              getEditableSpatiallyIndexedSkeletonSource(layer.base) !==
-                undefined,
+              layer.base.editableSource !== undefined,
           ),
         { changed: this.layersChanged, value: this.renderLayers },
       ),
@@ -1633,9 +1629,9 @@ export class SegmentationUserLayer extends Base {
       return false;
     }
     if (action === SpatialSkeletonActions.inspect) {
-      return getSpatiallyIndexedSkeletonSource(skeletonLayer) !== undefined;
+      return skeletonLayer?.fragmentSource !== undefined;
     }
-    const source = getEditableSpatiallyIndexedSkeletonSource(skeletonLayer);
+    const source = skeletonLayer?.editableSource;
     if (source === undefined) return false;
     try {
       ensureSpatialSkeletonOptimisticEditQueue(this, source);
@@ -1660,7 +1656,7 @@ export class SegmentationUserLayer extends Base {
       requirements.some(
         (action) => action !== SpatialSkeletonActions.inspect,
       ) &&
-      isSpatiallyIndexedSkeletonSourceReadOnly(skeletonLayer)
+      skeletonLayer?.editableSource === undefined
     ) {
       return "The active spatial skeleton source is read-only.";
     }
@@ -1729,9 +1725,7 @@ export class SegmentationUserLayer extends Base {
         "No active spatial skeleton layer found for delete action.",
       );
     }
-    if (
-      getEditableSpatiallyIndexedSkeletonSource(skeletonLayer) === undefined
-    ) {
+    if (skeletonLayer?.editableSource === undefined) {
       throw new Error(
         "Unable to resolve editable skeleton source for the active layer.",
       );
@@ -1900,6 +1894,8 @@ export class SegmentationUserLayer extends Base {
                 displayState,
                 {
                   sources2d: slicePanelSources,
+                  fragmentSource: mesh.fragmentSource,
+                  editableSource: mesh.editableSource,
                   selectedNodeInfo: this.selectedSpatialSkeletonNodeInfo,
                   suppressSelectedNodeHighlight:
                     this.spatialSkeletonState.suppressSelectedNodeHighlight,
@@ -2637,7 +2633,7 @@ export class SegmentationUserLayer extends Base {
     summaryRow.classList.add("neuroglancer-selection-details-skeleton-summary");
     container.appendChild(summaryRow);
 
-    const editSource = getEditableSpatiallyIndexedSkeletonSource(skeletonLayer);
+    const editSource = skeletonLayer?.editableSource;
     const rerootDisabledReason =
       editSource?.rerootCommand === undefined
         ? "Unable to resolve a reroot-capable skeleton source for the active layer."
@@ -3013,9 +3009,8 @@ export class SegmentationUserLayer extends Base {
         currentNodeId !== undefined &&
         selection !== undefined &&
         getNodeIdFromLayerSelectionState(selection) === currentNodeId &&
-        getEditableSpatiallyIndexedSkeletonSource(
-          this.getSpatiallyIndexedSkeletonLayer(),
-        ) === editSource &&
+        this.getSpatiallyIndexedSkeletonLayer()?.editableSource ===
+          editSource &&
         this.spatialSkeletonState.getOptimisticEditFatalState() === undefined &&
         this.spatialSkeletonState.getCachedNode(currentNodeId) !== undefined &&
         identities ===

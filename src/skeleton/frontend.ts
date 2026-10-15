@@ -73,6 +73,8 @@ import {
 } from "#src/segmentation_display_state/frontend.js";
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
 import type {
+  EditableSkeletonSource,
+  SkeletonFragmentSource,
   SkeletonSpatialIndexLevel,
   SkeletonSpatialIndexMetadata,
   SkeletonNode,
@@ -2033,17 +2035,11 @@ export const SPATIAL_SKELETON_SOURCE_OPTIONS: SliceViewSourceOptions = {
   modelChannelDimensionIndices: [],
 };
 
-export interface SpatialSkeletonLevelSourceOptions {
-  readonly coarseToFineIndex: number;
-  readonly levelCount: number;
-  readonly spec: SpatiallyIndexedSkeletonChunkSpecification;
-}
-
 function makeSpatialSkeletonLevelSpec(
-  coordinateSpace: CoordinateSpace,
+  modelSpace: CoordinateSpace,
   level: SkeletonSpatialIndexLevel,
 ): SpatiallyIndexedSkeletonChunkSpecification {
-  const { scales, bounds } = coordinateSpace;
+  const { scales, bounds } = modelSpace;
   const chunkDataSize = Float32Array.from(level.chunkSize);
   const chunkLayout = new ChunkLayout(
     vec3.fromValues(chunkDataSize[0], chunkDataSize[1], chunkDataSize[2]),
@@ -2065,48 +2061,40 @@ function makeSpatialSkeletonLevelSpec(
   };
 }
 
-export class MultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleSliceViewChunkSource<SpatiallyIndexedSkeletonSource> {
+export abstract class MultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleSliceViewChunkSource<SpatiallyIndexedSkeletonSource> {
+  abstract readonly fragmentSource: SkeletonFragmentSource;
+  // Undefined when the source cannot be edited.
+  abstract readonly editableSource: EditableSkeletonSource | undefined;
+
   constructor(
     chunkManager: Borrowed<ChunkManager>,
-    private readonly metadata: SkeletonSpatialIndexMetadata,
-    private readonly makeLevelSource: (
-      options: SpatialSkeletonLevelSourceOptions,
-    ) => SpatiallyIndexedSkeletonSource,
+    protected readonly metadata: SkeletonSpatialIndexMetadata,
   ) {
     super(chunkManager);
-    if (metadata.coordinateSpace.rank !== 3) {
+    if (metadata.modelSpace.rank !== 3) {
       throw new Error(
-        `Spatial skeleton coordinate space must have rank 3, not ${metadata.coordinateSpace.rank}.`,
+        `Spatial skeleton coordinate space must have rank 3, not ${metadata.modelSpace.rank}.`,
       );
     }
-    const { lowerBounds, upperBounds } = metadata.coordinateSpace.bounds;
+    const { lowerBounds, upperBounds } = metadata.modelSpace.bounds;
     if (![...lowerBounds, ...upperBounds].every(Number.isFinite)) {
       throw new Error(
         "Spatial skeleton coordinate space bounds must be finite.",
       );
     }
-    validateSpatialSkeletonLimitZeroOnlyFinest(metadata.spatial);
+    validateSpatialSkeletonLimitZeroOnlyFinest(metadata.levels);
   }
 
   get rank() {
     return 3;
   }
 
-  getSources(
-    _options: SliceViewSourceOptions,
-  ): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[][] {
-    const { coordinateSpace, spatial } = this.metadata;
-    const levelCount = spatial.length;
-    return [
-      spatial.map((level, coarseToFineIndex) => ({
-        chunkSource: this.makeLevelSource({
-          coarseToFineIndex,
-          levelCount,
-          spec: makeSpatialSkeletonLevelSpec(coordinateSpace, level),
-        }),
-        chunkToMultiscaleTransform: mat4.create(),
-      })),
-    ];
+  // From coarsest to finest, like the levels.
+  protected getLevelSpecs(): SpatiallyIndexedSkeletonChunkSpecification[] {
+    const { modelSpace, levels } = this.metadata;
+    return levels.map((level) =>
+      makeSpatialSkeletonLevelSpec(modelSpace, level),
+    );
   }
 
   getPerspectiveSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] {
@@ -2129,6 +2117,8 @@ interface SelectedSkeletonNodeInfo {
 
 interface SpatiallyIndexedSkeletonLayerOptions {
   sources2d?: SpatiallyIndexedSkeletonSourceEntry[];
+  fragmentSource?: SkeletonFragmentSource;
+  editableSource?: EditableSkeletonSource;
   selectedNodeInfo?: WatchableValueInterface<
     SelectedSkeletonNodeInfo | undefined
   >;
@@ -2975,6 +2965,9 @@ export class SpatiallyIndexedSkeletonLayer
   sources: SpatiallyIndexedSkeletonSourceEntry[];
   sources2d: SpatiallyIndexedSkeletonSourceEntry[];
   source: SpatiallyIndexedSkeletonSource;
+  readonly fragmentSource: SkeletonFragmentSource | undefined;
+  // Undefined when the source cannot be edited.
+  readonly editableSource: EditableSkeletonSource | undefined;
 
   constructor(
     public chunkManager: ChunkManager,
@@ -3026,6 +3019,8 @@ export class SpatiallyIndexedSkeletonLayer
         this.displayState.transform,
       ),
     );
+    this.fragmentSource = options.fragmentSource;
+    this.editableSource = options.editableSource;
     this.selectedNodeInfo = options.selectedNodeInfo;
     this.suppressSelectedNodeHighlight = options.suppressSelectedNodeHighlight;
     this.hoveredNodeInfo = options.hoveredNodeInfo;

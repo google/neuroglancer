@@ -31,8 +31,8 @@ function makeWholeSkeletonReads(
     getSkeletonFragment: async (
       skeletonId: bigint,
       _fragmentKey: string,
-      options: { signal: AbortSignal },
-    ) => ({ nodes: await getSkeleton(skeletonId, options) }),
+      signal: AbortSignal,
+    ) => ({ nodes: await getSkeleton(skeletonId, { signal }) }),
   };
 }
 
@@ -68,10 +68,7 @@ function makeSkeletonLayer() {
     },
   );
   const skeletonLayer = {
-    source: {
-      readonly: false,
-      ...makeWholeSkeletonReads(getSkeleton),
-    },
+    fragmentSource: makeWholeSkeletonReads(getSkeleton),
   } as any;
   return { skeletonLayer, getSkeleton, reads };
 }

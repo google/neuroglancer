@@ -173,20 +173,20 @@ function makeSpatialIndexSource(nodes: SkeletonNode[]) {
   return source;
 }
 
-function makeCellChunk() {
+function makeChunk() {
   const chunk = new SpatiallyIndexedSkeletonChunk();
   chunk.chunkGridPosition = Float32Array.of(0, 0, 0);
   return chunk;
 }
 
-describe("skeleton/backend cell download", () => {
-  it("draws an edge to a parent only when the parent is in the same cell", async () => {
+describe("skeleton/backend chunk download", () => {
+  it("draws an edge to a parent only when the parent is in the same chunk", async () => {
     const source = makeSpatialIndexSource([
       { nodeId: 1n, position: [1, 2, 3], segmentId: 10n },
       { nodeId: 2n, parentNodeId: 1n, position: [4, 5, 6], segmentId: 10n },
       { nodeId: 3n, parentNodeId: 99n, position: [7, 8, 9], segmentId: 11n },
     ]);
-    const chunk = makeCellChunk();
+    const chunk = makeChunk();
 
     await source.download(chunk, new AbortController().signal);
 
@@ -198,7 +198,21 @@ describe("skeleton/backend cell download", () => {
     expect(chunk.nodeIds).toEqual(BigUint64Array.of(1n, 2n, 3n));
   });
 
-  it("keeps skeleton and node IDs above 2^32 exact in a downloaded cell", async () => {
+  it("never joins two skeletons that reuse a node id", async () => {
+    const source = makeSpatialIndexSource([
+      { nodeId: 0n, position: [1, 2, 3], segmentId: 10n },
+      { nodeId: 1n, parentNodeId: 0n, position: [4, 5, 6], segmentId: 10n },
+      { nodeId: 0n, position: [7, 8, 9], segmentId: 11n },
+      { nodeId: 1n, parentNodeId: 0n, position: [10, 11, 12], segmentId: 11n },
+    ]);
+    const chunk = makeChunk();
+
+    await source.download(chunk, new AbortController().signal);
+
+    expect(chunk.indices).toEqual(Uint32Array.of(1, 0, 3, 2));
+  });
+
+  it("keeps skeleton and node IDs above 2^32 exact in a downloaded chunk", async () => {
     const source = makeSpatialIndexSource([
       {
         nodeId: 2n ** 53n + 1n,
@@ -212,7 +226,7 @@ describe("skeleton/backend cell download", () => {
         segmentId: 2n ** 63n + 5n,
       },
     ]);
-    const chunk = makeCellChunk();
+    const chunk = makeChunk();
 
     await source.download(chunk, new AbortController().signal);
 

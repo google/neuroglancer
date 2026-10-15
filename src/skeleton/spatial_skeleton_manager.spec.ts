@@ -29,9 +29,7 @@ import { SpatialSkeletonOptimisticReloadRequiredError } from "#src/skeleton/opti
 import { unchangedSpatialSkeletonOptimisticEditSettlement } from "#src/skeleton/optimistic_edit/lifecycle.js";
 import {
   editableSpatiallyIndexedSkeletonSourceSupportsAction,
-  getEditableSpatiallyIndexedSkeletonSource,
   getSpatialSkeletonEditCommandFactoryForAction,
-  isSpatiallyIndexedSkeletonSourceReadOnly,
   SpatialSkeletonState,
   type SpatialSkeletonPreparedProjectionStatePublication,
   type SpatialSkeletonOptimisticEditExecution,
@@ -49,8 +47,8 @@ function makeWholeSkeletonReads(
     getSkeletonFragment: async (
       skeletonId: bigint,
       _fragmentKey: string,
-      options: { signal: AbortSignal },
-    ) => ({ nodes: await getSkeleton(skeletonId, options) }),
+      signal: AbortSignal,
+    ) => ({ nodes: await getSkeleton(skeletonId, { signal }) }),
   };
 }
 
@@ -193,8 +191,7 @@ function makeFragmentedSkeletonLayer(
 ) {
   const requestedFragmentKeys: string[] = [];
   const layer = {
-    source: {
-      readonly: true,
+    fragmentSource: {
       async getSkeletonManifest() {
         await manifestReady;
         return { fragmentKeys: Object.keys(fragments) };
@@ -311,8 +308,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const unrelatedRead = deferred<SkeletonNode[]>();
     const signals = new Map<bigint, AbortSignal>();
     const layer = {
-      source: {
-        readonly: false,
+      fragmentSource: {
         ...makeWholeSkeletonReads(
           (id: bigint, options: { signal: AbortSignal }) => {
             signals.set(id, options.signal);
@@ -612,8 +608,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       },
     );
     const skeletonLayer = {
-      source: {
-        readonly: false,
+      fragmentSource: {
         ...makeWholeSkeletonReads(getSkeleton),
       },
     } as any;
@@ -815,76 +810,10 @@ describe("skeleton/spatial_skeleton_manager", () => {
     );
   });
 
-  it("returns an editable source when mandatory edit actions are present", () => {
-    const source = {
-      ...makeEditableSourceCommands(),
-      readonly: false,
-      getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-      getSkeletonFragment: async () => ({ nodes: [] }),
-    };
-
-    expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
-  });
-
-  it("does not treat a source missing mandatory edit actions as editable", () => {
-    const source = {
-      ...makeEditableSourceCommands(),
-      mergeSkeletonsCommand: undefined,
-      readonly: false,
-      getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-      getSkeletonFragment: async () => ({ nodes: [] }),
-    };
-
-    expect(
-      getEditableSpatiallyIndexedSkeletonSource({ source }),
-    ).toBeUndefined();
-  });
-
-  it("does not treat a writable source without a queue provider as editable", () => {
-    const { optimisticEditing: _optimisticEditing, ...commands } =
-      makeEditableSourceCommands();
-    const source = {
-      ...commands,
-      readonly: false,
-      getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-      getSkeletonFragment: async () => ({ nodes: [] }),
-    };
-
-    expect(
-      getEditableSpatiallyIndexedSkeletonSource({ source }),
-    ).toBeUndefined();
-  });
-
-  it("does not treat a command factory for the wrong action as editable", () => {
-    const source = {
-      ...makeEditableSourceCommands(),
-      moveNodesCommand: makeCommandFactory(SpatialSkeletonActions.addNodes),
-      readonly: false,
-      getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-      getSkeletonFragment: async () => ({ nodes: [] }),
-    };
-
-    expect(
-      getEditableSpatiallyIndexedSkeletonSource({ source }),
-    ).toBeUndefined();
-  });
-
-  it("does not require optional edit actions for editable source validation", () => {
-    const source = {
-      ...makeEditableSourceCommands(),
-      readonly: false,
-      getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-      getSkeletonFragment: async () => ({ nodes: [] }),
-    };
-
-    expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
-  });
-
   it("looks up edit command factories from shared action metadata", () => {
     const source = {
       ...makeEditableSourceCommands(),
       rerootCommand: makeCommandFactory(SpatialSkeletonActions.reroot),
-      readonly: false,
       getSkeletonManifest: async () => ({ fragmentKeys: [] }),
       getSkeletonFragment: async () => ({ nodes: [] }),
     };
@@ -909,42 +838,16 @@ describe("skeleton/spatial_skeleton_manager", () => {
     ).toBeUndefined();
   });
 
-  it("validates optional confidence configuration for editable sources", () => {
-    const source = {
-      ...makeEditableSourceCommands(),
-      editNodeConfidenceCommand: makeCommandFactory(
-        SpatialSkeletonActions.editNodeConfidence,
-      ),
-      confidenceValues: [0, 50, 100],
-      readonly: false,
-      getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-      getSkeletonFragment: async () => ({ nodes: [] }),
-    };
-
-    expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
-
-    expect(
-      getEditableSpatiallyIndexedSkeletonSource({
-        source: {
-          ...source,
-          confidenceValues: [0, Number.NaN, 100],
-        },
-      }),
-    ).toBeUndefined();
-  });
-
   it("supports confidence editing for a source that does not list its confidence values", () => {
     const source = {
       ...makeEditableSourceCommands(),
       editNodeConfidenceCommand: makeCommandFactory(
         SpatialSkeletonActions.editNodeConfidence,
       ),
-      readonly: false,
       getSkeletonManifest: async () => ({ fragmentKeys: [] }),
       getSkeletonFragment: async () => ({ nodes: [] }),
     };
 
-    expect(getEditableSpatiallyIndexedSkeletonSource({ source })).toBe(source);
     expect(
       editableSpatiallyIndexedSkeletonSourceSupportsAction(
         source as any,
@@ -956,51 +859,6 @@ describe("skeleton/spatial_skeleton_manager", () => {
         source as any,
         SpatialSkeletonActions.editNodeConfidence,
       ),
-    ).toBe(true);
-  });
-
-  it("does not treat a read-only source with edit commands as editable", () => {
-    const source = {
-      ...makeEditableSourceCommands(),
-      readonly: true,
-      getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-      getSkeletonFragment: async () => ({ nodes: [] }),
-    };
-
-    expect(
-      getEditableSpatiallyIndexedSkeletonSource({ source }),
-    ).toBeUndefined();
-  });
-
-  it("treats missing or invalid spatial skeleton sources as read-only", () => {
-    expect(isSpatiallyIndexedSkeletonSourceReadOnly(undefined)).toBe(true);
-    expect(
-      isSpatiallyIndexedSkeletonSourceReadOnly({ source: undefined }),
-    ).toBe(true);
-    expect(
-      isSpatiallyIndexedSkeletonSourceReadOnly({
-        source: {
-          readonly: false,
-        },
-      }),
-    ).toBe(true);
-  });
-
-  it("reads spatial skeleton source read-only state", () => {
-    const source = {
-      readonly: false,
-      getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-      getSkeletonFragment: async () => ({ nodes: [] }),
-    };
-
-    expect(isSpatiallyIndexedSkeletonSourceReadOnly({ source })).toBe(false);
-    expect(
-      isSpatiallyIndexedSkeletonSourceReadOnly({
-        source: {
-          ...source,
-          readonly: true,
-        },
-      }),
     ).toBe(true);
   });
 
@@ -1937,8 +1795,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
         }),
     );
     const skeletonLayer = {
-      source: {
-        readonly: false,
+      fragmentSource: {
         ...makeWholeSkeletonReads(getSkeleton),
       },
     } as any;
@@ -2084,8 +1941,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
         }),
     );
     const skeletonLayer = {
-      source: {
-        readonly: false,
+      fragmentSource: {
         ...makeWholeSkeletonReads(getSkeleton),
       },
     } as any;
@@ -2146,8 +2002,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
         }),
     );
     const skeletonLayer = {
-      source: {
-        readonly: false,
+      fragmentSource: {
         ...makeWholeSkeletonReads(getSkeleton),
       },
     } as any;
@@ -2187,8 +2042,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
         }),
     );
     const skeletonLayer = {
-      source: {
-        readonly: false,
+      fragmentSource: {
         ...makeWholeSkeletonReads(getSkeleton),
       },
     } as any;
@@ -2231,8 +2085,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
         }),
     );
     const skeletonLayer = {
-      source: {
-        readonly: false,
+      fragmentSource: {
         ...makeWholeSkeletonReads(getSkeleton),
       },
     } as any;
@@ -2275,8 +2128,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       const pending = state
         .getFullSegmentNodes(
           {
-            source: {
-              readonly: false,
+            fragmentSource: {
               ...makeWholeSkeletonReads(getSkeleton),
             },
           } as any,
@@ -2305,8 +2157,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       .mockRejectedValueOnce(new Error("temporary read failure"))
       .mockResolvedValueOnce([]);
     const skeletonLayer = {
-      source: {
-        readonly: false,
+      fragmentSource: {
         ...makeWholeSkeletonReads(getSkeleton),
       },
     } as any;
@@ -2338,8 +2189,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       );
       const pending = state.getFullSegmentNodes(
         {
-          source: {
-            readonly: false,
+          fragmentSource: {
             ...makeWholeSkeletonReads(getSkeleton),
           },
         } as any,
@@ -2353,8 +2203,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       await expect(
         state.getFullSegmentNodes(
           {
-            source: {
-              readonly: false,
+            fragmentSource: {
               ...makeWholeSkeletonReads(getSkeleton),
             },
           } as any,
@@ -2376,8 +2225,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     );
     const pending = state.getFullSegmentNodes(
       {
-        source: {
-          readonly: false,
+        fragmentSource: {
           ...makeWholeSkeletonReads(getSkeleton),
         },
       } as any,
@@ -2408,8 +2256,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
 
     const pending = state.getFullSegmentNodes(
       {
-        source: {
-          readonly: false,
+        fragmentSource: {
           ...makeWholeSkeletonReads(getSkeleton),
         },
       } as any,
@@ -2442,8 +2289,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
 
     const pending = state.getFullSegmentNodes(
       {
-        source: {
-          readonly: false,
+        fragmentSource: {
           ...makeWholeSkeletonReads(getSkeleton),
         },
       } as any,
@@ -2514,8 +2360,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
         }),
     );
     const skeletonLayer = {
-      source: {
-        readonly: false,
+      fragmentSource: {
         ...makeWholeSkeletonReads(getSkeleton),
       },
     } as any;
@@ -2562,8 +2407,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     );
     const pending = state.getFullSegmentNodes(
       {
-        source: {
-          readonly: false,
+        fragmentSource: {
           ...makeWholeSkeletonReads(getSkeleton),
         },
       } as any,
@@ -2611,8 +2455,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       },
     ]);
     const skeletonLayer = {
-      source: {
-        readonly: false,
+      fragmentSource: {
         ...makeWholeSkeletonReads(getSkeleton),
       },
     } as any;
@@ -2657,8 +2500,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     await expect(
       state.getFullSegmentNodes(
         {
-          source: {
-            readonly: false,
+          fragmentSource: {
             ...makeWholeSkeletonReads(getSkeleton),
           },
         } as any,
@@ -2724,8 +2566,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
         }),
     );
     const skeletonLayer = {
-      source: {
-        readonly: false,
+      fragmentSource: {
         ...makeWholeSkeletonReads(getSkeleton),
       },
       ...(itemLimit === undefined
@@ -2815,8 +2656,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
         segmentId === 11n ? new Promise<never>(() => {}) : Promise.resolve([]),
       );
       const skeletonLayer = {
-        source: {
-          readonly: false,
+        fragmentSource: {
           ...makeWholeSkeletonReads(getSkeleton),
         },
         chunkManager: {

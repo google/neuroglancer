@@ -287,9 +287,15 @@ function packSpatiallyIndexedSkeletonNodes(
   const vertexPositions = new Float32Array(numVertices * 3);
   const segmentIds = new BigUint64Array(numVertices);
   const nodeIds = new BigUint64Array(numVertices);
-  const vertexIndexByNodeId = new Map<bigint, number>();
+  // Node ids may repeat across segments.
+  const vertexIndexBySegmentAndNodeId = new Map<bigint, Map<bigint, number>>();
   for (let vertexIndex = 0; vertexIndex < numVertices; ++vertexIndex) {
     const node = nodes[vertexIndex];
+    let vertexIndexByNodeId = vertexIndexBySegmentAndNodeId.get(node.segmentId);
+    if (vertexIndexByNodeId === undefined) {
+      vertexIndexByNodeId = new Map();
+      vertexIndexBySegmentAndNodeId.set(node.segmentId, vertexIndexByNodeId);
+    }
     vertexIndexByNodeId.set(node.nodeId, vertexIndex);
     nodeIds[vertexIndex] = node.nodeId;
     segmentIds[vertexIndex] = node.segmentId;
@@ -299,9 +305,11 @@ function packSpatiallyIndexedSkeletonNodes(
   }
   const indices: number[] = [];
   for (let vertexIndex = 0; vertexIndex < numVertices; ++vertexIndex) {
-    const { parentNodeId } = nodes[vertexIndex];
+    const { segmentId, parentNodeId } = nodes[vertexIndex];
     if (parentNodeId === undefined) continue;
-    const parentVertexIndex = vertexIndexByNodeId.get(parentNodeId);
+    const parentVertexIndex = vertexIndexBySegmentAndNodeId
+      .get(segmentId)!
+      .get(parentNodeId);
     if (parentVertexIndex !== undefined) {
       indices.push(vertexIndex, parentVertexIndex);
     }

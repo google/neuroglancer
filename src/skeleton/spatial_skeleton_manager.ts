@@ -21,11 +21,7 @@ import type {
   SkeletonNodeAttributes,
   SkeletonFragmentSource,
 } from "#src/skeleton/api.js";
-import {
-  getSpatialSkeletonEditCommandFactoryFromSource,
-  isSpatialSkeletonEditCommandFactory,
-  SPATIAL_SKELETON_EDIT_COMMAND_METADATA,
-} from "#src/skeleton/command_factories.js";
+import { getSpatialSkeletonEditCommandFactoryFromSource } from "#src/skeleton/command_factories.js";
 import {
   createSpatialSkeletonOptimisticHistoryPort,
   SpatialSkeletonCommandHistory,
@@ -52,7 +48,6 @@ import type {
 } from "#src/skeleton/logical_identity.js";
 import {
   assertSpatialSkeletonOptimisticDriverRegistration,
-  isSpatialSkeletonOptimisticEditingProvider,
   SpatialSkeletonOptimisticDatasourceContractError,
   type SpatialSkeletonOptimisticEditingProvider,
   type SpatialSkeletonProvisionalNumericIdPolicy,
@@ -82,10 +77,6 @@ import { WatchableValue } from "#src/trackable_value.js";
 import { bigintCompare } from "#src/util/bigint.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { PromiseConcurrencyLimiter } from "#src/util/promise_concurrency_limiter.js";
-
-interface SpatialSkeletonSourceAccess {
-  source: unknown;
-}
 
 export {
   type SpatialSkeletonOptimisticEditActivityEntry,
@@ -285,98 +276,6 @@ export interface SpatialSkeletonAdoptedProjectionStatePublication {
   readonly cacheRevisions: ReadonlyMap<bigint, number>;
 }
 
-function hasFunction<T extends string>(
-  value: unknown,
-  property: T,
-): value is Record<T, (...args: any[]) => unknown> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as Record<string, unknown>)[property] === "function"
-  );
-}
-
-function getProperty<T extends string>(value: unknown, property: T): unknown {
-  return typeof value === "object" && value !== null
-    ? (value as Record<T, unknown>)[property]
-    : undefined;
-}
-
-function hasValidCommandFactory(
-  value: unknown,
-  metadata: (typeof SPATIAL_SKELETON_EDIT_COMMAND_METADATA)[number],
-) {
-  const commandFactory = getProperty(value, metadata.commandProperty);
-  return (
-    (commandFactory === undefined && !metadata.required) ||
-    isSpatialSkeletonEditCommandFactory(commandFactory, metadata.action)
-  );
-}
-
-function isFiniteNumberArray(value: unknown): value is readonly number[] {
-  return (
-    Array.isArray(value) &&
-    value.every((entry) => typeof entry === "number" && Number.isFinite(entry))
-  );
-}
-
-function hasOptionalConfidenceValues(value: unknown) {
-  const confidenceValues = getProperty(value, "confidenceValues");
-  return (
-    confidenceValues === undefined || isFiniteNumberArray(confidenceValues)
-  );
-}
-
-export function isSpatiallyIndexedSkeletonSource(
-  value: unknown,
-): value is SkeletonFragmentSource {
-  return (
-    typeof getProperty(value, "readonly") === "boolean" &&
-    hasFunction(value, "getSkeletonManifest") &&
-    hasFunction(value, "getSkeletonFragment")
-  );
-}
-
-export function isEditableSpatiallyIndexedSkeletonSource(
-  value: unknown,
-): value is EditableSkeletonSource {
-  return (
-    isSpatiallyIndexedSkeletonSource(value) &&
-    !value.readonly &&
-    isSpatialSkeletonOptimisticEditingProvider(
-      getProperty(value, "optimisticEditing"),
-    ) &&
-    SPATIAL_SKELETON_EDIT_COMMAND_METADATA.every((metadata) =>
-      hasValidCommandFactory(value, metadata),
-    ) &&
-    hasOptionalConfidenceValues(value)
-  );
-}
-
-export function getSpatiallyIndexedSkeletonSource(
-  value: SpatialSkeletonSourceAccess | undefined,
-): SkeletonFragmentSource | undefined {
-  if (value === undefined) return undefined;
-  return isSpatiallyIndexedSkeletonSource(value.source)
-    ? value.source
-    : undefined;
-}
-
-export function isSpatiallyIndexedSkeletonSourceReadOnly(
-  value: SpatialSkeletonSourceAccess | undefined,
-): boolean {
-  return getSpatiallyIndexedSkeletonSource(value)?.readonly ?? true;
-}
-
-export function getEditableSpatiallyIndexedSkeletonSource(
-  value: SpatialSkeletonSourceAccess | undefined,
-): EditableSkeletonSource | undefined {
-  if (value === undefined) return undefined;
-  return isEditableSpatiallyIndexedSkeletonSource(value.source)
-    ? value.source
-    : undefined;
-}
-
 export function getSpatialSkeletonEditCommandFactoryForAction(
   source: EditableSkeletonSource,
   action: SpatialSkeletonAction,
@@ -397,25 +296,24 @@ export function editableSpatiallyIndexedSkeletonSourceSupportsAction(
 
 async function fetchCompleteSkeleton(
   source: SkeletonFragmentSource,
-  skeletonId: bigint,
-  options: { signal?: AbortSignal } = {},
+  segmentId: bigint,
+  signal: AbortSignal,
 ): Promise<SkeletonNode[]> {
-  const { signal } = options;
-  const { fragmentKeys } = await source.getSkeletonManifest(skeletonId, {
-    signal,
-  });
+  const { fragmentKeys } = await source.getSkeletonManifest(segmentId, signal);
   const nodesById = new Map<bigint, SkeletonNode>();
   const parentLinks: SkeletonEdge[] = [];
   // One request at a time, so that a limit on concurrent skeleton reads also limits requests.
   for (const fragmentKey of fragmentKeys) {
-    signal?.throwIfAborted();
-    const fragment = await source.getSkeletonFragment(skeletonId, fragmentKey, {
+    signal.throwIfAborted();
+    const fragment = await source.getSkeletonFragment(
+      segmentId,
+      fragmentKey,
       signal,
-    });
+    );
     for (const node of fragment.nodes) {
       if (nodesById.has(node.nodeId)) {
         throw new Error(
-          `Skeleton ${skeletonId} has node ${node.nodeId} in more than one fragment.`,
+          `Skeleton ${segmentId} has node ${node.nodeId} in more than one fragment.`,
         );
       }
       nodesById.set(node.nodeId, node);
@@ -426,12 +324,12 @@ async function fetchCompleteSkeleton(
     const node = nodesById.get(nodeId);
     if (node === undefined) {
       throw new Error(
-        `Skeleton ${skeletonId} links a parent to node ${nodeId}, which no fragment has.`,
+        `Skeleton ${segmentId} links a parent to node ${nodeId}, which no fragment has.`,
       );
     }
     if (node.parentNodeId !== undefined && node.parentNodeId !== parentNodeId) {
       throw new Error(
-        `Skeleton ${skeletonId} gives node ${nodeId} two parents: ${node.parentNodeId} and ${parentNodeId}.`,
+        `Skeleton ${segmentId} gives node ${nodeId} two parents: ${node.parentNodeId} and ${parentNodeId}.`,
       );
     }
     nodesById.set(nodeId, { ...node, parentNodeId });
@@ -2601,7 +2499,7 @@ export class SpatialSkeletonState
       }
       return pendingEntry.promise;
     }
-    const skeletonSource = getSpatiallyIndexedSkeletonSource(skeletonLayer);
+    const skeletonSource = skeletonLayer.fragmentSource;
     if (skeletonSource === undefined) {
       throw new Error(
         "The active spatial skeleton source does not expose full skeleton inspection.",
@@ -2645,7 +2543,7 @@ export class SpatialSkeletonState
           const sourceRequest = fetchCompleteSkeleton(
             skeletonSource,
             segmentId,
-            { signal: abortController.signal },
+            abortController.signal,
           );
           // If abort/deadline wins the race, the source may still resolve or
           // reject later because not every implementation observes its

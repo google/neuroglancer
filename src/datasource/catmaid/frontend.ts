@@ -15,6 +15,7 @@
  */
 
 import { makeDataBoundsBoundingBoxAnnotationSet } from "#src/annotation/index.js";
+import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { WithParameters } from "#src/chunk_manager/frontend.js";
 import {
   makeCoordinateSpace,
@@ -48,97 +49,32 @@ import {
   normalizeInlineSegmentPropertyMap,
 } from "#src/segmentation_display_state/property_map.js";
 import type {
+  EditableSkeletonSource,
   SkeletonFragment,
   SkeletonManifest,
-  SkeletonFragmentSource,
+  SkeletonSpatialIndexMetadata,
 } from "#src/skeleton/api.js";
 import { SkeletonDataSourceState } from "#src/skeleton/find_path.js";
 import {
   SpatiallyIndexedSkeletonSource,
   MultiscaleSpatiallyIndexedSkeletonSource,
 } from "#src/skeleton/frontend.js";
+import { mat4 } from "#src/util/geom.js";
 import "#src/datasource/catmaid/register_credentials_provider.js";
 
-export class CatmaidSpatiallyIndexedSkeletonSource
-  extends WithParameters(
-    WithCredentialsProvider<CatmaidToken>()(SpatiallyIndexedSkeletonSource),
-    CatmaidSkeletonSourceParameters,
-  )
-  implements SkeletonFragmentSource
+export class CatmaidSpatiallyIndexedSkeletonSource extends WithParameters(
+  WithCredentialsProvider<CatmaidToken>()(SpatiallyIndexedSkeletonSource),
+  CatmaidSkeletonSourceParameters,
+) {}
+
+class CatmaidSkeletonSource
+  extends CatmaidSpatialSkeletonEditCommands
+  implements EditableSkeletonSource
 {
-  private readonly spatialSkeletonEditCommands =
-    new CatmaidSpatialSkeletonEditCommands({
-      getClient: () => this.client,
-    });
-  private client_?: CatmaidClient;
+  readonly confidenceValues = CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES;
 
-  get readonly() {
-    return this.parameters.catmaidParameters.readonly !== false;
-  }
-
-  get confidenceValues() {
-    return this.readonly
-      ? undefined
-      : CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES;
-  }
-
-  get optimisticEditing() {
-    return this.editableSpatialSkeletonEditCommands?.optimisticEditing;
-  }
-
-  private get editableSpatialSkeletonEditCommands() {
-    return this.readonly ? undefined : this.spatialSkeletonEditCommands;
-  }
-
-  get addNodesCommand() {
-    return this.editableSpatialSkeletonEditCommands?.addNodesCommand;
-  }
-
-  get insertNodesCommand() {
-    return this.editableSpatialSkeletonEditCommands?.insertNodesCommand;
-  }
-
-  get moveNodesCommand() {
-    return this.editableSpatialSkeletonEditCommands?.moveNodesCommand;
-  }
-
-  get deleteNodesCommand() {
-    return this.editableSpatialSkeletonEditCommands?.deleteNodesCommand;
-  }
-
-  get rerootCommand() {
-    return this.editableSpatialSkeletonEditCommands?.rerootCommand;
-  }
-
-  get editNodeDescriptionCommand() {
-    return this.editableSpatialSkeletonEditCommands?.editNodeDescriptionCommand;
-  }
-
-  get editNodeTrueEndCommand() {
-    return this.editableSpatialSkeletonEditCommands?.editNodeTrueEndCommand;
-  }
-
-  get editNodeRadiusCommand() {
-    return this.editableSpatialSkeletonEditCommands?.editNodeRadiusCommand;
-  }
-
-  get editNodeConfidenceCommand() {
-    return this.editableSpatialSkeletonEditCommands?.editNodeConfidenceCommand;
-  }
-
-  get mergeSkeletonsCommand() {
-    return this.editableSpatialSkeletonEditCommands?.mergeSkeletonsCommand;
-  }
-
-  get splitSkeletonsCommand() {
-    return this.editableSpatialSkeletonEditCommands?.splitSkeletonsCommand;
-  }
-
-  private get client() {
-    return (this.client_ ??= makeCatmaidClient(
-      this.parameters.catmaidParameters,
-      this.credentialsProvider,
-    ));
+  constructor(private readonly catmaidClient: CatmaidClient) {
+    super({ getClient: () => catmaidClient });
   }
 
   // One compact-detail request returns a whole skeleton.
@@ -149,9 +85,62 @@ export class CatmaidSpatiallyIndexedSkeletonSource
   async getSkeletonFragment(
     skeletonId: bigint,
     _fragmentKey: string,
-    options?: { signal?: AbortSignal },
+    signal: AbortSignal,
   ): Promise<SkeletonFragment> {
-    return { nodes: await this.client.getSkeleton(skeletonId, options) };
+    return {
+      nodes: await this.catmaidClient.getSkeleton(skeletonId, { signal }),
+    };
+  }
+}
+
+interface CatmaidLevelSourceOptions {
+  readonly baseUrl: string;
+  readonly projectId: number;
+  readonly cacheProvider: string | undefined;
+  readonly credentialsProvider: CredentialsProvider<CatmaidToken>;
+}
+
+class CatmaidMultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleSpatiallyIndexedSkeletonSource {
+  readonly fragmentSource: CatmaidSkeletonSource;
+  readonly editableSource: CatmaidSkeletonSource | undefined;
+
+  constructor(
+    chunkManager: ChunkManager,
+    metadata: SkeletonSpatialIndexMetadata,
+    client: CatmaidClient,
+    readonly: boolean,
+    private readonly levelSourceOptions: CatmaidLevelSourceOptions,
+  ) {
+    super(chunkManager, metadata);
+    this.fragmentSource = new CatmaidSkeletonSource(client);
+    this.editableSource = readonly ? undefined : this.fragmentSource;
+  }
+
+  getSources() {
+    const { baseUrl, projectId, cacheProvider, credentialsProvider } =
+      this.levelSourceOptions;
+    const specs = this.getLevelSpecs();
+    return [
+      specs.map((spec, coarseToFineIndex) => {
+        const parameters = new CatmaidSkeletonSourceParameters();
+        parameters.catmaidParameters = new CatmaidDataSourceParameters();
+        parameters.catmaidParameters.url = baseUrl;
+        parameters.catmaidParameters.projectId = projectId;
+        parameters.catmaidParameters.cacheProvider = cacheProvider;
+        parameters.gridIndex = coarseToFineIndex;
+        parameters.catmaidLod = getCatmaidLodForSpatialIndexLevel(
+          coarseToFineIndex,
+          specs.length,
+        );
+        return {
+          chunkSource: this.chunkManager.getChunkSource(
+            CatmaidSpatiallyIndexedSkeletonSource,
+            { parameters, spec, credentialsProvider },
+          ),
+          chunkToMultiscaleTransform: mat4.create(),
+        };
+      }),
+    ];
   }
 }
 
@@ -177,11 +166,7 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
       ) as CredentialsProvider<CatmaidToken>;
 
     const client = makeCatmaidClient(
-      {
-        url: baseUrl,
-        projectId,
-        readonly: true,
-      },
+      { url: baseUrl, projectId },
       credentialsProvider,
     );
 
@@ -223,27 +208,14 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
       ],
     });
 
-    const multiscaleSource = new MultiscaleSpatiallyIndexedSkeletonSource(
-      options.registry.chunkManager,
-      { coordinateSpace: modelSpace, spatial },
-      ({ coarseToFineIndex, levelCount, spec }) => {
-        const parameters = new CatmaidSkeletonSourceParameters();
-        parameters.catmaidParameters = new CatmaidDataSourceParameters();
-        parameters.catmaidParameters.url = baseUrl;
-        parameters.catmaidParameters.projectId = projectId;
-        parameters.catmaidParameters.cacheProvider = cacheProvider;
-        parameters.catmaidParameters.readonly = sourceReadonly;
-        parameters.gridIndex = coarseToFineIndex;
-        parameters.catmaidLod = getCatmaidLodForSpatialIndexLevel(
-          coarseToFineIndex,
-          levelCount,
-        );
-        return options.registry.chunkManager.getChunkSource(
-          CatmaidSpatiallyIndexedSkeletonSource,
-          { parameters, spec, credentialsProvider },
-        );
-      },
-    );
+    const multiscaleSource =
+      new CatmaidMultiscaleSpatiallyIndexedSkeletonSource(
+        options.registry.chunkManager,
+        { modelSpace, levels: spatial },
+        client,
+        sourceReadonly,
+        { baseUrl, projectId, cacheProvider, credentialsProvider },
+      );
     // Create SegmentPropertyMap
     const ids = BigUint64Array.from(skeletonIds);
 
