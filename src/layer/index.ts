@@ -22,6 +22,7 @@ import type {
   CoordinateSpace,
   CoordinateTransformSpecification,
 } from "#src/coordinate_transform.js";
+import { formatErrorMessage } from "#src/util/error.js";
 import {
   CoordinateSpaceCombiner,
   coordinateTransformSpecificationFromLegacyJson,
@@ -2216,9 +2217,9 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
         managedLayer.dispose();
         const msg = new StatusMessage();
         msg.setErrorMessage(
-          `Error creating layer ${JSON.stringify(name)}: ${
-            e instanceof Error ? e.message : e
-          }`,
+          `Error creating layer ${JSON.stringify(name)}: ${formatErrorMessage(
+            e,
+          )}`,
         );
       }
     }
@@ -2227,10 +2228,11 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
         completeUserLayerInitialization(managedLayer, spec);
       } catch (e) {
         const msg = new StatusMessage();
+        const { name } = managedLayer;
         msg.setErrorMessage(
-          `Error creating layer ${JSON.stringify(managedLayer.name)}: ${
-            e instanceof Error ? e.message : e
-          }`,
+          `Error creating layer ${JSON.stringify(name)}: ${formatErrorMessage(
+            e,
+          )}`,
         );
       }
     }
