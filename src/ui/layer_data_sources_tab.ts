@@ -557,6 +557,7 @@ export class LayerDataSourcesTab extends Tab {
           let view = sourceViews.get(source);
           if (view === undefined) {
             view = new DataSourceView(this, source);
+            view.registerDisposer(source.changed.add(this.reRender));
             view.registerDisposer(
               view.urlInput.dirty.changed.add(this.reRender),
             );

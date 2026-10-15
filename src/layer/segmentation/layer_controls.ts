@@ -68,12 +68,43 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
     })),
   },
   {
+    label: "Spacing (cross section)",
+    toolJson: json_keys.SKELETON_CROSS_SECTION_SPACING_JSON_KEY,
+    isValid: (layer) => layer.hasSpatiallyIndexedSkeletonsLayer,
+    title:
+      "Select the node spacing for spatially indexed skeletons in cross-section views",
+    ...renderScaleLayerControl((layer) => ({
+      histogram: layer.displayState.spatialSkeletonSpacingHistogram2d,
+      target: layer.displayState.spatialSkeletonSpacingTarget2d,
+    })),
+  },
+  {
+    label: "Spacing (projection)",
+    toolJson: json_keys.SKELETON_PERSPECTIVE_SPACING_JSON_KEY,
+    isValid: (layer) => layer.hasSpatiallyIndexedSkeletonsLayer,
+    title:
+      "Select the node spacing for spatially indexed skeletons in projection views",
+    ...renderScaleLayerControl((layer) => ({
+      histogram: layer.displayState.spatialSkeletonSpacingHistogram3d,
+      target: layer.displayState.spatialSkeletonSpacingTarget3d,
+    })),
+  },
+  {
     label: "Opacity (3d)",
     toolJson: json_keys.OBJECT_ALPHA_JSON_KEY,
     isValid: (layer) => layer.has3dLayer,
     title: "Opacity of meshes and skeletons",
     ...rangeLayerControl((layer) => ({
       value: layer.displayState.objectAlpha,
+    })),
+  },
+  {
+    label: "Hidden Opacity (3d)",
+    toolJson: json_keys.HIDDEN_OPACITY_3D_JSON_KEY,
+    isValid: (layer) => layer.hasSpatiallyIndexedSkeletonsLayer,
+    title: "Opacity of hidden (non-visible) skeleton nodes in 3D views",
+    ...rangeLayerControl((layer) => ({
+      value: layer.displayState.hiddenObjectAlpha,
     })),
   },
   {

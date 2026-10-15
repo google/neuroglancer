@@ -908,6 +908,24 @@ export function makeToolActivationStatusMessageWithHeader(
   return { message, body, header };
 }
 
+export function makeToolStatusChip(
+  key: Node | string,
+  label: string,
+  active = false,
+): HTMLElement {
+  const chip = document.createElement("div");
+  chip.classList.add("neuroglancer-tool-status-chip");
+  if (active) chip.dataset.active = "";
+  const keyElement = document.createElement("span");
+  keyElement.classList.add("neuroglancer-tool-status-chip-key");
+  keyElement.append(key);
+  const labelElement = document.createElement("span");
+  labelElement.classList.add("neuroglancer-tool-status-chip-label");
+  labelElement.textContent = label;
+  chip.append(keyElement, labelElement);
+  return chip;
+}
+
 function* getToolsFromListerMatchingTerms(
   localBinder: LocalToolBinder,
   lister: ToolLister,

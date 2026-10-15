@@ -152,12 +152,11 @@ export function srgbGammaExpand(value: number) {
 // https://www.w3.org/TR/WCAG20/#relativeluminancedef
 //
 // @param color sRGB color
-export function getRelativeLuminance(color: vec3 | vec4) {
-  const [r, g, b] = color;
+export function getRelativeLuminance(color: ArrayLike<number>) {
   return (
-    0.2126 * srgbGammaExpand(r) +
-    0.7152 * srgbGammaExpand(g) +
-    0.0722 * srgbGammaExpand(b)
+    0.2126 * srgbGammaExpand(color[0]) +
+    0.7152 * srgbGammaExpand(color[1]) +
+    0.0722 * srgbGammaExpand(color[2])
   );
 }
 
@@ -170,6 +169,54 @@ export function getRelativeLuminance(color: vec3 | vec4) {
 // https://stackoverflow.com/a/3943023
 export function useWhiteBackground(foregroundColor: vec3 | vec4) {
   return getRelativeLuminance(foregroundColor) <= 0.179;
+}
+
+export function getContrastRatio(
+  colorA: ArrayLike<number>,
+  colorB: ArrayLike<number>,
+) {
+  const luminanceA = getRelativeLuminance(colorA);
+  const luminanceB = getRelativeLuminance(colorB);
+  const darker = Math.min(luminanceA, luminanceB);
+  const lighter = Math.max(luminanceA, luminanceB);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+// Returns the HSV saturation of `color`: the fraction by which its most intense
+// channel exceeds its least intense channel. 0 for greys, 1 for fully saturated colors.
+export function getSaturation(color: ArrayLike<number>): number {
+  const max = Math.max(color[0], color[1], color[2]);
+  if (max <= 0) return 0;
+  const min = Math.min(color[0], color[1], color[2]);
+  return (max - min) / max;
+}
+
+// Returns a copy of `color` with saturation boosted by `factor` (moves each channel
+// away from the perceptual-grey axis by the given multiplier, clamped to [0, 1]).
+export function saturateColor(color: ArrayLike<number>, factor: number): vec3 {
+  const lum = getRelativeLuminance(color);
+  return vec3.fromValues(
+    Math.min(1.0, Math.max(0.0, lum + (color[0] - lum) * factor)),
+    Math.min(1.0, Math.max(0.0, lum + (color[1] - lum) * factor)),
+    Math.min(1.0, Math.max(0.0, lum + (color[2] - lum) * factor)),
+  );
+}
+
+// Returns the palette color with the highest contrast against `sourceColor`.
+export function pickHighestContrastColor(
+  palette: readonly vec3[],
+  sourceColor: ArrayLike<number>,
+): vec3 {
+  let bestColor = palette[0];
+  let bestContrast = -1;
+  for (const candidate of palette) {
+    const contrast = getContrastRatio(candidate, sourceColor);
+    if (contrast > bestContrast) {
+      bestContrast = contrast;
+      bestColor = candidate;
+    }
+  }
+  return bestColor;
 }
 
 export class TrackableRGB extends WatchableValue<vec3> {

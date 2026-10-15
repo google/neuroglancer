@@ -31,6 +31,7 @@ import type {
   DataSourceWithRedirectInfo,
   DataSubsourceEntry,
   DataSubsourceSpecification,
+  LayerRuntimeStateDisposalRequest,
 } from "#src/datasource/index.js";
 import { makeEmptyDataSourceSpecification } from "#src/datasource/index.js";
 import type { UserLayer } from "#src/layer/index.js";
@@ -148,6 +149,7 @@ export class LoadedDataSubsource {
   enabled: boolean;
   activated: RefCounted | undefined = undefined;
   guardValues: any[] = [];
+  renderLayers = new Set<RenderLayer>();
   messages = new MessageList();
   isActiveChanged = new NullarySignal();
   constructor(
@@ -212,9 +214,13 @@ export class LoadedDataSubsource {
 
   addRenderLayer(renderLayer: Owned<RenderLayer>) {
     const activated = this.activated!;
-    activated.registerDisposer(
-      this.loadedDataSource.layer.addRenderLayer(renderLayer),
-    );
+    const removeRenderLayer =
+      this.loadedDataSource.layer.addRenderLayer(renderLayer);
+    this.renderLayers.add(renderLayer);
+    activated.registerDisposer(() => {
+      this.renderLayers.delete(renderLayer);
+      removeRenderLayer();
+    });
     activated.registerDisposer(this.messages.addChild(renderLayer.messages));
   }
 
@@ -301,6 +307,16 @@ export class LoadedLayerDataSource extends RefCounted {
   }
 }
 
+export type LayerDataSourceChangeReason = "replace" | "clear";
+
+export interface LayerDataSourceChangeRuntimeDisposalContext {
+  request: LayerRuntimeStateDisposalRequest;
+  reason: LayerDataSourceChangeReason;
+  layerDataSource: LayerDataSource;
+  loadedDataSource: LoadedLayerDataSource;
+  loadedSubsource: LoadedDataSubsource;
+}
+
 export type LayerDataSourceLoadState =
   | {
       error: Error;
@@ -368,10 +384,36 @@ export class LayerDataSource extends RefCounted {
     return this.loadState_;
   }
 
+  private disposeRuntimeStateForDataSourceChange(
+    reason: LayerDataSourceChangeReason,
+  ) {
+    const { loadState } = this;
+    if (loadState === undefined || loadState.error !== undefined) return false;
+    const handledRequestKinds = new Set<string>();
+    let changed = false;
+    for (const loadedSubsource of loadState.subsources) {
+      if (loadedSubsource.activated === undefined) continue;
+      const request = loadedSubsource.subsourceEntry.layerRuntimeStateDisposal;
+      if (request === undefined) continue;
+      if (handledRequestKinds.has(request.kind)) continue;
+      handledRequestKinds.add(request.kind);
+      changed =
+        this.layer.disposeLayerRuntimeStateForDataSourceChange({
+          request,
+          reason,
+          layerDataSource: this,
+          loadedDataSource: loadState,
+          loadedSubsource,
+        }) || changed;
+    }
+    return changed;
+  }
+
   set spec(spec: DataSourceSpecification) {
     const { layer } = this;
     this.messages.clearMessages();
     if (spec.url.length === 0) {
+      this.disposeRuntimeStateForDataSourceChange("clear");
       if (layer.dataSources.length !== 1) {
         const index = layer.dataSources.indexOf(this);
         if (index !== -1) {
@@ -395,6 +437,7 @@ export class LayerDataSource extends RefCounted {
       disposableOnce(layer.markLoading()),
     );
     if (this.refCounted_ !== undefined) {
+      this.disposeRuntimeStateForDataSourceChange("replace");
       this.refCounted_.dispose();
       this.loadState_ = undefined;
     }

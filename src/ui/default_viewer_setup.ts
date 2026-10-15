@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { SkeletonNodeCommands } from "#src/skeleton/node_commands.js";
 import { StatusMessage } from "#src/status.js";
 import { bindCommandPalette } from "#src/ui/command_palette.js";
 import {
@@ -67,6 +68,7 @@ export function setupDefaultViewer(options?: Partial<MinimalViewerOptions>) {
   bindDefaultCopyHandler(viewer);
   bindDefaultPasteHandler(viewer);
   registerDefaultCommands(viewer.commandRegistry);
+  viewer.registerDisposer(new SkeletonNodeCommands(viewer));
   bindCommandPalette(viewer);
   bindStateEditor(viewer);
   bindScreenshotDialog(viewer);

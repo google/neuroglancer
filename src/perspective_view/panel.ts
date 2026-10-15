@@ -23,6 +23,7 @@ import type { DisplayContext } from "#src/display_context.js";
 import { applyRenderViewportToProjectionMatrix } from "#src/display_context.js";
 import type { VisibleRenderLayerTracker } from "#src/layer/index.js";
 import { makeRenderedPanelVisibleLayerTracker } from "#src/layer/index.js";
+import { projectToViewport } from "#src/panel_overlay.js";
 import { PERSPECTIVE_VIEW_RPC_ID } from "#src/perspective_view/base.js";
 import type {
   PerspectiveViewReadyRenderContext,
@@ -1502,6 +1503,10 @@ export class PerspectivePanel extends RenderedDataPanel {
       computeAxisLineMatrix(projectionParameters, axisLength),
       /*blend=*/ false,
     );
+  }
+
+  protected projectPosition(position: Float32Array) {
+    return projectToViewport(this.projectionParameters.value, position);
   }
 
   zoomByMouse(factor: number) {

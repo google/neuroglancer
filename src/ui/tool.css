@@ -75,3 +75,33 @@
   flex: 1;
   padding: 2px;
 }
+
+.neuroglancer-tool-status-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 1px 6px;
+  background-color: #333;
+  border: 1px solid #555;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.neuroglancer-tool-status-chip[data-active] {
+  background-color: #939;
+  border-color: #969;
+}
+
+.neuroglancer-tool-status-chip-key {
+  color: #0ff;
+  font: 9pt monospace;
+}
+
+.neuroglancer-tool-status-chip-label {
+  color: #ccc;
+}
+
+.neuroglancer-tool-status-chip[data-active]
+  .neuroglancer-tool-status-chip-label {
+  color: #fff;
+}
