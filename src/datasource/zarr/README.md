@@ -54,6 +54,14 @@ Dimension names may be specified using an `_ARRAY_DIMENSIONS` attribute,
 
 ## Zarr v3
 
+Supported chunk key encodings:
+
+- default
+- v2
+- offset (the `default` keys of the chunk grid coordinate plus a per-dimension offset, so an
+  array can grow in the negative direction without renaming chunks; keys may have negative
+  components)
+
 Supported codecs:
 
 - crc32c (not validated)
