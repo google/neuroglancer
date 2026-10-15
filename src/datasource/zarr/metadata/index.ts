@@ -68,7 +68,7 @@ export function encodeChunkKey(
     sep = dimensionSeparator;
   }
   for (let i = 0; i < rank; ++i) {
-    const offset = chunkKeyOffset === undefined ? 0 : chunkKeyOffset[i];
+    const offset = chunkKeyOffset?.[i] ?? 0;
     key += `${sep}${keyCoords[i] + offset}`;
     sep = dimensionSeparator;
   }
