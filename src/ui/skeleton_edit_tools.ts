@@ -65,7 +65,6 @@ import {
 import {
   PerspectiveViewSpatiallyIndexedSkeletonLayer,
   type SpatiallyIndexedSkeletonLayer,
-  setSpatialSkeletonModesToLinesAndPoints,
   SliceViewPanelSpatiallyIndexedSkeletonLayer,
 } from "#src/skeleton/frontend.js";
 import {
@@ -380,7 +379,6 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     activation: ToolActivation<this>,
     modeWatchable: { value: boolean },
   ) {
-    setSpatialSkeletonModesToLinesAndPoints(this.layer);
     modeWatchable.value = true;
     activation.registerDisposer(() => {
       modeWatchable.value = false;
@@ -2092,7 +2090,6 @@ export class SpatialSkeletonFindPathTool extends SpatialSkeletonToolBase {
 
     const { layer } = this;
     const activeContext = layer.getSpatialSkeletonFindPathContext();
-    setSpatialSkeletonModesToLinesAndPoints(layer);
 
     const { body, header } = makeToolActivationStatusMessageWithHeader(
       activation,
