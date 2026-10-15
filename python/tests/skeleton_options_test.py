@@ -23,12 +23,13 @@ dimensions = neuroglancer.CoordinateSpace(
 
 
 class SkeletonSource(neuroglancer.skeleton.SkeletonSource):
-    def __init__(self):
+    def __init__(self, vertex_position=(0, 0, 0)):
         super().__init__(dimensions=dimensions)
+        self.vertex_position = vertex_position
 
     def get_skeleton(self, object_id):
         return neuroglancer.skeleton.Skeleton(
-            vertex_positions=[[0, 0, 0]],
+            vertex_positions=[self.vertex_position],
             edges=[[0, 0]],
         )
 
@@ -55,19 +56,51 @@ void main () {
         s.layers[0].skeleton_rendering.shader_controls["color"] = "#f00"
         s.show_axis_lines = False
     screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
+    opaque_pixels_2d = screenshot.image_pixels.copy()
     np.testing.assert_array_equal(
-        screenshot.image_pixels,
+        opaque_pixels_2d,
         np.tile(np.array([255, 0, 0, 255], dtype=np.uint8), (10, 10, 1)),
     )
 
     with webdriver.viewer.txn() as s:
+        s.layers[0].source[0].subsources["default"] = False
+    background_pixels_2d = webdriver.viewer.screenshot(
+        size=[10, 10]
+    ).screenshot.image_pixels.copy()
+
+    with webdriver.viewer.txn() as s:
+        s.layers[0].source[0].subsources["default"] = True
+        s.layers[0].object_alpha = 0.5
+    screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
+    pixels = screenshot.image_pixels
+    np.testing.assert_allclose(
+        pixels[..., :3],
+        opaque_pixels_2d[..., :3] * 0.5 + background_pixels_2d[..., :3] * 0.5,
+        atol=2,
+    )
+    np.testing.assert_array_equal(pixels[..., 3], 255)
+
+    with webdriver.viewer.txn() as s:
         s.layout = "3d"
+        s.layers[0].object_alpha = 1.0
         s.layers[0].skeleton_rendering.line_width3d = 100
     screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
+    opaque_pixels = screenshot.image_pixels.copy()
     np.testing.assert_array_equal(
-        screenshot.image_pixels,
+        opaque_pixels,
         np.tile(np.array([255, 0, 0, 255], dtype=np.uint8), (10, 10, 1)),
     )
+
+    # Perspective OIT requires premultiplied RGB, so reducing opacity must
+    # reduce the red intensity rather than leave it saturated or brighten it.
+    with webdriver.viewer.txn() as s:
+        s.layers[0].object_alpha = 0.5
+    screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
+    pixels = screenshot.image_pixels
+    np.testing.assert_allclose(pixels[..., 0], opaque_pixels[..., 0] * 0.5, atol=2)
+    np.testing.assert_array_equal(pixels[..., 1], 0)
+    np.testing.assert_array_equal(pixels[..., 2], 0)
+    np.testing.assert_array_equal(pixels[..., 3], 255)
 
     with webdriver.viewer.txn() as s:
         s.layers[0].source[0].subsources["default"] = False
@@ -77,3 +110,51 @@ void main () {
         screenshot.image_pixels,
         np.tile(np.array([0, 0, 0, 255], dtype=np.uint8), (10, 10, 1)),
     )
+
+
+def test_segment_color_shader_alpha_makes_skeleton_transparent(webdriver):
+    image_data = np.zeros((20, 20, 20), dtype=np.uint8)
+    image_data[1:19, 1:19, 11:20] = 255
+
+    with webdriver.viewer.txn() as s:
+        s.dimensions = dimensions
+        s.layers.append(
+            name="image",
+            layer=neuroglancer.ImageLayer(
+                source=neuroglancer.LocalVolume(data=image_data, dimensions=dimensions),
+                volume_rendering_mode="Max",
+                shader="""
+#uicontrol invlerp normalized
+void main() {
+  emitRGBA(vec4(0.0, 0.0, normalized(), 1.0));
+}
+""",
+            ),
+        )
+        s.layers.append(
+            name="skeleton",
+            layer=neuroglancer.SegmentationLayer(
+                source=SkeletonSource((10, 10, 5)),
+                segments=[1],
+                segment_color_shader="""
+vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
+  return vec4(color.rgb, 0.5);
+}
+""",
+                skeleton_shader="""
+void main() {
+  emitRGB(vec3(1.0, 0.0, 0.0));
+}
+""",
+            ),
+        )
+        s.layers["skeleton"].skeleton_rendering.line_width3d = 100
+        s.layout = "3d"
+        s.show_axis_lines = False
+        s.position = [10, 10, 10]
+        s.projection_scale = 15
+
+    webdriver.sync()
+    pixels = webdriver.viewer.screenshot(size=[10, 10]).screenshot.image_pixels
+    assert np.all(pixels[..., 0] > 0)
+    assert np.all(pixels[..., 2] > 0)

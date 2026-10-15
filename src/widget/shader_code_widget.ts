@@ -57,7 +57,7 @@ const SHADER_UPDATE_DELAY = 500;
 interface ShaderCodeState {
   shaderError: WatchableShaderError;
   shaderControlState?: ShaderControlState;
-  fragmentMain: WatchableValue<string>;
+  fragment: WatchableValue<string>;
   sourceStringNumber?: number;
 }
 
@@ -70,7 +70,7 @@ export class ShaderCodeWidget extends RefCounted {
   private debouncedValueUpdater = debounce(() => {
     this.changingValue = true;
     try {
-      this.state.fragmentMain.value = this.textEditor.getValue();
+      this.state.fragment.value = this.textEditor.getValue();
     } finally {
       this.changingValue = false;
     }
@@ -79,7 +79,7 @@ export class ShaderCodeWidget extends RefCounted {
   constructor(public state: ShaderCodeState) {
     super();
     this.textEditor = CodeMirror((_element) => {}, {
-      value: this.state.fragmentMain.value,
+      value: this.state.fragment.value,
       mode: "glsl",
       gutters: ["CodeMirror-lint-markers"],
     });
@@ -88,9 +88,9 @@ export class ShaderCodeWidget extends RefCounted {
       this.debouncedValueUpdater();
     });
     this.registerDisposer(
-      this.state.fragmentMain.changed.add(() => {
+      this.state.fragment.changed.add(() => {
         if (!this.changingValue) {
-          this.textEditor.setValue(this.state.fragmentMain.value);
+          this.textEditor.setValue(this.state.fragment.value);
         }
       }),
     );
@@ -203,36 +203,39 @@ export class ShaderCodeWidget extends RefCounted {
 }
 
 type UserLayerWithCodeEditor = UserLayer & { codeVisible: TrackableBoolean };
-type ShaderCodeOverlayConstructor<T extends Overlay> = new (
-  layer: UserLayerWithCodeEditor,
-) => T;
+type ShaderCodeOverlayConstructor<
+  Layer extends UserLayerWithCodeEditor,
+  T extends Overlay,
+> = new (layer: Layer) => T;
 
-export function makeShaderCodeWidgetTopRow<T extends Overlay>(
-  layer: UserLayerWithCodeEditor,
+export function makeShaderCodeWidgetTopRow<
+  Layer extends UserLayerWithCodeEditor,
+  T extends Overlay,
+>(
+  layer: Layer,
   codeWidget: ShaderCodeWidget,
-  ShaderCodeOverlay: ShaderCodeOverlayConstructor<T>,
+  ShaderCodeOverlay: ShaderCodeOverlayConstructor<Layer, T>,
   help: {
     title: string;
     href: string;
   },
   className: string,
+  title = "Shader",
+  codeVisible = layer.codeVisible,
 ) {
   const spacer = document.createElement("div");
   spacer.style.flex = "1";
 
   const topRow = document.createElement("div");
   topRow.className = className;
-  topRow.appendChild(document.createTextNode("Shader"));
+  topRow.appendChild(document.createTextNode(title));
   topRow.appendChild(spacer);
 
   layer.registerDisposer(
-    new ElementVisibilityFromTrackableBoolean(
-      layer.codeVisible,
-      codeWidget.element,
-    ),
+    new ElementVisibilityFromTrackableBoolean(codeVisible, codeWidget.element),
   );
 
-  const codeVisibilityControl = new CheckboxIcon(layer.codeVisible, {
+  const codeVisibilityControl = new CheckboxIcon(codeVisible, {
     enableTitle: "Show code",
     disableTitle: "Hide code",
     backgroundScheme: "dark",

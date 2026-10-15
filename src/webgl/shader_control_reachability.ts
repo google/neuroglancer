@@ -27,7 +27,7 @@ function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function isCheckboxUsedInCode(
+function isCompileTimeControlUsedInCode(
   controlName: string,
   parseResult: ShaderControlsParseResult,
 ): boolean {
@@ -38,8 +38,8 @@ function isCheckboxUsedInCode(
 
 // Returns the set of #uicontrol names whose generated uniforms survived GLSL
 // link-time dead-code elimination. Controls that compile to no uniforms
-// (checkbox, which becomes a `#define`) are considered active only if the
-// parsed shader code actually references the generated identifier.
+// (checkbox and property, which become `#define`s) are considered active only
+// if the parsed shader code actually references the generated identifier.
 //
 // `shader.uniforms` is the map populated by ShaderProgram at link time:
 // each declared uniform name maps to its location (`WebGLUniformLocation`)
@@ -51,10 +51,10 @@ export function computeActiveControls(
   const active = new Set<string>();
   const { uniforms } = shader;
   for (const [name, control] of parseResult.controls) {
-    if (control.type === "checkbox") {
-      // Checkboxes become `#define`s at compile time; they have no uniform, so
-      // infer reachability from whether the shader code references the symbol.
-      if (isCheckboxUsedInCode(name, parseResult)) {
+    if (control.type === "checkbox" || control.type === "property") {
+      // Compile-time controls have no uniform, so infer reachability from
+      // whether the shader code references the generated identifier.
+      if (isCompileTimeControlUsedInCode(name, parseResult)) {
         active.add(name);
       }
       continue;
@@ -66,12 +66,12 @@ export function computeActiveControls(
     ) {
       // These inject helper functions plus one or more underlying uniforms
       // (bound/interval uniforms for invlerp, texture sampler for transfer
-      // function). Any surviving uniform with the control's prefix means the
-      // helper is reachable.
-      const prefix = uniformName(name);
+      // function). Any surviving helper uniform ending with the generated
+      // control name means the helper is reachable.
+      const suffix = uniformName(name);
       let found = false;
       for (const [uName, location] of uniforms) {
-        if (location !== null && uName.startsWith(prefix)) {
+        if (location !== null && uName.endsWith(suffix)) {
           found = true;
           break;
         }

@@ -42,6 +42,7 @@ import {
   parameterizedEmitterDependentShaderGetter,
   shaderCodeWithLineDirective,
 } from "#src/webgl/dynamic_shader.js";
+import { copyHistogramToCPU } from "#src/webgl/empirical_cdf.js";
 import {
   defineInvlerpShaderFunction,
   enableLerpShaderFunction,
@@ -268,10 +269,10 @@ class AnnotationRenderHelperBase extends RefCounted {
 
   protected defineProperties(
     builder: ShaderBuilder,
-    referencedProperties: number[],
+    annotationPropertyIndices: number[],
   ) {
     const { properties, rank } = this;
-    for (const i of referencedProperties) {
+    for (const i of annotationPropertyIndices) {
       const property = properties[i];
       const handler = annotationPropertyTypeRenderHandlers[property.type];
       handler.defineShader(builder, property.identifier, rank);
@@ -279,7 +280,7 @@ class AnnotationRenderHelperBase extends RefCounted {
     const { propertyOffsets } = this;
     const { propertyGroupBytes, propertyGroupCumulativeBytes } = this;
     builder.addInitializer((shader) => {
-      const binders = referencedProperties.map(
+      const binders = annotationPropertyIndices.map(
         (i) =>
           shader.vertexShaderInputBinders[`prop_${properties[i].identifier}`],
       );
@@ -293,7 +294,7 @@ class AnnotationRenderHelperBase extends RefCounted {
         bind(stride: number, offset: number) {
           for (let i = 0; i < numProperties; ++i) {
             const { group, offset: propertyOffset } =
-              propertyOffsets[referencedProperties[i]];
+              propertyOffsets[annotationPropertyIndices[i]];
             binders[i].bind(
               /*stride=*/ propertyGroupBytes[group],
               /*offset=*/ offset +
@@ -349,8 +350,11 @@ export abstract class AnnotationRenderHelper extends AnnotationRenderHelperBase 
         parameters: ShaderControlsBuilderState,
       ) => {
         const { rank, properties } = this;
-        const referencedProperties: number[] = [];
-        const controlsReferencedProperties = parameters.referencedProperties;
+        const annotationPropertyIndices: number[] = [];
+        const controlAnnotationProperties =
+          parameters.propertyReferences.source === "annotation"
+            ? parameters.propertyReferences.references
+            : [];
         const processedCode = parameters.parseResult.code;
         for (
           let i = 0, numProperties = properties.length;
@@ -360,14 +364,14 @@ export abstract class AnnotationRenderHelper extends AnnotationRenderHelperBase 
           const property = properties[i];
           const functionName = `prop_${property.identifier}`;
           if (
-            !controlsReferencedProperties.includes(property.identifier) &&
+            !controlAnnotationProperties.includes(property.identifier) &&
             !processedCode.match(new RegExp(`\\b${functionName}\\b`))
           ) {
             continue;
           }
-          referencedProperties.push(i);
+          annotationPropertyIndices.push(i);
         }
-        this.defineProperties(builder, referencedProperties);
+        this.defineProperties(builder, annotationPropertyIndices);
         builder.addUniform("highp vec3", "uColor");
         builder.addUniform("highp uint", "uSelectedIndex");
         builder.addVarying("highp vec4", "vColor");
@@ -444,7 +448,7 @@ float getMaxSubspaceClipCoefficient(float modelPointA[${this.rank}],  float mode
 }
 
 `);
-        addControlsToBuilder(parameters, builder);
+        addControlsToBuilder(parameters, builder, /*fragment=*/ false);
         builder.addVertexCode(`
 const bool PROJECTION_VIEW = ${!this.targetIsSliceView};
 bool ng_discardValue;
@@ -776,21 +780,12 @@ gl_PointSize = 1.0;
         }
         gl.drawArrays(WebGL2RenderingContext.POINTS, 0, context.count);
         if (DEBUG_HISTOGRAMS) {
-          const tempBuffer = new Float32Array(256 * 4);
-          gl.readPixels(
-            0,
-            0,
-            256,
-            1,
-            WebGL2RenderingContext.RGBA,
-            WebGL2RenderingContext.FLOAT,
-            tempBuffer,
+          const histogram = copyHistogramToCPU(gl);
+          console.log(
+            "histogram property:",
+            propertyIdentifier,
+            histogram.join(" "),
           );
-          const tempBuffer2 = new Float32Array(256);
-          for (let j = 0; j < 256; ++j) {
-            tempBuffer2[j] = tempBuffer[j * 4];
-          }
-          console.log("histogram", tempBuffer2.join(" "));
         }
         binder.disable();
         break;
