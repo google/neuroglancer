@@ -173,7 +173,7 @@ import type { ValueOrError } from "#src/util/error.js";
 import { makeValueOrError, valueOrThrow } from "#src/util/error.js";
 import { EventActionMap } from "#src/util/event_action_map.js";
 import { mat4, vec3, vec4 } from "#src/util/geom.js";
-import { fetchOk, HttpError, isNotFoundError } from "#src/util/http_request.js";
+import { fetchOk, HttpError } from "#src/util/http_request.js";
 import {
   parseArray,
   parseFixedLengthArray,
@@ -445,21 +445,16 @@ async function getMeshMetadata(
   url: string,
   options: Partial<ProgressOptions>,
 ): Promise<ParsedMeshMetadata> {
-  let metadata: any;
-  try {
-    metadata = await getJsonMetadata(
-      sharedKvStoreContext,
-      url,
-      /*required=*/ false,
-      options,
-    );
-  } catch (e) {
-    if (isNotFoundError(e)) {
-      // If we fail to fetch the info file, assume it is the legacy
-      // single-resolution mesh format.
-      return { metadata: undefined };
-    }
-    throw e;
+  const metadata = await getJsonMetadata(
+    sharedKvStoreContext,
+    url,
+    /*required=*/ false,
+    options,
+  );
+  if (metadata === undefined) {
+    // If the info file is missing, assume it is the legacy
+    // single-resolution mesh format.
+    return { metadata: undefined };
   }
   return parseMeshMetadata(metadata);
 }
