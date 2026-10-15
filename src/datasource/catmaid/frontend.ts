@@ -77,7 +77,9 @@ export class CatmaidSpatiallyIndexedSkeletonSource
   }
 
   get confidenceValues() {
-    return this.readonly ? undefined : CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES;
+    return this.readonly
+      ? undefined
+      : CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES;
   }
 
   get optimisticEditing() {
@@ -207,11 +209,7 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
       throw new Error("Failed to fetch CATMAID spatial index metadata");
     }
 
-    const {
-      bounds,
-      spatial,
-      readonly: sourceReadonly,
-    } = spatialIndexMetadata;
+    const { bounds, spatial, readonly: sourceReadonly } = spatialIndexMetadata;
     // The model-space coordinates we emit are in nanometers, converted to meters for Neuroglancer.
     const modelSpace = makeCoordinateSpace({
       names: ["x", "y", "z"],
