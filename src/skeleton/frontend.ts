@@ -118,6 +118,7 @@ import type {
   SliceViewPanelReadyRenderContext,
 } from "#src/sliceview/renderlayer.js";
 import { SliceViewPanelRenderLayer } from "#src/sliceview/renderlayer.js";
+import type { TrackableAlphaValue } from "#src/trackable_alpha.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
@@ -133,8 +134,8 @@ import { gatherUpdate } from "#src/util/array.js";
 import { bigintCompare } from "#src/util/bigint.js";
 import {
   getRelativeLuminance,
+  getContrastRatio,
   getSaturation,
-  pickHighestContrastColor,
   saturateColor,
 } from "#src/util/color.js";
 import { hsvToRgb } from "#src/util/colorspace.js";
@@ -237,6 +238,22 @@ const SELECTED_NODE_HIGHLIGHT_COLORS: readonly vec3[] = [
   vec3.fromValues(0.7, 0.67, 0.6), // stone (light warm gray)
   vec3.fromValues(0.5, 0.45, 0.15), // olive
 ];
+
+function pickHighestContrastColor(
+  palette: readonly vec3[],
+  sourceColor: vec3,
+): vec3 {
+  let bestColor = palette[0];
+  let bestContrast = -1;
+  for (const candidate of palette) {
+    const contrast = getContrastRatio(candidate, sourceColor);
+    if (contrast > bestContrast) {
+      bestContrast = contrast;
+      bestColor = candidate;
+    }
+  }
+  return bestColor;
+}
 
 // Used for debugging chunks via a different color for each chunk
 const tempChunkKeyToColorMap = new Map<string, Float32Array>();
@@ -1434,6 +1451,7 @@ export class SkeletonRenderingOptions implements Trackable {
 }
 
 export interface SkeletonLayerDisplayState extends SegmentationDisplayState3D {
+  hiddenObjectAlpha: TrackableAlphaValue;
   shaderError: WatchableShaderError;
   skeletonRenderingOptions: SkeletonRenderingOptions;
 }
@@ -1472,6 +1490,9 @@ export class SkeletonLayer extends RefCounted implements SkeletonShaderContext {
     super();
 
     registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
+    this.registerDisposer(
+      displayState.hiddenObjectAlpha.changed.add(this.redrawNeeded.dispatch),
+    );
     this.displayState.shaderError.value = undefined;
     const { skeletonRenderingOptions: renderingOptions } = displayState;
     this.registerDisposer(
@@ -2504,7 +2525,7 @@ export class SpatiallyIndexedSkeletonLayer
   // Falls back to the selected segment's color when the node has no segment id.
   private getNodeSegmentColor(
     nodeInfo: SelectedSkeletonNodeInfo,
-  ): Float32Array | undefined {
+  ): vec3 | undefined {
     const segmentId =
       nodeInfo.segmentId !== undefined
         ? nodeInfo.segmentId
@@ -2515,7 +2536,7 @@ export class SpatiallyIndexedSkeletonLayer
     if (this.provisionalSegmentIds?.has(segmentId)) {
       return PROVISIONAL_SEGMENT_COLOR;
     }
-    return getBaseObjectColor(this.displayState, segmentId);
+    return getBaseObjectColor(this.displayState, segmentId) as vec3;
   }
 
   // Each outline contrasts with its own node's segment color.
@@ -2967,6 +2988,9 @@ export class SpatiallyIndexedSkeletonLayer
       ),
     );
     registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
+    this.registerDisposer(
+      displayState.hiddenObjectAlpha.changed.add(this.redrawNeeded.dispatch),
+    );
     const invalidateNodeOutlineColors = () => {
       ++this.nodeOutlineColorGeneration;
     };
