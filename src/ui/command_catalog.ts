@@ -274,7 +274,6 @@ export class CommandCatalog extends RefCounted {
     const {
       globalToolBinder,
       layerManager,
-      selectedLayer,
       inputEventBindings,
       commandRegistry,
       toolPalettes,
@@ -298,6 +297,10 @@ export class CommandCatalog extends RefCounted {
       label: "Toggle Layer Visibility",
       shortcut: layerRangeShortcut("toggle-layer"),
     };
+    const showOnlyLayerGroup: CommandGroup = {
+      label: "Show Only Layer",
+      shortcut: "Shift+1–9",
+    };
     const selectLayerGroup: CommandGroup = {
       label: "Select Layer",
       shortcut: layerRangeShortcut("select-layer"),
@@ -318,10 +321,9 @@ export class CommandCatalog extends RefCounted {
 
       {
         // Toggle layer
-        const command = new CallbackCommand(
+        const command = new ActionCommand(
           `toggle-layer-${nonArchivedIndex + 1}`,
           `Show/hide ${layer.name}`,
-          () => layer.setVisible(!layer.visible),
         );
         command.enabled = enabled;
         commands.push({
@@ -333,14 +335,25 @@ export class CommandCatalog extends RefCounted {
       }
 
       {
+        // Show only layer
+        const command = new ActionCommand(
+          `show-only-layer-${nonArchivedIndex + 1}`,
+          `Show only ${layer.name}`,
+        );
+        command.enabled = enabled;
+        commands.push({
+          ...commonObject,
+          shortcut: nonArchivedIndex < 9 ? `Shift+${nonArchivedIndex + 1}` : "",
+          group: showOnlyLayerGroup,
+          command,
+        });
+      }
+
+      {
         // Select layer
-        const command = new CallbackCommand(
+        const command = new ActionCommand(
           `select-layer-${nonArchivedIndex + 1}`,
           `Select ${layer.name}`,
-          () => {
-            selectedLayer.layer = layer;
-            selectedLayer.visible = true;
-          },
         );
         command.enabled = enabled;
         commands.push({
@@ -353,12 +366,9 @@ export class CommandCatalog extends RefCounted {
 
       {
         // Toggle pick
-        const command = new CallbackCommand(
+        const command = new ActionCommand(
           `toggle-pick-layer-${nonArchivedIndex + 1}`,
           `Toggle pick ${layer.name}`,
-          () => {
-            layer.pickEnabled = !layer.pickEnabled;
-          },
         );
         command.enabled = enabled;
         commands.push({
@@ -416,7 +426,9 @@ export class CommandCatalog extends RefCounted {
     for (const { actionId } of bindings) {
       if (commandRegistry.has(actionId)) continue;
       if (/^tool-[A-Z]$/.test(actionId)) continue;
-      if (/^(toggle|select|toggle-pick)-layer-\d+$/.test(actionId)) continue;
+      if (/^(toggle|select|toggle-pick|show-only)-layer-\d+$/.test(actionId)) {
+        continue;
+      }
       const label = actionIdToLabel(actionId);
       commands.push({
         label,

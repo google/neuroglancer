@@ -34,7 +34,7 @@ import type { InputEventBindings } from "#src/viewer.js";
 // per-layer-index actions, both of which the catalog contributes dynamically.
 const DYNAMIC_ACTIONS = [
   /^tool-[A-Z]$/,
-  /^(toggle|select|toggle-pick)-layer-\d+$/,
+  /^(toggle|select|toggle-pick|show-only)-layer-\d+$/,
 ];
 
 // Commands that exist as viewer actions but have no default key binding.
