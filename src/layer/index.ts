@@ -82,7 +82,7 @@ import {
 } from "#src/ui/side_panel_location.js";
 import type { GlobalToolBinder } from "#src/ui/tool.js";
 import { LayerToolBinder, SelectedLegacyTool } from "#src/ui/tool.js";
-import { gatherUpdate } from "#src/util/array.js";
+import { arraysEqual, gatherUpdate } from "#src/util/array.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { invokeDisposers, RefCounted } from "#src/util/disposable.js";
 import {
@@ -639,16 +639,24 @@ export class UserLayer extends RefCounted {
   ) {
     const { globalPosition } = this.manager.root;
     const { localPosition } = this;
+    const previousGlobalCoordinates = Float32Array.from(globalPosition.value);
     gatherUpdate(
       globalPosition.value,
       layerPosition,
       modelTransform.globalToRenderLayerDimensions,
     );
+    if (!arraysEqual(globalPosition.value, previousGlobalCoordinates)) {
+      globalPosition.markMoved();
+    }
+    const previousLocalCoordinates = Float32Array.from(localPosition.value);
     gatherUpdate(
       localPosition.value,
       layerPosition,
       modelTransform.localToRenderLayerDimensions,
     );
+    if (!arraysEqual(localPosition.value, previousLocalCoordinates)) {
+      localPosition.markMoved();
+    }
     localPosition.changed.dispatch();
     globalPosition.changed.dispatch();
   }
