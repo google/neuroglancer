@@ -65,10 +65,6 @@ import {
   trackableRenderScaleTarget,
 } from "#src/render_scale_statistics.js";
 import { getCssColor, SegmentColorHash } from "#src/segment_color.js";
-import {
-  addSegmentToVisibleSets,
-  removeSegmentFromVisibleSets,
-} from "#src/segmentation_display_state/base.js";
 import type {
   SegmentationColorGroupState,
   SegmentationDisplayState,
@@ -1117,12 +1113,14 @@ export class SegmentationUserLayer extends Base {
     for (const visibility of hints.segmentVisibility) {
       const { segmentId } = visibility;
       if (visibility.visible) {
-        addSegmentToVisibleSets(group, segmentId, { includeTemporary: true });
+        group.visibleSegments.add(segmentId);
+        group.temporaryVisibleSegments.add(segmentId);
       } else {
-        removeSegmentFromVisibleSets(group, segmentId, {
-          includeTemporary: true,
-          deselect: visibility.deselect,
-        });
+        group.visibleSegments.delete(segmentId);
+        group.temporaryVisibleSegments.delete(segmentId);
+        if (visibility.deselect) {
+          group.selectedSegments.delete(segmentId);
+        }
       }
       if (visibility.select !== undefined) {
         this.selectSegment(
