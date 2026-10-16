@@ -130,7 +130,7 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
           const decodedDim = physicalToLogicalDimension[rank - 1 - i];
           permutedChunkShape[i] = readChunkShape[decodedDim];
           permutedDataShape[i] = shape[decodedDim];
-          orderTransform[i + decodedDim * (rank + 1)] = 1;
+          orderTransform[decodedDim + i * (rank + 1)] = 1;
         }
         const transform = new Float32Array((rank + 1) ** 2);
         matrix.multiply<Float32Array | Float64Array>(
