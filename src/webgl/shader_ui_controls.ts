@@ -112,6 +112,7 @@ export interface ShaderPropertyInvlerpControl {
   type: "propertyInvlerp";
   clamp: boolean;
   properties: PropertiesSpecification;
+  booleanProperties?: ReadonlySet<string>;
   default: PropertyInvlerpParameters;
 }
 
@@ -619,12 +620,17 @@ function parseInvlerpDirective(
   parameters: DirectiveParameters,
   dataContext: ShaderDataContext,
 ): DirectiveParseResult {
-  const { imageData, properties } = dataContext;
+  const { imageData, properties, booleanProperties } = dataContext;
   if (imageData !== undefined) {
     return parseImageInvlerpDirective(valueType, parameters, imageData);
   }
   if (properties !== undefined) {
-    return parsePropertyInvlerpDirective(valueType, parameters, properties);
+    return parsePropertyInvlerpDirective(
+      valueType,
+      parameters,
+      properties,
+      booleanProperties,
+    );
   }
   const errors = [];
   errors.push("invlerp control not supported");
@@ -700,6 +706,7 @@ function parsePropertyInvlerpDirective(
   valueType: string,
   parameters: DirectiveParameters,
   properties: Map<string, DataType>,
+  booleanProperties: ReadonlySet<string> | undefined,
 ) {
   const errors = [];
   if (valueType !== "invlerp") {
@@ -767,6 +774,7 @@ function parsePropertyInvlerpDirective(
       type: "propertyInvlerp",
       clamp,
       properties,
+      booleanProperties,
       default: { range, window, property, dataType },
     } as ShaderPropertyInvlerpControl,
     errors: undefined,
@@ -861,6 +869,7 @@ export interface ImageDataSpecification {
 export interface ShaderDataContext {
   imageData?: ImageDataSpecification;
   properties?: Map<string, DataType>;
+  booleanProperties?: ReadonlySet<string>;
 }
 
 const controlParsers = new Map<
@@ -988,11 +997,14 @@ float ${uName}() {
       case "propertyInvlerp": {
         const property = builderValue.property;
         const dataType = control.properties.get(property)!;
+        const propertyValue = control.booleanProperties?.has(property)
+          ? `prop_${property}() ? 1u : 0u`
+          : `prop_${property}()`;
         const code = [
           defineInvlerpShaderFunction(builder, uName, dataType, control.clamp),
           `
 float ${uName}() {
-  return ${uName}(prop_${property}());
+  return ${uName}(${propertyValue});
 }
 `,
         ];

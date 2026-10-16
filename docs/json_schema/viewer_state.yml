@@ -3,6 +3,10 @@ $id: ViewerState
 title: "Complete state of a Neuroglancer instance."
 type: object
 properties:
+  stateVersion:
+    type: integer
+    minimum: 0
+    title: "Version of the serialized viewer state format. Missing indicates version 0."
   dimensions:
     $ref: CoordinateSpace
     title: "Global coordinate space."

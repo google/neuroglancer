@@ -86,20 +86,29 @@ interface AnnotationPropertyTypeRenderHandler {
 }
 
 function makeSimplePropertyRenderHandler(
-  shaderType: string,
+  attributeShaderType: string,
   bind: (
     gl: WebGL2RenderingContext,
     location: number,
     stride: number,
     offset: number,
   ) => void,
+  accessorShaderType = attributeShaderType,
+  getAccessorValue = (attributeName: string) => attributeName,
+  defineAdditionalAccessors?: (
+    builder: ShaderBuilder,
+    propertyName: string,
+  ) => void,
 ) {
   return {
     defineShader(builder: ShaderBuilder, identifier: string) {
       const propName = `prop_${identifier}`;
       const aName = `a_${propName}`;
-      builder.addAttribute(`${shaderType}`, aName);
-      builder.addVertexCode(`${shaderType} ${propName}() { return ${aName}; }`);
+      builder.addAttribute(attributeShaderType, aName);
+      builder.addVertexCode(
+        `${accessorShaderType} ${propName}() { return ${getAccessorValue(aName)}; }`,
+      );
+      defineAdditionalAccessors?.(builder, propName);
       builder.addInitializer((shader) => {
         const location = shader.attribute(aName);
         const { gl } = shader;
@@ -153,6 +162,12 @@ function makeIntegerPropertyRenderHandler(
   shaderType: string,
   numComponents: number,
   attributeType: number,
+  accessorShaderType = shaderType,
+  getAccessorValue?: (attributeName: string) => string,
+  defineAdditionalAccessors?: (
+    builder: ShaderBuilder,
+    propertyName: string,
+  ) => void,
 ) {
   return makeSimplePropertyRenderHandler(
     shaderType,
@@ -165,6 +180,9 @@ function makeIntegerPropertyRenderHandler(
         offset,
       );
     },
+    accessorShaderType,
+    getAccessorValue,
+    defineAdditionalAccessors,
   );
 }
 
@@ -223,6 +241,13 @@ const annotationPropertyTypeRenderHandlers: {
     "highp uint",
     1,
     WebGL2RenderingContext.UNSIGNED_BYTE,
+    "bool",
+    (attributeName) => `${attributeName} != 0u`,
+    (builder, propertyName) => {
+      builder.addVertexCode(
+        `highp uint uint_${propertyName}() { return ${propertyName}() ? 1u : 0u; }`,
+      );
+    },
   ),
 };
 
@@ -708,8 +733,12 @@ if (ng_discardValue) {
         /*clamp=*/ false,
       ),
     );
+    const propertyValue =
+      propertyType === "bool"
+        ? "prop_histogram() ? 1u : 0u"
+        : "prop_histogram()";
     builder.setVertexMain(`
-float x = invlerpForHistogram(prop_histogram());
+float x = invlerpForHistogram(${propertyValue});
 if (x < 0.0) x = 0.0;
 else if (x > 1.0) x = 1.0;
 else x = (1.0 + x * 253.0) / 255.0;

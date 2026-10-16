@@ -17,6 +17,9 @@ You may find the WebGL reference card helpful: <https://www.khronos.org/files/we
 ### Accessing annotation properties
 
 To retrieve a property named `myProperty`, use the syntax `prop_myProperty()`.
+Properties with type `bool` are returned as GLSL `bool`; numeric properties are
+returned as their corresponding numeric GLSL type. For compatibility with
+legacy shaders, `uint_prop_myProperty()` returns a boolean property as `uint`.
 
 ### Common API
 

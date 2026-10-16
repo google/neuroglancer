@@ -64,6 +64,7 @@ import type {
   VisibilityTrackedRenderLayer,
 } from "#src/renderlayer.js";
 import type { VolumeType } from "#src/sliceview/volume/base.js";
+import { StateMigrationCoordinator } from "#src/state_migration.js";
 import { StatusMessage } from "#src/status.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type {
@@ -2154,6 +2155,7 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
   }
 
   coordinateSpaceCombiner: CoordinateSpaceCombiner;
+  stateMigrations = new StateMigrationCoordinator();
   subsets = new Set<LayerSubsetSpecification>();
   layerSelectedValues: LayerSelectedValues;
 
@@ -2179,6 +2181,9 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
     );
     this.registerDisposer(
       layerManager.specificationChanged.add(this.changed.dispatch),
+    );
+    this.registerDisposer(
+      this.stateMigrations.changed.add(this.changed.dispatch),
     );
   }
 
