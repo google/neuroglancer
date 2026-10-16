@@ -24,7 +24,8 @@ import { datasourceMetadataSnapshotTests } from "#tests/datasource/metadata_snap
 datasourceMetadataSnapshotTests("zarr", [
   "zarr_v3/examples/single_res",
   "zarr_v3/examples/transpose",
-  "zarr_v3/examples/offset_grown",
+  "zarr_v3/examples/regular_bounded",
+  "zarr_v3/examples/regular_bounded_origin",
   "ome_zarr/simple_0.4",
   "ome_zarr/simple_0.5",
   "ome_zarr/simple_0.5.zip",

@@ -1,26 +1,30 @@
 {
   "shape": [
-    10,
-    7
+    3,
+    4
   ],
   "data_type": "uint16",
   "chunk_grid": {
-    "name": "regular",
+    "name": "regular_bounded",
     "configuration": {
       "chunk_shape": [
-        4,
-        5
+        2,
+        3
+      ],
+      "origin": [
+        1,
+        -1
+      ],
+      "lower_bound": [
+        -1,
+        0
       ]
     }
   },
   "chunk_key_encoding": {
-    "name": "offset",
+    "name": "default",
     "configuration": {
-      "separator": "/",
-      "offset": [
-        -1,
-        0
-      ]
+      "separator": "/"
     }
   },
   "fill_value": 0,
