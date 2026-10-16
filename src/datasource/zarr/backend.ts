@@ -28,7 +28,7 @@ import {
 import "#src/datasource/zarr/codec/gzip/decode.js";
 import "#src/datasource/zarr/codec/sharding_indexed/decode.js";
 import "#src/datasource/zarr/codec/transpose/decode.js";
-import { encodeChunkKey } from "#src/datasource/zarr/metadata/index.js";
+import { ChunkKeyEncoding } from "#src/datasource/zarr/metadata/index.js";
 import { WithSharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
 import { postProcessRawData } from "#src/sliceview/backend_chunk_decoders/postprocess.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
@@ -51,8 +51,19 @@ export class ZarrVolumeChunkSource extends WithParameters(
     const { parameters } = this;
     const { chunkGridPosition } = chunk;
     const { metadata } = parameters;
+    let baseKey = "";
     const rank = this.spec.rank;
     const { physicalToLogicalDimension } = metadata.codecs.layoutInfo[0];
+    let sep: string;
+    if (metadata.chunkKeyEncoding === ChunkKeyEncoding.DEFAULT) {
+      baseKey += "c";
+      sep = metadata.dimensionSeparator;
+    } else {
+      sep = "";
+      if (rank === 0) {
+        baseKey += "0";
+      }
+    }
     const keyCoords = new Array<number>(rank);
     const { readChunkShape } = metadata.codecs.layoutInfo[0];
     const { chunkShape } = metadata;
@@ -68,7 +79,10 @@ export class ZarrVolumeChunkSource extends WithParameters(
           chunkShape[decodedDim],
       );
     }
-    const baseKey = encodeChunkKey(metadata, keyCoords);
+    for (let i = 0; i < rank; ++i) {
+      baseKey += `${sep}${keyCoords[i]}`;
+      sep = metadata.dimensionSeparator;
+    }
     const { chunkKvStore } = this;
     const response = await chunkKvStore.kvStore.read(
       chunkKvStore.getChunkKey(chunkGridPosition, baseKey),

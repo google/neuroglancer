@@ -1,0 +1,120 @@
+{
+  "canonicalUrl": "http://localhost:*/datasource/zarr/zarr_v3/examples/regular_bounded_origin/|zarr3:",
+  "modelTransform": {
+    "inputSpace": {
+      "bounds": {
+        "lowerBounds": Float64Array [
+          -1,
+          0,
+        ],
+        "upperBounds": Float64Array [
+          2,
+          4,
+        ],
+        "voxelCenterAtIntegerCoordinates": [
+          false,
+          false,
+        ],
+      },
+      "coordinateArrays": [
+        ,
+        ,
+      ],
+      "names": [
+        "dim_0",
+        "dim_1",
+      ],
+      "scales": Float64Array [
+        1,
+        1,
+      ],
+      "units": [
+        "",
+        "",
+      ],
+      "valid": true,
+    },
+  },
+  "subsources": [
+    {
+      "default": true,
+      "id": "default",
+      "subsource": {
+        "volume": {
+          "dataType": "UINT16",
+          "rank": 2,
+          "sources": [
+            [
+              {
+                "chunkSource": {
+                  "parameters": {
+                    "url": "http://localhost:*/datasource/zarr/zarr_v3/examples/regular_bounded_origin/",
+                  },
+                  "spec": {
+                    "baseVoxelOffset": [
+                      0,
+                      0,
+                    ],
+                    "chunkDataSize": [
+                      3,
+                      2,
+                    ],
+                    "compressedSegmentationBlockSize": undefined,
+                    "dataType": "UINT16",
+                    "lowerVoxelBound": [
+                      1,
+                      -2,
+                    ],
+                    "upperVoxelBound": [
+                      5,
+                      1,
+                    ],
+                  },
+                },
+                "chunkToMultiscaleTransform": [
+                  [
+                    0,
+                    1,
+                    1,
+                  ],
+                  [
+                    1,
+                    0,
+                    -1,
+                  ],
+                  [
+                    0,
+                    0,
+                    1,
+                  ],
+                ],
+              },
+            ],
+          ],
+          "volumeType": "IMAGE",
+        },
+      },
+    },
+    {
+      "default": true,
+      "id": "bounds",
+      "subsource": {
+        "staticAnnotations": [
+          {
+            "description": "Data Bounds",
+            "id": "data-bounds",
+            "pointA": [
+              -1,
+              0,
+            ],
+            "pointB": [
+              2,
+              4,
+            ],
+            "type": "axis_aligned_bounding_box",
+          },
+        ],
+      },
+    },
+  ],
+}
