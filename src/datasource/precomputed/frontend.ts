@@ -229,6 +229,12 @@ export interface MultiscaleVolumeInfo {
   modelSpace: CoordinateSpace;
 }
 
+// Volume of a single voxel, used to order scales from finest to coarsest.  Only
+// the spatial dimensions participate; the channel resolution is always 1.
+function voxelVolume(resolution: Float64Array) {
+  return resolution[0] * resolution[1] * resolution[2];
+}
+
 export function parseMultiscaleVolumeInfo(obj: unknown): MultiscaleVolumeInfo {
   verifyObject(obj);
   const dataType = verifyObjectProperty(obj, "data_type", (x) =>
@@ -257,6 +263,16 @@ export function parseMultiscaleVolumeInfo(obj: unknown): MultiscaleVolumeInfo {
     parseArray(x, (y) => new ScaleInfo(y, numChannels)),
   );
   if (scaleInfos.length === 0) throw new Error("Expected at least one scale");
+  // The format requires the resolution not to decrease as the index into
+  // `"scales"` increases, but files that list the scales in another order do
+  // occur in practice.  Sort them rather than trusting the order: the first
+  // scale defines the model coordinate space, and `getSources` must return the
+  // scales ordered from finest to coarsest.  Sorting is a no-op for conforming
+  // files, since `Array.prototype.sort` is stable and the voxel volume cannot
+  // decrease while no individual resolution does.
+  scaleInfos.sort(
+    (a, b) => voxelVolume(a.resolution) - voxelVolume(b.resolution),
+  );
   const baseScale = scaleInfos[0];
   const rank = numChannels === 1 ? 3 : 4;
   const scales = new Float64Array(rank);
