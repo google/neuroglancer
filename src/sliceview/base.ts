@@ -182,7 +182,11 @@ function updateFixedCurPositionInChunks<
   globalPosition: Float32Array,
   localPosition: Float32Array,
 ): boolean {
-  const { curPositionInChunks, fixedPositionWithinChunk } = tsource;
+  const {
+    curPositionInChunks,
+    fixedPositionWithinChunk,
+    chunkDisplayDimensionIndices,
+  } = tsource;
   const { nonDisplayLowerClipBound, nonDisplayUpperClipBound } = tsource;
   const { rank, chunkDataSize, lowerChunkBound, upperChunkBound } =
     tsource.source.spec;
@@ -217,6 +221,18 @@ function updateFixedCurPositionInChunks<
         );
       }
       return false;
+    }
+    if (chunkDisplayDimensionIndices.includes(chunkDim)) {
+      // This function computes only the *fixed* (non-display) part of the
+      // position.  The rows of `fixedLayerToChunkTransform` corresponding to
+      // display dimensions are zeroed, so `x` is a placeholder 0 rather than a
+      // real coordinate; the actual chunk index is filled in by the caller's
+      // iteration over the display subspace.  Clamping the placeholder to
+      // `lowerChunkBound` would, for a source with a non-zero
+      // `spec.lowerVoxelBound`, force `chunk` past `x` and leave a negative
+      // `fixedPositionWithinChunk`.
+      fixedPositionWithinChunk[chunkDim] = 0;
+      continue;
     }
     const chunkSize = chunkDataSize[chunkDim];
     // Given that clip bounds are already tested above, clamp chunk index to its
