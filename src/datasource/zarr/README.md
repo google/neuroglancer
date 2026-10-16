@@ -54,6 +54,12 @@ Dimension names may be specified using an `_ARRAY_DIMENSIONS` attribute,
 
 ## Zarr v3
 
+Supported chunk grids:
+
+- regular
+- regular_bounded (a regular grid with an `origin` and a `lower_bound`, under which chunk keys
+  may be negative and the first chunk may be partly filled)
+
 Supported codecs:
 
 - crc32c (not validated)
