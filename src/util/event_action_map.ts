@@ -332,6 +332,7 @@ export class EventActionMap
   implements EventActionMapInterface
 {
   label: string | undefined;
+  private suppressedBindings = new Set<NormalizedEventIdentifier>();
 
   /**
    * Returns a new EventActionMap with the specified bindings.
@@ -377,7 +378,21 @@ export class EventActionMap
     for (const normalizedIdentifier of getNormalizedEventIdentifiers(
       parsedIdentifier,
     )) {
+      this.suppressedBindings.delete(normalizedIdentifier);
       super.set(normalizedIdentifier, normalizedAction);
+    }
+  }
+
+  /**
+   * Suppresses the specified event identifier in this map without mutating any
+   * inherited parent bindings.
+   */
+  suppress(identifier: EventIdentifier) {
+    for (const normalizedIdentifier of getNormalizedEventIdentifiers(
+      parseEventIdentifier(identifier),
+    )) {
+      super.delete(normalizedIdentifier);
+      this.suppressedBindings.add(normalizedIdentifier);
     }
   }
 
@@ -393,6 +408,13 @@ export class EventActionMap
     )) {
       super.delete(normalizedIdentifier);
     }
+  }
+
+  get(key: NormalizedEventIdentifier): EventAction | undefined {
+    if (this.suppressedBindings.has(key)) {
+      return undefined;
+    }
+    return super.get(key);
   }
 
   describe(): string {
