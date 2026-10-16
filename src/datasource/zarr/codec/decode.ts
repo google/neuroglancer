@@ -140,19 +140,23 @@ export async function decodeArray(
   return decoded;
 }
 
+export interface ShardedKvStoreWithInvalidation {
+  invalidateIndexCache?: () => void;
+}
+
 export function applySharding(
   chunkManager: ChunkManager,
   codecs: CodecChainSpec,
   baseKvStore: KvStoreWithPath,
 ): {
-  kvStore: ReadableKvStore<unknown>;
+  kvStore: ReadableKvStore<unknown> & Partial<ShardedKvStoreWithInvalidation>;
   getChunkKey: (
     chunkGridPosition: ArrayLike<number>,
     baseKey: string,
   ) => unknown;
   decodeCodecs: CodecChainSpec;
 } {
-  let kvStore: ReadableKvStore<unknown> = baseKvStore.store;
+  let kvStore: ReadableKvStore<unknown> & Partial<ShardedKvStoreWithInvalidation> = baseKvStore.store;
   let curCodecs = codecs;
   while (true) {
     const { shardingInfo } = curCodecs;
