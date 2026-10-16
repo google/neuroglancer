@@ -18,20 +18,23 @@ import type {
   SkeletonNode,
   SkeletonNodeAttributes,
 } from "#src/skeleton/api.js";
-import { SkeletonNodeAttribute } from "#src/skeleton/api.js";
+import { KnownSkeletonNodeAttribute } from "#src/skeleton/api.js";
 
 export function getSkeletonNodeRadius(node: SkeletonNode): number | undefined {
-  return node.attributes?.[SkeletonNodeAttribute.RADIUS]?.[0];
+  return node.attributes?.[KnownSkeletonNodeAttribute.RADIUS]?.[0];
 }
 
 export function getSkeletonNodeConfidence(
   node: SkeletonNode,
 ): number | undefined {
-  return node.attributes?.[SkeletonNodeAttribute.CONFIDENCE]?.[0];
+  return node.attributes?.[
+    KnownSkeletonNodeAttribute.CONFIDENCE_PERCENT
+  ]?.[0];
 }
 
 export function isSkeletonNodeTrueEnd(node: SkeletonNode): boolean {
-  const value = node.attributes?.[SkeletonNodeAttribute.TRUE_END]?.[0];
+  const value =
+    node.attributes?.[KnownSkeletonNodeAttribute.IS_TRUE_END]?.[0];
   return value !== undefined && value !== 0;
 }
 
@@ -45,7 +48,10 @@ export function setSkeletonNodeAttributes(
   },
 ): SkeletonNodeAttributes | undefined {
   const result: Record<string, ArrayLike<number>> = { ...attributes };
-  const setScalar = (id: SkeletonNodeAttribute, value: number | undefined) => {
+  const setScalar = (
+    id: KnownSkeletonNodeAttribute,
+    value: number | undefined,
+  ) => {
     if (value === undefined) {
       delete result[id];
     } else {
@@ -53,14 +59,17 @@ export function setSkeletonNodeAttributes(
     }
   };
   if (Object.hasOwn(changes, "radius")) {
-    setScalar(SkeletonNodeAttribute.RADIUS, changes.radius);
+    setScalar(KnownSkeletonNodeAttribute.RADIUS, changes.radius);
   }
   if (Object.hasOwn(changes, "confidence")) {
-    setScalar(SkeletonNodeAttribute.CONFIDENCE, changes.confidence);
+    setScalar(
+      KnownSkeletonNodeAttribute.CONFIDENCE_PERCENT,
+      changes.confidence,
+    );
   }
   if (Object.hasOwn(changes, "isTrueEnd")) {
     setScalar(
-      SkeletonNodeAttribute.TRUE_END,
+      KnownSkeletonNodeAttribute.IS_TRUE_END,
       changes.isTrueEnd ? 1 : undefined,
     );
   }

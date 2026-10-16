@@ -37,13 +37,11 @@ export type SkeletonNodeAttributes = Readonly<
   Record<string, ArrayLike<number>>
 >;
 
-// A source may also have vertex attributes with other ids.
-export enum SkeletonNodeAttribute {
+export enum KnownSkeletonNodeAttribute {
   RADIUS = "radius",
-  // As a percent, from 0 to 100.
-  CONFIDENCE = "confidence",
-  // Non-zero on a leaf where the branch is confirmed to end.
-  TRUE_END = "true_end",
+  CONFIDENCE_PERCENT = "confidence",
+  // On a leaf where the branch is confirmed to end.
+  IS_TRUE_END = "true_end",
 }
 
 export interface SkeletonNode {
