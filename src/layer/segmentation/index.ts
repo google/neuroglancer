@@ -811,7 +811,14 @@ const SPATIALLY_INDEXED_SKELETON_RUNTIME_DISPOSAL_KIND =
   "spatiallyIndexedSkeleton";
 
 const Base = UserLayerWithAnnotationsMixin(UserLayer);
+export interface SegmentationLayerSelectionState
+  extends UserLayerSelectionState {
+  nodeId: bigint | undefined;
+}
+
 export class SegmentationUserLayer extends Base {
+  declare selectionState: SegmentationLayerSelectionState;
+
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
   codeVisible = new TrackableBoolean(true);
@@ -862,7 +869,7 @@ export class SegmentationUserLayer extends Base {
       selectionState.captureSingleLayerState(this, capture, pin, options);
       return;
     }
-    const state = {} as UserLayerSelectionState;
+    const state = {} as this["selectionState"];
     this.initializeSelectionState(state);
     if (!capture(state)) return;
     selectionState.value = {
@@ -990,7 +997,7 @@ export class SegmentationUserLayer extends Base {
     };
     this.captureSpatialSkeletonSelectionState(
       (state) => {
-        state.nodeId = nodeId.toString();
+        state.nodeId = nodeId;
         state.value = segmentId;
         return true;
       },
@@ -1081,7 +1088,7 @@ export class SegmentationUserLayer extends Base {
           ...entry,
           state: {
             ...entry.state,
-            ...(nextNodeId === undefined ? {} : { nodeId: String(nextNodeId) }),
+            ...(nextNodeId === undefined ? {} : { nodeId: nextNodeId }),
             ...(nextSegmentId === undefined ? {} : { value: nextSegmentId }),
           },
         };
@@ -2343,8 +2350,33 @@ export class SegmentationUserLayer extends Base {
     }
   }
 
+  initializeSelectionState(state: this["selectionState"]) {
+    super.initializeSelectionState(state);
+    state.nodeId = undefined;
+  }
+
+  resetSelectionState(state: this["selectionState"]) {
+    super.resetSelectionState(state);
+    state.nodeId = undefined;
+  }
+
+  copySelectionState(
+    dest: this["selectionState"],
+    source: this["selectionState"],
+  ) {
+    super.copySelectionState(dest, source);
+    dest.nodeId = source.nodeId;
+  }
+
   selectionStateFromJson(state: this["selectionState"], json: any) {
     super.selectionStateFromJson(state, json);
+    try {
+      state.nodeId = undefinedIfZero(
+        verifyOptionalObjectProperty(json, "nodeId", parseUint64),
+      );
+    } catch {
+      state.nodeId = undefined;
+    }
     let { value } = state;
     if (typeof value === "number") value = value.toString();
     try {
@@ -2368,8 +2400,7 @@ export class SegmentationUserLayer extends Base {
     ) {
       return;
     }
-    const nodeId = undefinedIfZero(pickedSpatialSkeleton.nodeId);
-    state.nodeId = nodeId === undefined ? undefined : nodeId.toString();
+    state.nodeId = undefinedIfZero(pickedSpatialSkeleton.nodeId);
     const segmentId = undefinedIfZero(pickedSpatialSkeleton.segmentId);
     if (segmentId !== undefined) {
       state.value = segmentId;
@@ -2378,6 +2409,9 @@ export class SegmentationUserLayer extends Base {
 
   selectionStateToJson(state: this["selectionState"], forPython: boolean): any {
     const json = super.selectionStateToJson(state, forPython);
+    if (state.nodeId !== undefined) {
+      json.nodeId = state.nodeId.toString();
+    }
     const { value } = state;
     if (value instanceof Uint64MapEntry) {
       if (forPython) {
