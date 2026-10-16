@@ -119,18 +119,23 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
     return transposeNestedArrays(
       this.multiscale.scales.map((scale) => {
         const { metadata } = scale;
-        const { rank, codecs, shape } = metadata;
+        const { rank, codecs, shape, chunkGridOrigin, lowerBound } = metadata;
         const readChunkShape = codecs.layoutInfo[0].readChunkShape;
         const { physicalToLogicalDimension } = metadata.codecs.layoutInfo[0];
         const permutedChunkShape = new Uint32Array(rank);
-        const permutedDataShape = new Float32Array(rank);
+        const permutedLowerBound = new Float32Array(rank);
+        const permutedUpperBound = new Float32Array(rank);
         const orderTransform = new Float32Array((rank + 1) ** 2);
         orderTransform[(rank + 1) ** 2 - 1] = 1;
+        // Chunk coordinates are relative to the chunk grid origin.
         for (let i = 0; i < rank; ++i) {
           const decodedDim = physicalToLogicalDimension[rank - 1 - i];
           permutedChunkShape[i] = readChunkShape[decodedDim];
-          permutedDataShape[i] = shape[decodedDim];
+          permutedLowerBound[i] =
+            lowerBound[decodedDim] - chunkGridOrigin[decodedDim];
+          permutedUpperBound[i] = permutedLowerBound[i] + shape[decodedDim];
           orderTransform[decodedDim + i * (rank + 1)] = 1;
+          orderTransform[(rank + 1) * rank + i] = chunkGridOrigin[i];
         }
         const transform = new Float32Array((rank + 1) ** 2);
         matrix.multiply<Float32Array | Float64Array>(
@@ -148,7 +153,8 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
           rank,
           chunkToMultiscaleTransform: transform,
           dataType: metadata.dataType,
-          upperVoxelBound: permutedDataShape,
+          lowerVoxelBound: permutedLowerBound,
+          upperVoxelBound: permutedUpperBound,
           volumeType: this.volumeType,
           chunkDataSizes: [permutedChunkShape],
           volumeSourceOptions,
@@ -275,8 +281,11 @@ function getMultiscaleInfoForSingleArray(
     units: Array.from(unitsAndScales, (x) => x.unit),
     boundingBoxes: [
       makeIdentityTransformedBoundingBox({
-        lowerBounds: new Float64Array(metadata.rank),
-        upperBounds: Float64Array.from(metadata.shape),
+        lowerBounds: Float64Array.from(metadata.lowerBound),
+        upperBounds: Float64Array.from(
+          metadata.shape,
+          (n, i) => metadata.lowerBound[i] + n,
+        ),
       }),
     ],
   });
@@ -347,7 +356,9 @@ async function resolveOmeMultiscale(
   const baseScale = multiscale.scales[0];
   const baseZarrMetadata = scaleZarrMetadata[0];
   for (let i = 0; i < rank; ++i) {
-    const lower = (lowerBounds[i] = baseScale.transform[(rank + 1) * rank + i]);
+    const lower = (lowerBounds[i] =
+      baseScale.transform[(rank + 1) * rank + i] +
+      baseZarrMetadata.lowerBound[i]);
     upperBounds[i] = lower + baseZarrMetadata.shape[i];
   }
   const boundingBox = makeIdentityTransformedBoundingBox({

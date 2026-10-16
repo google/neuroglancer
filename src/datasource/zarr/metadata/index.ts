@@ -20,8 +20,6 @@ import type { DataType } from "#src/util/data_type.js";
 export enum ChunkKeyEncoding {
   DEFAULT = 0,
   V2 = 1,
-  // https://github.com/zarr-developers/zarr-extensions/tree/main/chunk-key-encodings/offset
-  OFFSET = 2,
 }
 
 export type DimensionSeparator = "/" | ".";
@@ -41,38 +39,11 @@ export interface ArrayMetadata {
   userAttributes: Record<string, unknown>;
   dimensionSeparator: DimensionSeparator;
   chunkKeyEncoding: ChunkKeyEncoding;
-  // One entry per dimension under `ChunkKeyEncoding.OFFSET`.
-  chunkKeyOffset: number[] | undefined;
+  // Array coordinate where chunk 0 starts, and coordinate of the first
+  // element; all zero except under the `regular_bounded` chunk grid.
+  chunkGridOrigin: number[];
+  lowerBound: number[];
   codecs: CodecChainSpec;
-}
-
-/** Store key of the write chunk at grid coordinates `keyCoords`. */
-export function encodeChunkKey(
-  metadata: Pick<
-    ArrayMetadata,
-    "rank" | "chunkKeyEncoding" | "dimensionSeparator" | "chunkKeyOffset"
-  >,
-  keyCoords: ArrayLike<number>,
-): string {
-  const { rank, chunkKeyEncoding, dimensionSeparator, chunkKeyOffset } =
-    metadata;
-  let key = "";
-  let sep: string;
-  if (chunkKeyEncoding === ChunkKeyEncoding.V2) {
-    sep = "";
-    if (rank === 0) {
-      key += "0";
-    }
-  } else {
-    key += "c";
-    sep = dimensionSeparator;
-  }
-  for (let i = 0; i < rank; ++i) {
-    const offset = chunkKeyOffset?.[i] ?? 0;
-    key += `${sep}${keyCoords[i] + offset}`;
-    sep = dimensionSeparator;
-  }
-  return key;
 }
 
 export interface GroupMetadata {

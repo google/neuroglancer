@@ -62,7 +62,12 @@ export function parseChunkShape(obj: unknown, rank: number): number[] {
   });
 }
 
-function verifyStrictInt(value: unknown): number {
+enum ChunkGrid {
+  REGULAR = 0,
+  REGULAR_BOUNDED = 1,
+}
+
+function verifyInteger(value: unknown): number {
   if (!Number.isInteger(value)) {
     throw new Error(
       `Expected integer, but received: ${JSON.stringify(value)}.`,
@@ -234,18 +239,40 @@ export function parseV3Metadata(
       verifyEnumString(x, DataType, /^[a-z0-9]+$/),
     );
 
-    const { configuration: chunkShape } = verifyObjectProperty(
-      obj,
-      "chunk_grid",
-      (chunkGrid) =>
-        parseNameAndConfiguration(
-          chunkGrid,
-          (name) => verifyConstant(name, "regular"),
-          (configuration) =>
-            verifyObjectProperty(configuration, "chunk_shape", (chunks) =>
-              parseChunkShape(chunks, rank),
+    const {
+      configuration: { chunkShape, chunkGridOrigin, lowerBound },
+    } = verifyObjectProperty(obj, "chunk_grid", (chunkGrid) =>
+      parseNameAndConfiguration(
+        chunkGrid,
+        (name) =>
+          verifyEnumString(name, ChunkGrid, /^(regular|regular_bounded)$/),
+        (configuration, name) => {
+          const chunkShape = verifyObjectProperty(
+            configuration,
+            "chunk_shape",
+            (chunks) => parseChunkShape(chunks, rank),
+          );
+          if (name === ChunkGrid.REGULAR) {
+            const zeros = new Array<number>(rank).fill(0);
+            return { chunkShape, chunkGridOrigin: zeros, lowerBound: zeros };
+          }
+          const parseCoordinates = (x: unknown) =>
+            parseFixedLengthArray(new Array<number>(rank), x, verifyInteger);
+          return {
+            chunkShape,
+            chunkGridOrigin: verifyObjectProperty(
+              configuration,
+              "origin",
+              parseCoordinates,
             ),
-        ),
+            lowerBound: verifyObjectProperty(
+              configuration,
+              "lower_bound",
+              parseCoordinates,
+            ),
+          };
+        },
+      ),
     );
 
     const { userAttributes, dimensionUnits } = verifyObjectProperty(
@@ -265,34 +292,20 @@ export function parseV3Metadata(
       },
     );
 
-    const {
-      configuration: { dimensionSeparator, chunkKeyOffset },
-      name: chunkKeyEncoding,
-    } = verifyObjectProperty(obj, "chunk_key_encoding", (value) =>
-      parseNameAndConfiguration(
-        value,
-        (name) =>
-          verifyEnumString(name, ChunkKeyEncoding, /^(v2|default|offset)$/),
-        (configuration, chunkKeyEncoding) => ({
-          dimensionSeparator: verifyOptionalObjectProperty(
-            configuration,
-            "separator",
-            parseDimensionSeparator,
-            chunkKeyEncoding === ChunkKeyEncoding.V2 ? "." : "/",
-          ),
-          chunkKeyOffset:
-            chunkKeyEncoding === ChunkKeyEncoding.OFFSET
-              ? verifyObjectProperty(configuration, "offset", (offset) =>
-                  parseFixedLengthArray(
-                    new Array<number>(rank),
-                    offset,
-                    verifyStrictInt,
-                  ),
-                )
-              : undefined,
-        }),
-      ),
-    );
+    const { configuration: dimensionSeparator, name: chunkKeyEncoding } =
+      verifyObjectProperty(obj, "chunk_key_encoding", (value) =>
+        parseNameAndConfiguration(
+          value,
+          (name) => verifyEnumString(name, ChunkKeyEncoding, /^(v2|default)$/),
+          (configuration, chunkKeyEncoding) =>
+            verifyOptionalObjectProperty(
+              configuration,
+              "separator",
+              parseDimensionSeparator,
+              chunkKeyEncoding === ChunkKeyEncoding.DEFAULT ? "/" : ".",
+            ),
+        ),
+      );
 
     const fillValue = verifyObjectProperty(obj, "fill_value", (value) =>
       parseFillValue(dataType, value),
@@ -314,7 +327,8 @@ export function parseV3Metadata(
       dimensionUnits,
       chunkKeyEncoding,
       dimensionSeparator,
-      chunkKeyOffset,
+      chunkGridOrigin,
+      lowerBound,
       userAttributes,
       codecs,
     };
@@ -460,7 +474,8 @@ export function parseV2Metadata(
       userAttributes: attrs,
       dimensionSeparator,
       chunkKeyEncoding: ChunkKeyEncoding.V2,
-      chunkKeyOffset: undefined,
+      chunkGridOrigin: new Array<number>(rank).fill(0),
+      lowerBound: new Array<number>(rank).fill(0),
       codecs: codecChainSpec,
     };
   } catch (e) {

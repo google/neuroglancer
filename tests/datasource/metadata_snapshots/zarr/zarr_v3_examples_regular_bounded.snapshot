@@ -1,14 +1,14 @@
 {
-  "canonicalUrl": "http://localhost:*/datasource/zarr/zarr_v3/examples/offset_grown/|zarr3:",
+  "canonicalUrl": "http://localhost:*/datasource/zarr/zarr_v3/examples/regular_bounded/|zarr3:",
   "modelTransform": {
     "inputSpace": {
       "bounds": {
         "lowerBounds": Float64Array [
-          0,
-          0,
+          -3,
+          -2,
         ],
         "upperBounds": Float64Array [
-          10,
+          6,
           7,
         ],
         "voxelCenterAtIntegerCoordinates": [
@@ -48,7 +48,7 @@
               {
                 "chunkSource": {
                   "parameters": {
-                    "url": "http://localhost:*/datasource/zarr/zarr_v3/examples/offset_grown/",
+                    "url": "http://localhost:*/datasource/zarr/zarr_v3/examples/regular_bounded/",
                   },
                   "spec": {
                     "baseVoxelOffset": [
@@ -62,12 +62,12 @@
                     "compressedSegmentationBlockSize": undefined,
                     "dataType": "UINT16",
                     "lowerVoxelBound": [
-                      0,
-                      0,
+                      -2,
+                      -3,
                     ],
                     "upperVoxelBound": [
                       7,
-                      10,
+                      6,
                     ],
                   },
                 },
@@ -104,11 +104,11 @@
             "description": "Data Bounds",
             "id": "data-bounds",
             "pointA": [
-              0,
-              0,
+              -3,
+              -2,
             ],
             "pointB": [
-              10,
+              6,
               7,
             ],
             "type": "axis_aligned_bounding_box",
