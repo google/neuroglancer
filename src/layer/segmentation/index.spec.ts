@@ -23,6 +23,22 @@ import { SkeletonDataSourceState } from "#src/skeleton/find_path.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { NullarySignal } from "#src/util/signal.js";
 
+function makeWholeSkeletonReads(
+  getSkeleton: (
+    skeletonId: bigint,
+    options: { signal: AbortSignal },
+  ) => unknown,
+) {
+  return {
+    getSkeletonManifest: async () => ({ fragmentKeys: ["skeleton"] }),
+    getSkeletonFragment: async (
+      skeletonId: bigint,
+      _fragmentKey: string,
+      signal: AbortSignal,
+    ) => ({ nodes: await getSkeleton(skeletonId, { signal }) }),
+  };
+}
+
 if (!("WebGL2RenderingContext" in globalThis)) {
   Object.defineProperty(globalThis, "WebGL2RenderingContext", {
     value: new Proxy(class WebGL2RenderingContext {} as any, {
@@ -96,14 +112,14 @@ function makeQueuedSelectionLayer(pin = true) {
     getSkeleton: vi.fn(async () => []),
   };
   const source = {
-    readonly: false,
     optimisticEditing: commands.optimisticEditing,
     addNodesCommand: commands.addNodesCommand,
     deleteNodesCommand: commands.deleteNodesCommand,
-    getSkeleton: client.getSkeleton,
+    ...makeWholeSkeletonReads(client.getSkeleton),
   };
   const skeletonLayer = {
-    source,
+    fragmentSource: source,
+    editableSource: source,
     getNode: (id: bigint) => state.getCachedNode(id),
     retainOverlaySegment: vi.fn(),
     remapOverlaySegments: vi.fn(),
@@ -148,7 +164,6 @@ function makeQueuedSelectionLayer(pin = true) {
 
 function makeEditableSpatialSkeletonSource(
   options: {
-    confidenceConfiguration?: boolean;
     rerootCommand?: boolean;
   } = {},
 ) {
@@ -163,7 +178,6 @@ function makeEditableSpatialSkeletonSource(
     createCommand,
   });
   return {
-    readonly: false,
     optimisticEditing: {
       createDriver: vi.fn(),
     },
@@ -180,17 +194,8 @@ function makeEditableSpatialSkeletonSource(
     ),
     mergeSkeletonsCommand: makeCommand(SpatialSkeletonActions.mergeSkeletons),
     splitSkeletonsCommand: makeCommand(SpatialSkeletonActions.splitSkeletons),
-    listSkeletons: async () => [],
-    getSkeleton: async () => [],
-    fetchNodes: async () => [],
-    getSpatialIndexMetadata: async () => null,
-    ...(options.confidenceConfiguration !== true
-      ? {}
-      : {
-          spatialSkeletonConfidenceConfiguration: {
-            values: [0, 50, 100],
-          },
-        }),
+    getSkeletonManifest: async () => ({ fragmentKeys: [] }),
+    getSkeletonFragment: async () => ({ nodes: [] }),
     ...(options.rerootCommand !== true
       ? {}
       : {
@@ -199,21 +204,19 @@ function makeEditableSpatialSkeletonSource(
   };
 }
 
-function makeSpatialSkeletonLayerWithSource(source: unknown) {
-  return {
-    source,
-  };
-}
-
 function makeSpatialSkeletonActionGateLayer(options: {
-  source: unknown;
+  editableSource?: unknown;
+  readOnlySource?: unknown;
   visibleChunksLoaded?: boolean;
   visibleChunksNeeded?: number;
   visibleChunksAvailable?: number;
   fatalState?: object;
   driverSetupError?: unknown;
 }) {
-  const skeletonLayer = makeSpatialSkeletonLayerWithSource(options.source);
+  const skeletonLayer = {
+    fragmentSource: options.editableSource ?? options.readOnlySource,
+    editableSource: options.editableSource,
+  };
   return Object.assign(Object.create(SegmentationUserLayer.prototype), {
     getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
     skeletonNodeAccess: new WatchableValue(skeletonLayer),
@@ -481,7 +484,9 @@ describe("layer/segmentation optimistic projection UI hints", () => {
 describe("layer/segmentation spatial skeleton action gating", () => {
   it("blocks every edit after Reload required but keeps inspection available", () => {
     const layer = makeSpatialSkeletonActionGateLayer({
-      source: makeEditableSpatialSkeletonSource({ rerootCommand: true }),
+      editableSource: makeEditableSpatialSkeletonSource({
+        rerootCommand: true,
+      }),
       visibleChunksLoaded: false,
       fatalState: {
         reason: "authority-indeterminate",
@@ -511,7 +516,7 @@ describe("layer/segmentation spatial skeleton action gating", () => {
 
   it("does not require a specific grid level for skeleton actions", () => {
     const layer = makeSpatialSkeletonActionGateLayer({
-      source: makeEditableSpatialSkeletonSource({
+      editableSource: makeEditableSpatialSkeletonSource({
         rerootCommand: true,
       }),
     });
@@ -539,8 +544,7 @@ describe("layer/segmentation spatial skeleton action gating", () => {
 
   it("allows every factory-advertised edit and inspection", () => {
     const layer = makeSpatialSkeletonActionGateLayer({
-      source: makeEditableSpatialSkeletonSource({
-        confidenceConfiguration: true,
+      editableSource: makeEditableSpatialSkeletonSource({
         rerootCommand: true,
       }),
     });
@@ -577,7 +581,7 @@ describe("layer/segmentation spatial skeleton action gating", () => {
 
   it("still reports visible chunk loading when requested", () => {
     const layer = makeSpatialSkeletonActionGateLayer({
-      source: makeEditableSpatialSkeletonSource(),
+      editableSource: makeEditableSpatialSkeletonSource(),
       visibleChunksLoaded: false,
       visibleChunksNeeded: 3,
       visibleChunksAvailable: 1,
@@ -595,7 +599,7 @@ describe("layer/segmentation spatial skeleton action gating", () => {
 
   it("reports missing reroot support explicitly", () => {
     const layer = makeSpatialSkeletonActionGateLayer({
-      source: makeEditableSpatialSkeletonSource(),
+      editableSource: makeEditableSpatialSkeletonSource(),
     });
 
     expect(
@@ -612,7 +616,7 @@ describe("layer/segmentation spatial skeleton action gating", () => {
 
   it("treats an invalid datasource driver registration as inspect-only", () => {
     const layer = makeSpatialSkeletonActionGateLayer({
-      source: makeEditableSpatialSkeletonSource(),
+      editableSource: makeEditableSpatialSkeletonSource(),
       driverSetupError: new Error("invalid registration"),
     });
 
@@ -630,25 +634,10 @@ describe("layer/segmentation spatial skeleton action gating", () => {
     ).toBeUndefined();
   });
 
-  it("requires confidence configuration for confidence edit support", () => {
+  it("allows confidence editing for a source that does not list its confidence values", () => {
     const layer = makeSpatialSkeletonActionGateLayer({
-      source: makeEditableSpatialSkeletonSource(),
+      editableSource: makeEditableSpatialSkeletonSource(),
     });
-
-    expect(
-      layer.getSpatialSkeletonActionsDisabledReason(
-        SpatialSkeletonActions.editNodeConfidence,
-      ),
-    ).toBe(
-      "The active spatial skeleton source does not support node confidence editing.",
-    );
-
-    layer.getSpatiallyIndexedSkeletonLayer = () =>
-      makeSpatialSkeletonLayerWithSource(
-        makeEditableSpatialSkeletonSource({
-          confidenceConfiguration: true,
-        }),
-      );
 
     expect(
       layer.getSpatialSkeletonActionsDisabledReason(
@@ -659,12 +648,9 @@ describe("layer/segmentation spatial skeleton action gating", () => {
 
   it("reports read-only spatial skeleton sources explicitly", () => {
     const layer = makeSpatialSkeletonActionGateLayer({
-      source: {
-        ...makeEditableSpatialSkeletonSource({
-          rerootCommand: true,
-        }),
-        readonly: true,
-      },
+      readOnlySource: makeEditableSpatialSkeletonSource({
+        rerootCommand: true,
+      }),
     });
 
     expect(

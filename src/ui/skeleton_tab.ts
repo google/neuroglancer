@@ -49,6 +49,7 @@ import {
   showSpatialSkeletonActionError,
   undoSpatialSkeletonCommand,
 } from "#src/skeleton/commands.js";
+import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
 import {
   getSkeletonNodeFilterLabel,
   getSkeletonNodeIconFilterType,
@@ -1202,7 +1203,7 @@ export class SkeletonTab extends Tab {
         row.setAttribute("aria-disabled", "true");
       }
 
-      const nodeIsTrueEnd = node.isTrueEnd ?? false;
+      const nodeIsTrueEnd = isSkeletonNodeTrueEnd(node);
       const iconFilterType = getSkeletonNodeIconFilterType({
         nodeIsTrueEnd,
         nodeType: type,
@@ -1224,7 +1225,7 @@ export class SkeletonTab extends Tab {
           : "Setting true end"
         : typeIconTitle;
       const canChangeType =
-        layer.hasEditableSpatialSkeletonSource.value &&
+        layer.editableSkeletonSource.value !== undefined &&
         (isLeaf || nodeIsTrueEnd);
       const typeIcon = canChangeType
         ? document.createElement("button")
@@ -1294,7 +1295,7 @@ export class SkeletonTab extends Tab {
       } else if (pendingDeleteNodes.has(node.nodeId)) {
         deleteActionTitle = "Deleting node";
       }
-      if (layer.hasEditableSpatialSkeletonSource.value) {
+      if (layer.editableSkeletonSource.value !== undefined) {
         actions.appendChild(
           makeRowActionButton(
             svg_bin,
@@ -1483,7 +1484,7 @@ export class SkeletonTab extends Tab {
 
     const updateGateStatus = () => {
       findPathButton.hidden =
-        layer.getSpatiallyIndexedSkeletonLayer() === undefined;
+        layer.getSpatialSkeletonFindPathContext() === undefined;
       updatePreparationStatus();
       const topologyControlsDisabledReason =
         detailsPreparationState?.controlsDisabledReason;
@@ -1597,12 +1598,13 @@ export class SkeletonTab extends Tab {
     );
 
     this.registerDisposer(
-      observeWatchable((hasEditableSource) => {
-        undoButton.hidden = !hasEditableSource;
-        redoButton.hidden = !hasEditableSource;
-        editModeButton.hidden = !hasEditableSource;
+      observeWatchable((editableSource) => {
+        const readOnly = editableSource === undefined;
+        undoButton.hidden = readOnly;
+        redoButton.hidden = readOnly;
+        editModeButton.hidden = readOnly;
         updateDisplay();
-      }, layer.hasEditableSpatialSkeletonSource),
+      }, layer.editableSkeletonSource),
     );
     this.registerDisposer(
       observeWatchable(() => updateGateStatus(), layer.spatialSkeletonEditMode),

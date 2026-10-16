@@ -61,7 +61,6 @@ function makeNode(
     segmentId: 42n,
     position: new Float32Array([Number(nodeId), 0, 0]),
     parentNodeId,
-    isTrueEnd: false,
   };
 }
 

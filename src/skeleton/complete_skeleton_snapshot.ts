@@ -97,18 +97,18 @@ function updateNode(
   node: SkeletonNode,
   changes: CompleteSkeletonNodeChanges,
 ): SkeletonNode {
-  const copy: SkeletonNode = {
+  if (Object.hasOwn(changes, "position") && changes.position === undefined) {
+    throw new Error("A complete skeleton node position cannot be undefined.");
+  }
+  return Object.freeze({
     ...node,
     ...changes,
     nodeId: node.nodeId,
-  };
-  if (Object.hasOwn(changes, "position")) {
-    if (changes.position === undefined) {
-      throw new Error("A complete skeleton node position cannot be undefined.");
-    }
-    copy.position = cloneSkeletonVector(changes.position);
-  }
-  return Object.freeze(copy);
+    position:
+      changes.position === undefined
+        ? node.position
+        : cloneSkeletonVector(changes.position),
+  });
 }
 
 class BaseSnapshotProjection implements SnapshotProjection {

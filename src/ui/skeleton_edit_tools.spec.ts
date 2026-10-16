@@ -383,7 +383,6 @@ function makeFindPathNode(
       Number(nodeId) + 1,
       Number(nodeId) + 2,
     ]),
-    isTrueEnd: false,
   };
 }
 
@@ -418,13 +417,15 @@ function makeFindPathToolHarness(
     options.hasSource === false
       ? undefined
       : {
-          source: { readonly: options.readonly ?? true },
+          fragmentSource: {},
+          editableSource: options.readonly === false ? {} : undefined,
           getNode: vi.fn(),
         };
   const secondSkeletonLayer =
     options.hasSecondSource === true
       ? {
-          source: { readonly: options.readonly ?? true },
+          fragmentSource: {},
+          editableSource: options.readonly === false ? {} : undefined,
           getNode: vi.fn(),
         }
       : undefined;
@@ -545,7 +546,6 @@ function makeCommandFactory(action: SpatialSkeletonAction) {
 
 function makeCommandSkeletonSource(overrides: Record<string, unknown> = {}) {
   return {
-    readonly: false,
     optimisticEditing: { createDriver: vi.fn() },
     addNodesCommand: makeCommandFactory(SpatialSkeletonActions.addNodes),
     moveNodesCommand: makeCommandFactory(SpatialSkeletonActions.moveNodes),
@@ -569,10 +569,8 @@ function makeCommandSkeletonSource(overrides: Record<string, unknown> = {}) {
     splitSkeletonsCommand: makeCommandFactory(
       SpatialSkeletonActions.splitSkeletons,
     ),
-    listSkeletons: vi.fn(),
-    getSkeleton: vi.fn(),
-    fetchNodes: vi.fn(),
-    getSpatialIndexMetadata: vi.fn(),
+    getSkeletonManifest: vi.fn(),
+    getSkeletonFragment: vi.fn(),
     ...overrides,
   };
 }
@@ -583,7 +581,6 @@ function makeDragHarness({ inspected = true } = {}) {
     nodeId: 2147483647n,
     segmentId: 4294967293n,
     position: new Float32Array([1, 2, 3]),
-    isTrueEnd: false,
   };
   let currentNode = original;
   const handle = spatialSkeletonLogicalNode("dragged");
@@ -597,7 +594,8 @@ function makeDragHarness({ inspected = true } = {}) {
   const releaseBrowseExclusion = vi.fn();
   const source = makeCommandSkeletonSource();
   const skeletonLayer = {
-    source,
+    fragmentSource: source,
+    editableSource: source,
     getNode: (id: bigint) =>
       id === currentNode.nodeId ? currentNode : undefined,
     beginTemporaryBrowseExclusion: vi.fn(() => releaseBrowseExclusion),
@@ -710,7 +708,7 @@ describe("spatial skeleton tool lister", () => {
     ({
       getSpatiallyIndexedSkeletonLayer: () => ({}),
       getSpatialSkeletonFindPathContext: () => ({}),
-      hasEditableSpatialSkeletonSource: { value: hasEditableSource },
+      editableSkeletonSource: { value: hasEditableSource ? {} : undefined },
       layersChanged: makeChangedSignal(),
     }) as any;
 
@@ -991,7 +989,7 @@ describe("spatial_skeleton_edit_tool", () => {
     );
     const inspectedSnapshot = makeCachedSegmentSnapshot([hoveredNode]);
     const skeletonLayer = {
-      source: makeCommandSkeletonSource({ splitSkeletonsCommand }),
+      editableSource: makeCommandSkeletonSource({ splitSkeletonsCommand }),
       getNode: vi.fn((nodeId: bigint) =>
         nodeId === hoveredNode.nodeId ? hoveredNode : undefined,
       ),
@@ -1116,7 +1114,7 @@ describe("spatial_skeleton_edit_tool", () => {
       })),
     };
     const skeletonLayer = {
-      source: makeCommandSkeletonSource({ splitSkeletonsCommand }),
+      editableSource: makeCommandSkeletonSource({ splitSkeletonsCommand }),
     };
     const clearSkeletonNodeSelection = vi.fn();
     const layer = {
@@ -1329,7 +1327,7 @@ describe("spatial_skeleton_edit_tool", () => {
       SpatialSkeletonActions.insertNodes,
     );
     const skeletonLayer = {
-      source: makeCommandSkeletonSource({ insertNodesCommand }),
+      editableSource: makeCommandSkeletonSource({ insertNodesCommand }),
       getNode: vi.fn((nodeId: bigint) =>
         nodes.find((node) => node.nodeId === nodeId),
       ),
@@ -1719,7 +1717,7 @@ describe("spatial_skeleton_edit_tool", () => {
     const findNode = (nodeId: bigint) =>
       nodes.find((node) => node.nodeId === nodeId);
     const skeletonLayer = {
-      source: makeCommandSkeletonSource({
+      editableSource: makeCommandSkeletonSource({
         splitSkeletonsCommand: makeCommandFactory(
           SpatialSkeletonActions.splitSkeletons,
         ),
@@ -2036,7 +2034,7 @@ describe("spatial_skeleton_edit_tool", () => {
       makeFindPathNode(4n, 11n, 2n),
       makeFindPathNode(5n, 11n, 2n),
     ];
-    nodes[3].isTrueEnd = true;
+    nodes[3] = { ...nodes[3], attributes: { true_end: [1] } };
     const graph = buildSkeletonNavigationGraph(nodes);
 
     expect(
@@ -2494,11 +2492,11 @@ describe("spatial_skeleton_edit_tool", () => {
       segmentId: 11n,
       parentNodeId: 100n,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     const source = makeCommandSkeletonSource();
     const skeletonLayer = {
-      source,
+      fragmentSource: source,
+      editableSource: source,
       getNode: vi.fn(() => node),
     };
     const mouseState = {
@@ -2754,13 +2752,11 @@ describe("spatial_skeleton_edit_tool", () => {
       nodeId: 101n,
       segmentId: 11n,
       position: new Float32Array([1, 2, 3]),
-      isTrueEnd: false,
     };
     const toNode: SkeletonNode = {
       nodeId: 202n,
       segmentId: 17n,
       position: new Float32Array([4, 5, 6]),
-      isTrueEnd: false,
     };
     const mergeExecute = vi.fn(completedEditExecution);
     const mergeSkeletonsCommand = makeCommandFactory(
@@ -2768,7 +2764,8 @@ describe("spatial_skeleton_edit_tool", () => {
     );
     const source = makeCommandSkeletonSource({ mergeSkeletonsCommand });
     const skeletonLayer = {
-      source,
+      fragmentSource: source,
+      editableSource: source,
       getNode: vi.fn((nodeId: bigint) =>
         nodeId === fromNode.nodeId
           ? fromNode
@@ -2879,7 +2876,7 @@ describe("spatial_skeleton_edit_tool", () => {
     const addExecute = vi.fn(completedEditExecution);
     const addNodesCommand = makeCommandFactory(SpatialSkeletonActions.addNodes);
     const source = makeCommandSkeletonSource({ addNodesCommand });
-    const skeletonLayer = { source };
+    const skeletonLayer = { editableSource: source };
     const getCachedSegmentSnapshotHandle = vi.fn();
     const layer = {
       spatialSkeletonState: {

@@ -28,6 +28,7 @@ import {
   showSpatialSkeletonActionError,
   undoSpatialSkeletonCommand,
 } from "#src/skeleton/commands.js";
+import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
 import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/optimistic_edit/fatal.js";
 import { SkeletonNavigation } from "#src/skeleton/skeleton_navigator.js";
 import { StatusMessage } from "#src/status.js";
@@ -43,9 +44,7 @@ type SkeletonNodeViewer = Pick<
 interface SkeletonNodeCommandDefinition {
   readonly id: string;
   readonly label: string;
-  readonly requiredActions:
-    | SpatialSkeletonAction
-    | readonly SpatialSkeletonAction[];
+  readonly requiredActions: readonly SpatialSkeletonAction[];
   readonly run: (
     layer: SegmentationUserLayer,
     viewer: SkeletonNodeViewer,
@@ -122,7 +121,7 @@ function defineNavigation(
   return {
     id,
     label,
-    requiredActions: SpatialSkeletonActions.inspect,
+    requiredActions: [SpatialSkeletonActions.inspect],
     run: (layer) => layer.navigateSkeleton(navigation),
   };
 }
@@ -178,7 +177,7 @@ const COMMAND_DEFINITIONS: readonly SkeletonNodeCommandDefinition[] = [
   {
     id: "skeleton-reroot",
     label: "Skeleton: Set Selected Node as Root",
-    requiredActions: SpatialSkeletonActions.reroot,
+    requiredActions: [SpatialSkeletonActions.reroot],
     run: async (layer) => {
       const node = requireSelectedInspectedNode(layer);
       if (node === undefined) return;
@@ -192,14 +191,14 @@ const COMMAND_DEFINITIONS: readonly SkeletonNodeCommandDefinition[] = [
   {
     id: "skeleton-toggle-true-end",
     label: "Skeleton: Toggle True End on Selected Node",
-    requiredActions: SpatialSkeletonActions.editNodeTrueEnd,
+    requiredActions: [SpatialSkeletonActions.editNodeTrueEnd],
     run: async (layer) => {
       const node = requireSelectedInspectedNode(layer);
       if (node === undefined) return;
       try {
         await executeSpatialSkeletonNodeTrueEndUpdate(layer, {
           node,
-          nextIsTrueEnd: !(node.isTrueEnd ?? false),
+          nextIsTrueEnd: !isSkeletonNodeTrueEnd(node),
         });
       } catch (error) {
         showSpatialSkeletonActionError(
@@ -244,7 +243,7 @@ export class SkeletonNodeCommands extends RefCounted {
   }
 
   private layersSupporting(
-    requiredActions: SpatialSkeletonAction | readonly SpatialSkeletonAction[],
+    requiredActions: readonly SpatialSkeletonAction[],
   ): SegmentationUserLayer[] {
     const layers: SegmentationUserLayer[] = [];
     for (const managedLayer of this.viewer.layerManager.managedLayers) {
@@ -263,7 +262,7 @@ export class SkeletonNodeCommands extends RefCounted {
   }
 
   private targetLayer(
-    requiredActions: SpatialSkeletonAction | readonly SpatialSkeletonAction[],
+    requiredActions: readonly SpatialSkeletonAction[],
   ): SegmentationUserLayer | undefined {
     const supportingLayers = this.layersSupporting(requiredActions);
     if (supportingLayers.length === 1) return supportingLayers[0];

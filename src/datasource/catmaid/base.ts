@@ -22,7 +22,6 @@ export class CatmaidDataSourceParameters {
   url!: string;
   projectId!: number;
   cacheProvider?: string;
-  readonly = true;
 }
 
 export class CatmaidSkeletonSourceParameters {

@@ -59,6 +59,7 @@ import {
   type SpatialSkeletonProjectionSegmentSnapshot,
   type SpatialSkeletonProjectionSnapshotHandleSource,
 } from "#src/skeleton/spatial_skeleton_projection_reducer.js";
+import { bigintCompare } from "#src/util/bigint.js";
 
 export type {
   SpatialSkeletonProjectionSelectionPin,
@@ -66,7 +67,6 @@ export type {
   SpatialSkeletonProjectionUiHints,
   SpatialSkeletonResolvedProjectionUiHints,
 } from "#src/skeleton/optimistic_edit/projection_ui_hints.js";
-import { bigintCompare } from "#src/util/bigint.js";
 
 /**
  * Structural state boundary needed for one immutable projection adoption.

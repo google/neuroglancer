@@ -19,6 +19,7 @@ import {
   getFlatListNodeIds,
   type SkeletonNavigationGraph,
 } from "#src/skeleton/navigation_graph.js";
+import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
 import {
   classifySkeletonDisplayNodeType as classifyNodeType,
   matchesSkeletonNodeFilter,
@@ -110,7 +111,7 @@ export function buildSkeletonSegmentRenderState(
       matchesSkeletonNodeFilter(options.nodeFilterType, {
         isLeaf,
         nodeHasDescription: hasNonEmptyNodeDescription(description),
-        nodeIsTrueEnd: node.isTrueEnd ?? false,
+        nodeIsTrueEnd: isSkeletonNodeTrueEnd(node),
         nodeType: type,
       }) && nodeMatchesFilter(node, options.filterText, description)
     );
@@ -156,7 +157,7 @@ export function buildSkeletonSegmentRenderState(
     if (info === undefined) return true;
     return (
       info.type === SkeletonDisplayNodeType.REGULAR &&
-      !(info.node.isTrueEnd ?? false)
+      !isSkeletonNodeTrueEnd(info.node)
     );
   };
 

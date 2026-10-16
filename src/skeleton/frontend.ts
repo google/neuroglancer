@@ -23,6 +23,7 @@ import {
   ChunkRenderLayerFrontend,
   ChunkSource,
 } from "#src/chunk_manager/frontend.js";
+import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import { hashCombine } from "#src/gpu_hash/hash_function.js";
 import type { HashMapUint64, HashSetUint64 } from "#src/gpu_hash/hash_table.js";
 import { GPUHashTable, HashSetShaderManager } from "#src/gpu_hash/shader.js";
@@ -71,7 +72,13 @@ import {
   SegmentationLayerSharedObject,
 } from "#src/segmentation_display_state/frontend.js";
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
-import type { SkeletonNode } from "#src/skeleton/api.js";
+import type {
+  EditableSkeletonSource,
+  SkeletonFragmentSource,
+  SkeletonSpatialIndexLevel,
+  SkeletonSpatialIndexMetadata,
+  SkeletonNode,
+} from "#src/skeleton/api.js";
 import {
   forEachSpatialSkeletonSourceScale,
   forEachVisibleSpatialSkeletonChunk,
@@ -90,21 +97,29 @@ import {
   mergeSpatiallyIndexedSkeletonOverlaySegmentIds,
   retainSpatiallyIndexedSkeletonOverlaySegment,
 } from "#src/skeleton/segment_overlay.js";
+import {
+  getSkeletonChunkTopology,
+  type SkeletonChunkTopology,
+} from "#src/skeleton/skeleton_chunk_topology.js";
 import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
 import {
   edgeColorPathsGlsl,
   nodeColorPathsGlsl,
 } from "#src/skeleton/skeleton_shader_color.js";
-import type { SpatiallyIndexedSkeletonView } from "#src/skeleton/source_selection.js";
+import {
+  type SpatiallyIndexedSkeletonView,
+  validateSpatialSkeletonLimitZeroOnlyFinest,
+} from "#src/skeleton/source_selection.js";
 import type {
   SpatialSkeletonPreparationIntent,
   SpatialSkeletonPresentationSnapshot,
 } from "#src/skeleton/spatial_skeleton_manager.js";
 import {
+  makeSliceViewChunkSpecification,
   type SliceViewSourceOptions,
   type TransformedSource,
 } from "#src/sliceview/base.js";
-import type { ChunkLayout } from "#src/sliceview/chunk_layout.js";
+import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
 import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
 import {
   getVolumetricTransformedSources,
@@ -140,7 +155,7 @@ import {
 } from "#src/util/color.js";
 import { hsvToRgb } from "#src/util/colorspace.js";
 import { DataType } from "#src/util/data_type.js";
-import { RefCounted } from "#src/util/disposable.js";
+import { type Borrowed, RefCounted } from "#src/util/disposable.js";
 import type { ValueOrError } from "#src/util/error.js";
 import { makeValueOrError, valueOrThrow } from "#src/util/error.js";
 import { kOneVec4, kZeroVec, mat4, vec3, type vec4 } from "#src/util/geom.js";
@@ -1446,6 +1461,10 @@ export class SkeletonLayer
   layerChunkProgressInfo = new LayerChunkProgressInfo();
   redrawNeeded = new NullarySignal();
   private sharedObject: SegmentationLayerSharedObject;
+  private readonly chunkTopologies = new WeakMap<
+    SkeletonChunk,
+    SkeletonChunkTopology
+  >();
   vertexAttributes: VertexAttributeRenderInfo[];
   // Non-spatial skeletons iterate segments individually and pass color/alpha via
   // uniforms (getObjectColor), so the dynamic per-vertex segment appearance path
@@ -1532,10 +1551,10 @@ export class SkeletonLayer
   private getSegmentTopology(segmentId: bigint) {
     const chunk = this.source.chunks.get(getObjectKey(segmentId));
     if (chunk === undefined) return undefined;
-    let topology = chunkTopologies.get(chunk);
+    let topology = this.chunkTopologies.get(chunk);
     if (topology === undefined) {
       topology = getSkeletonChunkTopology(segmentId, chunk);
-      chunkTopologies.set(chunk, topology);
+      this.chunkTopologies.set(chunk, topology);
     }
     return topology;
   }
@@ -1877,120 +1896,6 @@ function freeSkeletonChunkGPUMemory(gl: GL, chunk: SkeletonChunkBase) {
   vertexAttributeTextures.length = 0;
 }
 
-export interface SkeletonChunkTopology {
-  readonly nodes: readonly SkeletonNode[];
-  readonly parentsInferred: boolean;
-}
-
-const chunkTopologies = new WeakMap<SkeletonChunk, SkeletonChunkTopology>();
-
-// Undefined unless each vertex has at most one incoming edge and no edges form a loop.
-function getStoredParentVertices(
-  numVertices: number,
-  indices: Uint32Array,
-): Int32Array | undefined {
-  const parentVertexByVertex = new Int32Array(numVertices).fill(-1);
-  const treeRootByVertex = Int32Array.from(
-    { length: numVertices },
-    (_, i) => i,
-  );
-  const findTreeRoot = (vertex: number) => {
-    while (treeRootByVertex[vertex] !== vertex) {
-      vertex = treeRootByVertex[vertex] =
-        treeRootByVertex[treeRootByVertex[vertex]];
-    }
-    return vertex;
-  };
-  for (let edgeOffset = 0; edgeOffset < indices.length; edgeOffset += 2) {
-    const sourceVertex = indices[edgeOffset];
-    const targetVertex = indices[edgeOffset + 1];
-    if (sourceVertex === targetVertex) continue;
-    if (parentVertexByVertex[targetVertex] !== -1) return undefined;
-    const sourceTreeRoot = findTreeRoot(sourceVertex);
-    const targetTreeRoot = findTreeRoot(targetVertex);
-    if (sourceTreeRoot === targetTreeRoot) return undefined;
-    parentVertexByVertex[targetVertex] = sourceVertex;
-    treeRootByVertex[targetTreeRoot] = sourceTreeRoot;
-  }
-  return parentVertexByVertex;
-}
-
-// Walks each connected part outward from its lowest vertex, so an edge that closes a loop is dropped.
-function getInferredParentVertices(
-  numVertices: number,
-  indices: Uint32Array,
-): Int32Array {
-  const neighborOffsets = new Int32Array(numVertices + 1);
-  for (const vertex of indices) ++neighborOffsets[vertex + 1];
-  for (let vertex = 0; vertex < numVertices; ++vertex) {
-    neighborOffsets[vertex + 1] += neighborOffsets[vertex];
-  }
-  const neighbors = new Int32Array(indices.length);
-  const nextNeighborOffset = neighborOffsets.slice(0, numVertices);
-  for (let edgeOffset = 0; edgeOffset < indices.length; edgeOffset += 2) {
-    const sourceVertex = indices[edgeOffset];
-    const targetVertex = indices[edgeOffset + 1];
-    neighbors[nextNeighborOffset[sourceVertex]++] = targetVertex;
-    neighbors[nextNeighborOffset[targetVertex]++] = sourceVertex;
-  }
-  const parentVertexByVertex = new Int32Array(numVertices).fill(-1);
-  const visited = new Uint8Array(numVertices);
-  const queue = new Int32Array(numVertices);
-  for (let rootVertex = 0; rootVertex < numVertices; ++rootVertex) {
-    if (visited[rootVertex]) continue;
-    visited[rootVertex] = 1;
-    let queueStart = 0;
-    let queueEnd = 0;
-    queue[queueEnd++] = rootVertex;
-    while (queueStart < queueEnd) {
-      const vertex = queue[queueStart++];
-      for (
-        let offset = neighborOffsets[vertex];
-        offset < neighborOffsets[vertex + 1];
-        ++offset
-      ) {
-        const neighbor = neighbors[offset];
-        if (visited[neighbor]) continue;
-        visited[neighbor] = 1;
-        parentVertexByVertex[neighbor] = vertex;
-        queue[queueEnd++] = neighbor;
-      }
-    }
-  }
-  return parentVertexByVertex;
-}
-
-// Precomputed writers often list each edge with its lower vertex first, so edge order is not trusted unless it forms a tree.
-export function getSkeletonChunkTopology(
-  segmentId: bigint,
-  chunk: Pick<
-    SkeletonChunk,
-    "vertexAttributes" | "vertexAttributeOffsets" | "indices" | "numVertices"
-  >,
-): SkeletonChunkTopology {
-  const { numVertices, indices, vertexAttributes, vertexAttributeOffsets } =
-    chunk;
-  const positions = new Float32Array(
-    vertexAttributes.buffer,
-    vertexAttributes.byteOffset + vertexAttributeOffsets[0],
-    numVertices * 3,
-  );
-  const storedParentVertices = getStoredParentVertices(numVertices, indices);
-  const parentVertexByVertex =
-    storedParentVertices ?? getInferredParentVertices(numVertices, indices);
-  const nodes: SkeletonNode[] = [];
-  for (let vertex = 0; vertex < numVertices; ++vertex) {
-    const parentVertex = parentVertexByVertex[vertex];
-    nodes.push({
-      nodeId: BigInt(vertex),
-      segmentId,
-      position: positions.subarray(vertex * 3, vertex * 3 + 3),
-      parentNodeId: parentVertex === -1 ? undefined : BigInt(parentVertex),
-    });
-  }
-  return { nodes, parentsInferred: storedParentVertices === undefined };
-}
-
 export class SkeletonChunk extends Chunk implements SkeletonChunkBase {
   declare source: SkeletonSource;
   vertexAttributes: Uint8Array;
@@ -2158,17 +2063,70 @@ export const SPATIAL_SKELETON_SOURCE_OPTIONS: SliceViewSourceOptions = {
   modelChannelDimensionIndices: [],
 };
 
+function makeSpatialSkeletonLevelSpec(
+  modelSpace: CoordinateSpace,
+  level: SkeletonSpatialIndexLevel,
+): SpatiallyIndexedSkeletonChunkSpecification {
+  const { scales, bounds } = modelSpace;
+  const chunkDataSize = Float32Array.from(level.chunkSize);
+  const chunkLayout = new ChunkLayout(
+    vec3.fromValues(chunkDataSize[0], chunkDataSize[1], chunkDataSize[2]),
+    mat4.fromScaling(
+      mat4.create(),
+      vec3.fromValues(scales[0], scales[1], scales[2]),
+    ),
+    3,
+  );
+  return {
+    ...makeSliceViewChunkSpecification({
+      rank: 3,
+      chunkDataSize,
+      lowerVoxelBound: Float32Array.from(bounds.lowerBounds),
+      upperVoxelBound: Float32Array.from(bounds.upperBounds),
+    }),
+    chunkLayout,
+    limit: level.limit,
+  };
+}
+
 export abstract class MultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleSliceViewChunkSource<SpatiallyIndexedSkeletonSource> {
-  getPerspectiveSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] {
-    const sources = this.getSources(SPATIAL_SKELETON_SOURCE_OPTIONS);
-    const flattened: SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] =
-      [];
-    for (const scale of sources) {
-      if (scale.length > 0) {
-        flattened.push(scale[0]);
-      }
+  abstract readonly fragmentSource: SkeletonFragmentSource;
+  // Undefined when the source cannot be edited.
+  abstract readonly editableSource: EditableSkeletonSource | undefined;
+
+  constructor(
+    chunkManager: Borrowed<ChunkManager>,
+    protected readonly metadata: SkeletonSpatialIndexMetadata,
+  ) {
+    super(chunkManager);
+    if (metadata.modelSpace.rank !== 3) {
+      throw new Error(
+        `Spatial skeleton coordinate space must have rank 3, not ${metadata.modelSpace.rank}.`,
+      );
     }
-    return flattened;
+    const { lowerBounds, upperBounds } = metadata.modelSpace.bounds;
+    if (![...lowerBounds, ...upperBounds].every(Number.isFinite)) {
+      throw new Error(
+        "Spatial skeleton coordinate space bounds must be finite.",
+      );
+    }
+    validateSpatialSkeletonLimitZeroOnlyFinest(metadata.levels);
+  }
+
+  get rank() {
+    return 3;
+  }
+
+  // From coarsest to finest, like the levels.
+  protected getLevelSpecs(): SpatiallyIndexedSkeletonChunkSpecification[] {
+    const { modelSpace, levels } = this.metadata;
+    return levels.map((level) =>
+      makeSpatialSkeletonLevelSpec(modelSpace, level),
+    );
+  }
+
+  getPerspectiveSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] {
+    return this.getSources(SPATIAL_SKELETON_SOURCE_OPTIONS)[0];
   }
 
   getSliceViewPanelSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] {
@@ -2187,6 +2145,8 @@ interface SelectedSkeletonNodeInfo {
 
 interface SpatiallyIndexedSkeletonLayerOptions {
   sources2d?: SpatiallyIndexedSkeletonSourceEntry[];
+  fragmentSource?: SkeletonFragmentSource;
+  editableSource?: EditableSkeletonSource;
   selectedNodeInfo?: WatchableValueInterface<
     SelectedSkeletonNodeInfo | undefined
   >;
@@ -3034,6 +2994,9 @@ export class SpatiallyIndexedSkeletonLayer
   sources: SpatiallyIndexedSkeletonSourceEntry[];
   sources2d: SpatiallyIndexedSkeletonSourceEntry[];
   source: SpatiallyIndexedSkeletonSource;
+  readonly fragmentSource: SkeletonFragmentSource | undefined;
+  // Undefined when the source cannot be edited.
+  readonly editableSource: EditableSkeletonSource | undefined;
 
   constructor(
     public chunkManager: ChunkManager,
@@ -3085,6 +3048,8 @@ export class SpatiallyIndexedSkeletonLayer
         this.displayState.transform,
       ),
     );
+    this.fragmentSource = options.fragmentSource;
+    this.editableSource = options.editableSource;
     this.selectedNodeInfo = options.selectedNodeInfo;
     this.suppressSelectedNodeHighlight = options.suppressSelectedNodeHighlight;
     this.hoveredNodeInfo = options.hoveredNodeInfo;

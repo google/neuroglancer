@@ -71,10 +71,10 @@ export async function readGraph(
                   parentId: node.parentNodeId ?? null,
                   skeletonId: node.segmentId,
                   position: Array.from(node.position),
-                  radius: node.radius,
-                  confidence: node.confidence,
+                  radius: node.attributes?.radius?.[0],
+                  confidence: node.attributes?.confidence?.[0],
                   description: node.description ?? "",
-                  isTrueEnd: node.isTrueEnd ?? false,
+                  isTrueEnd: (node.attributes?.true_end?.[0] ?? 0) !== 0,
                 },
               ]
             : [];

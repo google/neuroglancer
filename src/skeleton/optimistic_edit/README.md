@@ -13,7 +13,7 @@ needed to describe and persist its workflows.
 ## Runtime structure
 
 ```text
-EditableSpatiallyIndexedSkeletonSource
+EditableSkeletonSource
   -> optimisticEditing.createDriver({ source, identities, provisionalIds })
                        |
                        v
@@ -617,7 +617,7 @@ second persistent identity store or extra server reads.
 A validated mutation response plus retained complete queue input is the
 authority proof. Reconciliation applies returned node/segment bindings,
 retirements, and any projection correction, then adopts once. It does not call
-`getSkeleton()` to verify topology.
+`fetchCompleteSkeleton()` to verify topology.
 
 There is no topology-refresh batch, expected-presence registry, verification
 generation, retry/backoff timer, or background healing. Split/Merge topology

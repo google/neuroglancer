@@ -68,6 +68,7 @@ import {
   getPathBetweenNodes,
   type SkeletonNavigationGraph,
 } from "#src/skeleton/navigation_graph.js";
+import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
 import {
   classifySkeletonDisplayNodeType,
   SkeletonDisplayNodeType,
@@ -2024,7 +2025,7 @@ function getSpatialSkeletonFindPathNodeTypeLabel(
 ) {
   const node = graph.nodeById.get(nodeId);
   if (node === undefined) return undefined;
-  if (node.isTrueEnd ?? false) return "True end";
+  if (isSkeletonNodeTrueEnd(node)) return "True end";
   const parentInTree =
     node.parentNodeId !== undefined && graph.nodeById.has(node.parentNodeId);
   const type = classifySkeletonDisplayNodeType(
@@ -2432,7 +2433,7 @@ export function makeSpatialSkeletonToolLister(toolId: string) {
       (toolId === SPATIAL_SKELETON_FIND_PATH_TOOL_ID &&
         layer.getSpatialSkeletonFindPathContext() === undefined) ||
       (toolId === SPATIAL_SKELETON_EDIT_MODE_TOOL_ID &&
-        !layer.hasEditableSpatialSkeletonSource.value)
+        layer.editableSkeletonSource.value === undefined)
     ) {
       return [];
     }

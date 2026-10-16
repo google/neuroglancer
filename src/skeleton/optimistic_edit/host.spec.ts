@@ -16,7 +16,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import type { EditableSpatiallyIndexedSkeletonSource } from "#src/skeleton/api.js";
+import type { EditableSkeletonSource } from "#src/skeleton/api.js";
 import { SpatialSkeletonActions } from "#src/skeleton/command_protocol.js";
 import {
   SpatialSkeletonOptimisticDatasourceContractError,
@@ -32,13 +32,11 @@ import {
   type SpatialSkeletonLayerContext,
 } from "#src/skeleton/spatial_skeleton_manager.js";
 
-function makeSource(
-  optimisticEditing?: unknown,
-): EditableSpatiallyIndexedSkeletonSource {
+function makeSource(optimisticEditing?: unknown): EditableSkeletonSource {
   return {
     readonly: false,
     optimisticEditing,
-  } as unknown as EditableSpatiallyIndexedSkeletonSource;
+  } as unknown as EditableSkeletonSource;
 }
 
 function makeRegistration(

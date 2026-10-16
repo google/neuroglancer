@@ -20,7 +20,7 @@ import { StatusMessage, statusMessages } from "#src/status.js";
 
 describe("StatusMessage", () => {
   afterEach(() => {
-    for (const message of [...statusMessages]) message.dispose();
+    for (const message of statusMessages) message.dispose();
   });
 
   it("supports a required action instead of the default Dismiss button", () => {
