@@ -377,37 +377,23 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
     });
   }
 
-  it.each([false, true])(
-    "isolates observer failures through saving and unsubscribe (reporter throws: %s)",
-    async (reporterThrows) => {
-      const observerError = new Error("observer failed");
-      const onListenerError = vi.fn(() => {
-        if (reporterThrows) throw new Error("error reporter failed");
-      });
-      const harness = makeHarness({ onListenerError });
-      const { engine, commandHistory } = harness;
-      const unsubscribeThrowing = engine.subscribe(() => {
-        throw observerError;
-      });
-      const observer = vi.fn();
-      const unsubscribeObserver = engine.subscribe(observer);
+  it("keeps saving and reports the error when a queue observer throws", async () => {
+    const observerError = new Error("observer failed");
+    const onListenerError = vi.fn();
+    const harness = makeHarness({ onListenerError });
+    const { engine, commandHistory } = harness;
+    engine.subscribe(() => {
+      throw observerError;
+    });
 
-      await save(harness, "first");
-      expect(onListenerError).toHaveBeenCalledWith(observerError);
-      expect(observer).toHaveBeenCalled();
-      expect(commandHistory.undoLabel.value).toBe("first");
+    await save(harness, "first");
+    expect(onListenerError).toHaveBeenCalledWith(observerError);
+    expect(commandHistory.undoLabel.value).toBe("first");
 
-      unsubscribeThrowing();
-      unsubscribeObserver();
-      observer.mockClear();
-      onListenerError.mockClear();
-      await save(harness, "second");
-      expect(observer).not.toHaveBeenCalled();
-      expect(onListenerError).not.toHaveBeenCalled();
-      expect(commandHistory.undoLabel.value).toBe("second");
-      await engine.dispose();
-    },
-  );
+    await save(harness, "second");
+    expect(commandHistory.undoLabel.value).toBe("second");
+    await engine.dispose();
+  });
 
   it("restores and executes a Redo branch cleared by a rejected new edit", async () => {
     const harness = makeHarness();

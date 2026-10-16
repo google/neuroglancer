@@ -604,7 +604,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
     expect(state.getCachedNode(2n)?.description).toBe("second");
   });
 
-  it("isolates preview observers after every core reference is adopted", () => {
+  it("keeps a preview adopted and reports the error when an observer throws", () => {
     const { state, segment, nodes, runtime, auxiliaryErrors } = fixture();
     state.addSpatialSkeletonPreparation({
       intentId: 1,
@@ -614,10 +614,6 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       lifecycle: "preparing",
       segmentIds: [10n],
       nodeId: 2n,
-    });
-    const observerFailure = new Error("preview observer failed");
-    state.spatialSkeletonPresentation.changed.add(() => {
-      throw observerFailure;
     });
     const observed = vi.fn(() => {
       expect(runtime.generation).toBe(1);
@@ -631,10 +627,6 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       ).toBe(state.getCachedSegmentSnapshotHandle(10n)?.handle);
     });
     state.spatialSkeletonPresentation.changed.add(observed);
-    const nodeObserverFailure = new Error("node observer failed");
-    state.nodeDataVersion.changed.add(() => {
-      throw nodeObserverFailure;
-    });
     const notificationOrder: string[] = [];
     state.spatialSkeletonPresentation.changed.add(() => {
       notificationOrder.push("presentation");
@@ -650,6 +642,14 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       ).toBe(state.getCachedSegmentSnapshotHandle(10n)?.handle);
     });
     state.nodeDataVersion.changed.add(laterNodeObserver);
+    const observerFailure = new Error("preview observer failed");
+    state.spatialSkeletonPresentation.changed.add(() => {
+      throw observerFailure;
+    });
+    const nodeObserverFailure = new Error("node observer failed");
+    state.nodeDataVersion.changed.add(() => {
+      throw nodeObserverFailure;
+    });
     const prepared = runtime.prepareExact(
       1,
       move(segment, nodes.first, [20, 21, 22]),
@@ -664,7 +664,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
     expect(auxiliaryErrors).toHaveBeenCalledWith(nodeObserverFailure);
   });
 
-  it("isolates authoritative observers after bindings and baseline are adopted", () => {
+  it("keeps an authoritative result adopted and reports the error when an observer throws", () => {
     const { state, segment, nodes, runtime, auxiliaryErrors } = fixture();
     const add = runtime.prepareExact(1, {
       delta: {
@@ -679,10 +679,6 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
     runtime.publishExact(1, add.projection);
     auxiliaryErrors.mockClear();
 
-    const observerFailure = new Error("authority observer failed");
-    state.spatialSkeletonPresentation.changed.add(() => {
-      throw observerFailure;
-    });
     const observed = vi.fn(() => {
       expect(runtime.generation).toBe(2);
       expect(runtime.resolveNode(nodes.added)).toBe(9n);
@@ -693,6 +689,10 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       ).toEqual([]);
     });
     state.spatialSkeletonPresentation.changed.add(observed);
+    const observerFailure = new Error("authority observer failed");
+    state.spatialSkeletonPresentation.changed.add(() => {
+      throw observerFailure;
+    });
 
     expect(() =>
       runtime.publishAuthoritative({

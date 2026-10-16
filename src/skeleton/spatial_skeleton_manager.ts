@@ -1236,19 +1236,15 @@ export class SpatialSkeletonState
   private publishPreparedSpatialSkeletonPresentation(
     publication: SpatialSkeletonPresentationSnapshot,
   ) {
-    const publishPresentation = () => {
-      this.spatialSkeletonPresentation.value = publication;
-    };
     if (this.presentationNotificationErrorReporters.size === 0) {
-      publishPresentation();
+      this.spatialSkeletonPresentation.value = publication;
       return;
     }
-    const reportError = (error: unknown) =>
+    try {
+      this.spatialSkeletonPresentation.value = publication;
+    } catch (error) {
       this.reportSpatialSkeletonPresentationObserverError(error);
-    this.spatialSkeletonPresentation.changed.runWithHandlerErrorReporting(
-      reportError,
-      publishPresentation,
-    );
+    }
   }
 
   private publishSpatialSkeletonPresentation() {
@@ -1301,17 +1297,14 @@ export class SpatialSkeletonState
           }
           if (this.nodeDataNotificationPending) {
             this.nodeDataNotificationPending = false;
-            const publishNodeData = () => {
-              this.nodeDataVersion.value = this.nodeDataVersion.value + 1;
-            };
             if (this.presentationNotificationErrorReporters.size === 0) {
-              publishNodeData();
+              this.nodeDataVersion.value = this.nodeDataVersion.value + 1;
             } else {
-              this.nodeDataVersion.changed.runWithHandlerErrorReporting(
-                (error) =>
-                  this.reportSpatialSkeletonPresentationObserverError(error),
-                publishNodeData,
-              );
+              try {
+                this.nodeDataVersion.value = this.nodeDataVersion.value + 1;
+              } catch (error) {
+                this.reportSpatialSkeletonPresentationObserverError(error);
+              }
             }
           }
         } finally {

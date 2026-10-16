@@ -757,9 +757,9 @@ ID mappings independently of queue records. The projection runtime owns the
 mapping instance; the journal imports only handles and resource-key helpers.
 Identity and journal tests live beside their respective implementations.
 
-Engine subscriptions use Neuroglancer's `NullarySignal`. Notification dispatch
-isolates each observer and its error reporter, so presentation failures cannot
-interrupt an already-adopted edit or prevent later observers from being notified.
+Engine subscriptions use Neuroglancer's `NullarySignal`. An observer error is
+reported and does not fail an already-adopted edit. As with any `Signal`, it
+still stops the observers after it.
 The engine keeps its existing `subscribe()` interface and asynchronous disposal.
 
 ## Testing
