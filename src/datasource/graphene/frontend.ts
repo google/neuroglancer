@@ -1591,7 +1591,7 @@ class GraphConnection extends SegmentationGraphSourceConnection {
     return undefined;
   }
 
-  getMeshSource(): MeshSource | undefined {
+  getMeshSource() {
     const { layer } = this;
     for (const dataSource of layer.dataSources) {
       const { loadState } = dataSource;
@@ -1609,9 +1609,8 @@ class GraphConnection extends SegmentationGraphSourceConnection {
           (subsource) => subsource.id === "mesh",
         )[0];
         if (meshSubsource) {
-          // `DataSubsource.mesh` is widened for spatial skeleton support, but Graphene
-          // segment updates still target mesh sources.
-          return meshSubsource.subsource.mesh as MeshSource | undefined;
+          const { mesh } = meshSubsource.subsource;
+          return mesh instanceof MeshSource ? mesh : undefined;
         }
       }
     }
