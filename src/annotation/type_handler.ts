@@ -32,7 +32,6 @@ import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { RefCounted } from "#src/util/disposable.js";
 import type { mat4 } from "#src/util/geom.js";
 import type { GLBuffer } from "#src/webgl/buffer.js";
-import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
 import type { GL } from "#src/webgl/context.js";
 import type {
   ParameterizedContextDependentShaderGetter,
@@ -381,8 +380,6 @@ export abstract class AnnotationRenderHelper extends AnnotationRenderHelperBase 
         builder.addUniform("highp float", "uModelClipBounds", rank * 2);
         builder.addUniform("highp uint", "uPickID");
         builder.addVarying("highp uint", "vPickID", "flat");
-
-        builder.addVertexCode(glsl_COLORMAPS);
 
         builder.addVertexCode(`
 vec3 defaultColor() { return uColor; }

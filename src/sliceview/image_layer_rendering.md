@@ -228,6 +228,83 @@ The following parameters are supported:
 - `defaultColor`: Optional. The default color for new control points added via the UI control.
   Defaults to `#ffffff`, and must be specified as a hex string if provided `#rrggbb`.
 
+### `colormap` controls
+
+The `colormap` control type exposes a named colormap as a pure function from `[0, 1]` to color, with a dropdown picker and gradient swatch in the UI. It does not know about image data, ranges, or channels — pair it with an `invlerp` (or any other source of a `[0, 1]` float) to map data into a color. Changing the colormap in the UI re-binds the colormap texture without recompiling the shader.
+
+Directive syntax:
+
+```glsl
+#uicontrol colormap <name>
+#uicontrol colormap <name> colormap(default="<colormap>")
+```
+
+The following parameters are supported:
+
+- `default`: Optional. The initial colormap to apply. Must be one of: `"grayscale"` (default), `"viridis"`, `"plasma"`, `"cividis"`, `"magma"`, `"coolwarm"`, `"rdbu"`, `"turbo"`, `"cubehelix"`.
+
+This directive makes the following shader functions available:
+
+```glsl
+// Maps a normalized float [0, 1] → RGB color
+vec3 <name>(float t);
+
+// Maps a normalized float [0, 1] → RGBA color where alpha = t
+// Use this with emitRGBA, setColor(vec4), etc. when opacity should track intensity.
+vec4 <name>RGBA(float t);
+```
+
+The `<name>RGBA` companion is generated automatically — if your variable is named `cmap`, the RGBA variant is `cmapRGBA`. Calling `cmapRGBA(t)` is equivalent to `vec4(cmap(t), t)`: the alpha channel equals the same normalized value `t` that drives the colormap, so more-intense voxels become more opaque.
+
+**Example — pair with `invlerp` for an image layer:**
+
+```glsl
+#uicontrol invlerp normalized
+#uicontrol colormap cmap colormap(default="viridis")
+void main() {
+  emitRGB(cmap(normalized()));
+}
+```
+
+**Example — RGBA with intensity-driven opacity (e.g. masks or overlays):**
+
+```glsl
+#uicontrol invlerp normalized
+#uicontrol colormap cmap colormap(default="magma")
+void main() {
+  emitRGBA(cmapRGBA(normalized()));
+}
+```
+
+**Example — volume-rendering-aware shader using the RGBA companion:**
+
+```glsl
+#uicontrol invlerp normalized
+#uicontrol colormap cmap colormap(default="magma")
+void main() {
+  float t = normalized();
+  if (VOLUME_RENDERING) {
+    emitRGBA(cmapRGBA(t));  // color + opacity from intensity
+  } else {
+    emitRGB(cmap(t));       // RGB only for slice views
+  }
+}
+```
+
+**Example — annotation layer colored and faded by a property:**
+
+```glsl
+#uicontrol invlerp colorScale(property="score", range=[0, 1])
+#uicontrol colormap cmap colormap(default="viridis")
+void main() {
+  float t = colorScale();
+  setColor(cmapRGBA(t));        // vec4 overload: color + opacity from score
+  setPointMarkerSize(8.0);
+}
+```
+
+Because the colormap directive has no dependency on image data, both `<name>` and `<name>RGBA` are available in annotation shaders, segmentation shaders, and anywhere else `#uicontrol` directives are supported.
+
 ## API
 
 ### Retrieving voxel channel value

@@ -26,6 +26,7 @@
 // `package.json` is saved as `package.json.prepack` and is restored
 // automatically by `postpack.ts` (which is run as a postpack script).
 
+import { spawnSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import esbuild from "esbuild";
@@ -34,6 +35,24 @@ import ts from "typescript";
 import yargs from "yargs";
 
 const rootDir = path.resolve(import.meta.dirname, "..");
+
+/**
+ * Runs the colormap generator (writes src/webgl/colormaps.zarr/ and
+ * src/webgl/colormap_names_generated.ts). Both outputs are gitignored
+ * but included in the published package via the `files` array glob
+ * "src/**\/*". Invoked before esbuild so the TS file exists to be
+ * transpiled and the zarr chunk file exists to be copied into `lib/`.
+ */
+function generateColormaps() {
+  const r = spawnSync(
+    "uv",
+    ["run", "--no-project", "build_tools/generate_colormaps_zarr.py"],
+    { cwd: rootDir, stdio: "inherit" },
+  );
+  if (r.status !== 0) {
+    throw new Error("colormap generator failed");
+  }
+}
 
 function buildDeclarationFiles(
   fileNames: string[],
@@ -54,6 +73,10 @@ export async function buildPackage(options: {
   skipDeclarations?: boolean;
 }) {
   const { inplace = false, skipDeclarations = false } = options;
+
+  // Generate the colormap chunk + the generated TS names file before
+  // esbuild scans src/ for entry points. Both outputs are gitignored.
+  generateColormaps();
 
   const srcDir = path.resolve(rootDir, "src");
   const outDir = inplace ? rootDir : path.resolve(rootDir, "dist", "package");
@@ -108,14 +131,26 @@ export async function buildPackage(options: {
     });
   }
 
-  const otherSources = await glob(["**/*.{css,js,html,wasm}"], {
-    cwd: srcDir,
-    nodir: true,
-  });
+  const otherSources = await glob(
+    [
+      "**/*.{css,js,html,wasm}",
+      // Generated colormaps zarr directory: zarr.json + the chunk file
+      // c/0/0/0 (no extension). Consumers' bundlers resolve the chunk via
+      // `new URL("./colormaps.zarr/c/0/0/0", import.meta.url)` so the
+      // chunk must sit alongside the transpiled webgl/colormaps.js.
+      "webgl/colormaps.zarr/**/*",
+    ],
+    {
+      cwd: srcDir,
+      nodir: true,
+    },
+  );
   await Promise.all(
-    otherSources.map((name) =>
-      fs.copyFile(path.resolve(srcDir, name), path.resolve(libDir, name)),
-    ),
+    otherSources.map(async (name) => {
+      const dest = path.resolve(libDir, name);
+      await fs.mkdir(path.dirname(dest), { recursive: true });
+      await fs.copyFile(path.resolve(srcDir, name), dest);
+    }),
   );
 
   if (!inplace) {
