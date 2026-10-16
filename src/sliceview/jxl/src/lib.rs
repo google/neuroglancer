@@ -24,6 +24,8 @@ pub fn free(ptr: *mut u8, size: usize) {
     }
 }
 
+/// Returns width and height (no frame decode) packed into i64: bits 0..30 width, 31..61 height.
+/// Error codes: -1 invalid args, -2 parse failure.
 #[no_mangle]
 pub fn height_and_width(ptr: *mut u8, input_size: usize) -> i64 {
     if ptr.is_null() || input_size == 0 {
@@ -42,8 +44,65 @@ pub fn height_and_width(ptr: *mut u8, input_size: usize) -> i64 {
     }
 }
 
+/// Combined metadata probe returning width, height, frame count in one call without decoding frames.
+/// Encoded in i128: bits 0..30 width, 31..61 height, 62..92 frames. (All 31-bit slots.)
+/// Returns negative on error (fits in i128). For JS FFI you may prefer a separate pointer-based variant.
 #[no_mangle]
-pub fn decode(ptr: *mut u8, input_size: usize, output_size: usize) -> *const u8 {
+pub fn width_height_frames(ptr: *mut u8, input_size: usize) -> i128 {
+    if ptr.is_null() || input_size == 0 { return -1; }
+    let data: &[u8] = unsafe { slice::from_raw_parts(ptr, input_size) };
+    let image = match JxlImage::builder().read(data) { Ok(img) => img, Err(_) => return -2 };
+    let w = image.image_header().size.width as i128 & 0x7fffffff;
+    let h = image.image_header().size.height as i128 & 0x7fffffff;
+    let frames_loaded = image.num_loaded_keyframes() as i128; // may be 0 pre-render
+    let f = if frames_loaded <= 0 { 1 } else { frames_loaded & 0x7fffffff };
+    (f << 62) | (h << 31) | w
+}
+
+/// Combined metadata probe using an output buffer: writes [width, height, frames] as u32.
+/// Returns 0 on success, negative error codes like width_height_frames.
+#[no_mangle]
+pub fn width_height_frames_out(ptr: *mut u8, input_size: usize, out: *mut u32) -> i32 {
+    if ptr.is_null() || input_size == 0 || out.is_null() { return -1; }
+    let data: &[u8] = unsafe { slice::from_raw_parts(ptr, input_size) };
+    let image = match JxlImage::builder().read(data) { Ok(img) => img, Err(_) => return -2 };
+    let w = image.image_header().size.width as u32;
+    let h = image.image_header().size.height as u32;
+    let loaded = image.num_loaded_keyframes() as u32;
+    let f = if loaded == 0 { 1 } else { loaded };
+    unsafe {
+        *out.add(0) = w;
+        *out.add(1) = h;
+        *out.add(2) = f;
+    }
+    0
+}
+
+/// Returns number of keyframes (frames) in the codestream, or negative on error.
+/// Attempts to return number of keyframes without fully decoding them.
+/// Note: jxl_oxide lazily loads keyframes; if none are yet loaded this may return 1 as a heuristic.
+/// Error codes: -1 invalid args, -2 header parse failure.
+#[no_mangle]
+pub fn frames(ptr: *mut u8, input_size: usize, _output_size: usize) -> i32 {
+    if ptr.is_null() || input_size == 0 { return -1; }
+    let data: &[u8] = unsafe { slice::from_raw_parts(ptr, input_size) };
+    let image = match JxlImage::builder().read(data) { Ok(img) => img, Err(_) => return -2 };
+    // We don't force rendering here; if no frames are "loaded" yet assume 1 (common case).
+    let loaded = image.num_loaded_keyframes() as i32;
+    if loaded <= 0 { 1 } else { loaded }
+}
+
+
+/// Decode to uint8 output. `preserve_alpha` controls the RGBA/LA alpha channel:
+/// when nonzero the true alpha from the codestream is returned; when zero (the
+/// default for callers that pass no value) alpha is forced opaque, preserving
+/// the legacy precomputed behavior.
+///
+/// Samples are returned in stored pixel order: the codestream's EXIF-style
+/// orientation is NOT applied (samples come straight from `frame.stream()`),
+/// as required by the zarr `jpegxl` codec spec.
+#[no_mangle]
+pub fn decode(ptr: *mut u8, input_size: usize, output_size: usize, preserve_alpha: i32) -> *const u8 {
     if ptr.is_null() || input_size == 0 || output_size == 0 {
         return ptr::null();
     }
@@ -56,6 +115,12 @@ pub fn decode(ptr: *mut u8, input_size: usize, output_size: usize) -> *const u8 
         Ok(image) => image,
         Err(_image) => return std::ptr::null_mut(),
     };
+
+    // Value preservation: jxl-oxide normalizes integer samples so the stored
+    // range 0..=(2^bits-1) maps to [0, 1]. Scale by that same 2^bits-1 (not the
+    // output type's full range) so a reduced-bit codestream keeps its stored
+    // integer values instead of being rescaled.
+    let maxval = ((1u64 << image.image_header().metadata.bit_depth.bits_per_sample()) - 1) as f32;
 
     let mut output_buffer = Vec::with_capacity(output_size);
 
@@ -76,21 +141,42 @@ pub fn decode(ptr: *mut u8, input_size: usize, output_size: usize) -> *const u8 
         match image.pixel_format() {
             PixelFormat::Gray => {
                 for pixel in fb.buf() {
-                    let value = (pixel * 255.0).clamp(0.0, 255.0).round() as u8;
+                    let value = (pixel * maxval).clamp(0.0, maxval).round() as u8;
                     output_buffer.push(value);
                 }
             },
             PixelFormat::Rgb => {
                 for pixel in fb.buf() {
-                    let value = (pixel * 255.0).clamp(0.0, 255.0).round() as u8;
+                    let value = (pixel * maxval).clamp(0.0, maxval).round() as u8;
                     output_buffer.push(value);
                 }
             }
+            PixelFormat::Graya => {
+                // fb.buf() laid out as GA GA ...; write exactly 2 bytes per pixel
+                for px in fb.buf().chunks_exact(2) {
+                    let gray = (px[0] * maxval).clamp(0.0, maxval).round() as u8;
+                    output_buffer.push(gray);
+                    let alpha = if preserve_alpha != 0 {
+                        (px[1] * maxval).clamp(0.0, maxval).round() as u8
+                    } else {
+                        maxval as u8 // opaque alpha (legacy precomputed behavior)
+                    };
+                    output_buffer.push(alpha);
+                }
+            }
             PixelFormat::Rgba => {
-                for pixel in fb.buf() {
-                    let value = (pixel * 255.0).clamp(0.0, 255.0).round() as u8;
-                    output_buffer.push(value);
-                    output_buffer.push(255);  // Alpha channel set to fully opaque
+                // fb.buf() laid out as RGBA RGBA ...; write exactly 4 bytes per pixel
+                for px in fb.buf().chunks_exact(4) {
+                    for c in 0..3 { // RGB
+                        let v = (px[c] * maxval).clamp(0.0, maxval).round() as u8;
+                        output_buffer.push(v);
+                    }
+                    let alpha = if preserve_alpha != 0 {
+                        (px[3] * maxval).clamp(0.0, maxval).round() as u8
+                    } else {
+                        maxval as u8 // opaque alpha (legacy precomputed behavior)
+                    };
+                    output_buffer.push(alpha);
                 }
             }
             _ => return std::ptr::null_mut(),
@@ -104,6 +190,176 @@ pub fn decode(ptr: *mut u8, input_size: usize, output_size: usize) -> *const u8 
     std::mem::forget(output_buffer);
 
     ptr
+}
+
+/// Extended decode that supports 1-, 2-, or 4-byte per sample output.
+/// 1 => uint8, 2 => uint16 little-endian, 4 => float32 little-endian (linear 0..1).
+/// `preserve_alpha` controls the RGBA/LA alpha channel: nonzero returns the true
+/// alpha from the codestream; zero forces opaque alpha (legacy precomputed
+/// behavior).
+/// Samples are returned in stored pixel order; the codestream's orientation is
+/// NOT applied.
+/// Returns a pointer to a heap-allocated buffer of length exactly `output_size` on success or null on failure.
+#[no_mangle]
+pub fn decode_with_bpp(ptr: *mut u8, input_size: usize, output_size: usize, bytes_per_sample: usize, preserve_alpha: i32) -> *const u8 {
+    if ptr.is_null() || input_size == 0 || output_size == 0 {
+        return ptr::null();
+    }
+
+    if bytes_per_sample != 1 && bytes_per_sample != 2 && bytes_per_sample != 4 {
+        return ptr::null();
+    }
+
+    let data: &[u8] = unsafe { slice::from_raw_parts(ptr, input_size) };
+
+    let image = match JxlImage::builder().read(data) {
+        Ok(image) => image,
+        Err(_image) => return std::ptr::null_mut(),
+    };
+
+    // Value preservation: scale integer samples by the codestream's
+    // 2^bits-1 (not the output type range) so reduced-bit stores keep
+    // their stored values.
+    let maxval = ((1u64 << image.image_header().metadata.bit_depth.bits_per_sample()) - 1) as f32;
+
+    let mut output_buffer: Vec<u8> = Vec::with_capacity(output_size);
+
+    for keyframe_idx in 0..image.num_loaded_keyframes() {
+        let frame = match image.render_frame(keyframe_idx) {
+            Ok(frame) => frame,
+            Err(_frame) => return std::ptr::null_mut(),
+        };
+
+        let mut stream = frame.stream();
+        let mut fb = FrameBuffer::new(
+            stream.width() as usize,
+            stream.height() as usize,
+            stream.channels() as usize,
+        );
+        stream.write_to_buffer(fb.buf_mut());
+
+        match image.pixel_format() {
+            PixelFormat::Gray => {
+                for pixel in fb.buf() { // pixel in 0.0..1.0
+                    match bytes_per_sample {
+                        1 => {
+                            let value = (pixel * maxval).clamp(0.0, maxval) as u8;
+                            output_buffer.push(value);
+                        }
+                        2 => {
+                            let v = (pixel * maxval).clamp(0.0, maxval).round() as u16;
+                            output_buffer.extend_from_slice(&v.to_le_bytes());
+                        }
+                        4 => {
+                            let f = *pixel as f32; // already 0..1 linear
+                            output_buffer.extend_from_slice(&f.to_le_bytes());
+                        }
+                        _ => return ptr::null_mut(),
+                    }
+                }
+            },
+            PixelFormat::Rgb => {
+                for pixel in fb.buf() {
+                    match bytes_per_sample {
+                        1 => {
+                            let value = (pixel * maxval).clamp(0.0, maxval) as u8;
+                            output_buffer.push(value);
+                        }
+                        2 => {
+                            let v = (pixel * maxval).clamp(0.0, maxval).round() as u16;
+                            output_buffer.extend_from_slice(&v.to_le_bytes());
+                        }
+                        4 => {
+                            let f = *pixel as f32;
+                            output_buffer.extend_from_slice(&f.to_le_bytes());
+                        }
+                        _ => return ptr::null_mut(),
+                    }
+                }
+            }
+            PixelFormat::Graya => {
+                // Iterate per pixel (2 floats: gray, alpha)
+                for px in fb.buf().chunks_exact(2) {
+                    match bytes_per_sample {
+                        1 => {
+                            let g = (px[0] * maxval).clamp(0.0, maxval) as u8;
+                            output_buffer.push(g);
+                            let a = if preserve_alpha != 0 {
+                                (px[1] * maxval).clamp(0.0, maxval).round() as u8
+                            } else {
+                                maxval as u8
+                            };
+                            output_buffer.push(a);
+                        }
+                        2 => {
+                            let g = (px[0] * maxval).clamp(0.0, maxval).round() as u16;
+                            output_buffer.extend_from_slice(&g.to_le_bytes());
+                            let a = if preserve_alpha != 0 {
+                                (px[1] * maxval).clamp(0.0, maxval).round() as u16
+                            } else {
+                                maxval as u16
+                            };
+                            output_buffer.extend_from_slice(&a.to_le_bytes());
+                        }
+                        4 => {
+                            let g = px[0] as f32; output_buffer.extend_from_slice(&g.to_le_bytes());
+                            let a: f32 = if preserve_alpha != 0 { px[1] as f32 } else { 1.0 };
+                            output_buffer.extend_from_slice(&a.to_le_bytes());
+                        }
+                        _ => return ptr::null_mut(),
+                    }
+                }
+            }
+            PixelFormat::Rgba => {
+                // Iterate per pixel (4 floats)
+                for px in fb.buf().chunks_exact(4) {
+                    match bytes_per_sample {
+                        1 => {
+                            for c in 0..3 { // RGB
+                                let v = (px[c] * maxval).clamp(0.0, maxval) as u8; output_buffer.push(v);
+                            }
+                            let a = if preserve_alpha != 0 {
+                                (px[3] * maxval).clamp(0.0, maxval).round() as u8
+                            } else {
+                                maxval as u8
+                            };
+                            output_buffer.push(a);
+                        }
+                        2 => {
+                            for c in 0..3 {
+                                let v = (px[c] * maxval).clamp(0.0, maxval).round() as u16;
+                                output_buffer.extend_from_slice(&v.to_le_bytes());
+                            }
+                            let a = if preserve_alpha != 0 {
+                                (px[3] * maxval).clamp(0.0, maxval).round() as u16
+                            } else {
+                                maxval as u16
+                            };
+                            output_buffer.extend_from_slice(&a.to_le_bytes());
+                        }
+                        4 => {
+                            for c in 0..3 {
+                                let f = px[c] as f32; output_buffer.extend_from_slice(&f.to_le_bytes());
+                            }
+                            let a: f32 = if preserve_alpha != 0 { px[3] as f32 } else { 1.0 };
+                            output_buffer.extend_from_slice(&a.to_le_bytes());
+                        }
+                        _ => return ptr::null_mut(),
+                    }
+                }
+            }
+            _ => return std::ptr::null_mut(),
+        }
+    }
+
+    if output_buffer.len() != output_size {
+        // Size mismatch -> unsafe to expose.
+        return std::ptr::null_mut();
+    }
+
+    let ptr_out = output_buffer.as_ptr();
+    std::mem::forget(output_buffer);
+    ptr_out
 }
 
 
