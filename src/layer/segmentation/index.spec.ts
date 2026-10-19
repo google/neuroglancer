@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { RenderLayerTransform } from "#src/render_coordinate_transform.js";
 import { SkeletonEdgeDirection, type SkeletonNode } from "#src/skeleton/api.js";
@@ -86,6 +86,7 @@ const { SharedDisjointUint64Sets } = await import(
 );
 const { Uint64Set } = await import("#src/uint64_set.js");
 const { RefCounted } = await import("#src/util/disposable.js");
+const { StatusMessage } = await import("#src/status.js");
 
 const { SegmentSelectionState } = await import(
   "#src/segmentation_display_state/frontend.js"
@@ -1409,6 +1410,25 @@ function makeEquivalencesLayer(savedEquivalences: string[][]) {
   return { layer, groupState };
 }
 
+function makeLinkedLayer(rootEquivalences: [bigint, bigint][]) {
+  const { layer, groupState } = makeEquivalencesLayer([]);
+  const { groupState: rootGroupState } = makeEquivalencesLayer([]);
+  for (const [firstSegment, secondSegment] of rootEquivalences) {
+    rootGroupState.segmentEquivalences.link(firstSegment, secondSegment);
+  }
+  const root = { value: { managedLayer: { name: "merged" } } as unknown };
+  layer.managedLayer = { name: "catmaid" };
+  layer.displayState.segmentationGroupState.value = rootGroupState;
+  layer.displayState.linkedSegmentationGroup = {
+    root,
+    isolate: () => {
+      root.value = layer;
+      layer.displayState.segmentationGroupState.value = groupState;
+    },
+  };
+  return { layer, root };
+}
+
 function makeLoadedSubsource(subsource: object) {
   return {
     subsourceEntry: { subsource },
@@ -1442,6 +1462,10 @@ function makeSkeletonSubsource(editableSource: unknown) {
 }
 
 describe("layer/segmentation equivalences with editable skeletons", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("turns off equivalences when the layer has an editable skeleton source", () => {
     const { layer, groupState } = makeEquivalencesLayer([["3", "7"]]);
     const equivalences = makeEquivalencesSubsource();
@@ -1505,5 +1529,41 @@ describe("layer/segmentation equivalences with editable skeletons", () => {
     ]);
 
     expect(groupState.localGraph.toJSON()).toEqual([["3", "7"]]);
+  });
+
+  it("unlinks a layer with editable skeletons from a layer that has equivalences", () => {
+    const showMessage = vi
+      .spyOn(StatusMessage, "showTemporaryMessage")
+      .mockImplementation(() => ({}) as any);
+    const { layer, root } = makeLinkedLayer([[3n, 7n]]);
+
+    layer.activateDataSubsources([
+      makeSkeletonSubsource(makeEditableSpatialSkeletonSource()),
+    ]);
+
+    expect(root.value).toBe(layer);
+    expect(showMessage).toHaveBeenCalledWith(
+      "Unlinked catmaid from merged: layers with editable skeletons do not support equivalences.",
+    );
+  });
+
+  it("keeps a layer with editable skeletons linked to a layer without equivalences", () => {
+    const { layer, root } = makeLinkedLayer([]);
+    const linkedRoot = root.value;
+
+    layer.activateDataSubsources([
+      makeSkeletonSubsource(makeEditableSpatialSkeletonSource()),
+    ]);
+
+    expect(root.value).toBe(linkedRoot);
+  });
+
+  it("keeps a layer without editable skeletons linked to a layer with equivalences", () => {
+    const { layer, root } = makeLinkedLayer([[3n, 7n]]);
+    const linkedRoot = root.value;
+
+    layer.activateDataSubsources([makeSkeletonSubsource(undefined)]);
+
+    expect(root.value).toBe(linkedRoot);
   });
 });

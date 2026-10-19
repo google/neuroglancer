@@ -1346,6 +1346,20 @@ export class SegmentationUserLayer extends Base {
       this.updateDataSubsourceActivations(),
     );
     this.registerDisposer(
+      registerNestedSync((context, group) => {
+        context.registerDisposer(
+          group.segmentEquivalences.changed.add(() => {
+            if (
+              this.editableSkeletonSource.value !== undefined &&
+              this.displayState.linkedSegmentationGroup.root.value !== this
+            ) {
+              this.updateDataSubsourceActivations();
+            }
+          }),
+        );
+      }, this.displayState.segmentationGroupState),
+    );
+    this.registerDisposer(
       this.layersChanged.add(() => this.updateSpatialSkeletonChunkLoadState()),
     );
     this.registerDisposer(
@@ -1761,9 +1775,22 @@ export class SegmentationUserLayer extends Base {
       this.getSpatialSkeletonFindPathSubsource(loadedSubsources);
     const hasEditableSpatialSkeletonSource =
       this.hasEditableSpatialSkeletonSource(loadedSubsources);
+    const { linkedSegmentationGroup } = this.displayState;
+    const linkedRoot = linkedSegmentationGroup.root.value;
+    if (
+      hasEditableSpatialSkeletonSource &&
+      linkedRoot !== this &&
+      this.displayState.segmentationGroupState.value.segmentEquivalences.size >
+        0
+    ) {
+      StatusMessage.showTemporaryMessage(
+        `Unlinked ${this.managedLayer.name} from ${linkedRoot.managedLayer.name}: layers with editable skeletons do not support equivalences.`,
+      );
+      linkedSegmentationGroup.isolate();
+      return;
+    }
     const updatedSegmentPropertyMaps: SegmentPropertyMap[] = [];
-    const isGroupRoot =
-      this.displayState.linkedSegmentationGroup.root.value === this;
+    const isGroupRoot = linkedRoot === this;
     let updatedGraph: SegmentationGraphSource | undefined;
     let hasVolume = false;
     for (const loadedSubsource of loadedSubsources) {
