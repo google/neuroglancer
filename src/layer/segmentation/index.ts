@@ -1342,9 +1342,6 @@ export class SegmentationUserLayer extends Base {
       this.layersChanged.add(() => this.updateSpatialSkeletonChunkLoadState()),
     );
     this.registerDisposer(
-      this.layersChanged.add(() => this.updateSpatialSkeletonSourceState()),
-    );
-    this.registerDisposer(
       this.manager.chunkManager.layerChunkStatisticsUpdated.add(() =>
         this.updateSpatialSkeletonChunkLoadState(),
       ),
@@ -1413,7 +1410,6 @@ export class SegmentationUserLayer extends Base {
     });
     this.tabs.default = "rendering";
     this.updateSpatialSkeletonChunkLoadState();
-    this.updateSpatialSkeletonSourceState();
   }
 
   get volumeOptions() {
@@ -1591,40 +1587,6 @@ export class SegmentationUserLayer extends Base {
       stats2d.totalCount + stats3d.totalCount,
       stats2d.presentCount + stats3d.presentCount,
     );
-  }
-
-  private updateSpatialSkeletonSourceState() {
-    let hasSpatialSkeletonLayer = false;
-    for (const layer of this.renderLayers) {
-      if (
-        layer instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer ||
-        layer instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer
-      ) {
-        hasSpatialSkeletonLayer = true;
-        break;
-      }
-    }
-    this.spatialSkeletonState.updateCommandHistorySource(
-      this.getSpatialSkeletonCommandHistorySource(),
-    );
-    if (!hasSpatialSkeletonLayer) {
-      // Dispose/refold the old queue before clearing its inspected baseline.
-      // Otherwise disposal may republish an owned exact snapshot into the
-      // cache after this teardown has already emptied it.
-      this.spatialSkeletonState.clearInspectedSkeletonCache();
-    }
-  }
-
-  private getSpatialSkeletonCommandHistorySource() {
-    for (const layer of this.renderLayers) {
-      if (
-        layer instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer ||
-        layer instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer
-      ) {
-        return layer.base.source;
-      }
-    }
-    return undefined;
   }
 
   private supportsSpatialSkeletonAction(action: SpatialSkeletonAction) {

@@ -263,7 +263,6 @@ describe("layer/segmentation spatial skeleton chunk stats", () => {
         spatialSkeletonVisibleChunksNeeded: new WatchableValue(0),
         spatialSkeletonVisibleChunksAvailable: new WatchableValue(0),
         spatialSkeletonVisibleChunksLoaded: new WatchableValue(false),
-        updateSpatialSkeletonSourceState: vi.fn(),
       },
     );
 
@@ -323,9 +322,13 @@ describe("layer/segmentation spatial skeleton source teardown", () => {
     spatialSkeletonState.editMode.value = true;
     spatialSkeletonState.setMergeAnchor(5n);
 
+    const { commandHistory } = spatialSkeletonState;
+    commandHistory.confirm(commandHistory.stageExecute("add node"));
+
     layer.activateDataSubsources([replacement]);
     expect(spatialSkeletonState.editMode.value).toBe(false);
     expect(spatialSkeletonState.mergeAnchorNodeId.value).toBeUndefined();
+    expect(commandHistory.canUndo.value).toBe(false);
 
     spatialSkeletonState.editMode.value = true;
     spatialSkeletonState.setMergeAnchor(6n);
@@ -334,38 +337,25 @@ describe("layer/segmentation spatial skeleton source teardown", () => {
     expect(spatialSkeletonState.mergeAnchorNodeId.value).toBeUndefined();
   });
 
-  it("keeps edit mode and merge anchor when the same skeleton source is activated again", () => {
+  it("keeps edit mode, merge anchor, edit queue and undo history when the same skeleton source is activated again", () => {
     const { layer, spatialSkeletonState } = makeActivatingSegmentationLayer();
     const subsource = makeSpatialSkeletonSubsource();
     layer.activateDataSubsources([subsource]);
     spatialSkeletonState.editMode.value = true;
     spatialSkeletonState.setMergeAnchor(5n);
+    (spatialSkeletonState as any).optimisticEditQueue = {
+      hasUnconfirmedActions: () => true,
+      dispose: async () => {},
+    };
+    const { commandHistory } = spatialSkeletonState;
+    commandHistory.confirm(commandHistory.stageExecute("add node"));
 
     layer.activateDataSubsources([subsource]);
 
     expect(spatialSkeletonState.editMode.value).toBe(true);
     expect(spatialSkeletonState.mergeAnchorNodeId.value).toBe(5n);
-  });
-
-  it("disposes the queue before clearing its inspected snapshot cache", () => {
-    const order: string[] = [];
-    const layer = Object.assign(
-      Object.create(SegmentationUserLayer.prototype),
-      {
-        renderLayers: [],
-        spatialSkeletonState: {
-          updateCommandHistorySource: vi.fn(() => order.push("dispose")),
-          clearInspectedSkeletonCache: vi.fn(() => order.push("clear")),
-        },
-      },
-    );
-
-    layer.updateSpatialSkeletonSourceState();
-
-    expect(order).toEqual(["dispose", "clear"]);
-    expect(
-      layer.spatialSkeletonState.updateCommandHistorySource,
-    ).toHaveBeenCalledWith(undefined);
+    expect(spatialSkeletonState.hasUnconfirmedOptimisticEdits()).toBe(true);
+    expect(commandHistory.undoLabel.value).toBe("add node");
   });
 });
 

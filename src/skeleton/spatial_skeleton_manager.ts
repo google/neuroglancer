@@ -1595,34 +1595,6 @@ export class SpatialSkeletonState
     return true;
   }
 
-  updateCommandHistorySource(source: unknown) {
-    if (this.commandHistory.matchesSource(source)) {
-      return false;
-    }
-    this.releaseOptimisticEditingEngine();
-    return this.commandHistory.setSource(source);
-  }
-
-  clearInspectedSkeletonCache() {
-    return this.runSpatialSkeletonPresentationTransaction(() =>
-      this.clearInspectedSkeletonCacheInPresentation(),
-    );
-  }
-
-  private clearInspectedSkeletonCacheInPresentation() {
-    const cacheChanged =
-      this.fullSegmentNodeCache.size !== 0 ||
-      this.pendingFullSegmentNodeFetches.size !== 0 ||
-      this.cachedNodesById.size !== 0;
-    const pendingChanged = this.clearPendingNodePositions();
-    if (!cacheChanged) {
-      return pendingChanged;
-    }
-    this.clearFullSkeletonCache();
-    this.markNodeDataChanged({ invalidateFullSkeletonCache: false });
-    return true;
-  }
-
   clearRuntimeState() {
     return this.runSpatialSkeletonPresentationTransaction(() =>
       this.clearRuntimeStateInPresentation(),
