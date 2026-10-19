@@ -383,6 +383,12 @@ export class SkeletonTab extends Tab {
     nodesSummaryBar.className = "neuroglancer-skeleton-summary-bar";
     const nodesSummary = document.createElement("div");
     nodesSummary.className = "neuroglancer-skeleton-summary";
+    const inferredTopologyBadge = document.createElement("div");
+    inferredTopologyBadge.className = "neuroglancer-skeleton-inferred-topology";
+    inferredTopologyBadge.textContent = "Inferred topology";
+    inferredTopologyBadge.title =
+      "Parent and child are inferred, because this skeleton's edges have no direction.";
+    inferredTopologyBadge.hidden = true;
     let virtualItems: SkeletonListItem[] = [];
     let renderVirtualListItem = (
       _item: SkeletonListItem | undefined,
@@ -418,6 +424,7 @@ export class SkeletonTab extends Tab {
     nodesSection.appendChild(nodesNavigationBar);
     nodesSection.appendChild(preparationStatus);
     nodesSummaryBar.appendChild(nodesSummary);
+    nodesSummaryBar.appendChild(inferredTopologyBadge);
     nodesSection.appendChild(nodesSummaryBar);
     nodesSection.appendChild(nodesList.element);
     element.appendChild(nodesSection);
@@ -1452,6 +1459,10 @@ export class SkeletonTab extends Tab {
         selectedSegmentId !== undefined &&
         cachedSelectedSegmentNodes === undefined;
       loadedNodeSummarySuffix = "";
+      const parentsInferred =
+        layer.skeletonNodeAccess.value?.parentsInferred ?? false;
+      inferredTopologyBadge.hidden =
+        !parentsInferred || cachedSelectedSegmentNodes === undefined;
       if (
         activeSegmentId === undefined ||
         cachedSelectedSegmentNodes === undefined
@@ -1476,9 +1487,7 @@ export class SkeletonTab extends Tab {
         new Map<bigint, readonly SkeletonNode[]>([
           [segmentId, cachedSelectedSegmentNodes],
         ]),
-        layer.skeletonNodeAccess.value?.parentsInferred
-          ? "Parent and child are inferred, because this skeleton's edges have no direction."
-          : " Using inspected full skeleton data.",
+        parentsInferred ? "" : " Using inspected full skeleton data.",
       );
     };
 

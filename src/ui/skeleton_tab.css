@@ -194,6 +194,17 @@
   min-width: 0;
 }
 
+.neuroglancer-skeleton-inferred-topology {
+  flex: none;
+  font-size: small;
+  color: #d9e7f8;
+  border: 1px solid #465b75;
+  border-radius: 2px;
+  background: #142033;
+  padding: 0 0.4em;
+  cursor: help;
+}
+
 .neuroglancer-skeleton-queue {
   color: #d0d0d0;
   font-size: 12px;
