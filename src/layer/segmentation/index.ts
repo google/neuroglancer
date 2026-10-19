@@ -610,14 +610,8 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         layer.manager.rootLayers,
         layer,
         (userLayer) => userLayer instanceof SegmentationUserLayer,
-        (userLayer) => {
-          if (!(userLayer instanceof SegmentationUserLayer)) {
-            throw new Error(
-              "Expected a segmentation layer for the linked segmentation group.",
-            );
-          }
-          return userLayer.displayState.linkedSegmentationGroup;
-        },
+        (userLayer: SegmentationUserLayer) =>
+          userLayer.displayState.linkedSegmentationGroup,
       ),
     );
 
@@ -626,14 +620,8 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         layer.manager.rootLayers,
         layer,
         (userLayer) => userLayer instanceof SegmentationUserLayer,
-        (userLayer) => {
-          if (!(userLayer instanceof SegmentationUserLayer)) {
-            throw new Error(
-              "Expected a segmentation layer for the linked segmentation color group.",
-            );
-          }
-          return userLayer.displayState.linkedSegmentationColorGroup;
-        },
+        (userLayer: SegmentationUserLayer) =>
+          userLayer.displayState.linkedSegmentationColorGroup,
       ),
     );
 
@@ -2380,10 +2368,10 @@ export class SegmentationUserLayer extends Base {
 
   selectionStateFromJson(state: this["selectionState"], json: any) {
     super.selectionStateFromJson(state, json);
-    let parsedValue = state.value;
-    if (typeof parsedValue === "number") parsedValue = parsedValue.toString();
+    let { value } = state;
+    if (typeof value === "number") value = value.toString();
     try {
-      state.value = parseUint64(parsedValue);
+      state.value = parseUint64(value);
     } catch {
       state.value = undefined;
     }

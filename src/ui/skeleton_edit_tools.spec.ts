@@ -70,7 +70,6 @@ if (!("WebGL2RenderingContext" in globalThis)) {
   });
 }
 
-const { SkeletonRenderMode } = await import("#src/skeleton/frontend.js");
 const { PerspectivePanel } = await import("#src/perspective_view/panel.js");
 const { SliceViewPanel } = await import("#src/sliceview/panel.js");
 const { SpatialSkeletonEditTool } = await import(
@@ -199,15 +198,6 @@ function makeCachedSegmentSnapshot(nodes: readonly SkeletonNode[]) {
   };
 }
 
-function makeSkeletonRenderingOptions() {
-  return {
-    skeletonRenderingOptions: {
-      params2d: { mode: { value: SkeletonRenderMode.LINES } },
-      params3d: { mode: { value: SkeletonRenderMode.LINES } },
-    },
-  };
-}
-
 function makeToolActivation() {
   const disposers: unknown[] = [];
   const actions = new Map<string, (event: any) => void>();
@@ -270,7 +260,6 @@ function makeBoundPanel(
 function makeEditToolHarness() {
   const layer = {
     displayState: {
-      ...makeSkeletonRenderingOptions(),
       segmentationGroupState: { value: makeVisibleSegmentsState([11n]) },
     },
     spatialSkeletonEditMode: makeModeWatchable(),
@@ -447,7 +436,6 @@ function makeFindPathToolHarness(
   );
   const layer = {
     displayState: {
-      ...makeSkeletonRenderingOptions(),
       segmentationGroupState: { value: visibleSegmentsState },
     },
     annotationDisplayState: {
@@ -621,7 +609,6 @@ function makeDragHarness({ inspected = true } = {}) {
   const layer = {
     spatialSkeletonState: state,
     displayState: {
-      ...makeSkeletonRenderingOptions(),
       segmentationGroupState: {
         value: makeVisibleSegmentsState([original.segmentId]),
       },
@@ -899,7 +886,6 @@ describe("spatial_skeleton_edit_tool", () => {
     };
     const layer = {
       displayState: {
-        ...makeSkeletonRenderingOptions(),
         segmentationGroupState: {
           value: makeVisibleSegmentsState([11n]),
         },
@@ -1009,7 +995,6 @@ describe("spatial_skeleton_edit_tool", () => {
     const selectSkeletonNode = vi.fn();
     const layer = {
       displayState: {
-        ...makeSkeletonRenderingOptions(),
         segmentationGroupState: {
           value: makeVisibleSegmentsState([11n]),
         },
@@ -1342,7 +1327,6 @@ describe("spatial_skeleton_edit_tool", () => {
     const selectSkeletonNode = vi.fn();
     const layer = {
       displayState: {
-        ...makeSkeletonRenderingOptions(),
         segmentationGroupState: {
           value: makeVisibleSegmentsState([11n]),
         },
@@ -1741,7 +1725,6 @@ describe("spatial_skeleton_edit_tool", () => {
     const segmentIds = [...new Set(nodes.map((node) => node.segmentId))];
     const layer = {
       displayState: {
-        ...makeSkeletonRenderingOptions(),
         segmentationGroupState: {
           value: makeVisibleSegmentsState(segmentIds.map(BigInt)),
         },
@@ -2428,7 +2411,6 @@ describe("spatial_skeleton_edit_tool", () => {
     };
     const layer = {
       displayState: {
-        ...makeSkeletonRenderingOptions(),
         segmentationGroupState: {
           value: makeVisibleSegmentsState(),
         },
