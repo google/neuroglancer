@@ -265,11 +265,15 @@ const defaultViewerOptions =
  * an override may hide a control the configuration permits but can never
  * reveal one the configuration disallows.
  *
- * Additional `VIEWER_UI_CONTROL_CONFIG_OPTIONS` members belong here as they
- * become user-toggleable, rather than as new top level state keys.
+ * Additional `VIEWER_UI_CONFIG_OPTIONS` members belong here as they become
+ * user-toggleable, rather than as new top level state keys.
  */
 class TrackableUiControlVisibility extends CompoundTrackable {
   showLayerPanel = new TrackableValue<boolean | undefined>(
+    undefined,
+    verifyOptionalBoolean,
+  );
+  showTopBar = new TrackableValue<boolean | undefined>(
     undefined,
     verifyOptionalBoolean,
   );
@@ -277,6 +281,7 @@ class TrackableUiControlVisibility extends CompoundTrackable {
   constructor() {
     super();
     this.add("showLayerPanel", this.showLayerPanel);
+    this.add("showTopBar", this.showTopBar);
   }
 
   toJSON(): any {
@@ -552,12 +557,14 @@ export class Viewer extends RefCounted implements ViewerState {
    * toggle in the layer list panel.
    */
   layerPanelVisibility: WatchableValueInterface<boolean>;
+  /** Effective top bar visibility: the configuration and the user override combined. */
+  effectiveShowTopBar: WatchableValueInterface<boolean>;
 
   private makeUiControlVisibilityState(
     key: (typeof VIEWER_UI_CONTROL_CONFIG_OPTIONS)[number],
   ) {
     const showUIControls = this.uiConfiguration.showUIControls;
-    const showTopBar = this.uiConfiguration.showTopBar;
+    const showTopBar = this.effectiveShowTopBar;
     const option = this.uiConfiguration[key];
     const isTopBarControl = (
       VIEWER_TOP_ROW_CONFIG_OPTIONS as readonly string[]
@@ -648,6 +655,19 @@ export class Viewer extends RefCounted implements ViewerState {
 
     const optionsWithDefaults = { ...defaultViewerOptions, ...options };
     const { resetStateWhenEmpty, showLayerDialog } = optionsWithDefaults;
+
+    // The top bar override, like the layer panel override below, may hide the
+    // top bar within what the configuration permits, but can never reveal one
+    // it disallows. Each top row control is derived from it, so hiding it hides
+    // the whole row.
+    this.effectiveShowTopBar = this.registerDisposer(
+      makeDerivedWatchableValue(
+        (configEnabled: boolean, override: boolean | undefined) =>
+          configEnabled && (override ?? true),
+        this.uiConfiguration.showTopBar,
+        this.uiControlVisibilityState.showTopBar,
+      ),
+    );
 
     for (const key of VIEWER_UI_CONTROL_CONFIG_OPTIONS) {
       this.uiControlVisibility[key] = this.makeUiControlVisibilityState(key);
