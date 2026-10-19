@@ -466,7 +466,6 @@ export class SpatialSkeletonOptimisticQueueEngine<
   getRecentActivity() {
     return projectSpatialSkeletonOptimisticRecentActivity(
       this.journal.getEntries(),
-      this.queueInstanceId,
       this.options.history.capacity,
     );
   }

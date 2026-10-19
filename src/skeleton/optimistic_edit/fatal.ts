@@ -27,7 +27,6 @@ export interface SpatialSkeletonOptimisticFatalState {
   readonly reason: SpatialSkeletonOptimisticFatalReason;
   readonly authority: "committed" | "indeterminate" | "unchanged";
   readonly intentId?: number;
-  readonly operationId?: number;
   readonly cause?: unknown;
 }
 

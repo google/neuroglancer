@@ -145,7 +145,6 @@ export type EngineIntentRecord<
   TMutation,
   TResult,
 > = SpatialSkeletonIntentRecord<
-  string | number,
   ProjectionValue<TProjection>,
   ProjectionValue<TInverseProjection>,
   EngineMetadata<TInput, TWorkflow, THistoryTicket>,

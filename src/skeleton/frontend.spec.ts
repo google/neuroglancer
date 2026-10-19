@@ -50,7 +50,6 @@ describe("getActiveProvisionalSpatialSkeletonSegmentIds", () => {
   it("returns only active non-authoritative segment aliases", () => {
     const presentation = {
       revision: 1,
-      exactSegmentSnapshots: [],
       removedSegmentIds: [],
       activeLogicalOwners: [
         {
@@ -319,7 +318,6 @@ describe("SpatiallyIndexedSkeletonLayer inspection overlay chunks", () => {
           spatialSkeletonPresentation: new SpatialSkeletonState()
             .spatialSkeletonPresentation,
           nodeDataVersion: { value: 0 },
-          pendingNodePositionVersion: { value: 0 },
           getCachedSegmentNodes: (segmentId: bigint) => cache.get(segmentId),
           getFullSegmentNodes: vi.fn(),
           evictInactiveSegmentNodes: vi.fn(),

@@ -84,7 +84,7 @@ export interface SpatialSkeletonProjectionPublicationTarget
   ): SpatialSkeletonPreparedProjectionStatePublication | undefined;
   adoptPreparedSpatialSkeletonProjectionStatePublication(
     publication: SpatialSkeletonPreparedProjectionStatePublication,
-  ): { readonly cacheRevisions: ReadonlyMap<bigint, number> } | undefined;
+  ): boolean;
   finalizePreparedSpatialSkeletonProjectionStatePublication(
     publication: SpatialSkeletonPreparedProjectionStatePublication,
     reportError?: (error: unknown) => void,
@@ -1422,7 +1422,7 @@ export class SpatialSkeletonOptimisticProjectionRuntime
           this.target.adoptPreparedSpatialSkeletonProjectionStatePublication(
             publication.statePublication,
           );
-        if (adopted === undefined) {
+        if (!adopted) {
           throw new SpatialSkeletonProjectionRuntimeStateError(
             "A stale prepared spatial skeleton state publication cannot be adopted.",
           );

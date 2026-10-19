@@ -126,11 +126,6 @@ import {
 } from "#src/skeleton/frontend.js";
 import type { SpatialSkeletonLogicalNodeHandle } from "#src/skeleton/logical_identity.js";
 import {
-  findSpatiallyIndexedSkeletonNode,
-  getSpatiallyIndexedSkeletonDirectChildren,
-  getSpatiallyIndexedSkeletonNodeParent,
-} from "#src/skeleton/node_traversal.js";
-import {
   classifySpatialSkeletonDisplayNodeType as getSpatialSkeletonDisplayNodeType,
   getSpatialSkeletonNodeFilterLabel,
   getSpatialSkeletonNodeIconFilterType,
@@ -1542,9 +1537,9 @@ export class SegmentationUserLayer extends Base {
   ) {
     activated.registerDisposer(
       this.spatialSkeletonState.nodeDataVersion.changed.add(() => {
-        // Optimistic adoption and rollback publish through state, bypassing the
-        // legacy layer mutation callback. Invalidate before the active tool's
-        // node-data observer recomputes the path from the adopted snapshot.
+        // Optimistic adoption and rollback publish through state.
+        // Invalidate before the active tool's node-data observer recomputes
+        // the path from the adopted snapshot.
         if (this.spatialSkeletonState.hasUnconfirmedOptimisticEdits()) {
           context.state.invalidateResult();
         }
@@ -1673,65 +1668,6 @@ export class SegmentationUserLayer extends Base {
     return undefined;
   }
 
-  getCachedSpatialSkeletonSegmentNodesForEdit(segmentId: bigint) {
-    const segmentNodes =
-      this.spatialSkeletonState.getCachedSegmentNodes(segmentId);
-    if (segmentNodes === undefined) {
-      throw new Error(
-        `Segment ${segmentId} is not available in the inspected skeleton cache. Load the full skeleton before editing it.`,
-      );
-    }
-    return segmentNodes;
-  }
-
-  async getSpatialSkeletonDeleteOperationContext(
-    node: SpatiallyIndexedSkeletonNode,
-  ) {
-    const skeletonLayer = this.getSpatiallyIndexedSkeletonLayer();
-    if (skeletonLayer === undefined) {
-      throw new Error(
-        "No active spatial skeleton layer found for delete action.",
-      );
-    }
-    if (
-      getEditableSpatiallyIndexedSkeletonSource(skeletonLayer) === undefined
-    ) {
-      throw new Error(
-        "Unable to resolve editable skeleton source for the active layer.",
-      );
-    }
-
-    const segmentNodes = this.getCachedSpatialSkeletonSegmentNodesForEdit(
-      node.segmentId,
-    );
-    const currentNode = findSpatiallyIndexedSkeletonNode(
-      segmentNodes,
-      node.nodeId,
-    );
-    if (currentNode === undefined) {
-      throw new Error(
-        `Node ${node.nodeId} is not available in the inspected skeleton cache.`,
-      );
-    }
-    const childNodes = getSpatiallyIndexedSkeletonDirectChildren(
-      segmentNodes,
-      currentNode.nodeId,
-    );
-    if (currentNode.parentNodeId === undefined && childNodes.length > 0) {
-      throw new Error(
-        "Deleting a root node with children is blocked. Reroot the skeleton manually before deleting it.",
-      );
-    }
-    return {
-      node: currentNode,
-      parentNode: getSpatiallyIndexedSkeletonNodeParent(
-        segmentNodes,
-        currentNode,
-      ),
-      childNodes,
-    };
-  }
-
   getSpatialSkeletonNodeDisplayDescription(node: SpatiallyIndexedSkeletonNode) {
     return node.description?.length ? node.description : undefined;
   }
@@ -1746,13 +1682,6 @@ export class SegmentationUserLayer extends Base {
       throw new Error(`Node ${node.nodeId} is already root.`);
     }
     await executeSpatialSkeletonReroot(this, node);
-  }
-
-  markSpatialSkeletonNodeDataChanged(options?: {
-    invalidateFullSkeletonCache?: boolean;
-  }) {
-    this.spatialSkeletonFindPathContext?.state.invalidateResult();
-    this.spatialSkeletonState.markNodeDataChanged(options);
   }
 
   private clearRuntimeStateWhenSpatialSkeletonSourceChanges(

@@ -621,10 +621,6 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       expect(state.spatialSkeletonPresentation.value.preparations).toHaveLength(
         0,
       );
-      expect(
-        state.spatialSkeletonPresentation.value.exactSegmentSnapshots[0]
-          ?.snapshot.handle,
-      ).toBe(state.getCachedSegmentSnapshotHandle(10n)?.handle);
     });
     state.spatialSkeletonPresentation.changed.add(observed);
     const notificationOrder: string[] = [];
@@ -636,10 +632,6 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       expect(state.spatialSkeletonPresentation.value.preparations).toHaveLength(
         0,
       );
-      expect(
-        state.spatialSkeletonPresentation.value.exactSegmentSnapshots[0]
-          ?.snapshot.handle,
-      ).toBe(state.getCachedSegmentSnapshotHandle(10n)?.handle);
     });
     state.nodeDataVersion.changed.add(laterNodeObserver);
     const observerFailure = new Error("preview observer failed");

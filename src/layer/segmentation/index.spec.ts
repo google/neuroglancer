@@ -1197,7 +1197,6 @@ describe("layer/segmentation spatial skeleton find-path state", () => {
         spatialSkeletonFindPathContext: context,
         spatialSkeletonState: {
           nodeDataVersion: new WatchableValue(0),
-          markNodeDataChanged: vi.fn(),
           hasUnconfirmedOptimisticEdits: vi.fn(() => false),
         },
       },
@@ -1277,21 +1276,5 @@ describe("layer/segmentation spatial skeleton find-path state", () => {
     expect(active.findPathState.source?.nodeId).toBe(1n);
     expect(active.findPathState.target?.nodeId).toBe(3n);
     expect(inactive.findPathState.toJSON()).toEqual(serializedFindPathState);
-  });
-
-  it("invalidates only the active datasource result after a skeleton data change", () => {
-    const { active, inactive, layer } = makeLayerWithLoadedFindPathResult();
-
-    layer.markSpatialSkeletonNodeDataChanged({
-      invalidateFullSkeletonCache: false,
-    });
-
-    expect(active.findPathState.result).toBeUndefined();
-    expect(active.findPathState.source?.nodeId).toBe(1n);
-    expect(active.findPathState.target?.nodeId).toBe(3n);
-    expect(inactive.findPathState.toJSON()).toEqual(serializedFindPathState);
-    expect(layer.spatialSkeletonState.markNodeDataChanged).toHaveBeenCalledWith(
-      { invalidateFullSkeletonCache: false },
-    );
   });
 });

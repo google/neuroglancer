@@ -29,7 +29,6 @@ function rejectedEntry(
     sequence: 1,
     kind: "execute",
     terminal: true,
-    dependencySequences: [],
     lifecycle: {
       preview: "rolled-back",
       authority: "unchanged",
@@ -59,7 +58,7 @@ describe("optimistic queue failure explanations", () => {
       projectSpatialSkeletonOptimisticQueueSnapshot(entries, 1)[0],
     ).toMatchObject({ reason, error });
     expect(
-      projectSpatialSkeletonOptimisticRecentActivity(entries, 1, 10)[0],
+      projectSpatialSkeletonOptimisticRecentActivity(entries, 10)[0],
     ).toMatchObject({ status: "not-saved", reason });
     expect(reason).not.toContain(error.url);
   });
@@ -75,7 +74,6 @@ describe("optimistic queue failure explanations", () => {
       error.message += ` ${explanation}`;
       const reason = projectSpatialSkeletonOptimisticRecentActivity(
         [rejectedEntry(error)],
-        1,
         10,
       )[0]!.reason!;
       expect(reason).toContain("Request failed with HTTP 409 (Conflict).");
