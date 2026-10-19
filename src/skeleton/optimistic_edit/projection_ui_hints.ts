@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { SpatialSkeletonVector } from "#src/skeleton/api.js";
+import type { SkeletonVector } from "#src/skeleton/api.js";
 import type {
   SpatialSkeletonLogicalHandleMappings,
   SpatialSkeletonLogicalNodeHandle,
@@ -47,7 +47,7 @@ export interface SpatialSkeletonProjectionUiHints {
         readonly kind: "select";
         readonly node: SpatialSkeletonLogicalNodeHandle;
         readonly segment?: SpatialSkeletonLogicalSegmentHandle;
-        readonly position?: SpatialSkeletonVector;
+        readonly position?: SkeletonVector;
         readonly pin?: SpatialSkeletonProjectionSelectionPin;
         readonly moveView?: boolean;
       }
@@ -56,7 +56,7 @@ export interface SpatialSkeletonProjectionUiHints {
         readonly kind: "refresh-if-selected";
         readonly node: SpatialSkeletonLogicalNodeHandle;
         readonly segment?: SpatialSkeletonLogicalSegmentHandle;
-        readonly position?: SpatialSkeletonVector;
+        readonly position?: SkeletonVector;
       }
     | { readonly kind: "clear" };
   /** Keeps edited complete snapshots available independently of visibility. */
@@ -78,7 +78,7 @@ export interface SpatialSkeletonResolvedProjectionUiHints {
         readonly kind: "select" | "refresh-if-selected";
         readonly nodeId: bigint;
         readonly segmentId?: bigint;
-        readonly position?: SpatialSkeletonVector;
+        readonly position?: SkeletonVector;
         readonly pin: SpatialSkeletonProjectionSelectionPin;
         readonly moveView: boolean;
       }

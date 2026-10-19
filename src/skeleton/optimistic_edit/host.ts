@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { EditableSpatiallyIndexedSkeletonSource } from "#src/skeleton/api.js";
+import type { EditableSkeletonSource } from "#src/skeleton/api.js";
 import {
   isSpatialSkeletonOptimisticEditingProvider,
   SpatialSkeletonOptimisticDatasourceContractError,
@@ -24,7 +24,7 @@ import type { SpatialSkeletonOptimisticEditQueue } from "#src/skeleton/optimisti
 import type { SpatialSkeletonLayerContext } from "#src/skeleton/spatial_skeleton_manager.js";
 
 export function getSpatialSkeletonOptimisticEditingProvider(
-  source: EditableSpatiallyIndexedSkeletonSource,
+  source: EditableSkeletonSource,
 ): SpatialSkeletonOptimisticEditingProvider | undefined {
   const candidate = source.optimisticEditing;
   return isSpatialSkeletonOptimisticEditingProvider(candidate)
@@ -41,7 +41,7 @@ export function getSpatialSkeletonOptimisticEditingProvider(
  */
 export function ensureSpatialSkeletonOptimisticEditQueue(
   layer: SpatialSkeletonLayerContext,
-  source: EditableSpatiallyIndexedSkeletonSource,
+  source: EditableSkeletonSource,
 ): SpatialSkeletonOptimisticEditQueue {
   const state = layer.spatialSkeletonState;
   const provider = getSpatialSkeletonOptimisticEditingProvider(source);

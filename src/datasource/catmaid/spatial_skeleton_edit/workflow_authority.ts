@@ -27,6 +27,11 @@ import {
   type SpatialSkeletonLogicalResourceHandle,
   type SpatialSkeletonLogicalSegmentHandle,
 } from "#src/skeleton/logical_identity.js";
+import {
+  getSkeletonNodeConfidence,
+  getSkeletonNodeRadius,
+  isSkeletonNodeTrueEnd,
+} from "#src/skeleton/node_attributes.js";
 import type { SpatialSkeletonOptimisticIdentityService } from "#src/skeleton/optimistic_edit/api.js";
 import type { SpatialSkeletonMutationWorkflowContext } from "#src/skeleton/optimistic_edit/ports.js";
 import type { SpatialSkeletonAuthoritativeReconciliation } from "#src/skeleton/optimistic_edit/projection_runtime.js";
@@ -278,8 +283,8 @@ export abstract class CatmaidWorkflowAuthorityDriverBase {
             description: typeof value === "string" ? value : "",
             isTrueEnd:
               semantic.kind === "delete-node"
-                ? semantic.deletedSnapshot.isTrueEnd === true
-                : semantic.nodeSnapshot.isTrueEnd === true,
+                ? isSkeletonNodeTrueEnd(semantic.deletedSnapshot)
+                : isSkeletonNodeTrueEnd(semantic.nodeSnapshot),
           },
         };
       }
@@ -409,11 +414,11 @@ export abstract class CatmaidWorkflowAuthorityDriverBase {
         case "description":
           return semantic.deletedSnapshot.description;
         case "true-end":
-          return semantic.deletedSnapshot.isTrueEnd ?? false;
+          return isSkeletonNodeTrueEnd(semantic.deletedSnapshot);
         case "radius":
-          return semantic.deletedSnapshot.radius ?? 0;
+          return getSkeletonNodeRadius(semantic.deletedSnapshot) ?? 0;
         case "confidence":
-          return semantic.deletedSnapshot.confidence ?? 0;
+          return getSkeletonNodeConfidence(semantic.deletedSnapshot) ?? 0;
       }
     }
     return context.direction === "forward" ? semantic.after : semantic.before;

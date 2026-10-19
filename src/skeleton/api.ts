@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import type {
   SpatialSkeletonAddNodesCommandFactory,
   SpatialSkeletonInsertNodesCommandFactory,
@@ -29,79 +30,105 @@ import type {
 } from "#src/skeleton/command_factories.js";
 import type { SpatialSkeletonOptimisticEditingProvider } from "#src/skeleton/optimistic_edit/api.js";
 
-export type SpatialSkeletonVector = ArrayLike<number>;
+// One number per dimension of the model space, in its units, such as a position or a chunk size.
+export type SkeletonVector = ArrayLike<number>;
+// Keyed by vertex attribute id. Each value has one number per component.
+export type SkeletonNodeAttributes = Readonly<
+  Record<string, ArrayLike<number>>
+>;
 
-export interface SpatialSkeletonBounds {
-  lowerBounds: SpatialSkeletonVector;
-  upperBounds: SpatialSkeletonVector;
+export enum KnownSkeletonNodeAttribute {
+  RADIUS = "radius",
+  CONFIDENCE_PERCENT = "confidence",
+  // On a leaf where the branch is confirmed to end.
+  IS_TRUE_END = "true_end",
 }
 
-export interface SpatialSkeletonGridCellIndex {
-  cell: SpatialSkeletonVector;
+export interface SkeletonNode {
+  readonly nodeId: bigint;
+  readonly segmentId: bigint;
+  readonly position: SkeletonVector;
+  readonly parentNodeId?: bigint;
+  readonly attributes?: SkeletonNodeAttributes;
+  readonly description?: string;
 }
 
-export interface SpatialSkeletonSpatialIndexLevel {
-  chunkSize: SpatialSkeletonVector;
-  gridShape: readonly number[];
-  limit: number;
+export enum SkeletonEdgeDirection {
+  CHILD_TO_PARENT,
+  PARENT_TO_CHILD,
+  // Parents are inferred from the whole skeleton.
+  UNDIRECTED,
 }
 
-export interface SpatiallyIndexedSkeletonNodeBase {
-  nodeId: bigint;
-  segmentId: bigint;
-  position: SpatialSkeletonVector;
-  parentNodeId?: bigint;
+export interface SkeletonEdge {
+  readonly firstNodeId: bigint;
+  readonly secondNodeId: bigint;
 }
 
-export interface SpatiallyIndexedSkeletonNode
-  extends SpatiallyIndexedSkeletonNodeBase {
-  radius?: number;
-  confidence?: number;
-  description?: string;
-  isTrueEnd?: boolean;
+export interface SkeletonSpatialIndexLevel {
+  // Chunk `c` spans `c * chunkSize` to `(c + 1) * chunkSize`, counted from 0, not from the lower bound.
+  readonly chunkSize: SkeletonVector;
+  // Largest expected node count in one chunk. 0 means every node and is allowed only on the finest level.
+  readonly limit: number;
 }
 
-export interface SpatiallyIndexedSkeletonMetadata
-  extends SpatialSkeletonBounds {
-  spatial: readonly SpatialSkeletonSpatialIndexLevel[];
-  readonly readonly: boolean;
+export interface SkeletonSpatialIndexMetadata {
+  // Rank 3, with finite bounds. The bounds set the extent of the chunk grid.
+  readonly modelSpace: CoordinateSpace;
+  // Must be provided from coarsest to finest.
+  readonly levels: readonly SkeletonSpatialIndexLevel[];
 }
 
-export interface SpatialSkeletonConfidenceConfiguration {
-  values: readonly number[];
+export interface SkeletonManifest {
+  // Each key names one read. The source chooses how much of the skeleton one read covers.
+  // A missing skeleton may have keys whose fragments have no nodes.
+  readonly fragmentKeys: readonly string[];
 }
 
-export interface SpatiallyIndexedSkeletonSource {
-  readonly readonly: boolean;
-  listSkeletons(): Promise<bigint[]>;
-  getSkeleton(
-    skeletonId: bigint,
-    options?: { signal?: AbortSignal },
-  ): Promise<SpatiallyIndexedSkeletonNode[]>;
-  getSpatialIndexMetadata(): Promise<SpatiallyIndexedSkeletonMetadata | null>;
-  fetchNodes(
-    cellIndex: SpatialSkeletonGridCellIndex,
-    options?: {
-      signal?: AbortSignal;
-    },
-  ): Promise<SpatiallyIndexedSkeletonNodeBase[]>;
+export type SkeletonFragmentNode = Omit<SkeletonNode, "parentNodeId">;
+
+export interface SkeletonFragment {
+  // Each node of a skeleton is in exactly one of its fragments.
+  readonly nodes: readonly SkeletonFragmentNode[];
+  // Each edge is in exactly one fragment.
+  // An edge's endpoints may be in other fragments.
+  readonly edges: readonly SkeletonEdge[];
 }
 
-export interface EditableSpatiallyIndexedSkeletonSource
-  extends SpatiallyIndexedSkeletonSource {
-  readonly readonly: false;
-  /** Required datasource adapter for the generic optimistic edit queue host. */
+export interface SkeletonFragmentSource {
+  readonly edgeDirection: SkeletonEdgeDirection;
+  getSkeletonManifest(
+    segmentId: bigint,
+    signal: AbortSignal,
+  ): Promise<SkeletonManifest>;
+  getSkeletonFragment(
+    segmentId: bigint,
+    fragmentKey: string,
+    signal: AbortSignal,
+  ): Promise<SkeletonFragment>;
+}
+
+export interface SkeletonSpatialIndexSource {
+  // Resolves to [] for an empty or missing chunk.
+  downloadChunk(
+    chunkGridPosition: SkeletonVector,
+    signal: AbortSignal,
+  ): Promise<SkeletonNode[]>;
+}
+
+export interface EditableSkeletonSource extends SkeletonFragmentSource {
   readonly optimisticEditing: SpatialSkeletonOptimisticEditingProvider;
   readonly addNodesCommand: SpatialSkeletonAddNodesCommandFactory;
-  readonly insertNodesCommand?: SpatialSkeletonInsertNodesCommandFactory;
-  readonly deleteNodesCommand: SpatialSkeletonDeleteNodesCommandFactory;
   readonly moveNodesCommand: SpatialSkeletonMoveNodesCommandFactory;
+  readonly deleteNodesCommand: SpatialSkeletonDeleteNodesCommandFactory;
   readonly splitSkeletonsCommand: SpatialSkeletonSplitSkeletonsCommandFactory;
   readonly mergeSkeletonsCommand: SpatialSkeletonMergeSkeletonsCommandFactory;
+  readonly insertNodesCommand?: SpatialSkeletonInsertNodesCommandFactory;
   readonly rerootCommand?: SpatialSkeletonRerootCommandFactory;
   readonly editNodeDescriptionCommand?: SpatialSkeletonEditNodeDescriptionCommandFactory;
   readonly editNodeTrueEndCommand?: SpatialSkeletonEditNodeTrueEndCommandFactory;
   readonly editNodeRadiusCommand?: SpatialSkeletonEditNodeRadiusCommandFactory;
   readonly editNodeConfidenceCommand?: SpatialSkeletonEditNodeConfidenceCommandFactory;
-  readonly spatialSkeletonConfidenceConfiguration?: SpatialSkeletonConfidenceConfiguration;
+  // The only confidence values the source can store. Without it, any value from 0 to 100.
+  readonly confidenceValues?: readonly number[];
 }

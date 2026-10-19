@@ -119,6 +119,10 @@
   white-space: nowrap;
 }
 
+.neuroglancer-skeleton-filter-row .neuroglancer-tool-button[hidden] {
+  display: none;
+}
+
 .neuroglancer-skeleton-navigation-bar {
   display: flex;
   align-items: center;
@@ -188,6 +192,17 @@
   color: #c6c6c6;
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.neuroglancer-skeleton-inferred-topology {
+  flex: none;
+  font-size: small;
+  color: #d9e7f8;
+  border: 1px solid #465b75;
+  border-radius: 2px;
+  background: #142033;
+  padding: 0 0.4em;
+  cursor: help;
 }
 
 .neuroglancer-skeleton-queue {

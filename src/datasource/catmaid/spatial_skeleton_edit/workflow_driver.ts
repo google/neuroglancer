@@ -35,10 +35,7 @@ import type {
   CatmaidSplitSemantic,
   CatmaidWorkflow,
 } from "#src/datasource/catmaid/spatial_skeleton_edit/workflow_recipe.js";
-import type {
-  SpatiallyIndexedSkeletonNode,
-  SpatialSkeletonVector,
-} from "#src/skeleton/api.js";
+import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
 import {
   type SpatialSkeletonAction,
   type SpatialSkeletonEditCommand,
@@ -53,6 +50,11 @@ import {
   type SpatialSkeletonLogicalResourceHandle,
   type SpatialSkeletonLogicalSegmentHandle,
 } from "#src/skeleton/logical_identity.js";
+import {
+  getSkeletonNodeConfidence,
+  getSkeletonNodeRadius,
+  isSkeletonNodeTrueEnd,
+} from "#src/skeleton/node_attributes.js";
 import type {
   SpatialSkeletonOptimisticIdentityService,
   SpatialSkeletonProvisionalNumericIdPolicy,
@@ -76,6 +78,7 @@ import type {
   SpatialSkeletonProjectionDelta,
   SpatialSkeletonProjectionInverseDelta,
 } from "#src/skeleton/spatial_skeleton_projection_reducer.js";
+import { getSkeletonNodeChanges } from "#src/skeleton/spatial_skeleton_projection_reducer.js";
 
 export type { CatmaidWorkflow } from "#src/datasource/catmaid/spatial_skeleton_edit/workflow_recipe.js";
 
@@ -124,7 +127,7 @@ export interface CatmaidSpatialSkeletonCommandDescriptor
   readonly payload: CatmaidSpatialSkeletonCommandPayload;
 }
 
-function copyVector(value: ArrayLike<number>): SpatialSkeletonVector {
+function copyVector(value: ArrayLike<number>): SkeletonVector {
   return Object.freeze(Array.from(value));
 }
 
@@ -141,16 +144,14 @@ function uniqueResources(
   return Object.freeze([...resources.values()]);
 }
 
-function freezeNode(node: SpatiallyIndexedSkeletonNode) {
+function freezeNode(node: SkeletonNode) {
   return Object.freeze({
     nodeId: node.nodeId,
     segmentId: node.segmentId,
     position: toCatmaidPositionInModelSpace(node.position, "node position"),
     parentNodeId: node.parentNodeId,
-    radius: node.radius,
-    confidence: node.confidence,
+    attributes: node.attributes,
     description: node.description,
-    isTrueEnd: node.isTrueEnd ?? false,
   });
 }
 
@@ -424,7 +425,10 @@ export class CatmaidSpatialSkeletonWorkflowDriver
         ),
         deletedSnapshot: freezeNode({
           ...semantic.deletedSnapshot,
-          ...snapshot.attributes,
+          ...getSkeletonNodeChanges(
+            semantic.deletedSnapshot,
+            snapshot.attributes,
+          ),
           position: snapshot.position,
           parentNodeId: parent?.capturedNodeId,
         }),
@@ -751,7 +755,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
     snapshot: CompleteSkeletonSnapshotHandle,
     targetNodeId: bigint,
   ) {
-    const path: SpatiallyIndexedSkeletonNode[] = [];
+    const path: SkeletonNode[] = [];
     const seen = new Set<bigint>();
     let current = snapshot.getNode(targetNodeId);
     if (current === undefined) {
@@ -957,7 +961,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
         after = payload.options.nextDescription;
         break;
       case "true-end":
-        before = nodeSnapshot.isTrueEnd ?? false;
+        before = isSkeletonNodeTrueEnd(nodeSnapshot);
         after = payload.options.nextIsTrueEnd;
         if (after) {
           if (nodeSnapshot.parentNodeId === undefined) {
@@ -973,11 +977,11 @@ export class CatmaidSpatialSkeletonWorkflowDriver
         }
         break;
       case "radius":
-        before = nodeSnapshot.radius ?? 0;
+        before = getSkeletonNodeRadius(nodeSnapshot) ?? 0;
         after = payload.options.nextRadius;
         break;
       case "confidence":
-        before = nodeSnapshot.confidence ?? 0;
+        before = getSkeletonNodeConfidence(nodeSnapshot) ?? 0;
         after = payload.options.nextConfidence;
         break;
     }
@@ -1019,7 +1023,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
       ...capture,
       node,
       originalRoot,
-      originalRootConfidence: root.confidence,
+      originalRootConfidence: getSkeletonNodeConfidence(root),
       segment,
     });
   }
@@ -1113,7 +1117,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
       firstNode: firstHandle,
       secondNode: secondHandle,
       originalRoot: this.getRetainedNode(capture, secondRoot.nodeId)!,
-      originalRootConfidence: secondRoot.confidence,
+      originalRootConfidence: getSkeletonNodeConfidence(secondRoot),
       inverseOrientation: "second-from-first",
     });
   }

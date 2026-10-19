@@ -4,15 +4,17 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  */
 
-import type {
-  SpatiallyIndexedSkeletonNode,
-  SpatialSkeletonVector,
-} from "#src/skeleton/api.js";
+import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
 import type { CompleteSkeletonSnapshotHandle } from "#src/skeleton/complete_skeleton_snapshot.js";
 import type {
   SpatialSkeletonLogicalNodeHandle,
   SpatialSkeletonLogicalSegmentHandle,
 } from "#src/skeleton/logical_identity.js";
+import {
+  getSkeletonNodeConfidence,
+  getSkeletonNodeRadius,
+  isSkeletonNodeTrueEnd,
+} from "#src/skeleton/node_attributes.js";
 import type { SpatialSkeletonProjectionNodeAttributes } from "#src/skeleton/spatial_skeleton_projection_reducer.js";
 
 export interface CatmaidCapturedSegment {
@@ -38,7 +40,7 @@ export interface CatmaidCreatedNodeSemantic extends CatmaidSemanticBase {
   readonly node: SpatialSkeletonLogicalNodeHandle;
   readonly segment: SpatialSkeletonLogicalSegmentHandle;
   readonly parent: CatmaidRetainedNode | undefined;
-  readonly position: SpatialSkeletonVector;
+  readonly position: SkeletonVector;
   readonly attributes: SpatialSkeletonProjectionNodeAttributes;
   readonly createsSegment: boolean;
   readonly children?: readonly CatmaidRetainedNode[];
@@ -50,7 +52,7 @@ export interface CatmaidDeleteNodeSemantic extends CatmaidSemanticBase {
   readonly segment: SpatialSkeletonLogicalSegmentHandle;
   readonly parent: CatmaidRetainedNode | undefined;
   readonly children: readonly CatmaidRetainedNode[];
-  readonly deletedSnapshot: SpatiallyIndexedSkeletonNode;
+  readonly deletedSnapshot: SkeletonNode;
   readonly wasSoleRoot: boolean;
 }
 
@@ -58,15 +60,15 @@ export interface CatmaidMoveNodeSemantic extends CatmaidSemanticBase {
   readonly kind: "move-node";
   readonly node: CatmaidRetainedNode;
   readonly segment: SpatialSkeletonLogicalSegmentHandle;
-  readonly before: SpatialSkeletonVector;
-  readonly after: SpatialSkeletonVector;
+  readonly before: SkeletonVector;
+  readonly after: SkeletonVector;
 }
 
 export interface CatmaidAttributeSemantic extends CatmaidSemanticBase {
   readonly kind: "description" | "true-end" | "radius" | "confidence";
   readonly node: CatmaidRetainedNode;
   readonly segment: SpatialSkeletonLogicalSegmentHandle;
-  readonly nodeSnapshot: SpatiallyIndexedSkeletonNode;
+  readonly nodeSnapshot: SkeletonNode;
   readonly before: string | boolean | number | undefined;
   readonly after: string | boolean | number | undefined;
 }
@@ -196,14 +198,14 @@ function getRestoreSteps(semantic: CatmaidDeleteNodeSemantic) {
   }
   if (
     semantic.deletedSnapshot.description === undefined &&
-    semantic.deletedSnapshot.isTrueEnd === true
+    isSkeletonNodeTrueEnd(semantic.deletedSnapshot)
   ) {
     result.push({ kind: "true-end", semantic });
   }
-  if (semantic.deletedSnapshot.radius !== undefined) {
+  if (getSkeletonNodeRadius(semantic.deletedSnapshot) !== undefined) {
     result.push({ kind: "radius", semantic });
   }
-  if (semantic.deletedSnapshot.confidence !== undefined) {
+  if (getSkeletonNodeConfidence(semantic.deletedSnapshot) !== undefined) {
     result.push({ kind: "confidence", semantic });
   }
   return Object.freeze(result);

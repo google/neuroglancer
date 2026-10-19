@@ -82,13 +82,14 @@ describe("CatmaidClient skeleton editing methods", () => {
 
     await expect(client.getSpatialIndexMetadata()).resolves.toBeNull();
     await expect(client.getSpatialIndexMetadata()).resolves.toEqual({
-      lowerBounds: [5, 6, 7],
-      upperBounds: [25, 66, 127],
+      bounds: {
+        lowerBounds: Float64Array.of(5, 6, 7),
+        upperBounds: Float64Array.of(25, 66, 127),
+      },
       readonly: true,
       spatial: [
         {
           chunkSize: [15, 15, 15],
-          gridShape: [2, 4, 8],
           limit: 1,
         },
       ],
@@ -128,13 +129,14 @@ describe("CatmaidClient skeleton editing methods", () => {
     });
 
     await expect(client.getSpatialIndexMetadata()).resolves.toEqual({
-      lowerBounds: [5, 6, 7],
-      upperBounds: [25, 66, 127],
+      bounds: {
+        lowerBounds: Float64Array.of(5, 6, 7),
+        upperBounds: Float64Array.of(25, 66, 127),
+      },
       readonly: true,
       spatial: [
         {
           chunkSize: [15, 15, 15],
-          gridShape: [2, 4, 8],
           limit: 0,
         },
       ],
@@ -157,7 +159,6 @@ describe("CatmaidClient skeleton editing methods", () => {
       spatial: [
         {
           chunkSize: [15, 15, 15],
-          gridShape: [2, 4, 8],
           limit: 0,
         },
       ],
@@ -200,33 +201,30 @@ describe("CatmaidClient skeleton editing methods", () => {
     });
 
     await expect(client.getSpatialIndexMetadata()).resolves.toEqual({
-      lowerBounds: [5, 6, 7],
-      upperBounds: [25, 66, 127],
+      bounds: {
+        lowerBounds: Float64Array.of(5, 6, 7),
+        upperBounds: Float64Array.of(25, 66, 127),
+      },
       readonly: true,
       spatial: [
         {
           chunkSize: [11168145, 11168145, 11168145],
-          gridShape: [1, 1, 1],
           limit: 500,
         },
         {
           chunkSize: [6632497, 6632497, 6632497],
-          gridShape: [1, 1, 1],
           limit: 500,
         },
         {
           chunkSize: [3939000, 3939000, 3939000],
-          gridShape: [1, 1, 1],
           limit: 7000,
         },
         {
           chunkSize: [2339000, 2339000, 2339000],
-          gridShape: [1, 1, 1],
           limit: 27500,
         },
         {
           chunkSize: [1500000, 1500000, 1500000],
-          gridShape: [1, 1, 1],
           limit: 70000,
         },
       ],
@@ -234,6 +232,29 @@ describe("CatmaidClient skeleton editing methods", () => {
     await expect(client.getCacheProvider()).resolves.toBe(
       "cached_msgpack_grid",
     );
+  });
+
+  it("lists anisotropic levels from coarsest to finest whatever order the stack metadata gives", async () => {
+    const client = new CatmaidClient("https://example.invalid", 1);
+    (client as any).listStacks = vi.fn().mockResolvedValue([{ id: 7 }]);
+    (client as any).getStackInfo = vi.fn().mockResolvedValue({
+      dimension: { x: 10, y: 20, z: 30 },
+      resolution: { x: 2, y: 3, z: 4 },
+      translation: { x: 5, y: 6, z: 7 },
+      metadata: {
+        spatial: [
+          { chunk_size: [2000, 2000, 40], limit: 0 },
+          { chunk_size: [4000, 4000, 40], limit: 500 },
+        ],
+      },
+    });
+
+    const metadata = await client.getSpatialIndexMetadata();
+
+    expect(metadata?.spatial).toEqual([
+      { chunkSize: [4000, 4000, 40], limit: 500 },
+      { chunkSize: [2000, 2000, 40], limit: 0 },
+    ]);
   });
 
   it("accepts zero CATMAID spatial skeleton metadata limits", async () => {
@@ -275,26 +296,6 @@ describe("CatmaidClient skeleton editing methods", () => {
     await expect(client.getSpatialIndexMetadata()).resolves.toMatchObject({
       spatial: [{ limit: 10 }, { limit: 0 }],
     });
-  });
-
-  it("rejects zero CATMAID spatial skeleton metadata limits on non-finest levels", async () => {
-    const client = new CatmaidClient("https://example.invalid", 1);
-    (client as any).listStacks = vi.fn().mockResolvedValue([{ id: 7 }]);
-    (client as any).getStackInfo = vi.fn().mockResolvedValue({
-      dimension: { x: 10, y: 20, z: 30 },
-      resolution: { x: 2, y: 3, z: 4 },
-      translation: { x: 5, y: 6, z: 7 },
-      metadata: {
-        spatial: [
-          { chunk_size: [30, 30, 30], limit: 0 },
-          { chunk_size: [15, 15, 15], limit: 10 },
-        ],
-      },
-    });
-
-    await expect(client.getSpatialIndexMetadata()).rejects.toThrow(
-      "Spatial skeleton limit: 0 is only supported on the finest source level.",
-    );
   });
 
   it("parses compact-detail rows with edition times and labels in one request", async () => {
@@ -356,30 +357,24 @@ describe("CatmaidClient skeleton editing methods", () => {
         parentNodeId: undefined,
         position: new Float32Array([23697030, 15055839, 16651262]),
         segmentId: 2n,
-        radius: 2000,
-        confidence: 100,
         description: "afonso reviewed it",
-        isTrueEnd: false,
+        attributes: { radius: [2000], confidence: [100] },
       },
       {
         nodeId: 22107955n,
         parentNodeId: 22107954n,
         position: new Float32Array([23705874, 15093672, 16682375]),
         segmentId: 2n,
-        radius: 2000,
-        confidence: 100,
         description: "test 123 4",
-        isTrueEnd: false,
+        attributes: { radius: [2000], confidence: [100] },
       },
       {
         nodeId: 22107959n,
         parentNodeId: 22107958n,
         position: new Float32Array([23704520, 15085237, 16708998]),
         segmentId: 2n,
-        radius: 2000,
-        confidence: 100,
         description: undefined,
-        isTrueEnd: true,
+        attributes: { radius: [2000], confidence: [100], true_end: [1] },
       },
     ]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -438,10 +433,8 @@ describe("CatmaidClient skeleton editing methods", () => {
         parentNodeId: undefined,
         position: new Float32Array([23697030, 15055839, 16651262]),
         segmentId: 2n,
-        radius: 2000,
-        confidence: 100,
         description: "left, branch",
-        isTrueEnd: false,
+        attributes: { radius: [2000], confidence: [100] },
       },
     ]);
   });
@@ -521,20 +514,16 @@ describe("CatmaidClient skeleton editing methods", () => {
         parentNodeId: undefined,
         position: new Float32Array([23697030, 15055839, 16651262]),
         segmentId: 2n,
-        radius: 2000,
-        confidence: 100,
         description: "left, branch",
-        isTrueEnd: false,
+        attributes: { radius: [2000], confidence: [100] },
       },
       {
         nodeId: 22107955n,
         parentNodeId: 22107946n,
         position: new Float32Array([23705874, 15093672, 16682375]),
         segmentId: 2n,
-        radius: 2000,
-        confidence: 100,
         description: "left, branch",
-        isTrueEnd: true,
+        attributes: { radius: [2000], confidence: [100], true_end: [1] },
       },
     ]);
   });
@@ -558,10 +547,8 @@ describe("CatmaidClient skeleton editing methods", () => {
         parentNodeId: undefined,
         position: new Float32Array([23697030, 15055839, 16651262]),
         segmentId: 2n,
-        radius: 2000,
-        confidence: 100,
         description: undefined,
-        isTrueEnd: false,
+        attributes: { radius: [2000], confidence: [100] },
       },
     ]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -611,8 +598,8 @@ describe("CatmaidClient skeleton editing methods", () => {
 
     await expect(
       client.fetchNodes({
-        lowerBounds: [0, 0, 0],
-        upperBounds: [10, 10, 10],
+        lowerBounds: Float64Array.of(0, 0, 0),
+        upperBounds: Float64Array.of(10, 10, 10),
       }),
     ).resolves.toEqual([
       {
@@ -643,8 +630,8 @@ describe("CatmaidClient skeleton editing methods", () => {
 
     await client.fetchNodes(
       {
-        lowerBounds: [0, 0, 0],
-        upperBounds: [10, 10, 10],
+        lowerBounds: Float64Array.of(0, 0, 0),
+        upperBounds: Float64Array.of(10, 10, 10),
       },
       0.5,
     );
@@ -658,8 +645,8 @@ describe("CatmaidClient skeleton editing methods", () => {
     expect(
       getCatmaidSpatialSkeletonGridCellBounds([2, 3, 4], [10, 20, 30]),
     ).toEqual({
-      lowerBounds: [20, 60, 120],
-      upperBounds: [30, 80, 150],
+      lowerBounds: Float64Array.of(20, 60, 120),
+      upperBounds: Float64Array.of(30, 80, 150),
     });
   });
 
@@ -670,8 +657,8 @@ describe("CatmaidClient skeleton editing methods", () => {
 
     await expect(
       client.fetchNodes({
-        lowerBounds: [0, 0],
-        upperBounds: [10, 10],
+        lowerBounds: Float64Array.of(0, 0),
+        upperBounds: Float64Array.of(10, 10),
       }),
     ).rejects.toThrow(/requires at least 3 coordinates/i);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -1347,8 +1334,8 @@ describe("CatmaidClient skeleton editing methods", () => {
     try {
       await expect(
         client.fetchNodes({
-          lowerBounds: [0, 0, 0],
-          upperBounds: [10, 10, 10],
+          lowerBounds: Float64Array.of(0, 0, 0),
+          upperBounds: Float64Array.of(10, 10, 10),
         }),
       ).resolves.toEqual([
         {

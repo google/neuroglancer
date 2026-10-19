@@ -16,8 +16,38 @@
 
 import { describe, expect, it, vi } from "vitest";
 
+import { SkeletonEdgeDirection, type SkeletonNode } from "#src/skeleton/api.js";
 import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { SpatialSkeletonMergeTargetPrefetch } from "#src/ui/skeleton_merge_target_prefetch.js";
+
+function makeWholeSkeletonReads(
+  getSkeleton: (
+    skeletonId: bigint,
+    options: { signal: AbortSignal },
+  ) => unknown,
+) {
+  return {
+    edgeDirection: SkeletonEdgeDirection.CHILD_TO_PARENT,
+    getSkeletonManifest: async () => ({ fragmentKeys: ["skeleton"] }),
+    getSkeletonFragment: async (
+      skeletonId: bigint,
+      _fragmentKey: string,
+      signal: AbortSignal,
+    ) => {
+      const skeletonNodes = (await getSkeleton(skeletonId, {
+        signal,
+      })) as SkeletonNode[];
+      return {
+        nodes: skeletonNodes.map(({ parentNodeId: _, ...node }) => node),
+        edges: skeletonNodes.flatMap(({ nodeId, parentNodeId }) =>
+          parentNodeId === undefined
+            ? []
+            : [{ firstNodeId: nodeId, secondNodeId: parentNodeId }],
+        ),
+      };
+    },
+  };
+}
 
 function makeSkeletonNode(segmentId: bigint, nodeId: bigint) {
   return {
@@ -50,13 +80,7 @@ function makeSkeletonLayer() {
     },
   );
   const skeletonLayer = {
-    source: {
-      readonly: false,
-      listSkeletons: async () => [],
-      getSkeleton,
-      fetchNodes: async () => [],
-      getSpatialIndexMetadata: async () => null,
-    },
+    fragmentSource: makeWholeSkeletonReads(getSkeleton),
   } as any;
   return { skeletonLayer, getSkeleton, reads };
 }
@@ -91,6 +115,7 @@ describe("SpatialSkeletonMergeTargetPrefetch", () => {
     const prefetch = new SpatialSkeletonMergeTargetPrefetch(state);
 
     prefetch.setTarget(skeletonLayer, 7n);
+    await flushPromises();
     reads.get(7n)!.deferred.resolve([makeSkeletonNode(7n, 70n)]);
     await flushPromises();
     state.evictInactiveSegmentNodes([]);
@@ -107,6 +132,7 @@ describe("SpatialSkeletonMergeTargetPrefetch", () => {
     const prefetch = new SpatialSkeletonMergeTargetPrefetch(state);
 
     prefetch.setTarget(skeletonLayer, 7n);
+    await flushPromises();
     reads.get(7n)!.deferred.resolve([makeSkeletonNode(7n, 70n)]);
     await flushPromises();
     state.replaceCachedSegmentSnapshots([[7n, [makeSkeletonNode(7n, 71n)]]]);
@@ -119,19 +145,20 @@ describe("SpatialSkeletonMergeTargetPrefetch", () => {
     expect(getSkeleton).toHaveBeenCalledTimes(1);
   });
 
-  it("cancels the previous target's download when the pointer moves to another skeleton", () => {
+  it("never downloads the previous target when the pointer moves to another skeleton", async () => {
     const state = new SpatialSkeletonState();
     const { skeletonLayer, reads } = makeSkeletonLayer();
     const prefetch = new SpatialSkeletonMergeTargetPrefetch(state);
 
     prefetch.setTarget(skeletonLayer, 7n);
     prefetch.setTarget(skeletonLayer, 8n);
+    await flushPromises();
 
-    expect(reads.get(7n)!.signal?.aborted).toBe(true);
+    expect(reads.has(7n)).toBe(false);
     expect(reads.get(8n)!.signal?.aborted).toBe(false);
   });
 
-  it("keeps a download the display also awaits when the target changes", () => {
+  it("keeps a download the display also awaits when the target changes", async () => {
     const state = new SpatialSkeletonState();
     const { skeletonLayer, reads } = makeSkeletonLayer();
     const prefetch = new SpatialSkeletonMergeTargetPrefetch(state);
@@ -139,6 +166,7 @@ describe("SpatialSkeletonMergeTargetPrefetch", () => {
     void state.getFullSegmentNodes(skeletonLayer, 7n).catch(() => undefined);
     prefetch.setTarget(skeletonLayer, 7n);
     prefetch.setTarget(skeletonLayer, 8n);
+    await flushPromises();
 
     expect(reads.get(7n)!.signal?.aborted).toBe(false);
   });
@@ -149,6 +177,7 @@ describe("SpatialSkeletonMergeTargetPrefetch", () => {
     const prefetch = new SpatialSkeletonMergeTargetPrefetch(state);
 
     prefetch.setTarget(skeletonLayer, 7n);
+    await flushPromises();
     reads.get(7n)!.deferred.reject(new Error("network"));
     await flushPromises();
     prefetch.setTarget(skeletonLayer, 7n);

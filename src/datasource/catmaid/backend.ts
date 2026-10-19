@@ -25,8 +25,6 @@ import {
   CatmaidSkeletonSourceParameters,
   makeCatmaidClient,
 } from "#src/datasource/catmaid/base.js";
-import { packCatmaidSkeletonNodes } from "#src/datasource/catmaid/skeleton_packing.js";
-import type { SpatiallyIndexedSkeletonChunk } from "#src/skeleton/backend.js";
 import { SpatiallyIndexedSkeletonSourceBackend } from "#src/skeleton/backend.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
 
@@ -50,25 +48,14 @@ export class CatmaidSpatiallyIndexedSkeletonSourceBackend extends WithParameters
     super(args[0], args[1]);
   }
 
-  async download(chunk: SpatiallyIndexedSkeletonChunk, signal: AbortSignal) {
-    const { chunkGridPosition } = chunk;
-    const { chunkDataSize } = this.spec;
+  downloadChunk(chunkGridPosition: Float32Array, signal: AbortSignal) {
     const bounds = getCatmaidSpatialSkeletonGridCellBounds(
       chunkGridPosition,
-      chunkDataSize,
+      this.spec.chunkDataSize,
     );
-    const catmaidLod = this.parameters.catmaidLod ?? 0;
-    const { cacheProvider } = this.parameters.catmaidParameters;
-    const nodes = await this.client.fetchNodes(bounds, catmaidLod, {
-      cacheProvider,
+    return this.client.fetchNodes(bounds, this.parameters.catmaidLod ?? 0, {
+      cacheProvider: this.parameters.catmaidParameters.cacheProvider,
       signal,
     });
-    const packed = packCatmaidSkeletonNodes(nodes);
-
-    chunk.vertexPositions = packed.vertexPositions;
-    chunk.indices = packed.indices;
-
-    chunk.nodeIds = packed.nodeIds;
-    chunk.segmentIds = packed.segmentIds;
   }
 }

@@ -21,7 +21,7 @@ import type { DisplayContext } from "#src/display_context.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import {
   getSegmentIdFromLayerSelectionValue,
-  hasSpatialSkeletonNodeSelection,
+  hasSkeletonNodeSelection,
 } from "#src/layer/segmentation/selection.js";
 import { PerspectivePanel } from "#src/perspective_view/panel.js";
 import { getChunkPositionFromCombinedGlobalLocalPositions } from "#src/render_coordinate_transform.js";
@@ -40,10 +40,7 @@ import {
   SKELETON_FIND_PATH_SELECT_ENDPOINT,
   SKELETON_PIN_NODE,
 } from "#src/skeleton/actions.js";
-import type {
-  SpatiallyIndexedSkeletonNode,
-  SpatialSkeletonVector,
-} from "#src/skeleton/api.js";
+import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
 import {
   SpatialSkeletonActions,
   type SpatialSkeletonAction,
@@ -68,13 +65,13 @@ import {
   SliceViewPanelSpatiallyIndexedSkeletonLayer,
 } from "#src/skeleton/frontend.js";
 import {
-  buildSpatiallyIndexedSkeletonNavigationGraph,
   getPathBetweenNodes,
-  type SpatiallyIndexedSkeletonNavigationGraph,
+  type SkeletonNavigationGraph,
 } from "#src/skeleton/navigation_graph.js";
+import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
 import {
-  classifySpatialSkeletonDisplayNodeType,
-  SpatialSkeletonDisplayNodeType,
+  classifySkeletonDisplayNodeType,
+  SkeletonDisplayNodeType,
 } from "#src/skeleton/node_types.js";
 import type { SpatialSkeletonOptimisticEditExecution } from "#src/skeleton/optimistic_edit/types.js";
 import { StatusMessage } from "#src/status.js";
@@ -294,7 +291,7 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     | {
         nodeId: bigint;
         segmentId?: bigint;
-        position?: SpatialSkeletonVector;
+        position?: SkeletonVector;
       }
     | undefined {
     const nodeHit = this.getPickedSpatialSkeletonNode();
@@ -311,8 +308,8 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
     };
   }
 
-  protected getSelectedSpatialSkeletonNodeSummary() {
-    const nodeId = this.layer.selectedSpatialSkeletonNodeInfo.value?.nodeId;
+  protected getSelectedSkeletonNodeSummary() {
+    const nodeId = this.layer.selectedSkeletonNodeInfo.value?.nodeId;
     if (nodeId === undefined) {
       return undefined;
     }
@@ -352,18 +349,14 @@ abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUserLayer> 
           if (pickedSegmentId === undefined) {
             return;
           }
-          this.layer.clearSpatialSkeletonNodeSelection(false);
+          this.layer.clearSkeletonNodeSelection(false);
           this.layer.selectSegment(pickedSegmentId, true);
           return;
         }
         if (pickedNode.segmentId !== undefined) {
           this.layer.selectSegment(pickedNode.segmentId, true);
         }
-        this.layer.selectSpatialSkeletonNode(
-          pickedNode.nodeId,
-          true,
-          pickedNode,
-        );
+        this.layer.selectSkeletonNode(pickedNode.nodeId, true, pickedNode);
         if (showNodeSelectionMessage) {
           StatusMessage.showTemporaryMessage(
             `Selected and pinned node ${pickedNode.nodeId}.`,
@@ -522,7 +515,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     skeletonLayer: SpatiallyIndexedSkeletonLayer,
     nodeId: bigint,
     segmentId: bigint | undefined,
-  ): SpatiallyIndexedSkeletonNode | undefined {
+  ): SkeletonNode | undefined {
     const resolved = this.resolveInspectedNode(
       skeletonLayer,
       nodeId,
@@ -554,7 +547,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     parentNodeId: bigint | undefined,
   ) {
     if (parentNodeId === undefined) return undefined;
-    const selectedNode = this.layer.selectedSpatialSkeletonNodeInfo.value;
+    const selectedNode = this.layer.selectedSkeletonNodeInfo.value;
     return this.requireInspectedNode(
       skeletonLayer,
       parentNodeId,
@@ -575,17 +568,16 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
         }
         const pinnedSelection = this.layer.manager.root.selectionState.value;
         const hasSpatialSkeletonSelection =
-          this.layer.selectedSpatialSkeletonNodeInfo.value?.nodeId !==
-            undefined ||
+          this.layer.selectedSkeletonNodeInfo.value?.nodeId !== undefined ||
           (pinnedSelection?.layers.some(
             ({ layer, state }) =>
-              layer === this.layer && hasSpatialSkeletonNodeSelection(state),
+              layer === this.layer && hasSkeletonNodeSelection(state),
           ) ??
             false);
         const hasMergeAnchor =
           this.layer.spatialSkeletonState.mergeAnchorNodeId.value !== undefined;
         if (hasSpatialSkeletonSelection || hasMergeAnchor) {
-          this.layer.clearSpatialSkeletonNodeSelection("force-unpin");
+          this.layer.clearSkeletonNodeSelection("force-unpin");
           if (hasMergeAnchor) {
             this.layer.clearSpatialSkeletonMergeAnchor();
           }
@@ -758,7 +750,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       return;
     }
     // Default mode
-    const selectedPoint = this.getSelectedSpatialSkeletonNodeSummary();
+    const selectedPoint = this.getSelectedSkeletonNodeSummary();
     const isHidden =
       selectedPoint?.segmentId !== undefined &&
       !this.isSpatialSkeletonSegmentVisible(selectedPoint.segmentId);
@@ -820,7 +812,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
   // selection/highlight and status after a split so it prompts for the next
   // node instead of lingering.
   private resetSplitToFreshState() {
-    this.layer.clearSpatialSkeletonNodeSelection("force-unpin");
+    this.layer.clearSkeletonNodeSelection("force-unpin");
     this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value = true;
     this.statusOverride = undefined;
     this.renderStatus();
@@ -1014,7 +1006,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     if (pickedNode.segmentId !== undefined) {
       this.layer.selectSegment(pickedNode.segmentId, true);
     }
-    this.layer.selectSpatialSkeletonNode(pickedNode.nodeId, true, pickedNode);
+    this.layer.selectSkeletonNode(pickedNode.nodeId, true, pickedNode);
 
     if (!canMove || !hasPickedPosition) {
       return; // Can't drag: done after the select above.
@@ -1191,11 +1183,11 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
   private executeSplitOnNode(pickedNode: {
     nodeId: bigint;
     segmentId: bigint;
-    position?: SpatialSkeletonVector;
+    position?: SkeletonVector;
     parentNodeId?: bigint;
   }) {
     this.layer.selectSegment(pickedNode.segmentId, true);
-    this.layer.selectSpatialSkeletonNode(pickedNode.nodeId, true, pickedNode);
+    this.layer.selectSkeletonNode(pickedNode.nodeId, true, pickedNode);
     // A node was clicked: reveal the selected-node highlight for it.
     this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value = false;
     this.startPendingAction(
@@ -1273,7 +1265,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       return;
     }
     this.layer.selectSegment(nodeInfo.segmentId, true);
-    this.layer.selectSpatialSkeletonNode(nodeInfo.nodeId, true, nodeInfo);
+    this.layer.selectSkeletonNode(nodeInfo.nodeId, true, nodeInfo);
     this.layer.setSpatialSkeletonMergeAnchor(nodeInfo.nodeId);
     // First click made: reveal the selected-node highlight for the from node.
     this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value = false;
@@ -1306,7 +1298,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       this.handleMergeFirstPick();
       return;
     }
-    const selectedNode = this.layer.selectedSpatialSkeletonNodeInfo.value;
+    const selectedNode = this.layer.selectedSkeletonNodeInfo.value;
     const anchorNodeInfo = this.requireInspectedNode(
       skeletonLayer,
       anchorNodeId,
@@ -1346,7 +1338,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
       );
       if (reanchoredNode === undefined) return;
       this.layer.selectSegment(reanchoredNode.segmentId, true);
-      this.layer.selectSpatialSkeletonNode(
+      this.layer.selectSkeletonNode(
         reanchoredNode.nodeId,
         true,
         reanchoredNode,
@@ -1369,7 +1361,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     }
 
     this.layer.selectSegment(pickedNode.segmentId, true);
-    this.layer.selectSpatialSkeletonNode(pickedNode.nodeId, true, pickedNode);
+    this.layer.selectSkeletonNode(pickedNode.nodeId, true, pickedNode);
     this.startPendingAction(
       SpatialSkeletonActions.mergeSkeletons,
       () =>
@@ -1448,7 +1440,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     const firstNodeId = this.insertAnchorNodeId;
     if (firstNodeId === undefined) {
       this.insertAnchorNodeId = pickedNode.nodeId;
-      this.layer.selectSpatialSkeletonNode(pickedNode.nodeId, true, pickedNode);
+      this.layer.selectSkeletonNode(pickedNode.nodeId, true, pickedNode);
       this.layer.spatialSkeletonSuppressSelectedNodeHighlight.value = false;
       this.renderStatus();
       return;
@@ -1673,7 +1665,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     }
 
     const selectedParentNodeId =
-      this.layer.selectedSpatialSkeletonNodeInfo.value?.nodeId;
+      this.layer.selectedSkeletonNodeInfo.value?.nodeId;
     if (selectedParentNodeId === undefined) {
       StatusMessage.showTemporaryMessage(
         "Select a node first, then shift+click to append a child.",
@@ -1702,7 +1694,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
           return;
         }
         const currentParentNodeId =
-          this.layer.selectedSpatialSkeletonNodeInfo.value?.nodeId;
+          this.layer.selectedSkeletonNodeInfo.value?.nodeId;
         if (currentParentNodeId === undefined) {
           StatusMessage.showTemporaryMessage(
             "Select a node first, then shift+click to append a child.",
@@ -1884,9 +1876,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
 
     // 7. Register state-change watcher disposers.
     activation.registerDisposer(
-      layer.selectedSpatialSkeletonNodeInfo.changed.add(() =>
-        this.renderStatus(),
-      ),
+      layer.selectedSkeletonNodeInfo.changed.add(() => this.renderStatus()),
     );
     activation.registerDisposer(
       layer.manager.root.selectionState.changed.add(() => this.renderStatus()),
@@ -2028,25 +2018,25 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
 export { SpatialSkeletonEditTool as SpatialSkeletonEditModeTool };
 
 function getSpatialSkeletonFindPathNodeTypeLabel(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
+  graph: SkeletonNavigationGraph,
   nodeId: bigint,
 ) {
   const node = graph.nodeById.get(nodeId);
   if (node === undefined) return undefined;
-  if (node.isTrueEnd ?? false) return "True end";
+  if (isSkeletonNodeTrueEnd(node)) return "True end";
   const parentInTree =
     node.parentNodeId !== undefined && graph.nodeById.has(node.parentNodeId);
-  const type = classifySpatialSkeletonDisplayNodeType(
+  const type = classifySkeletonDisplayNodeType(
     node,
     graph.childrenByParent.get(nodeId)?.length ?? 0,
     parentInTree,
   );
   switch (type) {
-    case SpatialSkeletonDisplayNodeType.ROOT:
+    case SkeletonDisplayNodeType.ROOT:
       return "Root";
-    case SpatialSkeletonDisplayNodeType.BRANCH_START:
+    case SkeletonDisplayNodeType.BRANCH_START:
       return "Branch point";
-    case SpatialSkeletonDisplayNodeType.VIRTUAL_END:
+    case SkeletonDisplayNodeType.VIRTUAL_END:
       return "Leaf";
     default:
       return "Node";
@@ -2056,7 +2046,7 @@ function getSpatialSkeletonFindPathNodeTypeLabel(
 export function getSpatialSkeletonFindPathEndpointDescription(
   endpointName: "Source" | "Target",
   endpoint: SkeletonFindPathEndpoint,
-  graph: SpatiallyIndexedSkeletonNavigationGraph | undefined,
+  graph: SkeletonNavigationGraph | undefined,
 ) {
   const nodeType =
     graph === undefined
@@ -2172,16 +2162,7 @@ export class SpatialSkeletonFindPathTool extends SpatialSkeletonToolBase {
           [],
         );
         if (endpoint !== undefined) {
-          const cachedSegmentNodes =
-            layer.spatialSkeletonState.getCachedSegmentNodes(
-              endpoint.segmentId,
-            );
-          const graph =
-            cachedSegmentNodes === undefined
-              ? undefined
-              : buildSpatiallyIndexedSkeletonNavigationGraph(
-                  cachedSegmentNodes,
-                );
+          const graph = layer.skeletonNavigator.getGraph(endpoint.segmentId);
           const endpointDescription =
             getSpatialSkeletonFindPathEndpointDescription(
               sourceEndpoint ? "Source" : "Target",
@@ -2273,9 +2254,8 @@ export class SpatialSkeletonFindPathTool extends SpatialSkeletonToolBase {
       const { segmentId } = source;
       const sourceNodeId = source.nodeId;
       const targetNodeId = target.nodeId;
-      const cachedSegmentNodes =
-        layer.spatialSkeletonState.getCachedSegmentNodes(segmentId);
-      if (cachedSegmentNodes === undefined) {
+      const graph = layer.skeletonNavigator.getGraph(segmentId);
+      if (graph === undefined) {
         showPathStatus(
           `Full data for skeleton ${source.segmentId} is not cached. Make it visible and wait for loading.`,
           announce,
@@ -2285,8 +2265,6 @@ export class SpatialSkeletonFindPathTool extends SpatialSkeletonToolBase {
 
       statusOverride = undefined;
       try {
-        const graph =
-          buildSpatiallyIndexedSkeletonNavigationGraph(cachedSegmentNodes);
         if (!graph.nodeById.has(sourceNodeId)) {
           throw new Error(
             `Source node ${source.nodeId} is missing from the loaded skeleton.`,
@@ -2453,7 +2431,7 @@ export function makeSpatialSkeletonToolLister(toolId: string) {
       (toolId === SPATIAL_SKELETON_FIND_PATH_TOOL_ID &&
         layer.getSpatialSkeletonFindPathContext() === undefined) ||
       (toolId === SPATIAL_SKELETON_EDIT_MODE_TOOL_ID &&
-        !layer.hasEditableSpatialSkeletonSource.value)
+        layer.editableSkeletonSource.value === undefined)
     ) {
       return [];
     }

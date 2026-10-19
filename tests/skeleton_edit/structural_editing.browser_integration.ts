@@ -435,7 +435,7 @@ test("Undo and Redo during root creation preserve the preview and save in order"
     const viewer = (window as unknown as { viewer: Viewer }).viewer;
     const layer = viewer.layerManager.getLayerByName("Skeletons")!
       .layer as SegmentationUserLayer;
-    return layer.selectedSpatialSkeletonNodeInfo.value!.nodeId;
+    return layer.selectedSkeletonNodeInfo.value!.nodeId;
   });
   const preview = await readGraph(page, [previewNodeId]);
   expect(preview).toHaveLength(1);
@@ -514,7 +514,7 @@ for (const kind of ["new root", "split"] as const) {
       const viewer = (window as unknown as { viewer: Viewer }).viewer;
       const layer = viewer.layerManager.getLayerByName("Skeletons")!
         .layer as SegmentationUserLayer;
-      return layer.selectedSpatialSkeletonNodeInfo.value!.nodeId;
+      return layer.selectedSkeletonNodeInfo.value!.nodeId;
     });
     const [source] = await readGraph(page, [inputNodeId]);
     const [target] = await readGraph(page, [203n]);
@@ -576,7 +576,7 @@ for (const kind of ["new root", "split"] as const) {
       const layer = viewer.layerManager.getLayerByName("Skeletons")!
         .layer as SegmentationUserLayer;
       return {
-        segmentId: layer.selectedSpatialSkeletonNodeInfo.value?.segmentId,
+        segmentId: layer.selectedSkeletonNodeInfo.value?.segmentId,
         visible: [
           ...layer.displayState.segmentationGroupState.value.visibleSegments,
         ],

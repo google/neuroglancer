@@ -23,6 +23,7 @@ import {
   ChunkRenderLayerFrontend,
   ChunkSource,
 } from "#src/chunk_manager/frontend.js";
+import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import { hashCombine } from "#src/gpu_hash/hash_function.js";
 import type { HashMapUint64, HashSetUint64 } from "#src/gpu_hash/hash_table.js";
 import { GPUHashTable, HashSetShaderManager } from "#src/gpu_hash/shader.js";
@@ -71,7 +72,14 @@ import {
   SegmentationLayerSharedObject,
 } from "#src/segmentation_display_state/frontend.js";
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import {
+  SkeletonEdgeDirection,
+  type EditableSkeletonSource,
+  type SkeletonFragmentSource,
+  type SkeletonSpatialIndexLevel,
+  type SkeletonSpatialIndexMetadata,
+  type SkeletonNode,
+} from "#src/skeleton/api.js";
 import {
   forEachSpatialSkeletonSourceScale,
   forEachVisibleSpatialSkeletonChunk,
@@ -90,20 +98,26 @@ import {
   mergeSpatiallyIndexedSkeletonOverlaySegmentIds,
   retainSpatiallyIndexedSkeletonOverlaySegment,
 } from "#src/skeleton/segment_overlay.js";
+import { getSkeletonChunkNodes } from "#src/skeleton/skeleton_chunk_nodes.js";
+import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
 import {
   edgeColorPathsGlsl,
   nodeColorPathsGlsl,
 } from "#src/skeleton/skeleton_shader_color.js";
-import type { SpatiallyIndexedSkeletonView } from "#src/skeleton/source_selection.js";
+import {
+  type SpatiallyIndexedSkeletonView,
+  validateSpatialSkeletonLimitZeroOnlyFinest,
+} from "#src/skeleton/source_selection.js";
 import type {
   SpatialSkeletonPreparationIntent,
   SpatialSkeletonPresentationSnapshot,
 } from "#src/skeleton/spatial_skeleton_manager.js";
 import {
+  makeSliceViewChunkSpecification,
   type SliceViewSourceOptions,
   type TransformedSource,
 } from "#src/sliceview/base.js";
-import type { ChunkLayout } from "#src/sliceview/chunk_layout.js";
+import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
 import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
 import {
   getVolumetricTransformedSources,
@@ -141,14 +155,14 @@ import {
 } from "#src/util/color.js";
 import { hsvToRgb } from "#src/util/colorspace.js";
 import { DataType } from "#src/util/data_type.js";
-import { RefCounted } from "#src/util/disposable.js";
+import { type Borrowed, RefCounted } from "#src/util/disposable.js";
 import type { ValueOrError } from "#src/util/error.js";
 import { makeValueOrError, valueOrThrow } from "#src/util/error.js";
 import { kOneVec4, kZeroVec, mat4, vec3, type vec4 } from "#src/util/geom.js";
 import { verifyFinitePositiveFloat } from "#src/util/json.js";
 import * as matrix from "#src/util/matrix.js";
 import { getObjectId } from "#src/util/object_id.js";
-import { NullarySignal } from "#src/util/signal.js";
+import { NullarySignal, type NullaryReadonlySignal } from "#src/util/signal.js";
 import type { Trackable } from "#src/util/trackable.js";
 import { CompoundTrackable } from "#src/util/trackable.js";
 import { TrackableEnum } from "#src/util/trackable_enum.js";
@@ -1360,7 +1374,7 @@ function getSkeletonNodeHighlightRing(
   return { diameter: nodeDiameter + 2 * outline, borderWidth: outline };
 }
 
-function setMouseStatePositionFromSpatialSkeletonNode(
+function setMouseStatePositionFromSkeletonNode(
   mouseState: MouseSelectionState,
   nodePosition: Float32Array,
   transform: RenderLayerTransform,
@@ -1446,10 +1460,17 @@ export interface SkeletonLayerDisplayState extends SegmentationDisplayState3D {
   skeletonRenderingOptions: SkeletonRenderingOptions;
 }
 
-export class SkeletonLayer extends RefCounted implements SkeletonShaderContext {
+export class SkeletonLayer
+  extends RefCounted
+  implements SkeletonShaderContext, SkeletonNodeAccess
+{
   layerChunkProgressInfo = new LayerChunkProgressInfo();
   redrawNeeded = new NullarySignal();
   private sharedObject: SegmentationLayerSharedObject;
+  private readonly chunkNodes = new WeakMap<
+    SkeletonChunk,
+    readonly SkeletonNode[]
+  >();
   vertexAttributes: VertexAttributeRenderInfo[];
   // Non-spatial skeletons iterate segments individually and pass color/alpha via
   // uniforms (getObjectColor), so the dynamic per-vertex segment appearance path
@@ -1521,6 +1542,25 @@ export class SkeletonLayer extends RefCounted implements SkeletonShaderContext {
   get gl() {
     return this.chunkManager.chunkQueueManager.gl;
   }
+
+  readonly hasPickableNodes = false;
+
+  get nodesChanged() {
+    return this.source.chunksChanged;
+  }
+
+  getSegmentNodes(segmentId: bigint): readonly SkeletonNode[] | undefined {
+    const chunk = this.source.chunks.get(getObjectKey(segmentId));
+    if (chunk === undefined) return undefined;
+    let nodes = this.chunkNodes.get(chunk);
+    if (nodes === undefined) {
+      nodes = getSkeletonChunkNodes(segmentId, chunk);
+      this.chunkNodes.set(chunk, nodes);
+    }
+    return nodes;
+  }
+
+  readonly parentsInferred = true;
 
   draw(
     renderContext: SliceViewPanelRenderContext | PerspectiveViewRenderContext,
@@ -2015,17 +2055,70 @@ export const SPATIAL_SKELETON_SOURCE_OPTIONS: SliceViewSourceOptions = {
   modelChannelDimensionIndices: [],
 };
 
+function makeSpatialSkeletonLevelSpec(
+  modelSpace: CoordinateSpace,
+  level: SkeletonSpatialIndexLevel,
+): SpatiallyIndexedSkeletonChunkSpecification {
+  const { scales, bounds } = modelSpace;
+  const chunkDataSize = Float32Array.from(level.chunkSize);
+  const chunkLayout = new ChunkLayout(
+    vec3.fromValues(chunkDataSize[0], chunkDataSize[1], chunkDataSize[2]),
+    mat4.fromScaling(
+      mat4.create(),
+      vec3.fromValues(scales[0], scales[1], scales[2]),
+    ),
+    3,
+  );
+  return {
+    ...makeSliceViewChunkSpecification({
+      rank: 3,
+      chunkDataSize,
+      lowerVoxelBound: Float32Array.from(bounds.lowerBounds),
+      upperVoxelBound: Float32Array.from(bounds.upperBounds),
+    }),
+    chunkLayout,
+    limit: level.limit,
+  };
+}
+
 export abstract class MultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleSliceViewChunkSource<SpatiallyIndexedSkeletonSource> {
-  getPerspectiveSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] {
-    const sources = this.getSources(SPATIAL_SKELETON_SOURCE_OPTIONS);
-    const flattened: SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] =
-      [];
-    for (const scale of sources) {
-      if (scale.length > 0) {
-        flattened.push(scale[0]);
-      }
+  abstract readonly fragmentSource: SkeletonFragmentSource;
+  // Undefined when the source cannot be edited.
+  abstract readonly editableSource: EditableSkeletonSource | undefined;
+
+  constructor(
+    chunkManager: Borrowed<ChunkManager>,
+    protected readonly metadata: SkeletonSpatialIndexMetadata,
+  ) {
+    super(chunkManager);
+    if (metadata.modelSpace.rank !== 3) {
+      throw new Error(
+        `Spatial skeleton coordinate space must have rank 3, not ${metadata.modelSpace.rank}.`,
+      );
     }
-    return flattened;
+    const { lowerBounds, upperBounds } = metadata.modelSpace.bounds;
+    if (![...lowerBounds, ...upperBounds].every(Number.isFinite)) {
+      throw new Error(
+        "Spatial skeleton coordinate space bounds must be finite.",
+      );
+    }
+    validateSpatialSkeletonLimitZeroOnlyFinest(metadata.levels);
+  }
+
+  get rank() {
+    return 3;
+  }
+
+  // From coarsest to finest, like the levels.
+  protected getLevelSpecs(): SpatiallyIndexedSkeletonChunkSpecification[] {
+    const { modelSpace, levels } = this.metadata;
+    return levels.map((level) =>
+      makeSpatialSkeletonLevelSpec(modelSpace, level),
+    );
+  }
+
+  getPerspectiveSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] {
+    return this.getSources(SPATIAL_SKELETON_SOURCE_OPTIONS)[0];
   }
 
   getSliceViewPanelSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[] {
@@ -2044,6 +2137,8 @@ interface SelectedSkeletonNodeInfo {
 
 interface SpatiallyIndexedSkeletonLayerOptions {
   sources2d?: SpatiallyIndexedSkeletonSourceEntry[];
+  fragmentSource?: SkeletonFragmentSource;
+  editableSource?: EditableSkeletonSource;
   selectedNodeInfo?: WatchableValueInterface<
     SelectedSkeletonNodeInfo | undefined
   >;
@@ -2057,7 +2152,7 @@ interface SpatiallyIndexedSkeletonLayerOptions {
   getPendingNodePosition?: (nodeId: bigint) => ArrayLike<number> | undefined;
   // Node ids that currently have a pending (drag) position override.
   getPendingNodeIds?: () => Iterable<bigint>;
-  getCachedNode?: (nodeId: bigint) => SpatiallyIndexedSkeletonNode | undefined;
+  getCachedNode?: (nodeId: bigint) => SkeletonNode | undefined;
   // Transforms a node's model-space position into the global coordinate space
   // used by the panels, so node highlights can be projected to screen.
   resolveGlobalPosition?: (
@@ -2070,13 +2165,11 @@ interface SpatiallyIndexedSkeletonLayerOptions {
 interface SpatiallyIndexedSkeletonInspectionState {
   readonly nodeDataVersion: WatchableValueInterface<number>;
   readonly spatialSkeletonPresentation: WatchableValueInterface<SpatialSkeletonPresentationSnapshot>;
-  getCachedSegmentNodes(
-    segmentId: bigint,
-  ): readonly SpatiallyIndexedSkeletonNode[] | undefined;
+  getCachedSegmentNodes(segmentId: bigint): readonly SkeletonNode[] | undefined;
   getFullSegmentNodes(
     skeletonLayer: SpatiallyIndexedSkeletonLayer,
     segmentId: bigint,
-  ): Promise<readonly SpatiallyIndexedSkeletonNode[]>;
+  ): Promise<readonly SkeletonNode[]>;
   evictInactiveSegmentNodes(activeSegmentIds: Iterable<bigint>): void;
 }
 
@@ -2160,7 +2253,7 @@ export function commitSpatiallyIndexedSkeletonOverlayReplacement<T>(
 }
 
 interface SkeletonOverlaySegmentVersion {
-  readonly nodes: readonly SpatiallyIndexedSkeletonNode[];
+  readonly nodes: readonly SkeletonNode[];
   readonly pendingPositionKey: string;
 }
 
@@ -2230,7 +2323,7 @@ export function resolveSpatiallyIndexedSkeletonSegmentPick(
 
 export class SpatiallyIndexedSkeletonLayer
   extends RefCounted
-  implements SkeletonShaderContext
+  implements SkeletonShaderContext, SkeletonNodeAccess
 {
   layerChunkProgressInfo = new LayerChunkProgressInfo();
   redrawNeeded = new NullarySignal();
@@ -2267,13 +2360,14 @@ export class SpatiallyIndexedSkeletonLayer
   // position override without scanning all nodes; one entry during a drag.
   private getPendingNodeIds: (() => Iterable<bigint>) | undefined;
   private getCachedNodeInfo:
-    | ((nodeId: bigint) => SpatiallyIndexedSkeletonNode | undefined)
+    | ((nodeId: bigint) => SkeletonNode | undefined)
     | undefined;
   private resolveGlobalPosition:
     | ((modelPosition: ArrayLike<number>) => Float32Array | undefined)
     | undefined;
   readonly highlightMarkersChanged = new NullarySignal();
   private inspectionState: SpatiallyIndexedSkeletonInspectionState | undefined;
+  private readonly nodesChangedSignal: NullaryReadonlySignal;
   // Inspection geometry is cached per segment.  A node-data update therefore
   // replaces only the segment arrays that changed rather than disposing and
   // rebuilding one aggregate scene-wide overlay chunk.
@@ -2289,7 +2383,7 @@ export class SpatiallyIndexedSkeletonLayer
   private pendingOverlayPositionKeys = new Map<
     bigint,
     {
-      nodes: readonly SpatiallyIndexedSkeletonNode[];
+      nodes: readonly SkeletonNode[];
       globalVersion: number | undefined;
       key: string;
     }
@@ -2404,7 +2498,7 @@ export class SpatiallyIndexedSkeletonLayer
 
   private getOverlayPendingPositionKey(
     segmentId: bigint,
-    nodes: readonly SpatiallyIndexedSkeletonNode[],
+    nodes: readonly SkeletonNode[],
   ) {
     const getPendingNodePosition = this.getPendingNodePositionOverride;
     if (getPendingNodePosition === undefined) return "";
@@ -2736,9 +2830,7 @@ export class SpatiallyIndexedSkeletonLayer
     return this.browseExcludedSegments;
   }
 
-  private createOverlaySegmentChunk(
-    nodes: readonly SpatiallyIndexedSkeletonNode[],
-  ) {
+  private createOverlaySegmentChunk(nodes: readonly SkeletonNode[]) {
     const geometry = buildSpatiallyIndexedSkeletonOverlayGeometry([nodes], {
       getPendingNodePosition: this.getPendingNodePositionOverride,
     });
@@ -2840,6 +2932,9 @@ export class SpatiallyIndexedSkeletonLayer
   sources: SpatiallyIndexedSkeletonSourceEntry[];
   sources2d: SpatiallyIndexedSkeletonSourceEntry[];
   source: SpatiallyIndexedSkeletonSource;
+  readonly fragmentSource: SkeletonFragmentSource | undefined;
+  // Undefined when the source cannot be edited.
+  readonly editableSource: EditableSkeletonSource | undefined;
 
   constructor(
     public chunkManager: ChunkManager,
@@ -2894,6 +2989,8 @@ export class SpatiallyIndexedSkeletonLayer
         this.displayState.transform,
       ),
     );
+    this.fragmentSource = options.fragmentSource;
+    this.editableSource = options.editableSource;
     this.selectedNodeInfo = options.selectedNodeInfo;
     this.suppressSelectedNodeHighlight = options.suppressSelectedNodeHighlight;
     this.hoveredNodeInfo = options.hoveredNodeInfo;
@@ -2903,6 +3000,9 @@ export class SpatiallyIndexedSkeletonLayer
     this.getCachedNodeInfo = options.getCachedNode;
     this.resolveGlobalPosition = options.resolveGlobalPosition;
     this.inspectionState = options.inspectionState;
+    this.nodesChangedSignal =
+      this.inspectionState?.spatialSkeletonPresentation.changed ??
+      new NullarySignal();
     const initialPresentation =
       this.inspectionState?.spatialSkeletonPresentation?.value;
     if (initialPresentation !== undefined) {
@@ -3460,7 +3560,23 @@ export class SpatiallyIndexedSkeletonLayer
     return ready;
   }
 
-  getNode(nodeId: bigint): SpatiallyIndexedSkeletonNode | undefined {
+  readonly hasPickableNodes = true;
+
+  get nodesChanged() {
+    return this.nodesChangedSignal;
+  }
+
+  getSegmentNodes(segmentId: bigint): readonly SkeletonNode[] | undefined {
+    return this.inspectionState?.getCachedSegmentNodes(segmentId);
+  }
+
+  get parentsInferred() {
+    return (
+      this.fragmentSource?.edgeDirection === SkeletonEdgeDirection.UNDIRECTED
+    );
+  }
+
+  getNode(nodeId: bigint): SkeletonNode | undefined {
     if (nodeId === 0n) return undefined;
     return this.getCachedNodeSnapshot(nodeId);
   }
@@ -3905,7 +4021,7 @@ function updateSpatiallyIndexedSkeletonMouseState(
   if (data.kind === "segment-node") return;
   const transform = base.displayState.transform.value;
   if (transform.error === undefined) {
-    setMouseStatePositionFromSpatialSkeletonNode(
+    setMouseStatePositionFromSkeletonNode(
       mouseState,
       pickedNode.position,
       transform,
@@ -4336,8 +4452,20 @@ export class SkeletonSource extends ChunkSource {
   }
 
   declare chunks: Map<string, SkeletonChunk>;
+  readonly chunksChanged = new NullarySignal();
+
   getChunk(x: PackedSkeletonGeometry) {
     return new SkeletonChunk(this, x);
+  }
+
+  addChunk(key: string, chunk: SkeletonChunk) {
+    super.addChunk(key, chunk);
+    this.chunksChanged.dispatch();
+  }
+
+  deleteChunk(key: string) {
+    super.deleteChunk(key);
+    this.chunksChanged.dispatch();
   }
 
   get vertexAttributes(): Map<string, VertexAttributeInfo> {

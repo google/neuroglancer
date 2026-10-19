@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-// Regression coverage for confirmed retirement; see the automated-test guide.
 import { expect, it, vi } from "vitest";
+import { SkeletonEdgeDirection, type SkeletonNode } from "#src/skeleton/api.js";
 import { createCompleteSkeletonSnapshot } from "#src/skeleton/complete_skeleton_snapshot.js";
 import {
   SpatialSkeletonLogicalHandleMappings,
@@ -25,6 +25,41 @@ import {
 import { SpatialSkeletonOptimisticProjectionRuntime } from "#src/skeleton/optimistic_edit/projection_runtime.js";
 import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { SpatialSkeletonProjectionWorkspace } from "#src/skeleton/spatial_skeleton_projection_reducer.js";
+
+function makeWholeSkeletonReads(
+  getSkeleton: (
+    skeletonId: bigint,
+    options: { signal: AbortSignal },
+  ) => unknown,
+) {
+  return {
+    edgeDirection: SkeletonEdgeDirection.CHILD_TO_PARENT,
+    getSkeletonManifest: async () => ({ fragmentKeys: ["skeleton"] }),
+    getSkeletonFragment: async (
+      skeletonId: bigint,
+      _fragmentKey: string,
+      signal: AbortSignal,
+    ) => {
+      const skeletonNodes = (await getSkeleton(skeletonId, {
+        signal,
+      })) as SkeletonNode[];
+      return {
+        nodes: skeletonNodes.map(({ parentNodeId: _, ...node }) => node),
+        edges: skeletonNodes.flatMap(({ nodeId, parentNodeId }) =>
+          parentNodeId === undefined
+            ? []
+            : [{ firstNodeId: nodeId, secondNodeId: parentNodeId }],
+        ),
+      };
+    },
+  };
+}
+
+async function flushMicrotasks() {
+  for (let iteration = 0; iteration < 10; ++iteration) {
+    await Promise.resolve();
+  }
+}
 
 it("fences a read started during final-node deletion when deletion becomes authoritative", () => {
   const root = { nodeId: 1n, segmentId: 10n, position: [1, 2, 3] };
@@ -138,13 +173,7 @@ it.each([false, true])(
       (_segmentId: bigint, _options: { signal: AbortSignal }) => response,
     );
     const layer = {
-      source: {
-        readonly: true,
-        listSkeletons: async () => [],
-        getSkeleton,
-        fetchNodes: async () => [],
-        getSpatialIndexMetadata: async () => null,
-      },
+      fragmentSource: makeWholeSkeletonReads(getSkeleton),
     } as any;
     const read = state
       .getFullSegmentNodes(layer, 17n, { retainWhileInactive: true })
@@ -152,6 +181,7 @@ it.each([false, true])(
         () => undefined,
         (error) => error,
       );
+    await flushMicrotasks();
     expect(getSkeleton).toHaveBeenCalledOnce();
     runtime.publishAuthoritative({
       intentId: 1,

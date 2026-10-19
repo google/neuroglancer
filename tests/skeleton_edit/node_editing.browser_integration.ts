@@ -906,7 +906,7 @@ test("a new root and pending child chain survive full Undo and Redo with fresh I
         const viewer = (window as unknown as { viewer: Viewer }).viewer;
         const layer = viewer.layerManager.getLayerByName("Skeletons")!
           .layer as SegmentationUserLayer;
-        return layer.selectedSpatialSkeletonNodeInfo.value?.nodeId;
+        return layer.selectedSkeletonNodeInfo.value?.nodeId;
       });
       expect(id).toBeDefined();
       const [node] = await readGraph(page, [id!]);

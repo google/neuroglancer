@@ -16,7 +16,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
+import type { SkeletonNode } from "#src/skeleton/api.js";
 import {
   createCompleteSkeletonSnapshot,
   patchCompleteSkeletonSnapshot,
@@ -30,6 +30,11 @@ import {
   type SpatialSkeletonLogicalSegmentHandle,
 } from "#src/skeleton/logical_identity.js";
 import {
+  getSkeletonNodeConfidence,
+  getSkeletonNodeRadius,
+  isSkeletonNodeTrueEnd,
+} from "#src/skeleton/node_attributes.js";
+import {
   applySpatialSkeletonProjectionDelta,
   SpatialSkeletonProjectionWorkspace,
   type SpatialSkeletonProjectionDelta,
@@ -41,14 +46,18 @@ function node(
   nodeId: bigint,
   segmentId: bigint,
   parentNodeId?: bigint,
-  options: Partial<SpatiallyIndexedSkeletonNode> = {},
-): SpatiallyIndexedSkeletonNode {
+  options: Partial<SkeletonNode> = {},
+): SkeletonNode {
   return {
     nodeId,
     segmentId,
     parentNodeId,
     position: [Number(nodeId), Number(nodeId) + 0.25, Number(nodeId) + 0.5],
-    confidence: parentNodeId === undefined ? 100 : 70 + Number(nodeId % 20n),
+    attributes: {
+      confidence: [
+        parentNodeId === undefined ? 100 : 70 + Number(nodeId % 20n),
+      ],
+    },
     ...options,
   };
 }
@@ -130,10 +139,10 @@ function normalized(projection: SpatialSkeletonProjectionWorkspace) {
           segmentId: value.segmentId,
           parentNodeId: value.parentNodeId,
           position: Array.from(value.position),
-          radius: value.radius,
-          confidence: value.confidence,
+          radius: getSkeletonNodeRadius(value),
+          confidence: getSkeletonNodeConfidence(value),
           description: value.description,
-          isTrueEnd: value.isTrueEnd,
+          isTrueEnd: isSkeletonNodeTrueEnd(value),
         }))
         .sort((a, b) => bigintCompare(a.nodeId, b.nodeId)),
     }))
@@ -447,12 +456,17 @@ describe("spatial skeleton projection reducer", () => {
       // 1 -> 2 -> {3 -> 7, 4}; 1 -> 5 -> 6.
       const sourceNodes = [
         node(1n, 10n),
-        node(2n, 10n, 1n, { radius: 12, description: "branch" }),
+        node(2n, 10n, 1n, {
+          attributes: { radius: [12], confidence: [72] },
+          description: "branch",
+        }),
         node(3n, 10n, 2n),
         node(4n, 10n, 2n),
         node(5n, 10n, 1n),
         node(6n, 10n, 5n),
-        node(7n, 10n, 3n, { isTrueEnd: true }),
+        node(7n, 10n, 3n, {
+          attributes: { confidence: [77], true_end: [1] },
+        }),
       ];
       const snapshot = createCompleteSkeletonSnapshot(sourceNodes);
       const input = baseline.withChanges([{ segment: segmentA, snapshot }]);
@@ -740,9 +754,15 @@ describe("spatial skeleton projection reducer", () => {
         {
           segment: modelSegment,
           snapshot: createCompleteSkeletonSnapshot(
-            confirmed.map((value) => ({
+            confirmed.map(({ radius, confidence, ...value }) => ({
               ...value,
               segmentId,
+              attributes: {
+                ...(radius === undefined ? {} : { radius: [radius] }),
+                ...(confidence === undefined
+                  ? {}
+                  : { confidence: [confidence] }),
+              },
             })),
           ),
         },
@@ -873,11 +893,12 @@ describe("spatial skeleton projection reducer", () => {
           Array.from(actual.position),
           `step ${step}, node ${index}`,
         ).toEqual(expected[index].position);
-        expect(actual.radius, `step ${step}, node ${index} radius`).toBe(
-          expected[index].radius,
-        );
         expect(
-          actual.confidence,
+          getSkeletonNodeRadius(actual),
+          `step ${step}, node ${index} radius`,
+        ).toBe(expected[index].radius);
+        expect(
+          getSkeletonNodeConfidence(actual),
           `step ${step}, node ${index} confidence`,
         ).toBe(expected[index].confidence);
       }
