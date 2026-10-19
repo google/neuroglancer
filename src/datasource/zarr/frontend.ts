@@ -127,7 +127,8 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
         const permutedUpperBound = new Float32Array(rank);
         const orderTransform = new Float32Array((rank + 1) ** 2);
         orderTransform[(rank + 1) ** 2 - 1] = 1;
-        // Chunk coordinates are relative to the chunk grid origin.
+        // Chunk coordinates are relative to the chunk grid origin; the index
+        // space the scale transform maps starts at the first element.
         for (let i = 0; i < rank; ++i) {
           const decodedDim = physicalToLogicalDimension[rank - 1 - i];
           permutedChunkShape[i] = readChunkShape[decodedDim];
@@ -135,7 +136,8 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
             lowerBound[decodedDim] - chunkGridOrigin[decodedDim];
           permutedUpperBound[i] = permutedLowerBound[i] + shape[decodedDim];
           orderTransform[decodedDim + i * (rank + 1)] = 1;
-          orderTransform[(rank + 1) * rank + i] = chunkGridOrigin[i];
+          orderTransform[(rank + 1) * rank + i] =
+            chunkGridOrigin[i] - lowerBound[i];
         }
         const transform = new Float32Array((rank + 1) ** 2);
         matrix.multiply<Float32Array | Float64Array>(
@@ -289,18 +291,20 @@ function getMultiscaleInfoForSingleArray(
       }),
     ],
   });
-  const transform = matrix.createIdentity(Float64Array, metadata.rank + 1);
   return {
     coordinateSpace: modelSpace,
     dataType: metadata.dataType,
     scales: [
       {
         url,
-        transform,
+        transform: matrix.createHomogeneousTranslationMatrix(
+          Float64Array,
+          metadata.lowerBound,
+        ),
         metadata,
       },
     ],
-    baseTransform: transform,
+    baseTransform: matrix.createIdentity(Float64Array, metadata.rank + 1),
   };
 }
 
@@ -356,9 +360,7 @@ async function resolveOmeMultiscale(
   const baseScale = multiscale.scales[0];
   const baseZarrMetadata = scaleZarrMetadata[0];
   for (let i = 0; i < rank; ++i) {
-    const lower = (lowerBounds[i] =
-      baseScale.transform[(rank + 1) * rank + i] +
-      baseZarrMetadata.lowerBound[i]);
+    const lower = (lowerBounds[i] = baseScale.transform[(rank + 1) * rank + i]);
     upperBounds[i] = lower + baseZarrMetadata.shape[i];
   }
   const boundingBox = makeIdentityTransformedBoundingBox({
