@@ -15,11 +15,10 @@
 
 import json
 import os
-from pathlib import Path
 import site
 import subprocess
 import sys
-
+from pathlib import Path
 
 django_dir = Path("/home/django")
 project_dir = django_dir / "projects"
@@ -55,10 +54,10 @@ os.environ["DJANGO_SETTINGS_MODULE"] = "mysite.settings"
 import django
 
 django.setup()
+from catmaid.models import Project
 from django.contrib.auth import get_user_model
 from django.db import connection
 from rest_framework.authtoken.models import Token
-from catmaid.models import Project
 
 # Start skeleton and treenode IDs above 2^32 so a client that truncates them to 32 bits fails.
 with connection.cursor() as cursor:

@@ -22,11 +22,11 @@ os.environ["DJANGO_SETTINGS_MODULE"] = "mysite.settings"
 import django
 
 django.setup()
+from catmaid.control.tracing import setup_tracing
+from catmaid.models import Project, ProjectStack, Stack
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from guardian.shortcuts import assign_perm
-from catmaid.models import Project, ProjectStack, Stack
-from catmaid.control.tracing import setup_tracing
 
 PREFIX = "Neuroglancer E2E "
 with transaction.atomic():

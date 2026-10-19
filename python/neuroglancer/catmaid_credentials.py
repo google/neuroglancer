@@ -20,8 +20,8 @@ import urllib.request
 from . import credentials_provider
 from .futures import run_on_new_thread
 
-_configured_tokens = {}
-_providers = {}
+_configured_tokens: dict[str, str] = {}
+_providers: dict[str, "CatmaidCredentialsProvider"] = {}
 _providers_lock = threading.Lock()
 
 
