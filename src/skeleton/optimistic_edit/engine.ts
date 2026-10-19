@@ -1581,9 +1581,14 @@ export class SpatialSkeletonOptimisticQueueEngine<
   }
 
   private notifyChanged() {
-    this.changed.runWithHandlerErrorReporting(
-      (error) => this.options.onListenerError?.(error),
-      () => this.changed.dispatch(),
-    );
+    try {
+      this.changed.dispatch();
+    } catch (error) {
+      try {
+        this.options.onListenerError?.(error);
+      } catch {
+        // Reporting is best effort after the change is already published.
+      }
+    }
   }
 }

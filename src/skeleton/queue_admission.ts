@@ -31,7 +31,6 @@ import type {
   SpatialSkeletonLayerContext,
   SpatialSkeletonOptimisticEditExecution,
 } from "#src/skeleton/spatial_skeleton_manager.js";
-import { withPromiseProperties } from "#src/util/promise.js";
 
 /** A queue input requirement paired with a reference to its complete snapshot. */
 interface QueueInputBinding {
@@ -407,7 +406,7 @@ export function prepareAndSubmitSpatialSkeletonEdit<T>(
     void acceptedByQueue.catch(() => undefined);
     const execution = Promise.reject<T>(error);
     void execution.catch(() => undefined);
-    return withPromiseProperties(execution, {
+    return Object.assign(execution, {
       acceptedByQueue,
       settled: Promise.resolve(
         unchangedSpatialSkeletonOptimisticEditSettlement("not-started", error),

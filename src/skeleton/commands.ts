@@ -35,7 +35,6 @@ import {
   type SpatialSkeletonOptimisticEditExecution,
 } from "#src/skeleton/spatial_skeleton_manager.js";
 import { StatusMessage } from "#src/status.js";
-import { withPromiseProperties } from "#src/util/promise.js";
 
 function executeCommand(
   layer: SpatialSkeletonLayerContext,
@@ -57,7 +56,7 @@ function withPendingMessage<T>(
 ): SpatialSkeletonOptimisticEditExecution<T> {
   const status = StatusMessage.showMessage(message);
   // finally() creates a new preview promise, so carry its other milestones over.
-  return withPromiseProperties(
+  return Object.assign(
     execution.finally(() => status.dispose()),
     {
       acceptedByQueue: execution.acceptedByQueue,

@@ -79,12 +79,7 @@ import {
 import type { SpatialSkeletonOptimisticEditExecution } from "#src/skeleton/optimistic_edit/types.js";
 import { StatusMessage } from "#src/status.js";
 import { makeAnnotationListElement } from "#src/ui/annotations.js";
-import {
-  getDefaultAnnotationListBindings,
-  getDefaultSkeletonEditAuxBindings,
-  getDefaultSkeletonEditToolBindings,
-  getDefaultSkeletonFindPathToolBindings,
-} from "#src/ui/default_input_event_bindings.js";
+import { getDefaultAnnotationListBindings } from "#src/ui/default_input_event_bindings.js";
 import svg_addNodeCursor from "#src/ui/images/add_node_cursor.svg?raw";
 import svg_deleteCursor from "#src/ui/images/delete_cursor.svg?raw";
 import svg_dragCursor from "#src/ui/images/drag_cursor.svg?raw";
@@ -108,6 +103,9 @@ import type { SpatialSkeletonToolStatusText } from "#src/ui/skeleton_edit_tool_s
 import {
   getSpatialSkeletonModeKeyCode,
   renderSpatialSkeletonShortcut,
+  SKELETON_EDIT_AUX_INPUT_EVENT_MAP,
+  SKELETON_EDIT_TOOL_INPUT_EVENT_MAP,
+  SKELETON_FIND_PATH_TOOL_INPUT_EVENT_MAP,
   SPATIAL_SKELETON_EDIT_TOOL_NAME,
 } from "#src/ui/skeleton_edit_tool_shortcuts.js";
 import { SpatialSkeletonMergeTargetPrefetch } from "#src/ui/skeleton_merge_target_prefetch.js";
@@ -1877,8 +1875,8 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
     this.activateModeWatchable(activation, layer.spatialSkeletonEditMode);
 
     // 6. Bind event maps.
-    activation.bindInputEventMap(getDefaultSkeletonEditToolBindings());
-    activation.bindInputEventMap(getDefaultSkeletonEditAuxBindings());
+    activation.bindInputEventMap(SKELETON_EDIT_TOOL_INPUT_EVENT_MAP);
+    activation.bindInputEventMap(SKELETON_EDIT_AUX_INPUT_EVENT_MAP);
     this.bindPinnedSelectionAction(activation, {
       showNodeSelectionMessage: false,
     });
@@ -2353,7 +2351,7 @@ export class SpatialSkeletonFindPathTool extends SpatialSkeletonToolBase {
     );
 
     bindSpatialSkeletonViewDrag(activation);
-    activation.bindInputEventMap(getDefaultSkeletonFindPathToolBindings());
+    activation.bindInputEventMap(SKELETON_FIND_PATH_TOOL_INPUT_EVENT_MAP);
     activation.bindAction(
       SKELETON_FIND_PATH_SELECT_ENDPOINT,
       (event: ActionEvent<MouseEvent>) => {

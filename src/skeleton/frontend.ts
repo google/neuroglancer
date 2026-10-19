@@ -118,6 +118,7 @@ import type {
   SliceViewPanelReadyRenderContext,
 } from "#src/sliceview/renderlayer.js";
 import { SliceViewPanelRenderLayer } from "#src/sliceview/renderlayer.js";
+import type { TrackableAlphaValue } from "#src/trackable_alpha.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
@@ -134,8 +135,8 @@ import { gatherUpdate } from "#src/util/array.js";
 import { bigintCompare } from "#src/util/bigint.js";
 import {
   getRelativeLuminance,
+  getContrastRatio,
   getSaturation,
-  pickHighestContrastColor,
   saturateColor,
 } from "#src/util/color.js";
 import { hsvToRgb } from "#src/util/colorspace.js";
@@ -238,6 +239,22 @@ const SELECTED_NODE_HIGHLIGHT_COLORS: readonly vec3[] = [
   vec3.fromValues(0.7, 0.67, 0.6), // stone (light warm gray)
   vec3.fromValues(0.5, 0.45, 0.15), // olive
 ];
+
+function pickHighestContrastColor(
+  palette: readonly vec3[],
+  sourceColor: vec3,
+): vec3 {
+  let bestColor = palette[0];
+  let bestContrast = -1;
+  for (const candidate of palette) {
+    const contrast = getContrastRatio(candidate, sourceColor);
+    if (contrast > bestContrast) {
+      bestContrast = contrast;
+      bestColor = candidate;
+    }
+  }
+  return bestColor;
+}
 
 // Used for debugging chunks via a different color for each chunk
 const tempChunkKeyToColorMap = new Map<string, Float32Array>();
@@ -1424,6 +1441,7 @@ export class SkeletonRenderingOptions implements Trackable {
 }
 
 export interface SkeletonLayerDisplayState extends SegmentationDisplayState3D {
+  hiddenObjectAlpha: TrackableAlphaValue;
   shaderError: WatchableShaderError;
   skeletonRenderingOptions: SkeletonRenderingOptions;
 }
@@ -1462,6 +1480,9 @@ export class SkeletonLayer extends RefCounted implements SkeletonShaderContext {
     super();
 
     registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
+    this.registerDisposer(
+      displayState.hiddenObjectAlpha.changed.add(this.redrawNeeded.dispatch),
+    );
     this.displayState.shaderError.value = undefined;
     const { skeletonRenderingOptions: renderingOptions } = displayState;
     this.registerDisposer(
@@ -1956,20 +1977,13 @@ export class SpatiallyIndexedSkeletonSource extends SliceViewChunkSource<
   }
 }
 
-export interface SpatiallyIndexedSkeletonSourceRuntimeDisposalOptions {
-  invalidateCache?: boolean;
-}
-
-export function disposeSpatiallyIndexedSkeletonSourceRuntimeState(
+function disposeSpatiallyIndexedSkeletonSourceRuntimeState(
   sources: Iterable<SpatiallyIndexedSkeletonSource>,
-  options: SpatiallyIndexedSkeletonSourceRuntimeDisposalOptions = {},
 ) {
   const uniqueSources = new Set(sources);
-  const invalidateCache = options.invalidateCache ?? true;
   const chunkQueueManagersWithDeletedChunks = new Set<
     ChunkManager["chunkQueueManager"]
   >();
-  let changed = false;
   for (const source of uniqueSources) {
     if (source.chunks.size !== 0) {
       for (const chunkKey of source.chunks.keys()) {
@@ -1978,22 +1992,18 @@ export function disposeSpatiallyIndexedSkeletonSourceRuntimeState(
       chunkQueueManagersWithDeletedChunks.add(
         source.chunkManager.chunkQueueManager,
       );
-      changed = true;
     }
     if (
-      invalidateCache &&
       source.wasDisposed !== true &&
       source.rpc !== null &&
       source.rpcId !== null
     ) {
       source.invalidateCache();
-      changed = true;
     }
   }
   for (const chunkQueueManager of chunkQueueManagersWithDeletedChunks) {
     chunkQueueManager.visibleChunksChanged.dispatch();
   }
-  return changed;
 }
 
 // Options are provided by the SliceView framework for scale selection,
@@ -2348,10 +2358,6 @@ export class SpatiallyIndexedSkeletonLayer
 
   private disposeOverlayChunks() {
     const hadOverlaySegmentChunks = this.overlaySegmentChunks.size !== 0;
-    const changed =
-      hadOverlaySegmentChunks ||
-      this.failedOverlaySegmentBuilds.size !== 0 ||
-      this.overlayRenderChunks.length !== 0;
     const chunks = [...this.overlaySegmentChunks.values()].map(
       ({ chunk }) => chunk,
     );
@@ -2366,7 +2372,6 @@ export class SpatiallyIndexedSkeletonLayer
     if (hadOverlaySegmentChunks) {
       ++this.browseExcludedSegmentIdsVersion;
     }
-    return changed;
   }
 
   getUniqueChunkSources() {
@@ -2375,54 +2380,6 @@ export class SpatiallyIndexedSkeletonLayer
       sources.add(sourceEntry.chunkSource);
     }
     return sources;
-  }
-
-  private clearOverlayRuntimeState() {
-    let changed = this.disposeOverlayChunks();
-    if (this.pendingOverlaySegmentLoads.size !== 0) {
-      this.pendingOverlaySegmentLoads.clear();
-      changed = true;
-    }
-    if (this.temporaryBrowseExclusions.size !== 0) {
-      this.temporaryBrowseExclusions.clear();
-      ++this.browseExcludedSegmentIdsVersion;
-      changed = true;
-    }
-    if (this.retainedOverlaySegments.size !== 0) {
-      this.retainedOverlaySegments = new Map();
-      ++this.retainedOverlaySegmentIdsVersion;
-      ++this.browseExcludedSegmentIdsVersion;
-      changed = true;
-    }
-    if (this.browseExcludedSegments.size !== 0) {
-      this.browseExcludedSegments.clear();
-      changed = true;
-    }
-    // Runtime disposal also invalidates exclusions derived solely from a
-    // visible cached overlay, even when no retained or temporary state exists.
-    ++this.browseExcludedSegmentIdsVersion;
-    this.cachedBrowseExcludedVersion = -1;
-    this.cachedBrowseExcludedVisibleSet = undefined;
-    this.cachedBrowseExcludedVisibleGeneration = -1;
-    this.cachedBrowseExcludedNodeDataVersion = undefined;
-    this.cachedBrowseExcludedPresentation = undefined;
-    this.overlayRebuildFrame = -1;
-    return changed;
-  }
-
-  disposeRuntimeState(
-    options: SpatiallyIndexedSkeletonSourceRuntimeDisposalOptions = {},
-  ) {
-    const overlayChanged = this.clearOverlayRuntimeState();
-    const sourceChanged = disposeSpatiallyIndexedSkeletonSourceRuntimeState(
-      this.getUniqueChunkSources(),
-      options,
-    );
-    const changed = overlayChanged || sourceChanged;
-    if (changed) {
-      this.redrawNeeded.dispatch();
-    }
-    return changed;
   }
 
   private requestOverlaySegmentLoad(segmentId: bigint) {
@@ -2494,7 +2451,7 @@ export class SpatiallyIndexedSkeletonLayer
   // Falls back to the selected segment's color when the node has no segment id.
   private getNodeSegmentColor(
     nodeInfo: SelectedSkeletonNodeInfo,
-  ): Float32Array | undefined {
+  ): vec3 | undefined {
     const segmentId =
       nodeInfo.segmentId !== undefined
         ? nodeInfo.segmentId
@@ -2505,7 +2462,7 @@ export class SpatiallyIndexedSkeletonLayer
     if (this.provisionalSegmentIds?.has(segmentId)) {
       return PROVISIONAL_SEGMENT_COLOR;
     }
-    return getBaseObjectColor(this.displayState, segmentId);
+    return getBaseObjectColor(this.displayState, segmentId) as vec3;
   }
 
   // Each outline contrasts with its own node's segment color.
@@ -2897,7 +2854,10 @@ export class SpatiallyIndexedSkeletonLayer
   ) {
     super();
     this.registerDisposer(() => {
-      this.disposeRuntimeState();
+      this.disposeOverlayChunks();
+      disposeSpatiallyIndexedSkeletonSourceRuntimeState(
+        this.getUniqueChunkSources(),
+      );
     });
     let sources3d: SpatiallyIndexedSkeletonSourceEntry[];
     let sources2d = options.sources2d ?? [];
@@ -2957,6 +2917,9 @@ export class SpatiallyIndexedSkeletonLayer
       ),
     );
     registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
+    this.registerDisposer(
+      displayState.hiddenObjectAlpha.changed.add(this.redrawNeeded.dispatch),
+    );
     const invalidateNodeOutlineColors = () => {
       ++this.nodeOutlineColorGeneration;
     };

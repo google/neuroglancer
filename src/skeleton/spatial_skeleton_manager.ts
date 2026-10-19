@@ -1233,22 +1233,24 @@ export class SpatialSkeletonState
     }
   }
 
+  private notifyWithReporters(publish: () => void) {
+    if (this.presentationNotificationErrorReporters.size === 0) {
+      publish();
+      return;
+    }
+    try {
+      publish();
+    } catch (error) {
+      this.reportSpatialSkeletonPresentationObserverError(error);
+    }
+  }
+
   private publishPreparedSpatialSkeletonPresentation(
     publication: SpatialSkeletonPresentationSnapshot,
   ) {
-    const publishPresentation = () => {
+    this.notifyWithReporters(() => {
       this.spatialSkeletonPresentation.value = publication;
-    };
-    if (this.presentationNotificationErrorReporters.size === 0) {
-      publishPresentation();
-      return;
-    }
-    const reportError = (error: unknown) =>
-      this.reportSpatialSkeletonPresentationObserverError(error);
-    this.spatialSkeletonPresentation.changed.runWithHandlerErrorReporting(
-      reportError,
-      publishPresentation,
-    );
+    });
   }
 
   private publishSpatialSkeletonPresentation() {
@@ -1301,18 +1303,9 @@ export class SpatialSkeletonState
           }
           if (this.nodeDataNotificationPending) {
             this.nodeDataNotificationPending = false;
-            const publishNodeData = () => {
+            this.notifyWithReporters(() => {
               this.nodeDataVersion.value = this.nodeDataVersion.value + 1;
-            };
-            if (this.presentationNotificationErrorReporters.size === 0) {
-              publishNodeData();
-            } else {
-              this.nodeDataVersion.changed.runWithHandlerErrorReporting(
-                (error) =>
-                  this.reportSpatialSkeletonPresentationObserverError(error),
-                publishNodeData,
-              );
-            }
+            });
           }
         } finally {
           this.presentationNotificationErrorReporters.clear();
@@ -1599,34 +1592,6 @@ export class SpatialSkeletonState
     this.pendingNodePosition = undefined;
     this.pendingNodePositionVersion.value =
       this.pendingNodePositionVersion.value + 1;
-    return true;
-  }
-
-  updateCommandHistorySource(source: unknown) {
-    if (this.commandHistory.matchesSource(source)) {
-      return false;
-    }
-    this.releaseOptimisticEditingEngine();
-    return this.commandHistory.setSource(source);
-  }
-
-  clearInspectedSkeletonCache() {
-    return this.runSpatialSkeletonPresentationTransaction(() =>
-      this.clearInspectedSkeletonCacheInPresentation(),
-    );
-  }
-
-  private clearInspectedSkeletonCacheInPresentation() {
-    const cacheChanged =
-      this.fullSegmentNodeCache.size !== 0 ||
-      this.pendingFullSegmentNodeFetches.size !== 0 ||
-      this.cachedNodesById.size !== 0;
-    const pendingChanged = this.clearPendingNodePositions();
-    if (!cacheChanged) {
-      return pendingChanged;
-    }
-    this.clearFullSkeletonCache();
-    this.markNodeDataChanged({ invalidateFullSkeletonCache: false });
     return true;
   }
 

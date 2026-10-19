@@ -153,10 +153,6 @@ export interface CompleteUrlOptions extends CompleteUrlOptionsBase {
   signal: AbortSignal;
 }
 
-export interface LayerRuntimeStateDisposalRequest {
-  kind: string;
-}
-
 export interface DataSubsourceEntry {
   /**
    * Unique identifier (within the group) for this subsource.  Stored in the JSON state
@@ -186,12 +182,6 @@ export interface DataSubsourceEntry {
    * Specifies whether this associated data source is enabled by default.
    */
   default: boolean;
-
-  /**
-   * Optional layer-owned runtime cleanup requested when this active subsource's
-   * datasource is replaced or cleared.
-   */
-  layerRuntimeStateDisposal?: LayerRuntimeStateDisposalRequest;
 }
 
 export interface ChannelMetadata {

@@ -57,17 +57,6 @@ function formatPixelNumber(x: number) {
   return Math.round(x) + "";
 }
 
-export function formatSpatialScaleLabel(spatialScale: number) {
-  if (spatialScale === 0) return "all nodes";
-  if (Number.isFinite(spatialScale)) {
-    return formatScaleWithUnitAsString(spatialScale, "m", {
-      precision: 2,
-      elide1: false,
-    });
-  }
-  return "unknown";
-}
-
 export interface RenderScaleWidgetOptions {
   histogram: RenderScaleHistogram;
   target: TrackableValueInterface<number>;
@@ -93,6 +82,14 @@ export class RenderScaleWidget extends RefCounted {
   private debouncedUpdateView = this.registerCancellable(
     debounce(() => this.updateView(), 0),
   );
+
+  protected formatSpatialScale(spatialScale: number) {
+    if (!Number.isFinite(spatialScale)) return "unknown";
+    return formatScaleWithUnitAsString(spatialScale, "m", {
+      precision: 2,
+      elide1: false,
+    });
+  }
 
   adjustViaWheel(event: WheelEvent) {
     const deltaY = this.getWheelMoveValue(event);
@@ -307,7 +304,7 @@ export class RenderScaleWidget extends RefCounted {
         totalNotPresent += histogramData[index + numBins];
       }
       this.legendSpatialScale.textContent =
-        formatSpatialScaleLabel(hoverSpatialScale);
+        this.formatSpatialScale(hoverSpatialScale);
     } else {
       this.legendSpatialScale.textContent = "";
     }

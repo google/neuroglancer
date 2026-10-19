@@ -2351,7 +2351,7 @@ describe("spatial_skeleton_commands", () => {
     spatialSkeletonState.dispose();
   });
 
-  it("does not adopt or reverse a late commit after changing history source", async () => {
+  it("does not adopt or reverse a late commit after runtime state is cleared", async () => {
     suppressStatusMessages();
 
     const segmentId = 23n;
@@ -2385,14 +2385,9 @@ describe("spatial_skeleton_commands", () => {
     expect(spatialSkeletonState.hasUnconfirmedOptimisticEdits()).toBe(true);
 
     const oldQueue = (spatialSkeletonState as any).optimisticEditQueue;
-    expect(spatialSkeletonState.updateCommandHistorySource({})).toBe(true);
+    expect(spatialSkeletonState.clearRuntimeState()).toBe(true);
     const disposal = oldQueue.dispose();
     expect(spatialSkeletonState.hasUnconfirmedOptimisticEdits()).toBe(false);
-    expect(
-      spatialSkeletonState
-        .getCachedSegmentNodes(segmentId)
-        ?.some((node) => node.nodeId >= 2n ** 63n),
-    ).toBe(false);
 
     resolveAdd!({
       nodeId: 2n,

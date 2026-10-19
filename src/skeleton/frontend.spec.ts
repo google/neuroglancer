@@ -1154,20 +1154,6 @@ describe("SpatiallyIndexedSkeletonLayer browse exclusions", () => {
       23n,
     ]);
   });
-
-  it("clears retained and temporary ownership together on runtime reset", () => {
-    const { layer } = makeLayer();
-    layer.retainOverlaySegment(41n);
-    const release = layer.beginTemporaryBrowseExclusion(43n);
-    expect(getExcludedSegmentIds(layer)).toEqual([41n, 43n]);
-
-    expect(layer.clearOverlayRuntimeState()).toBe(true);
-
-    expect([...layer.retainedOverlaySegments]).toEqual([]);
-    expect([...layer.temporaryBrowseExclusions]).toEqual([]);
-    expect(layer.getBrowsePassExcludedSegments()).toBeUndefined();
-    expect(release()).toBe(false);
-  });
 });
 
 describe("SpatiallyIndexedSkeletonLayer projected removals", () => {

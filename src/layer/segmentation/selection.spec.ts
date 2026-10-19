@@ -19,66 +19,23 @@ import { describe, expect, it } from "vitest";
 import type { LayerSelectedValues } from "#src/layer/index.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import {
-  getNodeIdFromLayerSelectionState,
   getSegmentIdFromLayerSelectionValue,
-  hasSpatialSkeletonNodeSelection,
   SpatialSkeletonHoverState,
 } from "#src/layer/segmentation/selection.js";
 
 describe("layer/segmentation/selection", () => {
-  it("recognizes field-based spatial skeleton node selections", () => {
-    expect(
-      hasSpatialSkeletonNodeSelection({
-        nodeId: "17",
-        value: 9n,
-      }),
-    ).toBe(true);
-    expect(
-      hasSpatialSkeletonNodeSelection({
-        nodeId: "18446744073709551615",
-      }),
-    ).toBe(true);
-    expect(
-      hasSpatialSkeletonNodeSelection({
-        nodeId: 17n,
-      }),
-    ).toBe(false);
-    expect(
-      hasSpatialSkeletonNodeSelection({
-        nodeId: 0n,
-      }),
-    ).toBe(false);
-    expect(hasSpatialSkeletonNodeSelection({})).toBe(false);
-  });
-
-  it("extracts node and segment ids from a layer selection state", () => {
-    expect(
-      getNodeIdFromLayerSelectionState({
-        nodeId: "23",
-        value: 7n,
-      }),
-    ).toBe(23n);
+  it("extracts segment ids from a layer selection state", () => {
     expect(
       getSegmentIdFromLayerSelectionValue({
-        nodeId: "23",
+        nodeId: 23n,
         value: "7",
       }),
     ).toBe(7n);
-    expect(
-      getNodeIdFromLayerSelectionState({
-        nodeId: 0n,
-      }),
-    ).toBeUndefined();
     expect(
       getSegmentIdFromLayerSelectionValue({
         value: "9",
       }),
     ).toBe(9n);
-    expect(
-      getNodeIdFromLayerSelectionState({
-        nodeId: "18446744073709551615",
-      }),
-    ).toBe(18446744073709551615n);
   });
 
   it("extracts the hovered node id only for matching render layers", () => {

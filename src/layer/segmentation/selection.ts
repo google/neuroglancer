@@ -52,18 +52,11 @@ function parseSelectionStateId(value: unknown) {
   }
 }
 
-function parseSelectionStateStringId(value: unknown) {
-  return typeof value === "string" ? parseSelectionStateId(value) : undefined;
-}
-
-function getSelectionIdString(value: unknown) {
-  return parseSelectionStateStringId(value)?.toString();
-}
-
 export function getNodeIdFromLayerSelectionState(
   state: { nodeId?: unknown; value?: unknown } | undefined,
 ) {
-  return parseSelectionStateStringId(state?.nodeId);
+  const nodeId = state?.nodeId;
+  return typeof nodeId === "bigint" ? nodeId : undefined;
 }
 
 export function getSegmentIdFromLayerSelectionValue(
@@ -75,7 +68,7 @@ export function getSegmentIdFromLayerSelectionValue(
 export function hasSpatialSkeletonNodeSelection(
   state: { nodeId?: unknown; value?: unknown } | undefined,
 ) {
-  return getSelectionIdString(state?.nodeId) !== undefined;
+  return getNodeIdFromLayerSelectionState(state) !== undefined;
 }
 
 function getSpatialSkeletonHoverInfoFromViewerHover<TRenderLayer>(

@@ -18,7 +18,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { SpatialSkeletonMergeTargetPrefetch } from "#src/ui/skeleton_merge_target_prefetch.js";
-import { createDeferred } from "#src/util/promise.js";
 
 function makeSkeletonNode(segmentId: bigint, nodeId: bigint) {
   return {
@@ -33,15 +32,14 @@ function makeSkeletonLayer() {
   const reads = new Map<
     bigint,
     {
-      deferred: ReturnType<
-        typeof createDeferred<ReturnType<typeof makeSkeletonNode>[]>
-      >;
+      deferred: PromiseWithResolvers<ReturnType<typeof makeSkeletonNode>[]>;
       signal: AbortSignal | undefined;
     }
   >();
   const getSkeleton = vi.fn(
     (segmentId: bigint, options?: { signal?: AbortSignal }) => {
-      const deferred = createDeferred<ReturnType<typeof makeSkeletonNode>[]>();
+      const deferred =
+        Promise.withResolvers<ReturnType<typeof makeSkeletonNode>[]>();
       options?.signal?.addEventListener(
         "abort",
         () => deferred.reject(options.signal?.reason),

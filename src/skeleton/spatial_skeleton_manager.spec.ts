@@ -475,7 +475,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     expect(replacementCleanup).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the first Reload required state across queue and source clearing", async () => {
+  it("keeps the first Reload required state after runtime state is cleared", async () => {
     const state = new SpatialSkeletonState();
     state.editMode.value = true;
     state.mergeMode.value = true;
@@ -531,7 +531,6 @@ describe("skeleton/spatial_skeleton_manager", () => {
     });
 
     state.clearRuntimeState();
-    state.updateCommandHistorySource({ replacement: true });
     expect(state.getOptimisticEditFatalState()).toBe(fatalState);
     expect(() => state.assertOptimisticEditingAllowed()).toThrow(
       SpatialSkeletonOptimisticReloadRequiredError,
@@ -1042,7 +1041,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const nodeDataVersion = state.nodeDataVersion.value;
     const pendingNodePositionVersion = state.pendingNodePositionVersion.value;
 
-    expect(state.clearInspectedSkeletonCache()).toBe(true);
+    expect(state.clearRuntimeState()).toBe(true);
     expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
     expect(state.getCachedNode(5n)).toBeUndefined();
     expect(state.getPendingNodePosition(5n)).toBeUndefined();
@@ -1999,7 +1998,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const secondReplacementRevision = state.getCachedSegmentRevision(11n);
     expect(secondReplacementRevision).toBeGreaterThan(replacedRevision);
 
-    expect(state.clearInspectedSkeletonCache()).toBe(true);
+    expect(state.clearRuntimeState()).toBe(true);
     expect(state.getCachedSegmentRevision(11n)).toBeGreaterThan(
       secondReplacementRevision,
     );
@@ -2407,7 +2406,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       { retainWhileInactive: true },
     );
 
-    expect(state.clearInspectedSkeletonCache()).toBe(true);
+    expect(state.clearRuntimeState()).toBe(true);
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
     expect(getSkeleton).toHaveBeenCalledTimes(1);
   });
@@ -2441,7 +2440,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     );
 
     expect(receivedSignal?.aborted).toBe(false);
-    expect(state.clearInspectedSkeletonCache()).toBe(true);
+    expect(state.clearRuntimeState()).toBe(true);
     expect(receivedSignal?.aborted).toBe(true);
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
     expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
