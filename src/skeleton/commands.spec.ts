@@ -48,9 +48,9 @@ import {
   getSkeletonNodeRadius,
 } from "#src/skeleton/node_attributes.js";
 import {
-  findSpatiallyIndexedSkeletonNode,
-  getSpatiallyIndexedSkeletonDirectChildren,
-  getSpatiallyIndexedSkeletonNodeParent,
+  findSkeletonNode,
+  getSkeletonDirectChildren,
+  getSkeletonNodeParent,
 } from "#src/skeleton/node_traversal.js";
 import { resetGlobalSpatialSkeletonMutationAuthorityLeaseCoordinatorForTesting } from "#src/skeleton/optimistic_edit/authority_lease_coordinator.js";
 import { SpatialSkeletonOptimisticReloadRequiredError } from "#src/skeleton/optimistic_edit/fatal.js";
@@ -421,7 +421,7 @@ function makeOptimisticAddNodeTestLayer(options: {
     remapOverlaySegments: vi.fn(),
     getUniqueChunkSources: () => new Set([chunkSource]),
   };
-  const selectedSpatialSkeletonNodeInfo = {
+  const selectedSkeletonNodeInfo = {
     value: undefined as
       | {
           nodeId: bigint;
@@ -433,7 +433,7 @@ function makeOptimisticAddNodeTestLayer(options: {
   const layer = {
     displayState: makeDisplayState(options.segmentIds ?? [options.segmentId]),
     manager: makePinnedManager(),
-    selectedSpatialSkeletonNodeInfo,
+    selectedSkeletonNodeInfo,
     spatialSkeletonState,
     getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
     getCachedSpatialSkeletonSegmentNodesForEdit: (requestedSegmentId: bigint) =>
@@ -441,45 +441,39 @@ function makeOptimisticAddNodeTestLayer(options: {
     async getSpatialSkeletonDeleteOperationContext(node: SkeletonNode) {
       const segmentNodes =
         spatialSkeletonState.getCachedSegmentNodes(node.segmentId) ?? [];
-      const currentNode = findSpatiallyIndexedSkeletonNode(
-        segmentNodes,
-        node.nodeId,
-      );
+      const currentNode = findSkeletonNode(segmentNodes, node.nodeId);
       if (currentNode === undefined) {
         throw new Error(`Unable to resolve cached node ${node.nodeId}.`);
       }
-      const childNodes = getSpatiallyIndexedSkeletonDirectChildren(
+      const childNodes = getSkeletonDirectChildren(
         segmentNodes,
         currentNode.nodeId,
       );
       return {
         node: currentNode,
-        parentNode: getSpatiallyIndexedSkeletonNodeParent(
-          segmentNodes,
-          currentNode,
-        ),
+        parentNode: getSkeletonNodeParent(segmentNodes, currentNode),
         childNodes,
       };
     },
     selectSegment: vi.fn(),
-    selectAndMoveToSpatialSkeletonNode: vi.fn(),
-    selectSpatialSkeletonNode: vi.fn(
+    selectAndMoveToSkeletonNode: vi.fn(),
+    selectSkeletonNode: vi.fn(
       (
         nodeId: bigint,
         _pin: boolean,
         nodeInfo?: { segmentId?: bigint; position?: ArrayLike<number> },
       ) => {
-        selectedSpatialSkeletonNodeInfo.value = {
+        selectedSkeletonNodeInfo.value = {
           nodeId,
           segmentId: nodeInfo?.segmentId,
           position: nodeInfo?.position,
         };
       },
     ),
-    clearSpatialSkeletonNodeSelection: vi.fn(() => {
-      selectedSpatialSkeletonNodeInfo.value = undefined;
+    clearSkeletonNodeSelection: vi.fn(() => {
+      selectedSkeletonNodeInfo.value = undefined;
     }),
-    moveViewToSpatialSkeletonNodePosition: vi.fn(),
+    moveViewToSkeletonNodePosition: vi.fn(),
   };
   Object.assign(layer, {
     applySpatialSkeletonProjectionUiHints: (hints: {
@@ -511,9 +505,9 @@ function makeOptimisticAddNodeTestLayer(options: {
           set.add(to);
         }
       }
-      const selected = layer.selectedSpatialSkeletonNodeInfo.value;
+      const selected = layer.selectedSkeletonNodeInfo.value;
       if (selected !== undefined) {
-        layer.selectSpatialSkeletonNode(
+        layer.selectSkeletonNode(
           hints.nodeIdRemappings.get(selected.nodeId) ?? selected.nodeId,
           true,
           {
@@ -527,17 +521,17 @@ function makeOptimisticAddNodeTestLayer(options: {
         );
       }
       if (hints.selectedNode?.kind === "clear") {
-        layer.clearSpatialSkeletonNodeSelection();
+        layer.clearSkeletonNodeSelection();
       } else if (
         hints.selectedNode !== undefined &&
         (hints.selectedNode.kind === "select" ||
-          layer.selectedSpatialSkeletonNodeInfo.value?.nodeId ===
+          layer.selectedSkeletonNodeInfo.value?.nodeId ===
             hints.selectedNode.nodeId)
       ) {
         const cached = spatialSkeletonState.getCachedNode(
           hints.selectedNode.nodeId,
         );
-        layer.selectSpatialSkeletonNode(hints.selectedNode.nodeId, true, {
+        layer.selectSkeletonNode(hints.selectedNode.nodeId, true, {
           segmentId: hints.selectedNode.segmentId ?? cached?.segmentId,
           position: hints.selectedNode.position ?? cached?.position,
         });
@@ -1529,7 +1523,7 @@ describe("spatial_skeleton_commands", () => {
         position: preview.position,
       });
       expect(visible.has(preview.segmentId)).toBe(true);
-      expect(layer.selectedSpatialSkeletonNodeInfo.value).toMatchObject({
+      expect(layer.selectedSkeletonNodeInfo.value).toMatchObject({
         nodeId: previewNodeId,
         segmentId: preview.segmentId,
       });
@@ -3142,7 +3136,7 @@ describe("spatial_skeleton_commands", () => {
     expect(groupState.visibleSegments.has(realSegment)).toBe(false);
     expect(groupState.temporaryVisibleSegments.has(realSegment)).toBe(true);
     expect(groupState.selectedSegments.has(realSegment)).toBe(true);
-    expect(layer.selectedSpatialSkeletonNodeInfo.value).toMatchObject({
+    expect(layer.selectedSkeletonNodeInfo.value).toMatchObject({
       nodeId: realNodeId,
       segmentId: realSegmentId,
     });
@@ -3349,9 +3343,7 @@ describe("spatial_skeleton_commands", () => {
           }),
         );
         expect(group.visibleSegments).toEqual(new Set([11n, previewId]));
-        expect(layer.selectedSpatialSkeletonNodeInfo.value?.segmentId).toBe(
-          previewId,
-        );
+        expect(layer.selectedSkeletonNodeInfo.value?.segmentId).toBe(previewId);
       };
       expectCompletePreview(inputNode.nodeId);
       expect(mergeSkeletons).not.toHaveBeenCalled();
@@ -4462,12 +4454,12 @@ describe("spatial_skeleton_commands", () => {
       initialNodes: [node],
       segmentId: node.segmentId,
     });
-    layer.selectSpatialSkeletonNode(node.nodeId, true, node);
+    layer.selectSkeletonNode(node.nodeId, true, node);
     const execution = executeSpatialSkeletonDeleteNode(layer as any, node);
     await execution;
     await waitForMicrotasks();
     expect(spatialSkeletonState.getCachedNode(node.nodeId)).toBeUndefined();
-    expect(layer.selectedSpatialSkeletonNodeInfo.value).toBeUndefined();
+    expect(layer.selectedSkeletonNodeInfo.value).toBeUndefined();
     rejectDelete(
       new HttpError(
         "https://catmaid.example.test/1/treenode/delete",
@@ -4483,7 +4475,7 @@ describe("spatial_skeleton_commands", () => {
     expect(
       spatialSkeletonState.spatialSkeletonPresentation.value.removedSegmentIds,
     ).not.toContain(node.segmentId);
-    expect(layer.selectedSpatialSkeletonNodeInfo.value).toMatchObject({
+    expect(layer.selectedSkeletonNodeInfo.value).toMatchObject({
       nodeId: node.nodeId,
       segmentId: node.segmentId,
     });

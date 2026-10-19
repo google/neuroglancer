@@ -98,6 +98,11 @@ import {
   retainSpatiallyIndexedSkeletonOverlaySegment,
 } from "#src/skeleton/segment_overlay.js";
 import {
+  getSkeletonChunkTopology,
+  type SkeletonChunkTopology,
+} from "#src/skeleton/skeleton_chunk_topology.js";
+import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
+import {
   edgeColorPathsGlsl,
   nodeColorPathsGlsl,
 } from "#src/skeleton/skeleton_shader_color.js";
@@ -157,7 +162,7 @@ import { kOneVec4, kZeroVec, mat4, vec3, type vec4 } from "#src/util/geom.js";
 import { verifyFinitePositiveFloat } from "#src/util/json.js";
 import * as matrix from "#src/util/matrix.js";
 import { getObjectId } from "#src/util/object_id.js";
-import { NullarySignal } from "#src/util/signal.js";
+import { NullarySignal, type NullaryReadonlySignal } from "#src/util/signal.js";
 import type { Trackable } from "#src/util/trackable.js";
 import { CompoundTrackable } from "#src/util/trackable.js";
 import { TrackableEnum } from "#src/util/trackable_enum.js";
@@ -982,15 +987,6 @@ export enum SkeletonRenderMode {
   LINES_AND_POINTS = 1,
 }
 
-export function setSpatialSkeletonModesToLinesAndPoints(layer: {
-  displayState: { skeletonRenderingOptions: SkeletonRenderingOptions };
-}) {
-  layer.displayState.skeletonRenderingOptions.params2d.mode.value =
-    SkeletonRenderMode.LINES_AND_POINTS;
-  layer.displayState.skeletonRenderingOptions.params3d.mode.value =
-    SkeletonRenderMode.LINES_AND_POINTS;
-}
-
 /**
  * Returns active numeric aliases that exist only in the optimistic projection.
  * These ids are presentation state rather than datasource identities and receive a
@@ -1373,7 +1369,7 @@ function getSkeletonNodeHighlightRing(
   return { diameter: nodeDiameter + 2 * outline, borderWidth: outline };
 }
 
-function setMouseStatePositionFromSpatialSkeletonNode(
+function setMouseStatePositionFromSkeletonNode(
   mouseState: MouseSelectionState,
   nodePosition: Float32Array,
   transform: RenderLayerTransform,
@@ -1458,10 +1454,17 @@ export interface SkeletonLayerDisplayState extends SegmentationDisplayState3D {
   skeletonRenderingOptions: SkeletonRenderingOptions;
 }
 
-export class SkeletonLayer extends RefCounted implements SkeletonShaderContext {
+export class SkeletonLayer
+  extends RefCounted
+  implements SkeletonShaderContext, SkeletonNodeAccess
+{
   layerChunkProgressInfo = new LayerChunkProgressInfo();
   redrawNeeded = new NullarySignal();
   private sharedObject: SegmentationLayerSharedObject;
+  private readonly chunkTopologies = new WeakMap<
+    SkeletonChunk,
+    SkeletonChunkTopology
+  >();
   vertexAttributes: VertexAttributeRenderInfo[];
   // Non-spatial skeletons iterate segments individually and pass color/alpha via
   // uniforms (getObjectColor), so the dynamic per-vertex segment appearance path
@@ -1529,6 +1532,31 @@ export class SkeletonLayer extends RefCounted implements SkeletonShaderContext {
 
   get gl() {
     return this.chunkManager.chunkQueueManager.gl;
+  }
+
+  readonly hasPickableNodes = false;
+
+  get nodesChanged() {
+    return this.source.chunksChanged;
+  }
+
+  getSegmentNodes(segmentId: bigint): readonly SkeletonNode[] | undefined {
+    return this.getSegmentTopology(segmentId)?.nodes;
+  }
+
+  areParentsInferred(segmentId: bigint): boolean {
+    return this.getSegmentTopology(segmentId)?.parentsInferred ?? false;
+  }
+
+  private getSegmentTopology(segmentId: bigint) {
+    const chunk = this.source.chunks.get(getObjectKey(segmentId));
+    if (chunk === undefined) return undefined;
+    let topology = this.chunkTopologies.get(chunk);
+    if (topology === undefined) {
+      topology = getSkeletonChunkTopology(segmentId, chunk);
+      this.chunkTopologies.set(chunk, topology);
+    }
+    return topology;
   }
 
   draw(
@@ -2304,7 +2332,7 @@ export function resolveSpatiallyIndexedSkeletonSegmentPick(
 
 export class SpatiallyIndexedSkeletonLayer
   extends RefCounted
-  implements SkeletonShaderContext
+  implements SkeletonShaderContext, SkeletonNodeAccess
 {
   layerChunkProgressInfo = new LayerChunkProgressInfo();
   redrawNeeded = new NullarySignal();
@@ -2348,6 +2376,7 @@ export class SpatiallyIndexedSkeletonLayer
     | undefined;
   readonly highlightMarkersChanged = new NullarySignal();
   private inspectionState: SpatiallyIndexedSkeletonInspectionState | undefined;
+  private readonly nodesChangedSignal: NullaryReadonlySignal;
   // Inspection geometry is cached per segment.  A node-data update therefore
   // replaces only the segment arrays that changed rather than disposing and
   // rebuilding one aggregate scene-wide overlay chunk.
@@ -3030,6 +3059,9 @@ export class SpatiallyIndexedSkeletonLayer
     this.getCachedNodeInfo = options.getCachedNode;
     this.resolveGlobalPosition = options.resolveGlobalPosition;
     this.inspectionState = options.inspectionState;
+    this.nodesChangedSignal =
+      this.inspectionState?.spatialSkeletonPresentation.changed ??
+      new NullarySignal();
     const initialPresentation =
       this.inspectionState?.spatialSkeletonPresentation?.value;
     if (initialPresentation !== undefined) {
@@ -3584,6 +3616,20 @@ export class SpatiallyIndexedSkeletonLayer
     return ready;
   }
 
+  readonly hasPickableNodes = true;
+
+  get nodesChanged() {
+    return this.nodesChangedSignal;
+  }
+
+  getSegmentNodes(segmentId: bigint): readonly SkeletonNode[] | undefined {
+    return this.inspectionState?.getCachedSegmentNodes(segmentId);
+  }
+
+  areParentsInferred(): boolean {
+    return false;
+  }
+
   getNode(nodeId: bigint): SkeletonNode | undefined {
     if (nodeId === 0n) return undefined;
     return this.getCachedNodeSnapshot(nodeId);
@@ -4029,7 +4075,7 @@ function updateSpatiallyIndexedSkeletonMouseState(
   if (data.kind === "segment-node") return;
   const transform = base.displayState.transform.value;
   if (transform.error === undefined) {
-    setMouseStatePositionFromSpatialSkeletonNode(
+    setMouseStatePositionFromSkeletonNode(
       mouseState,
       pickedNode.position,
       transform,
@@ -4464,8 +4510,20 @@ export class SkeletonSource extends ChunkSource {
   }
 
   declare chunks: Map<string, SkeletonChunk>;
+  readonly chunksChanged = new NullarySignal();
+
   getChunk(x: PackedSkeletonGeometry) {
     return new SkeletonChunk(this, x);
+  }
+
+  addChunk(key: string, chunk: SkeletonChunk) {
+    super.addChunk(key, chunk);
+    this.chunksChanged.dispatch();
+  }
+
+  deleteChunk(key: string) {
+    super.deleteChunk(key);
+    this.chunksChanged.dispatch();
   }
 
   get vertexAttributes(): Map<string, VertexAttributeInfo> {

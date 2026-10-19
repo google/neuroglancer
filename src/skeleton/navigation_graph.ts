@@ -18,17 +18,16 @@ import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
 import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
 import { bigintCompare } from "#src/util/bigint.js";
 
-export interface SpatiallyIndexedSkeletonNavigationTarget {
+export interface SkeletonNavigationTarget {
   nodeId: bigint;
   position: SkeletonVector;
 }
 
-export interface SpatiallyIndexedSkeletonOpenLeaf
-  extends SpatiallyIndexedSkeletonNavigationTarget {
+export interface SkeletonOpenLeaf extends SkeletonNavigationTarget {
   distance: number;
 }
 
-export interface SpatiallyIndexedSkeletonNavigationGraph {
+export interface SkeletonNavigationGraph {
   nodeById: Map<bigint, SkeletonNode>;
   childrenByParent: Map<bigint, bigint[]>;
   rootNodeIds: bigint[];
@@ -58,12 +57,12 @@ interface NavigationGraphDerivedState {
 }
 
 const navigationGraphDerivedState = new WeakMap<
-  SpatiallyIndexedSkeletonNavigationGraph,
+  SkeletonNavigationGraph,
   NavigationGraphDerivedState
 >();
 
 function buildNavigationGraphDerivedState(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
+  graph: SkeletonNavigationGraph,
 ): NavigationGraphDerivedState {
   const sortPriorityByNodeId = new Map<bigint, number>();
   for (const [nodeId, node] of graph.nodeById) {
@@ -90,9 +89,7 @@ function buildNavigationGraphDerivedState(
   };
 }
 
-function getNavigationGraphDerivedState(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
-) {
+function getNavigationGraphDerivedState(graph: SkeletonNavigationGraph) {
   let state = navigationGraphDerivedState.get(graph);
   if (state === undefined) {
     state = buildNavigationGraphDerivedState(graph);
@@ -101,9 +98,9 @@ function getNavigationGraphDerivedState(
   return state;
 }
 
-export function buildSpatiallyIndexedSkeletonNavigationGraph(
+export function buildSkeletonNavigationGraph(
   nodes: readonly SkeletonNode[],
-): SpatiallyIndexedSkeletonNavigationGraph {
+): SkeletonNavigationGraph {
   const nodeById = new Map<bigint, SkeletonNode>();
   for (const node of nodes) {
     if (!nodeById.has(node.nodeId)) {
@@ -151,7 +148,7 @@ export function buildSpatiallyIndexedSkeletonNavigationGraph(
 }
 
 function getFlatListNodeSortPriority(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
+  graph: SkeletonNavigationGraph,
   nodeId: bigint,
 ) {
   const priority =
@@ -163,7 +160,7 @@ function getFlatListNodeSortPriority(
 }
 
 function compareFlatListNodeIds(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
+  graph: SkeletonNavigationGraph,
   a: bigint,
   b: bigint,
 ) {
@@ -174,7 +171,7 @@ function compareFlatListNodeIds(
 }
 
 export function getFlatListNodeIds(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
+  graph: SkeletonNavigationGraph,
   options: { collapseRegularNodesForOrdering?: boolean } = {},
 ) {
   if (options.collapseRegularNodesForOrdering ?? false) {
@@ -232,10 +229,7 @@ export function getFlatListNodeIds(
   return orderedNodeIds;
 }
 
-function getNodeOrThrow(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
-  nodeId: bigint,
-) {
+function getNodeOrThrow(graph: SkeletonNavigationGraph, nodeId: bigint) {
   const node = graph.nodeById.get(nodeId);
   if (node === undefined) {
     throw new Error(`Node ${nodeId} is not available in the loaded skeleton.`);
@@ -244,9 +238,9 @@ function getNodeOrThrow(
 }
 
 function getNodeTarget(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
+  graph: SkeletonNavigationGraph,
   nodeId: bigint,
-): SpatiallyIndexedSkeletonNavigationTarget {
+): SkeletonNavigationTarget {
   const node = getNodeOrThrow(graph, nodeId);
   return {
     nodeId: node.nodeId,
@@ -254,17 +248,11 @@ function getNodeTarget(
   };
 }
 
-function getChildNodeIds(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
-  nodeId: bigint,
-) {
+function getChildNodeIds(graph: SkeletonNavigationGraph, nodeId: bigint) {
   return graph.childrenByParent.get(nodeId) ?? [];
 }
 
-function getParentNodeId(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
-  nodeId: bigint,
-) {
+function getParentNodeId(graph: SkeletonNavigationGraph, nodeId: bigint) {
   const parentNodeId = getNodeOrThrow(graph, nodeId).parentNodeId;
   if (parentNodeId === undefined || !graph.nodeById.has(parentNodeId)) {
     return undefined;
@@ -273,7 +261,7 @@ function getParentNodeId(
 }
 
 function getFlatListOrderedChildNodeIds(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
+  graph: SkeletonNavigationGraph,
   nodeId: bigint,
 ) {
   const childNodeIds = getChildNodeIds(graph, nodeId);
@@ -293,7 +281,7 @@ function getFlatListOrderedChildNodeIds(
 }
 
 function getCollapsedBranchPath(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
+  graph: SkeletonNavigationGraph,
   nodeId: bigint,
 ) {
   const derivedState = getNavigationGraphDerivedState(graph);
@@ -318,7 +306,7 @@ function getCollapsedBranchPath(
 }
 
 function getCollapsedOrderedChildPaths(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
+  graph: SkeletonNavigationGraph,
   nodeId: bigint,
 ) {
   const derivedState = getNavigationGraphDerivedState(graph);
@@ -345,7 +333,7 @@ function getCollapsedOrderedChildPaths(
 }
 
 function isCollapsedRegularNode(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
+  graph: SkeletonNavigationGraph,
   nodeId: bigint,
 ) {
   const node = getNodeOrThrow(graph, nodeId);
@@ -357,7 +345,7 @@ function isCollapsedRegularNode(
 }
 
 function getCollapsedChildNodeIds(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
+  graph: SkeletonNavigationGraph,
   nodeId: bigint,
 ) {
   return getCollapsedOrderedChildPaths(graph, nodeId).map(
@@ -365,9 +353,7 @@ function getCollapsedChildNodeIds(
   );
 }
 
-function getCollapsedOrderedFlatListNodeIds(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
-) {
+function getCollapsedOrderedFlatListNodeIds(graph: SkeletonNavigationGraph) {
   const derivedState = getNavigationGraphDerivedState(graph);
   if (derivedState.collapsedFlatListNodeIds !== undefined) {
     return derivedState.collapsedFlatListNodeIds;
@@ -429,9 +415,7 @@ function getCollapsedOrderedFlatListNodeIds(
   return orderedNodeIds;
 }
 
-function getCollapsedLevelContext(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
-) {
+function getCollapsedLevelContext(graph: SkeletonNavigationGraph) {
   const derivedState = getNavigationGraphDerivedState(graph);
   if (derivedState.collapsedLevelContext !== undefined) {
     return derivedState.collapsedLevelContext;
@@ -464,10 +448,7 @@ function getCollapsedLevelContext(
   return context;
 }
 
-function getBranchEndNodeIds(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
-  nodeId: bigint,
-) {
+function getBranchEndNodeIds(graph: SkeletonNavigationGraph, nodeId: bigint) {
   getNodeOrThrow(graph, nodeId);
   const childNodeIds = getFlatListOrderedChildNodeIds(graph, nodeId);
   return childNodeIds.map((childNodeId) => {
@@ -483,9 +464,7 @@ function getBranchEndNodeIds(
   });
 }
 
-export function getSkeletonRootNode(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
-) {
+export function getSkeletonRootNode(graph: SkeletonNavigationGraph) {
   const rootNodeId = graph.rootNodeIds[0];
   if (rootNodeId === undefined) {
     throw new Error("The loaded skeleton does not contain a root node.");
@@ -493,10 +472,7 @@ export function getSkeletonRootNode(
   return getNodeTarget(graph, rootNodeId);
 }
 
-export function getBranchStart(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
-  nodeId: bigint,
-) {
+export function getBranchStart(graph: SkeletonNavigationGraph, nodeId: bigint) {
   getNodeOrThrow(graph, nodeId);
   let currentNodeId = nodeId;
   const visited = new Set<bigint>([currentNodeId]);
@@ -514,7 +490,7 @@ export function getBranchStart(
 }
 
 export function getBranchEnd(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
+  graph: SkeletonNavigationGraph,
   nodeId: bigint,
   options: { random?: () => number } = {},
 ) {
@@ -539,20 +515,14 @@ export function getBranchEnd(
   return getNodeTarget(graph, preferredNodeIds[index]);
 }
 
-export function getParentNode(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
-  nodeId: bigint,
-) {
+export function getParentNode(graph: SkeletonNavigationGraph, nodeId: bigint) {
   const parentNodeId = getParentNodeId(graph, nodeId);
   return parentNodeId === undefined
     ? undefined
     : getNodeTarget(graph, parentNodeId);
 }
 
-export function getChildNode(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
-  nodeId: bigint,
-) {
+export function getChildNode(graph: SkeletonNavigationGraph, nodeId: bigint) {
   const childNodeId = getFlatListOrderedChildNodeIds(graph, nodeId)[0];
   return childNodeId === undefined
     ? undefined
@@ -567,10 +537,10 @@ export function getChildNode(
  * deterministic when multiple shortest paths exist.
  */
 export function getPathBetweenNodes(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
+  graph: SkeletonNavigationGraph,
   sourceNodeId: bigint,
   targetNodeId: bigint,
-): SpatiallyIndexedSkeletonNavigationTarget[] | undefined {
+): SkeletonNavigationTarget[] | undefined {
   if (!graph.nodeById.has(sourceNodeId) || !graph.nodeById.has(targetNodeId)) {
     return undefined;
   }
@@ -619,7 +589,7 @@ export function getPathBetweenNodes(
 }
 
 export function getRandomChildNode(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
+  graph: SkeletonNavigationGraph,
   nodeId: bigint,
   options: { random?: () => number } = {},
 ) {
@@ -639,7 +609,7 @@ export function getRandomChildNode(
 }
 
 export function getNextCollapsedLevelNode(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
+  graph: SkeletonNavigationGraph,
   nodeId: bigint,
 ) {
   getNodeOrThrow(graph, nodeId);
@@ -667,9 +637,9 @@ export function getNextCollapsedLevelNode(
 }
 
 export function getOpenLeaves(
-  graph: SpatiallyIndexedSkeletonNavigationGraph,
+  graph: SkeletonNavigationGraph,
   nodeId: bigint,
-): SpatiallyIndexedSkeletonOpenLeaf[] {
+): SkeletonOpenLeaf[] {
   getNodeOrThrow(graph, nodeId);
   const distances = new Map<bigint, number>([[nodeId, 0]]);
   const queue = [nodeId];
@@ -706,7 +676,7 @@ export function getOpenLeaves(
     }
   }
 
-  const leaves: SpatiallyIndexedSkeletonOpenLeaf[] = [];
+  const leaves: SkeletonOpenLeaf[] = [];
   for (const candidateNodeId of queue) {
     if (getChildNodeIds(graph, candidateNodeId).length !== 0) continue;
     const candidateNode = getNodeOrThrow(graph, candidateNodeId);

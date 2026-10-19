@@ -81,14 +81,14 @@ export interface CompleteSkeletonSnapshotRemapping {
   readonly segmentIds?: ReadonlyMap<bigint, bigint>;
 }
 
-function cloneSpatialSkeletonVector(value: SkeletonVector): SkeletonVector {
+function cloneSkeletonVector(value: SkeletonVector): SkeletonVector {
   return Object.freeze(Array.from(value));
 }
 
 function cloneNode(node: SkeletonNode): SkeletonNode {
   const copy: SkeletonNode = {
     ...node,
-    position: cloneSpatialSkeletonVector(node.position),
+    position: cloneSkeletonVector(node.position),
   };
   return Object.freeze(copy);
 }
@@ -107,7 +107,7 @@ function updateNode(
     position:
       changes.position === undefined
         ? node.position
-        : cloneSpatialSkeletonVector(changes.position),
+        : cloneSkeletonVector(changes.position),
   });
 }
 

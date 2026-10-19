@@ -337,7 +337,7 @@ async function fetchCompleteSkeleton(
   return [...nodesById.values()];
 }
 
-export function normalizeSpatiallyIndexedSkeletonNode(
+export function normalizeSkeletonNode(
   node: SkeletonNode,
 ): SkeletonNode | undefined {
   const x = Number(node.position[0]);
@@ -356,7 +356,7 @@ export function normalizeSpatiallyIndexedSkeletonNode(
   };
 }
 
-function cloneSpatiallyIndexedSkeletonNode(node: SkeletonNode): SkeletonNode {
+function cloneSkeletonNode(node: SkeletonNode): SkeletonNode {
   return {
     ...node,
     position: new Float32Array(node.position),
@@ -1815,9 +1815,7 @@ export class SpatialSkeletonState
             `Invalid spatial skeleton node id: ${node.nodeId}`,
           );
         }
-        clonedNodes.push(
-          cloneSpatiallyIndexedSkeletonNode({ ...node, segmentId }),
-        );
+        clonedNodes.push(cloneSkeletonNode({ ...node, segmentId }));
       }
       replacements.set(segmentId, {
         nodes: clonedNodes,
@@ -2561,8 +2559,7 @@ export class SpatialSkeletonState
           }
           const normalizedNodes: SkeletonNode[] = [];
           for (const fetchedNode of fetchedNodes) {
-            const mappedNode =
-              normalizeSpatiallyIndexedSkeletonNode(fetchedNode);
+            const mappedNode = normalizeSkeletonNode(fetchedNode);
             if (mappedNode === undefined) continue;
             normalizedNodes.push(mappedNode);
           }

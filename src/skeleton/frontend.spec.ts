@@ -16,6 +16,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 
+import { ChunkState } from "#src/chunk_manager/base.js";
 import {
   type CoordinateSpace,
   makeCoordinateSpace,
@@ -26,6 +27,7 @@ import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js"
 import { Uint64Set } from "#src/uint64_set.js";
 import { getContrastRatio } from "#src/util/color.js";
 import { mat4, vec3 } from "#src/util/geom.js";
+import { NullarySignal } from "#src/util/signal.js";
 
 if (!("WebGL2RenderingContext" in globalThis)) {
   Object.defineProperty(globalThis, "WebGL2RenderingContext", {
@@ -45,6 +47,8 @@ const {
   buildSpatialSkeletonPreparationVisuals,
   commitSpatiallyIndexedSkeletonOverlayReplacement,
   getActiveProvisionalSpatialSkeletonSegmentIds,
+  SkeletonLayer,
+  SkeletonSource,
   SpatiallyIndexedSkeletonLayer,
   PerspectiveViewSpatiallyIndexedSkeletonLayer,
   SliceViewPanelSpatiallyIndexedSkeletonLayer,
@@ -1288,6 +1292,56 @@ describe("SpatiallyIndexedSkeletonLayer projected removals", () => {
     expect(state.getCachedSegmentNodes(23n)).toBe(snapshot.materialize());
     expect(layer.resolveSourceBackedOverlayChunks()).toEqual([oldChunk]);
     expect(layer.createOverlaySegmentChunk).not.toHaveBeenCalled();
+  });
+});
+
+function makePackedSkeletonChunk(
+  positions: readonly (readonly number[])[],
+  edges: readonly (readonly [number, number])[],
+) {
+  return {
+    numVertices: positions.length,
+    vertexAttributes: new Uint8Array(new Float32Array(positions.flat()).buffer),
+    vertexAttributeOffsets: new Uint32Array([0]),
+    indices: new Uint32Array(edges.flat()),
+  };
+}
+
+function makeSkeletonLayer() {
+  const source = Object.assign(Object.create(SkeletonSource.prototype), {
+    chunks: new Map(),
+    chunksChanged: new NullarySignal(),
+  });
+  const layer = Object.assign(Object.create(SkeletonLayer.prototype), {
+    source,
+    chunkTopologies: new WeakMap(),
+  });
+  return { source, layer };
+}
+
+describe("precomputed skeleton layer", () => {
+  it("tells listeners when a segment's skeleton enters or leaves memory", () => {
+    const { source, layer } = makeSkeletonLayer();
+    const listener = vi.fn();
+    layer.nodesChanged.add(listener);
+    const chunk = {
+      ...makePackedSkeletonChunk(
+        [
+          [0, 0, 0],
+          [10, 0, 0],
+        ],
+        [[0, 1]],
+      ),
+      state: ChunkState.SYSTEM_MEMORY,
+    };
+
+    source.addChunk("5", chunk);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(layer.getSegmentNodes(5n)).toHaveLength(2);
+
+    source.deleteChunk("5");
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(layer.getSegmentNodes(5n)).toBeUndefined();
   });
 });
 

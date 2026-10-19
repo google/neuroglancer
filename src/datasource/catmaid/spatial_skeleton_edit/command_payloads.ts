@@ -119,15 +119,13 @@ function isOptionalId(value: bigint | undefined) {
   return value === undefined || isId(value);
 }
 
-function isSpatialSkeletonVector(
-  value: object | undefined,
-): value is SkeletonVector {
+function isSkeletonVector(value: object | undefined): value is SkeletonVector {
   // Coordinate contents are consumed by the generic reducer or CATMAID
   // transport. Admission only requires the user-facing value to be present.
   return value !== undefined;
 }
 
-function isSpatiallyIndexedSkeletonNodePayload(
+function isSkeletonNodePayload(
   value: object | undefined,
 ): value is SkeletonNode {
   if (value === undefined) return false;
@@ -142,7 +140,7 @@ function isSpatiallyIndexedSkeletonNodePayload(
   return (
     isId(candidate.nodeId) &&
     isId(candidate.segmentId) &&
-    isSpatialSkeletonVector(candidate.position) &&
+    isSkeletonVector(candidate.position) &&
     isOptionalId(candidate.parentNodeId) &&
     (candidate.attributes === undefined ||
       (typeof candidate.attributes === "object" &&
@@ -164,8 +162,7 @@ function isCatmaidMergeEndpoint(
   return (
     isId(candidate.nodeId) &&
     isId(candidate.segmentId) &&
-    (candidate.position === undefined ||
-      isSpatialSkeletonVector(candidate.position))
+    (candidate.position === undefined || isSkeletonVector(candidate.position))
   );
 }
 
@@ -193,7 +190,7 @@ export function requireCatmaidAddNodeCommandOptions(payload: object) {
       return (
         isId(options.skeletonId) &&
         isOptionalId(options.parentNodeId) &&
-        isSpatialSkeletonVector(options.positionInModelSpace)
+        isSkeletonVector(options.positionInModelSpace)
       );
     },
   );
@@ -223,8 +220,8 @@ export function requireCatmaidMoveNodeCommandOptions(payload: object) {
         nextPositionInModelSpace?: object;
       };
       return (
-        isSpatiallyIndexedSkeletonNodePayload(options.node) &&
-        isSpatialSkeletonVector(options.nextPositionInModelSpace)
+        isSkeletonNodePayload(options.node) &&
+        isSkeletonVector(options.nextPositionInModelSpace)
       );
     },
   );
@@ -234,7 +231,7 @@ export function requireCatmaidDeleteNodeCommandPayload(payload: object) {
   return requireCatmaidCommandPayload(
     payload,
     "delete-node",
-    isSpatiallyIndexedSkeletonNodePayload,
+    isSkeletonNodePayload,
   );
 }
 
@@ -250,7 +247,7 @@ export function requireCatmaidNodeDescriptionCommandOptions(payload: object) {
         nextDescription?: string;
       };
       return (
-        isSpatiallyIndexedSkeletonNodePayload(options.node) &&
+        isSkeletonNodePayload(options.node) &&
         (options.nextDescription === undefined ||
           typeof options.nextDescription === "string")
       );
@@ -270,7 +267,7 @@ export function requireCatmaidNodeTrueEndCommandOptions(payload: object) {
         nextIsTrueEnd?: boolean;
       };
       return (
-        isSpatiallyIndexedSkeletonNodePayload(options.node) &&
+        isSkeletonNodePayload(options.node) &&
         typeof options.nextIsTrueEnd === "boolean"
       );
     },
@@ -289,7 +286,7 @@ export function requireCatmaidNodeRadiusCommandOptions(payload: object) {
         nextRadius?: number;
       };
       return (
-        isSpatiallyIndexedSkeletonNodePayload(options.node) &&
+        isSkeletonNodePayload(options.node) &&
         isFiniteNumber(options.nextRadius)
       );
     },
@@ -308,7 +305,7 @@ export function requireCatmaidNodeConfidenceCommandOptions(payload: object) {
         nextConfidence?: number;
       };
       return (
-        isSpatiallyIndexedSkeletonNodePayload(options.node) &&
+        isSkeletonNodePayload(options.node) &&
         isFiniteNumber(options.nextConfidence)
       );
     },
@@ -336,7 +333,7 @@ export function requireCatmaidRerootCommandPayload(payload: object) {
         isId(node.nodeId) &&
         isId(node.segmentId) &&
         isOptionalId(node.parentNodeId) &&
-        (node.position === undefined || isSpatialSkeletonVector(node.position))
+        (node.position === undefined || isSkeletonVector(node.position))
       );
     },
   );
@@ -360,7 +357,7 @@ export function requireCatmaidSplitCommandPayload(payload: object) {
         isId(node.nodeId) &&
         isId(node.segmentId) &&
         isOptionalId(node.parentNodeId) &&
-        (node.position === undefined || isSpatialSkeletonVector(node.position))
+        (node.position === undefined || isSkeletonVector(node.position))
       );
     },
   );
