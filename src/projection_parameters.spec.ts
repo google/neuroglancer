@@ -19,10 +19,8 @@ import {
   applyRenderViewportToProjectionMatrix,
   RenderViewport,
 } from "#src/display_context.js";
-import type { PanelOverlayHost } from "#src/panel_overlay.js";
-import { PanelOverlayManager, projectToViewport } from "#src/panel_overlay.js";
 import type { ProjectionParameters } from "#src/projection_parameters.js";
-import { RefCounted } from "#src/util/disposable.js";
+import { projectToViewport } from "#src/projection_parameters.js";
 import { mat4 } from "#src/util/geom.js";
 
 function makeParameters(options: {
@@ -67,21 +65,11 @@ function makeParameters(options: {
     ...renderViewport,
     projectionMat,
     viewProjectionMat: mat4.multiply(mat4.create(), projectionMat, viewMatrix),
+    globalPosition: Float32Array.of(0, 0, 0),
     displayDimensionRenderInfo: {
       displayDimensionIndices: Int32Array.of(0, 1, 2),
     },
   } as unknown as ProjectionParameters;
-}
-
-function makeDotOverlay(host: PanelOverlayHost) {
-  const dot = document.createElement("div");
-  host.container.appendChild(dot);
-  return Object.assign(new RefCounted(), {
-    update() {},
-    disposed() {
-      dot.remove();
-    },
-  });
 }
 
 describe("projectToViewport", () => {
@@ -97,10 +85,33 @@ describe("projectToViewport", () => {
         logicalHeight: 100,
       });
       const point = projectToViewport(parameters, [0, 0, 0])!;
-      expect(point.viewportLeft).toBeCloseTo(100);
-      expect(point.viewportTop).toBeCloseTo(50);
+      expect(point.viewportX).toBeCloseTo(100);
+      expect(point.viewportY).toBeCloseTo(50);
+      expect(point.focalPlaneScale).toBeCloseTo(1);
       expect(point.focalPlaneDepthFraction).toBeCloseTo(0);
     }
+  });
+
+  it("magnifies a point nearer than the focal plane only under perspective projection", () => {
+    const perspective = makeParameters({
+      projectionMat: mat4.perspective(mat4.create(), Math.PI / 2, 2, 0.5, 3),
+      focalDistance: 2,
+      logicalWidth: 200,
+      logicalHeight: 100,
+    });
+    const orthographic = makeParameters({
+      projectionMat: mat4.ortho(mat4.create(), -2, 2, -1, 1, 0.5, 3),
+      focalDistance: 2,
+      logicalWidth: 200,
+      logicalHeight: 100,
+    });
+    const halfWayToTheCamera = [0, 0, 1];
+    expect(
+      projectToViewport(perspective, halfWayToTheCamera)!.focalPlaneScale,
+    ).toBeCloseTo(2);
+    expect(
+      projectToViewport(orthographic, halfWayToTheCamera)!.focalPlaneScale,
+    ).toBeCloseTo(1);
   });
 
   it("keeps the focal point at the panel center when part of the panel is clipped", () => {
@@ -117,8 +128,8 @@ describe("projectToViewport", () => {
       },
     });
     const point = projectToViewport(parameters, [0, 0, 0])!;
-    expect(point.viewportLeft).toBeCloseTo(100);
-    expect(point.viewportTop).toBeCloseTo(50);
+    expect(point.viewportX).toBeCloseTo(100);
+    expect(point.viewportY).toBeCloseTo(50);
   });
 
   it("gives no position for a point beyond the far plane", () => {
@@ -139,41 +150,40 @@ describe("projectToViewport", () => {
     }
   });
 
-  it("measures depth linearly from the focal plane under both projections", () => {
-    const perspective = makeParameters({
-      projectionMat: mat4.perspective(mat4.create(), Math.PI / 2, 2, 0.5, 1.5),
-      focalDistance: 1,
-      logicalWidth: 200,
-      logicalHeight: 100,
-    });
-    const orthographic = makeParameters({
-      projectionMat: mat4.ortho(mat4.create(), -2, 2, -1, 1, 0.5, 1.5),
-      focalDistance: 1,
-      logicalWidth: 200,
-      logicalHeight: 100,
-    });
-    const halfWayToFar = [0, 0, -0.25];
-    expect(
-      projectToViewport(perspective, halfWayToFar)!.focalPlaneDepthFraction,
-    ).toBeCloseTo(0.5);
-    expect(
-      projectToViewport(orthographic, halfWayToFar)!.focalPlaneDepthFraction,
-    ).toBeCloseTo(0.5);
+  it("measures depth linearly from the focal plane to each clipping plane when the two planes lie at unequal distances from it", () => {
+    for (const projectionMat of [
+      mat4.perspective(mat4.create(), Math.PI / 2, 2, 0.1, 3),
+      mat4.ortho(mat4.create(), -2, 2, -1, 1, 0.1, 3),
+    ]) {
+      const parameters = makeParameters({
+        projectionMat,
+        focalDistance: 1,
+        logicalWidth: 200,
+        logicalHeight: 100,
+      });
+      const depthAt = (z: number) =>
+        projectToViewport(parameters, [0, 0, z])!.focalPlaneDepthFraction;
+      const atNearPlane = 0.9;
+      const atFarPlane = -2;
+      const halfWayToFar = -1;
+      expect(depthAt(atNearPlane)).toBeCloseTo(-1);
+      expect(depthAt(atFarPlane)).toBeCloseTo(1);
+      expect(depthAt(halfWayToFar)).toBeCloseTo(0.5);
+    }
   });
-});
 
-describe("PanelOverlayManager", () => {
-  it("removes an overlay from the panel while other overlays stay", () => {
-    const panel = document.createElement("div");
-    const manager = new PanelOverlayManager(
-      panel,
-      () => undefined,
-      () => true,
-    );
-    const removeFirst = manager.add(makeDotOverlay);
-    manager.add(makeDotOverlay);
-    removeFirst();
-    manager.update();
-    expect(manager.container.children.length).toBe(1);
+  it("measures depth from the slice plane when the clipping planes lie on both sides of the camera", () => {
+    const parameters = makeParameters({
+      projectionMat: mat4.ortho(mat4.create(), -2, 2, -1, 1, -4, 4),
+      focalDistance: 0,
+      logicalWidth: 200,
+      logicalHeight: 100,
+    });
+    const depthAt = (z: number) =>
+      projectToViewport(parameters, [0, 0, z])!.focalPlaneDepthFraction;
+    expect(depthAt(0)).toBeCloseTo(0);
+    expect(depthAt(4)).toBeCloseTo(-1);
+    expect(depthAt(-4)).toBeCloseTo(1);
+    expect(depthAt(-2)).toBeCloseTo(0.5);
   });
 });

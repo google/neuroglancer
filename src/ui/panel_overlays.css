@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-.neuroglancer-panel-overlay-container {
+.neuroglancer-panel-overlays {
   position: absolute;
   inset: 0;
   pointer-events: none;
