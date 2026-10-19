@@ -608,6 +608,12 @@ export class UserLayer extends RefCounted {
     return value;
   }
 
+  getMissingAnnotationToolMessage(): string {
+    return `The selected layer (${JSON.stringify(
+      this.managedLayer.name,
+    )}) does not have an active annotation tool.`;
+  }
+
   toJSON(): any {
     return {
       type: this.type,
@@ -1115,10 +1121,17 @@ export class LayerManager extends RefCounted {
   }
 }
 
+export interface PickedSpatialSkeletonState {
+  nodeId?: bigint;
+  segmentId?: bigint;
+  position?: Float32Array;
+}
+
 export interface PickState {
   pickedRenderLayer: RenderLayer | null;
   pickedValue: bigint;
   pickedOffset: number;
+  pickedSpatialSkeleton: PickedSpatialSkeletonState | undefined;
   pickedAnnotationLayer: AnnotationLayerState | undefined;
   pickedAnnotationId: string | undefined;
   pickedAnnotationBuffer: ArrayBuffer | undefined;
@@ -1140,6 +1153,7 @@ export class MouseSelectionState implements PickState {
   pickedRenderLayer: RenderLayer | null = null;
   pickedValue = 0n;
   pickedOffset = 0;
+  pickedSpatialSkeleton: PickedSpatialSkeletonState | undefined = undefined;
   pickedAnnotationLayer: AnnotationLayerState | undefined = undefined;
   pickedAnnotationId: string | undefined = undefined;
   pickedAnnotationBuffer: ArrayBuffer | undefined = undefined;
@@ -1384,6 +1398,7 @@ export class TrackableDataSelectionState
     userLayer: Borrowed<T>,
     capture: (state: T["selectionState"]) => boolean,
     pin: boolean | "toggle" | "force-unpin" = true,
+    options: { position?: ArrayLike<number> } = {},
   ) {
     if (pin === false && (!this.location.visible || this.pin.value)) return;
     const state = {} as UserLayerSelectionState;
@@ -1400,7 +1415,10 @@ export class TrackableDataSelectionState
       this.value = {
         layers: [{ layer: userLayer, state }],
         coordinateSpace: this.coordinateSpace.value,
-        position: undefined,
+        position:
+          options.position === undefined
+            ? undefined
+            : new Float32Array(options.position),
       };
     }
   }

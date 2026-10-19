@@ -21,8 +21,10 @@ import type { Annotation } from "#src/annotation/index.js";
 import { getAnnotationTypeRenderHandler } from "#src/annotation/type_handler.js";
 import type { DisplayContext } from "#src/display_context.js";
 import { RenderedPanel } from "#src/display_context.js";
+import { hasSkeletonNodeSelection } from "#src/layer/segmentation/selection.js";
 import type { NavigationState } from "#src/navigation_state.js";
 import { PickIDManager } from "#src/object_picking.js";
+import type { ProjectionParameters } from "#src/projection_parameters.js";
 import {
   displayToLayerCoordinates,
   layerToDisplayCoordinates,
@@ -32,7 +34,12 @@ import {
   getPickDiameter,
 } from "#src/rendered_data_panel_picking.js";
 import { StatusMessage } from "#src/status.js";
-import type { TrackableValue } from "#src/trackable_value.js";
+import type {
+  TrackableValue,
+  WatchableValueChangeInterface,
+} from "#src/trackable_value.js";
+import type { PanelOverlay } from "#src/ui/panel_overlays.js";
+import { PanelOverlays } from "#src/ui/panel_overlays.js";
 import { AutomaticallyFocusedElement } from "#src/util/automatic_focus.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import type {
@@ -57,6 +64,35 @@ import type { ViewerState } from "#src/viewer_state.js";
 declare let NEUROGLANCER_SHOW_OBJECT_SELECTION_TOOLTIP: boolean | undefined;
 
 const tempVec3 = vec3.create();
+
+interface SpatialSkeletonSelectableLayer {
+  selectSkeletonNode: (
+    nodeId: bigint,
+    pin: boolean | "toggle" | "force-unpin",
+    options?: {
+      segmentId?: bigint;
+      position?: ArrayLike<number>;
+    },
+  ) => void;
+  clearSkeletonNodeSelection: (pin: boolean | "toggle" | "force-unpin") => void;
+}
+
+function isSpatialSkeletonSelectableLayer(
+  layer: unknown,
+): layer is SpatialSkeletonSelectableLayer {
+  return (
+    typeof layer === "object" &&
+    layer !== null &&
+    "selectSkeletonNode" in layer &&
+    typeof layer.selectSkeletonNode === "function" &&
+    "clearSkeletonNodeSelection" in layer &&
+    typeof layer.clearSkeletonNodeSelection === "function"
+  );
+}
+
+function isSkeletonNodeSelectionValue(state: unknown) {
+  return hasSkeletonNodeSelection(state as { nodeId?: unknown } | undefined);
+}
 
 export interface RenderedDataViewerState extends ViewerState {
   inputEventMap: EventActionMap;
@@ -106,6 +142,12 @@ export abstract class RenderedDataPanel extends RenderedPanel {
   inputEventMap: EventActionMap;
 
   abstract navigationState: NavigationState;
+
+  abstract readonly projectionParameters: WatchableValueChangeInterface<ProjectionParameters>;
+
+  private readonly overlays = this.registerDisposer(
+    new PanelOverlays(this.element, this.context.screenshotMode),
+  );
 
   pickingData = [new FramePickingData(), new FramePickingData()];
   pickRequests = [new PickRequest(), new PickRequest()];
@@ -314,6 +356,11 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     );
   }
 
+  /** Returns a function that removes the overlay. */
+  addOverlay(overlay: PanelOverlay) {
+    return this.overlays.add(overlay);
+  }
+
   draw() {
     const { width, height } = this.renderViewport;
     this.checkForPickRequestCompletion(true);
@@ -327,8 +374,10 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     newPickingData.pickIDs.clear();
     if (!this.drawWithPicking(newPickingData)) {
       newPickingData.frameNumber = -1;
+      this.overlays.frameSkipped();
       return;
     }
+    this.overlays.frameDrawn();
     // For the new frame, allow new pick requests regardless of interval since last request.
     this.nextPickRequestTime = 0;
     if (this.mouseX >= 0) {
@@ -394,6 +443,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     }
     this.mouseX = mouseX;
     this.mouseY = mouseY;
+    this.overlays.mouseMoved();
     if (mouseX < 0) {
       // Mouse moved out of the viewport.
       this.pickRequestPending = false;
@@ -468,11 +518,63 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       /*capture=*/ true,
     );
 
+    const getPickedSpatialSkeletonLayerSelection = () => {
+      const { mouseState } = this.viewer;
+      if (!mouseState.updateUnconditionally()) {
+        return undefined;
+      }
+      const { pickedSpatialSkeleton } = mouseState;
+      const pickedNodeId = pickedSpatialSkeleton?.nodeId;
+      if (pickedNodeId === undefined || pickedNodeId === 0n) {
+        return undefined;
+      }
+      const pickedLayer = mouseState.pickedRenderLayer?.userLayer;
+      if (!isSpatialSkeletonSelectableLayer(pickedLayer)) {
+        return undefined;
+      }
+      const pickedSegmentId = pickedSpatialSkeleton?.segmentId;
+      return {
+        layer: pickedLayer,
+        nodeId: pickedNodeId,
+        segmentId: pickedSegmentId === 0n ? undefined : pickedSegmentId,
+        position: pickedSpatialSkeleton?.position ?? mouseState.position,
+      };
+    };
+
+    const clearPinnedSpatialSkeletonSelection = () => {
+      const selectionValue = this.viewer.selectionDetailsState.value;
+      if (selectionValue === undefined) {
+        return false;
+      }
+      for (const { layer, state } of selectionValue.layers) {
+        if (
+          !isSpatialSkeletonSelectableLayer(layer) ||
+          !isSkeletonNodeSelectionValue(state)
+        ) {
+          continue;
+        }
+        layer.clearSkeletonNodeSelection("force-unpin");
+        return true;
+      }
+      return false;
+    };
+
     registerActionListener(element, "select-position", () => {
+      const pickedSelection = getPickedSpatialSkeletonLayerSelection();
+      if (pickedSelection !== undefined) {
+        pickedSelection.layer.selectSkeletonNode(pickedSelection.nodeId, true, {
+          segmentId: pickedSelection.segmentId,
+          position: pickedSelection.position,
+        });
+        return;
+      }
       this.viewer.selectionDetailsState.select();
     });
 
     registerActionListener(element, "unpin-selected-position", () => {
+      if (clearPinnedSpatialSkeletonSelection()) {
+        return;
+      }
       this.viewer.selectionDetailsState.unpin();
     });
 

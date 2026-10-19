@@ -1,6 +1,11 @@
 export const SELECTED_ALPHA_JSON_KEY = "selectedAlpha";
 export const NOT_SELECTED_ALPHA_JSON_KEY = "notSelectedAlpha";
 export const OBJECT_ALPHA_JSON_KEY = "objectAlpha";
+export const HIDDEN_OPACITY_3D_JSON_KEY = "hiddenObjectAlpha";
+export const SKELETON_CROSS_SECTION_SPACING_JSON_KEY =
+  "skeletonCrossSectionSpacing";
+export const SKELETON_PERSPECTIVE_SPACING_JSON_KEY =
+  "skeletonPerspectiveSpacing";
 export const SATURATION_JSON_KEY = "saturation";
 export const HOVER_HIGHLIGHT_JSON_KEY = "hoverHighlight";
 export const HIDE_SEGMENT_ZERO_JSON_KEY = "hideSegmentZero";
@@ -18,6 +23,8 @@ export const SKELETON_RENDERING_JSON_KEY = "skeletonRendering";
 export const SKELETON_SHADER_JSON_KEY = "skeletonShader";
 export const SKELETON_CODE_VISIBLE_KEY = "codeVisible";
 export const SEGMENT_QUERY_JSON_KEY = "segmentQuery";
+export const SKELETON_NODE_QUERY_JSON_KEY = "skeletonNodeQuery";
+export const SKELETON_NODE_FILTER_JSON_KEY = "skeletonNodeFilter";
 export const MESH_SILHOUETTE_RENDERING_JSON_KEY = "meshSilhouetteRendering";
 export const LINKED_SEGMENTATION_GROUP_JSON_KEY = "linkedSegmentationGroup";
 export const LINKED_SEGMENTATION_COLOR_GROUP_JSON_KEY =

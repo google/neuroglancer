@@ -1604,7 +1604,8 @@ class GraphConnection extends SegmentationGraphSourceConnection {
           (subsource) => subsource.id === "mesh",
         )[0];
         if (meshSubsource) {
-          return meshSubsource.subsource.mesh;
+          const { mesh } = meshSubsource.subsource;
+          return mesh instanceof MeshSource ? mesh : undefined;
         }
       }
     }

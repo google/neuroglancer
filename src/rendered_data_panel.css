@@ -15,7 +15,7 @@
  */
 
 .neuroglancer-rendered-data-panel {
-  cursor: crosshair;
+  cursor: var(--neuroglancer-tool-cursor, crosshair);
   position: relative;
   outline: 0;
   touch-action: none;

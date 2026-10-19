@@ -83,6 +83,14 @@ export class RenderScaleWidget extends RefCounted {
     debounce(() => this.updateView(), 0),
   );
 
+  protected formatSpatialScale(spatialScale: number) {
+    if (!Number.isFinite(spatialScale)) return "unknown";
+    return formatScaleWithUnitAsString(spatialScale, "m", {
+      precision: 2,
+      elide1: false,
+    });
+  }
+
   adjustViaWheel(event: WheelEvent) {
     const deltaY = this.getWheelMoveValue(event);
     if (deltaY === 0) {
@@ -295,15 +303,8 @@ export class RenderScaleWidget extends RefCounted {
         totalPresent += histogramData[index];
         totalNotPresent += histogramData[index + numBins];
       }
-      if (Number.isFinite(hoverSpatialScale)) {
-        this.legendSpatialScale.textContent = formatScaleWithUnitAsString(
-          hoverSpatialScale,
-          "m",
-          { precision: 2, elide1: false },
-        );
-      } else {
-        this.legendSpatialScale.textContent = "unknown";
-      }
+      this.legendSpatialScale.textContent =
+        this.formatSpatialScale(hoverSpatialScale);
     } else {
       this.legendSpatialScale.textContent = "";
     }
@@ -315,7 +316,7 @@ export class RenderScaleWidget extends RefCounted {
     const spatialScaleColors = sortedSpatialScales.map((spatialScale) => {
       const saturation = spatialScale === hoverSpatialScale ? 0.5 : 1;
       let hue;
-      if (Number.isFinite(spatialScale)) {
+      if (Number.isFinite(spatialScale) && spatialScale > 0) {
         hue = (((Math.log2(spatialScale) * 0.1) % 1) + 1) % 1;
       } else {
         hue = 0;
