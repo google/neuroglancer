@@ -34,14 +34,13 @@ import type { ActionIdentifier } from "#src/util/event_action_map.js";
 import { EventActionMap } from "#src/util/event_action_map.js";
 import { makeIcon } from "#src/widget/icon.js";
 
-const SKELETON_TOOL_NAVIGATION_INPUT_EVENT_MAP =
-  EventActionMap.fromObject({
-    // Control+left mirrors middle drag for trackpads.
-    "at:mousedown1": SKELETON_DRAG_VIEW,
-    "at:control+mousedown1": "translate-via-mouse-drag",
-    "at:control+mousedown0": SKELETON_DRAG_VIEW,
-    "at:control+shift+mousedown0": "translate-via-mouse-drag",
-  });
+const SKELETON_TOOL_NAVIGATION_INPUT_EVENT_MAP = EventActionMap.fromObject({
+  // Control+left mirrors middle drag for trackpads.
+  "at:mousedown1": SKELETON_DRAG_VIEW,
+  "at:control+mousedown1": "translate-via-mouse-drag",
+  "at:control+mousedown0": SKELETON_DRAG_VIEW,
+  "at:control+shift+mousedown0": "translate-via-mouse-drag",
+});
 
 export const SKELETON_EDIT_TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject(
   {

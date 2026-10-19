@@ -27,14 +27,11 @@ export function getSkeletonNodeRadius(node: SkeletonNode): number | undefined {
 export function getSkeletonNodeConfidence(
   node: SkeletonNode,
 ): number | undefined {
-  return node.attributes?.[
-    KnownSkeletonNodeAttribute.CONFIDENCE_PERCENT
-  ]?.[0];
+  return node.attributes?.[KnownSkeletonNodeAttribute.CONFIDENCE_PERCENT]?.[0];
 }
 
 export function isSkeletonNodeTrueEnd(node: SkeletonNode): boolean {
-  const value =
-    node.attributes?.[KnownSkeletonNodeAttribute.IS_TRUE_END]?.[0];
+  const value = node.attributes?.[KnownSkeletonNodeAttribute.IS_TRUE_END]?.[0];
   return value !== undefined && value !== 0;
 }
 
