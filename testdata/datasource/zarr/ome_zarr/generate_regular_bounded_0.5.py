@@ -78,5 +78,7 @@ ome = {
 for group in (root, root / "scale0", root / "scale1"):
     attrs = {"ome": ome} if group == root else {}
     (group / "zarr.json").write_text(
-        json.dumps({"zarr_format": 3, "node_type": "group", "attributes": attrs}, indent=2)
+        json.dumps(
+            {"zarr_format": 3, "node_type": "group", "attributes": attrs}, indent=2
+        )
     )
