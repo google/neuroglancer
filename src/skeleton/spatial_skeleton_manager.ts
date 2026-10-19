@@ -1233,18 +1233,24 @@ export class SpatialSkeletonState
     }
   }
 
-  private publishPreparedSpatialSkeletonPresentation(
-    publication: SpatialSkeletonPresentationSnapshot,
-  ) {
+  private notifyWithReporters(publish: () => void) {
     if (this.presentationNotificationErrorReporters.size === 0) {
-      this.spatialSkeletonPresentation.value = publication;
+      publish();
       return;
     }
     try {
-      this.spatialSkeletonPresentation.value = publication;
+      publish();
     } catch (error) {
       this.reportSpatialSkeletonPresentationObserverError(error);
     }
+  }
+
+  private publishPreparedSpatialSkeletonPresentation(
+    publication: SpatialSkeletonPresentationSnapshot,
+  ) {
+    this.notifyWithReporters(() => {
+      this.spatialSkeletonPresentation.value = publication;
+    });
   }
 
   private publishSpatialSkeletonPresentation() {
@@ -1297,15 +1303,9 @@ export class SpatialSkeletonState
           }
           if (this.nodeDataNotificationPending) {
             this.nodeDataNotificationPending = false;
-            if (this.presentationNotificationErrorReporters.size === 0) {
+            this.notifyWithReporters(() => {
               this.nodeDataVersion.value = this.nodeDataVersion.value + 1;
-            } else {
-              try {
-                this.nodeDataVersion.value = this.nodeDataVersion.value + 1;
-              } catch (error) {
-                this.reportSpatialSkeletonPresentationObserverError(error);
-              }
-            }
+            });
           }
         } finally {
           this.presentationNotificationErrorReporters.clear();

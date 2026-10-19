@@ -1584,7 +1584,11 @@ export class SpatialSkeletonOptimisticQueueEngine<
     try {
       this.changed.dispatch();
     } catch (error) {
-      this.options.onListenerError?.(error);
+      try {
+        this.options.onListenerError?.(error);
+      } catch {
+        // Reporting is best effort after the change is already published.
+      }
     }
   }
 }

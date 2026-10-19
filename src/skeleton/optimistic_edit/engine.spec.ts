@@ -377,23 +377,28 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
     });
   }
 
-  it("keeps saving and reports the error when a queue observer throws", async () => {
-    const observerError = new Error("observer failed");
-    const onListenerError = vi.fn();
-    const harness = makeHarness({ onListenerError });
-    const { engine, commandHistory } = harness;
-    engine.subscribe(() => {
-      throw observerError;
-    });
+  it.each([false, true])(
+    "keeps saving and reports the error when a queue observer throws (reporter throws: %s)",
+    async (reporterThrows) => {
+      const observerError = new Error("observer failed");
+      const onListenerError = vi.fn(() => {
+        if (reporterThrows) throw new Error("error reporter failed");
+      });
+      const harness = makeHarness({ onListenerError });
+      const { engine, commandHistory } = harness;
+      engine.subscribe(() => {
+        throw observerError;
+      });
 
-    await save(harness, "first");
-    expect(onListenerError).toHaveBeenCalledWith(observerError);
-    expect(commandHistory.undoLabel.value).toBe("first");
+      await save(harness, "first");
+      expect(onListenerError).toHaveBeenCalledWith(observerError);
+      expect(commandHistory.undoLabel.value).toBe("first");
 
-    await save(harness, "second");
-    expect(commandHistory.undoLabel.value).toBe("second");
-    await engine.dispose();
-  });
+      await save(harness, "second");
+      expect(commandHistory.undoLabel.value).toBe("second");
+      await engine.dispose();
+    },
+  );
 
   it("restores and executes a Redo branch cleared by a rejected new edit", async () => {
     const harness = makeHarness();
