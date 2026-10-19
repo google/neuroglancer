@@ -144,6 +144,14 @@ describe("AutoUserLayer", () => {
     expect(layer.volumeRenderingDepthSamplesTarget.value).toBe(64);
   });
 
+  it("keeps a specified shader after the multi-channel setup", () => {
+    const shader = "void main() { emitRGB(vec3(1.0, 0.0, 0.0)); }";
+    const managedLayer = makeAutoDetectedImageLayer({ shader });
+    managedLayer.readyStateChanged.dispatch();
+    const layer = managedLayer.layer as ImageUserLayer;
+    expect(layer.fragmentMain.value).toBe(shader);
+  });
+
   it("uses the multi-channel defaults for settings that are not specified", () => {
     const managedLayer = makeAutoDetectedImageLayer({});
     managedLayer.readyStateChanged.dispatch();
@@ -151,5 +159,6 @@ describe("AutoUserLayer", () => {
     expect(layer.opacity.value).toBe(1);
     expect(layer.blendMode.value).toBe(BLEND_MODES.ADDITIVE);
     expect(layer.volumeRenderingDepthSamplesTarget.value).toBe(256);
+    expect(layer.fragmentMain.value).toContain("#uicontrol invlerp contrast");
   });
 });

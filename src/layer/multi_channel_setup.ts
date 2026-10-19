@@ -204,7 +204,13 @@ function setupLayerPostCreation(
 ) {
   if (!addedLayer.layer) return;
   const userImageLayer = addedLayer.layer as ImageUserLayer;
-  userImageLayer.fragmentMain.value = MULTICHANNEL_FRAGMENT_MAIN;
+  // A shader given in the layer specification is kept, along with its
+  // controls, since it may not have the color and contrast controls of the
+  // multi-channel shader.
+  const keepShader = layerSpecification.shader !== undefined;
+  if (!keepShader) {
+    userImageLayer.fragmentMain.value = MULTICHANNEL_FRAGMENT_MAIN;
+  }
 
   const active = channel?.active ?? channelIndex <= 3;
   addedLayer.setArchived(!active);
@@ -335,7 +341,9 @@ function setupLayerPostCreation(
 
   postCreationSetupFunctions.push(setVolumeRenderingSamples);
   postCreationSetupFunctions.push(set2DBlending);
-  postCreationSetupFunctions.push(setShaderDefaultsWhenReady);
+  if (!keepShader) {
+    postCreationSetupFunctions.push(setShaderDefaultsWhenReady);
+  }
 }
 
 /**
