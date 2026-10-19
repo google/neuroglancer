@@ -32,7 +32,6 @@ import type {
   PickState,
   VisibleLayerInfo,
 } from "#src/layer/index.js";
-import type { PanelOverlay, PanelOverlayHost } from "#src/panel_overlay.js";
 import type { PerspectivePanel } from "#src/perspective_view/panel.js";
 import type {
   PerspectiveViewReadyRenderContext,
@@ -40,6 +39,7 @@ import type {
 } from "#src/perspective_view/render_layer.js";
 import { PerspectiveViewRenderLayer } from "#src/perspective_view/render_layer.js";
 import type { ProjectionParameters } from "#src/projection_parameters.js";
+import { projectToViewport } from "#src/projection_parameters.js";
 import type {
   ChunkTransformParameters,
   RenderLayerTransform,
@@ -128,6 +128,7 @@ import {
   WatchableValue,
   registerNested,
 } from "#src/trackable_value.js";
+import type { PanelOverlay } from "#src/ui/panel_overlays.js";
 import { Uint64Set } from "#src/uint64_set.js";
 import { gatherUpdate } from "#src/util/array.js";
 import { bigintCompare } from "#src/util/bigint.js";
@@ -1180,36 +1181,31 @@ export function buildSpatialSkeletonPreparationVisuals(
   return visuals;
 }
 
-// Reconciles the ring child elements of an overlay source's per-panel container
-// to `markers`, projecting each via the panel context.  Reuses/pools children.
+// Returns the number of primitives drawn.
 function updateSkeletonHighlightOverlay(
   primitives: SkeletonPanelOverlayPrimitive[],
-  ctx: {
-    container: HTMLElement;
-    cssPerDevicePixel: number;
-    project(
-      position: Float32Array,
-    ): { x: number; y: number; opacity?: number } | undefined;
-  },
-) {
-  const { container, cssPerDevicePixel } = ctx;
+  element: HTMLElement,
+  project: (
+    position: Float32Array,
+  ) => { x: number; y: number; opacity: number } | undefined,
+): number {
   let count = 0;
   for (const primitive of primitives) {
-    const from = ctx.project(
+    const from = project(
       primitive.type === "marker" ? primitive.position : primitive.from,
     );
     if (from === undefined) continue;
     const to =
-      primitive.type === "connector" ? ctx.project(primitive.to) : undefined;
+      primitive.type === "connector" ? project(primitive.to) : undefined;
     if (primitive.type === "connector" && to === undefined) continue;
-    let element = container.children[count] as HTMLElement | undefined;
-    if (element === undefined) {
-      element = document.createElement("div");
-      element.className = "neuroglancer-skeleton-node-highlight";
-      container.appendChild(element);
+    let primitiveElement = element.children[count] as HTMLElement | undefined;
+    if (primitiveElement === undefined) {
+      primitiveElement = document.createElement("div");
+      primitiveElement.className = "neuroglancer-skeleton-node-highlight";
+      element.appendChild(primitiveElement);
     }
     ++count;
-    const { style } = element;
+    const { style } = primitiveElement;
     style.display = "";
     style.position = "absolute";
     style.left = "0";
@@ -1217,10 +1213,10 @@ function updateSkeletonHighlightOverlay(
     style.pointerEvents = "none";
     style.willChange = "transform";
     if (primitive.type === "marker") {
-      const size = primitive.diameter * cssPerDevicePixel;
+      const size = primitive.diameter;
       style.boxSizing = "border-box";
       style.borderRadius = "50%";
-      style.borderWidth = `${Math.max(1, primitive.borderWidth * cssPerDevicePixel)}px`;
+      style.borderWidth = `${Math.max(1, primitive.borderWidth)}px`;
       style.borderStyle = primitive.borderStyle ?? "solid";
       style.borderColor = primitive.color;
       style.borderTop = "";
@@ -1232,20 +1228,20 @@ function updateSkeletonHighlightOverlay(
       style.fontWeight = primitive.label === undefined ? "" : "bold";
       style.fontSize =
         primitive.label === undefined ? "" : `${Math.max(8, size * 0.55)}px`;
-      style.lineHeight = `${size - 2 * Math.max(1, primitive.borderWidth * cssPerDevicePixel)}px`;
+      style.lineHeight = `${size - 2 * Math.max(1, primitive.borderWidth)}px`;
       style.textAlign = "center";
       style.setProperty("--ng-node-highlight-outline", primitive.outlineColor);
       // Inner and outer halo separate a segment-tinted ring from the node and the background.
       style.boxShadow = `0 0 0 1px ${primitive.outlineColor}, inset 0 0 0 1px ${primitive.outlineColor}`;
-      style.opacity = `${from.opacity ?? 1}`;
+      style.opacity = `${from.opacity}`;
       style.transform = `translate(${from.x - size / 2}px, ${from.y - size / 2}px)`;
-      element.textContent = primitive.label ?? "";
+      primitiveElement.textContent = primitive.label ?? "";
     } else {
       const projectedTo = to!;
       const dx = projectedTo.x - from.x;
       const dy = projectedTo.y - from.y;
       const length = Math.hypot(dx, dy);
-      const width = Math.max(1, primitive.width * cssPerDevicePixel);
+      const width = Math.max(1, primitive.width);
       style.boxSizing = "content-box";
       style.borderRadius = "0";
       style.borderWidth = "0";
@@ -1262,22 +1258,24 @@ function updateSkeletonHighlightOverlay(
       style.lineHeight = "";
       style.textAlign = "";
       style.transformOrigin = "0 50%";
-      style.opacity = `${Math.min(from.opacity ?? 1, projectedTo.opacity ?? 1)}`;
+      style.opacity = `${Math.min(from.opacity, projectedTo.opacity)}`;
       style.transform = `translate(${from.x}px, ${from.y}px) rotate(${Math.atan2(dy, dx)}rad)`;
-      element.textContent = "";
+      primitiveElement.textContent = "";
     }
   }
-  const { children } = container;
+  const { children } = element;
   for (let i = count; i < children.length; ++i) {
     (children[i] as HTMLElement).style.display = "none";
   }
+  return count;
 }
 
 class SkeletonNodeHighlightOverlay extends RefCounted implements PanelOverlay {
-  private readonly container = document.createElement("div");
+  readonly element = document.createElement("div");
+  readonly updateNeeded = new NullarySignal();
+  readonly followsMouse = false;
 
   constructor(
-    private readonly host: PanelOverlayHost,
     private readonly panel: RenderedDataPanel,
     private readonly layer: SpatiallyIndexedSkeletonLayer,
     private readonly renderOptions: ViewSpecificSkeletonRenderingOptions,
@@ -1285,44 +1283,36 @@ class SkeletonNodeHighlightOverlay extends RefCounted implements PanelOverlay {
   ) {
     super();
     this.registerDisposer(
-      layer.highlightMarkersChanged.add(host.scheduleUpdate),
+      layer.highlightMarkersChanged.add(this.updateNeeded.dispatch),
     );
-    host.container.appendChild(this.container);
-    this.registerDisposer(() => this.container.remove());
   }
 
   update() {
-    const { host, panel, renderOptions } = this;
+    const { panel, renderOptions } = this;
     const targetIsSliceView = this.view === "2d";
     const { diameter, borderWidth } = getSkeletonNodeHighlightRing(
       renderOptions.mode.value,
       renderOptions.lineWidth.value,
       targetIsSliceView,
     );
-    // Clipping shrinks the drawn region, not the pixels, so this stays 1 unless screenshots are scaled.
-    const { logicalWidth } = panel.renderViewport;
-    const cssPerDevicePixel =
-      logicalWidth > 0 ? panel.element.clientWidth / logicalWidth : 1;
-    const coordinateSpace = panel.navigationState.coordinateSpace.value;
-    updateSkeletonHighlightOverlay(
+    const projectionParameters = panel.projectionParameters.value;
+    const drawnCount = updateSkeletonHighlightOverlay(
       this.layer.computePanelOverlayPrimitives(diameter, borderWidth),
-      {
-        container: this.container,
-        cssPerDevicePixel,
-        project: (position) => {
-          const point = host.project(position, coordinateSpace);
-          return point === undefined
-            ? undefined
-            : {
-                x: point.viewportLeft * cssPerDevicePixel,
-                y: point.viewportTop * cssPerDevicePixel,
-                opacity: targetIsSliceView
-                  ? 1 - Math.abs(point.focalPlaneDepthFraction)
-                  : 1,
-              };
-        },
+      this.element,
+      (position) => {
+        const point = projectToViewport(projectionParameters, position);
+        return point === undefined
+          ? undefined
+          : {
+              x: point.viewportX,
+              y: point.viewportY,
+              opacity: targetIsSliceView
+                ? 1 - Math.abs(point.focalPlaneDepthFraction)
+                : 1,
+            };
       },
     );
+    this.element.hidden = drawnCount === 0;
   }
 }
 
@@ -4082,14 +4072,12 @@ gl_Position = uChunkToClip * vec4(uTranslation + boxVertex * uChunkDataSize, 1.0
     attachSpatiallyIndexedSkeletonLayer(this.base, this, attachment, "3d");
     attachment.registerDisposer(
       attachment.view.addOverlay(
-        (host) =>
-          new SkeletonNodeHighlightOverlay(
-            host,
-            attachment.view,
-            this.base,
-            this.renderOptions,
-            "3d",
-          ),
+        new SkeletonNodeHighlightOverlay(
+          attachment.view,
+          this.base,
+          this.renderOptions,
+          "3d",
+        ),
       ),
     );
   }
@@ -4290,14 +4278,12 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
     attachSpatiallyIndexedSkeletonLayer(this.base, this, attachment, "2d");
     attachment.registerDisposer(
       attachment.view.addOverlay(
-        (host) =>
-          new SkeletonNodeHighlightOverlay(
-            host,
-            attachment.view,
-            this.base,
-            this.renderOptions,
-            "2d",
-          ),
+        new SkeletonNodeHighlightOverlay(
+          attachment.view,
+          this.base,
+          this.renderOptions,
+          "2d",
+        ),
       ),
     );
   }

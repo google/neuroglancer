@@ -19,18 +19,12 @@ import "#src/noselect.css";
 
 import type { Annotation } from "#src/annotation/index.js";
 import { getAnnotationTypeRenderHandler } from "#src/annotation/type_handler.js";
-import { coordinateSpacesEqual } from "#src/coordinate_transform.js";
 import type { DisplayContext } from "#src/display_context.js";
 import { RenderedPanel } from "#src/display_context.js";
 import { hasSpatialSkeletonNodeSelection } from "#src/layer/segmentation/selection.js";
 import type { NavigationState } from "#src/navigation_state.js";
 import { PickIDManager } from "#src/object_picking.js";
-import type {
-  PanelOverlay,
-  PanelOverlayHost,
-  ViewportPoint,
-} from "#src/panel_overlay.js";
-import { PanelOverlayManager } from "#src/panel_overlay.js";
+import type { ProjectionParameters } from "#src/projection_parameters.js";
 import {
   displayToLayerCoordinates,
   layerToDisplayCoordinates,
@@ -40,7 +34,12 @@ import {
   getPickDiameter,
 } from "#src/rendered_data_panel_picking.js";
 import { StatusMessage } from "#src/status.js";
-import type { TrackableValue } from "#src/trackable_value.js";
+import type {
+  TrackableValue,
+  WatchableValueChangeInterface,
+} from "#src/trackable_value.js";
+import type { PanelOverlay } from "#src/ui/panel_overlays.js";
+import { PanelOverlays } from "#src/ui/panel_overlays.js";
 import { AutomaticallyFocusedElement } from "#src/util/automatic_focus.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import type {
@@ -146,6 +145,12 @@ export abstract class RenderedDataPanel extends RenderedPanel {
   inputEventMap: EventActionMap;
 
   abstract navigationState: NavigationState;
+
+  abstract readonly projectionParameters: WatchableValueChangeInterface<ProjectionParameters>;
+
+  private readonly overlays = this.registerDisposer(
+    new PanelOverlays(this.element, this.context.screenshotMode),
+  );
 
   pickingData = [new FramePickingData(), new FramePickingData()];
   pickRequests = [new PickRequest(), new PickRequest()];
@@ -354,31 +359,9 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     );
   }
 
-  protected abstract projectPosition(
-    position: Float32Array,
-  ): ViewportPoint | undefined;
-
-  private readonly overlays = this.registerDisposer(
-    new PanelOverlayManager(
-      this.element,
-      (position, coordinateSpace) =>
-        coordinateSpacesEqual(
-          coordinateSpace,
-          this.navigationState.coordinateSpace.value,
-        )
-          ? this.projectPosition(position)
-          : undefined,
-      () => {
-        this.ensureBoundsUpdated();
-        const { width, height } = this.renderViewport;
-        return this.shouldDraw && width !== 0 && height !== 0;
-      },
-    ),
-  );
-
   /** Returns a function that removes the overlay. */
-  addOverlay(createOverlay: (host: PanelOverlayHost) => PanelOverlay) {
-    return this.overlays.add(createOverlay);
+  addOverlay(overlay: PanelOverlay) {
+    return this.overlays.add(overlay);
   }
 
   draw() {
@@ -394,10 +377,10 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     newPickingData.pickIDs.clear();
     if (!this.drawWithPicking(newPickingData)) {
       newPickingData.frameNumber = -1;
-      this.overlays.hide();
+      this.overlays.frameSkipped();
       return;
     }
-    this.overlays.update();
+    this.overlays.frameDrawn();
     // For the new frame, allow new pick requests regardless of interval since last request.
     this.nextPickRequestTime = 0;
     if (this.mouseX >= 0) {
@@ -463,6 +446,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     }
     this.mouseX = mouseX;
     this.mouseY = mouseY;
+    this.overlays.mouseMoved();
     if (mouseX < 0) {
       // Mouse moved out of the viewport.
       this.pickRequestPending = false;
