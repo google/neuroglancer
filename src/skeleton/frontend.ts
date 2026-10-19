@@ -84,6 +84,7 @@ import {
   parseShaderUiControls,
   setControlsInShader,
   ShaderControlState,
+  stripComments,
 } from "#src/webgl/shader_ui_controls.js";
 import {
   computeTextureFormat,
@@ -181,6 +182,10 @@ highp uint vertexIndex = aVertexIndex.x * (1u - lineEndpointIndex) + aVertexInde
 vec4 segmentColor() {
   return uColor;
 }
+void emitRGBA(vec4 color) {
+  color.a *= uColor.a;
+  emit(vec4(color.rgb * color.a, color.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
+}
 void emitRGB(vec3 color) {
   emit(vec4(color * uColor.a, uColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
 }
@@ -248,6 +253,8 @@ vec4 segmentColor() {
   return uColor;
 }
 void emitRGBA(vec4 color) {
+  color.a *= uColor.a;
+  color.rgb *= color.a;
   vec4 borderColor = color;
   emit(getCircleColor(color, borderColor), uPickID);
 }
@@ -255,7 +262,7 @@ void emitRGB(vec3 color) {
   emitRGBA(vec4(color, 1.0));
 }
 void emitDefault() {
-  emitRGBA(uColor);
+  emit(getCircleColor(uColor, uColor), uPickID);
 }
 `);
           builder.addFragmentCode(glsl_COLORMAPS);
@@ -701,7 +708,13 @@ export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
   }
 
   get isTransparent() {
-    return this.base.displayState.objectAlpha.value < 1.0;
+    const { displayState } = this.base;
+    return (
+      displayState.objectAlpha.value < 1.0 ||
+      stripComments(
+        displayState.skeletonRenderingOptions.shader.value,
+      ).includes("emitRGBA")
+    );
   }
 
   draw(
