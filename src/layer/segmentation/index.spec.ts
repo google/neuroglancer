@@ -77,6 +77,16 @@ const {
   SpatiallyIndexedSkeletonSource,
 } = await import("#src/skeleton/frontend.js");
 
+const { LocalDataSource } = await import("#src/datasource/local.js");
+const { LocalSegmentationGraphSource } = await import(
+  "#src/segmentation_graph/local.js"
+);
+const { SharedDisjointUint64Sets } = await import(
+  "#src/shared_disjoint_sets.js"
+);
+const { Uint64Set } = await import("#src/uint64_set.js");
+const { RefCounted } = await import("#src/util/disposable.js");
+
 const { SegmentSelectionState } = await import(
   "#src/segmentation_display_state/frontend.js"
 );
@@ -1369,5 +1379,131 @@ describe("layer/segmentation spatial skeleton find-path state", () => {
     expect(active.findPathState.source?.nodeId).toBe(1n);
     expect(active.findPathState.target?.nodeId).toBe(3n);
     expect(inactive.findPathState.toJSON()).toEqual(serializedFindPathState);
+  });
+});
+
+function makeEquivalencesLayer(savedEquivalences: string[][]) {
+  const layer = Object.create(SegmentationUserLayer.prototype);
+  const localGraph = new LocalSegmentationGraphSource();
+  localGraph.restoreState(savedEquivalences);
+  const groupState = {
+    localGraph,
+    graph: new WatchableValue(undefined),
+    segmentPropertyMap: new WatchableValue(undefined),
+    segmentEquivalences: new SharedDisjointUint64Sets(),
+    visibleSegments: new Uint64Set(),
+  };
+  Object.defineProperty(layer, "manager", {
+    value: { chunkManager: { memoize: { getUncounted: () => undefined } } },
+  });
+  Object.assign(layer, {
+    displayState: {
+      linkedSegmentationGroup: { root: { value: layer } },
+      originalSegmentationGroupState: groupState,
+      segmentationGroupState: { value: groupState },
+      hasVolume: new WatchableValue(false),
+    },
+    graphConnection: new WatchableValue(undefined),
+    updateSpatialSkeletonChunkLoadState: vi.fn(),
+  });
+  return { layer, groupState };
+}
+
+function makeLoadedSubsource(subsource: object) {
+  return {
+    subsourceEntry: { subsource },
+    loadedDataSource: { dataSource: { state: undefined } },
+    activated: undefined as InstanceType<typeof RefCounted> | undefined,
+    errorMessage: undefined as string | undefined,
+    activate(callback: (refCounted: InstanceType<typeof RefCounted>) => void) {
+      this.errorMessage = undefined;
+      if (this.activated !== undefined) return;
+      this.activated = new RefCounted();
+      callback(this.activated);
+    },
+    deactivate(message: string) {
+      this.errorMessage = message;
+      this.activated?.dispose();
+      this.activated = undefined;
+    },
+  };
+}
+
+function makeEquivalencesSubsource() {
+  return makeLoadedSubsource({ local: LocalDataSource.equivalences });
+}
+
+function makeSkeletonSubsource(editableSource: unknown) {
+  const mesh = Object.create(
+    MultiscaleSpatiallyIndexedSkeletonSource.prototype,
+  );
+  Object.defineProperty(mesh, "editableSource", { value: editableSource });
+  return { ...makeLoadedSubsource({ mesh }), activate: vi.fn() };
+}
+
+describe("layer/segmentation equivalences with editable skeletons", () => {
+  it("turns off equivalences when the layer has an editable skeleton source", () => {
+    const { layer, groupState } = makeEquivalencesLayer([["3", "7"]]);
+    const equivalences = makeEquivalencesSubsource();
+
+    layer.activateDataSubsources([
+      equivalences,
+      makeSkeletonSubsource(makeEditableSpatialSkeletonSource()),
+    ]);
+
+    expect(groupState.segmentEquivalences.get(7n)).toBe(7n);
+    expect(groupState.graph.value).toBeUndefined();
+    expect(equivalences.errorMessage).toBe(
+      "Not supported with editable skeletons",
+    );
+  });
+
+  it("removes merges that were applied before the editable skeleton source loaded", () => {
+    const { layer, groupState } = makeEquivalencesLayer([["3", "7"]]);
+    const equivalences = makeEquivalencesSubsource();
+    layer.activateDataSubsources([equivalences]);
+    expect(groupState.segmentEquivalences.get(7n)).toBe(3n);
+
+    layer.activateDataSubsources([
+      equivalences,
+      makeSkeletonSubsource(makeEditableSpatialSkeletonSource()),
+    ]);
+
+    expect(groupState.segmentEquivalences.get(7n)).toBe(7n);
+  });
+
+  it("removes merges that a linked layer left behind", () => {
+    const { layer, groupState } = makeEquivalencesLayer([]);
+    groupState.segmentEquivalences.link(3n, 7n);
+
+    layer.activateDataSubsources([
+      makeSkeletonSubsource(makeEditableSpatialSkeletonSource()),
+    ]);
+
+    expect(groupState.segmentEquivalences.get(7n)).toBe(7n);
+  });
+
+  it("keeps equivalences for a skeleton source that cannot be edited", () => {
+    const { layer, groupState } = makeEquivalencesLayer([["3", "7"]]);
+
+    layer.activateDataSubsources([
+      makeEquivalencesSubsource(),
+      makeSkeletonSubsource(undefined),
+    ]);
+
+    expect(groupState.segmentEquivalences.get(7n)).toBe(3n);
+  });
+
+  it("keeps the saved equivalences while they are turned off", () => {
+    const { layer, groupState } = makeEquivalencesLayer([["3", "7"]]);
+    const equivalences = makeEquivalencesSubsource();
+    layer.activateDataSubsources([equivalences]);
+
+    layer.activateDataSubsources([
+      equivalences,
+      makeSkeletonSubsource(makeEditableSpatialSkeletonSource()),
+    ]);
+
+    expect(groupState.localGraph.toJSON()).toEqual([["3", "7"]]);
   });
 });

@@ -1738,6 +1738,18 @@ export class SegmentationUserLayer extends Base {
     });
   }
 
+  private hasEditableSpatialSkeletonSource(
+    loadedSubsources: readonly LoadedDataSubsource[],
+  ): boolean {
+    return loadedSubsources.some(({ subsourceEntry }) => {
+      const { mesh } = subsourceEntry.subsource;
+      return (
+        mesh instanceof MultiscaleSpatiallyIndexedSkeletonSource &&
+        mesh.editableSource !== undefined
+      );
+    });
+  }
+
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>) {
     const loadedSubsources = [...subsources];
     this.clearRuntimeStateWhenSpatialSkeletonSourceChanges(
@@ -1747,6 +1759,8 @@ export class SegmentationUserLayer extends Base {
     );
     const findPathSubsource =
       this.getSpatialSkeletonFindPathSubsource(loadedSubsources);
+    const hasEditableSpatialSkeletonSource =
+      this.hasEditableSpatialSkeletonSource(loadedSubsources);
     const updatedSegmentPropertyMaps: SegmentPropertyMap[] = [];
     const isGroupRoot =
       this.displayState.linkedSegmentationGroup.root.value === this;
@@ -1963,6 +1977,8 @@ export class SegmentationUserLayer extends Base {
           loadedSubsource.deactivate(
             "Not supported on non-root linked segmentation layers",
           );
+        } else if (hasEditableSpatialSkeletonSource) {
+          loadedSubsource.deactivate("Not supported with editable skeletons");
         } else {
           if (updatedGraph !== undefined) {
             loadedSubsource.deactivate(
@@ -1984,6 +2000,9 @@ export class SegmentationUserLayer extends Base {
       } else {
         loadedSubsource.deactivate("Not compatible with segmentation layer");
       }
+    }
+    if (hasEditableSpatialSkeletonSource && isGroupRoot) {
+      this.displayState.segmentationGroupState.value.segmentEquivalences.clear();
     }
     this.displayState.originalSegmentationGroupState.segmentPropertyMap.value =
       getPreprocessedSegmentPropertyMap(
