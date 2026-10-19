@@ -29,6 +29,7 @@ datasourceMetadataSnapshotTests("zarr", [
   "ome_zarr/simple_0.5",
   "ome_zarr/simple_0.5.zip",
   "ome_zarr/simple_0.5.ocdbt",
+  "ome_zarr/regular_bounded_0.5",
 ]);
 
 datasourceMetadataSnapshotTests(
