@@ -14,19 +14,6 @@
  * limitations under the License.
  */
 
-import {
-  SKELETON_ADD_NODE,
-  SKELETON_CLEAR_SELECTION,
-  SKELETON_DRAG_VIEW,
-  SKELETON_EDIT_AT_MOUSE,
-  SKELETON_ENTER_CREATE,
-  SKELETON_ENTER_DELETE_MODE,
-  SKELETON_ENTER_INSERT_MODE,
-  SKELETON_ENTER_MERGE_MODE,
-  SKELETON_ENTER_SPLIT_MODE,
-  SKELETON_FIND_PATH_SELECT_ENDPOINT,
-  SKELETON_PIN_NODE,
-} from "#src/skeleton/actions.js";
 import { EventActionMap } from "#src/util/event_action_map.js";
 import type { InputEventBindings } from "#src/viewer.js";
 
@@ -199,72 +186,6 @@ export function getDefaultSliceViewPanelBindings() {
     );
   }
   return defaultSliceViewPanelBindings;
-}
-
-let defaultSkeletonEditToolBindings: EventActionMap | undefined;
-let defaultSkeletonToolNavigationBindings: EventActionMap | undefined;
-
-export function getDefaultSkeletonToolNavigationBindings() {
-  if (defaultSkeletonToolNavigationBindings === undefined) {
-    defaultSkeletonToolNavigationBindings = EventActionMap.fromObject({
-      // Control+left mirrors middle drag for trackpads.
-      "at:mousedown1": SKELETON_DRAG_VIEW,
-      "at:control+mousedown1": "translate-via-mouse-drag",
-      "at:control+mousedown0": SKELETON_DRAG_VIEW,
-      "at:control+shift+mousedown0": "translate-via-mouse-drag",
-    });
-  }
-  return defaultSkeletonToolNavigationBindings;
-}
-
-export function getDefaultSkeletonEditToolBindings() {
-  if (defaultSkeletonEditToolBindings === undefined) {
-    defaultSkeletonEditToolBindings = EventActionMap.fromObject(
-      {
-        "at:mousedown0": SKELETON_EDIT_AT_MOUSE,
-        "at:shift+mousedown0": SKELETON_ADD_NODE,
-        "at:keym": SKELETON_ENTER_MERGE_MODE,
-        "at:keys": SKELETON_ENTER_SPLIT_MODE,
-        "at:keyi": SKELETON_ENTER_INSERT_MODE,
-        "at:keyn": SKELETON_ENTER_CREATE,
-        "at:keyd": SKELETON_ENTER_DELETE_MODE,
-        "at:control+mousedown2": {
-          action: SKELETON_PIN_NODE,
-          stopPropagation: true,
-          preventDefault: true,
-        },
-      },
-      { parents: [[getDefaultSkeletonToolNavigationBindings(), 0]] },
-    );
-  }
-  return defaultSkeletonEditToolBindings;
-}
-
-let defaultSkeletonFindPathToolBindings: EventActionMap | undefined;
-export function getDefaultSkeletonFindPathToolBindings() {
-  if (defaultSkeletonFindPathToolBindings === undefined) {
-    defaultSkeletonFindPathToolBindings = EventActionMap.fromObject(
-      {
-        "at:shift?+mousedown0": SKELETON_FIND_PATH_SELECT_ENDPOINT,
-      },
-      { parents: [[getDefaultSkeletonToolNavigationBindings(), 0]] },
-    );
-  }
-  return defaultSkeletonFindPathToolBindings;
-}
-
-let defaultSkeletonEditAuxBindings: EventActionMap | undefined;
-export function getDefaultSkeletonEditAuxBindings() {
-  if (defaultSkeletonEditAuxBindings === undefined) {
-    defaultSkeletonEditAuxBindings = EventActionMap.fromObject({
-      "at:shift+control+mousedown2": {
-        action: SKELETON_CLEAR_SELECTION,
-        stopPropagation: true,
-        preventDefault: true,
-      },
-    });
-  }
-  return defaultSkeletonEditAuxBindings;
 }
 
 export function setDefaultInputEventBindings(

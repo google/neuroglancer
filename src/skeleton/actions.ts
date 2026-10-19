@@ -17,7 +17,6 @@
 // Neuroglancer event action identifier strings for all skeleton UI.
 // These are the "skeleton-*" prefixed action names used in EventActionMap bindings
 // and bindAction calls in the skeleton edit tools.
-// Default key bindings live in src/ui/default_input_event_bindings.ts.
 
 // --- Edit tool spatial actions ---
 export const SKELETON_EDIT_AT_MOUSE = "skeleton-edit-at-mouse";

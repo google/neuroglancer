@@ -16,6 +16,7 @@
 
 import {
   SKELETON_ADD_NODE,
+  SKELETON_CLEAR_SELECTION,
   SKELETON_DRAG_VIEW,
   SKELETON_EDIT_AT_MOUSE,
   SKELETON_ENTER_CREATE,
@@ -23,18 +24,58 @@ import {
   SKELETON_ENTER_INSERT_MODE,
   SKELETON_ENTER_MERGE_MODE,
   SKELETON_ENTER_SPLIT_MODE,
+  SKELETON_FIND_PATH_SELECT_ENDPOINT,
+  SKELETON_PIN_NODE,
 } from "#src/skeleton/actions.js";
-import {
-  getDefaultRenderedDataPanelBindings,
-  getDefaultSkeletonEditToolBindings,
-} from "#src/ui/default_input_event_bindings.js";
+import { getDefaultRenderedDataPanelBindings } from "#src/ui/default_input_event_bindings.js";
 import svg_mouse from "#src/ui/images/mouse.svg?raw";
 import { makeToolStatusChip } from "#src/ui/tool.js";
-import type {
-  ActionIdentifier,
-  EventActionMap,
-} from "#src/util/event_action_map.js";
+import type { ActionIdentifier } from "#src/util/event_action_map.js";
+import { EventActionMap } from "#src/util/event_action_map.js";
 import { makeIcon } from "#src/widget/icon.js";
+
+const SKELETON_TOOL_NAVIGATION_INPUT_EVENT_MAP =
+  EventActionMap.fromObject({
+    // Control+left mirrors middle drag for trackpads.
+    "at:mousedown1": SKELETON_DRAG_VIEW,
+    "at:control+mousedown1": "translate-via-mouse-drag",
+    "at:control+mousedown0": SKELETON_DRAG_VIEW,
+    "at:control+shift+mousedown0": "translate-via-mouse-drag",
+  });
+
+export const SKELETON_EDIT_TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject(
+  {
+    "at:mousedown0": SKELETON_EDIT_AT_MOUSE,
+    "at:shift+mousedown0": SKELETON_ADD_NODE,
+    "at:keym": SKELETON_ENTER_MERGE_MODE,
+    "at:keys": SKELETON_ENTER_SPLIT_MODE,
+    "at:keyi": SKELETON_ENTER_INSERT_MODE,
+    "at:keyn": SKELETON_ENTER_CREATE,
+    "at:keyd": SKELETON_ENTER_DELETE_MODE,
+    "at:control+mousedown2": {
+      action: SKELETON_PIN_NODE,
+      stopPropagation: true,
+      preventDefault: true,
+    },
+  },
+  { parents: [[SKELETON_TOOL_NAVIGATION_INPUT_EVENT_MAP, 0]] },
+);
+
+export const SKELETON_FIND_PATH_TOOL_INPUT_EVENT_MAP =
+  EventActionMap.fromObject(
+    {
+      "at:shift?+mousedown0": SKELETON_FIND_PATH_SELECT_ENDPOINT,
+    },
+    { parents: [[SKELETON_TOOL_NAVIGATION_INPUT_EVENT_MAP, 0]] },
+  );
+
+export const SKELETON_EDIT_AUX_INPUT_EVENT_MAP = EventActionMap.fromObject({
+  "at:shift+control+mousedown2": {
+    action: SKELETON_CLEAR_SELECTION,
+    stopPropagation: true,
+    preventDefault: true,
+  },
+});
 
 export type SpatialSkeletonShortcutComboPart =
   | { type: "icon"; value: string }
@@ -149,7 +190,7 @@ export function getSpatialSkeletonModeKeyCode(
   action: ActionIdentifier,
 ): string {
   const eventIdentifiers = boundEventIdentifiers(
-    getDefaultSkeletonEditToolBindings(),
+    SKELETON_EDIT_TOOL_INPUT_EVENT_MAP,
     action,
   );
   const keyCode = eventIdentifiers[0];
@@ -186,7 +227,7 @@ function makeShortcuts<Name extends string>(
 }
 
 export const SKELETON_EDIT_SHORTCUTS = {
-  ...makeShortcuts(getDefaultSkeletonEditToolBindings(), {
+  ...makeShortcuts(SKELETON_EDIT_TOOL_INPUT_EVENT_MAP, {
     select: {
       label: "Select",
       action: SKELETON_EDIT_AT_MOUSE,
