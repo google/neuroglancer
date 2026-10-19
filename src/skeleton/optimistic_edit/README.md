@@ -63,13 +63,9 @@ Public commands and tools use `SpatialSkeletonOptimisticEditExecution<T>`
 directly: ordinary edits use `T = void`, while Undo/Redo use `boolean`.
 `withPendingMessage` decorates an execution for Add/Delete/Split/Merge. Its
 message ends when the preview promise completes. Both `commands.ts` and
-`queue_admission.ts` import `withPromiseProperties` from `src/util/promise.ts`
-to attach caller-supplied properties to a promise and preserve their inferred
-types. The callers supply `acceptedByQueue` and `settled`, including when
-`finally()` produces a replacement preview promise. The utility also exports
-`createDeferred`, which creates a promise with externally accessible resolution
-and rejection functions. It has no skeleton dependencies. The queue admission
-boundary observes independent acceptance rejections; the message wrapper does
+`queue_admission.ts` attach `acceptedByQueue` and `settled`, including to the
+replacement preview promise that `finally()` produces. The queue admission
+boundary observes independent acceptance rejections. The message wrapper does
 not add a duplicate handler.
 
 `prepareAndSubmitSpatialSkeletonEdit` submits a reusable input policy immediately.
@@ -761,9 +757,9 @@ ID mappings independently of queue records. The projection runtime owns the
 mapping instance; the journal imports only handles and resource-key helpers.
 Identity and journal tests live beside their respective implementations.
 
-Engine subscriptions use Neuroglancer's `NullarySignal`. Notification dispatch
-isolates each observer and its error reporter, so presentation failures cannot
-interrupt an already-adopted edit or prevent later observers from being notified.
+Engine subscriptions use Neuroglancer's `NullarySignal`. An observer error is
+reported and does not fail an already-adopted edit. As with any `Signal`, it
+still stops the observers after it.
 The engine keeps its existing `subscribe()` interface and asynchronous disposal.
 
 ## Testing

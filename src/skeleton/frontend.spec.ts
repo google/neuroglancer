@@ -60,7 +60,6 @@ describe("getActiveProvisionalSpatialSkeletonSegmentIds", () => {
   it("returns only active non-authoritative segment aliases", () => {
     const presentation = {
       revision: 1,
-      exactSegmentSnapshots: [],
       removedSegmentIds: [],
       activeLogicalOwners: [
         {
@@ -329,7 +328,6 @@ describe("SpatiallyIndexedSkeletonLayer inspection overlay chunks", () => {
           spatialSkeletonPresentation: new SpatialSkeletonState()
             .spatialSkeletonPresentation,
           nodeDataVersion: { value: 0 },
-          pendingNodePositionVersion: { value: 0 },
           getCachedSegmentNodes: (segmentId: bigint) => cache.get(segmentId),
           getFullSegmentNodes: vi.fn(),
           evictInactiveSegmentNodes: vi.fn(),
@@ -1163,20 +1161,6 @@ describe("SpatiallyIndexedSkeletonLayer browse exclusions", () => {
       provisionalSegmentId,
       23n,
     ]);
-  });
-
-  it("clears retained and temporary ownership together on runtime reset", () => {
-    const { layer } = makeLayer();
-    layer.retainOverlaySegment(41n);
-    const release = layer.beginTemporaryBrowseExclusion(43n);
-    expect(getExcludedSegmentIds(layer)).toEqual([41n, 43n]);
-
-    expect(layer.clearOverlayRuntimeState()).toBe(true);
-
-    expect([...layer.retainedOverlaySegments]).toEqual([]);
-    expect([...layer.temporaryBrowseExclusions]).toEqual([]);
-    expect(layer.getBrowsePassExcludedSegments()).toBeUndefined();
-    expect(release()).toBe(false);
   });
 });
 

@@ -32,7 +32,6 @@ import {
   createSpatialSkeletonQueueInputPreparation,
   prepareAndSubmitSpatialSkeletonEdit,
 } from "#src/skeleton/queue_admission.js";
-import { createDeferred } from "#src/util/promise.js";
 
 function optimisticExecution<T>(
   execution: Promise<T>,
@@ -249,7 +248,7 @@ describe("spatial skeleton queue input preparation", () => {
   it("rejects an unexpected source replacement during a target download", async () => {
     const { layer, state, cachedSegments, replaceCachedSegment, releases } =
       makeHarness([11n]);
-    const read = createDeferred<void>();
+    const read = Promise.withResolvers<void>();
     state.getFullSegmentNodes.mockImplementationOnce(async (_layer, id) => {
       await read.promise;
       cachedSegments.add(id);
@@ -270,7 +269,7 @@ describe("spatial skeleton queue input preparation", () => {
 
   it("rechecks endpoint requirements after a download", async () => {
     const { layer, state, cachedSegments } = makeHarness([11n]);
-    const read = createDeferred<void>();
+    const read = Promise.withResolvers<void>();
     state.getFullSegmentNodes.mockImplementationOnce(async (_layer, id) => {
       await read.promise;
       cachedSegments.add(id);
@@ -297,7 +296,7 @@ describe("spatial skeleton queue input preparation", () => {
 
   it("releases a canceled read owner promptly and ignores a late response", async () => {
     const { layer, state, cachedSegments, releases } = makeHarness([11n]);
-    const read = createDeferred<void>();
+    const read = Promise.withResolvers<void>();
     state.getFullSegmentNodes.mockImplementationOnce(async (_layer, id) => {
       await read.promise;
       cachedSegments.add(id);
@@ -357,7 +356,7 @@ describe("spatial skeleton queue input preparation", () => {
 
   it("checks the fatal gate before validation and after loading", async () => {
     const { layer, state, cachedSegments, setFatalState } = makeHarness([11n]);
-    const read = createDeferred<void>();
+    const read = Promise.withResolvers<void>();
     state.getFullSegmentNodes.mockImplementationOnce(async (_layer, id) => {
       await read.promise;
       cachedSegments.add(id);

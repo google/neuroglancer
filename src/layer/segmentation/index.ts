@@ -42,10 +42,7 @@ import {
   registerVolumeLayerType,
   UserLayer,
 } from "#src/layer/index.js";
-import type {
-  LayerDataSourceChangeRuntimeDisposalContext,
-  LoadedDataSubsource,
-} from "#src/layer/layer_data_source.js";
+import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import { layerDataSourceSpecificationFromJson } from "#src/layer/layer_data_source.js";
 import * as json_keys from "#src/layer/segmentation/json_keys.js";
 import { registerLayerControls } from "#src/layer/segmentation/layer_controls.js";
@@ -66,10 +63,6 @@ import {
 } from "#src/render_scale_statistics.js";
 import type { RenderLayer } from "#src/renderlayer.js";
 import { getCssColor, SegmentColorHash } from "#src/segment_color.js";
-import {
-  addSegmentToVisibleSets,
-  removeSegmentFromVisibleSets,
-} from "#src/segmentation_display_state/base.js";
 import type {
   SegmentationColorGroupState,
   SegmentationDisplayState,
@@ -141,11 +134,6 @@ import {
   getSkeletonNodeRadius,
   isSkeletonNodeTrueEnd,
 } from "#src/skeleton/node_attributes.js";
-import {
-  findSkeletonNode,
-  getSkeletonDirectChildren,
-  getSkeletonNodeParent,
-} from "#src/skeleton/node_traversal.js";
 import {
   classifySkeletonDisplayNodeType as getSkeletonDisplayNodeType,
   getSkeletonNodeFilterLabel,
@@ -822,17 +810,37 @@ function remapSpatialSkeletonSegmentSet(
   for (const target of presentTargets) set.add(target);
 }
 
-const SPATIALLY_INDEXED_SKELETON_RUNTIME_DISPOSAL_KIND =
-  "spatiallyIndexedSkeleton";
-
 const Base = UserLayerWithAnnotationsMixin(UserLayer);
+export interface SegmentationLayerSelectionState
+  extends UserLayerSelectionState {
+  nodeId: bigint | undefined;
+}
+
+type AnySpatiallyIndexedSkeletonSource =
+  | MultiscaleSpatiallyIndexedSkeletonSource
+  | SpatiallyIndexedSkeletonSource;
+
+function isSpatiallyIndexedSkeletonSource(
+  mesh: unknown,
+): mesh is AnySpatiallyIndexedSkeletonSource {
+  return (
+    mesh instanceof MultiscaleSpatiallyIndexedSkeletonSource ||
+    mesh instanceof SpatiallyIndexedSkeletonSource
+  );
+}
+
 export class SegmentationUserLayer extends Base {
+  declare selectionState: SegmentationLayerSelectionState;
+
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
   codeVisible = new TrackableBoolean(true);
   readonly spatialSkeletonState = this.registerDisposer(
     new SpatialSkeletonState(),
   );
+  private activeSpatialSkeletonSource:
+    | AnySpatiallyIndexedSkeletonSource
+    | undefined;
   private spatialSkeletonFindPathContext:
     | SpatialSkeletonFindPathContext
     | undefined;
@@ -877,7 +885,7 @@ export class SegmentationUserLayer extends Base {
       selectionState.captureSingleLayerState(this, capture, pin, options);
       return;
     }
-    const state = {} as UserLayerSelectionState;
+    const state = {} as this["selectionState"];
     this.initializeSelectionState(state);
     if (!capture(state)) return;
     selectionState.value = {
@@ -1005,7 +1013,7 @@ export class SegmentationUserLayer extends Base {
     };
     this.captureSpatialSkeletonSelectionState(
       (state) => {
-        state.nodeId = nodeId.toString();
+        state.nodeId = nodeId;
         state.value = segmentId;
         return true;
       },
@@ -1094,7 +1102,7 @@ export class SegmentationUserLayer extends Base {
           ...entry,
           state: {
             ...entry.state,
-            ...(nextNodeId === undefined ? {} : { nodeId: String(nextNodeId) }),
+            ...(nextNodeId === undefined ? {} : { nodeId: nextNodeId }),
             ...(nextSegmentId === undefined ? {} : { value: nextSegmentId }),
           },
         };
@@ -1126,12 +1134,14 @@ export class SegmentationUserLayer extends Base {
     for (const visibility of hints.segmentVisibility) {
       const { segmentId } = visibility;
       if (visibility.visible) {
-        addSegmentToVisibleSets(group, segmentId, { includeTemporary: true });
+        group.visibleSegments.add(segmentId);
+        group.temporaryVisibleSegments.add(segmentId);
       } else {
-        removeSegmentFromVisibleSets(group, segmentId, {
-          includeTemporary: true,
-          deselect: visibility.deselect,
-        });
+        group.visibleSegments.delete(segmentId);
+        group.temporaryVisibleSegments.delete(segmentId);
+        if (visibility.deselect) {
+          group.selectedSegments.delete(segmentId);
+        }
       }
       if (visibility.select !== undefined) {
         this.selectSegment(
@@ -1339,9 +1349,6 @@ export class SegmentationUserLayer extends Base {
       this.layersChanged.add(() => this.updateSpatialSkeletonChunkLoadState()),
     );
     this.registerDisposer(
-      this.layersChanged.add(() => this.updateSpatialSkeletonSourceState()),
-    );
-    this.registerDisposer(
       this.manager.chunkManager.layerChunkStatisticsUpdated.add(() =>
         this.updateSpatialSkeletonChunkLoadState(),
       ),
@@ -1408,7 +1415,6 @@ export class SegmentationUserLayer extends Base {
     });
     this.tabs.default = "rendering";
     this.updateSpatialSkeletonChunkLoadState();
-    this.updateSpatialSkeletonSourceState();
   }
 
   get volumeOptions() {
@@ -1561,9 +1567,9 @@ export class SegmentationUserLayer extends Base {
   ) {
     activated.registerDisposer(
       this.spatialSkeletonState.nodeDataVersion.changed.add(() => {
-        // Optimistic adoption and rollback publish through state, bypassing the
-        // legacy layer mutation callback. Invalidate before the active tool's
-        // node-data observer recomputes the path from the adopted snapshot.
+        // Optimistic adoption and rollback publish through state.
+        // Invalidate before the active tool's node-data observer recomputes
+        // the path from the adopted snapshot.
         if (this.spatialSkeletonState.hasUnconfirmedOptimisticEdits()) {
           context.state.invalidateResult();
         }
@@ -1606,40 +1612,6 @@ export class SegmentationUserLayer extends Base {
       stats2d.totalCount + stats3d.totalCount,
       stats2d.presentCount + stats3d.presentCount,
     );
-  }
-
-  private updateSpatialSkeletonSourceState() {
-    let hasSpatialSkeletonLayer = false;
-    for (const layer of this.renderLayers) {
-      if (
-        layer instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer ||
-        layer instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer
-      ) {
-        hasSpatialSkeletonLayer = true;
-        break;
-      }
-    }
-    this.spatialSkeletonState.updateCommandHistorySource(
-      this.getSpatialSkeletonCommandHistorySource(),
-    );
-    if (!hasSpatialSkeletonLayer) {
-      // Dispose/refold the old queue before clearing its inspected baseline.
-      // Otherwise disposal may republish an owned exact snapshot into the
-      // cache after this teardown has already emptied it.
-      this.spatialSkeletonState.clearInspectedSkeletonCache();
-    }
-  }
-
-  private getSpatialSkeletonCommandHistorySource() {
-    for (const layer of this.renderLayers) {
-      if (
-        layer instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer ||
-        layer instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer
-      ) {
-        return layer.base.source;
-      }
-    }
-    return undefined;
   }
 
   private supportsSpatialSkeletonAction(action: SpatialSkeletonAction) {
@@ -1726,55 +1698,6 @@ export class SegmentationUserLayer extends Base {
     return undefined;
   }
 
-  getCachedSpatialSkeletonSegmentNodesForEdit(segmentId: bigint) {
-    const segmentNodes =
-      this.spatialSkeletonState.getCachedSegmentNodes(segmentId);
-    if (segmentNodes === undefined) {
-      throw new Error(
-        `Segment ${segmentId} is not available in the inspected skeleton cache. Load the full skeleton before editing it.`,
-      );
-    }
-    return segmentNodes;
-  }
-
-  async getSpatialSkeletonDeleteOperationContext(node: SkeletonNode) {
-    const skeletonLayer = this.getSpatiallyIndexedSkeletonLayer();
-    if (skeletonLayer === undefined) {
-      throw new Error(
-        "No active spatial skeleton layer found for delete action.",
-      );
-    }
-    if (skeletonLayer?.editableSource === undefined) {
-      throw new Error(
-        "Unable to resolve editable skeleton source for the active layer.",
-      );
-    }
-
-    const segmentNodes = this.getCachedSpatialSkeletonSegmentNodesForEdit(
-      node.segmentId,
-    );
-    const currentNode = findSkeletonNode(segmentNodes, node.nodeId);
-    if (currentNode === undefined) {
-      throw new Error(
-        `Node ${node.nodeId} is not available in the inspected skeleton cache.`,
-      );
-    }
-    const childNodes = getSkeletonDirectChildren(
-      segmentNodes,
-      currentNode.nodeId,
-    );
-    if (currentNode.parentNodeId === undefined && childNodes.length > 0) {
-      throw new Error(
-        "Deleting a root node with children is blocked. Reroot the skeleton manually before deleting it.",
-      );
-    }
-    return {
-      node: currentNode,
-      parentNode: getSkeletonNodeParent(segmentNodes, currentNode),
-      childNodes,
-    };
-  }
-
   getSkeletonNodeDisplayDescription(node: SkeletonNode) {
     return node.description?.length ? node.description : undefined;
   }
@@ -1791,46 +1714,24 @@ export class SegmentationUserLayer extends Base {
     await executeSpatialSkeletonReroot(this, node);
   }
 
-  markSpatialSkeletonNodeDataChanged(options?: {
-    invalidateFullSkeletonCache?: boolean;
-  }) {
-    this.spatialSkeletonFindPathContext?.state.invalidateResult();
-    this.spatialSkeletonState.markNodeDataChanged(options);
-  }
-
-  disposeLayerRuntimeStateForDataSourceChange(
-    context: LayerDataSourceChangeRuntimeDisposalContext,
+  private clearRuntimeStateWhenSpatialSkeletonSourceChanges(
+    source: AnySpatiallyIndexedSkeletonSource | undefined,
   ) {
-    if (
-      context.request.kind !== SPATIALLY_INDEXED_SKELETON_RUNTIME_DISPOSAL_KIND
-    ) {
-      return super.disposeLayerRuntimeStateForDataSourceChange(context);
+    const previousSource = this.activeSpatialSkeletonSource;
+    this.activeSpatialSkeletonSource = source;
+    if (previousSource !== undefined && previousSource !== source) {
+      this.spatialSkeletonState.clearRuntimeState();
     }
-    let changed = false;
-    const spatialSkeletonLayers = new Set<SpatiallyIndexedSkeletonLayer>();
-    for (const renderLayer of context.loadedSubsource.renderLayers) {
-      if (
-        renderLayer instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer ||
-        renderLayer instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer
-      ) {
-        spatialSkeletonLayers.add(renderLayer.base);
-      }
-    }
-    for (const spatialSkeletonLayer of spatialSkeletonLayers) {
-      changed = spatialSkeletonLayer.disposeRuntimeState() || changed;
-    }
-    changed = this.spatialSkeletonState.clearRuntimeState() || changed;
-    return changed;
   }
 
   private getSpatialSkeletonFindPathSubsource(
     loadedSubsources: readonly LoadedDataSubsource[],
   ) {
     return loadedSubsources.find((loadedSubsource) => {
-      const { mesh } = loadedSubsource.subsourceEntry.subsource;
       return (
-        (mesh instanceof MultiscaleSpatiallyIndexedSkeletonSource ||
-          mesh instanceof SpatiallyIndexedSkeletonSource) &&
+        isSpatiallyIndexedSkeletonSource(
+          loadedSubsource.subsourceEntry.subsource.mesh,
+        ) &&
         loadedSubsource.loadedDataSource.dataSource.state instanceof
           SkeletonDataSourceState
       );
@@ -1839,6 +1740,11 @@ export class SegmentationUserLayer extends Base {
 
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>) {
     const loadedSubsources = [...subsources];
+    this.clearRuntimeStateWhenSpatialSkeletonSourceChanges(
+      loadedSubsources
+        .map((loadedSubsource) => loadedSubsource.subsourceEntry.subsource.mesh)
+        .find(isSpatiallyIndexedSkeletonSource),
+    );
     const findPathSubsource =
       this.getSpatialSkeletonFindPathSubsource(loadedSubsources);
     const updatedSegmentPropertyMaps: SegmentPropertyMap[] = [];
@@ -2366,8 +2272,31 @@ export class SegmentationUserLayer extends Base {
     }
   }
 
+  initializeSelectionState(state: this["selectionState"]) {
+    super.initializeSelectionState(state);
+    state.nodeId = undefined;
+  }
+
+  resetSelectionState(state: this["selectionState"]) {
+    super.resetSelectionState(state);
+    state.nodeId = undefined;
+  }
+
+  copySelectionState(
+    dest: this["selectionState"],
+    source: this["selectionState"],
+  ) {
+    super.copySelectionState(dest, source);
+    dest.nodeId = source.nodeId;
+  }
+
   selectionStateFromJson(state: this["selectionState"], json: any) {
     super.selectionStateFromJson(state, json);
+    try {
+      state.nodeId = verifyOptionalObjectProperty(json, "nodeId", parseUint64);
+    } catch {
+      state.nodeId = undefined;
+    }
     let { value } = state;
     if (typeof value === "number") value = value.toString();
     try {
@@ -2391,8 +2320,7 @@ export class SegmentationUserLayer extends Base {
     ) {
       return;
     }
-    const nodeId = undefinedIfZero(pickedSpatialSkeleton.nodeId);
-    state.nodeId = nodeId === undefined ? undefined : nodeId.toString();
+    state.nodeId = undefinedIfZero(pickedSpatialSkeleton.nodeId);
     const segmentId = undefinedIfZero(pickedSpatialSkeleton.segmentId);
     if (segmentId !== undefined) {
       state.value = segmentId;
@@ -2401,6 +2329,9 @@ export class SegmentationUserLayer extends Base {
 
   selectionStateToJson(state: this["selectionState"], forPython: boolean): any {
     const json = super.selectionStateToJson(state, forPython);
+    if (state.nodeId !== undefined) {
+      json.nodeId = state.nodeId.toString();
+    }
     const { value } = state;
     if (value instanceof Uint64MapEntry) {
       if (forPython) {

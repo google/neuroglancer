@@ -173,8 +173,7 @@ function adoptPreparedProjectionSnapshots(
   let adopted = false;
   state.runSpatialSkeletonPresentationTransaction(() => {
     adopted =
-      state.adoptPreparedSpatialSkeletonProjectionStatePublication(prepared) !==
-      undefined;
+      state.adoptPreparedSpatialSkeletonProjectionStatePublication(prepared);
   });
   if (!adopted) return false;
   state.finalizePreparedSpatialSkeletonProjectionStatePublication(prepared);
@@ -272,7 +271,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
           state.adoptPreparedSpatialSkeletonProjectionStatePublication(
             prepared,
           ),
-        ).toBeDefined();
+        ).toBe(true);
         expect(state.getCachedSegmentRevision(11n)).toBe(
           prepared.cacheRevisions.get(11n),
         );
@@ -368,7 +367,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     state.runSpatialSkeletonPresentationTransaction(() => {
       expect(
         state.adoptPreparedSpatialSkeletonProjectionStatePublication(prepared),
-      ).toBeDefined();
+      ).toBe(true);
     });
     expect(signals.get(17n)?.aborted).toBe(false);
     state.finalizePreparedSpatialSkeletonProjectionStatePublication(prepared);
@@ -411,7 +410,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const presentation = state.spatialSkeletonPresentation.value;
     expect(
       state.adoptPreparedSpatialSkeletonProjectionStatePublication(prepared),
-    ).toBeUndefined();
+    ).toBe(false);
     expect(state.getCachedSegmentSnapshotHandle(17n)).toBe(current);
     expect(state.getCachedSegmentRevision(17n)).toBe(revision);
     expect(state.spatialSkeletonPresentation.value).toBe(presentation);
@@ -545,7 +544,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     expect(replacementCleanup).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the first Reload required state across queue and source clearing", async () => {
+  it("keeps the first Reload required state after runtime state is cleared", async () => {
     const state = new SpatialSkeletonState();
     state.editMode.value = true;
     state.mergeMode.value = true;
@@ -601,7 +600,6 @@ describe("skeleton/spatial_skeleton_manager", () => {
     });
 
     state.clearRuntimeState();
-    state.updateCommandHistorySource({ replacement: true });
     expect(state.getOptimisticEditFatalState()).toBe(fatalState);
     expect(() => state.assertOptimisticEditingAllowed()).toThrow(
       SpatialSkeletonOptimisticReloadRequiredError,
@@ -781,16 +779,14 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const observed: Array<{
       revision: number;
       preparations: number;
-      exactSegments: bigint[];
+      exactTopology: unknown;
     }> = [];
     state.spatialSkeletonPresentation.changed.add(() => {
       const presentation = state.spatialSkeletonPresentation.value;
       observed.push({
         revision: presentation.revision,
         preparations: presentation.preparations.length,
-        exactSegments: presentation.exactSegmentSnapshots.map(
-          ({ segmentId }) => segmentId,
-        ),
+        exactTopology: state.getCachedSegmentSnapshotHandle(11n)?.handle,
       });
     });
     let nodeNotifications = 0;
@@ -814,7 +810,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     state.runSpatialSkeletonPresentationTransaction(() => {
       expect(
         state.adoptPreparedSpatialSkeletonProjectionStatePublication(prepared),
-      ).toBeDefined();
+      ).toBe(true);
     });
     state.finalizePreparedSpatialSkeletonProjectionStatePublication(prepared);
 
@@ -822,7 +818,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       {
         revision: 2,
         preparations: 0,
-        exactSegments: [11n],
+        exactTopology: handle,
       },
     ]);
     expect(nodeNotifications).toBe(1);
@@ -888,32 +884,6 @@ describe("skeleton/spatial_skeleton_manager", () => {
     ).toBe(true);
   });
 
-  it("clears the full skeleton cache before notifying node data listeners", () => {
-    const state = new SpatialSkeletonState();
-    const cachedSegmentId = 11n;
-    (state as any).fullSegmentNodeCache.set(cachedSegmentId, [
-      {
-        nodeId: 1n,
-        segmentId: cachedSegmentId,
-        position: new Float32Array([1, 2, 3]),
-      },
-    ]);
-
-    let cachePresentDuringNotification: boolean | undefined;
-    state.nodeDataVersion.changed.add(() => {
-      cachePresentDuringNotification = (state as any).fullSegmentNodeCache.has(
-        cachedSegmentId,
-      );
-    });
-
-    state.markNodeDataChanged();
-
-    expect(cachePresentDuringNotification).toBe(false);
-    expect((state as any).fullSegmentNodeCache.has(cachedSegmentId)).toBe(
-      false,
-    );
-  });
-
   it("clears inspected cache state and pending node positions together", () => {
     const state = new SpatialSkeletonState();
     state.replaceCachedSegmentSnapshots(
@@ -935,7 +905,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const nodeDataVersion = state.nodeDataVersion.value;
     const pendingNodePositionVersion = state.pendingNodePositionVersion.value;
 
-    expect(state.clearInspectedSkeletonCache()).toBe(true);
+    expect(state.clearRuntimeState()).toBe(true);
     expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
     expect(state.getCachedNode(5n)).toBeUndefined();
     expect(state.getPendingNodePosition(5n)).toBeUndefined();
@@ -1357,17 +1327,13 @@ describe("skeleton/spatial_skeleton_manager", () => {
     expect(state.getCachedSegmentSnapshotHandle(11n)?.handle).toBe(
       baseline.handle,
     );
-    let adopted:
-      | ReturnType<
-          SpatialSkeletonState["adoptPreparedSpatialSkeletonProjectionStatePublication"]
-        >
-      | undefined;
+    let adopted = false;
     state.runSpatialSkeletonPresentationTransaction(() => {
       adopted =
         state.adoptPreparedSpatialSkeletonProjectionStatePublication(prepared);
     });
 
-    expect(adopted).toBeDefined();
+    expect(adopted).toBe(true);
     expect(projected.materializationCount).toBe(1);
     expect(state.getCachedSegmentSnapshotHandle(11n)?.handle).toBe(projected);
     expect(state.getCachedNode(1n)?.position).toEqual([7, 8, 9]);
@@ -1423,7 +1389,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
 
     expect(
       state.adoptPreparedSpatialSkeletonProjectionStatePublication(prepared),
-    ).toBeUndefined();
+    ).toBe(false);
     expect(state.getCachedSegmentSnapshotHandle(11n)).toBe(beforeStaleAdoption);
     expect(getSkeletonNodeConfidence(state.getCachedNode(1n)!)).toBeUndefined();
 
@@ -1887,7 +1853,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     const secondReplacementRevision = state.getCachedSegmentRevision(11n);
     expect(secondReplacementRevision).toBeGreaterThan(replacedRevision);
 
-    expect(state.clearInspectedSkeletonCache()).toBe(true);
+    expect(state.clearRuntimeState()).toBe(true);
     expect(state.getCachedSegmentRevision(11n)).toBeGreaterThan(
       secondReplacementRevision,
     );
@@ -2260,7 +2226,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     );
     await flushMicrotasks();
 
-    expect(state.clearInspectedSkeletonCache()).toBe(true);
+    expect(state.clearRuntimeState()).toBe(true);
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
     expect(getSkeleton).toHaveBeenCalledTimes(1);
   });
@@ -2291,7 +2257,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     await flushMicrotasks();
 
     expect(receivedSignal?.aborted).toBe(false);
-    expect(state.clearInspectedSkeletonCache()).toBe(true);
+    expect(state.clearRuntimeState()).toBe(true);
     expect(receivedSignal?.aborted).toBe(true);
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
     expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
@@ -2795,7 +2761,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       });
       await flushMicrotasks();
 
-      state.clearInspectedSkeletonCache();
+      state.clearRuntimeState();
       manifestReady.resolve();
       await aborted;
       await flushMicrotasks();

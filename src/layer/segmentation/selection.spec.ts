@@ -33,70 +33,25 @@ if (!("WebGL2RenderingContext" in globalThis)) {
   });
 }
 
-const {
-  getNodeIdFromLayerSelectionState,
-  getSegmentIdFromLayerSelectionValue,
-  hasSkeletonNodeSelection,
-  SkeletonHoverState,
-} = await import("#src/layer/segmentation/selection.js");
+const { getSegmentIdFromLayerSelectionValue, SkeletonHoverState } =
+  await import("#src/layer/segmentation/selection.js");
 const { Uint64MapEntry } = await import(
   "#src/segmentation_display_state/frontend.js"
 );
 
 describe("layer/segmentation/selection", () => {
-  it("recognizes field-based spatial skeleton node selections", () => {
-    expect(
-      hasSkeletonNodeSelection({
-        nodeId: "17",
-        value: 9n,
-      }),
-    ).toBe(true);
-    expect(
-      hasSkeletonNodeSelection({
-        nodeId: "18446744073709551615",
-      }),
-    ).toBe(true);
-    expect(
-      hasSkeletonNodeSelection({
-        nodeId: 17n,
-      }),
-    ).toBe(false);
-    expect(
-      hasSkeletonNodeSelection({
-        nodeId: 0n,
-      }),
-    ).toBe(false);
-    expect(hasSkeletonNodeSelection({})).toBe(false);
-  });
-
-  it("extracts node and segment ids from a layer selection state", () => {
-    expect(
-      getNodeIdFromLayerSelectionState({
-        nodeId: "23",
-        value: 7n,
-      }),
-    ).toBe(23n);
+  it("extracts segment ids from a layer selection state", () => {
     expect(
       getSegmentIdFromLayerSelectionValue({
-        nodeId: "23",
+        nodeId: 23n,
         value: "7",
       }),
     ).toBe(7n);
-    expect(
-      getNodeIdFromLayerSelectionState({
-        nodeId: 0n,
-      }),
-    ).toBeUndefined();
     expect(
       getSegmentIdFromLayerSelectionValue({
         value: "9",
       }),
     ).toBe(9n);
-    expect(
-      getNodeIdFromLayerSelectionState({
-        nodeId: "18446744073709551615",
-      }),
-    ).toBe(18446744073709551615n);
   });
 
   it("reads the segment of a clicked segment that has a label", () => {

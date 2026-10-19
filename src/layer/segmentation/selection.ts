@@ -57,7 +57,7 @@ export function getNodeIdFromLayerSelectionState(
   state: { nodeId?: unknown; value?: unknown } | undefined,
 ) {
   const nodeId = state?.nodeId;
-  return typeof nodeId === "string" ? parseSelectionStateId(nodeId) : undefined;
+  return typeof nodeId === "bigint" ? nodeId : undefined;
 }
 
 // Segment 0 means no segment.

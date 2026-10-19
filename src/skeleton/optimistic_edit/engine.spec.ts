@@ -378,7 +378,7 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
   }
 
   it.each([false, true])(
-    "isolates observer failures through saving and unsubscribe (reporter throws: %s)",
+    "keeps saving and reports the error when a queue observer throws (reporter throws: %s)",
     async (reporterThrows) => {
       const observerError = new Error("observer failed");
       const onListenerError = vi.fn(() => {
@@ -386,24 +386,15 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
       });
       const harness = makeHarness({ onListenerError });
       const { engine, commandHistory } = harness;
-      const unsubscribeThrowing = engine.subscribe(() => {
+      engine.subscribe(() => {
         throw observerError;
       });
-      const observer = vi.fn();
-      const unsubscribeObserver = engine.subscribe(observer);
 
       await save(harness, "first");
       expect(onListenerError).toHaveBeenCalledWith(observerError);
-      expect(observer).toHaveBeenCalled();
       expect(commandHistory.undoLabel.value).toBe("first");
 
-      unsubscribeThrowing();
-      unsubscribeObserver();
-      observer.mockClear();
-      onListenerError.mockClear();
       await save(harness, "second");
-      expect(observer).not.toHaveBeenCalled();
-      expect(onListenerError).not.toHaveBeenCalled();
       expect(commandHistory.undoLabel.value).toBe("second");
       await engine.dispose();
     },

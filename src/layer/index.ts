@@ -38,10 +38,7 @@ import type {
 } from "#src/datasource/index.js";
 import { makeEmptyDataSourceSpecification } from "#src/datasource/index.js";
 import type { DisplayContext, RenderedPanel } from "#src/display_context.js";
-import type {
-  LayerDataSourceChangeRuntimeDisposalContext,
-  LoadedDataSubsource,
-} from "#src/layer/layer_data_source.js";
+import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import {
   LayerDataSource,
   layerDataSourceSpecificationFromJson,
@@ -145,7 +142,6 @@ export interface UserLayerSelectionState {
   annotationSubsource: string | undefined;
   annotationSubsubsourceId: string | undefined;
   annotationPartIndex: number | undefined;
-  nodeId: string | undefined;
 
   value: any;
 }
@@ -226,14 +222,12 @@ export class UserLayer extends RefCounted {
     state.annotationPartIndex = undefined;
     state.annotationInstanceIndex = undefined;
     state.annotationInstanceCount = undefined;
-    state.nodeId = undefined;
     state.value = undefined;
   }
 
   resetSelectionState(state: this["selectionState"]) {
     state.localPositionValid = false;
     state.annotationId = undefined;
-    state.nodeId = undefined;
     state.value = undefined;
   }
 
@@ -282,7 +276,6 @@ export class UserLayer extends RefCounted {
         verifyString,
       );
     }
-    state.nodeId = verifyOptionalObjectProperty(json, "nodeId", verifyString);
 
     state.value = json.value;
   }
@@ -313,9 +306,6 @@ export class UserLayer extends RefCounted {
       json.annotationPart = state.annotationPartIndex;
       json.annotationSource = state.annotationSourceIndex;
       json.annotationSubsource = state.annotationSubsource;
-    }
-    if (state.nodeId !== undefined) {
-      json.nodeId = state.nodeId;
     }
     if (state.value != null) {
       json.value = state.value;
@@ -363,7 +353,6 @@ export class UserLayer extends RefCounted {
     dest.annotationSourceIndex = source.annotationSourceIndex;
     dest.annotationSubsource = source.annotationSubsource;
     dest.annotationPartIndex = source.annotationPartIndex;
-    dest.nodeId = source.nodeId;
     dest.value = source.value;
   }
 
@@ -428,14 +417,6 @@ export class UserLayer extends RefCounted {
   // Should be overridden by derived classes.
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>): void {
     subsources;
-  }
-
-  // Derived classes may override to clear layer-owned runtime state for active
-  // datasources that explicitly request cleanup on source change.
-  disposeLayerRuntimeStateForDataSourceChange(
-    _context: LayerDataSourceChangeRuntimeDisposalContext,
-  ) {
-    return false;
   }
 
   updateDataSubsourceActivations() {

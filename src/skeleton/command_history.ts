@@ -327,10 +327,6 @@ export class SpatialSkeletonCommandHistory extends RefCounted {
     return changed;
   }
 
-  matchesSource(source: unknown) {
-    return this.source === source;
-  }
-
   setSource(source: unknown) {
     if (this.source === source) return false;
     this.source = source;
