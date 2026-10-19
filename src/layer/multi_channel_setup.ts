@@ -200,6 +200,7 @@ function setupLayerPostCreation(
   totalLocalChannels: number,
   channel?: SingleChannelMetadata,
   ignoreInputMetadata = false,
+  layerSpecification: any = {},
 ) {
   if (!addedLayer.layer) return;
   const userImageLayer = addedLayer.layer as ImageUserLayer;
@@ -315,14 +316,21 @@ function setupLayerPostCreation(
     );
   };
 
+  // Settings given in the layer specification take precedence over the
+  // defaults below.
   const setVolumeRenderingSamples = () => {
+    if (layerSpecification.volumeRenderingDepthSamples !== undefined) return;
     userImageLayer.volumeRenderingDepthSamplesTarget.value =
       DEFAULT_VOLUME_RENDERING_SAMPLES;
   };
 
   const set2DBlending = () => {
-    userImageLayer.blendMode.value = BLEND_MODES.ADDITIVE;
-    userImageLayer.opacity.value = 1.0;
+    if (layerSpecification.blend === undefined) {
+      userImageLayer.blendMode.value = BLEND_MODES.ADDITIVE;
+    }
+    if (layerSpecification.opacity === undefined) {
+      userImageLayer.opacity.value = 1.0;
+    }
   };
 
   postCreationSetupFunctions.push(setVolumeRenderingSamples);
@@ -330,10 +338,16 @@ function setupLayerPostCreation(
   postCreationSetupFunctions.push(setShaderDefaultsWhenReady);
 }
 
+/**
+ * @param layerSpecification Optional layer specification from which the layer was created.
+ *     Settings that it specifies, such as "opacity", are not replaced by the multi-channel
+ *     defaults.
+ */
 export function createImageLayerAsMultiChannel(
   managedLayer: Borrowed<ManagedUserLayer>,
   makeLayer: MakeLayerFn,
   checkForMultipleChannels: boolean = false,
+  layerSpecification: any = {},
 ) {
   if (managedLayer.layer?.type !== "image") return;
 
@@ -403,6 +417,7 @@ export function createImageLayerAsMultiChannel(
       totalLocalChannels,
       channelMetadata,
       ignoreInputMetadata,
+      layerSpecification,
     );
   }
   // Propagate new channel layers to all layer group subsets that contain the original managed layer
