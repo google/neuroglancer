@@ -15,6 +15,7 @@
  */
 
 import { expect, it, vi } from "vitest";
+import { SkeletonEdgeDirection, type SkeletonNode } from "#src/skeleton/api.js";
 import { createCompleteSkeletonSnapshot } from "#src/skeleton/complete_skeleton_snapshot.js";
 import {
   SpatialSkeletonLogicalHandleMappings,
@@ -32,12 +33,25 @@ function makeWholeSkeletonReads(
   ) => unknown,
 ) {
   return {
+    edgeDirection: SkeletonEdgeDirection.CHILD_TO_PARENT,
     getSkeletonManifest: async () => ({ fragmentKeys: ["skeleton"] }),
     getSkeletonFragment: async (
       skeletonId: bigint,
       _fragmentKey: string,
       signal: AbortSignal,
-    ) => ({ nodes: await getSkeleton(skeletonId, { signal }) }),
+    ) => {
+      const skeletonNodes = (await getSkeleton(skeletonId, {
+        signal,
+      })) as SkeletonNode[];
+      return {
+        nodes: skeletonNodes.map(({ parentNodeId: _, ...node }) => node),
+        edges: skeletonNodes.flatMap(({ nodeId, parentNodeId }) =>
+          parentNodeId === undefined
+            ? []
+            : [{ firstNodeId: nodeId, secondNodeId: parentNodeId }],
+        ),
+      };
+    },
   };
 }
 

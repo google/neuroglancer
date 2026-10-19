@@ -17,7 +17,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { RenderLayerTransform } from "#src/render_coordinate_transform.js";
-import type { SkeletonNode } from "#src/skeleton/api.js";
+import { SkeletonEdgeDirection, type SkeletonNode } from "#src/skeleton/api.js";
 import { SpatialSkeletonActions } from "#src/skeleton/command_protocol.js";
 import { SkeletonDataSourceState } from "#src/skeleton/find_path.js";
 import { WatchableValue } from "#src/trackable_value.js";
@@ -30,12 +30,25 @@ function makeWholeSkeletonReads(
   ) => unknown,
 ) {
   return {
+    edgeDirection: SkeletonEdgeDirection.CHILD_TO_PARENT,
     getSkeletonManifest: async () => ({ fragmentKeys: ["skeleton"] }),
     getSkeletonFragment: async (
       skeletonId: bigint,
       _fragmentKey: string,
       signal: AbortSignal,
-    ) => ({ nodes: await getSkeleton(skeletonId, { signal }) }),
+    ) => {
+      const skeletonNodes = (await getSkeleton(skeletonId, {
+        signal,
+      })) as SkeletonNode[];
+      return {
+        nodes: skeletonNodes.map(({ parentNodeId: _, ...node }) => node),
+        edges: skeletonNodes.flatMap(({ nodeId, parentNodeId }) =>
+          parentNodeId === undefined
+            ? []
+            : [{ firstNodeId: nodeId, secondNodeId: parentNodeId }],
+        ),
+      };
+    },
   };
 }
 
@@ -194,8 +207,9 @@ function makeEditableSpatialSkeletonSource(
     ),
     mergeSkeletonsCommand: makeCommand(SpatialSkeletonActions.mergeSkeletons),
     splitSkeletonsCommand: makeCommand(SpatialSkeletonActions.splitSkeletons),
+    edgeDirection: SkeletonEdgeDirection.CHILD_TO_PARENT,
     getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-    getSkeletonFragment: async () => ({ nodes: [] }),
+    getSkeletonFragment: async () => ({ nodes: [], edges: [] }),
     ...(options.rerootCommand !== true
       ? {}
       : {
@@ -684,7 +698,7 @@ function makeNodeAccess(nodes: readonly SkeletonNode[]) {
     getSegmentNodes: () => nodes,
     nodesChanged: new NullarySignal(),
     hasPickableNodes: false,
-    areParentsInferred: () => false,
+    parentsInferred: false,
     displayState: { transform: new WatchableValue(undefined as any) },
   });
 }

@@ -53,9 +53,16 @@ export interface SkeletonNode {
   readonly description?: string;
 }
 
+export enum SkeletonEdgeDirection {
+  CHILD_TO_PARENT,
+  PARENT_TO_CHILD,
+  // Parents are inferred from the whole skeleton.
+  UNDIRECTED,
+}
+
 export interface SkeletonEdge {
-  readonly parentNodeId: bigint;
-  readonly childNodeId: bigint;
+  readonly firstNodeId: bigint;
+  readonly secondNodeId: bigint;
 }
 
 export interface SkeletonSpatialIndexLevel {
@@ -78,14 +85,18 @@ export interface SkeletonManifest {
   readonly fragmentKeys: readonly string[];
 }
 
+export type SkeletonFragmentNode = Omit<SkeletonNode, "parentNodeId">;
+
 export interface SkeletonFragment {
   // Each node of a skeleton is in exactly one of its fragments.
-  // A node's optional parentNodeId may name a node in another fragment.
-  readonly nodes: readonly SkeletonNode[];
-  readonly crossFragmentEdges?: readonly SkeletonEdge[];
+  readonly nodes: readonly SkeletonFragmentNode[];
+  // Each edge is in exactly one fragment.
+  // An edge's endpoints may be in other fragments.
+  readonly edges: readonly SkeletonEdge[];
 }
 
 export interface SkeletonFragmentSource {
+  readonly edgeDirection: SkeletonEdgeDirection;
   getSkeletonManifest(
     segmentId: bigint,
     signal: AbortSignal,

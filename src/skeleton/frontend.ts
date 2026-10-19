@@ -72,12 +72,13 @@ import {
   SegmentationLayerSharedObject,
 } from "#src/segmentation_display_state/frontend.js";
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
-import type {
-  EditableSkeletonSource,
-  SkeletonFragmentSource,
-  SkeletonSpatialIndexLevel,
-  SkeletonSpatialIndexMetadata,
-  SkeletonNode,
+import {
+  SkeletonEdgeDirection,
+  type EditableSkeletonSource,
+  type SkeletonFragmentSource,
+  type SkeletonSpatialIndexLevel,
+  type SkeletonSpatialIndexMetadata,
+  type SkeletonNode,
 } from "#src/skeleton/api.js";
 import {
   forEachSpatialSkeletonSourceScale,
@@ -97,10 +98,7 @@ import {
   mergeSpatiallyIndexedSkeletonOverlaySegmentIds,
   retainSpatiallyIndexedSkeletonOverlaySegment,
 } from "#src/skeleton/segment_overlay.js";
-import {
-  getSkeletonChunkTopology,
-  type SkeletonChunkTopology,
-} from "#src/skeleton/skeleton_chunk_topology.js";
+import { getSkeletonChunkNodes } from "#src/skeleton/skeleton_chunk_nodes.js";
 import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
 import {
   edgeColorPathsGlsl,
@@ -1461,9 +1459,9 @@ export class SkeletonLayer
   layerChunkProgressInfo = new LayerChunkProgressInfo();
   redrawNeeded = new NullarySignal();
   private sharedObject: SegmentationLayerSharedObject;
-  private readonly chunkTopologies = new WeakMap<
+  private readonly chunkNodes = new WeakMap<
     SkeletonChunk,
-    SkeletonChunkTopology
+    readonly SkeletonNode[]
   >();
   vertexAttributes: VertexAttributeRenderInfo[];
   // Non-spatial skeletons iterate segments individually and pass color/alpha via
@@ -1541,23 +1539,17 @@ export class SkeletonLayer
   }
 
   getSegmentNodes(segmentId: bigint): readonly SkeletonNode[] | undefined {
-    return this.getSegmentTopology(segmentId)?.nodes;
-  }
-
-  areParentsInferred(segmentId: bigint): boolean {
-    return this.getSegmentTopology(segmentId)?.parentsInferred ?? false;
-  }
-
-  private getSegmentTopology(segmentId: bigint) {
     const chunk = this.source.chunks.get(getObjectKey(segmentId));
     if (chunk === undefined) return undefined;
-    let topology = this.chunkTopologies.get(chunk);
-    if (topology === undefined) {
-      topology = getSkeletonChunkTopology(segmentId, chunk);
-      this.chunkTopologies.set(chunk, topology);
+    let nodes = this.chunkNodes.get(chunk);
+    if (nodes === undefined) {
+      nodes = getSkeletonChunkNodes(segmentId, chunk);
+      this.chunkNodes.set(chunk, nodes);
     }
-    return topology;
+    return nodes;
   }
+
+  readonly parentsInferred = true;
 
   draw(
     renderContext: SliceViewPanelRenderContext | PerspectiveViewRenderContext,
@@ -3626,8 +3618,10 @@ export class SpatiallyIndexedSkeletonLayer
     return this.inspectionState?.getCachedSegmentNodes(segmentId);
   }
 
-  areParentsInferred(): boolean {
-    return false;
+  get parentsInferred() {
+    return (
+      this.fragmentSource?.edgeDirection === SkeletonEdgeDirection.UNDIRECTED
+    );
   }
 
   getNode(nodeId: bigint): SkeletonNode | undefined {

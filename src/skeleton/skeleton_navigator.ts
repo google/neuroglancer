@@ -44,7 +44,7 @@ export interface SkeletonNodeAccess {
   // Undefined until every node of the segment is in memory.
   // Returns the same array while the nodes are unchanged.
   getSegmentNodes(segmentId: bigint): readonly SkeletonNode[] | undefined;
-  areParentsInferred(segmentId: bigint): boolean;
+  readonly parentsInferred: boolean;
   readonly nodesChanged: NullaryReadonlySignal;
   readonly hasPickableNodes: boolean;
   readonly displayState: {

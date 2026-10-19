@@ -19,6 +19,7 @@ import type {
   SkeletonEdge,
   SkeletonNode,
   SkeletonNodeAttributes,
+  SkeletonFragmentNode,
   SkeletonFragmentSource,
 } from "#src/skeleton/api.js";
 import { getSpatialSkeletonEditCommandFactoryFromSource } from "#src/skeleton/command_factories.js";
@@ -73,6 +74,7 @@ import {
   type SpatialSkeletonOptimisticEditQueueEntry,
   type SpatialSkeletonOptimisticEditState,
 } from "#src/skeleton/optimistic_edit/types.js";
+import { resolveSkeletonParents } from "#src/skeleton/skeleton_edges.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { bigintCompare } from "#src/util/bigint.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -300,8 +302,9 @@ async function fetchCompleteSkeleton(
   signal: AbortSignal,
 ): Promise<SkeletonNode[]> {
   const { fragmentKeys } = await source.getSkeletonManifest(segmentId, signal);
-  const nodesById = new Map<bigint, SkeletonNode>();
-  const parentLinks: SkeletonEdge[] = [];
+  const nodeIds = new Set<bigint>();
+  const nodes: SkeletonFragmentNode[] = [];
+  const edges: SkeletonEdge[] = [];
   // One request at a time, so that a limit on concurrent skeleton reads also limits requests.
   for (const fragmentKey of fragmentKeys) {
     signal.throwIfAborted();
@@ -311,30 +314,17 @@ async function fetchCompleteSkeleton(
       signal,
     );
     for (const node of fragment.nodes) {
-      if (nodesById.has(node.nodeId)) {
+      if (nodeIds.has(node.nodeId)) {
         throw new Error(
           `Skeleton ${segmentId} has node ${node.nodeId} in more than one fragment.`,
         );
       }
-      nodesById.set(node.nodeId, node);
+      nodeIds.add(node.nodeId);
+      nodes.push(node);
     }
-    parentLinks.push(...(fragment.crossFragmentEdges ?? []));
+    edges.push(...fragment.edges);
   }
-  for (const { childNodeId: nodeId, parentNodeId } of parentLinks) {
-    const node = nodesById.get(nodeId);
-    if (node === undefined) {
-      throw new Error(
-        `Skeleton ${segmentId} links a parent to node ${nodeId}, which no fragment has.`,
-      );
-    }
-    if (node.parentNodeId !== undefined && node.parentNodeId !== parentNodeId) {
-      throw new Error(
-        `Skeleton ${segmentId} gives node ${nodeId} two parents: ${node.parentNodeId} and ${parentNodeId}.`,
-      );
-    }
-    nodesById.set(nodeId, { ...node, parentNodeId });
-  }
-  return [...nodesById.values()];
+  return resolveSkeletonParents(segmentId, nodes, edges, source.edgeDirection);
 }
 
 export function normalizeSkeletonNode(

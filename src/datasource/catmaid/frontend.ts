@@ -48,11 +48,14 @@ import {
   SegmentPropertyMap,
   normalizeInlineSegmentPropertyMap,
 } from "#src/segmentation_display_state/property_map.js";
-import type {
-  EditableSkeletonSource,
-  SkeletonFragment,
-  SkeletonManifest,
-  SkeletonSpatialIndexMetadata,
+import {
+  SkeletonEdgeDirection,
+  type EditableSkeletonSource,
+  type SkeletonEdge,
+  type SkeletonFragment,
+  type SkeletonFragmentNode,
+  type SkeletonManifest,
+  type SkeletonSpatialIndexMetadata,
 } from "#src/skeleton/api.js";
 import { SkeletonDataSourceState } from "#src/skeleton/find_path.js";
 import {
@@ -72,6 +75,7 @@ class CatmaidSkeletonSource
   implements EditableSkeletonSource
 {
   readonly confidenceValues = CATMAID_SPATIAL_SKELETON_CONFIDENCE_VALUES;
+  readonly edgeDirection = SkeletonEdgeDirection.CHILD_TO_PARENT;
 
   constructor(private readonly catmaidClient: CatmaidClient) {
     super({ getClient: () => catmaidClient });
@@ -87,9 +91,18 @@ class CatmaidSkeletonSource
     _fragmentKey: string,
     signal: AbortSignal,
   ): Promise<SkeletonFragment> {
-    return {
-      nodes: await this.catmaidClient.getSkeleton(skeletonId, { signal }),
-    };
+    const skeletonNodes = await this.catmaidClient.getSkeleton(skeletonId, {
+      signal,
+    });
+    const nodes: SkeletonFragmentNode[] = [];
+    const edges: SkeletonEdge[] = [];
+    for (const { parentNodeId, ...node } of skeletonNodes) {
+      nodes.push(node);
+      if (parentNodeId !== undefined) {
+        edges.push({ firstNodeId: node.nodeId, secondNodeId: parentNodeId });
+      }
+    }
+    return { nodes, edges };
   }
 }
 

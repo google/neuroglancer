@@ -465,7 +465,7 @@ function makeFindPathToolHarness(
           layer.spatialSkeletonState.getCachedSegmentNodes(segmentId),
         nodesChanged: new NullarySignal(),
         hasPickableNodes: false,
-        areParentsInferred: () => false,
+        parentsInferred: false,
         displayState: { transform: new WatchableValue(undefined as any) },
       }),
     ),

@@ -1314,7 +1314,7 @@ function makeSkeletonLayer() {
   });
   const layer = Object.assign(Object.create(SkeletonLayer.prototype), {
     source,
-    chunkTopologies: new WeakMap(),
+    chunkNodes: new WeakMap(),
   });
   return { source, layer };
 }

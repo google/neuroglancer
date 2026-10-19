@@ -16,7 +16,13 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import type { SkeletonFragment, SkeletonNode } from "#src/skeleton/api.js";
+import {
+  SkeletonEdgeDirection,
+  type SkeletonEdge,
+  type SkeletonFragment,
+  type SkeletonFragmentNode,
+  type SkeletonNode,
+} from "#src/skeleton/api.js";
 import { SpatialSkeletonActions } from "#src/skeleton/command_protocol.js";
 import {
   createCompleteSkeletonSnapshot,
@@ -43,12 +49,25 @@ function makeWholeSkeletonReads(
   ) => unknown,
 ) {
   return {
+    edgeDirection: SkeletonEdgeDirection.CHILD_TO_PARENT,
     getSkeletonManifest: async () => ({ fragmentKeys: ["skeleton"] }),
     getSkeletonFragment: async (
       skeletonId: bigint,
       _fragmentKey: string,
       signal: AbortSignal,
-    ) => ({ nodes: await getSkeleton(skeletonId, { signal }) }),
+    ) => {
+      const skeletonNodes = (await getSkeleton(skeletonId, {
+        signal,
+      })) as SkeletonNode[];
+      return {
+        nodes: skeletonNodes.map(({ parentNodeId: _, ...node }) => node),
+        edges: skeletonNodes.flatMap(({ nodeId, parentNodeId }) =>
+          parentNodeId === undefined
+            ? []
+            : [{ firstNodeId: nodeId, secondNodeId: parentNodeId }],
+        ),
+      };
+    },
   };
 }
 
@@ -176,22 +195,29 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function makeFragmentNode(nodeId: bigint, parentNodeId?: bigint): SkeletonNode {
-  return {
-    nodeId,
-    segmentId: 7n,
-    position: new Float32Array([0, 0, 0]),
-    parentNodeId,
-  };
+function makeFragmentNode(nodeId: bigint): SkeletonFragmentNode {
+  return { nodeId, segmentId: 7n, position: new Float32Array([0, 0, 0]) };
+}
+
+function makeEdge(firstNodeId: bigint, secondNodeId: bigint): SkeletonEdge {
+  return { firstNodeId, secondNodeId };
 }
 
 function makeFragmentedSkeletonLayer(
   fragments: Record<string, SkeletonFragment | Error>,
-  manifestReady: Promise<void> = Promise.resolve(),
+  options: {
+    edgeDirection?: SkeletonEdgeDirection;
+    manifestReady?: Promise<void>;
+  } = {},
 ) {
+  const {
+    edgeDirection = SkeletonEdgeDirection.CHILD_TO_PARENT,
+    manifestReady = Promise.resolve(),
+  } = options;
   const requestedFragmentKeys: string[] = [];
   const layer = {
     fragmentSource: {
+      edgeDirection,
       async getSkeletonManifest() {
         await manifestReady;
         return { fragmentKeys: Object.keys(fragments) };
@@ -815,7 +841,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       ...makeEditableSourceCommands(),
       rerootCommand: makeCommandFactory(SpatialSkeletonActions.reroot),
       getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-      getSkeletonFragment: async () => ({ nodes: [] }),
+      getSkeletonFragment: async () => ({ nodes: [], edges: [] }),
     };
 
     expect(
@@ -845,7 +871,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
         SpatialSkeletonActions.editNodeConfidence,
       ),
       getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-      getSkeletonFragment: async () => ({ nodes: [] }),
+      getSkeletonFragment: async () => ({ nodes: [], edges: [] }),
     };
 
     expect(
@@ -2718,8 +2744,11 @@ describe("skeleton/spatial_skeleton_manager", () => {
     it("returns the nodes of every fragment that the manifest lists", async () => {
       const state = new SpatialSkeletonState();
       const { layer } = makeFragmentedSkeletonLayer({
-        "0.0.0": { nodes: [makeFragmentNode(1n), makeFragmentNode(2n, 1n)] },
-        "0.0.1": { nodes: [makeFragmentNode(3n, 2n)] },
+        "0.0.0": {
+          nodes: [makeFragmentNode(1n), makeFragmentNode(2n)],
+          edges: [makeEdge(2n, 1n)],
+        },
+        "0.0.1": { nodes: [makeFragmentNode(3n)], edges: [makeEdge(3n, 2n)] },
       });
 
       const nodes = await state.getFullSegmentNodes(layer, 7n);
@@ -2731,7 +2760,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
     it("fails the whole read when one fragment fails", async () => {
       const state = new SpatialSkeletonState();
       const { layer } = makeFragmentedSkeletonLayer({
-        "0.0.0": { nodes: [makeFragmentNode(1n)] },
+        "0.0.0": { nodes: [makeFragmentNode(1n)], edges: [] },
         "0.0.1": new Error("fragment missing"),
       });
 
@@ -2744,7 +2773,7 @@ describe("skeleton/spatial_skeleton_manager", () => {
       const state = new SpatialSkeletonState();
       const { layer, requestedFragmentKeys } = makeFragmentedSkeletonLayer({
         "0.0.0": new Error("fragment missing"),
-        "0.0.1": { nodes: [makeFragmentNode(2n)] },
+        "0.0.1": { nodes: [makeFragmentNode(2n)], edges: [] },
       });
 
       await expect(state.getFullSegmentNodes(layer, 7n)).rejects.toThrow(
@@ -2757,8 +2786,8 @@ describe("skeleton/spatial_skeleton_manager", () => {
       const state = new SpatialSkeletonState();
       const manifestReady = deferred<void>();
       const { layer, requestedFragmentKeys } = makeFragmentedSkeletonLayer(
-        { "0.0.0": { nodes: [makeFragmentNode(1n)] } },
-        manifestReady.promise,
+        { "0.0.0": { nodes: [makeFragmentNode(1n)], edges: [] } },
+        { manifestReady: manifestReady.promise },
       );
       const read = state.getFullSegmentNodes(layer, 7n);
       const aborted = expect(read).rejects.toMatchObject({
@@ -2777,9 +2806,13 @@ describe("skeleton/spatial_skeleton_manager", () => {
     it("rejects a skeleton that has one node in two fragments", async () => {
       const state = new SpatialSkeletonState();
       const { layer } = makeFragmentedSkeletonLayer({
-        "0.0.0": { nodes: [makeFragmentNode(1n), makeFragmentNode(2n, 1n)] },
+        "0.0.0": {
+          nodes: [makeFragmentNode(1n), makeFragmentNode(2n)],
+          edges: [],
+        },
         "0.0.1": {
-          nodes: [makeFragmentNode(2n, 1n), makeFragmentNode(3n, 2n)],
+          nodes: [makeFragmentNode(2n), makeFragmentNode(3n)],
+          edges: [],
         },
       });
 
@@ -2791,16 +2824,88 @@ describe("skeleton/spatial_skeleton_manager", () => {
     it("joins a node to a parent that another fragment links to it", async () => {
       const state = new SpatialSkeletonState();
       const { layer } = makeFragmentedSkeletonLayer({
-        "0.0.0": { nodes: [makeFragmentNode(3n)] },
+        "0.0.0": { nodes: [makeFragmentNode(3n)], edges: [] },
         "0.0.1": {
-          nodes: [makeFragmentNode(1n), makeFragmentNode(2n, 1n)],
-          crossFragmentEdges: [{ childNodeId: 3n, parentNodeId: 2n }],
+          nodes: [makeFragmentNode(1n), makeFragmentNode(2n)],
+          edges: [makeEdge(2n, 1n), makeEdge(3n, 2n)],
         },
       });
 
       const nodes = await state.getFullSegmentNodes(layer, 7n);
 
       expect(nodes.find((node) => node.nodeId === 3n)?.parentNodeId).toBe(2n);
+    });
+
+    it("takes the first node of each edge as the parent when the source lists edges parent to child", async () => {
+      const state = new SpatialSkeletonState();
+      const { layer } = makeFragmentedSkeletonLayer(
+        {
+          skeleton: {
+            nodes: [makeFragmentNode(1n), makeFragmentNode(2n)],
+            edges: [makeEdge(1n, 2n)],
+          },
+        },
+        { edgeDirection: SkeletonEdgeDirection.PARENT_TO_CHILD },
+      );
+
+      const nodes = await state.getFullSegmentNodes(layer, 7n);
+
+      expect(nodes.map((node) => [node.nodeId, node.parentNodeId])).toEqual([
+        [1n, undefined],
+        [2n, 1n],
+      ]);
+    });
+
+    it("rejects a directed skeleton that gives one node two parents", async () => {
+      const state = new SpatialSkeletonState();
+      const { layer } = makeFragmentedSkeletonLayer({
+        "0.0.0": {
+          nodes: [makeFragmentNode(1n), makeFragmentNode(2n)],
+          edges: [makeEdge(2n, 1n)],
+        },
+        "0.0.1": { nodes: [makeFragmentNode(3n)], edges: [makeEdge(2n, 3n)] },
+      });
+
+      await expect(state.getFullSegmentNodes(layer, 7n)).rejects.toThrow(
+        "Skeleton 7 gives node 2 two parents.",
+      );
+    });
+
+    it("rejects a directed edge to a node that no fragment has", async () => {
+      const state = new SpatialSkeletonState();
+      const { layer } = makeFragmentedSkeletonLayer({
+        skeleton: { nodes: [makeFragmentNode(2n)], edges: [makeEdge(2n, 1n)] },
+      });
+
+      await expect(state.getFullSegmentNodes(layer, 7n)).rejects.toThrow(
+        "Skeleton 7 has an edge to node 1, which no fragment has.",
+      );
+    });
+
+    it("infers parents from the first node of each part when the source's edges have no direction", async () => {
+      const state = new SpatialSkeletonState();
+      const { layer } = makeFragmentedSkeletonLayer(
+        {
+          "0.0.0": {
+            nodes: [makeFragmentNode(1n), makeFragmentNode(2n)],
+            edges: [makeEdge(2n, 3n)],
+          },
+          "0.0.1": {
+            nodes: [makeFragmentNode(3n), makeFragmentNode(4n)],
+            edges: [makeEdge(1n, 3n)],
+          },
+        },
+        { edgeDirection: SkeletonEdgeDirection.UNDIRECTED },
+      );
+
+      const nodes = await state.getFullSegmentNodes(layer, 7n);
+
+      expect(nodes.map((node) => [node.nodeId, node.parentNodeId])).toEqual([
+        [1n, undefined],
+        [2n, 3n],
+        [3n, 1n],
+        [4n, undefined],
+      ]);
     });
 
     it("returns no nodes for a skeleton the source does not have", async () => {

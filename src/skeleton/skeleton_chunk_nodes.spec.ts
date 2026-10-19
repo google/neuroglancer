@@ -20,8 +20,9 @@ import type { SkeletonNode } from "#src/skeleton/api.js";
 import {
   buildSkeletonNavigationGraph,
   getBranchEnd,
+  getSkeletonRootNode,
 } from "#src/skeleton/navigation_graph.js";
-import { getSkeletonChunkTopology } from "#src/skeleton/skeleton_chunk_topology.js";
+import { getSkeletonChunkNodes } from "#src/skeleton/skeleton_chunk_nodes.js";
 
 function makePackedSkeletonChunk(
   positions: readonly (readonly number[])[],
@@ -40,7 +41,7 @@ function getParentNodeIds(nodes: readonly SkeletonNode[]) {
 }
 
 describe("skeleton nodes from a chunk", () => {
-  it("keeps the stored parents of a file whose edges form a tree", () => {
+  it("infers parents from the lowest vertex even when the stored edges form a tree", () => {
     const chunk = makePackedSkeletonChunk(
       [
         [0, 0, 0],
@@ -53,14 +54,57 @@ describe("skeleton nodes from a chunk", () => {
       ],
     );
 
-    const topology = getSkeletonChunkTopology(7n, chunk);
+    const nodes = getSkeletonChunkNodes(7n, chunk);
 
-    expect(getParentNodeIds(topology.nodes)).toEqual([
-      [0n, 1n],
-      [1n, 2n],
-      [2n, undefined],
+    expect(getParentNodeIds(nodes)).toEqual([
+      [0n, undefined],
+      [1n, 0n],
+      [2n, 1n],
     ]);
-    expect(topology.parentsInferred).toBe(false);
+  });
+
+  it("goes to a root and along a branch of a skeleton with a loop and two separate parts", () => {
+    const chunk = makePackedSkeletonChunk(
+      [
+        [0, 0, 0],
+        [10, 0, 0],
+        [20, 0, 0],
+        [100, 0, 0],
+        [110, 0, 0],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 0],
+        [3, 4],
+      ],
+    );
+
+    const graph = buildSkeletonNavigationGraph(
+      getSkeletonChunkNodes(7n, chunk),
+    );
+
+    expect(graph.rootNodeIds).toEqual([0n, 3n]);
+    expect(getSkeletonRootNode(graph).nodeId).toBe(0n);
+    expect(getBranchEnd(graph, 4n).nodeId).toBe(4n);
+  });
+
+  it("ignores an edge to a vertex that the skeleton does not have", () => {
+    const chunk = makePackedSkeletonChunk(
+      [
+        [0, 0, 0],
+        [10, 0, 0],
+      ],
+      [
+        [0, 1],
+        [1, 5],
+      ],
+    );
+
+    expect(getParentNodeIds(getSkeletonChunkNodes(7n, chunk))).toEqual([
+      [0n, undefined],
+      [1n, 0n],
+    ]);
   });
 
   it("infers parents from the lowest vertex when the edges have no direction", () => {
@@ -76,14 +120,13 @@ describe("skeleton nodes from a chunk", () => {
       ],
     );
 
-    const topology = getSkeletonChunkTopology(7n, chunk);
+    const nodes = getSkeletonChunkNodes(7n, chunk);
 
-    expect(getParentNodeIds(topology.nodes)).toEqual([
+    expect(getParentNodeIds(nodes)).toEqual([
       [0n, undefined],
       [1n, 2n],
       [2n, 0n],
     ]);
-    expect(topology.parentsInferred).toBe(true);
   });
 
   it("cuts a loop in the edges so that branch navigation ends", () => {
@@ -100,7 +143,7 @@ describe("skeleton nodes from a chunk", () => {
       ],
     );
 
-    const { nodes } = getSkeletonChunkTopology(7n, chunk);
+    const nodes = getSkeletonChunkNodes(7n, chunk);
 
     expect(getParentNodeIds(nodes)).toEqual([
       [0n, undefined],

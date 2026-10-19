@@ -47,7 +47,7 @@ function makeNodeAccess(
     getSegmentNodes,
     nodesChanged: new NullarySignal(),
     hasPickableNodes: false,
-    areParentsInferred: () => false,
+    parentsInferred: false,
     displayState: { transform: new WatchableValue(undefined as any) },
   };
   return new WatchableValue<SkeletonNodeAccess | undefined>(access);
