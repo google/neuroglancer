@@ -19,6 +19,7 @@ import type {
   PickedSpatialSkeletonState,
 } from "#src/layer/index.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+import { Uint64MapEntry } from "#src/segmentation_display_state/frontend.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { parseUint64 } from "#src/util/json.js";
 import { NullarySignal } from "#src/util/signal.js";
@@ -63,7 +64,11 @@ export function getNodeIdFromLayerSelectionState(
 export function getSegmentIdFromLayerSelectionValue(
   state: { nodeId?: unknown; value?: unknown } | undefined,
 ) {
-  const segmentId = parseSelectionStateId(state?.value);
+  const value = state?.value;
+  const segmentId =
+    value instanceof Uint64MapEntry
+      ? value.value || value.key
+      : parseSelectionStateId(value);
   return segmentId === 0n ? undefined : segmentId;
 }
 

@@ -18,12 +18,30 @@ import { describe, expect, it } from "vitest";
 
 import type { LayerSelectedValues } from "#src/layer/index.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
-import {
+
+if (!("WebGL2RenderingContext" in globalThis)) {
+  Object.defineProperty(globalThis, "WebGL2RenderingContext", {
+    value: new Proxy(class WebGL2RenderingContext {} as any, {
+      get(target, property, receiver) {
+        if (Reflect.has(target, property)) {
+          return Reflect.get(target, property, receiver);
+        }
+        return 0;
+      },
+    }),
+    configurable: true,
+  });
+}
+
+const {
   getNodeIdFromLayerSelectionState,
   getSegmentIdFromLayerSelectionValue,
   hasSkeletonNodeSelection,
   SkeletonHoverState,
-} from "#src/layer/segmentation/selection.js";
+} = await import("#src/layer/segmentation/selection.js");
+const { Uint64MapEntry } = await import(
+  "#src/segmentation_display_state/frontend.js"
+);
 
 describe("layer/segmentation/selection", () => {
   it("recognizes field-based spatial skeleton node selections", () => {
@@ -79,6 +97,22 @@ describe("layer/segmentation/selection", () => {
         nodeId: "18446744073709551615",
       }),
     ).toBe(18446744073709551615n);
+  });
+
+  it("reads the segment of a clicked segment that has a label", () => {
+    expect(
+      getSegmentIdFromLayerSelectionValue({
+        value: new Uint64MapEntry(7n, undefined, "axon"),
+      }),
+    ).toBe(7n);
+  });
+
+  it("reads the merged segment of a clicked segment that has an equivalence", () => {
+    expect(
+      getSegmentIdFromLayerSelectionValue({
+        value: new Uint64MapEntry(7n, 3n),
+      }),
+    ).toBe(3n);
   });
 
   it("extracts the hovered node id only for matching render layers", () => {
