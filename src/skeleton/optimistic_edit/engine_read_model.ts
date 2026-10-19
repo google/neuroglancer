@@ -53,7 +53,6 @@ export interface SpatialSkeletonOptimisticEngineReadModelEntry {
   readonly kind: SpatialSkeletonIntentKind;
   readonly lifecycle: SpatialSkeletonOptimisticIntentLifecycle;
   readonly terminal: boolean;
-  readonly dependencySequences: readonly number[];
   readonly rejectionReason: unknown;
   readonly canceledLaterIntentCount?: number;
   readonly metadata: {
@@ -103,7 +102,6 @@ export function projectSpatialSkeletonOptimisticQueueSnapshot(
 
 export function projectSpatialSkeletonOptimisticRecentActivity(
   entries: readonly SpatialSkeletonOptimisticEngineReadModelEntry[],
-  queueInstanceId: number,
   capacity: number,
 ): readonly SpatialSkeletonOptimisticEditActivityEntry[] {
   return entries
@@ -121,14 +119,12 @@ export function projectSpatialSkeletonOptimisticRecentActivity(
       const reason =
         status === "not-saved" ? getRejectedActivityReason(entry) : undefined;
       return {
-        queueInstanceId,
         operationId: entry.sequence,
         kind: entry.metadata.kind,
         status,
         intent: entry.kind,
         commandLabel: entry.metadata.commandLabel,
         authorityReason,
-        authorityPresentation: entry.metadata.authorityPresentation,
         ...(reason === undefined || reason.length === 0 ? {} : { reason }),
         ...(entry.canceledLaterIntentCount === undefined
           ? {}

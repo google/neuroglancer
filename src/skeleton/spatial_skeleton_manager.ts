@@ -215,11 +215,6 @@ export interface SpatialSkeletonInputReference {
   release(): void;
 }
 
-export interface SpatialSkeletonPresentationExactSegment {
-  readonly segmentId: bigint;
-  readonly snapshot: SpatialSkeletonCachedSegmentSnapshotHandle;
-}
-
 export interface SpatialSkeletonPresentationLogicalOwner {
   readonly segmentId: bigint;
   readonly logicalHandle: SpatialSkeletonLogicalSegmentHandle;
@@ -241,7 +236,6 @@ export interface SpatialSkeletonPresentationNumericAlias {
  */
 export interface SpatialSkeletonPresentationSnapshot {
   readonly revision: number;
-  readonly exactSegmentSnapshots: readonly SpatialSkeletonPresentationExactSegment[];
   /** Explicit projection removals, including pending deletions and retired IDs. */
   readonly removedSegmentIds: readonly bigint[];
   readonly activeLogicalOwners: readonly SpatialSkeletonPresentationLogicalOwner[];
@@ -279,10 +273,6 @@ export interface SpatialSkeletonProjectionStatePublicationRequest {
   readonly provisionalNodeIds: Iterable<bigint>;
   readonly preparationIntentIdsToRemove: Iterable<number>;
   readonly notify: boolean;
-}
-
-export interface SpatialSkeletonAdoptedProjectionStatePublication {
-  readonly cacheRevisions: ReadonlyMap<bigint, number>;
 }
 
 function hasFunction<T extends string>(
@@ -793,7 +783,6 @@ export class SpatialSkeletonState
     new WatchableValue<SpatialSkeletonPresentationSnapshot>(
       Object.freeze({
         revision: 0,
-        exactSegmentSnapshots: Object.freeze([]),
         removedSegmentIds: Object.freeze([]),
         activeLogicalOwners: Object.freeze([]),
         numericAliases: Object.freeze([]),
@@ -1135,12 +1124,6 @@ export class SpatialSkeletonState
 
   private prepareSpatialSkeletonPresentationPublication(
     options: {
-      readonly fullSegmentSnapshotHandles?: ReadonlyMap<
-        bigint,
-        SpatialSkeletonCachedSegmentSnapshotHandle
-      >;
-      readonly fullSegmentNodeRevisions?: ReadonlyMap<bigint, number>;
-      readonly fullSegmentNodeRevisionFloor?: number;
       readonly logicalOwners?: ReadonlyMap<
         bigint,
         SpatialSkeletonLogicalSegmentHandle
@@ -1163,26 +1146,6 @@ export class SpatialSkeletonState
         options.preparationsById ?? this.spatialSkeletonPreparationsById
       ).values(),
     ].sort((a, b) => a.sequence - b.sequence || a.intentId - b.intentId);
-    const revisionFloor =
-      options.fullSegmentNodeRevisionFloor ?? this.fullSegmentNodeRevisionFloor;
-    const revisions =
-      options.fullSegmentNodeRevisions ?? this.fullSegmentNodeRevisions;
-    const exactSegmentSnapshots = [
-      ...(options.fullSegmentSnapshotHandles ??
-        this.fullSegmentSnapshotHandles),
-    ]
-      .filter(
-        ([segmentId, snapshot]) =>
-          snapshot.cacheRevision ===
-          Math.max(revisionFloor, revisions.get(segmentId) ?? 0),
-      )
-      .sort(([a], [b]) => bigintCompare(a, b))
-      .map(([segmentId, snapshot]) =>
-        Object.freeze({
-          segmentId,
-          snapshot: Object.freeze({ ...snapshot }),
-        }),
-      );
     const activeLogicalOwners = [
       ...(options.logicalOwners ?? this.presentationLogicalOwners),
     ]
@@ -1210,7 +1173,6 @@ export class SpatialSkeletonState
     return Object.freeze({
       revision:
         options.revision ?? this.spatialSkeletonPresentation.value.revision + 1,
-      exactSegmentSnapshots: Object.freeze(exactSegmentSnapshots),
       removedSegmentIds: Object.freeze(
         [
           ...(options.removedSegmentIds ?? this.presentationRemovedSegmentIds),
@@ -1638,7 +1600,7 @@ export class SpatialSkeletonState
     const historyChanged = this.commandHistory.reset();
     if (cacheChanged) {
       this.clearFullSkeletonCache();
-      this.markNodeDataChanged({ invalidateFullSkeletonCache: false });
+      this.markNodeDataChanged();
     }
     return (
       cacheChanged ||
@@ -1652,10 +1614,7 @@ export class SpatialSkeletonState
     );
   }
 
-  markNodeDataChanged(options: { invalidateFullSkeletonCache?: boolean } = {}) {
-    if (options.invalidateFullSkeletonCache ?? true) {
-      this.clearFullSkeletonCache();
-    }
+  markNodeDataChanged() {
     if (this.presentationTransactionDepth !== 0) {
       this.nodeDataNotificationPending = true;
     } else {
@@ -1950,7 +1909,7 @@ export class SpatialSkeletonState
         ) || changed;
     }
     if (changed && (options.notify ?? true)) {
-      this.markNodeDataChanged({ invalidateFullSkeletonCache: false });
+      this.markNodeDataChanged();
     }
     return changed;
   }
@@ -2140,8 +2099,6 @@ export class SpatialSkeletonState
       (request.notify && changedSegmentIds.length !== 0);
     const presentation = publishPresentation
       ? this.prepareSpatialSkeletonPresentationPublication({
-          fullSegmentSnapshotHandles: nextFullSegmentSnapshotHandles,
-          fullSegmentNodeRevisions: nextFullSegmentNodeRevisions,
           logicalOwners: identities.nextOwners,
           numericAliases: identities.nextAliases,
           provisionalNodeIds: identities.nextProvisionalNodeIds,
@@ -2181,7 +2138,7 @@ export class SpatialSkeletonState
   /** Installs a genuine prepared publication using reference assignments only. */
   adoptPreparedSpatialSkeletonProjectionStatePublication(
     publication: SpatialSkeletonPreparedProjectionStatePublication,
-  ): SpatialSkeletonAdoptedProjectionStatePublication | undefined {
+  ): boolean {
     const prepared =
       publication as SpatialSkeletonPreparedProjectionStatePublicationImplementation;
     if (
@@ -2202,13 +2159,13 @@ export class SpatialSkeletonState
         prepared.expectedCacheRevisionClock ||
       this.spatialSkeletonPresentation.value !== prepared.expectedPresentation
     ) {
-      return undefined;
+      return false;
     }
     for (const [segmentId, expectedRevision] of prepared.expectedRevisions) {
       if (
         this.getCurrentCachedSegmentRevision(segmentId) !== expectedRevision
       ) {
-        return undefined;
+        return false;
       }
     }
 
@@ -2230,7 +2187,7 @@ export class SpatialSkeletonState
       this.presentationPublicationPending = false;
       this.preparedPresentationPublication = prepared.presentation;
     }
-    return prepared;
+    return true;
   }
 
   /** Runs callback-bearing cache cleanup only after core adoption completed. */
@@ -2402,7 +2359,7 @@ export class SpatialSkeletonState
       this.cachedNodesById.set(nodeId, node);
     }
     if (options.notify ?? true) {
-      this.markNodeDataChanged({ invalidateFullSkeletonCache: false });
+      this.markNodeDataChanged();
     }
     return true;
   }

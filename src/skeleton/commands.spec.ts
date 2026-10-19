@@ -19,10 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
 import type { SpatiallyIndexedSkeletonNode } from "#src/skeleton/api.js";
 import { SpatialSkeletonCommandHistory } from "#src/skeleton/command_history.js";
-import {
-  SpatialSkeletonActions,
-  SpatialSkeletonHistoryActions,
-} from "#src/skeleton/command_protocol.js";
+import { SpatialSkeletonActions } from "#src/skeleton/command_protocol.js";
 import {
   executeSpatialSkeletonAddNode,
   executeSpatialSkeletonInsertNode,
@@ -39,15 +36,7 @@ import {
   showSpatialSkeletonActionError,
   undoSpatialSkeletonCommand,
 } from "#src/skeleton/commands.js";
-import {
-  SpatialSkeletonEditConflictError,
-  SpatialSkeletonEditRecoveryError,
-} from "#src/skeleton/edit_errors.js";
-import {
-  findSpatiallyIndexedSkeletonNode,
-  getSpatiallyIndexedSkeletonDirectChildren,
-  getSpatiallyIndexedSkeletonNodeParent,
-} from "#src/skeleton/node_traversal.js";
+import { SpatialSkeletonEditConflictError } from "#src/skeleton/edit_errors.js";
 import { resetGlobalSpatialSkeletonMutationAuthorityLeaseCoordinatorForTesting } from "#src/skeleton/optimistic_edit/authority_lease_coordinator.js";
 import { SpatialSkeletonOptimisticReloadRequiredError } from "#src/skeleton/optimistic_edit/fatal.js";
 import {
@@ -425,33 +414,6 @@ function makeOptimisticAddNodeTestLayer(options: {
     selectedSpatialSkeletonNodeInfo,
     spatialSkeletonState,
     getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
-    getCachedSpatialSkeletonSegmentNodesForEdit: (requestedSegmentId: bigint) =>
-      spatialSkeletonState.getCachedSegmentNodes(requestedSegmentId) ?? [],
-    async getSpatialSkeletonDeleteOperationContext(
-      node: SpatiallyIndexedSkeletonNode,
-    ) {
-      const segmentNodes =
-        spatialSkeletonState.getCachedSegmentNodes(node.segmentId) ?? [];
-      const currentNode = findSpatiallyIndexedSkeletonNode(
-        segmentNodes,
-        node.nodeId,
-      );
-      if (currentNode === undefined) {
-        throw new Error(`Unable to resolve cached node ${node.nodeId}.`);
-      }
-      const childNodes = getSpatiallyIndexedSkeletonDirectChildren(
-        segmentNodes,
-        currentNode.nodeId,
-      );
-      return {
-        node: currentNode,
-        parentNode: getSpatiallyIndexedSkeletonNodeParent(
-          segmentNodes,
-          currentNode,
-        ),
-        childNodes,
-      };
-    },
     selectSegment: vi.fn(),
     selectAndMoveToSpatialSkeletonNode: vi.fn(),
     selectSpatialSkeletonNode: vi.fn(
@@ -7462,23 +7424,6 @@ describe("skeleton edit failure messages", () => {
     showSpatialSkeletonActionError(SpatialSkeletonActions.deleteNodes, error);
     expect(StatusMessage.showTemporaryMessage).toHaveBeenCalledWith(message);
     expect(StatusMessage.showErrorMessage).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    SpatialSkeletonActions.reroot,
-    SpatialSkeletonHistoryActions.undo,
-    SpatialSkeletonHistoryActions.redo,
-  ] as const)("keeps recovery guidance persistent for %s", (operation) => {
-    suppressStatusMessages();
-    const error = new SpatialSkeletonEditRecoveryError(
-      "The edit committed. Refresh the page to sync.",
-      { cause: new Error("revision refresh failed") },
-    );
-    showSpatialSkeletonActionError(operation, error);
-    expect(StatusMessage.showErrorMessage).toHaveBeenCalledWith(
-      "The edit committed. Refresh the page to sync.: revision refresh failed",
-    );
-    expect(StatusMessage.showTemporaryMessage).not.toHaveBeenCalled();
   });
 
   it("keeps the refresh message for an outdated-state conflict", () => {

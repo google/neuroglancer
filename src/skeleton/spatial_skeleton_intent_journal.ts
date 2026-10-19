@@ -79,7 +79,6 @@ export interface SpatialSkeletonCommittedMutationAttempt<
 }
 
 export interface SpatialSkeletonIntentRecord<
-  HistoryTicketId,
   RequestedResult,
   InverseDelta,
   Metadata,
@@ -87,7 +86,6 @@ export interface SpatialSkeletonIntentRecord<
     SpatialSkeletonCommittedMutationAttempt = SpatialSkeletonCommittedMutationAttempt,
 > {
   readonly sequence: number;
-  readonly historyTicketId: HistoryTicketId;
   readonly kind: SpatialSkeletonIntentKind;
   readonly resources: readonly SpatialSkeletonIntentResource[];
   readonly resourceDependencySequences: readonly number[];
@@ -495,7 +493,6 @@ export class SpatialSkeletonIntentJournal<
 
   getEntries(options: { includeTerminal?: boolean } = {}) {
     const result: SpatialSkeletonIntentRecord<
-      HistoryTicketId,
       RequestedResult,
       InverseDelta,
       Metadata,
@@ -1271,7 +1268,6 @@ export class SpatialSkeletonIntentJournal<
       CommittedMutationAttempt
     >,
   ): SpatialSkeletonIntentRecord<
-    HistoryTicketId,
     RequestedResult,
     InverseDelta,
     Metadata,
@@ -1279,7 +1275,6 @@ export class SpatialSkeletonIntentJournal<
   > {
     return Object.freeze({
       sequence: record.sequence,
-      historyTicketId: record.historyTicketId,
       kind: record.kind,
       resources: Object.freeze([...record.resources]),
       resourceDependencySequences: Object.freeze(

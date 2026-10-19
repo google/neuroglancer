@@ -129,14 +129,12 @@ export type SpatialSkeletonOptimisticEditActivityStatus =
 
 /** Bounded, non-blocking terminal activity shown separately from queued work. */
 export interface SpatialSkeletonOptimisticEditActivityEntry {
-  readonly queueInstanceId?: number;
   readonly operationId?: number;
   readonly kind: string;
   readonly status: SpatialSkeletonOptimisticEditActivityStatus;
   readonly intent?: "execute" | "undo" | "redo";
   readonly commandLabel?: string;
   readonly authorityReason?: SpatialSkeletonOptimisticAuthorityReason;
-  readonly authorityPresentation?: SpatialSkeletonOptimisticAuthorityPresentation;
   readonly reason?: string;
   readonly canceledLaterIntentCount?: number;
 }

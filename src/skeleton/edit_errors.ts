@@ -63,14 +63,6 @@ export class SpatialSkeletonInspectionRequiredError extends Error {
   }
 }
 
-/** The edit committed, but local state needs recovery before further edits. */
-export class SpatialSkeletonEditRecoveryError extends Error {
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = "SpatialSkeletonEditRecoveryError";
-  }
-}
-
 export class SpatialSkeletonEditConflictError extends Error {
   constructor(detail?: string) {
     super(
@@ -102,23 +94,10 @@ export function isSpatialSkeletonInspectionRequiredError(error: unknown) {
   return error instanceof SpatialSkeletonInspectionRequiredError;
 }
 
-export function isSpatialSkeletonRecoveryError(error: unknown) {
-  return (
-    isSpatialSkeletonOutdatedStateError(error) ||
-    error instanceof SpatialSkeletonEditRecoveryError
-  );
-}
-
 export function getSpatialSkeletonActionErrorMessage(
   action: string,
   error: unknown,
 ) {
-  if (error instanceof SpatialSkeletonEditRecoveryError) {
-    return {
-      message: formatErrorMessage(error),
-      requiresDismissal: true,
-    };
-  }
   if (isSpatialSkeletonOutdatedStateError(error)) {
     return {
       message: `Failed to ${action} due to outdated state. Refresh the page to sync.`,

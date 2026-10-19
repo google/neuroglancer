@@ -2069,7 +2069,6 @@ interface SpatiallyIndexedSkeletonLayerOptions {
 
 interface SpatiallyIndexedSkeletonInspectionState {
   readonly nodeDataVersion: WatchableValueInterface<number>;
-  readonly pendingNodePositionVersion: WatchableValueInterface<number>;
   readonly spatialSkeletonPresentation: WatchableValueInterface<SpatialSkeletonPresentationSnapshot>;
   getCachedSegmentNodes(
     segmentId: bigint,
