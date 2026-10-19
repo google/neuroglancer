@@ -38,10 +38,7 @@ import type {
 } from "#src/datasource/index.js";
 import { makeEmptyDataSourceSpecification } from "#src/datasource/index.js";
 import type { DisplayContext, RenderedPanel } from "#src/display_context.js";
-import type {
-  LayerDataSourceChangeRuntimeDisposalContext,
-  LoadedDataSubsource,
-} from "#src/layer/layer_data_source.js";
+import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import {
   LayerDataSource,
   layerDataSourceSpecificationFromJson,
@@ -420,14 +417,6 @@ export class UserLayer extends RefCounted {
   // Should be overridden by derived classes.
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>): void {
     subsources;
-  }
-
-  // Derived classes may override to clear layer-owned runtime state for active
-  // datasources that explicitly request cleanup on source change.
-  disposeLayerRuntimeStateForDataSourceChange(
-    _context: LayerDataSourceChangeRuntimeDisposalContext,
-  ) {
-    return false;
   }
 
   updateDataSubsourceActivations() {

@@ -40,6 +40,7 @@ const { SegmentationUserLayer } = await import(
 );
 
 const {
+  MultiscaleSpatiallyIndexedSkeletonSource,
   PerspectiveViewSpatiallyIndexedSkeletonLayer,
   SliceViewPanelSpatiallyIndexedSkeletonLayer,
   SpatiallyIndexedSkeletonSource,
@@ -275,6 +276,77 @@ describe("layer/segmentation spatial skeleton chunk stats", () => {
 });
 
 describe("layer/segmentation spatial skeleton source teardown", () => {
+  function makeActivatingSegmentationLayer() {
+    const spatialSkeletonState = new SpatialSkeletonState();
+    const layer = Object.assign(
+      Object.create(SegmentationUserLayer.prototype),
+      {
+        spatialSkeletonState,
+        displayState: {
+          linkedSegmentationGroup: { root: { value: undefined } },
+          segmentationGroupState: { value: {} },
+          originalSegmentationGroupState: {
+            segmentPropertyMap: new WatchableValue(undefined),
+            graph: new WatchableValue(undefined),
+          },
+          hasVolume: new WatchableValue(false),
+        },
+        updateSpatialSkeletonChunkLoadState: vi.fn(),
+      },
+    );
+    Object.defineProperty(layer, "manager", {
+      value: { chunkManager: { memoize: { getUncounted: () => undefined } } },
+    });
+    return { layer, spatialSkeletonState };
+  }
+
+  function makeSpatialSkeletonSubsource() {
+    return {
+      subsourceEntry: {
+        subsource: {
+          mesh: Object.create(
+            MultiscaleSpatiallyIndexedSkeletonSource.prototype,
+          ),
+        },
+      },
+      loadedDataSource: { dataSource: { state: undefined } },
+      activate: vi.fn(),
+      deactivate: vi.fn(),
+    };
+  }
+
+  it("clears edit state when the skeleton source is replaced or removed", () => {
+    const { layer, spatialSkeletonState } = makeActivatingSegmentationLayer();
+    const original = makeSpatialSkeletonSubsource();
+    const replacement = makeSpatialSkeletonSubsource();
+    layer.activateDataSubsources([original]);
+    spatialSkeletonState.editMode.value = true;
+    spatialSkeletonState.setMergeAnchor(5n);
+
+    layer.activateDataSubsources([replacement]);
+    expect(spatialSkeletonState.editMode.value).toBe(false);
+    expect(spatialSkeletonState.mergeAnchorNodeId.value).toBeUndefined();
+
+    spatialSkeletonState.editMode.value = true;
+    spatialSkeletonState.setMergeAnchor(6n);
+    layer.activateDataSubsources([]);
+    expect(spatialSkeletonState.editMode.value).toBe(false);
+    expect(spatialSkeletonState.mergeAnchorNodeId.value).toBeUndefined();
+  });
+
+  it("keeps edit mode and merge anchor when the same skeleton source is activated again", () => {
+    const { layer, spatialSkeletonState } = makeActivatingSegmentationLayer();
+    const subsource = makeSpatialSkeletonSubsource();
+    layer.activateDataSubsources([subsource]);
+    spatialSkeletonState.editMode.value = true;
+    spatialSkeletonState.setMergeAnchor(5n);
+
+    layer.activateDataSubsources([subsource]);
+
+    expect(spatialSkeletonState.editMode.value).toBe(true);
+    expect(spatialSkeletonState.mergeAnchorNodeId.value).toBe(5n);
+  });
+
   it("disposes the queue before clearing its inspected snapshot cache", () => {
     const order: string[] = [];
     const layer = Object.assign(

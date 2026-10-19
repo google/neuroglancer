@@ -1987,20 +1987,13 @@ export class SpatiallyIndexedSkeletonSource extends SliceViewChunkSource<
   }
 }
 
-export interface SpatiallyIndexedSkeletonSourceRuntimeDisposalOptions {
-  invalidateCache?: boolean;
-}
-
-export function disposeSpatiallyIndexedSkeletonSourceRuntimeState(
+function disposeSpatiallyIndexedSkeletonSourceRuntimeState(
   sources: Iterable<SpatiallyIndexedSkeletonSource>,
-  options: SpatiallyIndexedSkeletonSourceRuntimeDisposalOptions = {},
 ) {
   const uniqueSources = new Set(sources);
-  const invalidateCache = options.invalidateCache ?? true;
   const chunkQueueManagersWithDeletedChunks = new Set<
     ChunkManager["chunkQueueManager"]
   >();
-  let changed = false;
   for (const source of uniqueSources) {
     if (source.chunks.size !== 0) {
       for (const chunkKey of source.chunks.keys()) {
@@ -2009,22 +2002,18 @@ export function disposeSpatiallyIndexedSkeletonSourceRuntimeState(
       chunkQueueManagersWithDeletedChunks.add(
         source.chunkManager.chunkQueueManager,
       );
-      changed = true;
     }
     if (
-      invalidateCache &&
       source.wasDisposed !== true &&
       source.rpc !== null &&
       source.rpcId !== null
     ) {
       source.invalidateCache();
-      changed = true;
     }
   }
   for (const chunkQueueManager of chunkQueueManagersWithDeletedChunks) {
     chunkQueueManager.visibleChunksChanged.dispatch();
   }
-  return changed;
 }
 
 // Options are provided by the SliceView framework for scale selection,
@@ -2379,10 +2368,6 @@ export class SpatiallyIndexedSkeletonLayer
 
   private disposeOverlayChunks() {
     const hadOverlaySegmentChunks = this.overlaySegmentChunks.size !== 0;
-    const changed =
-      hadOverlaySegmentChunks ||
-      this.failedOverlaySegmentBuilds.size !== 0 ||
-      this.overlayRenderChunks.length !== 0;
     const chunks = [...this.overlaySegmentChunks.values()].map(
       ({ chunk }) => chunk,
     );
@@ -2397,7 +2382,6 @@ export class SpatiallyIndexedSkeletonLayer
     if (hadOverlaySegmentChunks) {
       ++this.browseExcludedSegmentIdsVersion;
     }
-    return changed;
   }
 
   getUniqueChunkSources() {
@@ -2406,54 +2390,6 @@ export class SpatiallyIndexedSkeletonLayer
       sources.add(sourceEntry.chunkSource);
     }
     return sources;
-  }
-
-  private clearOverlayRuntimeState() {
-    let changed = this.disposeOverlayChunks();
-    if (this.pendingOverlaySegmentLoads.size !== 0) {
-      this.pendingOverlaySegmentLoads.clear();
-      changed = true;
-    }
-    if (this.temporaryBrowseExclusions.size !== 0) {
-      this.temporaryBrowseExclusions.clear();
-      ++this.browseExcludedSegmentIdsVersion;
-      changed = true;
-    }
-    if (this.retainedOverlaySegments.size !== 0) {
-      this.retainedOverlaySegments = new Map();
-      ++this.retainedOverlaySegmentIdsVersion;
-      ++this.browseExcludedSegmentIdsVersion;
-      changed = true;
-    }
-    if (this.browseExcludedSegments.size !== 0) {
-      this.browseExcludedSegments.clear();
-      changed = true;
-    }
-    // Runtime disposal also invalidates exclusions derived solely from a
-    // visible cached overlay, even when no retained or temporary state exists.
-    ++this.browseExcludedSegmentIdsVersion;
-    this.cachedBrowseExcludedVersion = -1;
-    this.cachedBrowseExcludedVisibleSet = undefined;
-    this.cachedBrowseExcludedVisibleGeneration = -1;
-    this.cachedBrowseExcludedNodeDataVersion = undefined;
-    this.cachedBrowseExcludedPresentation = undefined;
-    this.overlayRebuildFrame = -1;
-    return changed;
-  }
-
-  disposeRuntimeState(
-    options: SpatiallyIndexedSkeletonSourceRuntimeDisposalOptions = {},
-  ) {
-    const overlayChanged = this.clearOverlayRuntimeState();
-    const sourceChanged = disposeSpatiallyIndexedSkeletonSourceRuntimeState(
-      this.getUniqueChunkSources(),
-      options,
-    );
-    const changed = overlayChanged || sourceChanged;
-    if (changed) {
-      this.redrawNeeded.dispatch();
-    }
-    return changed;
   }
 
   private requestOverlaySegmentLoad(segmentId: bigint) {
@@ -2928,7 +2864,10 @@ export class SpatiallyIndexedSkeletonLayer
   ) {
     super();
     this.registerDisposer(() => {
-      this.disposeRuntimeState();
+      this.disposeOverlayChunks();
+      disposeSpatiallyIndexedSkeletonSourceRuntimeState(
+        this.getUniqueChunkSources(),
+      );
     });
     let sources3d: SpatiallyIndexedSkeletonSourceEntry[];
     let sources2d = options.sources2d ?? [];

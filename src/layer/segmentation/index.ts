@@ -42,10 +42,7 @@ import {
   registerVolumeLayerType,
   UserLayer,
 } from "#src/layer/index.js";
-import type {
-  LayerDataSourceChangeRuntimeDisposalContext,
-  LoadedDataSubsource,
-} from "#src/layer/layer_data_source.js";
+import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import { layerDataSourceSpecificationFromJson } from "#src/layer/layer_data_source.js";
 import * as json_keys from "#src/layer/segmentation/json_keys.js";
 import { registerLayerControls } from "#src/layer/segmentation/layer_controls.js";
@@ -807,13 +804,23 @@ function remapSpatialSkeletonSegmentSet(
   for (const target of presentTargets) set.add(target);
 }
 
-const SPATIALLY_INDEXED_SKELETON_RUNTIME_DISPOSAL_KIND =
-  "spatiallyIndexedSkeleton";
-
 const Base = UserLayerWithAnnotationsMixin(UserLayer);
 export interface SegmentationLayerSelectionState
   extends UserLayerSelectionState {
   nodeId: bigint | undefined;
+}
+
+type AnySpatiallyIndexedSkeletonSource =
+  | MultiscaleSpatiallyIndexedSkeletonSource
+  | SpatiallyIndexedSkeletonSource;
+
+function isSpatiallyIndexedSkeletonSource(
+  mesh: unknown,
+): mesh is AnySpatiallyIndexedSkeletonSource {
+  return (
+    mesh instanceof MultiscaleSpatiallyIndexedSkeletonSource ||
+    mesh instanceof SpatiallyIndexedSkeletonSource
+  );
 }
 
 export class SegmentationUserLayer extends Base {
@@ -825,6 +832,9 @@ export class SegmentationUserLayer extends Base {
   readonly spatialSkeletonState = this.registerDisposer(
     new SpatialSkeletonState(),
   );
+  private activeSpatialSkeletonSource:
+    | AnySpatiallyIndexedSkeletonSource
+    | undefined;
   private spatialSkeletonFindPathContext:
     | SpatialSkeletonFindPathContext
     | undefined;
@@ -1783,39 +1793,24 @@ export class SegmentationUserLayer extends Base {
     this.spatialSkeletonState.markNodeDataChanged(options);
   }
 
-  disposeLayerRuntimeStateForDataSourceChange(
-    context: LayerDataSourceChangeRuntimeDisposalContext,
+  private clearRuntimeStateWhenSpatialSkeletonSourceChanges(
+    source: AnySpatiallyIndexedSkeletonSource | undefined,
   ) {
-    if (
-      context.request.kind !== SPATIALLY_INDEXED_SKELETON_RUNTIME_DISPOSAL_KIND
-    ) {
-      return super.disposeLayerRuntimeStateForDataSourceChange(context);
+    const previousSource = this.activeSpatialSkeletonSource;
+    this.activeSpatialSkeletonSource = source;
+    if (previousSource !== undefined && previousSource !== source) {
+      this.spatialSkeletonState.clearRuntimeState();
     }
-    let changed = false;
-    const spatialSkeletonLayers = new Set<SpatiallyIndexedSkeletonLayer>();
-    for (const renderLayer of context.loadedSubsource.renderLayers) {
-      if (
-        renderLayer instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer ||
-        renderLayer instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer
-      ) {
-        spatialSkeletonLayers.add(renderLayer.base);
-      }
-    }
-    for (const spatialSkeletonLayer of spatialSkeletonLayers) {
-      changed = spatialSkeletonLayer.disposeRuntimeState() || changed;
-    }
-    changed = this.spatialSkeletonState.clearRuntimeState() || changed;
-    return changed;
   }
 
   private getSpatialSkeletonFindPathSubsource(
     loadedSubsources: readonly LoadedDataSubsource[],
   ) {
     return loadedSubsources.find((loadedSubsource) => {
-      const { mesh } = loadedSubsource.subsourceEntry.subsource;
       return (
-        (mesh instanceof MultiscaleSpatiallyIndexedSkeletonSource ||
-          mesh instanceof SpatiallyIndexedSkeletonSource) &&
+        isSpatiallyIndexedSkeletonSource(
+          loadedSubsource.subsourceEntry.subsource.mesh,
+        ) &&
         loadedSubsource.loadedDataSource.dataSource.state instanceof
           SkeletonDataSourceState
       );
@@ -1824,6 +1819,11 @@ export class SegmentationUserLayer extends Base {
 
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>) {
     const loadedSubsources = [...subsources];
+    this.clearRuntimeStateWhenSpatialSkeletonSourceChanges(
+      loadedSubsources
+        .map((loadedSubsource) => loadedSubsource.subsourceEntry.subsource.mesh)
+        .find(isSpatiallyIndexedSkeletonSource),
+    );
     const findPathSubsource =
       this.getSpatialSkeletonFindPathSubsource(loadedSubsources);
     const updatedSegmentPropertyMaps: SegmentPropertyMap[] = [];
