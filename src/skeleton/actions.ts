@@ -14,25 +14,16 @@
  * limitations under the License.
  */
 
-// Neuroglancer event action identifier strings for all skeleton UI.
-// These are the "skeleton-*" prefixed action names used in EventActionMap bindings
-// and bindAction calls in the skeleton edit tools.
-
-// --- Edit tool spatial actions ---
 export const SKELETON_EDIT_AT_MOUSE = "skeleton-edit-at-mouse";
 export const SKELETON_DRAG_VIEW = "skeleton-drag-view";
 export const SKELETON_ADD_NODE = "skeleton-add-node";
-// Merge (m): enters merge mode; click the anchor node, then the target node.
 export const SKELETON_ENTER_MERGE_MODE = "skeleton-enter-merge-mode";
-// Split (s): enters split mode; click the node to split.
 export const SKELETON_ENTER_SPLIT_MODE = "skeleton-enter-split-mode";
-// Insert (i): enters insert mode; click two connected nodes to insert a node between them.
 export const SKELETON_ENTER_INSERT_MODE = "skeleton-enter-insert-mode";
 export const SKELETON_ENTER_CREATE = "skeleton-enter-create";
 export const SKELETON_PIN_NODE = "skeleton-pin-node";
 export const SKELETON_ENTER_DELETE_MODE = "skeleton-enter-delete-mode";
 export const SKELETON_CLEAR_SELECTION = "skeleton-clear-node-selection";
 
-// --- Find Path tool actions ---
 export const SKELETON_FIND_PATH_SELECT_ENDPOINT =
   "skeleton-find-path-select-endpoint";
