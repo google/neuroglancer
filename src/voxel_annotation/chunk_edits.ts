@@ -14,7 +14,11 @@
  * limitations under the License.
  */
 
-import { ChunkState } from "#src/chunk_manager/base.js";
+import {
+  ChunkDownloadStatistics,
+  ChunkState,
+  getChunkDownloadStatisticIndex,
+} from "#src/chunk_manager/base.js";
 import { DataType } from "#src/sliceview/base.js";
 import { decodeChannel as decodeChannelUint32 } from "#src/sliceview/compressed_segmentation/decode_uint32.js";
 import { decodeChannel as decodeChannelUint64 } from "#src/sliceview/compressed_segmentation/decode_uint64.js";
@@ -49,6 +53,23 @@ function getIsolatedChunk(
     chunkGridPosition as vec3,
   );
   return chunk;
+}
+
+// Isolated downloads bypass the chunk queue: record the same download
+// statistics as the queue does for its own downloads.
+async function downloadIsolatedChunk(
+  source: VolumeChunkSource,
+  chunk: VolumeChunk,
+) {
+  const startTime = Date.now();
+  await source.download(chunk, new AbortController().signal);
+  const { statistics } = source;
+  statistics[
+    getChunkDownloadStatisticIndex(ChunkDownloadStatistics.totalTime)
+  ] += Date.now() - startTime;
+  ++statistics[
+    getChunkDownloadStatisticIndex(ChunkDownloadStatistics.totalChunks)
+  ];
 }
 
 function getFlatChunkData(
@@ -102,7 +123,7 @@ export async function readChunkData(
   ) {
     chunk = getIsolatedChunk(source, chunkGridPosition);
     try {
-      await source.download(chunk, new AbortController().signal);
+      await downloadIsolatedChunk(source, chunk);
     } catch {
       return { data: null, chunkDataSize: chunk.chunkDataSize };
     }
@@ -154,7 +175,7 @@ export async function applyChunkEdits(
     chunk.data = (resident.data as TypedArray).slice();
   } else {
     try {
-      await source.download(chunk, new AbortController().signal);
+      await downloadIsolatedChunk(source, chunk);
     } catch (e) {
       // Only deterministic decode failures proving the stored bytes themselves
       // are corrupt (e.g. the empty-body objects written by an earlier bug) may

@@ -16,7 +16,11 @@
 
 import type { Mock } from "vitest";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ChunkState } from "#src/chunk_manager/base.js";
+import {
+  ChunkDownloadStatistics,
+  ChunkState,
+  getChunkDownloadStatisticIndex,
+} from "#src/chunk_manager/base.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { DataType } from "#src/util/data_type.js";
@@ -376,6 +380,22 @@ describe("applyChunkEdits", () => {
       ).rejects.toThrow("some wrapped kvstore failure");
       expect(writeSpy).not.toHaveBeenCalled();
     });
+  });
+
+  it("records download statistics for chunks it downloads", async () => {
+    const totalChunks = getChunkDownloadStatisticIndex(
+      ChunkDownloadStatistics.totalChunks,
+    );
+
+    await applyChunkEdits(source, "0,0,0", [0], [1n]);
+    expect(source.statistics[totalChunks]).toBe(1);
+
+    // Resident data is copied, not downloaded.
+    const chunk = source.getChunk(new Float32Array([1, 0, 0])) as VolumeChunk;
+    chunk.data = new BigUint64Array(8);
+    chunk.state = ChunkState.SYSTEM_MEMORY_WORKER;
+    await applyChunkEdits(source, "1,0,0", [0], [1n]);
+    expect(source.statistics[totalChunks]).toBe(1);
   });
 
   it("invalidates the shared backend cache entry after a successful write", async () => {
