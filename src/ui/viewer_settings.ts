@@ -115,6 +115,7 @@ export class ViewerSettingsPanel extends SidePanel {
       labelElement.appendChild(checkbox.element);
       scroll.appendChild(labelElement);
     };
+    addCheckbox("Show layer bar", viewer.layerPanelVisibility);
     addCheckbox("Show axis lines", viewer.showAxisLines);
     addCheckbox("Show scale bar", viewer.showScaleBar);
     addCheckbox("Show cross sections in 3-d", viewer.showPerspectiveSliceViews);
