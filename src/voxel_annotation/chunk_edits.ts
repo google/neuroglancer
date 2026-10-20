@@ -22,17 +22,21 @@ import {
 import { DataType } from "#src/sliceview/base.js";
 import { decodeChannel as decodeChannelUint32 } from "#src/sliceview/compressed_segmentation/decode_uint32.js";
 import { decodeChannel as decodeChannelUint64 } from "#src/sliceview/compressed_segmentation/decode_uint64.js";
-import { encodeChannel as encodeChannelUint32 } from "#src/sliceview/compressed_segmentation/encode_uint32.js";
-import { encodeChannel as encodeChannelUint64 } from "#src/sliceview/compressed_segmentation/encode_uint64.js";
 import type {
   VolumeChunk,
   VolumeChunkSource,
 } from "#src/sliceview/volume/backend.js";
+import type { WritableVolumeChunkSource } from "#src/sliceview/volume/base.js";
 import type { TypedArray } from "#src/util/array.js";
-import { TypedArrayBuilder } from "#src/util/array.js";
 import { DATA_TYPE_ARRAY_CONSTRUCTOR } from "#src/util/data_type.js";
 import type { vec3 } from "#src/util/geom.js";
 import type { VoxelChange } from "#src/voxel_annotation/base.js";
+
+function isWritableVolumeChunkSource(
+  source: VolumeChunkSource,
+): source is VolumeChunkSource & WritableVolumeChunkSource {
+  return "writeChunk" in source;
+}
 
 /**
  * Returns a chunk for `chunkGridPosition` that is NOT registered in the shared
@@ -145,6 +149,11 @@ export async function applyChunkEdits(
   indices: ArrayLike<number>,
   values: ArrayLike<number | bigint>,
 ): Promise<VoxelChange> {
+  if (!isWritableVolumeChunkSource(source)) {
+    throw new Error(
+      "applyChunkEdits: this data source does not support writing",
+    );
+  }
   if (indices.length !== values.length) {
     throw new Error("applyChunkEdits: indices and values length mismatch");
   }
@@ -207,18 +216,14 @@ export async function applyChunkEdits(
     );
   }
 
-  if (!chunk.data) {
-    const numElements = chunk.chunkDataSize.reduce((a, b) => a * b, 1);
-    let Ctor;
-    if (source.spec.compressedSegmentationBlockSize !== undefined) {
-      Ctor = Uint32Array;
-    } else {
-      Ctor = DATA_TYPE_ARRAY_CONSTRUCTOR[source.spec.dataType];
-    }
-    chunk.data = new (Ctor as any)(numElements) as TypedArray;
-  }
-
+  // Segmentation chunks are kept as compressed segmentation in memory but
+  // stored as raw values: edit and write a flat array of the data type.
   const ArrayCtor = DATA_TYPE_ARRAY_CONSTRUCTOR[source.spec.dataType] as any;
+  const chunkDataSize = chunk.chunkDataSize;
+  const data: TypedArray =
+    getFlatChunkData(chunk, source.spec) ??
+    new ArrayCtor(chunkDataSize.reduce((a, b) => a * b, 1));
+
   const indicesCopy = new Uint32Array(indices);
   const newValuesArray = new ArrayCtor(values.length);
   for (let i = 0; i < values.length; ++i) {
@@ -228,93 +233,18 @@ export async function applyChunkEdits(
         : Number(values[i]!);
   }
   const oldValuesArray = new ArrayCtor(indices.length);
-
-  if (source.spec.compressedSegmentationBlockSize !== undefined) {
-    const compressedData = chunk.data as Uint32Array;
-    const { chunkDataSize } = chunk;
-    const numElements = chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2];
-    const { dataType, compressedSegmentationBlockSize: subchunkSize } =
-      source.spec;
-    const baseOffset = compressedData.length > 0 ? compressedData[0] : 0;
-
-    let uncompressedData: Uint32Array | BigUint64Array;
-    if (dataType === DataType.UINT32) {
-      uncompressedData = new Uint32Array(numElements);
-      if (baseOffset !== 0) {
-        decodeChannelUint32(
-          uncompressedData,
-          compressedData,
-          baseOffset,
-          chunkDataSize,
-          subchunkSize!,
-        );
-      }
-    } else {
-      uncompressedData = new BigUint64Array(numElements);
-      if (baseOffset !== 0) {
-        decodeChannelUint64(
-          uncompressedData,
-          compressedData,
-          baseOffset,
-          chunkDataSize,
-          subchunkSize!,
-        );
-      }
-    }
-
-    for (let i = 0; i < indices.length; ++i) {
-      const idx = indices[i]!;
-      if (idx < 0 || idx >= uncompressedData.length) {
-        throw new Error(
-          `applyChunkEdits: index ${idx} out of bounds for chunk ${chunkKey}`,
-        );
-      }
-      oldValuesArray[i] = uncompressedData[idx];
-      if (dataType === DataType.UINT32) {
-        (uncompressedData as Uint32Array)[idx] = Number(values[i]!);
-        newValuesArray[i] = Number(values[i]!);
-      } else {
-        (uncompressedData as BigUint64Array)[idx] = values[i]! as bigint;
-        newValuesArray[i] = values[i]! as bigint;
-      }
-    }
-
-    const outputBuilder = new TypedArrayBuilder(Uint32Array);
-    outputBuilder.resize(1);
-    outputBuilder.data[0] = 1;
-
-    if (dataType === DataType.UINT32) {
-      encodeChannelUint32(
-        outputBuilder,
-        subchunkSize!,
-        uncompressedData as Uint32Array,
-        chunkDataSize,
-      );
-    } else {
-      encodeChannelUint64(
-        outputBuilder,
-        subchunkSize!,
-        uncompressedData as BigUint64Array,
-        chunkDataSize,
+  for (let i = 0; i < indices.length; ++i) {
+    const idx = indices[i]!;
+    if (idx < 0 || idx >= data.length) {
+      throw new Error(
+        `applyChunkEdits: index ${idx} out of bounds for chunk ${chunkKey}`,
       );
     }
-
-    chunk.data = outputBuilder.view;
-  } else {
-    const data = chunk.data as TypedArray;
-    for (let i = 0; i < indices.length; ++i) {
-      const idx = indices[i]!;
-      if (idx < 0 || idx >= data.length) {
-        throw new Error(
-          `applyChunkEdits: index ${idx} out of bounds for chunk ${chunkKey}`,
-        );
-      }
-      oldValuesArray[i] = data[idx];
-      data[idx] = newValuesArray[i];
-    }
+    oldValuesArray[i] = data[idx];
+    data[idx] = newValuesArray[i];
   }
 
-  await source.writeChunk(chunk);
+  await source.writeChunk(chunkGridPosition, chunkDataSize, data);
   // The edit was written from an isolated chunk, so the shared cache
   // entry (if any) still holds pre-edit data — or has a pre-edit
   // download in flight that would otherwise later land as "fresh" and

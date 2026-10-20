@@ -50,15 +50,17 @@ class RealisticInMemorySource extends VolumeChunkSource {
     }
   }
 
-  async writeChunk(chunk: VolumeChunk) {
+  async writeChunk(
+    chunkGridPosition: Float32Array,
+    _chunkDataSize: Uint32Array,
+    data: ArrayBufferView,
+  ) {
     if (NETWORK_LATENCY)
       await new Promise((resolve) => setTimeout(resolve, NETWORK_LATENCY));
 
-    const key = chunk.chunkGridPosition.join(",");
+    const key = chunkGridPosition.join(",");
     const Ctor = DATA_TYPE_ARRAY_CONSTRUCTOR[this.spec.dataType];
-    if (chunk.data) {
-      this.storage.set(key, new (Ctor as any)(chunk.data));
-    }
+    this.storage.set(key, new (Ctor as any)(data));
   }
 }
 

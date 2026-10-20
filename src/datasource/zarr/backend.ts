@@ -36,18 +36,19 @@ import { encodeArray } from "#src/datasource/zarr/codec/encode.js";
 import { ChunkKeyEncoding } from "#src/datasource/zarr/metadata/index.js";
 import { WithSharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
 import { postProcessRawData } from "#src/sliceview/backend_chunk_decoders/postprocess.js";
-import { decodeChannel as decodeChannelUint32 } from "#src/sliceview/compressed_segmentation/decode_uint32.js";
-import { decodeChannel as decodeChannelUint64 } from "#src/sliceview/compressed_segmentation/decode_uint64.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
-import { DataType } from "#src/util/data_type.js";
+import type { WritableVolumeChunkSource } from "#src/sliceview/volume/base.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
 
 @registerSharedObject()
-export class ZarrVolumeChunkSource extends WithParameters(
-  WithSharedKvStoreContextCounterpart(VolumeChunkSource),
-  VolumeChunkSourceParameters,
-) {
+export class ZarrVolumeChunkSource
+  extends WithParameters(
+    WithSharedKvStoreContextCounterpart(VolumeChunkSource),
+    VolumeChunkSourceParameters,
+  )
+  implements WritableVolumeChunkSource
+{
   private chunkKvStore = applySharding(
     this.chunkManager,
     this.parameters.metadata.codecs,
@@ -110,84 +111,24 @@ export class ZarrVolumeChunkSource extends WithParameters(
     }
   }
 
-  async writeChunk(chunk: VolumeChunk): Promise<void> {
+  async writeChunk(
+    chunkGridPosition: Float32Array,
+    chunkDataSize: Uint32Array,
+    data: ArrayBufferView,
+  ): Promise<void> {
     const { kvStore, decodeCodecs } = this.chunkKvStore;
     if (!kvStore.write) {
       throw new Error(
         "ZarrVolumeChunkSource.writeChunk: underlying kvStore is not writable",
       );
     }
-    if (!chunk.data) {
-      throw new Error("ZarrVolumeChunkSource.writeChunk: missing chunk.data");
-    }
-    let dataToWrite = chunk.data;
-
-    // For segmentation layers (uint32/uint64), neuroglancer automatically
-    // transcodes chunks into its own compressed segmentation format for GPU
-    // efficiency (see makeDefaultVolumeChunkSpecifications in
-    // sliceview/volume/base.ts). chunk.data is therefore stored in that
-    // compressed format in memory. Before writing back to the zarr store we
-    // must decompress it so the on-disk data stays as raw integers.
-    const { compressedSegmentationBlockSize } = this.spec;
-    if (compressedSegmentationBlockSize !== undefined) {
-      const compressedData = chunk.data as Uint32Array;
-      const { chunkDataSize } = chunk;
-      if (!chunkDataSize) {
-        throw new Error("Cannot write chunk with unknown size.");
-      }
-      const numElements =
-        chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2];
-      const { dataType } = this.spec;
-      // A zero-length compressed buffer for a non-empty chunk means the
-      // underlying ArrayBuffer was detached (transferred to the frontend).
-      // Proceeding would silently decode to a full-size zero-filled array and
-      // durably overwrite the stored chunk with zeros.
-      if (compressedData.length === 0 && numElements > 0) {
-        throw new Error(
-          "ZarrVolumeChunkSource.writeChunk: refusing to write chunk from a " +
-            "zero-length (detached?) compressed buffer.",
-        );
-      }
-      const baseOffset = compressedData.length > 0 ? compressedData[0] : 0;
-
-      if (dataType === DataType.UINT32) {
-        const uncompressedData = new Uint32Array(numElements);
-        if (baseOffset !== 0) {
-          decodeChannelUint32(
-            uncompressedData,
-            compressedData,
-            baseOffset,
-            chunkDataSize,
-            compressedSegmentationBlockSize,
-          );
-        }
-        dataToWrite = uncompressedData;
-      } else {
-        const uncompressedData = new BigUint64Array(numElements);
-        if (baseOffset !== 0) {
-          decodeChannelUint64(
-            uncompressedData,
-            compressedData,
-            baseOffset,
-            chunkDataSize,
-            compressedSegmentationBlockSize,
-          );
-        }
-        dataToWrite = uncompressedData;
-      }
-    }
 
     // Never write a body whose element count does not match the chunk. A
     // zero-length view here means the underlying buffer was detached (its
     // ArrayBuffer transferred to the frontend); writing it would durably
     // corrupt the stored object (e.g. a 20-byte gzip of an empty stream).
-    const writeChunkDataSize = chunk.chunkDataSize;
-    if (!writeChunkDataSize) {
-      throw new Error("ZarrVolumeChunkSource.writeChunk: unknown chunk size");
-    }
-    const expectedElements = writeChunkDataSize.reduce((a, b) => a * b, 1);
-    const actualElements = (dataToWrite as unknown as { length: number })
-      .length;
+    const expectedElements = chunkDataSize.reduce((a, b) => a * b, 1);
+    const actualElements = (data as unknown as { length: number }).length;
     if (expectedElements === 0 || actualElements !== expectedElements) {
       throw new Error(
         `ZarrVolumeChunkSource.writeChunk: refusing to write chunk with ` +
@@ -198,11 +139,11 @@ export class ZarrVolumeChunkSource extends WithParameters(
 
     const encoded = await encodeArray(
       decodeCodecs,
-      dataToWrite as ArrayBufferView<ArrayBufferLike>,
+      data as ArrayBufferView<ArrayBufferLike>,
       new AbortController().signal,
     );
 
-    const key = this.getChunkStoreKey(chunk.chunkGridPosition);
+    const key = this.getChunkStoreKey(chunkGridPosition);
     const arrayBuffer = new Uint8Array(encoded).buffer;
     await kvStore.write!(key, arrayBuffer);
   }

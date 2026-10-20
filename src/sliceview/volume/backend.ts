@@ -157,14 +157,6 @@ export class VolumeChunkSource
   computeChunkBounds(chunk: VolumeChunk) {
     return computeChunkBounds(this, chunk);
   }
-
-  // Override in data source backends to actually persist the chunk.
-  // Default throws to ensure write capability is explicitly implemented.
-  async writeChunk(_chunk: VolumeChunk): Promise<void> {
-    throw new Error(
-      "VolumeChunkSource.writeChunk not implemented for this datasource",
-    );
-  }
 }
 
 @registerSharedObject(IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID)

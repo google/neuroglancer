@@ -326,5 +326,18 @@ export interface VolumeChunkSource extends SliceViewChunkSource {
 }
 
 export const VOLUME_RPC_ID = "volume";
+/**
+ * Implemented by volume chunk sources whose data source can store chunks.
+ * `data` holds the chunk's voxels as a flat array of the source's data type,
+ * even for sources that keep chunks as compressed segmentation in memory.
+ */
+export interface WritableVolumeChunkSource {
+  writeChunk(
+    chunkGridPosition: Float32Array,
+    chunkDataSize: Uint32Array,
+    data: ArrayBufferView,
+  ): Promise<void>;
+}
+
 export const IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID =
   "sliceview/volume/InMemoryChunkSource";

@@ -31,18 +31,8 @@ import type { RPC } from "#src/worker_rpc.js";
 vi.mock("#src/sliceview/compressed_segmentation/decode_uint64.js", () => ({
   decodeChannel: vi.fn((out) => out.fill(5n)),
 }));
-vi.mock("#src/sliceview/compressed_segmentation/encode_uint64.js", () => ({
-  encodeChannel: vi.fn((builder) => {
-    builder.data = new Uint32Array([888]);
-  }),
-}));
 vi.mock("#src/sliceview/compressed_segmentation/decode_uint32.js", () => ({
   decodeChannel: vi.fn((out) => out.fill(5)),
-}));
-vi.mock("#src/sliceview/compressed_segmentation/encode_uint32.js", () => ({
-  encodeChannel: vi.fn((builder) => {
-    builder.data = new Uint32Array([444]);
-  }),
 }));
 
 vi.mock("#src/sliceview/volume/registry.js", () => ({
@@ -63,9 +53,19 @@ class MockBackendSource extends VolumeChunkSource {
     }
   }
 
-  async writeChunk(chunk: VolumeChunk) {
-    const key = chunk.chunkGridPosition.join(",");
-    this.serverStorage.set(key, chunk.data!.buffer.slice(0) as ArrayBuffer);
+  async writeChunk(
+    chunkGridPosition: Float32Array,
+    _chunkDataSize: Uint32Array,
+    data: ArrayBufferView,
+  ) {
+    const key = chunkGridPosition.join(",");
+    this.serverStorage.set(
+      key,
+      data.buffer.slice(
+        data.byteOffset,
+        data.byteOffset + data.byteLength,
+      ) as ArrayBuffer,
+    );
   }
 }
 
@@ -124,6 +124,19 @@ describe("applyChunkEdits", () => {
   });
 
   describe("Input Validation", () => {
+    it("should throw if the source cannot write", async () => {
+      class ReadOnlySource extends VolumeChunkSource {
+        async download() {}
+      }
+      const readOnly = new ReadOnlySource(mockRpc, {
+        spec: { ...BASE_SPEC },
+        chunkManager: 0,
+      });
+      await expect(
+        applyChunkEdits(readOnly, "0,0,0", [0], [1n]),
+      ).rejects.toThrow(/does not support writing/);
+    });
+
     it("should throw if indices and values lengths mismatch", async () => {
       await expect(
         applyChunkEdits(source, "0,0,0", [1], [1n, 2n]),
@@ -149,9 +162,9 @@ describe("applyChunkEdits", () => {
       const result = await applyChunkEdits(source, "0,0,0", [0], [100n]);
 
       expect(writeSpy).toHaveBeenCalled();
-      const written = writeSpy.mock.calls[0][0] as VolumeChunk;
-      expect(written.data).toBeInstanceOf(BigUint64Array);
-      expect((written.data as BigUint64Array)[0]).toBe(100n);
+      const written = writeSpy.mock.calls[0][2] as BigUint64Array;
+      expect(written).toBeInstanceOf(BigUint64Array);
+      expect(written[0]).toBe(100n);
       expect(result.newValues[0]).toBe(100n);
     });
 
@@ -185,9 +198,9 @@ describe("applyChunkEdits", () => {
       const writeSpy = vi.spyOn(uint32Source, "writeChunk");
       const result = await applyChunkEdits(uint32Source, "0,0,0", [0], [123]);
 
-      const written = writeSpy.mock.calls[0][0] as VolumeChunk;
-      expect(written.data).toBeInstanceOf(Uint32Array);
-      expect((written.data as Uint32Array)[0]).toBe(123);
+      const written = writeSpy.mock.calls[0][2] as Uint32Array;
+      expect(written).toBeInstanceOf(Uint32Array);
+      expect(written[0]).toBe(123);
       expect(result.newValues[0]).toBe(123);
     });
   });
@@ -218,8 +231,11 @@ describe("applyChunkEdits", () => {
       );
 
       expect(result.oldValues[0]).toBe(5n);
-      const written = writeSpy.mock.calls[0][0] as VolumeChunk;
-      expect((written.data as Uint32Array)[0]).toBe(888);
+      // Written as raw values: the decoded voxels with the edit applied.
+      const written = writeSpy.mock.calls[0][2] as BigUint64Array;
+      expect(written).toBeInstanceOf(BigUint64Array);
+      expect(written[0]).toBe(99n);
+      expect(written[1]).toBe(5n);
       // The shared cache entry is invalidated, never mutated in place.
       expect((chunk.data as Uint32Array)[0]).toBe(123);
     });
@@ -251,8 +267,10 @@ describe("applyChunkEdits", () => {
 
       expect(result.oldValues[0]).toBe(5);
       expect(result.newValues[0]).toBe(77);
-      const written = writeSpy.mock.calls[0][0] as VolumeChunk;
-      expect((written.data as Uint32Array)[0]).toBe(444);
+      const written = writeSpy.mock.calls[0][2] as Uint32Array;
+      expect(written).toBeInstanceOf(Uint32Array);
+      expect(written[0]).toBe(77);
+      expect(written[1]).toBe(5);
     });
 
     it("should handle zero-offset compressed data (empty/new)", async () => {
@@ -273,8 +291,8 @@ describe("applyChunkEdits", () => {
 
       const writeSpy = vi.spyOn(compressedSource, "writeChunk");
       await applyChunkEdits(compressedSource, "0,0,0", [0], [50n]);
-      const written = writeSpy.mock.calls[0][0] as VolumeChunk;
-      expect((written.data as Uint32Array)[0]).toBe(888);
+      const written = writeSpy.mock.calls[0][2] as BigUint64Array;
+      expect(Array.from(written)).toEqual([50n, 0n, 0n, 0n, 0n, 0n, 0n, 0n]);
     });
 
     it("should handle zero-offset compressed data for UINT32", async () => {
@@ -296,8 +314,8 @@ describe("applyChunkEdits", () => {
 
       const writeSpy = vi.spyOn(compressedSource, "writeChunk");
       await applyChunkEdits(compressedSource, "0,0,0", [0], [50]);
-      const written = writeSpy.mock.calls[0][0] as VolumeChunk;
-      expect((written.data as Uint32Array)[0]).toBe(444);
+      const written = writeSpy.mock.calls[0][2] as Uint32Array;
+      expect(Array.from(written)).toEqual([50, 0, 0, 0, 0, 0, 0, 0]);
     });
   });
 

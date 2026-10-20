@@ -95,11 +95,19 @@ class MockBackendSource extends VolumeChunkSource {
     }
   }
 
-  async writeChunk(chunk: VolumeChunk) {
-    const key = chunk.chunkGridPosition.join(",");
-    if (chunk.data) {
-      this.serverStorage.set(key, chunk.data.buffer.slice(0) as ArrayBuffer);
-    }
+  async writeChunk(
+    chunkGridPosition: Float32Array,
+    _chunkDataSize: Uint32Array,
+    data: ArrayBufferView,
+  ) {
+    const key = chunkGridPosition.join(",");
+    this.serverStorage.set(
+      key,
+      data.buffer.slice(
+        data.byteOffset,
+        data.byteOffset + data.byteLength,
+      ) as ArrayBuffer,
+    );
   }
 }
 
