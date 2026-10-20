@@ -18,7 +18,6 @@ import type {
   LayerActionContext,
   MouseSelectionState,
 } from "#src/layer/index.js";
-import { UserLayer } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import {
   drawBrushCursor,
@@ -465,42 +464,6 @@ export class VoxelEditingContext
   }
 }
 
-export declare abstract class UserLayerWithVoxelEditing extends UserLayer {
-  hasSubsourcesWithWritingEnabled: WatchableValue<boolean>;
-
-  voxelEditingState: CompoundTrackable;
-  paintValue: TrackableValue<bigint>;
-  brushRadius: TrackableValue<number>;
-  brushShape: TrackableEnum<BrushShape>;
-  floodFillMaxVoxels: TrackableValue<number>;
-  floodFillMorphological: TrackableBoolean;
-  erasePaintValueOnly: TrackableBoolean;
-  cursorInEraseMode: TrackableBoolean;
-
-  editingContexts: Map<LoadedDataSubsource, VoxelEditingContext>;
-
-  abstract createVoxelEditingPreviewRenderLayer(
-    source: MultiscaleVolumeChunkSource,
-    transform: WatchableValueInterface<RenderLayerTransformOrError>,
-  ): ImageRenderLayer | SegmentationRenderLayer;
-  abstract getPaintValue(erase: boolean): PaintValueGetter;
-  abstract setPaintValue(value: any): bigint;
-  setEraseState(erase: boolean): void;
-  shouldErase(): boolean;
-  scheduleOverlayRedraw(): void;
-
-  initializeVoxelEditingForSubsource(
-    loadedSubsource: LoadedDataSubsource,
-    renderlayer: SegmentationRenderLayer | ImageRenderLayer,
-  ): void;
-  deinitializeVoxelEditingForSubsource(
-    loadedSubsource: LoadedDataSubsource,
-  ): void;
-  updateHasSubsourcesWithWritingEnabled(): void;
-  getIdentitySliceViewSourceOptions(): SliceViewSourceOptions;
-  handleVoxelEditingAction(action: string, context: LayerActionContext): void;
-}
-
 export function UserLayerWithVoxelEditingMixin<
   TBase extends { new (...args: any[]): UserLayerWithAnnotations },
 >(Base: TBase) {
@@ -863,3 +826,10 @@ export function UserLayerWithVoxelEditingMixin<
   }
   return C;
 }
+
+type UserLayerWithVoxelEditingClass = ReturnType<
+  typeof UserLayerWithVoxelEditingMixin
+>;
+
+export type UserLayerWithVoxelEditing =
+  InstanceType<UserLayerWithVoxelEditingClass>;
