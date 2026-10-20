@@ -38,6 +38,11 @@ import {
 } from "#src/segmentation_display_state/frontend.js";
 import type { VertexAttributeInfo } from "#src/skeleton/base.js";
 import { SKELETON_LAYER_RPC_ID } from "#src/skeleton/base.js";
+import type { SkeletonDrawContext } from "#src/skeleton/rendering_diagnostics.js";
+import {
+  shouldDrawSkeletonNodes,
+  SkeletonDrawDiagnostics,
+} from "#src/skeleton/rendering_diagnostics.js";
 import type { SliceViewPanel } from "#src/sliceview/panel.js";
 import type { SliceViewPanelRenderContext } from "#src/sliceview/renderlayer.js";
 import { SliceViewPanelRenderLayer } from "#src/sliceview/renderlayer.js";
@@ -134,6 +139,7 @@ class RenderHelper extends RefCounted {
 
   edgeShaderGetter;
   nodeShaderGetter;
+  private drawDiagnostics: SkeletonDrawDiagnostics;
 
   get gl(): GL {
     return this.base.gl;
@@ -144,6 +150,7 @@ class RenderHelper extends RefCounted {
     public targetIsSliceView: boolean,
   ) {
     super();
+    this.drawDiagnostics = new SkeletonDrawDiagnostics(this.gl);
     this.vertexIdHelper = this.registerDisposer(VertexIdHelper.get(this.gl));
     this.edgeShaderGetter = parameterizedEmitterDependentShaderGetter(
       this,
@@ -346,10 +353,28 @@ void emitDefault() {
   drawSkeleton(
     gl: GL,
     edgeShader: ShaderProgram,
-    nodeShader: ShaderProgram,
+    nodeShader: ShaderProgram | undefined,
     skeletonChunk: SkeletonChunk,
-    projectionParameters: { width: number; height: number },
+    renderContext: SliceViewPanelRenderContext | PerspectiveViewRenderContext,
+    mode: SkeletonRenderMode,
+    objectId: string,
   ) {
+    const { projectionParameters } = renderContext;
+    const context: Omit<SkeletonDrawContext, "primitive"> = {
+      view: this.targetIsSliceView ? "2d" : "3d",
+      pass: renderContext.emitColor
+        ? renderContext.emitPickID
+          ? "color-and-picking"
+          : "color"
+        : "picking",
+      emitter: renderContext.emitter.name,
+      objectId,
+      objectAlpha: this.base.displayState.objectAlpha.value,
+      mode:
+        mode === SkeletonRenderMode.LINES_AND_POINTS
+          ? "lines-and-points"
+          : "lines",
+    };
     const { vertexAttributes } = this;
     const numAttributes = vertexAttributes.length;
     const { vertexAttributeTextures } = skeletonChunk;
@@ -379,20 +404,27 @@ void emitDefault() {
         projectionParameters,
         this.targetIsSliceView ? 1.0 : 0.0,
       );
-      drawLines(gl, 1, skeletonChunk.numIndices / 2);
+      this.drawDiagnostics.draw(
+        edgeShader,
+        { ...context, primitive: "edges" },
+        () => drawLines(gl, 1, skeletonChunk.numIndices / 2),
+      );
+      if (gl.isContextLost()) return;
       gl.vertexAttribDivisor(aVertexIndex, 0);
       gl.disableVertexAttribArray(aVertexIndex);
     }
 
-    // Draw nodes - this is performed also in line render mode
-    // so that there are no visible gaps between the edges
-    // as the point size is set to the line width
-    {
+    // Normally nodes also fill line joins; the diagnostic build skips them in 3D lines mode.
+    if (nodeShader !== undefined) {
       nodeShader.bind();
       initializeCircleShader(nodeShader, projectionParameters, {
         featherWidthInPixels: this.targetIsSliceView ? 1.0 : 0.0,
       });
-      drawCircles(nodeShader.gl, 1, skeletonChunk.numVertices);
+      this.drawDiagnostics.draw(
+        nodeShader,
+        { ...context, primitive: "nodes" },
+        () => drawCircles(gl, 1, skeletonChunk.numVertices),
+      );
     }
   }
 
@@ -560,6 +592,7 @@ export class SkeletonLayer extends RefCounted {
   ) {
     const lineWidth = renderOptions.lineWidth.value;
     const { gl, source, displayState } = this;
+    if (gl.isContextLost()) return;
     if (displayState.objectAlpha.value <= 0.0) {
       // Skip drawing.
       return;
@@ -580,13 +613,16 @@ export class SkeletonLayer extends RefCounted {
     const edgeShaderResult = renderHelper.edgeShaderGetter(
       renderContext.emitter,
     );
-    const nodeShaderResult = renderHelper.nodeShaderGetter(
-      renderContext.emitter,
-    );
+    const nodeShaderResult = shouldDrawSkeletonNodes(
+      renderHelper.targetIsSliceView,
+      renderOptions.mode.value === SkeletonRenderMode.LINES_AND_POINTS,
+    )
+      ? renderHelper.nodeShaderGetter(renderContext.emitter)
+      : undefined;
     const { shader: edgeShader, parameters: edgeShaderParameters } =
       edgeShaderResult;
-    const { shader: nodeShader, parameters: nodeShaderParameters } =
-      nodeShaderResult;
+    const nodeShader = nodeShaderResult?.shader;
+    const nodeShaderParameters = nodeShaderResult?.parameters;
     if (edgeShader === null || nodeShader === null) {
       // Shader error, skip drawing.
       return;
@@ -604,15 +640,17 @@ export class SkeletonLayer extends RefCounted {
     );
     gl.uniform1f(edgeShader.uniform("uLineWidth"), lineWidth!);
 
-    nodeShader.bind();
-    renderHelper.beginLayer(gl, nodeShader, renderContext, modelMatrix);
-    gl.uniform1f(nodeShader.uniform("uNodeDiameter"), pointDiameter);
-    setControlsInShader(
-      gl,
-      nodeShader,
-      shaderControlState,
-      nodeShaderParameters.parseResult,
-    );
+    if (nodeShader !== undefined && nodeShaderParameters !== undefined) {
+      nodeShader.bind();
+      renderHelper.beginLayer(gl, nodeShader, renderContext, modelMatrix);
+      gl.uniform1f(nodeShader.uniform("uNodeDiameter"), pointDiameter);
+      setControlsInShader(
+        gl,
+        nodeShader,
+        shaderControlState,
+        nodeShaderParameters.parseResult,
+      );
+    }
 
     const skeletons = source.chunks;
 
@@ -622,6 +660,7 @@ export class SkeletonLayer extends RefCounted {
       renderContext.emitColor,
       renderContext.emitPickID ? renderContext.pickIDs : undefined,
       (objectId, color, pickIndex) => {
+        if (gl.isContextLost()) return;
         const key = getObjectKey(objectId);
         const skeleton = skeletons.get(key);
         if (
@@ -633,25 +672,31 @@ export class SkeletonLayer extends RefCounted {
         if (color !== undefined) {
           edgeShader.bind();
           renderHelper.setColor(gl, edgeShader, <vec3>(<Float32Array>color));
-          nodeShader.bind();
-          renderHelper.setColor(gl, nodeShader, <vec3>(<Float32Array>color));
+          if (nodeShader !== undefined) {
+            nodeShader.bind();
+            renderHelper.setColor(gl, nodeShader, <vec3>(<Float32Array>color));
+          }
         }
         if (pickIndex !== undefined) {
           edgeShader.bind();
           renderHelper.setPickID(gl, edgeShader, pickIndex);
-          nodeShader.bind();
-          renderHelper.setPickID(gl, nodeShader, pickIndex);
+          if (nodeShader !== undefined) {
+            nodeShader.bind();
+            renderHelper.setPickID(gl, nodeShader, pickIndex);
+          }
         }
         renderHelper.drawSkeleton(
           gl,
           edgeShader,
           nodeShader,
           skeleton,
-          renderContext.projectionParameters,
+          renderContext,
+          renderOptions.mode.value,
+          key,
         );
       },
     );
-    renderHelper.endLayer(gl, edgeShader);
+    if (!gl.isContextLost()) renderHelper.endLayer(gl, edgeShader);
   }
 
   isReady() {
