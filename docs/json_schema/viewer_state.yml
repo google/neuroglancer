@@ -41,6 +41,12 @@ properties:
     type: boolean
     title: "Indicates whether to show the red/green/blue axis lines."
     default: true
+  showCrossSectionHoverPosition:
+    type: boolean
+    title: |
+      Indicates whether to show the position hovered in one cross-section panel
+      as a marker in the other cross-section panels.
+    default: false
   wireFrame:
     type: boolean
     title: "Indicates whether to enable wireframe rendering mode (for debugging)."
