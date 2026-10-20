@@ -144,8 +144,21 @@
 }
 
 .neuroglancer-annotation-properties-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
   margin-bottom: 6px;
   font-weight: bold;
+}
+
+.neuroglancer-annotation-hide-derived-properties {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: normal;
+  cursor: pointer;
 }
 
 .neuroglancer-annotation-layer-view

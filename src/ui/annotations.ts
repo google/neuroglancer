@@ -489,6 +489,7 @@ export class AnnotationLayerView extends AccordionTab {
   private typeSummaryContainer = document.createElement("div");
   private propertyDetailsOpen = new Map<string, boolean>();
   private numericalSummaryContainer = document.createElement("div");
+  private derivedSummaryContainer = document.createElement("div");
   private derivedWarningElement = document.createElement("div");
   private loadedNoticeElement = document.createElement("div");
   private listLoadedAnnotationsLabel = document.createElement("label");
@@ -755,6 +756,7 @@ export class AnnotationLayerView extends AccordionTab {
     );
     this.categoricalSummaryContainer.style.display = "none";
     this.numericalSummaryContainer.style.display = "none";
+    this.derivedSummaryContainer.style.display = "none";
     this.derivedWarningElement.classList.add(
       "neuroglancer-annotation-derived-warning",
     );
@@ -767,11 +769,23 @@ export class AnnotationLayerView extends AccordionTab {
     const propertiesHeader = document.createElement("div");
     propertiesHeader.classList.add("neuroglancer-annotation-properties-header");
     propertiesHeader.textContent = "Properties";
+    const hideDerivedLabel = document.createElement("label");
+    hideDerivedLabel.classList.add(
+      "neuroglancer-annotation-hide-derived-properties",
+    );
+    const hideDerivedCheckbox = document.createElement("input");
+    hideDerivedCheckbox.type = "checkbox";
+    hideDerivedLabel.append(hideDerivedCheckbox, "Hide derived properties");
+    this.registerEventListener(hideDerivedCheckbox, "change", () => {
+      this.derivedSummaryContainer.hidden = hideDerivedCheckbox.checked;
+    });
+    propertiesHeader.appendChild(hideDerivedLabel);
     this.queryStatistics.content.append(
       propertiesHeader,
       this.typeSummaryContainer,
       this.numericalSummaryContainer,
       this.categoricalSummaryContainer,
+      this.derivedSummaryContainer,
       this.derivedWarningElement,
       this.loadedNoticeElement,
     );
@@ -1510,10 +1524,12 @@ export class AnnotationLayerView extends AccordionTab {
     return header;
   }
 
-  private rebuildNumericalSummary() {
+  private rebuildNumericalSummary(declaredPropertyIds: ReadonlySet<string>) {
     this.numericalPropertiesSummary?.dispose();
     this.numericalPropertiesSummary = undefined;
     removeChildren(this.numericalSummaryContainer);
+    removeChildren(this.derivedSummaryContainer);
+    this.derivedSummaryContainer.style.display = "none";
     if (this.annotationQuerySchema.numericProps.length === 0) {
       this.numericalSummaryContainer.style.display = "none";
       this.updateStatisticsVisibility();
@@ -1545,7 +1561,15 @@ export class AnnotationLayerView extends AccordionTab {
     this.numericalPropertiesSummary = summary;
     if (summary.listElement !== undefined) {
       this.numericalSummaryContainer.appendChild(summary.listElement);
-      this.numericalSummaryContainer.style.display = "";
+      for (const property of summary.properties) {
+        if (!declaredPropertyIds.has(property.property.id)) {
+          this.derivedSummaryContainer.appendChild(property.element);
+        }
+      }
+      this.numericalSummaryContainer.style.display =
+        summary.listElement.childElementCount === 0 ? "none" : "";
+      this.derivedSummaryContainer.style.display =
+        this.derivedSummaryContainer.childElementCount === 0 ? "none" : "";
     }
     this.updateStatisticsVisibility();
   }
@@ -1567,6 +1591,7 @@ export class AnnotationLayerView extends AccordionTab {
       this.typeSummaryContainer,
       this.categoricalSummaryContainer,
       this.numericalSummaryContainer,
+      this.derivedSummaryContainer,
       this.derivedWarningElement,
       this.loadedNoticeElement,
     ].some((element) => element.style.display !== "none");
@@ -2139,7 +2164,9 @@ export class AnnotationLayerView extends AccordionTab {
         },
         derivedSchemas,
       );
-      this.rebuildNumericalSummary();
+      this.rebuildNumericalSummary(
+        new Set(allSpecs.map((spec) => spec.identifier)),
+      );
       // Derived schema set changed (relevance / units): refresh column headers
       // on the next pass so shown derived columns get correct unit labels.
       ++this.curColumnConfigGeneration;
