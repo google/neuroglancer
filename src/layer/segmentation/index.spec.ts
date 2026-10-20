@@ -216,7 +216,7 @@ describe("layer/segmentation spatial skeleton source teardown", () => {
     return {
       subsourceEntry: {
         subsource: {
-          mesh: Object.create(
+          spatialSkeleton: Object.create(
             MultiscaleSpatiallyIndexedSkeletonSource.prototype,
           ),
         },
@@ -414,11 +414,13 @@ function makeEquivalencesSubsource() {
 }
 
 function makeSkeletonSubsource(editableSource: unknown) {
-  const mesh = Object.create(
+  const spatialSkeleton = Object.create(
     MultiscaleSpatiallyIndexedSkeletonSource.prototype,
   );
-  Object.defineProperty(mesh, "editableSource", { value: editableSource });
-  return { ...makeLoadedSubsource({ mesh }), activate: vi.fn() };
+  Object.defineProperty(spatialSkeleton, "editableSource", {
+    value: editableSource,
+  });
+  return { ...makeLoadedSubsource({ spatialSkeleton }), activate: vi.fn() };
 }
 
 describe("layer/segmentation equivalences with editable skeletons", () => {

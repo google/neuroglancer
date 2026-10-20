@@ -243,7 +243,7 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
       {
         id: "skeletons",
         default: true,
-        subsource: { mesh: multiscaleSource },
+        subsource: { spatialSkeleton: multiscaleSource },
       },
       {
         id: "properties",

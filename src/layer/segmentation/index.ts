@@ -93,8 +93,7 @@ import {
   SliceViewPanelSkeletonLayer,
   PerspectiveViewSpatiallyIndexedSkeletonLayer,
   SliceViewPanelSpatiallyIndexedSkeletonLayer,
-  MultiscaleSpatiallyIndexedSkeletonSource,
-  SpatiallyIndexedSkeletonSource,
+  type MultiscaleSpatiallyIndexedSkeletonSource,
   SpatiallyIndexedSkeletonLayer,
   type SpatiallyIndexedSkeletonLayerDisplayState,
 } from "#src/skeleton/frontend.js";
@@ -618,17 +617,6 @@ export interface SegmentationLayerSelectionState
   nodeId: bigint | undefined;
 }
 
-function isSpatiallyIndexedSkeletonSource(
-  mesh: unknown,
-): mesh is
-  | MultiscaleSpatiallyIndexedSkeletonSource
-  | SpatiallyIndexedSkeletonSource {
-  return (
-    mesh instanceof MultiscaleSpatiallyIndexedSkeletonSource ||
-    mesh instanceof SpatiallyIndexedSkeletonSource
-  );
-}
-
 export class SegmentationUserLayer extends Base {
   declare selectionState: SegmentationLayerSelectionState;
 
@@ -910,9 +898,7 @@ export class SegmentationUserLayer extends Base {
 
   private makeSpatiallyIndexedSkeletonLayers(
     loadedSubsource: LoadedDataSubsource,
-    source:
-      | MultiscaleSpatiallyIndexedSkeletonSource
-      | SpatiallyIndexedSkeletonSource,
+    source: MultiscaleSpatiallyIndexedSkeletonSource,
     displayState: SpatiallyIndexedSkeletonLayerDisplayState & {
       localPosition: WatchableValueInterface<Float32Array>;
     },
@@ -935,35 +921,23 @@ export class SegmentationUserLayer extends Base {
         skeletonNodeSelection.toGlobalPosition(modelPosition),
       inspectionState: spatialSkeletonState,
     };
-    let base: SpatiallyIndexedSkeletonLayer;
-    let hasPerspectiveSources = true;
-    let hasSlicePanelSources = true;
-    if (source instanceof MultiscaleSpatiallyIndexedSkeletonSource) {
-      const perspectiveSources = source.getPerspectiveSources();
-      const slicePanelSources = source.getSliceViewPanelSources();
-      hasPerspectiveSources = perspectiveSources.length > 0;
-      hasSlicePanelSources = slicePanelSources.length > 0;
-      if (!hasPerspectiveSources && !hasSlicePanelSources) return;
-      // One base serves 2D and 3D panels so their edit state stays consistent.
-      base = new SpatiallyIndexedSkeletonLayer(
-        this.manager.chunkManager,
-        hasPerspectiveSources ? perspectiveSources : slicePanelSources,
-        displayState,
-        {
-          ...layerOptions,
-          sources2d: slicePanelSources,
-          fragmentSource: source.fragmentSource,
-          editableSource: source.editableSource,
-        },
-      );
-    } else {
-      base = new SpatiallyIndexedSkeletonLayer(
-        this.manager.chunkManager,
-        source,
-        displayState,
-        layerOptions,
-      );
-    }
+    const perspectiveSources = source.getPerspectiveSources();
+    const slicePanelSources = source.getSliceViewPanelSources();
+    const hasPerspectiveSources = perspectiveSources.length > 0;
+    const hasSlicePanelSources = slicePanelSources.length > 0;
+    if (!hasPerspectiveSources && !hasSlicePanelSources) return;
+    // One base serves 2D and 3D panels so their edit state stays consistent.
+    const base = new SpatiallyIndexedSkeletonLayer(
+      this.manager.chunkManager,
+      hasPerspectiveSources ? perspectiveSources : slicePanelSources,
+      displayState,
+      {
+        ...layerOptions,
+        sources2d: slicePanelSources,
+        fragmentSource: source.fragmentSource,
+        editableSource: source.editableSource,
+      },
+    );
     if (options.attachFindPath) {
       attachFindPath(this, loadedSubsource, base);
     }
@@ -988,9 +962,8 @@ export class SegmentationUserLayer extends Base {
   ) {
     return loadedSubsources.find((loadedSubsource) => {
       return (
-        isSpatiallyIndexedSkeletonSource(
-          loadedSubsource.subsourceEntry.subsource.mesh,
-        ) &&
+        loadedSubsource.subsourceEntry.subsource.spatialSkeleton !==
+          undefined &&
         loadedSubsource.loadedDataSource.dataSource.state instanceof
           SkeletonDataSourceState
       );
@@ -1001,10 +974,8 @@ export class SegmentationUserLayer extends Base {
     loadedSubsources: readonly LoadedDataSubsource[],
   ): boolean {
     return loadedSubsources.some(({ subsourceEntry }) => {
-      const { mesh: skeleton } = subsourceEntry.subsource;
       return (
-        skeleton instanceof MultiscaleSpatiallyIndexedSkeletonSource &&
-        skeleton.editableSource !== undefined
+        subsourceEntry.subsource.spatialSkeleton?.editableSource !== undefined
       );
     });
   }
@@ -1012,9 +983,10 @@ export class SegmentationUserLayer extends Base {
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>) {
     const loadedSubsources = [...subsources];
     this.skeletonSourceConnection.sourceChanged(
-      loadedSubsources
-        .map((loadedSubsource) => loadedSubsource.subsourceEntry.subsource.mesh)
-        .find(isSpatiallyIndexedSkeletonSource),
+      loadedSubsources.find(
+        ({ subsourceEntry }) =>
+          subsourceEntry.subsource.spatialSkeleton !== undefined,
+      )?.subsourceEntry.subsource.spatialSkeleton,
     );
     const findPathSubsource =
       this.getSpatialSkeletonFindPathSubsource(loadedSubsources);
@@ -1040,8 +1012,14 @@ export class SegmentationUserLayer extends Base {
     let hasVolume = false;
     for (const loadedSubsource of loadedSubsources) {
       if (this.addStaticAnnotations(loadedSubsource)) continue;
-      const { volume, mesh, segmentPropertyMap, segmentationGraph, local } =
-        loadedSubsource.subsourceEntry.subsource;
+      const {
+        volume,
+        mesh,
+        spatialSkeleton,
+        segmentPropertyMap,
+        segmentationGraph,
+        local,
+      } = loadedSubsource.subsourceEntry.subsource;
       if (volume instanceof MultiscaleVolumeChunkSource) {
         switch (volume.dataType) {
           case DataType.FLOAT32:
@@ -1069,7 +1047,6 @@ export class SegmentationUserLayer extends Base {
           const displayState = {
             ...this.displayState,
             transform: loadedSubsource.getRenderLayerTransform(),
-            localPosition: this.localPosition,
           };
           if (mesh instanceof MeshSource) {
             loadedSubsource.addRenderLayer(
@@ -1082,16 +1059,6 @@ export class SegmentationUserLayer extends Base {
                 mesh,
                 displayState,
               ),
-            );
-          } else if (
-            mesh instanceof MultiscaleSpatiallyIndexedSkeletonSource ||
-            mesh instanceof SpatiallyIndexedSkeletonSource
-          ) {
-            this.makeSpatiallyIndexedSkeletonLayers(
-              loadedSubsource,
-              mesh,
-              displayState,
-              { attachFindPath: loadedSubsource === findPathSubsource },
             );
           } else {
             const base = new SkeletonLayer(
@@ -1106,6 +1073,20 @@ export class SegmentationUserLayer extends Base {
               new SliceViewPanelSkeletonLayer(/* transfer ownership */ base),
             );
           }
+        }, this.displayState.segmentationGroupState.value);
+      } else if (spatialSkeleton !== undefined) {
+        loadedSubsource.activate(() => {
+          const displayState = {
+            ...this.displayState,
+            transform: loadedSubsource.getRenderLayerTransform(),
+            localPosition: this.localPosition,
+          };
+          this.makeSpatiallyIndexedSkeletonLayers(
+            loadedSubsource,
+            spatialSkeleton,
+            displayState,
+            { attachFindPath: loadedSubsource === findPathSubsource },
+          );
         }, this.displayState.segmentationGroupState.value);
       } else if (segmentPropertyMap !== undefined) {
         if (!isGroupRoot) {
@@ -1782,7 +1763,7 @@ registerLayerControls(SegmentationUserLayer);
 registerLayerType(SegmentationUserLayer);
 registerVolumeLayerType(VolumeType.SEGMENTATION, SegmentationUserLayer);
 registerLayerTypeDetector((subsource) => {
-  if (subsource.mesh !== undefined) {
+  if (subsource.mesh !== undefined || subsource.spatialSkeleton !== undefined) {
     return { layerConstructor: SegmentationUserLayer, priority: 1 };
   }
   return undefined;

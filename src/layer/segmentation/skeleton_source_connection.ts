@@ -28,7 +28,6 @@ import type { SpatialSkeletonFindPathAnnotationController } from "#src/skeleton/
 import type {
   MultiscaleSpatiallyIndexedSkeletonSource,
   SpatiallyIndexedSkeletonLayer,
-  SpatiallyIndexedSkeletonSource,
 } from "#src/skeleton/frontend.js";
 import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/optimistic_edit/fatal.js";
 import { ensureSpatialSkeletonOptimisticEditQueue } from "#src/skeleton/optimistic_edit/host.js";
@@ -79,10 +78,7 @@ export class SkeletonSourceConnection
   extends RefCounted
   implements SpatialSkeletonLayerContext
 {
-  private activeSource:
-    | MultiscaleSpatiallyIndexedSkeletonSource
-    | SpatiallyIndexedSkeletonSource
-    | undefined;
+  private activeSource: MultiscaleSpatiallyIndexedSkeletonSource | undefined;
   private findPathContext: SpatialSkeletonFindPathContext | undefined;
 
   constructor(private readonly options: SkeletonSourceConnectionOptions) {
@@ -130,10 +126,7 @@ export class SkeletonSourceConnection
   }
 
   sourceChanged(
-    source:
-      | MultiscaleSpatiallyIndexedSkeletonSource
-      | SpatiallyIndexedSkeletonSource
-      | undefined,
+    source: MultiscaleSpatiallyIndexedSkeletonSource | undefined,
   ): void {
     const previousSource = this.activeSource;
     this.activeSource = source;

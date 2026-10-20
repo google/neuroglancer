@@ -44,7 +44,6 @@ import type { SegmentationGraphSource } from "#src/segmentation_graph/source.js"
 import type { SingleMeshSource } from "#src/single_mesh/frontend.js";
 import type {
   SkeletonSource,
-  SpatiallyIndexedSkeletonSource,
   MultiscaleSpatiallyIndexedSkeletonSource,
 } from "#src/skeleton/frontend.js";
 import type { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
@@ -129,12 +128,8 @@ export interface ConvertLegacyUrlOptions extends ConvertLegacyUrlOptionsBase {
 
 export interface DataSubsource {
   volume?: MultiscaleVolumeChunkSource;
-  mesh?:
-    | MeshSource
-    | MultiscaleMeshSource
-    | SkeletonSource
-    | SpatiallyIndexedSkeletonSource
-    | MultiscaleSpatiallyIndexedSkeletonSource;
+  mesh?: MeshSource | MultiscaleMeshSource | SkeletonSource;
+  spatialSkeleton?: MultiscaleSpatiallyIndexedSkeletonSource;
   annotation?: MultiscaleAnnotationSource;
   staticAnnotations?: AnnotationSource;
   local?: LocalDataSource;
