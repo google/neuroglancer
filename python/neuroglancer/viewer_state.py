@@ -658,6 +658,16 @@ class SkeletonNodeFilterType(enum.StrEnum):
 
 
 @export
+class SkeletonBrowseState(JsonObjectWrapper):
+    __slots__ = ()
+
+    node_query = nodeQuery = wrapped_property("nodeQuery", optional(str, ""))
+    node_filter = nodeFilter = wrapped_property(
+        "nodeFilter", optional(SkeletonNodeFilterType)
+    )
+
+
+@export
 class SkeletonRenderingOptions(JsonObjectWrapper):
     __slots__ = ()
 
@@ -993,11 +1003,8 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
         "meshSilhouetteRendering", optional(float, 0)
     )
     segment_query = segmentQuery = wrapped_property("segmentQuery", optional(str))
-    skeleton_node_query = skeletonNodeQuery = wrapped_property(
-        "skeletonNodeQuery", optional(str, "")
-    )
-    skeleton_node_filter = skeletonNodeFilter = wrapped_property(
-        "skeletonNodeFilter", optional(SkeletonNodeFilterType)
+    skeleton_browse = skeletonBrowse = wrapped_property(
+        "skeletonBrowse", SkeletonBrowseState
     )
     hidden_object_alpha = hiddenObjectAlpha = wrapped_property(
         "hiddenObjectAlpha", optional(float, 0.5)

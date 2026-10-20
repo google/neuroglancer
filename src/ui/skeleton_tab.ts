@@ -21,13 +21,9 @@ import svg_bin from "ikonate/icons/bin.svg?raw";
 import svg_chevron_right from "ikonate/icons/chevron-right.svg?raw";
 import svg_chevrons_left from "ikonate/icons/chevrons-left.svg?raw";
 import svg_chevrons_right from "ikonate/icons/chevrons-right.svg?raw";
-import svg_circle from "ikonate/icons/circle.svg?raw";
-import svg_flag from "ikonate/icons/flag.svg?raw";
-import svg_minus from "ikonate/icons/minus.svg?raw";
 import svg_origin from "ikonate/icons/origin.svg?raw";
 import svg_redo from "ikonate/icons/redo.svg?raw";
 import svg_retweet from "ikonate/icons/retweet.svg?raw";
-import svg_share_android from "ikonate/icons/share-android.svg?raw";
 import svg_undo from "ikonate/icons/undo.svg?raw";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import { getSegmentIdFromLayerSelectionValue } from "#src/layer/segmentation/selection.js";
@@ -52,8 +48,7 @@ import {
 import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
 import {
   getSkeletonNodeFilterLabel,
-  getSkeletonNodeIconFilterType,
-  SkeletonDisplayNodeType,
+  getSkeletonNodeTypeLabel,
   SkeletonNodeFilterType,
 } from "#src/skeleton/node_types.js";
 import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/optimistic_edit/fatal.js";
@@ -64,11 +59,14 @@ import {
   observeWatchable,
   registerNested,
   registerNestedSync,
+  makeCachedDerivedWatchableValue,
 } from "#src/trackable_value.js";
 import {
   SPATIAL_SKELETON_EDIT_MODE_TOOL_ID,
   SPATIAL_SKELETON_FIND_PATH_TOOL_ID,
 } from "#src/ui/skeleton_edit_tools.js";
+import { getSkeletonNodeTypeIcon } from "#src/ui/skeleton_node_icons.js";
+import { registerSpatialSkeletonOptimisticEditQueueTab } from "#src/ui/skeleton_optimistic_edit_queue_tab.js";
 import {
   buildSkeletonSegmentRenderState,
   type SkeletonSegmentRenderRow,
@@ -257,20 +255,6 @@ export function getSkeletonEmptyListText(options: {
   return "No matching nodes.";
 }
 
-const NODE_TYPE_ICONS: Record<SkeletonDisplayNodeType, string> = {
-  [SkeletonDisplayNodeType.ROOT]: svg_origin,
-  [SkeletonDisplayNodeType.BRANCH_START]: svg_share_android,
-  [SkeletonDisplayNodeType.REGULAR]: svg_minus,
-  [SkeletonDisplayNodeType.VIRTUAL_END]: svg_circle,
-};
-
-const NODE_TYPE_LABELS: Record<SkeletonDisplayNodeType, string> = {
-  [SkeletonDisplayNodeType.ROOT]: "Root",
-  [SkeletonDisplayNodeType.BRANCH_START]: "Branch point",
-  [SkeletonDisplayNodeType.REGULAR]: "Node",
-  [SkeletonDisplayNodeType.VIRTUAL_END]: "Virtual end",
-};
-
 export class SkeletonTab extends Tab {
   constructor(public layer: SegmentationUserLayer) {
     super();
@@ -300,7 +284,7 @@ export class SkeletonTab extends Tab {
       if (undoButton.disabled) return;
       void (async () => {
         try {
-          await undoSpatialSkeletonCommand(layer);
+          await undoSpatialSkeletonCommand(layer.skeletonSourceConnection);
         } catch (error) {
           showSpatialSkeletonActionError(
             SpatialSkeletonHistoryActions.undo,
@@ -313,7 +297,7 @@ export class SkeletonTab extends Tab {
       if (redoButton.disabled) return;
       void (async () => {
         try {
-          await redoSpatialSkeletonCommand(layer);
+          await redoSpatialSkeletonCommand(layer.skeletonSourceConnection);
         } catch (error) {
           showSpatialSkeletonActionError(
             SpatialSkeletonHistoryActions.redo,
@@ -331,8 +315,8 @@ export class SkeletonTab extends Tab {
     filterInput.type = "text";
     filterInput.placeholder = "Enter node ID or description";
     filterInput.className = "neuroglancer-skeleton-filter";
-    const nodeQuery = layer.displayState.skeletonNodeQuery;
-    const nodeFilterTypeModel = layer.displayState.skeletonNodeFilter;
+    const nodeQuery = layer.displayState.skeletonBrowse.nodeQuery;
+    const nodeFilterTypeModel = layer.displayState.skeletonBrowse.nodeFilter;
     filterInput.value = nodeQuery.value;
     const nodeFilterTypeWidget = this.registerDisposer(
       new EnumSelectWidget(nodeFilterTypeModel),
@@ -518,14 +502,11 @@ export class SkeletonTab extends Tab {
 
     const ensureActionsAllowed = (
       requiredActions: SpatialSkeletonAction | readonly SpatialSkeletonAction[],
-      options: {
-        requireVisibleChunks?: boolean;
-      } = {},
     ) => {
-      const reason = layer.getSpatialSkeletonActionsDisabledReason(
-        requiredActions,
-        options,
-      );
+      const reason =
+        layer.skeletonSourceConnection.getActionsDisabledReason(
+          requiredActions,
+        );
       if (reason !== undefined) {
         StatusMessage.showTemporaryMessage(reason);
         return false;
@@ -544,7 +525,7 @@ export class SkeletonTab extends Tab {
       const moveView = options.moveView ?? false;
       const pin = options.pin ?? false;
       pendingScrollToSelectedNode = true;
-      layer.selectSkeletonNode(node.nodeId, pin, {
+      layer.skeletonNodeSelection.select(node.nodeId, pin, {
         segmentId: node.segmentId,
         position: node.position,
       });
@@ -555,7 +536,7 @@ export class SkeletonTab extends Tab {
     };
 
     const moveViewToNodePosition = (position: ArrayLike<number>) => {
-      layer.moveViewToSkeletonNodePosition(position);
+      layer.skeletonNodeSelection.moveViewTo(position);
     };
 
     const getSegmentChipColors = (segmentId: bigint) => {
@@ -604,10 +585,10 @@ export class SkeletonTab extends Tab {
       `Ctrl+shift+right-click to unpin`;
 
     const getNodeDescriptionText = (node: SkeletonNode) =>
-      layer.getSkeletonNodeDisplayDescription(node);
+      node.description?.length ? node.description : undefined;
 
     const getHoveredNodeIdFromViewer = () => {
-      return layer.hoveredSkeletonNodeInfo.value?.nodeId;
+      return layer.skeletonNodeSelection.hovered.value?.nodeId;
     };
 
     const getSelectedSegmentId = () => {
@@ -725,7 +706,7 @@ export class SkeletonTab extends Tab {
     // measured geometry across a bounded number of frames.
     const attemptScrollToSelectedNode = () => {
       scrollRetryHandle = undefined;
-      const selectedNodeId = layer.selectedSkeletonNodeInfo.value?.nodeId;
+      const selectedNodeId = layer.skeletonNodeSelection.selected.value?.nodeId;
       if (selectedNodeId === undefined) {
         pendingScrollToSelectedNode = false;
         return;
@@ -777,7 +758,7 @@ export class SkeletonTab extends Tab {
     };
 
     const scrollSelectedNodeIntoView = () => {
-      const selectedNodeId = layer.selectedSkeletonNodeInfo.value?.nodeId;
+      const selectedNodeId = layer.skeletonNodeSelection.selected.value?.nodeId;
       if (selectedNodeId === undefined) {
         pendingScrollToSelectedNode = false;
         cancelScrollRetry();
@@ -799,7 +780,7 @@ export class SkeletonTab extends Tab {
 
     // Node IDs repeat across the segments of some skeleton sources.
     const isSelectedNode = (node: SkeletonNode) => {
-      const selected = layer.selectedSkeletonNodeInfo.value;
+      const selected = layer.skeletonNodeSelection.selected.value;
       return (
         selected?.nodeId === node.nodeId &&
         (selected.segmentId === undefined ||
@@ -871,10 +852,13 @@ export class SkeletonTab extends Tab {
               `Node ${node.nodeId} is missing from the inspected skeleton cache.`,
             );
           }
-          await executeSpatialSkeletonNodeTrueEndUpdate(layer, {
-            node: currentNode,
-            nextIsTrueEnd: present,
-          });
+          await executeSpatialSkeletonNodeTrueEndUpdate(
+            layer.skeletonSourceConnection,
+            {
+              node: currentNode,
+              nextIsTrueEnd: present,
+            },
+          );
         } catch (error) {
           const message =
             error instanceof Error ? error.message : String(error);
@@ -908,7 +892,10 @@ export class SkeletonTab extends Tab {
       updateDisplay();
       void (async () => {
         try {
-          await executeSpatialSkeletonDeleteNode(layer, node);
+          await executeSpatialSkeletonDeleteNode(
+            layer.skeletonSourceConnection,
+            node,
+          );
           refreshNodes();
         } catch (error) {
           showSpatialSkeletonActionError(
@@ -927,43 +914,50 @@ export class SkeletonTab extends Tab {
       navTools,
       svg_origin,
       "Go to root",
-      () => layer.navigateSkeleton(SkeletonNavigation.ROOT),
+      () => layer.skeletonNodeSelection.navigate(SkeletonNavigation.ROOT),
     );
     const goBranchStartButton = makeIconButton(
       navTools,
       svg_chevrons_left,
       "Go to start of branch",
-      () => layer.navigateSkeleton(SkeletonNavigation.BRANCH_START),
+      () =>
+        layer.skeletonNodeSelection.navigate(SkeletonNavigation.BRANCH_START),
     );
     const goTreeEndButton = makeIconButton(
       navTools,
       svg_chevrons_right,
       "Go to end of branch",
-      () => layer.navigateSkeleton(SkeletonNavigation.BRANCH_END),
+      () => layer.skeletonNodeSelection.navigate(SkeletonNavigation.BRANCH_END),
     );
     const cycleBranchesButton = makeIconButton(
       navTools,
       svg_retweet,
       "Cycle through level nodes",
-      () => layer.navigateSkeleton(SkeletonNavigation.NEXT_LEVEL_NODE),
+      () =>
+        layer.skeletonNodeSelection.navigate(
+          SkeletonNavigation.NEXT_LEVEL_NODE,
+        ),
     );
     const goParentButton = makeIconButton(
       navTools,
       svg_arrow_left,
       "Go to parent",
-      () => layer.navigateSkeleton(SkeletonNavigation.PARENT),
+      () => layer.skeletonNodeSelection.navigate(SkeletonNavigation.PARENT),
     );
     const goChildButton = makeIconButton(
       navTools,
       svg_arrow_right,
       "Go to child",
-      () => layer.navigateSkeleton(SkeletonNavigation.CHILD),
+      () => layer.skeletonNodeSelection.navigate(SkeletonNavigation.CHILD),
     );
     const goUnfinishedBranchButton = makeIconButton(
       navTools,
       svg_chevron_right,
       "Go to nearest unfinished leaf node",
-      () => layer.navigateSkeleton(SkeletonNavigation.NEAREST_OPEN_LEAF),
+      () =>
+        layer.skeletonNodeSelection.navigate(
+          SkeletonNavigation.NEAREST_OPEN_LEAF,
+        ),
     );
     const gatedControls = [
       goRootButton,
@@ -1014,7 +1008,7 @@ export class SkeletonTab extends Tab {
     const buildSegmentDisplayState = (): SegmentDisplayState | undefined => {
       const segmentId = activeSegmentId;
       if (segmentId === undefined) return undefined;
-      const graph = layer.skeletonNavigator.getGraph(segmentId);
+      const graph = layer.skeletonNodeSelection.navigator.getGraph(segmentId);
       const renderState =
         graph === undefined
           ? {
@@ -1161,11 +1155,7 @@ export class SkeletonTab extends Tab {
           ) {
             return;
           }
-          if (
-            !ensureActionsAllowed(SpatialSkeletonActions.inspect, {
-              requireVisibleChunks: false,
-            })
-          ) {
+          if (!ensureActionsAllowed(SpatialSkeletonActions.inspect)) {
             return;
           }
           selectNode(node, { moveView: true, pin: true });
@@ -1181,11 +1171,7 @@ export class SkeletonTab extends Tab {
             return;
           }
           event.preventDefault();
-          if (
-            !ensureActionsAllowed(SpatialSkeletonActions.inspect, {
-              requireVisibleChunks: false,
-            })
-          ) {
+          if (!ensureActionsAllowed(SpatialSkeletonActions.inspect)) {
             return;
           }
           if (event.ctrlKey) {
@@ -1197,11 +1183,7 @@ export class SkeletonTab extends Tab {
         row.addEventListener("keydown", (event: KeyboardEvent) => {
           if (event.key !== "Enter" && event.key !== " ") return;
           event.preventDefault();
-          if (
-            !ensureActionsAllowed(SpatialSkeletonActions.inspect, {
-              requireVisibleChunks: false,
-            })
-          ) {
+          if (!ensureActionsAllowed(SpatialSkeletonActions.inspect)) {
             return;
           }
           selectNode(node, { moveView: true, pin: true });
@@ -1211,20 +1193,8 @@ export class SkeletonTab extends Tab {
       }
 
       const nodeIsTrueEnd = isSkeletonNodeTrueEnd(node);
-      const iconFilterType = getSkeletonNodeIconFilterType({
-        nodeIsTrueEnd,
-        nodeType: type,
-      });
-      const typeIconSvg =
-        iconFilterType === SkeletonNodeFilterType.TRUE_END
-          ? svg_flag
-          : iconFilterType === SkeletonNodeFilterType.VIRTUAL_END
-            ? svg_circle
-            : NODE_TYPE_ICONS[type];
-      const typeIconTitle =
-        iconFilterType !== undefined
-          ? getSkeletonNodeFilterLabel(iconFilterType)
-          : NODE_TYPE_LABELS[type];
+      const typeIconSvg = getSkeletonNodeTypeIcon(type, nodeIsTrueEnd);
+      const typeIconTitle = getSkeletonNodeTypeLabel(type, nodeIsTrueEnd);
       const typeButtonPending = pendingTrueEndNodes.has(node.nodeId);
       const typeButtonTitle = typeButtonPending
         ? nodeIsTrueEnd
@@ -1445,7 +1415,7 @@ export class SkeletonTab extends Tab {
     };
 
     const refreshNodes = () => {
-      const skeletonLayer = layer.getSpatiallyIndexedSkeletonLayer();
+      const skeletonLayer = layer.spatiallyIndexedSkeletonLayer.value;
       const selectedSegmentId = getSelectedSegmentId();
       const cachedSelectedSegmentNodes =
         selectedSegmentId === undefined
@@ -1493,36 +1463,30 @@ export class SkeletonTab extends Tab {
 
     const updateGateStatus = () => {
       findPathButton.hidden =
-        layer.getSpatialSkeletonFindPathContext() === undefined;
+        layer.skeletonSourceConnection.getFindPathContext() === undefined;
       updatePreparationStatus();
       const topologyControlsDisabledReason =
         detailsPreparationState?.controlsDisabledReason;
       const nextInspectionAllowed =
-        layer.getSpatialSkeletonActionsDisabledReason(
+        layer.skeletonSourceConnection.getActionsDisabledReason(
           SpatialSkeletonActions.inspect,
-          {
-            requireVisibleChunks: false,
-          },
         ) === undefined;
       const nextNavigationAllowed =
         nextInspectionAllowed && topologyControlsDisabledReason === undefined;
       const nextTrueEndEditingAllowed =
         topologyControlsDisabledReason === undefined &&
-        layer.getSpatialSkeletonActionsDisabledReason(
+        layer.skeletonSourceConnection.getActionsDisabledReason(
           SpatialSkeletonActions.editNodeTrueEnd,
         ) === undefined;
       const nextNodeDeletionAllowed =
         topologyControlsDisabledReason === undefined &&
-        layer.getSpatialSkeletonActionsDisabledReason(
+        layer.skeletonSourceConnection.getActionsDisabledReason(
           SpatialSkeletonActions.deleteNodes,
         ) === undefined;
       const nextNodeRerootAllowed =
         topologyControlsDisabledReason === undefined &&
-        layer.getSpatialSkeletonActionsDisabledReason(
+        layer.skeletonSourceConnection.getActionsDisabledReason(
           SpatialSkeletonActions.reroot,
-          {
-            requireVisibleChunks: false,
-          },
         ) === undefined;
       const gateStateChanged =
         inspectionAllowed !== nextInspectionAllowed ||
@@ -1616,29 +1580,22 @@ export class SkeletonTab extends Tab {
       }, layer.editableSkeletonSource),
     );
     this.registerDisposer(
-      observeWatchable(() => updateGateStatus(), layer.spatialSkeletonEditMode),
-    );
-    this.registerDisposer(
       observeWatchable(
         () => updateGateStatus(),
-        layer.spatialSkeletonMergeMode,
+        layer.spatialSkeletonState.editMode,
       ),
     );
     this.registerDisposer(
       observeWatchable(
         () => updateGateStatus(),
-        layer.spatialSkeletonSplitMode,
+        layer.spatialSkeletonState.mergeMode,
       ),
     );
     this.registerDisposer(
-      layer.spatialSkeletonVisibleChunksAvailable.changed.add(() => {
-        updateGateStatus();
-      }),
-    );
-    this.registerDisposer(
-      layer.spatialSkeletonVisibleChunksNeeded.changed.add(() => {
-        updateGateStatus();
-      }),
+      observeWatchable(
+        () => updateGateStatus(),
+        layer.spatialSkeletonState.splitMode,
+      ),
     );
     this.registerDisposer(
       layer.layersChanged.add(() => {
@@ -1703,13 +1660,13 @@ export class SkeletonTab extends Tab {
     );
     this.registerDisposer(() => cancelScrollRetry());
     this.registerDisposer(
-      layer.selectedSkeletonNodeInfo.changed.add(() => {
+      layer.skeletonNodeSelection.selected.changed.add(() => {
         pendingScrollToSelectedNode = true;
         applyRowInteractionState({ scrollSelectedIntoView: true });
       }),
     );
     this.registerDisposer(
-      layer.hoveredSkeletonNodeInfo.changed.add(() => {
+      layer.skeletonNodeSelection.hovered.changed.add(() => {
         updateHoveredViewerNode();
       }),
     );
@@ -1763,4 +1720,27 @@ export class SkeletonTab extends Tab {
     updateHoveredViewerNode();
     refreshNodes();
   }
+}
+
+export function registerSkeletonTabs(layer: SegmentationUserLayer) {
+  layer.tabs.add("skeleton", {
+    label: "Skeleton",
+    order: -45,
+    getter: () => new SkeletonTab(layer),
+    hidden: layer.registerDisposer(
+      makeCachedDerivedWatchableValue(
+        (nodeAccess) => nodeAccess === undefined,
+        [layer.skeletonNodeAccess],
+      ),
+    ),
+  });
+  registerSpatialSkeletonOptimisticEditQueueTab(
+    layer,
+    layer.registerDisposer(
+      makeCachedDerivedWatchableValue(
+        (editableSource) => editableSource === undefined,
+        [layer.editableSkeletonSource],
+      ),
+    ),
+  );
 }

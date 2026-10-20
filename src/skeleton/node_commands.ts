@@ -27,6 +27,7 @@ import {
   redoSpatialSkeletonCommand,
   showSpatialSkeletonActionError,
   undoSpatialSkeletonCommand,
+  executeSpatialSkeletonReroot,
 } from "#src/skeleton/commands.js";
 import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
 import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/optimistic_edit/fatal.js";
@@ -72,7 +73,7 @@ async function runHistoryCommand(
           execute: redoSpatialSkeletonCommand,
         };
   try {
-    await execute(layer);
+    await execute(layer.skeletonSourceConnection);
   } catch (error) {
     showSpatialSkeletonActionError(action, error);
   }
@@ -81,7 +82,7 @@ async function runHistoryCommand(
 function requireSelectedInspectedNode(
   layer: SegmentationUserLayer,
 ): SkeletonNode | undefined {
-  const selected = layer.selectedSkeletonNodeInfo.value;
+  const selected = layer.skeletonNodeSelection.selected.value;
   if (selected === undefined) {
     StatusMessage.showTemporaryMessage("No skeleton node is selected.");
     return undefined;
@@ -122,7 +123,7 @@ function defineNavigation(
     id,
     label,
     requiredActions: [SpatialSkeletonActions.inspect],
-    run: (layer) => layer.navigateSkeleton(navigation),
+    run: (layer) => layer.skeletonNodeSelection.navigate(navigation),
   };
 }
 
@@ -182,7 +183,10 @@ const COMMAND_DEFINITIONS: readonly SkeletonNodeCommandDefinition[] = [
       const node = requireSelectedInspectedNode(layer);
       if (node === undefined) return;
       try {
-        await layer.rerootSpatialSkeletonNode(node);
+        await executeSpatialSkeletonReroot(
+          layer.skeletonSourceConnection,
+          node,
+        );
       } catch (error) {
         showSpatialSkeletonActionError(SpatialSkeletonActions.reroot, error);
       }
@@ -196,10 +200,13 @@ const COMMAND_DEFINITIONS: readonly SkeletonNodeCommandDefinition[] = [
       const node = requireSelectedInspectedNode(layer);
       if (node === undefined) return;
       try {
-        await executeSpatialSkeletonNodeTrueEndUpdate(layer, {
-          node,
-          nextIsTrueEnd: !isSkeletonNodeTrueEnd(node),
-        });
+        await executeSpatialSkeletonNodeTrueEndUpdate(
+          layer.skeletonSourceConnection,
+          {
+            node,
+            nextIsTrueEnd: !isSkeletonNodeTrueEnd(node),
+          },
+        );
       } catch (error) {
         showSpatialSkeletonActionError(
           SpatialSkeletonActions.editNodeTrueEnd,
@@ -251,9 +258,9 @@ export class SkeletonNodeCommands extends RefCounted {
       if (
         managedLayer.visible &&
         layer instanceof SegmentationUserLayer &&
-        layer.getSpatialSkeletonActionsDisabledReason(requiredActions, {
-          requireVisibleChunks: false,
-        }) === undefined
+        layer.skeletonSourceConnection.getActionsDisabledReason(
+          requiredActions,
+        ) === undefined
       ) {
         layers.push(layer);
       }
@@ -278,10 +285,10 @@ export class SkeletonNodeCommands extends RefCounted {
       );
       return;
     }
-    const disabledReason = layer.getSpatialSkeletonActionsDisabledReason(
-      definition.requiredActions,
-      { requireVisibleChunks: false },
-    );
+    const disabledReason =
+      layer.skeletonSourceConnection.getActionsDisabledReason(
+        definition.requiredActions,
+      );
     if (disabledReason !== undefined) {
       StatusMessage.showTemporaryMessage(disabledReason);
       return;

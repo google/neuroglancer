@@ -23,6 +23,7 @@ import { NullarySignal } from "#src/util/signal.js";
 vi.mock("#src/skeleton/commands.js", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   executeSpatialSkeletonNodeTrueEndUpdate: vi.fn(async () => true),
+  executeSpatialSkeletonReroot: vi.fn(async () => true),
 }));
 
 if (!("WebGL2RenderingContext" in globalThis)) {
@@ -42,14 +43,21 @@ if (!("WebGL2RenderingContext" in globalThis)) {
 const { SegmentationUserLayer } = await import(
   "#src/layer/segmentation/index.js"
 );
-const { executeSpatialSkeletonNodeTrueEndUpdate } = await import(
-  "#src/skeleton/commands.js"
+const { SkeletonSourceConnection } = await import(
+  "#src/layer/segmentation/skeleton_source_connection.js"
 );
+const {
+  executeSpatialSkeletonNodeTrueEndUpdate,
+  executeSpatialSkeletonReroot,
+} = await import("#src/skeleton/commands.js");
 const { StatusMessage } = await import("#src/status.js");
 const { CommandRegistry } = await import("#src/ui/command_registry.js");
 const { SkeletonNodeCommands } = await import("#src/skeleton/node_commands.js");
-const { SkeletonNavigator } = await import(
+const { SkeletonNavigation } = await import(
   "#src/skeleton/skeleton_navigator.js"
+);
+const { SpatialSkeletonState } = await import(
+  "#src/skeleton/spatial_skeleton_manager.js"
 );
 
 function makeNode(
@@ -77,50 +85,50 @@ function makeNodeAccess(nodes: readonly SkeletonNode[]) {
 function makeSkeletonLayer(selectedNodeId: bigint, { inspected = true } = {}) {
   const nodes = [makeNode(1n, undefined), makeNode(2n, 1n), makeNode(3n, 2n)];
   const layer = Object.create(SegmentationUserLayer.prototype);
-  const selectAndMoveToSkeletonNode = vi.fn();
-  const rerootSpatialSkeletonNode = vi.fn(async () => true);
-  Object.defineProperty(layer, "manager", {
-    value: { root: { selectionState: { value: undefined } } },
-  });
-  Object.assign(layer, {
-    skeletonNavigator: new SkeletonNavigator(makeNodeAccess(nodes)),
-    getSpatialSkeletonActionsDisabledReason: () => undefined,
-    selectedSkeletonNodeInfo: {
-      value: { nodeId: selectedNodeId, segmentId: 42n },
-    },
-    spatialSkeletonState: {
-      getOptimisticEditFatalState: () => undefined,
-      assertOptimisticEditingAllowed: () => {},
-      getCachedNode: (nodeId: bigint) =>
-        nodes.find((node) => node.nodeId === nodeId),
-      getCachedSegmentNodes: () => nodes,
-      getCachedSegmentSnapshotHandle: () =>
-        inspected
-          ? {
-              handle: {
-                getNode: (nodeId: bigint) =>
-                  nodes.find((node) => node.nodeId === nodeId),
-              },
-            }
-          : undefined,
-    },
-    selectAndMoveToSkeletonNode,
-    rerootSpatialSkeletonNode,
-  });
-  return {
-    layer,
-    nodes,
-    selectAndMoveToSkeletonNode,
-    rerootSpatialSkeletonNode,
+  const skeletonNodeSelection = {
+    selected: { value: { nodeId: selectedNodeId, segmentId: 42n } },
+    navigate: vi.fn(),
   };
+  const spatialSkeletonState = {
+    getOptimisticEditFatalState: () => undefined,
+    assertOptimisticEditingAllowed: () => {},
+    getCachedNode: (nodeId: bigint) =>
+      nodes.find((node) => node.nodeId === nodeId),
+    getCachedSegmentNodes: () => nodes,
+    getCachedSegmentSnapshotHandle: () =>
+      inspected
+        ? {
+            handle: {
+              getNode: (nodeId: bigint) =>
+                nodes.find((node) => node.nodeId === nodeId),
+            },
+          }
+        : undefined,
+  };
+  const skeletonSourceConnection = {
+    spatialSkeletonState,
+    getActionsDisabledReason: () => undefined,
+  };
+  Object.assign(layer, {
+    skeletonNodeSelection,
+    skeletonSourceConnection,
+    spatialSkeletonState,
+  });
+  return { layer, nodes, skeletonNodeSelection, skeletonSourceConnection };
 }
 
 function makeReadOnlySkeletonLayer() {
   const layer = Object.create(SegmentationUserLayer.prototype);
+  const spatialSkeletonState = new SpatialSkeletonState();
   Object.assign(layer, {
-    skeletonNodeAccess: makeNodeAccess([makeNode(1n, undefined)]),
-    getSpatiallyIndexedSkeletonLayer: () => undefined,
-    spatialSkeletonState: { getOptimisticEditFatalState: () => undefined },
+    spatialSkeletonState,
+    skeletonSourceConnection: new SkeletonSourceConnection({
+      spatialSkeletonState,
+      selection: {} as any,
+      segmentationGroupState: new WatchableValue({} as any),
+      skeletonNodeAccess: makeNodeAccess([makeNode(1n, undefined)]),
+      spatiallyIndexedSkeletonLayer: new WatchableValue(undefined),
+    }),
   });
   return layer;
 }
@@ -159,7 +167,7 @@ describe("skeleton node commands", () => {
   });
 
   it("moves to the parent of the selected node", () => {
-    const { layer, selectAndMoveToSkeletonNode } = makeSkeletonLayer(3n);
+    const { layer, skeletonNodeSelection } = makeSkeletonLayer(3n);
     const { viewer } = makeViewer([layer]);
     new SkeletonNodeCommands(viewer as any);
 
@@ -167,9 +175,8 @@ describe("skeleton node commands", () => {
       .get("skeleton-go-parent")!
       .invoke({ dispatchTarget: new EventTarget() });
 
-    expect(selectAndMoveToSkeletonNode).toHaveBeenCalledWith(
-      expect.objectContaining({ nodeId: 2n, segmentId: 42n }),
-      true,
+    expect(skeletonNodeSelection.navigate).toHaveBeenCalledWith(
+      SkeletonNavigation.PARENT,
     );
   });
 
@@ -183,15 +190,14 @@ describe("skeleton node commands", () => {
       .get("skeleton-go-root")!
       .invoke({ dispatchTarget: new EventTarget() });
 
-    expect(first.selectAndMoveToSkeletonNode).not.toHaveBeenCalled();
-    expect(second.selectAndMoveToSkeletonNode).toHaveBeenCalledWith(
-      expect.objectContaining({ nodeId: 1n }),
-      true,
+    expect(first.skeletonNodeSelection.navigate).not.toHaveBeenCalled();
+    expect(second.skeletonNodeSelection.navigate).toHaveBeenCalledWith(
+      SkeletonNavigation.ROOT,
     );
   });
 
   it("sets the selected node as the skeleton root", () => {
-    const { layer, nodes, rerootSpatialSkeletonNode } = makeSkeletonLayer(3n);
+    const { layer, nodes, skeletonSourceConnection } = makeSkeletonLayer(3n);
     const { viewer } = makeViewer([layer]);
     new SkeletonNodeCommands(viewer as any);
 
@@ -199,16 +205,18 @@ describe("skeleton node commands", () => {
       .get("skeleton-reroot")!
       .invoke({ dispatchTarget: new EventTarget() });
 
-    expect(rerootSpatialSkeletonNode).toHaveBeenCalledWith(nodes[2]);
+    expect(executeSpatialSkeletonReroot).toHaveBeenCalledWith(
+      skeletonSourceConnection,
+      nodes[2],
+    );
   });
 
   it("asks to inspect the skeleton before setting a root", () => {
     const showMessage = vi
       .spyOn(StatusMessage, "showTemporaryMessage")
       .mockImplementation(() => ({ dispose() {} }) as any);
-    const { layer, rerootSpatialSkeletonNode } = makeSkeletonLayer(3n, {
-      inspected: false,
-    });
+    vi.mocked(executeSpatialSkeletonReroot).mockClear();
+    const { layer } = makeSkeletonLayer(3n, { inspected: false });
     const { viewer } = makeViewer([layer]);
     new SkeletonNodeCommands(viewer as any);
 
@@ -216,7 +224,7 @@ describe("skeleton node commands", () => {
       .get("skeleton-reroot")!
       .invoke({ dispatchTarget: new EventTarget() });
 
-    expect(rerootSpatialSkeletonNode).not.toHaveBeenCalled();
+    expect(executeSpatialSkeletonReroot).not.toHaveBeenCalled();
     expect(showMessage).toHaveBeenCalledWith(
       "Inspect skeleton 42 before editing it.",
     );
@@ -236,7 +244,7 @@ describe("skeleton node commands", () => {
   });
 
   it("marks an unflagged node as a true end", () => {
-    const { layer, nodes } = makeSkeletonLayer(3n);
+    const { layer, nodes, skeletonSourceConnection } = makeSkeletonLayer(3n);
     const { viewer } = makeViewer([layer]);
     new SkeletonNodeCommands(viewer as any);
 
@@ -245,7 +253,7 @@ describe("skeleton node commands", () => {
       .invoke({ dispatchTarget: new EventTarget() });
 
     expect(executeSpatialSkeletonNodeTrueEndUpdate).toHaveBeenCalledWith(
-      layer,
+      skeletonSourceConnection,
       { node: nodes[2], nextIsTrueEnd: true },
     );
   });

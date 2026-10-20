@@ -29,10 +29,12 @@ import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import { RenderLayerRole } from "#src/renderlayer.js";
 import {
+  SkeletonDataSourceState,
   type SkeletonFindPathEndpoint,
   type SkeletonFindPathResultNode,
   type SkeletonFindPathState,
 } from "#src/skeleton/find_path.js";
+import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/frontend.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -219,4 +221,34 @@ export class SpatialSkeletonFindPathAnnotationController extends RefCounted {
     this.resultReference = undefined;
     super.disposed();
   }
+}
+
+export function attachFindPath(
+  layer: SegmentationUserLayer,
+  loadedSubsource: LoadedDataSubsource,
+  skeletonLayer: SpatiallyIndexedSkeletonLayer,
+) {
+  const { activated } = loadedSubsource;
+  const dataSourceState = loadedSubsource.loadedDataSource.dataSource.state;
+  if (
+    activated === undefined ||
+    !(dataSourceState instanceof SkeletonDataSourceState)
+  ) {
+    return;
+  }
+  const annotationController = activated.registerDisposer(
+    new SpatialSkeletonFindPathAnnotationController({
+      layer,
+      loadedSubsource,
+      state: dataSourceState.findPathState,
+    }),
+  );
+  layer.skeletonSourceConnection.attachFindPath(
+    {
+      skeletonLayer,
+      state: dataSourceState.findPathState,
+      annotationController,
+    },
+    activated,
+  );
 }

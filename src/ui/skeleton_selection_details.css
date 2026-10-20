@@ -1,0 +1,181 @@
+/**
+ * @license
+ * Copyright 2026 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.neuroglancer-selection-details-skeleton-segment-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.2em;
+  padding: 0 0.35em;
+  font-weight: 600;
+}
+
+.neuroglancer-selection-details-skeleton-properties-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #717171;
+  background: #8b8b8b;
+  color: #111;
+  padding: 0.18rem 0.35rem;
+  text-align: left;
+  font: inherit;
+}
+
+.neuroglancer-selection-details-skeleton-properties-input[data-invalid] {
+  border-color: #c94f4f;
+  background: #9f7b7b;
+}
+
+.neuroglancer-selection-details-skeleton-properties-input::placeholder {
+  color: #2a2a2a;
+}
+
+.neuroglancer-selection-details-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.neuroglancer-selection-details-skeleton-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.25rem 0.4rem;
+  background: #383838;
+  font-family: monospace;
+  font-size: medium;
+}
+
+.neuroglancer-selection-details-skeleton-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.2rem;
+  background: transparent;
+  color: inherit;
+  padding: 0.1rem;
+  cursor: pointer;
+  transition: background-color 0.12s ease-in-out;
+}
+
+.neuroglancer-selection-details-skeleton-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.neuroglancer-selection-details-skeleton-action:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.neuroglancer-selection-details-skeleton-summary-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.neuroglancer-selection-details-skeleton-summary-icon .neuroglancer-icon {
+  min-width: 14px;
+  min-height: 14px;
+}
+
+.neuroglancer-selection-details-skeleton-summary-coordinates {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+
+.neuroglancer-selection-details-skeleton .neuroglancer-annotation-property {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0 0.1rem;
+}
+
+.neuroglancer-selection-details-skeleton
+  .neuroglancer-annotation-property-label {
+  color: #b0b0b0;
+}
+
+.neuroglancer-selection-details-skeleton
+  .neuroglancer-annotation-property-value {
+  color: #f0f0f0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.neuroglancer-selection-details-skeleton-node-type {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.28rem;
+}
+
+.neuroglancer-selection-details-skeleton-node-type-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0.65;
+}
+
+.neuroglancer-selection-details-skeleton-node-type-choice[data-checked] {
+  opacity: 1;
+  font-weight: 600;
+}
+
+.neuroglancer-selection-details-skeleton-node-type-choice:disabled:not(
+    [data-checked]
+  ) {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.neuroglancer-selection-details-skeleton-node-type-choice .neuroglancer-icon {
+  min-width: 14px;
+  min-height: 14px;
+}
+
+.neuroglancer-selection-details-skeleton-description {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 5rem;
+  margin-top: 0.15rem;
+  padding: 0.55rem;
+  border: 1px solid #4a4a4a;
+  background: #3b3b3b;
+  color: #f0f0f0;
+  font: 10pt sans-serif;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+textarea.neuroglancer-selection-details-skeleton-description {
+  outline: 0;
+  resize: none;
+  overflow-y: auto;
+}

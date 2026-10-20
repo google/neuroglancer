@@ -321,8 +321,14 @@ export function executeSpatialSkeletonNodeConfidenceUpdate(
 
 export function executeSpatialSkeletonReroot(
   layer: SpatialSkeletonLayerContext,
-  node: SpatialSkeletonCommandPayload,
+  node: Pick<
+    SkeletonNode,
+    "nodeId" | "segmentId" | "parentNodeId" | "position"
+  >,
 ) {
+  if (node.parentNodeId === undefined) {
+    throw new Error(`Node ${node.nodeId} is already root.`);
+  }
   return executeSpatialSkeletonAction(
     layer,
     SpatialSkeletonActions.reroot,

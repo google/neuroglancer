@@ -36,7 +36,7 @@ const viewerState = {
       source: mockServer.sourceUrl,
       segments: ["10", "20"],
       tab: "skeleton",
-      skeletonNodeFilter: "none",
+      skeletonBrowse: { nodeFilter: "none" },
       toolBindings: { E: "spatialSkeletonEditMode" },
     },
   ],

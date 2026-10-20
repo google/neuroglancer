@@ -108,7 +108,7 @@ export class RealSkeletonPage extends SkeletonEditPage {
         window as unknown as { viewer: Viewer }
       ).viewer.layerManager.getLayerByName("Skeletons")!
         .layer as SegmentationUserLayer;
-      const selected = layer.selectedSkeletonNodeInfo.value;
+      const selected = layer.skeletonNodeSelection.selected.value;
       return (
         selected && { id: selected.nodeId, skeletonId: selected.segmentId }
       );
@@ -207,9 +207,7 @@ export class RealSkeletonPage extends SkeletonEditPage {
   async trueEnd(id: bigint) {
     await this.selectNode(id);
     await this.runEdit(() =>
-      this.page
-        .getByRole("radio", { name: "Flag True end", exact: true })
-        .check(),
+      this.page.getByRole("button", { name: /^(\S+ )?True end$/ }).click(),
     );
   }
 }

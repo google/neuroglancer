@@ -42,8 +42,8 @@ with viewer.txn() as s:
 
     # Can set the new spatial related options
     layer = s.layers[0]
-    layer.skeleton_node_query = "1"
-    layer.skeleton_node_filter = neuroglancer.SkeletonNodeFilterType.LEAF
+    layer.skeleton_browse.node_query = "1"
+    layer.skeleton_browse.node_filter = neuroglancer.SkeletonNodeFilterType.LEAF
     layer.hidden_object_alpha = 0.8
     layer.skeleton_cross_section_spacing = 4.0
     layer.skeleton_perspective_spacing = 4.0

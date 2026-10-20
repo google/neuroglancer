@@ -16,42 +16,45 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { RenderLayerTransform } from "#src/render_coordinate_transform.js";
-import { SkeletonEdgeDirection, type SkeletonNode } from "#src/skeleton/api.js";
+import { emptyInvalidCoordinateSpace } from "#src/coordinate_transform.js";
+import { SkeletonEdgeDirection } from "#src/skeleton/api.js";
 import { SpatialSkeletonActions } from "#src/skeleton/command_protocol.js";
-import { SkeletonDataSourceState } from "#src/skeleton/find_path.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { NullarySignal } from "#src/util/signal.js";
+import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 
-function makeWholeSkeletonReads(
-  getSkeleton: (
-    skeletonId: bigint,
-    options: { signal: AbortSignal },
-  ) => unknown,
-) {
-  return {
-    edgeDirection: SkeletonEdgeDirection.CHILD_TO_PARENT,
-    getSkeletonManifest: async () => ({ fragmentKeys: ["skeleton"] }),
-    getSkeletonFragment: async (
-      skeletonId: bigint,
-      _fragmentKey: string,
-      signal: AbortSignal,
-    ) => {
-      const skeletonNodes = (await getSkeleton(skeletonId, {
-        signal,
-      })) as SkeletonNode[];
-      return {
-        nodes: skeletonNodes.map(({ parentNodeId: _, ...node }) => node),
-        edges: skeletonNodes.flatMap(({ nodeId, parentNodeId }) =>
-          parentNodeId === undefined
-            ? []
-            : [{ firstNodeId: nodeId, secondNodeId: parentNodeId }],
-        ),
-      };
-    },
-  };
-}
+const segmentationDisplayStateCallbacks = vi.hoisted(
+  () => new Set<() => void>(),
+);
 
+vi.mock(
+  "#src/segmentation_display_state/frontend.js",
+  async (importOriginal) => {
+    const original = await importOriginal<Record<string, unknown>>();
+    return {
+      ...original,
+      makeSegmentWidget: (_displayState: unknown, id: { key: bigint }) => {
+        const row = document.createElement("div");
+        row.textContent = `segment ${id.key}`;
+        return row;
+      },
+      bindSegmentListWidth: () => () => {},
+      getBaseObjectColor: () => new Float32Array([0.2, 0.4, 0.6, 1]),
+      registerCallbackWhenSegmentationDisplayStateChanged: (
+        _displayState: unknown,
+        context: { registerDisposer(disposer: () => void): void },
+        callback: () => void,
+      ) => {
+        segmentationDisplayStateCallbacks.add(callback);
+        context.registerDisposer(() =>
+          segmentationDisplayStateCallbacks.delete(callback),
+        );
+      },
+    };
+  },
+);
+
+// The layer module reads WebGL constants when it loads.
 if (!("WebGL2RenderingContext" in globalThis)) {
   Object.defineProperty(globalThis, "WebGL2RenderingContext", {
     value: new Proxy(class WebGL2RenderingContext {} as any, {
@@ -69,14 +72,15 @@ if (!("WebGL2RenderingContext" in globalThis)) {
 const { SegmentationUserLayer } = await import(
   "#src/layer/segmentation/index.js"
 );
-
-const {
-  MultiscaleSpatiallyIndexedSkeletonSource,
-  PerspectiveViewSpatiallyIndexedSkeletonLayer,
-  SliceViewPanelSpatiallyIndexedSkeletonLayer,
-  SpatiallyIndexedSkeletonSource,
-} = await import("#src/skeleton/frontend.js");
-
+const { SkeletonNodeSelection } = await import(
+  "#src/layer/segmentation/selection.js"
+);
+const { SkeletonSourceConnection } = await import(
+  "#src/layer/segmentation/skeleton_source_connection.js"
+);
+const { MultiscaleSpatiallyIndexedSkeletonSource } = await import(
+  "#src/skeleton/frontend.js"
+);
 const { LocalDataSource } = await import("#src/datasource/local.js");
 const { LocalSegmentationGraphSource } = await import(
   "#src/segmentation_graph/local.js"
@@ -85,106 +89,58 @@ const { SharedDisjointUint64Sets } = await import(
   "#src/shared_disjoint_sets.js"
 );
 const { Uint64Set } = await import("#src/uint64_set.js");
+const { Uint64OrderedSet } = await import("#src/uint64_ordered_set.js");
+const { SelectionDetailsPanel } = await import("#src/ui/selection_details.js");
+const { executeSpatialSkeletonAddNode } = await import(
+  "#src/skeleton/commands.js"
+);
 const { RefCounted } = await import("#src/util/disposable.js");
 const { StatusMessage } = await import("#src/status.js");
-
-const { SegmentSelectionState } = await import(
-  "#src/segmentation_display_state/frontend.js"
-);
-
 const { TrackableDataSelectionState } = await import("#src/layer/index.js");
-const { SkeletonNavigation, SkeletonNavigator } = await import(
-  "#src/skeleton/skeleton_navigator.js"
+const { SpatialSkeletonState } = await import(
+  "#src/skeleton/spatial_skeleton_manager.js"
 );
 const { CatmaidSpatialSkeletonEditCommands } = await import(
   "#src/datasource/catmaid/spatial_skeleton_commands.js"
 );
-const { SpatialSkeletonState } = await import(
-  "#src/skeleton/spatial_skeleton_manager.js"
-);
-const { executeSpatialSkeletonDeleteNode } = await import(
-  "#src/skeleton/commands.js"
-);
 
-function makeQueuedSelectionLayer(pin = true) {
+function makeSkeletonSourceConnection(
+  spatialSkeletonState: InstanceType<typeof SpatialSkeletonState>,
+) {
+  return new SkeletonSourceConnection({
+    spatialSkeletonState,
+    selection: {} as any,
+    segmentationGroupState: new WatchableValue({} as any),
+    skeletonNodeAccess: new WatchableValue(undefined),
+    spatiallyIndexedSkeletonLayer: new WatchableValue(undefined),
+  });
+}
+
+function makeSelectionHookLayer() {
+  const renderLayer = {};
   const layer = Object.create(SegmentationUserLayer.prototype);
-  const selectionState: any = {
-    value: undefined,
-    pin: new WatchableValue(pin),
-    coordinateSpace: { value: {} },
-    location: { visible: true },
-    captureSingleLayerState:
-      TrackableDataSelectionState.prototype.captureSingleLayerState,
+  const layerSelectedValues = {
+    changed: new NullarySignal(),
+    mouseState: { active: false },
   };
-  const state = new SpatialSkeletonState();
-  const group = {
-    visibleSegments: new Set<bigint>(),
-    temporaryVisibleSegments: new Set<bigint>(),
-    selectedSegments: new Set<bigint>(),
-    useTemporaryVisibleSegments: { value: false },
-  };
-  Object.defineProperty(layer, "manager", {
-    value: { root: { selectionState } },
+  const selectionState = new TrackableDataSelectionState(
+    new WatchableValue(emptyInvalidCoordinateSpace),
+    layerSelectedValues as any,
+  );
+  Object.defineProperties(layer, {
+    localCoordinateSpace: { value: { value: { rank: 0 } } },
+    localPosition: { value: { value: new Float32Array(0) } },
+    renderLayers: { value: [renderLayer] },
+    getValueAt: { value: () => 7n },
+    manager: { value: { layerSelectedValues, root: { selectionState } } },
   });
-  const commands = new CatmaidSpatialSkeletonEditCommands({
-    getClient: () => client as any,
+  layer.skeletonNodeSelection = new SkeletonNodeSelection({
+    layer,
+    skeletonNodeAccess: new WatchableValue(undefined),
+    spatiallyIndexedSkeletonLayer: new WatchableValue(undefined),
+    spatialSkeletonState: new SpatialSkeletonState(),
   });
-  const client = {
-    baseUrl: "https://catmaid.example.test",
-    projectId: 1,
-    addNode: vi.fn(),
-    deleteNode: vi.fn(),
-    getSkeleton: vi.fn(async () => []),
-  };
-  const source = {
-    optimisticEditing: commands.optimisticEditing,
-    addNodesCommand: commands.addNodesCommand,
-    deleteNodesCommand: commands.deleteNodesCommand,
-    ...makeWholeSkeletonReads(client.getSkeleton),
-  };
-  const skeletonLayer = {
-    fragmentSource: source,
-    editableSource: source,
-    getNode: (id: bigint) => state.getCachedNode(id),
-    retainOverlaySegment: vi.fn(),
-    remapOverlaySegments: vi.fn(),
-  };
-  Object.assign(layer, {
-    spatialSkeletonState: state,
-    displayState: {
-      segmentationGroupState: { value: group },
-      segmentSelectionState: { baseValue: 999n },
-    },
-    selectedSkeletonNodeInfo: new WatchableValue(undefined),
-    getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
-    initializeSelectionState: (value: any) => {
-      value.nodeId = undefined;
-      value.value = undefined;
-    },
-    selectSegment: (id: bigint, pin: boolean) =>
-      selectionState.captureSingleLayerState(
-        layer,
-        (value: any) => {
-          value.value = id;
-          return true;
-        },
-        pin,
-      ),
-    selectSkeletonNode: (nodeId: bigint, pin: boolean, options: any) => {
-      layer.selectedSkeletonNodeInfo.value = { nodeId, ...options };
-      (layer as any).captureSpatialSkeletonSelectionState((value: any) => {
-        value.nodeId = nodeId;
-        value.value = options.segmentId;
-        return true;
-      }, pin);
-    },
-    clearSkeletonNodeSelection: (pin: boolean) => {
-      layer.selectedSkeletonNodeInfo.value = undefined;
-      (layer as any).captureSpatialSkeletonSelectionState(() => true, pin);
-    },
-    moveViewToSkeletonNodePosition: vi.fn(),
-  });
-  return { layer, selectionState, state, group, client, skeletonLayer };
+  return { layer, renderLayer };
 }
 
 function makeEditableSpatialSkeletonSource(
@@ -230,84 +186,6 @@ function makeEditableSpatialSkeletonSource(
   };
 }
 
-function makeSpatialSkeletonActionGateLayer(options: {
-  editableSource?: unknown;
-  readOnlySource?: unknown;
-  visibleChunksLoaded?: boolean;
-  visibleChunksNeeded?: number;
-  visibleChunksAvailable?: number;
-  fatalState?: object;
-  driverSetupError?: unknown;
-}) {
-  const skeletonLayer = {
-    fragmentSource: options.editableSource ?? options.readOnlySource,
-    editableSource: options.editableSource,
-  };
-  return Object.assign(Object.create(SegmentationUserLayer.prototype), {
-    getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
-    skeletonNodeAccess: new WatchableValue(skeletonLayer),
-    spatialSkeletonState: {
-      ensureOptimisticEditingEngine: vi.fn(() => {
-        if (options.driverSetupError !== undefined) {
-          throw options.driverSetupError;
-        }
-        return {};
-      }),
-      getOptimisticEditFatalState: vi.fn(() => options.fatalState),
-    },
-    spatialSkeletonVisibleChunksLoaded: new WatchableValue(
-      options.visibleChunksLoaded ?? true,
-    ),
-    spatialSkeletonVisibleChunksNeeded: new WatchableValue(
-      options.visibleChunksNeeded ?? 0,
-    ),
-    spatialSkeletonVisibleChunksAvailable: new WatchableValue(
-      options.visibleChunksAvailable ?? 0,
-    ),
-  });
-}
-
-describe("layer/segmentation spatial skeleton chunk stats", () => {
-  it("tracks combined chunk load state from the loading render layers only", () => {
-    // After the 2D/3D backend unification, only PerspectiveViewSpatiallyIndexedSkeletonLayer
-    // contributes to the chunk stats (it handles both 2D and 3D views via the shared backend).
-    const perspectiveLayer = Object.assign(
-      Object.create(PerspectiveViewSpatiallyIndexedSkeletonLayer.prototype),
-      {
-        layerChunkProgressInfo: {
-          numVisibleChunksNeeded: 9,
-          numVisibleChunksAvailable: 7,
-        },
-      },
-    );
-    const slicePanelLayer = Object.assign(
-      Object.create(SliceViewPanelSpatiallyIndexedSkeletonLayer.prototype),
-      {
-        layerChunkProgressInfo: {
-          numVisibleChunksNeeded: 100,
-          numVisibleChunksAvailable: 100,
-        },
-      },
-    );
-
-    const layer = Object.assign(
-      Object.create(SegmentationUserLayer.prototype),
-      {
-        renderLayers: [perspectiveLayer, slicePanelLayer],
-        spatialSkeletonVisibleChunksNeeded: new WatchableValue(0),
-        spatialSkeletonVisibleChunksAvailable: new WatchableValue(0),
-        spatialSkeletonVisibleChunksLoaded: new WatchableValue(false),
-      },
-    );
-
-    layer.updateSpatialSkeletonChunkLoadState();
-
-    expect(layer.spatialSkeletonVisibleChunksNeeded.value).toBe(9);
-    expect(layer.spatialSkeletonVisibleChunksAvailable.value).toBe(7);
-    expect(layer.spatialSkeletonVisibleChunksLoaded.value).toBe(false);
-  });
-});
-
 describe("layer/segmentation spatial skeleton source teardown", () => {
   function makeActivatingSegmentationLayer() {
     const spatialSkeletonState = new SpatialSkeletonState();
@@ -324,9 +202,10 @@ describe("layer/segmentation spatial skeleton source teardown", () => {
           },
           hasVolume: new WatchableValue(false),
         },
-        updateSpatialSkeletonChunkLoadState: vi.fn(),
       },
     );
+    layer.skeletonSourceConnection =
+      makeSkeletonSourceConnection(spatialSkeletonState);
     Object.defineProperty(layer, "manager", {
       value: { chunkManager: { memoize: { getUncounted: () => undefined } } },
     });
@@ -393,453 +272,13 @@ describe("layer/segmentation spatial skeleton source teardown", () => {
   });
 });
 
-describe("layer/segmentation optimistic projection UI hints", () => {
-  it("migrates persistent, temporary, selected, and current identities together", () => {
-    const group = {
-      visibleSegments: new Set([100n]),
-      temporaryVisibleSegments: new Set([100n]),
-      selectedSegments: new Set([100n]),
-    };
-    const selectedSkeletonNodeInfo = new WatchableValue<any>({
-      nodeId: 10n,
-      segmentId: 100n,
-      position: [1, 2, 3],
-    });
-    const selectSkeletonNode = vi.fn();
-    const retainOverlaySegment = vi.fn();
-    const remapOverlaySegments = vi.fn();
-    const remapPendingNodePositions = vi.fn();
-    const layer = Object.assign(
-      Object.create(SegmentationUserLayer.prototype),
-      {
-        displayState: {
-          segmentationGroupState: { value: group },
-          segmentSelectionState: { baseValue: 100n },
-        },
-        selectedSkeletonNodeInfo,
-        selectSkeletonNode,
-        selectSegment: vi.fn(),
-        clearSkeletonNodeSelection: vi.fn(),
-        spatialSkeletonState: {
-          getCachedNode: vi.fn(),
-          remapPendingNodePositions,
-        },
-        managedLayer: {
-          manager: { root: { selectionState: { pin: { value: true } } } },
-        },
-        getSpatiallyIndexedSkeletonLayer: () => ({
-          retainOverlaySegment,
-          remapOverlaySegments,
-        }),
-      },
-    );
-
-    layer.applySpatialSkeletonProjectionUiHints({
-      nodeIdRemappings: new Map([[10n, 20n]]),
-      segmentIdRemappings: new Map([[100n, 200n]]),
-      segmentVisibility: [],
-      retainSegmentIds: [200n],
-    });
-
-    for (const set of [
-      group.visibleSegments,
-      group.temporaryVisibleSegments,
-      group.selectedSegments,
-    ]) {
-      expect(set.has(100n)).toBe(false);
-      expect(set.has(200n)).toBe(true);
-    }
-    expect(selectedSkeletonNodeInfo.value).toEqual({
-      nodeId: 20n,
-      segmentId: 200n,
-      position: [1, 2, 3],
-    });
-    expect(selectSkeletonNode).not.toHaveBeenCalled();
-    expect(remapPendingNodePositions).toHaveBeenCalledWith(
-      new Map([[10n, 20n]]),
-    );
-    expect(remapOverlaySegments).toHaveBeenCalledWith(new Map([[100n, 200n]]));
-    expect(retainOverlaySegment).toHaveBeenCalledWith(200n);
-  });
-
-  it("keeps the pinned node selected after its id is remapped", () => {
-    const { layer, selectionState } = makeQueuedSelectionLayer(true);
-    selectionState.value = {
-      layers: [{ layer, state: { nodeId: 10n, value: 100n } }],
-      position: new Float32Array([1, 2, 3]),
-    };
-
-    layer.applySpatialSkeletonProjectionUiHints({
-      nodeIdRemappings: new Map([[10n, 20n]]),
-      segmentIdRemappings: new Map(),
-      segmentVisibility: [],
-      retainSegmentIds: [],
-    });
-
-    expect(selectionState.value.layers[0].state).toEqual({
-      nodeId: 20n,
-      value: 100n,
-    });
-  });
-
-  it.each([true, false])(
-    "remaps a stored segment-only selection while preserving pin %s, position, and other layers",
-    (pin) => {
-      const { layer, selectionState } = makeQueuedSelectionLayer(pin);
-      const otherEntry = { layer: {}, state: { value: 42n } };
-      const position = new Float32Array([1, 2, 3]);
-      selectionState.value = {
-        layers: [{ layer, state: { value: 4294967290n } }, otherEntry],
-        position,
-      };
-      layer.applySpatialSkeletonProjectionUiHints({
-        nodeIdRemappings: new Map(),
-        segmentIdRemappings: new Map([[4294967290n, 114n]]),
-        segmentVisibility: [],
-        retainSegmentIds: [],
-      });
-      expect(selectionState.value.layers[0].state.value).toBe(114n);
-      expect(selectionState.value.layers[1]).toBe(otherEntry);
-      expect(selectionState.value.position).toBe(position);
-      expect(selectionState.pin.value).toBe(pin);
-    },
-  );
-
-  it.each([true, false])(
-    "applies restored node hints while preserving pin %s",
-    (pin) => {
-      const { layer, selectionState } = makeQueuedSelectionLayer(pin);
-      layer.applySpatialSkeletonProjectionUiHints({
-        nodeIdRemappings: new Map(),
-        segmentIdRemappings: new Map(),
-        segmentVisibility: [
-          {
-            segmentId: 87n,
-            visible: true,
-            deselect: false,
-            select: "preserve",
-          },
-        ],
-        selectedNode: {
-          kind: "select",
-          nodeId: 725n,
-          segmentId: 87n,
-          pin: "preserve",
-          moveView: false,
-        },
-        retainSegmentIds: [87n],
-      });
-      expect(selectionState.value.layers[0].state).toEqual({
-        nodeId: 725n,
-        value: 87n,
-      });
-      expect(selectionState.pin.value).toBe(pin);
-    },
-  );
-
-  it("restores visibility and the pinned node after a final-node rejection through the real queue", async () => {
-    const { layer, state, selectionState, group, client } =
-      makeQueuedSelectionLayer();
-    const node = {
-      nodeId: 725n,
-      segmentId: 87n,
-      position: new Float32Array([4, 5, 6]),
-    };
-    state.replaceCachedSegmentSnapshots([[87n, [node]]]);
-    group.visibleSegments.add(87n);
-    layer.selectSkeletonNode(node.nodeId, true, node);
-    let rejectDelete!: (error: Error) => void;
-    client.deleteNode.mockImplementation(
-      () =>
-        new Promise((_, reject) => {
-          rejectDelete = reject;
-        }),
-    );
-    const execution = executeSpatialSkeletonDeleteNode(layer, node);
-    await execution;
-    for (let i = 0; i < 20 && rejectDelete === undefined; i++)
-      await Promise.resolve();
-    expect(selectionState.value.layers[0].state.nodeId).toBeUndefined();
-    expect(group.visibleSegments.has(87n)).toBe(false);
-    // A plain provider rejection must be classified as definitive, as HTTP 409 is.
-    const { HttpError } = await import("#src/util/http_request.js");
-    rejectDelete(
-      new HttpError(
-        "https://catmaid.example.test/1/treenode/delete",
-        409,
-        "Conflict",
-      ),
-    );
-    expect(await execution.settled).toMatchObject({
-      outcome: "unchanged",
-      reason: "rejected",
-    });
-    expect(selectionState.value.layers[0].state).toEqual({
-      nodeId: 725n,
-      value: 87n,
-    });
-    expect(group.visibleSegments.has(87n)).toBe(true);
-    expect(state.getCachedNode(725n)).toMatchObject(node);
-    expect(
-      state.spatialSkeletonPresentation.value.removedSegmentIds,
-    ).not.toContain(87n);
-    expect(state.getOptimisticEditFatalState()).toBeUndefined();
-    state.dispose();
-  });
-});
-
-describe("layer/segmentation spatial skeleton action gating", () => {
-  it("blocks every edit after Reload required but keeps inspection available", () => {
-    const layer = makeSpatialSkeletonActionGateLayer({
-      editableSource: makeEditableSpatialSkeletonSource({
-        rerootCommand: true,
-      }),
-      visibleChunksLoaded: false,
-      fatalState: {
-        reason: "authority-indeterminate",
-        authority: "indeterminate",
-      },
-    });
-
-    expect(
-      layer.getSpatialSkeletonActionsDisabledReason(
-        SpatialSkeletonActions.moveNodes,
-        { requireVisibleChunks: true },
-      ),
-    ).toBe("Reload the page before making more skeleton edits.");
-    expect(
-      layer.getSpatialSkeletonActionsDisabledReason([
-        SpatialSkeletonActions.inspect,
-        SpatialSkeletonActions.splitSkeletons,
-      ]),
-    ).toBe("Reload the page before making more skeleton edits.");
-    expect(
-      layer.getSpatialSkeletonActionsDisabledReason(
-        SpatialSkeletonActions.inspect,
-        { requireVisibleChunks: false },
-      ),
-    ).toBeUndefined();
-  });
-
-  it("does not require a specific grid level for skeleton actions", () => {
-    const layer = makeSpatialSkeletonActionGateLayer({
-      editableSource: makeEditableSpatialSkeletonSource({
-        rerootCommand: true,
-      }),
-    });
-
-    expect(
-      layer.getSpatialSkeletonActionsDisabledReason(
-        SpatialSkeletonActions.mergeSkeletons,
-      ),
-    ).toBeUndefined();
-    expect(
-      layer.getSpatialSkeletonActionsDisabledReason(
-        SpatialSkeletonActions.reroot,
-        {
-          requireVisibleChunks: false,
-        },
-      ),
-    ).toBeUndefined();
-    expect(
-      layer.getSpatialSkeletonActionsDisabledReason([
-        SpatialSkeletonActions.addNodes,
-        SpatialSkeletonActions.moveNodes,
-      ]),
-    ).toBeUndefined();
-  });
-
-  it("allows every factory-advertised edit and inspection", () => {
-    const layer = makeSpatialSkeletonActionGateLayer({
-      editableSource: makeEditableSpatialSkeletonSource({
-        rerootCommand: true,
-      }),
-    });
-
-    for (const action of [
-      SpatialSkeletonActions.addNodes,
-      SpatialSkeletonActions.moveNodes,
-      SpatialSkeletonActions.deleteNodes,
-      SpatialSkeletonActions.mergeSkeletons,
-      SpatialSkeletonActions.splitSkeletons,
-      SpatialSkeletonActions.reroot,
-      SpatialSkeletonActions.editNodeDescription,
-      SpatialSkeletonActions.editNodeTrueEnd,
-      SpatialSkeletonActions.editNodeRadius,
-      SpatialSkeletonActions.editNodeConfidence,
-    ]) {
-      expect(
-        layer.getSpatialSkeletonActionsDisabledReason(action),
-      ).toBeUndefined();
-    }
-
-    expect(
-      layer.getSpatialSkeletonActionsDisabledReason(
-        SpatialSkeletonActions.inspect,
-      ),
-    ).toBeUndefined();
-    expect(
-      layer.getSpatialSkeletonActionsDisabledReason([
-        SpatialSkeletonActions.inspect,
-        SpatialSkeletonActions.addNodes,
-      ]),
-    ).toBeUndefined();
-  });
-
-  it("still reports visible chunk loading when requested", () => {
-    const layer = makeSpatialSkeletonActionGateLayer({
-      editableSource: makeEditableSpatialSkeletonSource(),
-      visibleChunksLoaded: false,
-      visibleChunksNeeded: 3,
-      visibleChunksAvailable: 1,
-    });
-
-    expect(
-      layer.getSpatialSkeletonActionsDisabledReason(
-        SpatialSkeletonActions.splitSkeletons,
-        {
-          requireVisibleChunks: true,
-        },
-      ),
-    ).toBe("Wait for visible skeleton chunks to load (1/3).");
-  });
-
-  it("reports missing reroot support explicitly", () => {
-    const layer = makeSpatialSkeletonActionGateLayer({
-      editableSource: makeEditableSpatialSkeletonSource(),
-    });
-
-    expect(
-      layer.getSpatialSkeletonActionsDisabledReason(
-        SpatialSkeletonActions.reroot,
-        {
-          requireVisibleChunks: false,
-        },
-      ),
-    ).toBe(
-      "The active spatial skeleton source does not support skeleton rerooting.",
-    );
-  });
-
-  it("treats an invalid datasource driver registration as inspect-only", () => {
-    const layer = makeSpatialSkeletonActionGateLayer({
-      editableSource: makeEditableSpatialSkeletonSource(),
-      driverSetupError: new Error("invalid registration"),
-    });
-
-    expect(
-      layer.getSpatialSkeletonActionsDisabledReason(
-        SpatialSkeletonActions.moveNodes,
-      ),
-    ).toBe(
-      "The active spatial skeleton source does not support node movement.",
-    );
-    expect(
-      layer.getSpatialSkeletonActionsDisabledReason(
-        SpatialSkeletonActions.inspect,
-      ),
-    ).toBeUndefined();
-  });
-
-  it("allows confidence editing for a source that does not list its confidence values", () => {
-    const layer = makeSpatialSkeletonActionGateLayer({
-      editableSource: makeEditableSpatialSkeletonSource(),
-    });
-
-    expect(
-      layer.getSpatialSkeletonActionsDisabledReason(
-        SpatialSkeletonActions.editNodeConfidence,
-      ),
-    ).toBeUndefined();
-  });
-
-  it("reports read-only spatial skeleton sources explicitly", () => {
-    const layer = makeSpatialSkeletonActionGateLayer({
-      readOnlySource: makeEditableSpatialSkeletonSource({
-        rerootCommand: true,
-      }),
-    });
-
-    expect(
-      layer.getSpatialSkeletonActionsDisabledReason(
-        SpatialSkeletonActions.addNodes,
-      ),
-    ).toBe("The active spatial skeleton source is read-only.");
-    expect(
-      layer.getSpatialSkeletonActionsDisabledReason(
-        SpatialSkeletonActions.inspect,
-      ),
-    ).toBeUndefined();
-  });
-});
-
-function makePrecomputedNode(
-  nodeId: bigint,
-  position: readonly number[],
-  parentNodeId?: bigint,
-): SkeletonNode {
-  return {
-    nodeId,
-    segmentId: 7n,
-    position: new Float32Array(position),
-    parentNodeId,
-  };
-}
-
-function makeNodeAccess(nodes: readonly SkeletonNode[]) {
-  return new WatchableValue({
-    getSegmentNodes: () => nodes,
-    nodesChanged: new NullarySignal(),
-    hasPickableNodes: false,
-    parentsInferred: false,
-    displayState: { transform: new WatchableValue(undefined as any) },
-  });
-}
-
-function makePrecomputedSelectionLayer(nodes: readonly SkeletonNode[]) {
-  const skeletonNodeAccess = makeNodeAccess(nodes);
-  return Object.assign(Object.create(SegmentationUserLayer.prototype), {
-    displayState: undefined,
-    getSpatiallyIndexedSkeletonLayer: () => undefined,
-    skeletonNodeAccess,
-    skeletonNavigator: new SkeletonNavigator(skeletonNodeAccess),
-    selectSegment: vi.fn(),
-    selectedSkeletonNodeInfo: new WatchableValue(undefined),
-    spatialSkeletonNodeDataVersion: new WatchableValue(0),
-    spatialSkeletonState: { getCachedNode: () => undefined },
-  });
-}
-
-function makeSelectionContext() {
-  return {
-    redraw: vi.fn(),
-    registerDisposer: vi.fn((disposer: unknown) => disposer),
-  };
-}
-
-describe("layer/segmentation spatial skeleton selection serialization", () => {
-  it("accepts bigint segment selections for runtime spatial skeleton state", () => {
-    const selectionState = new SegmentSelectionState();
-
-    selectionState.set(7n);
-
-    expect(selectionState.value).toBe(7n);
-    expect(selectionState.baseValue).toBe(7n);
-  });
-
-  it("round-trips node id and segment value for spatial skeleton selections", () => {
-    const layer = Object.create(SegmentationUserLayer.prototype);
-    Object.defineProperty(layer, "localCoordinateSpace", {
-      value: { value: { rank: 0 } },
-      configurable: true,
-    });
+describe("layer/segmentation spatial skeleton selection state", () => {
+  it("a saved node selection keeps both the node and its skeleton", () => {
+    const { layer } = makeSelectionHookLayer();
     const state: any = {};
     layer.initializeSelectionState(state);
 
-    layer.selectionStateFromJson(state, {
-      nodeId: "23",
-      value: "7",
-    });
+    layer.selectionStateFromJson(state, { nodeId: "23", value: "7" });
 
     expect(state.nodeId).toBe(23n);
     expect(state.value).toBe(7n);
@@ -847,7 +286,6 @@ describe("layer/segmentation spatial skeleton selection serialization", () => {
       nodeId: "23",
       value: "7",
     });
-
     const copiedState: any = {};
     layer.initializeSelectionState(copiedState);
     layer.copySelectionState(copiedState, state);
@@ -856,11 +294,7 @@ describe("layer/segmentation spatial skeleton selection serialization", () => {
   });
 
   it("ignores legacy spatial skeleton selection keys", () => {
-    const layer = Object.create(SegmentationUserLayer.prototype);
-    Object.defineProperty(layer, "localCoordinateSpace", {
-      value: { value: { rank: 0 } },
-      configurable: true,
-    });
+    const { layer } = makeSelectionHookLayer();
     const state: any = {};
     layer.initializeSelectionState(state);
 
@@ -874,144 +308,9 @@ describe("layer/segmentation spatial skeleton selection serialization", () => {
     expect(layer.selectionStateToJson(state, false)).toEqual({});
   });
 
-  it("reconciles a retired skeleton ID with the selected node owner", () => {
-    const layer = Object.create(SegmentationUserLayer.prototype);
-    const otherEntry = { layer: {}, state: { value: 42n } };
-    const position = new Float32Array([1, 2, 3]);
-    const selectionState = {
-      pin: { value: true },
-      value: {
-        position,
-        layers: [
-          { layer, state: { nodeId: 210701784n, value: 6369475n } },
-          otherEntry,
-        ],
-      },
-    };
-    Object.defineProperty(layer, "manager", {
-      value: { root: { selectionState } },
-    });
-    layer.getSpatiallyIndexedSkeletonLayer = () => ({
-      getNode: () => undefined,
-    });
-    const getCachedNode = vi.fn(() => ({
-      nodeId: 210701784n,
-      segmentId: 6368977n,
-    }));
-    layer.spatialSkeletonState = { getCachedNode };
-    layer.reconcileSpatialSkeletonSelectionOwnership();
-    expect(selectionState.value.layers[0].state).toEqual({
-      nodeId: 210701784n,
-      value: 6368977n,
-    });
-    expect(selectionState.value.layers[1]).toBe(otherEntry);
-    expect(selectionState.value.position).toBe(position);
-    expect(selectionState.pin.value).toBe(true);
-    const reconciled = selectionState.value;
-    layer.reconcileSpatialSkeletonSelectionOwnership();
-    expect(selectionState.value).toBe(reconciled);
-    getCachedNode.mockReturnValue(undefined as any);
-    layer.reconcileSpatialSkeletonSelectionOwnership();
-    expect(selectionState.value).toBe(reconciled);
-  });
-
-  it("captures and clears spatial skeleton nodes using nodeId and segment value", () => {
-    const selectionState = {
-      pin: { value: false },
-      coordinateSpace: { value: undefined },
-      value: undefined as any,
-    };
-    const layer = Object.create(SegmentationUserLayer.prototype);
-    Object.defineProperty(layer, "localCoordinateSpace", {
-      value: { value: { rank: 0 } },
-      configurable: true,
-    });
-    Object.defineProperty(layer, "manager", {
-      value: {
-        root: {
-          selectionState,
-        },
-      },
-      configurable: true,
-    });
-    layer.captureSpatialSkeletonSelectionState((state: any) => {
-      state.nodeId = 31n;
-      state.value = 9n;
-      return true;
-    }, false);
-
-    expect(selectionState.value.layers[0].state.nodeId).toBe(31n);
-    expect(selectionState.value.layers[0].state.value).toBe(9n);
-
-    layer.captureSpatialSkeletonSelectionState((state: any) => {
-      state.nodeId = undefined;
-      state.value = undefined;
-      return true;
-    }, false);
-
-    expect(selectionState.value.layers[0].state.nodeId).toBeUndefined();
-    expect(selectionState.value.layers[0].state.value).toBeUndefined();
-  });
-
-  it("forgets the hovered node once the mouse leaves it", () => {
-    const renderLayer = {};
-    const layer = Object.create(SegmentationUserLayer.prototype);
-    Object.defineProperty(layer, "localCoordinateSpace", {
-      value: { value: { rank: 0 } },
-      configurable: true,
-    });
-    Object.defineProperty(layer, "localPosition", {
-      value: { value: new Float32Array(0) },
-      configurable: true,
-    });
-    Object.defineProperty(layer, "renderLayers", {
-      value: [renderLayer],
-      configurable: true,
-    });
-    Object.defineProperty(layer, "getValueAt", {
-      value: vi.fn(() => 7n),
-      configurable: true,
-    });
-    const state = {} as any;
-    layer.initializeSelectionState(state);
-    layer.captureSelectionState(state, {
-      active: true,
-      position: new Float32Array(0),
-      pickedRenderLayer: renderLayer,
-      pickedSpatialSkeleton: { nodeId: 31n, segmentId: 9n },
-    } as any);
-
-    layer.resetSelectionState(state);
-    layer.captureSelectionState(state, {
-      active: true,
-      position: new Float32Array(0),
-      pickedRenderLayer: renderLayer,
-      pickedSpatialSkeleton: undefined,
-    } as any);
-
-    expect(state.nodeId).toBeUndefined();
-  });
-
-  it("captures spatial skeleton node ids from unpinned hover selection", () => {
-    const renderLayer = {};
-    const layer = Object.create(SegmentationUserLayer.prototype);
-    Object.defineProperty(layer, "localCoordinateSpace", {
-      value: { value: { rank: 0 } },
-      configurable: true,
-    });
-    Object.defineProperty(layer, "localPosition", {
-      value: { value: new Float32Array(0) },
-      configurable: true,
-    });
-    Object.defineProperty(layer, "renderLayers", {
-      value: [renderLayer],
-      configurable: true,
-    });
-    Object.defineProperty(layer, "getValueAt", {
-      value: vi.fn(() => 7n),
-      configurable: true,
-    });
-    const state = {} as any;
+  it("clicking a skeleton node selects the node and its skeleton, not the voxel below it", () => {
+    const { layer, renderLayer } = makeSelectionHookLayer();
+    const state: any = {};
     layer.initializeSelectionState(state);
 
     layer.captureSelectionState(state, {
@@ -1025,361 +324,20 @@ describe("layer/segmentation spatial skeleton selection serialization", () => {
     expect(state.value).toBe(9n);
   });
 
-  it("ignores spatial skeleton node ids from other render layers", () => {
-    const renderLayer = {};
-    const otherRenderLayer = {};
-    const layer = Object.create(SegmentationUserLayer.prototype);
-    Object.defineProperty(layer, "localCoordinateSpace", {
-      value: { value: { rank: 0 } },
-      configurable: true,
-    });
-    Object.defineProperty(layer, "localPosition", {
-      value: { value: new Float32Array(0) },
-      configurable: true,
-    });
-    Object.defineProperty(layer, "renderLayers", {
-      value: [renderLayer],
-      configurable: true,
-    });
-    Object.defineProperty(layer, "getValueAt", {
-      value: vi.fn(() => 7n),
-      configurable: true,
-    });
-    const state = {} as any;
+  it("a node picked in another layer's skeleton leaves the voxel selection", () => {
+    const { layer } = makeSelectionHookLayer();
+    const state: any = {};
     layer.initializeSelectionState(state);
 
     layer.captureSelectionState(state, {
       active: true,
       position: new Float32Array(0),
-      pickedRenderLayer: otherRenderLayer,
+      pickedRenderLayer: {},
       pickedSpatialSkeleton: { nodeId: 31n, segmentId: 9n },
     } as any);
 
     expect(state.nodeId).toBeUndefined();
     expect(state.value).toBe(7n);
-  });
-
-  it("shows the type and position of a selected precomputed node", () => {
-    const layer = makePrecomputedSelectionLayer([
-      makePrecomputedNode(0n, [4, 5, 6]),
-      makePrecomputedNode(1n, [10, 5, 6], 0n),
-    ]);
-    const parent = document.createElement("div");
-
-    (layer as any).displaySpatialSkeletonSelection(
-      { nodeId: 0n, value: "7" },
-      parent,
-      makeSelectionContext(),
-    );
-
-    expect(parent.textContent).toContain("Root");
-    expect(parent.textContent).toContain("4 5 6");
-    expect(parent.textContent).not.toContain("Radius");
-  });
-
-  it("renders only segment and node ids for non-inspected spatial index node selections", () => {
-    const state = {
-      nodeId: 22242672n,
-      value: "2836850",
-    };
-    const layer = Object.assign(
-      Object.create(SegmentationUserLayer.prototype),
-      {
-        displayState: undefined,
-        getSpatiallyIndexedSkeletonLayer: () => undefined,
-        skeletonNodeAccess: new WatchableValue(undefined),
-        skeletonNavigator: new SkeletonNavigator(new WatchableValue(undefined)),
-        selectSegment: vi.fn(),
-        selectedSkeletonNodeInfo: new WatchableValue(undefined),
-        spatialSkeletonNodeDataVersion: new WatchableValue(0),
-        spatialSkeletonState: {
-          getCachedNode: () => undefined,
-        },
-      },
-    );
-    Object.defineProperty(layer, "manager", {
-      value: {
-        root: {
-          selectionState: {
-            value: {
-              layers: [{ layer, state }],
-            },
-          },
-        },
-      },
-      configurable: true,
-    });
-    const parent = document.createElement("div");
-    const context = {
-      redraw: vi.fn(),
-      registerDisposer: vi.fn((disposer: unknown) => disposer),
-    };
-
-    expect(
-      (layer as any).displaySpatialSkeletonSelection(state, parent, context),
-    ).toBe(true);
-
-    expect(parent.textContent).toContain("2836850");
-    expect(parent.textContent).toContain("22242672");
-    expect(parent.textContent).not.toContain("Unknown");
-    expect(parent.textContent).not.toContain("Unavailable");
-    expect(parent.textContent).not.toContain("Radius");
-    expect(parent.textContent).not.toContain("Confidence");
-
-    (layer.spatialSkeletonState as any).spatialSkeletonPresentation = {
-      value: { provisionalNodeIds: [22242672n] },
-    };
-    const provisionalParent = document.createElement("div");
-    expect(
-      (layer as any).displaySpatialSkeletonSelection(
-        state,
-        provisionalParent,
-        context,
-      ),
-    ).toBe(true);
-    expect(provisionalParent.textContent).toContain("Preview");
-    expect(provisionalParent.textContent).not.toContain("22242672");
-    expect(
-      [...provisionalParent.querySelectorAll<HTMLElement>("[title]")].find(
-        (element) => element.textContent === "Preview",
-      )?.title,
-    ).toBe(
-      "Preview node. The skeleton source has not yet confirmed its permanent node ID.",
-    );
-  });
-});
-
-describe("layer/segmentation spatial skeleton node navigation helpers", () => {
-  it("keeps the segment selected after going to a node of a precomputed skeleton", () => {
-    const layer = Object.create(SegmentationUserLayer.prototype);
-    Object.defineProperty(layer, "manager", {
-      value: { root: { selectionState: { value: undefined } } },
-    });
-    const skeletonNodeAccess = makeNodeAccess([
-      makePrecomputedNode(0n, [0, 0, 0]),
-      makePrecomputedNode(1n, [1, 0, 0], 0n),
-    ]);
-    const selectSkeletonNode = vi.fn();
-    Object.assign(layer, {
-      skeletonNavigator: new SkeletonNavigator(skeletonNodeAccess),
-      selectedSkeletonNodeInfo: new WatchableValue({ nodeId: 1n }),
-      selectSkeletonNode,
-      moveViewToSkeletonNodePosition: vi.fn(),
-    });
-    layer.manager.root.selectionState.value = {
-      layers: [{ layer, state: { value: 7n, nodeId: 1n } }],
-    };
-
-    layer.navigateSkeleton(SkeletonNavigation.PARENT);
-
-    expect(selectSkeletonNode).toHaveBeenCalledWith(
-      0n,
-      true,
-      expect.objectContaining({ segmentId: 7n }),
-    );
-  });
-
-  it("maps model-space node positions through non-identity transforms before updating view state", () => {
-    const dispatchGlobalPositionChanged = vi.fn();
-    const dispatchLocalPositionChanged = vi.fn();
-    const transform: RenderLayerTransform = {
-      rank: 3,
-      unpaddedRank: 3,
-      localToRenderLayerDimensions: [1, -1, 2],
-      globalToRenderLayerDimensions: [2, 0, 1, -1],
-      channelToRenderLayerDimensions: [],
-      channelToModelDimensions: [],
-      channelSpaceShape: new Uint32Array(0),
-      modelToRenderLayerTransform: new Float32Array([
-        2, 0, 0, 0, 0, 0, 1, 0, 0, 3, 0, 0, 10, -5, 1, 1,
-      ]),
-      modelDimensionNames: ["x", "y", "z"],
-      layerDimensionNames: ["a", "b", "c"],
-    };
-    const layer = Object.create(SegmentationUserLayer.prototype);
-    Object.assign(layer, {
-      skeletonNodeAccess: {
-        value: { displayState: { transform: { value: transform } } },
-      },
-    });
-    Object.defineProperty(layer, "manager", {
-      value: {
-        root: {
-          globalPosition: {
-            value: new Float32Array([100, 101, 102, 103]),
-            changed: {
-              dispatch: dispatchGlobalPositionChanged,
-            },
-          },
-        },
-      },
-      configurable: true,
-    });
-    Object.defineProperty(layer, "localPosition", {
-      value: {
-        value: new Float32Array([200, 201, 202]),
-        changed: {
-          dispatch: dispatchLocalPositionChanged,
-        },
-      },
-      configurable: true,
-    });
-
-    layer.moveViewToSkeletonNodePosition([4, 5, 6]);
-
-    expect(Array.from(layer.manager.root.globalPosition.value)).toEqual([
-      6, 18, 13, 103,
-    ]);
-    expect(Array.from(layer.localPosition.value)).toEqual([13, 201, 6]);
-    expect(dispatchLocalPositionChanged).toHaveBeenCalledTimes(1);
-    expect(dispatchGlobalPositionChanged).toHaveBeenCalledTimes(1);
-  });
-
-  it("selects and moves to the provided node, or clears selection when absent", () => {
-    const selectSkeletonNode = vi.fn();
-    const moveViewToSkeletonNodePosition = vi.fn();
-    const clearSkeletonNodeSelection = vi.fn();
-    const layer = Object.assign(
-      Object.create(SegmentationUserLayer.prototype),
-      {
-        selectSkeletonNode,
-        moveViewToSkeletonNodePosition,
-        clearSkeletonNodeSelection,
-      },
-    );
-    Object.defineProperty(layer, "manager", {
-      value: {
-        root: {
-          selectionState: {
-            pin: {
-              value: true,
-            },
-          },
-        },
-      },
-      configurable: true,
-    });
-    const node = {
-      nodeId: 31n,
-      segmentId: 9n,
-      position: new Float32Array([4, 5, 6]),
-    };
-
-    expect(layer.selectAndMoveToSkeletonNode(node)).toBe(true);
-    expect(selectSkeletonNode).toHaveBeenCalledWith(31n, true, {
-      segmentId: 9n,
-      position: new Float32Array([4, 5, 6]),
-    });
-    expect(moveViewToSkeletonNodePosition).toHaveBeenCalledWith(node.position);
-    expect(clearSkeletonNodeSelection).not.toHaveBeenCalled();
-
-    expect(layer.selectAndMoveToSkeletonNode(undefined, false)).toBe(false);
-    expect(clearSkeletonNodeSelection).toHaveBeenCalledWith(false);
-  });
-});
-
-describe("layer/segmentation spatial skeleton find-path state", () => {
-  const serializedFindPathState = {
-    source: { nodeId: "1", segmentId: "7", position: [1, 2, 3] },
-    target: { nodeId: "3", segmentId: "7", position: [7, 8, 9] },
-    result: [
-      { nodeId: "1", position: [1, 2, 3] },
-      { nodeId: "2", position: [4, 5, 6] },
-      { nodeId: "3", position: [7, 8, 9] },
-    ],
-  };
-
-  function makeContextTestLayer(dataSourceState: SkeletonDataSourceState) {
-    const context = {
-      skeletonLayer: { source: {} },
-      state: dataSourceState.findPathState,
-      annotationController: {},
-    };
-    const layer = Object.assign(
-      Object.create(SegmentationUserLayer.prototype),
-      {
-        spatialSkeletonFindPathContext: context,
-        spatialSkeletonState: {
-          nodeDataVersion: new WatchableValue(0),
-          hasUnconfirmedOptimisticEdits: vi.fn(() => false),
-        },
-      },
-    );
-    const activated = { registerDisposer: vi.fn() };
-    (layer as any).registerSpatialSkeletonFindPathInvalidation(
-      context,
-      activated,
-    );
-    return { layer, context };
-  }
-
-  it("selects a compatible spatial skeleton subsource", () => {
-    const spatialMesh = Object.create(SpatiallyIndexedSkeletonSource.prototype);
-    const makeLoadedSubsource = (state: unknown, mesh: unknown) => ({
-      subsourceEntry: { subsource: { mesh } },
-      loadedDataSource: { dataSource: { state } },
-    });
-    const unsupported = makeLoadedSubsource(undefined, spatialMesh);
-    const compatible = makeLoadedSubsource(
-      new SkeletonDataSourceState(),
-      spatialMesh,
-    );
-    const regularSkeleton = makeLoadedSubsource(
-      new SkeletonDataSourceState(),
-      {},
-    );
-    const layer = Object.create(SegmentationUserLayer.prototype);
-    const select = (values: unknown[]) =>
-      (layer as any).getSpatialSkeletonFindPathSubsource(values);
-
-    expect(select([unsupported, compatible])).toBe(compatible);
-    expect(select([regularSkeleton])).toBeUndefined();
-  });
-
-  it("exposes only the singular owning spatial skeleton context", () => {
-    const state = new SkeletonDataSourceState();
-    const { layer, context } = makeContextTestLayer(state);
-
-    expect(layer.getSpatialSkeletonFindPathContext()).toBe(context);
-    expect(layer.getSpatialSkeletonFindPathContext(context.skeletonLayer)).toBe(
-      context,
-    );
-    expect(layer.getSpatialSkeletonFindPathContext({ source: {} })).toBe(
-      undefined,
-    );
-  });
-
-  function makeLayerWithLoadedFindPathResult() {
-    const active = new SkeletonDataSourceState({
-      findPath: serializedFindPathState,
-    });
-    const inactive = new SkeletonDataSourceState({
-      findPath: serializedFindPathState,
-    });
-    const { layer } = makeContextTestLayer(active);
-    return { active, inactive, layer };
-  }
-
-  it("preserves restored results after a cache-only node-data notification", () => {
-    const { active, layer } = makeLayerWithLoadedFindPathResult();
-
-    layer.spatialSkeletonState.nodeDataVersion.value++;
-
-    expect(active.findPathState.toJSON()).toEqual(serializedFindPathState);
-  });
-
-  it("invalidates an inactive Find Path result when the optimistic cache changes", () => {
-    const { active, inactive, layer } = makeLayerWithLoadedFindPathResult();
-    layer.spatialSkeletonState.hasUnconfirmedOptimisticEdits.mockReturnValue(
-      true,
-    );
-
-    layer.spatialSkeletonState.nodeDataVersion.value++;
-
-    expect(active.findPathState.result).toBeUndefined();
-    expect(active.findPathState.source?.nodeId).toBe(1n);
-    expect(active.findPathState.target?.nodeId).toBe(3n);
-    expect(inactive.findPathState.toJSON()).toEqual(serializedFindPathState);
   });
 });
 
@@ -1405,7 +363,9 @@ function makeEquivalencesLayer(savedEquivalences: string[][]) {
       hasVolume: new WatchableValue(false),
     },
     graphConnection: new WatchableValue(undefined),
-    updateSpatialSkeletonChunkLoadState: vi.fn(),
+    skeletonSourceConnection: makeSkeletonSourceConnection(
+      new SpatialSkeletonState(),
+    ),
   });
   return { layer, groupState };
 }
@@ -1565,5 +525,344 @@ describe("layer/segmentation equivalences with editable skeletons", () => {
     layer.activateDataSubsources([makeSkeletonSubsource(undefined)]);
 
     expect(root.value).toBe(linkedRoot);
+  });
+});
+
+describe("layer/segmentation selection details", () => {
+  function makeDetailsHostLayer() {
+    const layer = Object.create(SegmentationUserLayer.prototype);
+    const layerSelectedValues = {
+      changed: new NullarySignal(),
+      mouseState: { active: false },
+    };
+    const selectionState = new TrackableDataSelectionState(
+      new WatchableValue(emptyInvalidCoordinateSpace),
+      layerSelectedValues as any,
+    );
+    const spatialSkeletonState = new SpatialSkeletonState();
+    const commands = new CatmaidSpatialSkeletonEditCommands({
+      getClient: () => ({}) as any,
+    });
+    const skeletonNodeAccess = new WatchableValue<any>({
+      getSegmentNodes: () => [],
+      parentsInferred: false,
+      nodesChanged: new NullarySignal(),
+      hasPickableNodes: false,
+      displayState: { transform: new WatchableValue(undefined) },
+    });
+    const spatiallyIndexedSkeletonLayer = new WatchableValue<any>({
+      editableSource: {
+        optimisticEditing: commands.optimisticEditing,
+        editNodeRadiusCommand: commands.editNodeRadiusCommand,
+      },
+      getNode: () => undefined,
+    });
+    Object.defineProperties(layer, {
+      manager: {
+        value: {
+          layerSelectedValues,
+          root: {
+            selectionState,
+            globalPosition: new WatchableValue(new Float32Array(3)),
+          },
+        },
+      },
+      renderLayers: { value: [] },
+      displayState: {
+        value: {
+          segmentationGroupState: {
+            value: {
+              segmentEquivalences: { get: (id: bigint) => id },
+              segmentPropertyMap: { value: undefined },
+            },
+          },
+        },
+      },
+    });
+    const skeletonNodeSelection = new SkeletonNodeSelection({
+      layer,
+      skeletonNodeAccess,
+      spatiallyIndexedSkeletonLayer,
+      spatialSkeletonState,
+    });
+    Object.assign(layer, {
+      spatialSkeletonState,
+      skeletonNodeAccess,
+      skeletonNodeSelection,
+      skeletonSourceConnection: new SkeletonSourceConnection({
+        spatialSkeletonState,
+        selection: skeletonNodeSelection,
+        segmentationGroupState: new WatchableValue({} as any),
+        skeletonNodeAccess,
+        spatiallyIndexedSkeletonLayer,
+      }),
+    });
+    return { layer, spatialSkeletonState };
+  }
+
+  it("keeps a radius being typed while the hovered segment changes", async () => {
+    const { layer, spatialSkeletonState } = makeDetailsHostLayer();
+    spatialSkeletonState.replaceCachedSegmentSnapshots([
+      [
+        5n,
+        [
+          {
+            nodeId: 1n,
+            segmentId: 5n,
+            position: new Float32Array([1, 2, 3]),
+            attributes: { radius: [2] },
+          },
+        ],
+      ],
+    ]);
+    const state: any = {};
+    layer.initializeSelectionState(state);
+    state.nodeId = 1n;
+    state.value = 5n;
+    const panel = new DependentViewWidget(
+      { value: undefined, changed: new NullarySignal() },
+      (_, parent, context) => {
+        layer.displaySelectionState(state, parent, context);
+      },
+    );
+    document.body.appendChild(panel.element);
+    const radius = [
+      ...panel.element.querySelectorAll(".neuroglancer-annotation-property"),
+    ].find((row) => row.firstElementChild?.textContent === "Radius")!
+      .lastElementChild!.firstElementChild as HTMLInputElement;
+    radius.focus();
+    radius.value = "7";
+    radius.dispatchEvent(new Event("input"));
+
+    for (const callback of segmentationDisplayStateCallbacks) callback();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    expect(radius.isConnected).toBe(true);
+    expect(radius.value).toBe("7");
+    expect(document.activeElement).toBe(radius);
+    panel.dispose();
+    panel.element.remove();
+  });
+
+  function makeCreatingHostLayer() {
+    const layer = Object.create(SegmentationUserLayer.prototype);
+    const layerSelectedValues = {
+      changed: new NullarySignal(),
+      mouseState: { active: false },
+    };
+    const selectionState = new TrackableDataSelectionState(
+      new WatchableValue(emptyInvalidCoordinateSpace),
+      layerSelectedValues as any,
+    );
+    selectionState.location.visible = true;
+    const spatialSkeletonState = new SpatialSkeletonState();
+    let confirmCreation:
+      | ((created: { nodeId: bigint; segmentId: bigint }) => void)
+      | undefined;
+    const client = {
+      baseUrl: "https://catmaid.example.test",
+      projectId: 1,
+      addNode: vi.fn(
+        () =>
+          new Promise<{ nodeId: bigint; segmentId: bigint }>((resolve) => {
+            confirmCreation = resolve;
+          }),
+      ),
+      updateDescription: vi.fn(),
+    };
+    const commands = new CatmaidSpatialSkeletonEditCommands({
+      getClient: () => client as any,
+    });
+    const source = {
+      optimisticEditing: commands.optimisticEditing,
+      addNodesCommand: commands.addNodesCommand,
+      editNodeDescriptionCommand: commands.editNodeDescriptionCommand,
+      edgeDirection: SkeletonEdgeDirection.CHILD_TO_PARENT,
+      getSkeletonManifest: async () => ({ fragmentKeys: [] }),
+      getSkeletonFragment: async () => ({ nodes: [], edges: [] }),
+    };
+    const skeletonNodeAccess = new WatchableValue<any>({
+      getSegmentNodes: () => [],
+      parentsInferred: false,
+      nodesChanged: new NullarySignal(),
+      hasPickableNodes: false,
+      displayState: { transform: new WatchableValue(undefined) },
+    });
+    const spatiallyIndexedSkeletonLayer = new WatchableValue<any>({
+      fragmentSource: source,
+      editableSource: source,
+      getNode: (nodeId: bigint) => spatialSkeletonState.getCachedNode(nodeId),
+      remapOverlaySegments: vi.fn(),
+      retainOverlaySegment: vi.fn(),
+    });
+    const segmentationGroupState = new WatchableValue<any>({
+      visibleSegments: new Uint64Set(),
+      temporaryVisibleSegments: new Uint64Set(),
+      selectedSegments: new Uint64OrderedSet(),
+      segmentEquivalences: { get: (id: bigint) => id },
+      segmentPropertyMap: { value: undefined },
+    });
+    Object.defineProperties(layer, {
+      manager: {
+        value: {
+          layerSelectedValues,
+          root: {
+            selectionState,
+            globalPosition: new WatchableValue(new Float32Array(3)),
+          },
+        },
+      },
+      managedLayer: {
+        value: { layerChanged: new NullarySignal(), name: "skeletons" },
+      },
+      isReady: { value: true },
+      wasDisposed: { value: false },
+      renderLayers: { value: [] },
+      displayState: { value: { segmentationGroupState } },
+    });
+    const skeletonNodeSelection = new SkeletonNodeSelection({
+      layer,
+      skeletonNodeAccess,
+      spatiallyIndexedSkeletonLayer,
+      spatialSkeletonState,
+    });
+    Object.assign(layer, {
+      spatialSkeletonState,
+      skeletonNodeAccess,
+      skeletonNodeSelection,
+      skeletonSourceConnection: new SkeletonSourceConnection({
+        spatialSkeletonState,
+        selection: skeletonNodeSelection,
+        segmentationGroupState,
+        skeletonNodeAccess,
+        spatiallyIndexedSkeletonLayer,
+      }),
+    });
+    const panel = new SelectionDetailsPanel(
+      {} as any,
+      selectionState,
+      { globalPosition: new WatchableValue(new Float32Array(3)) } as any,
+      {} as any,
+    );
+    document.body.appendChild(panel.element);
+    return {
+      layer,
+      panel,
+      client,
+      spatialSkeletonState,
+      confirmCreation: (created: { nodeId: bigint; segmentId: bigint }) =>
+        confirmCreation!(created),
+    };
+  }
+
+  function nextFrame() {
+    return new Promise((resolve) => requestAnimationFrame(resolve));
+  }
+
+  it("labels a new skeleton and node as Preview, without their provisional IDs, until the server confirms them", async () => {
+    const { layer, panel, spatialSkeletonState, confirmCreation } =
+      makeCreatingHostLayer();
+    await executeSpatialSkeletonAddNode(layer.skeletonSourceConnection, {
+      skeletonId: 0n,
+      parentNodeId: undefined,
+      positionInModelSpace: new Float32Array([1, 2, 3]),
+    });
+    const [provisionalNodeId] =
+      spatialSkeletonState.spatialSkeletonPresentation.value.provisionalNodeIds;
+    layer.skeletonNodeSelection.select(provisionalNodeId, true);
+    await nextFrame();
+    await nextFrame();
+    const provisionalSegmentId =
+      layer.skeletonNodeSelection.selected.value!.segmentId!;
+
+    expect(panel.element.textContent).toContain("Segment IDPreview");
+    expect(panel.element.textContent).toContain("Node IDPreview");
+    expect(panel.element.textContent).not.toContain(`${provisionalSegmentId}`);
+    expect(panel.element.textContent).not.toContain(`${provisionalNodeId}`);
+
+    confirmCreation({ nodeId: 501n, segmentId: 77n });
+    await vi.waitFor(() =>
+      expect(layer.skeletonNodeSelection.selected.value?.nodeId).toBe(501n),
+    );
+    await nextFrame();
+    await nextFrame();
+    expect(panel.element.textContent).toContain("segment 77");
+    expect(panel.element.textContent).toContain("Segment ID77");
+    expect(panel.element.textContent).toContain("Node ID501");
+    panel.dispose();
+    panel.element.remove();
+    spatialSkeletonState.dispose();
+  });
+
+  it("labels a selected new skeleton as Preview, without its provisional ID, until the server confirms it", async () => {
+    const { layer, panel, spatialSkeletonState, confirmCreation } =
+      makeCreatingHostLayer();
+    await executeSpatialSkeletonAddNode(layer.skeletonSourceConnection, {
+      skeletonId: 0n,
+      parentNodeId: undefined,
+      positionInModelSpace: new Float32Array([1, 2, 3]),
+    });
+    const [provisionalNodeId] =
+      spatialSkeletonState.spatialSkeletonPresentation.value.provisionalNodeIds;
+    const provisionalSegmentId =
+      spatialSkeletonState.getCachedNode(provisionalNodeId)!.segmentId;
+    layer.manager.root.selectionState.captureSingleLayerState(
+      layer,
+      (state: { value?: bigint }) => {
+        state.value = provisionalSegmentId;
+        return true;
+      },
+      true,
+    );
+    await nextFrame();
+    await nextFrame();
+
+    expect(panel.element.textContent).toContain("Segment IDPreview");
+    expect(panel.element.textContent).not.toContain(`${provisionalSegmentId}`);
+
+    confirmCreation({ nodeId: 501n, segmentId: 77n });
+    await vi.waitFor(() =>
+      expect(panel.element.textContent).toContain("segment 77"),
+    );
+    expect(panel.element.textContent).not.toContain("Preview");
+    panel.dispose();
+    panel.element.remove();
+    spatialSkeletonState.dispose();
+  });
+
+  it("keeps a description being typed when the server gives its new node a permanent ID", async () => {
+    const { layer, panel, client, spatialSkeletonState, confirmCreation } =
+      makeCreatingHostLayer();
+    await executeSpatialSkeletonAddNode(layer.skeletonSourceConnection, {
+      skeletonId: 0n,
+      parentNodeId: undefined,
+      positionInModelSpace: new Float32Array([1, 2, 3]),
+    });
+    const [provisionalNodeId] =
+      spatialSkeletonState.spatialSkeletonPresentation.value.provisionalNodeIds;
+    layer.skeletonNodeSelection.select(provisionalNodeId, true);
+    await nextFrame();
+    const description = panel.element.querySelector("textarea")!;
+    description.focus();
+    description.value = "unfinished draft";
+    description.dispatchEvent(new Event("input"));
+    description.setSelectionRange(3, 3);
+
+    confirmCreation({ nodeId: 501n, segmentId: 77n });
+    await vi.waitFor(() =>
+      expect(layer.skeletonNodeSelection.selected.value?.nodeId).toBe(501n),
+    );
+    await nextFrame();
+
+    expect(description.isConnected).toBe(true);
+    expect(document.activeElement).toBe(description);
+    expect(description.value).toBe("unfinished draft");
+    expect(description.selectionStart).toBe(3);
+    expect(client.updateDescription).not.toHaveBeenCalled();
+    expect(panel.element.textContent).toContain("Node ID501");
+    description.blur();
+    panel.dispose();
+    panel.element.remove();
+    spatialSkeletonState.dispose();
   });
 });

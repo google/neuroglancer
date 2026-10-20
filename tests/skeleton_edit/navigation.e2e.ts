@@ -246,7 +246,7 @@ test("[E2E-27] description and true-end filters react to pending properties and 
   const ended = change(described, ids.Atip, { isTrueEnd: true });
   const endGate = transport.hold(`label/treenode/${ids.Atip}/update`);
   await ui.runEdit(() =>
-    ui.page.getByRole("radio", { name: "Flag True end", exact: true }).check(),
+    ui.page.getByRole("button", { name: /^(\S+ )?True end$/ }).click(),
   );
   await endGate.reached;
   await expectListedNodes(ui, [ids.Aleaf, ids.Asibling]);

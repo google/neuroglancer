@@ -22,6 +22,7 @@ import {
   getSkeletonNodeFilterLabel,
   getSkeletonNodeIconFilterType,
   matchesSkeletonNodeFilter,
+  SkeletonBrowseState,
   SkeletonDisplayNodeType,
   SkeletonNodeFilterType,
 } from "#src/skeleton/node_types.js";
@@ -145,5 +146,30 @@ describe("skeleton node types", () => {
     expect(
       getSkeletonNodeFilterLabel(SkeletonNodeFilterType.HAS_DESCRIPTION),
     ).toBe("Has description");
+  });
+});
+
+describe("SkeletonBrowseState", () => {
+  it("a saved state restores the Skeleton tab's node query and filter", () => {
+    const savedState = new SkeletonBrowseState();
+    savedState.nodeQuery.value = "soma";
+    savedState.nodeFilter.value = SkeletonNodeFilterType.TRUE_END;
+
+    const restoredState = new SkeletonBrowseState();
+    restoredState.restoreState(JSON.parse(JSON.stringify(savedState.toJSON())));
+
+    expect(restoredState.nodeQuery.value).toBe("soma");
+    expect(restoredState.nodeFilter.value).toBe(
+      SkeletonNodeFilterType.TRUE_END,
+    );
+  });
+
+  it("a layer without saved Skeleton tab state starts with an empty query and the default filter", () => {
+    const browseState = new SkeletonBrowseState();
+    browseState.restoreState(undefined);
+
+    expect(browseState.nodeQuery.value).toBe("");
+    expect(browseState.nodeFilter.value).toBe(SkeletonNodeFilterType.DEFAULT);
+    expect(browseState.toJSON()).toBeUndefined();
   });
 });

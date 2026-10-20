@@ -91,7 +91,7 @@ export async function readRenderedNodeIds(page: Page, layerName = "Skeletons") {
     const viewer = (window as unknown as { viewer: Viewer }).viewer;
     const layer = viewer.layerManager.getLayerByName(layerName)!
       .layer as SegmentationUserLayer;
-    const renderer = layer.getSpatiallyIndexedSkeletonLayer() as unknown as {
+    const renderer = layer.spatiallyIndexedSkeletonLayer.value as unknown as {
       overlayRenderChunks: readonly { nodeIds: BigUint64Array }[];
     };
     return renderer.overlayRenderChunks
@@ -166,7 +166,7 @@ export class SkeletonEditPage {
       source: sourceUrl,
       segments: segments.map(String),
       tab: "skeleton",
-      skeletonNodeFilter: "none",
+      skeletonBrowse: { nodeFilter: "none" },
       toolBindings: { [key]: "spatialSkeletonEditMode" },
     });
     const state = {
@@ -364,7 +364,7 @@ export class SkeletonEditPage {
   async reroot(id: bigint) {
     await this.selectNode(id);
     await this.runEdit(() =>
-      this.page.getByRole("button", { name: "Origin", exact: true }).click(),
+      this.page.getByRole("button", { name: /^(\S+ )?Root$/ }).click(),
     );
   }
 

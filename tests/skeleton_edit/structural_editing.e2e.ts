@@ -49,7 +49,7 @@ async function holdRetiringSegmentRead(real: RealSession, segmentId: bigint) {
       .layer as SegmentationUserLayer;
     try {
       await layer.spatialSkeletonState.getFullSegmentNodes(
-        layer.getSpatiallyIndexedSkeletonLayer()!,
+        layer.spatiallyIndexedSkeletonLayer.value!,
         segmentId,
         { retainWhileInactive: true },
       );
