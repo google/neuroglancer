@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+import type { UserLayer } from "#src/layer/index.js";
+import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
 import {
   DEFAULT_SPATIAL_SKELETON_EDIT_ACTIONS,
@@ -39,21 +40,40 @@ import type { Viewer } from "#src/viewer.js";
 
 type SkeletonNodeViewer = Pick<
   Viewer,
-  "commandRegistry" | "layerManager" | "selectedLayer" | "selectionDetailsState"
+  | "commandRegistry"
+  | "layerManager"
+  | "selectedLayer"
+  | "selectionDetailsState"
+  | "registerDisposer"
 >;
+
+type SkeletonNodeCommandLayer = Pick<
+  SegmentationUserLayer,
+  "skeletonNodeSelection" | "skeletonSourceConnection" | "spatialSkeletonState"
+>;
+
+function isSkeletonNodeCommandLayer(
+  layer: UserLayer | null | undefined,
+): layer is UserLayer & SkeletonNodeCommandLayer {
+  return (
+    layer != null &&
+    ("skeletonSourceConnection" satisfies keyof SkeletonNodeCommandLayer) in
+      layer
+  );
+}
 
 interface SkeletonNodeCommandDefinition {
   readonly id: string;
   readonly label: string;
   readonly requiredActions: readonly SpatialSkeletonAction[];
   readonly run: (
-    layer: SegmentationUserLayer,
+    layer: SkeletonNodeCommandLayer,
     viewer: SkeletonNodeViewer,
   ) => void | Promise<unknown>;
 }
 
 async function runHistoryCommand(
-  layer: SegmentationUserLayer,
+  layer: SkeletonNodeCommandLayer,
   history: "undo" | "redo",
 ) {
   if (layer.spatialSkeletonState.getOptimisticEditFatalState() !== undefined) {
@@ -80,7 +100,7 @@ async function runHistoryCommand(
 }
 
 function requireSelectedInspectedNode(
-  layer: SegmentationUserLayer,
+  layer: SkeletonNodeCommandLayer,
 ): SkeletonNode | undefined {
   const selected = layer.skeletonNodeSelection.selected.value;
   if (selected === undefined) {
@@ -222,7 +242,11 @@ const COMMAND_DEFINITIONS: readonly SkeletonNodeCommandDefinition[] = [
  * acts on the one visible skeleton layer that supports it, or on the selected
  * layer when there are several.
  */
-export class SkeletonNodeCommands extends RefCounted {
+export function bindSkeletonNodeCommands(viewer: SkeletonNodeViewer): void {
+  viewer.registerDisposer(new SkeletonNodeCommands(viewer));
+}
+
+class SkeletonNodeCommands extends RefCounted {
   private readonly enabledUpdaters: (() => void)[] = [];
 
   constructor(private readonly viewer: SkeletonNodeViewer) {
@@ -251,13 +275,13 @@ export class SkeletonNodeCommands extends RefCounted {
 
   private layersSupporting(
     requiredActions: readonly SpatialSkeletonAction[],
-  ): SegmentationUserLayer[] {
-    const layers: SegmentationUserLayer[] = [];
+  ): SkeletonNodeCommandLayer[] {
+    const layers: SkeletonNodeCommandLayer[] = [];
     for (const managedLayer of this.viewer.layerManager.managedLayers) {
       const { layer } = managedLayer;
       if (
         managedLayer.visible &&
-        layer instanceof SegmentationUserLayer &&
+        isSkeletonNodeCommandLayer(layer) &&
         layer.skeletonSourceConnection.getActionsDisabledReason(
           requiredActions,
         ) === undefined
@@ -270,11 +294,11 @@ export class SkeletonNodeCommands extends RefCounted {
 
   private targetLayer(
     requiredActions: readonly SpatialSkeletonAction[],
-  ): SegmentationUserLayer | undefined {
+  ): SkeletonNodeCommandLayer | undefined {
     const supportingLayers = this.layersSupporting(requiredActions);
     if (supportingLayers.length === 1) return supportingLayers[0];
     const selected = this.viewer.selectedLayer.layer?.layer;
-    return selected instanceof SegmentationUserLayer ? selected : undefined;
+    return isSkeletonNodeCommandLayer(selected) ? selected : undefined;
   }
 
   private async run(definition: SkeletonNodeCommandDefinition): Promise<void> {

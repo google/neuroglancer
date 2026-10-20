@@ -16,8 +16,18 @@
 
 import { describe, expect, it, vi } from "vitest";
 
+import { SkeletonSourceConnection } from "#src/layer/segmentation/skeleton_source_connection.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
+import {
+  executeSpatialSkeletonNodeTrueEndUpdate,
+  executeSpatialSkeletonReroot,
+} from "#src/skeleton/commands.js";
+import { bindSkeletonNodeCommands } from "#src/skeleton/node_commands.js";
+import { SkeletonNavigation } from "#src/skeleton/skeleton_navigator.js";
+import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
+import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
+import { CommandRegistry } from "#src/ui/command_registry.js";
 import { NullarySignal } from "#src/util/signal.js";
 
 vi.mock("#src/skeleton/commands.js", async (importOriginal) => ({
@@ -25,40 +35,6 @@ vi.mock("#src/skeleton/commands.js", async (importOriginal) => ({
   executeSpatialSkeletonNodeTrueEndUpdate: vi.fn(async () => true),
   executeSpatialSkeletonReroot: vi.fn(async () => true),
 }));
-
-if (!("WebGL2RenderingContext" in globalThis)) {
-  Object.defineProperty(globalThis, "WebGL2RenderingContext", {
-    value: new Proxy(class WebGL2RenderingContext {} as any, {
-      get(target, property, receiver) {
-        if (Reflect.has(target, property)) {
-          return Reflect.get(target, property, receiver);
-        }
-        return 0;
-      },
-    }),
-    configurable: true,
-  });
-}
-
-const { SegmentationUserLayer } = await import(
-  "#src/layer/segmentation/index.js"
-);
-const { SkeletonSourceConnection } = await import(
-  "#src/layer/segmentation/skeleton_source_connection.js"
-);
-const {
-  executeSpatialSkeletonNodeTrueEndUpdate,
-  executeSpatialSkeletonReroot,
-} = await import("#src/skeleton/commands.js");
-const { StatusMessage } = await import("#src/status.js");
-const { CommandRegistry } = await import("#src/ui/command_registry.js");
-const { SkeletonNodeCommands } = await import("#src/skeleton/node_commands.js");
-const { SkeletonNavigation } = await import(
-  "#src/skeleton/skeleton_navigator.js"
-);
-const { SpatialSkeletonState } = await import(
-  "#src/skeleton/spatial_skeleton_manager.js"
-);
 
 function makeNode(
   nodeId: bigint,
@@ -84,7 +60,6 @@ function makeNodeAccess(nodes: readonly SkeletonNode[]) {
 
 function makeSkeletonLayer(selectedNodeId: bigint, { inspected = true } = {}) {
   const nodes = [makeNode(1n, undefined), makeNode(2n, 1n), makeNode(3n, 2n)];
-  const layer = Object.create(SegmentationUserLayer.prototype);
   const skeletonNodeSelection = {
     selected: { value: { nodeId: selectedNodeId, segmentId: 42n } },
     navigate: vi.fn(),
@@ -109,18 +84,17 @@ function makeSkeletonLayer(selectedNodeId: bigint, { inspected = true } = {}) {
     spatialSkeletonState,
     getActionsDisabledReason: () => undefined,
   };
-  Object.assign(layer, {
+  const layer = {
     skeletonNodeSelection,
     skeletonSourceConnection,
     spatialSkeletonState,
-  });
+  };
   return { layer, nodes, skeletonNodeSelection, skeletonSourceConnection };
 }
 
 function makeReadOnlySkeletonLayer() {
-  const layer = Object.create(SegmentationUserLayer.prototype);
   const spatialSkeletonState = new SpatialSkeletonState();
-  Object.assign(layer, {
+  return {
     spatialSkeletonState,
     skeletonSourceConnection: new SkeletonSourceConnection({
       spatialSkeletonState,
@@ -129,8 +103,7 @@ function makeReadOnlySkeletonLayer() {
       skeletonNodeAccess: makeNodeAccess([makeNode(1n, undefined)]),
       spatiallyIndexedSkeletonLayer: new WatchableValue(undefined),
     }),
-  });
-  return layer;
+  };
 }
 
 function makeViewer(
@@ -150,6 +123,7 @@ function makeViewer(
       layer: selectedLayer === undefined ? undefined : { layer: selectedLayer },
     },
     selectionDetailsState: { value: undefined },
+    registerDisposer: <T>(disposable: T) => disposable,
   };
   return { viewer, managedLayers, layersChanged };
 }
@@ -157,7 +131,7 @@ function makeViewer(
 describe("skeleton node commands", () => {
   it("offers skeleton commands only while a skeleton layer is visible", () => {
     const { viewer, managedLayers, layersChanged } = makeViewer([]);
-    new SkeletonNodeCommands(viewer as any);
+    bindSkeletonNodeCommands(viewer as any);
     const goToParent = viewer.commandRegistry.get("skeleton-go-parent")!;
     expect(goToParent.enabled).toBe(false);
 
@@ -169,7 +143,7 @@ describe("skeleton node commands", () => {
   it("moves to the parent of the selected node", () => {
     const { layer, skeletonNodeSelection } = makeSkeletonLayer(3n);
     const { viewer } = makeViewer([layer]);
-    new SkeletonNodeCommands(viewer as any);
+    bindSkeletonNodeCommands(viewer as any);
 
     viewer.commandRegistry
       .get("skeleton-go-parent")!
@@ -184,7 +158,7 @@ describe("skeleton node commands", () => {
     const first = makeSkeletonLayer(3n);
     const second = makeSkeletonLayer(3n);
     const { viewer } = makeViewer([first.layer, second.layer], second.layer);
-    new SkeletonNodeCommands(viewer as any);
+    bindSkeletonNodeCommands(viewer as any);
 
     viewer.commandRegistry
       .get("skeleton-go-root")!
@@ -199,7 +173,7 @@ describe("skeleton node commands", () => {
   it("sets the selected node as the skeleton root", () => {
     const { layer, nodes, skeletonSourceConnection } = makeSkeletonLayer(3n);
     const { viewer } = makeViewer([layer]);
-    new SkeletonNodeCommands(viewer as any);
+    bindSkeletonNodeCommands(viewer as any);
 
     viewer.commandRegistry
       .get("skeleton-reroot")!
@@ -218,7 +192,7 @@ describe("skeleton node commands", () => {
     vi.mocked(executeSpatialSkeletonReroot).mockClear();
     const { layer } = makeSkeletonLayer(3n, { inspected: false });
     const { viewer } = makeViewer([layer]);
-    new SkeletonNodeCommands(viewer as any);
+    bindSkeletonNodeCommands(viewer as any);
 
     viewer.commandRegistry
       .get("skeleton-reroot")!
@@ -234,7 +208,7 @@ describe("skeleton node commands", () => {
     const { viewer, managedLayers, layersChanged } = makeViewer([
       makeSkeletonLayer(3n).layer,
     ]);
-    new SkeletonNodeCommands(viewer as any);
+    bindSkeletonNodeCommands(viewer as any);
     const goToParent = viewer.commandRegistry.get("skeleton-go-parent")!;
     expect(goToParent.enabled).toBe(true);
 
@@ -246,7 +220,7 @@ describe("skeleton node commands", () => {
   it("marks an unflagged node as a true end", () => {
     const { layer, nodes, skeletonSourceConnection } = makeSkeletonLayer(3n);
     const { viewer } = makeViewer([layer]);
-    new SkeletonNodeCommands(viewer as any);
+    bindSkeletonNodeCommands(viewer as any);
 
     viewer.commandRegistry
       .get("skeleton-toggle-true-end")!
@@ -267,7 +241,7 @@ describe("skeleton node commands", () => {
       throw new Error("Editing is paused.");
     };
     const { viewer } = makeViewer([layer]);
-    new SkeletonNodeCommands(viewer as any);
+    bindSkeletonNodeCommands(viewer as any);
 
     viewer.commandRegistry
       .get("skeleton-undo")!
@@ -282,7 +256,7 @@ describe("skeleton node commands", () => {
 
   it("offers navigation commands but not edit commands for a read-only skeleton layer", () => {
     const { viewer } = makeViewer([makeReadOnlySkeletonLayer()]);
-    new SkeletonNodeCommands(viewer as any);
+    bindSkeletonNodeCommands(viewer as any);
 
     expect(viewer.commandRegistry.get("skeleton-go-parent")!.enabled).toBe(
       true,
@@ -304,7 +278,7 @@ describe("skeleton node commands", () => {
       throw new Error("Editing is paused.");
     };
     const { viewer } = makeViewer([makeReadOnlySkeletonLayer(), editableLayer]);
-    new SkeletonNodeCommands(viewer as any);
+    bindSkeletonNodeCommands(viewer as any);
 
     viewer.commandRegistry
       .get("skeleton-undo")!
