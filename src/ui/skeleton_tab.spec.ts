@@ -20,7 +20,13 @@ import type { SkeletonNode } from "#src/skeleton/api.js";
 import { buildSkeletonNavigationGraph } from "#src/skeleton/navigation_graph.js";
 import { SkeletonNodeFilterType } from "#src/skeleton/node_types.js";
 import type { SpatialSkeletonPreparationIntent } from "#src/skeleton/spatial_skeleton_manager.js";
-import { buildSkeletonSegmentRenderState } from "#src/ui/skeleton_tab_render.js";
+import {
+  buildSkeletonSegmentRenderState,
+  buildSkeletonVirtualListItems,
+  getSkeletonEmptyListText,
+  getSkeletonNodeIdPresentation,
+  getSpatialSkeletonDetailsPreparationState,
+} from "#src/ui/skeleton_tab_render.js";
 
 function makeNode(
   nodeId: bigint,
@@ -44,41 +50,6 @@ function makeNode(
   };
 }
 
-function stubWebGLContext() {
-  const webglContextStub = new Proxy(
-    {},
-    {
-      get: () => 0,
-    },
-  );
-  (
-    globalThis as { WebGL2RenderingContext?: unknown }
-  ).WebGL2RenderingContext ??= webglContextStub;
-}
-
-async function getBuildSkeletonVirtualListItems() {
-  stubWebGLContext();
-  return (await import("#src/ui/skeleton_tab.js"))
-    .buildSkeletonVirtualListItems;
-}
-
-async function getSkeletonEmptyListText() {
-  stubWebGLContext();
-  return (await import("#src/ui/skeleton_tab.js")).getSkeletonEmptyListText;
-}
-
-async function getSpatialSkeletonDetailsPreparationState() {
-  stubWebGLContext();
-  return (await import("#src/ui/skeleton_tab.js"))
-    .getSpatialSkeletonDetailsPreparationState;
-}
-
-async function getSkeletonNodeIdPresentation() {
-  stubWebGLContext();
-  return (await import("#src/ui/skeleton_tab.js"))
-    .getSkeletonNodeIdPresentation;
-}
-
 function makePreparation(
   options: Partial<SpatialSkeletonPreparationIntent> = {},
 ): SpatialSkeletonPreparationIntent {
@@ -94,16 +65,16 @@ function makePreparation(
 }
 
 describe("spatial skeleton node id presentation", () => {
-  it("replaces only a provisional node id with a Preview placeholder", async () => {
-    const getNodeIdPresentation = await getSkeletonNodeIdPresentation();
-
-    expect(getNodeIdPresentation(2n ** 63n + 1n, [2n ** 63n + 1n])).toEqual({
+  it("replaces only a provisional node id with a Preview placeholder", () => {
+    expect(
+      getSkeletonNodeIdPresentation(2n ** 63n + 1n, [2n ** 63n + 1n]),
+    ).toEqual({
       label: "Preview",
       tooltip:
         "Preview node. The skeleton source has not yet confirmed its permanent node ID.",
       provisional: true,
     });
-    expect(getNodeIdPresentation(42n, [2n ** 63n + 1n])).toEqual({
+    expect(getSkeletonNodeIdPresentation(42n, [2n ** 63n + 1n])).toEqual({
       label: "42",
       tooltip: undefined,
       provisional: false,
@@ -265,9 +236,7 @@ describe("spatial skeleton edit tab render state", () => {
 });
 
 describe("spatial skeleton edit tab virtual list items", () => {
-  it("flattens one selected segment and its displayed node rows", async () => {
-    const buildSkeletonVirtualListItems =
-      await getBuildSkeletonVirtualListItems();
+  it("flattens one selected segment and its displayed node rows", () => {
     const graph = buildSkeletonNavigationGraph([
       makeNode(1n, undefined),
       makeNode(2n, 1n),
@@ -300,10 +269,7 @@ describe("spatial skeleton edit tab virtual list items", () => {
     expect(flattened.listIndexByNodeId.get(3n)).toBe(2);
   });
 
-  it("returns one empty row when no selected segment rows are available", async () => {
-    const buildSkeletonVirtualListItems =
-      await getBuildSkeletonVirtualListItems();
-
+  it("returns one empty row when no selected segment rows are available", () => {
     const flattened = buildSkeletonVirtualListItems(
       undefined,
       "Select a skeleton segment to inspect editable nodes.",
@@ -318,9 +284,7 @@ describe("spatial skeleton edit tab virtual list items", () => {
     expect(flattened.listIndexByNodeId.size).toBe(0);
   });
 
-  it("keeps more than 10,000 displayed rows in the virtual source items", async () => {
-    const buildSkeletonVirtualListItems =
-      await getBuildSkeletonVirtualListItems();
+  it("keeps more than 10,000 displayed rows in the virtual source items", () => {
     const leafCount = 10001;
     const nodes = [makeNode(1n, undefined)];
     for (let i = 0; i < leafCount; ++i) {
@@ -349,10 +313,8 @@ describe("spatial skeleton edit tab virtual list items", () => {
 });
 
 describe("spatial skeleton edit tab empty list text", () => {
-  it("explains how to obtain node details when a hovered or selected skeleton has no complete details", async () => {
-    const getEmptyListText = await getSkeletonEmptyListText();
-
-    const text = getEmptyListText({
+  it("explains how to obtain node details when a hovered or selected skeleton has no complete details", () => {
+    const text = getSkeletonEmptyListText({
       activeSegmentId: undefined,
       selectedSegmentDetailsUnavailable: true,
       segmentState: undefined,
@@ -366,10 +328,8 @@ describe("spatial skeleton edit tab empty list text", () => {
     expect(text).not.toMatch(/is selected|non-visible/i);
   });
 
-  it("asks the user to hover over or select a node when there is no skeleton context", async () => {
-    const getEmptyListText = await getSkeletonEmptyListText();
-
-    const text = getEmptyListText({
+  it("asks the user to hover over or select a node when there is no skeleton context", () => {
+    const text = getSkeletonEmptyListText({
       activeSegmentId: undefined,
       selectedSegmentDetailsUnavailable: false,
       segmentState: undefined,
@@ -383,10 +343,8 @@ describe("spatial skeleton edit tab empty list text", () => {
     );
   });
 
-  it("reports no loaded nodes for an active segment with no cached nodes, regardless of visibility", async () => {
-    const getEmptyListText = await getSkeletonEmptyListText();
-
-    const text = getEmptyListText({
+  it("reports no loaded nodes for an active segment with no cached nodes, regardless of visibility", () => {
+    const text = getSkeletonEmptyListText({
       activeSegmentId: 20380n,
       selectedSegmentDetailsUnavailable: false,
       segmentState: undefined,
@@ -398,8 +356,7 @@ describe("spatial skeleton edit tab empty list text", () => {
     expect(text).toBe("No loaded nodes.");
   });
 
-  it("reports no matching nodes when a filter excludes all loaded nodes", async () => {
-    const getEmptyListText = await getSkeletonEmptyListText();
+  it("reports no matching nodes when a filter excludes all loaded nodes", () => {
     const graph = buildSkeletonNavigationGraph([makeNode(1n, undefined)]);
     const segmentState = {
       ...buildSkeletonSegmentRenderState(20380n, graph, {
@@ -412,7 +369,7 @@ describe("spatial skeleton edit tab empty list text", () => {
       segmentLabel: undefined,
     };
 
-    const text = getEmptyListText({
+    const text = getSkeletonEmptyListText({
       activeSegmentId: 20380n,
       selectedSegmentDetailsUnavailable: false,
       segmentState,
@@ -424,10 +381,8 @@ describe("spatial skeleton edit tab empty list text", () => {
     expect(text).toBe("No matching nodes.");
   });
 
-  it("does not claim zero nodes while the complete preview is preparing", async () => {
-    const getEmptyListText = await getSkeletonEmptyListText();
-
-    const text = getEmptyListText({
+  it("does not claim zero nodes while the complete preview is preparing", () => {
+    const text = getSkeletonEmptyListText({
       activeSegmentId: undefined,
       selectedSegmentDetailsUnavailable: true,
       segmentState: undefined,
@@ -442,10 +397,8 @@ describe("spatial skeleton edit tab empty list text", () => {
 });
 
 describe("spatial skeleton edit tab preparation status", () => {
-  it("shows the earliest overlapping preparation and counts only later overlapping edits", async () => {
-    const getPreparationState =
-      await getSpatialSkeletonDetailsPreparationState();
-    const state = getPreparationState({
+  it("shows the earliest overlapping preparation and counts only later overlapping edits", () => {
+    const state = getSpatialSkeletonDetailsPreparationState({
       preparations: [
         makePreparation({
           intentId: 3,
@@ -476,10 +429,8 @@ describe("spatial skeleton edit tab preparation status", () => {
     expect(state?.statusText).not.toContain("20380");
   });
 
-  it("uses Undo wording and hides derived details until the split preview is exact", async () => {
-    const getPreparationState =
-      await getSpatialSkeletonDetailsPreparationState();
-    const state = getPreparationState({
+  it("uses Undo wording and hides derived details until the split preview is exact", () => {
+    const state = getSpatialSkeletonDetailsPreparationState({
       preparations: [
         makePreparation({
           direction: "undo",
@@ -498,10 +449,8 @@ describe("spatial skeleton edit tab preparation status", () => {
     );
   });
 
-  it("uses Redo wording while the exact preview is preparing", async () => {
-    const getPreparationState =
-      await getSpatialSkeletonDetailsPreparationState();
-    const state = getPreparationState({
+  it("uses Redo wording while the exact preview is preparing", () => {
+    const state = getSpatialSkeletonDetailsPreparationState({
       preparations: [
         makePreparation({
           direction: "redo",
@@ -518,10 +467,8 @@ describe("spatial skeleton edit tab preparation status", () => {
     );
   });
 
-  it("keeps status attached to logical selection when a physical merge alias changes", async () => {
-    const getPreparationState =
-      await getSpatialSkeletonDetailsPreparationState();
-    const state = getPreparationState({
+  it("keeps status attached to logical selection when a physical merge alias changes", () => {
+    const state = getSpatialSkeletonDetailsPreparationState({
       preparations: [
         makePreparation({
           segmentIds: [20380n],

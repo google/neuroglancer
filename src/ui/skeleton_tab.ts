@@ -49,11 +49,10 @@ import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
 import {
   getSkeletonNodeFilterLabel,
   getSkeletonNodeTypeLabel,
-  SkeletonNodeFilterType,
+  type SkeletonNodeFilterType,
 } from "#src/skeleton/node_types.js";
 import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/optimistic_edit/fatal.js";
 import { SkeletonNavigation } from "#src/skeleton/skeleton_navigator.js";
-import type { SpatialSkeletonPreparationIntent } from "#src/skeleton/spatial_skeleton_manager.js";
 import { StatusMessage } from "#src/status.js";
 import {
   observeWatchable,
@@ -69,8 +68,15 @@ import { getSkeletonNodeTypeIcon } from "#src/ui/skeleton_node_icons.js";
 import { registerSpatialSkeletonOptimisticEditQueueTab } from "#src/ui/skeleton_optimistic_edit_queue_tab.js";
 import {
   buildSkeletonSegmentRenderState,
+  buildSkeletonVirtualListItems,
+  getSkeletonEmptyListText,
+  getSkeletonNodeIdPresentation,
+  getSpatialSkeletonDetailsPreparationState,
+  PREPARATION_PENDING_LIST_MESSAGE,
+  type SegmentDisplayState,
+  type SkeletonListItem,
   type SkeletonSegmentRenderRow,
-  type SkeletonSegmentRenderState,
+  type SpatialSkeletonDetailsPreparationState,
 } from "#src/ui/skeleton_tab_render.js";
 import { makeToolButton } from "#src/ui/tool.js";
 import type { ArraySpliceOp } from "#src/util/array.js";
@@ -82,178 +88,6 @@ import { makeIcon } from "#src/widget/icon.js";
 import { Tab } from "#src/widget/tab_view.js";
 import type { VirtualListSource } from "#src/widget/virtual_list.js";
 import { VirtualList } from "#src/widget/virtual_list.js";
-
-const PROVISIONAL_NODE_ID_TOOLTIP =
-  "Preview node. The skeleton source has not yet confirmed its permanent node ID.";
-const SKELETON_DETAILS_UNAVAILABLE_LIST_MESSAGE =
-  "To view this skeleton's nodes, show it in Seg, then allow it to finish loading.";
-const PICKABLE_SKELETON_DETAILS_UNAVAILABLE_LIST_MESSAGE =
-  "To view this skeleton's nodes, show it in Seg or double-click one of its nodes, then allow its details to finish loading.";
-const PREPARATION_PENDING_LIST_MESSAGE =
-  "Preparing the complete skeleton preview…";
-
-export function getSkeletonNodeIdPresentation(
-  nodeId: bigint,
-  provisionalNodeIds: readonly bigint[],
-) {
-  return provisionalNodeIds.includes(nodeId)
-    ? {
-        label: "Preview",
-        tooltip: PROVISIONAL_NODE_ID_TOOLTIP,
-        provisional: true,
-      }
-    : { label: String(nodeId), tooltip: undefined, provisional: false };
-}
-
-const PREPARATION_ACTION_LABELS: Record<
-  SpatialSkeletonPreparationIntent["kind"],
-  string
-> = {
-  merge: "merge",
-  split: "split",
-  delete: "node deletion",
-  restore: "node restoration",
-  reroot: "reroot",
-};
-
-export interface SpatialSkeletonDetailsPreparationState {
-  readonly preparation: SpatialSkeletonPreparationIntent;
-  readonly statusText: string;
-  readonly detailText: string;
-  readonly controlsDisabledReason: string;
-  readonly laterEditCount: number;
-}
-
-function getPreparationStatusText(
-  preparation: SpatialSkeletonPreparationIntent,
-) {
-  const action = PREPARATION_ACTION_LABELS[preparation.kind];
-  switch (preparation.direction) {
-    case "undo":
-      return `Preparing Undo preview for ${action}…`;
-    case "redo":
-      return `Preparing Redo preview for ${action}…`;
-    default:
-      return `Preparing ${action} preview…`;
-  }
-}
-
-function getPreparationControlsDisabledReason(
-  preparation: SpatialSkeletonPreparationIntent,
-) {
-  const action = PREPARATION_ACTION_LABELS[preparation.kind];
-  return `Available after the exact ${action} preview finishes preparing.`;
-}
-
-/**
- * Returns the earliest preparation that can change the selected skeleton.
- * Match physical IDs or logical identity across remapping. Neither is shown
- * in the status, so temporary IDs stay out of user-facing messages.
- */
-export function getSpatialSkeletonDetailsPreparationState(options: {
-  preparations: readonly SpatialSkeletonPreparationIntent[];
-  selectedSegmentId: bigint | undefined;
-  selectedLogicalSegmentStableId?: string;
-  hasExactTopology: boolean;
-}): SpatialSkeletonDetailsPreparationState | undefined {
-  const {
-    selectedSegmentId,
-    selectedLogicalSegmentStableId,
-    hasExactTopology,
-  } = options;
-  if (selectedSegmentId === undefined) return undefined;
-  const overlapping = options.preparations
-    .filter(
-      (preparation) =>
-        preparation.segmentIds.includes(selectedSegmentId) ||
-        (selectedLogicalSegmentStableId !== undefined &&
-          preparation.logicalSegmentHandles?.some(
-            (handle) => handle.stableId === selectedLogicalSegmentStableId,
-          )),
-    )
-    .sort((a, b) => a.sequence - b.sequence);
-  const preparation = overlapping[0];
-  if (preparation === undefined) return undefined;
-  return {
-    preparation,
-    statusText: getPreparationStatusText(preparation),
-    detailText: hasExactTopology
-      ? "The last complete skeleton is shown below while the requested preview is prepared."
-      : PREPARATION_PENDING_LIST_MESSAGE,
-    controlsDisabledReason: getPreparationControlsDisabledReason(preparation),
-    laterEditCount: overlapping.length - 1,
-  };
-}
-
-export type SegmentDisplayState = SkeletonSegmentRenderState & {
-  segmentLabel: string | undefined;
-};
-
-export type SkeletonListItem =
-  | { kind: "segment"; segmentState: SegmentDisplayState }
-  | { kind: "node"; row: SkeletonSegmentRenderRow }
-  | { kind: "empty"; text: string };
-
-export function buildSkeletonVirtualListItems(
-  segmentState: SegmentDisplayState | undefined,
-  emptyText: string,
-) {
-  const items: SkeletonListItem[] = [];
-  const listIndexByNodeId = new Map<bigint, number>();
-  if (segmentState !== undefined && segmentState.displayedNodeCount > 0) {
-    items.push({ kind: "segment", segmentState });
-    for (const row of segmentState.rows) {
-      listIndexByNodeId.set(row.node.nodeId, items.length);
-      items.push({ kind: "node", row });
-    }
-  } else {
-    items.push({ kind: "empty", text: emptyText });
-  }
-  return { items, listIndexByNodeId };
-}
-
-export function getSkeletonEmptyListText(options: {
-  activeSegmentId: bigint | undefined;
-  selectedSegmentDetailsUnavailable: boolean;
-  segmentState: SegmentDisplayState | undefined;
-  filterText: string;
-  nodeFilterType: SkeletonNodeFilterType;
-  preparationActive?: boolean;
-  hasPickableNodes: boolean;
-}): string {
-  const {
-    activeSegmentId,
-    selectedSegmentDetailsUnavailable,
-    segmentState,
-    filterText,
-    nodeFilterType,
-    preparationActive = false,
-    hasPickableNodes,
-  } = options;
-  if (preparationActive && segmentState === undefined) {
-    return PREPARATION_PENDING_LIST_MESSAGE;
-  }
-  if (activeSegmentId === undefined) {
-    if (selectedSegmentDetailsUnavailable) {
-      return hasPickableNodes
-        ? PICKABLE_SKELETON_DETAILS_UNAVAILABLE_LIST_MESSAGE
-        : SKELETON_DETAILS_UNAVAILABLE_LIST_MESSAGE;
-    }
-    return hasPickableNodes
-      ? "Hover over or select a skeleton node to view its skeleton's nodes."
-      : "Select a skeleton to view its nodes.";
-  }
-  if (
-    segmentState === undefined ||
-    segmentState.totalNodeCount === 0 ||
-    (filterText.length === 0 &&
-      (nodeFilterType === SkeletonNodeFilterType.DEFAULT ||
-        nodeFilterType === SkeletonNodeFilterType.NONE))
-  ) {
-    return "No loaded nodes.";
-  }
-  return "No matching nodes.";
-}
 
 export class SkeletonTab extends Tab {
   constructor(public layer: SegmentationUserLayer) {
