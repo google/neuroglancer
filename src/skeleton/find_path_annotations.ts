@@ -34,7 +34,7 @@ import {
   type SkeletonFindPathResultNode,
   type SkeletonFindPathState,
 } from "#src/skeleton/find_path.js";
-import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/frontend.js";
+import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { RefCounted } from "#src/util/disposable.js";

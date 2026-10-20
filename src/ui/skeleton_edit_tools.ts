@@ -61,11 +61,6 @@ import {
   SPATIAL_SKELETON_FIND_PATH_TARGET_DESCRIPTION,
 } from "#src/skeleton/find_path_annotations.js";
 import {
-  PerspectiveViewSpatiallyIndexedSkeletonLayer,
-  type SpatiallyIndexedSkeletonLayer,
-  SliceViewPanelSpatiallyIndexedSkeletonLayer,
-} from "#src/skeleton/frontend.js";
-import {
   getPathBetweenNodes,
   type SkeletonNavigationGraph,
 } from "#src/skeleton/navigation_graph.js";
@@ -75,6 +70,11 @@ import {
   SkeletonDisplayNodeType,
 } from "#src/skeleton/node_types.js";
 import type { SpatialSkeletonOptimisticEditExecution } from "#src/skeleton/optimistic_edit/types.js";
+import {
+  PerspectiveViewSpatiallyIndexedSkeletonLayer,
+  type SpatiallyIndexedSkeletonLayer,
+  SliceViewPanelSpatiallyIndexedSkeletonLayer,
+} from "#src/skeleton/spatial/skeleton_render_layer.js";
 import { StatusMessage } from "#src/status.js";
 import { makeAnnotationListElement } from "#src/ui/annotations.js";
 import { getDefaultAnnotationListBindings } from "#src/ui/default_input_event_bindings.js";
@@ -601,7 +601,7 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
   // Activation-scoped state — reset at the start of each activate() call.
   private currentMode: SkeletonEditMode = SkeletonEditMode.Default;
   private dragInProgress = false;
-  private activeDragBrowseExclusionRelease: (() => boolean) | undefined;
+  private activeDragBrowseExclusionRelease: (() => void) | undefined;
   private pending = false;
   /** Invalidates delayed callbacks from prior modes or tool activations. */
   private interactionGeneration = 0;
@@ -1083,7 +1083,9 @@ export class SpatialSkeletonEditTool extends SpatialSkeletonToolBase {
           this.layer.spatialSkeletonState.clearPendingNodePositions();
           this.activeDragBrowseExclusionRelease?.();
           this.activeDragBrowseExclusionRelease =
-            skeletonLayer.beginTemporaryBrowseExclusion(currentNode.segmentId);
+            this.layer.skeletonOverlaySegments.beginTemporaryBrowseExclusion(
+              currentNode.segmentId,
+            );
           this.setStatus(getSpatialSkeletonMovingStatusText());
         }
         panel.translateDataPointByViewportPixels(

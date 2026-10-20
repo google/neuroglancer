@@ -42,7 +42,6 @@ import {
   SpatialSkeletonInspectionRequiredError,
   type SpatialSkeletonInspectionRequiredReason,
 } from "#src/skeleton/edit_errors.js";
-import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/frontend.js";
 import type {
   SpatialSkeletonLogicalNodeHandle,
   SpatialSkeletonLogicalSegmentHandle,
@@ -75,7 +74,9 @@ import {
   type SpatialSkeletonOptimisticEditState,
 } from "#src/skeleton/optimistic_edit/types.js";
 import { resolveSkeletonParents } from "#src/skeleton/skeleton_edges.js";
+import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
 import { WatchableValue } from "#src/trackable_value.js";
+import { Uint64Set } from "#src/uint64_set.js";
 import { bigintCompare } from "#src/util/bigint.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { PromiseConcurrencyLimiter } from "#src/util/promise_concurrency_limiter.js";
@@ -236,6 +237,34 @@ export interface SpatialSkeletonPresentationSnapshot {
   /** Node ids that exist only in the local optimistic projection. */
   readonly provisionalNodeIds: readonly bigint[];
   readonly preparations: readonly SpatialSkeletonPreparationIntent[];
+}
+
+/**
+ * Returns active numeric aliases that exist only in the optimistic projection.
+ * These ids are presentation state rather than datasource identities and receive a
+ * temporary render color until their owning operation is confirmed.
+ */
+function getActiveProvisionalSpatialSkeletonSegmentIds(
+  presentation: SpatialSkeletonPresentationSnapshot,
+): bigint[] {
+  const activeOwners = new Map(
+    presentation.activeLogicalOwners.map(({ segmentId, logicalHandle }) => [
+      segmentId,
+      logicalHandle.stableId,
+    ]),
+  );
+  const provisionalSegmentIds = new Set<bigint>();
+  for (const alias of presentation.numericAliases) {
+    if (
+      alias.authoritative !== false ||
+      alias.segmentId === 0n ||
+      activeOwners.get(alias.segmentId) !== alias.logicalHandle.stableId
+    ) {
+      continue;
+    }
+    provisionalSegmentIds.add(alias.segmentId);
+  }
+  return [...provisionalSegmentIds].sort(bigintCompare);
 }
 
 const preparedSpatialSkeletonProjectionStatePublicationBrand = Symbol(
@@ -676,6 +705,7 @@ export class SpatialSkeletonState
   // not display a stale highlight until the user makes their first click
   // (merge) or is suppressed entirely until a click/exit (split).
   readonly suppressSelectedNodeHighlight = new WatchableValue(false);
+  readonly provisionalSegmentIds = this.registerDisposer(new Uint64Set());
   readonly nodeDataVersion = new WatchableValue(0);
   readonly pendingNodePositionVersion = new WatchableValue(0);
   readonly optimisticEditQueueVersion = new WatchableValue(0);
@@ -1109,9 +1139,25 @@ export class SpatialSkeletonState
     }
   }
 
+  private updateProvisionalSegmentIds(
+    presentation: SpatialSkeletonPresentationSnapshot,
+  ) {
+    const nextIds = getActiveProvisionalSpatialSkeletonSegmentIds(presentation);
+    const { provisionalSegmentIds } = this;
+    if (
+      nextIds.length === provisionalSegmentIds.size &&
+      nextIds.every((segmentId) => provisionalSegmentIds.has(segmentId))
+    ) {
+      return;
+    }
+    provisionalSegmentIds.clear();
+    if (nextIds.length !== 0) provisionalSegmentIds.add(nextIds);
+  }
+
   private publishPreparedSpatialSkeletonPresentation(
     publication: SpatialSkeletonPresentationSnapshot,
   ) {
+    this.updateProvisionalSegmentIds(publication);
     this.notifyWithReporters(() => {
       this.spatialSkeletonPresentation.value = publication;
     });
@@ -1675,6 +1721,24 @@ export class SpatialSkeletonState
 
   getCachedNode(nodeId: bigint) {
     return this.cachedNodesById.get(nodeId);
+  }
+
+  /** The cached node at its pending position, if it has one. */
+  getDisplayedNode(nodeId: bigint): SkeletonNode | undefined {
+    const cachedNode = this.cachedNodesById.get(nodeId);
+    if (cachedNode === undefined) {
+      return undefined;
+    }
+    const pendingPosition =
+      this.getPendingNodePosition(cachedNode.nodeId) ?? cachedNode.position;
+    return {
+      ...cachedNode,
+      position: new Float32Array([
+        Number(pendingPosition[0]),
+        Number(pendingPosition[1]),
+        Number(pendingPosition[2]),
+      ]),
+    };
   }
 
   /**

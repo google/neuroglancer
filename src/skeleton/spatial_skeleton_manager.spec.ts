@@ -2882,3 +2882,50 @@ describe("skeleton/spatial_skeleton_manager", () => {
     });
   });
 });
+
+function publishSplitOutputAlias(
+  state: SpatialSkeletonState,
+  options: { authoritative: boolean; activeOwner: boolean },
+) {
+  const logicalHandle = { kind: "segment" as const, stableId: "split-output" };
+  const prepared = state.prepareSpatialSkeletonProjectionStatePublication({
+    snapshots: [],
+    expectedRevisions: new Map(),
+    activeLogicalOwners: options.activeOwner
+      ? [{ segmentId: 17n, logicalHandle }]
+      : [],
+    numericAliases: [
+      { segmentId: 17n, logicalHandle, authoritative: options.authoritative },
+    ],
+    provisionalNodeIds: [],
+    preparationIntentIdsToRemove: [],
+    notify: true,
+  })!;
+  state.runSpatialSkeletonPresentationTransaction(() => {
+    state.adoptPreparedSpatialSkeletonProjectionStatePublication(prepared);
+  });
+  state.finalizePreparedSpatialSkeletonProjectionStatePublication(prepared);
+}
+
+describe("SpatialSkeletonState provisional skeletons", () => {
+  it("lists a skeleton as provisional until its creating edit is confirmed", () => {
+    const state = new SpatialSkeletonState();
+
+    publishSplitOutputAlias(state, { authoritative: false, activeOwner: true });
+    expect([...state.provisionalSegmentIds]).toEqual([17n]);
+
+    publishSplitOutputAlias(state, { authoritative: true, activeOwner: true });
+    expect([...state.provisionalSegmentIds]).toEqual([]);
+  });
+
+  it("does not list a provisional ID whose skeleton is no longer shown", () => {
+    const state = new SpatialSkeletonState();
+
+    publishSplitOutputAlias(state, {
+      authoritative: false,
+      activeOwner: false,
+    });
+
+    expect([...state.provisionalSegmentIds]).toEqual([]);
+  });
+});

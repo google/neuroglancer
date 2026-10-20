@@ -42,10 +42,8 @@ import type { MeshSource, MultiscaleMeshSource } from "#src/mesh/frontend.js";
 import type { SegmentPropertyMap } from "#src/segmentation_display_state/property_map.js";
 import type { SegmentationGraphSource } from "#src/segmentation_graph/source.js";
 import type { SingleMeshSource } from "#src/single_mesh/frontend.js";
-import type {
-  SkeletonSource,
-  MultiscaleSpatiallyIndexedSkeletonSource,
-} from "#src/skeleton/frontend.js";
+import type { SkeletonSource } from "#src/skeleton/frontend.js";
+import type { MultiscaleSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial/frontend.js";
 import type { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import type {

@@ -61,7 +61,7 @@ import { SkeletonDataSourceState } from "#src/skeleton/find_path.js";
 import {
   SpatiallyIndexedSkeletonSource,
   MultiscaleSpatiallyIndexedSkeletonSource,
-} from "#src/skeleton/frontend.js";
+} from "#src/skeleton/spatial/frontend.js";
 import { mat4 } from "#src/util/geom.js";
 import "#src/datasource/catmaid/register_credentials_provider.js";
 

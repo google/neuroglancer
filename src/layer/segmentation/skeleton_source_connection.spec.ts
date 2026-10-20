@@ -31,12 +31,11 @@ import { SkeletonEdgeDirection, type SkeletonNode } from "#src/skeleton/api.js";
 import { SpatialSkeletonActions } from "#src/skeleton/command_protocol.js";
 import { executeSpatialSkeletonDeleteNode } from "#src/skeleton/commands.js";
 import { SkeletonFindPathState } from "#src/skeleton/find_path.js";
-import type {
-  MultiscaleSpatiallyIndexedSkeletonSource,
-  SpatiallyIndexedSkeletonLayer,
-} from "#src/skeleton/frontend.js";
 import type { SpatialSkeletonResolvedProjectionUiHints } from "#src/skeleton/optimistic_edit/projection_ui_hints.js";
 import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
+import type { MultiscaleSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial/frontend.js";
+import type { SkeletonOverlaySegments } from "#src/skeleton/spatial/overlay_segments.js";
+import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
 import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
@@ -63,8 +62,6 @@ function makeSkeletonLayer(editableSource: unknown) {
   return {
     editableSource,
     getNode: () => undefined,
-    remapOverlaySegments: vi.fn(),
-    retainOverlaySegment: vi.fn(),
   } as unknown as SpatiallyIndexedSkeletonLayer;
 }
 
@@ -90,8 +87,6 @@ function makeDeletingSkeletonLayer(
     fragmentSource: source,
     editableSource: source,
     getNode: (nodeId: bigint) => getCachedNode(nodeId),
-    remapOverlaySegments: vi.fn(),
-    retainOverlaySegment: vi.fn(),
   } as unknown as SpatiallyIndexedSkeletonLayer;
   return { skeletonLayer, client };
 }
@@ -151,9 +146,15 @@ function makeConnection(
     temporaryVisibleSegments: new Uint64Set(),
     selectedSegments: new Uint64OrderedSet(),
   };
+  const overlaySegments = {
+    remap: vi.fn(),
+    retain: vi.fn(),
+    clear: vi.fn(),
+  } as unknown as SkeletonOverlaySegments;
   const connection = new SkeletonSourceConnection({
     spatialSkeletonState,
     selection,
+    overlaySegments,
     segmentationGroupState: new WatchableValue(
       group as unknown as SegmentationGroupState,
     ),
@@ -162,6 +163,7 @@ function makeConnection(
   });
   return {
     connection,
+    overlaySegments,
     spatialSkeletonState,
     selection,
     selectionState,
@@ -233,8 +235,9 @@ describe("SkeletonSourceConnection", () => {
     ).toBeUndefined();
   });
 
-  it("only a change to a different skeleton source clears pending edit state", () => {
-    const { connection, spatialSkeletonState } = makeConnection();
+  it("only a change to a different skeleton source clears pending edit state and edited skeletons", () => {
+    const { connection, spatialSkeletonState, overlaySegments } =
+      makeConnection();
     const firstSource = {} as MultiscaleSpatiallyIndexedSkeletonSource;
     const secondSource = {} as MultiscaleSpatiallyIndexedSkeletonSource;
 
@@ -242,9 +245,11 @@ describe("SkeletonSourceConnection", () => {
     spatialSkeletonState.setPendingNodePosition(7n, [1, 2, 3]);
     connection.sourceChanged(firstSource);
     expect(spatialSkeletonState.getPendingNodePosition(7n)).toBeDefined();
+    expect(overlaySegments.clear).not.toHaveBeenCalled();
 
     connection.sourceChanged(secondSource);
     expect(spatialSkeletonState.getPendingNodePosition(7n)).toBeUndefined();
+    expect(overlaySegments.clear).toHaveBeenCalledOnce();
   });
 
   it("an adopted optimistic edit invalidates the shown Find Path result", () => {
@@ -278,7 +283,9 @@ describe("SkeletonSourceConnection", () => {
 
   it("a renumbered skeleton stays visible and selected after the server confirms an edit", () => {
     const skeletonLayer = makeSkeletonLayer(undefined);
-    const { connection, group } = makeConnection({ skeletonLayer });
+    const { connection, group, overlaySegments } = makeConnection({
+      skeletonLayer,
+    });
     group.visibleSegments.add(5n);
     group.temporaryVisibleSegments.add(5n);
     group.selectedSegments.add(5n);
@@ -291,9 +298,7 @@ describe("SkeletonSourceConnection", () => {
     expect(group.visibleSegments.has(5n)).toBe(false);
     expect(group.selectedSegments.has(9n)).toBe(true);
     expect(group.selectedSegments.has(5n)).toBe(false);
-    expect(skeletonLayer.remapOverlaySegments).toHaveBeenCalledWith(
-      new Map([[5n, 9n]]),
-    );
+    expect(overlaySegments.remap).toHaveBeenCalledWith(new Map([[5n, 9n]]));
   });
 
   it("deleting the last node of a skeleton hides and deselects it", () => {

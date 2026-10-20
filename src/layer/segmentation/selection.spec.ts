@@ -33,11 +33,11 @@ import {
 import type { RenderLayerTransform } from "#src/render_coordinate_transform.js";
 import { Uint64MapEntry } from "#src/segmentation_display_state/base.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
-import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/frontend.js";
 import {
   SkeletonNavigation,
   type SkeletonNodeAccess,
 } from "#src/skeleton/skeleton_navigator.js";
+import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
 import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";

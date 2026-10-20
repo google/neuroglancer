@@ -25,7 +25,7 @@ import {
   CatmaidSkeletonSourceParameters,
   makeCatmaidClient,
 } from "#src/datasource/catmaid/base.js";
-import { SpatiallyIndexedSkeletonSourceBackend } from "#src/skeleton/backend.js";
+import { SpatiallyIndexedSkeletonSourceBackend } from "#src/skeleton/spatial/backend.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
 
 @registerSharedObject()

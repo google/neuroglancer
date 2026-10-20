@@ -34,8 +34,9 @@ import {
   executeSpatialSkeletonNodeRadiusUpdate,
   executeSpatialSkeletonReroot,
 } from "#src/skeleton/commands.js";
-import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/frontend.js";
 import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
+import { SkeletonOverlaySegments } from "#src/skeleton/spatial/overlay_segments.js";
+import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
 import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { displaySkeletonNodeSelection } from "#src/ui/skeleton_selection_details.js";
@@ -152,6 +153,10 @@ function makeDetailsLayer(
   const skeletonSourceConnection = new SkeletonSourceConnection({
     spatialSkeletonState,
     selection: skeletonNodeSelection,
+    overlaySegments: new SkeletonOverlaySegments({
+      segmentationGroupState: new WatchableValue({} as any),
+      editState: spatialSkeletonState,
+    }),
     segmentationGroupState: new WatchableValue({
       visibleSegments: new Uint64Set(),
       temporaryVisibleSegments: new Uint64Set(),

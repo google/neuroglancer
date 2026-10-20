@@ -1282,7 +1282,7 @@ export class SkeletonTab extends Tab {
       if (skeletonLayer !== undefined) {
         const cachedSegmentIds = new Set<bigint>([segmentId]);
         addVisibleSegmentIds(cachedSegmentIds);
-        for (const retainedSegmentId of skeletonLayer.getRetainedOverlaySegmentIds()) {
+        for (const retainedSegmentId of layer.skeletonOverlaySegments.getRetainedSegmentIds()) {
           cachedSegmentIds.add(retainedSegmentId);
         }
         skeletonState.evictInactiveSegmentNodes(cachedSegmentIds);

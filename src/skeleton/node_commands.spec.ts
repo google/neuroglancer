@@ -24,6 +24,7 @@ import {
 } from "#src/skeleton/commands.js";
 import { bindSkeletonNodeCommands } from "#src/skeleton/node_commands.js";
 import { SkeletonNavigation } from "#src/skeleton/skeleton_navigator.js";
+import { SkeletonOverlaySegments } from "#src/skeleton/spatial/overlay_segments.js";
 import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
@@ -99,6 +100,10 @@ function makeReadOnlySkeletonLayer() {
     skeletonSourceConnection: new SkeletonSourceConnection({
       spatialSkeletonState,
       selection: {} as any,
+      overlaySegments: new SkeletonOverlaySegments({
+        segmentationGroupState: new WatchableValue({} as any),
+        editState: spatialSkeletonState,
+      }),
       segmentationGroupState: new WatchableValue({} as any),
       skeletonNodeAccess: makeNodeAccess([makeNode(1n, undefined)]),
       spatiallyIndexedSkeletonLayer: new WatchableValue(undefined),

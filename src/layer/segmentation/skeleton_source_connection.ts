@@ -25,14 +25,13 @@ import {
 } from "#src/skeleton/command_protocol.js";
 import type { SkeletonFindPathState } from "#src/skeleton/find_path.js";
 import type { SpatialSkeletonFindPathAnnotationController } from "#src/skeleton/find_path_annotations.js";
-import type {
-  MultiscaleSpatiallyIndexedSkeletonSource,
-  SpatiallyIndexedSkeletonLayer,
-} from "#src/skeleton/frontend.js";
 import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/optimistic_edit/fatal.js";
 import { ensureSpatialSkeletonOptimisticEditQueue } from "#src/skeleton/optimistic_edit/host.js";
 import type { SpatialSkeletonResolvedProjectionUiHints } from "#src/skeleton/optimistic_edit/projection_ui_hints.js";
 import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
+import type { MultiscaleSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial/frontend.js";
+import type { SkeletonOverlaySegments } from "#src/skeleton/spatial/overlay_segments.js";
+import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
 import {
   editableSpatiallyIndexedSkeletonSourceSupportsAction,
   type SpatialSkeletonLayerContext,
@@ -65,6 +64,7 @@ export interface SpatialSkeletonFindPathContext {
 export interface SkeletonSourceConnectionOptions {
   readonly spatialSkeletonState: SpatialSkeletonState;
   readonly selection: SkeletonNodeSelection;
+  readonly overlaySegments: SkeletonOverlaySegments;
   readonly segmentationGroupState: WatchableValueInterface<SegmentationGroupState>;
   readonly skeletonNodeAccess: WatchableValueInterface<
     SkeletonNodeAccess | undefined
@@ -132,6 +132,7 @@ export class SkeletonSourceConnection
     this.activeSource = source;
     if (previousSource !== undefined && previousSource !== source) {
       this.spatialSkeletonState.clearRuntimeState();
+      this.options.overlaySegments.clear();
     }
   }
 
@@ -185,13 +186,13 @@ export class SkeletonSourceConnection
       }
     }
     this.options.selection.applyProjectionUiHints(hints);
-    const skeletonLayer = this.getSpatiallyIndexedSkeletonLayer();
+    const { overlaySegments } = this.options;
     if (hints.segmentIdRemappings.size !== 0) {
       // Copied so that the layer cannot change the runtime's publication.
-      skeletonLayer?.remapOverlaySegments(new Map(hints.segmentIdRemappings));
+      overlaySegments.remap(new Map(hints.segmentIdRemappings));
     }
     for (const segmentId of hints.retainSegmentIds) {
-      skeletonLayer?.retainOverlaySegment(segmentId);
+      overlaySegments.retain(segmentId);
     }
   }
 

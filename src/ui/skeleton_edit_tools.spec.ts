@@ -624,6 +624,8 @@ function makeDragHarness({ inspected = true } = {}) {
     editableSource: source,
     getNode: (id: bigint) =>
       id === currentNode.nodeId ? currentNode : undefined,
+  };
+  const skeletonOverlaySegments = {
     beginTemporaryBrowseExclusion: vi.fn(() => releaseBrowseExclusion),
   };
   const state = {
@@ -650,6 +652,7 @@ function makeDragHarness({ inspected = true } = {}) {
   };
   const layer = {
     spatialSkeletonState: state,
+    skeletonOverlaySegments,
     displayState: {
       segmentationGroupState: {
         value: makeVisibleSegmentsState([original.segmentId]),
@@ -722,6 +725,7 @@ function makeDragHarness({ inspected = true } = {}) {
     layer,
     source,
     skeletonLayer,
+    skeletonOverlaySegments,
     mouseState,
     panel,
     event,
@@ -2715,7 +2719,7 @@ describe("spatial_skeleton_edit_tool", () => {
           handle,
           state,
           source,
-          skeletonLayer,
+          skeletonOverlaySegments,
           executeOptimistically,
           releaseBrowseExclusion,
           setCurrentNode,
@@ -2746,7 +2750,7 @@ describe("spatial_skeleton_edit_tool", () => {
         }
         finish!(event, 0, 0);
         expect(
-          skeletonLayer.beginTemporaryBrowseExclusion,
+          skeletonOverlaySegments.beginTemporaryBrowseExclusion,
         ).toHaveBeenCalledWith(
           when === "before movement"
             ? currentNode.segmentId

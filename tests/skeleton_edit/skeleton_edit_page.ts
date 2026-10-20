@@ -92,10 +92,13 @@ export async function readRenderedNodeIds(page: Page, layerName = "Skeletons") {
     const layer = viewer.layerManager.getLayerByName(layerName)!
       .layer as SegmentationUserLayer;
     const renderer = layer.spatiallyIndexedSkeletonLayer.value as unknown as {
-      overlayRenderChunks: readonly { nodeIds: BigUint64Array }[];
+      overlayChunks: ReadonlyMap<
+        bigint,
+        { readonly chunk: { readonly nodeIds: BigUint64Array } }
+      >;
     };
-    return renderer.overlayRenderChunks
-      .flatMap(({ nodeIds }) => Array.from(nodeIds))
+    return [...renderer.overlayChunks.values()]
+      .flatMap(({ chunk }) => Array.from(chunk.nodeIds))
       .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   }, layerName);
 }

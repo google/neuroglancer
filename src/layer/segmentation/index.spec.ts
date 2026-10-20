@@ -19,6 +19,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { emptyInvalidCoordinateSpace } from "#src/coordinate_transform.js";
 import { SkeletonEdgeDirection } from "#src/skeleton/api.js";
 import { SpatialSkeletonActions } from "#src/skeleton/command_protocol.js";
+import { SkeletonOverlaySegments } from "#src/skeleton/spatial/overlay_segments.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
@@ -79,7 +80,7 @@ const { SkeletonSourceConnection } = await import(
   "#src/layer/segmentation/skeleton_source_connection.js"
 );
 const { MultiscaleSpatiallyIndexedSkeletonSource } = await import(
-  "#src/skeleton/frontend.js"
+  "#src/skeleton/spatial/frontend.js"
 );
 const { LocalDataSource } = await import("#src/datasource/local.js");
 const { LocalSegmentationGraphSource } = await import(
@@ -110,6 +111,10 @@ function makeSkeletonSourceConnection(
   return new SkeletonSourceConnection({
     spatialSkeletonState,
     selection: {} as any,
+    overlaySegments: new SkeletonOverlaySegments({
+      segmentationGroupState: new WatchableValue({} as any),
+      editState: spatialSkeletonState,
+    }),
     segmentationGroupState: new WatchableValue({} as any),
     skeletonNodeAccess: new WatchableValue(undefined),
     spatiallyIndexedSkeletonLayer: new WatchableValue(undefined),
@@ -594,6 +599,10 @@ describe("layer/segmentation selection details", () => {
       skeletonSourceConnection: new SkeletonSourceConnection({
         spatialSkeletonState,
         selection: skeletonNodeSelection,
+        overlaySegments: new SkeletonOverlaySegments({
+          segmentationGroupState: new WatchableValue({} as any),
+          editState: spatialSkeletonState,
+        }),
         segmentationGroupState: new WatchableValue({} as any),
         skeletonNodeAccess,
         spatiallyIndexedSkeletonLayer,
@@ -735,6 +744,10 @@ describe("layer/segmentation selection details", () => {
       skeletonSourceConnection: new SkeletonSourceConnection({
         spatialSkeletonState,
         selection: skeletonNodeSelection,
+        overlaySegments: new SkeletonOverlaySegments({
+          segmentationGroupState: segmentationGroupState,
+          editState: spatialSkeletonState,
+        }),
         segmentationGroupState,
         skeletonNodeAccess,
         spatiallyIndexedSkeletonLayer,

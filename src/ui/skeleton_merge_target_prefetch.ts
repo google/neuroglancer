@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/frontend.js";
+import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
 import type {
   SpatialSkeletonInputReference,
   SpatialSkeletonState,

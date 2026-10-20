@@ -91,14 +91,20 @@ import {
   SkeletonLayer,
   SkeletonRenderingOptions,
   SliceViewPanelSkeletonLayer,
-  PerspectiveViewSpatiallyIndexedSkeletonLayer,
-  SliceViewPanelSpatiallyIndexedSkeletonLayer,
-  type MultiscaleSpatiallyIndexedSkeletonSource,
-  SpatiallyIndexedSkeletonLayer,
-  type SpatiallyIndexedSkeletonLayerDisplayState,
 } from "#src/skeleton/frontend.js";
 import { SkeletonBrowseState } from "#src/skeleton/node_types.js";
 import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
+import {
+  type MultiscaleSpatiallyIndexedSkeletonSource,
+  SPATIAL_SKELETON_SOURCE_OPTIONS,
+} from "#src/skeleton/spatial/frontend.js";
+import { SkeletonOverlaySegments } from "#src/skeleton/spatial/overlay_segments.js";
+import {
+  PerspectiveViewSpatiallyIndexedSkeletonLayer,
+  SliceViewPanelSpatiallyIndexedSkeletonLayer,
+  SpatiallyIndexedSkeletonLayer,
+  type SpatiallyIndexedSkeletonLayerDisplayState,
+} from "#src/skeleton/spatial/skeleton_render_layer.js";
 import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { DataType, VolumeType } from "#src/sliceview/volume/base.js";
 import { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
@@ -627,6 +633,7 @@ export class SegmentationUserLayer extends Base {
     new SpatialSkeletonState(),
   );
   readonly skeletonNodeSelection: SkeletonNodeSelection;
+  readonly skeletonOverlaySegments: SkeletonOverlaySegments;
   readonly skeletonSourceConnection: SkeletonSourceConnection;
 
   graphConnection = new WatchableValue<
@@ -796,10 +803,17 @@ export class SegmentationUserLayer extends Base {
         spatialSkeletonState: this.spatialSkeletonState,
       }),
     );
+    this.skeletonOverlaySegments = this.registerDisposer(
+      new SkeletonOverlaySegments({
+        segmentationGroupState: this.displayState.segmentationGroupState,
+        editState: this.spatialSkeletonState,
+      }),
+    );
     this.skeletonSourceConnection = this.registerDisposer(
       new SkeletonSourceConnection({
         spatialSkeletonState: this.spatialSkeletonState,
         selection: this.skeletonNodeSelection,
+        overlaySegments: this.skeletonOverlaySegments,
         segmentationGroupState: this.displayState.segmentationGroupState,
         skeletonNodeAccess: this.skeletonNodeAccess,
         spatiallyIndexedSkeletonLayer: this.spatiallyIndexedSkeletonLayer,
@@ -904,57 +918,28 @@ export class SegmentationUserLayer extends Base {
     },
     options: { attachFindPath: boolean },
   ): void {
-    const { spatialSkeletonState, skeletonNodeSelection } = this;
-    const layerOptions = {
-      selectedNodeInfo: skeletonNodeSelection.selected,
-      suppressSelectedNodeHighlight:
-        spatialSkeletonState.suppressSelectedNodeHighlight,
-      hoveredNodeInfo: skeletonNodeSelection.hovered,
-      pendingNodePositionVersion:
-        spatialSkeletonState.pendingNodePositionVersion,
-      getPendingNodePosition: (nodeId: bigint) =>
-        spatialSkeletonState.getPendingNodePosition(nodeId),
-      getPendingNodeIds: () => spatialSkeletonState.getPendingNodeIds(),
-      getCachedNode: (nodeId: bigint) =>
-        spatialSkeletonState.getCachedNode(nodeId),
-      resolveGlobalPosition: (modelPosition: ArrayLike<number>) =>
-        skeletonNodeSelection.toGlobalPosition(modelPosition),
-      inspectionState: spatialSkeletonState,
-    };
-    const perspectiveSources = source.getPerspectiveSources();
-    const slicePanelSources = source.getSliceViewPanelSources();
-    const hasPerspectiveSources = perspectiveSources.length > 0;
-    const hasSlicePanelSources = slicePanelSources.length > 0;
-    if (!hasPerspectiveSources && !hasSlicePanelSources) return;
+    if (source.getSources(SPATIAL_SKELETON_SOURCE_OPTIONS)[0].length === 0) {
+      return;
+    }
     // One base serves 2D and 3D panels so their edit state stays consistent.
-    const base = new SpatiallyIndexedSkeletonLayer(
-      this.manager.chunkManager,
-      hasPerspectiveSources ? perspectiveSources : slicePanelSources,
+    const base = new SpatiallyIndexedSkeletonLayer({
+      multiscaleSource: source,
       displayState,
-      {
-        ...layerOptions,
-        sources2d: slicePanelSources,
-        fragmentSource: source.fragmentSource,
-        editableSource: source.editableSource,
-      },
-    );
+      editState: this.spatialSkeletonState,
+      nodeSelection: this.skeletonNodeSelection,
+      overlaySegments: this.skeletonOverlaySegments,
+    });
     if (options.attachFindPath) {
       attachFindPath(this, loadedSubsource, base);
     }
-    if (hasPerspectiveSources) {
-      loadedSubsource.addRenderLayer(
-        new PerspectiveViewSpatiallyIndexedSkeletonLayer(base.addRef()),
-      );
-    }
-    if (hasSlicePanelSources) {
-      loadedSubsource.addRenderLayer(
-        new SliceViewPanelSpatiallyIndexedSkeletonLayer(
-          /* transfer ownership */ base,
-        ),
-      );
-    } else {
-      base.dispose();
-    }
+    loadedSubsource.addRenderLayer(
+      new PerspectiveViewSpatiallyIndexedSkeletonLayer(base.addRef()),
+    );
+    loadedSubsource.addRenderLayer(
+      new SliceViewPanelSpatiallyIndexedSkeletonLayer(
+        /* transfer ownership */ base,
+      ),
+    );
   }
 
   private getSpatialSkeletonFindPathSubsource(
