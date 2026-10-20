@@ -27,11 +27,9 @@ import type {
   VolumeChunkSource as VolumeChunkSourceInterface,
   VolumeChunkSpecification,
 } from "#src/sliceview/volume/base.js";
-import { IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID } from "#src/sliceview/volume/base.js";
 import type { vec3 } from "#src/util/geom.js";
 import * as vector from "#src/util/vector.js";
 import type { RPC } from "#src/worker_rpc.js";
-import { registerSharedObject } from "#src/worker_rpc.js";
 
 export class VolumeChunk extends SliceViewChunk {
   source: VolumeChunkSource | null = null;
@@ -158,13 +156,4 @@ export class VolumeChunkSource
     return computeChunkBounds(this, chunk);
   }
 }
-
-@registerSharedObject(IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID)
-export class InMemoryVolumeChunkSourceBackend extends VolumeChunkSource {
-  async download(chunk: VolumeChunk, _signal: AbortSignal): Promise<void> {
-    chunk.data = null;
-    return new Promise((_resolve) => {});
-  }
-}
-
 VolumeChunkSource.prototype.chunkConstructor = VolumeChunk;

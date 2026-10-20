@@ -458,22 +458,26 @@ export class SliceView extends Base {
           layerInfo.displayDimensionRenderInfo = displayDimensionRenderInfo;
           layerInfo.transformGeneration = curTransformGeneration;
         }
-        this.flushBackendProjectionParameters();
-        rpc.invoke(SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, {
-          id: this.rpcId,
-          layerId: renderLayer.rpcId,
-          sources: serializeAllTransformedSources(layerInfo.allSources),
-          displayDimensionRenderInfo: displayDimensionRenderInfo,
-        });
+        if (renderLayer.rpcId !== null) {
+          this.flushBackendProjectionParameters();
+          rpc.invoke(SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, {
+            id: this.rpcId,
+            layerId: renderLayer.rpcId,
+            sources: serializeAllTransformedSources(layerInfo.allSources),
+            displayDimensionRenderInfo: displayDimensionRenderInfo,
+          });
+        }
         changed = true;
       }
     }
     for (const [renderLayer, layerInfo] of visibleLayers) {
       if (layerInfo.lastSeenGeneration === curUpdateGeneration) continue;
-      rpc.invoke(SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, {
-        id: this.rpcId,
-        layerId: renderLayer.rpcId,
-      });
+      if (renderLayer.rpcId !== null) {
+        rpc.invoke(SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, {
+          id: this.rpcId,
+          layerId: renderLayer.rpcId,
+        });
+      }
       visibleLayers.delete(renderLayer);
       disposeTransformedSources(renderLayer, layerInfo.allSources);
       invokeDisposers(layerInfo.disposers);

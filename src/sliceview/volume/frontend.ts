@@ -31,10 +31,7 @@ import type {
   VolumeSourceOptions,
   VolumeType,
 } from "#src/sliceview/volume/base.js";
-import {
-  computeChunkGridPosition,
-  IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID,
-} from "#src/sliceview/volume/base.js";
+import { computeChunkGridPosition } from "#src/sliceview/volume/base.js";
 import { VolumeChunk } from "#src/sliceview/volume/chunk.js";
 import { getChunkFormatHandler } from "#src/sliceview/volume/registry.js";
 import type { TypedArray } from "#src/util/array.js";
@@ -43,7 +40,6 @@ import type { Disposable } from "#src/util/disposable.js";
 import type { GL } from "#src/webgl/context.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import { getShaderType, glsl_mixLinear } from "#src/webgl/shader_lib.js";
-import { registerSharedObjectOwner } from "#src/worker_rpc.js";
 
 export interface LocalVolumeEdit {
   indices: number[];
@@ -300,7 +296,6 @@ export class VolumeChunkSource
   }
 }
 
-@registerSharedObjectOwner(IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID)
 export class InMemoryVolumeChunkSource extends VolumeChunkSource {
   // Stroke seq of the last local edit that touched each chunk. A reload may
   // clear a chunk only once its write coverage reaches this seq. Entries live
@@ -331,14 +326,6 @@ export class InMemoryVolumeChunkSource extends VolumeChunkSource {
   deleteChunk(key: string) {
     this.previewSeqs.delete(key);
     super.deleteChunk(key);
-  }
-
-  constructor(
-    chunkManager: ChunkManager,
-    options: { spec: VolumeChunkSpecification },
-  ) {
-    super(chunkManager, options);
-    this.initializeCounterpart(this.chunkManager.rpc!, {});
   }
 
   private invalidateGpuData(chunks: Set<VolumeChunk>): void {

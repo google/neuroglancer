@@ -338,6 +338,3 @@ export interface WritableVolumeChunkSource {
     data: ArrayBufferView,
   ): Promise<void>;
 }
-
-export const IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID =
-  "sliceview/volume/InMemoryChunkSource";

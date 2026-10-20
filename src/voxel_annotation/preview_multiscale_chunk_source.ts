@@ -27,11 +27,15 @@ import {
   MultiscaleVolumeChunkSource,
   type VolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
+import { StringMemoize } from "#src/util/memoize.js";
 
 export class PreviewMultiscaleSource extends MultiscaleVolumeChunkSource {
   dataType: DataType;
   volumeType: VolumeType;
   rank: number;
+
+  // Not ChunkManager.getChunkSource: it would create a worker counterpart.
+  private sources = new StringMemoize();
 
   constructor(
     chunkManager: ChunkManager,
@@ -57,9 +61,12 @@ export class PreviewMultiscaleSource extends MultiscaleVolumeChunkSource {
           compressedSegmentationBlockSize: undefined,
         };
 
-        const previewSource = this.chunkManager.getChunkSource(
-          InMemoryVolumeChunkSource,
-          { spec: previewSpec },
+        const previewSource = this.sources.get(
+          InMemoryVolumeChunkSource.encodeOptions({ spec: previewSpec }),
+          () =>
+            new InMemoryVolumeChunkSource(this.chunkManager, {
+              spec: previewSpec,
+            }),
         );
 
         return {

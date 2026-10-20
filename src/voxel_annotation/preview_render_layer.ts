@@ -38,6 +38,8 @@ export function VoxelEditingPreviewRenderLayerMixin<
   TBase extends { new (...args: any[]): SliceViewRenderLayer },
 >(Base: TBase) {
   abstract class C extends Base {
+    initializeCounterpart() {}
+
     // Edits are only made at the finest scale, whatever the zoom.
     filterVisibleSources(
       _sliceView: SliceViewBase,
