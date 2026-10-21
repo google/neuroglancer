@@ -91,72 +91,109 @@ function checkHeader(buffer: Uint8Array) {
 
 export async function decompressJxl(
   buffer: Uint8Array,
-  area: number | undefined,
-  numComponents: number | undefined,
+  expectedElements: number,
   bytesPerPixel: number,
+  preserveAlpha: boolean = false,
 ): Promise<DecodedImage> {
   const m = await getJxlModulePromise();
   checkHeader(buffer);
-
-  area ||= 0;
-  numComponents ||= 1;
-
-  const nbytes = area * bytesPerPixel * numComponents;
 
   const jxlImagePtr = (m.exports.malloc as Function)(buffer.byteLength);
   const heap = new Uint8Array((m.exports.memory as WebAssembly.Memory).buffer);
   heap.set(buffer, jxlImagePtr);
 
-  let imagePtr = null;
+  let imagePtr: number = 0;
+  // Will be set after we probe metadata (single probe call now).
+  let frameCount = 1;
+  let numComponents = 1;
+  let nbytes = 0;
 
   try {
-    const height_and_width = (m.exports.height_and_width as Function)(
-      jxlImagePtr,
-      buffer.byteLength,
-    );
-
-    const width = Number(height_and_width & 0x7fffffffn);
-    const height = Number(height_and_width >> 31n);
-
-    if (width <= 0 || height <= 0) {
-      throw new Error(
-        `jxl: Decoding failed. Width (${width}) and/or height (${height}) invalid.`,
+    // Allocate 3 u32s for combined probe [width,height,frames]
+    const probePtr = (m.exports.malloc as Function)(3 * 4);
+    try {
+      const rc = (m.exports.width_height_frames_out as Function)(
+        jxlImagePtr,
+        buffer.byteLength,
+        probePtr,
       );
-    }
-
-    if (area !== undefined && width * height !== area) {
-      throw new Error(
-        `jxl: Expected width and height (${width} x ${height}, ${width * height}) to match area: ${area}.`,
+      if (rc !== 0) {
+        throw new Error(`jxl: metadata probe failed code=${rc}`);
+      }
+      const view = new DataView(
+        (m.exports.memory as WebAssembly.Memory).buffer,
+        probePtr,
+        12,
       );
+      const width = view.getUint32(0, true);
+      const height = view.getUint32(4, true);
+      frameCount = view.getUint32(8, true) || 1;
+
+      if (width <= 0 || height <= 0) {
+        throw new Error(
+          `jxl: Decoding failed. Width (${width}) and/or height (${height}) invalid.`,
+        );
+      }
+      // Derive the number of components (channels) from the codestream's
+      // spatial/frame extent.  This resolves the `[f,h,w]` vs `[h,w,c]`
+      // ambiguity without any array-side heuristic: the caller supplies the
+      // total element count and the codestream supplies width*height*frames.
+      const spatialElements = width * height * frameCount;
+      if (
+        expectedElements <= 0 ||
+        spatialElements <= 0 ||
+        expectedElements % spatialElements !== 0
+      ) {
+        throw new Error(
+          `jxl: expected element count ${expectedElements} is not a multiple ` +
+            `of width*height*frames = ${width}*${height}*${frameCount} = ` +
+            `${spatialElements}.`,
+        );
+      }
+      numComponents = expectedElements / spatialElements;
+      // Compute bytes required using probed metadata.
+      nbytes = expectedElements * bytesPerPixel;
+
+      const preserveAlphaFlag = preserveAlpha ? 1 : 0;
+      if (bytesPerPixel === 1) {
+        imagePtr = (m.exports.decode as Function)(
+          jxlImagePtr,
+          buffer.byteLength,
+          nbytes,
+          preserveAlphaFlag,
+        );
+      } else {
+        imagePtr = (m.exports.decode_with_bpp as Function)(
+          jxlImagePtr,
+          buffer.byteLength,
+          nbytes,
+          bytesPerPixel,
+          preserveAlphaFlag,
+        );
+      }
+
+      if (imagePtr === 0) {
+        throw new Error("jxl: Decoding failed. Null pointer returned.");
+      }
+
+      // Likewise, we reference memory.buffer instead of heap.buffer
+      // because memory growth during decompress could have detached
+      // the buffer.
+      const image = new Uint8Array(
+        (m.exports.memory as WebAssembly.Memory).buffer,
+        imagePtr,
+        nbytes,
+      );
+
+      return {
+        width: width || 0,
+        height: height || 0,
+        numComponents: numComponents || 1,
+        uint8Array: image.slice(0),
+      };
+    } finally {
+      (m.exports.free as Function)(probePtr, 3 * 4);
     }
-
-    imagePtr = (m.exports.decode as Function)(
-      jxlImagePtr,
-      buffer.byteLength,
-      nbytes,
-    );
-
-    if (imagePtr === 0) {
-      throw new Error("jxl: Decoding failed. Null pointer returned.");
-    }
-
-    // Likewise, we reference memory.buffer instead of heap.buffer
-    // because memory growth during decompress could have detached
-    // the buffer.
-    const image = new Uint8Array(
-      (m.exports.memory as WebAssembly.Memory).buffer,
-      imagePtr,
-      nbytes,
-    );
-
-    // copy the array so it can be memory managed by JS
-    // and we can free the emscripten buffer
-    return {
-      width: width || 0,
-      height: height || 0,
-      numComponents: numComponents || 1,
-      uint8Array: image.slice(0),
-    };
   } finally {
     (m.exports.free as Function)(jxlImagePtr, buffer.byteLength);
     if (imagePtr) {
