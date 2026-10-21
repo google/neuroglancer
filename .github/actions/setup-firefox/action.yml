@@ -4,16 +4,17 @@ runs:
   using: "composite"
   steps:
     - run: |
-        sudo add-apt-repository ppa:mozillateam/ppa
+        sudo add-apt-repository --no-update ppa:mozillateam/ppa
         echo '
         Package: *
         Pin: release o=LP-PPA-mozillateam
         Pin-Priority: 1001
 
         Package: firefox
-        Pin: version 1:1snap1-0ubuntu2
+        Pin: version 1:1snap*
         Pin-Priority: -1
         ' | sudo tee /etc/apt/preferences.d/mozilla-firefox
+        sudo apt-get update -o APT::Update::Error-Mode=any -o Acquire::Retries=3
         sudo apt-get install firefox xvfb
       if: startsWith(runner.os, 'Linux')
       shell: bash
