@@ -24,7 +24,7 @@ import {
   SpatialSkeletonActions,
 } from "#src/skeleton/command_protocol.js";
 import type { SkeletonFindPathState } from "#src/skeleton/find_path.js";
-import type { SpatialSkeletonFindPathAnnotationController } from "#src/skeleton/find_path_annotations.js";
+import type { SpatialSkeletonFindPathAnnotationController } from "#src/skeleton/find_path_attachment.js";
 import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/optimistic_edit/fatal.js";
 import { ensureSpatialSkeletonOptimisticEditQueue } from "#src/skeleton/optimistic_edit/host.js";
 import type { SpatialSkeletonResolvedProjectionUiHints } from "#src/skeleton/optimistic_edit/projection_ui_hints.js";

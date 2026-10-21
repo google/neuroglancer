@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { AnnotationType } from "#src/annotation/index.js";
 import {
@@ -22,32 +22,16 @@ import {
   makeIdentityTransform,
   WatchableCoordinateSpaceTransform,
 } from "#src/coordinate_transform.js";
-import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
-import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import {
   type SkeletonFindPathEndpoint,
   SkeletonFindPathState,
 } from "#src/skeleton/find_path.js";
 import {
-  SpatialSkeletonFindPathAnnotationController,
+  SpatialSkeletonFindPathAnnotations,
   SPATIAL_SKELETON_FIND_PATH_RESULT_DESCRIPTION,
   SPATIAL_SKELETON_FIND_PATH_SOURCE_DESCRIPTION,
   SPATIAL_SKELETON_FIND_PATH_TARGET_DESCRIPTION,
 } from "#src/skeleton/find_path_annotations.js";
-import { WatchableValue } from "#src/trackable_value.js";
-import { NullarySignal } from "#src/util/signal.js";
-
-vi.hoisted(() => {
-  const WebGL2RenderingContextStub = new Proxy(class {}, {
-    get(target, property, receiver) {
-      return Reflect.get(target, property, receiver) ?? 0;
-    },
-  });
-  Object.defineProperty(globalThis, "WebGL2RenderingContext", {
-    configurable: true,
-    value: WebGL2RenderingContextStub,
-  });
-});
 
 function endpoint(
   nodeId: number,
@@ -70,99 +54,36 @@ function setResolvedPath(state: SkeletonFindPathState) {
   ]);
 }
 
-function makeFixture(state: SkeletonFindPathState) {
-  const coordinateSpace = makeCoordinateSpace({
-    names: ["x", "y", "z"],
-    units: ["m", "m", "m"],
-    scales: Float64Array.of(1, 1, 1),
-  });
-  const transform = new WatchableCoordinateSpaceTransform(
-    makeIdentityTransform(coordinateSpace),
+function makeTransform() {
+  return new WatchableCoordinateSpaceTransform(
+    makeIdentityTransform(
+      makeCoordinateSpace({
+        names: ["x", "y", "z"],
+        units: ["m", "m", "m"],
+        scales: Float64Array.of(1, 1, 1),
+      }),
+    ),
   );
-  const visibleSegments = {
-    size: 0,
-    changed: new NullarySignal(),
-  };
-  const displayState = {
-    segmentationGroupState: new WatchableValue({ visibleSegments }),
-  };
-  let addedState: unknown;
-  let addedSubsource: unknown;
-  const layer = {
-    displayState,
-    localPosition: new WatchableValue(new Float32Array(3)),
-    addAnnotationLayerState(stateValue: unknown, subsourceValue: unknown) {
-      addedState = stateValue;
-      addedSubsource = subsourceValue;
-    },
-  } as unknown as SegmentationUserLayer;
-  const loadedSubsource = {
-    loadedDataSource: {
-      transform,
-      layerDataSource: { name: "test data source" },
-    },
-    subsourceEntry: { id: "skeletons" },
-    subsourceIndex: 4,
-    getRenderLayerTransform: () =>
-      new WatchableValue({ error: new Error("Unused test transform") }),
-  } as unknown as LoadedDataSubsource;
-  const controller = new SpatialSkeletonFindPathAnnotationController({
-    layer,
-    loadedSubsource,
-    state,
-  });
+}
+
+function makeFixture(state: SkeletonFindPathState) {
+  const transform = makeTransform();
   return {
-    controller,
-    layer,
-    loadedSubsource,
+    findPathAnnotations: new SpatialSkeletonFindPathAnnotations(
+      transform,
+      state,
+    ),
     transform,
-    get addedState() {
-      return addedState;
-    },
-    get addedSubsource() {
-      return addedSubsource;
-    },
   };
 }
 
-describe("SpatialSkeletonFindPathAnnotationController", () => {
-  it("adds an independent white annotation layer for the loaded subsource", () => {
-    const state = new SkeletonFindPathState();
-    const fixture = makeFixture(state);
-    const { controller } = fixture;
-
-    expect(fixture.addedState).toBe(controller.annotationState);
-    expect(fixture.addedSubsource).toBe(fixture.loadedSubsource);
-    expect(controller.annotationState.subsourceId).toBe("skeletons");
-    expect(controller.annotationState.subsourceIndex).toBe(4);
-    expect(controller.annotationState.subsubsourceId).toBe(
-      "spatialSkeletonFindPath",
-    );
-    expect(controller.annotationSource.relationships).toEqual([
-      "associated segments",
-    ]);
-    expect(
-      Array.from(controller.annotationState.displayState.color.value),
-    ).toEqual([1, 1, 1]);
-    const relationship =
-      controller.annotationState.displayState.relationshipStates.get(
-        "associated segments",
-      );
-    expect(relationship?.segmentationState.value).toBe(
-      fixture.layer.displayState,
-    );
-    expect(relationship?.showMatches.value).toBe(false);
-
-    controller.dispose();
-    state.dispose();
-  });
-
+describe("SpatialSkeletonFindPathAnnotations", () => {
   it("renders labeled endpoints and the ordered route for its source", () => {
     const state = new SkeletonFindPathState();
     setResolvedPath(state);
-    const { controller } = makeFixture(state);
+    const { findPathAnnotations } = makeFixture(state);
 
-    const annotations = Array.from(controller.annotationSource);
+    const annotations = Array.from(findPathAnnotations.annotationSource);
     expect(annotations).toHaveLength(3);
     const source = annotations.find(
       (annotation) =>
@@ -204,7 +125,7 @@ describe("SpatialSkeletonFindPathAnnotationController", () => {
     }
     expect(state.toJSON()).not.toHaveProperty("annotationReference");
 
-    controller.dispose();
+    findPathAnnotations.dispose();
     state.dispose();
   });
 
@@ -216,8 +137,12 @@ describe("SpatialSkeletonFindPathAnnotationController", () => {
     const first = makeFixture(firstState);
     const second = makeFixture(secondState);
 
-    const firstAnnotation = Array.from(first.controller.annotationSource)[0];
-    const secondAnnotation = Array.from(second.controller.annotationSource)[0];
+    const firstAnnotation = Array.from(
+      first.findPathAnnotations.annotationSource,
+    )[0];
+    const secondAnnotation = Array.from(
+      second.findPathAnnotations.annotationSource,
+    )[0];
     expect(firstAnnotation.type).toBe(AnnotationType.POINT);
     expect(secondAnnotation.type).toBe(AnnotationType.POINT);
     if (
@@ -228,18 +153,18 @@ describe("SpatialSkeletonFindPathAnnotationController", () => {
     }
     expect(Array.from(firstAnnotation.point)).toEqual([1, 2, 3]);
     expect(Array.from(secondAnnotation.point)).toEqual([8, 9, 10]);
-    expect(first.controller.annotationSource.watchableTransform).toBe(
+    expect(first.findPathAnnotations.annotationSource.watchableTransform).toBe(
       first.transform,
     );
-    expect(second.controller.annotationSource.watchableTransform).toBe(
+    expect(second.findPathAnnotations.annotationSource.watchableTransform).toBe(
       second.transform,
     );
-    expect(first.controller.annotationSource.watchableTransform).not.toBe(
-      second.controller.annotationSource.watchableTransform,
-    );
+    expect(
+      first.findPathAnnotations.annotationSource.watchableTransform,
+    ).not.toBe(second.findPathAnnotations.annotationSource.watchableTransform);
 
-    first.controller.dispose();
-    second.controller.dispose();
+    first.findPathAnnotations.dispose();
+    second.findPathAnnotations.dispose();
     firstState.dispose();
     secondState.dispose();
   });
@@ -247,8 +172,8 @@ describe("SpatialSkeletonFindPathAnnotationController", () => {
   it("replaces an endpoint annotation when its state changes", () => {
     const state = new SkeletonFindPathState();
     setResolvedPath(state);
-    const { controller } = makeFixture(state);
-    const sourceBefore = Array.from(controller.annotationSource).find(
+    const { findPathAnnotations } = makeFixture(state);
+    const sourceBefore = Array.from(findPathAnnotations.annotationSource).find(
       (annotation) =>
         annotation.description ===
         SPATIAL_SKELETON_FIND_PATH_SOURCE_DESCRIPTION,
@@ -256,7 +181,7 @@ describe("SpatialSkeletonFindPathAnnotationController", () => {
     expect(sourceBefore).toBeDefined();
 
     state.setSource(endpoint(11, 100, [11, 12, 13]));
-    const sourceAfter = Array.from(controller.annotationSource).find(
+    const sourceAfter = Array.from(findPathAnnotations.annotationSource).find(
       (annotation) =>
         annotation.description ===
         SPATIAL_SKELETON_FIND_PATH_SOURCE_DESCRIPTION,
@@ -269,30 +194,32 @@ describe("SpatialSkeletonFindPathAnnotationController", () => {
     expect(Array.from(sourceAfter.point)).toEqual([11, 12, 13]);
     expect(state.target?.nodeId).toBe(3n);
 
-    controller.dispose();
+    findPathAnnotations.dispose();
     state.dispose();
   });
 
   it("maps user deletions back to endpoint and result state", () => {
     const state = new SkeletonFindPathState();
     setResolvedPath(state);
-    const { controller } = makeFixture(state);
+    const { findPathAnnotations } = makeFixture(state);
 
-    const sourceAnnotation = Array.from(controller.annotationSource).find(
+    const sourceAnnotation = Array.from(
+      findPathAnnotations.annotationSource,
+    ).find(
       (annotation) =>
         annotation.description ===
         SPATIAL_SKELETON_FIND_PATH_SOURCE_DESCRIPTION,
     )!;
-    const sourceReference = controller.annotationSource.getReference(
+    const sourceReference = findPathAnnotations.annotationSource.getReference(
       sourceAnnotation.id,
     );
-    controller.annotationSource.delete(sourceReference);
+    findPathAnnotations.annotationSource.delete(sourceReference);
     sourceReference.dispose();
     expect(state.source).toBeUndefined();
     expect(state.target?.nodeId).toBe(3n);
     expect(state.result).toBeUndefined();
     expect(
-      Array.from(controller.annotationSource).map(
+      Array.from(findPathAnnotations.annotationSource).map(
         (annotation) => annotation.description,
       ),
     ).toEqual([SPATIAL_SKELETON_FIND_PATH_TARGET_DESCRIPTION]);
@@ -302,22 +229,24 @@ describe("SpatialSkeletonFindPathAnnotationController", () => {
       { nodeId: 1n, position: new Float32Array([1, 2, 3]) },
       { nodeId: 3n, position: new Float32Array([3, 4, 5]) },
     ]);
-    const resultAnnotation = Array.from(controller.annotationSource).find(
+    const resultAnnotation = Array.from(
+      findPathAnnotations.annotationSource,
+    ).find(
       (annotation) =>
         annotation.description ===
         SPATIAL_SKELETON_FIND_PATH_RESULT_DESCRIPTION,
     )!;
-    const resultReference = controller.annotationSource.getReference(
+    const resultReference = findPathAnnotations.annotationSource.getReference(
       resultAnnotation.id,
     );
-    controller.annotationSource.delete(resultReference);
+    findPathAnnotations.annotationSource.delete(resultReference);
     resultReference.dispose();
     expect(state.source).toBeUndefined();
     expect(state.target).toBeUndefined();
     expect(state.result).toBeUndefined();
-    expect(Array.from(controller.annotationSource)).toHaveLength(0);
+    expect(Array.from(findPathAnnotations.annotationSource)).toHaveLength(0);
 
-    controller.dispose();
+    findPathAnnotations.dispose();
     state.dispose();
   });
 
@@ -325,9 +254,9 @@ describe("SpatialSkeletonFindPathAnnotationController", () => {
     const state = new SkeletonFindPathState();
     setResolvedPath(state);
     const persistedState = state.toJSON();
-    const { controller } = makeFixture(state);
+    const { findPathAnnotations } = makeFixture(state);
 
-    controller.dispose();
+    findPathAnnotations.dispose();
 
     expect(state.toJSON()).toEqual(persistedState);
     state.dispose();

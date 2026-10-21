@@ -235,21 +235,40 @@ describe("SkeletonSourceConnection", () => {
     ).toBeUndefined();
   });
 
-  it("only a change to a different skeleton source clears pending edit state and edited skeletons", () => {
+  it("only a change to a different skeleton source ends editing and clears pending edits, undo history and edited skeletons", () => {
     const { connection, spatialSkeletonState, overlaySegments } =
       makeConnection();
     const firstSource = {} as MultiscaleSpatiallyIndexedSkeletonSource;
     const secondSource = {} as MultiscaleSpatiallyIndexedSkeletonSource;
+    const { commandHistory } = spatialSkeletonState;
+    const startEditing = () => {
+      spatialSkeletonState.editMode.value = true;
+      spatialSkeletonState.setMergeAnchor(5n);
+      spatialSkeletonState.setPendingNodePosition(7n, [1, 2, 3]);
+      commandHistory.confirm(commandHistory.stageExecute("add node"));
+    };
 
     connection.sourceChanged(firstSource);
-    spatialSkeletonState.setPendingNodePosition(7n, [1, 2, 3]);
+    startEditing();
     connection.sourceChanged(firstSource);
+    expect(spatialSkeletonState.editMode.value).toBe(true);
+    expect(spatialSkeletonState.mergeAnchorNodeId.value).toBe(5n);
     expect(spatialSkeletonState.getPendingNodePosition(7n)).toBeDefined();
+    expect(commandHistory.undoLabel.value).toBe("add node");
     expect(overlaySegments.clear).not.toHaveBeenCalled();
 
     connection.sourceChanged(secondSource);
+    expect(spatialSkeletonState.editMode.value).toBe(false);
+    expect(spatialSkeletonState.mergeAnchorNodeId.value).toBeUndefined();
     expect(spatialSkeletonState.getPendingNodePosition(7n)).toBeUndefined();
+    expect(commandHistory.canUndo.value).toBe(false);
     expect(overlaySegments.clear).toHaveBeenCalledOnce();
+
+    startEditing();
+    connection.sourceChanged(undefined);
+    expect(spatialSkeletonState.editMode.value).toBe(false);
+    expect(spatialSkeletonState.mergeAnchorNodeId.value).toBeUndefined();
+    expect(commandHistory.canUndo.value).toBe(false);
   });
 
   it("an adopted optimistic edit invalidates the shown Find Path result", () => {

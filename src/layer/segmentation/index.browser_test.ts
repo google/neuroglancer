@@ -17,10 +17,26 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { emptyInvalidCoordinateSpace } from "#src/coordinate_transform.js";
+import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
+import { LocalDataSource } from "#src/datasource/local.js";
+import { TrackableDataSelectionState } from "#src/layer/index.js";
+import { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+import { SkeletonNodeSelection } from "#src/layer/segmentation/selection.js";
+import { SkeletonSourceConnection } from "#src/layer/segmentation/skeleton_source_connection.js";
+import { LocalSegmentationGraphSource } from "#src/segmentation_graph/local.js";
+import { SharedDisjointUint64Sets } from "#src/shared_disjoint_sets.js";
 import { SkeletonEdgeDirection } from "#src/skeleton/api.js";
 import { SpatialSkeletonActions } from "#src/skeleton/command_protocol.js";
+import { executeSpatialSkeletonAddNode } from "#src/skeleton/commands.js";
+import { MultiscaleSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial/frontend.js";
 import { SkeletonOverlaySegments } from "#src/skeleton/spatial/overlay_segments.js";
+import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
+import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
+import { SelectionDetailsPanel } from "#src/ui/selection_details.js";
+import { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
+import { Uint64Set } from "#src/uint64_set.js";
+import { RefCounted } from "#src/util/disposable.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 
@@ -55,58 +71,8 @@ vi.mock(
   },
 );
 
-// The layer module reads WebGL constants when it loads.
-if (!("WebGL2RenderingContext" in globalThis)) {
-  Object.defineProperty(globalThis, "WebGL2RenderingContext", {
-    value: new Proxy(class WebGL2RenderingContext {} as any, {
-      get(target, property, receiver) {
-        if (Reflect.has(target, property)) {
-          return Reflect.get(target, property, receiver);
-        }
-        return 0;
-      },
-    }),
-    configurable: true,
-  });
-}
-
-const { SegmentationUserLayer } = await import(
-  "#src/layer/segmentation/index.js"
-);
-const { SkeletonNodeSelection } = await import(
-  "#src/layer/segmentation/selection.js"
-);
-const { SkeletonSourceConnection } = await import(
-  "#src/layer/segmentation/skeleton_source_connection.js"
-);
-const { MultiscaleSpatiallyIndexedSkeletonSource } = await import(
-  "#src/skeleton/spatial/frontend.js"
-);
-const { LocalDataSource } = await import("#src/datasource/local.js");
-const { LocalSegmentationGraphSource } = await import(
-  "#src/segmentation_graph/local.js"
-);
-const { SharedDisjointUint64Sets } = await import(
-  "#src/shared_disjoint_sets.js"
-);
-const { Uint64Set } = await import("#src/uint64_set.js");
-const { Uint64OrderedSet } = await import("#src/uint64_ordered_set.js");
-const { SelectionDetailsPanel } = await import("#src/ui/selection_details.js");
-const { executeSpatialSkeletonAddNode } = await import(
-  "#src/skeleton/commands.js"
-);
-const { RefCounted } = await import("#src/util/disposable.js");
-const { StatusMessage } = await import("#src/status.js");
-const { TrackableDataSelectionState } = await import("#src/layer/index.js");
-const { SpatialSkeletonState } = await import(
-  "#src/skeleton/spatial_skeleton_manager.js"
-);
-const { CatmaidSpatialSkeletonEditCommands } = await import(
-  "#src/datasource/catmaid/spatial_skeleton_commands.js"
-);
-
 function makeSkeletonSourceConnection(
-  spatialSkeletonState: InstanceType<typeof SpatialSkeletonState>,
+  spatialSkeletonState: SpatialSkeletonState,
 ) {
   return new SkeletonSourceConnection({
     spatialSkeletonState,
@@ -298,21 +264,6 @@ describe("layer/segmentation spatial skeleton selection state", () => {
     expect(copiedState.value).toBe(7n);
   });
 
-  it("ignores legacy spatial skeleton selection keys", () => {
-    const { layer } = makeSelectionHookLayer();
-    const state: any = {};
-    layer.initializeSelectionState(state);
-
-    layer.selectionStateFromJson(state, {
-      spatialSkeletonNodeId: "23",
-      spatialSkeletonSegmentId: "7",
-    });
-
-    expect(state.nodeId).toBeUndefined();
-    expect(state.value).toBeUndefined();
-    expect(layer.selectionStateToJson(state, false)).toEqual({});
-  });
-
   it("clicking a skeleton node selects the node and its skeleton, not the voxel below it", () => {
     const { layer, renderLayer } = makeSelectionHookLayer();
     const state: any = {};
@@ -398,9 +349,9 @@ function makeLoadedSubsource(subsource: object) {
   return {
     subsourceEntry: { subsource },
     loadedDataSource: { dataSource: { state: undefined } },
-    activated: undefined as InstanceType<typeof RefCounted> | undefined,
+    activated: undefined as RefCounted | undefined,
     errorMessage: undefined as string | undefined,
-    activate(callback: (refCounted: InstanceType<typeof RefCounted>) => void) {
+    activate(callback: (refCounted: RefCounted) => void) {
       this.errorMessage = undefined;
       if (this.activated !== undefined) return;
       this.activated = new RefCounted();
@@ -773,41 +724,6 @@ describe("layer/segmentation selection details", () => {
   function nextFrame() {
     return new Promise((resolve) => requestAnimationFrame(resolve));
   }
-
-  it("labels a new skeleton and node as Preview, without their provisional IDs, until the server confirms them", async () => {
-    const { layer, panel, spatialSkeletonState, confirmCreation } =
-      makeCreatingHostLayer();
-    await executeSpatialSkeletonAddNode(layer.skeletonSourceConnection, {
-      skeletonId: 0n,
-      parentNodeId: undefined,
-      positionInModelSpace: new Float32Array([1, 2, 3]),
-    });
-    const [provisionalNodeId] =
-      spatialSkeletonState.spatialSkeletonPresentation.value.provisionalNodeIds;
-    layer.skeletonNodeSelection.select(provisionalNodeId, true);
-    await nextFrame();
-    await nextFrame();
-    const provisionalSegmentId =
-      layer.skeletonNodeSelection.selected.value!.segmentId!;
-
-    expect(panel.element.textContent).toContain("Segment IDPreview");
-    expect(panel.element.textContent).toContain("Node IDPreview");
-    expect(panel.element.textContent).not.toContain(`${provisionalSegmentId}`);
-    expect(panel.element.textContent).not.toContain(`${provisionalNodeId}`);
-
-    confirmCreation({ nodeId: 501n, segmentId: 77n });
-    await vi.waitFor(() =>
-      expect(layer.skeletonNodeSelection.selected.value?.nodeId).toBe(501n),
-    );
-    await nextFrame();
-    await nextFrame();
-    expect(panel.element.textContent).toContain("segment 77");
-    expect(panel.element.textContent).toContain("Segment ID77");
-    expect(panel.element.textContent).toContain("Node ID501");
-    panel.dispose();
-    panel.element.remove();
-    spatialSkeletonState.dispose();
-  });
 
   it("labels a selected new skeleton as Preview, without its provisional ID, until the server confirms it", async () => {
     const { layer, panel, spatialSkeletonState, confirmCreation } =

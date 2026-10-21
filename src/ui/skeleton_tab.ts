@@ -60,10 +60,6 @@ import {
   registerNestedSync,
   makeCachedDerivedWatchableValue,
 } from "#src/trackable_value.js";
-import {
-  SPATIAL_SKELETON_EDIT_MODE_TOOL_ID,
-  SPATIAL_SKELETON_FIND_PATH_TOOL_ID,
-} from "#src/ui/skeleton_edit_tools.js";
 import { getSkeletonNodeTypeIcon } from "#src/ui/skeleton_node_icons.js";
 import { registerSpatialSkeletonOptimisticEditQueueTab } from "#src/ui/skeleton_optimistic_edit_queue_tab.js";
 import {
@@ -78,6 +74,10 @@ import {
   type SkeletonSegmentRenderRow,
   type SpatialSkeletonDetailsPreparationState,
 } from "#src/ui/skeleton_tab_render.js";
+import {
+  SPATIAL_SKELETON_EDIT_MODE_TOOL_ID,
+  SPATIAL_SKELETON_FIND_PATH_TOOL_ID,
+} from "#src/ui/skeleton_tool_base.js";
 import { makeToolButton } from "#src/ui/tool.js";
 import type { ArraySpliceOp } from "#src/util/array.js";
 import * as matrix from "#src/util/matrix.js";

@@ -85,7 +85,7 @@ import { SharedDisjointUint64Sets } from "#src/shared_disjoint_sets.js";
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
 import type { EditableSkeletonSource } from "#src/skeleton/api.js";
 import { SkeletonDataSourceState } from "#src/skeleton/find_path.js";
-import { attachFindPath } from "#src/skeleton/find_path_annotations.js";
+import { attachFindPath } from "#src/skeleton/find_path_attachment.js";
 import {
   PerspectiveViewSkeletonLayer,
   SkeletonLayer,
@@ -131,7 +131,8 @@ import { SegmentDisplayTab } from "#src/ui/segment_list.js";
 import { registerSegmentSelectTools } from "#src/ui/segment_select_tools.js";
 import { registerSegmentSplitMergeTools } from "#src/ui/segment_split_merge_tools.js";
 import { DisplayOptionsTab } from "#src/ui/segmentation_display_options_tab.js";
-import { registerSpatialSkeletonEditModeTool } from "#src/ui/skeleton_edit_tools.js";
+import { registerSpatialSkeletonEditTool } from "#src/ui/skeleton_edit_tools.js";
+import { registerSpatialSkeletonFindPathTool } from "#src/ui/skeleton_find_path_tool.js";
 import {
   displaySkeletonNodeSelection,
   selectsProvisionalSkeleton,
@@ -878,18 +879,26 @@ export class SegmentationUserLayer extends Base {
     makeCachedLazyDerivedWatchableValue(
       (layers): SpatiallyIndexedSkeletonLayer | undefined => {
         for (const layer of layers) {
-          if (
-            layer instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer ||
-            layer instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer
-          ) {
-            return layer.base;
-          }
+          const skeletonLayer = this.getSpatiallyIndexedSkeletonLayerOf(layer);
+          if (skeletonLayer !== undefined) return skeletonLayer;
         }
         return undefined;
       },
       { changed: this.layersChanged, value: this.renderLayers },
     ),
   );
+
+  getSpatiallyIndexedSkeletonLayerOf(
+    renderLayer: MouseSelectionState["pickedRenderLayer"],
+  ): SpatiallyIndexedSkeletonLayer | undefined {
+    if (
+      renderLayer instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer ||
+      renderLayer instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer
+    ) {
+      return renderLayer.base;
+    }
+    return undefined;
+  }
 
   readonly hasSpatiallyIndexedSkeletonsLayer = this.registerDisposer(
     makeCachedDerivedWatchableValue(
@@ -1763,6 +1772,7 @@ registerLayerShaderControlsTool(
   json_keys.SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID,
 );
 
-registerSpatialSkeletonEditModeTool(SegmentationUserLayer);
+registerSpatialSkeletonEditTool(SegmentationUserLayer);
+registerSpatialSkeletonFindPathTool(SegmentationUserLayer);
 registerSegmentSplitMergeTools(SegmentationUserLayer);
 registerSegmentSelectTools(SegmentationUserLayer);

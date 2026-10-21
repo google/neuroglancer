@@ -15,42 +15,27 @@
  */
 
 import {
-  AnnotationDisplayState,
-  AnnotationLayerState,
-} from "#src/annotation/annotation_layer_state.js";
-import {
   type AnnotationReference,
   AnnotationType,
   LocalAnnotationSource,
   type Point,
   type PolyLine,
 } from "#src/annotation/index.js";
-import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
-import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
-import { RenderLayerRole } from "#src/renderlayer.js";
-import {
-  SkeletonDataSourceState,
-  type SkeletonFindPathEndpoint,
-  type SkeletonFindPathResultNode,
-  type SkeletonFindPathState,
+import type { WatchableCoordinateSpaceTransform } from "#src/coordinate_transform.js";
+import type {
+  SkeletonFindPathEndpoint,
+  SkeletonFindPathResultNode,
+  SkeletonFindPathState,
 } from "#src/skeleton/find_path.js";
-import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
-import { TrackableBoolean } from "#src/trackable_boolean.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { RefCounted } from "#src/util/disposable.js";
 
-const ASSOCIATED_SEGMENTS_RELATIONSHIP = "associated segments";
-const SPATIAL_SKELETON_FIND_PATH_SUBSOURCE_ID = "spatialSkeletonFindPath";
+export const SKELETON_FIND_PATH_ASSOCIATED_SEGMENTS_RELATIONSHIP =
+  "associated segments";
 
 export const SPATIAL_SKELETON_FIND_PATH_SOURCE_DESCRIPTION = "find path source";
 export const SPATIAL_SKELETON_FIND_PATH_TARGET_DESCRIPTION = "find path target";
 export const SPATIAL_SKELETON_FIND_PATH_RESULT_DESCRIPTION = "find path result";
-
-export interface SpatialSkeletonFindPathAnnotationControllerOptions {
-  layer: SegmentationUserLayer;
-  loadedSubsource: LoadedDataSubsource;
-  state: SkeletonFindPathState;
-}
 
 interface RenderedEndpoint {
   endpoint: SkeletonFindPathEndpoint;
@@ -58,12 +43,11 @@ interface RenderedEndpoint {
 }
 
 /**
- * Projects persisted spatial-skeleton Find Path state into local annotations
- * for one loaded subsource. Annotation references remain runtime-only.
+ * Projects persisted spatial-skeleton Find Path state into local annotations.
+ * Annotation references remain runtime-only.
  */
-export class SpatialSkeletonFindPathAnnotationController extends RefCounted {
+export class SpatialSkeletonFindPathAnnotations extends RefCounted {
   readonly annotationSource: LocalAnnotationSource;
-  readonly annotationState: AnnotationLayerState;
 
   private renderedSource: RenderedEndpoint | undefined;
   private renderedTarget: RenderedEndpoint | undefined;
@@ -71,42 +55,17 @@ export class SpatialSkeletonFindPathAnnotationController extends RefCounted {
   private synchronizing = false;
 
   constructor(
-    private readonly options: SpatialSkeletonFindPathAnnotationControllerOptions,
+    transform: WatchableCoordinateSpaceTransform,
+    private readonly state: SkeletonFindPathState,
   ) {
     super();
-
-    const { layer, loadedSubsource, state } = options;
-    const annotationSource = new LocalAnnotationSource(
-      loadedSubsource.loadedDataSource.transform,
-      new WatchableValue([]),
-      [ASSOCIATED_SEGMENTS_RELATIONSHIP],
+    this.annotationSource = this.registerDisposer(
+      new LocalAnnotationSource(transform, new WatchableValue([]), [
+        SKELETON_FIND_PATH_ASSOCIATED_SEGMENTS_RELATIONSHIP,
+      ]),
     );
-    this.annotationSource = annotationSource;
-
-    const displayState = new AnnotationDisplayState();
-    displayState.color.value.set([1, 1, 1]);
-    displayState.relationshipStates.set(ASSOCIATED_SEGMENTS_RELATIONSHIP, {
-      segmentationState: new WatchableValue(layer.displayState),
-      showMatches: new TrackableBoolean(false),
-    });
-
-    const annotationState = new AnnotationLayerState({
-      localPosition: layer.localPosition,
-      transform: loadedSubsource.getRenderLayerTransform(),
-      source: annotationSource,
-      displayState,
-      dataSource: loadedSubsource.loadedDataSource.layerDataSource,
-      subsourceIndex: loadedSubsource.subsourceIndex,
-      subsourceId: loadedSubsource.subsourceEntry.id,
-      subsubsourceId: SPATIAL_SKELETON_FIND_PATH_SUBSOURCE_ID,
-      role: RenderLayerRole.ANNOTATION,
-    });
-    annotationState.registerDisposer(displayState);
-    this.annotationState = this.registerDisposer(annotationState);
-    layer.addAnnotationLayerState(annotationState, loadedSubsource);
-
     this.registerDisposer(
-      annotationSource.childDeleted.add((annotationId) => {
+      this.annotationSource.childDeleted.add((annotationId) => {
         this.handleAnnotationDeleted(annotationId);
       }),
     );
@@ -171,7 +130,7 @@ export class SpatialSkeletonFindPathAnnotationController extends RefCounted {
     if (this.synchronizing) return;
     this.synchronizing = true;
     try {
-      const { source, target, result } = this.options.state;
+      const { source, target, result } = this.state;
       this.renderedSource = this.synchronizeEndpoint(
         this.renderedSource,
         source,
@@ -191,7 +150,7 @@ export class SpatialSkeletonFindPathAnnotationController extends RefCounted {
   private handleAnnotationDeleted(annotationId: string) {
     if (this.synchronizing) return;
 
-    const { state } = this.options;
+    const { state } = this;
     if (this.renderedSource?.annotationReference.id === annotationId) {
       this.renderedSource.annotationReference.dispose();
       this.renderedSource = undefined;
@@ -221,34 +180,4 @@ export class SpatialSkeletonFindPathAnnotationController extends RefCounted {
     this.resultReference = undefined;
     super.disposed();
   }
-}
-
-export function attachFindPath(
-  layer: SegmentationUserLayer,
-  loadedSubsource: LoadedDataSubsource,
-  skeletonLayer: SpatiallyIndexedSkeletonLayer,
-) {
-  const { activated } = loadedSubsource;
-  const dataSourceState = loadedSubsource.loadedDataSource.dataSource.state;
-  if (
-    activated === undefined ||
-    !(dataSourceState instanceof SkeletonDataSourceState)
-  ) {
-    return;
-  }
-  const annotationController = activated.registerDisposer(
-    new SpatialSkeletonFindPathAnnotationController({
-      layer,
-      loadedSubsource,
-      state: dataSourceState.findPathState,
-    }),
-  );
-  layer.skeletonSourceConnection.attachFindPath(
-    {
-      skeletonLayer,
-      state: dataSourceState.findPathState,
-      annotationController,
-    },
-    activated,
-  );
 }

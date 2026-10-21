@@ -20,78 +20,6 @@ import type {
 } from "#src/ui/skeleton_edit_tool_shortcuts.js";
 import { SKELETON_EDIT_SHORTCUTS } from "#src/ui/skeleton_edit_tool_shortcuts.js";
 
-export interface SpatialSkeletonToolPointInfo {
-  nodeId: bigint;
-  segmentId?: bigint;
-  position?: ArrayLike<number>;
-}
-
-export interface SpatialSkeletonToolSummaryField {
-  label: string;
-  value: string;
-  highlight?: boolean;
-}
-
-export interface SpatialSkeletonToolSummaryRow {
-  fields: SpatialSkeletonToolSummaryField[];
-}
-
-export interface SpatialSkeletonToolStatusField {
-  label: string;
-  value: string;
-}
-
-export function formatSpatialSkeletonToolPoint(
-  point: SpatialSkeletonToolPointInfo,
-) {
-  return point.segmentId === undefined
-    ? `Node ${point.nodeId}`
-    : `Node ${point.nodeId}, segment ${point.segmentId}`;
-}
-
-export function getSpatialSkeletonToolPointSummaryRow(
-  point: SpatialSkeletonToolPointInfo,
-): SpatialSkeletonToolSummaryRow {
-  const fields: SpatialSkeletonToolSummaryField[] = [
-    {
-      label: "Segment ID:",
-      value: point.segmentId === undefined ? "-" : `${point.segmentId}`,
-    },
-    { label: "Node ID:", value: `${point.nodeId}` },
-  ];
-  const { position } = point;
-  if (position !== undefined && position.length >= 3) {
-    fields.push({
-      label: "x",
-      value: `${Math.round(Number(position[0]))}`,
-      highlight: true,
-    });
-    fields.push({
-      label: "y",
-      value: `${Math.round(Number(position[1]))}`,
-      highlight: true,
-    });
-    fields.push({
-      label: "z",
-      value: `${Math.round(Number(position[2]))}`,
-      highlight: true,
-    });
-  }
-  return { fields };
-}
-
-export function getSpatialSkeletonToolPointStatusFields(
-  point: SpatialSkeletonToolPointInfo,
-): SpatialSkeletonToolStatusField[] {
-  const fields: SpatialSkeletonToolStatusField[] = [
-    { label: "Node ID:", value: `${point.nodeId}` },
-  ];
-  if (point.segmentId !== undefined) {
-    fields.push({ label: "Segment ID:", value: `${point.segmentId}` });
-  }
-  return fields;
-}
-
 // --- Name / status / actions message system ---
 //
 // The tool's status bar is split into three parts: a name (rendered by the
@@ -217,13 +145,6 @@ export function getSpatialSkeletonMergeStatusText(
   }
 }
 
-export function getSpatialSkeletonMergingStatusText(): SpatialSkeletonToolStatusText {
-  return {
-    status: "Merge · merging nodes…",
-    actions: [SKELETON_EDIT_SHORTCUTS.rotatePan],
-  };
-}
-
 export type SpatialSkeletonInsertState = "no-first-node" | "first-node-picked";
 
 export function getSpatialSkeletonInsertStatusText(
@@ -260,13 +181,6 @@ export function getSpatialSkeletonSplitIdleStatusText(
       canExitWithKey,
       SKELETON_EDIT_SHORTCUTS.exitSplit,
     ),
-  };
-}
-
-export function getSpatialSkeletonSplittingStatusText(): SpatialSkeletonToolStatusText {
-  return {
-    status: "Split · splitting node…",
-    actions: [SKELETON_EDIT_SHORTCUTS.rotatePan],
   };
 }
 
