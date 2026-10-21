@@ -29,7 +29,7 @@ import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { arraysEqual } from "#src/util/array.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { mat3, mat4, quat, vec3 } from "#src/util/geom.js";
+import { kAxes, mat3, mat4, quat, vec3 } from "#src/util/geom.js";
 import {
   parseArray,
   parseFiniteVec,
@@ -1695,6 +1695,9 @@ export class LinkedDisplayDimensions extends SimpleLinkedBase<TrackableDisplayDi
 export class DisplayPose extends RefCounted {
   changed = new NullarySignal();
 
+  // Last sinusoidal sway angle applied per axis, used to compute the next incremental rotation.
+  private swayLastAngle = new Map<vec3, number>();
+
   get displayDimensions(): Borrowed<TrackableDisplayDimensions> {
     return this.displayDimensionRenderInfo.displayDimensions;
   }
@@ -1845,6 +1848,32 @@ export class DisplayPose extends RefCounted {
     const orientation = this.orientation.orientation;
     quat.multiply(orientation, orientation, temp);
     this.orientation.changed.dispatch();
+  }
+
+  swayRelative(axis: vec3) {
+    const period = 1.0; // Periodicity of the sway motion, in seconds.
+    const amplitude = 0.01; // Amplitude of the sway motion, in radians.
+    const omega = (2 * Math.PI) / period;
+    const t = performance.now() / 1000;
+    if (axis[2] != 1) {
+      // Sway back and forth or up and down along one axis.
+      const angle = amplitude * Math.sin(omega * t);
+      // Default to `angle` so the first call for a given axis produces no jump.
+      const lastAngle = this.swayLastAngle.get(axis) ?? angle;
+      this.swayLastAngle.set(axis, angle);
+      this.rotateRelative(axis, angle - lastAngle);
+    }
+    else {
+      // Sway around X and Y 90 degrees out of phase to trace a small circle.
+      const angleX = amplitude * Math.cos(omega * t);
+      const angleY = amplitude * Math.sin(omega * t);
+      const lastAngleX = this.swayLastAngle.get(kAxes[0]) ?? angleX;
+      const lastAngleY = this.swayLastAngle.get(kAxes[1]) ?? angleY;
+      this.swayLastAngle.set(kAxes[0], angleX);
+      this.swayLastAngle.set(kAxes[1], angleY);
+      this.rotateRelative(kAxes[0], angleX - lastAngleX);
+      this.rotateRelative(kAxes[1], angleY - lastAngleY);
+    }
   }
 
   rotateAbsolute(axis: vec3, angle: number, fixedPoint: Float32Array) {
