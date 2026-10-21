@@ -18,7 +18,7 @@ import type { ShaderProgram } from "#src/webgl/shader.js";
 
 // Temporary diagnostic-build switches; neither is intended for production.
 export const DEBUG_SKELETON_DRAW = true;
-export const DEBUG_SKIP_3D_LINE_NODES = true;
+export const DEBUG_SKIP_3D_LINE_NODES = false;
 
 export function shouldDrawSkeletonNodes(
   targetIsSliceView: boolean,

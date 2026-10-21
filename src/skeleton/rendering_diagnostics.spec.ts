@@ -25,7 +25,7 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("diagnostic skeleton node selection", () => {
   it.each([
-    [false, false, false],
+    [false, false, true],
     [false, true, true],
     [true, false, true],
     [true, true, true],

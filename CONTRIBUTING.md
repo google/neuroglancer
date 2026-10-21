@@ -55,13 +55,13 @@ nox -s lint format mypy
 
 ### Temporary skeleton WebGL diagnostic build
 
-This checkout enables `DEBUG_SKELETON_DRAW` and `DEBUG_SKIP_3D_LINE_NODES` in
+This checkout enables `DEBUG_SKELETON_DRAW` and disables `DEBUG_SKIP_3D_LINE_NODES` in
 [rendering_diagnostics.ts](src/skeleton/rendering_diagnostics.ts) for investigating
 Windows ANGLE/D3D11 draw-time shader compilation failures.
 
-- In 3D **lines** mode, node circles are not compiled, initialized, or drawn.
-  Edges still use the normal transparency and picking passes. Small gaps at line
-  joins are possible. 2D rendering and 3D **lines and points** retain node circles.
+- Node circles are compiled, initialized, and drawn in all modes, including 3D
+  **lines**, where they fill gaps at line joins. Normal transparency and picking
+  passes are retained.
 - Each skeleton edge/node draw checks WebGL errors and program/shader info logs.
   Console messages beginning `Skeleton WebGL draw diagnostic` include the view,
   pass, emitter, primitive, segment ID, alpha, mode, and complete GLSL sources.
@@ -71,8 +71,9 @@ Windows ANGLE/D3D11 draw-time shader compilation failures.
   state, and export the console log. Include browser version, GPU/driver details,
   and the active WebGL backend from `chrome://gpu` or Firefox `about:support`.
   Logs include segment IDs and shader source; inspect them before sharing.
-- If the state works with node circles skipped, set `DEBUG_SKIP_3D_LINE_NODES` to
-  `false`, rebuild, and repeat with the same state to collect node-draw diagnostics.
+- To compare against the node-skip workaround, set `DEBUG_SKIP_3D_LINE_NODES` to
+  `true`, rebuild, and repeat with the same state. This skips node compilation,
+  initialization, and drawing only in 3D **lines** mode.
   Driver logs may be unavailable after context loss; retained GLSL is still
   included.
 
