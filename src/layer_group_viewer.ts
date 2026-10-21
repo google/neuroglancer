@@ -50,6 +50,7 @@ import {
   PlaybackManager,
   WatchableDisplayDimensionRenderInfo,
 } from "#src/navigation_state.js";
+import type { TrackableTransparentMeshRenderingMode } from "#src/perspective_view/transparent_mesh_rendering.js";
 import type { RenderLayerRole } from "#src/renderlayer.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type {
@@ -92,6 +93,7 @@ export interface LayerGroupViewerState {
   mouseState: MouseSelectionState;
   showAxisLines: TrackableBoolean;
   wireFrame: TrackableBoolean;
+  transparentMeshRenderingMode: TrackableTransparentMeshRenderingMode;
   enableAdaptiveDownsampling: TrackableBoolean;
   showScaleBar: TrackableBoolean;
   scaleBarOptions: TrackableScaleBarOptions;
@@ -357,6 +359,9 @@ export class LayerGroupViewer extends RefCounted {
   }
   get wireFrame() {
     return this.viewerState.wireFrame;
+  }
+  get transparentMeshRenderingMode() {
+    return this.viewerState.transparentMeshRenderingMode;
   }
   get enableAdaptiveDownsampling() {
     return this.viewerState.enableAdaptiveDownsampling;

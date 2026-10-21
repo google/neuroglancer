@@ -45,6 +45,11 @@ properties:
     type: boolean
     title: "Indicates whether to enable wireframe rendering mode (for debugging)."
     default: false
+  transparentMeshRenderingMode:
+    type: string
+    enum: [current, improved, high_quality]
+    title: "Specifies the transparency rendering algorithm for meshes."
+    default: current
   showScaleBar:
     type: boolean
     title: "Indicates whether to show scale bars."
