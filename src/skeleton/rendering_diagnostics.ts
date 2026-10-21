@@ -45,7 +45,9 @@ type DiagnosticGL = Pick<
   | "isContextLost"
   | "getProgramInfoLog"
   | "getShaderInfoLog"
->;
+> & {
+  getExtension(name: "WEBGL_debug_shaders"): WEBGL_debug_shaders | null;
+};
 
 type DiagnosticShader = Pick<
   ShaderProgram,
@@ -69,8 +71,13 @@ function readErrors(gl: DiagnosticGL) {
 
 export class SkeletonDrawDiagnostics {
   private reports = new WeakMap<WebGLProgram, Set<string>>();
+  private debugShaders: WEBGL_debug_shaders | null;
 
-  constructor(private gl: DiagnosticGL) {}
+  constructor(private gl: DiagnosticGL) {
+    this.debugShaders = DEBUG_SKELETON_DRAW
+      ? gl.getExtension("WEBGL_debug_shaders")
+      : null;
+  }
 
   draw(
     shader: DiagnosticShader,
@@ -129,6 +136,20 @@ export class SkeletonDrawDiagnostics {
         ...status,
         vertexSource: shader.vertexSource,
         fragmentSource: shader.fragmentSource,
+        translatedShaderStatus:
+          this.debugShaders === null
+            ? "extension-unavailable"
+            : contextLost
+              ? "context-lost"
+              : "queried",
+        translatedVertexSource:
+          this.debugShaders !== null && !contextLost
+            ? this.debugShaders.getTranslatedShaderSource(shader.vertexShader)
+            : null,
+        translatedFragmentSource:
+          this.debugShaders !== null && !contextLost
+            ? this.debugShaders.getTranslatedShaderSource(shader.fragmentShader)
+            : null,
       },
       null,
       2,

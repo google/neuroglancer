@@ -107,6 +107,26 @@ const DEFAULT_FRAGMENT_MAIN = `void main() {
 }
 `;
 
+export const glsl_skeletonNodeEmit = `
+vec4 segmentColor() {
+  return uColor;
+}
+void emitRGBA(vec4 color) {
+  color.a *= uColor.a;
+  color.rgb *= color.a;
+  vec4 borderColor = color;
+  vec4 circleColor = getCircleColor(color, borderColor);
+  emit(circleColor, uPickID);
+}
+void emitRGB(vec3 color) {
+  emitRGBA(vec4(color, 1.0));
+}
+void emitDefault() {
+  vec4 circleColor = getCircleColor(uColor, uColor);
+  emit(circleColor, uPickID);
+}
+`;
+
 interface VertexAttributeRenderInfo extends VertexAttributeInfo {
   name: string;
   webglDataType: number;
@@ -255,23 +275,7 @@ highp vec3 vertexPosition = readAttribute0(vertexIndex);
 emitCircle(uProjection * vec4(vertexPosition, 1.0), uNodeDiameter, 0.0);
 `;
 
-          builder.addFragmentCode(`
-vec4 segmentColor() {
-  return uColor;
-}
-void emitRGBA(vec4 color) {
-  color.a *= uColor.a;
-  color.rgb *= color.a;
-  vec4 borderColor = color;
-  emit(getCircleColor(color, borderColor), uPickID);
-}
-void emitRGB(vec3 color) {
-  emitRGBA(vec4(color, 1.0));
-}
-void emitDefault() {
-  emit(getCircleColor(uColor, uColor), uPickID);
-}
-`);
+          builder.addFragmentCode(glsl_skeletonNodeEmit);
           builder.addFragmentCode(glsl_COLORMAPS);
           const { vertexAttributes } = this;
           const numAttributes = vertexAttributes.length;

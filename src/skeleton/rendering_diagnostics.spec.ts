@@ -37,7 +37,7 @@ describe("diagnostic skeleton node selection", () => {
   );
 });
 
-function setup() {
+function setup(debugShaders: WEBGL_debug_shaders | null = null) {
   const gl = {
     NO_ERROR: 0 as const,
     CONTEXT_LOST_WEBGL: 0x9242 as const,
@@ -45,6 +45,7 @@ function setup() {
     isContextLost: vi.fn<() => boolean>().mockReturnValue(false),
     getProgramInfoLog: vi.fn<() => string | null>().mockReturnValue(""),
     getShaderInfoLog: vi.fn<() => string | null>().mockReturnValue(""),
+    getExtension: vi.fn().mockReturnValue(debugShaders),
   };
   const shader = {
     program: {},
@@ -103,6 +104,57 @@ describe("SkeletonDrawDiagnostics", () => {
       fragmentInfoLog: "",
       vertexSource: shader.vertexSource,
       fragmentSource: shader.fragmentSource,
+      translatedShaderStatus: "extension-unavailable",
+      translatedVertexSource: null,
+      translatedFragmentSource: null,
+    });
+  });
+
+  it("captures translated sources after a failed draw when the extension is available", () => {
+    const getTranslatedShaderSource = vi
+      .fn()
+      .mockReturnValueOnce("translated vertex")
+      .mockReturnValueOnce("translated fragment");
+    const { gl, shader, context, error, draw, diagnostics } = setup({
+      getTranslatedShaderSource,
+    });
+    expect(gl.getExtension).toHaveBeenCalledWith("WEBGL_debug_shaders");
+    draw.mockImplementation(() => gl.getError.mockReturnValueOnce(0x502));
+    diagnostics.draw(shader, context, draw);
+    expect(getTranslatedShaderSource.mock.calls).toEqual([
+      [shader.vertexShader],
+      [shader.fragmentShader],
+    ]);
+    expect(JSON.parse(error.mock.calls[0][1])).toMatchObject({
+      translatedShaderStatus: "queried",
+      translatedVertexSource: "translated vertex",
+      translatedFragmentSource: "translated fragment",
+    });
+    diagnostics.draw(shader, context, draw);
+    expect(getTranslatedShaderSource).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not request translated sources for successful draws", () => {
+    const getTranslatedShaderSource = vi.fn();
+    const { shader, context, draw, diagnostics } = setup({
+      getTranslatedShaderSource,
+    });
+    diagnostics.draw(shader, context, draw);
+    expect(getTranslatedShaderSource).not.toHaveBeenCalled();
+  });
+
+  it("does not request translated sources after context loss", () => {
+    const getTranslatedShaderSource = vi.fn();
+    const { gl, shader, context, error, draw, diagnostics } = setup({
+      getTranslatedShaderSource,
+    });
+    draw.mockImplementation(() => gl.isContextLost.mockReturnValue(true));
+    diagnostics.draw(shader, context, draw);
+    expect(getTranslatedShaderSource).not.toHaveBeenCalled();
+    expect(JSON.parse(error.mock.calls[0][1])).toMatchObject({
+      translatedShaderStatus: "context-lost",
+      translatedVertexSource: null,
+      translatedFragmentSource: null,
     });
   });
 

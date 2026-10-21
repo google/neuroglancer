@@ -67,6 +67,15 @@ Windows ANGLE/D3D11 draw-time shader compilation failures.
   pass, emitter, primitive, segment ID, alpha, mode, and complete GLSL sources.
   Errors preceding the draw are recorded separately. Repeated identical reports
   for the same program and pass are suppressed.
+  Reports also include translated vertex/fragment shader source when
+  `WEBGL_debug_shaders` is available and the context is not lost.
+  `translatedShaderStatus` distinguishes an unavailable extension, a lost context,
+  and a completed query. Translation output may be empty and may not include
+  ANGLE's final draw-time specialization, so HLSL line numbers may not match it.
+- The node shader now evaluates `getCircleColor` into a local before calling
+  `emit`, rather than nesting the discard-containing helper inside the call.
+  This is an unconfirmed compiler-workaround trial; circle clipping, alpha,
+  transparency, and picking calculations are unchanged.
 - To test, enable **Preserve log** in browser developer tools, open the failing
   state, and export the console log. Include browser version, GPU/driver details,
   and the active WebGL backend from `chrome://gpu` or Firefox `about:support`.
