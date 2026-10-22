@@ -18,12 +18,12 @@ import "#src/ui/skeleton_tab.css";
 
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import { formatSpatialSkeletonOptimisticEditFailureReason } from "#src/skeleton/edit_queue/edit_queue_rows.js";
-import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/edit_queue/fatal.js";
-import type { SpatialSkeletonOptimisticIntentLifecycle } from "#src/skeleton/edit_queue/lifecycle.js";
 import type {
+  SpatialSkeletonOptimisticIntentLifecycle,
   SpatialSkeletonOptimisticEditActivityEntry,
   SpatialSkeletonOptimisticEditQueueEntry,
 } from "#src/skeleton/edit_queue/types.js";
+import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/edit_queue/types.js";
 import { StatusMessage } from "#src/status.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { HttpError } from "#src/util/http_request.js";

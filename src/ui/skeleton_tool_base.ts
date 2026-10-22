@@ -20,14 +20,14 @@ import { getSegmentIdFromLayerSelectionValue } from "#src/layer/segmentation/sel
 import type { SkeletonSourceConnection } from "#src/layer/segmentation/skeleton_source_connection.js";
 import type { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import { getVisibleSegments } from "#src/segmentation_display_state/base.js";
-import {
-  SKELETON_DRAG_VIEW,
-  SKELETON_PIN_NODE,
-} from "#src/skeleton/actions.js";
 import type { SkeletonVector } from "#src/skeleton/api.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
 import type { SliceViewPanel } from "#src/sliceview/panel.js";
 import { StatusMessage } from "#src/status.js";
+import {
+  SKELETON_DRAG_VIEW,
+  SKELETON_PIN_NODE,
+} from "#src/ui/skeleton_edit_tool_shortcuts.js";
 import type { ToolActivation } from "#src/ui/tool.js";
 import { LayerTool } from "#src/ui/tool.js";
 import type { ActionEvent } from "#src/util/event_action_map.js";

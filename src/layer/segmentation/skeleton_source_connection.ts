@@ -17,20 +17,20 @@
 import type { SkeletonNodeSelection } from "#src/layer/segmentation/selection.js";
 import type { SegmentationGroupState } from "#src/segmentation_display_state/frontend.js";
 import {
-  DEFAULT_SPATIAL_SKELETON_EDIT_ACTIONS,
-  getSpatialSkeletonActionSupportLabel,
-  isSpatialSkeletonEditAction,
-  type SpatialSkeletonAction,
-  SpatialSkeletonActions,
-} from "#src/skeleton/edit/command_protocol.js";
-import { ensureSpatialSkeletonOptimisticEditQueue } from "#src/skeleton/edit/host.js";
-import {
+  ensureSpatialSkeletonOptimisticEditQueue,
   editableSpatiallyIndexedSkeletonSourceSupportsAction,
   type SpatialSkeletonLayerContext,
   type SpatialSkeletonState,
 } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
-import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/edit_queue/fatal.js";
+import type { SpatialSkeletonAction } from "#src/skeleton/edit_commands.js";
+import {
+  DEFAULT_SPATIAL_SKELETON_EDIT_ACTIONS,
+  getSpatialSkeletonActionSupportLabel,
+  isSpatialSkeletonEditAction,
+  SpatialSkeletonActions,
+} from "#src/skeleton/edit_commands.js";
 import type { SpatialSkeletonResolvedProjectionUiHints } from "#src/skeleton/edit_queue/preview_ui_hints.js";
+import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/edit_queue/types.js";
 import type { SkeletonFindPathState } from "#src/skeleton/find_path/find_path.js";
 import type { SpatialSkeletonFindPathAnnotationController } from "#src/skeleton/find_path/find_path_attachment.js";
 import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";

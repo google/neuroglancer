@@ -16,20 +16,18 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { SpatialSkeletonActions } from "#src/skeleton/edit/command_protocol.js";
-import {
-  SpatialSkeletonState,
-  type SpatialSkeletonOptimisticEditExecution,
-  type SpatialSkeletonOptimisticEditQueue,
-} from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   redoSpatialSkeletonCommand,
   undoSpatialSkeletonCommand,
 } from "#src/skeleton/edit/submit_edits.js";
-import {
-  committedSpatialSkeletonOptimisticEditSettlement,
-  type SpatialSkeletonOptimisticEditSettlement,
-} from "#src/skeleton/edit_queue/lifecycle.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
+import type {
+  SpatialSkeletonOptimisticEditSettlement,
+  SpatialSkeletonOptimisticEditExecution,
+  SpatialSkeletonOptimisticEditQueue,
+} from "#src/skeleton/edit_queue/types.js";
+import { committedSpatialSkeletonOptimisticEditSettlement } from "#src/skeleton/edit_queue/types.js";
 import { StatusMessage } from "#src/status.js";
 
 function withExecutionMilestones<T>(

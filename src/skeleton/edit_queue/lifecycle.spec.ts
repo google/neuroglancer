@@ -16,12 +16,12 @@
 
 import { describe, expect, it } from "vitest";
 
+import type { SpatialSkeletonOptimisticEditSettlement } from "#src/skeleton/edit_queue/types.js";
 import {
   committedSpatialSkeletonOptimisticEditSettlement,
   createInitialSpatialSkeletonOptimisticIntentLifecycle,
   unchangedSpatialSkeletonOptimisticEditSettlement,
-  type SpatialSkeletonOptimisticEditSettlement,
-} from "#src/skeleton/edit_queue/lifecycle.js";
+} from "#src/skeleton/edit_queue/types.js";
 
 describe("spatial skeleton optimistic lifecycle", () => {
   it("creates an independent lifecycle with every generic axis", () => {

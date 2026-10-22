@@ -17,15 +17,13 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { EditableSkeletonSource } from "#src/skeleton/api.js";
-import { SpatialSkeletonActions } from "#src/skeleton/edit/command_protocol.js";
 import {
   ensureSpatialSkeletonOptimisticEditQueue,
   getSpatialSkeletonOptimisticEditingProvider,
-} from "#src/skeleton/edit/host.js";
-import {
   SpatialSkeletonState,
   type SpatialSkeletonLayerContext,
 } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import {
   SpatialSkeletonOptimisticDatasourceContractError,
   type SpatialSkeletonOptimisticDriverRegistration,

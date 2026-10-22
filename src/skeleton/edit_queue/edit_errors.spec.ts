@@ -16,7 +16,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { SpatialSkeletonActions } from "#src/skeleton/edit/command_protocol.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import {
   getSpatialSkeletonActionErrorMessage,
   isSpatialSkeletonInspectionRequiredError,

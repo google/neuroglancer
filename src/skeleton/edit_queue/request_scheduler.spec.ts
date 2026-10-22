@@ -21,11 +21,9 @@ import type {
   SpatialSkeletonMutationFailureDisposition,
   SpatialSkeletonOptimisticMutationAdapter,
 } from "#src/skeleton/edit_queue/api.js";
+import type { SpatialSkeletonMutationAuthorityLease } from "#src/skeleton/edit_queue/request_scheduler.js";
 import {
   SpatialSkeletonMutationAuthorityLeaseCoordinator,
-  type SpatialSkeletonMutationAuthorityLease,
-} from "#src/skeleton/edit_queue/authority_lease_coordinator.js";
-import {
   SpatialSkeletonMutationAttemptScheduler,
   SpatialSkeletonMutationAttemptSchedulerDisposedError,
 } from "#src/skeleton/edit_queue/request_scheduler.js";

@@ -28,8 +28,6 @@ import {
 } from "#src/layer/segmentation/selection.js";
 import type { RenderLayerTransformOrError } from "#src/render_coordinate_transform.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
-import type { SpatialSkeletonAction } from "#src/skeleton/edit/command_protocol.js";
-import { SpatialSkeletonActions } from "#src/skeleton/edit/command_protocol.js";
 import type { SpatialSkeletonPresentationSnapshot } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   executeSpatialSkeletonDeleteNode,
@@ -40,6 +38,8 @@ import {
   executeSpatialSkeletonReroot,
   showSpatialSkeletonActionError,
 } from "#src/skeleton/edit/submit_edits.js";
+import type { SpatialSkeletonAction } from "#src/skeleton/edit_commands.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import type { SpatialSkeletonOptimisticIdentityService } from "#src/skeleton/edit_queue/api.js";
 import {
   getSkeletonNodeConfidence,

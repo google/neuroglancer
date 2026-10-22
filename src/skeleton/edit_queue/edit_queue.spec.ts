@@ -15,28 +15,27 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-
-import type {
-  SpatialSkeletonQueueInput,
-  SpatialSkeletonQueueInputPreparation,
-} from "#src/skeleton/edit/command_protocol.js";
-import type {
-  SpatialSkeletonMutationContext,
-  SpatialSkeletonMutationFailureDisposition,
-  SpatialSkeletonOptimisticMutationAdapter,
-} from "#src/skeleton/edit_queue/api.js";
-import { SpatialSkeletonMutationAuthorityLeaseCoordinator } from "#src/skeleton/edit_queue/authority_lease_coordinator.js";
-import { SpatialSkeletonOptimisticQueueEngine } from "#src/skeleton/edit_queue/edit_queue.js";
-import type { SpatialSkeletonOptimisticFatalState } from "#src/skeleton/edit_queue/fatal.js";
 import type {
   SpatialSkeletonIntentDriver,
+  SpatialSkeletonMutationContext,
+  SpatialSkeletonMutationFailureDisposition,
   SpatialSkeletonOptimisticHistoryPort,
+  SpatialSkeletonOptimisticMutationAdapter,
   SpatialSkeletonOptimisticProjectionPort,
   SpatialSkeletonProjectionArtifactsListener,
   SpatialSkeletonProjectionIntentArtifact,
-} from "#src/skeleton/edit_queue/ports.js";
-import { SpatialSkeletonMutationAttemptScheduler } from "#src/skeleton/edit_queue/request_scheduler.js";
+} from "#src/skeleton/edit_queue/api.js";
+import { SpatialSkeletonOptimisticQueueEngine } from "#src/skeleton/edit_queue/edit_queue.js";
+import type {
+  SpatialSkeletonQueueInput,
+  SpatialSkeletonQueueInputPreparation,
+} from "#src/skeleton/edit_queue/queue_input.js";
+import {
+  SpatialSkeletonMutationAttemptScheduler,
+  SpatialSkeletonMutationAuthorityLeaseCoordinator,
+} from "#src/skeleton/edit_queue/request_scheduler.js";
 import { spatialSkeletonLogicalSegment } from "#src/skeleton/edit_queue/stable_id_handles.js";
+import type { SpatialSkeletonOptimisticFatalState } from "#src/skeleton/edit_queue/types.js";
 import {
   SpatialSkeletonCommandHistory,
   type SpatialSkeletonCommandHistoryTransitionTicket as Ticket,

@@ -15,14 +15,18 @@
  */
 
 import type {
-  SpatialSkeletonPreparedProjectionStatePublication,
-  SpatialSkeletonProjectionStatePublicationRequest,
-  SpatialSkeletonPresentationLogicalOwner,
-  SpatialSkeletonPresentationNumericAlias,
-} from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+  SpatialSkeletonAuthoritativePublication,
+  SpatialSkeletonOptimisticProjectionPort,
+  SpatialSkeletonProjectionArtifactsListener,
+  SpatialSkeletonProjectionIntentArtifact,
+  SpatialSkeletonProjectionRollbackReplayRequest,
+} from "#src/skeleton/edit_queue/api.js";
 import type { CompleteSkeletonSnapshotHandle } from "#src/skeleton/edit_queue/complete_skeleton.js";
 import {
   applySpatialSkeletonProjectionDelta,
+  materializePhysicalSpatialSkeletonWorkspace,
+  ownsPhysicalSpatialSkeletonSegment,
+  remapSpatialSkeletonProjectionWorkspace,
   SpatialSkeletonProjectionValidationError,
   SpatialSkeletonProjectionWorkspace,
   type SpatialSkeletonProjectionDelta,
@@ -30,13 +34,6 @@ import {
   type SpatialSkeletonProjectionSegmentSnapshot,
   type SpatialSkeletonProjectionSnapshotHandleSource,
 } from "#src/skeleton/edit_queue/complete_skeleton_edits.js";
-import type {
-  SpatialSkeletonAuthoritativePublication,
-  SpatialSkeletonOptimisticProjectionPort,
-  SpatialSkeletonProjectionArtifactsListener,
-  SpatialSkeletonProjectionIntentArtifact,
-  SpatialSkeletonProjectionRollbackReplayRequest,
-} from "#src/skeleton/edit_queue/ports.js";
 import {
   applySpatialSkeletonProjectionUiHintsAfterAdoption,
   cloneSpatialSkeletonProjectionUiHints,
@@ -44,11 +41,6 @@ import {
   type SpatialSkeletonProjectionUiHintPort,
   type SpatialSkeletonProjectionUiHints,
 } from "#src/skeleton/edit_queue/preview_ui_hints.js";
-import {
-  materializePhysicalSpatialSkeletonWorkspace,
-  ownsPhysicalSpatialSkeletonSegment,
-  remapSpatialSkeletonProjectionWorkspace,
-} from "#src/skeleton/edit_queue/projection_workspace.js";
 import {
   SpatialSkeletonLogicalHandleMappings,
   spatialSkeletonLogicalNode,
@@ -60,13 +52,6 @@ import {
   type SpatialSkeletonLogicalSegmentHandle,
 } from "#src/skeleton/edit_queue/stable_id_handles.js";
 import { bigintCompare } from "#src/util/bigint.js";
-
-export type {
-  SpatialSkeletonProjectionSelectionPin,
-  SpatialSkeletonProjectionUiHintPort,
-  SpatialSkeletonProjectionUiHints,
-  SpatialSkeletonResolvedProjectionUiHints,
-} from "#src/skeleton/edit_queue/preview_ui_hints.js";
 
 /**
  * Structural state boundary needed for one immutable projection adoption.
@@ -1688,4 +1673,47 @@ export class SpatialSkeletonOptimisticProjectionRuntime
     });
     return retiredSegmentId;
   }
+}
+
+export interface SpatialSkeletonPresentationLogicalOwner {
+  readonly segmentId: bigint;
+  readonly logicalHandle: SpatialSkeletonLogicalSegmentHandle;
+}
+
+export interface SpatialSkeletonPresentationNumericAlias {
+  readonly logicalHandle: SpatialSkeletonLogicalSegmentHandle;
+  /** Numeric id shown to rendering, picking, and user-facing selection. */
+  readonly segmentId: bigint;
+  /** False while the numeric id exists only in the local optimistic projection. */
+  readonly authoritative?: boolean;
+}
+
+export const preparedSpatialSkeletonProjectionStatePublicationBrand = Symbol(
+  "prepared spatial skeleton projection state publication",
+);
+
+/**
+ * Opaque, state-owned result of complete off-screen projection publication
+ * preparation. The runtime may only return this value to the state instance
+ * that created it; a runtime ownership token rejects forged/cross-state use.
+ */
+export interface SpatialSkeletonPreparedProjectionStatePublication {
+  readonly [preparedSpatialSkeletonProjectionStatePublicationBrand]: true;
+  /** Planned post-adoption revisions, prepared with the cache maps. */
+  readonly cacheRevisions: ReadonlyMap<bigint, number>;
+}
+
+/** Complete state-facing portion of one immutable optimistic publication. */
+export interface SpatialSkeletonProjectionStatePublicationRequest {
+  readonly snapshots: Iterable<
+    readonly [bigint, CompleteSkeletonSnapshotHandle | undefined]
+  >;
+  readonly expectedRevisions: ReadonlyMap<bigint, number>;
+  /** Confirmed deletions advance revisions even for already-absent snapshots. */
+  readonly retiredSegmentIds?: ReadonlySet<bigint>;
+  readonly activeLogicalOwners: Iterable<SpatialSkeletonPresentationLogicalOwner>;
+  readonly numericAliases: Iterable<SpatialSkeletonPresentationNumericAlias>;
+  readonly provisionalNodeIds: Iterable<bigint>;
+  readonly preparationIntentIdsToRemove: Iterable<number>;
+  readonly notify: boolean;
 }

@@ -17,21 +17,19 @@
 import type {
   EditableSkeletonSource,
   SkeletonEdge,
-  SkeletonNode,
-  SkeletonNodeAttributes,
   SkeletonFragmentNode,
   SkeletonFragmentSource,
+  SkeletonNode,
+  SkeletonNodeAttributes,
 } from "#src/skeleton/api.js";
-import {
-  type SpatialSkeletonAction,
-  type SpatialSkeletonEditCommand,
-  type SpatialSkeletonQueueInput,
-  type SpatialSkeletonQueueInputPreparation,
-  type SpatialSkeletonQueueInputRequirement,
-} from "#src/skeleton/edit/command_protocol.js";
+import type {
+  SpatialSkeletonAction,
+  SpatialSkeletonEditCommand,
+} from "#src/skeleton/edit_commands.js";
 import { getSpatialSkeletonEditCommandFactoryFromSource } from "#src/skeleton/edit_commands.js";
 import {
   assertSpatialSkeletonOptimisticDriverRegistration,
+  isSpatialSkeletonOptimisticEditingProvider,
   SpatialSkeletonOptimisticDatasourceContractError,
   type SpatialSkeletonOptimisticEditingProvider,
   type SpatialSkeletonProvisionalNumericIdPolicy,
@@ -46,16 +44,22 @@ import {
   type SpatialSkeletonInspectionRequiredReason,
 } from "#src/skeleton/edit_queue/edit_errors.js";
 import { SpatialSkeletonOptimisticQueueEngine } from "#src/skeleton/edit_queue/edit_queue.js";
-import {
-  freezeSpatialSkeletonOptimisticFatalState,
-  SpatialSkeletonOptimisticReloadRequiredError,
-  type SpatialSkeletonOptimisticFatalState,
-} from "#src/skeleton/edit_queue/fatal.js";
-import { unchangedSpatialSkeletonOptimisticEditSettlement } from "#src/skeleton/edit_queue/lifecycle.js";
-import {
-  SpatialSkeletonOptimisticProjectionRuntime,
-  type SpatialSkeletonResolvedProjectionUiHints,
+import type {
+  SpatialSkeletonPreparedProjectionStatePublication,
+  SpatialSkeletonPresentationLogicalOwner,
+  SpatialSkeletonPresentationNumericAlias,
+  SpatialSkeletonProjectionStatePublicationRequest,
 } from "#src/skeleton/edit_queue/preview.js";
+import {
+  preparedSpatialSkeletonProjectionStatePublicationBrand,
+  SpatialSkeletonOptimisticProjectionRuntime,
+} from "#src/skeleton/edit_queue/preview.js";
+import type { SpatialSkeletonResolvedProjectionUiHints } from "#src/skeleton/edit_queue/preview_ui_hints.js";
+import type {
+  SpatialSkeletonQueueInput,
+  SpatialSkeletonQueueInputPreparation,
+  SpatialSkeletonQueueInputRequirement,
+} from "#src/skeleton/edit_queue/queue_input.js";
 import { SpatialSkeletonMutationAttemptScheduler } from "#src/skeleton/edit_queue/request_scheduler.js";
 import type {
   SpatialSkeletonLogicalNodeHandle,
@@ -63,11 +67,15 @@ import type {
 } from "#src/skeleton/edit_queue/stable_id_handles.js";
 import {
   DEFAULT_SPATIAL_SKELETON_OPTIMISTIC_EDIT_QUEUE_CAPACITY,
+  freezeSpatialSkeletonOptimisticFatalState,
+  SpatialSkeletonOptimisticReloadRequiredError,
+  unchangedSpatialSkeletonOptimisticEditSettlement,
   type SpatialSkeletonOptimisticEditActivityEntry,
   type SpatialSkeletonOptimisticEditExecution,
   type SpatialSkeletonOptimisticEditQueue,
   type SpatialSkeletonOptimisticEditQueueEntry,
   type SpatialSkeletonOptimisticEditState,
+  type SpatialSkeletonOptimisticFatalState,
 } from "#src/skeleton/edit_queue/types.js";
 import {
   createSpatialSkeletonOptimisticHistoryPort,
@@ -81,13 +89,35 @@ import { bigintCompare } from "#src/util/bigint.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { PromiseConcurrencyLimiter } from "#src/util/promise_concurrency_limiter.js";
 
-export {
-  type SpatialSkeletonOptimisticEditActivityEntry,
-  type SpatialSkeletonOptimisticEditExecution,
-  type SpatialSkeletonOptimisticEditQueue,
-  type SpatialSkeletonOptimisticEditQueueEntry,
-  type SpatialSkeletonOptimisticEditState,
-} from "#src/skeleton/edit_queue/types.js";
+export function getSpatialSkeletonOptimisticEditingProvider(
+  source: EditableSkeletonSource,
+): SpatialSkeletonOptimisticEditingProvider | undefined {
+  const candidate = source.optimisticEditing;
+  return isSpatialSkeletonOptimisticEditingProvider(candidate)
+    ? candidate
+    : undefined;
+}
+
+/**
+ * Ensures the state-owned queue using the editable source's validated driver.
+ *
+ * Command construction calls this boundary every time. The layer state reuses
+ * its existing engine for the same source and replaces it only after a new
+ * datasource registration has been validated.
+ */
+export function ensureSpatialSkeletonOptimisticEditQueue(
+  layer: SpatialSkeletonLayerContext,
+  source: EditableSkeletonSource,
+): SpatialSkeletonOptimisticEditQueue {
+  const state = layer.spatialSkeletonState;
+  const provider = getSpatialSkeletonOptimisticEditingProvider(source);
+  if (provider === undefined) {
+    throw new SpatialSkeletonOptimisticDatasourceContractError(
+      "Writable spatial skeleton datasource is missing optimisticEditing.createDriver().",
+    );
+  }
+  return state.ensureOptimisticEditingEngine(layer, source, provider);
+}
 
 function resolvedOptimisticEditExecution<T>(
   value: T,
@@ -209,19 +239,6 @@ export interface SpatialSkeletonInputReference {
   release(): void;
 }
 
-export interface SpatialSkeletonPresentationLogicalOwner {
-  readonly segmentId: bigint;
-  readonly logicalHandle: SpatialSkeletonLogicalSegmentHandle;
-}
-
-export interface SpatialSkeletonPresentationNumericAlias {
-  readonly logicalHandle: SpatialSkeletonLogicalSegmentHandle;
-  /** Numeric id shown to rendering, picking, and user-facing selection. */
-  readonly segmentId: bigint;
-  /** False while the numeric id exists only in the local optimistic projection. */
-  readonly authoritative?: boolean;
-}
-
 /**
  * The complete presentation observed by rendering and Skeleton Details.
  * Topology references are always exact complete-skeleton handles.  A cold
@@ -265,36 +282,6 @@ function getActiveProvisionalSpatialSkeletonSegmentIds(
     provisionalSegmentIds.add(alias.segmentId);
   }
   return [...provisionalSegmentIds].sort(bigintCompare);
-}
-
-const preparedSpatialSkeletonProjectionStatePublicationBrand = Symbol(
-  "prepared spatial skeleton projection state publication",
-);
-
-/**
- * Opaque, state-owned result of complete off-screen projection publication
- * preparation. The runtime may only return this value to the state instance
- * that created it; a runtime ownership token rejects forged/cross-state use.
- */
-export interface SpatialSkeletonPreparedProjectionStatePublication {
-  readonly [preparedSpatialSkeletonProjectionStatePublicationBrand]: true;
-  /** Planned post-adoption revisions, prepared with the cache maps. */
-  readonly cacheRevisions: ReadonlyMap<bigint, number>;
-}
-
-/** Complete state-facing portion of one immutable optimistic publication. */
-export interface SpatialSkeletonProjectionStatePublicationRequest {
-  readonly snapshots: Iterable<
-    readonly [bigint, CompleteSkeletonSnapshotHandle | undefined]
-  >;
-  readonly expectedRevisions: ReadonlyMap<bigint, number>;
-  /** Confirmed deletions advance revisions even for already-absent snapshots. */
-  readonly retiredSegmentIds?: ReadonlySet<bigint>;
-  readonly activeLogicalOwners: Iterable<SpatialSkeletonPresentationLogicalOwner>;
-  readonly numericAliases: Iterable<SpatialSkeletonPresentationNumericAlias>;
-  readonly provisionalNodeIds: Iterable<bigint>;
-  readonly preparationIntentIdsToRemove: Iterable<number>;
-  readonly notify: boolean;
 }
 
 export function getSpatialSkeletonEditCommandFactoryForAction(

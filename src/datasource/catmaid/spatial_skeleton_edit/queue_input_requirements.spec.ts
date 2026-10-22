@@ -19,7 +19,7 @@ import { describe, expect, it } from "vitest";
 import {
   getCatmaidQueueInputRequirements,
   getCatmaidMergeQueueInputRequirements,
-} from "#src/datasource/catmaid/spatial_skeleton_edit/queue_input_requirements.js";
+} from "#src/datasource/catmaid/spatial_skeleton_edit/command_factories.js";
 
 describe("getCatmaidQueueInputRequirements", () => {
   it("deduplicates required endpoints", () => {

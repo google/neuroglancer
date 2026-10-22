@@ -15,23 +15,20 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-
-import type {
-  SpatialSkeletonEditCommand,
-  SpatialSkeletonQueueInputRequirement,
-} from "#src/skeleton/edit/command_protocol.js";
-import { SpatialSkeletonActions } from "#src/skeleton/edit/command_protocol.js";
 import {
   createSpatialSkeletonQueueInputPreparation,
   prepareAndSubmitSpatialSkeletonEdit,
-} from "#src/skeleton/edit/queue_admission.js";
+} from "#src/skeleton/edit/submit_edits.js";
+import type { SpatialSkeletonEditCommand } from "#src/skeleton/edit_commands.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import { SpatialSkeletonInspectionRequiredError } from "#src/skeleton/edit_queue/edit_errors.js";
-import {
-  SpatialSkeletonOptimisticReloadRequiredError,
-  type SpatialSkeletonOptimisticFatalState,
-} from "#src/skeleton/edit_queue/fatal.js";
-import type { SpatialSkeletonOptimisticEditSettlement } from "#src/skeleton/edit_queue/lifecycle.js";
-import type { SpatialSkeletonOptimisticEditExecution } from "#src/skeleton/edit_queue/types.js";
+import type { SpatialSkeletonQueueInputRequirement } from "#src/skeleton/edit_queue/queue_input.js";
+import type {
+  SpatialSkeletonOptimisticEditExecution,
+  SpatialSkeletonOptimisticEditSettlement,
+  SpatialSkeletonOptimisticFatalState,
+} from "#src/skeleton/edit_queue/types.js";
+import { SpatialSkeletonOptimisticReloadRequiredError } from "#src/skeleton/edit_queue/types.js";
 
 function optimisticExecution<T>(
   execution: Promise<T>,

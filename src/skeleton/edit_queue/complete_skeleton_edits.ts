@@ -23,6 +23,7 @@ import {
   type CompleteSkeletonNodeChanges,
   type CompleteSkeletonNodePatch,
   type CompleteSkeletonSnapshotHandle,
+  remapCompleteSkeletonSnapshot,
 } from "#src/skeleton/edit_queue/complete_skeleton.js";
 import {
   getSpatialSkeletonLogicalResourceKey,
@@ -36,6 +37,61 @@ import {
   isSkeletonNodeTrueEnd,
   setSkeletonNodeAttributes,
 } from "#src/skeleton/node_attributes.js";
+
+export function materializePhysicalSpatialSkeletonWorkspace(
+  workspace: SpatialSkeletonProjectionWorkspace,
+  mappings: SpatialSkeletonLogicalHandleMappings<bigint, bigint>,
+) {
+  const result = new Map<
+    bigint,
+    {
+      readonly segment: SpatialSkeletonLogicalSegmentHandle;
+      readonly snapshot: CompleteSkeletonSnapshotHandle;
+    }
+  >();
+  for (const entry of workspace.segments) {
+    const segmentId = mappings.resolveSegment(entry.segment);
+    if (segmentId === undefined || segmentId === 0n) {
+      throw new SpatialSkeletonProjectionValidationError(
+        `Logical segment ${entry.segment.stableId} requires a nonzero id for publication.`,
+      );
+    }
+    if (result.has(segmentId)) {
+      throw new SpatialSkeletonProjectionValidationError(
+        `Physical segment ${segmentId} has multiple active logical owners.`,
+      );
+    }
+    result.set(segmentId, entry);
+  }
+  return result;
+}
+
+export function ownsPhysicalSpatialSkeletonSegment(
+  workspace: SpatialSkeletonProjectionWorkspace,
+  mappings: SpatialSkeletonLogicalHandleMappings<bigint, bigint>,
+  segmentId: bigint,
+) {
+  return workspace.segments.some(
+    ({ segment }) => mappings.resolveSegment(segment) === segmentId,
+  );
+}
+
+export function remapSpatialSkeletonProjectionWorkspace(
+  workspace: SpatialSkeletonProjectionWorkspace,
+  nodeIds: ReadonlyMap<bigint, bigint>,
+  segmentIds: ReadonlyMap<bigint, bigint>,
+) {
+  if (nodeIds.size === 0 && segmentIds.size === 0) return workspace;
+  return new SpatialSkeletonProjectionWorkspace(
+    workspace.segments.map(({ segment, snapshot }) => ({
+      segment,
+      snapshot: remapCompleteSkeletonSnapshot(snapshot, {
+        nodeIds,
+        segmentIds,
+      }),
+    })),
+  );
+}
 
 export interface SpatialSkeletonProjectionNodeAttributes {
   readonly radius?: number;

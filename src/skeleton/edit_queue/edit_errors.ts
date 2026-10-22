@@ -14,11 +14,9 @@
  * limitations under the License.
  */
 
-import {
-  getSpatialSkeletonActionSupportLabel,
-  type SpatialSkeletonAction,
-  type SpatialSkeletonQueueInputRequirement,
-} from "#src/skeleton/edit/command_protocol.js";
+import type { SpatialSkeletonAction } from "#src/skeleton/edit_commands.js";
+import { getSpatialSkeletonActionSupportLabel } from "#src/skeleton/edit_commands.js";
+import type { SpatialSkeletonQueueInputRequirement } from "#src/skeleton/edit_queue/queue_input.js";
 import { formatErrorMessage } from "#src/util/error.js";
 
 export type SpatialSkeletonInspectionRequiredReason =

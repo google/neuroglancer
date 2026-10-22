@@ -16,9 +16,9 @@
 
 import { describe, expect, it } from "vitest";
 
-import { getDefaultCatmaidChunkSize } from "#src/datasource/catmaid/default_chunk_size.js";
+import { getDefaultCatmaidChunkSize } from "#src/datasource/catmaid/api.js";
 
-describe("datasource/catmaid/default_chunk_size", () => {
+describe("getDefaultCatmaidChunkSize", () => {
   it("covers the bounds with at most 64 isotropic chunks", () => {
     expect(
       getDefaultCatmaidChunkSize({

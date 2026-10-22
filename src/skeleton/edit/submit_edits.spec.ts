@@ -18,7 +18,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_edit/command_factories.js";
 import { SkeletonEdgeDirection, type SkeletonNode } from "#src/skeleton/api.js";
-import { SpatialSkeletonActions } from "#src/skeleton/edit/command_protocol.js";
 import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   executeSpatialSkeletonAddNode,
@@ -36,14 +35,15 @@ import {
   showSpatialSkeletonActionError,
   undoSpatialSkeletonCommand,
 } from "#src/skeleton/edit/submit_edits.js";
-import { resetGlobalSpatialSkeletonMutationAuthorityLeaseCoordinatorForTesting } from "#src/skeleton/edit_queue/authority_lease_coordinator.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import { SpatialSkeletonEditConflictError } from "#src/skeleton/edit_queue/edit_errors.js";
-import { SpatialSkeletonOptimisticReloadRequiredError } from "#src/skeleton/edit_queue/fatal.js";
-import {
-  committedSpatialSkeletonOptimisticEditSettlement,
-  type SpatialSkeletonOptimisticEditSettlement,
-} from "#src/skeleton/edit_queue/lifecycle.js";
 import { SpatialSkeletonOptimisticProjectionRuntime } from "#src/skeleton/edit_queue/preview.js";
+import { resetGlobalSpatialSkeletonMutationAuthorityLeaseCoordinatorForTesting } from "#src/skeleton/edit_queue/request_scheduler.js";
+import type { SpatialSkeletonOptimisticEditSettlement } from "#src/skeleton/edit_queue/types.js";
+import {
+  SpatialSkeletonOptimisticReloadRequiredError,
+  committedSpatialSkeletonOptimisticEditSettlement,
+} from "#src/skeleton/edit_queue/types.js";
 import { SpatialSkeletonCommandHistory } from "#src/skeleton/edit_queue/undo_history.js";
 import {
   getSkeletonNodeConfidence,

@@ -16,7 +16,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { SpatialSkeletonMutationAuthorityLeaseCoordinator } from "#src/skeleton/edit_queue/authority_lease_coordinator.js";
+import { SpatialSkeletonMutationAuthorityLeaseCoordinator } from "#src/skeleton/edit_queue/request_scheduler.js";
 
 async function isPending(promise: Promise<unknown>) {
   const marker = {};

@@ -23,6 +23,40 @@ import type {
 } from "#src/datasource/catmaid/api.js";
 import type { SkeletonVector } from "#src/skeleton/api.js";
 
+export interface CatmaidSpatialSkeletonEditOperations {
+  /** Stable identity of the physical CATMAID mutation target. */
+  readonly mutationScope: object;
+  commitAddNode(
+    request: CatmaidSpatialSkeletonAddNodeRequest,
+  ): Promise<CatmaidSpatialSkeletonAddNodeResult>;
+  commitInsertNode(
+    request: CatmaidSpatialSkeletonInsertNodeRequest,
+  ): Promise<CatmaidSpatialSkeletonInsertNodeResult>;
+  commitMoveNode(request: CatmaidSpatialSkeletonMoveNodeRequest): Promise<void>;
+  commitDeleteNode(
+    request: CatmaidSpatialSkeletonDeleteNodeRequest,
+  ): Promise<void>;
+  commitReroot(request: CatmaidSpatialSkeletonRerootRequest): Promise<void>;
+  commitDescription(
+    request: CatmaidSpatialSkeletonDescriptionUpdateRequest,
+  ): Promise<CatmaidSpatialSkeletonDescriptionUpdateResult>;
+  commitTrueEnd(
+    request: CatmaidSpatialSkeletonTrueEndUpdateRequest,
+  ): Promise<void>;
+  commitRadius(
+    request: CatmaidSpatialSkeletonRadiusUpdateRequest,
+  ): Promise<void>;
+  commitConfidence(
+    request: CatmaidSpatialSkeletonConfidenceUpdateRequest,
+  ): Promise<void>;
+  commitMerge(
+    request: CatmaidSpatialSkeletonMergeRequest,
+  ): Promise<CatmaidSpatialSkeletonMergeResult>;
+  commitSplit(
+    request: CatmaidSpatialSkeletonSplitRequest,
+  ): Promise<CatmaidSpatialSkeletonSplitResult>;
+}
+
 // CATMAID owns these payloads; the generic skeleton API only promises named edit operations.
 export interface CatmaidSpatialSkeletonAddNodeRequest {
   position: SkeletonVector;

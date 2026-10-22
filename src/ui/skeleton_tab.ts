@@ -34,18 +34,18 @@ import {
 import { getBaseObjectColor } from "#src/segmentation_display_state/frontend.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
 import {
-  SpatialSkeletonActions,
-  SpatialSkeletonHistoryActions,
-  type SpatialSkeletonAction,
-} from "#src/skeleton/edit/command_protocol.js";
-import {
   executeSpatialSkeletonDeleteNode,
   executeSpatialSkeletonNodeTrueEndUpdate,
   redoSpatialSkeletonCommand,
   showSpatialSkeletonActionError,
   undoSpatialSkeletonCommand,
 } from "#src/skeleton/edit/submit_edits.js";
-import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/edit_queue/fatal.js";
+import type { SpatialSkeletonAction } from "#src/skeleton/edit_commands.js";
+import {
+  SpatialSkeletonActions,
+  SpatialSkeletonHistoryActions,
+} from "#src/skeleton/edit_commands.js";
+import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/edit_queue/types.js";
 import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
 import {
   getSkeletonNodeFilterLabel,

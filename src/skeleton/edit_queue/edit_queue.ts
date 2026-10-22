@@ -15,62 +15,546 @@
  */
 
 import type {
-  SpatialSkeletonQueueInput,
-  SpatialSkeletonQueueInputPreparation,
-  SpatialSkeletonPreparedQueueInput,
-} from "#src/skeleton/edit/command_protocol.js";
-import type { SpatialSkeletonMutationOutcome } from "#src/skeleton/edit_queue/api.js";
+  SpatialSkeletonIntentDescription,
+  SpatialSkeletonLogicalIntent,
+  SpatialSkeletonMutationOutcome,
+  SpatialSkeletonProjectionIntentArtifact,
+  SpatialSkeletonIntentDriver,
+  SpatialSkeletonOptimisticHistoryPort,
+  SpatialSkeletonOptimisticPreparationPort,
+  SpatialSkeletonOptimisticProjectionPort,
+  SpatialSkeletonProjectionHistoryRecipe,
+} from "#src/skeleton/edit_queue/api.js";
 import {
-  SpatialSkeletonOptimisticQueueCapacityError,
   SpatialSkeletonInspectionRequiredError,
+  SpatialSkeletonOptimisticQueueCapacityError,
 } from "#src/skeleton/edit_queue/edit_errors.js";
 import {
   SpatialSkeletonIntentJournal,
   type SpatialSkeletonIntentKind,
+  type SpatialSkeletonCommittedMutationAttempt,
+  type SpatialSkeletonIntentRecord,
 } from "#src/skeleton/edit_queue/edit_intent_journal.js";
 import {
   projectSpatialSkeletonOptimisticQueueSnapshot,
   projectSpatialSkeletonOptimisticRecentActivity,
 } from "#src/skeleton/edit_queue/edit_queue_rows.js";
-import { SpatialSkeletonOptimisticEngineHistory } from "#src/skeleton/edit_queue/engine_history.js";
-import {
-  createPromiseResolver,
-  createSpatialSkeletonExecution,
-  createSpatialSkeletonNoOpExecution,
-  createSpatialSkeletonReloadRequiredExecution,
-  SpatialSkeletonOptimisticQueueEngineDisposedError,
-  type EngineIntentJournal,
-  type EngineIntentRuntime,
-  type SpatialSkeletonOptimisticQueueEngineOptions,
-} from "#src/skeleton/edit_queue/engine_runtime.js";
-import {
-  freezeSpatialSkeletonOptimisticFatalState,
-  SpatialSkeletonOptimisticReloadRequiredError,
-  type SpatialSkeletonOptimisticFatalState,
-} from "#src/skeleton/edit_queue/fatal.js";
-import {
-  committedSpatialSkeletonOptimisticEditSettlement,
-  unchangedSpatialSkeletonOptimisticEditSettlement,
-} from "#src/skeleton/edit_queue/lifecycle.js";
 import type {
-  SpatialSkeletonLogicalIntent,
-  SpatialSkeletonIntentDescription,
-  SpatialSkeletonProjectionIntentArtifact,
-} from "#src/skeleton/edit_queue/ports.js";
-import type { SpatialSkeletonMutationAttemptSettlement } from "#src/skeleton/edit_queue/request_scheduler.js";
+  SpatialSkeletonPreparedQueueInput,
+  SpatialSkeletonQueueInput,
+  SpatialSkeletonQueueInputPreparation,
+} from "#src/skeleton/edit_queue/queue_input.js";
+import type {
+  SpatialSkeletonMutationAttemptSettlement,
+  SpatialSkeletonMutationAttemptScheduler,
+  SpatialSkeletonMutationAttemptSubmission,
+  SpatialSkeletonMutationAuthorityLease,
+} from "#src/skeleton/edit_queue/request_scheduler.js";
 import { spatialSkeletonLogicalSegment } from "#src/skeleton/edit_queue/stable_id_handles.js";
 import type {
   SpatialSkeletonOptimisticEditExecution,
   SpatialSkeletonOptimisticEditQueue,
   SpatialSkeletonOptimisticEditSettlement,
+  SpatialSkeletonOptimisticFatalState,
+  SpatialSkeletonOptimisticAuthorityPresentation,
+  SpatialSkeletonOptimisticFatalStatePort,
+} from "#src/skeleton/edit_queue/types.js";
+import {
+  committedSpatialSkeletonOptimisticEditSettlement,
+  freezeSpatialSkeletonOptimisticFatalState,
+  SpatialSkeletonOptimisticReloadRequiredError,
+  unchangedSpatialSkeletonOptimisticEditSettlement,
 } from "#src/skeleton/edit_queue/types.js";
 import { NullarySignal } from "#src/util/signal.js";
 
-export {
-  SpatialSkeletonOptimisticQueueEngineDisposedError,
-  type SpatialSkeletonOptimisticQueueEngineOptions,
-} from "#src/skeleton/edit_queue/engine_runtime.js";
+export interface SpatialSkeletonOptimisticEngineHistoryOptions<
+  TInput,
+  THistoryTicket,
+  TWorkflow,
+  TProjection,
+  TMutation,
+  TResult,
+  TReconciliation,
+  TInverseProjection,
+> {
+  readonly journal: EngineIntentJournal<
+    TInput,
+    TWorkflow,
+    THistoryTicket,
+    TProjection,
+    TInverseProjection,
+    TMutation,
+    TResult
+  >;
+  readonly runtimes: Map<number, EngineIntentRuntime<TResult>>;
+  readonly history: SpatialSkeletonOptimisticHistoryPort<
+    TInput,
+    THistoryTicket
+  >;
+  readonly projection: SpatialSkeletonOptimisticProjectionPort<
+    TProjection,
+    TReconciliation,
+    TInverseProjection
+  >;
+}
 
+/** Read-only recipe and retention queries over canonical engine state. */
+class SpatialSkeletonOptimisticEngineHistory<
+  TInput,
+  THistoryTicket,
+  TWorkflow,
+  TProjection,
+  TMutation,
+  TResult,
+  TReconciliation,
+  TInverseProjection,
+> {
+  constructor(
+    private readonly options: SpatialSkeletonOptimisticEngineHistoryOptions<
+      TInput,
+      THistoryTicket,
+      TWorkflow,
+      TProjection,
+      TMutation,
+      TResult,
+      TReconciliation,
+      TInverseProjection
+    >,
+  ) {}
+
+  getQueuedOppositeTarget(
+    intent: SpatialSkeletonIntentKind,
+    historyEntryId: string | number,
+    dependencySequences: readonly number[],
+  ) {
+    if (intent === "execute") return undefined;
+    for (const dependencyId of [...dependencySequences].reverse()) {
+      const dependency = this.options.journal.get(dependencyId);
+      if (
+        dependency !== undefined &&
+        !dependency.terminal &&
+        dependency.lifecycle.authority === "queued" &&
+        dependency.metadata.historyEntryId === historyEntryId &&
+        dependency.kind !== intent &&
+        !this.hasUnresolvedSameEntryDependency(dependency.sequence)
+      ) {
+        return dependency.sequence;
+      }
+    }
+    return undefined;
+  }
+
+  getProjectedQueuedOppositeTarget(intent: "undo" | "redo") {
+    const historyEntryId = this.options.history.getProjectedEntryId(intent);
+    if (historyEntryId === undefined) return undefined;
+    return this.options.journal
+      .getEntries({ includeTerminal: false })
+      .reverse()
+      .find(
+        (entry) =>
+          entry.metadata.historyEntryId === historyEntryId &&
+          entry.kind !== intent &&
+          entry.lifecycle.authority === "queued" &&
+          !this.hasUnresolvedSameEntryDependency(entry.sequence),
+      )?.sequence;
+  }
+
+  private hasUnresolvedSameEntryDependency(intentId: number) {
+    const entry = this.options.journal.get(intentId);
+    if (entry === undefined) return false;
+    return this.options.journal
+      .getBlockingDependencies(intentId)
+      .some(
+        (dependencyId) =>
+          this.options.journal.get(dependencyId)?.metadata.historyEntryId ===
+          entry.metadata.historyEntryId,
+      );
+  }
+
+  getActivePreviewArtifacts(excludeIntentId?: number) {
+    return this.options.journal
+      .getEntries({ includeTerminal: false })
+      .filter(
+        (entry) =>
+          entry.sequence !== excludeIntentId &&
+          entry.lifecycle.preview === "exact",
+      )
+      .flatMap((entry) => this.getProjectionArtifact(entry.sequence));
+  }
+
+  getProjectionArtifacts(intentIds: readonly number[]) {
+    return intentIds.flatMap((intentId) =>
+      this.getProjectionArtifact(intentId),
+    );
+  }
+
+  private getProjectionArtifact(
+    intentId: number,
+  ): readonly SpatialSkeletonProjectionIntentArtifact<
+    TProjection,
+    TInverseProjection
+  >[] {
+    const entry = this.options.journal.get(intentId);
+    const projection = entry?.requestedResult.value;
+    const inverseProjection = entry?.inverseDelta.value;
+    return projection === undefined || inverseProjection === undefined
+      ? []
+      : [{ intentId, projection, inverseProjection }];
+  }
+
+  getHistoryRecipeByEntryId(
+    historyEntryId: string | number,
+  ):
+    | SpatialSkeletonProjectionHistoryRecipe<
+        TWorkflow,
+        TProjection,
+        TInverseProjection
+      >
+    | undefined {
+    const candidates = this.options.journal
+      .getEntries()
+      .filter(
+        (entry) =>
+          entry.metadata.historyEntryId === historyEntryId &&
+          entry.requestedResult.value !== undefined,
+      );
+    return this.createHistoryRecipe(
+      candidates.find((candidate) => candidate.kind === "execute") ??
+        candidates.at(-1),
+    );
+  }
+
+  getCanonicalHistoryInput(historyEntryId: string | number) {
+    const candidates = this.options.journal
+      .getEntries()
+      .filter((entry) => entry.metadata.historyEntryId === historyEntryId);
+    return (
+      candidates.find((candidate) => candidate.kind === "execute") ??
+      candidates.at(-1)
+    )?.metadata.input;
+  }
+
+  getCanonicalInputPreparation(historyEntryId: string | number) {
+    return this.options.journal
+      .getEntries()
+      .find(
+        (entry) =>
+          entry.kind === "execute" &&
+          entry.metadata.historyEntryId === historyEntryId,
+      )?.metadata.inputPreparation;
+  }
+
+  private createHistoryRecipe(
+    entry:
+      | EngineIntentRecord<
+          TInput,
+          TWorkflow,
+          THistoryTicket,
+          TProjection,
+          TInverseProjection,
+          TMutation,
+          TResult
+        >
+      | undefined,
+  ) {
+    const projection = entry?.requestedResult.value;
+    return entry === undefined ||
+      projection === undefined ||
+      entry.metadata.workflow === undefined
+      ? undefined
+      : {
+          workflow: entry.metadata.workflow,
+          projection,
+          inverseProjection: entry.inverseDelta.value,
+        };
+  }
+
+  refreshCanonicalRecipeFromRedo(
+    redoEntry: EngineIntentRecord<
+      TInput,
+      TWorkflow,
+      THistoryTicket,
+      TProjection,
+      TInverseProjection,
+      TMutation,
+      TResult
+    >,
+    artifact: SpatialSkeletonProjectionIntentArtifact<
+      TProjection,
+      TInverseProjection
+    >,
+  ) {
+    if (redoEntry.kind !== "redo") return;
+    const canonical = this.options.journal
+      .getEntries()
+      .find(
+        (entry) =>
+          entry.kind === "execute" &&
+          entry.metadata.historyEntryId === redoEntry.metadata.historyEntryId,
+      );
+    if (canonical === undefined) {
+      throw new Error(
+        `History entry ${redoEntry.metadata.historyEntryId} lost its canonical Execute recipe.`,
+      );
+    }
+    this.options.journal.refreshRetainedRecord(canonical.sequence, {
+      requestedResult: { value: artifact.projection },
+      inverseDelta: { value: artifact.inverseProjection },
+      metadata: {
+        ...canonical.metadata,
+        workflow: redoEntry.metadata.workflow,
+      },
+    });
+  }
+
+  syncRetainedHistoryResources() {
+    const retainedEntryIds = new Set(
+      this.options.history.getRetainedEntryIds(),
+    );
+    const projections = this.options.journal
+      .getEntries()
+      .filter(
+        (entry) =>
+          entry.kind === "execute" &&
+          retainedEntryIds.has(entry.metadata.historyEntryId),
+      )
+      .flatMap((entry) => {
+        const projection = entry.requestedResult.value;
+        return projection === undefined ? [] : [projection];
+      });
+    this.options.projection.setRetainedHistoryProjections(projections);
+  }
+
+  compactTerminalState() {
+    const retainedEntryIds = new Set(
+      this.options.history.getRetainedEntryIds(),
+    );
+    const canonicalSequences = this.options.journal
+      .getEntries()
+      .filter(
+        (entry) =>
+          entry.kind === "execute" &&
+          retainedEntryIds.has(entry.metadata.historyEntryId),
+      )
+      .map(({ sequence }) => sequence);
+    this.syncRetainedHistoryResources();
+    this.options.journal.compactTerminalRecords({
+      retainRecent: this.options.history.capacity,
+      preserveSequences: canonicalSequences,
+    });
+    for (const [intentId, runtime] of this.options.runtimes) {
+      if (runtime.settled.settled) this.options.runtimes.delete(intentId);
+    }
+  }
+}
+
+export interface PromiseResolver<T> {
+  readonly promise: Promise<T>;
+  readonly settled: boolean;
+  resolve(value: T | PromiseLike<T>): void;
+  reject(reason?: unknown): void;
+}
+
+function createPromiseResolver<T>(): PromiseResolver<T> {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  let settled = false;
+  return {
+    promise,
+    get settled() {
+      return settled;
+    },
+    resolve(value) {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    },
+    reject(reason) {
+      if (settled) return;
+      settled = true;
+      reject(reason);
+    },
+  };
+}
+
+export class SpatialSkeletonOptimisticQueueEngineDisposedError extends Error {
+  constructor() {
+    super("The optimistic queue was disposed before the intent settled.");
+    this.name = "SpatialSkeletonOptimisticQueueEngineDisposedError";
+  }
+}
+
+export interface SpatialSkeletonOptimisticQueueEngineOptions<
+  TInput,
+  THistoryTicket,
+  TWorkflow,
+  TProjection,
+  TMutation,
+  TResult,
+  TReconciliation,
+  TInverseProjection = TProjection,
+> {
+  readonly driver: SpatialSkeletonIntentDriver<
+    TInput,
+    TWorkflow,
+    TProjection,
+    TMutation,
+    TResult,
+    TReconciliation,
+    TInverseProjection
+  >;
+  readonly projection: SpatialSkeletonOptimisticProjectionPort<
+    TProjection,
+    TReconciliation,
+    TInverseProjection
+  >;
+  readonly history: SpatialSkeletonOptimisticHistoryPort<
+    TInput,
+    THistoryTicket
+  >;
+  readonly attempts: SpatialSkeletonMutationAttemptScheduler<
+    TMutation,
+    TResult
+  >;
+  readonly preparation?: SpatialSkeletonOptimisticPreparationPort;
+  /** Layer-scoped, first-write-wins fatal state owned by SpatialSkeletonState. */
+  readonly fatalState: SpatialSkeletonOptimisticFatalStatePort;
+  readonly onListenerError?: (error: unknown) => void;
+}
+
+export interface ProjectionValue<T> {
+  value?: T;
+}
+
+export interface EngineMetadata<TInput, TWorkflow, THistoryTicket> {
+  readonly input: TInput;
+  readonly workflow?: TWorkflow;
+  readonly inputPreparation?: SpatialSkeletonQueueInputPreparation;
+  readonly historyTicket: THistoryTicket;
+  readonly historyEntryId: string | number;
+  readonly kind: string;
+  readonly commandLabel?: string;
+  readonly authorityPresentation?: SpatialSkeletonOptimisticAuthorityPresentation;
+}
+
+type EngineIntentRecord<
+  TInput,
+  TWorkflow,
+  THistoryTicket,
+  TProjection,
+  TInverseProjection,
+  TMutation,
+  TResult,
+> = SpatialSkeletonIntentRecord<
+  ProjectionValue<TProjection>,
+  ProjectionValue<TInverseProjection>,
+  EngineMetadata<TInput, TWorkflow, THistoryTicket>,
+  SpatialSkeletonCommittedMutationAttempt<TMutation, TResult>
+>;
+
+type EngineIntentJournal<
+  TInput,
+  TWorkflow,
+  THistoryTicket,
+  TProjection,
+  TInverseProjection,
+  TMutation,
+  TResult,
+> = SpatialSkeletonIntentJournal<
+  string | number,
+  ProjectionValue<TProjection>,
+  ProjectionValue<TInverseProjection>,
+  EngineMetadata<TInput, TWorkflow, THistoryTicket>,
+  SpatialSkeletonCommittedMutationAttempt<TMutation, TResult>
+>;
+
+/**
+ * The only non-canonical per-intent runtime state. Semantic workflow state,
+ * lifecycle, attempts, dependencies, and history identity live in the journal.
+ */
+interface EngineIntentRuntime<TResult> {
+  readonly exact: PromiseResolver<boolean>;
+  readonly settled: PromiseResolver<
+    SpatialSkeletonOptimisticEditSettlement<TResult>
+  >;
+  inputAbortController?: AbortController;
+  releaseAdmissionInputs?: () => void;
+  lease?: SpatialSkeletonMutationAuthorityLease;
+  submission?: SpatialSkeletonMutationAttemptSubmission<TResult>;
+}
+
+function createSpatialSkeletonNoOpExecution<TResult>(value: boolean) {
+  const promise = Promise.resolve(
+    value,
+  ) as SpatialSkeletonOptimisticEditExecution<boolean, TResult>;
+  Object.defineProperties(promise, {
+    acceptedByQueue: { value: Promise.resolve() },
+    settled: {
+      value: Promise.resolve(
+        unchangedSpatialSkeletonOptimisticEditSettlement("no-op"),
+      ),
+    },
+  });
+  return promise;
+}
+
+function createSpatialSkeletonReloadRequiredExecution<TResult>(
+  fatalState: SpatialSkeletonOptimisticFatalState,
+) {
+  const error = new SpatialSkeletonOptimisticReloadRequiredError(fatalState);
+  const promise = Promise.reject(
+    error,
+  ) as SpatialSkeletonOptimisticEditExecution<boolean, TResult>;
+  Object.defineProperties(promise, {
+    acceptedByQueue: { value: Promise.reject(error) },
+    settled: {
+      value: Promise.resolve(
+        unchangedSpatialSkeletonOptimisticEditSettlement("not-started", error),
+      ),
+    },
+  });
+  // `acceptedByQueue` may be deliberately ignored by direct callers observing the
+  // main execution promise.
+  void promise.acceptedByQueue.catch(() => undefined);
+  return promise;
+}
+
+function createSpatialSkeletonExecution<TResult>(
+  runtime: EngineIntentRuntime<TResult>,
+) {
+  const execution = runtime.exact
+    .promise as SpatialSkeletonOptimisticEditExecution<boolean, TResult>;
+  Object.defineProperties(execution, {
+    acceptedByQueue: { value: Promise.resolve() },
+    settled: { value: runtime.settled.promise },
+  });
+  return execution;
+}
+
+type EngineIntentRuntimeAllowedField =
+  | "exact"
+  | "settled"
+  | "submission"
+  | "lease"
+  | "inputAbortController"
+  | "releaseAdmissionInputs";
+const engineIntentRuntimeFieldGuard: {
+  [Field in keyof EngineIntentRuntime<unknown>]-?: Field extends EngineIntentRuntimeAllowedField
+    ? true
+    : never;
+} = {
+  exact: true,
+  settled: true,
+  submission: true,
+  lease: true,
+  inputAbortController: true,
+  releaseAdmissionInputs: true,
+};
+void engineIntentRuntimeFieldGuard;
 let nextSpatialSkeletonOptimisticQueueInstanceId = 1;
 
 /**

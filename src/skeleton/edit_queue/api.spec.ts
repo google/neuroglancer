@@ -18,10 +18,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   commitSpatialSkeletonMutation,
-  isSpatialSkeletonOptimisticEditingProvider,
   type SpatialSkeletonMutationContext,
   type SpatialSkeletonOptimisticMutationAdapter,
 } from "#src/skeleton/edit_queue/api.js";
+import { isSpatialSkeletonOptimisticEditingProvider } from "#src/skeleton/edit_queue/api.js";
 
 interface TestMutation {
   readonly nodeId: bigint;

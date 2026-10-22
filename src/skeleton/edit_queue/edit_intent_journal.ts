@@ -15,18 +15,20 @@
  */
 
 import {
-  createInitialSpatialSkeletonOptimisticIntentLifecycle,
-  type SpatialSkeletonOptimisticAuthorityReason,
-  type SpatialSkeletonOptimisticIntentLifecycle,
-  type SpatialSkeletonOptimisticReconciliationLifecycle,
-} from "#src/skeleton/edit_queue/lifecycle.js";
-import {
   getSpatialSkeletonLogicalResourceKey,
   spatialSkeletonLogicalNode,
   spatialSkeletonLogicalSegment,
   type SpatialSkeletonLogicalResourceHandle,
 } from "#src/skeleton/edit_queue/stable_id_handles.js";
-import { DEFAULT_SPATIAL_SKELETON_OPTIMISTIC_EDIT_QUEUE_CAPACITY } from "#src/skeleton/edit_queue/types.js";
+import type {
+  SpatialSkeletonOptimisticAuthorityReason,
+  SpatialSkeletonOptimisticIntentLifecycle,
+  SpatialSkeletonOptimisticReconciliationLifecycle,
+} from "#src/skeleton/edit_queue/types.js";
+import {
+  createInitialSpatialSkeletonOptimisticIntentLifecycle,
+  DEFAULT_SPATIAL_SKELETON_OPTIMISTIC_EDIT_QUEUE_CAPACITY,
+} from "#src/skeleton/edit_queue/types.js";
 
 export type SpatialSkeletonIntentKind = "execute" | "undo" | "redo";
 

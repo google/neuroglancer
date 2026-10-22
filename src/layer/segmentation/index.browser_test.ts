@@ -26,9 +26,9 @@ import { SkeletonSourceConnection } from "#src/layer/segmentation/skeleton_sourc
 import { LocalSegmentationGraphSource } from "#src/segmentation_graph/local.js";
 import { SharedDisjointUint64Sets } from "#src/shared_disjoint_sets.js";
 import { SkeletonEdgeDirection } from "#src/skeleton/api.js";
-import { SpatialSkeletonActions } from "#src/skeleton/edit/command_protocol.js";
 import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import { executeSpatialSkeletonAddNode } from "#src/skeleton/edit/submit_edits.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import { MultiscaleSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial/frontend.js";
 import { SkeletonOverlaySegments } from "#src/skeleton/spatial/overlay_segments.js";
 import { StatusMessage } from "#src/status.js";

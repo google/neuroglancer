@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import type { CatmaidClient } from "#src/datasource/catmaid/api.js";
 import type {
   CatmaidSpatialSkeletonAddNodeRequest,
   CatmaidSpatialSkeletonAddNodeResult,
@@ -31,14 +32,42 @@ import type {
   CatmaidSpatialSkeletonSplitRequest,
   CatmaidSpatialSkeletonSplitResult,
   CatmaidSpatialSkeletonTrueEndUpdateRequest,
+  CatmaidSpatialSkeletonEditOperations,
 } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_endpoints.js";
-import type { CatmaidSpatialSkeletonEditOperations } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_operations.js";
 import {
   type SpatialSkeletonMutationContext,
   type SpatialSkeletonOptimisticMutationAdapter,
 } from "#src/skeleton/edit_queue/api.js";
 import { SpatialSkeletonEditConflictError } from "#src/skeleton/edit_queue/edit_errors.js";
 import { HttpError } from "#src/util/http_request.js";
+
+const catmaidMutationScopes = new Map<string, object>();
+
+export function getCatmaidMutationScope(client: CatmaidClient) {
+  if (
+    typeof client.baseUrl !== "string" ||
+    !Number.isSafeInteger(client.projectId)
+  ) {
+    return client;
+  }
+  let normalizedBaseUrl: string;
+  try {
+    const url = new URL(client.baseUrl);
+    url.hash = "";
+    url.search = "";
+    url.pathname = url.pathname.replace(/\/+$/, "");
+    normalizedBaseUrl = url.toString().replace(/\/+$/, "");
+  } catch {
+    normalizedBaseUrl = client.baseUrl.trim().replace(/\/+$/, "");
+  }
+  const key = `${normalizedBaseUrl}/${client.projectId}`;
+  let scope = catmaidMutationScopes.get(key);
+  if (scope === undefined) {
+    scope = Object.freeze({ key });
+    catmaidMutationScopes.set(key, scope);
+  }
+  return scope;
+}
 
 /**
  * CATMAID mutations as seen by datasource-neutral optimistic machinery.

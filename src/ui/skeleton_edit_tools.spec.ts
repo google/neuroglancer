@@ -16,16 +16,6 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
-import {
-  SKELETON_ADD_NODE,
-  SKELETON_CLEAR_SELECTION,
-  SKELETON_EDIT_AT_MOUSE,
-  SKELETON_ENTER_CREATE,
-  SKELETON_ENTER_DELETE_MODE,
-  SKELETON_ENTER_INSERT_MODE,
-  SKELETON_ENTER_MERGE_MODE,
-  SKELETON_ENTER_SPLIT_MODE,
-} from "#src/skeleton/actions.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
 import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import * as skeletonCommands from "#src/skeleton/edit/submit_edits.js";
@@ -42,6 +32,16 @@ import svg_insertNodeCursor from "#src/ui/images/insert_node_cursor.svg?raw";
 import svg_mergeCursor from "#src/ui/images/merge_cursor.svg?raw";
 import svg_newSkeletonCursor from "#src/ui/images/new_skeleton_cursor.svg?raw";
 import svg_splitCursor from "#src/ui/images/split_cursor.svg?raw";
+import {
+  SKELETON_ADD_NODE,
+  SKELETON_CLEAR_SELECTION,
+  SKELETON_EDIT_AT_MOUSE,
+  SKELETON_ENTER_CREATE,
+  SKELETON_ENTER_DELETE_MODE,
+  SKELETON_ENTER_INSERT_MODE,
+  SKELETON_ENTER_MERGE_MODE,
+  SKELETON_ENTER_SPLIT_MODE,
+} from "#src/ui/skeleton_edit_tool_shortcuts.js";
 import { SpatialSkeletonEditTool } from "#src/ui/skeleton_edit_tools.js";
 import {
   makeSpatialSkeletonToolLister,

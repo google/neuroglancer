@@ -14,11 +14,98 @@
  * limitations under the License.
  */
 
-import {
-  SpatialSkeletonActions,
-  type SpatialSkeletonAction,
-  type SpatialSkeletonEditCommand,
-} from "#src/skeleton/edit/command_protocol.js";
+import type { SpatialSkeletonOptimisticIdentityService } from "#src/skeleton/edit_queue/api.js";
+import type { SpatialSkeletonQueueInputRequirements } from "#src/skeleton/edit_queue/queue_input.js";
+
+export const SpatialSkeletonActions = {
+  inspect: "inspectSkeletons",
+  addNodes: "addNodes",
+  insertNodes: "insertNodes",
+  moveNodes: "moveNodes",
+  deleteNodes: "deleteNodes",
+  reroot: "rerootSkeletons",
+  editNodeDescription: "editNodeDescription",
+  editNodeTrueEnd: "editNodeTrueEnd",
+  editNodeRadius: "editNodeRadius",
+  editNodeConfidence: "editNodeConfidence",
+  mergeSkeletons: "mergeSkeletons",
+  splitSkeletons: "splitSkeletons",
+} as const;
+
+export type SpatialSkeletonAction =
+  (typeof SpatialSkeletonActions)[keyof typeof SpatialSkeletonActions];
+export const SpatialSkeletonHistoryActions = {
+  undo: "undo",
+  redo: "redo",
+} as const;
+
+export type SpatialSkeletonErrorAction =
+  | SpatialSkeletonAction
+  | (typeof SpatialSkeletonHistoryActions)[keyof typeof SpatialSkeletonHistoryActions];
+
+export const DEFAULT_SPATIAL_SKELETON_EDIT_ACTIONS = [
+  SpatialSkeletonActions.addNodes,
+  SpatialSkeletonActions.moveNodes,
+  SpatialSkeletonActions.deleteNodes,
+] as const satisfies readonly SpatialSkeletonAction[];
+
+export function isSpatialSkeletonEditAction(action: SpatialSkeletonAction) {
+  return action !== SpatialSkeletonActions.inspect;
+}
+
+export function getSpatialSkeletonActionSupportLabel(
+  action: SpatialSkeletonAction,
+) {
+  switch (action) {
+    case SpatialSkeletonActions.inspect:
+      return "full skeleton inspection";
+    case SpatialSkeletonActions.addNodes:
+      return "node creation";
+    case SpatialSkeletonActions.insertNodes:
+      return "node insertion";
+    case SpatialSkeletonActions.moveNodes:
+      return "node movement";
+    case SpatialSkeletonActions.deleteNodes:
+      return "node deletion";
+    case SpatialSkeletonActions.reroot:
+      return "skeleton rerooting";
+    case SpatialSkeletonActions.editNodeDescription:
+      return "node description editing";
+    case SpatialSkeletonActions.editNodeTrueEnd:
+      return "node true-end editing";
+    case SpatialSkeletonActions.editNodeRadius:
+      return "node radius editing";
+    case SpatialSkeletonActions.editNodeConfidence:
+      return "node confidence editing";
+    case SpatialSkeletonActions.mergeSkeletons:
+      return "skeleton merging";
+    case SpatialSkeletonActions.splitSkeletons:
+      return "skeleton splitting";
+  }
+}
+
+export interface SpatialSkeletonCommandContext {
+  readonly identities: SpatialSkeletonOptimisticIdentityService;
+}
+
+/**
+ * Immutable user intent passed from a datasource command factory to the
+ * state-owned queue engine.  It describes what to do; it cannot execute or
+ * mutate history by itself.
+ */
+export interface SpatialSkeletonEditCommand<TPayload = unknown> {
+  readonly action: SpatialSkeletonAction;
+  readonly label: string;
+  readonly payload: TPayload;
+  /**
+   * Declares the complete projected snapshots required before a new Execute
+   * intent may be admitted. Undo and Redo use retained history state directly.
+   * Return `{ required: [] }` when no existing snapshot is required.
+   */
+  getQueueInputRequirements(
+    context: SpatialSkeletonCommandContext,
+  ): SpatialSkeletonQueueInputRequirements;
+}
 
 export type SpatialSkeletonCommandPayload = object;
 

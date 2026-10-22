@@ -14,25 +14,35 @@
  * limitations under the License.
  */
 
-import {
-  SKELETON_ADD_NODE,
-  SKELETON_CLEAR_SELECTION,
-  SKELETON_DRAG_VIEW,
-  SKELETON_EDIT_AT_MOUSE,
-  SKELETON_ENTER_CREATE,
-  SKELETON_ENTER_DELETE_MODE,
-  SKELETON_ENTER_INSERT_MODE,
-  SKELETON_ENTER_MERGE_MODE,
-  SKELETON_ENTER_SPLIT_MODE,
-  SKELETON_FIND_PATH_SELECT_ENDPOINT,
-  SKELETON_PIN_NODE,
-} from "#src/skeleton/actions.js";
 import { getDefaultRenderedDataPanelBindings } from "#src/ui/default_input_event_bindings.js";
 import svg_mouse from "#src/ui/images/mouse.svg?raw";
 import { makeToolStatusChip } from "#src/ui/tool.js";
 import type { ActionIdentifier } from "#src/util/event_action_map.js";
 import { EventActionMap } from "#src/util/event_action_map.js";
 import { makeIcon } from "#src/widget/icon.js";
+
+export const SKELETON_EDIT_AT_MOUSE = "skeleton-edit-at-mouse";
+
+export const SKELETON_DRAG_VIEW = "skeleton-drag-view";
+
+export const SKELETON_ADD_NODE = "skeleton-add-node";
+
+export const SKELETON_ENTER_MERGE_MODE = "skeleton-enter-merge-mode";
+
+export const SKELETON_ENTER_SPLIT_MODE = "skeleton-enter-split-mode";
+
+export const SKELETON_ENTER_INSERT_MODE = "skeleton-enter-insert-mode";
+
+export const SKELETON_ENTER_CREATE = "skeleton-enter-create";
+
+export const SKELETON_PIN_NODE = "skeleton-pin-node";
+
+export const SKELETON_ENTER_DELETE_MODE = "skeleton-enter-delete-mode";
+
+export const SKELETON_CLEAR_SELECTION = "skeleton-clear-node-selection";
+
+export const SKELETON_FIND_PATH_SELECT_ENDPOINT =
+  "skeleton-find-path-select-endpoint";
 
 const SKELETON_TOOL_NAVIGATION_INPUT_EVENT_MAP = EventActionMap.fromObject({
   // Control+left mirrors middle drag for trackpads.

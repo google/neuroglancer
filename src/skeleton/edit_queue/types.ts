@@ -14,24 +14,143 @@
  * limitations under the License.
  */
 
-import type { SpatialSkeletonOptimisticFatalState } from "#src/skeleton/edit_queue/fatal.js";
-import type {
-  SpatialSkeletonOptimisticAuthorityReason,
-  SpatialSkeletonOptimisticEditSettlement,
-  SpatialSkeletonOptimisticIntentLifecycle,
-} from "#src/skeleton/edit_queue/lifecycle.js";
+/** State of the local optimistic projection. */
+export type SpatialSkeletonOptimisticPreviewLifecycle =
+  | "reserved"
+  | "preparing"
+  | "exact"
+  | "promoted"
+  | "rolled-back";
 
-export type {
-  SpatialSkeletonOptimisticAuthorityLifecycle,
-  SpatialSkeletonOptimisticAuthorityReason,
-  SpatialSkeletonOptimisticCommittedSettlement,
-  SpatialSkeletonOptimisticEditSettlement,
-  SpatialSkeletonOptimisticHistoryLifecycle,
-  SpatialSkeletonOptimisticIntentLifecycle,
-  SpatialSkeletonOptimisticPreviewLifecycle,
-  SpatialSkeletonOptimisticReconciliationLifecycle,
-  SpatialSkeletonOptimisticUnchangedSettlement,
-} from "#src/skeleton/edit_queue/lifecycle.js";
+/** State of the corresponding mutation at the authoritative datasource. */
+export type SpatialSkeletonOptimisticAuthorityLifecycle =
+  | "queued"
+  /** Claimed by the engine but still waiting to cross the commit boundary. */
+  | "waiting"
+  | "running"
+  | "committed"
+  | "unchanged"
+  | "indeterminate";
+
+/** State of authoritative/local projection reconciliation. */
+export type SpatialSkeletonOptimisticReconciliationLifecycle =
+  | "waiting"
+  | "not-required"
+  | "pending"
+  | "applying"
+  | "complete"
+  | "blocked";
+
+/** State of the command-history transition represented by an intent. */
+export type SpatialSkeletonOptimisticHistoryLifecycle =
+  | "staged"
+  | "advanced"
+  | "rejected";
+
+/** Why authority is known to be unchanged. */
+export type SpatialSkeletonOptimisticAuthorityReason =
+  | "not-started"
+  | "rejected"
+  | "no-op";
+
+/**
+ * Datasource-neutral lifecycle of one optimistic logical intent.
+ *
+ * These axes deliberately remain independent. For example, authority may be
+ * committed while reconciliation is still applying.
+ */
+export interface SpatialSkeletonOptimisticIntentLifecycle {
+  readonly preview: SpatialSkeletonOptimisticPreviewLifecycle;
+  readonly authority: SpatialSkeletonOptimisticAuthorityLifecycle;
+  readonly reconciliation: SpatialSkeletonOptimisticReconciliationLifecycle;
+  readonly history: SpatialSkeletonOptimisticHistoryLifecycle;
+  readonly authorityReason?: SpatialSkeletonOptimisticAuthorityReason;
+}
+
+/** Creates the lifecycle published when an optimistic intent is reserved. */
+export function createInitialSpatialSkeletonOptimisticIntentLifecycle(): SpatialSkeletonOptimisticIntentLifecycle {
+  return {
+    preview: "reserved",
+    authority: "queued",
+    reconciliation: "waiting",
+    history: "staged",
+  };
+}
+
+export interface SpatialSkeletonOptimisticCommittedSettlement<TResult> {
+  readonly outcome: "committed";
+  readonly result?: TResult;
+}
+
+export interface SpatialSkeletonOptimisticUnchangedSettlement {
+  readonly outcome: "unchanged";
+  readonly reason: SpatialSkeletonOptimisticAuthorityReason;
+  readonly error?: unknown;
+}
+
+/**
+ * Definitive authority settlement of one optimistic logical intent.
+ *
+ * A reload-required mutation intentionally has no settlement. Its settlement
+ * promise remains pending until the page unloads.
+ */
+export type SpatialSkeletonOptimisticEditSettlement<TResult = unknown> =
+  | SpatialSkeletonOptimisticCommittedSettlement<TResult>
+  | SpatialSkeletonOptimisticUnchangedSettlement;
+
+export function committedSpatialSkeletonOptimisticEditSettlement<
+  TResult = unknown,
+>(result?: TResult): SpatialSkeletonOptimisticCommittedSettlement<TResult> {
+  return result === undefined
+    ? { outcome: "committed" }
+    : { outcome: "committed", result };
+}
+
+export function unchangedSpatialSkeletonOptimisticEditSettlement(
+  reason: SpatialSkeletonOptimisticAuthorityReason,
+  error?: unknown,
+): SpatialSkeletonOptimisticUnchangedSettlement {
+  return error === undefined
+    ? { outcome: "unchanged", reason }
+    : { outcome: "unchanged", reason, error };
+}
+
+export const SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON =
+  "Reload the page before making more skeleton edits.";
+
+export type SpatialSkeletonOptimisticFatalReason =
+  | "authority-indeterminate"
+  | "committed-local-publication-failed"
+  | "local-projection-reset-failed";
+
+/** Immutable, layer-scoped reason that optimistic editing cannot continue. */
+export interface SpatialSkeletonOptimisticFatalState {
+  readonly reason: SpatialSkeletonOptimisticFatalReason;
+  readonly authority: "committed" | "indeterminate" | "unchanged";
+  readonly intentId?: number;
+  readonly cause?: unknown;
+}
+
+export function freezeSpatialSkeletonOptimisticFatalState(
+  state: SpatialSkeletonOptimisticFatalState,
+): SpatialSkeletonOptimisticFatalState {
+  return Object.freeze({ ...state });
+}
+
+export class SpatialSkeletonOptimisticReloadRequiredError extends Error {
+  constructor(readonly fatalState: SpatialSkeletonOptimisticFatalState) {
+    super(SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON, {
+      cause: fatalState.cause,
+    });
+    this.name = "SpatialSkeletonOptimisticReloadRequiredError";
+  }
+}
+
+/** Generic engine boundary for a latch owned by one spatial-skeleton state. */
+export interface SpatialSkeletonOptimisticFatalStatePort {
+  get(): SpatialSkeletonOptimisticFatalState | undefined;
+  latch(state: SpatialSkeletonOptimisticFatalState): boolean;
+}
 
 /** Promise returned by an optimistic edit transition. */
 export interface SpatialSkeletonOptimisticEditExecution<

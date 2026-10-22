@@ -17,8 +17,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
-import type { SpatialSkeletonOptimisticIntentLifecycle } from "#src/skeleton/edit_queue/lifecycle.js";
 import type {
+  SpatialSkeletonOptimisticIntentLifecycle,
   SpatialSkeletonOptimisticEditActivityEntry,
   SpatialSkeletonOptimisticEditQueueEntry,
 } from "#src/skeleton/edit_queue/types.js";

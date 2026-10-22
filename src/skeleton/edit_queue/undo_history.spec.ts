@@ -16,10 +16,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import {
-  SpatialSkeletonActions,
-  type SpatialSkeletonEditCommand,
-} from "#src/skeleton/edit/command_protocol.js";
+import type { SpatialSkeletonEditCommand } from "#src/skeleton/edit_commands.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import {
   createSpatialSkeletonOptimisticHistoryPort,
   SpatialSkeletonCommandHistory,

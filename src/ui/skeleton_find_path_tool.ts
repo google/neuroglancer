@@ -16,8 +16,7 @@
 
 import type { Annotation } from "#src/annotation/index.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
-import { SKELETON_FIND_PATH_SELECT_ENDPOINT } from "#src/skeleton/actions.js";
-import { SpatialSkeletonActions } from "#src/skeleton/edit/command_protocol.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import type { SkeletonFindPathEndpoint } from "#src/skeleton/find_path/find_path.js";
 import {
   SPATIAL_SKELETON_FIND_PATH_SOURCE_DESCRIPTION,
@@ -35,7 +34,10 @@ import {
 import { StatusMessage } from "#src/status.js";
 import { makeAnnotationListElement } from "#src/ui/annotations.js";
 import { getDefaultAnnotationListBindings } from "#src/ui/default_input_event_bindings.js";
-import { SKELETON_FIND_PATH_TOOL_INPUT_EVENT_MAP } from "#src/ui/skeleton_edit_tool_shortcuts.js";
+import {
+  SKELETON_FIND_PATH_SELECT_ENDPOINT,
+  SKELETON_FIND_PATH_TOOL_INPUT_EVENT_MAP,
+} from "#src/ui/skeleton_edit_tool_shortcuts.js";
 import {
   bindSpatialSkeletonViewDrag,
   makeSpatialSkeletonToolLister,

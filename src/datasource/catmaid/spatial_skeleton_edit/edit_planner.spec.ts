@@ -27,16 +27,14 @@ import type {
   CatmaidOptimisticMutationResult,
 } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_requests.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
-import {
-  SpatialSkeletonActions,
-  type SpatialSkeletonQueueInput,
-} from "#src/skeleton/edit/command_protocol.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import { createCompleteSkeletonSnapshot } from "#src/skeleton/edit_queue/complete_skeleton.js";
 import type { SpatialSkeletonProjectionInverseDelta } from "#src/skeleton/edit_queue/complete_skeleton_edits.js";
 import type {
   SpatialSkeletonAuthoritativeReconciliation,
   SpatialSkeletonProjectionIntentDelta,
 } from "#src/skeleton/edit_queue/preview.js";
+import type { SpatialSkeletonQueueInput } from "#src/skeleton/edit_queue/queue_input.js";
 import {
   spatialSkeletonLogicalNode,
   spatialSkeletonLogicalSegment,

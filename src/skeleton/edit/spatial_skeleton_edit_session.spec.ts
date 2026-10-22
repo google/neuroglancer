@@ -23,23 +23,27 @@ import {
   type SkeletonFragmentNode,
   type SkeletonNode,
 } from "#src/skeleton/api.js";
-import { SpatialSkeletonActions } from "#src/skeleton/edit/command_protocol.js";
 import {
   editableSpatiallyIndexedSkeletonSourceSupportsAction,
   getSpatialSkeletonEditCommandFactoryForAction,
   SpatialSkeletonState,
-  type SpatialSkeletonPreparedProjectionStatePublication,
-  type SpatialSkeletonOptimisticEditExecution,
-  type SpatialSkeletonOptimisticEditQueue,
 } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import {
   createCompleteSkeletonSnapshot,
   patchCompleteSkeletonSnapshot,
   type CompleteSkeletonSnapshotHandle,
 } from "#src/skeleton/edit_queue/complete_skeleton.js";
 import { SpatialSkeletonInspectionRequiredError } from "#src/skeleton/edit_queue/edit_errors.js";
-import { SpatialSkeletonOptimisticReloadRequiredError } from "#src/skeleton/edit_queue/fatal.js";
-import { unchangedSpatialSkeletonOptimisticEditSettlement } from "#src/skeleton/edit_queue/lifecycle.js";
+import type { SpatialSkeletonPreparedProjectionStatePublication } from "#src/skeleton/edit_queue/preview.js";
+import type {
+  SpatialSkeletonOptimisticEditExecution,
+  SpatialSkeletonOptimisticEditQueue,
+} from "#src/skeleton/edit_queue/types.js";
+import {
+  SpatialSkeletonOptimisticReloadRequiredError,
+  unchangedSpatialSkeletonOptimisticEditSettlement,
+} from "#src/skeleton/edit_queue/types.js";
 import { getSkeletonNodeConfidence } from "#src/skeleton/node_attributes.js";
 
 function makeWholeSkeletonReads(
@@ -1216,8 +1220,8 @@ describe("skeleton edit session", () => {
       );
     } catch (error) {
       expect(error).toMatchObject({
-        reason: "snapshot-unavailable",
         action: SpatialSkeletonActions.moveNodes,
+        reason: "snapshot-unavailable",
         requirement: coldRequirement,
       });
       expect((error as Error).message).toBe(

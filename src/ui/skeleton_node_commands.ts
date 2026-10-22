@@ -18,19 +18,19 @@ import type { UserLayer } from "#src/layer/index.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
 import {
-  DEFAULT_SPATIAL_SKELETON_EDIT_ACTIONS,
-  SpatialSkeletonActions,
-  SpatialSkeletonHistoryActions,
-  type SpatialSkeletonAction,
-} from "#src/skeleton/edit/command_protocol.js";
-import {
   executeSpatialSkeletonNodeTrueEndUpdate,
   redoSpatialSkeletonCommand,
   showSpatialSkeletonActionError,
   undoSpatialSkeletonCommand,
   executeSpatialSkeletonReroot,
 } from "#src/skeleton/edit/submit_edits.js";
-import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/edit_queue/fatal.js";
+import type { SpatialSkeletonAction } from "#src/skeleton/edit_commands.js";
+import {
+  DEFAULT_SPATIAL_SKELETON_EDIT_ACTIONS,
+  SpatialSkeletonActions,
+  SpatialSkeletonHistoryActions,
+} from "#src/skeleton/edit_commands.js";
+import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/edit_queue/types.js";
 import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
 import { SkeletonNavigation } from "#src/skeleton/skeleton_navigator.js";
 import { StatusMessage } from "#src/status.js";

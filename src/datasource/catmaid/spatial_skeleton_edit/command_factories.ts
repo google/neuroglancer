@@ -16,18 +16,18 @@
 
 import type { CatmaidClient } from "#src/datasource/catmaid/api.js";
 import {
-  type CatmaidSpatialSkeletonCommandPayload,
   requireCatmaidAddNodeCommandOptions,
   requireCatmaidDeleteNodeCommandPayload,
+  requireCatmaidInsertNodeCommandOptions,
   requireCatmaidMergeCommandPayload,
   requireCatmaidMoveNodeCommandOptions,
-  requireCatmaidInsertNodeCommandOptions,
   requireCatmaidNodeConfidenceCommandOptions,
   requireCatmaidNodeDescriptionCommandOptions,
   requireCatmaidNodeRadiusCommandOptions,
   requireCatmaidNodeTrueEndCommandOptions,
   requireCatmaidRerootCommandPayload,
   requireCatmaidSplitCommandPayload,
+  type CatmaidSpatialSkeletonCommandPayload,
 } from "#src/datasource/catmaid/spatial_skeleton_edit/command_payloads.js";
 import type {
   CatmaidSpatialSkeletonAddNodeRequest,
@@ -46,33 +46,92 @@ import type {
   CatmaidSpatialSkeletonSplitRequest,
   CatmaidSpatialSkeletonSplitResult,
   CatmaidSpatialSkeletonTrueEndUpdateRequest,
+  CatmaidSpatialSkeletonEditOperations,
 } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_endpoints.js";
-import type { CatmaidSpatialSkeletonEditOperations } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_operations.js";
 import {
   CATMAID_PROVISIONAL_NUMERIC_ID_POLICY,
   CatmaidSpatialSkeletonWorkflowDriver,
   type CatmaidSpatialSkeletonCommandDescriptor,
 } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_planner.js";
-import { CatmaidSpatialSkeletonOptimisticMutationAdapter } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_requests.js";
-import { getCatmaidMutationScope } from "#src/datasource/catmaid/spatial_skeleton_edit/mutation_scope.js";
 import {
-  getCatmaidQueueInputRequirement,
-  getCatmaidQueueInputRequirements,
-  getCatmaidMergeQueueInputRequirements,
-} from "#src/datasource/catmaid/spatial_skeleton_edit/queue_input_requirements.js";
+  CatmaidSpatialSkeletonOptimisticMutationAdapter,
+  getCatmaidMutationScope,
+} from "#src/datasource/catmaid/spatial_skeleton_edit/edit_requests.js";
 import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
-import {
-  SpatialSkeletonActions,
-  type SpatialSkeletonAction,
-  type SpatialSkeletonCommandContext,
-  type SpatialSkeletonEditCommand,
-  type SpatialSkeletonQueueInputRequirements,
-} from "#src/skeleton/edit/command_protocol.js";
-import type { SpatialSkeletonEditCommandFactory } from "#src/skeleton/edit_commands.js";
+import type {
+  SpatialSkeletonAction,
+  SpatialSkeletonCommandContext,
+  SpatialSkeletonEditCommand,
+  SpatialSkeletonEditCommandFactory,
+} from "#src/skeleton/edit_commands.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import type {
   SpatialSkeletonOptimisticDriverRegistration,
   SpatialSkeletonOptimisticEditingProvider,
 } from "#src/skeleton/edit_queue/api.js";
+import type {
+  SpatialSkeletonQueueInputRequirement,
+  SpatialSkeletonQueueInputRequirements,
+} from "#src/skeleton/edit_queue/queue_input.js";
+
+/** Resolve the current skeleton/node IDs required by a CATMAID queue input. */
+function getCatmaidQueueInputRequirement(
+  context: SpatialSkeletonCommandContext,
+  stableSegmentId: bigint | undefined,
+  stableNodeId: bigint | undefined,
+): SpatialSkeletonQueueInputRequirement | undefined {
+  const segmentId =
+    stableSegmentId === undefined
+      ? undefined
+      : (context.identities.resolveSegment(
+          context.identities.getOrCreateSegmentHandle(stableSegmentId),
+        ) ?? stableSegmentId);
+  if (segmentId === undefined || segmentId === 0n) {
+    return undefined;
+  }
+  const nodeId =
+    stableNodeId === undefined
+      ? undefined
+      : (context.identities.resolveNode(
+          context.identities.getOrCreateNodeHandle(stableNodeId),
+        ) ?? stableNodeId);
+  return {
+    segmentId,
+    nodeId: nodeId === 0n ? undefined : nodeId,
+  };
+}
+
+export function getCatmaidQueueInputRequirements(
+  ...requirements: readonly (SpatialSkeletonQueueInputRequirement | undefined)[]
+): SpatialSkeletonQueueInputRequirements {
+  const unique = new Map<string, SpatialSkeletonQueueInputRequirement>();
+  for (const requirement of requirements) {
+    if (requirement === undefined) continue;
+    const key = `${requirement.segmentId}:${requirement.nodeId ?? ""}`;
+    if (!unique.has(key)) unique.set(key, Object.freeze({ ...requirement }));
+  }
+  return Object.freeze({ required: Object.freeze([...unique.values()]) });
+}
+
+export function getCatmaidMergeQueueInputRequirements(
+  required: SpatialSkeletonQueueInputRequirement | undefined,
+  mergeTarget: SpatialSkeletonQueueInputRequirement | undefined,
+): SpatialSkeletonQueueInputRequirements {
+  if (
+    required !== undefined &&
+    mergeTarget !== undefined &&
+    required.segmentId === mergeTarget.segmentId &&
+    required.nodeId === mergeTarget.nodeId
+  ) {
+    return getCatmaidQueueInputRequirements(required);
+  }
+  return Object.freeze({
+    required: getCatmaidQueueInputRequirements(required).required,
+    ...(mergeTarget === undefined
+      ? {}
+      : { loadable: Object.freeze([Object.freeze({ ...mergeTarget })]) }),
+  });
+}
 
 export interface CatmaidSpatialSkeletonEditCommandContext {
   getClient(): CatmaidClient;
